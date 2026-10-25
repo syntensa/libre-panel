@@ -15,7 +15,15 @@ are the only questions:
      value, unit], ...]}
 
   ``age`` is how many seconds ago that was (null before the first time), ``state`` is
-  ``starting``, ``running`` or ``failed`` (then ``error`` says why).
+  ``starting``, ``running`` or ``failed`` (then ``error`` says why). The service adds what its
+  rounds cost (*Live → Diagnose → Load*): the last round, and the last that updated every
+  piece (null before the first), each part with the seconds its update took::
+
+    "timing": {"last": {"full": false, "parts": [[hardware id, hardware name, type,
+               seconds], ...]}, "full": {...}}
+
+  A service older than the times leaves them out, and a client older than them does not look
+  at them: the protocol stays 1 both ways.
 
 Everything that comes in is checked here before anything else looks at it, on both sides: a
 length out of bounds ends the connection, anything else that is not as above is answered with
@@ -32,7 +40,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
 
-from libre_panel.sensors.librehardwaremonitor import LhmSensor
+from libre_panel.sensors.librehardwaremonitor import LhmSensor, PartTime, RoundTime, Timing
 
 PROTOCOL = 1
 HEADER = struct.Struct("<I")  # the length of the message that follows
@@ -41,6 +49,7 @@ MAX_ANSWER = 4 * 1024 * 1024  # bytes: some thousand sensors fit many times over
 MAX_HARDWARE = 64  # pieces of hardware one request may name
 MAX_SENSORS = 10_000  # sensors one answer may carry
 MAX_TEXT = 300  # characters of a name, a label, a version or an error
+MAX_TIMED = 256  # parts one round's times may name
 STATES = ("starting", "running", "failed")
 # A hardware id as LibreHardwareMonitor makes them: "/amdcpu/0", "/nic/%7B…%7D"; printable
 # ASCII without spaces, so nothing else gets through to the service's set of wishes
@@ -149,6 +158,17 @@ def hello_answer(version: str) -> dict[str, Any]:
     return {"v": PROTOCOL, "ok": True, "service": version[:MAX_TEXT], "protocol": PROTOCOL}
 
 
+def _round_answer(done: RoundTime | None) -> dict[str, Any] | None:
+    if done is None:
+        return None
+    parts = [
+        [p.hardware_id[:MAX_TEXT], p.name[:MAX_TEXT], p.kind[:MAX_TEXT], round(p.seconds, 6)]
+        for p in done.parts
+        if math.isfinite(p.seconds) and p.hardware_id and p.kind
+    ]
+    return {"full": done.full, "parts": parts[:MAX_TIMED]}
+
+
 def read_answer(
     sensors: Iterable[LhmSensor],
     *,
@@ -157,13 +177,14 @@ def read_answer(
     ring0: bool | None,
     pawnio: str | None,
     error: str = "",
+    timing: Timing | None = None,
 ) -> dict[str, Any]:
     rows = [
         [s.sensor_id, s.hardware_id, s.hardware_name, s.sensor_type, s.label, s.value, s.unit]
         for s in sensors
         if math.isfinite(s.value)
     ]
-    return {
+    answer = {
         "v": PROTOCOL,
         "ok": True,
         "state": state,
@@ -173,6 +194,9 @@ def read_answer(
         "pawnio": pawnio,
         "sensors": rows[:MAX_SENSORS],
     }
+    if timing is not None:
+        answer["timing"] = {"last": _round_answer(timing.last), "full": _round_answer(timing.full)}
+    return answer
 
 
 class ServiceError(Exception):
@@ -193,6 +217,7 @@ class Readings:
     ring0: bool | None
     pawnio: str | None
     sensors: tuple[LhmSensor, ...]
+    timing: Timing | None = None  # None: the service does not say (one older than this)
 
 
 def _text(value: Any, what: str, empty: bool = True) -> str:
@@ -248,6 +273,43 @@ def _sensor(row: Any) -> LhmSensor:
     )
 
 
+def _part(row: Any) -> PartTime:
+    if not isinstance(row, list) or len(row) != 4:
+        raise ProtocolError("a part's time is a list of four values")
+    hardware_id, name, kind, seconds = row
+    took = _number(seconds, "a part's seconds")
+    if took < 0:
+        raise ProtocolError("a part's seconds are not below zero")
+    return PartTime(
+        _text(hardware_id, "a hardware id", empty=False),
+        _text(name, "a hardware name"),
+        _text(kind, "a hardware type", empty=False),
+        took,
+    )
+
+
+def _round(value: Any) -> RoundTime | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ProtocolError("a round's times are an object or null")
+    full, parts = value.get("full"), value.get("parts")
+    if not isinstance(full, bool):
+        raise ProtocolError("full is true or false")
+    if not isinstance(parts, list) or len(parts) > MAX_TIMED:
+        raise ProtocolError(f"parts is a list of at most {MAX_TIMED}")
+    return RoundTime(tuple(_part(row) for row in parts), full)
+
+
+def parse_timing(value: Any) -> Timing | None:
+    """What the service's rounds cost; None where it does not say (an older service)."""
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ProtocolError("timing is an object")
+    return Timing(_round(value.get("last")), _round(value.get("full")))
+
+
 def parse_readings(message: dict[str, Any]) -> Readings:
     """The answer to ``read``, checked whole: one thing wrong in it and none of it is taken."""
     message = _checked(message)
@@ -271,4 +333,5 @@ def parse_readings(message: dict[str, Any]) -> Readings:
         ring0,
         pawnio,
         tuple(_sensor(row) for row in rows),
+        parse_timing(message.get("timing")),
     )

@@ -124,6 +124,8 @@ export const endpoints = {
   doctor: () => get("/api/doctor"),
   doctorAction: (action, answer) => post("/api/doctor", answer === undefined ? { action } : { action, answer }),
   logs: (level = "DEBUG") => get(`/api/logs?level=${enc(level)}`),
+  // what Libre Panel costs the PC: its processes, the main one's threads (load_report.py)
+  load: () => get("/api/load"),
   experiment: () => get("/api/experiment"),
   experimentAction: (action) => post("/api/experiment", { action }),
   setDetailedLog: (verbose) => post("/api/logs", { verbose }),

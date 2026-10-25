@@ -206,6 +206,58 @@ def test_an_answer_that_is_not_the_protocols_is_not_taken():
         source.ask()
 
 
+def test_the_status_says_what_the_services_rounds_take_and_its_version():
+    service = Service()
+    source = source_for(service)
+    source.ask()  # hello, and everything once: the service reads it in its next round
+    status = source.status()
+    assert status.version == "0.5.0" and status.timing == lhm.Timing()  # no round yet
+    service.reader.refresh()
+    source.ask()
+    timing = source.status().timing
+    assert timing.last is not None and timing.last.full and len(timing.full.parts) == 6
+    assert {part.kind for part in timing.full.parts} >= {"Cpu", "GpuNvidia", "SuperIO", "Memory"}
+    assert all(part.seconds >= 0 for part in timing.full.parts)
+    assert source.status() == lhm.LhmStatus("service", True, True, "2.0.1")  # (as before)
+
+
+def test_a_service_older_than_the_round_times_is_read_as_before_and_says_it_does_not_tell():
+    from libre_panel import load_report
+
+    service = Service(version="0.6.0")
+    answer = service.handler.answer
+
+    def older(request):  # what a service of before the times answers
+        said = answer(request)
+        said.pop("timing", None)
+        return said
+
+    service.handler.answer = older
+    source = source_for(service)
+    service.reader.refresh()
+    source.ask()
+    status = source.status()
+    assert source.read()["cpu.temp"].value == 55.0  # the readings come as before
+    assert status.timing is None and status.error == "" and status.version == "0.6.0"
+    report = load_report.sensors_report(status)
+    assert report["reported"] is False
+    assert load_report.sensors_text(report) == [
+        "LibreHardwareMonitor rounds, the sensor service 0.6.0: "
+        "not reported by this service version"
+    ]
+
+
+def test_a_service_that_does_not_answer_keeps_its_version_and_says_why():
+    service = Service()
+    source = source_for(service, wait_seconds=0)
+    source.ask()
+    service.down = lhm_service.Unavailable("the sensor service is stopped")
+    source._lost("the sensor service is stopped", since=0.0)
+    status = source.status()
+    assert status.error == "the sensor service is stopped" and status.version == "0.5.0"
+    assert status.timing is None
+
+
 # -- the provider: service, then inside Libre Panel, then the web server ---------------------------
 
 
@@ -602,6 +654,21 @@ def test_the_check_reads_through_the_service_and_says_what_it_found():
     assert "CPU temperature, power and clock: available" in lines
     assert "PawnIO driver: 2.0.1" in lines and "cpu.temp: 55.0 °C" in lines
     assert service.closed == 1
+
+
+def test_the_check_says_what_the_rounds_take():
+    rounds = lhm.Timing(
+        lhm.RoundTime((lhm.PartTime(CPU, "CPU", "Cpu", 0.004),)),
+        lhm.RoundTime(
+            (lhm.PartTime(CPU, "CPU", "Cpu", 0.004), lhm.PartTime(GPU, "GPU", "GpuNvidia", 0.006)),
+            True,
+        ),
+    )
+    assert lhm_service.round_line(rounds) == (
+        "round time: last round 4.0 ms (1 part), all hardware 10.0 ms (2 parts)"
+    )
+    assert lhm_service.round_line(lhm.Timing()) == "round time: no round yet"
+    assert lhm_service.round_line(None) == "round time: not reported by this service version"
 
 
 def test_the_check_waits_for_fresh_readings():

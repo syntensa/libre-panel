@@ -226,7 +226,10 @@ power supply), as LibreHardwareMonitor itself does.
 **What crosses the pipe.** The service answers on the local named pipe
 `\\.\pipe\LibrePanelSensors`, and understands two requests: *hello* (its version) and *read*
 (the readings, and which pieces of hardware the client's themes show, which it then reads for
-the next ten seconds). Anything else gets an error answer. A message is a JSON object after
+the next ten seconds). The answer to *read* also says how long each piece's update took in the
+last round and in the last round of all hardware (*Live → Diagnose → Load*); a service older
+than that leaves it out, and the protocol is the same either way. Anything else gets an error
+answer. A message is a JSON object after
 its length, at most 4 KiB in and 4 MiB out; a length out of bounds ends the connection, as
 does a client that says nothing for 30 seconds or takes longer than 5 seconds with a message
 it began; a connection may ask four times a second (after a first eight); four clients are

@@ -20,7 +20,7 @@ from fake_lhm import (
 from fake_sensors import wait_for
 
 from libre_panel import __version__
-from libre_panel.sensors.librehardwaremonitor import LhmSensor
+from libre_panel.sensors.librehardwaremonitor import LhmSensor, PartTime, RoundTime, Timing
 from libre_panel.sensorservice import core, protocol, winapi, winpipe, winservice
 from libre_panel.sensorservice.protocol import ProtocolError, ServiceError
 
@@ -417,6 +417,136 @@ def test_before_the_first_reading_it_says_it_starts():
     reader = core.Reader(lambda: None)
     readings = protocol.parse_readings(core.Handler(reader).answer(protocol.read_request()))
     assert readings.state == "starting" and readings.age is None and readings.sensors == ()
+
+
+# -- what the rounds take (Live -> Diagnose -> Load) ----------------------------------------------
+
+
+class Ticks:
+    """The timer of the reader, moved on by the fake hardware: each update takes its time."""
+
+    def __init__(self):
+        self.now = 0.0
+
+    def __call__(self):
+        return self.now
+
+
+def takes(computer, ticks, seconds):
+    """Each part's update takes ``seconds[its id]`` (a millisecond where it does not say)."""
+    for item in computer.everything():
+        took = seconds.get(item.Identifier, 0.001)
+        item.on_update = lambda hardware, took=took: setattr(ticks, "now", ticks.now + took)
+
+
+def test_the_times_of_the_rounds_go_through_the_protocol():
+    last = RoundTime((PartTime(CPU, "8-Core Processor", "Cpu", 0.0061),
+                      PartTime(GPU, "Graphics Card", "GpuNvidia", 0.0037)))  # fmt: skip
+    full = RoundTime((*last.parts, PartTime(CHIP, "Chip", "SuperIO", 0.02)), full=True)
+    answer = protocol.read_answer(
+        [SENSOR], state="running", age=0.1, ring0=True, pawnio=None, timing=Timing(last, full)
+    )
+    sent = json.loads(protocol.encode(answer, protocol.MAX_ANSWER)[4:])
+    assert sent["timing"]["last"] == {
+        "full": False,
+        "parts": [
+            [CPU, "8-Core Processor", "Cpu", 0.0061],
+            [GPU, "Graphics Card", "GpuNvidia", 0.0037],
+        ],
+    }
+    readings = protocol.parse_readings(sent)
+    assert readings.timing == Timing(last, full) and readings.sensors == (SENSOR,)
+    nothing_yet = protocol.read_answer([], state="running", age=0.1, ring0=None, pawnio=None,
+                                       timing=Timing())  # fmt: skip
+    assert protocol.parse_readings(nothing_yet).timing == Timing()
+
+
+def test_an_older_service_says_nothing_of_its_rounds_and_its_answer_is_taken_as_before():
+    """A service older than the times answers without them: the client takes the readings and
+    knows that it does not say. And an older client finds every key it reads where it was."""
+    older = good_answer()
+    assert "timing" not in older
+    readings = protocol.parse_readings(older)
+    assert readings.timing is None and readings.sensors == (SENSOR,)
+    newer = protocol.read_answer([SENSOR], state="running", age=0.1, ring0=None, pawnio=None,
+                                 timing=Timing())  # fmt: skip
+    assert {key: value for key, value in newer.items() if key != "timing"} == older
+    assert newer["v"] == protocol.PROTOCOL == 1  # the same protocol both ways
+
+
+@pytest.mark.parametrize(
+    "timing",
+    [
+        "fast",
+        {"last": 1},
+        {"last": {"full": "no", "parts": []}},
+        {"last": {"full": False, "parts": {}}},
+        {"last": {"full": False, "parts": [[CPU, "x", "Cpu"]]}},
+        {"last": {"full": False, "parts": [[CPU, "x", "Cpu", -0.1]]}},
+        {"last": {"full": False, "parts": [[CPU, "x", "Cpu", "1"]]}},
+        {"last": {"full": False, "parts": [["", "x", "Cpu", 0.1]]}},
+        {"full": {"full": True, "parts": [[CPU, "x" * 1000, "Cpu", 0.1]]}},
+        {"full": {"full": True, "parts": [[CPU, "x", "Cpu", 0.1]] * (protocol.MAX_TIMED + 1)}},
+    ],
+)
+def test_times_with_anything_wrong_in_them_are_not_taken(timing):
+    with pytest.raises(ProtocolError):
+        protocol.parse_readings(good_answer(timing=timing))
+
+
+def test_the_reader_times_each_part_of_each_round():
+    ticks = Ticks()
+    reader, computer, clock = begun(timer=ticks, refresh_seconds=30)
+    takes(computer, ticks, {CPU: 0.006, GPU: 0.004, CHIP: 0.02})
+    assert reader.timing() == Timing()  # opened, no round yet
+    reader.ask([])  # the first after a quiet time: everything, now
+    reader.refresh()
+    timing = reader.timing()
+    assert timing.last is timing.full and timing.full.full
+    assert {part.hardware_id: part.seconds for part in timing.full.parts} == pytest.approx({
+        "/motherboard": 0.001, CHIP: 0.02, CPU: 0.006, "/ram": 0.001, GPU: 0.004,
+        "/memory/dimm/1": 0.001,
+    })  # fmt: skip
+    cpu = next(part for part in timing.full.parts if part.hardware_id == CPU)
+    assert (cpu.name, cpu.kind) == ("8-Core Processor", "Cpu")
+    clock.now += 1
+    reader.ask([])  # a theme that reads none of it: a round that reads nothing
+    assert reader.refresh() is False
+    assert reader.timing().last == RoundTime() and len(reader.timing().full.parts) == 6
+    clock.now += 1
+    reader.ask([CPU, GPU])
+    reader.refresh()
+    timing = reader.timing()
+    assert [p.hardware_id for p in timing.last.parts] == [CPU, GPU]
+    assert [p.seconds for p in timing.last.parts] == pytest.approx([0.006, 0.004])
+    assert not timing.last.full and timing.last.seconds == pytest.approx(0.01)
+    assert len(timing.full.parts) == 6  # the full round stays what it was
+    answer = core.Handler(reader, clock=clock).answer(protocol.read_request([CPU]))
+    assert answer["timing"]["last"]["full"] is False
+    assert [row[0] for row in answer["timing"]["last"]["parts"]] == [CPU, GPU]
+    assert len(answer["timing"]["full"]["parts"]) == 6
+    taken = protocol.parse_readings(answer).timing  # to the microsecond
+
+    def rounded(done):
+        return [(p.hardware_id, p.name, p.kind, round(p.seconds, 6)) for p in done.parts]
+
+    assert rounded(taken.last) == rounded(reader.timing().last) and taken.full.full
+
+
+def test_a_part_that_fails_is_timed_too(caplog):
+    ticks = Ticks()
+    reader, computer, _ = begun(timer=ticks)
+    takes(computer, ticks, {})
+
+    def update():  # it takes half a second, and then fails
+        ticks.now += 0.5
+        raise RuntimeError("busy")
+
+    next(item for item in computer.everything() if item.Identifier == GPU).Update = update
+    reader.ask([GPU])
+    reader.refresh()
+    assert any(p.hardware_id == GPU and p.seconds == 0.5 for p in reader.timing().last.parts)
+    assert reader.timing().last.seconds == pytest.approx(0.505)
 
 
 # -- one connection --------------------------------------------------------------------------------

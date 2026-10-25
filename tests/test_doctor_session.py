@@ -131,6 +131,34 @@ def test_without_a_panel_the_test_says_so(panel):
     assert loop.calls == ["hold", ("release", True)]
 
 
+def test_the_report_says_what_libre_panel_cost_the_pc_before_the_test(panel):
+    """The lines of Live → Diagnose → Load go into the report and the form, as they were before
+    the test took the panel (while it runs, the panel's loop is not what it costs)."""
+    panel.unplugged = True  # (the test ends at once)
+    loop = Loop()
+
+    def load():
+        loop.calls.append("load")
+        return "Libre Panel load over 2.0 s, 8 logical processors\nmain process 1.0 %\n"
+
+    session = Session(loop, load=load)
+    session.start()
+    report = until(session, "done", "failed")["report"]
+    assert loop.calls == ["load", "hold", ("release", True)]
+    assert report["text"].endswith(
+        "\nLibre Panel load over 2.0 s, 8 logical processors\nmain process 1.0 %\n"
+    )
+    assert "RESULT:" in report["text"].split("Libre Panel load")[0]
+    assert "Libre+Panel+load+over+2.0+s" in report["form"]
+
+    def broken():
+        raise RuntimeError("no psutil")
+
+    session = Session(Loop(), load=broken)  # a help, not a must: the report comes all the same
+    session.start()
+    assert "Libre Panel load" not in until(session, "done", "failed")["report"]["text"]
+
+
 def test_a_loop_that_hangs_on_the_panel_keeps_the_test_off_it(panel):
     class Stuck(Loop):
         def hold(self):

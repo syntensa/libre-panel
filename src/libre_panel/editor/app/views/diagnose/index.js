@@ -6,10 +6,13 @@
 // doctor (doctor_session.py) shows test pictures on the panel and asks what is seen, with buttons;
 // its report goes to the project's form on GitHub with one click, and the person sends it. Then
 // the log (/api/logs, logview.py): its last entries, the problems or all, in detail on request, to
-// copy or keep, without the names of the person's folders. Built on the shell: see ../../README.md.
+// copy or keep, without the names of the person's folders. And what Libre Panel costs the PC
+// (/api/load, load_report.py): its processes, the main one's threads and the rounds of the sensor
+// service, asked for every two seconds while the card is on screen. Built on the shell: see
+// ../../README.md.
 
 import { endpoints } from "../../core/api.js";
-import { t } from "../../core/i18n.js";
+import { formatNumber, t } from "../../core/i18n.js";
 import { loadPanelInfo, loadServiceStates, loadSettings, loadSourceStates, openFolder, restartPanel } from "../../core/settings.js";
 import { useStore } from "../../core/state.js";
 import { html, useEffect, useRef, useState } from "../../lib/preact.js";
@@ -393,6 +396,162 @@ function LogCard() {
   </section>`;
 }
 
+// -- the load ------------------------------------------------------------------------------------------
+
+/** Whether the element of ``ref`` is on screen (and the page shown): the load is asked for only then. */
+function useOnScreen(ref) {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return undefined;
+    if (typeof IntersectionObserver === "undefined") {
+      setOn(true);
+      return undefined;
+    }
+    const watch = new IntersectionObserver((entries) => setOn(entries.some((entry) => entry.isIntersecting)));
+    watch.observe(node);
+    return () => watch.disconnect();
+  }, []);
+  return on;
+}
+
+/** The load, every two seconds while ``on`` (sooner while the first measurement is not in). */
+function useLoad(on) {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    if (!on) return undefined;
+    let alive = true;
+    let timer = 0;
+    const tick = async () => {
+      let next = 2000;
+      if (!document.hidden) {
+        try {
+          const answer = await endpoints.load();
+          if (!alive) return;
+          setData(answer);
+          if (!answer.ready) next = 700;
+        } catch (error) {
+          if (alive) setData((now) => ({ ...(now || {}), problem: error.message }));
+        }
+      }
+      if (alive) timer = setTimeout(tick, next);
+    };
+    tick();
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [on]);
+  return data;
+}
+
+const percent = (value) => (value === null || value === undefined ? "–" : `${formatNumber(value, 1, { fixed: true })} %`);
+const megabytes = (bytes) => `${formatNumber(bytes / 1048576, 0)} MB`;
+const millis = (ms) => `${formatNumber(ms, 1, { fixed: true })} ms`;
+
+/** A process's row, in the app's language. */
+function processName(row) {
+  const many = row.count > 1 ? ` ×${row.count}` : "";
+  const names = {
+    main: () => t("Main process"),
+    panel: () => (row.panel ? t("Panel {n}", { n: row.panel }) : t("A panel's process")),
+    ffmpeg: () => (row.panel ? t("Video of panel {n} (ffmpeg)", { n: row.panel }) : t("Video (ffmpeg)")),
+    presentmon: () => t("Frame rates (PresentMon)"),
+    window: () => t("Window"),
+    webview: () => t("Browser engine of the window"),
+    service: () => t("Sensor service"),
+  };
+  return (names[row.role]?.() ?? (row.name || t("Other"))) + many;
+}
+
+/** A round of LibreHardwareMonitor: what it took, and its slowest parts. */
+function Round({ title, done }) {
+  const slowest = done.parts.slice(0, 3);
+  return html`<div class="load-round">
+    <div class="load-round-head"><span>${title}</span><strong class="mono">${millis(done.ms)}</strong></div>
+    ${slowest.length
+      ? html`<p class="muted">${t("Slowest:")} ${slowest.map((part, index) => html`<span key=${index} class="load-part" title=${part.kind}>${index ? " · " : ""}${part.name || part.kind} <span class="mono">${millis(part.ms)}</span></span>`)}</p>`
+      : html`<p class="muted">${t("Nothing was read: no theme on show needs it.")}</p>`}
+  </div>`;
+}
+
+function Rounds({ sensors }) {
+  if (!sensors) return null;
+  const where = sensors.mode === "service"
+    ? t("Through the sensor service {version}", { version: sensors.version || "" }).trim()
+    : sensors.mode === "inprocess" ? t("Inside Libre Panel") : t("From its web server");
+  let body;
+  if (sensors.mode === "webserver") body = html`<p class="muted">${t("LibreHardwareMonitor runs as a program of its own: what it costs is not counted here.")}</p>`;
+  else if (sensors.error) body = html`<p class="muted">${t("Not read now: {reason}", { reason: sensors.error })}</p>`;
+  else if (!sensors.reported) body = html`<p class="muted" data-load="unreported">${t("Not reported by this service version.")}</p>`;
+  else if (!sensors.last && !sensors.full) body = html`<p class="muted">${t("No round yet.")}</p>`;
+  else {
+    body = html`${sensors.last ? html`<${Round} title=${sensors.last.full ? t("Last round, all hardware") : t("Last round (every second)")} done=${sensors.last} />` : null}
+      ${sensors.full && !sensors.last?.full ? html`<${Round} title=${t("All hardware (now and then)")} done=${sensors.full} />` : null}`;
+  }
+  return html`<div class="load-sensors" data-load="sensors">
+    <h3>${t("LibreHardwareMonitor's rounds")} <span class="muted">${where}</span></h3>
+    ${body}
+  </div>`;
+}
+
+function LoadCard() {
+  const card = useRef(null);
+  const on = useOnScreen(card);
+  const data = useLoad(on);
+  useStore((s) => s.lang);
+  const ready = Boolean(data?.ready);
+  const threads = ready ? data.threads : [];
+  let body;
+  if (!ready) {
+    body = data?.problem ? html`<p class="diagnose-failed">${data.problem}</p>` : html`<p class="muted" role="status">${t("Measuring …")}</p>`;
+  } else {
+    body = html`<div class="load-headline">
+        <div class="load-figure"><strong data-load="cpu">${percent(data.total.cpu_pc)}</strong><span>${t("of the PC")}</span></div>
+        <div class="load-figure"><strong data-load="memory">${megabytes(data.total.rss)}</strong><span>${t("memory")}</span></div>
+        <p class="muted">${t("{core} of one core · {n} logical processors", { core: percent(data.total.cpu_core), n: data.cpus })}</p>
+      </div>
+      <table class="load-table">
+        <thead><tr><th>${t("Process")}</th><th>${t("Of the PC")}</th><th>${t("Of one core")}</th><th>${t("Memory")}</th></tr></thead>
+        <tbody>
+          ${data.processes.map((row, index) => html`<tr key=${index} data-role=${row.role}>
+            <td>${processName(row)}</td><td class="mono">${percent(row.cpu_pc)}</td><td class="mono">${percent(row.cpu_core)}</td><td class="mono">${megabytes(row.rss)}</td>
+          </tr>`)}
+        </tbody>
+      </table>
+      ${data.service?.state === "not running" ? html`<p class="muted">${t("The sensor service does not run.")}</p>` : null}
+      ${data.service?.found_by === "program name" ? html`<p class="muted">${t("The sensor service was found by its program's name: the Service Control Manager could not be asked.")}</p>` : null}
+      ${threads.length
+        ? html`<details class="load-threads">
+            <summary>${t("Threads of the main process")}</summary>
+            <ol>
+              ${threads.map((thread, index) => html`<li key=${index}>
+                <span class=${thread.name === "other" ? "" : "mono"}>${thread.name === "other" ? t("Other threads") : thread.name}${thread.count > 1 ? ` ×${thread.count}` : ""}</span>
+                <span class="mono">${percent(thread.cpu_core)}</span>
+              </li>`)}
+            </ol>
+            <p class="muted">${t("Of one core. Other threads: those without a name of Libre Panel's, and those that ended meanwhile.")}</p>
+          </details>`
+        : null}
+      <${Rounds} sensors=${data.sensors} />`;
+  }
+  return html`<section class="settings-card diagnose-load" aria-labelledby="diagnose-load-title" ref=${card}>
+    <div class="settings-card-head split">
+      <div>
+        <h2 id="diagnose-load-title">${t("Load")}</h2>
+        <p>${t("What Libre Panel costs this PC now: each of its processes, the threads of the main one and the sensor service's rounds, measured while this card is on screen.")}</p>
+      </div>
+    </div>
+    <div class="diagnose-body">
+      ${body}
+      <div class="diagnose-actions">
+        <button type="button" class="btn" data-load="copy" disabled=${!ready} onClick=${() => copyText(data.text)}>${t("Copy as text")}</button>
+      </div>
+      <p class="muted diagnose-hint">${t("Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %. Memory is each process's working set.")}${ready ? ` ${t("Measuring took {ms}.", { ms: millis(data.sample_ms) })}` : ""}</p>
+    </div>
+  </section>`;
+}
+
 // -- the view ------------------------------------------------------------------------------------------
 
 export function DiagnoseView({ switcher }) {
@@ -410,6 +569,7 @@ export function DiagnoseView({ switcher }) {
       </div>
       <div class="diagnose-column">
         <${AtAGlance} />
+        <${LoadCard} />
         <${LogCard} />
       </div>
     </div>
