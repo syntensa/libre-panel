@@ -1573,6 +1573,10 @@ answer too.
 - Rarely the panel's video decoder hangs (the picture freezes). Libre Panel
   then restarts the panel, which takes about 10 seconds, and carries on. If
   that does not help three times in a row, it asks you to replug the panel.
+- `video-state.json` beside `config.toml` keeps what `"auto"` found out for the next start:
+  the bit rate each panel got to (the next start begins there, within the steps, instead of
+  climbing them again) and whether ffmpeg can start the graphics card's encoder (asked again
+  after a week, as a new driver may change it); delete the file to have both found out anew.
 
 | Setting | Default | |
 |---|---|---|
@@ -1584,7 +1588,7 @@ answer too.
 | `keyframe_s` | 10 | seconds between keyframes; below 3 flat backgrounds visibly pulse |
 | `maxrate` | `"auto"` | highest bit rate: `"auto"` starts at 2 Mbit/s for the 9.2" (1920×480 at 50 fps) and proportionally more for a panel with more pixels or frames (the 12.3": 3 Mbit/s), then follows the panel up the steps 3 · 4 · 6 · 8 · 12 · 16 · 24 · 32 Mbit/s: a step down while the panel takes less than it is sent, never below the start (a panel that cannot keep up there cannot keep up with the pictures: fewer `fps` help), a step up after a calm minute; the *Data rate* tile under Live says the cap in force. Or a fixed rate such as `"1500k"` or `"4M"` |
 | `profile` | `"auto"` | (these and the rows below are also on the card *Video experiment* under Settings → Panel, with how the panel is doing underneath; *Run every step by itself* there tries them all in turn and judges each from the panels' numbers) the H.264 profile: `"auto"` is `"high"` on the 9.2" and the 12.3" (measured to show there; it compresses far better) and `"baseline"` elsewhere; `"main"` and `"high"` ask more of a panel's decoder (if the panel shows nothing, go back to `"baseline"`) |
-| `encoder` | `"auto"` | the encoder: `"auto"` is the graphics card's where it was measured to show and ffmpeg can start it (AMD's `"h264_amf"`, probed once per run; one that stops before its first picture is left out), else `"libx264"` on the processor; `"h264_nvenc"` (NVIDIA) and `"h264_qsv"` (Intel) are an experiment to set by hand (`crf` and `preset` are x264's, a hardware encoder takes the quality from `maxrate`, NVIDIA's from `crf` too). What ffmpeg says about an encoder it cannot start is in the log |
+| `encoder` | `"auto"` | the encoder: `"auto"` is the graphics card's where it was measured to show and ffmpeg can start it (AMD's `"h264_amf"`, probed once a week; one that stops before its first picture is left out), else `"libx264"` on the processor; `"h264_nvenc"` (NVIDIA) and `"h264_qsv"` (Intel) are an experiment to set by hand (`crf` and `preset` are x264's, a hardware encoder takes the quality from `maxrate`, NVIDIA's from `crf` too). What ffmpeg says about an encoder it cannot start is in the log |
 | `ffmpeg` | `""` | path to ffmpeg; empty = the download's own, else look in `PATH` |
 | `local_clip` | `""` | see above |
 | `clip_asked` | `false` | `true` once the app has asked for `local_clip` (a name written there, or *Not now*); then it does not ask again |

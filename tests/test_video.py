@@ -24,9 +24,10 @@ from libre_panel.config import (  # noqa: E402
     VideoConfig,
     parse_config,
 )
-from libre_panel.devices import h264, turzx_usb, turzx_video  # noqa: E402
+from libre_panel.devices import h264, turzx_usb, turzx_video, video_state  # noqa: E402
 from libre_panel.devices.base import Counters, DeviceError, Display  # noqa: E402
 from libre_panel.devices.h264 import (  # noqa: E402
+    NAL_IDR,
     EncoderSettings,
     EncoderStopped,
     PictureSplitter,
@@ -173,6 +174,59 @@ def test_the_profile_and_the_encoder_of_auto_are_resolved_per_panel_and_pc(monke
     monkeypatch.setattr(h264, "_PROBED", {})
     assert encoder_works("/no/such/ffmpeg", "h264_amf") is False  # no ffmpeg: no
     assert h264._PROBED == {("/no/such/ffmpeg", "h264_amf"): False}  # asked once
+
+
+def test_a_new_run_starts_at_the_rate_the_last_one_got_to(isolated_home):
+    """video-state.json keeps the rate "auto" got to per panel; a new run starts there, on the
+    steps: never below its start, never above the top, and between two steps at the lower."""
+    assert RateControl(2.0, 8.0).rate == 8.0
+    assert RateControl(3.0, 2.0).rate == 3.0  # below the start: the start
+    assert RateControl(2.0, 64.0).rate == 32.0  # above the top: the top
+    assert RateControl(2.0, 5.0).rate == 4.0  # between the steps: the one below
+    assert RateControl(2.4, 2.5).rate == 2.4 and RateControl(2.0).rate == 2.0
+    key = ("turing-9.2-usb", "usb:1.9", (1920, 480))
+    video_state.keep_rate(key, 6.0)  # no folder of config.toml yet: nothing is kept
+    assert video_state.rate(key) == 0.0 and not isolated_home.exists()
+    isolated_home.mkdir()
+    other = ("turing-12.3-usb", "usb:1.4", (1920, 720))  # another panel, each for itself
+    video_state.keep_rate(key, 6.0)
+    video_state.keep_rate(other, 8.0)
+    assert video_state.rate(key) == 6.0 and video_state.rate(other) == 8.0
+    assert video_state.rate((*key[:2], (480, 1920))) == 0.0  # another picture size
+    (isolated_home / video_state.STATE_FILENAME).write_text("{not json", encoding="utf-8")
+    assert video_state.rate(key) == 0.0  # a file that cannot be read counts as empty
+
+
+def test_the_answer_of_a_probe_is_kept_for_a_week(isolated_home, monkeypatch):
+    """Whether ffmpeg can start a card's encoder is asked once, kept in video-state.json, and
+    taken by the next runs for a week; then it is asked again (a new driver may change it)."""
+    from libre_panel.devices.h264 import encoder_works
+
+    isolated_home.mkdir()
+    asked = []
+
+    def run(command, **kwargs):
+        asked.append((command[0], command[command.index("-c:v") + 1]))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(subprocess, "run", run)
+    monkeypatch.setattr(h264, "_PROBED", {})
+    assert encoder_works("ffmpeg-here", "h264_amf") is True
+    assert asked == [("ffmpeg-here", "h264_amf")]
+    monkeypatch.setattr(h264, "_PROBED", {})  # the next run
+    assert encoder_works("ffmpeg-here", "h264_amf") is True and len(asked) == 1  # not asked
+    eight_days = time.time() - video_state.PROBE_S - 24 * 3600
+    video_state.keep_probe("ffmpeg-here", "h264_amf", False, now=eight_days)
+    monkeypatch.setattr(h264, "_PROBED", {})
+    assert encoder_works("ffmpeg-here", "h264_amf") is True and len(asked) == 2  # asked again
+    assert video_state.probed("ffmpeg-here", "h264_amf") is True  # and kept anew
+    video_state.keep_probe("ffmpeg-here", "h264_amf", False, now=time.time() - 3600)
+    monkeypatch.setattr(h264, "_PROBED", {})
+    assert encoder_works("ffmpeg-here", "h264_amf") is False and len(asked) == 2  # within the week
+    assert encoder_works("ffmpeg-elsewhere", "h264_amf") and len(asked) == 3  # each for itself
+    future = time.time() + 3600  # the clock went back since: asked again
+    video_state.keep_probe("ffmpeg-here", "h264_amf", False, now=future)
+    assert video_state.probed("ffmpeg-here", "h264_amf") is None
 
 
 @needs_ffmpeg
@@ -387,6 +441,7 @@ def panel(monkeypatch):
     monkeypatch.setattr(turzx_usb.UsbTransport, "open", staticmethod(open_transport))
     monkeypatch.setattr(turzx_usb.UsbTransport, "present", staticmethod(lambda pid: fake.present))
     monkeypatch.setattr(turzx_video, "RESTART", turzx_video._Restart())  # no count from before
+    monkeypatch.setattr(turzx_video, "RATES", {})  # no rate found before (calm since long ago)
     return fake
 
 
@@ -767,6 +822,179 @@ def test_auto_rate_steps_down_on_a_slow_panel_and_the_counters_say_the_cap(panel
         assert fixed.rate is None and fixed.counters.bit_rate == 1.5
     finally:
         fixed.close()
+
+
+def frame_number(picture):
+    """Which of :func:`moving_frames` a decoded picture (turned as the panel holds it) shows:
+    where its rectangle begins."""
+    row = picture.transpose(Image.Transpose.ROTATE_90).crop((0, 240, 1920, 241)).tobytes()
+    left = next(x for x in range(1920) if row[3 * x + 1] > 110)  # its green, not the background's
+    return round((left - 40) / 12)
+
+
+def kinds(block):
+    return [kind for _, kind in nal_units(block)]
+
+
+@needs_ffmpeg
+def test_a_step_of_the_bit_rate_leaves_no_gap(panel, monkeypatch):
+    """A step of "auto" starts the new ffmpeg beside the old one: the panel goes on showing the
+    old one's pictures, frame by frame, until the new one's first (a keyframe), and nothing is
+    counted as dropped or restarted for it."""
+    import sys
+
+    monkeypatch.setattr(turzx_video, "RATES", {})
+    # only the step made here: ffmpeg's start-up sends a few pictures at once, which can
+    # make the sender wait for room often enough for a step down within the first window
+    monkeypatch.setattr(RateControl, "TROUBLE_WAITS", 10**6)
+    display = TurzxVideoDisplay(video_config())
+    display.open()
+    frames = moving_frames(140)
+    try:
+        stream_frames(display, frames[:30])
+        old = display.encoder
+        assert "2.0M" in old.command
+        # the new ffmpeg takes half a second to start, as on a busy PC: what the panel shows
+        # meanwhile can be counted on any machine
+        real = turzx_video.ffmpeg_command
+        late = (
+            "import subprocess, sys, time; time.sleep(0.5); sys.exit(subprocess.call(sys.argv[1:]))"
+        )
+        monkeypatch.setattr(
+            turzx_video, "ffmpeg_command", lambda *a: [sys.executable, "-c", late, *real(*a)]
+        )
+        display.rate.rate = 3.0  # as after a calm minute: the next frame starts the switch
+        after = 0
+        for frame in frames[30:]:
+            display.show(frame)
+            time.sleep(0.02)
+            after += display._leaving is None
+            if after > 15:  # the switch is done, and the new one has shown a while
+                break
+        settle(panel)
+        assert display.encoder is not old and "3.0M" in display.encoder.command
+        assert display._leaving is None and old.proc.poll() is not None  # the old one is closed
+        assert display.counters.bit_rate == 3.0 and display.counters.drops == 0
+        assert display.counters.ffmpeg_restarts == 0
+    finally:
+        display.close()
+    keyframes = [i for i, block in enumerate(panel.blocks) if NAL_IDR in kinds(block)]
+    assert len(keyframes) == 2 and keyframes[0] == 0
+    switch = keyframes[1]
+    assert kinds(panel.blocks[switch])[:2] == [7, 8]  # the new stream's parameter sets with it
+    assert all(slice_count(block) == 1 for block in panel.blocks) and panel.overwritten == 0
+    shown = [frame_number(picture) for picture in decode(panel.stream())]
+    assert len(shown) == len(panel.blocks)
+    assert shown[:switch] == list(range(switch))  # the old one, frame by frame, to the end
+    assert shown[switch - 1] > 30  # and on while the new one started
+    # the new one starts with the first frame it took, and no frame was left out before it
+    assert 30 <= shown[switch] <= shown[switch - 1] + 1
+    assert all(a < b for a, b in itertools.pairwise(shown[switch:]))  # then the new one, on
+    assert len(shown) - switch > 5
+    assert not NEVER & set(panel.commands) and panel.commands.count(110) == 1
+
+
+@needs_ffmpeg
+def test_a_new_ffmpeg_that_shows_nothing_is_given_up_and_the_old_one_goes_on(
+    panel, monkeypatch, caplog
+):
+    """A switch whose new ffmpeg has no picture in time is given up: the new one is closed,
+    the old one never stopped showing, and the switch waits a minute before it is tried again."""
+    monkeypatch.setattr(turzx_video, "RATES", {})
+    monkeypatch.setattr(RateControl, "TROUBLE_WAITS", 10**6)  # only the step made here
+    monkeypatch.setattr(TurzxVideoDisplay, "SWITCH_S", 1.0)
+    made = []
+
+    class Silent(h264.Encoder):
+        """Takes the frames and never hands a picture on."""
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            made.append(self)
+
+        def _hand_on(self, picture):
+            pass
+
+    display = TurzxVideoDisplay(video_config())
+    display.open()
+    frames = moving_frames(140)
+    try:
+        stream_frames(display, frames[:20])
+        old = display.encoder
+        monkeypatch.setattr(turzx_video, "Encoder", Silent)
+        display.rate.rate = 3.0
+        given_up = 20
+        with caplog.at_level("WARNING", logger="libre_panel.devices.turzx_video"):
+            for given_up in range(20, 110):
+                display.show(frames[given_up])
+                time.sleep(0.02)
+                if made and display._leaving is None:
+                    break
+        assert len(made) == 1 and made[0].proc.poll() is not None  # the new one is closed
+        assert display.encoder is old and old.alive and display.counters.bit_rate == 2.0
+        assert any("no picture after" in r.getMessage() for r in caplog.records)
+        stream_frames(display, frames[given_up + 1 : given_up + 6])
+        assert len(made) == 1 and display.encoder is old  # not tried again within the minute
+        assert display.counters.drops == 0 and display.counters.ffmpeg_restarts == 0
+        settle(panel)
+        assert sum(NAL_IDR in kinds(block) for block in panel.blocks) == 1  # the old one's
+        shown = [frame_number(picture) for picture in decode(panel.stream())]
+        assert shown == list(range(len(shown))) and shown[-1] >= given_up  # the old one, on
+
+        monkeypatch.setattr(turzx_video, "Encoder", h264.Encoder)
+        monkeypatch.setattr(TurzxVideoDisplay, "SWITCH_S", 3.0)
+        display._switch_held = 0.0  # as a minute later: tried again, now with a real one
+        deadline = time.monotonic() + 20
+        for frame in itertools.cycle(frames[given_up + 6 :]):
+            display.show(frame)
+            time.sleep(0.02)
+            if display.encoder is not old and display._leaving is None:
+                break
+            assert time.monotonic() < deadline
+        settle(panel)
+        assert len(made) == 1 and "3.0M" in display.encoder.command and old.proc.poll() is not None
+        assert display.counters.drops == 0
+        assert sum(NAL_IDR in kinds(block) for block in panel.blocks) == 2
+    finally:
+        display.close()
+
+
+@needs_ffmpeg
+def test_the_rate_auto_got_to_is_where_the_next_run_starts(panel, monkeypatch, isolated_home):
+    """The rate goes into video-state.json when it changes (at most every 10 s) and when the
+    panel is closed; the next run's display starts there."""
+    isolated_home.mkdir()
+    monkeypatch.setattr(turzx_video, "RATES", {})
+    frame = moving_frames(1)[0]
+    display = TurzxVideoDisplay(video_config())
+    display.open()
+    try:
+        display.show(frame)
+        key = display._rate_key
+        assert key[::2] == ("turing-9.2-usb", (1920, 480)) and video_state.rate(key) == 0.0
+        display._keep_rate(100.0)
+        assert video_state.rate(key) == 0.0  # nothing found yet: nothing written
+        display.rate.rate = 3.0
+        display._keep_rate(100.0)
+        assert video_state.rate(key) == 3.0  # a change: written
+        display.rate.rate = 4.0
+        display._keep_rate(105.0)
+        assert video_state.rate(key) == 3.0  # the next within 10 s waits
+        display._keep_rate(110.0)
+        assert video_state.rate(key) == 4.0
+        display.rate.rate = 6.0
+    finally:
+        display.close()
+    assert video_state.rate(key) == 6.0  # on close, whenever the last write was
+    monkeypatch.setattr(turzx_video, "RATES", {})  # the next run
+    again = TurzxVideoDisplay(video_config())
+    again.open()
+    try:
+        again.show(frame)
+        assert again.rate.rate == 6.0 and "6.0M" in again.encoder.command
+        assert again.counters.bit_rate == 6.0 and again.rate.steps[0] == 2.0  # its floor stays
+    finally:
+        again.close()
 
 
 @needs_ffmpeg

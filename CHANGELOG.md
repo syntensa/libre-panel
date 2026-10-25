@@ -3,6 +3,13 @@
 ## 0.7.1rc5 — 2026-10-24
 
 **Changes**
+- **A step of the bit rate without a gap, and what auto found is kept**: when "auto" steps
+  the cap, a second ffmpeg starts beside the running one and takes over with its first
+  picture; the panel keeps showing the old stream until then (one that shows nothing within
+  3 s is given up, the old one goes on, a retry comes after a minute). The rate a panel got to
+  and the answer of an encoder probe are kept in `video-state.json` next to the settings: the
+  next run starts at that rate instead of climbing again, and an encoder is probed once a
+  week, not once a run.
 - **The renderer keeps more between frames**: the lit rings keep their groove and sweep and
   redraw only the tip, the background is laid once for the whole panel, the fans of a list
   turn over the list instead of redrawing its names and numbers, composed parts go into the

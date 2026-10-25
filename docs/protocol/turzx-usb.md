@@ -207,6 +207,9 @@ x264, Constrained Baseline, yuv420p, Annex B:
   link lags; a healthy block takes about 1 ms), a step up after 60 s without
   that (a failed step is held off for 10 min, twice as long each time it fails
   again). Each step starts ffmpeg anew: x264 cannot change its rate on the way.
+- A step does not freeze the picture: the new ffmpeg starts beside the old one, whose
+  pictures go on to the panel until the new one's first (SPS, PPS, keyframe); one without a
+  picture within 3 s is closed and the old one goes on (tried again after a minute).
 - Measured on the 12.3" with a 9.2" beside it (2026-10, Settings → Panel →
   Video experiment, during a game): the 12.3" took every step without the
   sender waiting for room, nothing dropped, no faults, with caps up to 32M
