@@ -22,7 +22,8 @@ jobs:
       - run: ruff format --check .
 
   test:
-    timeout-minutes: 30
+    # Windows takes about 20 minutes for the suite, and a slow runner more
+    timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
@@ -50,7 +51,7 @@ jobs:
           fi
           export PATH="$RUNNER_TEMP/tools:$PATH"
           ffmpeg -hide_banner -encoders | grep libx264
-      - run: pytest -q -rs
+      - run: pytest -q -rs --durations=20
       - name: Render the built-in themes
         run: |
           libre-panel preview libre-default -o libre-default.png
