@@ -1,0 +1,89 @@
+# A "Share a theme" issue (.github/ISSUE_TEMPLATE/share_theme.yml) becomes a pull request that
+# puts the theme among the community themes (community/themes). What comes from the issue is
+# looked into only in the first job, which may write nothing; the second takes what it left,
+# checks it again as data and opens the pull request. A person looks at it before it is merged.
+# Needs Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests".
+name: Community theme
+
+on:
+  issues:
+    types: [opened, edited]
+
+concurrency:
+  group: community-theme-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    if: github.event.issue.state == 'open' && (contains(github.event.issue.labels.*.name, 'community theme') || startsWith(github.event.issue.title, 'Theme:'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install .
+      - name: Check the theme and draw its picture
+        env:
+          BODY: ${{ github.event.issue.body }}
+          LOGIN: ${{ github.event.issue.user.login }}
+        run: |
+          printf '%s' "$BODY" > "$RUNNER_TEMP/issue.md"
+          python tools/community_theme.py check --issue "$RUNNER_TEMP/issue.md" --login "$LOGIN" --out "$RUNNER_TEMP/checked"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: checked
+          path: ${{ runner.temp }}/checked
+          retention-days: 3
+
+  add:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install .
+      - uses: actions/download-artifact@v4
+        with:
+          name: checked
+          path: ${{ runner.temp }}/checked
+      - name: Put it beside the list and open the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: |
+          if ! id=$(python tools/community_theme.py add --checked "$RUNNER_TEMP/checked" --number "$NUMBER" \
+              --pull-request "$RUNNER_TEMP/pr.md" --refusal "$RUNNER_TEMP/refusal.md"); then
+            gh issue comment "$NUMBER" --body-file "$RUNNER_TEMP/refusal.md"
+            exit 0
+          fi
+          branch="community/theme-$NUMBER"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add community/themes
+          git commit -q -m "Community theme: $id (#$NUMBER)"
+          git push -q --force origin "$branch"
+          url=$(gh pr list --head "$branch" --state open --json url --jq '.[0].url // ""')
+          if [ -z "$url" ]; then
+            url=$(gh pr create --base main --head "$branch" --title "Community theme: $id" --body-file "$RUNNER_TEMP/pr.md")
+          else
+            gh pr edit "$url" --body-file "$RUNNER_TEMP/pr.md"
+          fi
+          printf 'Thanks! Your theme passed the check and waits for a look: %s\n\nOnce it is merged, it shows in everyone'"'"'s app under *Start → Themes → Community themes* (within the hour).\n' "$url" > "$RUNNER_TEMP/comment.md"
+          gh issue comment "$NUMBER" --body-file "$RUNNER_TEMP/comment.md"

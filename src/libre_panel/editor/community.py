@@ -6,8 +6,8 @@ list, and the zip's SHA-256. Libre Panel asks for the list only when the person 
 *Community themes*, keeps it an hour, and each preview as long. Those requests carry what any
 does (the computer's address, "libre-panel/<version>"), nothing of the person or the panel.
 *Install* downloads the zip from beside the list (nowhere else: a redirect to another host is
-not followed), checks its SHA-256 and puts it in place as an import of the file does
-(theme/share.py).
+not followed), checks its SHA-256 and that the theme in it is made for the sizes the list says,
+and puts it in place as an import of the file does (theme/share.py).
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from urllib.parse import urlsplit
 from libre_panel import __version__
 from libre_panel.i18n import t
 from libre_panel.theme.model import valid_theme_name
-from libre_panel.theme.share import MAX_ZIP, import_theme
+from libre_panel.theme.share import MAX_ZIP, import_theme, inspect_shared
 
 log = logging.getLogger(__name__)
 
@@ -237,5 +237,11 @@ class Community:
             raise CommunityError(
                 t("The download is not the file the community's list names (its checksum "
                   "differs): nothing was installed.")
+            )  # fmt: skip
+        width, height = inspect_shared(data)["size"]
+        if not any(size in ([width, height], [height, width]) for size in entry["sizes"]):
+            raise CommunityError(
+                t("The theme in the download is made for {size}, not for the panels the "
+                  "community's list names: nothing was installed.", size=f"{width} × {height}")
             )  # fmt: skip
         return import_theme(data, folder=entry["id"])

@@ -496,6 +496,76 @@ def test_the_community_themes_are_asked_for_once_opened_and_one_installs(
         assert (isolated_home / "themes" / "aurora" / "theme.json").is_file()
 
 
+def test_the_community_themes_follow_the_chosen_panel_and_one_of_yours_is_shared(
+    app_url,  # noqa: F811
+    isolated_home,
+    github,  # noqa: F811
+    tmp_path,
+):
+    """What fits the panel comes first, marked; one made for another asks before it installs;
+    an installed one goes on the panel with one click; and one of yours is shared through
+    GitHub's form, filled in, with the theme saved for it."""
+    import hashlib
+    from urllib.parse import parse_qs, urlsplit
+
+    from test_share import an_entry, png, theme_json, zipped
+
+    other = zipped({"wide/theme.json": theme_json(name="Wide", display={"model": "custom",
+                    "width": 800, "height": 480}), "wide/assets/back.png": png()})  # fmt: skip
+    index = json.loads(github["/main/community/themes/index.json"])
+    index["themes"].append(an_entry(name="Wide", zip_path="wide/wide.zip", sizes=["800x480"],
+                                    preview="wide/preview.png",
+                                    sha256=hashlib.sha256(other).hexdigest()))  # fmt: skip
+    github["/main/community/themes/index.json"] = json.dumps(index).encode()
+    github["/main/community/themes/wide/wide.zip"] = other
+    github["/main/community/themes/wide/preview.png"] = png()
+    choose_theme(isolated_home, "lumen")
+    routes = {"**/api/app": a_panel_app()}  # a 9.2" bar: 1920 × 480
+    with browser_page(app_url, "home/themes", routes=routes, allow=PICTURE) as page:
+        page.get_by_role("button", name=re.compile("^Community themes")).click()
+        aurora = page.locator(".community-card[data-community='aurora']")
+        wide = page.locator(".community-card[data-community='wide']")
+        expect(aurora).to_contain_text("Fits Turing 9.2″")
+        expect(wide).to_have_count(0)  # made for 800 × 480: under All sizes
+        page.locator(".community-scope").get_by_role("radio", name="All sizes").click()
+        expect(wide).not_to_contain_text("Fits")
+        wide.get_by_role("button", name="Install “Wide”").click()
+        dialog = page.locator(".dialog")
+        expect(dialog).to_contain_text("Made for another panel")
+        expect(dialog).to_contain_text(
+            "“Wide” is made for 800 × 480, and Turing 9.2″ is 1920 × 480"
+        )
+        dialog.get_by_role("button", name="Cancel").click()
+        assert not (isolated_home / "themes" / "wide").exists()
+        wide.get_by_role("button", name="Install “Wide”").click()
+        page.locator(".dialog").get_by_role("button", name="Install anyway").click()
+        waits_for(page, lambda: (isolated_home / "themes" / "wide" / "theme.json").is_file())
+        aurora.get_by_role("button", name="Install “Aurora”").click()
+        aurora.get_by_role("button", name="Show on the panel").click()
+        waits_for(page, lambda: settings_config().theme == "aurora")
+        # one of yours, shared: its name, who made it and what it shows, then the file and the form
+        mine = page.locator(".theme-card[data-theme='aurora']")
+        mine.get_by_role("button", name="Share “Aurora” with everyone…").click()
+        dialog = page.locator(".dialog")
+        save = dialog.get_by_role("button", name="Save the theme")
+        expect(save).to_be_disabled()  # what it shows, and that it may be shared, first
+        dialog.get_by_label("Made by").fill("Northern")
+        dialog.get_by_label("What it shows").fill("Lights over the time.")
+        dialog.get_by_role("checkbox").check()
+        with page.expect_download() as saved:
+            save.click()
+        assert saved.value.suggested_filename == "aurora.zip"
+        expect(dialog).to_contain_text("aurora.zip is saved in your downloads.")
+        form = urlsplit(dialog.locator("[data-share-form]").get_attribute("href"))
+        fields = {key: values[0] for key, values in parse_qs(form.query).items()}
+        assert form.netloc == "github.com" and fields["template"] == "share_theme.yml"
+        assert (fields["title"], fields["name"], fields["author"], fields["description"]) == (
+            "Theme: Aurora", "Aurora", "Northern", "Lights over the time.")  # fmt: skip
+        dialog.get_by_role("button", name="Close").click()
+        mine.get_by_role("button", name="Share “Aurora” with everyone…").click()
+        expect(page.locator(".dialog").get_by_label("Made by")).to_have_value("Northern")  # kept
+
+
 def test_offline_the_community_themes_say_so_quietly(app_url, isolated_home):  # noqa: F811
     choose_theme(isolated_home, "lumen")
     with browser_page(app_url, "home/themes", allow=PICTURE) as page:

@@ -25,7 +25,7 @@ import { MountedChoice, PanelCard, PanelStrip, asksMounting, panelModelNow, useP
 import { Gallery, ThemeRow, collectionsOf, fitsPanel, startThemes } from "./themes.js";
 import { ScenesCard } from "./scenes.js";
 import { SequenceCard, SequencePage } from "./sequence.js";
-import { CommunityThemes, exportZip, importZip, useDropFile } from "./sharing.js";
+import { CommunityThemes, exportZip, importZip, shareWithEveryone, useDropFile } from "./sharing.js";
 import { SetupCard } from "./setup.js";
 import { UpdateCard } from "./update.js";
 
@@ -203,8 +203,8 @@ function ThemesPage({ asked }) {
           onClick=${pick}><${Icon} name="upload" size=${16} /> ${t("Import…")}</button>
       </div>
     </div>
-    <${Gallery} items=${shown} asked=${asked} label=${themeLabel} onChoose=${choose} onEdit=${edit} onExport=${exportZip} />
-    <${CommunityThemes} onInstalled=${select} />
+    <${Gallery} items=${shown} asked=${asked} label=${themeLabel} onChoose=${choose} onEdit=${edit} onExport=${exportZip} onShare=${shareWithEveryone} />
+    <${CommunityThemes} model=${model} onInstalled=${select} />
     <${StartActions} />
     ${dropping ? html`<div class="gallery-drop" aria-hidden="true"><${Icon} name="upload" size=${22} /> ${t("Drop the .zip to add the theme to yours")}</div>` : null}
   </div>`;

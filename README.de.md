@@ -54,8 +54,8 @@
 </p>
 
 Panel anstecken, Libre Panel starten: Es zeigt Prozessor, Grafikkarte, Arbeitsspeicher,
-Lüfter, Netzwerk, was gerade läuft und das Wetter draußen, in einem Theme, das du auswählst
-oder selbst baust, auf bis zu vier Panels zugleich. Es läuft unauffällig im Tray und ersetzt
+Lüfter, Netzwerk, was gerade läuft und das Wetter draußen, in einem Theme, das du auswählst,
+selbst baust oder aus der Community installierst, auf bis zu vier Panels zugleich. Es läuft unauffällig im Tray und ersetzt
 die Hersteller-App.
 
 ## Funktionen
@@ -407,16 +407,36 @@ Was jedes zeigt, ausführlich: [alle eingebauten Themes](docs/THEMES.md#every-bu
 Panel bringen. Themes sind schlichtes JSON mit ihren Bildern und Schriften und können keinen
 Code ausführen ([Theme-Format](docs/THEMES.md)).
 
+### Themes der Community
+
+Themes, die andere Nutzer von Libre Panel gebaut haben, einen Klick entfernt: *Start → Themes →
+Themes der Community* zeigt zuerst die, die für das oben gewählte Panel gemacht sind, markiert
+mit *Passt*, und die übrigen unter *Alle Größen*. **Installieren** legt eins zu deinen, **Auf
+dem Panel zeigen** bringt es dorthin; eins für eine andere Größe fragt vorher nach, weil es
+skaliert würde.
+
+- **Teile deins mit zwei Klicks.** *Mit allen teilen …* (die Weltkugel auf der Karte deines
+  Themes) fragt, wie es heißt und was es zeigt, speichert es als eine `.zip` und öffnet das
+  ausgefüllte Formular auf GitHub: Datei hineinziehen, abschicken. Eine Prüfung läuft von selbst,
+  zeichnet sein Bild und bereitet es für die Liste vor; nach einem Blick darauf steht es in der
+  App aller. *Exportieren …* und *Importieren …* geben ein Theme direkt weiter.
+- **Sicher gebaut.** Ein Theme ist reines JSON mit seinen Bildern und Schriften und kann keinen
+  Code ausführen. Die App holt die Liste und die Zips nur aus diesem Repository, prüft jede Zip
+  vor dem Entpacken gegen ihren SHA-256 und die Panelgröße ihres Eintrags, und jedes Theme wird
+  angesehen, bevor es in die Liste kommt.
+- **Ohne Konto.** Die App fragt GitHub erst nach der Liste, wenn du sie öffnest, und die
+  Anfrage enthält nichts über dich oder dein Panel.
+
+Die Galerie ist neu, die ersten Themes darin können deine sein
+([Teilen, Schritt für Schritt](community/themes/README.md)). Themes zum Besprechen oder noch
+im Werden gehören in die [Discussions](https://github.com/syntensa/libre-panel/discussions).
+
 <details>
-<summary><b>Ein Theme teilen</b>, und die Bildschirme von SPUR II</summary>
+<summary><b>Die Bildschirme von SPUR II</b></summary>
 <br>
 
-Eins gebaut, das dir gefällt? *Exportieren …* auf seiner Karte in *Start → Themes* speichert es
-als eine `.zip`, und *Importieren …* dort fügt eins hinzu, das dir jemand gegeben hat. Teile es
-in den [Discussions](https://github.com/syntensa/libre-panel/discussions) oder mit allen unter
-den [Themes der Community](community/themes/README.md), die die App auflistet und mit einem
-Klick installiert. Ebenfalls eingebaut: die acht Bildschirme von SPUR II als Legacy-Sammlung,
-siehe [Wo alles begann](#wo-alles-begann).
+Ebenfalls eingebaut: die acht Bildschirme von SPUR II als Legacy-Sammlung, siehe
+[Wo alles begann](#wo-alles-begann).
 </details>
 
 <details>

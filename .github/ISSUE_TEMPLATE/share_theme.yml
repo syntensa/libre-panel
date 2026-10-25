@@ -1,0 +1,49 @@
+name: Share a theme
+description: Put a theme you made among the community themes, for everyone's app
+title: "Theme: "
+labels: [community theme]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing! Libre Panel's **Share with everyone…** (on your theme's card in *Start → Themes*) has filled this in and saved the theme as a `.zip`. Drag that file into **The theme** below and send the issue.
+
+        A check runs by itself: it looks at the theme as Libre Panel looks at every shared theme, draws its picture with made-up readings and prepares it for the list. Then someone has a look, and once it is in, it shows in everyone's app under *Start → Themes → Community themes*.
+  - type: input
+    id: name
+    attributes:
+      label: Name
+      description: As the app shows it, up to 80 characters.
+    validations:
+      required: true
+  - type: input
+    id: author
+    attributes:
+      label: Made by
+      description: Your name or handle, as the app shows it. Empty is your GitHub name.
+  - type: textarea
+    id: description
+    attributes:
+      label: What it shows
+      description: A sentence or two, up to 400 characters.
+    validations:
+      required: true
+  - type: textarea
+    id: theme
+    attributes:
+      label: The theme
+      description: Drag the `.zip` Libre Panel saved here (at most 20 MB).
+    validations:
+      required: true
+  - type: input
+    id: tried
+    attributes:
+      label: Panels you tried it on
+      placeholder: e.g. Turing 9.2" USB
+  - type: checkboxes
+    id: consent
+    attributes:
+      label: Sharing
+      options:
+        - label: Every picture and font in it may be shared with everyone (they are my own, or their license allows it).
+          required: true

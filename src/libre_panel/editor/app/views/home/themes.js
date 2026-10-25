@@ -92,9 +92,10 @@ function Picture({ item, width }) {
  * `onEdit` (if given) adds a button that says so and opens it for editing, `onExport` one that
  * saves it as a file to share. `item.selected` marks the card (a theme just added).
  */
-export function ThemeCard({ item, big = false, label, onChoose, onEdit, onExport }) {
+export function ThemeCard({ item, big = false, label, onChoose, onEdit, onExport, onShare }) {
   const name = item.name || item.id;
   const actions = onEdit || onExport;
+  const sharing = onShare && item.own; // (your own: with everyone, through GitHub's form)
   const kind = `${item.shown ? " current" : ""}${big ? " big" : ""}${actions ? " editable" : ""}${onExport ? " exportable" : ""}${item.selected ? " selected" : ""}`;
   return html`<article class=${`theme-card${kind}`} data-theme=${item.id}>
     <button type="button" class="theme-card-main" aria-label=${label} aria-current=${item.shown ? "true" : undefined} onClick=${() => onChoose(item)}>
@@ -116,6 +117,12 @@ export function ThemeCard({ item, big = false, label, onChoose, onEdit, onExport
     </button>
     ${actions
       ? html`<span class="theme-card-actions">
+          ${sharing
+            ? html`<button type="button" class="btn theme-card-export theme-card-share" aria-label=${t("Share “{name}” with everyone…", { name })}
+                title=${t("Share “{name}” with everyone…", { name })} onClick=${() => onShare(item)}>
+                <${Icon} name="globe" size=${14} />
+              </button>`
+            : null}
           ${onExport
             ? html`<button type="button" class="btn theme-card-export" aria-label=${t("Export “{name}”…", { name })}
                 title=${t("Export “{name}”…", { name })} onClick=${() => onExport(item)}>
@@ -147,12 +154,12 @@ export function ThemeRow({ item, label, onChoose }) {
   </button>`;
 }
 
-function Grid({ items, big, onChoose, onEdit, onExport, label, name }) {
+function Grid({ items, big, onChoose, onEdit, onExport, onShare, label, name }) {
   const upright = useMounted() === "portrait"; // tall pictures: narrow cards
   return html`<div class=${`theme-grid${big ? " big" : ""}${upright ? " upright" : ""}`} role="list" aria-label=${name || t("Themes")}>
     ${items.map(
       (item) => html`<div role="listitem" key=${item.id} class="theme-grid-item">
-        <${ThemeCard} item=${item} big=${big} label=${label(item)} onChoose=${onChoose} onEdit=${onEdit} onExport=${onExport} />
+        <${ThemeCard} item=${item} big=${big} label=${label(item)} onChoose=${onChoose} onEdit=${onEdit} onExport=${onExport} onShare=${onShare} />
       </div>`,
     )}
   </div>`;
@@ -193,11 +200,11 @@ function Collection({ name, items, alone, asked, ...more }) {
  * The cards: Libre Panel's own themes and yours in a grid, then one closed group for each
  * collection the themes name (A to Z; `asked` opens one). `big` makes the cards of the grid large.
  */
-export function Gallery({ items, big = false, asked = "", onChoose, onEdit, onExport, label }) {
+export function Gallery({ items, big = false, asked = "", onChoose, onEdit, onExport, onShare, label }) {
   const own = items.filter((item) => !item.collection);
   const names = collectionsOf(items).map((set) => set.name);
   return html`<div class="theme-gallery">
-    ${own.length ? html`<${Grid} items=${own} big=${big} onChoose=${onChoose} onEdit=${onEdit} onExport=${onExport} label=${label} />` : null}
+    ${own.length ? html`<${Grid} items=${own} big=${big} onChoose=${onChoose} onEdit=${onEdit} onExport=${onExport} onShare=${onShare} label=${label} />` : null}
     ${names.map(
       (name) => html`<${Collection} key=${name} name=${name} items=${items.filter((item) => item.collection === name)}
         alone=${!own.length && names.length === 1} asked=${name === asked} onChoose=${onChoose} onEdit=${onEdit} onExport=${onExport} label=${label} />`,

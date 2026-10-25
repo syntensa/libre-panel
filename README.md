@@ -54,8 +54,8 @@
 </p>
 
 Plug in the panel, start Libre Panel, and it shows your processor, graphics card, memory,
-fans, network, what is playing and the weather outside, in a theme you pick or build
-yourself, on up to four panels at once. It runs quietly in the tray and takes the vendor
+fans, network, what is playing and the weather outside, in a theme you pick, build yourself
+or install from the community, on up to four panels at once. It runs quietly in the tray and takes the vendor
 app's place.
 
 ## Features
@@ -396,15 +396,33 @@ What each one shows, in full: [every built-in theme](docs/THEMES.md#every-built-
 Every theme moves to any other panel from the panel button at the top of *Design*. Themes are
 plain JSON with their pictures and fonts, and cannot run code ([theme format](docs/THEMES.md)).
 
+### Community themes
+
+Themes other Libre Panel users made, one click away: *Start → Themes → Community themes*
+shows first the ones made for the panel you chose in the header, marked *Fits*, and the others
+under *All sizes*. **Install** puts one among yours, and **Show on the panel** puts it there;
+one made for another size asks first, as it would be scaled.
+
+- **Share yours in two clicks.** *Share with everyone…* (the globe on your theme's card) asks
+  what it is called and shows, saves it as one `.zip` and opens GitHub's form, filled in: drag
+  the file in and send. A check runs by itself, draws its picture and prepares it for the list;
+  after a look it is in everyone's app. *Export…* and *Import…* pass a theme on directly.
+- **Safe by design.** A theme is plain JSON with its pictures and fonts and cannot run code.
+  The app takes the list and the zips from this repository only, checks each zip against its
+  SHA-256 and the panel size its entry names before anything is unpacked, and every theme is
+  looked at before it is listed.
+- **No account.** The app asks GitHub for the list only when you open it, and the request
+  carries nothing of you or your panel.
+
+The gallery is new, so the first themes in it can be yours
+([sharing, step by step](community/themes/README.md)). Themes to talk about or still in the
+making belong in [Discussions](https://github.com/syntensa/libre-panel/discussions).
+
 <details>
-<summary><b>Share a theme</b>, and SPUR II's screens</summary>
+<summary><b>SPUR II's screens</b></summary>
 <br>
 
-Made one you like? *Export…* on its card in *Start → Themes* saves it as one `.zip`, and
-*Import…* there adds one someone gave you. Share it in
-[Discussions](https://github.com/syntensa/libre-panel/discussions), or with everyone among the
-[community themes](community/themes/README.md), which the app lists and installs with a
-click. Also built in: the eight screens of SPUR II as a legacy collection, see
+Also built in: the eight screens of SPUR II as a legacy collection, see
 [Where it started](#where-it-started).
 </details>
 
