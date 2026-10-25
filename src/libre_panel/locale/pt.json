@@ -2586,7 +2586,6 @@
     "Other": "Outro",
     "Other threads": "Outras threads",
     "Panel {n}": "Painel {n}",
-    "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %. Memory is each process's working set.": "Do PC é o que o Gerenciador de Tarefas mostra: o PC inteiro é 100 %. De um núcleo: um núcleo inteiro é 100 %. A memória é o conjunto de trabalho de cada processo.",
     "Process": "Processo",
     "Slowest:": "Os mais lentos:",
     "The sensor service does not run.": "O serviço de sensores não está rodando.",
@@ -2649,7 +2648,11 @@
     "{encoder} was passed over:": "{encoder} foi descartado:",
     "no picture came from it": "nenhuma imagem saiu dele",
     "30 looks smooth and is the default. 50 is smoother still and costs about two thirds more processor time (measured with two panels: 2.0 instead of 1.2 cores); 25 asks least. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "30 fica fluido e é o padrão. 50 é ainda mais fluido e custa cerca de dois terços a mais de tempo de processador (medido com dois painéis: 2,0 núcleos em vez de 1,2); 25 exige o mínimo. 60 é um experimento: o painel recebe 70, para que seu player fique à frente.",
-    "50 frames a second": "50 quadros por segundo"
+    "50 frames a second": "50 quadros por segundo",
+    "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %.": "Do PC é o que o Gerenciador de Tarefas mostra: o PC inteiro é 100 %. De um núcleo: um núcleo inteiro é 100 %.",
+    "Working set": "Conjunto de trabalho",
+    "Working set: {size}": "Conjunto de trabalho: {size}",
+    "Memory is each process's private memory, as the Task Manager's Memory column shows it (on its Details tab: Memory (active private working set)); – where Windows does not let it be read. The working set also counts what processes share, once for each.": "A memória é a memória privada de cada processo, como a coluna Memória do Gerenciador de Tarefas a mostra (na guia Detalhes: Memória (conjunto de trabalho privado ativo)); – onde o Windows não deixa lê-la. O conjunto de trabalho também conta o que os processos compartilham, uma vez para cada um."
   },
   "fields": {
     "agent": "agente",

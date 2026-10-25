@@ -2587,7 +2587,6 @@
     "Other": "Другое",
     "Other threads": "Другие потоки",
     "Panel {n}": "Панель {n}",
-    "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %. Memory is each process's working set.": "«От ПК» — как в диспетчере задач: весь ПК — 100 %. «От одного ядра»: целое ядро — 100 %. Память — рабочий набор каждого процесса.",
     "Process": "Процесс",
     "Slowest:": "Самые медленные:",
     "The sensor service does not run.": "Служба датчиков не работает.",
@@ -2649,7 +2648,11 @@
     "{encoder} was passed over:": "{encoder} пропущен:",
     "no picture came from it": "он не выдал ни одной картинки",
     "30 looks smooth and is the default. 50 is smoother still and costs about two thirds more processor time (measured with two panels: 2.0 instead of 1.2 cores); 25 asks least. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "30 выглядит плавно и используется по умолчанию. 50 ещё плавнее, но требует примерно на две трети больше процессорного времени (измерено с двумя панелями: 2,0 ядра вместо 1,2); 25 нагружает меньше всего. 60 — эксперимент: панели сообщается 70, чтобы её проигрыватель не отставал.",
-    "50 frames a second": "50 кадров в секунду"
+    "50 frames a second": "50 кадров в секунду",
+    "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %.": "«От ПК» — как в диспетчере задач: весь ПК — 100 %. «От одного ядра»: целое ядро — 100 %.",
+    "Working set": "Рабочий набор",
+    "Working set: {size}": "Рабочий набор: {size}",
+    "Memory is each process's private memory, as the Task Manager's Memory column shows it (on its Details tab: Memory (active private working set)); – where Windows does not let it be read. The working set also counts what processes share, once for each.": "Память — частная память каждого процесса, как её показывает столбец «Память» диспетчера задач (на вкладке «Подробности»: «Память (активный частный рабочий набор)»); – там, где Windows не даёт её прочитать. Рабочий набор учитывает и то, что процессы делят между собой, — для каждого по разу."
   },
   "fields": {
     "agent": "агент",

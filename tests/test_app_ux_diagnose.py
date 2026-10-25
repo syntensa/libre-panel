@@ -142,20 +142,21 @@ def test_a_port_other_devices_have_too_is_asked_about_and_can_be_none(app_url): 
 MB = 1024**2
 LOAD = {
     "ready": True, "cpus": 8, "window_s": 2.0, "sample_ms": 1.4, "age_s": 0.3,
-    "total": {"cpu_core": 41.0, "cpu_pc": 5.12, "rss": 735 * MB},
+    "total": {"cpu_core": 41.0, "cpu_pc": 5.12, "private": 382 * MB, "rss": 735 * MB},
     "processes": [
         {"role": "main", "panel": None, "name": "", "count": 1, "cpu_core": 25.0, "cpu_pc": 3.12,
-         "rss": 200 * MB, "label": "main process"},
+         "private": 150 * MB, "rss": 200 * MB, "label": "main process"},
         {"role": "panel", "panel": 2, "name": "", "count": 1, "cpu_core": 10.0, "cpu_pc": 1.25,
-         "rss": 90 * MB, "label": "panel 2"},
+         "private": 70 * MB, "rss": 90 * MB, "label": "panel 2"},
         {"role": "ffmpeg", "panel": 2, "name": "", "count": 1, "cpu_core": 4.0, "cpu_pc": 0.5,
-         "rss": 40 * MB, "label": "ffmpeg (panel 2)"},
+         "private": 30 * MB, "rss": 40 * MB, "label": "ffmpeg (panel 2)"},
         {"role": "webview", "panel": None, "name": "", "count": 2, "cpu_core": 0.0, "cpu_pc": 0.0,
-         "rss": 150 * MB, "label": "WebView2"},
+         "private": 129 * MB, "rss": 150 * MB, "label": "WebView2"},
         {"role": "service", "panel": None, "name": "", "count": 1, "cpu_core": 2.0, "cpu_pc": 0.25,
-         "rss": 80 * MB, "label": "sensor service", "found_by": "service manager"},
+         "private": None, "rss": 80 * MB, "label": "sensor service",
+         "found_by": "service manager"},
         {"role": "other", "panel": None, "name": "conhost.exe", "count": 1, "cpu_core": None,
-         "cpu_pc": None, "rss": 5 * MB, "label": "other: conhost.exe"},
+         "cpu_pc": None, "private": 3 * MB, "rss": 5 * MB, "label": "other: conhost.exe"},
     ],
     "threads": [
         {"name": "panel", "count": 1, "cpu_core": 15.0, "cpu_pc": 1.88},
@@ -207,20 +208,28 @@ def test_the_load_card_shows_what_libre_panel_costs_and_copies_it_as_text(app_ur
         card = page.locator(".diagnose-load")
         expect(card.locator("#diagnose-load-title")).to_have_text("Load on this PC")
         expect(card.locator('[data-load="cpu"]')).to_have_text("5.1 %")
-        expect(card.locator('[data-load="memory"]')).to_have_text("735 MB")
+        # the private memory (the Task Manager's Memory column), the working set beside it
+        expect(card.locator('[data-load="memory"]')).to_have_text("382 MB")
+        expect(card.locator('[data-load="working-set"]')).to_have_text("Working set: 735 MB")
         expect(card.locator(".load-headline")).to_contain_text(
             "41.0 % of one core · 8 logical processors"
+        )
+        expect(card.locator(".load-table thead th")).to_have_text(
+            ["Process", "Of the PC", "Of one core", "Memory", "Working set"]
         )
         rows = card.locator(".load-table tbody tr")
         expect(rows).to_have_count(6)
         expect(rows.nth(0)).to_contain_text("Main process")
         expect(rows.nth(0)).to_contain_text("3.1 %")
         expect(rows.nth(0)).to_contain_text("25.0 %")
-        expect(rows.nth(0)).to_contain_text("200 MB")
+        expect(rows.nth(0).locator('[data-load="private"]')).to_have_text("150 MB")
+        expect(rows.nth(0).locator('[data-load="rss"]')).to_have_text("200 MB")
         expect(rows.nth(1)).to_contain_text("Panel 2")
         expect(rows.nth(2)).to_contain_text("Video of panel 2 (ffmpeg)")
         expect(rows.nth(3)).to_contain_text("Browser engine of the window ×2")
         expect(rows.nth(4)).to_contain_text("Sensor service")
+        expect(rows.nth(4).locator('[data-load="private"]')).to_have_text("–")  # refused
+        expect(rows.nth(4).locator('[data-load="rss"]')).to_have_text("80 MB")
         expect(rows.nth(5)).to_contain_text("conhost.exe")
         expect(rows.nth(5)).to_contain_text("–")  # not measured yet
         threads = card.locator(".load-threads")
@@ -241,6 +250,9 @@ def test_the_load_card_shows_what_libre_panel_costs_and_copies_it_as_text(app_ur
         expect(rounds.nth(1).locator(".load-part")).to_have_count(3)  # the three slowest
         expect(rounds.nth(1)).not_to_contain_text("Total Memory")
         expect(card).to_contain_text("Per PC is what the Task Manager shows")
+        expect(card).to_contain_text(
+            "Memory is each process's private memory, as the Task Manager's Memory column shows it"
+        )
         expect(card).to_contain_text("Measuring took 1.4 ms.")
         page.evaluate(
             "Object.defineProperty(navigator.clipboard, 'writeText',"

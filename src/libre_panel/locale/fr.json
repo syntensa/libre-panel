@@ -2586,7 +2586,6 @@
     "Other": "Autre",
     "Other threads": "Autres threads",
     "Panel {n}": "Panneau {n}",
-    "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %. Memory is each process's working set.": "Du PC, c'est ce qu'affiche le Gestionnaire des tâches : le PC entier fait 100 %. D'un cœur : un cœur entier fait 100 %. La mémoire est la plage de travail de chaque processus.",
     "Process": "Processus",
     "Slowest:": "Les plus lents :",
     "The sensor service does not run.": "Le service de capteurs ne tourne pas.",
@@ -2649,7 +2648,11 @@
     "{encoder} was passed over:": "{encoder} a été écarté :",
     "no picture came from it": "aucune image n'en est sortie",
     "30 looks smooth and is the default. 50 is smoother still and costs about two thirds more processor time (measured with two panels: 2.0 instead of 1.2 cores); 25 asks least. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "30 est fluide et c'est la valeur par défaut. 50 est encore plus fluide et coûte environ deux tiers de temps processeur en plus (mesuré avec deux panneaux : 2,0 cœurs au lieu de 1,2) ; 25 demande le moins. 60 est une expérience : le panneau reçoit 70, pour que son lecteur garde de l'avance.",
-    "50 frames a second": "50 images par seconde"
+    "50 frames a second": "50 images par seconde",
+    "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %.": "Du PC, c'est ce qu'affiche le Gestionnaire des tâches : le PC entier fait 100 %. D'un cœur : un cœur entier fait 100 %.",
+    "Working set": "Plage de travail",
+    "Working set: {size}": "Plage de travail : {size}",
+    "Memory is each process's private memory, as the Task Manager's Memory column shows it (on its Details tab: Memory (active private working set)); – where Windows does not let it be read. The working set also counts what processes share, once for each.": "La mémoire est la mémoire privée de chaque processus, comme l'affiche la colonne Mémoire du Gestionnaire des tâches (dans son onglet Détails : Mémoire (plage de travail privée active)) ; – là où Windows ne la laisse pas lire. La plage de travail compte aussi ce que les processus partagent, une fois pour chacun."
   },
   "fields": {
     "agent": "agent",

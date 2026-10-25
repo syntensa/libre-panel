@@ -2586,7 +2586,6 @@
     "Other": "Andere",
     "Other threads": "Andere Threads",
     "Panel {n}": "Panel {n}",
-    "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %. Memory is each process's working set.": "Vom PC ist, was der Task-Manager zeigt: der ganze PC ist 100 %. Von einem Kern: ein ganzer Kern ist 100 %. Arbeitsspeicher ist der Arbeitssatz jedes Prozesses.",
     "Process": "Prozess",
     "Slowest:": "Am langsamsten:",
     "The sensor service does not run.": "Der Sensordienst läuft nicht.",
@@ -2649,7 +2648,11 @@
     "{encoder} was passed over:": "{encoder} wurde übergangen:",
     "no picture came from it": "es kam kein Bild von ihm",
     "30 looks smooth and is the default. 50 is smoother still and costs about two thirds more processor time (measured with two panels: 2.0 instead of 1.2 cores); 25 asks least. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "30 sieht flüssig aus und ist der Standard. 50 ist noch flüssiger und kostet etwa zwei Drittel mehr Prozessorzeit (gemessen mit zwei Panels: 2,0 statt 1,2 Kerne); 25 braucht am wenigsten. 60 ist ein Experiment: Dem Panel werden 70 gemeldet, damit sein Player vorn bleibt.",
-    "50 frames a second": "50 Bilder pro Sekunde"
+    "50 frames a second": "50 Bilder pro Sekunde",
+    "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %.": "Vom PC ist, was der Task-Manager zeigt: der ganze PC ist 100 %. Von einem Kern: ein ganzer Kern ist 100 %.",
+    "Working set": "Arbeitssatz",
+    "Working set: {size}": "Arbeitssatz: {size}",
+    "Memory is each process's private memory, as the Task Manager's Memory column shows it (on its Details tab: Memory (active private working set)); – where Windows does not let it be read. The working set also counts what processes share, once for each.": "Arbeitsspeicher ist der private Speicher jedes Prozesses, wie ihn die Spalte „Arbeitsspeicher“ des Task-Managers zeigt (auf der Registerkarte „Details“: Arbeitsspeicher (aktiver privater Arbeitssatz)); – wo Windows ihn nicht lesen lässt. Der Arbeitssatz zählt auch, was Prozesse teilen, für jeden einmal."
   },
   "fields": {
     "agent": "Agent",

@@ -2587,7 +2587,6 @@
     "Other": "その他",
     "Other threads": "その他のスレッド",
     "Panel {n}": "パネル{n}",
-    "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %. Memory is each process's working set.": "「PC全体に対して」はタスクマネージャーと同じ表示で、PC全体が100%です。「コア1個あたり」では、コア1個分が100%です。メモリは各プロセスのワーキングセットです。",
     "Process": "プロセス",
     "Slowest:": "最も遅いもの：",
     "The sensor service does not run.": "センサーサービスが動作していません。",
@@ -2649,7 +2648,11 @@
     "{encoder} was passed over:": "{encoder}は見送られました：",
     "no picture came from it": "画像が出力されませんでした",
     "30 looks smooth and is the default. 50 is smoother still and costs about two thirds more processor time (measured with two panels: 2.0 instead of 1.2 cores); 25 asks least. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "30 でも十分なめらかで、これが既定値です。50 はさらになめらかですが、プロセッサー時間が約 3 分の 2 増えます（パネル 2 枚で実測：1.2 コアに対して 2.0 コア）。25 が最も負荷が軽くなります。60 は実験的な設定です。プレーヤーが遅れないよう、パネルには 70 を伝えます。",
-    "50 frames a second": "毎秒50フレーム"
+    "50 frames a second": "毎秒50フレーム",
+    "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %.": "「PC全体に対して」はタスクマネージャーと同じ表示で、PC全体が100%です。「コア1個あたり」では、コア1個分が100%です。",
+    "Working set": "ワーキングセット",
+    "Working set: {size}": "ワーキングセット: {size}",
+    "Memory is each process's private memory, as the Task Manager's Memory column shows it (on its Details tab: Memory (active private working set)); – where Windows does not let it be read. The working set also counts what processes share, once for each.": "メモリは各プロセスのプライベートメモリで、タスクマネージャーの「メモリ」列と同じです（「詳細」タブでは「メモリ (アクティブなプライベート ワーキング セット)」）。Windows が読み取りを許可しないものは – です。ワーキングセットには、プロセス間で共有される分もプロセスごとに含まれます。"
   },
   "fields": {
     "agent": "エージェント",

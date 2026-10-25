@@ -2586,7 +2586,6 @@
     "Other": "Otro",
     "Other threads": "Otros hilos",
     "Panel {n}": "Panel {n}",
-    "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %. Memory is each process's working set.": "Del PC es lo que muestra el Administrador de tareas: el PC entero es el 100 %. De un núcleo: un núcleo entero es el 100 %. La memoria es el espacio de trabajo de cada proceso.",
     "Process": "Proceso",
     "Slowest:": "Los más lentos:",
     "The sensor service does not run.": "El servicio de sensores no se está ejecutando.",
@@ -2649,7 +2648,11 @@
     "{encoder} was passed over:": "{encoder} se descartó:",
     "no picture came from it": "no salió ninguna imagen de él",
     "30 looks smooth and is the default. 50 is smoother still and costs about two thirds more processor time (measured with two panels: 2.0 instead of 1.2 cores); 25 asks least. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "30 se ve fluido y es el valor predeterminado. 50 es aún más fluido y cuesta unos dos tercios más de tiempo de procesador (medido con dos paneles: 2,0 núcleos en lugar de 1,2); 25 es lo que menos exige. 60 es un experimento: al panel se le indica 70, para que su reproductor vaya por delante.",
-    "50 frames a second": "50 fotogramas por segundo"
+    "50 frames a second": "50 fotogramas por segundo",
+    "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %.": "Del PC es lo que muestra el Administrador de tareas: el PC entero es el 100 %. De un núcleo: un núcleo entero es el 100 %.",
+    "Working set": "Espacio de trabajo",
+    "Working set: {size}": "Espacio de trabajo: {size}",
+    "Memory is each process's private memory, as the Task Manager's Memory column shows it (on its Details tab: Memory (active private working set)); – where Windows does not let it be read. The working set also counts what processes share, once for each.": "La memoria es la memoria privada de cada proceso, como la muestra la columna Memoria del Administrador de tareas (en su pestaña Detalles: Memoria (espacio de trabajo privado activo)); – donde Windows no deja leerla. El espacio de trabajo cuenta también lo que comparten los procesos, una vez por cada uno."
   },
   "fields": {
     "agent": "agente",

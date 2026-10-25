@@ -418,12 +418,12 @@ do not know that yet.
 when it is not on screen nothing is measured at all.
 
 - **At the top**: Libre Panel's share of the processor, of the whole PC, and the memory of
-  all its processes together.
+  all its processes together: their private memory, and below it their working set.
 - **The processes**: the main one (the first panel's loop, the sensors, the app's server, the
   tray, the shortcuts, the weather), one for each further panel, the video encoder (ffmpeg) of
   each panel in the video mode, PresentMon while it reads a game's frame rate, the window and
   its browser engine (WebView2) while it is open, and the sensor service. Each with its share
-  of the PC, its share of one core and its memory.
+  of the PC, its share of one core, its private memory and its working set.
 - **The threads of the main process**, folded: which part of Libre Panel spends the time
   (`panel` draws the first panel, `panel-video` sends its video, `lhm-service` asks the
   sensor service, `sensors-load` measures the load ten times a second, `editor` takes the
@@ -438,10 +438,15 @@ when it is not on screen nothing is measured at all.
 
 How to read it: *of the PC* is what the Task Manager shows, the whole PC being 100 % (on a
 PC with 16 logical processors, one core busy all the time is 6.25 %). *Of one core* is the
-same time as a share of one core, which is how psutil and `top` count. Memory is each
-process's working set (the Task Manager's *Details* tab; its *Processes* tab shows the private
-part, which is smaller); what processes share counts once for each. The Task Manager's
-*Processes* tab adjusts the share to the processor's clock, so it may differ a little.
+same time as a share of one core, which is how psutil and `top` count. *Memory* is each
+process's private memory, what is its alone: the Task Manager's *Memory* column (on its
+*Details* tab *Memory (active private working set)*), measured every six seconds, as it costs
+a little more to measure than the rest. The *working set* beside it is larger: it counts what
+processes share (the libraries they load, the pictures the window shows) once for each, so the
+working sets of all of them add up to more than the PC lends them. The sensor service runs as
+the system, and Windows does not let a program without administrator rights read its private
+memory: it says – there, and the total is of the others. The Task Manager's *Processes* tab
+adjusts the share of the processor to the processor's clock, so it may differ a little.
 
 *Copy as text* copies the same numbers in English, without your names or folders, for an
 issue; the report of the panel test carries them too (as they were before the test).
