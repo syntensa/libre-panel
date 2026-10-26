@@ -442,11 +442,37 @@ same time as a share of one core, which is how psutil and `top` count. *Memory* 
 process's private memory, what is its alone: the Task Manager's *Memory* column (on its
 *Details* tab *Memory (active private working set)*), measured every six seconds, as it costs
 a little more to measure than the rest. The *working set* beside it is larger: it counts what
-processes share (the libraries they load, the pictures the window shows) once for each, so the
-working sets of all of them add up to more than the PC lends them. The sensor service runs as
-the system, and Windows does not let a program without administrator rights read its private
-memory: it says – there, and the total is of the others. The Task Manager's *Processes* tab
-adjusts the share of the processor to the processor's clock, so it may differ a little.
+processes share (the libraries they load, what WebView2's processes share among them) once for
+each, so the working sets of all of them add up to more than the PC lends them. The sensor
+service runs as the system, and Windows does not let a program without administrator rights
+read its private memory: it says – there, and the total is of the others. The Task Manager's
+*Processes* tab adjusts the share of the processor to the processor's clock, so it may differ a
+little.
+
+Where the memory goes:
+
+- **A panel's loop** keeps what it has drawn, so that a frame on the move costs little: the
+  panel's ground (its background picture), the frame before, every widget's picture, and its
+  caches: the letters, the numbers a value glides through, the fans at each of their positions,
+  the bars of the lists, the lit rings' light, what lies under a graph that moves. Each cache
+  holds as many megabytes as the themes need and no more, so a theme that runs for a day keeps
+  what it kept after a minute. The lit bodies of the weather symbols (ten megabytes) go a minute
+  after a symbol was made from them and are read again when the weather changes. Measured with
+  a virtual panel in the video mode at 30 frames a second, Lumen's loop on the 12.3" takes some
+  110 MB of private memory, Lumen Companion's on the 9.2" some 75, Arena's 93 and 78, Encore's
+  84; some 40 of them are Python, numpy and Pillow, which every process of Libre Panel loads.
+- **A panel beside the first** is a process of its own that loads only what it draws with: no
+  app server, no sensor source (the first panel's process sends it the readings), no tray, no
+  window and no .NET. It takes what its loop takes.
+- **The main process** holds the first panel's loop, the sensors and the app's server. The
+  pictures the app drew of every theme (Start) go a minute after its window was closed; with
+  [light mode](CONFIGURATION.md#light-mode) the caches the app filled while it was open go too,
+  and the memory goes back to the system.
+- **The window** starts WebView2 with one renderer process, without a spare one and without
+  caches on the disk for its pages and the GPU's shaders. While it is minimized or hidden the
+  app asks Libre Panel nothing; closed, its processes end. (An app started with the highest
+  rights, *autostart --elevated*: Windows ignores those arguments for it, and its window opens
+  as it did.)
 
 *Copy as text* copies the same numbers in English, without your names or folders, for an
 issue; the report of the panel test carries them too (as they were before the test).

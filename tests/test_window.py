@@ -651,3 +651,34 @@ def test_the_check_opens_a_window_as_the_app_does(monkeypatch):
     assert loads.started["icon"] is None  # no PNG for WinForms
     assert loads.started["storage_path"] != window._start_options()["storage_path"]
     assert window._open_for_a_moment(Fake(), seconds=0.01) is False  # it never loaded
+
+
+# -- WebView2, lighter --------------------------------------------------------------------------
+
+
+def test_webview2_starts_with_fewer_processes_and_no_disk_caches():
+    """On Windows the window's browser engine gets its arguments in WebView2's environment
+    variable (pywebview has no setting for them): one renderer, no spare one, no disk cache
+    for the pages or the shaders. Nothing elsewhere, and a variable set already stays."""
+    arguments = window.browser_arguments({}, "win32")
+    assert arguments == (
+        "--renderer-process-limit=1 --disable-features=SpareRendererForSitePerProcess"
+        " --disk-cache-size=1 --disable-gpu-shader-disk-cache"
+    )
+    assert all(part.startswith("--") for part in arguments.split())
+    assert arguments.count("--disable-features") == 1  # (WebView2 joins it with pywebview's)
+    assert window.browser_arguments({}, "linux") is None
+    own = {window.WEBVIEW2_ARGUMENTS: "--enable-logging"}
+    assert window.browser_arguments(own, "win32") is None
+    window._lighter_engine(own)
+    assert own == {window.WEBVIEW2_ARGUMENTS: "--enable-logging"}
+
+
+def test_the_window_sets_them_before_its_engine_starts(monkeypatch):
+    monkeypatch.setenv(window.WEBVIEW2_ARGUMENTS, "")  # (none yet; taken away again after)
+    real = window.browser_arguments
+    monkeypatch.setattr(window, "browser_arguments", lambda environ: real(environ, "win32"))
+    seen = []
+    fake = FakeWebview(lambda shown: seen.append(os.environ.get(window.WEBVIEW2_ARGUMENTS)))
+    assert window.run_window(URL, "home", webview=fake, token=TOKEN) == 0
+    assert seen == [" ".join(window.BROWSER_ARGUMENTS)]

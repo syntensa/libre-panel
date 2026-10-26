@@ -300,3 +300,37 @@ def test_the_load_card_reads_the_real_measurement(app_url):  # noqa: F811
         card = page.locator(".diagnose-load")
         expect(card.locator('[data-load="cpu"]')).to_contain_text("%", timeout=15000)
         expect(card.locator(".load-table tbody tr").first).to_contain_text("Main process")
+
+
+def test_a_hidden_window_asks_the_app_nothing_until_it_is_shown(app_url):  # noqa: F811
+    """A window that is minimized or hidden (WebView2 says the page is hidden) asks the app's
+    server nothing: not how the app is doing, not the load, not the log; shown, it asks again.
+    (Closed, its browser engine's processes end with it.)"""
+    load = Load(LOAD)
+    with browser_page(app_url, "live/diagnose", routes={"**/api/load": load.route}) as page:
+        asked = []
+        page.on("request", lambda r: asked.append(r.url) if "/api/" in r.url else None)
+        page.wait_for_timeout(2500)
+        assert any("/api/load" in url for url in asked)  # (shown: it asks)
+        page.evaluate(
+            """() => {
+              Object.defineProperty(document, "hidden", {configurable: true, get: () => true});
+              Object.defineProperty(document, "visibilityState",
+                                    {configurable: true, get: () => "hidden"});
+              document.dispatchEvent(new Event("visibilitychange"));
+            }"""
+        )
+        page.wait_for_timeout(500)  # (a request on its way when it was hidden comes back)
+        asked.clear()
+        page.wait_for_timeout(4500)  # longer than any of them waits between two
+        assert asked == []
+        page.evaluate(
+            """() => {
+              Object.defineProperty(document, "hidden", {configurable: true, get: () => false});
+              Object.defineProperty(document, "visibilityState",
+                                    {configurable: true, get: () => "visible"});
+              document.dispatchEvent(new Event("visibilitychange"));
+            }"""
+        )
+        page.wait_for_timeout(2500)
+        assert any("/api/load" in url for url in asked) and any("/api/app" in url for url in asked)
