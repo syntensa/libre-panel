@@ -89,10 +89,22 @@ class Smoke(Service):
 """
 
 
+def home_parent():
+    """Where the app's folder goes: with the highest rights (a Windows runner of CI is an
+    administrator) the app loads plugin folders only from where others cannot change them, so
+    under Program Files there; else the system's temporary folder."""
+    if sys.platform == "win32":
+        import ctypes
+
+        if ctypes.windll.shell32.IsUserAnAdmin():
+            return os.environ["ProgramFiles"]
+    return None
+
+
 def main(command):
     tools = command[:1] == ["--tools"]
     command = command[1:] if tools else command
-    with tempfile.TemporaryDirectory() as folder:
+    with tempfile.TemporaryDirectory(dir=home_parent()) as folder:
         home = Path(folder)
         frame = home / "frame.png"
         (home / "config.toml").write_text(
