@@ -30,12 +30,17 @@ def program(folder, name):
     return path
 
 
+def found(path):
+    """A path found, as the file system compares it (Windows' PATH finds "ffmpeg.EXE")."""
+    return os.path.normcase(path) if path else path
+
+
 def test_without_the_highest_rights_every_place_will_do(tmp_path, monkeypatch):
     monkeypatch.setattr(rights, "elevated", lambda: False)
     assert rights.safe_place(tmp_path / "anything")
     tool = program(tmp_path / "bin", "lp-tool")
     monkeypatch.setenv("PATH", str(tool.parent))
-    assert rights.which("lp-tool") == str(tool)
+    assert found(rights.which("lp-tool")) == found(str(tool))
 
 
 def test_on_windows_only_the_folders_of_administrators_are_safe(tmp_path):
@@ -76,7 +81,7 @@ def test_with_the_highest_rights_only_a_program_from_a_safe_place_is_found(
     assert rights.which("lp-tool") is None
     safe = program(tmp_path / "safe" / "bin", "lp-tool")
     monkeypatch.setenv("PATH", os.pathsep.join([str(unsafe.parent), str(safe.parent)]))
-    assert rights.which("lp-tool") == str(safe)  # the first one that may be started
+    assert found(rights.which("lp-tool")) == found(str(safe))  # the first one that may be started
 
 
 def test_with_the_highest_rights_the_plugin_folders_are_held_back(plugin_folder, elevated):
@@ -111,7 +116,9 @@ def test_with_the_highest_rights_video_ffmpeg_elsewhere_is_passed_over(
     ]
     other = program(tmp_path / "safe", "ffmpeg")
     monkeypatch.setenv("PATH", str(other.parent))
-    assert h264.find_ffmpeg(str(named)) == str(other)  # the panel goes on with a safe one
+    assert found(h264.find_ffmpeg(str(named))) == found(
+        str(other)
+    )  # the panel goes on with a safe one
     assert video_gaps(VideoConfig(ffmpeg=str(named), local_clip="x.h264"), None) == []
     # a path that names nothing is said as before, rights or not
     with pytest.raises(h264.DeviceError) as missing:
@@ -130,7 +137,7 @@ def test_with_the_highest_rights_presentmon_and_the_agents_come_from_safe_places
     assert find_presentmon(str(named)) is None
     safe = program(tmp_path / "safe", "PresentMon")
     monkeypatch.setenv("PATH", str(safe.parent))
-    assert find_presentmon(str(named)) == str(safe)
+    assert found(find_presentmon(str(named))) == found(str(safe))
     program(tmp_path / "user", "claude")
     monkeypatch.setenv("PATH", str(tmp_path / "user"))
     assert agents.program("claude") is None

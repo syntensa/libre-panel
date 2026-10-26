@@ -358,8 +358,10 @@ def test_the_screens_in_turn_come_one_after_another_and_round_again(panel, clip)
     turn = panel.CLIPS["screens-in-turn"]
     assert turn.loop == "cut" and turn.seconds == pytest.approx(3 * 2.6)  # the clip is one round
     recorded = clip("screens-in-turn")
-    assert differ(recorded, 10, 40) > 8 and differ(recorded, 40, 70) > 8  # three screens
-    assert differ(recorded, 10, 70) > 8
+    # (each in the middle of its time, clear of the transitions: they begin near 1, 3.6, 6.2 s)
+    assert differ(recorded, 4, 28) > 8 and differ(recorded, 28, 52) > 8  # three screens
+    assert differ(recorded, 4, 52) > 8
+    assert differ(recorded, 4, 76) < 1  # and round again to the first
 
 
 def test_the_start_clip_is_the_boot_logo_then_the_standby_clip_round_and_round(
