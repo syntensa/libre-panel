@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+**New**
+- **Start asks how black looks on a panel nobody has compared yet.** A panel's decoder that
+  shows video as full range lays a grey veil over it, as it did on the 9.2" and the 12.3" before
+  anyone noticed. Where smooth motion runs on a model whose black level is not known yet, Start
+  asks once and *Compare on the panel* shows both ways on it; the one that looks right is kept,
+  and the panel report tells it, so the model can get it by itself.
+
 ## 0.7.1 — 2026-10-26
 
 A transition for every occasion and twelve new ones; community themes shared in two clicks and

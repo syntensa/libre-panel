@@ -2775,7 +2775,10 @@
     "Orientation of the picture": "画面方向",
     "Units with the values": "数值附带单位",
     "As Waveshare's program sends them: 75%, 2934RPM. Off: the numbers alone, for themes that show their units themselves.": "与 Waveshare 程序发送的格式相同：75%、2934RPM。关闭：只发送数字，适用于自带单位显示的主题。",
-    "Another program has the display's port: close it (Waveshare's own program, or wsmonitor's service).": "其他程序占用了屏幕的端口：请关闭它（Waveshare 自带的程序，或 wsmonitor 的服务）。"
+    "Another program has the display's port: close it (Waveshare's own program, or wsmonitor's service).": "其他程序占用了屏幕的端口：请关闭它（Waveshare 自带的程序，或 wsmonitor 的服务）。",
+    "Is black black on panel {n}?": "面板 {n} 上的黑色够黑吗？",
+    "Smooth motion runs on panel {n}, a model whose black level nobody has compared yet. If its video looks washed out, as under a grey veil, compare the two ways on the panel once: the one that looks right is kept.": "面板 {n} 正在运行流畅动态，而这个型号的黑位还没有人对比过。如果画面发白、像蒙了一层灰纱，请在面板上对比一次两种方式：看起来正确的那种会被保留。",
+    "Compare on the panel": "在面板上对比"
   },
   "fields": {
     "agent": "智能体",

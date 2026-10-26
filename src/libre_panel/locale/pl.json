@@ -2775,7 +2775,10 @@
     "Orientation of the picture": "Orientacja obrazu",
     "Units with the values": "Jednostki przy wartościach",
     "As Waveshare's program sends them: 75%, 2934RPM. Off: the numbers alone, for themes that show their units themselves.": "Tak, jak wysyła je program Waveshare: 75%, 2934RPM. Wyłączone: same liczby, dla motywów, które same pokazują jednostki.",
-    "Another program has the display's port: close it (Waveshare's own program, or wsmonitor's service).": "Inny program zajmuje port wyświetlacza: zamknij go (program Waveshare albo usługę wsmonitor)."
+    "Another program has the display's port: close it (Waveshare's own program, or wsmonitor's service).": "Inny program zajmuje port wyświetlacza: zamknij go (program Waveshare albo usługę wsmonitor).",
+    "Is black black on panel {n}?": "Czy czerń na panelu {n} jest czarna?",
+    "Smooth motion runs on panel {n}, a model whose black level nobody has compared yet. If its video looks washed out, as under a grey veil, compare the two ways on the panel once: the one that looks right is kept.": "Na panelu {n} działa płynny ruch, a poziomu czerni tego modelu nikt jeszcze nie porównał. Jeśli obraz wygląda na wyblakły, jak pod szarą zasłoną, porównaj raz oba sposoby na panelu: zostanie ten, który wygląda dobrze.",
+    "Compare on the panel": "Porównaj na panelu"
   },
   "fields": {
     "agent": "agent",

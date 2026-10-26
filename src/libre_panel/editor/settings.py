@@ -781,9 +781,10 @@ class Settings:
             "video": {
                 "mode": video.mode,
                 "fps": video.fps,
-                "on": video_mode(video, model)[0] if usb else False,
+                "on": (on := video_mode(video, model)[0] if usb else False),
                 "usb": usb,
                 "gaps": gaps,
+                "range_unseen": _range_unseen(on, gaps, config.device.video_range, model),
             },
             "weather_theme": self._weather_theme(config, shown),
         }
@@ -837,7 +838,9 @@ class Settings:
             else:
                 gaps = video_gaps(video, model, proven=False)
             on = video_mode(video, model)[0] if usb else False
-            result.append({"index": n, "usb": usb, "on": on, "gaps": gaps})
+            unseen = _range_unseen(on, gaps, config.for_panel(n).device.video_range, model)
+            result.append({"index": n, "usb": usb, "on": on, "gaps": gaps,
+                           "range_unseen": unseen})  # fmt: skip
         return result
 
     @staticmethod
@@ -1149,6 +1152,12 @@ class Settings:
             f"Libre Panel {__version__}, {platform.system()} {platform.release()} "
             f"({platform.machine()})",
             f"Panel found: {product or 'none'}",
+            # (what the owner's A/B found, for a model whose range is not known yet)
+            *(
+                [f"Video range: {config.device.video_range}"]
+                if config.device.video_range != "auto"
+                else []
+            ),  # fmt: skip
             *connected_devices(),
         ]
         text = "\n".join(lines)
@@ -1174,6 +1183,16 @@ class Settings:
         except OSError as exc:
             raise SettingsError(str(exc), 501) from exc
         return {"opened": name}
+
+
+def _range_unseen(on: bool, gaps: list[str], video_range: str, model: Any) -> bool:
+    """Whether Start asks how black looks on a panel: smooth motion runs on it (nothing it
+    lacks), its range is left to the model ([device] video_range "auto"), and nobody has seen
+    that model's range on a panel (PanelModel.video_range_seen; a model not on the list
+    neither). The answer, the A/B of Check the colours, sets video_range: then it is not asked
+    again."""
+    return bool(on and not gaps and video_range == "auto"
+                and not (model is not None and model.video_range_seen))  # fmt: skip
 
 
 # -- the rules, by the name of the setting -------------------------------------------------------
