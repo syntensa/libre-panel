@@ -34,9 +34,7 @@
   <a href="https://github.com/syntensa/libre-panel/releases/latest"><img alt="Download for Linux: AppImage" src="https://img.shields.io/badge/Linux-AppImage-2EE6D6?style=for-the-badge&labelColor=111820"></a>
   <br>
   <sub>Windows 10 and 11 (x64) · Linux (x86-64) · every file and the release notes on the
-  <a href="https://github.com/syntensa/libre-panel/releases/latest">latest release</a></sub><br>
-  <sub>This page describes 0.7.1, which is being finished; the latest release is 0.7.0
-  (<a href="CHANGELOG.md">what 0.7.1 brings</a>).</sub>
+  <a href="https://github.com/syntensa/libre-panel/releases/latest">latest release</a></sub>
 </p>
 
 <p align="center">

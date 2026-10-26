@@ -1,20 +1,15 @@
 # Changelog
 
-## 0.7.1rc8 — 2026-10-26
+## 0.7.1 — 2026-10-26
 
-**New**
-- **Waveshare USB monitors (experimental).** These displays draw their own themes from their
-  card and take only the values from the PC: the new service *Waveshare USB monitor*
-  (*Settings → Game mode and more*) sends them Libre Panel's readings, under the keys their
-  themes use, and sets the brightness (on the display's own scale, so as bright as with
-  Waveshare's program) and turns the picture where you ask. Nothing is written on the card. On
-  Linux, *Set up sensors and panel access* now also hands units with the ids `1234:5678` from
-  the touchscreen driver to the serial one. The protocol is the one Derik-for-real24 documented
-  in the wsmonitor project (#21), with thanks; the same frames from its client were seen
-  working on a display.
-- **A service can say what it is doing** (`Service.summary()`), shown on its card in the app.
+A transition for every occasion and twelve new ones; community themes shared in two clicks and
+found for your panel; an update with one click; drivers for Thermalright, BeadaPanel, NZXT,
+Thermaltake and Waveshare's own kind of display; a third less memory; sharper video that costs
+the processor less, with black as black on the 12.3"; the round report with its lows and
+temperatures; Japanese, Russian and Italian; and nothing loaded with administrator rights that
+others can change.
 
-## 0.7.1rc7 — 2026-10-26
+![The screens in turn, one after another, along the new line of light](https://raw.githubusercontent.com/syntensa/libre-panel/v0.7.1/docs/media/screens-in-turn.gif)
 
 **Security**
 - **With administrator rights, nothing that other programs can change is loaded or
@@ -38,144 +33,18 @@
   "Music ended"; the screens in turn follow a line of light. New: wipe, zoom, iris, blinds,
   dissolve and slides to every side, and the elaborate line of light, glitch, tiles and
   shatter. **▶** plays one on the panels, out to a card with its name and back.
-- **Community themes: sharing in two clicks, and what fits your panel first.** *Share with
-  everyone…* (the globe on your theme's card) asks what it is called and shows, saves the
-  theme and opens GitHub's form, filled in: drag the file in and send. A workflow checks it
-  where it can write nothing, draws its picture with the demo readings and opens the pull
-  request. In the list, the themes made for the panel chosen in the header come first,
-  marked *Fits*; one made for another size asks before it installs, an installed one goes on
-  the panel with one click, and a download whose theme is not the size its entry says is
-  not installed.
-- **JONSBO ZC-360: each screen a panel of its own.** One click in Settings → Panels makes the
-  three fan screens three panels of 640×180 and back: each shows a theme of its own, the
-  header's panel switch picks the one Live shows and Design edits, and the three keep one
-  brightness. Seven versions of Lumen for one screen; the three start with CPU, GPU and
-  memory, each a lit ring beside its history. (Asked for in #13; not yet seen on the
-  hardware.)
-
-**Changes**
-- **30 frames a second by default**: the video mode runs at 30 instead of 50. On the panels it
-  still looks smooth, and it asks far less of the PC: measured with two panels, 7.5 % of a
-  16-thread processor (1.2 cores) at 30 against 12.4 % (2.0 cores) at 50. Settings → Panel →
-  Frames per second says what 50 costs, for whoever wants it; the video experiment has a step
-  at 50. A panel set to 50 by hand keeps it.
-- **The graphics card converts the colours only where it is proven right**: with
-  `video.pixels = "auto"` the processor converts until a colour check has compared the card's
-  conversion with it; the first time the video mode starts a card's encoder with a new ffmpeg
-  or graphics driver, that check runs by itself in the background (a few frames, a few seconds,
-  never on the panel). Where the colours come out identical the card takes over (it saves the
-  processor a few milliseconds a frame), else the processor stays. The card is told BT.601 and
-  the range outright: AMD's through its own scaler (`vpp_amf`), Intel's through `vpp_qsv`;
-  NVIDIA's converts by itself. Settings → Panel → *Check the colours* says who converts and why,
-  with the day it was checked and *Check again*. `"card"` and `"rgb"` force a way.
-- **A third less memory in many places.** The renderer's caches are held by their size in
-  bytes instead of a count (the frames stay the same to the pixel), the app's pictures (the
-  themes' previews, the community's) go a minute after its window closes, and the window's
-  WebView2 runs with one renderer and no disk caches. Measured in the video mode: a panel's
-  own process 110 → 74 MB, Lumen on the 12.3" 139 → 110 MB, the main process after Start
-  showed every theme 246 → 164 MB and a minute after the window closed 151 MB. *Load on this
-  PC* (Diagnose) shows each process's private memory, as the Task Manager's Memory column
-  does, with the working set beside it.
-- **Every stream says it is BT.601**, in the range it has, whichever encoder made it: a player
-  on the PC shows it as the panel does (AMD's encoder tagged its stream BT.709 in full range).
-
-**Fixes**
-- **Black looked grey on the 12.3" in video mode**: its decoder shows the video as full range,
-  so the video of limited range looked washed out while the stills were right. It now gets full
-  range by itself (`[device] video_range`, each panel its own); *Is black too light on the
-  panel? Compare* under *Check the colours* shows any panel both, and *A looks right* or *B
-  looks right* writes the one that does.
-
-## 0.7.1rc6 — 2026-10-25
-
-**Changes**
-- **Check the colours, in the app**: Settings → Panel has a card *Check the colours* under the
-  video experiment. One click encodes a test picture with every encoder that works on this PC,
-  fed the new way (four bytes a pixel, the colours made on the graphics card) and the old way
-  (made by the processor), decodes both and compares them patch by patch: *identical*, a
-  *level shift* (black and white) or a *matrix shift* (the colours). Where the card's encoder
-  in use shifts them, one button makes the processor convert them, and another takes it back:
-  no file to edit. The card says which encoder "Automatic" picked and why it passed a card's
-  encoder over. *Show it on the panel* switches the test picture between both ways every
-  3 seconds for half a minute, with A and B in a corner. A card's encoder that refuses four
-  bytes a pixel is fed three from the start (kept a week), and the test of an encoder accepts
-  one that takes three.
-
-**Fixes**
-- **A theme opens at once from the gallery**: the previews of the gallery take two turns at a
-  time and go to the browser last, so Edit opens Design in a fifth of a second instead of
-  waiting for every picture (1.4 s and more before, measured).
-- **Japanese on the panel in Japanese glyphs on Linux**: the panel's fallback fonts follow the
-  app's language, Japanese faces first for Japanese, Chinese ones for Chinese.
-- **"Load on this PC"** is the Diagnose card's title (German "Auslastung dieses PCs"), and
-  Settings → Sensors names the sensor service's version. The README and the configuration
-  guide name *Settings → Game mode and more* where the AI activity and the notices are.
-- **"Automatic" chose x264 where the graphics card's encoder works**: the test of an encoder
-  fed it 64×64 pictures, which a card's encoder may refuse although it encodes the panel's
-  pictures fine (the experiment's AMD step ran, its "auto" step had x264). The test now runs
-  the video mode's own command at 480×480, fed as the video mode feeds it, and counts the
-  H.264 that comes out; answers kept by the old test are asked again, the log says why an
-  encoder was passed over.
-
-## 0.7.1rc5 — 2026-10-25
-
-**Changes**
-- **Japanese, Russian and Italian**: the app, the panel texts and the tray in ten languages
-  now (Settings → Start and system → Language); the three new ones have not had a native
-  speaker's review yet, so corrections are welcome.
-- **The GitHub page and the website, shorter and quicker to grasp**: a grid of the features
-  under the download buttons, "Several panels at once" as a section of its own with a picture
-  of three panels, a compact tour with the rest of each part folded away, the theme and panel
-  tables kept, the FAQ folded; nothing was dropped, the long theme descriptions live in
-  THEMES.md. The round report's clips show its new layout.
-- **Video frames cost less**: the frames go into ffmpeg as four bytes a pixel, as Pillow holds
-  them, written from the encoder's own thread; AMD's and NVIDIA's encoders take them as they
-  are and convert on the card (BT.601 limited range, as before), x264 and Intel's get the same
-  YUV as before, bit for bit. About 8 ms less processor time per frame with a card's encoder
-  and 4 ms with x264 on the 12.3", measured here. A card's encoder that refuses the new feed
-  is tried once with the old one, then x264 takes over as before. `[video] pixels = "rgb"`
-  restores the old feed if colours ever look different. Formatted texts and the check of the
-  readings are kept between frames too.
-- **The app's server reads every request to the end before it answers**: a route that
-  answered without reading its body closed the connection with data unread, which on Windows
-  could throw the answer away (the renewal of the notify key). Tests that waited a fixed time
-  now wait for what they need, so a busy machine does not fail them.
-- **What Libre Panel costs your PC**: a Load card in Live → Diagnose shows Libre Panel's
-  processor share and memory as the Task Manager counts them, per process (the app, each
-  panel's process, each ffmpeg, PresentMon, the window, the sensor service), the threads of
-  the app by name, and how long LibreHardwareMonitor's rounds take with their slowest parts
-  (a sensor service from before says "not reported by this service version"). Copy as text
-  for an issue; the panel report carries it too. Nothing is measured while the card is not
-  on screen.
-- **Panels**: the TURZX 9.2", 8.8" and 12.3" are listed as verified on the hardware: the 9.2" with an
-  owner's doctor report, every check passed (#19), the 8.8" rev. C with another (#20).
-- **More makers' screens, unverified**: drivers for Thermalright's Trofeo Vision (the 6.86"
-  and the 9.16" and 11.3" bars), every BeadaPanel model (on the Panel-Link stream they all
-  take), the NZXT Krakens with an LCD (Z53/Z63/Z73, Kraken 2023, Elite RGB 2024, Plus 2024:
-  still pictures through the cooler's picture memory, never its pump or fans) and
-  Thermaltake's 6" LCD, each written from the published sources (credited in NOTICE.md) and
-  none yet seen on real hardware: `auto` finds them, Settings lists them, HARDWARE.md says
-  what each cannot do. `auto` now looks on past a maker's screen it does not drive.
-- **The round report tells more**: the round's 1 % and 0.1 % lows, its average and longest
-  frame time (every frame of the round counted, exact to 0.01 ms, however long the round),
-  the course of the CPU and GPU temperatures over the round, and the PC's peak power where
-  the power service runs, on all five report screens; `game.fps_avg`, `game.fps_1low`,
-  `game.fps_01low`, `game.frametime_avg` and `game.frametime_max` are readings for any screen.
-  Live → History keeps a round's report as a picture (Pictures → Libre Panel). Rounds from
-  before show the old figures and a dash for the course.
-- **A step of the bit rate without a gap, and what auto found is kept**: when "auto" steps
-  the cap, a second ffmpeg starts beside the running one and takes over with its first
-  picture; the panel keeps showing the old stream until then (one that shows nothing within
-  3 s is given up, the old one goes on, a retry comes after a minute). The rate a panel got to
-  and the answer of an encoder probe are kept in `video-state.json` next to the settings: the
-  next run starts at that rate instead of climbing again, and an encoder is probed once a
-  week, not once a run.
-- **The renderer keeps more between frames**: the lit rings keep their groove and sweep and
-  redraw only the tip, the background is laid once for the whole panel, the fans of a list
-  turn over the list instead of redrawing its names and numbers, composed parts go into the
-  frame without a conversion, and list patterns are matched only when the readings' keys
-  change. The same pixels (a test proves it on four screens), 13 to 19 % less processor
-  time per frame on the game screen.
+- **Themes travel as files, and a community gallery.** Export… on a theme's card (Start →
+  Themes) saves it as a .zip with the pictures and fonts it names and nothing of your folders;
+  Import… (or the file dropped on the gallery) adds a shared one to yours under a free name,
+  checked before anything is in place (size, kinds of files, paths, a theme.json that parses).
+  *Share with everyone…* (the globe on your theme's card) asks what it is called and shows,
+  saves the theme and opens GitHub's form, filled in: drag the file in and send. A workflow
+  checks it where it can write nothing, draws its picture with the demo readings and opens the
+  pull request. Community themes, a closed section of the gallery, lists the themes others
+  shared, those made for the panel chosen in the header first, marked *Fits*; one made for
+  another size asks before it installs, an installed one goes on the panel with one click, and
+  a download whose hash or size does not fit its entry is not installed. Nothing is asked of
+  the network until the section is opened.
 - **Update with one click**: where a newer version is out, Start's card and Settings → About
   offer "Update to …". The download comes only from this repository's releases over HTTPS and
   is checked against the published size and the release's `SHA256SUMS` (every release from
@@ -184,67 +53,121 @@
   folder with the settings copied, an AppImage replaces itself in place; a Linux tarball only
   lands in Downloads. A pre-release is offered pre-releases of its own line, a release only
   releases.
-- **Themes travel as files, and a community gallery**: Export… on a theme's card (Start →
-  Themes) saves it as a .zip with the pictures and fonts it names and nothing of your folders;
-  Import… (or the file dropped on the gallery) adds a shared one to yours under a free name,
-  checked before anything is in place (size, kinds of files, paths, a theme.json that parses).
-  Community themes, a closed section of the gallery, lists themes others shared in the
-  repository's `community/themes` folder, with a preview each and an Install button that
-  checks the download's hash; nothing is asked of the network until the section is opened.
-- **Stills as JPEG on TURZX USB panels**: `[device] still = "auto" | "png" | "jpeg"` says how a
-  panel takes its pictures without smooth motion. JPEG (command 101) goes to the layer under
-  the PNG one and is decoded in hardware; the frame is cut to the decoder's layer (464
-  columns on the 9.2", behind the bezel), 4:4:4 at quality 90, lower on busy frames. "auto"
-  is JPEG on the 5.2", which shows nothing of a PNG, and PNG on the others, where it is
-  proven. Settings → Panel → Advanced has the switch (Stills).
-
-## 0.7.1rc4 — 2026-10-24
-
-**Changes**
-- **Sharper and cheaper video, measured**: the video mode's quality is crf 20 (was 25), the
-  profile is high on the 9.2" and the 12.3" (measured to show there; it compresses far
-  better), and the encoder is the graphics card's where it was measured to show and ffmpeg
-  can start it (AMD's `h264_amf`; one that stops before its first picture is left out, x264
-  takes over), so a game leaves the processor to the game. The bit rate's ladder never goes
-  below its start: a panel that cannot keep up there cannot keep up with the pictures (the
-  9.2" at 60 frames a second), and the log says so. The run of the video experiment tells
-  "the PC was slow" from "stutters" by the drawing time ([Video](docs/CONFIGURATION.md#video))
-- **The screens use their room**: the card of what plays (Lumen, Encore, every size) sets the
-  title, the artist and the player a size larger in the middle of the room between the state
-  and the progress; Almanac's clock is a tenth larger on the 9.2" and 12.3", and Almanac
-  Analog's day and date stand under its digits; a clock module with room to spare runs the
-  seconds along a line under the date, as Almanac does (Agents); the processes card shows four
-  rows where it showed three, in one column where it is narrow; Lumen on the 5.2" gives its
-  fans a card of their own above the download; the clock face has a faint rim
-- **Names no longer cut short**: the network details module says "IP", "Down", "Up",
-  "Received" and "Sent" where the full names would end in dots, and Lumen's fan names on the
-  5.2" have the room they need
-- **Agents** say for how long each one has been working, waiting or idle, beside the tool
-- **The ring instrument can show the course of the load** along the bottom of a tall card,
-  under its rows (*Course of the load* in the module's settings, `history`): Arena beside a
-  companion on the 12.3" shows it for the processor and the graphics card, so the two cards
-  say where the frame rate went, not only where it is now
-- **Encore beside a companion on the 12.3"** sets the title, the artist and the album a size
-  larger in the middle of its card
-- **Sharper video on the 12.3"**: the video mode's bit rate was capped at 2 Mbit/s for every
-  panel, measured on the 9.2"; the 12.3" has half as many pixels again, and a screen that
-  moves on every frame (Arena's graph) made the encoder coarsen the whole picture, lettering
-  included. The cap now grows with the pixels and the frame rate (`maxrate` "auto": 3 Mbit/s
-  on the 12.3" to start with) and then follows the panel: a step down while the panel takes
-  less than it is sent, a step up again after a calm minute, between 1 and 32 Mbit/s, so each panel
-  gets as sharp a picture as its USB link takes; the *Data rate* tile under Live says the cap
-  in force. A rate of your own still holds ([Video](docs/CONFIGURATION.md#video))
+- **More makers' screens, unverified**: drivers for Thermalright's Trofeo Vision (the 6.86"
+  and the 9.16" and 11.3" bars), every BeadaPanel model (on the Panel-Link stream they all
+  take), the NZXT Krakens with an LCD (Z53/Z63/Z73, Kraken 2023, Elite RGB 2024, Plus 2024:
+  still pictures through the cooler's picture memory, never its pump or fans) and
+  Thermaltake's 6" LCD, each written from the published sources (credited in NOTICE.md) and
+  none yet seen on real hardware: `auto` finds them, Settings lists them, HARDWARE.md says
+  what each cannot do. `auto` now looks on past a maker's screen it does not drive.
+- **Waveshare USB monitors (experimental).** These displays draw their own themes from their
+  card and take only the values from the PC: the new service *Waveshare USB monitor*
+  (*Settings → Game mode and more*) sends them Libre Panel's readings, under the keys their
+  themes use, and sets the brightness (on the display's own scale, so as bright as with
+  Waveshare's program) and turns the picture where you ask. Nothing is written on the card, and
+  a port another program has open (wsmonitor's service) is left to it, with a word on the card.
+  On Linux, *Set up sensors and panel access* now also hands units with the ids `1234:5678` from
+  the touchscreen driver to the serial one. The protocol is the one Derik-for-real24 documented
+  in the wsmonitor project (#21), with thanks; the same frames from its client were seen
+  working on a display.
+- **JONSBO ZC-360: each screen a panel of its own.** One click in Settings → Panels makes the
+  three fan screens three panels of 640×180 and back: each shows a theme of its own, the
+  header's panel switch picks the one Live shows and Design edits, and the three keep one
+  brightness. Seven versions of Lumen for one screen; the three start with CPU, GPU and
+  memory, each a lit ring beside its history. (Asked for in #13; not yet seen on the
+  hardware.)
+- **Japanese, Russian and Italian**: the app, the panel texts and the tray in ten languages
+  now (Settings → Start and system → Language); the three new ones have not had a native
+  speaker's review yet, so corrections are welcome.
+- **What Libre Panel costs your PC**: a card *Load on this PC* in Live → Diagnose shows Libre
+  Panel's processor share and its private memory as the Task Manager counts them (the working
+  set beside it), per process (the app, each panel's process, each ffmpeg, PresentMon, the
+  window, the sensor service), the threads of the app by name, and how long
+  LibreHardwareMonitor's rounds take with their slowest parts. Copy as text for an issue; the
+  panel report carries it too. Nothing is measured while the card is not on screen.
+- **Check the colours, in the app**: Settings → Panel → *Check the colours* encodes a test
+  picture with every encoder that works on this PC, the colours made on the graphics card and
+  by the processor, decodes both and compares them patch by patch: *identical*, a *level
+  shift* (black and white) or a *matrix shift* (the colours). It says who converts and why,
+  with the day it was checked and *Check again*; *Show it on the panel* switches the test
+  picture between both ways with A and B in a corner, and *Is black too light on the panel?
+  Compare* shows any panel both ranges, *A looks right* or *B looks right* writing the one
+  that does.
 - **An experiment for the video mode**, for those who want to try what the panels take beyond
   what was measured on the 9.2": a card *Video experiment* under Settings → Panel with the bit
-  rate's cap, the quality, x264's speed, the profile (`main`, `high`), the encoder
-  (`h264_nvenc`, `h264_amf`, `h264_qsv`: the graphics card encodes, at little cost to the
-  processor), the keyframe spacing and 60 frames a second, each written at once, with Live's
-  tiles and the log's lines about the video underneath, and a way back to the measured
-  settings; the same under `[device.video]` in config.toml. *Run every step by itself* tries
-  them all in turn (about ten minutes), samples every panel's numbers, the companion's too,
-  judges each step (pictures reached the panel, the frame rate held, the queue did not keep
-  filling), brings the settings from before back and shows a table to copy into an issue.
-  The panel's firmware name is in the log when it connects ([Video](docs/CONFIGURATION.md#video))
+  rate's cap, the quality, x264's speed, the profile, the encoder (the graphics card's: at
+  little cost to the processor), the keyframe spacing and 60 frames a second, each written at
+  once, with Live's tiles and the log's lines about the video underneath, and a way back to the
+  measured settings. *Run every step by itself* tries them all in turn, judges each step and
+  shows a table to copy into an issue ([Video](docs/CONFIGURATION.md#video)).
+- **Stills as JPEG on TURZX USB panels**: `[device] still = "auto" | "png" | "jpeg"` says how a
+  panel takes its pictures without smooth motion. JPEG goes to the layer under the PNG one and
+  is decoded in hardware; "auto" is JPEG on the 5.2", which shows nothing of a PNG, and PNG on
+  the others, where it is proven. Settings → Panel → Advanced has the switch (Stills).
+- **A service can say what it is doing** (`Service.summary()`), shown on its card in the app.
+
+**Changes**
+- **Sharper video that costs less**: the quality is crf 20 (was 25), the profile is high on the
+  9.2" and the 12.3", and the encoder is the graphics card's where it was measured to show
+  (AMD's `h264_amf`; x264 takes over where one fails). The bit rate's cap grows with the pixels
+  and the frame rate and then follows the panel, between 1 and 32 Mbit/s, so the 12.3" is no
+  longer held to the 9.2"'s 2 Mbit/s; a step of the cap starts the new stream beside the old
+  one without a gap, and the rate a panel got to is kept for the next run. The frames go into
+  ffmpeg as four bytes a pixel, about 8 ms less processor time per frame with a card's encoder
+  and 4 ms with x264 on the 12.3".
+- **The graphics card converts the colours only where it is proven right**: with
+  `video.pixels = "auto"` the processor converts until a colour check has compared the card's
+  conversion with it; the first time the video mode starts a card's encoder with a new ffmpeg
+  or graphics driver, that check runs by itself in the background (a few frames, a few seconds,
+  never on the panel). Where the colours come out identical the card takes over, else the
+  processor stays. Every stream says it is BT.601, in the range it has, whichever encoder made
+  it, so a player on the PC shows it as the panel does.
+- **30 frames a second by default**: the video mode runs at 30 instead of 50. On the panels it
+  still looks smooth, and it asks far less of the PC: measured with two panels, 7.5 % of a
+  16-thread processor (1.2 cores) at 30 against 12.4 % (2.0 cores) at 50. Settings → Panel →
+  Frames per second says what 50 costs, for whoever wants it. A panel set to 50 by hand keeps
+  it.
+- **A third less memory in many places.** The renderer's caches are held by their size in
+  bytes instead of a count (the frames stay the same to the pixel), the app's pictures (the
+  themes' previews, the community's) go a minute after its window closes, and the window's
+  WebView2 runs with one renderer and no disk caches. Measured in the video mode: a panel's
+  own process 110 → 74 MB, Lumen on the 12.3" 139 → 110 MB, the main process after Start
+  showed every theme 246 → 164 MB and a minute after the window closed 151 MB.
+- **The renderer keeps more between frames**: the lit rings redraw only their tip, the
+  background is laid once for the whole panel, the fans of a list turn over the list, and list
+  patterns are matched only when the readings' keys change. The same pixels, 13 to 19 % less
+  processor time per frame on the game screen.
+- **The round report tells more**: the round's 1 % and 0.1 % lows, its average and longest
+  frame time (every frame of the round counted), the course of the CPU and GPU temperatures
+  over the round, and the PC's peak power where the power service runs, on all five report
+  screens; `game.fps_avg`, `game.fps_1low`, `game.fps_01low`, `game.frametime_avg` and
+  `game.frametime_max` are readings for any screen. Live → History keeps a round's report as a
+  picture.
+- **The screens use their room**: the card of what plays sets the title, the artist and the
+  player a size larger; Almanac's clock is a tenth larger on the 9.2" and 12.3"; a clock
+  module with room to spare runs the seconds along a line under the date; the processes card
+  shows four rows; the ring instrument can show the course of the load under its rows (Arena
+  beside a companion on the 12.3"); Agents say for how long each one has been working, waiting
+  or idle; names no longer end in dots where a shorter word fits.
+- **Panels**: the TURZX 9.2", 8.8" and 12.3" are listed as verified on the hardware (#19,
+  #20).
+- **The GitHub page and the website, shorter and quicker to grasp**: a grid of the features
+  under the download buttons, "Several panels at once" as a section of its own, a compact tour
+  with the rest of each part folded away; the long theme descriptions live in THEMES.md.
+
+**Fixes**
+- **Black looked grey on the 12.3" in video mode**: its decoder shows the video as full range,
+  so the video of limited range looked washed out while the stills were right. It now gets full
+  range by itself (`[device] video_range`, each panel its own).
+- **"Automatic" chose x264 where the graphics card's encoder works**: the test of an encoder
+  fed it 64×64 pictures, which a card's encoder may refuse although it encodes the panel's
+  pictures fine. The test now runs the video mode's own command as the video mode feeds it.
+- **A theme opens at once from the gallery**: Edit opens Design in a fifth of a second instead
+  of waiting for every preview.
+- **Japanese on the panel in Japanese glyphs on Linux**: the panel's fallback fonts follow the
+  app's language.
+- **The app's server reads every request to the end before it answers**: on Windows an
+  answer could be thrown away (the renewal of the notify key).
 
 ## 0.7.0 — 2026-10-22
 
