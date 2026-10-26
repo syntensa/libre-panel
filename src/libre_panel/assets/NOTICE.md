@@ -67,6 +67,13 @@ ossini, GPL-3.0-or-later. <https://github.com/ossini/krakenlcd>. Its notes, made
 Z53, add the header's own transfer, the two buckets in turn and the hidraw node. Libre Panel's
 driver (`devices/nzxt_kraken.py`) is its own code.
 
+**wsmonitor** — Derik-for-real24 (<https://github.com/Derik-for-real24>). The protocol of
+Waveshare's USB monitors (the frame's head and its CRC, the map of values as Qt writes it, the
+commands and their answers, the keys the vendor's themes use, the placeholder ids `1234:5678`
+and the usbtouchscreen driver that takes them on Linux) comes from its `docs/PROTOCOL.md`, made
+from the display's own program and the vendor's Windows application and shared in #21. Libre
+Panel's driver (`devices/waveshare.py`, `services/waveshare.py`) is its own code.
+
 **LibreHardwareMonitor** (MPL-2.0) — the sensor source for the GPU,
 temperatures, power and fans on Windows. The Windows downloads carry its
 library and read it inside Libre Panel (see "Windows downloads" below); a
