@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.1rc7 — 2026-10-26
 
 **Security**
 - **With administrator rights, nothing that other programs can change is loaded or
