@@ -1109,6 +1109,26 @@ currency = "€"
 minute and when it stops, so a restart loses nothing; a new day and a new month begin at
 zero, and time the PC sleeps is not counted.
 
+### Waveshare USB monitor (experimental)
+
+Sends the readings to a Waveshare USB monitor, which shows them in the themes on its own card
+(docs/HARDWARE.md). The display's themes name their values with the keys of Waveshare's
+program: `Cpu_Temp` and `Cpu温度` both get `cpu.temp`, `Cpu_Freq` the processor's load (so
+Waveshare named it), `Gpu_Usedata` the graphics memory in MB, `Download_Speed` and
+`Upload_Speed` KB/s, `Partition_Usage_0` to `_7` the drives `disk.1` to `disk.8`, `time`,
+`date` and `week` the clock; a value Libre Panel does not have is not sent.
+
+```toml
+[services.waveshare]
+port = ""              # "": the display is looked for; else "COM5", "/dev/ttyACM0"
+brightness = 0         # 1-100 sets it; 0 leaves it as it is
+flip = ""              # "": as it is; "normal" or "upside-down"
+every_s = 1.0
+```
+
+Nothing is written on the display's card: Libre Panel has none of its commands that write
+or delete there.
+
 ### AI activity
 
 What Claude Code and Codex do on this PC: working, waiting for you (a question, a

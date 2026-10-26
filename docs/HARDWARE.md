@@ -322,8 +322,29 @@ layer above it once, and waits when the panel says pictures pile up. As
 Lian Li's other LCDs (UNI FAN TL LCD, Galahad II LCD, Lancool 207 Digital, …) speak Lian Li's
 own HID and wireless protocols, which lian-li-linux documents; they have no driver here yet.
 
-Not supported and not planned for now: Waveshare USB monitors, GUITION 3.5",
-Fuldho 3.5", AX206/AIDA64-style frames.
+Not supported and not planned for now: GUITION 3.5", Fuldho 3.5", AX206/AIDA64-style frames.
+
+## Waveshare USB monitors (experimental)
+
+Waveshare's USB monitors (the 2.8" and its family) are small Linux computers of their own: they
+draw the themes on their card (PCMonitorLinux) and take from the PC only the values to show,
+over a serial port on USB. So Libre Panel does not draw on them; the service *Waveshare USB
+monitor* (*Settings → Game mode and more*) sends them its readings once a second, under the
+keys Waveshare's themes use (in English and in Chinese), and sets the brightness and turns the
+picture upside down where you ask. Libre Panel's own themes do not show on them, and nothing is
+written on the card. Not yet seen on the hardware; the protocol is the one the wsmonitor
+project documented (#21).
+
+- The display is looked for by its USB ids (`1d6b:0104` "Virtual Serial Port", or the
+  placeholder `1234:5678` some units have) and taken only once it answered the display's own
+  handshake. A port can be named instead (`port`).
+- Waveshare's own program (or wsmonitor's) and Libre Panel cannot both have the display: quit
+  the other one.
+- **Linux:** *Settings → Sensors → Set up sensors and panel access* gives your user the port,
+  and on units with `1234:5678` hands the display from the kernel's `usbtouchscreen` driver,
+  which takes those ids for a touchscreen, to `cdc_acm`, which makes `/dev/ttyACM*`. Plug the
+  display in again afterwards. A real touchscreen with those ids is left alone: the rule only
+  moves the display's serial interfaces.
 
 ## Setup per operating system
 

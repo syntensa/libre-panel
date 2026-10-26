@@ -71,6 +71,10 @@ export const SERVICES = {
     title: () => t("Power use"),
     hint: () => t("The watts the PC draws, from the sensors of the processor and the graphics card, and the energy of today and of the month with what it costs."),
   },
+  waveshare: {
+    title: () => t("Waveshare USB monitor (experimental)"),
+    hint: () => t("Sends the readings to a Waveshare USB monitor, which shows them in the themes on its own card. Libre Panel writes nothing on the card. Waveshare's own program must not run at the same time."),
+  },
 };
 
 const SECONDS = { unit: "s", min: 0, max: 86400 };
@@ -186,6 +190,17 @@ const OPTIONS = {
   "power.rest_w": { label: () => t("The rest of the PC"), hint: () => t("Mainboard, drives, fans and what the power supply loses, in watts: some 40 to 80."), unit: "W", min: 0, max: 2000 },
   "power.price": { label: () => t("Price of a kWh"), hint: () => t("0: no cost."), min: 0, max: 100, step: 0.01 },
   "power.currency": { label: () => t("Currency") },
+  "waveshare.port": { label: () => t("Port"), hint: () => t("Only if Libre Panel does not find the display: COM5, /dev/ttyACM0.") },
+  "waveshare.brightness": { label: () => t("Brightness"), hint: () => t("0: as the display has it."), unit: "%", min: 0, max: 100 },
+  "waveshare.flip": {
+    label: () => t("Orientation of the picture"),
+    choices: () => [
+      { id: "", name: t("As it is") },
+      { id: "normal", name: t("Upright") },
+      { id: "upside-down", name: t("Upside down") },
+    ],
+  },
+  "waveshare.every_s": { label: () => t("Send the readings every"), unit: "s", min: 0.25, max: 60, step: 0.25 },
 };
 
 const optionLabel = (service, option) => OPTIONS[`${service}.${option.key}`]?.label() ?? option.key.replace(/_/g, " ");
@@ -327,6 +342,20 @@ function ServiceStatus({ row, enabled, loaded, background }) {
   return null;
 }
 
+/** What the Waveshare service says of the display (services/waveshare.py, summary()). */
+function WaveshareStatus({ summary }) {
+  const { state } = summary;
+  if (state === "connected") {
+    const about = [summary.inch ? `${summary.inch}″` : "", summary.size, summary.version].filter(Boolean).join(" · ");
+    return html`<${Status} tone="ok">${t("The display is connected on {port}", { port: summary.port })}${about ? ` · ${about}` : ""}<//>`;
+  }
+  if (state === "busy") return html`<${Status} tone="warn">${t("Another program has the display's port: close Waveshare's own program.")}<//>`;
+  if (state === "denied") return html`<${Status} tone="warn">${t("Your user may not use the display's port yet: Settings → Sensors → Set up sensors and panel access, then plug the display in again.")}<//>`;
+  if (state === "silent") return html`<${Status} tone="warn">${t("A port with the display's USB ids does not answer as the display does.")}<//>`;
+  if (state === "absent") return html`<${Status}>${t("No display found; Libre Panel keeps looking.")}<//>`;
+  return html`<${Status}>${t("Looking for the display …")}<//>`;
+}
+
 /** The timer's buttons: start or pause it and set it back, as its keyboard shortcuts do. */
 function TimerButtons() {
   const press = (action) => control.shortcut(action).catch(toastError);
@@ -373,6 +402,9 @@ function ServiceCard({ service, config, row, loaded, background }) {
         <${Toggle} label=${title} checked=${enabled} disabled=${Boolean(service.error) && !enabled} onChange=${(on) => enableService(service.name, on)} />
       </div>
     </div>
+    ${service.name === "waveshare" && enabled && row?.summary
+      ? html`<div class="settings-row waveshare-status"><${WaveshareStatus} summary=${row.summary} /></div>`
+      : null}
     ${service.name === "game" ? html`<${GameScreen} />` : null}
     ${service.name === "timer" && enabled && background && row?.state === "running" ? html`<${TimerButtons} />` : null}
     ${service.name === "agents" && enabled ? html`<${AgentsSetup} />` : null}

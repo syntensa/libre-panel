@@ -122,6 +122,11 @@ Services run in the background app (tray, `libre-panel start`) and in
 `libre-panel run`. Editing `[services]` starts, stops or restarts them
 while Libre Panel runs.
 
+A service may say what it is doing now with `summary()`: a dict (or `None`)
+that `GET control/services` passes on with the service's state, for a page
+to show beside it (a device found, a port another program has). It is called
+from the editor's thread, so it should only read what the service keeps.
+
 ### What a service may do: `self.host`
 
 | Call | |

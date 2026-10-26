@@ -2758,7 +2758,22 @@
     "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %.": "«От ПК» — как в диспетчере задач: весь ПК — 100 %. «От одного ядра»: целое ядро — 100 %.",
     "Memory is each process's private memory, as the Task Manager's Memory column shows it (on its Details tab: Memory (active private working set)); – where Windows does not let it be read. The working set also counts what processes share, once for each.": "Память — частная память каждого процесса, как её показывает столбец «Память» диспетчера задач (на вкладке «Подробности»: «Память (активный частный рабочий набор)»); – там, где Windows не даёт её прочитать. Рабочий набор учитывает и то, что процессы делят между собой, — для каждого по разу.",
     "Working set": "Рабочий набор",
-    "Working set: {size}": "Рабочий набор: {size}"
+    "Working set: {size}": "Рабочий набор: {size}",
+    "Waveshare USB monitor (experimental)": "USB-монитор Waveshare (экспериментально)",
+    "Sends the readings to a Waveshare USB monitor, which shows them in the themes on its own card. Libre Panel writes nothing on the card. Waveshare's own program must not run at the same time.": "Отправляет показания на USB-монитор Waveshare, который показывает их в темах со своей карты памяти. Libre Panel ничего не записывает на карту. Собственная программа Waveshare не должна работать одновременно.",
+    "Port": "Порт",
+    "Only if Libre Panel does not find the display: COM5, /dev/ttyACM0.": "Только если Libre Panel не находит дисплей: COM5, /dev/ttyACM0.",
+    "0: as the display has it.": "0: как настроено на дисплее.",
+    "As it is": "Как есть",
+    "Upright": "Нормально",
+    "Send the readings every": "Отправлять показания каждые",
+    "The display is connected on {port}": "Дисплей подключён к {port}",
+    "Another program has the display's port: close Waveshare's own program.": "Порт дисплея занят другой программой: закройте собственную программу Waveshare.",
+    "Your user may not use the display's port yet: Settings → Sensors → Set up sensors and panel access, then plug the display in again.": "Вашему пользователю пока нельзя использовать порт дисплея: Настройки → Датчики → Настроить датчики и доступ к панели, затем подключите дисплей заново.",
+    "A port with the display's USB ids does not answer as the display does.": "Порт с USB-идентификаторами дисплея отвечает не так, как дисплей.",
+    "No display found; Libre Panel keeps looking.": "Дисплей не найден; Libre Panel продолжает поиск.",
+    "Looking for the display …": "Поиск дисплея …",
+    "Orientation of the picture": "Ориентация изображения"
   },
   "fields": {
     "agent": "агент",

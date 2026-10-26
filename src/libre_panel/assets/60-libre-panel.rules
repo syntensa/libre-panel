@@ -34,3 +34,12 @@ KERNEL=="hidraw*", ATTRS{idVendor}=="1e71", ATTRS{idProduct}=="3014", MODE="0660
 
 # Thermaltake's 6" LCD (a HID device)
 SUBSYSTEM=="usb", ATTRS{idVendor}=="264a", ATTRS{idProduct}=="2347", MODE="0660", TAG+="uaccess"
+
+# Waveshare's USB monitors (a serial port over USB; Libre Panel sends them the readings): the
+# person at the computer may use the port. Units with the placeholder ids 1234:5678 are taken by
+# the kernel's usbtouchscreen driver, which knows a touchscreen by those ids: once it has the
+# display's data interface (CDC data, class 0a, which no touchscreen has), both of the display's
+# interfaces go to cdc_acm instead. It holds from the next time the display is plugged in.
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1234", ATTRS{idProduct}=="5678", MODE="0660", TAG+="uaccess"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1d6b", ATTRS{idProduct}=="0104", ATTRS{product}=="Virtual Serial Port", MODE="0660", TAG+="uaccess"
+ACTION!="remove", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_interface", DRIVER=="usbtouchscreen", ATTRS{idVendor}=="1234", ATTRS{idProduct}=="5678", ATTR{bInterfaceClass}=="0a", RUN+="/bin/sh -c 'd=%k; p=$${d%%.*}; u=/sys/bus/usb/drivers/usbtouchscreen; [ -e $$u/$$p.0 ] && echo -n $$p.0 > $$u/unbind; echo -n $$d > $$u/unbind; echo -n $$p.0 > /sys/bus/usb/drivers/cdc_acm/bind'"

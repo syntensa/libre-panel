@@ -2758,7 +2758,22 @@
     "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %.": "Z całego PC to to, co pokazuje Menedżer zadań: cały PC to 100 %. Z jednego rdzenia: cały rdzeń to 100 %.",
     "Memory is each process's private memory, as the Task Manager's Memory column shows it (on its Details tab: Memory (active private working set)); – where Windows does not let it be read. The working set also counts what processes share, once for each.": "Pamięć to pamięć prywatna każdego procesu, tak jak pokazuje ją kolumna Pamięć Menedżera zadań (na karcie Szczegóły: Pamięć (aktywny prywatny zestaw roboczy)); – tam, gdzie Windows nie pozwala jej odczytać. Zestaw roboczy liczy też to, co procesy dzielą, raz dla każdego.",
     "Working set": "Zestaw roboczy",
-    "Working set: {size}": "Zestaw roboczy: {size}"
+    "Working set: {size}": "Zestaw roboczy: {size}",
+    "Waveshare USB monitor (experimental)": "Monitor USB Waveshare (eksperymentalnie)",
+    "Sends the readings to a Waveshare USB monitor, which shows them in the themes on its own card. Libre Panel writes nothing on the card. Waveshare's own program must not run at the same time.": "Wysyła odczyty do monitora USB Waveshare, który pokazuje je w motywach na własnej karcie. Libre Panel niczego nie zapisuje na karcie. Program Waveshare nie może działać w tym samym czasie.",
+    "Port": "Port",
+    "Only if Libre Panel does not find the display: COM5, /dev/ttyACM0.": "Tylko jeśli Libre Panel nie znajduje wyświetlacza: COM5, /dev/ttyACM0.",
+    "0: as the display has it.": "0: tak, jak ustawiono na wyświetlaczu.",
+    "As it is": "Bez zmian",
+    "Upright": "Normalnie",
+    "Send the readings every": "Wysyłaj odczyty co",
+    "The display is connected on {port}": "Wyświetlacz jest podłączony do {port}",
+    "Another program has the display's port: close Waveshare's own program.": "Inny program zajmuje port wyświetlacza: zamknij program Waveshare.",
+    "Your user may not use the display's port yet: Settings → Sensors → Set up sensors and panel access, then plug the display in again.": "Twój użytkownik nie może jeszcze używać portu wyświetlacza: Ustawienia → Czujniki → Skonfiguruj czujniki i dostęp do panelu, a potem podłącz wyświetlacz ponownie.",
+    "A port with the display's USB ids does not answer as the display does.": "Port z identyfikatorami USB wyświetlacza nie odpowiada tak jak wyświetlacz.",
+    "No display found; Libre Panel keeps looking.": "Nie znaleziono wyświetlacza; Libre Panel szuka dalej.",
+    "Looking for the display …": "Szukanie wyświetlacza …",
+    "Orientation of the picture": "Orientacja obrazu"
   },
   "fields": {
     "agent": "agent",

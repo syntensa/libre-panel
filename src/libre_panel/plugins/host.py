@@ -144,6 +144,12 @@ class Service:
     def stop(self) -> None:
         pass
 
+    def summary(self) -> dict[str, Any] | None:
+        """What the service is doing now, for its card in the app (Settings → Game mode and
+        more), as data the card words: a device found, a port another program has. Called
+        from the editor's thread; None says nothing."""
+        return None
+
 
 class ServiceHost:
     """What one service may do. Thread-safe; call it from any thread."""

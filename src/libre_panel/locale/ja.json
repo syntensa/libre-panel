@@ -2758,7 +2758,22 @@
     "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %.": "「PC全体に対して」はタスクマネージャーと同じ表示で、PC全体が100%です。「コア1個あたり」では、コア1個分が100%です。",
     "Memory is each process's private memory, as the Task Manager's Memory column shows it (on its Details tab: Memory (active private working set)); – where Windows does not let it be read. The working set also counts what processes share, once for each.": "メモリは各プロセスのプライベートメモリで、タスクマネージャーの「メモリ」列と同じです（「詳細」タブでは「メモリ (アクティブなプライベート ワーキング セット)」）。Windows が読み取りを許可しないものは – です。ワーキングセットには、プロセス間で共有される分もプロセスごとに含まれます。",
     "Working set": "ワーキングセット",
-    "Working set: {size}": "ワーキングセット: {size}"
+    "Working set: {size}": "ワーキングセット: {size}",
+    "Waveshare USB monitor (experimental)": "Waveshare USB モニター（試験的）",
+    "Sends the readings to a Waveshare USB monitor, which shows them in the themes on its own card. Libre Panel writes nothing on the card. Waveshare's own program must not run at the same time.": "計測値を Waveshare USB モニターに送り、モニター自身のカードにあるテーマで表示させます。Libre Panel はカードに何も書き込みません。Waveshare 純正のプログラムと同時には動かせません。",
+    "Port": "ポート",
+    "Only if Libre Panel does not find the display: COM5, /dev/ttyACM0.": "Libre Panel がディスプレイを見つけられない場合のみ：COM5、/dev/ttyACM0。",
+    "0: as the display has it.": "0：ディスプレイの現在の設定のまま。",
+    "As it is": "そのまま",
+    "Upright": "通常の向き",
+    "Send the readings every": "計測値を送る間隔",
+    "The display is connected on {port}": "ディスプレイは {port} に接続されています",
+    "Another program has the display's port: close Waveshare's own program.": "別のプログラムがディスプレイのポートを使っています：Waveshare 純正のプログラムを終了してください。",
+    "Your user may not use the display's port yet: Settings → Sensors → Set up sensors and panel access, then plug the display in again.": "あなたのユーザーはまだディスプレイのポートを使えません：設定 → センサー → センサーとパネルへのアクセスを設定 を行い、ディスプレイを差し直してください。",
+    "A port with the display's USB ids does not answer as the display does.": "ディスプレイの USB ID を持つポートが、ディスプレイのようには応答しません。",
+    "No display found; Libre Panel keeps looking.": "ディスプレイが見つかりません。Libre Panel は探し続けます。",
+    "Looking for the display …": "ディスプレイを探しています …",
+    "Orientation of the picture": "画面の向き"
   },
   "fields": {
     "agent": "エージェント",

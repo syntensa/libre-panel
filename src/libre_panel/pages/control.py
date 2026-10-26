@@ -14,6 +14,7 @@ gathers the parts a screen polls together.
 from __future__ import annotations
 
 import io
+import logging
 from datetime import datetime
 from typing import Any
 
@@ -27,6 +28,8 @@ from libre_panel.plugins.loader import registry
 from libre_panel.services.game import MODE as GAME_MODE
 from libre_panel.theme.defaults import normal_theme
 from libre_panel.theme.model import ThemeError, find_theme, list_themes
+
+log = logging.getLogger(__name__)
 
 LIVE_WIDTH = 960  # the live picture is this wide unless asked otherwise
 JPEG_QUALITY = 78
@@ -282,7 +285,19 @@ class Control(ConsolePage):
             "enabled": enabled,
             "installed": name in registry().names("services"),
             "restartable": code in RESTARTABLE,
+            "summary": self._summary(name) if code == "running" else None,
         }
+
+    def _summary(self, name: str) -> dict[str, Any] | None:
+        """What a running service says it is doing (Service.summary), None when it says
+        nothing or cannot say."""
+        service = self.context.service(name)
+        try:
+            found = service.summary() if service is not None else None
+        except Exception:
+            log.exception("service %r could not say what it is doing", name)
+            return None
+        return found if isinstance(found, dict) else None
 
     def _services(self, config: Config | None) -> list[dict[str, Any]]:
         applied = self.context.services()

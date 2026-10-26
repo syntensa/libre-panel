@@ -302,7 +302,7 @@ def test_control_shows_the_panel_its_sources_and_its_services(running, isolated_
     services = {service["name"]: service for service in data["services"]}
     assert services["notices"] == {
         "name": "notices", "state": "running", "detail": "", "enabled": True,
-        "installed": True, "restartable": True,
+        "installed": True, "restartable": True, "summary": None,
     }  # fmt: skip
     assert services["game"]["state"] == "off" and services["game"]["restartable"] is False
     assert services["game"]["enabled"] is False

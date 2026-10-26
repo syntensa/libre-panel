@@ -57,7 +57,7 @@ MAX_NOTICE = 200_000
 # the section is named after it); plugins' come after them.
 SERVICE_ORDER = (
     "game", "memory", "notices", "autopilot", "devices", "cooling", "downloads", "timer", "power",
-    "agents",
+    "agents", "waveshare",
 )  # fmt: skip
 # Sources that start by themselves; they are listed only where config.toml names them.
 # hardware: the names of this PC; mangohud: a game's frame rate on Linux

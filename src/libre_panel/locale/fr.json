@@ -2758,7 +2758,22 @@
     "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %.": "Du PC, c'est ce qu'affiche le Gestionnaire des tâches : le PC entier fait 100 %. D'un cœur : un cœur entier fait 100 %.",
     "Memory is each process's private memory, as the Task Manager's Memory column shows it (on its Details tab: Memory (active private working set)); – where Windows does not let it be read. The working set also counts what processes share, once for each.": "La mémoire est la mémoire privée de chaque processus, comme l'affiche la colonne Mémoire du Gestionnaire des tâches (dans son onglet Détails : Mémoire (plage de travail privée active)) ; – là où Windows ne la laisse pas lire. La plage de travail compte aussi ce que les processus partagent, une fois pour chacun.",
     "Working set": "Plage de travail",
-    "Working set: {size}": "Plage de travail : {size}"
+    "Working set: {size}": "Plage de travail : {size}",
+    "Waveshare USB monitor (experimental)": "Moniteur USB Waveshare (expérimental)",
+    "Sends the readings to a Waveshare USB monitor, which shows them in the themes on its own card. Libre Panel writes nothing on the card. Waveshare's own program must not run at the same time.": "Envoie les mesures à un moniteur USB Waveshare, qui les affiche dans les thèmes de sa propre carte. Libre Panel n'écrit rien sur la carte. Le programme de Waveshare ne doit pas tourner en même temps.",
+    "Port": "Port",
+    "Only if Libre Panel does not find the display: COM5, /dev/ttyACM0.": "Seulement si Libre Panel ne trouve pas l'écran : COM5, /dev/ttyACM0.",
+    "0: as the display has it.": "0 : comme réglé sur l'écran.",
+    "As it is": "Tel quel",
+    "Upright": "À l'endroit",
+    "Send the readings every": "Envoyer les mesures toutes les",
+    "The display is connected on {port}": "L'écran est connecté sur {port}",
+    "Another program has the display's port: close Waveshare's own program.": "Un autre programme utilise le port de l'écran : fermez le programme de Waveshare.",
+    "Your user may not use the display's port yet: Settings → Sensors → Set up sensors and panel access, then plug the display in again.": "Votre utilisateur ne peut pas encore utiliser le port de l'écran : Paramètres → Capteurs → Configurer les capteurs et l'accès au panneau, puis rebranchez l'écran.",
+    "A port with the display's USB ids does not answer as the display does.": "Un port avec les identifiants USB de l'écran ne répond pas comme l'écran.",
+    "No display found; Libre Panel keeps looking.": "Aucun écran trouvé ; Libre Panel continue de chercher.",
+    "Looking for the display …": "Recherche de l'écran …",
+    "Orientation of the picture": "Orientation de l'image"
   },
   "fields": {
     "agent": "agent",

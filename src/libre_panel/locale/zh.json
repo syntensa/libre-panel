@@ -2758,7 +2758,22 @@
     "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %.": "占整机即任务管理器显示的数值：整台电脑为 100 %。占单核：一个完整核心为 100 %。",
     "Memory is each process's private memory, as the Task Manager's Memory column shows it (on its Details tab: Memory (active private working set)); – where Windows does not let it be read. The working set also counts what processes share, once for each.": "内存为每个进程的专用内存，即任务管理器“内存”列显示的数值（在其“详细信息”选项卡中为：内存(活动的专用工作集)）；Windows 不允许读取的显示为 –。工作集还包括各进程共享的部分，每个进程各算一次。",
     "Working set": "工作集",
-    "Working set: {size}": "工作集：{size}"
+    "Working set: {size}": "工作集：{size}",
+    "Waveshare USB monitor (experimental)": "Waveshare USB 副屏（实验性）",
+    "Sends the readings to a Waveshare USB monitor, which shows them in the themes on its own card. Libre Panel writes nothing on the card. Waveshare's own program must not run at the same time.": "把读数发送到 Waveshare USB 副屏，由它在自己存储卡上的主题中显示。Libre Panel 不会向存储卡写入任何内容。Waveshare 自带的程序不能同时运行。",
+    "Port": "端口",
+    "Only if Libre Panel does not find the display: COM5, /dev/ttyACM0.": "仅在 Libre Panel 找不到该屏幕时填写：COM5、/dev/ttyACM0。",
+    "0: as the display has it.": "0：保持屏幕当前设置。",
+    "As it is": "保持现状",
+    "Upright": "正常",
+    "Send the readings every": "发送读数间隔",
+    "The display is connected on {port}": "屏幕已连接在 {port}",
+    "Another program has the display's port: close Waveshare's own program.": "其他程序占用了屏幕的端口：请关闭 Waveshare 自带的程序。",
+    "Your user may not use the display's port yet: Settings → Sensors → Set up sensors and panel access, then plug the display in again.": "你的用户还不能使用屏幕的端口：设置 → 传感器 → 设置传感器和面板访问，然后重新插入屏幕。",
+    "A port with the display's USB ids does not answer as the display does.": "某个带有该屏幕 USB ID 的端口没有像该屏幕那样应答。",
+    "No display found; Libre Panel keeps looking.": "未找到屏幕；Libre Panel 会继续查找。",
+    "Looking for the display …": "正在查找屏幕 …",
+    "Orientation of the picture": "画面方向"
   },
   "fields": {
     "agent": "智能体",

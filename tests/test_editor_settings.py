@@ -145,7 +145,7 @@ def test_the_catalog_names_the_sources_the_drivers_and_the_services_with_their_o
     services = catalog["services"]
     assert [service["name"] for service in services] == [
         "game", "memory", "notices", "autopilot", "devices", "cooling", "downloads", "timer",
-        "power", "agents",
+        "power", "agents", "waveshare",
     ]  # fmt: skip
     game = next(service for service in services if service["name"] == "game")
     options = {option["key"]: option for option in game["options"]}

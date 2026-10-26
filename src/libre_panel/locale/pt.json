@@ -2758,7 +2758,22 @@
     "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %.": "Do PC é o que o Gerenciador de Tarefas mostra: o PC inteiro é 100 %. De um núcleo: um núcleo inteiro é 100 %.",
     "Memory is each process's private memory, as the Task Manager's Memory column shows it (on its Details tab: Memory (active private working set)); – where Windows does not let it be read. The working set also counts what processes share, once for each.": "A memória é a memória privada de cada processo, como a coluna Memória do Gerenciador de Tarefas a mostra (na guia Detalhes: Memória (conjunto de trabalho privado ativo)); – onde o Windows não deixa lê-la. O conjunto de trabalho também conta o que os processos compartilham, uma vez para cada um.",
     "Working set": "Conjunto de trabalho",
-    "Working set: {size}": "Conjunto de trabalho: {size}"
+    "Working set: {size}": "Conjunto de trabalho: {size}",
+    "Waveshare USB monitor (experimental)": "Monitor USB da Waveshare (experimental)",
+    "Sends the readings to a Waveshare USB monitor, which shows them in the themes on its own card. Libre Panel writes nothing on the card. Waveshare's own program must not run at the same time.": "Envia as leituras para um monitor USB da Waveshare, que as mostra nos temas do seu próprio cartão. O Libre Panel não grava nada no cartão. O programa da própria Waveshare não pode rodar ao mesmo tempo.",
+    "Port": "Porta",
+    "Only if Libre Panel does not find the display: COM5, /dev/ttyACM0.": "Só se o Libre Panel não encontrar a tela: COM5, /dev/ttyACM0.",
+    "0: as the display has it.": "0: como está na tela.",
+    "As it is": "Como está",
+    "Upright": "Normal",
+    "Send the readings every": "Enviar as leituras a cada",
+    "The display is connected on {port}": "A tela está conectada em {port}",
+    "Another program has the display's port: close Waveshare's own program.": "Outro programa está usando a porta da tela: feche o programa da própria Waveshare.",
+    "Your user may not use the display's port yet: Settings → Sensors → Set up sensors and panel access, then plug the display in again.": "Seu usuário ainda não pode usar a porta da tela: Configurações → Sensores → Configurar os sensores e o acesso ao painel, depois conecte a tela de novo.",
+    "A port with the display's USB ids does not answer as the display does.": "Uma porta com os IDs USB da tela não responde como a tela responde.",
+    "No display found; Libre Panel keeps looking.": "Nenhuma tela encontrada; o Libre Panel continua procurando.",
+    "Looking for the display …": "Procurando a tela …",
+    "Orientation of the picture": "Orientação da imagem"
   },
   "fields": {
     "agent": "agente",

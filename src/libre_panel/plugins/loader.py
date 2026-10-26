@@ -64,6 +64,7 @@ BUILT_IN_PARTS: dict[str, dict[str, str]] = {
         "notices": "libre_panel.services.notices:Notices",
         "power": "libre_panel.services.power:Power",
         "timer": "libre_panel.services.timer:Timer",
+        "waveshare": "libre_panel.services.waveshare:Waveshare",
     },
     "editor_pages": {
         "autopilot": "libre_panel.pages.autopilot:Autopilot",

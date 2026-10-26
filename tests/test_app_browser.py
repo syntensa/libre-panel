@@ -3498,7 +3498,7 @@ def test_settings_services(app_url, isolated_home):
         cards = page.locator(".settings-card.service")
         assert [cards.nth(i).get_attribute("data-service") for i in range(cards.count())] == [
             "game", "memory", "notices", "autopilot", "devices", "cooling", "downloads", "timer",
-            "power", "agents",
+            "power", "agents", "waveshare",
         ]  # fmt: skip
         assert page.locator("[role='switch'][aria-checked='true']").count() == 0  # off until asked
         game = page.locator("[data-service='game']")
