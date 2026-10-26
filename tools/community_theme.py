@@ -131,6 +131,15 @@ def _text(answers: dict[str, str], key: str, fallback: str) -> tuple[str, bool]:
     return text[: most - 1].rsplit(" ", 1)[0].rstrip(".,;: ") + "…", True
 
 
+def _maker(given: str, original: str) -> str:
+    """Who made the theme, as the form says (else as the theme says), with the maker the theme
+    names where that is someone else: a theme made from another one keeps its credit."""
+    given, original = " ".join(given.split()), " ".join(original.split())
+    if not given or not original or original.casefold() in given.casefold():
+        return given or original
+    return f"{given}, after {original}"
+
+
 # -- check (no rights) -------------------------------------------------------------------------
 
 
@@ -157,7 +166,7 @@ def check(body: str, login: str, out: Path, get=download) -> dict[str, Any]:
     """The theme of an issue checked and drawn: its zip, picture and entry in ``out``
     (``theme.zip``, ``preview.png``, ``entry.json``). :class:`Refused` where it cannot go in."""
     from libre_panel.editor.community import MAX_PREVIEW
-    from libre_panel.theme.share import MAX_ZIP, ShareError, inspect_shared
+    from libre_panel.theme.share import MAX_ZIP, ShareError, inspect_shared, retitled
 
     answers = fields(body)
     if "[x]" not in answers.get("consent", "").lower():
@@ -165,14 +174,20 @@ def check(body: str, login: str, out: Path, get=download) -> dict[str, Any]:
     data = get(attachment(answers.get("theme", "")), MAX_ZIP)
     try:
         theme = inspect_shared(data)
+    except ShareError as exc:
+        raise Refused(f"Libre Panel cannot take this theme: {exc}") from exc
+    maker = _maker(answers.get("author", ""), theme["author"] or "")
+    name, cut_name = _text(answers, "name", theme["name"])
+    author, cut_author = _text({"author": maker}, "author", login)
+    description, cut_description = _text(answers, "description", "")
+    try:  # installed, it is called what its entry says (its maker in full, with whom it is after)
+        data = retitled(data, name=name, author=maker, description=description)
+        inspect_shared(data)
         picture = _picture(data)
     except ShareError as exc:
         raise Refused(f"Libre Panel cannot take this theme: {exc}") from exc
     if len(picture) > MAX_PREVIEW:
         raise Refused("Its picture comes out larger than the list takes; fewer photos, perhaps?")
-    name, cut_name = _text(answers, "name", theme["name"])
-    author, cut_author = _text(answers, "author", theme["author"] or login)
-    description, cut_description = _text(answers, "description", "")
     width, height = theme["size"]
     sha256 = hashlib.sha256(data).hexdigest()
     entry = {"name": name, "author": author, "description": description,
@@ -255,7 +270,8 @@ def pull_request_text(entry: dict[str, Any], number: int) -> str:
         f"community/themes/{entry['preview']}?raw=true)",
         "",
         "Checked by the workflow as Libre Panel checks every shared theme, and drawn with the "
-        "demo readings. Before merging, look that it shows what its entry says, that nothing "
+        "demo readings; its theme.json carries the name, maker and description above. Before "
+        "merging, look that it shows what its entry says, that nothing "
         "in it should not be shared, and that its license is named.",
         "",
         f"Closes #{number}",

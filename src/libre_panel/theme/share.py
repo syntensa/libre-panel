@@ -362,3 +362,25 @@ def inspect_shared(data: bytes) -> dict[str, Any]:
         theme = load_theme(Path(place) / done["id"])
     return {"name": theme.name, "size": [theme.width, theme.height], "author": theme.author,
             "license": theme.license}  # fmt: skip
+
+
+def retitled(data: bytes, **fields: str) -> bytes:
+    """A shared theme's zip (one :func:`inspect_shared` took) with ``fields`` set in its
+    theme.json (``name``, ``author``, ``description``; one left empty stays as it is), every
+    other file as it was: a community theme is installed under the name and maker its entry
+    shows (tools/community_theme.py)."""
+    out = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        _top, files = _checked(archive)
+        found = files[THEME_FILENAME]
+        raw = json.loads(archive.read(found).decode("utf-8"))
+        raw.update({key: value for key, value in fields.items() if value})
+        with zipfile.ZipFile(out, "w") as written:
+            for entry in archive.infolist():
+                body = archive.read(entry)
+                if entry.filename == found.filename:
+                    body = (json.dumps(raw, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+                copy = zipfile.ZipInfo(entry.filename, entry.date_time)
+                copy.compress_type, copy.external_attr = entry.compress_type, entry.external_attr
+                written.writestr(copy, body)
+    return out.getvalue()

@@ -18,8 +18,9 @@ made for the sizes the entry names, and then as it checks any shared theme
    needs a free GitHub account).
 3. A check runs by itself ([community-theme.yml](../../.github/workflows/community-theme.yml)):
    it looks at the theme as the app looks at every shared theme, works out the panel size it is
-   made for, draws its picture with made-up readings, and opens a pull request with the zip,
-   the picture and the entry. It answers on your issue, with what to change where something is
+   made for, draws its picture with made-up readings, writes the name, maker and description
+   you gave into its `theme.json` (a theme made from someone else's keeps them as whom it is
+   after), and opens a pull request with the zip, the picture and the entry. It answers on your issue, with what to change where something is
    wrong; edit the issue and it runs again.
 4. Someone has a look and merges it. Within the hour it shows in everyone's app.
 

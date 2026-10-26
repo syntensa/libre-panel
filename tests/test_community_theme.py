@@ -90,15 +90,49 @@ def test_a_shared_theme_is_checked_drawn_and_described(tool, tmp_path):
                          get=lambda url, limit: asked.append(url) or data)  # fmt: skip
     assert asked == [URL]
     assert checked["name"] == "Glow" and checked["author"] == "In the theme"  # (the theme's)
-    assert checked["sizes"] == ["480x320"] and checked["sha256"] == hashlib.sha256(data).hexdigest()
-    assert (tmp_path / "checked/theme.zip").read_bytes() == data
+    shared = (tmp_path / "checked/theme.zip").read_bytes()
+    assert checked["sizes"] == ["480x320"]
+    assert checked["sha256"] == hashlib.sha256(shared).hexdigest()
     picture = Image.open(tmp_path / "checked/preview.png")
     assert picture.size == (480, 320) and picture.format == "PNG"
     long = "word " * 120
     checked = tool.check(issue(author="Me", description=long), "someone", tmp_path / "again",
                          get=lambda url, limit: data)  # fmt: skip
-    assert checked["author"] == "Me" and len(checked["description"]) <= 400
+    assert checked["author"] == "Me, after In the theme" and len(checked["description"]) <= 400
     assert checked["description"].endswith("…") and checked["cut"] == ["description"]
+
+
+def test_a_shared_theme_is_installed_under_the_name_and_maker_its_entry_shows(tool, tmp_path):
+    """A theme made from another one (here a copy of a built-in theme, renamed in the editor):
+    the zip in the list carries the form's name, maker and description, its first maker kept
+    as whom it is after; every other file as it was."""
+    from libre_panel.theme.share import inspect_shared
+
+    data = theme_zip("Libre Default (mine)")
+    checked = tool.check(issue(name="All in", author="Varulf", description="All at a glance."),
+                         "someone", tmp_path / "checked", get=lambda url, limit: data)  # fmt: skip
+    assert checked["name"] == "All in" and checked["author"] == "Varulf, after In the theme"
+    shared = (tmp_path / "checked/theme.zip").read_bytes()
+    assert inspect_shared(shared)["name"] == "All in"
+    with zipfile.ZipFile(io.BytesIO(shared)) as archive, zipfile.ZipFile(io.BytesIO(data)) as was:
+        assert archive.namelist() == was.namelist()
+        theme = json.loads(archive.read("glow/theme.json"))
+        assert theme["author"] == "Varulf, after In the theme"
+        assert theme["description"] == "All at a glance." and theme["widgets"]
+        assert archive.read("glow/assets/back.png") == was.read("glow/assets/back.png")
+        assert archive.getinfo("glow/theme.json").date_time == WHEN
+    # the maker the form names is the theme's already, or the form names none: as it is
+    assert tool._maker("In the theme", "In the theme") == "In the theme"
+    assert tool._maker("", "In the theme") == "In the theme" and tool._maker("Me", "") == "Me"
+
+
+def test_a_theme_s_picture_beside_the_list_is_not_kept_out_of_git():
+    """The list's pictures (community/themes/<id>/preview.png) go into the pull request."""
+    import subprocess
+
+    found = subprocess.run(["git", "check-ignore", "-q", "community/themes/glow/preview.png"],
+                           cwd=ROOT, check=False)  # fmt: skip
+    assert found.returncode == 1  # (0: ignored)
 
 
 def test_what_keeps_a_theme_out_is_said(tool, tmp_path):
@@ -125,7 +159,10 @@ def test_a_checked_theme_goes_beside_the_list_under_a_name_of_its_own(tool, tmp_
     assert entry["id"] == "glow" and entry["zip"] == "glow/glow.zip"
     index = (root / "community/themes/index.json").read_bytes()
     assert [e["id"] for e in parse_index(index)] == ["glow"]  # as the app reads it
-    assert (root / "community/themes/glow/glow.zip").read_bytes() == theme_zip()
+    assert (root / "community/themes/glow/glow.zip").read_bytes() == (
+        checked / "theme.zip"
+    ).read_bytes()
+    assert (root / "community/themes/glow/preview.png").read_bytes()[:4] == b"\x89PNG"
     assert tool.add(checked, 13, root)["id"] == "glow-2"  # the name is taken: beside it
     tool.check(issue(name="Lumen"), "someone", tmp_path / "lumen",
                get=lambda url, limit: theme_zip("Lumen"))  # fmt: skip
