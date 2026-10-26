@@ -55,6 +55,7 @@ from libre_panel.theme.model import find_theme, load_theme
 FFMPEG = shutil.which("ffmpeg")
 needs_ffmpeg = pytest.mark.skipif(FFMPEG is None, reason="needs ffmpeg with libx264")
 NINE, TWELVE = "turing-9.2-usb", "turing-12.3-usb"
+EIGHT = "turing-8.8-usb"  # a panel whose video is limited range by itself (the 9.2" is full)
 
 
 @pytest.fixture(autouse=True)
@@ -568,7 +569,7 @@ def test_the_card_says_who_converts_for_the_panel_and_why(isolated_home, monkeyp
     monkeypatch.setattr(h264, "find_ffmpeg", lambda configured="": "/a/ffmpeg")
     monkeypatch.setattr(card_choice, "version", lambda ffmpeg: "8.1")
     stats = {"streaming": True, "encoder": "h264_amf, rgb0"}
-    runner = ColourCheck(None, running_app(stats))
+    runner = ColourCheck(None, running_app(stats, model=EIGHT))
 
     def choice(**fields):
         state = runner.state(1)
@@ -617,14 +618,14 @@ def test_the_check_runs_with_the_panel_s_size_and_range_and_the_choice_follows_i
     isolated_home.mkdir(parents=True)
     ffmpeg = h264.find_ffmpeg("")
     stats = {"streaming": True, "encoder": "h264_amf, rgb0"}
-    runner = ColourCheck(None, running_app(stats), works=lambda f, e: e == "h264_amf",
+    runner = ColourCheck(None, running_app(stats, model=EIGHT), works=lambda f, e: e == "h264_amf",
                          command=stand_in("scale=out_color_matrix=bt709"))  # fmt: skip
     runner.start_check(1)
     with pytest.raises(ColourError):
         runner.start_check(1)  # once at a time
     assert wait_for(lambda: not runner.running)
     state = runner.state(1)
-    assert state["check"]["picture"] == {"panel": 1, "model": NINE, "size": [1920, 480],
+    assert state["check"]["picture"] == {"panel": 1, "model": EIGHT, "size": [1920, 480],
                                          "full": False}  # fmt: skip
     verdicts = {r["encoder"]: r["verdict"] or r["state"] for r in state["check"]["results"]}
     assert verdicts == {"h264_amf": "matrix", "h264_nvenc": "unavailable",
@@ -735,7 +736,8 @@ def test_the_route(isolated_home, monkeypatch):
         status, state = request(port, "GET", "/api/colour-check?panel=1")
         assert status == 200 and state["panel"] == 1 and not state["app"]
         assert state["check"]["results"] == [] and state["pixels"] == "auto"
-        assert state["choice"]["range"] == "auto" and state["choice"]["full"] is False
+        # (no panel and none chosen: the check's own, the 9.2", which shows video as full range)
+        assert state["choice"]["range"] == "auto" and state["choice"]["full"] is True
         assert request(port, "GET", "/api/colour-check?panel=5")[0] == 400
         assert request(port, "POST", "/api/colour-check", {"action": "dance"})[0] == 400
         for action in ("show", "range"):

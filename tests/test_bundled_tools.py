@@ -156,3 +156,34 @@ def test_the_pin_the_app_checks_is_the_one_the_download_was_fetched_by():
     spec.loader.exec_module(fetch_tools)
     pawnio = [tool for tool in fetch_tools.TOOLS if tool.file == bundled.PAWNIO_SETUP]
     assert [tool.sha256 for tool in pawnio] == [bundled.PAWNIO_SETUP_SHA256]
+
+
+def test_the_system_s_programs_get_the_system_s_libraries_in_a_linux_download():
+    """The AppImage's loader put its folder first in LD_LIBRARY_PATH; inherited, it made the
+    system's /bin/sh take the bundle's older readline and stop, so the app never opened (#21).
+    The programs it starts get the path from before, or none."""
+    env = {"LD_LIBRARY_PATH": "/tmp/_MEI/lib:/opt/mine", "LD_LIBRARY_PATH_ORIG": "/opt/mine",
+           "PATH": "/usr/bin"}  # fmt: skip
+    bundled.system_libraries(env, frozen=True, platform="linux")
+    assert env == {"LD_LIBRARY_PATH": "/opt/mine", "LD_LIBRARY_PATH_ORIG": "/opt/mine",
+                   "PATH": "/usr/bin"}  # fmt: skip
+    env = {"LD_LIBRARY_PATH": "/tmp/_MEI/lib", "PATH": "/usr/bin"}  # none from before
+    bundled.system_libraries(env, frozen=True, platform="linux")
+    assert env == {"PATH": "/usr/bin"}
+    for frozen, platform in ((False, "linux"), (True, "win32")):  # a checkout, Windows: as is
+        env = {"LD_LIBRARY_PATH": "/tmp/_MEI/lib"}
+        bundled.system_libraries(env, frozen=frozen, platform=platform)
+        assert env == {"LD_LIBRARY_PATH": "/tmp/_MEI/lib"}
+    env = {}
+    bundled.system_libraries(env, frozen=True, platform="linux")
+    assert env == {}
+
+
+def test_the_command_line_hands_the_system_its_libraries_first(monkeypatch):
+    from libre_panel import cli
+
+    calls = []
+    monkeypatch.setattr(bundled, "system_libraries", lambda: calls.append("libraries"))
+    with pytest.raises(SystemExit):
+        cli.main(["--help"])
+    assert calls == ["libraries"]

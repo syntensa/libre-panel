@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+**Fixes**
+- **The app did not open from the Linux AppImage on newer systems** (Arch, CachyOS and others):
+  the AppImage handed its own libraries on to the system's programs it starts, so the shell
+  behind `xdg-open` stopped at once ("undefined symbol: rl_trim_arg_from_keyseq") and the
+  browser never opened, at the first start or from the tray icon. The system's programs get the
+  system's libraries now (#21).
+- **A grey veil on the 9.2" in video mode**: its decoder, as the 12.3"'s, shows the video as
+  full range, so the video of limited range looked washed out while the stills were right. It
+  now gets full range by itself too (`[device] video_range = "auto"`); a panel set to
+  `"limited"` by hand keeps it.
+
 ## 0.7.1 — 2026-10-26
 
 A transition for every occasion and twelve new ones; community themes shared in two clicks and

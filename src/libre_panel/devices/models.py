@@ -244,6 +244,9 @@ MODELS: tuple[PanelModel, ...] = (
         notes="protocol verified on hardware",
         hidden=(0, 18, 0, 0),
         video=True,
+        # as the 12.3": the owner's panel showed limited-range video under a grey veil and
+        # full range right (the A/B comparison of Check the colours)
+        video_range="full",
     ),
     PanelModel(
         "turing-12.3-usb",

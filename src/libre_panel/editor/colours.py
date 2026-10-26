@@ -149,10 +149,15 @@ class ColourCheck:
         return full_range(config.device.video_range, model)
 
     def _model(self, number: int, config: Any) -> PanelModel | None:
-        """The model of panel ``number`` as it runs, else as Settings name it (no look at the
-        bus: the card asks every second)."""
+        """The model of panel ``number`` as it runs, else as Settings name it, else the one the
+        last check was made for (the panel it found on the bus), else the check's own default:
+        so the choice reads the verdicts in the range the check made them in. No look at the bus
+        here: the card asks every second."""
         status = self._status(number)
-        return find_model(getattr(status, "model", "") or "") or find_model(config.device.model)
+        found = find_model(getattr(status, "model", "") or "") or find_model(config.device.model)
+        if found is None and self.picture.get("panel") == number:
+            found = find_model(str(self.picture.get("model") or ""))
+        return found or get_model(DEFAULT_MODEL)
 
     def _picture(self, number: int, config: Any) -> dict[str, Any]:
         """The model, the frame size and the range of panel ``number``: as it runs, else the

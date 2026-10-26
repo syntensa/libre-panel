@@ -632,9 +632,12 @@ def decode(stream, size=(480, 1920)):
     return [Image.frombytes("RGB", size, raw[i : i + n]) for i in range(0, len(raw), n)]
 
 
-def video_config(**kwargs):
+def video_config(video_range="limited", **kwargs):
+    """A 9.2" in video mode, in limited range unless asked (as these tests were written for:
+    the 9.2"'s own range, full, is test_the_video_range_setting_per_panel_and_by_model's)."""
     video = VideoConfig(mode="on", local_clip="usr/data/clip.h264", **kwargs)
-    return DeviceConfig(driver="turzx", model="turing-9.2-usb", video=video)
+    return DeviceConfig(driver="turzx", model="turing-9.2-usb", video=video,
+                        video_range=video_range)  # fmt: skip
 
 
 def stream_frames(display, frames, fps=50):
@@ -1472,7 +1475,8 @@ def running_panel(home, monkeypatch, panel, video=""):
 
     home.mkdir(parents=True, exist_ok=True)
     (home / "config.toml").write_text(
-        'theme = "slate"\nfps = 5\n\n[device]\ndriver = "turzx"\nmodel = "turing-9.2-usb"\n\n'
+        'theme = "slate"\nfps = 5\n\n[device]\ndriver = "turzx"\nmodel = "turing-9.2-usb"\n'
+        'video_range = "limited"\n\n'  # (the range these tests were written for)
         f'[sensors]\nproviders = ["demo"]\n\n[video]\n{video}',
         encoding="utf-8",
     )
@@ -2041,17 +2045,19 @@ def test_every_stream_says_it_is_bt601_in_its_range(pixels, full):
 
 def test_the_video_range_setting_per_panel_and_by_model():
     """[device] video_range: "auto" (the default) as the model is known to show video, full on
-    the 12.3" and limited elsewhere; "limited" or "full" for that panel; each [[panels]] table
-    its own."""
+    the 9.2" and the 12.3" (their owner saw both washed out in limited range) and limited
+    elsewhere; "limited" or "full" for that panel; each [[panels]] table its own."""
     from libre_panel.devices.models import get_model
     from libre_panel.devices.turzx_video import full_range
 
     assert parse_config({}).device.video_range == "auto"
+    assert get_model("turing-12.3-usb").video_range == get_model("turing-9.2-usb").video_range
     assert get_model("turing-12.3-usb").video_range == "full"
-    assert get_model("turing-9.2-usb").video_range == "limited"
+    assert get_model("turing-8.8-usb").video_range == "limited"
     assert full_range("auto", get_model("turing-12.3-usb"))
-    assert not full_range("auto", get_model("turing-9.2-usb")) and not full_range("auto", None)
-    assert full_range("full", get_model("turing-9.2-usb"))
+    assert full_range("auto", get_model("turing-9.2-usb"))
+    assert not full_range("auto", get_model("turing-8.8-usb")) and not full_range("auto", None)
+    assert full_range("full", get_model("turing-8.8-usb"))
     assert not full_range("limited", get_model("turing-12.3-usb"))
     panels = [{"model": "auto", "video_range": "limited"}, {"model": "auto"}]
     two = parse_config({"device": {"video_range": "full"}, "panels": panels})
@@ -2160,7 +2166,7 @@ def test_who_converts_under_auto_and_when_a_way_is_forced(monkeypatch, isolated_
         return {"encoder": encoder, "compared": ["card", "processor"], "state": state,
                 "verdict": verdict, "worst": None}  # fmt: skip
 
-    def way(encoder, pixels="auto", video_range="auto", model="turing-9.2-usb"):
+    def way(encoder, pixels="auto", video_range="limited", model="turing-9.2-usb"):
         config = video_config(pixels=pixels)
         config.video_range, config.model = video_range, model
         from libre_panel.devices.models import get_model
@@ -2173,9 +2179,11 @@ def test_who_converts_under_auto_and_when_a_way_is_forced(monkeypatch, isolated_
     card_choice.record("/ffmpeg", result("h264_amf"), full=False)
     assert way("h264_amf")[1] == "card"
     assert way("h264_amf", video_range="full")[1] == "processor"  # (no verdict in full range)
-    assert way("h264_amf", model="turing-12.3-usb")[1] == "processor"  # full there by itself
+    assert way("h264_amf", video_range="auto")[1] == "processor"  # the 9.2" is full by itself
+    assert way("h264_amf", "auto", "auto", "turing-12.3-usb")[1] == "processor"  # full by itself
     card_choice.record("/ffmpeg", result("h264_amf"), full=True)
-    assert way("h264_amf", model="turing-12.3-usb")[1] == "card"
+    assert way("h264_amf", "auto", "auto", "turing-12.3-usb")[1] == "card"
+    assert way("h264_amf", video_range="auto")[1] == "card"  # and the 9.2" too
     assert way("h264_amf", model="turing-12.3-usb", video_range="limited")[1] == "card"
     card_choice.record("/ffmpeg", result("h264_amf", "matrix"), full=False)
     assert way("h264_amf")[1] == "processor"

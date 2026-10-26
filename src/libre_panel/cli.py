@@ -925,6 +925,9 @@ def _portable() -> None:
 
 
 def main(argv: list[str] | None = None, default_command: str = "start") -> int:
+    from libre_panel import bundled
+
+    bundled.system_libraries()  # (first: before anything starts a program of the system)
     parser = build_parser()
     argv = sys.argv[1:] if argv is None else list(argv)
     if default_command == "start" and _hand_over_to_the_app(argv):

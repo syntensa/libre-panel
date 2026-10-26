@@ -836,9 +836,9 @@ def test_the_colour_check_measures_each_encoder_and_says_who_converts(
         expect(card.get_by_role("button", name="Show it on the panel")).to_be_disabled()
         expect(card.locator(".colour-ab").first).to_contain_text("running in the background")
         range_ = card.locator(".colour-range")
-        expect(range_).to_have_attribute("data-range", "limited")
+        expect(range_).to_have_attribute("data-range", "full")  # (a 9.2" is on the bus)
         expect(range_.locator(".colour-range-now")).to_have_text(
-            "Panel 1 gets its video in limited range (16-235). Automatic: as its model is known "
+            "Panel 1 gets its video in full range (0-255). Automatic: as its model is known "
             "to show video."
         )
         compare = card.get_by_role("button", name="Is black too light on the panel? Compare")

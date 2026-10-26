@@ -86,7 +86,8 @@ still = "auto"                 # TURZX USB panels without the video mode: each p
                                # and PNG on the others
 video_range = "auto"           # TURZX USB panels in video mode: the range of the video's
                                # values, "limited" (16-235) or "full" (0-255); "auto" is
-                               # full on the 12.3", limited on the others (see Video)
+                               # full on the 9.2" and the 12.3", limited on the others
+                               # (see Video)
 dark_on_quit = false           # true: black and its light off when Libre Panel quits
                                # (Windows shutting down too); lit again at the next start;
                                # Turing 3.5" and UsbPCMonitor turn their screen off too
@@ -1728,8 +1729,8 @@ limited range (16 is black, 235 white: what video usually is) or as full range (
 panel that shows a limited-range video as full range shows black as dark grey and every colour
 paler, in video mode only; its stills are right. `[device] video_range` (and each `[[panels]]`
 table's own) says which the panel gets: `"auto"` as its model is known to show video (full on
-the 12.3", whose video looked washed out in limited range; limited on the others), `"limited"`
-or `"full"`. Full range is made by ffmpeg on the processor (BT.601 in full range), or by AMD's
+the 9.2" and the 12.3", whose video looked washed out in limited range; limited on the others),
+`"limited"` or `"full"`. Full range is made by ffmpeg on the processor (BT.601 in full range), or by AMD's
 and Intel's card where the check found it right; the stream says so of itself. *Is black too
 light on the panel? Compare* under *Check the colours* shows the test picture on that panel in
 limited (A) and full range (B) every 3 seconds; *A looks right* or *B looks right* writes that
