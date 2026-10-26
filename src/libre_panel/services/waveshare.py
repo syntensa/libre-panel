@@ -46,8 +46,11 @@ def tenth(value: Any) -> str | None:
 
 
 def kilo(value: Any) -> str | None:
-    """Bytes a second as the display's KB/s."""
-    return str(round(value / 1024)) if isinstance(value, int | float) else None
+    """Bytes a second as the display's KB/s: a tenth below 100."""
+    if not isinstance(value, int | float):
+        return None
+    rate = value / 1024
+    return f"{rate:.1f}" if rate < 100 else str(round(rate))
 
 
 def text(value: Any) -> str | None:
@@ -61,7 +64,6 @@ KEYS: tuple[tuple[str, str, str, Callable[[Any], str | None]], ...] = (
     ("Cpu_Temp", "Cpu温度", "cpu.temp", whole),
     ("Cpu_Clock", "Cpu频率", "cpu.freq", whole),
     ("Cpu_Power", "Cpu功耗", "cpu.power", whole),
-    ("Cpu_Fan", "Cpu风扇", "fan.cpu", whole),
     ("Cpu_Model", "Cpu型号", "cpu.name", text),
     ("Gpu_Load", "显卡利用率", "gpu.load", whole),
     ("GPU_Temp", "显卡温度", "gpu.temp", whole),
@@ -80,9 +82,23 @@ KEYS: tuple[tuple[str, str, str, Callable[[Any], str | None]], ...] = (
     ("temperature", "气温", "weather.temperature", whole),
     ("weather", "天气", "weather.description", text),
 )
+# Fans by what their name says (the sources name them by chip and header: fan.board.cpu_fan,
+# fan.lpc.pump): the display's key, its Chinese key, and the word looked for
+FANS = (("Cpu_Fan", "Cpu风扇", "cpu"), ("Pump_Fan", "水冷风扇", "pump"))
 PARTITIONS = 8  # the drives' use: Libre Panel's disk.1 to disk.8, the display's 0 to 7
-WANTED = (*(reading for _, _, reading, _ in KEYS), "disk.load",
+WANTED = (*(reading for _, _, reading, _ in KEYS), "fan.*", "disk.load",
           *(f"disk.{n}.load" for n in range(1, PARTITIONS + 1)))  # fmt: skip
+
+
+def fan(snapshot: Any, word: str) -> Any:
+    """The first fan whose reading's key has ``word`` in it (``fan.cpu`` first), or None."""
+    keys = sorted(getattr(snapshot, "readings", None) or {})
+    for key in (f"fan.{word}", *keys):
+        if key.startswith("fan.") and word in key.lower() and not key.endswith(".percent"):
+            value = snapshot.value(key)
+            if isinstance(value, int | float):
+                return value
+    return None
 
 
 def values(snapshot: Any, now: datetime) -> dict[str, str]:
@@ -97,6 +113,8 @@ def values(snapshot: Any, now: datetime) -> dict[str, str]:
     read = snapshot.value if snapshot is not None else (lambda key: None)
     for english, chinese, reading, how in KEYS:
         put(english, chinese, how(read(reading)))
+    for english, chinese, word in FANS:
+        put(english, chinese, whole(fan(snapshot, word)) if snapshot is not None else None)
     for n in range(1, PARTITIONS + 1):
         load = read(f"disk.{n}.load")
         if n == 1 and load is None:

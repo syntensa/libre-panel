@@ -222,7 +222,7 @@ def test_ports_are_looked_at_by_their_ids_and_a_taken_one_is_left(monkeypatch):
 
 
 def snapshot(readings):
-    return SimpleNamespace(value=readings.get)
+    return SimpleNamespace(value=readings.get, readings=readings)
 
 
 READINGS = {
@@ -230,6 +230,8 @@ READINGS = {
     "gpu.load": 97.0, "gpu.temp": 68.2, "gpu.mem.used": 8123.6, "mem.load": 41.0,
     "mem.used": 13.04, "mem.free": 18.66, "net.down": 2_560_000.0, "net.up": 51_200.0,
     "audio.volume": 35.0, "disk.1.load": 40.2, "disk.2.load": 71.0,
+    "fan.board.case_1": 800.0, "fan.board.cpu_fan": 1180.4, "fan.board.pump": 2934.0,
+    "fan.gpu.fan_1.percent": 40.0,
 }  # fmt: skip
 
 
@@ -240,7 +242,11 @@ def test_the_readings_go_under_the_display_s_english_and_chinese_keys():
     assert got["Cpu_Clock"] == "4712" and got["Cpu_Model"] == got["Cpu型号"] == "chip0000"
     assert got["Gpu_Load"] == "97" and got["GPU_Temp"] == "68" and got["Gpu_Usedata"] == "8124"
     assert got["Memory_Used"] == "13.0" and got["Memory_Available"] == "18.7"
-    assert got["Download_Speed"] == "2500" and got["Upload_Speed"] == "50"  # KB/s
+    assert got["Download_Speed"] == "2500" and got["Upload_Speed"] == "50.0"  # KB/s
+    assert service.kilo(4300.0) == "4.2" and service.kilo(None) is None
+    # the fans by what their names say, whatever chip and header they are on
+    assert got["Cpu_Fan"] == got["Cpu风扇"] == "1180" and got["Pump_Fan"] == "2934"
+    assert service.fan(snapshot({"fan.cpu": 900.0, "fan.board.cpu_fan": 1.0}), "cpu") == 900.0
     assert got["vol"] == got["音量"] == "35"
     assert got["Partition_Usage_0"] == "40" and got["分区利用率_1"] == "71"
     assert got["time"] == got["时间"] == "09:08:07" and got["date"] == "2026-01-05"
@@ -299,7 +305,7 @@ def test_the_service_sends_the_readings_and_sets_what_is_asked():
     feeder = started({"brightness": 60, "flip": "upside-down", "port": "/dev/ttyACM0"}, connect)
     try:
         assert wait_for(lambda: display.commands().count(waveshare.SYSTEM_DATA) >= 2, 5)
-        assert "cpu.temp" in feeder.host.wanted and "disk.1.load" in feeder.host.wanted
+        assert {"cpu.temp", "disk.1.load", "fan.*"} <= set(feeder.host.wanted)
         commands = display.commands()
         assert commands[:4] == [waveshare.FIND_DEVICE, waveshare.GET_VERSION,
                                 waveshare.SET_BRIGHTNESS, waveshare.SET_CANVAS_FLIP]  # fmt: skip

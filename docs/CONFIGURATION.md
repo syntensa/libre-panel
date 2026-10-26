@@ -1115,8 +1115,9 @@ Sends the readings to a Waveshare USB monitor, which shows them in the themes on
 (docs/HARDWARE.md). The display's themes name their values with the keys of Waveshare's
 program: `Cpu_Temp` and `Cpu温度` both get `cpu.temp`, `Cpu_Freq` the processor's load (so
 Waveshare named it), `Gpu_Usedata` the graphics memory in MB, `Download_Speed` and
-`Upload_Speed` KB/s, `Partition_Usage_0` to `_7` the drives `disk.1` to `disk.8`, `time`,
-`date` and `week` the clock; a value Libre Panel does not have is not sent.
+`Upload_Speed` KB/s, `Cpu_Fan` and `Pump_Fan` the first fan whose name says `cpu` or
+`pump`, `Partition_Usage_0` to `_7` the drives `disk.1` to `disk.8`, `time`, `date` and
+`week` the clock; a value Libre Panel does not have is not sent.
 
 ```toml
 [services.waveshare]
