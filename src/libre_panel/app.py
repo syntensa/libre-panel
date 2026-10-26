@@ -1716,13 +1716,25 @@ HANG_S = 120.0  # a step of the loop this long is a hang: a whole serial frame t
 class _HangWatch:
     """Where every thread is when a step of the loop does not end within ``seconds`` (the panel
     stands still, and the tray may stand with it), written once per hang to ``path``.
-    faulthandler's timer needs no interpreter, so it writes even while a call holds it; a
-    step that ends in time takes it back."""
+
+    A thread of its own writes it, from Python's own view of the threads (sys._current_frames):
+    faulthandler's timer, which reads them without the interpreter, crashed a process now and
+    then on Windows (an access violation while another thread began or ended). faulthandler
+    stays as the last resort, for a call that holds the interpreter so long that no thread can
+    run: it writes after ``FALLBACK`` times the time, unless this thread has written by then. A
+    step that ends in time takes both back."""
+
+    FALLBACK = 4  # faulthandler's dump comes after this many times ``seconds``
 
     def __init__(self, path: Path | None, seconds: float = HANG_S) -> None:
         self.path, self.seconds = path, seconds
         self._file: Any = None
         self._started = 0.0
+        self._armed = False
+        self._written = False  # the hang of this step is in the file already
+        self._lock = threading.Lock()
+        self._closed = threading.Event()
+        self._thread: threading.Thread | None = None
 
     def arm(self) -> None:
         if self.path is None:
@@ -1742,8 +1754,11 @@ class _HangWatch:
                 log.debug("no file for a hang: %s", exc)
                 self.path = None
                 return
-        self._started = time.monotonic()
-        faulthandler.dump_traceback_later(self.seconds, file=self._file)
+            self._thread = threading.Thread(target=self._watch, name="hang-watch", daemon=True)
+            self._thread.start()
+        with self._lock:
+            self._started, self._armed, self._written = time.monotonic(), True, False
+            faulthandler.dump_traceback_later(self.seconds * self.FALLBACK, file=self._file)
 
     def disarm(self) -> None:
         if self._file is None:
@@ -1751,17 +1766,59 @@ class _HangWatch:
         import faulthandler
 
         faulthandler.cancel_dump_traceback_later()
-        took = time.monotonic() - self._started
+        with self._lock:
+            self._armed = False
+            took = time.monotonic() - self._started
         if took >= self.seconds:  # it went on after all: the file says where it stood
             log.warning("the panel loop stood still for %.0f s; where: %s", took, self.path)
 
     def close(self) -> None:
+        self._closed.set()
+        thread, self._thread = self._thread, None
+        if thread is not None:
+            thread.join(timeout=2)
         if self._file is not None:
             import faulthandler
 
             faulthandler.cancel_dump_traceback_later()
             self._file.close()
             self._file = None
+
+    def _watch(self) -> None:
+        step = min(1.0, self.seconds / 4)
+        while not self._closed.wait(step):
+            with self._lock:
+                due = (self._armed and not self._written
+                       and time.monotonic() - self._started >= self.seconds)  # fmt: skip
+                if due:
+                    import faulthandler
+
+                    self._written = True
+                    took = time.monotonic() - self._started
+                    faulthandler.cancel_dump_traceback_later()  # (the hang is told here)
+            if due:
+                self._write(took)
+
+    def _write(self, took: float) -> None:
+        """Every thread's stack, newest call first, as faulthandler writes it."""
+        import sys
+        import traceback
+
+        names = {thread.ident: thread.name for thread in threading.enumerate()}
+        hours, rest = divmod(took, 3600)
+        lines = [f"Timeout ({int(hours)}:{int(rest // 60):02d}:{rest % 60:09.6f})!"]
+        for ident, frame in sys._current_frames().items():
+            if ident == threading.get_ident():
+                continue  # (this thread, watching)
+            lines.append(f"\nThread 0x{ident:016x} ({names.get(ident, '?')}) "
+                         "(most recent call first):")  # fmt: skip
+            for entry in reversed(traceback.extract_stack(frame)):
+                lines.append(f'  File "{entry.filename}", line {entry.lineno} in {entry.name}')
+        try:
+            self._file.write("\n".join(lines) + "\n")
+            self._file.flush()
+        except (OSError, ValueError, AttributeError):  # (closed meanwhile)
+            pass
 
 
 def run(

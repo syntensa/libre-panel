@@ -2775,7 +2775,13 @@
     "Orientation of the picture": "画面方向",
     "Units with the values": "数值附带单位",
     "As Waveshare's program sends them: 75%, 2934RPM. Off: the numbers alone, for themes that show their units themselves.": "与 Waveshare 程序发送的格式相同：75%、2934RPM。关闭：只发送数字，适用于自带单位显示的主题。",
-    "Another program has the display's port: close it (Waveshare's own program, or wsmonitor's service).": "其他程序占用了屏幕的端口：请关闭它（Waveshare 自带的程序，或 wsmonitor 的服务）。"
+    "Another program has the display's port: close it (Waveshare's own program, or wsmonitor's service).": "其他程序占用了屏幕的端口：请关闭它（Waveshare 自带的程序，或 wsmonitor 的服务）。",
+    "Theme on the display": "屏幕上的主题",
+    "One of the themes on the display's card; showing it writes nothing there. The list comes once the display is connected.": "屏幕存储卡上的某个主题；显示它不会向卡写入任何内容。屏幕连接后会出现列表。",
+    "Themes in turn": "轮换的主题",
+    "Shown at random, each for the minutes below.": "随机显示，每个显示下方设定的分钟数。",
+    "Next theme after": "切换到下一个主题的间隔",
+    "0: no turns.": "0：不轮换。"
   },
   "fields": {
     "agent": "智能体",

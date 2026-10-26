@@ -78,6 +78,12 @@ export const SERVICES = {
 };
 
 const SECONDS = { unit: "s", min: 0, max: 86400 };
+
+/** The themes on the Waveshare display's card, as its service last listed them ({id, name}). */
+function waveshareThemes() {
+  const row = (store.get().serviceStates?.services || []).find((item) => item.name === "waveshare");
+  return row?.summary?.themes || [];
+}
 // the transitions a service may ask for (Settings → Panel → Transitions has them all, by occasion)
 const TRANSITIONS = () => [
   { id: "", name: t("The one of config.toml") },
@@ -204,6 +210,17 @@ const OPTIONS = {
     label: () => t("Units with the values"),
     hint: () => t("As Waveshare's program sends them: 75%, 2934RPM. Off: the numbers alone, for themes that show their units themselves."),
   },
+  "waveshare.theme": {
+    label: () => t("Theme on the display"),
+    hint: () => t("One of the themes on the display's card; showing it writes nothing there. The list comes once the display is connected."),
+    choices: () => [{ id: "", name: t("As it is") }, ...waveshareThemes()],
+  },
+  "waveshare.rotate": {
+    label: () => t("Themes in turn"),
+    hint: () => t("Shown at random, each for the minutes below."),
+    picks: waveshareThemes,
+  },
+  "waveshare.rotate_min": { label: () => t("Next theme after"), hint: () => t("0: no turns."), unit: "min", min: 0, max: 1440, step: 0.5 },
   "waveshare.every_s": { label: () => t("Send the readings every"), unit: "s", min: 0.25, max: 60, step: 0.25 },
 };
 
@@ -305,6 +322,27 @@ function OptionRow({ service, option, given }) {
       return row(html`<${Select} label=${label} value=${value} options=${options} onChange=${save} />`);
     }
     return row(html`<${CommitField} label=${label} value=${value} mono onCommit=${save} />`);
+  }
+  if (option.type === "list" && meta.picks && meta.picks().length) {
+    // a few of a given set (the themes on a display): ticked, in the set's order
+    const chosen = Array.isArray(value) ? value : [];
+    const toggle = (id) =>
+      saveSettings((now) => {
+        const current = now.services.options[service]?.[option.key];
+        const list = Array.isArray(current) ? current : [];
+        return { [name]: list.includes(id) ? list.filter((item) => item !== id) : [...list, id] };
+      });
+    return row(
+      html`<div class="option-picks" role="group" aria-label=${label}>
+        ${meta.picks().map(
+          (pick) => html`<label key=${pick.id} class=${`option-pick${chosen.includes(pick.id) ? " on" : ""}`}>
+            <input type="checkbox" checked=${chosen.includes(pick.id)} onChange=${() => toggle(pick.id)} />
+            ${pick.name}
+          </label>`,
+        )}
+      </div>`,
+      true,
+    );
   }
   if (option.type === "list") {
     if (meta.structured || (Array.isArray(value) && value.some((item) => item && typeof item === "object"))) {

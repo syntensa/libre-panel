@@ -1547,13 +1547,20 @@ a.btn-primary:hover {
   padding: 6px 9px;
 }
 
-.transition-picks {
+.transition-picks,
+.option-picks {
   display: flex;
   flex-wrap: wrap;
   gap: 6px 14px;
 }
 
-.transition-pick {
+.option-picks {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.transition-pick,
+.option-pick {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1561,6 +1568,7 @@ a.btn-primary:hover {
   font-size: 13px;
 }
 
-.transition-pick.on {
+.transition-pick.on,
+.option-pick.on {
   color: var(--text);
 }

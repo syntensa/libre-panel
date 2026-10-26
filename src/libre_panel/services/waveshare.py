@@ -10,6 +10,9 @@ screen turned upside down where they are set. Nothing is written on the card
     flip = ""          # "": as it is; "normal" or "upside-down"
     units = false      # the values with their units, as Waveshare's program sends them
     every_s = 1.0
+    theme = ""         # a theme on the card to show ("/data/theme/480x480/Space Suit.Theme")
+    rotate = []        # themes on the card shown in turn, at random,
+    rotate_min = 0     # each for so many minutes (0: no turns)
 
 The display's themes name their values with the keys of Waveshare's own program, in English
 (``Cpu_Temp``), and some with Chinese ones (``Cpu温度``): both are sent. Waveshare's program
@@ -22,6 +25,7 @@ opens its port first keeps it.
 from __future__ import annotations
 
 import logging
+import random
 import threading
 import time
 from collections.abc import Callable
@@ -163,6 +167,9 @@ class Waveshare(Service):
         "flip": ("string", ""),
         "units": ("bool", False),
         "every_s": ("number", 1.0),
+        "theme": ("string", ""),
+        "rotate": ("list", []),
+        "rotate_min": ("number", 0.0),
     }
 
     def __init__(
@@ -172,6 +179,7 @@ class Waveshare(Service):
         *,
         connect: Callable[[str], tuple[waveshare.Link, str, dict]] = waveshare.connect,
         now: Callable[[], datetime] = datetime.now,
+        pick: Callable[[list[str]], str] = random.choice,
     ) -> None:
         super().__init__(host, options)
         self.port = str(options["port"]).strip()
@@ -179,7 +187,10 @@ class Waveshare(Service):
         self.flip = FLIPS.get(str(options["flip"]).strip())
         self.units = bool(options["units"])
         self.every = max(0.25, float(options["every_s"]))
-        self._connect, self._now = connect, now
+        self.theme = str(options["theme"]).strip()
+        self.rotate = [str(path) for path in options["rotate"] if str(path).strip()]
+        self.rotate_s = max(0.0, float(options["rotate_min"])) * 60
+        self._connect, self._now, self._pick = connect, now, pick
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
@@ -201,8 +212,9 @@ class Waveshare(Service):
 
     def summary(self) -> dict[str, Any]:
         """``state``: ``connected`` (with ``port``, ``inch``, ``size`` and ``version`` where the
-        display says them), ``searching``, ``absent``, ``busy``, ``denied`` or ``silent`` (with
-        the ``reason``)."""
+        display says them, its ``themes`` as ``{id, name}`` and the ``theme`` this service last
+        showed), ``searching``, ``absent``, ``busy``, ``denied`` or ``silent`` (with the
+        ``reason``)."""
         with self._lock:
             return dict(self._state)
 
@@ -211,6 +223,10 @@ class Waveshare(Service):
     def _say(self, **state: Any) -> None:
         with self._lock:
             self._state = state
+
+    def _add(self, **fields: Any) -> None:
+        with self._lock:
+            self._state = {**self._state, **fields}
 
     def _run(self) -> None:
         said_why = ""
@@ -255,7 +271,32 @@ class Waveshare(Service):
             link.set_brightness(self.brightness)
         if self.flip is not None:
             link.set_flipped(self.flip)
+        try:
+            themes = link.themes()
+        except DeviceError:
+            themes = []  # (an older firmware may not tell: the values go on all the same)
+        self._add(themes=[{"id": path, "name": waveshare.theme_name(path)} for path in themes],
+                  theme="")  # fmt: skip
+        # a theme named that is not on the card (any more) is passed over
+        known = (lambda path: path in themes) if themes else (lambda path: True)
+        if self.theme and known(self.theme):
+            self._show(link, self.theme)
+        turns = [path for path in self.rotate if known(path)]
+        next_turn = time.monotonic() + self.rotate_s
         while not self._stop.is_set():
             began = time.monotonic()
+            if self.rotate_s and turns and began >= next_turn:
+                current = self.summary().get("theme")
+                self._show(link, self._pick([p for p in turns if p != current] or turns))
+                next_turn = began + self.rotate_s
             link.send_values(values(self.host.snapshot(), self._now(), self.units))
             self._stop.wait(max(0.0, self.every - (time.monotonic() - began)))
+
+    def _show(self, link: waveshare.Link, path: str) -> None:
+        """A theme on the card on the display; the picture turned again as set (a theme that
+        loads may set it upright)."""
+        link.show_theme(path)
+        if self.flip is not None:
+            link.set_flipped(self.flip)
+        self._add(theme=path)
+        log.info("Waveshare USB monitor: theme %s", waveshare.theme_name(path))

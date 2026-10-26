@@ -37,8 +37,8 @@ class Display:
     as PCMonitorLinux does (``says``: what FIND_DEVICE answers; ``silent``: it answers
     nothing, as a port of another device with the same ids)."""
 
-    def __init__(self, says=None, silent=False):
-        self.says, self.silent = says, silent
+    def __init__(self, says=None, silent=False, themes=()):
+        self.says, self.silent, self.themes = says, silent, list(themes)
         self.frames = waveshare.Frames()
         self.got = []  # (command, payload)
         self.out = bytearray()
@@ -56,7 +56,11 @@ class Display:
                 reply = waveshare.qmap(self.says) if self.says else b""
             elif frame.command == waveshare.GET_VERSION:
                 reply = waveshare.qmap({"versionV2": "V2.04"})
-            elif frame.command in (waveshare.SET_BRIGHTNESS, waveshare.SET_CANVAS_FLIP):
+            elif frame.command == waveshare.GET_THEME:
+                reply = waveshare.qmap({**{path: "123" for path in self.themes},
+                                        "/data/PCMonitorLinux": "overlay"})  # fmt: skip
+            elif frame.command in (waveshare.SET_BRIGHTNESS, waveshare.SET_CANVAS_FLIP,
+                                   waveshare.RELOAD_THEME):  # fmt: skip
                 reply = frame.payload  # (they echo what they were sent)
             else:
                 reply = b""
@@ -161,11 +165,12 @@ def test_the_link_asks_and_the_display_answers():
 
 def test_the_link_has_no_command_that_writes_on_the_card():
     """FILE_START (6), FILE_END (7) and DELETE_THEMES (11) write and delete on the display's
-    card, and RELOAD_THEME (2) changes its theme: Libre Panel sends none of them."""
-    assert waveshare.COMMANDS.isdisjoint({2, 6, 7, 11})
+    card, SET_SCAN_STATE (5) does nothing known: Libre Panel sends none of them. (RELOAD_THEME
+    shows a theme that is on the card already.)"""
+    assert waveshare.COMMANDS.isdisjoint({5, 6, 7, 11})
     display = Display()
     link = waveshare.Link(display)
-    for command in (2, 6, 7, 11):
+    for command in (5, 6, 7, 11):
         with pytest.raises(ValueError):
             link.ask(command)
     assert display.got == []
@@ -318,7 +323,8 @@ class Host:
 
 
 def started(options, connect):
-    given = {"port": "", "brightness": 0, "flip": "", "units": False, "every_s": 0.25, **options}
+    given = {"port": "", "brightness": 0, "flip": "", "units": False, "every_s": 0.25,
+             "theme": "", "rotate": [], "rotate_min": 0.0, **options}  # fmt: skip
     feeder = service.Waveshare(Host(READINGS), given, connect=connect,
                                now=lambda: datetime(2026, 1, 5, 9, 8, 7))  # fmt: skip
     feeder.start()
@@ -346,12 +352,73 @@ def test_the_service_sends_the_readings_and_sets_what_is_asked():
         sent = waveshare.read_qmap(display.last(waveshare.SYSTEM_DATA))
         assert sent["Cpu_Temp"] == "54" and sent["时间"] == "09:08:07"
         assert feeder.summary() == {"state": "connected", "port": "/dev/ttyACM0", "inch": "2.8",
-                                    "size": "480×640", "version": "V2.04"}  # fmt: skip
+                                    "size": "480×640", "version": "V2.04", "themes": [],
+                                    "theme": ""}  # fmt: skip
         assert asked == ["/dev/ttyACM0"]
         assert set(display.commands()) <= waveshare.COMMANDS
     finally:
         feeder.stop()
     assert display.closed
+
+
+CARD = [
+    "/data/theme/480x480/021-astronaut.Theme",
+    "/data/theme/480x480/Space Suit.Theme",
+    "/data/theme/480x480/大波浪-MIC.Theme",
+    "/data/theme/480x480/Vinyl.Theme",
+]
+
+
+def test_the_link_lists_the_card_s_themes_and_shows_one():
+    display = Display(themes=CARD)
+    link = waveshare.Link(display)
+    listed = link.themes()  # by name, the display's own entry left out
+    assert listed == sorted(CARD, key=lambda path: waveshare.theme_name(path).casefold())
+    assert [waveshare.theme_name(path) for path in listed][:2] == ["021-astronaut", "Space Suit"]
+    link.show_theme(CARD[2])
+    assert display.last(waveshare.RELOAD_THEME).decode("utf-8") == CARD[2]
+    assert waveshare.Link(Display()).themes() == []  # (an empty card)
+
+
+def test_the_service_shows_a_theme_on_the_card_and_takes_turns_with_others():
+    """The theme chosen goes on the display when it connects, the picture turned again after it
+    (loading a theme sets it upright); the themes in turn follow at random, never the same
+    twice running; a theme that is not on the card is passed over. The card's themes are on
+    the service's card in the app."""
+    display = Display(themes=CARD)
+
+    def connect(port):
+        link = waveshare.Link(display)
+        return link, "/dev/ttyACM0", link.hello()
+
+    picked = []
+
+    def pick(choices):
+        picked.append(list(choices))
+        return choices[0]
+
+    options = {"flip": "upside-down", "theme": CARD[1], "rotate_min": 0.25 / 60,
+               "rotate": [CARD[0], CARD[3], "/data/theme/480x480/Gone.Theme"]}  # fmt: skip
+    given = {"port": "", "brightness": 0, "units": False, "every_s": 0.25, **options}
+    feeder = service.Waveshare(Host(READINGS), given, connect=connect, pick=pick,
+                               now=lambda: datetime(2026, 1, 5, 9, 8, 7))  # fmt: skip
+    feeder.start()
+    try:
+        assert wait_for(lambda: display.commands().count(waveshare.RELOAD_THEME) >= 3, 10)
+    finally:
+        feeder.stop()
+    shown = [payload.decode() for command, payload in display.got
+             if command == waveshare.RELOAD_THEME]  # fmt: skip
+    assert shown[0] == CARD[1] and set(shown[1:]) <= {CARD[0], CARD[3]}
+    assert all(a != b for a, b in zip(shown, shown[1:], strict=False))
+    assert all("/data/theme/480x480/Gone.Theme" not in choices for choices in picked)
+    commands = display.commands()
+    after = commands.index(waveshare.RELOAD_THEME)
+    assert commands[after + 1] == waveshare.SET_CANVAS_FLIP  # turned again after the theme
+    summary = feeder.summary()
+    assert summary["themes"][0] == {"id": CARD[0], "name": "021-astronaut"}
+    assert summary["theme"] in (CARD[0], CARD[3])
+    assert set(commands) <= waveshare.COMMANDS
 
 
 def test_the_service_leaves_brightness_and_picture_alone_unless_they_are_set():

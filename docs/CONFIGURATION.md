@@ -1125,6 +1125,9 @@ port = ""              # "": the display is looked for; else "COM5", "/dev/ttyAC
 brightness = 0         # 1-100 sets it; 0 leaves it as it is
 flip = ""              # "": as it is; "normal" or "upside-down"
 units = false          # the values with their units ("75%", "2934RPM")
+theme = ""             # "": the theme the display shows; else one of its card's themes
+rotate = []            # themes of the card shown in turn, at random
+rotate_min = 0.0       # minutes for each of them; 0: no turns
 every_s = 1.0
 ```
 
@@ -1132,6 +1135,11 @@ The brightness in percent goes to the display on its own scale of 0 to 255, as W
 program sends it, so 100 is as bright as there. The weekday goes short (`Mon`, in the app's
 language), with `year`, `month` and `day` beside `date`; `units` adds the units as Waveshare's
 program writes them, for themes made for that.
+
+`theme` and `rotate` take the themes on the display's card, by their paths there
+(`/data/theme/480x480/021-astronaut.Theme`); the service's options list them by name once the
+display answered. With `rotate` and `rotate_min`, a theme of the list at random takes the place
+of the one shown every `rotate_min` minutes, never the same twice in a row.
 
 Nothing is written on the display's card: Libre Panel has none of its commands that write
 or delete there.
