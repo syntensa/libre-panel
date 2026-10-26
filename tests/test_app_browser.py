@@ -2557,6 +2557,9 @@ def test_a_view_that_cannot_be_drawn_says_so_and_the_others_stay_reachable(app_u
     with browser_page(app_url, "home") as page:
         page.goto(f"{app_url}#/plugin/anything")
         page.wait_for_selector(".plugin-view")
+        # (the app asks for the plugins' pages without waiting: their answer, coming after the
+        # broken list, would mend it before it is drawn)
+        page.wait_for_function("(window.libre.store.get().plugins || []).length > 0")
         js(page, "window.libre.store.set({ plugins: null })")
         alert = page.locator(".view-message.error")
         expect(alert).to_contain_text("This view could not be drawn")
