@@ -7,7 +7,11 @@ symbols and pieces of all of them, and the memory they took stays with the progr
 window closed, or hidden), those caches are emptied and the memory goes back to the system;
 Windows also takes back the pages the panel does not touch (the "Memory" Task Manager shows).
 The panel draws on as it did: what it needs comes back within a frame or two, and the app takes
-a moment longer when it opens again. Off, nothing changes.
+a moment longer when it opens again.
+
+Without light mode the app's own pictures go all the same once it has been closed for a minute
+(its pictures of every theme, the previews of the community's themes): nothing but the app
+uses them, and it draws them again when it asks. The renderer's caches the panel shares stay.
 """
 
 from __future__ import annotations
@@ -72,9 +76,10 @@ def release(also: Callable[[], None] | None = None) -> None:
 
 
 class Watch:
-    """Releases the memory once the app has been closed for :data:`IDLE_S` seconds, while
-    ``light()`` says light mode is on; once per time the app was open (``last_request()``:
-    when a page of it last asked something, monotonic seconds; None: never)."""
+    """Once the app has been closed for :data:`IDLE_S` seconds, lets go of the app's own
+    pictures (``closed``), and while ``light()`` says light mode is on releases the memory
+    (``release``); each once per time the app was open (``last_request()``: when a page of it
+    last asked something, monotonic seconds; None: never)."""
 
     def __init__(
         self,
@@ -82,19 +87,25 @@ class Watch:
         last_request: Callable[[], float | None],
         release: Callable[[], None] = release,
         clock: Callable[[], float] = time.monotonic,
+        closed: Callable[[], None] = lambda: None,
     ) -> None:
         self.light, self.last_request = light, last_request
-        self.release, self.clock = release, clock
+        self.release, self.clock, self.closed = release, clock, closed
         self.released_for: Any = object()  # the request it released after (none yet)
+        self.closed_for: Any = object()  # ... and the one it let the app's pictures go after
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
     def look(self) -> bool:
-        """One look: whether it released now."""
+        """One look: whether it released now (light mode)."""
         last = self.last_request()
-        if last is None or last == self.released_for or not self.light():
+        if last is None or self.clock() - last < IDLE_S:
             return False
-        if self.clock() - last < IDLE_S:
+        if last != self.closed_for:
+            self.closed_for = last
+            self.closed()
+            log.debug("the app is closed: its pictures of the themes went")
+        if last == self.released_for or not self.light():
             return False
         self.released_for = last
         self.release()

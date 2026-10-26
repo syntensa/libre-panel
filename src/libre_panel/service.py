@@ -355,11 +355,15 @@ class EditorService:
         return None if server is None else server.editor_state.last_request
 
     def forget_pictures(self) -> None:
-        """The app's pictures of the themes: drawn again when it asks for them."""
+        """The app's pictures of the themes, and of the community's: drawn (and fetched) again
+        when it asks for them."""
         server = self._server
         if server is not None:
-            with server.editor_state.previews_lock:
-                server.editor_state.previews.clear()
+            state = server.editor_state
+            with state.previews_lock:
+                state.previews.clear()
+            with state.community.lock:
+                state.community.previews.clear()
 
     def stop(self) -> None:
         with self._lock:
@@ -418,7 +422,7 @@ class BackgroundApp:
         self.quit_requested = threading.Event()
         self._on_quit: list[Callable[[], None]] = []
         self.session_watcher: Any = None  # Windows: stops cleanly at shutdown (tray.run_app)
-        # light mode: what only the app needs goes while it is closed (light.py)
+        # what only the app needs goes while it is closed, more of it in light mode (light.py)
         from libre_panel import light
 
         self.light_mode = False
@@ -426,6 +430,7 @@ class BackgroundApp:
             light=lambda: self.light_mode,
             last_request=self.editor.last_request,
             release=lambda: light.release(self.editor.forget_pictures),
+            closed=self.editor.forget_pictures,
         )
 
     # -- lifecycle -----------------------------------------------------------

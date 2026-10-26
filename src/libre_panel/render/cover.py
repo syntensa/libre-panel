@@ -9,8 +9,9 @@ read as a thin line on a dark panel is brightened until it is not.
 
 from __future__ import annotations
 
+import threading
+import weakref
 from collections import OrderedDict
-from typing import Any
 
 from PIL import Image
 
@@ -21,7 +22,11 @@ GREYEST = 0.18  # ... and one less colourful than this is grey
 BRIGHT = 180  # the winner is brightened to this, as a line on dark ground
 KEPT = 8
 
-_kept: OrderedDict[int, tuple[Any, tuple[int, int, int] | None]] = OrderedDict()
+# by picture: the colour it carries. The picture itself is not held (a cover is up to a
+# megabyte, and the eight last were kept alive here after their tracks): an entry whose
+# picture is gone is found dead and made anew, so an id that comes back is never taken for it.
+_kept: OrderedDict[int, tuple[weakref.ref, tuple[int, int, int] | None]] = OrderedDict()
+_lock = threading.Lock()
 
 
 def dominant(image: Image.Image | None) -> tuple[int, int, int] | None:
@@ -29,14 +34,16 @@ def dominant(image: Image.Image | None) -> tuple[int, int, int] | None:
     once per picture: a track's cover is the same object for as long as it plays."""
     if image is None:
         return None
-    hit = _kept.get(id(image))
-    if hit is not None and hit[0] is image:  # (the picture is held, so its id stays its own)
-        _kept.move_to_end(id(image))
-        return hit[1]
+    with _lock:
+        hit = _kept.get(id(image))
+        if hit is not None and hit[0]() is image:
+            _kept.move_to_end(id(image))
+            return hit[1]
     found = _find(image)
-    _kept[id(image)] = (image, found)
-    while len(_kept) > KEPT:
-        _kept.popitem(last=False)
+    with _lock:
+        _kept[id(image)] = (weakref.ref(image), found)
+        while len(_kept) > KEPT:
+            _kept.popitem(last=False)
     return found
 
 

@@ -23,15 +23,35 @@ class Clock:
 
 
 def watch(on=True, last=None):
-    state = {"on": on, "last": last, "released": 0}
+    state = {"on": on, "last": last, "released": 0, "closed": 0}
     clock = Clock()
     w = light.Watch(
         light=lambda: state["on"],
         last_request=lambda: state["last"],
         release=lambda: state.__setitem__("released", state["released"] + 1),
         clock=clock,
+        closed=lambda: state.__setitem__("closed", state["closed"] + 1),
     )
     return w, state, clock
+
+
+@pytest.mark.parametrize("on", [False, True])
+def test_the_apps_own_pictures_go_a_minute_after_it_was_closed_light_mode_or_not(on):
+    """Its pictures of the themes are the app's alone: they go once it has been closed for a
+    minute, with light mode off too, once per time it was open; light mode lets go of more."""
+    w, state, clock = watch(on=on, last=1000.0)
+    clock.now = 1000 + light.IDLE_S - 1
+    w.look()
+    assert state["closed"] == 0  # (still open, or just closed)
+    clock.now = 1000 + light.IDLE_S
+    assert w.look() is on and state["closed"] == 1 and state["released"] == int(on)
+    clock.now += 600
+    w.look()
+    assert state["closed"] == 1 and state["released"] == int(on)
+    state["last"] = clock.now  # opened again, and closed
+    clock.now += light.IDLE_S
+    w.look()
+    assert state["closed"] == 2 and state["released"] == 2 * int(on)
 
 
 def test_the_memory_goes_a_minute_after_the_app_was_closed_and_once():
@@ -87,3 +107,18 @@ def test_only_a_page_of_this_run_counts_as_the_app_being_open(isolated_home):
         httpd.shutdown()
         httpd.server_close()
         state.close()
+
+
+def test_the_app_lets_go_of_its_pictures_of_the_themes_and_of_the_communitys(isolated_home):
+    from libre_panel.service import EditorService
+
+    service = EditorService(port=0)
+    service.start()
+    try:
+        state = service._server.editor_state
+        state.previews[("lumen", 1, 480)] = b"\x89PNG" + bytes(1000)
+        state.community.previews[("aurora", "preview.png")] = (0.0, b"\x89PNG" + bytes(1000))
+        service.forget_pictures()
+        assert state.previews == {} and state.community.previews == {}
+    finally:
+        service.stop()

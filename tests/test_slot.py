@@ -747,6 +747,21 @@ def test_a_cover_is_looked_at_once():
     assert len(cover._kept) <= cover.KEPT
 
 
+def test_the_covers_of_tracks_gone_are_not_kept_alive_for_their_colour():
+    """A cover is up to a megabyte: the colour it carries is kept, the picture is not."""
+    import gc
+    import weakref
+
+    image = picture((10, 160, 200))
+    found = cover.dominant(image)
+    gone = weakref.ref(image)
+    del image
+    gc.collect()
+    assert gone() is None  # (nothing here held it)
+    other = picture((10, 160, 200))
+    assert cover.dominant(other) == found  # (an id that comes back is looked at anew)
+
+
 # -- the slot in a theme ---------------------------------------------------------------------
 
 
