@@ -2022,7 +2022,9 @@ def test_every_stream_says_it_is_bt601_in_its_range(pixels, full):
     bt601 = {"color_range": "pc" if full else "tv", "color_space": "smpte170m",
              "color_primaries": "smpte170m", "color_transfer": "smpte170m"}  # fmt: skip
     assert seen["plain"][0] == bt601 and seen["mistagged"][0] == bt601  # stamped over
-    assert seen["unstamped"][0] == bt601  # (x264 as told)
+    # (x264 as told: the range and the matrix; the rest an ffmpeg 8 leaves to the stamp)
+    assert {key: seen["unstamped"][0].get(key) for key in ("color_range", "color_space")} == {
+        "color_range": bt601["color_range"], "color_space": "smpte170m"}  # fmt: skip
     kinds = seen["plain"][1]
     assert len(kinds) == 60 and kinds == seen["unstamped"][1]  # the stamp moves no picture
     assert kinds[0][:2] == (7, 8) and kinds[0][-1] == NAL_IDR and kinds[1] == (1,)
@@ -2075,7 +2077,10 @@ def card_stand_in(monkeypatch, shift=""):
     def chain(encoder, full=False):
         if encoder != "libx264":
             return real(encoder, full)
-        own = f"scale={shift}," if shift else ""
+        # (said to be BT.601 after it, so that an ffmpeg that converts to what its output is
+        # told, as 8.x does, leaves the shift as it is)
+        told = f"setparams=range={'pc' if full else 'tv'}:colorspace=smpte170m"
+        own = f"scale={shift},format=yuv420p,{told}," if shift else ""
         return [], ["null", (f"{FULL_RANGE}," if full and not shift else own) + "format=yuv420p"]
 
     monkeypatch.setattr(h264, "card_chain", chain)

@@ -82,7 +82,10 @@ def stand_in(extra="", encoder="h264_amf", fail=False):
             return [ffmpeg, "-hide_banner", "-loglevel", "error", "-f", "nonexistent", "-i", "-"]
         found = h264.ffmpeg_command(ffmpeg, size, rotate, settings)
         if card and extra:
-            found[found.index("-vf") + 1] += f",{extra}"
+            # (said to be what the stream says, so that an ffmpeg that converts to what its
+            # output is told, as 8.x does, leaves the card's own conversion as it is)
+            told = f"setparams=range={after(found, '-color_range')}:colorspace=smpte170m"
+            found[found.index("-vf") + 1] += f",{extra},{told}"
         return found
 
     return command
@@ -263,7 +266,7 @@ def test_a_panel_in_full_range_is_measured_in_full_range():
     assert patches["black"]["new"]["yuv"][0] == pytest.approx(0, abs=1.5)
     assert patches["white"]["new"]["yuv"][0] == pytest.approx(255, abs=1.5)
     assert patches["red"]["new"]["yuv"] == pytest.approx(full_yuv_of((255, 0, 0)), abs=1.5)
-    assert patches["black"]["new"]["rgb"] == [0, 0, 0]
+    assert max(patches["black"]["new"]["rgb"]) <= 1  # (ffmpeg 8 rounds the chroma a step off)
     red = patches["red"]["new"]["rgb"]
     assert max(abs(a - b) for a, b in zip(red, (255, 0, 0), strict=True)) <= 3
 
