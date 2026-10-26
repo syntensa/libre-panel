@@ -1,7 +1,8 @@
 """Waveshare's USB monitors (the 2.8" and its family): a small Linux computer behind a serial port
 over USB, which draws the themes on its own card (PCMonitorLinux) and takes from the PC only
 the values to show in them. Libre Panel sends those (services/waveshare.py), with the
-brightness and the screen turned upside down; it writes nothing on the card.
+brightness and the screen turned upside down, and switches between the themes on the card; it
+writes nothing on the card.
 
 The protocol, as Derik-for-real24 documented it in the wsmonitor project (#21, NOTICE.md):
 every message is a frame
@@ -40,15 +41,20 @@ HEAD = struct.Struct("<4I")  # type, command, length, crc
 TO_DISPLAY, ANSWER = 0, 2
 MAX_PAYLOAD = 1 << 20  # a longer length in a head is not the display's
 
-# the commands Libre Panel sends: none of them writes on the card
+# the commands Libre Panel sends: none of them writes on the card (RELOAD_THEME shows a theme
+# that is there already, GET_THEME lists them)
 FIND_DEVICE = 0
 SYSTEM_DATA = 1
+RELOAD_THEME = 2
+GET_THEME = 3
 SET_BRIGHTNESS = 4
 GET_VERSION = 8
 SET_CANVAS_FLIP = 9
 GET_SCREEN_MESSAGE = 10
-COMMANDS = frozenset({FIND_DEVICE, SYSTEM_DATA, SET_BRIGHTNESS, GET_VERSION, SET_CANVAS_FLIP,
-                      GET_SCREEN_MESSAGE})  # fmt: skip
+COMMANDS = frozenset({FIND_DEVICE, SYSTEM_DATA, RELOAD_THEME, GET_THEME, SET_BRIGHTNESS,
+                      GET_VERSION, SET_CANVAS_FLIP, GET_SCREEN_MESSAGE})  # fmt: skip
+THEMES_FOLDER = "/data/theme/"  # where the card keeps its themes (GET_THEME names each by path)
+THEME_SUFFIX = ".Theme"
 
 # where the display may be: the USB gadget's own ids (with its product's name), and the
 # placeholder ids some units have, which other devices use too
@@ -213,11 +219,33 @@ class Link:
     def set_flipped(self, flipped: bool) -> None:
         self.ask(SET_CANVAS_FLIP, qmap({"canvas_flip": "1" if flipped else "0"}))
 
+    def themes(self) -> list[str]:
+        """The themes on the card, by their path (``/data/theme/480x480/Space Suit.Theme``), in
+        the order of their names; GET_THEME's answer names them with their checksums, beside
+        what else the display tells of itself."""
+        said = answer_of(self.ask(GET_THEME).payload)
+        if not isinstance(said, dict):
+            return []
+        found = [path for path in said if path.startswith(THEMES_FOLDER)
+                 and path.endswith(THEME_SUFFIX)]  # fmt: skip
+        return sorted(found, key=lambda path: theme_name(path).casefold())
+
+    def show_theme(self, path: str) -> None:
+        """Show the theme at ``path`` (as :meth:`themes` lists it), one that is on the card:
+        nothing is written. Loading a theme may set the picture upright again."""
+        self.ask(RELOAD_THEME, path.encode("utf-8"), timeout=ANSWER_S * 2)
+
     def close(self) -> None:
         try:
             self.port.close()
         except Exception:
             pass
+
+
+def theme_name(path: str) -> str:
+    """A theme's name as the person knows it: its file's name without ``.Theme``."""
+    name = path.rsplit("/", 1)[-1]
+    return name[: -len(THEME_SUFFIX)] if name.endswith(THEME_SUFFIX) else name
 
 
 def _is_display(info: Any) -> bool:

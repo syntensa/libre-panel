@@ -2775,7 +2775,13 @@
     "Orientation of the picture": "Ausrichtung des Bildes",
     "Units with the values": "Einheiten zu den Werten",
     "As Waveshare's program sends them: 75%, 2934RPM. Off: the numbers alone, for themes that show their units themselves.": "So, wie Waveshares Programm sie schickt: 75%, 2934RPM. Aus: nur die Zahlen, für Themes, die ihre Einheiten selbst zeigen.",
-    "Another program has the display's port: close it (Waveshare's own program, or wsmonitor's service).": "Ein anderes Programm belegt den Port des Displays: Schließe es (Waveshares eigenes Programm oder den Dienst von wsmonitor)."
+    "Another program has the display's port: close it (Waveshare's own program, or wsmonitor's service).": "Ein anderes Programm belegt den Port des Displays: Schließe es (Waveshares eigenes Programm oder den Dienst von wsmonitor).",
+    "Theme on the display": "Theme auf dem Display",
+    "One of the themes on the display's card; showing it writes nothing there. The list comes once the display is connected.": "Eines der Themes auf der Karte des Displays; es zu zeigen schreibt dort nichts. Die Liste kommt, sobald das Display verbunden ist.",
+    "Themes in turn": "Themes im Wechsel",
+    "Shown at random, each for the minutes below.": "Zufällig gezeigt, jedes für die Minuten darunter.",
+    "Next theme after": "Nächstes Theme nach",
+    "0: no turns.": "0: kein Wechsel."
   },
   "fields": {
     "agent": "Agent",

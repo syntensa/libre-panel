@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+**New**
+- **Waveshare: the themes on the display's card, one at a time or in turn.** The service's
+  options list the card's themes by name: pick the one to show, or tick several and Libre
+  Panel shows them in turn at random, each for the minutes you set. It only switches between
+  the themes the card has; nothing is written on it (#21).
+
 **Fixes**
 - **The app did not open from the Linux AppImage on newer systems** (Arch, CachyOS and others):
   the AppImage handed its own libraries on to the system's programs it starts, so the shell
@@ -12,6 +18,10 @@
   full range, so the video of limited range looked washed out while the stills were right. It
   now gets full range by itself too (`[device] video_range = "auto"`); a panel set to
   `"limited"` by hand keeps it.
+- **The note on a hang of the panel no longer risks a crash on Windows.** When a step of the
+  panel stood still for two minutes, Python's own timer wrote where every part of the app
+  stood, and that timer now and then crashed the app on Windows. A thread of the app's own
+  writes the note now; the timer stays only for a hang that holds every thread, much later.
 
 ## 0.7.1 — 2026-10-26
 

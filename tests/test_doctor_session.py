@@ -264,6 +264,27 @@ def test_a_step_of_the_loop_that_hangs_writes_where_every_thread_stands(tmp_path
     assert whole.index("game over") < whole.index(HANG_FILENAME) < whole.index("a_step_that_hangs")
 
 
+def test_a_hang_is_written_once_even_when_it_outlasts_faulthandler_s_late_timer(tmp_path):
+    """The watch's own thread writes the hang (faulthandler's timer crashed a process on Windows
+    now and then); the timer kept for a loop that holds the interpreter does not write it again."""
+    from libre_panel.app import HANG_FILENAME, _HangWatch
+
+    watch = _HangWatch(tmp_path / HANG_FILENAME, seconds=0.2)
+
+    def a_long_step():
+        time.sleep(watch.seconds * (watch.FALLBACK + 2))
+
+    try:
+        watch.arm()
+        a_long_step()
+        watch.disarm()
+    finally:
+        watch.close()
+    hang = (tmp_path / HANG_FILENAME).read_text("utf-8")
+    assert hang.count("Timeout") == 1 and "a_long_step" in hang
+    assert "(MainThread)" in hang and "hang-watch" not in hang
+
+
 def test_the_log_is_written_in_detail_until_it_is_switched_off():
     import logging
 
