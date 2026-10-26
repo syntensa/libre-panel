@@ -23,8 +23,6 @@ from __future__ import annotations
 
 import math
 import os
-import threading
-from collections import OrderedDict
 from collections.abc import Callable
 from types import SimpleNamespace
 from typing import Any, NamedTuple
@@ -33,6 +31,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 from libre_panel.render import light
+from libre_panel.render.kept import MB, Kept
 
 RGB = tuple[int, int, int]
 
@@ -66,42 +65,18 @@ SKY_SHARE = 0.35  # the sky metal mirrors is the accent this far towards white
 SUPER = 4  # glyph geometry is worked out this much larger
 MARGIN = 2  # blank pixels round a glyph: an edge needs an outside for its bevel to follow
 
-GLYPHS = 1500  # glyph geometries kept
-PATCHES = 3000  # coloured glyphs kept
+# What is kept, by bytes: a glyph's geometry is five bytes a pixel (a letter of 58 px some
+# 60 kB), a coloured one four. Counted, 1500 big letters took some 80 MB in the app, which draws
+# every theme; a panel's few dozen take well under a megabyte, and a ring's band one.
+GLYPH_BYTES = 4 * MB  # glyph geometries
+PATCH_BYTES = 4 * MB  # coloured glyphs
+WINDOW_BYTES = 2 * MB  # a bar's shading windows
+BOX_BYTES = 4 * MB  # coloured boxes
+RING_BYTES = 4 * MB  # rings' bands (a ring of 300 px is one megabyte)
+TRACK_BYTES = 2 * MB  # rings' milled grooves, coloured
+GROOVE_BYTES = 2 * MB  # bars' milled grooves, coloured
 
-_lock = threading.Lock()
 builds = {"glyph": 0, "patch": 0}  # how often each was built (tests, the bench)
-
-
-class Lru:
-    """A small thread-safe least-recently-used cache (several threads draw texts)."""
-
-    def __init__(self, size: int) -> None:
-        self.size = size
-        self._items: OrderedDict[Any, Any] = OrderedDict()
-        self._lock = threading.Lock()
-
-    def get(self, key: Any) -> Any:
-        with self._lock:
-            item = self._items.get(key)
-            if item is not None:
-                self._items.move_to_end(key)
-            return item
-
-    def put(self, key: Any, value: Any) -> Any:
-        with self._lock:
-            self._items[key] = value
-            self._items.move_to_end(key)
-            while len(self._items) > self.size:
-                self._items.popitem(last=False)
-        return value
-
-    def clear(self) -> None:
-        with self._lock:
-            self._items.clear()
-
-    def __len__(self) -> int:
-        return len(self._items)
 
 
 # -- distance, filters, normals ---------------------------------------------------------
@@ -290,8 +265,8 @@ class Glyph(NamedTuple):
     terms: np.ndarray  # (h, w, 4) uint8: A * 255, B, S * 255, G * 255
 
 
-_glyphs = Lru(GLYPHS)
-_patches = Lru(PATCHES)
+_glyphs = Kept("facets.glyphs", GLYPH_BYTES)
+_patches = Kept("facets.patches", PATCH_BYTES)
 _blank = object()
 
 
@@ -444,7 +419,7 @@ def put(layer: Image.Image, patch: Image.Image, x: int, y: int) -> None:
 
 MIN_BAR, MAX_BAR = 6, 400  # thinner bars stay flat (a bevel does not read there), thicker too
 SUB = 4  # a window is worked out this much larger
-_windows = Lru(512)
+_windows = Kept("facets.windows", WINDOW_BYTES)
 
 
 def box_window(
@@ -507,7 +482,7 @@ def box_window(
 
 
 RGBA = tuple[int, int, int, int]
-_images = Lru(2048)  # coloured boxes, by what they are made of
+_images = Kept("facets.boxes", BOX_BYTES)  # coloured boxes, by what they are made of
 
 
 def _mix(a: RGBA, b: RGBA | None, t: np.ndarray) -> np.ndarray:
@@ -646,9 +621,10 @@ def bar_layer(
 # -- rings ------------------------------------------------------------------------------
 
 RING_SUB = 2  # the band of a ring is worked out this much larger
-_rings = Lru(16)
-_tracks = Lru(16)  # a ring's milled groove, coloured: it does not change with the fill
-_grooves = Lru(64)  # a bar's milled groove, coloured
+_rings = Kept("facets.rings", RING_BYTES)
+# a ring's milled groove, coloured: it does not change with the fill
+_tracks = Kept("facets.tracks", TRACK_BYTES)
+_grooves = Kept("facets.grooves", GROOVE_BYTES)  # a bar's milled groove, coloured
 
 
 class RingBand(NamedTuple):

@@ -42,7 +42,7 @@ STEP = 25.0  # how often the picture changes, per second
 QUICK = 1.8  # the tempo of a symbol under SMALL px, as a multiple of a big one's
 SMALL = 120
 TURN = 7.0  # degrees a second the sun's rays turn
-BUDGET = 40 << 20  # bytes of kept layer sets
+BUDGET = 16 << 20  # bytes of kept layer sets (a panel's weather takes well under one)
 
 # WMO weather code -> kind (Open-Meteo); a code that is not here is overcast
 _CODES = {

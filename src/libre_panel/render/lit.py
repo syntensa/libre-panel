@@ -36,6 +36,7 @@ from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 from libre_panel.render import facets, light3d
 from libre_panel.render.finish import Finish, register
+from libre_panel.render.kept import MB, Kept, size_of
 from libre_panel.render.light import mix, role_color
 from libre_panel.render.renderer import Piece, _fraction, _number, _steps
 
@@ -46,7 +47,11 @@ HALO = 0.9  # a lit graph's halo at glow 1 ...
 LINE_WHITE = 0.45  # ... and how far its line runs towards white
 MIN_ICON = 16
 
-_PICTURES = light3d.Kept(48 << 20)  # masks, coloured lights and symbols
+# masks, coloured lights and symbols: Lumen's on the 12.3" take 2.5 MB. Encore's light at each
+# value of its bars, each made once (two in three of them asked for again in the same moment):
+# within 48 MB they took 12 MB after a minute and grew on, within these as many are found.
+PICTURE_BYTES = 4 * MB
+_PICTURES = Kept("lit.pictures", PICTURE_BYTES)
 
 
 def _unit(color: tuple[int, ...] | None) -> np.ndarray | None:
@@ -122,7 +127,7 @@ def _pill(length: int, thick: int, room: int) -> np.ndarray:
         )  # fmt: skip
         return np.asarray(mask.resize((w, h), Image.Resampling.LANCZOS), np.float32) / 255
 
-    return _PICTURES.get(("pill", length, thick, room), make)
+    return _PICTURES.make(("pill", length, thick, room), make)
 
 
 def _layout(widget: dict[str, Any]) -> tuple[int, int, bool, bool]:
@@ -176,7 +181,7 @@ def _groove(renderer: Any, widget: dict[str, Any], length: int, thick: int,
     if milled is not None:
         return milled
     key = ("bar-groove", length, thick, tuple(track))
-    return _PICTURES.get(key, lambda: Image.new("RGBA", (length, thick), tuple(track)))
+    return _PICTURES.make(key, lambda: Image.new("RGBA", (length, thick), tuple(track)))
 
 
 def _glow_source(length: int, thick: int, spans, colours: np.ndarray, head_px: float,
@@ -284,7 +289,7 @@ def bar_piece(renderer: Any, widget: dict[str, Any], frac: float, paint) -> Piec
             c = (colours[columns] if np.ndim(colours) == 2 else colours) * 255
             key = ("bar-light", span, core, pad, _key(paint[0]), _key(paint[1]),
                    start if np.ndim(colours) == 2 else 0)  # fmt: skip
-            rgba = _PICTURES.get(key, lambda m=mask, c=c: light(m, c, BAR_HALO * unit))
+            rgba = _PICTURES.make(key, lambda m=mask, c=c: light(m, c, BAR_HALO * unit))
             image = Image.fromarray(rgba, "RGBA")
             if alpha < 0.999:
                 image = _alpha_scaled(image, alpha)
@@ -356,7 +361,7 @@ def _arc(widget: dict[str, Any], frac: float, stroke: int, room: int) -> np.ndar
 
     key = ("arc", widget["w"], widget["h"], widget["thickness"], widget["start_angle"],
            widget["end_angle"], frac, stroke, room)  # fmt: skip
-    return _PICTURES.get(key, make)
+    return _PICTURES.make(key, make)
 
 
 def _arc_part(widget: dict[str, Any], frac: float, stroke: int, room: int,
@@ -387,7 +392,7 @@ def _sweep_light(widget: dict[str, Any], stroke: int, room: int, halo: float):
 
     key = ("sweep-light", widget["w"], widget["h"], widget["thickness"], widget["start_angle"],
            widget["end_angle"], stroke, room, halo)  # fmt: skip
-    return _PICTURES.get(key, make)
+    return _PICTURES.make(key, make)
 
 
 def _ring_light(widget: dict[str, Any], frac: float, colour: Any, stroke: int, room: int,
@@ -462,7 +467,7 @@ def _ring_parts(widget: dict[str, Any], frac: float, colour: Any, stroke: int, r
                  or tip_outer[3] <= outer[1] or outer[3] <= tip_outer[1])  # fmt: skip
         if apart:  # its start the same at every value but these: kept
             key = ("ring-start", w, h, widget["thickness"], start, end, tuple(c), stroke, room)
-            start_patch = _PICTURES.get(key, lambda: patch(inner, outer))
+            start_patch = _PICTURES.make(key, lambda: patch(inner, outer))
         else:
             start_patch = patch(inner, outer)
         patches.append((*inner[:2], start_patch))
@@ -488,7 +493,7 @@ def _ring_ground(renderer: Any, widget: dict[str, Any], room: int) -> tuple[tupl
             canvas.paste(groove, (room, room))
         return canvas
 
-    return key, _PICTURES.get(key, make) if renderer.keep_static else make()
+    return key, _PICTURES.make(key, make) if renderer.keep_static else make()
 
 
 def _light_ring(canvas: Image.Image, ground: tuple[tuple, Image.Image], widget: dict[str, Any],
@@ -508,7 +513,7 @@ def _light_ring(canvas: Image.Image, ground: tuple[tuple, Image.Image], widget: 
         lit.alpha_composite(_alpha_scaled(_ring_sweep(widget, colour, stroke, room, halo), fade))
         return lit
 
-    lit = _PICTURES.get(("ring-lit", key, tuple(colour), stroke, halo), make)
+    lit = _PICTURES.make(("ring-lit", key, tuple(colour), stroke, halo), make)
     sector, patches = _ring_parts(widget, frac, colour, stroke, room, halo)
     canvas.paste(lit, (0, 0), sector)  # (where the sector is clear, the groove stays)
     for left, top, patch in patches:
@@ -593,11 +598,12 @@ class LitText(Finish):
 
     name = "lit"
     types = ("text", "metric")
-    KEPT = 512
+    KEPT_BYTES = 4 * MB  # (a heading's light on the 12.3" is some 100 kB)
 
     def __init__(self) -> None:
-        self._lit: dict[int, tuple[Piece, Piece]] = {}  # by text piece: the piece with light
-        self._lock = threading.Lock()
+        # by text piece: the piece with light (the text piece kept with it: an id is unique only
+        # while its object lives)
+        self._lit = Kept("lit.texts", self.KEPT_BYTES)
 
     def widget(self, widget):
         # the renderer draws the letters whole and without its glow
@@ -611,17 +617,15 @@ class LitText(Finish):
         opacity = widget.get("\0opacity", 1.0)
         if piece is None or (strength <= 0 and opacity >= 0.999):
             return piece
-        with self._lock:
-            hit = self._lit.get(id(piece))
-            if hit is not None and hit[0] is piece:
-                return hit[1]
+        hit = self._lit.get(id(piece), valid=lambda kept: kept[0] is piece)
+        if hit is not None:
+            return hit[1]
         radius = max(1.0, float(widget.get("glow_radius", 10)))
         light_ = text_light(piece, radius, strength, widget.get("glow_area")) if strength else None
         lit = replace(piece, layer=_alpha_scaled(piece.layer, opacity), light=light_)
-        with self._lock:
-            self._lit[id(piece)] = (piece, lit)
-            while len(self._lit) > self.KEPT:
-                del self._lit[next(iter(self._lit))]
+        # (its bytes: the light, and the letters where they were faded: the rest is the text's)
+        own = size_of(light_) + (size_of(lit.layer) if lit.layer is not piece.layer else 0)
+        self._lit.put(id(piece), (piece, lit), own)
         return lit
 
 
@@ -808,14 +812,14 @@ class LitIcon(Finish):
     def draw(self, renderer, widget, snapshot, now):
         name = renderer._icon_name(widget, snapshot)
         size = widget["size"]
-        if name not in SYMBOLS or size < MIN_ICON or light3d.WEATHER_BODIES.get() is None:
+        if name not in SYMBOLS or size < MIN_ICON or not light3d.WEATHER_BODIES.available():
             return renderer._draw_icon(widget, snapshot, now)
         colours = self._colours(renderer, widget)
         key = ("symbol", name, size, tuple(sorted(colours.items())))
         x, y = widget["x"], widget["y"]
 
         def build() -> Piece:
-            return Piece(_PICTURES.get(key, lambda: symbol(name, size, colours)), x, y)
+            return Piece(_PICTURES.make(key, lambda: symbol(name, size, colours)), x, y)
 
         return renderer._cached(widget, ("lit", name, colours["cloud"]), build)
 

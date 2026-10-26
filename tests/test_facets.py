@@ -334,18 +334,6 @@ def test_text_with_spacing_and_the_edge_of_the_layer():
     facets.put(layer, patch, 8, 8)  # hanging off the other side: composited, cut by Pillow
 
 
-def test_lru_keeps_the_newest():
-    cache = facets.Lru(3)
-    for n in range(5):
-        cache.put(n, n)
-    assert len(cache) == 3 and cache.get(0) is None and cache.get(4) == 4
-    cache.get(2)
-    cache.put(5, 5)  # 3 was the least recently used
-    assert cache.get(3) is None and cache.get(2) == 2
-    cache.clear()
-    assert len(cache) == 0
-
-
 # -- in a theme --------------------------------------------------------------------------------
 
 

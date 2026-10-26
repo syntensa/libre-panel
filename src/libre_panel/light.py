@@ -37,9 +37,8 @@ def empty_caches() -> None:
         kept.clear()
     with symbols._lock:
         symbols._sets.clear()
-    with fan._lock:
-        for kept in (fan._images, fan._layers, fan._frames):
-            kept.clear()
+    for kept in (fan._images, fan._layers, fan._frames, lit._PICTURES):
+        kept.clear()
     cover._kept.clear()
     with lit._SOLIDS_LOCK:
         lit._SOLIDS.clear()

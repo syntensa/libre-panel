@@ -311,7 +311,7 @@ def test_the_rotors_layers_are_kept_for_the_sizes_in_use_not_for_every_size_aske
     """A fan resized in the editor asks for a size at a time, and the layers of a size are some
     megabytes (a fan of 150 px: 17): the oldest go once more than a budget is kept, the
     newest always stays."""
-    monkeypatch.setattr(fan, "LAYER_BYTES", 700_000, raising=False)
+    monkeypatch.setattr(fan._layers, "budget", 700_000)
     fan._layers.clear()
     for k in (8, 10, 12, 14, 16, 18, 20):
         fan.rotor_layers(k)
