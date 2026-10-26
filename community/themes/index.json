@@ -1,4 +1,16 @@
 {
   "format": "libre-panel-community/1",
-  "themes": []
+  "themes": [
+    {
+      "name": "All-In with Codex",
+      "author": "Varulfen, after Libre Panel contributors",
+      "description": "Übersicht auf einem 3,5\" Monitor - CPU/ MEM/ GPU Temperatur, Auslastung, Frequenz. Übersicht für Codex inkl. Wochen und 5 Std. Übersicht, Netzwerkauslastung und einer variablen Kachel, je nach Situation. Natürlich Uhrzeit und aktuelle Temperatur",
+      "sizes": [
+        "480x320"
+      ],
+      "preview": "all-in-with-codex/preview.png",
+      "zip": "all-in-with-codex/all-in-with-codex.zip",
+      "sha256": "4bed4a66b5b52b973f0045c0eb0fe126b559433425e981728af78a3a0d9c072c"
+    }
+  ]
 }
