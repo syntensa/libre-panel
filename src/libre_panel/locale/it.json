@@ -2784,7 +2784,8 @@
     "0: no turns.": "0: nessun cambio.",
     "Is black black on panel {n}?": "Il nero sul pannello {n} è davvero nero?",
     "Compare on the panel": "Confronta sul pannello",
-    "Smooth motion runs on panel {n}, a model whose black level nobody has compared yet. If its video looks washed out, as under a grey veil, compare the two ways on the panel once: the one that looks right is kept.": "Sul pannello {n} è attivo il movimento fluido, ma il livello del nero di questo modello non l'ha ancora confrontato nessuno. Se il video appare slavato, come sotto un velo grigio, confronta una volta i due modi sul pannello: resta quello che sembra giusto."
+    "Smooth motion runs on panel {n}, a model whose black level nobody has compared yet. If its video looks washed out, as under a grey veil, compare the two ways on the panel once: the one that looks right is kept.": "Sul pannello {n} è attivo il movimento fluido, ma il livello del nero di questo modello non l'ha ancora confrontato nessuno. Se il video appare slavato, come sotto un velo grigio, confronta una volta i due modi sul pannello: resta quello che sembra giusto.",
+    "Each theme on the card brings its own, which the display takes on as it loads it. Set here, it stays as Libre Panel switches the themes.": "Ogni tema sulla scheda porta il proprio orientamento, che il display adotta caricandolo. Impostato qui, resta quando Libre Panel cambia tema."
   },
   "fields": {
     "agent": "agente",

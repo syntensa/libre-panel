@@ -2784,7 +2784,8 @@
     "0: no turns.": "0：不轮换。",
     "Is black black on panel {n}?": "面板 {n} 上的黑色够黑吗？",
     "Compare on the panel": "在面板上对比",
-    "Smooth motion runs on panel {n}, a model whose black level nobody has compared yet. If its video looks washed out, as under a grey veil, compare the two ways on the panel once: the one that looks right is kept.": "面板 {n} 正在运行流畅动态，而这个型号的黑位还没有人对比过。如果画面发白、像蒙了一层灰纱，请在面板上对比一次两种方式：看起来正确的那种会被保留。"
+    "Smooth motion runs on panel {n}, a model whose black level nobody has compared yet. If its video looks washed out, as under a grey veil, compare the two ways on the panel once: the one that looks right is kept.": "面板 {n} 正在运行流畅动态，而这个型号的黑位还没有人对比过。如果画面发白、像蒙了一层灰纱，请在面板上对比一次两种方式：看起来正确的那种会被保留。",
+    "Each theme on the card brings its own, which the display takes on as it loads it. Set here, it stays as Libre Panel switches the themes.": "卡上的每个主题都自带方向，显示屏加载时会采用它。在这里设置后，Libre Panel 切换主题时方向保持不变。"
   },
   "fields": {
     "agent": "智能体",

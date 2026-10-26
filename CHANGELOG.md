@@ -10,7 +10,8 @@
   and the panel report tells it, so the model can get it by itself.
 - **Waveshare: the themes on the display's card, one at a time or in turn.** The service's
   options list the card's themes by name: pick the one to show, or tick several and Libre
-  Panel shows them in turn at random, each for the minutes you set. It only switches between
+  Panel shows them in turn at random, each for the minutes you set. Each theme brings its own
+  orientation; the one set in the options stays through every switch. It only switches between
   the themes the card has; nothing is written on it (#21).
 
 **Fixes**

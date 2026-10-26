@@ -293,8 +293,8 @@ class Waveshare(Service):
             self._stop.wait(max(0.0, self.every - (time.monotonic() - began)))
 
     def _show(self, link: waveshare.Link, path: str) -> None:
-        """A theme on the card on the display; the picture turned again as set (a theme that
-        loads may set it upright)."""
+        """A theme on the card on the display; the picture turned again as set (each theme
+        brings its own orientation, which the display takes on as it loads it)."""
         link.show_theme(path)
         if self.flip is not None:
             link.set_flipped(self.flip)

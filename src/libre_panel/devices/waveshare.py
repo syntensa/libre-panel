@@ -72,11 +72,12 @@ def frame(command: int, payload: bytes = b"", kind: int = TO_DISPLAY) -> bytes:
 
 
 def qmap(values: dict[str, str]) -> bytes:
-    """``values`` as QDataStream writes a ``QMap<QString, QString>``: in the order of the keys'
-    UTF-16 code units, as Qt keeps them (the display does not mind; the frames are then the
-    vendor's to the byte)."""
+    """``values`` as Qt 5's QDataStream writes a ``QMap<QString, QString>``: from the last key
+    to the first, in the order of their UTF-16 code units, as the themes Waveshare's program
+    saves have them (the display does not mind; the frames are then the vendor's to the
+    byte)."""
     out = [struct.pack(">I", len(values))]
-    for key in sorted(values, key=lambda k: k.encode("utf-16-be")):
+    for key in sorted(values, key=lambda k: k.encode("utf-16-be"), reverse=True):
         for text in (key, values[key]):
             data = str(text).encode("utf-16-be")
             out.append(struct.pack(">I", len(data)) + data)
@@ -232,7 +233,8 @@ class Link:
 
     def show_theme(self, path: str) -> None:
         """Show the theme at ``path`` (as :meth:`themes` lists it), one that is on the card:
-        nothing is written. Loading a theme may set the picture upright again."""
+        nothing is written. The theme brings its own orientation (``canvas_flip`` in its file),
+        which the display takes on as it loads it."""
         self.ask(RELOAD_THEME, path.encode("utf-8"), timeout=ANSWER_S * 2)
 
     def close(self) -> None:

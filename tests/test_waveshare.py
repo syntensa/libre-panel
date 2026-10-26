@@ -110,12 +110,16 @@ def test_a_frame_is_the_head_the_numbers_and_the_payload():
 
 def test_a_map_is_written_as_qt_writes_it_and_read_back():
     assert waveshare.qmap({"a": "1"}) == b"\x00\x00\x00\x01" + qstring("a") + qstring("1")
-    # in the order of the keys' UTF-16 code units, as a QMap keeps them
+    # from the last of the keys' UTF-16 code units to the first, as Qt 5 writes a QMap (a theme
+    # Waveshare's program saved has its maps so: canvas_w, canvas_rotate, canvas_h, canvas_flip)
     written = waveshare.qmap({"b": "2", "Z": "3", "Cpu温度": "54", "a": "1"})
     assert written.startswith(b"\x00\x00\x00\x04")
     order = list(waveshare.read_qmap(written))
-    assert order == sorted(order, key=lambda key: key.encode("utf-16-be"))
-    assert order == ["Cpu温度", "Z", "a", "b"]
+    assert order == ["b", "a", "Z", "Cpu温度"]
+    canvas = {"canvas_flip": "0", "canvas_h": "480", "canvas_rotate": "0", "canvas_w": "480"}
+    assert list(waveshare.read_qmap(waveshare.qmap(canvas))) == [
+        "canvas_w", "canvas_rotate", "canvas_h", "canvas_flip",
+    ]  # fmt: skip
     assert waveshare.read_qmap(written) == {"b": "2", "Z": "3", "Cpu温度": "54", "a": "1"}
     null = b"\x00\x00\x00\x01" + qstring("res") + b"\xff\xff\xff\xff"
     assert waveshare.read_qmap(null) == {"res": None}

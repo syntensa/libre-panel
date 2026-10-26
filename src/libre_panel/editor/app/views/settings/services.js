@@ -200,6 +200,7 @@ const OPTIONS = {
   "waveshare.brightness": { label: () => t("Brightness"), hint: () => t("0: as the display has it."), unit: "%", min: 0, max: 100 },
   "waveshare.flip": {
     label: () => t("Orientation of the picture"),
+    hint: () => t("Each theme on the card brings its own, which the display takes on as it loads it. Set here, it stays as Libre Panel switches the themes."),
     choices: () => [
       { id: "", name: t("As it is") },
       { id: "normal", name: t("Upright") },

@@ -1140,7 +1140,9 @@ program writes them, for themes made for that.
 `theme` and `rotate` take the themes on the display's card, by their paths there
 (`/data/theme/480x480/021-astronaut.Theme`); the service's options list them by name once the
 display answered. With `rotate` and `rotate_min`, a theme of the list at random takes the place
-of the one shown every `rotate_min` minutes, never the same twice in a row.
+of the one shown every `rotate_min` minutes, never the same twice in a row. Each theme brings
+its own orientation, which the display takes on as it loads it: `flip` keeps the picture as
+set through every switch.
 
 Nothing is written on the display's card: Libre Panel has none of its commands that write
 or delete there.
