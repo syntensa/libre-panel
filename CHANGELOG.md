@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.1rc8 — 2026-10-26
 
 **New**
 - **Waveshare USB monitors (experimental).** These displays draw their own themes from their
