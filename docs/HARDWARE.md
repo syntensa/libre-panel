@@ -332,8 +332,8 @@ over a serial port on USB. So Libre Panel does not draw on them; the service *Wa
 monitor* (*Settings → Game mode and more*) sends them its readings once a second, under the
 keys Waveshare's themes use (in English and in Chinese), and sets the brightness and turns the
 picture upside down where you ask. Libre Panel's own themes do not show on them, and nothing is
-written on the card. Not yet seen on the hardware; the protocol is the one the wsmonitor
-project documented (#21).
+written on the card. Not yet seen on the hardware; the protocol is the one Derik-for-real24
+documented in the wsmonitor project (#21).
 
 - The display is looked for by its USB ids (`1d6b:0104` "Virtual Serial Port", or the
   placeholder `1234:5678` some units have) and taken only once it answered the display's own

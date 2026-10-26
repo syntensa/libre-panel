@@ -3,7 +3,8 @@ over USB, which draws the themes on its own card (PCMonitorLinux) and takes from
 the values to show in them. Libre Panel sends those (services/waveshare.py), with the
 brightness and the screen turned upside down; it writes nothing on the card.
 
-The protocol, as documented by the wsmonitor project (#21): every message is a frame
+The protocol, as Derik-for-real24 documented it in the wsmonitor project (#21, NOTICE.md):
+every message is a frame
 
     "AA551234 FIXEDCMDHEAD "  22 bytes
     type, command, length, CRC-32 of the payload   four little-endian uint32
