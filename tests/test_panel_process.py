@@ -107,3 +107,88 @@ def test_the_beats_and_which_is_which_go_across():
         assert "usb:9.9" in base.places_taken()
     finally:
         base.leave_place("usb:9.9")
+
+
+# -- what a panel's process loads ----------------------------------------------------------------
+
+# A panel's process as the first panel's process starts it (spawn): the program's entry point
+# imports the command line first (libre_panel.cli, before multiprocessing hands over), then the
+# process runs child(); here a thread plays the first panel's process at the pipe's other end.
+CHILD = r"""
+import json, sys, threading, time
+from multiprocessing import Pipe, Queue
+
+import libre_panel.cli  # (the entry point's import)
+from libre_panel import panel_process
+from libre_panel.sensors.base import Reading
+
+ours, theirs = Pipe()
+said = [{}]
+
+def first():
+    while True:
+        try:
+            message = ours.recv()
+        except (EOFError, OSError):
+            return
+        if message[0] == "snapshot?":
+            readings = {"cpu.load": Reading("cpu.load", 40.0, "%", "CPU"),
+                        "cpu.temp": Reading("cpu.temp", 55.0, "°C", "CPU")}
+            ours.send(("snapshot", readings, {}, 0.1, False))
+        elif message[0] == "status":
+            said.append(message[1])
+
+threading.Thread(target=first, daemon=True).start()
+ours.send(("state", {"mode": None, "first": "", "places": [], "quitting": None, "identify": 0,
+                     "beats": {}, "taken": [], "colours": None}))
+child = threading.Thread(target=panel_process.child, args=(0, sys.argv[1], theirs, Queue()),
+                         daemon=True)
+child.start()
+end = time.monotonic() + 90
+while time.monotonic() < end and not said[-1].get("frames"):
+    time.sleep(0.1)
+time.sleep(2.0)  # (it draws on a while)
+shown = dict(said[-1])
+ours.send(("stop",))
+child.join(20)
+print(json.dumps({"state": shown.get("state"), "frames": shown.get("frames", 0),
+                  "modules": sorted(sys.modules)}))
+"""
+
+# what only the first panel's process does: the app's server and pages, the sensor sources (the
+# first one's readings come across), the tray, the window, the memory's store, the services,
+# .NET (LibreHardwareMonitor and the window through pythonnet)
+NOT_IN_A_PANELS_PROCESS = (
+    "libre_panel.editor", "libre_panel.service", "libre_panel.tray", "libre_panel.window",
+    "libre_panel.services", "libre_panel.sensorservice", "libre_panel.weather",
+    "libre_panel.load_report", "libre_panel.doctor", "libre_panel.hotkeys",
+    "clr", "pythonnet", "clr_loader", "webview", "pystray", "winrt", "paho", "sqlite3",
+    "http.server", "socketserver",
+)  # fmt: skip
+SENSORS_OF_ITS_OWN = {"libre_panel.sensors", "libre_panel.sensors.base",
+                      "libre_panel.sensors.fan_names"}  # fmt: skip
+
+
+def test_a_panels_process_loads_only_what_it_draws_with(tmp_path):
+    """No server, no sensor source, no tray, no window, no .NET, no memory store: a panel's
+    process draws its theme on the readings it is sent, and loads that alone."""
+    import json
+    import os
+    import subprocess
+    import sys
+
+    path = tmp_path / "config.toml"
+    path.write_text(CONFIG, encoding="utf-8")
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path)}
+    done = subprocess.run([sys.executable, "-c", CHILD, str(path)], env=env, cwd=tmp_path,
+                          capture_output=True, text=True, timeout=180)  # fmt: skip
+    assert done.returncode == 0, done.stderr[-2000:]
+    found = json.loads(done.stdout.strip().splitlines()[-1])
+    assert found["state"] == "showing" and found["frames"] >= 1  # it drew its theme
+    modules = found["modules"]
+    loaded = [m for m in modules for name in NOT_IN_A_PANELS_PROCESS
+              if m == name or m.startswith(name + ".")]  # fmt: skip
+    assert loaded == []
+    sensors = {m for m in modules if m.startswith("libre_panel.sensors")}
+    assert sensors <= SENSORS_OF_ITS_OWN
+    assert "libre_panel.render.renderer" in modules and "libre_panel.devices.virtual" in modules
