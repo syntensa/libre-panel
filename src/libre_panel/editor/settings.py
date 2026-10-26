@@ -25,8 +25,11 @@ from libre_panel.config import (
     ALARM_THEME,
     MORE_PANELS,
     MOTIONS,
+    RANDOM_TRANSITION,
     STILLS,
     SYMBOL_PACKS,
+    TRANSITION_OCCASIONS,
+    TRANSITION_SPEEDS,
     VIDEO_RANGES,
     Config,
     ConfigError,
@@ -487,6 +490,13 @@ class Settings:
                 "symbols": config.symbols,
                 "accent": config.accent,
                 "across": config.across,
+                # how the panel goes from one screen to the next (Settings → Panel → Transitions)
+                "transitions": {
+                    "default": config.transition,
+                    "speed": config.transitions.speed,
+                    **config.transitions.occasions,
+                    "random": list(config.transitions.random),
+                },
                 "switches": {theme: dict(chosen) for theme, chosen in config.switches.items()},
                 # the panels beside this one ([[panels]]): written back whole ("panels")
                 "panels": [
@@ -545,6 +555,7 @@ class Settings:
             "lhm_modes": list(MODES),
             "drivers": sorted(available_drivers()),
             "services": services,
+            "transitions": _transition_list(),
         }
 
     # -- writing ----------------------------------------------------------------------------
@@ -1362,6 +1373,35 @@ def _check_switch(name: str, value: Any) -> tuple[str, Any]:
 _SWITCH_PART = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
 
+def _transition_list() -> list[dict[str, str]]:
+    from libre_panel.render.overlays import transition_choices
+
+    return transition_choices()
+
+
+def _known_transitions() -> set[str]:
+    return {choice["id"] for choice in _transition_list()}
+
+
+def _rule_transition(name: str, value: Any, config: Config, empty: bool = False) -> str:
+    """A transition by its name: one Libre Panel or a plugin brings, or "random"; "" where
+    the occasion may leave it to the service or the default (``empty``)."""
+    allowed = sorted(_known_transitions() | {RANDOM_TRANSITION})
+    return _choice(name, value, (("",) if empty else ()) + tuple(allowed))
+
+
+def _rule_random(name: str, value: Any, config: Config) -> list[str]:
+    """What "random" picks from: one to 32 transitions, each once."""
+    known = _known_transitions()
+    if (
+        not isinstance(value, list)
+        or not 1 <= len(value) <= 32
+        or not all(isinstance(item, str) and item in known for item in value)
+    ):
+        raise SettingsError(f"{name}: one to 32 transitions, by their names")
+    return list(dict.fromkeys(value))
+
+
 RULES: dict[str, Any] = {
     "device.model": _rule_model,
     "device.driver": _rule_driver,
@@ -1382,6 +1422,13 @@ RULES: dict[str, Any] = {
     "device.away_brightness": lambda n, v, c: _whole(n, v, 0, 100),
     "device.at": lambda n, v, c: _place_at(n, v),
     "across": lambda n, v, c: _text(n, v, 300).strip(),
+    "transitions.default": _rule_transition,
+    "transitions.speed": lambda n, v, c: _choice(n, v, tuple(TRANSITION_SPEEDS)),
+    **{
+        f"transitions.{occasion}": functools.partial(_rule_transition, empty=True)
+        for occasion in TRANSITION_OCCASIONS
+    },
+    "transitions.random": _rule_random,
     "device.output": lambda n, v, c: _text(n, v, 260, required=True),
     "device.port": lambda n, v, c: _text(n, v, 64),
     "video.mode": lambda n, v, c: _choice(n, v, ("auto", "on", "off")),

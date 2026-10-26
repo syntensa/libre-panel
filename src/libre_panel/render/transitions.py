@@ -76,7 +76,10 @@ class Entrance(Transition):
     ``params``: ``title``, ``text``, ``logo`` (a PIL image, or the key of one a
     service published, e.g. ``"game.logo"``) and ``kind``: ``"start"`` or
     ``"end"`` for a text of its own ("Game mode", "Game ended") when there
-    is no ``text``. Without a logo the title stands in big letters.
+    is no ``text``; ``"media"``, ``"media-end"``, ``"idle"`` and ``"idle-end"``
+    for music and the PC at rest (Settings → Panel → Transitions). Without a
+    logo the title stands in big letters; with one (music's cover) the title
+    follows the text.
     """
 
     name = "entrance"
@@ -90,7 +93,14 @@ class Entrance(Transition):
     def __init__(self, context: Any = None, params: dict[str, Any] | None = None) -> None:
         super().__init__(context, params)
         kind = self.params.get("kind")
-        default = {"start": i18n.t("Game mode"), "end": i18n.t("Game ended")}.get(kind, "")
+        default = {
+            "start": i18n.t("Game mode"),
+            "end": i18n.t("Game ended"),
+            "media": i18n.t("Now playing"),
+            "media-end": i18n.t("Music ended"),
+            "idle": i18n.t("Taking a break"),
+            "idle-end": i18n.t("Welcome back"),
+        }.get(kind, "")
         self.title = str(self.params.get("title") or "")
         self.text = str(self.params.get("text") or default).upper()
         self._figure: tuple[Any, ...] | None = None  # (frame size, picture, its halo, margin)
@@ -194,6 +204,8 @@ class Entrance(Transition):
         room_w, room_h = max(16, min(round(900 * u), w - round(80 * u))), max(8, round(150 * u))
         logo = self._logo()
         if logo is not None:
+            if self.title and self.params.get("kind") == "media":  # the cover: the track below it
+                self.text = f"{self.text} · {self.title.upper()}"[:64]
             picture = logo.convert("RGBA")
             scale = min(room_w / picture.width, room_h / picture.height, 2.0)  # no blur
             size = (max(1, round(picture.width * scale)), max(1, round(picture.height * scale)))

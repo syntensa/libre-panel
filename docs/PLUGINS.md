@@ -803,14 +803,15 @@ self.host.set_mode("game", transition=("entrance", entrance))
 self.host.set_mode(None, transition=("entrance", {"title": game, "kind": "end"}))
 ```
 
-A plugin can add its own:
+A plugin can add its own, by a name with a dot (`myplugin.curtain`) so that it never meets one
+Libre Panel brings; Settings → Panel → Transitions offers it beside them:
 
 ```python
 from libre_panel.plugins import Transition
 
 
-class Wipe(Transition):
-    name = "wipe"
+class Curtain(Transition):
+    name = "myplugin.curtain"
     api = 1
     duration = 0.3  # seconds
 

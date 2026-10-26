@@ -9,15 +9,19 @@ from __future__ import annotations
 
 import inspect
 import logging
+import random
+import time
 from dataclasses import replace
 from typing import Any
 
 from PIL import Image, ImageDraw
 
+from libre_panel.config import RANDOM_TRANSITION, TRANSITION_SPEEDS
 from libre_panel.fonts.fallback import truetype
 from libre_panel.icons import ICON_NAMES, draw_icon
 from libre_panel.plugins.render import RenderContext, ToastStyle, Transition
 from libre_panel.render.band import BandStyle
+from libre_panel.render.handovers import HANDOVERS
 from libre_panel.render.light import accent_color, ellipsize, role_value
 from libre_panel.render.transitions import Entrance, Tube
 from libre_panel.render.volume_looks import VOLUME_LOOKS
@@ -419,7 +423,7 @@ class _Cut(Transition):
 
 class _Fade(Transition):
     name = "fade"
-    duration = 0.4
+    duration = 0.6
 
     def frame(self, old: Image.Image, new: Image.Image, t: float) -> Image.Image:
         return Image.blend(old, new, t * t * (3 - 2 * t))  # smoothstep
@@ -444,7 +448,12 @@ BUILT_IN_TRANSITIONS = {
     "slide": _Slide,
     "tube": Tube,
     "entrance": Entrance,
+    **HANDOVERS,
 }
+# how Settings → Panel → Transitions offers them: the plain ones, then the elaborate ones
+PLAIN_TRANSITIONS = ("cut", "fade", "slide", "slide-right", "slide-up", "slide-down", "wipe",
+                     "zoom", "iris", "blinds", "dissolve")  # fmt: skip
+ELABORATE_TRANSITIONS = ("tube", "entrance", "light", "glitch", "tiles", "shatter")
 BUILT_IN_STYLES = {"card": CardStyle, "band": BandStyle}
 
 
@@ -497,3 +506,79 @@ def transition(spec: Any, context: Any = None) -> Any:
     except Exception:
         log.exception("transition %r failed to start; switching without one", name)
         return None
+
+
+def transition_choices() -> list[dict[str, str]]:
+    """The transitions to choose from, for the app: ``{id, group}``, ``group`` "plain",
+    "elaborate" or "plugin" (a plugin's, by its name)."""
+    from libre_panel.plugins.loader import registry
+
+    found = [{"id": name, "group": "plain"} for name in PLAIN_TRANSITIONS]
+    found += [{"id": name, "group": "elaborate"} for name in ELABORATE_TRANSITIONS]
+    for name in sorted(registry().parts.get("transitions", {})):
+        if name not in BUILT_IN_TRANSITIONS:
+            found.append({"id": name, "group": "plugin"})
+    return found
+
+
+def occasion_params(
+    name: str, occasion: str, leaving: bool, readings: Any, theme_name: str
+) -> dict[str, Any]:
+    """What a transition chosen for an occasion says (the entrance's title, text and picture):
+    music with its cover and title, the PC at rest with the time, any other switch with the
+    name of the screen that comes."""
+    if name != "entrance":
+        return {}
+
+    def value(key: str) -> Any:
+        return getattr(readings.get(key), "value", None) if readings else None
+
+    if occasion == "media":
+        if leaving:
+            return {"kind": "media-end"}
+        title = " – ".join(
+            str(part) for part in (value("media.artist"), value("media.title")) if part
+        )
+        return {"kind": "media", "title": title, "logo": "media.cover"}
+    if occasion == "idle":
+        return (
+            {"kind": "idle-end"} if leaving else {"kind": "idle", "title": time.strftime("%H:%M")}
+        )
+    if occasion == "game":
+        return {"kind": "end" if leaving else "start"}
+    return {"title": theme_name}
+
+
+def handover(
+    config: Any,
+    occasion: str,
+    leaving: bool,
+    asked: Any,
+    context: Any,
+    readings: Any = None,
+    theme_name: str = "",
+    pick: Any = random.choice,
+    make: Any = None,
+) -> Any:
+    """The transition for a switch, from config.toml's [transitions]: the occasion's own (what
+    the service asked for, ``asked``, where it is the same transition: it knows the game's
+    logo), else what the service asked for, else the default; "random" picks one of its list;
+    the speed stretches it. ``leaving``: the switch ends the occasion (the game is over).
+    ``make`` makes it (:func:`transition`)."""
+    chosen = config.transitions
+
+    def spec_of(name: str) -> Any:
+        params = occasion_params(name, occasion, leaving, readings, theme_name)
+        return (name, params) if params else name
+
+    name = chosen.occasions.get(occasion, "") if occasion else ""
+    asked_name = asked[0] if isinstance(asked, tuple) else asked
+    default = getattr(config, "transition", "") or chosen.default  # (config.toml's either way)
+    spec = spec_of(name) if name and name != asked_name else asked or spec_of(default)
+    name = spec[0] if isinstance(spec, tuple) else spec
+    if name == RANDOM_TRANSITION:
+        spec = spec_of(pick(chosen.random) if chosen.random else "fade")
+    kind = (make or transition)(spec, context)
+    if kind is not None and getattr(kind, "duration", 0):
+        kind.duration = kind.duration * TRANSITION_SPEEDS.get(chosen.speed, 1.0)
+    return kind

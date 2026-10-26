@@ -16,6 +16,14 @@
   at it.
 
 **New**
+- **Transitions for every occasion, and twelve more of them.** Music, the PC at rest, the
+  screens in turn and the rest switched with a faint fade; now Settings → Panel →
+  Transitions gives each occasion its own (a game, music, rest, screens in turn, the
+  autopilot, the round report, a theme chosen), a default, a pace (fast, normal, leisurely)
+  and Random. Music starts with the entrance showing its cover and track and ends with
+  "Music ended"; the screens in turn follow a line of light. New: wipe, zoom, iris, blinds,
+  dissolve and slides to every side, and the elaborate line of light, glitch, tiles and
+  shatter. **▶** plays one on the panels, out to a card with its name and back.
 - **Community themes: sharing in two clicks, and what fits your panel first.** *Share with
   everyone…* (the globe on your theme's card) asks what it is called and shows, saves the
   theme and opens GitHub's form, filled in: drag the file in and send. A workflow checks it

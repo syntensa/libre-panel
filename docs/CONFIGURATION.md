@@ -54,8 +54,8 @@ language = "auto"              # "auto" (system language), "en", "de", "fr", "es
 # check_updates = true        # look once a day for a newer version (not set: Start asks)
 # allow_notify = false        # other programs may show a notice (see below)
 fps = 10                       # 1-60; values glide between readings
-transition = "fade"            # between themes: "cut", "fade", "slide", "tube", "entrance",
-                               # or a plugin's
+# [transitions]                # how the panel goes from one screen to the next
+# default = "fade"             # (see "Transitions"; Settings → Panel → Transitions)
 # accent = "system"           # every theme in one accent colour: "system" (Windows'),
                                # "#E0457B" (your own); empty or left out: each theme's own
 
@@ -403,6 +403,47 @@ shows (its palette, by name), its background colour, its fonts and how it frames
 stay its own, and a change saved in Design shows on both at once. A change in config.toml
 reaches every panel, and a panel that is added, switched on or off, or taken out starts or
 ends while the others go on.
+
+## Transitions
+
+How the panel goes from one screen to the next. *Settings → Panel → Transitions* sets a
+default, a pace, and for each occasion its own; **▶** beside each plays it on the panels, out to
+a card with its name and back. A calm panel (`device.motion`, a USB serial one) switches at once.
+
+```toml
+[transitions]
+default = "fade"      # every switch that has none of its own
+speed = "normal"      # "fast", "normal", "slow": shorter or longer, each of them
+game = ""             # a game starts or ends ("": the game's entrance, with its logo)
+media = "entrance"    # music starts or stops: the cover and the track; "Music ended"
+idle = "fade"         # the PC is at rest (Almanac), or in use again
+sequence = "light"    # the screens in turn
+autopilot = ""        # the autopilot ("": the one its options name, the tube)
+report = ""           # the round report ("": the one memory's options name, the tube)
+manual = ""           # a theme or scene chosen ("": the default)
+random = ["fade", "wipe", "zoom", "iris", "blinds", "dissolve", "light", "tiles"]
+```
+
+| Transition | What it does |
+|---|---|
+| `cut` | at once |
+| `fade` | the new screen comes over the old one |
+| `slide`, `slide-right`, `slide-up`, `slide-down` | the new screen pushes the old one out, to the left, right, up or down |
+| `wipe` | a soft edge goes across |
+| `zoom` | the old screen draws back into the dark, the new one comes forward |
+| `iris` | a circle opens from the middle |
+| `blinds` | upright slats turn one after another |
+| `dissolve` | the new screen comes through in small squares |
+| `tube` | a line ignites and opens into two edges |
+| `entrance` | the screen closes to a line, a band shows a picture or a title with a word typed below, then the new screen opens: a game's logo, music's cover and track, the time when the PC rests, else the new screen's name |
+| `light` | a line of light runs across, the new screen behind it |
+| `glitch` | a short digital fault: rows slip, the colours split |
+| `tiles` | the screen turns over tile by tile |
+| `shatter` | the old screen breaks into pieces that fly apart |
+| `random` | another of `random` each time |
+
+A plugin's transition goes by its name (`myplugin.curtain`, [Plugins](PLUGINS.md)). The old
+setting `transition = "fade"` at the top of `config.toml` still names the default.
 
 ## Scenes
 

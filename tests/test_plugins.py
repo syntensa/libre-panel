@@ -904,8 +904,8 @@ PLUGIN_TRANSITION = """
 from libre_panel.plugins import Transition
 
 
-class Wipe(Transition):
-    name = "wipe"
+class Curtain(Transition):
+    name = "demo.curtain"
     api = 1
     duration = 0.3
 
@@ -945,8 +945,8 @@ def test_plugin_transition(plugin_folder):
     from libre_panel.render.renderer import Renderer
     from libre_panel.theme.model import parse_theme
 
-    plugin_folder(PLUGIN_TRANSITION, {"libre_panel.transitions": {"wipe": "Wipe"}})
-    assert transition("wipe").duration == 0.3
+    plugin_folder(PLUGIN_TRANSITION, {"libre_panel.transitions": {"demo.curtain": "Curtain"}})
+    assert transition("demo.curtain").duration == 0.3
     plugin_folder(PLUGIN_ENTRANCE, {"libre_panel.transitions": {"demo.entrance": "Entrance"}})
     data = theme_data()
     data["palette"] = {"accent": "#00ff00"}

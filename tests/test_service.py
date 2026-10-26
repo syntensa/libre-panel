@@ -460,3 +460,17 @@ def test_relative_output_is_in_the_settings_folder(isolated_home, tmp_path, monk
     display = VirtualDisplay(DeviceConfig(driver="virtual", output=str(blocked / "frame.png")))
     with pytest.raises(DeviceError):  # retried by the main loop, never a crash
         display.show(Image.new("RGB", (8, 8)))
+
+
+def test_a_transition_is_shown_on_the_panels_from_the_app(isolated_home):
+    from libre_panel import transition_show
+
+    write_config(isolated_home)
+    background = BackgroundApp(port=0, autostart=Autostart("sunos5", home=isolated_home))
+    background.act("show_transition", {"name": "tiles", "label": "Tiles"})
+    number, name, label = transition_show.asked()
+    assert (name, label) == ("tiles", "Tiles")
+    transition_show.done(number)
+    for bad in (None, {"label": "x"}, {"name": ""}, {"name": "x" * 65}):
+        with pytest.raises(ValueError):
+            background.act("show_transition", bad)
