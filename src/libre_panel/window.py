@@ -62,6 +62,24 @@ ANSWER_S = 2.0  # how long a start waits for the open window to answer
 WINDOW_LOG = "window.log"  # next to the tray's log: what the window process says, and why it ended
 SETTLE_S = 15.0  # a window that ends with an error this soon did not open: the browser instead
 
+# WebView2's processes, lighter (Windows): what its browser engine is started with beside
+# pywebview's own arguments. Each is in Microsoft's list of WebView2's browser flags or among
+# Chromium's switches, and none changes what the window shows or how it is used: the app is
+# one page from Libre Panel's own server on this PC, which navigates nowhere else.
+BROWSER_ARGUMENTS = (
+    "--renderer-process-limit=1",  # one page: one renderer process (Chromium's)
+    # no warm spare renderer kept for a page of another site, which the app never opens (its
+    # links open in the browser): one process fewer (in WebView2's list)
+    "--disable-features=SpareRendererForSitePerProcess",
+    "--disk-cache-size=1",  # no HTTP cache on the disk for pages from this PC (in the list)
+    "--disable-gpu-shader-disk-cache",  # nor one of the GPU's shaders (Chromium's)
+)
+# pywebview has no setting for them: WebView2 reads them from its environment variable when the
+# window's engine starts, and appends them to the app's (the lists of features are joined). An
+# elevated program does not read it (Microsoft's rule): a window of an app started with the
+# highest rights opens as before.
+WEBVIEW2_ARGUMENTS = "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"
+
 
 def view_url(url: str, view: str | None) -> str:
     """The app's address with a view: ``http://127.0.0.1:8765/#/design``."""
@@ -426,6 +444,7 @@ def _open_for_a_moment(webview: Any, seconds: float) -> bool:
     timer.daemon = True
     timer.start()
     # not the app's own window data; WebView2's processes may hold its files a moment longer
+    _lighter_engine()  # (as the window's: the release build's test opens it so)
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as storage:
         webview.start(**{**_start_options(), "storage_path": storage})
     timer.cancel()
@@ -561,6 +580,24 @@ def _start_options() -> dict[str, Any]:
     }
 
 
+def browser_arguments(environ: Any = None, platform: str | None = None) -> str | None:
+    """What WebView2's engine is started with beside pywebview's (:data:`BROWSER_ARGUMENTS`),
+    for its environment variable; None off Windows, and where the variable is set already
+    (the person's own, for a test of theirs: kept as it is)."""
+    environ = os.environ if environ is None else environ
+    if (platform or sys.platform) != "win32" or environ.get(WEBVIEW2_ARGUMENTS):
+        return None
+    return " ".join(BROWSER_ARGUMENTS)
+
+
+def _lighter_engine(environ: Any = None) -> None:
+    """Have the window's WebView2 start with :func:`browser_arguments` (before webview.start)."""
+    environ = os.environ if environ is None else environ
+    arguments = browser_arguments(environ)
+    if arguments:
+        environ[WEBVIEW2_ARGUMENTS] = arguments
+
+
 def _register(listener: socket.socket, token: str, url: str) -> None:
     """Write the file that lets other starts find this window (only this user may read it).
     The window lock is this process's, so one there is left behind by a window that is gone."""
@@ -677,6 +714,7 @@ def _show(webview: Any, url: str, listener: socket.socket, secret: str) -> int:
     _Requests(listener, secret, window, shown).start()
     webview.settings["ALLOW_DOWNLOADS"] = True  # "Export" saves a theme file
     webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
+    _lighter_engine()
     webview.start(**_start_options())
     save_state(state)
     return 0

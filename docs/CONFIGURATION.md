@@ -177,9 +177,12 @@ light_mode = true              # Settings → Start and system → Light mode; o
 ```
 
 While the app's window is closed (or hidden) for a minute, Libre Panel lets go of what only
-the app needs, such as its pictures of every theme, and gives the memory back to the system;
-Windows also takes back the pages the panel does not touch, which is what Task Manager shows.
-The panel draws on as before; the app takes a moment longer to open again.
+the app needs, such as the letters, symbols and pieces of every theme its pictures were drawn
+with, and gives the memory back to the system; Windows also takes back the pages the panel
+does not touch, which is what Task Manager shows. The panel draws on as before; the app takes a
+moment longer to open again. The app's pictures of the themes themselves (and of the
+community's) go a minute after its window was closed in any case, light mode or not: nothing
+but the app shows them, and it draws them again when it opens.
 
 ## New versions
 

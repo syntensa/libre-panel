@@ -2584,7 +2584,6 @@
     "Other": "Другое",
     "Other threads": "Другие потоки",
     "Panel {n}": "Панель {n}",
-    "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %. Memory is each process's working set.": "«От ПК» — как в диспетчере задач: весь ПК — 100 %. «От одного ядра»: целое ядро — 100 %. Память — рабочий набор каждого процесса.",
     "Process": "Процесс",
     "Slowest:": "Самые медленные:",
     "The sensor service does not run.": "Служба датчиков не работает.",
@@ -2755,7 +2754,11 @@
     "Transitions": "Переходы",
     "Tube": "Кинескоп",
     "Welcome back": "С возвращением",
-    "Wipe": "Шторка"
+    "Wipe": "Шторка",
+    "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %.": "«От ПК» — как в диспетчере задач: весь ПК — 100 %. «От одного ядра»: целое ядро — 100 %.",
+    "Memory is each process's private memory, as the Task Manager's Memory column shows it (on its Details tab: Memory (active private working set)); – where Windows does not let it be read. The working set also counts what processes share, once for each.": "Память — частная память каждого процесса, как её показывает столбец «Память» диспетчера задач (на вкладке «Подробности»: «Память (активный частный рабочий набор)»); – там, где Windows не даёт её прочитать. Рабочий набор учитывает и то, что процессы делят между собой, — для каждого по разу.",
+    "Working set": "Рабочий набор",
+    "Working set: {size}": "Рабочий набор: {size}"
   },
   "fields": {
     "agent": "агент",

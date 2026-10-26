@@ -22,7 +22,6 @@ import re
 import threading
 import time
 import weakref
-from collections import OrderedDict
 from collections.abc import Callable
 from concurrent.futures import Future
 from dataclasses import dataclass, field, replace
@@ -37,11 +36,12 @@ from libre_panel.config import DEFAULT_SYMBOLS, SYMBOL_PACKS
 from libre_panel.fonts import DEFAULT_FONT, builtin_font_path
 from libre_panel.fonts.fallback import cursive, truetype
 from libre_panel.icons import draw_icon, weather_icon_name
-from libre_panel.render import cover, fan, fan_looks, lists
+from libre_panel.render import cover, fan, fan_looks, kept, lists
 from libre_panel.render import finish as finishes
 from libre_panel.render.countdown import countdown_text
 from libre_panel.render.dust import Dust
 from libre_panel.render.formatting import FormatError, auto_format, safe_format
+from libre_panel.render.kept import MB, Kept, cached, size_of
 from libre_panel.render.motion import MAX_POINTS, RATE, History, Motion, Spring, grid
 from libre_panel.render.motion import number as motion_number
 from libre_panel.sensors.base import Snapshot, want
@@ -378,7 +378,7 @@ def _blur(img: Image.Image, radius: float, exact: bool = False) -> Image.Image:
     return pre.convert("RGBA")
 
 
-@lru_cache(maxsize=64)
+@cached("renderer.ramps", 2 * MB)
 def _ramp(w: int, h: int, edge: int) -> Image.Image:
     """Opacity over ``h`` rows: full, but soft over ``edge`` rows at the top and the bottom."""
     column = Image.new("L", (1, h))
@@ -429,7 +429,8 @@ def _dimmed(light: Piece | None, factor: float) -> Piece | None:
     return replace(light, layer=light.layer.point(table))
 
 
-@lru_cache(maxsize=128)
+# (gradients as large as the panel are made once for a card, kept as a piece: not kept here)
+@cached("renderer.gradients", 4 * MB)
 def _gradient(size: tuple[int, int], a: RGBA, b: RGBA, horizontal: bool) -> Image.Image:
     """Linear gradient from ``a`` to ``b`` (cached: callers must not modify it)."""
     steps = size[0] if horizontal else size[1]
@@ -438,7 +439,7 @@ def _gradient(size: tuple[int, int], a: RGBA, b: RGBA, horizontal: bool) -> Imag
     return strip.resize(size, Image.NEAREST)
 
 
-@lru_cache(maxsize=64)
+@cached("renderer.gradients_down", 1 * MB)  # (for cards and rects: made once, kept as pieces)
 def _gradient_down(size: tuple[int, int], a: RGBA, b: RGBA, horizontal: bool) -> Image.Image:
     """The colours a gradient three times the size has once reduced (cached:
     callers must not modify it)."""
@@ -617,6 +618,9 @@ def _live_pictures(widget: dict[str, Any]) -> set[str]:
     return {name[1:] for name in map(str.strip, pictures) if name.startswith("@") and len(name) > 1}
 
 
+_UNREAD = object()  # (a picture not kept yet: None is one that could not be read)
+
+
 class Renderer:
     def __init__(
         self,
@@ -646,9 +650,8 @@ class Renderer:
         self._analog_parts: dict[Any, Image.Image] = {}  # faces and second hands (_analog_part)
         self._fonts: dict[tuple[str, int], ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
         self._digit_width: dict[int, float] = {}
-        self._images: OrderedDict[tuple[str, int, int, str, str], Image.Image | None] = (
-            OrderedDict()
-        )
+        # the theme's pictures, fitted (one that could not be read: None)
+        self._images = Kept("renderer.pictures", self.IMAGE_BYTES)
         self._slide_lists: dict[str, tuple[float, list[str]]] = {}  # widget id -> pictures
         self._gauge_parts: dict[tuple[Any, ...], Image.Image] = {}  # static rings, colour fields
         # Video mode (the main loop sets these): every frame goes out, so graphs
@@ -660,10 +663,10 @@ class Renderer:
         self._cache: dict[str, tuple[Any, Piece]] = {}
         # a gliding list's bars and its text, and the two as one (_joined)
         self._joins: dict[str, tuple[Piece, Piece, Piece]] = {}
-        self._list_bars: OrderedDict[tuple[Any, ...], Image.Image] = OrderedDict()
-        self._texts: OrderedDict[tuple[str, str, str], Piece] = OrderedDict()
-        self._glyphs: OrderedDict[tuple[Any, ...], Image.Image] = OrderedDict()
-        self._glyph_lock = threading.Lock()
+        self._list_bars = Kept("renderer.list_bars", self.LIST_BAR_BYTES)
+        self._list_bar_ends = Kept("renderer.list_bar_ends", self.LIST_BAR_END_BYTES)
+        self._texts = Kept("renderer.texts", self.TEXT_BYTES)  # pieces by (id, text, colour)
+        self._glyphs = Kept("renderer.glyphs", self.GLYPH_BYTES)
         # Modules become plain widgets laid out for their cells; the editor
         # gets one box per module.
         self.widgets, self.module_boxes = expand_modules(theme)
@@ -701,14 +704,10 @@ class Renderer:
         # frame (for tests: the pixels are the same).
         self.keep_static = True
         self._last: tuple[list[tuple[str, Piece]], Image.Image] | None = None
-        # The last canvas in RGB, as it was (never handed out), and the parts of the canvas
-        # composed since (None: all of it): only those are converted for the next frame.
-        self._rgb: tuple[Image.Image, Image.Image] | None = None
         self._finite = _Finite()  # (the readings it found drawable the frame before)
-        self._fresh: list[tuple[Image.Image, tuple[int, int, int, int]]] | None = None
         # Per region, what lies under the first piece that changes (a graph that
         # moves every frame over a card): the same pieces need not be laid again.
-        self._underlays: dict[tuple[int, int, int, int], tuple[list[Piece], Image.Image]] = {}
+        self._underlays = Kept("renderer.underlays", self.UNDERLAY_BYTES)
         self._grounds: tuple[RGBA | None, Image.Image] | None = None  # (_ground)
         # Video panels take a frame every 20 ms. With background builds a
         # changed piece is built in a helper thread while frames keep going out
@@ -735,7 +734,7 @@ class Renderer:
         self.fan_choices = fan.Choices()
         # the look of the weather symbols and the moon the user chose (config.toml ``symbols``)
         self.symbols = DEFAULT_SYMBOLS
-        self._fans: OrderedDict[tuple[Any, ...], Piece] = OrderedDict()  # fan pieces, by look
+        self._fans = Kept("renderer.fans", self.FAN_BYTES)  # fan pieces, by look
         # the turning fans of a list of them as pieces over it (_list_turning): this frame's,
         # by list id; whether they lie on nothing of the list; each fan's piece and where
         self._over: dict[str, list[tuple[Piece, str]]] = {}
@@ -797,47 +796,42 @@ class Renderer:
             self._fonts[key] = font or ImageFont.load_default(size)
         return self._fonts[key]
 
-    IMAGE_BYTES = 64 << 20  # pictures kept fitted: a slideshow of a folder reads the rest again
+    IMAGE_BYTES = 64 * MB  # pictures kept fitted: a slideshow of a folder reads the rest again
 
     def _asset_image(
         self, rel: str, w: int, h: int, fit: str = "stretch", align: str = "center"
     ) -> Image.Image | None:
+        """The theme's picture ``rel`` fitted to ``w`` x ``h`` (0: as it is), kept: the oldest
+        go beyond ``IMAGE_BYTES`` (the newest stays), as a folder of photos would else be kept
+        whole, each as fitted, for as long as the theme shows. None where it cannot be read."""
         key = (rel, w, h, fit, align)
-        if key in self._images:
-            self._images.move_to_end(key)
-            return self._images[key]
-        image = None
-        if rel and self.theme.root is not None:
-            try:
-                with Image.open(resolve_asset(self.theme.root, rel)) as src:
-                    image = ImageOps.exif_transpose(src).convert("RGBA")
-                if w > 0 and h > 0:
-                    image = _fitted(image, w, h, fit, align)
-            except (OSError, ThemeError) as exc:
-                self._warn(f"image {rel!r} could not be loaded ({exc})")
-        self._images[key] = image
-        self._forget_images()
-        return image
+        found = self._images.get(key, _UNREAD)
+        if found is not _UNREAD:
+            return found
+        image = self._read_picture(rel)
+        if image is not None and w > 0 and h > 0:
+            image = _fitted(image, w, h, fit, align)
+        # (a picture that is not there counts too)
+        size = 4096 if image is None else max(4096, image.width * image.height * 4)
+        return self._images.put(key, image, size)
 
-    def _forget_images(self) -> None:
-        """Let the oldest pictures go beyond ``IMAGE_BYTES`` (the newest stays): a folder of
-        photos would else be kept whole, each as fitted, for as long as the theme shows."""
-
-        def size(image: Image.Image | None) -> int:  # (a picture that is not there counts too)
-            return 4096 if image is None else max(4096, image.width * image.height * 4)
-
-        total = sum(size(image) for image in self._images.values())
-        while total > self.IMAGE_BYTES and len(self._images) > 1:
-            total -= size(self._images.popitem(last=False)[1])
+    def _read_picture(self, rel: str) -> Image.Image | None:
+        if not rel or self.theme.root is None:
+            return None
+        try:
+            with Image.open(resolve_asset(self.theme.root, rel)) as src:
+                return ImageOps.exif_transpose(src).convert("RGBA")
+        except (OSError, ThemeError) as exc:
+            self._warn(f"image {rel!r} could not be loaded ({exc})")
+            return None
 
     def _load_background(self) -> Image.Image | None:
+        """The background picture at the theme's size. Read for it alone, not kept as read
+        (a picture the size of the 12.3" is five megabytes: it was kept twice)."""
         if self.backdrop is not None:
             fitted = ImageOps.fit(self.backdrop, (self.theme.width, self.theme.height))
             return fitted.convert("RGBA")
-        rel = self.theme.background_image
-        if not rel:
-            return None
-        image = self._asset_image(rel, 0, 0)
+        image = self._read_picture(self.theme.background_image or "")
         if image is None:
             return None
         return ImageOps.fit(image, (self.theme.width, self.theme.height))
@@ -1108,7 +1102,12 @@ class Renderer:
                 clipped.append((x0, y0, x1, y1))
         return clipped
 
-    UNDERLAYS = 16  # regions whose underlay is kept
+    # What lies under the pieces that change, by region: a region of the 12.3" is up to five
+    # megabytes (the newest stays, also alone), a graph's some hundred kilobytes. Lumen's on
+    # the 12.3" fit in 4 MB: 99 % of them are found (16 regions were kept: 71 %); SPUR II's
+    # and the companions' on the 9.2" are larger, and this finds as many of them as the 16 did
+    # (16 regions of the 12.3" were up to 84 MB).
+    UNDERLAY_BYTES = 8 * MB
 
     def _compose_region(
         self,
@@ -1126,17 +1125,18 @@ class Renderer:
             if px0 < x1 and px1 > x0 and py0 < y1 and py1 > y0:
                 inside.append((wid, piece))  # outside the region: its pixels are unchanged
         below = next((i for i, (wid, _) in enumerate(inside) if wid in changed), len(inside))
-        hit = self._underlays.get(region)
-        reused = (
-            hit is not None
-            and len(hit[0]) <= below
-            and all(a is b for a, (_, b) in zip(hit[0], inside, strict=False))
-        )
+        hit = self._underlays.get(
+            region,
+            valid=lambda kept: (
+                len(kept[0]) <= below
+                and all(a is b for a, (_, b) in zip(kept[0], inside, strict=False))
+            ),
+        )  # (used: the last to go)
+        reused = hit is not None
         if reused:
             done, part = len(hit[0]), hit[1].copy()
-            self._underlays[region] = self._underlays.pop(region)  # used: the last to go
         elif self.keep_static:
-            done, part = 0, self._ground().crop(region)
+            done, part = 0, self._ground_of(region)
         else:
             done = 0
             part = Image.new("RGBA", (x1 - x0, y1 - y0), self.color(self.theme.background_color))
@@ -1157,17 +1157,28 @@ class Renderer:
         is composed from the ground up (callers must not change it)."""
         color = self.color(self.theme.background_color)
         if self._grounds is None or self._grounds[0] != color:
-            ground = Image.new("RGBA", (self.theme.width, self.theme.height), color)
-            if self._background is not None:
-                ground.alpha_composite(self._background)
+            self._grounds = None  # (the one before goes first: it is the panel's size)
+            background = self._background
+            if background is not None and background.getchannel("A").getextrema()[0] == 255:
+                ground = background  # opaque, as a photo is: the colour does not show through
+            else:
+                ground = Image.new("RGBA", (self.theme.width, self.theme.height), color)
+                if background is not None:
+                    ground.alpha_composite(background)
             self._grounds = (color, ground)
         return self._grounds[1]
 
+    def _ground_of(self, region: tuple[int, int, int, int]) -> Image.Image:
+        """The ground of ``region``: its colour alone where the theme has no background picture
+        (no picture the size of the panel is kept for that), else cut from :meth:`_ground`."""
+        color = self.color(self.theme.background_color)
+        if self._background is None and color is not None:
+            return Image.new("RGBA", (region[2] - region[0], region[3] - region[1]), color)
+        return self._ground().crop(region)
+
     def _keep_underlay(self, region: tuple[int, int, int, int], under: list[Piece], part) -> None:
-        self._underlays.pop(region, None)
-        self._underlays[region] = (under, part.copy())
-        while len(self._underlays) > self.UNDERLAYS:
-            self._underlays.pop(next(iter(self._underlays)))
+        # (its bytes are the picture's: the pieces under it are the frame's own)
+        self._underlays.put(region, (under, part.copy()), size_of(part))
 
     def _compose(self, pieces: list[tuple[str, Piece]]) -> Image.Image:
         theme = self.theme
@@ -1184,42 +1195,25 @@ class Renderer:
             changed = {wid for wid, piece in pieces if before.get(wid) is not piece}
         if last is None or area > 0.6 * theme.width * theme.height:
             canvas = self._compose_region(pieces, full, changed)
-            self._fresh = None
         else:
             canvas = last[1]
             for region in regions:
-                part = self._compose_region(pieces, region, changed)
-                canvas.paste(part, region[:2])
-                if self._fresh is not None:
-                    self._fresh.append((part, region))
+                canvas.paste(self._compose_region(pieces, region, changed), region[:2])
         self._last = (pieces, canvas)
         return canvas
 
     def _as_rgb(self, canvas: Image.Image) -> Image.Image:
         """The frame of ``canvas``, in RGB: a new picture each time (the loop keeps frames and
-        draws on them), made from the last one where only parts of the canvas are new, so that
-        a frame converts those parts, not the whole canvas."""
-        kept, fresh = self._rgb, self._fresh
-        if not self.incremental:
-            self._rgb = None
+        draws on them). An RGBA picture pasted into an RGB one gives its colours as they are,
+        without a conversion: the RGB picture's fourth byte, which nothing shows or hands on,
+        takes the alpha. On the 12.3" that takes 0.9 ms, the conversion two; the frame before
+        in RGB with the parts new since pasted on it and copied took 0.6 to 0.9 ms, and five
+        megabytes kept for it."""
+        if not self.keep_static:
             return canvas.convert("RGB")
-        # An RGBA picture pasted into an RGB one gives its colours as they are, without a
-        # conversion (the whole frame's took two milliseconds on the 12.3", the parts of a
-        # frame on the move about one): the RGB picture's fourth byte, which nothing shows or
-        # hands on, takes the alpha.
-        as_is = self.keep_static
-        if kept is None or kept[0] is not canvas or fresh is None:
-            if as_is:
-                rgb = Image.new("RGB", canvas.size)
-                rgb.paste(canvas)
-            else:
-                rgb = canvas.convert("RGB")
-        else:
-            rgb = kept[1]
-            for part, region in fresh:
-                rgb.paste(part if as_is else part.convert("RGB"), region[:2])
-        self._rgb, self._fresh = (canvas, rgb), []
-        return rgb.copy()
+        rgb = Image.new("RGB", canvas.size)
+        rgb.paste(canvas)
+        return rgb
 
     def _cached(
         self, widget: dict[str, Any], content: Any, build: Callable[[], Piece | None]
@@ -1571,6 +1565,9 @@ class Renderer:
             ]
         for slot in self._slots.values():  # frame and line of light, over the cards
             slot.overlay(pieces)
+        if self._strips:
+            self._forget_strips(now)
+        kept.tick()  # (what nothing used for a while goes: the weather bodies)
         dust = self._dust_on()
         if screen is not None:
             alone = not pieces and self.look is None and not dust
@@ -1583,7 +1580,6 @@ class Renderer:
             self.look.compose(pieces, snapshot, now)  # the grid beneath, the sun's gloss on top
         canvas = self._compose(pieces)
         if dust:
-            self._rgb = self._fresh = None  # (made of the whole canvas)
             canvas = self._dusted(canvas, now)  # RGB once there is dust on it
         frame = canvas if canvas.mode == "RGB" else self._as_rgb(canvas)
         return (frame if self.look is None else self.look.finish(frame, now)), boxes
@@ -1746,7 +1742,9 @@ class Renderer:
         left = math.floor(start) - margin
         return _Letters((w, h), left, y, [left + margin, y, math.ceil(total), h], glyphs, font)
 
-    GLYPHS = 4096  # glyph images kept: a gliding number changes a digit or two at a time
+    # glyph images kept: a gliding number changes a digit or two at a time (a digit of 60 px is
+    # about 10 kB; Arena on the 12.3" keeps some 3 MB of them)
+    GLYPH_BYTES = 4 * MB
 
     def _glyph(
         self, font: Any, ch: str, fill: RGBA, at: float, pad: int, h: int
@@ -1756,18 +1754,12 @@ class Renderer:
         the next text with that character in that place costs no rendering."""
         whole = math.floor(at)
         key = (id(font), ch, fill, round(at - whole, 4), pad, h)
-        with self._glyph_lock:  # the helper thread draws texts too
-            image = self._glyphs.get(key)
-            if image is not None:
-                self._glyphs.move_to_end(key)
-                return image, whole - pad
+        image = self._glyphs.get(key)  # (the helper thread draws texts too: it is thread-safe)
+        if image is not None:
+            return image, whole - pad
         image = Image.new("RGBA", (math.ceil(font.getlength(ch)) + 2 * pad + 1, h), (0, 0, 0, 0))
         ImageDraw.Draw(image).text((at - whole + pad, 0), ch, font=font, fill=fill, anchor="la")
-        with self._glyph_lock:
-            self._glyphs[key] = image
-            while len(self._glyphs) > self.GLYPHS:
-                self._glyphs.popitem(last=False)
-        return image, whole - pad
+        return self._glyphs.put(key, image), whole - pad
 
     def _format(self, widget: dict[str, Any], reading: Any) -> tuple[str, float | None]:
         if reading is None or reading.value is None:
@@ -1781,7 +1773,9 @@ class Renderer:
             text = value if isinstance(value, str) else widget.get("fallback", "--")
         return text, _number(value)
 
-    TEXTS = 256  # text pieces kept: gliding numbers come back to the same texts
+    # text pieces kept: gliding numbers come back to the same texts (Arena's on the 12.3" are
+    # some 40 kB each; 256 of them were kept, 10 MB, and fewer found than with these)
+    TEXT_BYTES = 2 * MB
 
     def _text_widget(self, widget: dict[str, Any], text: str, color: str) -> Piece | None:
         """The text as a piece, kept by (text, colour): a number gliding back
@@ -1789,15 +1783,12 @@ class Renderer:
         wid = widget["id"]
         piece = self._texts.get((wid, text, color))
         if piece is not None:
-            self._texts.move_to_end((wid, text, color))
             self._cache[wid] = ((text, color), piece)
             return piece
         piece = self._cached(widget, (text, color), lambda: self._text_piece(widget, text, color))
         hit = self._cache.get(wid)
         if hit is not None and (wid, *hit[0]) not in self._texts:  # built now, or earlier
-            self._texts[(wid, *hit[0])] = hit[1]
-            while len(self._texts) > self.TEXTS:
-                self._texts.popitem(last=False)
+            self._texts.put((wid, *hit[0]), hit[1])
         return piece
 
     def _draw_text(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
@@ -2209,8 +2200,14 @@ class Renderer:
 
     # -- fans --------------------------------------------------------------
 
-    FANS = 512  # fan pieces kept: a fan that has turned once round costs a lookup
-    LIST_BARS = 1024  # the bars of lists kept: a core's bar that holds costs a lookup
+    # fan pieces kept: a fan that has turned once round costs a lookup (Lumen's on the 12.3"
+    # are some 20 kB each; 512 of them were kept, 9 MB, and found as often as in these)
+    FAN_BYTES = 8 * MB
+    # the bars of lists kept: a core's bar that holds costs a lookup. Each is kept as the part
+    # round the end of its fill (_Bar), a kilobyte or two; whole, a bar of Lumen Companion's on
+    # the 9.2" was 32 kB, and a gliding list asked for a thousand of them
+    LIST_BAR_BYTES = 4 * MB
+    LIST_BAR_END_BYTES = 2 * MB  # each look's bar empty and full, which the rest of a bar is
 
     def _draw_fan(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
         """A rotor that turns with the sensor's RPM, in a ring that shows the load. Its
@@ -2237,12 +2234,8 @@ class Renderer:
         if piece is None:
             image = fan.fan_image(color, w, h, rotor, widget["frame"], look, paint)
             at = (x + (w - image.width) // 2, y + (h - image.height) // 2)
-            piece = self._effects(widget, Piece(image, at[0], at[1], [x, y, w, h]))
-            self._fans[key] = piece
-            while len(self._fans) > self.FANS:
-                self._fans.popitem(last=False)
-        else:
-            self._fans.move_to_end(key)
+            piece = self._fans.put(key, self._effects(widget, Piece(image, at[0], at[1],
+                                                                    [x, y, w, h])))  # fmt: skip
         return piece
 
     # -- weather symbols ---------------------------------------------------
@@ -2543,23 +2536,29 @@ class Renderer:
             return
         steps = (h if direction in ("up", "down") else w) * SUPERSAMPLE
         frac = round(frac * steps) / steps  # (to what can be seen: a gliding bar's are kept)
-        key = (w, h, direction, frac, rule, widget["color2"], widget["background"])
-        image = self._list_bars.get(key)
-        if image is None:
-            accent = self.color(widget["color2"])
-            track = self.color(widget["background"])
-            deep = _lerp(accent, track, 0.55) if track else accent
-            bar = {
-                "radius": min(w, h) // 2, "direction": direction, "segments": 0,
-                "segment_gap": 0, "color": "#{:02x}{:02x}{:02x}{:02x}".format(*deep),
-                "color2": widget["color2"], "background": widget["background"],
-            }  # fmt: skip
-            image = self._bar_piece(bar, frac, self._paint(bar, rule), x, y, w, h).layer
-            self._list_bars[key] = image
-            while len(self._list_bars) > self.LIST_BARS:
-                self._list_bars.popitem(last=False)
-        else:
-            self._list_bars.move_to_end(key)
+        look = (w, h, direction, rule, widget["color2"], widget["background"])
+        kept = self._list_bars.get((*look, frac))
+        if kept is not None:
+            kept.paste(self, layer, x, y)
+            return
+        accent = self.color(widget["color2"])
+        track = self.color(widget["background"])
+        deep = _lerp(accent, track, 0.55) if track else accent
+        bar = {
+            "radius": min(w, h) // 2, "direction": direction, "segments": 0,
+            "segment_gap": 0, "color": "#{:02x}{:02x}{:02x}{:02x}".format(*deep),
+            "color2": widget["color2"], "background": widget["background"],
+        }  # fmt: skip
+        paint = self._paint(bar, rule)
+        image = self._bar_piece(bar, frac, paint, x, y, w, h).layer
+
+        def ends() -> tuple[Image.Image, Image.Image]:
+            empty, full = (self._bar_piece(bar, f, paint, x, y, w, h).layer for f in (0.0, 1.0))
+            return empty, full
+
+        kept = _Bar.of(image, frac, direction, bar["radius"],
+                       lambda: self._list_bar_ends.make(look, ends))  # fmt: skip
+        self._list_bars.put((*look, frac), kept)
         self._paste(layer, image, x, y)
 
     def _list_piece(self, widget: dict[str, Any], rows: list[tuple],
@@ -3475,6 +3474,7 @@ class Renderer:
         strips = self._strips.get(wid)
         if strips is None or strips.per_point != per_point:  # new, or another window
             strips = self._strips[wid] = _Strips(per_point)
+        strips.drawn = now
         strips.collect()
         # The window's left edge at ``s``, point k sitting at k * per_point on
         # every strip: the newest point at the right edge, now.
@@ -3544,6 +3544,18 @@ class Renderer:
             piece = _clip_sides(piece)
         self._cache[wid] = (None if patch else content, piece)
         return piece
+
+    def _forget_strips(self, now: float) -> None:
+        """Let the strips of a graph not on show go (on a card of a slot that is not on show):
+        once its strip ends before ``now``, it could not be shown again but drawn anew, as it
+        is when the graph comes back. One whose next strip is still being drawn stays."""
+        for wid, strips in list(self._strips.items()):
+            if strips.drawn >= now:
+                continue
+            strips.collect()
+            ready = strips.ready
+            if strips.building is None and (ready is None or ready.until + 1.0 < now):
+                del self._strips[wid]
 
     def _parts(self, per_point: float) -> int:
         """Into how many parts a graph's steps are cut: so many that it moves on in every
@@ -3664,6 +3676,7 @@ class Renderer:
             _scale_alpha(self._down(layer.crop((p, 0, p + s * width, s * h)), width, h, s), opacity)
             for p in range(s)
         ]
+        del layer  # (drawn twice as large: the biggest picture here, let go before the next)
         halo, pad = self._halo(widget, lines[0], exact=True)
         phases = []
         for line in lines:
@@ -3673,6 +3686,7 @@ class Renderer:
             out = halo.copy()
             out.alpha_composite(line, (pad, pad))
             phases.append(out)
+        del lines
         if strip.parts > 1:  # after the last step comes the first, a pixel on
             weighed = [phase.convert("RGBa") for phase in phases]
             width0, height0 = weighed[0].size
@@ -3842,6 +3856,77 @@ class Renderer:
         return layer
 
 
+class _Bar:
+    """A list's bar at one value (:meth:`Renderer._list_bar`), kept small: the part round the
+    end of its fill (``cut``, from the start of the bar on along it, in pixels), the bar empty
+    and the bar full (``ends``, kept once for the look) the rest of it, as it is drawn: a bar
+    whose other parts are not exactly those is kept whole."""
+
+    __slots__ = ("cut", "ends", "middle", "vertical", "whole", "filled_first")
+
+    MARGIN = 2  # pixels beyond the rounded end: where the reduction meets it, and a rounding
+
+    def __init__(self) -> None:
+        self.whole: Image.Image | None = None
+        self.middle: Image.Image | None = None
+        self.ends: tuple[Image.Image, Image.Image] | None = None
+        self.cut = (0, 0)
+        self.vertical = False
+        self.filled_first = False  # the full bar's part comes first (down, right)
+
+    @classmethod
+    def of(cls, image: Image.Image, frac: float, direction: str, radius: int,
+           ends: Callable[[], tuple[Image.Image, Image.Image]]) -> _Bar:  # fmt: skip
+        bar = cls()
+        bar.vertical = direction in ("up", "down")
+        bar.filled_first = direction in ("down", "right")
+        length = image.height if bar.vertical else image.width
+        r = min(radius, image.width // 2, image.height // 2) + cls.MARGIN
+        end = frac * length if bar.filled_first else (1 - frac) * length
+        a, b = max(0, math.floor(end) - r), min(length, math.ceil(end) + r)
+        if b - a > 0.6 * length:  # (short: as small whole)
+            bar.whole = image
+            return bar
+        empty, full = ends()
+        first, last = (full, empty) if bar.filled_first else (empty, full)
+        if bar._part(image, 0, a) != bar._part(first, 0, a) or bar._part(
+            image, b, length
+        ) != bar._part(last, b, length):
+            bar.whole = image  # (not the same pixels there: whole, as drawn)
+            return bar
+        bar.cut, bar.ends = (a, b), (empty, full)
+        bar.middle = bar._crop(image, a, b)
+        return bar
+
+    def _crop(self, image: Image.Image, a: int, b: int) -> Image.Image:
+        return image.crop((0, a, image.width, b) if self.vertical else (a, 0, b, image.height))
+
+    def _part(self, image: Image.Image, a: int, b: int) -> bytes:
+        return self._crop(image, a, b).tobytes() if b > a else b""
+
+    @property
+    def nbytes(self) -> int:
+        return size_of(self.whole if self.whole is not None else self.middle)
+
+    def paste(self, renderer: Renderer, layer: Image.Image, x: int, y: int) -> None:
+        """Onto ``layer`` at ``x``, ``y``: the same pixels the whole bar gives there."""
+        if self.whole is not None:
+            renderer._paste(layer, self.whole, x, y)
+            return
+        empty, full = self.ends  # type: ignore[misc]
+        first, last = (full, empty) if self.filled_first else (empty, full)
+        a, b = self.cut
+        length = first.height if self.vertical else first.width
+        for image, at in ((self._crop(first, 0, a), 0), (self.middle, a),
+                          (self._crop(last, b, length), b)):  # fmt: skip
+            if image is None or not (image.width and image.height):
+                continue
+            if self.vertical:
+                renderer._paste(layer, image, x, y + at)
+            else:
+                renderer._paste(layer, image, x + at, y)
+
+
 class _Strip:
     """A graph's curve drawn ahead (see :meth:`Renderer._timeline`): one image
     per half-pixel step, glow and all, ``pad`` pixels larger on every side."""
@@ -3902,6 +3987,15 @@ class _Strips:
         self.ready: _Strip | None = None
         self.building: Future | None = None
         self.asked = -math.inf
+        self.drawn = -math.inf  # the frame it was last on show in
+
+    @property
+    def nbytes(self) -> int:
+        """The bytes of its pictures (kept.size_of)."""
+        strip = self.ready
+        if strip is None:
+            return 0
+        return sum(size_of(image) for image in (*strip.phases, strip.halo))
 
     def collect(self) -> None:
         """Take the strip the helper thread has finished, if it is newer."""

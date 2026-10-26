@@ -7,10 +7,21 @@ server, the tray, the shortcuts, the memory store, the weather), one for each fu
 while a game's frame rate is read (sensors/presentmon.py), the window while it is open
 (window.py, with WebView2's processes on Windows) and, on Windows, the sensor service
 (sensorservice). :class:`LoadSampler` measures them with psutil: each one's processor time over
-the last ``WINDOW_S`` and its memory (the working set, psutil's RSS), and the threads of this
-process by their names (``threading``'s, matched to the thread ids the system gives psutil).
-The other processes' threads are not looked at: from outside their names are not known, and
-asking costs.
+the last ``WINDOW_S``, its memory, and the threads of this process by their names
+(``threading``'s, matched to the thread ids the system gives psutil). The other processes'
+threads are not looked at: from outside their names are not known, and asking costs.
+
+- **Memory, two ways.** The private memory first: what is the process's alone (psutil's USS,
+  ``memory_full_info().uss``), which is what the Task Manager's Memory column shows (its
+  *Processes* tab; on its *Details* tab *Memory (active private working set)*): on Windows psutil
+  counts the pages of the working set that are not shared. Beside it the working set (psutil's
+  RSS, ``memory_info().rss``), which counts what processes share once for each. psutil's
+  ``memory_info().private`` on Windows is the commit charge (the Task Manager's *Commit size*),
+  not that column, so it is not used. The private memory costs: psutil walks the working set
+  (Windows) or the kernel the page tables (Linux), about two milliseconds for half a gigabyte;
+  so it is measured every ``PRIVATE_S``, the working set every sample. A process that does not
+  let it be read (the sensor service runs as the system: without administrator rights Windows
+  refuses) has none (None, "–"); the total is then of those that do.
 
 - **Per PC and per core.** psutil counts one whole core as 100 %, the Task Manager the whole
   PC: both are given, per PC being per core divided by the logical processors.
@@ -52,6 +63,7 @@ WINDOW_LOOK_S = 10.0  # the window's process (window.json) is looked for this of
 # of a sample, on Linux some milliseconds); in between the processes found are measured
 TREE_S = 6.0
 TEXT_THREADS = 10  # threads named in the text; the rest go with "other"
+PRIVATE_S = 6.0  # each process's private memory is measured this often (it costs: see above)
 # Python's own names for a thread nobody named: "Thread-12 (process_request_thread)", "Dummy-3"
 _UNNAMED = re.compile(r"(?:Thread|Dummy)-\d+(?: \(.*\))?")
 OTHER = "other"
@@ -176,8 +188,10 @@ class _Measured:
     panel: int | None
     name: str
     cpu: float  # seconds of processor time so far (user and system)
-    rss: int
+    rss: int  # the working set
     born: float  # when it started (seconds since 1970)
+    private: int | None = None  # its private memory (None: it may not be read)
+    proc: Any = None  # (psutil's, for its private memory)
 
 
 @dataclass
@@ -266,6 +280,8 @@ class LoadSampler:
         self._window_pid: int | None = None
         self._window_looked: float | None = None
         self._tree: list[Any] = []  # the processes under this one (and the window's)
+        # each process's private memory as measured last: (when, bytes or None)
+        self._private: dict[tuple[int, float], tuple[float, int | None]] = {}
         self._tree_at: float | None = None
         self._costs: deque[float] = deque(maxlen=6)  # what the last samples took
         self._latest: dict[str, Any] | None = None
@@ -340,6 +356,7 @@ class LoadSampler:
         started = self._timer()
         now, wall = self._clock(), self._wall()
         measured = self._measure_all(now)
+        self._private_of(measured, now)
         threads = self._thread_times()
         self._costs.append(self._timer() - started)
         sample = _Sample(now, wall, {m.key: m.cpu for m in measured}, threads)
@@ -405,7 +422,23 @@ class LoadSampler:
     def _measured(self, proc: Any, role: str, panel: int | None, name: str) -> _Measured:
         cpu, rss = _times(proc)
         born = float(proc.create_time())
-        return _Measured((proc.pid, born), role, panel, name, cpu, rss, born)
+        return _Measured((proc.pid, born), role, panel, name, cpu, rss, born, proc=proc)
+
+    def _private_of(self, measured: list[_Measured], now: float) -> None:
+        """Each process's private memory: measured anew every ``PRIVATE_S``, in between the
+        last one; None for one that may not be read."""
+        kept = self._private
+        fresh: dict[tuple[int, float], tuple[float, int | None]] = {}
+        for m in measured:
+            known = kept.get(m.key)
+            if known is None or not 0 <= now - known[0] < PRIVATE_S:
+                try:
+                    known = (now, int(m.proc.memory_full_info().uss))
+                except (psutil.Error, AttributeError, OSError):  # refused (the system's own)
+                    known = (now, None)
+            fresh[m.key] = known
+            m.private = known[1]
+        self._private = fresh  # (those that ended are forgotten)
 
     def _role(self, proc: Any, panels: dict[int, int], window: int | None) -> tuple[str, Any, str]:
         """A child's role, worked out once (its name and command line are asked for then)."""
@@ -487,10 +520,12 @@ class LoadSampler:
             row = rows.setdefault(
                 (m.role, m.panel, m.name),
                 {"role": m.role, "panel": m.panel, "name": m.name, "count": 0,
-                 "cpu_core": None, "rss": 0},
+                 "cpu_core": None, "private": None, "rss": 0},
             )  # fmt: skip
             row["count"] += 1
             row["rss"] += m.rss
+            if m.private is not None:
+                row["private"] = (row["private"] or 0) + m.private
             if share is not None:
                 row["cpu_core"] = (row["cpu_core"] or 0.0) + share
         processes = sorted(rows.values(), key=lambda r: (_ORDER.get(r["role"], 9), r["panel"] or 0))
@@ -500,6 +535,7 @@ class LoadSampler:
                 row["found_by"] = self._service_found.how
             self._shares(row)
         total = {"cpu_core": sum(r["cpu_core"] or 0.0 for r in processes),
+                 "private": sum(r["private"] or 0 for r in processes),
                  "rss": sum(r["rss"] for r in processes)}  # fmt: skip
         self._shares(total)
         service = self._service_found
@@ -569,8 +605,8 @@ def _pct(value: float | None) -> str:
     return "–" if value is None else f"{value:.1f} %"
 
 
-def _mb(value: int) -> str:
-    return f"{value / 1024**2:.0f} MB"
+def _mb(value: int | None) -> str:
+    return "–" if value is None else f"{value / 1024**2:.0f} MB"
 
 
 def _parts(done: dict[str, Any], most: int = 5) -> str:
@@ -607,14 +643,14 @@ def report_text(report: dict[str, Any]) -> str:
     """The report in a few lines of English, for an issue: no names, no folders, no ids."""
     lines = [
         f"Libre Panel load over {report['window_s']:.1f} s, {report['cpus']} logical processors "
-        "(PC: of the whole PC, as the Task Manager counts; core: of one core)",
-        f"{'':<22}{'PC':>8}{'core':>9}{'memory':>10}",
+        "(PC: of the whole PC, as the Task Manager counts; core: of one core; private: memory "
+        "as the Task Manager's Memory column shows it; working set: with what is shared)",
+        f"{'':<22}{'PC':>8}{'core':>9}{'private':>10}{'working set':>13}",
     ]
 
     def row(label: str, data: dict[str, Any]) -> str:
-        return (
-            f"{label:<22}{_pct(data['cpu_pc']):>8}{_pct(data['cpu_core']):>9}{_mb(data['rss']):>10}"
-        )
+        cpu = f"{_pct(data['cpu_pc']):>8}{_pct(data['cpu_core']):>9}"
+        return f"{label:<22}{cpu}{_mb(data.get('private')):>10}{_mb(data['rss']):>13}"
 
     lines.append(row("Libre Panel, total", report["total"]))
     for process in report["processes"]:

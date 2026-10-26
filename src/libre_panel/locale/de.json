@@ -2583,7 +2583,6 @@
     "Other": "Andere",
     "Other threads": "Andere Threads",
     "Panel {n}": "Panel {n}",
-    "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %. Memory is each process's working set.": "Vom PC ist, was der Task-Manager zeigt: der ganze PC ist 100 %. Von einem Kern: ein ganzer Kern ist 100 %. Arbeitsspeicher ist der Arbeitssatz jedes Prozesses.",
     "Process": "Prozess",
     "Slowest:": "Am langsamsten:",
     "The sensor service does not run.": "Der Sensordienst läuft nicht.",
@@ -2755,7 +2754,11 @@
     "Transitions": "Übergänge",
     "Tube": "Röhre",
     "Welcome back": "Willkommen zurück",
-    "Wipe": "Wischen"
+    "Wipe": "Wischen",
+    "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %.": "Vom PC ist, was der Task-Manager zeigt: der ganze PC ist 100 %. Von einem Kern: ein ganzer Kern ist 100 %.",
+    "Memory is each process's private memory, as the Task Manager's Memory column shows it (on its Details tab: Memory (active private working set)); – where Windows does not let it be read. The working set also counts what processes share, once for each.": "Arbeitsspeicher ist der private Speicher jedes Prozesses, wie ihn die Spalte „Arbeitsspeicher“ des Task-Managers zeigt (auf der Registerkarte „Details“: Arbeitsspeicher (aktiver privater Arbeitssatz)); – wo Windows ihn nicht lesen lässt. Der Arbeitssatz zählt auch, was Prozesse teilen, für jeden einmal.",
+    "Working set": "Arbeitssatz",
+    "Working set: {size}": "Arbeitssatz: {size}"
   },
   "fields": {
     "agent": "Agent",

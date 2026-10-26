@@ -2583,7 +2583,6 @@
     "Other": "Inne",
     "Other threads": "Inne wątki",
     "Panel {n}": "Panel {n}",
-    "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %. Memory is each process's working set.": "Z całego PC to to, co pokazuje Menedżer zadań: cały PC to 100 %. Z jednego rdzenia: cały rdzeń to 100 %. Pamięć to zestaw roboczy każdego procesu.",
     "Process": "Proces",
     "Slowest:": "Najwolniejsze:",
     "The sensor service does not run.": "Usługa czujników nie działa.",
@@ -2755,7 +2754,11 @@
     "Transitions": "Przejścia",
     "Tube": "Tuba",
     "Welcome back": "Witaj ponownie",
-    "Wipe": "Wymazanie"
+    "Wipe": "Wymazanie",
+    "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %.": "Z całego PC to to, co pokazuje Menedżer zadań: cały PC to 100 %. Z jednego rdzenia: cały rdzeń to 100 %.",
+    "Memory is each process's private memory, as the Task Manager's Memory column shows it (on its Details tab: Memory (active private working set)); – where Windows does not let it be read. The working set also counts what processes share, once for each.": "Pamięć to pamięć prywatna każdego procesu, tak jak pokazuje ją kolumna Pamięć Menedżera zadań (na karcie Szczegóły: Pamięć (aktywny prywatny zestaw roboczy)); – tam, gdzie Windows nie pozwala jej odczytać. Zestaw roboczy liczy też to, co procesy dzielą, raz dla każdego.",
+    "Working set": "Zestaw roboczy",
+    "Working set: {size}": "Zestaw roboczy: {size}"
   },
   "fields": {
     "agent": "agent",

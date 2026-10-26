@@ -1329,6 +1329,7 @@ def test_the_load_has_its_route_and_is_measured_only_while_asked(editor):
     body = request(editor.port, "GET", "/api/load")[1]
     main = body["processes"][0]
     assert main["role"] == "main" and main["rss"] > 0 and main["cpu_core"] is not None
+    assert 0 < main["private"] <= main["rss"]  # (what is its alone: part of its working set)
     assert body["total"]["cpu_pc"] == pytest.approx(
         body["total"]["cpu_core"] / body["cpus"], abs=0.02
     )

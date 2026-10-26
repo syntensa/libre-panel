@@ -21,8 +21,8 @@ import logging
 import math
 import os
 import threading
-from collections import OrderedDict
-from collections.abc import Callable, Hashable
+import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +30,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from libre_panel.config import config_dir
+from libre_panel.render.kept import on_idle
 
 log = logging.getLogger(__name__)
 
@@ -89,6 +90,10 @@ class Part:
     """
 
     VERSION = 2  # 2: the weather bodies at full size, in half floats
+    # Layers nothing asked for this long are let go (the weather bodies are ten megabytes, and
+    # a symbol is made from them once, then kept: they are asked for when the weather or a
+    # symbol's size changes); read again from the cache when asked (some 20 ms).
+    IDLE_S = 60.0
 
     def __init__(
         self,
@@ -102,6 +107,8 @@ class Part:
         self.sources = [self.folder / f"{stem}_{layer}.png" for stem in stems for layer in LAYERS]
         self._data: dict[str, np.ndarray] | None = None
         self._missing = False
+        self._had = False  # whether it was loaded once (it can be had: available)
+        self._used = 0.0  # when it was last asked for (monotonic)
         self._lock = threading.Lock()
 
     @property
@@ -113,17 +120,37 @@ class Part:
         return self._data is not None or self._missing
 
     def get(self) -> dict[str, np.ndarray] | None:
-        if not self.loaded:
-            with self._lock:
-                if not self.loaded:
-                    self._data = self._load()
-                    self._missing = self._data is None
-        return self._data
+        self._used = time.monotonic()
+        data = self._data  # (once: another thread may let it go meanwhile)
+        if data is not None or self._missing:
+            return data
+        with self._lock:
+            if self._data is None and not self._missing:
+                self._data = self._load()
+                self._missing = self._data is None
+                self._had = self._had or self._data is not None
+            return self._data
+
+    def available(self) -> bool:
+        """Whether the layers can be had, without loading them again once they were (a frame
+        asks this of every lit symbol)."""
+        return self._had or self.get() is not None
+
+    def forget_idle(self, now: float | None = None) -> bool:
+        """Let the layers go once nothing asked for them for ``IDLE_S`` (whether it did)."""
+        now = time.monotonic() if now is None else now
+        if self._data is None or now - self._used < self.IDLE_S:
+            return False
+        with self._lock:
+            if self._data is None or now - self._used < self.IDLE_S:
+                return False
+            self._data = None
+        return True
 
     def reset(self) -> None:
         """Forget what was loaded (tests; the next ``get`` loads again)."""
         with self._lock:
-            self._data, self._missing = None, False
+            self._data, self._missing, self._had = None, False, False
 
     def _load(self) -> dict[str, np.ndarray] | None:
         try:
@@ -168,6 +195,16 @@ WEATHER_BODIES = Part("weather", BODIES, _weather_build)
 PARTS = {"weather": WEATHER_BODIES}
 
 
+def forget_idle(now: float | None = None) -> None:
+    """Let go of the parts nothing asked for for a while (:attr:`Part.IDLE_S`), and of the
+    half sizes made of them (kept.tick calls it now and then)."""
+    if any([part.forget_idle(now) for part in PARTS.values()]):
+        _halved.clear()
+
+
+on_idle(forget_idle)
+
+
 def preload(names: tuple[str, ...] | None = None) -> None:
     """Load the parts (all, or ``names``) now: in a thread of its own before
     the first frame, so no frame waits for them."""
@@ -204,48 +241,6 @@ def rgba(rgb: np.ndarray, alpha: np.ndarray) -> np.ndarray:
 
 def unit_colour(color: tuple[int, ...]) -> np.ndarray:
     return np.asarray(color[:3], np.float32) / 255
-
-
-class Kept:
-    """Finished pictures by key, the most recently used kept up to ``budget``
-    bytes; thread-safe (the render thread and the helper thread draw)."""
-
-    def __init__(self, budget: int) -> None:
-        self.budget = budget
-        self._items: OrderedDict[Hashable, Any] = OrderedDict()
-        self._size = 0
-        self._lock = threading.Lock()
-
-    def get(self, key: Hashable, make: Callable[[], Any]) -> Any:
-        with self._lock:
-            hit = self._items.get(key)
-            if hit is not None:
-                self._items.move_to_end(key)
-                return hit
-        made = make()
-        with self._lock:
-            if key not in self._items:
-                self._items[key] = made
-                self._size += _bytes(made)
-            while self._size > self.budget and len(self._items) > 1:
-                _key, old = self._items.popitem(last=False)
-                self._size -= _bytes(old)
-        return made
-
-    def clear(self) -> None:
-        with self._lock:
-            self._items.clear()
-            self._size = 0
-
-
-def _bytes(value: Any) -> int:
-    if isinstance(value, Image.Image):
-        return value.width * value.height * len(value.getbands())
-    if isinstance(value, np.ndarray):
-        return int(value.nbytes)
-    if isinstance(value, tuple):
-        return sum(_bytes(v) for v in value) + 64
-    return 1024  # tables of arrays and the like: small next to pictures
 
 
 # -- weather bodies ------------------------------------------------------------------------

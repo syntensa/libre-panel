@@ -15,13 +15,13 @@ from __future__ import annotations
 
 import math
 import weakref
-from collections import OrderedDict
 from typing import Any
 
 from PIL import Image, ImageChops, ImageDraw, ImageOps
 
 from libre_panel.icons import ICON_NAMES, draw_icon
 from libre_panel.plugins.render import ToastStyle
+from libre_panel.render.kept import MB, Kept, size_of
 from libre_panel.render.light import (
     RGB,
     accent_color,
@@ -118,6 +118,11 @@ class BandStyle(ToastStyle):
     options = {"roll_in": ("number", 0.45), "roll_out": ("number", 0.32)}
     CHANGE_S = 0.26  # another message rolls down inside the open band
     GLIDE_S = 0.09  # the bar is two thirds of the way after 90 ms, there after 270 ms
+    # what is kept of the bands (one is 1.4 MB on the 9.2", 2.1 MB on the 12.3"): a ground and
+    # a message or two, the bar at a few values
+    GROUND_BYTES = 5 * MB
+    CONTENT_BYTES = 5 * MB
+    BAR_BYTES = 8 * MB
     AFTERGLOW_S = 0.25  # the edge glows on after the band is down
     # shares of the roll-in: the edge is full width by WIDE; the band rolls from FROM for FOR
     WIDE, FROM, FOR = 0.36, 0.22, 0.67
@@ -132,10 +137,12 @@ class BandStyle(ToastStyle):
         self._layout_for: tuple[Any, ...] | None = None  # (size, at the top, context, layout)
         # Built once and reused (each keeps what its key names by id, so an id
         # that comes again for another object is never mistaken for it): the
-        # ground with frame, title and tile; the text on it; the bar on that.
-        self._grounds: OrderedDict[Any, tuple[Any, ...]] = OrderedDict()
-        self._contents: OrderedDict[Any, tuple[Any, ...]] = OrderedDict()
-        self._bars: OrderedDict[Any, tuple[Image.Image, Image.Image]] = OrderedDict()
+        # ground with frame, title and tile; the text on it; the bar on that. A band is as
+        # wide as the panel (two megabytes on the 12.3"), and they stay after the message:
+        # held by bytes.
+        self._grounds = Kept("band.grounds", self.GROUND_BYTES)
+        self._contents = Kept("band.contents", self.CONTENT_BYTES)
+        self._bars = Kept("band.bars", self.BAR_BYTES)
 
     # -- timing ---------------------------------------------------------------
 
@@ -294,9 +301,10 @@ class BandStyle(ToastStyle):
         label = str(payload.get("label") or "").upper()
         refs = (self.context, image, badge)
         key = (layout.key, accent, label, icon, *map(id, refs))
-        cached = self._grounds.get(key)
-        if cached is not None and all(a is b for a, b in zip(cached[2], refs, strict=True)):
-            self._grounds.move_to_end(key)
+        cached = self._grounds.get(
+            key, valid=lambda kept: all(a is b for a, b in zip(kept[2], refs, strict=True))
+        )
+        if cached is not None:
             return cached[0], cached[1]
         u, w, h = layout.u, layout.w, layout.h
         ground, text = role_color(self.context, "ground"), role_color(self.context, "text")
@@ -319,9 +327,7 @@ class BandStyle(ToastStyle):
         if label:
             self._title(band, label, layout, accent, ground)
         tile = self._tile(band, image, badge, icon, layout, accent, ground)
-        self._grounds[key] = (band, tile, refs)
-        while len(self._grounds) > 4:
-            self._grounds.popitem(last=False)
+        self._grounds.put(key, (band, tile, refs), size_of(band))  # (the pictures are the toast's)
         return band, tile
 
     def _title(self, band: Image.Image, label: str, layout: _Layout, accent: RGB, ground: RGB):
@@ -377,8 +383,10 @@ class BandStyle(ToastStyle):
     def _content(self, toast: Any, layout: _Layout, accent: RGB) -> tuple[Image.Image, Any]:
         """The band of ``toast`` without its bar's value, and where the bar goes."""
         key = (id(toast), layout.key, accent, id(self.context))
-        cached = self._contents.get(key)
-        if cached is not None and cached[0] is toast and cached[1] is self.context:
+        cached = self._contents.get(
+            key, valid=lambda kept: kept[0] is toast and kept[1] is self.context
+        )
+        if cached is not None:
             return cached[2], cached[3]
         ground_layer, tile = self._ground(toast, layout, accent)
         band = ground_layer.copy()
@@ -399,9 +407,7 @@ class BandStyle(ToastStyle):
             end = x + font.getlength(text)
             start = min(max(end + 60 * u, x + 540 * u), layout.right - 560 * u)
             bar = (form, round(start), 0, layout.right)
-        self._contents[key] = (toast, self.context, band, bar)
-        while len(self._contents) > 4:
-            self._contents.popitem(last=False)
+        self._contents.put(key, (toast, self.context, band, bar), size_of(band))
         return band, bar
 
     def _with_bar(self, toast: Any, layout: _Layout, accent: RGB, value: float | None):
@@ -416,14 +422,12 @@ class BandStyle(ToastStyle):
         else:
             state = round(x0 + (x1 - x0) * value)
         key = (id(band), state)
-        cached = self._bars.get(key)
-        if cached is not None and cached[0] is band:
+        cached = self._bars.get(key, valid=lambda kept: kept[0] is band)
+        if cached is not None:
             return cached[1]
         out = band.copy()
         self._draw_bar(out, form, x0, y0, x1, steps, state, layout, accent)
-        self._bars[key] = (band, out)
-        while len(self._bars) > 6:
-            self._bars.popitem(last=False)
+        self._bars.put(key, (band, out), size_of(out))
         return out
 
     def _draw_bar(self, band, form, x0, y0, x1, steps, state, layout: _Layout, accent: RGB):

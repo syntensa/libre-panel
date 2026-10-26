@@ -2583,7 +2583,6 @@
     "Other": "Outro",
     "Other threads": "Outras threads",
     "Panel {n}": "Painel {n}",
-    "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %. Memory is each process's working set.": "Do PC é o que o Gerenciador de Tarefas mostra: o PC inteiro é 100 %. De um núcleo: um núcleo inteiro é 100 %. A memória é o conjunto de trabalho de cada processo.",
     "Process": "Processo",
     "Slowest:": "Os mais lentos:",
     "The sensor service does not run.": "O serviço de sensores não está rodando.",
@@ -2755,7 +2754,11 @@
     "Transitions": "Transições",
     "Tube": "Tubo",
     "Welcome back": "De volta",
-    "Wipe": "Varredura"
+    "Wipe": "Varredura",
+    "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %.": "Do PC é o que o Gerenciador de Tarefas mostra: o PC inteiro é 100 %. De um núcleo: um núcleo inteiro é 100 %.",
+    "Memory is each process's private memory, as the Task Manager's Memory column shows it (on its Details tab: Memory (active private working set)); – where Windows does not let it be read. The working set also counts what processes share, once for each.": "A memória é a memória privada de cada processo, como a coluna Memória do Gerenciador de Tarefas a mostra (na guia Detalhes: Memória (conjunto de trabalho privado ativo)); – onde o Windows não deixa lê-la. O conjunto de trabalho também conta o que os processos compartilham, uma vez para cada um.",
+    "Working set": "Conjunto de trabalho",
+    "Working set: {size}": "Conjunto de trabalho: {size}"
   },
   "fields": {
     "agent": "agente",

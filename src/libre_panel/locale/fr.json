@@ -2583,7 +2583,6 @@
     "Other": "Autre",
     "Other threads": "Autres threads",
     "Panel {n}": "Panneau {n}",
-    "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %. Memory is each process's working set.": "Du PC, c'est ce qu'affiche le Gestionnaire des tâches : le PC entier fait 100 %. D'un cœur : un cœur entier fait 100 %. La mémoire est la plage de travail de chaque processus.",
     "Process": "Processus",
     "Slowest:": "Les plus lents :",
     "The sensor service does not run.": "Le service de capteurs ne tourne pas.",
@@ -2755,7 +2754,11 @@
     "Transitions": "Transitions",
     "Tube": "Tube",
     "Welcome back": "Bon retour",
-    "Wipe": "Balayage"
+    "Wipe": "Balayage",
+    "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %.": "Du PC, c'est ce qu'affiche le Gestionnaire des tâches : le PC entier fait 100 %. D'un cœur : un cœur entier fait 100 %.",
+    "Memory is each process's private memory, as the Task Manager's Memory column shows it (on its Details tab: Memory (active private working set)); – where Windows does not let it be read. The working set also counts what processes share, once for each.": "La mémoire est la mémoire privée de chaque processus, comme l'affiche la colonne Mémoire du Gestionnaire des tâches (dans son onglet Détails : Mémoire (plage de travail privée active)) ; – là où Windows ne la laisse pas lire. La plage de travail compte aussi ce que les processus partagent, une fois pour chacun.",
+    "Working set": "Plage de travail",
+    "Working set: {size}": "Plage de travail : {size}"
   },
   "fields": {
     "agent": "agent",

@@ -446,7 +446,7 @@ function useLoad(on) {
 }
 
 const percent = (value) => (value === null || value === undefined ? "–" : `${formatNumber(value, 1, { fixed: true })} %`);
-const megabytes = (bytes) => `${formatNumber(bytes / 1048576, 0)} MB`;
+const megabytes = (bytes) => (bytes === null || bytes === undefined ? "–" : `${formatNumber(bytes / 1048576, 0)} MB`);
 const millis = (ms) => `${formatNumber(ms, 1, { fixed: true })} ms`;
 
 /** A process's row, in the app's language. */
@@ -508,14 +508,15 @@ function LoadCard() {
   } else {
     body = html`<div class="load-headline">
         <div class="load-figure"><strong data-load="cpu">${percent(data.total.cpu_pc)}</strong><span>${t("of the PC")}</span></div>
-        <div class="load-figure"><strong data-load="memory">${megabytes(data.total.rss)}</strong><span>${t("memory")}</span></div>
+        <div class="load-figure"><strong data-load="memory">${megabytes(data.total.private ?? data.total.rss)}</strong><span>${t("memory")}</span></div>
         <p class="muted">${t("{core} of one core · {n} logical processors", { core: percent(data.total.cpu_core), n: data.cpus })}</p>
+        ${data.total.private !== undefined ? html`<p class="muted" data-load="working-set">${t("Working set: {size}", { size: megabytes(data.total.rss) })}</p>` : null}
       </div>
       <table class="load-table">
-        <thead><tr><th>${t("Process")}</th><th>${t("Of the PC")}</th><th>${t("Of one core")}</th><th>${t("Memory")}</th></tr></thead>
+        <thead><tr><th>${t("Process")}</th><th>${t("Of the PC")}</th><th>${t("Of one core")}</th><th>${t("Memory")}</th><th>${t("Working set")}</th></tr></thead>
         <tbody>
           ${data.processes.map((row, index) => html`<tr key=${index} data-role=${row.role}>
-            <td>${processName(row)}</td><td class="mono">${percent(row.cpu_pc)}</td><td class="mono">${percent(row.cpu_core)}</td><td class="mono">${megabytes(row.rss)}</td>
+            <td>${processName(row)}</td><td class="mono">${percent(row.cpu_pc)}</td><td class="mono">${percent(row.cpu_core)}</td><td class="mono" data-load="private">${megabytes(row.private)}</td><td class="mono" data-load="rss">${megabytes(row.rss)}</td>
           </tr>`)}
         </tbody>
       </table>
@@ -547,7 +548,7 @@ function LoadCard() {
       <div class="diagnose-actions">
         <button type="button" class="btn" data-load="copy" disabled=${!ready} onClick=${() => copyText(data.text)}>${t("Copy as text")}</button>
       </div>
-      <p class="muted diagnose-hint">${t("Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %. Memory is each process's working set.")}${ready ? ` ${t("Measuring took {ms}.", { ms: millis(data.sample_ms) })}` : ""}</p>
+      <p class="muted diagnose-hint">${t("Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %.")} ${t("Memory is each process's private memory, as the Task Manager's Memory column shows it (on its Details tab: Memory (active private working set)); – where Windows does not let it be read. The working set also counts what processes share, once for each.")}${ready ? ` ${t("Measuring took {ms}.", { ms: millis(data.sample_ms) })}` : ""}</p>
     </div>
   </section>`;
 }

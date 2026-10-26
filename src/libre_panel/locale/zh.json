@@ -2583,7 +2583,6 @@
     "Other": "其他",
     "Other threads": "其他线程",
     "Panel {n}": "面板 {n}",
-    "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %. Memory is each process's working set.": "占整机即任务管理器显示的数值：整台电脑为 100 %。占单核：一个完整核心为 100 %。内存为每个进程的工作集。",
     "Process": "进程",
     "Slowest:": "最慢：",
     "The sensor service does not run.": "传感器服务未运行。",
@@ -2755,7 +2754,11 @@
     "Transitions": "过渡",
     "Tube": "显像管",
     "Welcome back": "欢迎回来",
-    "Wipe": "擦除"
+    "Wipe": "擦除",
+    "Per PC is what the Task Manager shows: the whole PC is 100 %. Of one core, a whole core is 100 %.": "占整机即任务管理器显示的数值：整台电脑为 100 %。占单核：一个完整核心为 100 %。",
+    "Memory is each process's private memory, as the Task Manager's Memory column shows it (on its Details tab: Memory (active private working set)); – where Windows does not let it be read. The working set also counts what processes share, once for each.": "内存为每个进程的专用内存，即任务管理器“内存”列显示的数值（在其“详细信息”选项卡中为：内存(活动的专用工作集)）；Windows 不允许读取的显示为 –。工作集还包括各进程共享的部分，每个进程各算一次。",
+    "Working set": "工作集",
+    "Working set: {size}": "工作集：{size}"
   },
   "fields": {
     "agent": "智能体",

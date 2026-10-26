@@ -4,6 +4,7 @@ and the panel's look block (render.look: grid, panel light)."""
 import math
 import os
 import sys
+import time
 from datetime import UTC, datetime
 
 import numpy as np
@@ -379,26 +380,6 @@ def test_a_lit_ring_is_a_thin_arc_of_light_on_the_middle_of_its_groove():
     assert tuple(pixels[80, 25]) == (0x16, 0x23, 0x32)  # nine o'clock: past its end, the groove
 
 
-def test_kept_pictures_stay_within_their_budget():
-    kept = light3d.Kept(budget=3 * 1000)
-    made = []
-
-    def make(n):
-        def build():
-            made.append(n)
-            return np.zeros(1000, np.uint8)
-
-        return build
-
-    for n in (1, 2, 3, 1):
-        kept.get(n, make(n))
-    assert made == [1, 2, 3]
-    kept.get(4, make(4))  # over the budget: the least recently used (2) goes
-    kept.get(1, make(1))
-    kept.get(2, make(2))
-    assert made == [1, 2, 3, 4, 2]
-
-
 def fake_layers(folder, stems):
     folder.mkdir(parents=True)
     for stem in stems:
@@ -432,6 +413,34 @@ def test_layers_are_kept_as_npz_and_prepared_again_when_a_source_is_newer(tmp_pa
     stale.VERSION = light3d.Part.VERSION + 1  # an older format in the cache: prepared again
     stale.get()
     assert len(builds) == 3
+
+
+def test_layers_nothing_asked_for_go_and_come_back_from_the_cache(tmp_path):
+    """The weather bodies are ten megabytes, and a symbol is made from them once: once nothing
+    asked for them for a minute they go, and the next that asks reads them again (from the
+    cache, as drawn). Whether they can be had is known without reading them again."""
+    fake_layers(tmp_path / "probe", ("a",))
+    builds = []
+
+    def build(folder):
+        builds.append(folder)
+        return {"table": np.arange(4, dtype=np.float32)}
+
+    part = light3d.Part("probe", ("a",), build, tmp_path)
+    assert part.get() is not None and part.available()
+    used = time.monotonic()
+    assert not part.forget_idle(used + part.IDLE_S / 2)  # asked for a moment ago: kept
+    assert part.forget_idle(used + part.IDLE_S + 1) and part._data is None
+    assert part.available() and part._data is None  # (known: not read for that)
+    again = part.get()
+    assert np.array_equal(again["table"], np.arange(4)) and builds == [tmp_path / "probe"]
+    light3d._halved["probe"] = (again["table"], again["table"])
+    light3d.PARTS["probe"] = part
+    try:
+        light3d.forget_idle(time.monotonic() + part.IDLE_S + 1)
+        assert part._data is None and "probe" not in light3d._halved  # (made of them)
+    finally:
+        del light3d.PARTS["probe"]
 
 
 def test_missing_layers_draw_flat(tmp_path):

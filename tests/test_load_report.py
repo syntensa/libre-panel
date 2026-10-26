@@ -16,6 +16,7 @@ from libre_panel.sensors.librehardwaremonitor import LhmStatus, PartTime, RoundT
 
 Times = namedtuple("Times", "user system")
 Memory = namedtuple("Memory", "rss")
+FullMemory = namedtuple("FullMemory", "rss uss")
 MB = 1024**2
 
 
@@ -28,17 +29,19 @@ class Clock:
 
 
 class FakeProcess:
-    """A process as psutil hands it over: its processor seconds (``cpu``), its memory, its
-    children and, for this process, its threads (id -> seconds). It counts what is asked."""
+    """A process as psutil hands it over: its processor seconds (``cpu``), its memory (the
+    working set ``rss``, the private memory ``uss``: None, it may not be read), its children
+    and, for this process, its threads (id -> seconds). It counts what is asked."""
 
     def __init__(self, pid, name="python3", cmdline=(), cpu=0.0, rss=10 * MB, born=0.0,
-                 parent=None, children=(), threads=None):  # fmt: skip
+                 parent=None, children=(), threads=None, uss=-1):  # fmt: skip
         self.pid, self._name, self._cmdline = pid, name, list(cmdline)
         self.cpu, self.rss, self.born, self.parent = cpu, rss, born, parent
+        self.uss = rss * 3 // 4 if uss == -1 else uss
         self.kids = list(children)
         self.thread_times = threads or {}
         self.gone = False
-        self.asked = {"name": 0, "cmdline": 0, "children": 0}
+        self.asked = {"name": 0, "cmdline": 0, "children": 0, "private": 0}
 
     def _alive(self):
         if self.gone:
@@ -51,6 +54,13 @@ class FakeProcess:
     def memory_info(self):
         self._alive()
         return Memory(self.rss)
+
+    def memory_full_info(self):
+        self._alive()
+        self.asked["private"] += 1
+        if self.uss is None:  # the system's own: Windows refuses it to a user's process
+            raise psutil.AccessDenied(self.pid)
+        return FullMemory(self.rss, self.uss)
 
     def create_time(self):
         return self.born
@@ -101,7 +111,7 @@ class Machine:
                               children=[self.panel2, self.ffmpeg1, self.presentmon, self.conhost,
                                         self.window],
                               threads={101: 0.0, 102: 0.0, 103: 0.0, 104: 0.0})  # fmt: skip
-        self.service = FakeProcess(900, "libre-panel-sensors.exe", born=1.0, rss=80 * MB)
+        self.service = FakeProcess(900, "libre-panel-sensors.exe", born=1.0, rss=80 * MB, uss=None)
         self.processes = {p.pid: p for p in [self.me, self.panel2, self.service, self.window]}
         self.names = {101: "MainThread", 102: "panel", 103: "Thread-9 (process_request_thread)"}
         self.lhm = None
@@ -202,6 +212,7 @@ def test_every_process_is_measured_over_the_window_per_core_and_per_pc():
     found = rows(report)
     main = found[("main", None, "")]
     assert (main["cpu_core"], main["cpu_pc"], main["rss"]) == (25.0, 3.12, 200 * MB)
+    assert main["private"] == 150 * MB  # (the stand-in's: three quarters of its working set)
     assert found[("panel", 2, "")]["cpu_core"] == 10.0
     assert found[("ffmpeg", 2, "")]["cpu_core"] == 20.0  # the video of panel 2, its process's
     assert found[("ffmpeg", None, "")]["cpu_core"] == 5.0  # the main process's
@@ -209,8 +220,10 @@ def test_every_process_is_measured_over_the_window_per_core_and_per_pc():
     assert found[("window", None, "")]["cpu_core"] == 3.0
     webview = found[("webview", None, "")]
     assert webview["count"] == 2 and webview["cpu_core"] == 5.0 and webview["rss"] == 150 * MB
+    assert webview["private"] == (75 + 37.5) * MB  # the private memory of the two
     service = found[("service", None, "")]
     assert service["cpu_core"] == 2.0 and service["found_by"] == "service manager"
+    assert service["private"] is None and service["rss"] == 80 * MB  # (refused: none)
     assert found[("other", None, "conhost.exe")]["label"] == "other: conhost.exe"
     assert [r["role"] for r in report["processes"]] == [
         "main", "panel", "ffmpeg", "ffmpeg", "presentmon", "window", "webview", "service", "other"
@@ -220,8 +233,30 @@ def test_every_process_is_measured_over_the_window_per_core_and_per_pc():
         71 / 8, abs=0.01
     )
     assert total["rss"] == sum(r["rss"] for r in report["processes"])
+    assert total["private"] == sum(r["private"] or 0 for r in report["processes"])
+    assert total["private"] == pytest.approx((625 - 80) * MB * 3 / 4)  # without the service's
     assert report["service"] == {"state": "running", "found_by": "service manager"}
     assert report["sample_ms"] >= 0
+
+
+def test_the_private_memory_is_measured_every_few_seconds_the_working_set_every_time():
+    """The private memory costs (psutil walks the working set): it is asked for every
+    PRIVATE_S, the last one shown in between; the working set every sample."""
+    machine = Machine()
+    sampler = machine.sampler()
+    sampler.sample()
+    asked = machine.me.asked["private"]
+    assert asked == 1
+    machine.me.uss, machine.me.rss = 160 * MB, 210 * MB
+    for _ in range(int(load_report.PRIVATE_S / 2) - 1):  # (measured at 0 s)
+        machine.run(2.0)
+        main = rows(sampler.sample())[("main", None, "")]
+        assert main["private"] == 150 * MB and main["rss"] == 210 * MB
+    assert machine.me.asked["private"] == 1
+    machine.run(2.0)
+    main = rows(sampler.sample())[("main", None, "")]
+    assert main["private"] == 160 * MB and machine.me.asked["private"] == 2
+    assert machine.service.asked["private"] == 2  # refused, and asked again as often only
 
 
 def test_this_processs_threads_by_their_names_and_the_rest_as_other():
@@ -265,7 +300,8 @@ def test_the_tree_is_walked_now_and_then_and_a_name_asked_for_once():
         sampler.sample()
         machine.run(2.0, me=0.1)
     assert machine.me.asked["children"] == 2  # at 0 s and at 6 s
-    assert machine.ffmpeg2.asked == {"name": 1, "cmdline": 1, "children": 2}
+    # its private memory at 0 s and at 6 s too (PRIVATE_S)
+    assert machine.ffmpeg2.asked == {"name": 1, "cmdline": 1, "children": 2, "private": 2}
     machine.ffmpeg1.gone = True  # it ended: gone from the report at once
     report = sampler.sample()
     assert ("ffmpeg", None, "") not in rows(report) and ("ffmpeg", 2, "") in rows(report)
@@ -368,8 +404,24 @@ def test_the_text_is_for_an_issue():
     lines = text.splitlines()
     assert lines[0].startswith("Libre Panel load over 2.0 s, 8 logical processors")
     assert "Task Manager" in lines[0]
-    assert lines[2].split() == ["Libre", "Panel,", "total", "6.9", "%", "55.0", "%", "625", "MB"]
-    assert lines[3].split() == ["main", "process", "3.1", "%", "25.0", "%", "200", "MB"]
+    assert "private: memory as the Task Manager's Memory column shows it" in lines[0]
+    assert lines[1].split() == ["PC", "core", "private", "working", "set"]
+    total = ["Libre", "Panel,", "total", "6.9", "%", "55.0", "%", "409", "MB", "625", "MB"]
+    assert lines[2].split() == total
+    assert lines[3].split() == [
+        "main",
+        "process",
+        "3.1",
+        "%",
+        "25.0",
+        "%",
+        "150",
+        "MB",
+        "200",
+        "MB",
+    ]
+    service = next(line for line in lines if line.startswith("sensor service"))
+    assert service.split()[-3:] == ["–", "80", "MB"]  # its private memory refused
     assert any(line.startswith("ffmpeg (panel 2)") for line in lines)
     assert any(line.startswith("WebView2 ×2") for line in lines)
     assert "(the sensor service: the process the Service Control Manager names)" in lines

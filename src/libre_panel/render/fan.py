@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import math
 import threading
-from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -30,6 +29,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 from libre_panel.render import fan_looks
+from libre_panel.render.kept import MB, Kept
 
 ASSETS = Path(__file__).resolve().parent.parent / "assets" / "light3d" / "fan"
 
@@ -62,16 +62,19 @@ FRICTION = 0.35  # turns a second lost every second while it runs out
 BLUR = 0.8  # how far the blades blur into a disc at full speed
 LIGHT = {"running": 1.0, "stopped": 0.5, "missing": 0.25}  # how bright it shows
 
-_lock = threading.Lock()  # the coloured images and the kept layers, held for a moment
 _load = threading.Lock()  # reading the layers, held for as long as that takes
-_images: OrderedDict[tuple[Any, ...], Image.Image] = OrderedDict()
-# (look, size) -> (positions, 5, k, k): shape, core, gloss, alpha, part; the oldest first
-_layers: OrderedDict[tuple[str, int], np.ndarray] = OrderedDict()
-_frames: OrderedDict[tuple[str, int], np.ndarray] = OrderedDict()
-IMAGES = 768  # coloured images kept
+# The coloured images: a rotor at each of its positions in a colour, the frames, the rings (a
+# rotor of 66 px is 17 kB). 768 of them were kept, up to 12 MB: these find all but one or two
+# in a hundred of what those did (on Arena's and Lumen's 12.3", the companions' 9.2").
+IMAGE_BYTES = 6 * MB
+_images = Kept("fan.images", IMAGE_BYTES)
 # The layers of a size are a few megabytes (17 for a fan of 150 px), and a fan that is resized in
-# the editor asks for one size after the other: the sizes kept are as many as this holds.
-LAYER_BYTES = 48 << 20
+# the editor asks for one size after the other: the sizes kept are as many as this holds (the
+# newest always: a panel's fans need theirs on every frame they turn).
+LAYER_BYTES = 24 * MB
+# (look, size) -> (positions, 5, k, k): shape, core, gloss, alpha, part; the oldest first
+_layers = Kept("fan.layers", LAYER_BYTES)
+_frames = Kept("fan.frames", LAYER_BYTES)
 
 
 @dataclass
@@ -284,22 +287,14 @@ def _reduced(planes: list[np.ndarray], size: int) -> np.ndarray:
     )
 
 
-def _kept_layers(cache: OrderedDict[Any, np.ndarray], size: Any) -> np.ndarray | None:
+def _kept_layers(cache: Kept, size: Any) -> np.ndarray | None:
     """The layers of ``size`` (a look and a size) if they are kept (they are then the newest)."""
-    with _lock:
-        layers = cache.get(size)
-        if layers is not None:
-            cache.move_to_end(size)
-        return layers
+    return cache.get(size)
 
 
-def _keep_layers(cache: OrderedDict[Any, np.ndarray], size: Any, layers: np.ndarray) -> None:
-    """Keep ``layers`` as the newest; the oldest go while more than ``LAYER_BYTES`` are kept."""
-    with _lock:
-        cache[size] = layers
-        cache.move_to_end(size)
-        while len(cache) > 1 and sum(kept.nbytes for kept in cache.values()) > LAYER_BYTES:
-            cache.popitem(last=False)
+def _keep_layers(cache: Kept, size: Any, layers: np.ndarray) -> None:
+    """Keep ``layers`` as the newest; the oldest go while more than its budget is kept."""
+    cache.put(size, layers)
 
 
 def rotor_layers(size: int, look: str = fan_looks.DEFAULT) -> np.ndarray:
@@ -365,17 +360,7 @@ def _coloured(
 
 
 def _kept(key: tuple[Any, ...], make: Callable[[], Image.Image]) -> Image.Image:
-    with _lock:
-        image = _images.get(key)
-        if image is not None:
-            _images.move_to_end(key)
-            return image
-    image = make()
-    with _lock:
-        _images[key] = image
-        while len(_images) > IMAGES:
-            _images.popitem(last=False)
-    return image
+    return _images.make(key, make)
 
 
 def rotor_image(

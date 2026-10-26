@@ -54,6 +54,14 @@
   the range outright: AMD's through its own scaler (`vpp_amf`), Intel's through `vpp_qsv`;
   NVIDIA's converts by itself. Settings → Panel → *Check the colours* says who converts and why,
   with the day it was checked and *Check again*. `"card"` and `"rgb"` force a way.
+- **A third less memory in many places.** The renderer's caches are held by their size in
+  bytes instead of a count (the frames stay the same to the pixel), the app's pictures (the
+  themes' previews, the community's) go a minute after its window closes, and the window's
+  WebView2 runs with one renderer and no disk caches. Measured in the video mode: a panel's
+  own process 110 → 74 MB, Lumen on the 12.3" 139 → 110 MB, the main process after Start
+  showed every theme 246 → 164 MB and a minute after the window closed 151 MB. *Load on this
+  PC* (Diagnose) shows each process's private memory, as the Task Manager's Memory column
+  does, with the working set beside it.
 - **Every stream says it is BT.601**, in the range it has, whichever encoder made it: a player
   on the PC shows it as the panel does (AMD's encoder tagged its stream BT.709 in full range).
 
