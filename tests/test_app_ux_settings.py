@@ -770,7 +770,11 @@ def card_s(extra=""):
             settings = replace(settings, encoder="libx264", card=False)
         found = h264.ffmpeg_command(ffmpeg, size, rotate, settings)
         if card and command.extra:
-            found[found.index("-vf") + 1] += f",{command.extra}"
+            # (said to be what the stream says, so that an ffmpeg that converts to what its
+            # output is told, as 8.x does, leaves the card's own conversion as it is)
+            at = found.index("-color_range") + 1
+            told = f"setparams=range={found[at]}:colorspace=smpte170m"
+            found[found.index("-vf") + 1] += f",{command.extra},{told}"
         return found
 
     command.extra = extra

@@ -26,6 +26,9 @@ def tool():
         yield community_theme
 
 
+WHEN = (2026, 1, 1, 12, 0, 0)
+
+
 def theme_zip(name="Glow", width=480, height=320) -> bytes:
     buffer = io.BytesIO()
     picture = io.BytesIO()
@@ -35,9 +38,9 @@ def theme_zip(name="Glow", width=480, height=320) -> bytes:
              "background": {"color": "#000000", "image": "assets/back.png"},
              "widgets": [{"type": "module", "id": "clock", "module": "clock",
                           "col": 0, "row": 0, "cols": 2, "rows": 1}]}  # fmt: skip
-    with zipfile.ZipFile(buffer, "w") as archive:
-        archive.writestr("glow/theme.json", json.dumps(theme))
-        archive.writestr("glow/assets/back.png", picture.getvalue())
+    with zipfile.ZipFile(buffer, "w") as archive:  # (at a fixed time: the same bytes each call)
+        archive.writestr(zipfile.ZipInfo("glow/theme.json", WHEN), json.dumps(theme))
+        archive.writestr(zipfile.ZipInfo("glow/assets/back.png", WHEN), picture.getvalue())
     return buffer.getvalue()
 
 
