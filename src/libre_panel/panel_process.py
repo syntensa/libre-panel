@@ -169,7 +169,7 @@ class PanelProcess:
                 pass  # the process ended: the receiver says so
 
     def _state(self) -> dict[str, Any]:
-        from libre_panel import colour_show, identify
+        from libre_panel import colour_show, identify, transition_show
         from libre_panel.devices import base
 
         more = self.more
@@ -177,6 +177,7 @@ class PanelProcess:
         beats = more.beats.export() if more.beats is not None else {}
         return {"mode": more._mode(), "first": more._look() or "", "places": more.places(),
                 "quitting": quitting, "identify": identify.left(), "beats": beats,
+                "transition": transition_show.export(),
                 "taken": sorted(base.places_taken() - self._held),
                 "colours": colour_show.export()}  # fmt: skip
 
@@ -299,7 +300,7 @@ class _Link:
             return self._replies.pop() if self._replies else None
 
     def hear(self) -> None:
-        from libre_panel import colour_show, identify
+        from libre_panel import colour_show, identify, transition_show
         from libre_panel.devices import base
 
         while True:
@@ -317,6 +318,7 @@ class _Link:
                 self.state = state
                 if state["identify"]:  # Which is which? shows on every panel at once
                     identify.show(state["identify"])
+                transition_show.adopt(state.get("transition"))  # a transition shown, everywhere
                 colour_show.adopt(state.get("colours"))  # the colour check's A and B
                 if self.beats is not None and state.get("beats"):
                     self.beats.adopt(state["beats"])

@@ -568,6 +568,37 @@ class ModeConfig:
     minutes: float | None = None
 
 
+# Where a switch of the screen comes from ([transitions], app.py works it out): a game, music, the
+# PC at rest, the screens in turn, the autopilot, the round report, or a theme or scene chosen
+TRANSITION_OCCASIONS = ("game", "media", "idle", "sequence", "autopilot", "report", "manual")
+# each occasion's own at first; "" is what the service asks for (the game's entrance with its
+# logo, the autopilot's and the round report's tube), else the default
+OCCASION_TRANSITIONS = {
+    "game": "",
+    "media": "entrance",
+    "idle": "fade",
+    "sequence": "light",
+    "autopilot": "",
+    "report": "",
+    "manual": "",
+}
+TRANSITION_SPEEDS = {"fast": 0.6, "normal": 1.0, "slow": 1.6}  # times the durations
+RANDOM_TRANSITION = "random"  # one of [transitions] random, another each time
+RANDOM_TRANSITIONS = ("fade", "wipe", "zoom", "iris", "blinds", "dissolve", "light", "tiles")
+_TRANSITION_NAME = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+
+
+@dataclass
+class TransitionsConfig:
+    """How the panel goes from one screen to the next ([transitions]): the default, how fast,
+    each occasion's own (TRANSITION_OCCASIONS; "" the default) and what "random" picks from."""
+
+    default: str = "fade"
+    speed: str = "normal"
+    occasions: dict[str, str] = field(default_factory=lambda: dict(OCCASION_TRANSITIONS))
+    random: list[str] = field(default_factory=lambda: list(RANDOM_TRANSITIONS))
+
+
 @dataclass
 class SequenceConfig:
     """Screens in turn (libre_panel.sequence): the steps, and whether they show."""
@@ -639,7 +670,9 @@ class Config:
     language: str = "auto"
     refresh_ms: int | None = None
     fps: int = 10
-    transition: str = "fade"  # between themes: cut, fade, slide, tube, entrance, or a plugin's
+    # between themes: the default of [transitions], which config.toml may still name here
+    transition: str = "fade"
+    transitions: TransitionsConfig = field(default_factory=TransitionsConfig)
     check_updates: bool | None = None  # a look for a newer version once a day; None: not asked
     allow_notify: bool = False  # other programs may show a notice (notify.py)
     light_mode: bool = False  # less memory while the app is closed (light.py)
@@ -722,6 +755,37 @@ class Config:
             modes=pages,  # (those of a game and of music, while the first panel shows them)
             same_look=panel.same_look,
         )
+
+
+def _transition_name(value: Any, name: str, empty: bool = False) -> str:
+    text = _expect(value, str, name).strip()
+    if (text or not empty) and not _TRANSITION_NAME.match(text):
+        raise ConfigError(f"{name}: the name of a transition, such as fade, wipe or entrance")
+    return text
+
+
+def _transitions(cfg: Config, table: dict[str, Any]) -> None:
+    """``[transitions]``: ``default``, ``speed``, each occasion's own and ``random``."""
+    chosen = cfg.transitions
+    for key, value in table.items():
+        name = f"transitions.{key}"
+        if key == "default":
+            cfg.transition = chosen.default = _transition_name(value, name)
+        elif key == "speed":
+            chosen.speed = _expect(value, str, name)
+            if chosen.speed not in TRANSITION_SPEEDS:
+                raise ConfigError(f"{name}: one of {', '.join(TRANSITION_SPEEDS)}")
+        elif key in TRANSITION_OCCASIONS:
+            chosen.occasions[key] = _transition_name(value, name, empty=True)
+        elif key == "random":
+            names = _expect(value, list, name)
+            if not names or len(names) > 32:
+                raise ConfigError(f"{name}: one to 32 transitions")
+            chosen.random = [_transition_name(item, name) for item in names]
+            if RANDOM_TRANSITION in chosen.random:
+                raise ConfigError(f"{name}: random cannot pick itself")
+        else:
+            raise ConfigError(f"unknown setting {name!r}")
 
 
 def _expect(value: Any, kind: type | tuple[type, ...], name: str) -> Any:
@@ -843,7 +907,10 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
         if not 1 <= cfg.fps <= 60:
             raise ConfigError("fps: must be between 1 and 60")
     if "transition" in data:
-        cfg.transition = _expect(data["transition"], str, "transition")
+        cfg.transition = cfg.transitions.default = _transition_name(
+            data["transition"], "transition"
+        )
+    _transitions(cfg, _expect(data.get("transitions", {}), dict, "transitions"))
     if "symbols" in data:
         cfg.symbols = _expect(data["symbols"], str, "symbols").strip()
         if cfg.symbols not in SYMBOL_PACKS:

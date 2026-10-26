@@ -35,6 +35,7 @@ import { ColourCard } from "./colours.js";
 import { NewPanel } from "./newpanel.js";
 import { Card, CommitField, Disclosure, SettingRow, Status, copyText, usePolling } from "./parts.js";
 import { StartScreenCard } from "./startscreen.js";
+import { TransitionsCard } from "./transitions.js";
 import { Zc360Row, joinZc360, splitZc360, zc360Places } from "./zc360.js";
 
 /** Write settings, and ask about the panel again: what they change shows there. */
@@ -963,6 +964,7 @@ export const panelGroups = [
   { id: "found", order: 10, component: PanelFound, load: loadPanelSection },
   { id: "video", order: 20, component: VideoCard },
   { id: "display", order: 30, component: DisplayCard },
+  { id: "transitions", order: 32, component: TransitionsCard },
   { id: "start-screen", order: 35, component: StartScreenCard },
   { id: "advanced", order: 40, component: AdvancedCard },
 ];

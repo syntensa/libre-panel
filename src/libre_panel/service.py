@@ -641,6 +641,15 @@ class BackgroundApp:
             from libre_panel import identify
 
             identify.show()
+        elif action == "show_transition":  # a transition shown on the panels, to see it
+            from libre_panel import transition_show
+
+            if not isinstance(value, dict) or not isinstance(value.get("name"), str):
+                raise ValueError('expected {"name": "...", "label": "..."}')
+            name, label = value["name"].strip(), str(value.get("label") or "")[:60]
+            if not 0 < len(name) <= 64:
+                raise ValueError("the name of a transition")
+            transition_show.show(name, label)
         elif action == "quit":
             # Answer the request first; the server stops as part of quitting.
             timer = threading.Timer(0.3, self.quit)

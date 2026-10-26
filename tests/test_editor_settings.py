@@ -1174,6 +1174,9 @@ def test_the_settings_that_name_a_program_or_a_file_are_the_ones_locked():
         "sensors.json.update_s",
         "weather.enabled", "weather.units", "weather.update_minutes", "weather.latitude",
         "weather.longitude", "weather.place",
+        "transitions.default", "transitions.speed", "transitions.random", "transitions.game",
+        "transitions.media", "transitions.idle", "transitions.sequence", "transitions.autopilot",
+        "transitions.report", "transitions.manual",
     }  # fmt: skip
     assert set(RULES) == names | {"video.ffmpeg", "device.output"}, "tell what the new one names"
     assert {name for name in RULES if names_a_path(name)} == {"video.ffmpeg", "device.output"}
@@ -1291,3 +1294,25 @@ def test_with_the_highest_rights_a_json_source_names_no_new_file(server, elevate
     status, answer = write(server, **{"sensors.json.sources": [other]})
     assert status == 403 and "administrator" in answer["error"]
     assert load_config().sensors.options["json"]["sources"][0]["file"] == "C:/Data/room.json"
+
+
+def test_the_transitions_are_read_and_written_by_occasion(server):
+    status, data = request(server, "GET", "/api/settings")
+    chosen = data["config"]["transitions"]
+    assert status == 200 and chosen["default"] == "fade" and chosen["speed"] == "normal"
+    assert chosen["sequence"] == "light" and chosen["game"] == ""  # (the game's own entrance)
+    listed = {item["id"]: item["group"] for item in data["catalog"]["transitions"]}
+    assert listed["light"] == "elaborate" and listed["wipe"] == "plain"
+    status, data = write(server, **{"transitions.media": "glitch", "transitions.speed": "slow",
+                                    "transitions.default": "iris",
+                                    "transitions.random": ["tiles", "zoom", "tiles"]})  # fmt: skip
+    assert status == 200, data
+    config = load_config()
+    assert config.transitions.occasions["media"] == "glitch" and config.transition == "iris"
+    assert config.transitions.speed == "slow" and config.transitions.random == ["tiles", "zoom"]
+    assert write(server, **{"transitions.idle": "random"})[0] == 200
+    assert write(server, **{"transitions.game": ""})[0] == 200  # back to its own
+    for bad in ({"transitions.media": "warp"}, {"transitions.speed": "light"},
+                {"transitions.random": ["random"]}, {"transitions.random": []},
+                {"transitions.default": ""}):  # fmt: skip
+        assert write(server, **bad)[0] == 400, bad

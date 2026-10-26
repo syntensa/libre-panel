@@ -16,7 +16,7 @@ import {
   useCatalog,
   useConfig,
 } from "../../core/settings.js";
-import { useStore } from "../../core/state.js";
+import { store, useStore } from "../../core/state.js";
 import { html, useEffect, useState } from "../../lib/preact.js";
 import { navigate } from "../../shell/views.js";
 import { NumberField, Select, Toggle } from "../../ui/controls.js";
@@ -26,6 +26,7 @@ import { PageThemeSelect } from "../design/pages.js";
 import { AgentsSetup } from "./agents.js";
 import { NotifyCard } from "./notify.js";
 import { CommitField, SettingRow, Status, usePolling } from "./parts.js";
+import { transitionName } from "./transitions.js";
 
 export const loadServicesSection = () => Promise.all([loadSettings(), loadServiceStates()]);
 
@@ -73,7 +74,11 @@ export const SERVICES = {
 };
 
 const SECONDS = { unit: "s", min: 0, max: 86400 };
-const TRANSITIONS = ["", "cut", "fade", "slide", "tube", "entrance"];
+// the transitions a service may ask for (Settings → Panel → Transitions has them all, by occasion)
+const TRANSITIONS = () => [
+  { id: "", name: t("The one of config.toml") },
+  ...(store.get().settings?.catalog?.transitions || []).map((item) => ({ id: item.id, name: transitionName(item.id) })),
+];
 
 // The words for the options of the services Libre Panel brings; a plugin's show their key.
 const OPTIONS = {

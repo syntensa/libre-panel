@@ -23,11 +23,19 @@ from libre_panel import (
     modes,
     presence,
     timing,
+    transition_show,
     winsession,
 )
 from libre_panel import clock as loop_clock
 from libre_panel.accent import accent_of
-from libre_panel.config import Config, ConfigError, brightness_now, config_dir, load_config
+from libre_panel.config import (
+    TRANSITION_OCCASIONS,
+    Config,
+    ConfigError,
+    brightness_now,
+    config_dir,
+    load_config,
+)
 from libre_panel.devices.base import Counters, DeviceError, Display, FrameError, create_display
 from libre_panel.devices.models import PanelModel, find_model
 from libre_panel.devices.turzx import video_mode
@@ -37,8 +45,9 @@ from libre_panel.plugins.host import LEFT_OUT, NO_PANEL, OFF_IN_THEME, Delivery,
 from libre_panel.plugins.render import RenderContext
 from libre_panel.render import fan
 from libre_panel.render.alarm import AlarmEdge
+from libre_panel.render.light import role_color
 from libre_panel.render.motion import Motion
-from libre_panel.render.overlays import ToastLayer, switch_policy, transition
+from libre_panel.render.overlays import ToastLayer, handover, switch_policy, transition
 from libre_panel.render.renderer import Renderer, changed_region, changed_regions
 from libre_panel.sensors.base import (
     HubView,
@@ -365,6 +374,38 @@ def _theme_name(
     named = _named(config, host, default, rotation, mode, first)
     shown = theme_for(named, config.device.orientation, panel_size(config, reported))
     return (pair_version(shown) or shown) if paired else shown
+
+
+# what a service's theme is, as an occasion of [transitions] (others: "manual")
+_ASKED_BY = {"autopilot": "autopilot", "memory": "report"}
+_SPECIAL = frozenset(TRANSITION_OCCASIONS) - {"manual", "sequence"}  # left: its own transition
+
+
+def _occasion(config: Config, host: Any, rotation: Any, mode: str | None = None) -> str:
+    """Where the theme :func:`_named` picks comes from, as an occasion of ``[transitions]``
+    (config.TRANSITION_OCCASIONS): a service's request, a page or mode (a game, music, the PC
+    at rest), the screens in turn, else the theme or scene chosen ("manual")."""
+    if host is not None:
+        if host.theme:
+            return _ASKED_BY.get(host.theme_owner or "", "manual")
+        if modes.page_theme(config, host.mode):
+            return host.mode if host.mode in TRANSITION_OCCASIONS else "manual"
+    elif mode is not None:
+        own = config.modes.get(mode)
+        if own is not None and own.theme:
+            return mode if mode in TRANSITION_OCCASIONS else "manual"
+    if rotation is not None and config.sequence.active:
+        if rotation.where(config.sequence.steps) is not None:
+            return "sequence"
+    return "manual"
+
+
+def _switch_occasion(before: str, after: str) -> tuple[str, bool]:
+    """The occasion of a switch and whether it leaves it: one into a game, music or the like is
+    that one's; one back from it is that one's too, leaving it."""
+    if after in _SPECIAL or before not in _SPECIAL:
+        return after, False
+    return before, True
 
 
 def panel_size(config: Config, reported: PanelModel | None = None) -> tuple[int, int] | None:
@@ -777,6 +818,8 @@ class MainLoop:
         if host is not None:
             host.judge = self.judge  # ``notify`` says whether a message will show
         self.blend: tuple[Any, Image.Image, float] | None = None  # a transition under way
+        self.occasion = "manual"  # where the theme on show came from ([transitions])
+        self.showing: transition_show.Show | None = None  # a transition shown to see it
         self.began_in: str | None = None  # the mode it began in
         self.shown_frame: Image.Image | None = None  # the last frame as it went out, toasts and all
         self.switches = host.switches if host is not None else 0  # mode changes with a transition
@@ -1264,11 +1307,16 @@ class MainLoop:
                         chosen = host.take_transition() if host is not None else None
                         # a following one uncovers the new theme, unless a mode
                         # change brought a transition of its own
+                        came = _occasion(config, host, self.rotation, self._mode())
+                        occasion, leaving = _switch_occasion(self.occasion, came)
+                        self.occasion = came
                         if policy != "follow" or (host is not None and host.switches != switches):
-                            ctx = RenderContext(renderer)
                             # a calm panel changes at once: a fade is a whole picture a frame
-                            spec = "cut" if calm(config, display) else chosen or config.transition
-                            kind = transition(spec, ctx)
+                            kind = None if calm(config, display) else handover(
+                                config, occasion, leaving, chosen, RenderContext(renderer),
+                                snapshot.readings if snapshot is not None else None,
+                                theme.name, make=transition,
+                            )  # fmt: skip
                             begins = now + self._sweep(before, config)
                             blend = _begin(kind, last_frame, shown_frame, begins, toasts) or blend
                         if host is not None:
@@ -1282,7 +1330,14 @@ class MainLoop:
             if host is not None and host.switches != switches and policy != "wait":
                 switches = host.switches  # a mode change that keeps the theme, with a transition
                 spec = host.take_transition()
-                kind = transition("cut" if calm(config, display) else spec, RenderContext(renderer))
+                came = _occasion(config, host, self.rotation, self._mode())
+                occasion, leaving = _switch_occasion(self.occasion, came)
+                self.occasion = came
+                kind = None if calm(config, display) else handover(
+                    config, occasion, leaving, spec, RenderContext(renderer),
+                    snapshot.readings if snapshot is not None else None, theme.name,
+                    make=transition,
+                )  # fmt: skip
                 blend = _begin(kind, last_frame, shown_frame, now, toasts) or blend
             if blend is not playing:
                 began_in = mode
@@ -1358,6 +1413,7 @@ class MainLoop:
                         told(wanted)
                 if checking is not None:
                     frame = colour_show.picture(frame.size, checking[0])
+                frame = self._show_transition(frame, renderer, config, display, now)
                 if identify.showing():  # which panel is which: its number instead, a moment
                     accent = renderer.theme.palette.get("accent") or "#2EE6D6"
                     frame = identify.picture(number, frame.size, accent)
@@ -1402,6 +1458,35 @@ class MainLoop:
                 self._ahead.start(self.hub.snapshot)
         return out
 
+    def _show_transition(
+        self, frame: Image.Image, renderer: Renderer, config: Config, display: Any, now: float
+    ) -> Image.Image:
+        """The frame while a transition is shown to see it (transition_show.py), else ``frame``."""
+        asked = transition_show.asked()
+        if asked is None:
+            self.showing = None
+            return frame
+        number, name, label = asked
+        if self.showing is None or self.showing.number != number:
+            context = RenderContext(renderer)
+            still = calm(config, display)  # a calm panel: the card alone
+            spec = (name, {"title": label}) if name == "entrance" else name
+
+            def make() -> Any:
+                if still:
+                    return None
+                return handover(config, "", False, spec, context, make=transition)
+
+            void, ink = role_color(context, "void"), role_color(context, "text")
+            card = transition_show.card(label, frame.size, void, ink)
+            self.showing = transition_show.Show(number, frame, card, make)
+        out = self.showing.frame(frame, now)
+        if out is None:
+            transition_show.done(number)
+            self.showing = None
+            return frame
+        return out
+
     def pause(self) -> float:
         """Seconds to wait before the next frame when the display is not streaming."""
         config, host, renderer, blend, toasts = (
@@ -1411,7 +1496,7 @@ class MainLoop:
         # While something glides, draw at full fps; otherwise wake for the next
         # reading, but at least twice a second so a seconds clock never skips.
         interval = 1 / _fps(config, host, self.display)
-        if not (renderer.moving or blend is not None or toasts.active):
+        if not (renderer.moving or blend is not None or toasts.active or self.showing):
             interval = max(interval, min(0.5, next_sample - started))
         return max(0.0, interval - (self.clock() - started))
 

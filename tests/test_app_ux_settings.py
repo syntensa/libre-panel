@@ -1313,3 +1313,38 @@ def test_a_port_that_may_be_a_turing_panel_is_chosen_with_a_click(app_url, isola
         expect(maybe.locator("button")).to_have_count(3)
         maybe.get_by_role("button", name="Turing 8.8″").click()
         waits_for(page, lambda: settings_config().device.model == "turing-8.8")
+
+
+def test_the_transitions_card_sets_each_occasion_and_shows_one_on_the_panel(app_url):  # noqa: F811
+    """Settings → Panel → Transitions: an occasion's own, the pace, what random picks from, and
+    Show on the panel asks the app to play it there."""
+    asked = []
+
+    def app_action(route, request):
+        if request.method != "POST":
+            route.continue_()
+            return
+        asked.append(json.loads(request.post_data))
+        route.fulfill(status=200, content_type="application/json", body="{}")
+
+    with browser_page(app_url, "settings/panel", routes={"**/api/app": app_action}) as page:
+        card = page.locator("#panel-transitions")
+        expect(card).to_contain_text("Transitions")
+        music = card.locator("[data-occasion='media']")
+        expect(music.locator("select")).to_have_value("entrance")
+        music.locator("select").select_option("glitch")
+        waits_for(page, lambda: settings_config().transitions.occasions["media"] == "glitch")
+        game = card.locator("[data-occasion='game']")
+        expect(game.locator("select")).to_have_value("")  # its own: the entrance
+        expect(game.locator("option").first).to_have_text("Its own (Entrance)")
+        card.get_by_role("radio", name="Leisurely").click()
+        waits_for(page, lambda: settings_config().transitions.speed == "slow")
+        expect(card.get_by_text("Random picks from")).to_have_count(0)
+        card.locator("[data-occasion='idle'] select").select_option("random")
+        expect(card.get_by_text("Random picks from")).to_have_count(1)
+        card.get_by_role("checkbox", name="Shatter").click()  # (checked once it is written)
+        waits_for(page, lambda: "shatter" in settings_config().transitions.random)
+        music.get_by_role("button", name="Show “Glitch” on the panel").click()
+        waits_for(page, lambda: any(item.get("action") == "show_transition" for item in asked))
+        shown = next(item for item in asked if item.get("action") == "show_transition")
+        assert shown["value"] == {"name": "glitch", "label": "Glitch"}

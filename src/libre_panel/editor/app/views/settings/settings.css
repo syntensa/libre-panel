@@ -1535,3 +1535,32 @@ a.btn-primary:hover {
   overflow: auto;
   white-space: pre;
 }
+
+/* Settings → Panel → Transitions: a choice and its Show beside it, what "random" picks from */
+.transition-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.transition-show {
+  padding: 6px 9px;
+}
+
+.transition-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.transition-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.transition-pick.on {
+  color: var(--text);
+}

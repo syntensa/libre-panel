@@ -455,9 +455,21 @@ class PluginHost:
             return self._top_theme()
 
     def _top_theme(self) -> str | None:
+        top = self._top_request()
+        return top[1][0] if top else None
+
+    def _top_request(self) -> tuple[str, tuple[Any, ...]] | None:
+        """The request on top, with who asked: the highest priority, then the latest."""
         mode = self._mode[0] if self._mode else None
-        requests = [r for r in self._themes.values() if r[3] == ANY_MODE or r[3] == mode]
-        return max(requests, key=lambda r: (r[1], r[2]))[0] if requests else None
+        requests = [(by, r) for by, r in self._themes.items() if r[3] == ANY_MODE or r[3] == mode]
+        return max(requests, key=lambda item: (item[1][1], item[1][2])) if requests else None
+
+    @property
+    def theme_owner(self) -> str | None:
+        """Who asked for :attr:`theme`: a service's name (for the transition of its switch)."""
+        with self._lock:
+            top = self._top_request()
+        return top[0] if top else None
 
     @property
     def mode(self) -> str | None:
