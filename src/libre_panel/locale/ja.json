@@ -2768,14 +2768,14 @@
     "Upright": "通常の向き",
     "Send the readings every": "計測値を送る間隔",
     "The display is connected on {port}": "ディスプレイは {port} に接続されています",
-    "Another program has the display's port: close Waveshare's own program.": "別のプログラムがディスプレイのポートを使っています：Waveshare 純正のプログラムを終了してください。",
     "Your user may not use the display's port yet: Settings → Sensors → Set up sensors and panel access, then plug the display in again.": "あなたのユーザーはまだディスプレイのポートを使えません：設定 → センサー → センサーとパネルへのアクセスを設定 を行い、ディスプレイを差し直してください。",
     "A port with the display's USB ids does not answer as the display does.": "ディスプレイの USB ID を持つポートが、ディスプレイのようには応答しません。",
     "No display found; Libre Panel keeps looking.": "ディスプレイが見つかりません。Libre Panel は探し続けます。",
     "Looking for the display …": "ディスプレイを探しています …",
     "Orientation of the picture": "画面の向き",
     "Units with the values": "値に単位を付ける",
-    "As Waveshare's program sends them: 75%, 2934RPM. Off: the numbers alone, for themes that show their units themselves.": "Waveshare のプログラムと同じ形式：75%、2934RPM。オフ：数字のみ。単位を自分で表示するテーマ向けです。"
+    "As Waveshare's program sends them: 75%, 2934RPM. Off: the numbers alone, for themes that show their units themselves.": "Waveshare のプログラムと同じ形式：75%、2934RPM。オフ：数字のみ。単位を自分で表示するテーマ向けです。",
+    "Another program has the display's port: close it (Waveshare's own program, or wsmonitor's service).": "別のプログラムがディスプレイのポートを使っています：それを終了してください（Waveshare 純正のプログラム、または wsmonitor のサービス）。"
   },
   "fields": {
     "agent": "エージェント",

@@ -353,7 +353,7 @@ function WaveshareStatus({ summary }) {
     const about = [summary.inch ? `${summary.inch}″` : "", summary.size, summary.version].filter(Boolean).join(" · ");
     return html`<${Status} tone="ok">${t("The display is connected on {port}", { port: summary.port })}${about ? ` · ${about}` : ""}<//>`;
   }
-  if (state === "busy") return html`<${Status} tone="warn">${t("Another program has the display's port: close Waveshare's own program.")}<//>`;
+  if (state === "busy") return html`<${Status} tone="warn">${t("Another program has the display's port: close it (Waveshare's own program, or wsmonitor's service).")}<//>`;
   if (state === "denied") return html`<${Status} tone="warn">${t("Your user may not use the display's port yet: Settings → Sensors → Set up sensors and panel access, then plug the display in again.")}<//>`;
   if (state === "silent") return html`<${Status} tone="warn">${t("A port with the display's USB ids does not answer as the display does.")}<//>`;
   if (state === "absent") return html`<${Status}>${t("No display found; Libre Panel keeps looking.")}<//>`;

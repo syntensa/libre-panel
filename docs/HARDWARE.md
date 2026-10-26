@@ -340,7 +340,9 @@ not yet.
   placeholder `1234:5678` some units have) and taken only once it answered the display's own
   handshake. A port can be named instead (`port`).
 - Waveshare's own program (or wsmonitor's) and Libre Panel cannot both have the display: quit
-  the other one.
+  the other one. wsmonitor's service starts at login: `systemctl --user disable --now
+  wsmonitor.service` stops it for good. On Linux Libre Panel sees a program that has the port
+  open and says so on its card instead of writing over it.
 - **Linux:** *Settings → Sensors → Set up sensors and panel access* gives your user the port,
   and on units with `1234:5678` hands the display from the kernel's `usbtouchscreen` driver,
   which takes those ids for a touchscreen, to `cdc_acm`, which makes `/dev/ttyACM*`. Plug the

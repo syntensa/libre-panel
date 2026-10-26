@@ -2768,14 +2768,14 @@
     "Upright": "Нормально",
     "Send the readings every": "Отправлять показания каждые",
     "The display is connected on {port}": "Дисплей подключён к {port}",
-    "Another program has the display's port: close Waveshare's own program.": "Порт дисплея занят другой программой: закройте собственную программу Waveshare.",
     "Your user may not use the display's port yet: Settings → Sensors → Set up sensors and panel access, then plug the display in again.": "Вашему пользователю пока нельзя использовать порт дисплея: Настройки → Датчики → Настроить датчики и доступ к панели, затем подключите дисплей заново.",
     "A port with the display's USB ids does not answer as the display does.": "Порт с USB-идентификаторами дисплея отвечает не так, как дисплей.",
     "No display found; Libre Panel keeps looking.": "Дисплей не найден; Libre Panel продолжает поиск.",
     "Looking for the display …": "Поиск дисплея …",
     "Orientation of the picture": "Ориентация изображения",
     "Units with the values": "Единицы вместе со значениями",
-    "As Waveshare's program sends them: 75%, 2934RPM. Off: the numbers alone, for themes that show their units themselves.": "Как их отправляет программа Waveshare: 75%, 2934RPM. Выключено: только числа, для тем, которые сами показывают единицы."
+    "As Waveshare's program sends them: 75%, 2934RPM. Off: the numbers alone, for themes that show their units themselves.": "Как их отправляет программа Waveshare: 75%, 2934RPM. Выключено: только числа, для тем, которые сами показывают единицы.",
+    "Another program has the display's port: close it (Waveshare's own program, or wsmonitor's service).": "Порт дисплея занят другой программой: закройте её (собственную программу Waveshare или службу wsmonitor)."
   },
   "fields": {
     "agent": "агент",

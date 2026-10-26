@@ -220,6 +220,25 @@ def test_ports_are_looked_at_by_their_ids_and_a_taken_one_is_left(monkeypatch):
     assert waveshare.candidates("/dev/ttyUSB9") == ["/dev/ttyUSB9"]  # a port named is asked
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Linux's /proc, with links")
+def test_another_program_that_has_the_port_open_is_named(tmp_path):
+    """wsmonitor's service opens the port without pyserial's lock: Libre Panel would write over
+    its frames, so on Linux the port counts as busy while another process has it open."""
+    device = tmp_path / "ttyACM0"
+    device.write_text("")
+    for pid, name, target in ((101, "python3", device), (102, "bash", tmp_path / "other"),
+                              (103, "python3", device)):  # fmt: skip
+        (tmp_path / "proc" / str(pid) / "fd").mkdir(parents=True)
+        (tmp_path / "proc" / str(pid) / "comm").write_text(f"{name}\n")
+        (tmp_path / "proc" / str(pid) / "fd" / "3").symlink_to(target)
+    (tmp_path / "proc" / "self").mkdir()  # (not a process number)
+    assert waveshare.holders(str(device), tmp_path / "proc") == ["python3", "python3"]
+    assert waveshare.holders(str(tmp_path / "nothing"), tmp_path / "proc") == []
+    assert waveshare.holders(str(device), tmp_path / "no-proc") == []
+    reason = f"{device} is busy: python3 has it open"
+    assert service.kind_of(reason) == "busy"
+
+
 # -- the service ------------------------------------------------------------------------------
 
 

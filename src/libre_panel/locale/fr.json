@@ -2768,14 +2768,14 @@
     "Upright": "À l'endroit",
     "Send the readings every": "Envoyer les mesures toutes les",
     "The display is connected on {port}": "L'écran est connecté sur {port}",
-    "Another program has the display's port: close Waveshare's own program.": "Un autre programme utilise le port de l'écran : fermez le programme de Waveshare.",
     "Your user may not use the display's port yet: Settings → Sensors → Set up sensors and panel access, then plug the display in again.": "Votre utilisateur ne peut pas encore utiliser le port de l'écran : Paramètres → Capteurs → Configurer les capteurs et l'accès au panneau, puis rebranchez l'écran.",
     "A port with the display's USB ids does not answer as the display does.": "Un port avec les identifiants USB de l'écran ne répond pas comme l'écran.",
     "No display found; Libre Panel keeps looking.": "Aucun écran trouvé ; Libre Panel continue de chercher.",
     "Looking for the display …": "Recherche de l'écran …",
     "Orientation of the picture": "Orientation de l'image",
     "Units with the values": "Unités avec les valeurs",
-    "As Waveshare's program sends them: 75%, 2934RPM. Off: the numbers alone, for themes that show their units themselves.": "Comme le programme de Waveshare les envoie : 75%, 2934RPM. Désactivé : les nombres seuls, pour les thèmes qui affichent eux-mêmes leurs unités."
+    "As Waveshare's program sends them: 75%, 2934RPM. Off: the numbers alone, for themes that show their units themselves.": "Comme le programme de Waveshare les envoie : 75%, 2934RPM. Désactivé : les nombres seuls, pour les thèmes qui affichent eux-mêmes leurs unités.",
+    "Another program has the display's port: close it (Waveshare's own program, or wsmonitor's service).": "Un autre programme utilise le port de l'écran : fermez-le (le programme de Waveshare, ou le service de wsmonitor)."
   },
   "fields": {
     "agent": "agent",

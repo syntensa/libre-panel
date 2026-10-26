@@ -2768,14 +2768,14 @@
     "Upright": "Diritto",
     "Send the readings every": "Invia le letture ogni",
     "The display is connected on {port}": "Il display è collegato su {port}",
-    "Another program has the display's port: close Waveshare's own program.": "Un altro programma occupa la porta del display: chiudi il programma di Waveshare.",
     "Your user may not use the display's port yet: Settings → Sensors → Set up sensors and panel access, then plug the display in again.": "Il tuo utente non può ancora usare la porta del display: Impostazioni → Sensori → Configura sensori e accesso al pannello, poi ricollega il display.",
     "A port with the display's USB ids does not answer as the display does.": "Una porta con gli ID USB del display non risponde come il display.",
     "No display found; Libre Panel keeps looking.": "Nessun display trovato; Libre Panel continua a cercare.",
     "Looking for the display …": "Ricerca del display …",
     "Orientation of the picture": "Orientamento dell'immagine",
     "Units with the values": "Unità insieme ai valori",
-    "As Waveshare's program sends them: 75%, 2934RPM. Off: the numbers alone, for themes that show their units themselves.": "Come le invia il programma di Waveshare: 75%, 2934RPM. Disattivato: solo i numeri, per i temi che mostrano da soli le unità."
+    "As Waveshare's program sends them: 75%, 2934RPM. Off: the numbers alone, for themes that show their units themselves.": "Come le invia il programma di Waveshare: 75%, 2934RPM. Disattivato: solo i numeri, per i temi che mostrano da soli le unità.",
+    "Another program has the display's port: close it (Waveshare's own program, or wsmonitor's service).": "Un altro programma occupa la porta del display: chiudilo (il programma di Waveshare o il servizio di wsmonitor)."
   },
   "fields": {
     "agent": "agente",

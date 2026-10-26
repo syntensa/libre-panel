@@ -2768,14 +2768,14 @@
     "Upright": "正常",
     "Send the readings every": "发送读数间隔",
     "The display is connected on {port}": "屏幕已连接在 {port}",
-    "Another program has the display's port: close Waveshare's own program.": "其他程序占用了屏幕的端口：请关闭 Waveshare 自带的程序。",
     "Your user may not use the display's port yet: Settings → Sensors → Set up sensors and panel access, then plug the display in again.": "你的用户还不能使用屏幕的端口：设置 → 传感器 → 设置传感器和面板访问，然后重新插入屏幕。",
     "A port with the display's USB ids does not answer as the display does.": "某个带有该屏幕 USB ID 的端口没有像该屏幕那样应答。",
     "No display found; Libre Panel keeps looking.": "未找到屏幕；Libre Panel 会继续查找。",
     "Looking for the display …": "正在查找屏幕 …",
     "Orientation of the picture": "画面方向",
     "Units with the values": "数值附带单位",
-    "As Waveshare's program sends them: 75%, 2934RPM. Off: the numbers alone, for themes that show their units themselves.": "与 Waveshare 程序发送的格式相同：75%、2934RPM。关闭：只发送数字，适用于自带单位显示的主题。"
+    "As Waveshare's program sends them: 75%, 2934RPM. Off: the numbers alone, for themes that show their units themselves.": "与 Waveshare 程序发送的格式相同：75%、2934RPM。关闭：只发送数字，适用于自带单位显示的主题。",
+    "Another program has the display's port: close it (Waveshare's own program, or wsmonitor's service).": "其他程序占用了屏幕的端口：请关闭它（Waveshare 自带的程序，或 wsmonitor 的服务）。"
   },
   "fields": {
     "agent": "智能体",

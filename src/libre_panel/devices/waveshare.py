@@ -23,12 +23,14 @@ say where to ask.
 
 from __future__ import annotations
 
+import os
 import struct
 import sys
 import time
 import zlib
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from libre_panel.devices.base import DeviceError, place_taken
@@ -244,13 +246,38 @@ def candidates(port: str = "") -> list[str]:
     ]
 
 
+def holders(device: str, proc: Path = Path("/proc")) -> list[str]:
+    """Linux: the names of the other processes of this user that have ``device`` open, such as
+    wsmonitor's service, which takes the port without the lock (each would write over the
+    other's frames); [] where it cannot be told."""
+    try:
+        target = os.path.realpath(device)
+        entries = list(os.scandir(proc))
+    except OSError:
+        return []
+    found = []
+    for entry in entries:
+        if not entry.name.isdigit() or int(entry.name) == os.getpid():
+            continue
+        try:
+            if any(os.readlink(fd.path) == target for fd in os.scandir(Path(entry.path, "fd"))):
+                found.append(Path(entry.path, "comm").read_text(encoding="utf-8").strip())
+        except OSError:  # (another user's process, or one that ended)
+            continue
+    return found
+
+
 def open_port(device: str) -> Any:
     """``device`` opened for the display: raw, with DTR set (some firmware is silent without);
-    the speed means nothing to a USB serial port."""
+    the speed means nothing to a USB serial port. DeviceError ("busy") where another program has
+    it open on Linux, which pyserial's lock does not keep out."""
     try:
         import serial
     except ImportError as exc:
         raise DeviceError("pyserial is not installed") from exc
+    others = holders(device) if sys.platform.startswith("linux") else []
+    if others:
+        raise DeviceError(f"{device} is busy: {', '.join(sorted(set(others)))} has it open")
     # (Windows opens a port for one program anyway; elsewhere the lock keeps out a second
     # Libre Panel and every program that asks for it)
     only_ours = {} if sys.platform == "win32" else {"exclusive": True}
