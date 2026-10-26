@@ -2773,7 +2773,9 @@
     "A port with the display's USB ids does not answer as the display does.": "Ein Port mit den USB-IDs des Displays antwortet nicht so, wie das Display es tut.",
     "No display found; Libre Panel keeps looking.": "Kein Display gefunden; Libre Panel sucht weiter.",
     "Looking for the display …": "Suche das Display …",
-    "Orientation of the picture": "Ausrichtung des Bildes"
+    "Orientation of the picture": "Ausrichtung des Bildes",
+    "Units with the values": "Einheiten zu den Werten",
+    "As Waveshare's program sends them: 75%, 2934RPM. Off: the numbers alone, for themes that show their units themselves.": "So, wie Waveshares Programm sie schickt: 75%, 2934RPM. Aus: nur die Zahlen, für Themes, die ihre Einheiten selbst zeigen."
   },
   "fields": {
     "agent": "Agent",

@@ -13,7 +13,7 @@ every message is a frame
 with type 0 from the PC and 2 for the display's answer (it answers every command). Most
 payloads are a ``QMap<QString, QString>`` as Qt's QDataStream writes it: the count, then each
 key and value as a big-endian byte length and UTF-16BE text. Brightness takes the number as
-plain text.
+plain text, 0 to 255 (as a capture of Waveshare's own program showed, #21).
 
 The display has commands that write files on its card and delete themes; this module has none
 of them. A port is the display only once it answered the handshake (``FIND_DEVICE``) with a
@@ -55,6 +55,7 @@ GADGET_PRODUCT = "Virtual Serial Port"
 PLACEHOLDER_IDS = (0x1234, 0x5678)
 
 ANSWER_S = 3.0  # the longest the display takes to answer
+BRIGHTEST = 255  # the display's brightest backlight (Waveshare's program sends 0 to 255)
 
 
 def frame(command: int, payload: bytes = b"", kind: int = TO_DISPLAY) -> bytes:
@@ -202,7 +203,10 @@ class Link:
         self.ask(SYSTEM_DATA, qmap(values))
 
     def set_brightness(self, percent: int) -> None:
-        self.ask(SET_BRIGHTNESS, str(max(0, min(100, int(percent)))).encode("ascii"))
+        """``percent`` of the backlight: the display counts 0 to 255 (Waveshare's program sends
+        that range; 100, as other tools send at most, is only two fifths of it)."""
+        level = round(max(0, min(100, int(percent))) * BRIGHTEST / 100)
+        self.ask(SET_BRIGHTNESS, str(level).encode("ascii"))
 
     def set_flipped(self, flipped: bool) -> None:
         self.ask(SET_CANVAS_FLIP, qmap({"canvas_flip": "1" if flipped else "0"}))

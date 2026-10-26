@@ -8,12 +8,15 @@ screen turned upside down where they are set. Nothing is written on the card
     port = ""          # "": the display is looked for; else its port ("COM5", "/dev/ttyACM0")
     brightness = 0     # 1-100 sets it; 0 leaves it as it is
     flip = ""          # "": as it is; "normal" or "upside-down"
+    units = false      # the values with their units, as Waveshare's program sends them
     every_s = 1.0
 
 The display's themes name their values with the keys of Waveshare's own program, in English
-and in Chinese (``Cpu_Temp`` and ``Cpu温度``): both are sent, as numbers without their units
-(the themes have those). Waveshare's program and this service cannot both have the display:
-the one that opens its port first keeps it.
+(``Cpu_Temp``), and some with Chinese ones (``Cpu温度``): both are sent. Waveshare's program
+writes its values with their units (``75%``, ``24RPM``, ``31℃``) and the weekday short
+(``Mon``); here the numbers go alone unless ``units`` is on, since themes often show the units
+themselves. Waveshare's program and this service cannot both have the display: the one that
+opens its port first keeps it.
 """
 
 from __future__ import annotations
@@ -58,36 +61,42 @@ def text(value: Any) -> str | None:
 
 
 # The display's keys for Libre Panel's readings: (its English key, its Chinese key, the
-# reading, how it is written). "Cpu_Freq" is the processor's load: so Waveshare named it.
-KEYS: tuple[tuple[str, str, str, Callable[[Any], str | None]], ...] = (
-    ("Cpu_Freq", "Cpu使用率", "cpu.load", whole),
-    ("Cpu_Temp", "Cpu温度", "cpu.temp", whole),
-    ("Cpu_Clock", "Cpu频率", "cpu.freq", whole),
-    ("Cpu_Power", "Cpu功耗", "cpu.power", whole),
-    ("Cpu_Model", "Cpu型号", "cpu.name", text),
-    ("Gpu_Load", "显卡利用率", "gpu.load", whole),
-    ("GPU_Temp", "显卡温度", "gpu.temp", whole),
-    ("Gpu_Clock", "显卡频率", "gpu.freq", whole),
-    ("Gpu_Power", "显卡功耗", "gpu.power", whole),
-    ("Gpu_Fan", "显卡风扇", "gpu.fan", whole),
-    ("Gpu_Usedata", "已用显存", "gpu.mem.used", whole),  # MB
-    ("Gpu_Model", "显卡型号", "gpu.name", text),
-    ("Memory_Load", "内存利用率", "mem.load", whole),
-    ("Memory_Used", "已用内存", "mem.used", tenth),  # GB
-    ("Memory_Available", "可用内存", "mem.free", tenth),
-    ("RAM_Model_0", "内存型号_0", "mem.name", text),
-    ("Download_Speed", "下载速度", "net.down", kilo),
-    ("Upload_Speed", "上传速度", "net.up", kilo),
-    ("vol", "音量", "audio.volume", whole),
-    ("temperature", "气温", "weather.temperature", whole),
-    ("weather", "天气", "weather.description", text),
+# reading, how it is written, the unit Waveshare's program puts after it). "Cpu_Freq" is the
+# processor's load: so Waveshare named it.
+KEYS: tuple[tuple[str, str, str, Callable[[Any], str | None], str], ...] = (
+    ("Cpu_Freq", "Cpu使用率", "cpu.load", whole, "%"),
+    ("Cpu_Temp", "Cpu温度", "cpu.temp", whole, "℃"),
+    ("Cpu_Clock", "Cpu频率", "cpu.freq", whole, "MHZ"),
+    ("Cpu_Power", "Cpu功耗", "cpu.power", whole, "W"),
+    ("Cpu_Model", "Cpu型号", "cpu.name", text, ""),
+    ("Gpu_Load", "显卡利用率", "gpu.load", whole, "%"),
+    ("GPU_Temp", "显卡温度", "gpu.temp", whole, "℃"),
+    ("Gpu_Clock", "显卡频率", "gpu.freq", whole, "MHZ"),
+    ("Gpu_Power", "显卡功耗", "gpu.power", whole, "W"),
+    ("Gpu_Fan", "显卡风扇", "gpu.fan", whole, "RPM"),
+    ("Gpu_Usedata", "已用显存", "gpu.mem.used", whole, "MB"),
+    ("Gpu_Model", "显卡型号", "gpu.name", text, ""),
+    ("Memory_Load", "内存利用率", "mem.load", whole, "%"),
+    ("Memory_Used", "已用内存", "mem.used", tenth, "GB"),
+    ("Memory_Available", "可用内存", "mem.free", tenth, "GB"),
+    ("RAM_Model_0", "内存型号_0", "mem.name", text, ""),
+    ("Download_Speed", "下载速度", "net.down", kilo, "KB/s"),
+    ("Upload_Speed", "上传速度", "net.up", kilo, "KB/s"),
+    ("vol", "音量", "audio.volume", whole, ""),
+    ("temperature", "气温", "weather.temperature", whole, "℃"),
+    ("weather", "天气", "weather.description", text, ""),
 )
 # Fans by what their name says (the sources name them by chip and header: fan.board.cpu_fan,
 # fan.lpc.pump): the display's key, its Chinese key, and the word looked for
 FANS = (("Cpu_Fan", "Cpu风扇", "cpu"), ("Pump_Fan", "水冷风扇", "pump"))
 PARTITIONS = 8  # the drives' use: Libre Panel's disk.1 to disk.8, the display's 0 to 7
-WANTED = (*(reading for _, _, reading, _ in KEYS), "fan.*", "disk.load",
+WANTED = (*(key[2] for key in KEYS), "fan.*", "disk.load",
           *(f"disk.{n}.load" for n in range(1, PARTITIONS + 1)))  # fmt: skip
+# the clock as Waveshare's program writes it (the weekday short, in the app's language here):
+# the display's key, its Chinese key where it has one, and the format
+CLOCK = (("time", "时间", "%H:%M:%S"), ("date", "日期", "%Y-%m-%d"), ("week", "星期", "%a"),
+         ("year", "", "%Y"), ("month", "", "%m"), ("day", "", "%d"), ("hour", "时", "%H"),
+         ("minute", "分", "%M"), ("second", "秒", "%S"))  # fmt: skip
 
 
 def fan(snapshot: Any, word: str) -> Any:
@@ -101,31 +110,31 @@ def fan(snapshot: Any, word: str) -> Any:
     return None
 
 
-def values(snapshot: Any, now: datetime) -> dict[str, str]:
+def values(snapshot: Any, now: datetime, units: bool = False) -> dict[str, str]:
     """What the display gets from ``snapshot`` at ``now``: each value under both of its keys,
-    and only those Libre Panel has."""
+    and only those Libre Panel has; with ``units``, each number with its unit."""
     out: dict[str, str] = {}
 
-    def put(english: str, chinese: str, value: str | None) -> None:
-        if value is not None:
-            out[english] = out[chinese] = value
+    def put(english: str, chinese: str, value: str | None, unit: str = "") -> None:
+        if value is None:
+            return
+        value = value + unit if units else value
+        out[english] = value
+        if chinese:
+            out[chinese] = value
 
     read = snapshot.value if snapshot is not None else (lambda key: None)
-    for english, chinese, reading, how in KEYS:
-        put(english, chinese, how(read(reading)))
+    for english, chinese, reading, how, unit in KEYS:
+        put(english, chinese, how(read(reading)), unit)
     for english, chinese, word in FANS:
-        put(english, chinese, whole(fan(snapshot, word)) if snapshot is not None else None)
+        put(english, chinese, whole(fan(snapshot, word)) if snapshot is not None else None, "RPM")
     for n in range(1, PARTITIONS + 1):
         load = read(f"disk.{n}.load")
         if n == 1 and load is None:
             load = read("disk.load")
-        put(f"Partition_Usage_{n - 1}", f"分区利用率_{n - 1}", whole(load))
-    clock = {"time": "%H:%M:%S", "date": "%Y-%m-%d", "week": "%A", "hour": "%H",
-             "minute": "%M", "second": "%S"}  # fmt: skip
-    chinese = {"time": "时间", "date": "日期", "week": "星期", "hour": "时", "minute": "分",
-               "second": "秒"}  # fmt: skip
-    for key, fmt in clock.items():
-        put(key, chinese[key], format_date(now, fmt))
+        put(f"Partition_Usage_{n - 1}", f"分区利用率_{n - 1}", whole(load), "%")
+    for english, chinese, fmt in CLOCK:
+        put(english, chinese, format_date(now, fmt))
     return out
 
 
@@ -152,6 +161,7 @@ class Waveshare(Service):
         "port": ("string", ""),
         "brightness": ("int", 0),
         "flip": ("string", ""),
+        "units": ("bool", False),
         "every_s": ("number", 1.0),
     }
 
@@ -167,6 +177,7 @@ class Waveshare(Service):
         self.port = str(options["port"]).strip()
         self.brightness = max(0, min(100, int(options["brightness"])))
         self.flip = FLIPS.get(str(options["flip"]).strip())
+        self.units = bool(options["units"])
         self.every = max(0.25, float(options["every_s"]))
         self._connect, self._now = connect, now
         self._stop = threading.Event()
@@ -246,5 +257,5 @@ class Waveshare(Service):
             link.set_flipped(self.flip)
         while not self._stop.is_set():
             began = time.monotonic()
-            link.send_values(values(self.host.snapshot(), self._now()))
+            link.send_values(values(self.host.snapshot(), self._now(), self.units))
             self._stop.wait(max(0.0, self.every - (time.monotonic() - began)))

@@ -1124,8 +1124,14 @@ Waveshare named it), `Gpu_Usedata` the graphics memory in MB, `Download_Speed` a
 port = ""              # "": the display is looked for; else "COM5", "/dev/ttyACM0"
 brightness = 0         # 1-100 sets it; 0 leaves it as it is
 flip = ""              # "": as it is; "normal" or "upside-down"
+units = false          # the values with their units ("75%", "2934RPM")
 every_s = 1.0
 ```
+
+The brightness in percent goes to the display on its own scale of 0 to 255, as Waveshare's
+program sends it, so 100 is as bright as there. The weekday goes short (`Mon`, in the app's
+language), with `year`, `month` and `day` beside `date`; `units` adds the units as Waveshare's
+program writes them, for themes made for that.
 
 Nothing is written on the display's card: Libre Panel has none of its commands that write
 or delete there.

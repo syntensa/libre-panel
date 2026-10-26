@@ -6,11 +6,12 @@
 - **Waveshare USB monitors (experimental).** These displays draw their own themes from their
   card and take only the values from the PC: the new service *Waveshare USB monitor*
   (*Settings → Game mode and more*) sends them Libre Panel's readings, under the keys their
-  themes use, and sets the brightness and turns the picture where you ask. Nothing is written
-  on the card. On Linux, *Set up sensors and panel access* now also hands units with the ids
-  `1234:5678` from the touchscreen driver to the serial one. The protocol is the one
-  Derik-for-real24 documented in the wsmonitor project (#21), with thanks; not yet seen on the
-  hardware.
+  themes use, and sets the brightness (on the display's own scale, so as bright as with
+  Waveshare's program) and turns the picture where you ask. Nothing is written on the card. On
+  Linux, *Set up sensors and panel access* now also hands units with the ids `1234:5678` from
+  the touchscreen driver to the serial one. The protocol is the one Derik-for-real24 documented
+  in the wsmonitor project (#21), with thanks; the same frames from its client were seen
+  working on a display.
 - **A service can say what it is doing** (`Service.summary()`), shown on its card in the app.
 
 ## 0.7.1rc7 — 2026-10-26

@@ -146,7 +146,9 @@ def test_the_link_asks_and_the_display_answers():
     assert link.hello() == {"screen_inch": "2.8", "screen_w": "480", "screen_h": "640"}
     assert link.version() == "V2.04"
     link.set_brightness(130)
-    assert display.last(waveshare.SET_BRIGHTNESS) == b"100"  # 0-100
+    assert display.last(waveshare.SET_BRIGHTNESS) == b"255"  # the display counts 0 to 255
+    link.set_brightness(50)
+    assert display.last(waveshare.SET_BRIGHTNESS) == b"128"
     link.set_flipped(True)
     assert waveshare.read_qmap(display.last(waveshare.SET_CANVAS_FLIP)) == {"canvas_flip": "1"}
     link.send_values({"Cpu_Temp": "54"})
@@ -251,7 +253,8 @@ def test_the_readings_go_under_the_display_s_english_and_chinese_keys():
     assert got["Partition_Usage_0"] == "40" and got["分区利用率_1"] == "71"
     assert got["time"] == got["时间"] == "09:08:07" and got["date"] == "2026-01-05"
     assert got["hour"] == "09" and got["minute"] == "08" and got["second"] == "07"
-    assert got["week"] == got["星期"] and got["week"]  # the weekday in the app's language
+    assert got["week"] == got["星期"] == "Mon"  # short, in the app's language
+    assert (got["year"], got["month"], got["day"]) == ("2026", "01", "05")
     assert "Cpu_Power" not in got and "GPU_Temp" in got  # only what Libre Panel has
     assert all(isinstance(value, str) for value in got.values())
     # the drive's use without numbers: the first partition
@@ -259,9 +262,19 @@ def test_the_readings_go_under_the_display_s_english_and_chinese_keys():
         "Partition_Usage_0"
     ] == "63"  # fmt: skip
     assert set(service.values(None, datetime(2026, 1, 5))) == {
-        "time", "时间", "date", "日期", "week", "星期",
+        "time", "时间", "date", "日期", "week", "星期", "year", "month", "day",
         "hour", "时", "minute", "分", "second", "秒",
     }  # fmt: skip
+
+
+def test_the_values_can_carry_their_units_as_waveshare_s_program_sends_them():
+    """A capture of Waveshare's program (#21): "75%", "24RPM", "31℃", "0.0KB/s"."""
+    got = service.values(snapshot(READINGS), datetime(2026, 1, 5, 9, 8, 7), units=True)
+    assert got["Cpu_Freq"] == "13%" and got["Cpu_Temp"] == got["Cpu温度"] == "54℃"
+    assert got["Cpu_Clock"] == "4712MHZ" and got["Cpu_Fan"] == "1180RPM"
+    assert got["Memory_Used"] == "13.0GB" and got["Upload_Speed"] == "50.0KB/s"
+    assert got["Partition_Usage_0"] == "40%" and got["Gpu_Usedata"] == "8124MB"
+    assert got["vol"] == "35" and got["Cpu_Model"] == "chip0000" and got["time"] == "09:08:07"
 
 
 def test_why_the_display_is_not_there_is_told_apart():
@@ -286,7 +299,7 @@ class Host:
 
 
 def started(options, connect):
-    given = {"port": "", "brightness": 0, "flip": "", "every_s": 0.25, **options}
+    given = {"port": "", "brightness": 0, "flip": "", "units": False, "every_s": 0.25, **options}
     feeder = service.Waveshare(Host(READINGS), given, connect=connect,
                                now=lambda: datetime(2026, 1, 5, 9, 8, 7))  # fmt: skip
     feeder.start()
@@ -309,7 +322,7 @@ def test_the_service_sends_the_readings_and_sets_what_is_asked():
         commands = display.commands()
         assert commands[:4] == [waveshare.FIND_DEVICE, waveshare.GET_VERSION,
                                 waveshare.SET_BRIGHTNESS, waveshare.SET_CANVAS_FLIP]  # fmt: skip
-        assert display.last(waveshare.SET_BRIGHTNESS) == b"60"
+        assert display.last(waveshare.SET_BRIGHTNESS) == b"153"  # 60 % of 255
         assert waveshare.read_qmap(display.last(waveshare.SET_CANVAS_FLIP)) == {"canvas_flip": "1"}
         sent = waveshare.read_qmap(display.last(waveshare.SYSTEM_DATA))
         assert sent["Cpu_Temp"] == "54" and sent["时间"] == "09:08:07"

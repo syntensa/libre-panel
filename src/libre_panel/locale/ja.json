@@ -2773,7 +2773,9 @@
     "A port with the display's USB ids does not answer as the display does.": "ディスプレイの USB ID を持つポートが、ディスプレイのようには応答しません。",
     "No display found; Libre Panel keeps looking.": "ディスプレイが見つかりません。Libre Panel は探し続けます。",
     "Looking for the display …": "ディスプレイを探しています …",
-    "Orientation of the picture": "画面の向き"
+    "Orientation of the picture": "画面の向き",
+    "Units with the values": "値に単位を付ける",
+    "As Waveshare's program sends them: 75%, 2934RPM. Off: the numbers alone, for themes that show their units themselves.": "Waveshare のプログラムと同じ形式：75%、2934RPM。オフ：数字のみ。単位を自分で表示するテーマ向けです。"
   },
   "fields": {
     "agent": "エージェント",

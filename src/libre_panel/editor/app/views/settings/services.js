@@ -200,6 +200,10 @@ const OPTIONS = {
       { id: "upside-down", name: t("Upside down") },
     ],
   },
+  "waveshare.units": {
+    label: () => t("Units with the values"),
+    hint: () => t("As Waveshare's program sends them: 75%, 2934RPM. Off: the numbers alone, for themes that show their units themselves."),
+  },
   "waveshare.every_s": { label: () => t("Send the readings every"), unit: "s", min: 0.25, max: 60, step: 0.25 },
 };
 
