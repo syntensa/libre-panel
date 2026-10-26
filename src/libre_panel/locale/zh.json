@@ -2781,7 +2781,10 @@
     "Themes in turn": "轮换的主题",
     "Shown at random, each for the minutes below.": "随机显示，每个显示下方设定的分钟数。",
     "Next theme after": "切换到下一个主题的间隔",
-    "0: no turns.": "0：不轮换。"
+    "0: no turns.": "0：不轮换。",
+    "Is black black on panel {n}?": "面板 {n} 上的黑色够黑吗？",
+    "Compare on the panel": "在面板上对比",
+    "Smooth motion runs on panel {n}, a model whose black level nobody has compared yet. If its video looks washed out, as under a grey veil, compare the two ways on the panel once: the one that looks right is kept.": "面板 {n} 正在运行流畅动态，而这个型号的黑位还没有人对比过。如果画面发白、像蒙了一层灰纱，请在面板上对比一次两种方式：看起来正确的那种会被保留。"
   },
   "fields": {
     "agent": "智能体",

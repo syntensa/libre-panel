@@ -467,6 +467,12 @@
   align-items: stretch;
 }
 
+.range-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .hint-card strong {
   color: var(--warn);
 }

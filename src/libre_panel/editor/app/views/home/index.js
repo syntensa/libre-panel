@@ -26,6 +26,7 @@ import { Gallery, ThemeRow, collectionsOf, fitsPanel, startThemes } from "./them
 import { ScenesCard } from "./scenes.js";
 import { SequenceCard, SequencePage } from "./sequence.js";
 import { CommunityThemes, exportZip, importZip, shareWithEveryone, useDropFile } from "./sharing.js";
+import { RangeCard } from "./range.js";
 import { SetupCard } from "./setup.js";
 import { UpdateCard } from "./update.js";
 
@@ -262,11 +263,12 @@ const OWN_CARDS = ["video-clip", "sensor-service", "linux-setup", "readings", "p
 /**
  * What keeps the panel from all it can do, each with the way to fix it: in short what
  * Settings → Overview says in full, then the sensors Windows keeps to administrators, the
- * rights Linux gives, readings that are missing. The launcher's first place, above the panel:
+ * rights Linux gives, readings that are missing, how black looks on a panel nobody has compared
+ * yet. The launcher's first place, above the panel:
  * "is everything all right?" is answered before anything else.
  */
 function StartNotices() {
-  return html`<${HealthCard} compact skip=${OWN_CARDS} /><${UnlockCard} /><${SetupCard} /><${Hint} />`;
+  return html`<${HealthCard} compact skip=${OWN_CARDS} /><${UnlockCard} /><${SetupCard} /><${Hint} /><${RangeCard} />`;
 }
 
 /** For a while: what is new (who updated, until it is closed), else the first steps (who began

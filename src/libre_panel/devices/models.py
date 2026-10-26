@@ -67,6 +67,9 @@ class PanelModel:
     # (16-235, as a stream says by default), or "full" (0-255) for one that shows every stream
     # as full range, whatever the stream says
     video_range: str = "limited"
+    # Whether ``video_range`` is what an owner saw on the panel (Check the colours' A/B), not
+    # the default: where it is not, Start asks the person once at the first video
+    video_range_seen: bool = False
 
     def size(self, orientation: str) -> tuple[int, int]:
         """Frame size for ``portrait`` or ``landscape``."""
@@ -247,6 +250,7 @@ MODELS: tuple[PanelModel, ...] = (
         # as the 12.3": the owner's panel showed limited-range video under a grey veil and
         # full range right (the A/B comparison of Check the colours)
         video_range="full",
+        video_range_seen=True,
     ),
     PanelModel(
         "turing-12.3-usb",
@@ -261,6 +265,7 @@ MODELS: tuple[PanelModel, ...] = (
         # conversion and with the processor's, the stream tagged limited, and right as stills:
         # its decoder takes every stream as full range
         video_range="full",
+        video_range_seen=True,
     ),
     PanelModel(
         "usbpcmonitor-3.5",

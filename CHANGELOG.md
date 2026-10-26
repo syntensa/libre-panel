@@ -3,6 +3,11 @@
 ## Unreleased
 
 **New**
+- **Start asks how black looks on a panel nobody has compared yet.** A panel's decoder that
+  shows video as full range lays a grey veil over it, as it did on the 9.2" and the 12.3" before
+  anyone noticed. Where smooth motion runs on a model whose black level is not known yet, Start
+  asks once and *Compare on the panel* shows both ways on it; the one that looks right is kept,
+  and the panel report tells it, so the model can get it by itself.
 - **Waveshare: the themes on the display's card, one at a time or in turn.** The service's
   options list the card's themes by name: pick the one to show, or tick several and Libre
   Panel shows them in turn at random, each for the minutes you set. It only switches between

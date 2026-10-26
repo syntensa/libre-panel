@@ -4174,6 +4174,42 @@ def test_start_offers_the_setup_while_something_is_missing(app_url, isolated_hom
         expect(card.get_by_role("button", name="Set up")).to_be_enabled()
 
 
+def test_start_asks_how_black_looks_where_nobody_compared_the_model(app_url, isolated_home):
+    """Smooth motion on a model whose range nobody has compared: Start asks; Compare starts the
+    A/B on that panel and goes to Check the colours, where the answer is written; Not now keeps
+    the card away, also after the page is loaded again."""
+    import json
+
+    posted = []
+
+    def panel(route, request):
+        answer = route.fetch().json()
+        answer["video"]["range_unseen"] = True
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(answer))
+
+    def colours(route, request):
+        if request.method != "POST":
+            return route.continue_()
+        posted.append(json.loads(request.post_data))
+        route.fulfill(status=200, content_type="application/json", body="{}")
+
+    choose_theme(isolated_home)
+    routes = {"**/api/panel": panel, "**/api/colour-check*": colours}
+    with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
+        card = page.locator(".range-card")
+        expect(card).to_contain_text("Is black black on panel 1?")
+        card.get_by_role("button", name="Compare on the panel").click()
+        page.wait_for_function("location.hash.startsWith('#/settings/panel')")
+        assert posted == [{"action": "range", "panel": 1}]
+        page.goto(f"{app_url}#/home")
+        page.locator(".range-card").get_by_role("button", name="Not now").click()
+        expect(page.locator(".range-card")).to_have_count(0)
+        page.reload()
+        page.wait_for_selector(".start.launcher")
+        page.wait_for_function("window.libre.store.get().panelInfo?.video?.range_unseen === true")
+        expect(page.locator(".range-card")).to_have_count(0)
+
+
 def test_start_stays_quiet_where_nothing_is_missing(app_url, isolated_home, linux_pc):
     linux_pc(rule_elsewhere=True, dmi={}, panel=False, panel_denied=False, rapl=(), rapl_closed=())
     with start_with_setup(app_url, isolated_home) as page:

@@ -535,7 +535,9 @@ def test_no_panel_found_says_so_and_has_nothing_to_tell_about_video(server, monk
     assert status == 200
     assert data["found"] is None and data["model"] is None and data["running"] is None
     assert data["configured"] == "auto"
-    assert data["video"] == {"mode": "auto", "fps": 30, "on": False, "usb": True, "gaps": []}
+    assert data["video"] == {
+        "mode": "auto", "fps": 30, "on": False, "usb": True, "gaps": [], "range_unseen": False,
+    }  # fmt: skip
 
 
 def test_a_panel_on_the_bus_is_named_and_the_video_mode_says_what_it_lacks(server, monkeypatch):
@@ -565,6 +567,32 @@ def test_on_asks_for_no_proof_but_still_for_the_clip_name_and_ffmpeg(server, mon
     write(server, **{"video.mode": "on"})
     _, data = request(server, "GET", "/api/panel")
     assert data["video"]["gaps"] == ["clip", "ffmpeg"] and data["video"]["on"] is True
+
+
+def test_start_asks_how_black_looks_on_a_model_nobody_compared(server, monkeypatch):
+    """Smooth motion on a model whose range nobody has seen on a panel: Start asks how black
+    looks there until the answer sets video_range, which the panel report then tells; a model
+    that was compared is not asked for."""
+    panel_on_the_bus(monkeypatch, "turing-8.8-usb")
+    lacking_ffmpeg(monkeypatch, found=True)
+    write(server, **{"video.mode": "on", "video.local_clip": "usr/data/standby.h264"})
+    _, data = request(server, "GET", "/api/panel")
+    assert data["video"]["on"] is True and data["video"]["range_unseen"] is True
+    _, report = request(server, "GET", "/api/report")
+    assert "Video range" not in report["text"]
+    write(server, **{"device.video_range": "full"})
+    _, data = request(server, "GET", "/api/panel")
+    assert data["video"]["range_unseen"] is False
+    _, report = request(server, "GET", "/api/report")
+    assert "Video range: full" in report["text"]
+    write(server, **{"device.video_range": "auto"})
+    panel_on_the_bus(monkeypatch, "turing-12.3-usb")
+    _, data = request(server, "GET", "/api/panel")
+    assert data["video"]["on"] is True and data["video"]["range_unseen"] is False
+    write(server, **{"video.mode": "off"})
+    panel_on_the_bus(monkeypatch, "turing-8.8-usb")
+    _, data = request(server, "GET", "/api/panel")
+    assert data["video"]["range_unseen"] is False  # (no video, no question)
 
 
 def test_a_zc360_is_found_as_one_usb_panel_of_three_screens(server, monkeypatch):

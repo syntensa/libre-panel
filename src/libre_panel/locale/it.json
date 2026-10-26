@@ -2781,7 +2781,10 @@
     "Themes in turn": "Temi a turno",
     "Shown at random, each for the minutes below.": "Mostrati a caso, ognuno per i minuti qui sotto.",
     "Next theme after": "Tema successivo dopo",
-    "0: no turns.": "0: nessun cambio."
+    "0: no turns.": "0: nessun cambio.",
+    "Is black black on panel {n}?": "Il nero sul pannello {n} è davvero nero?",
+    "Compare on the panel": "Confronta sul pannello",
+    "Smooth motion runs on panel {n}, a model whose black level nobody has compared yet. If its video looks washed out, as under a grey veil, compare the two ways on the panel once: the one that looks right is kept.": "Sul pannello {n} è attivo il movimento fluido, ma il livello del nero di questo modello non l'ha ancora confrontato nessuno. Se il video appare slavato, come sotto un velo grigio, confronta una volta i due modi sul pannello: resta quello che sembra giusto."
   },
   "fields": {
     "agent": "agente",

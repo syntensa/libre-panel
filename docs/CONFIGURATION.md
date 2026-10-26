@@ -1738,11 +1738,15 @@ panel that shows a limited-range video as full range shows black as dark grey an
 paler, in video mode only; its stills are right. `[device] video_range` (and each `[[panels]]`
 table's own) says which the panel gets: `"auto"` as its model is known to show video (full on
 the 9.2" and the 12.3", whose video looked washed out in limited range; limited on the others),
-`"limited"` or `"full"`. Full range is made by ffmpeg on the processor (BT.601 in full range), or by AMD's
-and Intel's card where the check found it right; the stream says so of itself. *Is black too
+`"limited"` or `"full"`. Full range is made by ffmpeg on the processor (BT.601 in full
+range), or by AMD's and Intel's card where the check found it right; the stream says so of
+itself. *Is black too
 light on the panel? Compare* under *Check the colours* shows the test picture on that panel in
 limited (A) and full range (B) every 3 seconds; *A looks right* or *B looks right* writes that
-panel's `video_range`, and the panel follows at once.
+panel's `video_range`, and the panel follows at once. Where smooth motion runs on a model that
+nobody has compared yet and `video_range` is `"auto"`, Start asks once (*Is black black on panel
+1?*) and *Compare on the panel* starts this comparison; the panel report (*Settings → About*)
+tells the answer, so the model can learn it.
 
 The settings were measured on the 9.2" panel; the details are in
 [the protocol notes](protocol/turzx-usb.md#two-layers-h264-video--png-overlay-smooth-path).

@@ -2781,7 +2781,10 @@
     "Themes in turn": "Темы по очереди",
     "Shown at random, each for the minutes below.": "Показываются случайно, каждая на указанное ниже число минут.",
     "Next theme after": "Следующая тема через",
-    "0: no turns.": "0: без смены."
+    "0: no turns.": "0: без смены.",
+    "Is black black on panel {n}?": "Чёрный на панели {n} действительно чёрный?",
+    "Compare on the panel": "Сравнить на панели",
+    "Smooth motion runs on panel {n}, a model whose black level nobody has compared yet. If its video looks washed out, as under a grey veil, compare the two ways on the panel once: the one that looks right is kept.": "На панели {n} работает плавное движение, а уровень чёрного этой модели ещё никто не сравнивал. Если видео выглядит блёклым, как под серой вуалью, один раз сравните оба способа на панели: останется тот, что выглядит правильно."
   },
   "fields": {
     "agent": "агент",

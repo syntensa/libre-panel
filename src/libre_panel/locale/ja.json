@@ -2781,7 +2781,10 @@
     "Themes in turn": "交互に表示するテーマ",
     "Shown at random, each for the minutes below.": "ランダムに表示し、それぞれ下の分数だけ表示します。",
     "Next theme after": "次のテーマまで",
-    "0: no turns.": "0：切り替えなし。"
+    "0: no turns.": "0：切り替えなし。",
+    "Is black black on panel {n}?": "パネル {n} の黒はちゃんと黒い？",
+    "Compare on the panel": "パネルで比べる",
+    "Smooth motion runs on panel {n}, a model whose black level nobody has compared yet. If its video looks washed out, as under a grey veil, compare the two ways on the panel once: the one that looks right is kept.": "パネル {n} でなめらかな動きが動いていますが、この機種の黒レベルはまだ誰も比べていません。映像が灰色のベールをかけたように白っぽく見えたら、パネル上で 2 つの方式を一度比べてください。正しく見えるほうが残ります。"
   },
   "fields": {
     "agent": "エージェント",
