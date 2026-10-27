@@ -357,16 +357,19 @@ themes (Linux, #21).
 Waveshare's wiki also offers, for each monitor, a card image that makes it a plain USB display:
 it no longer shows the themes on its card, it shows what the PC sends, whole pictures over USB.
 Libre Panel then drives it as one of its own panels, with its own themes, the way up and the
-brightness set in Libre Panel, and up to 30 pictures a second, as a panel in video mode
-(`device.model = "waveshare-2.8-udisp"`, or found by `auto`). The service above has nothing to
+brightness set in Libre Panel, and a video stream of raw pictures, 30 a second as a TURZX panel
+in video mode gets them (`device.model = "waveshare-2.8-udisp"`, or found by `auto`). The service above has nothing to
 do with it then.
 
 - It shows up as a USB display, `303a:2986`, whose product string says its size and what it
   takes ("t113udisp1_R480x480_Ejpg5_Ergb16_Ergb32" on the 2.8" round one, #21). Libre Panel
   finds it by that string; a size it does not know yet is not taken.
-- Libre Panel sends whole pictures as a panel in video mode gets them, 30 a second. It times what
-  the display takes: JPEG first, as its firmware is made for it; where JPEG stays under 25 a
-  second, RGB565 (and then RGB888) is timed too and the fastest kept. The log says what each
+- Libre Panel streams the pictures as raw pixels (RGB565), every pixel as it was drawn: no
+  JPEG blurs fine lines or edges. The stream runs at the frames a second of a TURZX panel in
+  video mode (`[video] fps`, 30 by default, up to 60), fewer where the display says so. Libre
+  Panel times what the display takes: where raw pixels stay under 25 a second (an ESP32 display
+  at USB's full speed), RGB888 and then JPEG are timed too; the first that goes smoothly is
+  kept, else the fastest, and the stream runs no faster than it goes. The log says what each
   came to.
 - No command for the backlight is known, so the brightness goes into the picture: 100 % is as
   bright as the display's card image sets its backlight, and less is darker.

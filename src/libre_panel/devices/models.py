@@ -34,7 +34,8 @@ PROTOCOLS = {
     "usb-beada": "USB bulk (VID 0x4E58), BeadaPanel's Panel-Link, 16-bit frames",
     "usb-nzxt": "USB bulk and HID (VID 0x1E71), an NZXT Kraken's LCD, frames through its memory",
     "usb-thermaltake": "USB HID (VID 0x264A), Thermaltake's LCD, JPEG frames",
-    "usb-udisp": "USB bulk (VID 0x303A), a udisp USB display (Waveshare's USB display image), JPEG",
+    "usb-udisp": "USB bulk (VID 0x303A), a udisp USB display (Waveshare's USB display image), a "
+    "video stream of raw RGB565 pictures",
 }
 
 
@@ -803,8 +804,9 @@ _LIMITS = {
     "waveshare-2.8-udisp": (
         "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB "
         "display (it then calls itself udisp over USB), and shows only what the PC sends: the "
-        "themes on its card are gone with that image. It takes whole pictures, up to 30 a "
-        "second: smooth motion. Its brightness goes into the picture: dimming darkens it."
+        "themes on its card are gone with that image. It gets a video stream of raw pictures, "
+        "every pixel as drawn, 30 a second: smooth motion. Its brightness goes into the picture: "
+        "dimming darkens it."
     ),
 }
 MODELS = tuple(

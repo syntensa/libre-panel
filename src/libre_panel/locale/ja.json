@@ -2789,7 +2789,7 @@
     "the USB display shows {size}, not the {panel}'s size": "USBディスプレイは {size} で、{panel} のサイズではありません",
     "the {panel} has no endpoint for pictures": "{panel} には画像用のエンドポイントがありません",
     "Waveshare's round USB Monitor with the card image that makes it a USB display": "USBディスプレイにするカードイメージを入れたWaveshareの円形USBモニター",
-    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It takes whole pictures, up to 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "実機ではまだ確認されていません。USBディスプレイにするWaveshareのカードイメージが必要で（その後はUSBでudispと名乗ります）、PCが送るものだけを表示します。カード上のテーマはそのイメージで消えます。画像を丸ごと、毎秒30枚まで受け取ります。なめらかな動きです。明るさは画像に反映されるため、減光すると画像が暗くなります。"
+    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of raw pictures, every pixel as drawn, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "実機ではまだ確認されていません。USBディスプレイにするWaveshareのカードイメージが必要で（その後はUSBでudispと名乗ります）、PCが送るものだけを表示します。カード上のテーマはそのイメージで消えます。未圧縮の画像によるビデオストリームを受け取ります。各ピクセルは描かれたとおりで、毎秒30枚、なめらかな動きです。明るさは画像に反映されるため、減光すると画像が暗くなります。"
   },
   "fields": {
     "agent": "エージェント",

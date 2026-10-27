@@ -1,8 +1,8 @@
 """USB displays that speak "udisp": Waveshare's USB monitors with the card image that makes
 them a USB display (the 2.8" round one: an Allwinner T113 that shows what the PC sends), and
-the ESP32 displays the protocol was made for. They take whole pictures, as JPEG or as raw
-pixels, as fast as USB 2.0 carries them: Libre Panel drives them as it does a panel in video
-mode, every frame at a steady pace.
+the ESP32 displays the protocol was made for. They take whole pictures as raw pixels (or as
+JPEG), as fast as USB 2.0 carries them: Libre Panel streams them as it does a TURZX panel in
+video mode, every frame at a steady pace, every pixel as it was drawn.
 
 The protocol, as chuanjinpang's xfz1986 USB display drivers (GPL-2.0, Windows and Linux) and
 the firmware beside them speak it, and as the display tells it in its USB product string:
@@ -50,8 +50,8 @@ MAX_PAYLOAD = (1 << 22) - 1
 FRAME_IDS = 1 << 10
 QUALITIES = (90, 80, 70, 60, 50)
 WRITE_TIMEOUT_MS = 3000
-STREAM_FPS = 30  # every frame, as a video panel gets them (less where the display says less)
 SMOOTH_FPS = 25  # a kind of picture that goes this fast is kept without trying the others
+REACHED = 0.9  # of the pictures a second the kind kept came to: the most it is driven at
 TRIAL = 24  # the frames each kind of picture is timed over
 NAMES = {RGB565: "RGB565", RGB888: "RGB888", YUV420: "YUV420", JPEG: "JPEG"}
 AGAIN_S = 1.0  # the last picture again after this long without one
@@ -149,8 +149,10 @@ def rgb565(picture: Image.Image) -> bytes:
 
 def takes(said: dict[str, Any]) -> list[int]:
     """The kinds of picture a display takes, by what it says, in the order they are tried:
-    JPEG (what its firmware is made for), RGB565, RGB888 (the most bytes)."""
-    found = [kind for kind, key in ((JPEG, "jpeg"), (RGB565, "rgb16"), (RGB888, "rgb32"))
+    raw pixels first, every pixel as it was drawn (RGB565: half the bytes of RGB888), JPEG
+    last (it blurs fine lines and edges: for a display that takes no raw pixels, or too few of
+    them a second)."""
+    found = [kind for kind, key in ((RGB565, "rgb16"), (RGB888, "rgb32"), (JPEG, "jpeg"))
              if said.get(key)]  # fmt: skip
     return found or [JPEG]
 
@@ -173,7 +175,7 @@ class UdispDisplay(Display):
         self.model = model or next(m for m in MODELS if m.protocol == PROTOCOL)
         self.clock = clock
         self.kinds: list[int] = []  # what the display takes, in the order they are tried
-        self.kind = JPEG
+        self.kind = RGB565
         self.rates: dict[int, float] = {}  # pictures a second each kind came to
         self._timed: list[float] = []
         self.device: Any = None
@@ -200,7 +202,15 @@ class UdispDisplay(Display):
 
     @property
     def stream_fps(self) -> int:  # type: ignore[override]
-        return min(STREAM_FPS, self.said.get("fps") or STREAM_FPS)
+        """The frames a second of a TURZX panel in video mode (``[video] fps``, 30 by default),
+        fewer where the display says so or the kind of picture kept comes to fewer."""
+        reached = self.rates.get(self.kind)
+        wanted = self._wanted()
+        return max(1, min(wanted, round(reached * REACHED))) if reached else wanted
+
+    def _wanted(self) -> int:
+        fps = self.config.video.fps
+        return min(fps, self.said.get("fps") or fps)
 
     def open(self) -> None:
         import usb.core
@@ -254,9 +264,9 @@ class UdispDisplay(Display):
     def _choose(self, seconds: float) -> None:
         """Time the kind of picture in use: the display takes the next one only once it has
         drawn the last (the transfer waits for it), so encoding and sending tell how many it
-        shows a second. JPEG goes first, as the display's firmware is made for it; where it
-        stays under :data:`SMOOTH_FPS`, the next kind it takes is timed too, and the fastest is
-        kept."""
+        shows a second. Raw pixels go first; where they stay under :data:`SMOOTH_FPS` (or the
+        frames a second wanted), the next kind it takes is timed too. The first kind that goes
+        that fast is kept, else the fastest."""
         if self.rates.get(self.kind) is not None or not self.kinds:
             return
         self._timed.append(seconds)
@@ -265,11 +275,13 @@ class UdispDisplay(Display):
         rate = len(self._timed) / max(sum(self._timed), 1e-6)
         self.rates[self.kind], self._timed = rate, []
         untried = [kind for kind in self.kinds if kind not in self.rates]
-        if rate < SMOOTH_FPS and untried:
+        smooth = min(SMOOTH_FPS, self._wanted())
+        if rate < smooth and untried:
             self.kind = untried[0]
             return
-        best = max(self.rates.values())  # (as fast within a twentieth: the fewer bytes)
-        self.kind = next(k for k in self.kinds if self.rates.get(k, 0) >= 0.95 * best)
+        best = max(self.rates.values())  # (none smooth: as fast within a twentieth is as good)
+        least = smooth if best >= smooth else 0.95 * best
+        self.kind = next(k for k in self.kinds if self.rates.get(k, 0) >= least)
         said = ", ".join(f"{NAMES[k]} {r:.0f}" for k, r in self.rates.items())
         log.info("%s: %s pictures a second; %s kept", self.describe(), said, NAMES[self.kind])
 

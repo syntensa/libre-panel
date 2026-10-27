@@ -2789,7 +2789,7 @@
     "the USB display shows {size}, not the {panel}'s size": "该 USB 显示屏的尺寸为 {size}，不是 {panel} 的尺寸",
     "the {panel} has no endpoint for pictures": "{panel} 没有用于图片的端点",
     "Waveshare's round USB Monitor with the card image that makes it a USB display": "Waveshare 圆形 USB 副屏，使用把它变成 USB 显示屏的存储卡镜像",
-    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It takes whole pictures, up to 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "尚未在实机上验证。它需要 Waveshare 把它变成 USB 显示屏的存储卡镜像（之后它在 USB 上自称 udisp），并且只显示电脑发送的内容：卡上的主题会随该镜像消失。它接收整张图片，每秒最多 30 张：流畅动态。它的亮度体现在画面里：调暗会让画面变暗。"
+    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of raw pictures, every pixel as drawn, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "尚未在实机上验证。它需要 Waveshare 把它变成 USB 显示屏的存储卡镜像（之后它在 USB 上自称 udisp），并且只显示电脑发送的内容：卡上的主题会随该镜像消失。它接收由原始图像组成的视频流，每个像素都与绘制时一致，每秒 30 张：流畅动态。它的亮度体现在画面里：调暗会让画面变暗。"
   },
   "fields": {
     "agent": "智能体",

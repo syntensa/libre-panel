@@ -13,9 +13,10 @@
 - **Waveshare's USB monitors as USB displays, panels of their own.** With the card image from
   Waveshare's wiki that makes it a USB display ("udisp"), the 2.8" round monitor shows what the
   PC sends instead of the themes on its card; Libre Panel now drives it as one of its panels,
-  with its own themes, the way up and the brightness set in Libre Panel, and smooth motion: up
-  to 30 pictures a second, as a panel in video mode gets them. Libre Panel times what the display
-  takes (JPEG, else RGB565) and keeps the fastest. It is found by the size it tells over USB.
+  with its own themes, the way up and the brightness set in Libre Panel, and smooth motion: a
+  video stream of raw pictures, every pixel as drawn, 30 a second as a TURZX panel in video
+  mode gets them (`[video] fps`). Only a display too slow for raw pixels gets JPEG. It is found
+  by the size it tells over USB.
   Nobody has run it with Libre Panel yet (#21).
 - **Waveshare's USB monitors run with Libre Panel.** An owner's 2.8" shows Libre Panel's
   readings live in its own themes, with 0.7.1 on Linux (#21).

@@ -50,11 +50,13 @@ One bulk transfer: a header of 16 bytes, little-endian, then the payload.
 | 12–15 | bits 0–9: a frame number; bits 10–31: the payload's length in bytes |
 
 RGB565 is 16 bits a pixel, little-endian, red in the top 5 bits; RGB888 is three bytes a
-pixel, red first. Libre Panel sends whole pictures, up to 30 a second as a panel in video mode
-gets them (fewer where the product string says `Fps`); the last picture goes again after a
-second without one. The display takes the next transfer only once it has the last, so the time
-a picture takes to encode and send is what it costs the display: Libre Panel times JPEG first
-(what the firmware is made for), and where it stays under 25 a second the other kinds the
-display takes, and keeps the fastest.
+pixel, red first (as the xfz1986 drivers pack them from an XRGB8888 framebuffer). Libre Panel
+streams whole pictures as raw RGB565, every pixel as drawn, at the frames a second of a TURZX
+panel in video mode (`[video] fps`, 30 by default; fewer where the product string says `Fps`):
+480×480 is 450 KB a picture, 13.5 MB a second at 30, well within USB 2.0's high speed. The last
+picture goes again after a second without one. The display takes the next transfer only once
+it has the last, so the time a picture takes to encode and send is what it costs the display:
+where raw pixels stay under 25 a second, Libre Panel times RGB888 and then JPEG too, keeps the
+first that goes smoothly (else the fastest), and drives the stream no faster than it goes.
 
 No command for the backlight is known: Libre Panel's brightness goes into the picture.

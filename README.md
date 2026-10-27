@@ -472,7 +472,7 @@ with it filled in, and the model becomes *supported* for everyone.
 | BeadaPanel, every model (2" to 11") | the panel says its model and size | USB device (`4e58:1001`), Panel-Link stream | unverified |
 | NZXT Kraken with an LCD (Z53/Z63/Z73, Kraken 2023, Elite RGB 2024, Plus 2024) | 240×240, 320×320, 640×640, round | USB device (`1e71:3008`, `300e`, `3012`, `3014`), stills through the cooler's picture memory | unverified |
 | Thermaltake 6" LCD | 1480×720 | USB device (`264a:2347` HID), JPEG pictures | unverified |
-| Waveshare USB Monitor 2.8", as a USB display (Waveshare's udisp card image) | 480×480, round | USB display (`303a:2986`), JPEG pictures up to 30 a second | unverified |
+| Waveshare USB Monitor 2.8", as a USB display (Waveshare's udisp card image) | 480×480, round | USB display (`303a:2986`), a video stream of raw pictures, 30 a second | unverified |
 
 Their drivers follow other projects' notes, and nobody has run them with Libre Panel yet. None
 of them has smooth motion; the DS916, the Hongtai screens and Lian Li's take whole JPEG pictures
