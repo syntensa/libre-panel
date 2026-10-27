@@ -47,7 +47,7 @@ THEMES = ("lumen", "lumen-companion", "studio", "encore", "nimbus", "almanac", "
 COMPOSED = ("hero.png", "gallery.png", "social-preview.png", "studio-adapts.png", "vertical.png",
             "module-sizes.png", "weather-sizes.png", "looks.png", "module-layouts.png",
             "module-catalog.png", "module-layouts-more.png", "more-panels.png",
-            "panels-at-once.png")  # fmt: skip
+            "panels-at-once.png", "round-screens.png", "zc360-screens.png")  # fmt: skip
 APP_SHOTS = ("editor-new.png", "editor.png", "editor-drag.png", "palette.png", "start.png",
              "settings.png")  # fmt: skip
 
@@ -291,6 +291,53 @@ def vertical() -> Image.Image:
                     font("Barlow-SemiBold", 30), (226, 232, 240))  # fmt: skip
         x += shot.width + gap
     # (eight panels in true pixels are 4400 px across: more than a page shows)
+    return img.resize((round(w * 0.6), round(h * 0.6)), Image.Resampling.LANCZOS)
+
+
+ROUND = ("lumen", "encore", "nimbus", "almanac", "arena", "round-report")
+ZC360 = ("lumen-cpu", "lumen-gpu", "lumen-memory")  # (as the three screens start)
+
+
+def round_screens() -> Image.Image:
+    """The screens in their versions for the round panels of 480x480, three by two."""
+    border, cols, title = 14, 3, 58
+    shots = [device(render(f"{name}-480x480"), border, round_panel=True) for name in ROUND]
+    pad = shadow_margin(border)
+    gap, margin = 44 - 2 * pad, 64 - pad
+    cw, ch = shots[0].size
+    rows = -(-len(shots) // cols)
+    w = cols * cw + (cols - 1) * gap + 2 * margin
+    h = rows * (ch + title) + (rows - 1) * gap + 2 * margin
+    img = background(w, h, glow=(0.5, 0.0))
+    draw = ImageDraw.Draw(img)
+    for i, (name, shot) in enumerate(zip(ROUND, shots, strict=True)):
+        x = margin + (i % cols) * (cw + gap)
+        y = margin + (i // cols) * (ch + title + gap)
+        img.paste(shot, (x, y), shot)
+        label = load_theme(find_theme(f"{name}-480x480")).name
+        text_center(draw, x + cw / 2, y + ch - pad + 26, label, font("Barlow-SemiBold", 30),
+                    (226, 232, 240))  # fmt: skip
+    return img.resize((round(w * 0.6), round(h * 0.6)), Image.Resampling.LANCZOS)
+
+
+def zc360_screens() -> Image.Image:
+    """The ZC-360's three screens, each a panel of its own, one above the other: the Lumen each
+    starts with."""
+    border, title = 20, 60
+    shots = [device(render(f"{name}-640x180", 2), border) for name in ZC360]
+    pad = shadow_margin(border)
+    gap, margin = 30 - 2 * pad, 64 - pad
+    cw, ch = shots[0].size
+    w = cw + 2 * margin
+    h = len(shots) * (ch + title) + (len(shots) - 1) * gap + 2 * margin
+    img = background(w, h, glow=(0.5, 0.0))
+    draw = ImageDraw.Draw(img)
+    for i, (name, shot) in enumerate(zip(ZC360, shots, strict=True)):
+        y = margin + i * (ch + title + gap)
+        img.paste(shot, (margin, y), shot)
+        label = f"{i + 1} · {load_theme(find_theme(f'{name}-640x180')).name}"
+        text_center(draw, w / 2, y + ch - pad + 28, label, font("Barlow-SemiBold", 34),
+                    (226, 232, 240))  # fmt: skip
     return img.resize((round(w * 0.6), round(h * 0.6)), Image.Resampling.LANCZOS)
 
 
@@ -1002,6 +1049,8 @@ def main() -> None:
         "module-layouts-more.png": new_module_layouts,
         "more-panels.png": more_panels,
         "panels-at-once.png": panels_at_once,
+        "round-screens.png": round_screens,
+        "zc360-screens.png": zc360_screens,
     }
     for name, make in made.items():
         if wanted(name):
