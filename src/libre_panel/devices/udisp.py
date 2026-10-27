@@ -268,7 +268,8 @@ class UdispDisplay(Display):
         if rate < SMOOTH_FPS and untried:
             self.kind = untried[0]
             return
-        self.kind = max(self.rates, key=self.rates.get)
+        best = max(self.rates.values())  # (as fast within a twentieth: the fewer bytes)
+        self.kind = next(k for k in self.kinds if self.rates.get(k, 0) >= 0.95 * best)
         said = ", ".join(f"{NAMES[k]} {r:.0f}" for k, r in self.rates.items())
         log.info("%s: %s pictures a second; %s kept", self.describe(), said, NAMES[self.kind])
 

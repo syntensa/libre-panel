@@ -159,6 +159,9 @@ def test_the_kind_of_picture_that_goes_fastest_is_kept(bus):
     all_slow = bus(Timed({udisp.JPEG: 1 / 18, udisp.RGB565: 1 / 12, udisp.RGB888: 1 / 9}))
     kind, rates = driven(all_slow, 3 * udisp.TRIAL + 5)
     assert kind == udisp.JPEG and set(rates) == {udisp.JPEG, udisp.RGB565, udisp.RGB888}
+    alike = bus(Timed({udisp.JPEG: 1 / 15, udisp.RGB565: 1 / 15.2, udisp.RGB888: 1 / 15.4}))
+    kind, _rates = driven(alike, 3 * udisp.TRIAL + 5)
+    assert kind == udisp.JPEG  # (as fast: the fewest bytes)
 
 
 def test_raw_pixels_where_the_display_takes_no_jpeg(bus):

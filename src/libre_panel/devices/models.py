@@ -689,7 +689,7 @@ MODELS: tuple[PanelModel, ...] = (
     PanelModel(
         "waveshare-2.8-udisp",
         "Waveshare",
-        "USB Monitor (USB display)",
+        "Waveshare USB Monitor",
         2.8,
         480,
         480,
