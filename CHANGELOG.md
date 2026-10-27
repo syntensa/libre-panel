@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.7.3 — 2026-10-28
+
+Waveshare's 2.8" as a USB display shows what it is sent (0.7.2 left it black), up to 60
+pictures a second; elements of a theme turn, by any angle; game mode knows the games of the
+other launchers and of folders you name; the panels restart without quitting Libre Panel; and
+on Windows no more hang at the start over its private folder.
 
 **New**
 - **Elements turn, by any angle** (discussion #23). *Design → Position and size* turns the
