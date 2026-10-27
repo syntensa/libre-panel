@@ -130,7 +130,15 @@ const OPTIONS = {
   },
   "game.steam": { label: () => t("Games installed through Steam") },
   "game.steam_path": { label: () => t("Steam's folder"), hint: () => t("Only if Libre Panel does not find Steam.") },
-  "game.ignore": { label: () => t("Never count as games"), hint: () => t("Tools and programs in Steam's library.") },
+  "game.launchers": {
+    label: () => t("Games of other launchers"),
+    hint: () => t("Epic, GOG, Ubisoft Connect, EA app, Battle.net, Rockstar, Amazon and the Xbox app; Heroic and Lutris."),
+  },
+  "game.folders": {
+    label: () => t("Game folders"),
+    hint: () => t("Games from no launcher: a game's own folder, or a folder with a game in each of its folders."),
+  },
+  "game.ignore": { label: () => t("Never count as games"), hint: () => t("Tools and programs in a launcher's library or a game folder.") },
   "game.automatic": { label: () => t("Switch by itself when a game runs") },
   "game.force": { label: () => t("Always in game mode"), hint: () => t("To try the game screens, game or not.") },
   "game.entrance": { label: () => t("Entrance"), hint: () => t("The screen with the game's logo when the mode begins and ends.") },

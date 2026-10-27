@@ -337,7 +337,6 @@
     "This takes effect after Libre Panel is started again.": "Avrà effetto dopo il riavvio di Libre Panel.",
     "This takes effect after a restart of the panel.": "Avrà effetto dopo il riavvio del pannello.",
     "To try the game screens, game or not.": "Per provare le schermate di gioco, con o senza un gioco in corso.",
-    "Tools and programs in Steam's library.": "Strumenti e programmi nella libreria di Steam.",
     "Transition": "Transizione",
     "Transition to the report": "Transizione verso il report",
     "Unlock all sensors": "Sblocca tutti i sensori",
@@ -2789,7 +2788,12 @@
     "the USB display shows {size}, not the {panel}'s size": "il display USB mostra {size}, non le dimensioni del {panel}",
     "the {panel} has no endpoint for pictures": "il {panel} non ha un endpoint per le immagini",
     "Waveshare's round USB Monitor with the card image that makes it a USB display": "Il monitor USB rotondo di Waveshare con l'immagine della scheda che lo rende un display USB",
-    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of raw pictures, every pixel as drawn, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "Non ancora provato sull'hardware. Richiede l'immagine della scheda di Waveshare che lo rende un display USB (via USB si chiama allora udisp) e mostra solo ciò che invia il PC: i temi sulla sua scheda spariscono con quell'immagine. Riceve un flusso video di immagini non compresse, ogni pixel così come è stato disegnato, 30 al secondo: movimento fluido. La luminosità è parte dell'immagine: attenuando, questa si scurisce."
+    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of raw pictures, every pixel as drawn, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "Non ancora provato sull'hardware. Richiede l'immagine della scheda di Waveshare che lo rende un display USB (via USB si chiama allora udisp) e mostra solo ciò che invia il PC: i temi sulla sua scheda spariscono con quell'immagine. Riceve un flusso video di immagini non compresse, ogni pixel così come è stato disegnato, 30 al secondo: movimento fluido. La luminosità è parte dell'immagine: attenuando, questa si scurisce.",
+    "Games of other launchers": "Giochi di altri launcher",
+    "Epic, GOG, Ubisoft Connect, EA app, Battle.net, Rockstar, Amazon and the Xbox app; Heroic and Lutris.": "Epic, GOG, Ubisoft Connect, EA app, Battle.net, Rockstar, Amazon e l'app Xbox; Heroic e Lutris.",
+    "Game folders": "Cartelle di giochi",
+    "Games from no launcher: a game's own folder, or a folder with a game in each of its folders.": "Giochi di nessun launcher: la cartella di un gioco, o una cartella con un gioco in ciascuna delle sue cartelle.",
+    "Tools and programs in a launcher's library or a game folder.": "Strumenti e programmi nella libreria di un launcher o in una cartella di giochi."
   },
   "fields": {
     "agent": "agente",

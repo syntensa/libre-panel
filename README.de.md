@@ -297,8 +297,9 @@ Runde vergleicht ein optionaler Bericht sie mit deinen letzten zehn.
 <summary>Mehr</summary>
 <br>
 
-Das Spiel kommt aus deiner eigenen Liste oder deiner Steam-Bibliothek, die FPS zählt Intels
-PresentMon, und klein in der Ecke steht die Uhrzeit. Seinen Bildschirm wählst du unter
+Das Spiel kommt aus deinem Launcher (Steam, Epic, GOG, Ubisoft Connect, EA app, Battle.net,
+Rockstar, Amazon, Xbox-App, Heroic oder Lutris) oder aus eigener Liste und eigenen Ordnern, die
+FPS zählt Intels PresentMon, und klein in der Ecke steht die Uhrzeit. Seinen Bildschirm wählst du unter
 *Gestalten → Seiten*: **Arena**, den eigenen von Libre Panel, oder einen von SPUR II.
 
 [Der Spielbildschirm](docs/images/arena.png): Arena, der Spielscreen: die Bildrate groß mit

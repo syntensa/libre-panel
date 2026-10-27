@@ -1213,7 +1213,10 @@ enabled = ["game"]
 programs = ["emulator.exe = Retro Games", "othergame.exe"]  # programs that are games
 steam = true           # and any game installed through Steam
 # steam_path = ""      # where Steam is, if Libre Panel does not find it
-# ignore = ["Wallpaper Engine"]  # games and tools in Steam's library that never count
+launchers = true       # and the games of Epic, GOG, Ubisoft Connect, EA app, Battle.net,
+                       # Rockstar, Amazon, the Xbox app, Heroic and Lutris
+# folders = ["D:\\Games", "C:\\Portable\\Doom"]  # games from no launcher
+# ignore = ["Wallpaper Engine"]  # games and tools in a library or folder that never count
 automatic = true       # switch by itself when a game runs
 force = false          # game mode on, game or not (to try the screens)
 entrance = true        # the entrance; false: a "Game mode" message and the theme's transition
@@ -1233,10 +1236,29 @@ theme = "slate"        # optional: another theme
   Linux (also Flatpak and Snap). Tools in a library, such as Proton,
   the Steam Linux Runtime or SteamVR, are not games; `ignore` adds more.
   Windows programs under Wine and Proton are found by the folder they work in.
-- **The window in front.** On Windows a Steam game counts only once its window
-  has been in front, because a library also holds programs that run all day (a
-  wallpaper). Where Libre Panel cannot tell which window is in front (Linux),
-  a running program of a Steam game is enough.
+- **Other launchers.** With `launchers`, any program of a game that another
+  launcher installed counts the same way, read from the launcher's own list
+  (only read, every two minutes): Epic's manifests in ProgramData; the list of
+  installed programs for GOG (without DLC), the EA app (without the app and its
+  anti-cheat), Battle.net and the Rockstar Games Launcher; Ubisoft Connect's key
+  in the registry; Amazon Games' database; the folder `XboxGames` the Xbox app
+  installs to on a drive; Heroic's lists of its Epic, GOG and Amazon games
+  (Linux, also Flatpak, and Windows) and Lutris's database (Linux, also
+  Flatpak; its Steam games are Steam's). A game is named as its launcher names
+  it. The formats are those Playnite's library extensions, Heroic and Lutris
+  read.
+- **Game folders.** For games from no launcher (portable ones, a store without
+  a launcher), `folders` names their folders: a folder with programs in it
+  (`.exe`, `.x86_64`, `.sh`, …) is a game of its own, named after its folder;
+  any other holds a game in each of its folders (`D:\Games\Celeste`,
+  `D:\Games\Hollow Knight`). A single program is a game through `programs`.
+  A folder that would make half the computer a game (a drive, Program Files,
+  your home) is never taken.
+- **The window in front.** On Windows a game of Steam, another launcher or a
+  game folder counts only once its window has been in front, because a library
+  also holds programs that run all day (a wallpaper, a launcher's helper). Where
+  Libre Panel cannot tell which window is in front (Linux), a running program of
+  such a game is enough.
 - **The beginning.** The service shows the name (`game.name`) and the logo
   (`game.logo`, an image: `"src": "@game.logo"` in an image widget) to the
   screens, then switches. The logo comes from Steam's picture cache, cut out

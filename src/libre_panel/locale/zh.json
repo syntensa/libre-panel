@@ -337,7 +337,6 @@
     "This takes effect after Libre Panel is started again.": "重新启动 Libre Panel 后生效。",
     "This takes effect after a restart of the panel.": "重启面板后生效。",
     "To try the game screens, game or not.": "用于试用游戏屏幕，无论是否在玩游戏。",
-    "Tools and programs in Steam's library.": "Steam 库中的工具和程序。",
     "Transition": "转场",
     "Transition to the report": "切换到报告的转场",
     "Unlock all sensors": "解锁全部传感器",
@@ -2789,7 +2788,12 @@
     "the USB display shows {size}, not the {panel}'s size": "该 USB 显示屏的尺寸为 {size}，不是 {panel} 的尺寸",
     "the {panel} has no endpoint for pictures": "{panel} 没有用于图片的端点",
     "Waveshare's round USB Monitor with the card image that makes it a USB display": "Waveshare 圆形 USB 副屏，使用把它变成 USB 显示屏的存储卡镜像",
-    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of raw pictures, every pixel as drawn, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "尚未在实机上验证。它需要 Waveshare 把它变成 USB 显示屏的存储卡镜像（之后它在 USB 上自称 udisp），并且只显示电脑发送的内容：卡上的主题会随该镜像消失。它接收由原始图像组成的视频流，每个像素都与绘制时一致，每秒 30 张：流畅动态。它的亮度体现在画面里：调暗会让画面变暗。"
+    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of raw pictures, every pixel as drawn, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "尚未在实机上验证。它需要 Waveshare 把它变成 USB 显示屏的存储卡镜像（之后它在 USB 上自称 udisp），并且只显示电脑发送的内容：卡上的主题会随该镜像消失。它接收由原始图像组成的视频流，每个像素都与绘制时一致，每秒 30 张：流畅动态。它的亮度体现在画面里：调暗会让画面变暗。",
+    "Games of other launchers": "其他启动器的游戏",
+    "Epic, GOG, Ubisoft Connect, EA app, Battle.net, Rockstar, Amazon and the Xbox app; Heroic and Lutris.": "Epic、GOG、Ubisoft Connect、EA app、Battle.net、Rockstar、Amazon 和 Xbox 应用；Heroic 和 Lutris。",
+    "Game folders": "游戏文件夹",
+    "Games from no launcher: a game's own folder, or a folder with a game in each of its folders.": "不属于任何启动器的游戏：一个游戏自己的文件夹，或每个子文件夹中各有一个游戏的文件夹。",
+    "Tools and programs in a launcher's library or a game folder.": "启动器库或游戏文件夹中的工具和程序。"
   },
   "fields": {
     "agent": "智能体",

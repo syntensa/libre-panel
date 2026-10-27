@@ -1,7 +1,8 @@
 """Game mode: the panel changes by itself when you play.
 
 The service looks every few seconds for a game: a program from the list in the
-settings, or any program of a game installed through Steam whose window has
+settings, or any program of a game installed through Steam, another launcher
+(services/launchers.py) or in a folder named in the settings whose window has
 been in front once (where Libre Panel cannot tell which window is in front,
 any program of such a game that runs). Once it finds one, it publishes the
 game's name (``game.name``) and its logo from Steam's cache (``game.logo``),
@@ -31,6 +32,7 @@ from libre_panel.plugins import Service
 from libre_panel.sensors import presentmon
 from libre_panel.sensors.base import Snapshot
 from libre_panel.services import machine as computer
+from libre_panel.services.launchers import Catalog
 from libre_panel.services.steam import Library
 
 NAME = "game.name"
@@ -45,7 +47,8 @@ POLL_RANGE_S = (0.25, 60.0)  # how often it looks for a game
 class Found:
     """A game that runs."""
 
-    key: str  # the same key, the same game: its program, "steam:<number>", "" for ``force``
+    key: str  # the same key, the same game: its program, "steam:<number>", "epic:<app>" and
+    #           so on for another launcher's, "folder:<its folder>", "" for ``force``
     name: str
     pid: int = 0
     path: str = ""
@@ -86,17 +89,24 @@ class Detector:
         programs: dict[str, str],
         steam: bool = True,
         linger_s: float = 6.0,
+        catalog: Catalog | None = None,
     ) -> None:
         self.machine, self.library, self.programs = machine, library, programs
         self.steam, self.linger_s = steam, linger_s
+        self.catalog = catalog if catalog is not None and catalog.wanted else None
         self.game: Found | None = None
         self.seen = 0.0  # when its program was last seen
         self.front: set[int] = set()  # programs whose window has been in front once
 
     def look(self, now: float) -> Found | None:
         """The game that runs at ``now``, or None."""
-        running = self.machine.programs() if self.programs or self.steam else []
-        hit = self._listed(running) or (self._steam(running) if self.steam else None)
+        looking = self.programs or self.steam or self.catalog is not None
+        running = self.machine.programs() if looking else []
+        hit = (
+            self._listed(running)
+            or (self._steam(running) if self.steam else None)
+            or (self._launchers(running) if self.catalog is not None else None)
+        )
         if hit is not None:
             self.game, self.seen = hit, now
         elif self.game is not None and now - self.seen > self.linger_s:
@@ -115,18 +125,41 @@ class Detector:
         return None
 
     def _steam(self, running: list[Any]) -> Found | None:
-        """A program of a game installed through Steam. Where we know which window
-        is in front, it must have been in front once: a library also holds programs
-        that run all day (a wallpaper)."""
+        """A program of a game installed through Steam."""
         if not self.library.games():
             return None
+
+        def match(path: str) -> tuple[str, str, str] | None:
+            game = self.library.match(path)
+            # one game, whatever the program of it that is in front
+            return (f"steam:{game.appid}", game.name, game.appid) if game else None
+
+        return self._installed(running, match)
+
+    def _launchers(self, running: list[Any]) -> Found | None:
+        """A program of a game of another launcher, or in a folder named in the settings."""
+        if self.catalog is None or not self.catalog.games():
+            return None
+
+        def match(path: str) -> tuple[str, str, str] | None:
+            game = self.catalog.match(path) if self.catalog else None
+            return (f"{game.source}:{game.key}", game.name, "") if game else None
+
+        return self._installed(running, match)
+
+    def _installed(
+        self, running: list[Any], match: Callable[[str], tuple[str, str, str] | None]
+    ) -> Found | None:
+        """The program of an installed game (``match`` tells its key, name and Steam number).
+        Where we know which window is in front, it must have been in front once: a library also
+        holds programs that run all day (a wallpaper, a launcher's helper)."""
         front = self.machine.foreground_pid() if self.machine.has_foreground else None
         current = self.game.pid if self.game else 0
         # the game's program in front first (a launcher or an anti-cheat's starter that stays
         # in the background is not the one that draws), then the one it is: keep the game
         order = sorted(running, key=lambda p: (p.pid != front, p.pid != current))
         for program in order:
-            game = self.library.match(program.path)
+            game = match(program.path)
             if game is None:
                 continue
             if front is not None:
@@ -134,8 +167,8 @@ class Detector:
                     self.front.add(program.pid)
                 if program.pid not in self.front:
                     continue
-            key = f"steam:{game.appid}"  # one game, whatever the program of it that is in front
-            return Found(key, game.name, program.pid, program.path, game.appid)
+            key, name, appid = game
+            return Found(key, name, program.pid, program.path, appid)
         return None
 
 
@@ -148,6 +181,8 @@ class Game(Service):
         "programs": ("list", []),
         "steam": ("bool", True),
         "steam_path": ("string", ""),
+        "launchers": ("bool", True),
+        "folders": ("list", []),
         "ignore": ("list", []),
         "automatic": ("bool", True),
         "force": ("bool", False),
@@ -170,9 +205,11 @@ class Game(Service):
         self.machine = machine or computer.current()
         self.library = Library(options["steam_path"], options["ignore"], clock)
         programs = parse_programs(options["programs"], lambda text: host.log.warning("%s", text))
+        self.catalog = Catalog(options["folders"], options["ignore"], options["launchers"], clock)
         self.detector = Detector(
-            self.machine, self.library, programs, options["steam"], options["linger_s"]
-        )
+            self.machine, self.library, programs, options["steam"], options["linger_s"],
+            self.catalog,
+        )  # fmt: skip
         self.poll_s = min(max(float(options["poll_s"]), POLL_RANGE_S[0]), POLL_RANGE_S[1])
         self.found: Found | None = None  # the game the panel is set up for
         self.logo: Image.Image | None = None

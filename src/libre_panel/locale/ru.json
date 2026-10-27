@@ -337,7 +337,6 @@
     "This takes effect after Libre Panel is started again.": "Вступит в силу после повторного запуска Libre Panel.",
     "This takes effect after a restart of the panel.": "Вступит в силу после перезапуска панели.",
     "To try the game screens, game or not.": "Чтобы проверить игровые экраны, независимо от того, идёт игра или нет.",
-    "Tools and programs in Steam's library.": "Инструменты и программы в библиотеке Steam.",
     "Transition": "Переход",
     "Transition to the report": "Переход к отчёту",
     "Unlock all sensors": "Разблокировать все датчики",
@@ -2789,7 +2788,12 @@
     "the USB display shows {size}, not the {panel}'s size": "USB-дисплей показывает {size}, а не размер {panel}",
     "the {panel} has no endpoint for pictures": "у {panel} нет конечной точки для изображений",
     "Waveshare's round USB Monitor with the card image that makes it a USB display": "Круглый USB-монитор Waveshare с образом карты, который делает его USB-дисплеем",
-    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of raw pictures, every pixel as drawn, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "Пока не проверялось на реальном устройстве. Нужен образ карты Waveshare, который делает его USB-дисплеем (по USB он тогда называет себя udisp), и он показывает только то, что присылает ПК: темы на его карте с этим образом пропадают. Получает видеопоток из несжатых изображений, каждый пиксель — как нарисован, 30 в секунду: плавное движение. Яркость встроена в само изображение: при уменьшении оно темнеет."
+    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of raw pictures, every pixel as drawn, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "Пока не проверялось на реальном устройстве. Нужен образ карты Waveshare, который делает его USB-дисплеем (по USB он тогда называет себя udisp), и он показывает только то, что присылает ПК: темы на его карте с этим образом пропадают. Получает видеопоток из несжатых изображений, каждый пиксель — как нарисован, 30 в секунду: плавное движение. Яркость встроена в само изображение: при уменьшении оно темнеет.",
+    "Games of other launchers": "Игры других лаунчеров",
+    "Epic, GOG, Ubisoft Connect, EA app, Battle.net, Rockstar, Amazon and the Xbox app; Heroic and Lutris.": "Epic, GOG, Ubisoft Connect, EA app, Battle.net, Rockstar, Amazon и приложение Xbox; Heroic и Lutris.",
+    "Game folders": "Папки с играми",
+    "Games from no launcher: a game's own folder, or a folder with a game in each of its folders.": "Игры не из лаунчера: собственная папка игры или папка, в каждой подпапке которой лежит по игре.",
+    "Tools and programs in a launcher's library or a game folder.": "Инструменты и программы в библиотеке лаунчера или в папке с играми."
   },
   "fields": {
     "agent": "агент",

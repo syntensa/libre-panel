@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+**New**
+- **Game mode knows the games of the other launchers, and of folders you name.** Besides Steam,
+  a game of Epic, GOG, Ubisoft Connect, the EA app, Battle.net, Rockstar, Amazon Games or the
+  Xbox app now switches the panel to game mode by itself, and on Linux one of Heroic (Epic, GOG,
+  Amazon) or Lutris: each launcher's own list of what it installed is read, as for Steam, and a
+  game counts once its window has been in front, so a launcher's helper in the background does
+  not. Games from no launcher come in through *Game folders* (*Settings → Game mode and more*):
+  a game's own folder, or a folder with a game in each of its folders.
+
 ## 0.7.2 — 2026-10-27
 
 Round screens for the round panels; Waveshare's USB monitor as a panel of its own, a video

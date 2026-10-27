@@ -337,7 +337,6 @@
     "This takes effect after Libre Panel is started again.": "Libre Panelを再起動すると有効になります。",
     "This takes effect after a restart of the panel.": "パネルを再起動すると有効になります。",
     "To try the game screens, game or not.": "ゲーム画面を試すためのものです（ゲームの実行中かどうかに関係なく）。",
-    "Tools and programs in Steam's library.": "Steamライブラリ内のツールとプログラム。",
     "Transition": "トランジション",
     "Transition to the report": "レポートへのトランジション",
     "Unlock all sensors": "すべてのセンサーのロックを解除",
@@ -2789,7 +2788,12 @@
     "the USB display shows {size}, not the {panel}'s size": "USBディスプレイは {size} で、{panel} のサイズではありません",
     "the {panel} has no endpoint for pictures": "{panel} には画像用のエンドポイントがありません",
     "Waveshare's round USB Monitor with the card image that makes it a USB display": "USBディスプレイにするカードイメージを入れたWaveshareの円形USBモニター",
-    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of raw pictures, every pixel as drawn, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "実機ではまだ確認されていません。USBディスプレイにするWaveshareのカードイメージが必要で（その後はUSBでudispと名乗ります）、PCが送るものだけを表示します。カード上のテーマはそのイメージで消えます。未圧縮の画像によるビデオストリームを受け取ります。各ピクセルは描かれたとおりで、毎秒30枚、なめらかな動きです。明るさは画像に反映されるため、減光すると画像が暗くなります。"
+    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of raw pictures, every pixel as drawn, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "実機ではまだ確認されていません。USBディスプレイにするWaveshareのカードイメージが必要で（その後はUSBでudispと名乗ります）、PCが送るものだけを表示します。カード上のテーマはそのイメージで消えます。未圧縮の画像によるビデオストリームを受け取ります。各ピクセルは描かれたとおりで、毎秒30枚、なめらかな動きです。明るさは画像に反映されるため、減光すると画像が暗くなります。",
+    "Games of other launchers": "ほかのランチャーのゲーム",
+    "Epic, GOG, Ubisoft Connect, EA app, Battle.net, Rockstar, Amazon and the Xbox app; Heroic and Lutris.": "Epic、GOG、Ubisoft Connect、EA app、Battle.net、Rockstar、Amazon、Xbox アプリ。Heroic と Lutris。",
+    "Game folders": "ゲームフォルダー",
+    "Games from no launcher: a game's own folder, or a folder with a game in each of its folders.": "どのランチャーにも属さないゲーム：ゲーム自体のフォルダー、または各フォルダーにゲームが 1 つずつ入ったフォルダー。",
+    "Tools and programs in a launcher's library or a game folder.": "ランチャーのライブラリやゲームフォルダー内のツールとプログラム。"
   },
   "fields": {
     "agent": "エージェント",

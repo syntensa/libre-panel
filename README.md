@@ -291,8 +291,9 @@ compares it with your last ten.
 <summary>More</summary>
 <br>
 
-The game comes from a list of your own or your Steam library, its frame rate is counted by
-Intel's PresentMon, and the time shows small in a corner. Its screen is yours to pick in
+The game comes from your launcher (Steam, Epic, GOG, Ubisoft Connect, the EA app, Battle.net,
+Rockstar, Amazon, the Xbox app, Heroic or Lutris) or a list and folders of your own, its frame
+rate is counted by Intel's PresentMon, and the time shows small in a corner. Its screen is yours to pick in
 *Design → Pages*: **Arena**, Libre Panel's own, or one of SPUR II's.
 
 [The game screen](docs/images/arena.png): Arena, the game screen: the frame rate large with
