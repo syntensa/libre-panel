@@ -2372,9 +2372,9 @@ def _ai_agent(b: _Build, name: str, x: float, y: float, w: float, h: float,
     meters = [("five_hour", t("5 hours")), ("week", t("7 days"))]
     if alone and name == "claude":  # (its status line tells it)
         meters.append(("context", t("Context")))
-    # what the session is called has a line of its own, before the meters take what is left;
-    # side by side there is no room for it and the plan's limits are the better use of the line
-    task = alone and tw >= small * 14
+    # what the session is called has a line of its own, before the meters take what is left (a
+    # long name is cut, not shrunk); side by side the plan's limits are the better use of it
+    task = alone
     task_h = small * 1.5 if task else 0.0
     fit = (text_room - size * CAP - small * 2.0 - task_h) // (small * 1.5 + small * 0.9 + 6)
     rows = max(0, min(len(meters), int(fit)))
@@ -2411,8 +2411,8 @@ def _ai_agent(b: _Build, name: str, x: float, y: float, w: float, h: float,
     row = line + small * 2.0
     if task:
         b.value(f"{name}-task", f"{key}.task", "{value}", ax, row, small * 0.9, color=calm,
-                align=align, width=tw, font="text_font", tabular=False, fallback="",
-                hide_if_missing=True)  # fmt: skip
+                align=align, width=tw, font="text_font", tabular=False, fit="ellipsis",
+                fallback="", hide_if_missing=True)  # fmt: skip
         row += small * 1.5
     bar_h = max(4, round(small * 0.5))
     # when a window begins anew, where it fits between the window's name and its share
