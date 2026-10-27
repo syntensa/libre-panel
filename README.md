@@ -199,6 +199,11 @@ Up to four panels at once, each with its own theme, on the same readings and in 
 - **In their real sizes**: *Settings → Panels* places them beside your monitor, and *Add a
   panel* asks step by step which panel it is, how it is mounted and what it shows.
 
+A JONSBO ZC-360 has three screens under its fans: each is a panel of its own, and they start
+with Lumen for the processor, the graphics card and the memory.
+
+<p align="center"><img src="docs/images/zc360-screens.png" width="70%" alt="The JONSBO ZC-360's three fan screens, each a panel of its own: 1 Lumen CPU, 2 Lumen GPU and 3 Lumen Memory, each a lit ring beside its history"></p>
+
 When a sensor reaches its critical limit, every panel's edge pulses red:
 
 <picture>
@@ -395,7 +400,10 @@ before it writes, and takes it out again; nothing leaves this PC
 <img src="docs/media/small-panel.gif" width="100%" alt="Libre Default on a 3.5-inch panel: the time, lit rings for CPU and memory that fill, the CPU temperature, disk and network, a CPU history that scrolls, and a small card in the corner that changes from the playing track to the weather">
 
 From the 0.96" stick to the 12.3" screen: every theme moves to every panel and lays itself out
-for it.
+for it. On the round panels of 480x480, the screens come in versions of their own, laid out for the
+circle:
+
+<img src="docs/images/round-screens.png" width="100%" alt="Libre Panel's screens for the round panels of 480x480, in round bezels: Lumen, Encore, Nimbus, Almanac, Arena and the round report">
 
 <details>
 <summary>More</summary>

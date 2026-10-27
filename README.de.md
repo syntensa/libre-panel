@@ -202,6 +202,11 @@ Takt.
   hinzufügen* fragt Schritt für Schritt, welches Panel es ist, wie es montiert ist und was es
   zeigt.
 
+Ein JONSBO ZC-360 hat drei Displays unter seinen Lüftern: Jedes ist ein eigenes Panel, und sie
+starten mit Lumen für Prozessor, Grafikkarte und Arbeitsspeicher.
+
+<p align="center"><img src="docs/images/zc360-screens.png" width="70%" alt="Die drei Lüfter-Displays des JONSBO ZC-360, jedes ein eigenes Panel: 1 Lumen CPU, 2 Lumen GPU und 3 Lumen Memory, jedes ein leuchtender Ring neben seinem Verlauf"></p>
+
 Erreicht ein Sensor seine kritische Grenze, pulsiert der Rand jedes Panels rot:
 
 <picture>
@@ -403,7 +408,10 @@ wieder heraus; nichts verlässt diesen PC ([KI-Aktivität](docs/CONFIGURATION.md
 <img src="docs/media/small-panel.gif" width="100%" alt="Libre Default auf einem 3,5-Zoll-Panel: die Uhrzeit, leuchtende Ringe für CPU und Arbeitsspeicher, die sich füllen, CPU-Temperatur, Laufwerk und Netzwerk, ein scrollender CPU-Verlauf und eine kleine Karte in der Ecke, die vom laufenden Titel zum Wetter wechselt">
 
 Vom 0,96"-Stick bis zum 12,3"-Display: Jedes Theme passt auf jedes Panel und ordnet sich dafür
-neu an.
+neu an. Auf den runden Panels mit 480×480 haben die Screens eigene Versionen, für den Kreis
+angelegt:
+
+<img src="docs/images/round-screens.png" width="100%" alt="Die Screens von Libre Panel für die runden Panels mit 480×480, in runden Rahmen: Lumen, Encore, Nimbus, Almanac, Arena und der runde Bericht">
 
 <details>
 <summary>Mehr</summary>
