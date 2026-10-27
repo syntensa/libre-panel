@@ -27,7 +27,6 @@ import logging
 import os
 import re
 import secrets
-import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -42,6 +41,11 @@ NAME = "token"  # in the address' fragment (``#token=...``) and in a picture's q
 ENV = "LIBRE_PANEL_TOKEN"  # how a program that starts a window tells it the token
 PRIVATE_DIR = "private"  # in the settings folder: opened by this user only
 TOKEN_FILE = "editor.json"  # in it: the pid, the port and the token of the running editor
+# How many names the temporary file of the token tries: tempfile's own tries without end on
+# Windows where an ACL keeps the user out of the folder (it takes that for a name in use), and
+# the app hung at the start with a core busy (discussion #22).
+ATTEMPTS = 20
+POSIX = os.name == "posix"
 _TOKEN = re.compile(r"[A-Za-z0-9_-]{16,200}")
 # this run's token, and the key of the notices from other programs (notify.py)
 _IN_TEXT = re.compile(r"([?&#](?:" + NAME + r"|key)=)[A-Za-z0-9_-]+")
@@ -105,9 +109,13 @@ def token_file() -> Path:
 def _private_dir(folder: Path) -> None:
     """Make ``folder`` (and nothing above it), for this user only. Raises OSError when it cannot
     be made so, e.g. it belongs to somebody else."""
+    if not POSIX:
+        # Windows: what the folder inherits from the user's profile. (A mode of 0o700 gives it
+        # to its owner alone, and made with administrator rights its owner is the
+        # Administrators group: Libre Panel started without them could not write to it.)
+        folder.mkdir(parents=True, exist_ok=True)
+        return
     folder.mkdir(mode=0o700, parents=True, exist_ok=True)
-    if os.name != "posix":
-        return  # Windows: what the folder inherits from the user's profile
     info = folder.stat()
     if info.st_uid != os.geteuid():
         raise PermissionError(f"{folder} belongs to another user")
@@ -115,23 +123,65 @@ def _private_dir(folder: Path) -> None:
         folder.chmod(0o700)
 
 
+def _temporary(folder: Path) -> tuple[int, Path]:
+    """A new file in ``folder`` that only this user can open, as tempfile.mkstemp makes one, but
+    with a few names at most, and an error at once where the folder may not be written to."""
+    flags = os.O_RDWR | os.O_CREAT | os.O_EXCL
+    flags |= getattr(os, "O_NOINHERIT", 0) | getattr(os, "O_BINARY", 0)
+    for _ in range(ATTEMPTS):
+        path = folder / f".editor-{secrets.token_hex(6)}.tmp"
+        try:
+            return os.open(path, flags, 0o600), path
+        except FileExistsError:
+            continue
+    raise FileExistsError(f"no free name for a temporary file in {folder}")
+
+
+def _write(path: Path, info: dict) -> None:
+    # a temporary file that only this user can open, then a rename: the token is never
+    # readable by others, not even for a moment, and a reader never meets half a file
+    fd, tmp = _temporary(path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as file:
+            json.dump(info, file)
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
+def _set_aside(folder: Path) -> bool:
+    """Move a private folder this user may not write to out of the way (Windows), so that a new
+    one can be made: renaming it takes only the right to change the folder above it, which is
+    the user's. (Made by a Libre Panel with administrator rights, it may be theirs alone.)"""
+    for number in range(1, 100):
+        aside = folder.with_name(f"{folder.name}-locked-{number}")
+        if aside.exists():
+            continue
+        try:
+            folder.rename(aside)
+        except OSError:
+            return False
+        log.warning("could not write to %s: moved it to %s and made it anew", folder, aside)
+        return True
+    return False
+
+
 def publish(token: str, port: int) -> Path | None:
     """Write the token of the editor on ``port`` where the programs of this user find it. None
     (and a line in the log) when that cannot be done: the app works, but `libre-panel quit` and
     a window started later cannot sign in."""
     path = token_file()
+    info = {"pid": os.getpid(), "port": port, "token": token}
     try:
         _private_dir(path.parent)
-        # a temporary file that only this user can open, then a rename: the token is never
-        # readable by others, not even for a moment, and a reader never meets half a file
-        fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".editor-", suffix=".tmp")
         try:
-            with os.fdopen(fd, "w", encoding="utf-8") as file:
-                json.dump({"pid": os.getpid(), "port": port, "token": token}, file)
-            os.replace(tmp, path)
-        except BaseException:
-            Path(tmp).unlink(missing_ok=True)
-            raise
+            _write(path, info)
+        except PermissionError:
+            if POSIX or not _set_aside(path.parent):
+                raise
+            _private_dir(path.parent)
+            _write(path, info)
     except OSError as exc:
         log.warning("the editor's token could not be written to %s: %s", path, exc)
         return None

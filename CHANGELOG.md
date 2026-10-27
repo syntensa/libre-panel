@@ -11,6 +11,14 @@
   not. Games from no launcher come in through *Game folders* (*Settings → Game mode and more*):
   a game's own folder, or a folder with a game in each of its folders.
 
+**Fixes**
+- **On Windows, Libre Panel could hang at its start with a core busy**, without its tray icon
+  and window, when it was not allowed to write to its private folder
+  (`%APPDATA%\LibrePanel\private`): Python's temporary file tried new names there without end.
+  It now gives up at once and goes on. A private folder it may not write to (made by a Libre
+  Panel with administrator rights) is set aside and made anew, and such a folder no longer goes
+  to its owner alone (discussion #22).
+
 ## 0.7.2 — 2026-10-27
 
 Round screens for the round panels; Waveshare's USB monitor as a panel of its own, a video

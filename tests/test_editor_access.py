@@ -10,6 +10,7 @@ import re
 import socket
 import stat
 import threading
+from pathlib import Path
 
 import pytest
 from editor_token import token_of
@@ -630,3 +631,51 @@ def test_asking_for_the_highest_rights_warns_of_a_folder_others_can_change(monke
     monkeypatch.setattr(access, "folder_risk", lambda folder: "")
     assert cli.main(["autostart", "enable", "--elevated"]) == 1
     assert "LIBRE_PANEL_HOME" not in capsys.readouterr().err
+
+
+def test_a_folder_that_may_not_be_written_to_fails_at_once_and_does_not_hang(monkeypatch, caplog):
+    """tempfile.mkstemp tried names without end on Windows when an ACL kept the user out of the
+    folder, and the app hung at its start with a core busy (discussion #22)."""
+    tries = []
+
+    def taken(path, flags, mode=0o777):
+        tries.append(path)
+        raise FileExistsError(path)
+
+    monkeypatch.setattr(access.os, "open", taken)
+    with caplog.at_level(logging.WARNING):
+        assert access.publish(TOKEN, 4711) is None
+    assert len(tries) == access.ATTEMPTS and "could not be written" in caplog.text
+
+
+def test_on_windows_a_locked_private_folder_is_set_aside_and_made_anew(monkeypatch, caplog):
+    """Made by a Libre Panel with administrator rights, the folder could be theirs alone: the
+    user may still rename it, as the folder above it is theirs."""
+    monkeypatch.setattr(access, "POSIX", False)
+    folder = config_dir() / "private"
+    folder.mkdir(parents=True)
+    (folder / "editor.json").write_text("{}")
+    write = access._write
+
+    def locked(path, info):  # (the old folder still holds the old file)
+        old = path.parent / "editor.json"
+        if old.exists() and old.read_text() == "{}":
+            raise PermissionError(13, "Access is denied", str(path.parent))
+        write(path, info)
+
+    monkeypatch.setattr(access, "_write", locked)
+    with caplog.at_level(logging.WARNING):
+        assert access.publish(TOKEN, 4711) == access.token_file()
+    assert json.loads(access.token_file().read_text())["token"] == TOKEN
+    assert (config_dir() / "private-locked-1" / "editor.json").read_text() == "{}"
+    assert "made it anew" in caplog.text
+
+
+def test_on_windows_the_private_folder_gets_what_the_profile_gives(monkeypatch):
+    """No mode of 0o700 on Windows: Python gives such a folder to its owner alone, and made with
+    administrator rights, that is the Administrators group, not the user."""
+    monkeypatch.setattr(access, "POSIX", False)
+    made = []
+    monkeypatch.setattr(Path, "mkdir", lambda self, *args, **kwargs: made.append(kwargs))
+    access._private_dir(config_dir() / "private")
+    assert made == [{"parents": True, "exist_ok": True}]
