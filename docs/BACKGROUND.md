@@ -78,6 +78,7 @@ download's folder checks it. Installed with pip:
 | **Theme** | switch the theme on the panel: the themes made for it by name, the others under *More themes*, a collection (SPUR II) in its own |
 | **Brightness** | Off, 10–100 %; written to `config.toml` |
 | **Pause panel** | stops sending frames and releases the USB device, e.g. for the vendor app |
+| **Restart panels** | for a panel that hangs: lets every panel go and opens them anew, as at Libre Panel's start, without quitting it (also on *Start*, in the panel's menu in the header and in the command palette) |
 | **Design** | the window on *Design* |
 | **Settings** | the window on *Settings*: every setting of `config.toml` ([Configuration](CONFIGURATION.md#every-setting-is-in-the-app)) |
 | **Upside down** | for a panel mounted the other way round |

@@ -203,6 +203,9 @@ function Running({ app, onClose }) {
         <${Icon} name=${panel.state === "paused" ? "play" : "pause"} size=${14} />
         ${panel.state === "paused" ? t("Resume panel") : t("Pause panel")}
       </button>
+      <button type="button" class="btn" title=${t("Opens the panels anew, for one that hangs.")} onClick=${() => appAction("restart")}>
+        <${Icon} name="refresh" size=${14} /> ${t("Restart panels")}
+      </button>
       <button type="button" class="btn btn-danger-quiet" onClick=${quitApp}>
         <${Icon} name="power" size=${14} /> ${t("Quit Libre Panel")}
       </button>

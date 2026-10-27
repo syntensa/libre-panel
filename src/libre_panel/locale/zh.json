@@ -2793,7 +2793,13 @@
     "Epic, GOG, Ubisoft Connect, EA app, Battle.net, Rockstar, Amazon and the Xbox app; Heroic and Lutris.": "Epic、GOG、Ubisoft Connect、EA app、Battle.net、Rockstar、Amazon 和 Xbox 应用；Heroic 和 Lutris。",
     "Game folders": "游戏文件夹",
     "Games from no launcher: a game's own folder, or a folder with a game in each of its folders.": "不属于任何启动器的游戏：一个游戏自己的文件夹，或每个子文件夹中各有一个游戏的文件夹。",
-    "Tools and programs in a launcher's library or a game folder.": "启动器库或游戏文件夹中的工具和程序。"
+    "Tools and programs in a launcher's library or a game folder.": "启动器库或游戏文件夹中的工具和程序。",
+    "Restart panels": "重启面板",
+    "Opens the panels anew, for one that hangs.": "重新打开面板，以防某个面板卡住。",
+    "opens the panels anew, for one that hangs": "重新打开面板，以防某个面板卡住",
+    "restart reconnect hang frozen stuck reset panel": "重启 重新连接 卡住 冻结 无响应 重置 面板 restart",
+    "The panel test has the panels; they start again after it.": "面板测试正在使用面板；测试结束后它们会重新启动。",
+    "A panel does not let go: quit Libre Panel and start it again.": "有面板无法释放：请退出 Libre Panel 并重新启动。"
   },
   "fields": {
     "agent": "智能体",

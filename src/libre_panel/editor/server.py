@@ -2286,7 +2286,7 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._error('expected {"action": ...}')
         try:
             snapshot = self.controls.act(payload["action"], payload.get("value"))
-        except (ValueError, ConfigError, OSError) as exc:
+        except (ValueError, ConfigError, OSError, RuntimeError) as exc:
             return self._error(str(exc))
         self._json({"available": True, **snapshot})
 

@@ -151,6 +151,21 @@ class PanelService:
                 return False
         return True
 
+    def restart(self) -> None:
+        """Open the panels anew without restarting Libre Panel, for one that hangs: the loop lets
+        every panel go (those in a process of their own end it) and starts again, as at Libre
+        Panel's start, and a paused panel runs again. RuntimeError where the panel test has the
+        panels, or the loop does not let a panel go (it hangs on it: then only a new start of
+        Libre Panel helps)."""
+        if self._held:
+            raise RuntimeError(t("The panel test has the panels; they start again after it."))
+        if not self._halt():
+            raise RuntimeError(t("A panel does not let go: quit Libre Panel and start it again."))
+        log.info("the panels start anew")
+        self.start()
+        if not self.running:  # the loop of an earlier try still hangs on a panel
+            raise RuntimeError(t("A panel does not let go: quit Libre Panel and start it again."))
+
     def pause(self) -> None:
         """Stop sending frames and release the panel (another program may use it)."""
         self._paused = True
@@ -630,6 +645,8 @@ class BackgroundApp:
             self.panel.pause()
         elif action == "resume":
             self.panel.resume()
+        elif action == "restart":  # the panels opened anew, for one that hangs
+            self.panel.restart()
         elif action == "brightness":
             if isinstance(value, bool) or not isinstance(value, int):
                 raise ValueError("brightness must be a whole number")

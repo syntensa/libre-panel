@@ -214,6 +214,7 @@ class Tray:
             item(t("Brightness"), menu(self._brightness_items)),
             item(t("Timer"), menu(self._timer_items), visible=lambda _: self._timer() is not None),
             item(t("Pause panel"), self.toggle_pause, checked=lambda _: app.panel.paused),
+            item(t("Restart panels"), self.restart_panels),
             menu.SEPARATOR,
             item(t("Design"), self.open_editor),  # the app's tab of that name
             item(t("Settings"), self.open_settings_view),
@@ -479,6 +480,10 @@ class Tray:
     def toggle_pause(self) -> None:
         panel = self.app.panel
         self._later(panel.resume if panel.paused else panel.pause)()
+
+    def restart_panels(self) -> None:
+        """Open the panels anew, for one that hangs (a failure comes as a notice)."""
+        self._later(self.app.panel.restart)()
 
     def toggle_upside_down(self) -> None:
         self._later(lambda: self.app.set_upside_down(not self.app.upside_down()))()

@@ -2793,7 +2793,13 @@
     "Epic, GOG, Ubisoft Connect, EA app, Battle.net, Rockstar, Amazon and the Xbox app; Heroic and Lutris.": "Epic, GOG, Ubisoft Connect, EA app, Battle.net, Rockstar, Amazon et l'app Xbox ; Heroic et Lutris.",
     "Game folders": "Dossiers de jeux",
     "Games from no launcher: a game's own folder, or a folder with a game in each of its folders.": "Des jeux d'aucun lanceur : le dossier d'un jeu, ou un dossier avec un jeu dans chacun de ses dossiers.",
-    "Tools and programs in a launcher's library or a game folder.": "Outils et programmes dans la bibliothèque d'un lanceur ou dans un dossier de jeux."
+    "Tools and programs in a launcher's library or a game folder.": "Outils et programmes dans la bibliothèque d'un lanceur ou dans un dossier de jeux.",
+    "Restart panels": "Redémarrer les panneaux",
+    "Opens the panels anew, for one that hangs.": "Rouvre les panneaux, si l'un d'eux est figé.",
+    "opens the panels anew, for one that hangs": "rouvre les panneaux, si l'un d'eux est figé",
+    "restart reconnect hang frozen stuck reset panel": "redémarrer reconnecter figé bloqué gelé réinitialiser panneau restart",
+    "The panel test has the panels; they start again after it.": "Le test du panneau occupe les panneaux ; ils redémarrent après lui.",
+    "A panel does not let go: quit Libre Panel and start it again.": "Un panneau ne se libère pas : quittez Libre Panel et relancez-le."
   },
   "fields": {
     "agent": "agent",

@@ -272,6 +272,9 @@ export function PanelCard() {
           <button type="button" class="btn" onClick=${() => appAction(paused ? "resume" : "pause")}>
             <${Icon} name=${paused ? "play" : "pause"} size=${14} /> ${paused ? t("Resume panels") : t("Pause panels")}
           </button>
+          <button type="button" class="btn" title=${t("Opens the panels anew, for one that hangs.")} onClick=${() => appAction("restart")}>
+            <${Icon} name="refresh" size=${14} /> ${t("Restart panels")}
+          </button>
           <span class="muted">${t("Brightness and mounting of this panel: Settings → Panel.")}</span>
           <span class="grow"></span>
           <button type="button" class="link-btn" onClick=${() => navigate("settings", "panel")}>${t("Panel settings")}</button>
@@ -281,6 +284,9 @@ export function PanelCard() {
       ? html`<div class="panel-card-controls">
           <button type="button" class="btn" onClick=${() => appAction(paused ? "resume" : "pause")}>
             <${Icon} name=${paused ? "play" : "pause"} size=${14} /> ${paused ? t("Resume panel") : t("Pause panel")}
+          </button>
+          <button type="button" class="btn" title=${t("Opens the panels anew, for one that hangs.")} onClick=${() => appAction("restart")}>
+            <${Icon} name="refresh" size=${14} /> ${t("Restart panels")}
           </button>
           <label class="panel-card-brightness">
             <${Icon} name="sun" size=${16} />

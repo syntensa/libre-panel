@@ -485,3 +485,54 @@ def test_a_transition_is_shown_on_the_panels_from_the_app(isolated_home):
     for bad in (None, {"label": "x"}, {"name": ""}, {"name": "x" * 65}):
         with pytest.raises(ValueError):
             background.act("show_transition", bad)
+
+
+def test_the_panels_start_anew_without_libre_panel_and_a_paused_one_runs_again(isolated_home):
+    """For a panel that hangs: the loop lets every panel go and opens them again (the app, the
+    tray and the command palette call this), and a paused panel runs again."""
+    write_config(isolated_home)
+    service = PanelService()
+    service.start()
+    try:
+        assert wait_for(lambda: service.state()["state"] == "showing")
+        loop = service._thread
+        service.restart()
+        assert service.running and service._thread is not loop
+        assert wait_for(lambda: service.state()["state"] == "showing")
+        service.pause()
+        service.restart()
+        assert not service.paused and wait_for(lambda: service.state()["state"] == "showing")
+    finally:
+        service.stop()
+
+
+def test_a_panel_that_does_not_let_go_or_the_panel_test_keeps_the_panels(
+    isolated_home, monkeypatch
+):
+    write_config(isolated_home)
+    service = PanelService()
+    service._held = True  # the panel test has them
+    with pytest.raises(RuntimeError, match="panel test"):
+        service.restart()
+    service._held = False
+    monkeypatch.setattr(service, "_halt", lambda: False)  # the loop hangs on a panel
+    started = []
+    monkeypatch.setattr(service, "start", lambda: started.append(True))
+    with pytest.raises(RuntimeError, match="start it again"):
+        service.restart()
+    assert started == []  # (a second loop on the same panel never)
+    monkeypatch.setattr(service, "_halt", lambda: True)  # the loop of an earlier try still
+    with pytest.raises(RuntimeError, match="start it again"):  # hangs: the new one waits
+        service.restart()
+    assert started == [True] and not service.running
+
+
+def test_the_app_restarts_the_panels_and_says_why_it_cannot(app, monkeypatch):
+    url = app.start()
+    assert wait_for(lambda: app.panel.state()["state"] == "showing")
+    status, data = call(url, "POST", {"action": "restart"})
+    assert status == 200 and data["available"]
+    assert wait_for(lambda: app.panel.state()["state"] == "showing")
+    monkeypatch.setattr(app.panel, "_halt", lambda: False)  # the loop hangs on a panel
+    status, data = call(url, "POST", {"action": "restart"})
+    assert status == 400 and "start it again" in data["error"]

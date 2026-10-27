@@ -75,6 +75,7 @@ def test_menu_layout_and_state(tray):
         "Theme",
         "Brightness",
         "Pause panel",
+        "Restart panels",
         "Design",
         "Settings",
         "Upside down",

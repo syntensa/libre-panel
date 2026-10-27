@@ -10,6 +10,10 @@
   game counts once its window has been in front, so a launcher's helper in the background does
   not. Games from no launcher come in through *Game folders* (*Settings → Game mode and more*):
   a game's own folder, or a folder with a game in each of its folders.
+- **Restart panels, without quitting Libre Panel.** For a panel that hangs: *Restart panels* on
+  *Start*, in the panel's menu in the header, in the command palette and in the tray lets every
+  panel go and opens them anew, as at Libre Panel's start. Where a panel does not let go, it says
+  that only a new start of Libre Panel helps.
 
 **Fixes**
 - **On Windows, Libre Panel could hang at its start with a core busy**, without its tray icon

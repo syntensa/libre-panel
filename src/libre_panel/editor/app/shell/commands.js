@@ -88,6 +88,17 @@ export function registerAppCommands() {
       run: () => appAction(store.get().app.panel?.state === "paused" ? "resume" : "pause"),
     },
     {
+      id: "app.restart",
+      title: () => t("Restart panels"),
+      hint: () => t("opens the panels anew, for one that hangs"),
+      keywords: () => t("restart reconnect hang frozen stuck reset panel"),
+      group: panel,
+      icon: "refresh",
+      when: appRuns,
+      rank: 13,
+      run: () => appAction("restart"),
+    },
+    {
       // the running app's switch; without one, the card in Settings that has it
       id: "app.autostart",
       title: () =>
