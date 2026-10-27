@@ -7,6 +7,10 @@ stream of raw pictures at 30 a second, and the themes on its card in turn; the Z
 supported; Start asking how black looks on a panel nobody has compared yet; and the app opening
 from the Linux AppImage on newer systems again.
 
+![Libre Panel's screens for the round panels of 480x480: Lumen, Encore, Nimbus, Almanac, Arena and the round report](https://raw.githubusercontent.com/syntensa/libre-panel/3963216248678e240ae6da4f0bf1522a585cc2db/docs/images/round-screens.png)
+
+![The ZC-360's three screens, each a panel of its own: Lumen CPU, Lumen GPU and Lumen Memory](https://raw.githubusercontent.com/syntensa/libre-panel/3963216248678e240ae6da4f0bf1522a585cc2db/docs/images/zc360-screens.png)
+
 **New**
 - **Round screens for the round panels of 480x480.** Lumen, Encore, Nimbus, Almanac, Arena and
   the round report now have versions laid out for the circle (Turing's 2.1" and 2.8",
