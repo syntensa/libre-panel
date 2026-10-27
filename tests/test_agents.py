@@ -598,3 +598,20 @@ def test_the_module_says_when_a_window_begins_anew_only_where_it_fits():
     # two cells: the name of each window and its share, with no room for the time between them
     assert shown(2, 1) == {f"{w}-label" for w in windows}
     assert shown(4, 2) == {f"{w}-label" for w in windows} | {f"{w}-reset" for w in windows}
+
+
+def test_the_module_says_what_the_session_is_called_on_the_screen_of_one_agent():
+    from libre_panel.theme.modules import expand
+
+    def parts(cols, rows, agent):
+        data = {"format": "libre-panel-theme/1", "name": "ai",
+                "display": {"model": "turing-9.2-usb"},
+                "widgets": [{"type": "module", "id": "m0", "module": "ai", "col": 0, "row": 0,
+                             "cols": cols, "rows": rows, "agent": agent}]}  # fmt: skip
+        widgets, _boxes = expand(parse_theme(data))
+        sensors = {w.get("sensor") for w in widgets}
+        return "ai.claude.task" in sensors, len([w for w in widgets if w["id"].endswith("-bar")])
+
+    assert parts(6, 2, "claude")[0] and parts(2, 1, "claude")[0]  # however small the module is
+    # side by side the plan's limits are the better use of the line, and keep every bar
+    assert parts(6, 2, "both") == (False, 4) and parts(2, 1, "both") == (False, 4)

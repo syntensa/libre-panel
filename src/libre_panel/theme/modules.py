@@ -2320,9 +2320,9 @@ AI_NAMES = {"claude": "Claude Code", "codex": "Codex"}
 
 def build_ai(b: _Build, _src: Source) -> None:
     """What Claude Code and Codex do (the agents service): their sign, moving while they work
-    or wait for you, the state in words, the tool at work, and how much of the plan's 5-hour
-    and weekly limits is used, with the time until each begins anew. Both side by side, or one
-    over the other, or the one the module's ``agent`` names."""
+    or wait for you, the state in words, the tool at work, what the session is called, and how
+    much of the plan's 5-hour and weekly limits is used, with the time until each begins anew.
+    Both side by side, or one over the other, or the one the module's ``agent`` names."""
     b.card()
     which = b.module.get("agent") or "both"
     names = ["claude", "codex"] if which == "both" else [which]
@@ -2340,8 +2340,9 @@ def build_ai(b: _Build, _src: Source) -> None:
 
 def _ai_agent(b: _Build, name: str, x: float, y: float, w: float, h: float,
               alone: bool = False) -> None:  # fmt: skip
-    """One agent's part: its name, sign and state, and below the state the rows of the plan's
-    limits that fit; alone (Claude Code's own screen) also how full its context is."""
+    """One agent's part: its name, sign and state, and below the state what the session is
+    called and the rows of the plan's limits that fit; alone (Claude Code's own screen) also
+    how full its context is."""
     key = f"ai.{name}"
     color, wait, calm = b.tint("accent"), b.c("warn"), b.c("text3")
     title = max(7.0, min(b.ts * 1.05, h * 0.11))
@@ -2371,10 +2372,15 @@ def _ai_agent(b: _Build, name: str, x: float, y: float, w: float, h: float,
     meters = [("five_hour", t("5 hours")), ("week", t("7 days"))]
     if alone and name == "claude":  # (its status line tells it)
         meters.append(("context", t("Context")))
-    fit = (text_room - size * CAP - small * 2.0) // (small * 1.5 + small * 0.9 + 6)
+    # what the session is called has a line of its own, before the meters take what is left;
+    # side by side there is no room for it and the plan's limits are the better use of the line
+    task = alone and tw >= small * 14
+    task_h = small * 1.5 if task else 0.0
+    fit = (text_room - size * CAP - small * 2.0 - task_h) // (small * 1.5 + small * 0.9 + 6)
     rows = max(0, min(len(meters), int(fit)))
     rows = 0 if rows == 1 and not alone else rows  # (side by side: both rows or none)
-    block = CAP * size + small * 2.0 + rows * (small * 1.5 + max(4, small * 0.5) + small * 0.6)
+    block = (CAP * size + small * 2.0 + task_h
+             + rows * (small * 1.5 + max(4, small * 0.5) + small * 0.6))  # fmt: skip
     free = max(0.0, text_room - block)
     if wide:
         cap = text_top + free / 2
@@ -2403,6 +2409,11 @@ def _ai_agent(b: _Build, name: str, x: float, y: float, w: float, h: float,
                 color=calm, align="right", width=tw * 0.34, font="text_font", tabular=False,
                 needs=f"{key}.state!=off", fallback="", hide_if_missing=True)  # fmt: skip
     row = line + small * 2.0
+    if task:
+        b.value(f"{name}-task", f"{key}.task", "{value}", ax, row, small * 0.9, color=calm,
+                align=align, width=tw, font="text_font", tabular=False, fallback="",
+                hide_if_missing=True)  # fmt: skip
+        row += small * 1.5
     bar_h = max(4, round(small * 0.5))
     # when a window begins anew, where it fits between the window's name and its share
     reset = tw >= small * 15
