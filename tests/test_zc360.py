@@ -286,7 +286,8 @@ def test_the_screens_take_turns_across_the_panels_processes(bus, monkeypatch):
 
 def test_a_screen_of_its_own_has_lumen_in_its_size(bus):
     model = find_model(zc.SCREEN_MODEL_ID)
-    assert model.size("landscape") == (640, 180) and model.driver == "unverified"
+    assert model.size("landscape") == (640, 180) and model.driver == "supported"  # (#13)
+    assert model.hidden_edges("landscape") == {"top": 0, "right": 2, "bottom": 0, "left": 2}
     assert models_for_usb(0x43A8, 0x0E61) == [find_model(zc.MODEL_ID)]  # "auto": all three
     assert theme_for(default_theme(model), "landscape", (640, 180)) == "lumen-640x180"
     for theme in ("lumen-media", "lumen-clock", "lumen-rings", "lumen-memory"):

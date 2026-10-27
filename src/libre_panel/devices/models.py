@@ -363,7 +363,9 @@ MODELS: tuple[PanelModel, ...] = (
         # (no USB ids of its own: they are the ZC-360's, which "auto" finds as one panel; the
         # three as panels of their own are set up in the app, device.port says which screen)
         notes="one of the ZC-360's three screens under the fans as a panel of its own",
-        hidden=(0, 2, 0, 2),  # the doctor's ruler on each of an owner's three screens (#13)
+        # the doctor's ruler on each of an owner's three screens (#13): 2 pixels at the left
+        # and the right in landscape, the framebuffer's top and bottom
+        hidden=(2, 0, 2, 0),
     ),
     PanelModel(
         "jonsbo-tf3-pump",

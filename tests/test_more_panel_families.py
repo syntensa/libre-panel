@@ -286,8 +286,8 @@ def test_the_models_our_drivers_serve_as_they_are():
 
 
 def test_each_panel_written_from_notes_says_what_it_cannot_do():
-    """Settings → Panel says it under the panel's name: nobody has run them yet, and what each
-    does otherwise than a TURZX USB panel."""
+    """Settings → Panel says it under the panel's name: nobody has run them yet (until an owner
+    has: then it is not said), and what each does otherwise than a TURZX USB panel."""
     from libre_panel.devices.models import MODELS
     from libre_panel.editor.settings import _model_info
 
@@ -304,7 +304,11 @@ def test_each_panel_written_from_notes_says_what_it_cannot_do():
     )
     for model in MODELS:
         if model.protocol in new or model.id in ("turing-1.6-usb", "turing-2.1-usb"):
-            assert model.limits.startswith("Not yet seen on the hardware."), model.id
+            unseen = model.limits.startswith("Not yet seen on the hardware.")
+            assert unseen == (model.driver == "unverified"), model.id
+    # the ZC-360's screens as panels of their own ran on an owner's desk (#13)
+    assert get_model("jonsbo-zc360-screen").driver == "supported"
+    assert "no smooth motion" in get_model("jonsbo-zc360-screen").limits.lower()
     for model_id in ("jonsbo-ds916", "hongtai-480x960", "lianli-universal-8.8", "vmax-4.6"):
         assert "no smooth motion" in get_model(model_id).limits.lower()
     for model_id in ("jonsbo-ds339", "vmax-4.6"):
