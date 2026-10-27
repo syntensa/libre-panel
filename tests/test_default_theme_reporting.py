@@ -7,7 +7,7 @@ import pytest
 from test_autostart import FakeTasks
 from test_editor_server import request
 from test_service import FakeRegistry, wait_for
-from test_theme_defaults import BARS, NINE
+from test_theme_defaults import BARS, NINE, ROUND_LUMEN
 
 from libre_panel.autostart import Autostart
 from libre_panel.devices import turzx_usb
@@ -96,7 +96,8 @@ def test_the_editor_lists_each_panels_default_with_the_models(isolated_home):
         status, specs = request(server.server_address[1], "GET", "/api/specs")
         defaults = {model["id"]: model["default_theme"] for model in specs["models"]}
         assert defaults == {model.id: default_theme(model) for model in MODELS}
-        assert {id for id, theme in defaults.items() if theme == "lumen"} == set(BARS)
+        lumen = {id for id, theme in defaults.items() if theme == "lumen"}
+        assert lumen == set(BARS + ROUND_LUMEN)  # (the bars, and the round panels)
     finally:
         server.shutdown()
         server.server_close()
