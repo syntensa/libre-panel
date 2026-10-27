@@ -11,6 +11,17 @@
       "preview": "all-in-with-codex/preview.png",
       "zip": "all-in-with-codex/all-in-with-codex.zip",
       "sha256": "4bed4a66b5b52b973f0045c0eb0fe126b559433425e981728af78a3a0d9c072c"
+    },
+    {
+      "name": "Midnight Howling",
+      "author": "Varulfen 3D Designs",
+      "description": "A simple theme displaying clear PC metrics, the moon phase, and the time. Enjoy the howling.",
+      "sizes": [
+        "480x320"
+      ],
+      "preview": "midnight-howling/preview.png",
+      "zip": "midnight-howling/midnight-howling.zip",
+      "sha256": "0aa076e329a8292883935b1751ea1c95363fb735ea7b5819a0346e56456a64fa"
     }
   ]
 }
