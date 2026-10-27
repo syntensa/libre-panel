@@ -1,7 +1,8 @@
 """The theme a panel shows when config.toml names none: the panel's own default.
 
-Lumen is made for the 1920x480 bars (the 8.8" and 9.2"); every other panel starts with
-Libre Default. A default is only that: a ``theme`` in config.toml, or ``--theme``, always wins.
+Lumen is made for the 1920x480 bars (the 8.8" and 9.2") and has a round version for the round
+panels of its size (480x480); every other panel starts with Libre Default. A default is only
+that: a ``theme`` in config.toml, or ``--theme``, always wins.
 """
 
 from __future__ import annotations
@@ -33,9 +34,18 @@ def is_bar(model: PanelModel | None) -> bool:
 
 
 def default_theme(model: PanelModel | None) -> str:
-    """The theme a config without a ``theme`` shows on ``model``: Lumen on a bar, Libre Default
-    on every other panel and where the panel is not known."""
-    return BAR_THEME if is_bar(model) else DEFAULT_THEME
+    """The theme a config without a ``theme`` shows on ``model``: Lumen on a bar and on a round
+    panel Lumen has a version for (480x480: Libre Default's corners would be cut off there),
+    Libre Default on every other panel and where the panel is not known."""
+    return BAR_THEME if is_bar(model) or _round_lumen(model) else DEFAULT_THEME
+
+
+def _round_lumen(model: PanelModel | None) -> bool:
+    from libre_panel.theme.model import theme_for
+
+    if model is None or model.shape != "round":
+        return False
+    return theme_for(BAR_THEME, "landscape", model.size("landscape")) != BAR_THEME
 
 
 def panel_model(device: DeviceConfig, reported: PanelModel | None = None) -> PanelModel | None:

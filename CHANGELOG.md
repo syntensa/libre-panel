@@ -3,6 +3,13 @@
 ## Unreleased
 
 **New**
+- **Round screens for the round panels of 480x480.** Lumen, Encore, Nimbus, Almanac, Arena and
+  the round report now have versions laid out for the circle (Turing's 2.1" and 2.8",
+  Waveshare's USB monitor): lit rings for CPU, GPU and RAM under the time, the cover in a ring
+  that fills as the track plays, the sky and the next three days, the time with the minute
+  round the rim, the frame rate with the load as arcs along the rim. Each comes up by itself
+  where its screen does, and these panels now start with the round Lumen; until now every
+  screen but Orbit lost its corners there. High Contrast keeps inside the circle too.
 - **Waveshare's USB monitors as USB displays, panels of their own.** With the card image from
   Waveshare's wiki that makes it a USB display ("udisp"), the 2.8" round monitor shows what the
   PC sends instead of the themes on its card; Libre Panel now drives it as one of its panels,

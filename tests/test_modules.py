@@ -73,7 +73,7 @@ def test_a_modules_numbers_count_to_a_new_reading_as_its_rings_move():
 
 
 REPORTS = ("round-report", "round-report-vertical", "round-report-1920x720",
-           "round-report-1280x720", "spur-round-report")  # fmt: skip
+           "round-report-1280x720", "round-report-480x480", "spur-round-report")  # fmt: skip
 
 
 def test_every_number_of_a_built_in_theme_counts_to_a_new_reading():

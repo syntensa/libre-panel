@@ -42,7 +42,7 @@
     "columns": 2,
     "rows": 2,
     "gap": 10,
-    "margin": 10
+    "margin": 70
   },
   "style": {
     "card": "outline",

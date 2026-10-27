@@ -1,0 +1,280 @@
+{
+  "format": "libre-panel-theme/1",
+  "name": "Round report",
+  "author": "Libre Panel contributors",
+  "license": "CC0-1.0",
+  "description": "The round's report for round panels of 480x480: the game, the average frame rate large and against the rounds before, the lows and the frame times, the temperatures.",
+  "display": {
+    "model": "turing-2.8-usb",
+    "orientation": "landscape",
+    "width": 480,
+    "height": 480
+  },
+  "palette": {
+    "bg": "#0A0E13",
+    "bg2": "#06090D",
+    "surface": "#0D1219",
+    "line": "#1F2A36",
+    "track": "#18212C",
+    "text": "#E8EEF4",
+    "text2": "#C9D3DE",
+    "text3": "#93A1B2",
+    "dim": "#5F6E80",
+    "accent": "#2EE6D6",
+    "cpu": "#2EE6D6",
+    "gpu": "#7F9CFF",
+    "mem": "#C792FF",
+    "disk": "#5FB6FF",
+    "net": "#34D399",
+    "warn": "#F5C46B",
+    "crit": "#F87171"
+  },
+  "font": "builtin:Barlow-Medium",
+  "background": {
+    "color": "@bg",
+    "image": null
+  },
+  "refresh_ms": 1000,
+  "animation": {
+    "smoothing_ms": 600
+  },
+  "style": {
+    "card": "glass",
+    "radius": 14,
+    "glow": 0.6,
+    "backdrop": "flat",
+    "display_font": "builtin:Barlow-SemiBold",
+    "text_font": "builtin:Barlow-Medium"
+  },
+  "widgets": [
+    {
+      "type": "rect",
+      "id": "ground",
+      "x": 0,
+      "y": 0,
+      "w": 480,
+      "h": 480,
+      "color": "@bg2",
+      "color2": "@bg",
+      "locked": true
+    },
+    {
+      "type": "rect",
+      "id": "groove",
+      "x": 4,
+      "y": 4,
+      "w": 472,
+      "h": 472,
+      "radius": 236,
+      "color": "#00000000",
+      "outline": "@line",
+      "outline_width": 2,
+      "locked": true
+    },
+    {
+      "type": "metric",
+      "id": "title",
+      "x": 240,
+      "y": 66,
+      "sensor": "report.title",
+      "format": "{value:upper}",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 14,
+      "color": "@accent",
+      "align": "center",
+      "letter_spacing": 3
+    },
+    {
+      "type": "metric",
+      "id": "game",
+      "x": 240,
+      "y": 88,
+      "sensor": "report.game",
+      "format": "{value}",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 28,
+      "color": "@text",
+      "align": "center",
+      "max_width": 320,
+      "fit": "shrink"
+    },
+    {
+      "type": "metric",
+      "id": "length",
+      "x": 240,
+      "y": 128,
+      "sensor": "report.length",
+      "format": "{value:duration}",
+      "font": "builtin:Barlow-Medium",
+      "font_size": 16,
+      "color": "@text3",
+      "align": "center"
+    },
+    {
+      "type": "metric",
+      "id": "fps",
+      "x": 240,
+      "y": 148,
+      "sensor": "report.fps",
+      "format": "{value:.0f}",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 100,
+      "color": "@text",
+      "align": "center",
+      "finish": "acrylic"
+    },
+    {
+      "type": "text",
+      "id": "fps-label",
+      "x": 240,
+      "y": 274,
+      "text": "Ø FPS",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 17,
+      "color": "@accent",
+      "align": "center",
+      "tabular": false,
+      "letter_spacing": 3
+    },
+    {
+      "type": "metric",
+      "id": "fps-delta",
+      "x": 240,
+      "y": 296,
+      "sensor": "report.fps_delta",
+      "format": "{value:+.0f}",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 18,
+      "color": "@text2",
+      "align": "center",
+      "needs": "report.fps_delta",
+      "color_rules": [
+        {
+          "above": -100000,
+          "color": "@crit"
+        },
+        {
+          "above": -0.5,
+          "color": "@text2"
+        },
+        {
+          "above": 0.5,
+          "color": "@net"
+        }
+      ]
+    },
+    {
+      "type": "metric",
+      "id": "low-label",
+      "x": 128,
+      "y": 326,
+      "sensor": "report.fps_1low",
+      "format": "{label:upper}",
+      "font": "builtin:Barlow-Medium",
+      "font_size": 12,
+      "color": "@text3",
+      "align": "center",
+      "letter_spacing": 1.4,
+      "needs": "report.fps_1low",
+      "max_width": 104,
+      "fit": "shrink"
+    },
+    {
+      "type": "metric",
+      "id": "low-value",
+      "x": 128,
+      "y": 344,
+      "sensor": "report.fps_1low",
+      "format": "{value:.0f}",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 26,
+      "color": "@text",
+      "align": "center",
+      "needs": "report.fps_1low"
+    },
+    {
+      "type": "metric",
+      "id": "frame-label",
+      "x": 240,
+      "y": 326,
+      "sensor": "report.frametime_avg",
+      "format": "{label:upper}",
+      "font": "builtin:Barlow-Medium",
+      "font_size": 12,
+      "color": "@text3",
+      "align": "center",
+      "letter_spacing": 1.4,
+      "needs": "report.fps_1low",
+      "max_width": 104,
+      "fit": "shrink"
+    },
+    {
+      "type": "metric",
+      "id": "frame-value",
+      "x": 240,
+      "y": 344,
+      "sensor": "report.frametime_avg",
+      "format": "{value:.1f} ms",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 26,
+      "color": "@text",
+      "align": "center",
+      "needs": "report.fps_1low"
+    },
+    {
+      "type": "metric",
+      "id": "longest-label",
+      "x": 352,
+      "y": 326,
+      "sensor": "report.frametime_max",
+      "format": "{label:upper}",
+      "font": "builtin:Barlow-Medium",
+      "font_size": 12,
+      "color": "@text3",
+      "align": "center",
+      "letter_spacing": 1.4,
+      "needs": "report.fps_1low",
+      "max_width": 104,
+      "fit": "shrink"
+    },
+    {
+      "type": "metric",
+      "id": "longest-value",
+      "x": 352,
+      "y": 344,
+      "sensor": "report.frametime_max",
+      "format": "{value:.0f} ms",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 26,
+      "color": "@text",
+      "align": "center",
+      "needs": "report.fps_1low"
+    },
+    {
+      "type": "metric",
+      "id": "cpu-temp",
+      "x": 228,
+      "y": 396,
+      "sensor": "report.cpu_temp",
+      "format": "CPU {value:.0f}°C",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 17,
+      "color": "@cpu",
+      "align": "right",
+      "needs": "report.cpu_temp"
+    },
+    {
+      "type": "metric",
+      "id": "gpu-temp",
+      "x": 252,
+      "y": 396,
+      "sensor": "report.gpu_temp",
+      "format": "GPU {value:.0f}°C",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 17,
+      "color": "@gpu",
+      "align": "left",
+      "needs": "report.gpu_temp"
+    }
+  ]
+}

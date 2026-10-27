@@ -34,6 +34,7 @@ short). Every theme moves to any other panel from the panel button at the top of
 | **Libre Default** | 3.5" (480×320); the default on every other panel | two lit rings, temperature, disk and network, a history that scrolls; what plays, the weather or the day in the corner |
 | **Slate** | 5" (800×480) | four cards: CPU, GPU, memory and network |
 | **Orbit** | round 2.1" and 2.8" | three rings around a large clock |
+| **Round versions** | round 2.1" and 2.8" (480×480: Turing's, Waveshare's USB monitor); Lumen is the default there | Lumen, Encore, Nimbus, Almanac, Arena and the round report laid out for the circle: lit rings for CPU, GPU and RAM under the time, the cover in a ring that fills as the track plays, the sky and the next three days, the time with the minute round the rim, the frame rate with the load as arcs along the rim, the round's report. Each is taken by itself where its screen comes up |
 | **Column** | 3.5" portrait | the clock, a row per resource and the network |
 | **Pico** | 0.96" (160×80) | CPU with its temperature, and memory |
 | **Companions** | a panel beside the first, 9.2" either way up and 12.3" | Lumen Companion (every core, the temperatures with the fans, the drives, the processes), Arena Companion, Encore Companion and Almanac Companion: what the first panel's screen leaves out, while it leaves out what they show ([more panels at once](CONFIGURATION.md#more-panels-at-once)) |

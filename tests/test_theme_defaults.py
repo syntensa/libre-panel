@@ -11,6 +11,7 @@ from libre_panel.config import Config, DeviceConfig, load_config
 from libre_panel.devices import turzx_usb
 from libre_panel.devices.models import MODELS, get_model
 from libre_panel.theme.defaults import default_theme, is_bar, normal_theme, panel_model
+from libre_panel.theme.model import theme_for
 
 # The panels whose frame is 1920x480: both 8.8" (USB, and the serial V0.x one) and the 9.2"
 BARS = [
@@ -29,7 +30,9 @@ BARS = [
     "beadapanel-9",
     "beadapanel-11",
 ]
-OTHERS = [model.id for model in MODELS if model.id not in BARS]
+# the round ones of 480x480, which Lumen has a round version for
+ROUND_LUMEN = [m.id for m in MODELS if m.shape == "round" and m.size("landscape") == (480, 480)]
+OTHERS = [model.id for model in MODELS if model.id not in BARS + ROUND_LUMEN]
 NINE, THREE, FIVE = (get_model(id) for id in ("turing-9.2-usb", "turing-3.5", "turing-5"))
 
 
@@ -72,14 +75,16 @@ def test_the_12_inch_panel_is_not_a_bar():
     assert default_theme(twelve) == "libre-default"
 
 
-def test_small_round_and_portrait_panels_get_libre_default():
+def test_small_and_portrait_panels_get_libre_default_and_round_ones_round_lumen():
     for model in ("turing-3.5", "usbpcmonitor-3.5", "xuanfang-3.5", "kipye-3.5", "weact-3.5"):
         assert default_theme(get_model(model)) == "libre-default", model
     assert default_theme(get_model("turing-5")) == "libre-default"
     assert default_theme(get_model("usbpcmonitor-7")) == "libre-default"
-    for round_one in ("turing-2.1", "turing-2.8-usb"):
+    for round_one in ("turing-2.1", "turing-2.8-usb", "waveshare-2.8-udisp"):
+        # (Lumen has a round version of their 480x480: Libre Default's corners would be cut off)
         assert get_model(round_one).shape == "round"
-        assert default_theme(get_model(round_one)) == "libre-default"
+        assert default_theme(get_model(round_one)) == "lumen"
+        assert theme_for("lumen", "landscape", (480, 480)) == "lumen-480x480"
     portrait = get_model("turing-3.5")
     assert portrait.size("portrait") == (320, 480)  # what the Column theme is made for
     assert default_theme(portrait) == "libre-default"
@@ -91,7 +96,8 @@ def test_the_rule_is_the_shape_of_the_frame_whichever_way_the_panel_is_mounted()
     for model in MODELS:
         long, short = max(model.size("landscape")), min(model.size("landscape"))
         standing = model.size("portrait")
-        assert (default_theme(model) == "lumen") == (long >= 3.5 * short), model.id
+        bar_or_round = long >= 3.5 * short or model.id in ROUND_LUMEN
+        assert (default_theme(model) == "lumen") == bar_or_round, model.id
         assert (max(standing) >= 3.5 * min(standing)) == is_bar(model), model.id
     assert {model.id for model in MODELS if is_bar(model)} == set(BARS)  # a new model decides here
 
