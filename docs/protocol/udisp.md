@@ -50,8 +50,11 @@ One bulk transfer: a header of 16 bytes, little-endian, then the payload.
 | 12–15 | bits 0–9: a frame number; bits 10–31: the payload's length in bytes |
 
 RGB565 is 16 bits a pixel, little-endian, red in the top 5 bits; RGB888 is three bytes a
-pixel, red first. Libre Panel sends whole pictures as JPEG where the display takes it, up to 30
-a second as a panel in video mode gets them (fewer where the product string says `Fps`); the
-last picture goes again after a second without one.
+pixel, red first. Libre Panel sends whole pictures, up to 30 a second as a panel in video mode
+gets them (fewer where the product string says `Fps`); the last picture goes again after a
+second without one. The display takes the next transfer only once it has the last, so the time
+a picture takes to encode and send is what it costs the display: Libre Panel times JPEG first
+(what the firmware is made for), and where it stays under 25 a second the other kinds the
+display takes, and keeps the fastest.
 
 No command for the backlight is known: Libre Panel's brightness goes into the picture.

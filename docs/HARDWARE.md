@@ -364,8 +364,12 @@ do with it then.
 - It shows up as a USB display, `303a:2986`, whose product string says its size and what it
   takes ("t113udisp1_R480x480_Ejpg5_Ergb16_Ergb32" on the 2.8" round one, #21). Libre Panel
   finds it by that string; a size it does not know yet is not taken.
-- Libre Panel sends JPEG pictures. No command for the backlight is known, so the brightness goes
-  into the picture.
+- Libre Panel sends whole pictures as a panel in video mode gets them, 30 a second. It times what
+  the display takes: JPEG first, as its firmware is made for it; where JPEG stays under 25 a
+  second, RGB565 (and then RGB888) is timed too and the fastest kept. The log says what each
+  came to.
+- No command for the backlight is known, so the brightness goes into the picture: 100 % is as
+  bright as the display's card image sets its backlight, and less is darker.
 - Close any other program that drives the display first.
 - **Linux:** *Settings → Sensors → Set up sensors and panel access* gives your user the display,
   as it does the other panels. **Windows:** the display brings no driver of its own; it needs

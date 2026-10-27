@@ -803,8 +803,8 @@ _LIMITS = {
     "waveshare-2.8-udisp": (
         "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB "
         "display (it then calls itself udisp over USB), and shows only what the PC sends: the "
-        "themes on its card are gone with that image. It takes whole JPEG pictures, up to 30 a "
-        "second. Its brightness goes into the picture: dimming darkens it."
+        "themes on its card are gone with that image. It takes whole pictures, up to 30 a "
+        "second: smooth motion. Its brightness goes into the picture: dimming darkens it."
     ),
 }
 MODELS = tuple(

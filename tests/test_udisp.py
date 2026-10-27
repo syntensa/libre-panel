@@ -122,6 +122,45 @@ def test_the_display_is_driven_as_a_panel_in_video_mode(bus):
         assert screen.stream_fps == 20
 
 
+class Timed(FakeDisplay):
+    """A display that takes so long for each kind of picture (seconds), on a clock of its own."""
+
+    def __init__(self, costs, product=PRODUCT) -> None:
+        super().__init__(product)
+        self.costs, self.now = costs, 0.0
+
+    def clock(self):
+        return self.now
+
+    def received(self, endpoint, data):
+        super().received(endpoint, data)
+        self.now += self.costs[self.frames[-1]["kind"]]
+
+
+def driven(display, frames):
+    with opened() as screen:
+        screen._impl.clock = display.clock
+        for _ in range(frames):
+            screen.show(corner_red((480, 480)))
+        return screen._impl.kind, dict(screen._impl.rates)
+
+
+def test_the_kind_of_picture_that_goes_fastest_is_kept(bus):
+    """JPEG first, as the firmware is made for it; too slow for smooth motion, RGB565 is timed
+    too and the faster kept."""
+    slow_jpeg = bus(Timed({udisp.JPEG: 1 / 15, udisp.RGB565: 1 / 40}))
+    kind, rates = driven(slow_jpeg, 2 * udisp.TRIAL + 5)
+    assert kind == udisp.RGB565 and round(rates[udisp.JPEG]) == 15
+    assert round(rates[udisp.RGB565]) == 40
+    assert [f["kind"] for f in slow_jpeg.frames[-5:]] == [udisp.RGB565] * 5
+    fast_jpeg = bus(Timed({udisp.JPEG: 1 / 45, udisp.RGB565: 1 / 40}))
+    kind, rates = driven(fast_jpeg, udisp.TRIAL + 5)
+    assert kind == udisp.JPEG and set(rates) == {udisp.JPEG}  # (fast enough: nothing tried)
+    all_slow = bus(Timed({udisp.JPEG: 1 / 18, udisp.RGB565: 1 / 12, udisp.RGB888: 1 / 9}))
+    kind, rates = driven(all_slow, 3 * udisp.TRIAL + 5)
+    assert kind == udisp.JPEG and set(rates) == {udisp.JPEG, udisp.RGB565, udisp.RGB888}
+
+
 def test_raw_pixels_where_the_display_takes_no_jpeg(bus):
     display = bus(FakeDisplay("udisp0_R480x480_Ergb16"))
     with opened() as screen:

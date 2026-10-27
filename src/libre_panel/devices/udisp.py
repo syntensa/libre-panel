@@ -28,6 +28,8 @@ import io
 import logging
 import re
 import struct
+import time
+from collections.abc import Callable
 from typing import Any
 
 from PIL import Image
@@ -49,6 +51,9 @@ FRAME_IDS = 1 << 10
 QUALITIES = (90, 80, 70, 60, 50)
 WRITE_TIMEOUT_MS = 3000
 STREAM_FPS = 30  # every frame, as a video panel gets them (less where the display says less)
+SMOOTH_FPS = 25  # a kind of picture that goes this fast is kept without trying the others
+TRIAL = 24  # the frames each kind of picture is timed over
+NAMES = {RGB565: "RGB565", RGB888: "RGB888", YUV420: "YUV420", JPEG: "JPEG"}
 AGAIN_S = 1.0  # the last picture again after this long without one
 
 
@@ -142,6 +147,14 @@ def rgb565(picture: Image.Image) -> bytes:
     return packed.astype("<u2").tobytes()
 
 
+def takes(said: dict[str, Any]) -> list[int]:
+    """The kinds of picture a display takes, by what it says, in the order they are tried:
+    JPEG (what its firmware is made for), RGB565, RGB888 (the most bytes)."""
+    found = [kind for kind, key in ((JPEG, "jpeg"), (RGB565, "rgb16"), (RGB888, "rgb32"))
+             if said.get(key)]  # fmt: skip
+    return found or [JPEG]
+
+
 def to_native(frame: Image.Image, size: tuple[int, int]) -> Image.Image:
     """A frame turned and sized into the display's picture."""
     if (frame.width > frame.height) != (size[0] > size[1]):
@@ -154,9 +167,15 @@ def to_native(frame: Image.Image, size: tuple[int, int]) -> Image.Image:
 class UdispDisplay(Display):
     name = "udisp"
 
-    def __init__(self, config, model: PanelModel | None = None, configured: bool = True) -> None:
+    def __init__(self, config, model: PanelModel | None = None, configured: bool = True,
+                 clock: Callable[[], float] = time.perf_counter) -> None:  # fmt: skip
         super().__init__(config)
         self.model = model or next(m for m in MODELS if m.protocol == PROTOCOL)
+        self.clock = clock
+        self.kinds: list[int] = []  # what the display takes, in the order they are tried
+        self.kind = JPEG
+        self.rates: dict[int, float] = {}  # pictures a second each kind came to
+        self._timed: list[float] = []
         self.device: Any = None
         self.place = ""
         self.endpoint: int | None = None
@@ -199,6 +218,8 @@ class UdispDisplay(Display):
                     )  # fmt: skip
                 )
             self.said = said
+            self.kinds = takes(said)
+            self.kind, self.rates, self._timed = self.kinds[0], {}, []
             usb_link.claim(self.device, (0,))
             self.endpoint, _into = usb_link.endpoints(self.device, 0)
             if self.endpoint is None:
@@ -217,25 +238,39 @@ class UdispDisplay(Display):
         self._keeper.start()
 
     def _takes(self) -> str:
-        kinds = [f"JPEG {self.said['jpeg']}" if self.said.get("jpeg") else ""]
-        kinds += [
-            "RGB565" if self.said.get("rgb16") else "",
-            "RGB888" if self.said.get("rgb32") else "",
-        ]
-        return ", ".join(kind for kind in kinds if kind) or "?"
+        return ", ".join(NAMES[kind] for kind in self.kinds)
 
     def _encoded(self, picture: Image.Image) -> bytes:
-        """The picture as the display takes it: JPEG where it does (a tenth of the bytes of
-        the pixels), else raw pixels."""
-        if self.said.get("jpeg") or not (self.said.get("rgb32") or self.said.get("rgb16")):
+        """The picture as the kind the display takes that goes fastest (:meth:`_choose`)."""
+        if self.kind == JPEG:
             data = jpeg(picture, self.said.get("limit"))
-            kind = JPEG
-        elif self.said.get("rgb32"):
-            data, kind = picture.tobytes(), RGB888  # (R, G, B, a byte each)
+        elif self.kind == RGB888:
+            data = picture.tobytes()  # (R, G, B, a byte each)
         else:
-            data, kind = rgb565(picture), RGB565
+            data = rgb565(picture)
         self.frame += 1
-        return header(kind, picture.size, len(data), self.frame) + data
+        return header(self.kind, picture.size, len(data), self.frame) + data
+
+    def _choose(self, seconds: float) -> None:
+        """Time the kind of picture in use: the display takes the next one only once it has
+        drawn the last (the transfer waits for it), so encoding and sending tell how many it
+        shows a second. JPEG goes first, as the display's firmware is made for it; where it
+        stays under :data:`SMOOTH_FPS`, the next kind it takes is timed too, and the fastest is
+        kept."""
+        if self.rates.get(self.kind) is not None or not self.kinds:
+            return
+        self._timed.append(seconds)
+        if len(self._timed) < TRIAL:
+            return
+        rate = len(self._timed) / max(sum(self._timed), 1e-6)
+        self.rates[self.kind], self._timed = rate, []
+        untried = [kind for kind in self.kinds if kind not in self.rates]
+        if rate < SMOOTH_FPS and untried:
+            self.kind = untried[0]
+            return
+        self.kind = max(self.rates, key=self.rates.get)
+        said = ", ".join(f"{NAMES[k]} {r:.0f}" for k, r in self.rates.items())
+        log.info("%s: %s pictures a second; %s kept", self.describe(), said, NAMES[self.kind])
 
     # -- pictures ---------------------------------------------------------------------------
 
@@ -245,10 +280,12 @@ class UdispDisplay(Display):
     def show(self, frame: Image.Image, region: tuple[int, int, int, int] | None = None) -> None:
         if self.device is None:
             raise DeviceError(t("the {panel} is not open", panel=self.describe()))
+        began = self.clock()
         message = self._encoded(dimmed(to_native(frame, self.size), self.brightness))
         with self._keeper.lock:
             self._keeper.check()
             self._send(message)
+        self._choose(self.clock() - began)
 
     def _send(self, message: bytes) -> None:
         import usb.core
