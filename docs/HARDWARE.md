@@ -36,7 +36,8 @@ motion (the video mode is for the TURZX USB panels). The panel test's speed chec
   Libre Panel yet. Please run `libre-panel doctor` and report the result. For the panels of
   JONSBO, Hongtai, VMAX, Lian Li, Thermalright, BeadaPanel, NZXT and Thermaltake (and the
   Turing 1.6" and 2.1" USB panels) the protocol comes from other projects' notes and captures
-  and from the makers' own sources: nobody has run them with Libre Panel yet.
+  and from the makers' own sources: nobody has run them with Libre Panel yet, but for the
+  JONSBO ZC-360's screens as panels of their own, which are supported (#13).
 - **planned** — the panel is in the catalog (editor menu, sizes), the driver is
   not written yet. Design themes now; they will work once the driver lands.
 

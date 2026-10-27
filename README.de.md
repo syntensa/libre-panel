@@ -38,11 +38,11 @@
 </p>
 
 <p align="center">
+  <a href="#unterstützte-panels">Panels</a> ·
   <a href="#funktionen">Funktionen</a> ·
   <a href="#mehrere-panels-zugleich">Mehrere Panels</a> ·
   <a href="#in-30-sekunden">Rundgang</a> ·
   <a href="#themes">Themes</a> ·
-  <a href="#unterstützte-panels">Panels</a> ·
   <a href="#installation-und-erster-start">Installation</a> ·
   <a href="#sofort-startklar">Sofort startklar</a> ·
   <a href="#datenschutz">Datenschutz</a> ·
@@ -55,6 +55,77 @@ Panel anstecken, Libre Panel starten: Es zeigt Prozessor, Grafikkarte, Arbeitssp
 Lüfter, Netzwerk, was gerade läuft und das Wetter draußen, in einem Theme, das du auswählst,
 selbst baust oder aus der Community installierst, auf bis zu vier Panels zugleich. Es läuft unauffällig im Tray und ersetzt
 die Hersteller-App.
+
+## Unterstützte Panels
+
+### Unterstützt und verifiziert
+
+<p>
+  <img alt="Turing / TURZX: 8,8&quot;, 9,2&quot;, 12,3&quot;" src="https://img.shields.io/badge/Turing%20%2F%20TURZX-8%2C8%22%20%C2%B7%209%2C2%22%20%C2%B7%2012%2C3%22-34D399?style=for-the-badge&labelColor=111820">
+  <img alt="Turing Smart Screen: 3,5&quot;, 8,8&quot;" src="https://img.shields.io/badge/Turing%20Smart%20Screen-3%2C5%22%20%C2%B7%208%2C8%22-34D399?style=for-the-badge&labelColor=111820">
+  <img alt="JONSBO ZC-360: jedes Display ein eigenes Panel" src="https://img.shields.io/badge/JONSBO%20ZC--360-jedes%20Display%20ein%20eigenes%20Panel-34D399?style=for-the-badge&labelColor=111820">
+</p>
+
+Mit Libre Panel auf echten Panels betrieben, wie ihre Besitzer berichten.
+
+### Unterstützt und unverifiziert
+
+<p>
+  <img alt="Turing / TURZX: 1,6&quot;, rund 2,1&quot;, rund 2,8&quot;, 4,6&quot;, 5,2&quot;, 8&quot;" src="https://img.shields.io/badge/Turing%20%2F%20TURZX-1%2C6%22%20%C2%B7%20rund%202%2C1%22%20%C2%B7%20rund%202%2C8%22%20%C2%B7%204%2C6%22%20%C2%B7%205%2C2%22%20%C2%B7%208%22-F5C46B?style=for-the-badge&labelColor=111820">
+  <img alt="Turing Smart Screen: rund 2,1&quot;, 5&quot;" src="https://img.shields.io/badge/Turing%20Smart%20Screen-rund%202%2C1%22%20%C2%B7%205%22-F5C46B?style=for-the-badge&labelColor=111820">
+  <img alt="UsbPCMonitor: 3,5&quot;, 5&quot;, 7&quot;" src="https://img.shields.io/badge/UsbPCMonitor-3%2C5%22%20%C2%B7%205%22%20%C2%B7%207%22-F5C46B?style=for-the-badge&labelColor=111820">
+  <img alt="XuanFang: 3,5&quot;" src="https://img.shields.io/badge/XuanFang-3%2C5%22-F5C46B?style=for-the-badge&labelColor=111820">
+  <img alt="Kipye Qiye: 3,5&quot;" src="https://img.shields.io/badge/Kipye%20Qiye-3%2C5%22-F5C46B?style=for-the-badge&labelColor=111820">
+  <img alt="WeAct Display FS V1: 0,96&quot;, 3,5&quot;" src="https://img.shields.io/badge/WeAct%20Display%20FS%20V1-0%2C96%22%20%C2%B7%203%2C5%22-F5C46B?style=for-the-badge&labelColor=111820">
+  <img alt="JONSBO: ZC-360 als ein Bild, TF3-360SC, DS916, DS339" src="https://img.shields.io/badge/JONSBO-ZC--360%20als%20ein%20Bild%20%C2%B7%20TF3--360SC%20%C2%B7%20DS916%20%C2%B7%20DS339-F5C46B?style=for-the-badge&labelColor=111820">
+  <img alt="VMAX: 4,6&quot;" src="https://img.shields.io/badge/VMAX-4%2C6%22-F5C46B?style=for-the-badge&labelColor=111820">
+  <img alt="Hongtai / Jungle Leopard: Chill Arc 360, MSI EZ Display und weitere" src="https://img.shields.io/badge/Hongtai%20%2F%20Jungle%20Leopard-Chill%20Arc%20360%2C%20MSI%20EZ%20Display%20und%20weitere-F5C46B?style=for-the-badge&labelColor=111820">
+  <img alt="Lian Li: Universal Screen, HydroShift II, OLED Curve" src="https://img.shields.io/badge/Lian%20Li-Universal%20Screen%20%C2%B7%20HydroShift%20II%20%C2%B7%20OLED%20Curve-F5C46B?style=for-the-badge&labelColor=111820">
+  <img alt="Thermalright: Trofeo Vision" src="https://img.shields.io/badge/Thermalright-Trofeo%20Vision-F5C46B?style=for-the-badge&labelColor=111820">
+  <img alt="BeadaPanel: jedes Modell" src="https://img.shields.io/badge/BeadaPanel-jedes%20Modell-F5C46B?style=for-the-badge&labelColor=111820">
+  <img alt="NZXT Kraken: mit LCD" src="https://img.shields.io/badge/NZXT%20Kraken-mit%20LCD-F5C46B?style=for-the-badge&labelColor=111820">
+  <img alt="Thermaltake: 6&quot;-LCD" src="https://img.shields.io/badge/Thermaltake-6%22--LCD-F5C46B?style=for-the-badge&labelColor=111820">
+  <img alt="Waveshare USB-Monitor: 2,8&quot;, als USB-Display" src="https://img.shields.io/badge/Waveshare%20USB--Monitor-2%2C8%22%2C%20als%20USB--Display-F5C46B?style=for-the-badge&labelColor=111820">
+</p>
+
+Der Treiber folgt einem Protokoll, das auf echten Panels erprobt ist, aber noch
+niemand hat das Modell mit Libre Panel bestätigt. **Du hast eins?** Der Panel-Test in
+der App (*Live → Diagnose*, oder `libre-panel doctor` im Terminal) prüft es von
+Anfang bis Ende und schreibt einen Bericht ohne Seriennummern; ein Klick öffnet einen
+[Panel-Bericht](https://github.com/syntensa/libre-panel/issues/new?template=panel_support.yml)
+damit ausgefüllt, und das Modell gilt für alle als verifiziert.
+
+### Nicht unterstützt
+
+<p>
+  <img alt="GUITION: 3,5&quot;" src="https://img.shields.io/badge/GUITION-3%2C5%22-5F6E80?style=for-the-badge&labelColor=111820">
+  <img alt="Fuldho: 3,5&quot;" src="https://img.shields.io/badge/Fuldho-3%2C5%22-5F6E80?style=for-the-badge&labelColor=111820">
+  <img alt="AX206: Bilderrahmen" src="https://img.shields.io/badge/AX206-Bilderrahmen-5F6E80?style=for-the-badge&labelColor=111820">
+  <img alt="Lian Li: TL LCD, Galahad II LCD, Lancool 207" src="https://img.shields.io/badge/Lian%20Li-TL%20LCD%20%C2%B7%20Galahad%20II%20LCD%20%C2%B7%20Lancool%20207-5F6E80?style=for-the-badge&labelColor=111820">
+</p>
+
+Für sie gibt es hier noch keinen Treiber.
+
+Was ein Panel kann und was nicht (Bewegung, Helligkeit, Treiber des Herstellers),
+nennt *Einstellungen → Panel* unter seinem Namen; alles dazu, mit den USB-IDs und der
+Einrichtung: [docs/HARDWARE.md](docs/HARDWARE.md) (englisch).
+
+**Die Panels am virtuellen COM-Port sind langsamer.** Sie sind die ältere Bauart, und Libre
+Panel hält ihre Bewegung von selbst ruhig. Für die meiste Bewegung sind die TURZX-USB-Panels
+die richtigen.
+
+<details>
+<summary>Mehr</summary>
+<br>
+
+Libre Panel schickt ihnen ein Bild pro Sekunde, davon nur die geänderten Teile, sodass Zahlen,
+Balken und die Uhr mitkommen. Verläufe rücken einmal pro Sekunde weiter, Zahlen wechseln ohne
+Gleiten, die Wettersymbole stehen still, Themes wechseln ohne Überblendung, und ein neues Theme
+baut sich einen Moment lang auf. *Einstellungen → Panel → Bewegung auf dem Panel* schaltet die
+volle Bewegung für ein Panel ein, das mitkommt. Den Videomodus gibt es für die
+TURZX-USB-Panels; die anderen haben keinen Videodecoder. Einzelheiten, Rechte unter Linux und
+die Panels anderer Marken: [docs/HARDWARE.md](docs/HARDWARE.md) (englisch).
+</details>
 
 ## Funktionen
 
@@ -448,68 +519,6 @@ Sonnenauf- und -untergang und der Mond (berechnet, ohne Internet); was gerade l�
 Mikrofon stumm ist, deine Kalender (jede `.ics`), Werte aus Home Assistant, MQTT und JSON, was
 Claude Code und Codex tun, eine Diashow. Jedes Modul zeigt umso mehr, je größer es ist, tritt
 zur Seite, wenn seine Messwerte fehlen, und kostet nichts, solange kein Theme es zeigt.
-</details>
-
-## Unterstützte Panels
-
-| Panel | Größen | Meldet sich als | Stand |
-|---|---|---|---|
-| Turing / TURZX | 1,6", rund 2,1", rund 2,8", 4,6", 5,2", 8", 8,8", 9,2", 12,3" | USB-Gerät (`1cbe:…`) | 9,2", 8,8" und 12,3": auf der Hardware bestätigt (das 9,2" stundenlang, als Standbild und als Video mit 50 fps, mit dem Doctor-Bericht eines Besitzers; 8,8" und 12,3" laut ihren Besitzern). Andere Größen: dasselbe Protokoll, ungeprüft |
-| Turing Smart Screen | rund 2,1", 3,5", 5", 8,8" | virtueller COM-Port | 3,5" und 8,8": laufen, wie ihre Besitzer berichten. 2,1" und 5": ungeprüft |
-| UsbPCMonitor | 3,5", 5", 7" | virtueller COM-Port | ungeprüft |
-| XuanFang | 3,5" | virtueller COM-Port | ungeprüft |
-| Kipye Qiye | 3,5" | virtueller COM-Port | ungeprüft |
-| WeAct Display FS V1 | 0,96", 3,5" | virtueller COM-Port | ungeprüft |
-
-*Ungeprüft* heißt: Der Treiber folgt einem Protokoll, das auf echten Panels erprobt ist, aber
-noch niemand hat dieses Modell mit Libre Panel bestätigt. **Du hast eins?** Der Panel-Test in
-der App (*Live → Diagnose*, oder `libre-panel doctor` im Terminal) prüft es von Anfang bis
-Ende und schreibt einen Bericht ohne Seriennummern; ein Klick öffnet einen
-[Panel-Bericht](https://github.com/syntensa/libre-panel/issues/new?template=panel_support.yml)
-damit ausgefüllt, und das Modell gilt für alle als *unterstützt*.
-
-<details>
-<summary><b>Hier neu, größtenteils von noch niemandem betrieben</b>: die Panels von JONSBO, Hongtai, VMAX, Lian Li, Thermalright, BeadaPanel, NZXT, Thermaltake und Waveshare (als USB-Display)</summary>
-<br>
-
-| Panel | Größen | Meldet sich als | Stand |
-|---|---|---|---|
-| JONSBO ZC-360 (Lüfter-Displays) | 3 × 3,38", als ein Bild von 1920×180 oder jedes ein Panel von 640×180 | USB-Geräte (`43a8:0e61`) | jedes Display ein eigenes Panel: **unterstützt**, mit dem Doctor-Bericht eines Besitzers für jedes Display (Windows). Als ein Bild: ungeprüft |
-| JONSBO TF3-360SC (AIO) | Pumpe: 3,5", 640×480; Lüfter: die drei Displays des ZC-360, ein Panel daneben | USB-Geräte (`1cbe:0035`, `43a8:0e61`) | ungeprüft |
-| JONSBO DS916 | 9,16", 1920×462 | USB-Seriell-Port (`33c3:f101`), JPEG-Bilder | ungeprüft |
-| JONSBO DS339 | 3,39", 960×376; Modell auswählen (wird von „auto“ nicht gefunden) | USB-Display-Chip MS9132 (`345f:9132`) | ungeprüft |
-| VMAX 4,6" | 960×320; Modell auswählen (wird von „auto“ nicht gefunden) | USB-Display-Chip MS9132 (`345f:9132`) | ungeprüft |
-| Hongtai / Jungle Leopard (Chill Arc 360; MSI EZ Display, Thermaltake, ZOTAC und weitere Displays mit dieser Firmware) | 960×480, die Leiste 1920×462 | USB-Seriell-Port (`33c3:7788`), JPEG-Bilder | ungeprüft |
-| Lian Li Universal Screen, HydroShift II LCD und OLED Curve | Leisten mit 8,8" und 9,2", 480×480, 2288×1080 | USB-Gerät (`1cbe:a088`, `a092`, `a034`, `a068`) | ungeprüft |
-| Thermalright Trofeo Vision | 6,86"; die Leisten 9,16" und 11,3" (1920×462, 1920×440) | USB-Gerät (`0416:5302` HID, `0416:5408`), JPEG-Bilder | ungeprüft |
-| BeadaPanel, jedes Modell (2" bis 11") | das Panel nennt Modell und Größe selbst | USB-Gerät (`4e58:1001`), Panel-Link-Stream | ungeprüft |
-| NZXT Kraken mit LCD (Z53/Z63/Z73, Kraken 2023, Elite RGB 2024, Plus 2024) | 240×240, 320×320, 640×640, rund | USB-Gerät (`1e71:3008`, `300e`, `3012`, `3014`), Standbilder über den Bildspeicher des Kühlers | ungeprüft |
-| Thermaltake 6"-LCD | 1480×720 | USB-Gerät (`264a:2347` HID), JPEG-Bilder | ungeprüft |
-| Waveshare USB-Monitor 2,8", als USB-Display (Waveshares udisp-Kartenabbild) | 480×480, rund | USB-Display (`303a:2986`), Videostream aus Rohbildern, 30 pro Sekunde | ungeprüft |
-
-Ihre Treiber folgen den Notizen anderer Projekte, und noch niemand hat sie mit Libre Panel
-betrieben. Keines hat flüssige Bewegung; das DS916, die Hongtai-Displays und die von Lian Li
-nehmen ganze JPEG-Bilder (die von Hongtai wenige pro Sekunde); DS916, DS339 und VMAX haben keine
-Steuerung der Hintergrundbeleuchtung, Dimmen macht also das Bild dunkler; DS339 und VMAX
-brauchen unter Windows den Treiber des Herstellers. *Einstellungen → Panel* nennt unter dem
-Namen des Panels, was es nicht kann ([alles dazu](docs/HARDWARE.md)).
-</details>
-
-**Die Panels am virtuellen COM-Port sind langsamer.** Sie sind die ältere Bauart, und Libre
-Panel hält ihre Bewegung von selbst ruhig. Für die meiste Bewegung sind die TURZX-USB-Panels
-die richtigen.
-
-<details>
-<summary>Mehr</summary>
-<br>
-
-Libre Panel schickt ihnen ein Bild pro Sekunde, davon nur die geänderten Teile, sodass Zahlen,
-Balken und die Uhr mitkommen. Verläufe rücken einmal pro Sekunde weiter, Zahlen wechseln ohne
-Gleiten, die Wettersymbole stehen still, Themes wechseln ohne Überblendung, und ein neues Theme
-baut sich einen Moment lang auf. *Einstellungen → Panel → Bewegung auf dem Panel* schaltet die
-volle Bewegung für ein Panel ein, das mitkommt. Den Videomodus gibt es für die
-TURZX-USB-Panels; die anderen haben keinen Videodecoder. Einzelheiten, Rechte unter Linux und
-die Panels anderer Marken: [docs/HARDWARE.md](docs/HARDWARE.md) (englisch).
 </details>
 
 ## Installation und erster Start

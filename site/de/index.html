@@ -763,39 +763,57 @@
         <p>Jedes wird per USB angeschlossen. TURZX-USB-Panels sind USB-Geräte mit Videodecoder; die
           ältere Art meldet sich als virtueller COM-Port, und die neuesten hier sind eigene USB-Geräte.</p>
       </div>
-      <table class="table">
-        <thead><tr><th scope="col">Panel</th><th scope="col">Größen</th><th scope="col">Meldet sich als</th><th scope="col">Stand</th></tr></thead>
-        <tbody>
-          <tr><th scope="row">Turing / TURZX</th><td data-label="Größen">1,6", rund 2,1", rund 2,8", 4,6", 5,2", 8", 8,8", 9,2", 12,3"</td><td data-label="Meldet sich als">USB-Gerät, Videomodus</td>
-            <td class="status"><span class="state ok">Bestätigt auf dem 9,2", 8,8" und 12,3"</span><small>Stundenlang als Standbild und als Video mit 50 fps auf dem 9,2", das 8,8" und das 12,3" laut ihren Besitzern; die anderen Größen sprechen dasselbe Protokoll</small></td></tr>
-          <tr><th scope="row">Turing Smart Screen</th><td data-label="Größen">rund 2,1", 3,5", 5", 8,8"</td><td data-label="Meldet sich als">virtueller COM-Port</td><td class="status"><span class="state ok">Läuft auf dem 3,5" und 8,8"</span><small>Laut ihren Besitzern; das 2,1" und das 5" sind ungeprüft</small></td></tr>
-          <tr><th scope="row">UsbPCMonitor</th><td data-label="Größen">3,5", 5", 7"</td><td data-label="Meldet sich als">virtueller COM-Port</td><td class="status"><span class="state wait">Ungeprüft</span></td></tr>
-          <tr><th scope="row">XuanFang</th><td data-label="Größen">3,5"</td><td data-label="Meldet sich als">virtueller COM-Port</td><td class="status"><span class="state wait">Ungeprüft</span></td></tr>
-          <tr><th scope="row">Kipye Qiye</th><td data-label="Größen">3,5"</td><td data-label="Meldet sich als">virtueller COM-Port</td><td class="status"><span class="state wait">Ungeprüft</span></td></tr>
-          <tr><th scope="row">WeAct Display FS V1</th><td data-label="Größen">0,96", 3,5"</td><td data-label="Meldet sich als">virtueller COM-Port</td><td class="status"><span class="state wait">Ungeprüft</span></td></tr>
-        </tbody>
-      </table>
-      <details class="more more-block">
-        <summary>Hier neu, von noch niemandem betrieben: JONSBO, Lian Li, Hongtai und VMAX<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
-        <table class="table">
-          <thead><tr><th scope="col">Panel</th><th scope="col">Größen</th><th scope="col">Meldet sich als</th><th scope="col">Stand</th></tr></thead>
-          <tbody>
-            <tr><th scope="row">JONSBO</th><td data-label="Größen">ZC-360-Lüfterdisplays (3 × 3,38"), TF3-360SC-Pumpe (3,5"), DS916 (9,16"), DS339 (3,39")</td><td data-label="Meldet sich als">USB-Geräte</td><td class="status"><span class="state wait">Neu, ungeprüft</span><small>Treiber nach den Notizen anderer Projekte, ohne flüssige Bewegung</small></td></tr>
-            <tr><th scope="row">Lian Li</th><td data-label="Größen">Universal Screen 8,8" und 9,2", HydroShift II LCD und OLED Curve</td><td data-label="Meldet sich als">USB-Gerät, JPEG-Bilder</td><td class="status"><span class="state wait">Neu, ungeprüft</span></td></tr>
-            <tr><th scope="row">Hongtai / Jungle Leopard</th><td data-label="Größen">960×480, die Leiste 1920×462 (Chill Arc 360 und andere Displays mit dieser Firmware)</td><td data-label="Meldet sich als">USB-Serial-Port, JPEG-Bilder</td><td class="status"><span class="state wait">Neu, ungeprüft</span></td></tr>
-            <tr><th scope="row">VMAX</th><td data-label="Größen">4,6", 960×320</td><td data-label="Meldet sich als">USB-Displaychip (MS9132)</td><td class="status"><span class="state wait">Neu, ungeprüft</span><small>Modell wählen: „auto“ findet es nicht</small></td></tr>
-          </tbody>
-        </table>
-      </details>
+      <div class="groups">
+        <div class="card group ok">
+          <h3><span class="state ok">Unterstützt und verifiziert</span></h3>
+          <p>Mit Libre Panel auf echten Panels betrieben, wie ihre Besitzer berichten.</p>
+          <ul class="rows">
+            <li><b>Turing / TURZX</b><span class="chip chip-quiet">USB, Videomodus</span><span class="desc">8,8", 9,2", 12,3"</span></li>
+            <li><b>Turing Smart Screen</b><span class="chip chip-quiet">COM-Port</span><span class="desc">3,5", 8,8"</span></li>
+            <li><b>JONSBO ZC-360</b><span class="chip chip-quiet">USB</span><span class="desc">jedes Display ein eigenes Panel</span></li>
+          </ul>
+        </div>
+        <div class="card group wait">
+          <h3><span class="state wait">Unterstützt und unverifiziert</span></h3>
+          <p>Der Treiber folgt einem auf echten Panels erprobten Protokoll; noch niemand hat das Modell mit Libre Panel bestätigt.</p>
+          <ul class="rows">
+            <li><b>Turing / TURZX</b><span class="chip chip-quiet">USB, Videomodus</span><span class="desc">1,6", rund 2,1", rund 2,8", 4,6", 5,2", 8"</span></li>
+            <li><b>Turing Smart Screen</b><span class="chip chip-quiet">COM-Port</span><span class="desc">rund 2,1", 5"</span></li>
+            <li><b>UsbPCMonitor</b><span class="chip chip-quiet">COM-Port</span><span class="desc">3,5", 5", 7"</span></li>
+            <li><b>XuanFang</b><span class="chip chip-quiet">COM-Port</span><span class="desc">3,5"</span></li>
+            <li><b>Kipye Qiye</b><span class="chip chip-quiet">COM-Port</span><span class="desc">3,5"</span></li>
+            <li><b>WeAct Display FS V1</b><span class="chip chip-quiet">COM-Port</span><span class="desc">0,96", 3,5"</span></li>
+            <li><b>JONSBO</b><span class="chip chip-quiet">USB</span><span class="desc">ZC-360 als ein Bild, TF3-360SC, DS916, DS339</span></li>
+            <li><b>VMAX</b><span class="chip chip-quiet">USB</span><span class="desc">4,6"</span></li>
+            <li><b>Hongtai / Jungle Leopard</b><span class="chip chip-quiet">COM-Port</span><span class="desc">Chill Arc 360, MSI EZ Display und weitere</span></li>
+            <li><b>Lian Li</b><span class="chip chip-quiet">USB</span><span class="desc">Universal Screen, HydroShift II, OLED Curve</span></li>
+            <li><b>Thermalright</b><span class="chip chip-quiet">USB</span><span class="desc">Trofeo Vision</span></li>
+            <li><b>BeadaPanel</b><span class="chip chip-quiet">USB</span><span class="desc">jedes Modell</span></li>
+            <li><b>NZXT Kraken</b><span class="chip chip-quiet">USB</span><span class="desc">mit LCD</span></li>
+            <li><b>Thermaltake</b><span class="chip chip-quiet">USB</span><span class="desc">6"-LCD</span></li>
+            <li><b>Waveshare USB-Monitor</b><span class="chip chip-quiet">USB</span><span class="desc">2,8", als USB-Display</span></li>
+          </ul>
+        </div>
+        <div class="card group no">
+          <h3><span class="state">Nicht unterstützt</span></h3>
+          <p>Für sie gibt es hier noch keinen Treiber.</p>
+          <ul class="rows">
+            <li><b>GUITION</b><span class="desc">3,5"</span></li>
+            <li><b>Fuldho</b><span class="desc">3,5"</span></li>
+            <li><b>AX206</b><span class="desc">Bilderrahmen</span></li>
+            <li><b>Lian Li</b><span class="desc">TL LCD, Galahad II LCD, Lancool 207</span></li>
+          </ul>
+        </div>
+      </div>
       <div class="callout">
         <svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>
-        <p><strong>Du hast eins, das als ungeprüft gilt?</strong> Sein Treiber folgt einem Protokoll, das
+        <p><strong>Du hast eins, das als unverifiziert gilt?</strong> Sein Treiber folgt einem Protokoll, das
           auf echten Panels erprobt ist, aber noch niemand hat das Modell mit Libre Panel bestätigt.
           Der Panel-Test in der App (<em>Live → Diagnose</em>, oder <code>libre-panel doctor</code>)
           prüft es von Anfang bis Ende und schreibt einen Bericht ohne Seriennummern; ein Klick öffnet
           einen
           <a href="https://github.com/syntensa/libre-panel/issues/new?template=panel_support.yml">Panel-Bericht</a>
-          damit ausgefüllt, und das Modell gilt für alle als unterstützt.
+          damit ausgefüllt, und das Modell gilt für alle als verifiziert.
           <a href="https://github.com/syntensa/libre-panel/blob/main/docs/HARDWARE.md">Alle Panels und ihre Einrichtung</a> (englisch)</p>
       </div>
       <div class="callout">

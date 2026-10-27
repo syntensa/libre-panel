@@ -756,38 +756,56 @@
         <p>Every one plugs in with USB. TURZX USB panels are USB devices with a video decoder; the
           older kind shows up as a virtual COM port, and the newest here are USB devices of their own.</p>
       </div>
-      <table class="table">
-        <thead><tr><th scope="col">Panel</th><th scope="col">Sizes</th><th scope="col">Connects as</th><th scope="col">Status</th></tr></thead>
-        <tbody>
-          <tr><th scope="row">Turing / TURZX</th><td data-label="Sizes">1.6", 2.1" round, 2.8" round, 4.6", 5.2", 8", 8.8", 9.2", 12.3"</td><td data-label="Connects as">USB device, video mode</td>
-            <td class="status"><span class="state ok">Verified on the 9.2", 8.8" and 12.3"</span><small>Hours of stills and 50 fps video on the 9.2", the 8.8" and 12.3" as their owners report; the other sizes speak the same protocol</small></td></tr>
-          <tr><th scope="row">Turing Smart Screen</th><td data-label="Sizes">2.1" round, 3.5", 5", 8.8"</td><td data-label="Connects as">virtual COM port</td><td class="status"><span class="state ok">Runs on the 3.5" and 8.8"</span><small>As their owners report; the 2.1" and 5" are unverified</small></td></tr>
-          <tr><th scope="row">UsbPCMonitor</th><td data-label="Sizes">3.5", 5", 7"</td><td data-label="Connects as">virtual COM port</td><td class="status"><span class="state wait">Unverified</span></td></tr>
-          <tr><th scope="row">XuanFang</th><td data-label="Sizes">3.5"</td><td data-label="Connects as">virtual COM port</td><td class="status"><span class="state wait">Unverified</span></td></tr>
-          <tr><th scope="row">Kipye Qiye</th><td data-label="Sizes">3.5"</td><td data-label="Connects as">virtual COM port</td><td class="status"><span class="state wait">Unverified</span></td></tr>
-          <tr><th scope="row">WeAct Display FS V1</th><td data-label="Sizes">0.96", 3.5"</td><td data-label="Connects as">virtual COM port</td><td class="status"><span class="state wait">Unverified</span></td></tr>
-        </tbody>
-      </table>
-      <details class="more more-block">
-        <summary>New here, and run by nobody yet: JONSBO, Lian Li, Hongtai and VMAX<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
-        <table class="table">
-          <thead><tr><th scope="col">Panel</th><th scope="col">Sizes</th><th scope="col">Connects as</th><th scope="col">Status</th></tr></thead>
-          <tbody>
-            <tr><th scope="row">JONSBO</th><td data-label="Sizes">ZC-360 fan screens (3 × 3.38"), TF3-360SC pump (3.5"), DS916 (9.16"), DS339 (3.39")</td><td data-label="Connects as">USB devices</td><td class="status"><span class="state wait">New, unverified</span><small>Drivers after other projects' notes, without smooth motion</small></td></tr>
-            <tr><th scope="row">Lian Li</th><td data-label="Sizes">Universal Screen 8.8" and 9.2", HydroShift II LCD and OLED Curve</td><td data-label="Connects as">USB device, JPEG pictures</td><td class="status"><span class="state wait">New, unverified</span></td></tr>
-            <tr><th scope="row">Hongtai / Jungle Leopard</th><td data-label="Sizes">960×480, the strip 1920×462 (Chill Arc 360 and other screens on its firmware)</td><td data-label="Connects as">USB serial port, JPEG pictures</td><td class="status"><span class="state wait">New, unverified</span></td></tr>
-            <tr><th scope="row">VMAX</th><td data-label="Sizes">4.6", 960×320</td><td data-label="Connects as">USB display chip (MS9132)</td><td class="status"><span class="state wait">New, unverified</span><small>Choose the model: not found by "auto"</small></td></tr>
-          </tbody>
-        </table>
-      </details>
+      <div class="groups">
+        <div class="card group ok">
+          <h3><span class="state ok">Supported and verified</span></h3>
+          <p>Run with Libre Panel on real panels, as their owners report.</p>
+          <ul class="rows">
+            <li><b>Turing / TURZX</b><span class="chip chip-quiet">USB, video mode</span><span class="desc">8.8", 9.2", 12.3"</span></li>
+            <li><b>Turing Smart Screen</b><span class="chip chip-quiet">COM port</span><span class="desc">3.5", 8.8"</span></li>
+            <li><b>JONSBO ZC-360</b><span class="chip chip-quiet">USB</span><span class="desc">each screen its own panel</span></li>
+          </ul>
+        </div>
+        <div class="card group wait">
+          <h3><span class="state wait">Supported and unverified</span></h3>
+          <p>The driver follows a protocol proven on real panels; nobody has confirmed the model with Libre Panel yet.</p>
+          <ul class="rows">
+            <li><b>Turing / TURZX</b><span class="chip chip-quiet">USB, video mode</span><span class="desc">1.6", 2.1" round, 2.8" round, 4.6", 5.2", 8"</span></li>
+            <li><b>Turing Smart Screen</b><span class="chip chip-quiet">COM port</span><span class="desc">2.1" round, 5"</span></li>
+            <li><b>UsbPCMonitor</b><span class="chip chip-quiet">COM port</span><span class="desc">3.5", 5", 7"</span></li>
+            <li><b>XuanFang</b><span class="chip chip-quiet">COM port</span><span class="desc">3.5"</span></li>
+            <li><b>Kipye Qiye</b><span class="chip chip-quiet">COM port</span><span class="desc">3.5"</span></li>
+            <li><b>WeAct Display FS V1</b><span class="chip chip-quiet">COM port</span><span class="desc">0.96", 3.5"</span></li>
+            <li><b>JONSBO</b><span class="chip chip-quiet">USB</span><span class="desc">ZC-360 as one picture, TF3-360SC, DS916, DS339</span></li>
+            <li><b>VMAX</b><span class="chip chip-quiet">USB</span><span class="desc">4.6"</span></li>
+            <li><b>Hongtai / Jungle Leopard</b><span class="chip chip-quiet">COM port</span><span class="desc">Chill Arc 360, MSI EZ Display and more</span></li>
+            <li><b>Lian Li</b><span class="chip chip-quiet">USB</span><span class="desc">Universal Screen, HydroShift II, OLED Curve</span></li>
+            <li><b>Thermalright</b><span class="chip chip-quiet">USB</span><span class="desc">Trofeo Vision</span></li>
+            <li><b>BeadaPanel</b><span class="chip chip-quiet">USB</span><span class="desc">every model</span></li>
+            <li><b>NZXT Kraken</b><span class="chip chip-quiet">USB</span><span class="desc">with an LCD</span></li>
+            <li><b>Thermaltake</b><span class="chip chip-quiet">USB</span><span class="desc">6" LCD</span></li>
+            <li><b>Waveshare USB Monitor</b><span class="chip chip-quiet">USB</span><span class="desc">2.8", as a USB display</span></li>
+          </ul>
+        </div>
+        <div class="card group no">
+          <h3><span class="state">Not supported</span></h3>
+          <p>No driver here yet.</p>
+          <ul class="rows">
+            <li><b>GUITION</b><span class="desc">3.5"</span></li>
+            <li><b>Fuldho</b><span class="desc">3.5"</span></li>
+            <li><b>AX206</b><span class="desc">picture frames</span></li>
+            <li><b>Lian Li</b><span class="desc">TL LCD, Galahad II LCD, Lancool 207</span></li>
+          </ul>
+        </div>
+      </div>
       <div class="callout">
         <svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>
-        <p><strong>Own one marked unverified?</strong> Its driver follows a protocol proven on real
+        <p><strong>Own one that is unverified?</strong> Its driver follows a protocol proven on real
           panels, but nobody has confirmed the model with Libre Panel yet. The panel test in the app
           (<em>Live → Diagnose</em>, or <code>libre-panel doctor</code>) checks it end to end and writes
           a report without serial numbers; one click opens a
           <a href="https://github.com/syntensa/libre-panel/issues/new?template=panel_support.yml">panel report</a>
-          with it filled in, and the model becomes supported for everyone.
+          with it filled in, and the model becomes verified for everyone.
           <a href="https://github.com/syntensa/libre-panel/blob/main/docs/HARDWARE.md">All panels and their setup</a></p>
       </div>
       <div class="callout">
