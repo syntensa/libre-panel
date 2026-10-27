@@ -109,6 +109,16 @@ def test_the_setup_script_is_read_as_utf8():
     assert "de.PrivilegesRequiredOverrideCurrentUser=Nur für &mich installieren" in script.decode()
 
 
+def test_the_setup_starts_the_app_as_the_user_who_ran_it():
+    """The setup runs as administrator. An app it started as such made its private folder for
+    the administrators alone (Python's owner-only folders on Windows), and every later start as
+    the user hung there (discussion #22): what it runs after the install runs as the user."""
+    script = read("packaging", "windows", "libre-panel.iss")
+    run = script.split("\n[Run]\n", 1)[1].split("\n[", 1)[0]
+    lines = [line for line in run.splitlines() if line.startswith("Filename:")]
+    assert len(lines) == 2 and all("runasoriginaluser" in line for line in lines)
+
+
 def test_ci_runs_every_test_that_needs_a_browser_where_there_is_one():
     """Only CI's desktop job has Playwright and Chromium: elsewhere a test that needs them skips.
     A file of such tests left out of its list would never run anywhere."""

@@ -90,7 +90,7 @@ Name: "{autodesktop}\Libre Panel"; Filename: "{app}\LibrePanel.exe"; Tasks: desk
 
 [Run]
 Filename: "{app}\libre-panel.exe"; Parameters: "autostart enable"; Flags: runhidden runasoriginaluser; Tasks: autostart
-Filename: "{app}\LibrePanel.exe"; Description: "{cm:StartNow}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\LibrePanel.exe"; Description: "{cm:StartNow}"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
 [UninstallRun]
 Filename: "{app}\libre-panel.exe"; Parameters: "quit"; Flags: runhidden; RunOnceId: "QuitLibrePanel"

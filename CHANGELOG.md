@@ -27,7 +27,8 @@
   (`%APPDATA%\LibrePanel\private`): Python's temporary file tried new names there without end.
   It now gives up at once and goes on. A private folder it may not write to (made by a Libre
   Panel with administrator rights) is set aside and made anew, and such a folder no longer goes
-  to its owner alone (discussion #22).
+  to its owner alone (discussion #22). Such a Libre Panel came from the setup: started from its
+  last page, it ran with the setup's administrator rights. The setup now starts it as you.
 
 ## 0.7.2 — 2026-10-27
 
