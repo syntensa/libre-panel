@@ -2799,7 +2799,11 @@
     "restart reconnect hang frozen stuck reset panel": "riavvia riconnetti bloccato congelato fermo reimposta pannello restart",
     "The panel test has the panels; they start again after it.": "Il test del pannello ha i pannelli; ripartono dopo di esso.",
     "A panel does not let go: quit Libre Panel and start it again.": "Un pannello non si libera: chiudi Libre Panel e riavvialo.",
-    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of JPEG pictures, as it asks for them, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "Non ancora provato sull'hardware. Richiede l'immagine della scheda di Waveshare che lo rende un display USB (via USB si chiama allora udisp) e mostra solo ciò che invia il PC: i temi sulla sua scheda spariscono con quell'immagine. Riceve un flusso video di immagini JPEG, come le chiede, 30 al secondo: movimento fluido. La luminosità è parte dell'immagine: attenuando, questa si scurisce."
+    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of JPEG pictures, as it asks for them, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "Non ancora provato sull'hardware. Richiede l'immagine della scheda di Waveshare che lo rende un display USB (via USB si chiama allora udisp) e mostra solo ciò che invia il PC: i temi sulla sua scheda spariscono con quell'immagine. Riceve un flusso video di immagini JPEG, come le chiede, 30 al secondo: movimento fluido. La luminosità è parte dell'immagine: attenuando, questa si scurisce.",
+    "Turn 15° to the left": "Ruota di 15° a sinistra",
+    "Turn 15° to the right": "Ruota di 15° a destra",
+    "degrees clockwise, all of it about its middle": "gradi in senso orario, tutto attorno al suo centro",
+    "degrees clockwise, about its middle; a text about the point it is aligned at, so a changing value stays put": "gradi in senso orario, attorno al suo centro; un testo attorno al punto in cui è allineato, così un valore che cambia resta fermo"
   },
   "fields": {
     "agent": "agente",
@@ -2945,7 +2949,8 @@
     "fans": "Ventole",
     "fan_items": "Quali ventole",
     "hide_unused": "nascondi inutilizzati",
-    "threads": "thread"
+    "threads": "thread",
+    "rotate": "Rotazione"
   },
   "widgets": {
     "agent": "Segno IA",

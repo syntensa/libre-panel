@@ -58,6 +58,9 @@ _COMMON: dict[str, tuple[str, Any]] = {
     # Show only while this sensor has a value ("!key": only while it has none),
     # so a card, its labels and icons go with the readings they frame.
     "needs": ("sensor", ""),
+    # turned, degrees clockwise: about its middle, a text about the point it is aligned at
+    # halfway down its line, a module's parts about the module's middle (render.renderer)
+    "rotate": ("number", 0.0),
     "opacity": ("number", 1.0),
     "glow": ("number", 0.0),  # 0 = off, 1 = strong
     "glow_radius": ("int", 10),
@@ -778,6 +781,8 @@ def normalize_widget(
         raise ThemeError(f"{where}.opacity: must be between 0 and 1")
     if not 0 <= widget["glow"] <= 1:
         raise ThemeError(f"{where}.glow: must be between 0 and 1")
+    if not -360 <= widget["rotate"] <= 360:
+        raise ThemeError(f"{where}.rotate: must be between -360 and 360")
     for key in ("glow_radius", "shadow_blur", "backdrop_blur", "blur"):
         if key in widget and not 0 <= widget[key] <= BLUR_MAX:
             raise ThemeError(f"{where}.{key}: must be between 0 and {BLUR_MAX}")

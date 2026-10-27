@@ -429,6 +429,63 @@ def _dimmed(light: Piece | None, factor: float) -> Piece | None:
     return replace(light, layer=light.layer.point(table))
 
 
+Turn = tuple[float, tuple[float, float]]  # degrees clockwise, about this point on the panel
+# a quarter turn clockwise and its multiples, exactly (PIL's turns are anticlockwise)
+_QUARTERS = {90: Image.Transpose.ROTATE_270, 180: Image.Transpose.ROTATE_180,
+             270: Image.Transpose.ROTATE_90}  # fmt: skip
+
+
+def _turned_point(point: tuple[float, float], turn: Turn) -> tuple[float, float]:
+    """``point`` turned as ``turn`` says (y grows downwards: clockwise as seen)."""
+    angle, (cx, cy) = turn
+    cos, sin = math.cos(math.radians(angle)), math.sin(math.radians(angle))
+    dx, dy = point[0] - cx, point[1] - cy
+    return cx + dx * cos - dy * sin, cy + dx * sin + dy * cos
+
+
+def _turned_box(box: Box, turn: Turn) -> Box:
+    """The box around ``box`` turned."""
+    x, y, w, h = box
+    corners = [_turned_point(c, turn) for c in ((x, y), (x + w, y), (x, y + h), (x + w, y + h))]
+    xs = [round(c[0], 6) for c in corners]  # (a quarter turn's sines are not quite 1 and 0)
+    ys = [round(c[1], 6) for c in corners]
+    left, top = math.floor(min(xs)), math.floor(min(ys))
+    return [left, top, math.ceil(max(xs)) - left, math.ceil(max(ys)) - top]
+
+
+def _turned_image(image: Image.Image, angle: float) -> Image.Image:
+    """All of ``image`` turned ``angle`` degrees clockwise: a quarter turn pixel for pixel,
+    any other smoothly."""
+    quarter = _QUARTERS.get(int(angle)) if angle == int(angle) else None
+    if quarter is not None:
+        return image.transpose(quarter)
+    return image.rotate(-angle, resample=Image.Resampling.BICUBIC, expand=True)
+
+
+def _turned(piece: Piece, turn: Turn) -> Piece:
+    """``piece`` turned: its layer, its box, what blurs beneath it and its light."""
+    layer = piece.layer if piece.layer.mode == "RGBA" else piece.layer.convert("RGBA")
+    turned = _turned_image(layer, turn[0])
+    middle = _turned_point((piece.x + layer.width / 2, piece.y + layer.height / 2), turn)
+    box = piece.box or [piece.x, piece.y, layer.width, layer.height]
+    backdrop = piece.backdrop
+    if backdrop is not None:  # (it lies on the box: the box goes where it now lies)
+        backdrop = _turned_image(backdrop, turn[0])
+        mx, my = _turned_point((box[0] + box[2] / 2, box[1] + box[3] / 2), turn)
+        box = [round(mx - backdrop.width / 2), round(my - backdrop.height / 2), *backdrop.size]
+    else:
+        box = _turned_box(box, turn)
+    return replace(
+        piece,
+        layer=turned,
+        x=round(middle[0] - turned.width / 2),
+        y=round(middle[1] - turned.height / 2),
+        box=box,
+        backdrop=backdrop,
+        light=None if piece.light is None else _turned(piece.light, turn),
+    )
+
+
 # (gradients as large as the panel are made once for a card, kept as a piece: not kept here)
 @cached("renderer.gradients", 4 * MB)
 def _gradient(size: tuple[int, int], a: RGBA, b: RGBA, horizontal: bool) -> Image.Image:
@@ -740,6 +797,8 @@ class Renderer:
         self._over: dict[str, list[tuple[Piece, str]]] = {}
         self._fans_clear: dict[str, tuple[Piece, tuple, bool]] = {}
         self._turning: dict[tuple[str, str], tuple[tuple, Image.Image, Piece]] = {}
+        # the pieces of turned widgets last frame, by id: the piece, its turn, the turned one
+        self._turned: dict[str, tuple[Piece, Turn, Piece]] = {}
         self._downloads: dict[str, tuple[Any, Any]] = {}  # download widget id -> what it shows
         self.screen = self._make_screen()
 
@@ -1499,6 +1558,7 @@ class Renderer:
         self.motion.begin(snapshot.readings, now, self._glide_s(), self._lead())
         boxes: dict[str, Box] = {}
         pieces: list[tuple[str, Piece]] = []
+        turns: dict[str, Turn] = {}  # the turned widgets' and modules' ("<id>/")
         self._drawing = "\0screen"
         screen = self._screen_image(snapshot, now) if self.screen is not None else None
         for slot in self._slots.values():  # which card each slot shows, and how far a change is
@@ -1540,6 +1600,11 @@ class Renderer:
             if piece is None:
                 continue
             pieces.append((widget["id"], piece))
+            turn = self._turn(widget, module, piece)
+            if turn is not None:
+                turns[widget["id"]] = turn
+                if module is not None:  # (and its frame and line of light, over its cards)
+                    turns[f"{module['id']}/"] = turn
             if slot is None:  # what lies over a bar or a graph: its mark, its end dot
                 over = []
                 if widget["type"] == "bar" and widget.get("mark"):
@@ -1565,6 +1630,8 @@ class Renderer:
             ]
         for slot in self._slots.values():  # frame and line of light, over the cards
             slot.overlay(pieces)
+        if turns or self._turned:
+            self._turn_pieces(pieces, turns, boxes)
         if self._strips:
             self._forget_strips(now)
         kept.tick()  # (what nothing used for a while goes: the weather bodies)
@@ -1583,6 +1650,52 @@ class Renderer:
             canvas = self._dusted(canvas, now)  # RGB once there is dust on it
         frame = canvas if canvas.mode == "RGB" else self._as_rgb(canvas)
         return (frame if self.look is None else self.look.finish(frame, now)), boxes
+
+    # -- turned widgets ----------------------------------------------------
+
+    def _turn(
+        self, widget: dict[str, Any], module: dict[str, Any] | None, piece: Piece
+    ) -> Turn | None:
+        """How far a widget is turned (``rotate``, degrees clockwise) and about which point: a
+        module's parts about the middle of the module; a text about the point it is aligned
+        at, halfway down its line (its box follows its letters: a value that changes would move
+        it); anything else about the middle of its box. None for one that is not turned."""
+        owner = module if module is not None else widget
+        angle = float(owner.get("rotate") or 0) % 360
+        if not angle:
+            return None
+        if module is not None:
+            x, y, w, h = self.module_boxes[module["id"]]
+            return angle, (x + w / 2, y + h / 2)
+        if "font_size" in widget and "align" in widget and "w" not in widget:
+            font = self.font(widget.get("font", ""), widget["font_size"])
+            ascent, descent = font.getmetrics() if hasattr(font, "getmetrics") else (0, 0)
+            line = ascent + descent or widget["font_size"]
+            return angle, (widget["x"], widget["y"] + line / 2)
+        x, y, w, h = piece.box or [piece.x, piece.y, piece.layer.width, piece.layer.height]
+        return angle, (x + w / 2, y + h / 2)
+
+    def _turn_pieces(
+        self, pieces: list[tuple[str, Piece]], turns: dict[str, Turn], boxes: dict[str, Box]
+    ) -> None:
+        """Turn the pieces of the turned widgets, with what lies over them (a bar's mark and
+        dot, a list's fans) and a module's parts with its frame, and their boxes in the
+        editor. A piece turned as it was the frame before is that frame's again."""
+        before, self._turned = self._turned, {}
+        for index, (wid, piece) in enumerate(pieces):
+            base = wid.split("\0", 1)[0]
+            turn = turns.get(base) or turns.get(base.split("/", 1)[0] + "/")
+            if turn is None:
+                continue
+            hit = before.get(wid)
+            turned = hit[2] if hit and hit[0] is piece and hit[1] == turn else _turned(piece, turn)
+            self._turned[wid] = (piece, turn, turned)
+            pieces[index] = (wid, turned)
+            if wid in boxes and turned.box is not None:
+                boxes[wid] = turned.box
+        for key, turn in turns.items():
+            if key.endswith("/") and key[:-1] in boxes:  # a module: around all of it
+                boxes[key[:-1]] = _turned_box(self.module_boxes[key[:-1]], turn)
 
     # -- dust --------------------------------------------------------------
 

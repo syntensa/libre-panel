@@ -145,8 +145,9 @@ function shownBoxes(boxes, interaction) {
   return shown;
 }
 
+// (a turned widget's corners are not its box's: it is sized in the inspector)
 const resizable = (widget) => {
-  if (!widget || widget.locked || isModule(widget)) return false;
+  if (!widget || widget.locked || isModule(widget) || (Number(widget.rotate) || 0) % 360) return false;
   const spec = specOf(widget.type);
   return ("w" in spec && "h" in spec) || "size" in spec || "font_size" in spec;
 };

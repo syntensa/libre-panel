@@ -2799,7 +2799,11 @@
     "restart reconnect hang frozen stuck reset panel": "reiniciar reconectar travado congelado preso redefinir painel restart",
     "The panel test has the panels; they start again after it.": "O teste do painel está com os painéis; eles voltam a iniciar depois dele.",
     "A panel does not let go: quit Libre Panel and start it again.": "Um painel não se libera: feche o Libre Panel e inicie-o de novo.",
-    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of JPEG pictures, as it asks for them, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "Ainda não testado no hardware. Precisa da imagem de cartão da Waveshare que o torna uma tela USB (então ele se chama udisp por USB) e mostra apenas o que o PC envia: os temas do seu cartão somem com essa imagem. Recebe um fluxo de vídeo de imagens JPEG, como ele as pede, 30 por segundo: movimento suave. Seu brilho vai na imagem: escurecer a deixa mais escura."
+    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of JPEG pictures, as it asks for them, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "Ainda não testado no hardware. Precisa da imagem de cartão da Waveshare que o torna uma tela USB (então ele se chama udisp por USB) e mostra apenas o que o PC envia: os temas do seu cartão somem com essa imagem. Recebe um fluxo de vídeo de imagens JPEG, como ele as pede, 30 por segundo: movimento suave. Seu brilho vai na imagem: escurecer a deixa mais escura.",
+    "Turn 15° to the left": "Girar 15° para a esquerda",
+    "Turn 15° to the right": "Girar 15° para a direita",
+    "degrees clockwise, all of it about its middle": "graus no sentido horário, tudo em torno do seu centro",
+    "degrees clockwise, about its middle; a text about the point it is aligned at, so a changing value stays put": "graus no sentido horário, em torno do seu centro; um texto em torno do ponto em que está alinhado, para que um valor que muda fique no lugar"
   },
   "fields": {
     "agent": "agente",
@@ -2945,7 +2949,8 @@
     "fans": "Ventoinhas",
     "fan_items": "Quais ventoinhas",
     "hide_unused": "ocultar os não usados",
-    "threads": "threads"
+    "threads": "threads",
+    "rotate": "Rotação"
   },
   "widgets": {
     "agent": "Sinal de IA",

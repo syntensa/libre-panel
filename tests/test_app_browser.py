@@ -1868,6 +1868,28 @@ def test_every_way_to_another_theme_asks_before_it_drops_unsaved_changes(app_url
     assert js(page, "window.libre.store.get().dirty") is False
 
 
+def test_a_widget_turns_15_degrees_at_a_time_or_as_typed(page):
+    """Discussion #23: the turn under Position and size, 15° at a time with its buttons and
+    the arrow keys, or typed; a turned widget has no corners to size it by on the panel."""
+    js(page, "window.libre.doc.setSelection(['disk-bar'])")
+    expect(page.locator(".handle.se")).to_have_count(1)
+    page.locator(".details-button").click()
+    right = page.locator(".inspector [aria-label='Turn 15° to the right']")
+    left = page.locator(".inspector [aria-label='Turn 15° to the left']")
+    right.click()
+    assert widget(page, "disk-bar")["rotate"] == 15
+    left.click()
+    left.click()
+    assert widget(page, "disk-bar")["rotate"] == 345  # (a whole turn on)
+    turn = page.locator(".inspector input[aria-label='rotate']")
+    turn.fill("90")
+    turn.press("Enter")
+    assert widget(page, "disk-bar")["rotate"] == 90
+    turn.press("ArrowUp")
+    assert widget(page, "disk-bar")["rotate"] == 105
+    expect(page.locator(".handle")).to_have_count(0)
+
+
 def test_inspector_details_and_theme_settings(page):
     js(page, "window.libre.doc.setSelection(['cpu-ring'])")
     page.locator(".details-button").click()

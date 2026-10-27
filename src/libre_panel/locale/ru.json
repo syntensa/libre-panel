@@ -2799,7 +2799,11 @@
     "restart reconnect hang frozen stuck reset panel": "перезапуск переподключить зависла заморожена застряла сброс панель restart",
     "The panel test has the panels; they start again after it.": "Панели заняты тестом панели; после него они запустятся снова.",
     "A panel does not let go: quit Libre Panel and start it again.": "Панель не освобождается: закройте Libre Panel и запустите снова.",
-    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of JPEG pictures, as it asks for them, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "Пока не проверялось на реальном устройстве. Нужен образ карты Waveshare, который делает его USB-дисплеем (по USB он тогда называет себя udisp), и он показывает только то, что присылает ПК: темы на его карте с этим образом пропадают. Получает видеопоток из изображений JPEG, как он их запрашивает, 30 в секунду: плавное движение. Яркость встроена в само изображение: при уменьшении оно темнеет."
+    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of JPEG pictures, as it asks for them, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "Пока не проверялось на реальном устройстве. Нужен образ карты Waveshare, который делает его USB-дисплеем (по USB он тогда называет себя udisp), и он показывает только то, что присылает ПК: темы на его карте с этим образом пропадают. Получает видеопоток из изображений JPEG, как он их запрашивает, 30 в секунду: плавное движение. Яркость встроена в само изображение: при уменьшении оно темнеет.",
+    "Turn 15° to the left": "Повернуть на 15° влево",
+    "Turn 15° to the right": "Повернуть на 15° вправо",
+    "degrees clockwise, all of it about its middle": "градусы по часовой стрелке, целиком вокруг своего центра",
+    "degrees clockwise, about its middle; a text about the point it is aligned at, so a changing value stays put": "градусы по часовой стрелке, вокруг своего центра; текст — вокруг точки выравнивания, чтобы меняющееся значение оставалось на месте"
   },
   "fields": {
     "agent": "агент",
@@ -2945,7 +2949,8 @@
     "fans": "Вентиляторы",
     "fan_items": "Какие вентиляторы",
     "hide_unused": "скрыть неиспользуемые",
-    "threads": "потоки"
+    "threads": "потоки",
+    "rotate": "Поворот"
   },
   "widgets": {
     "agent": "Знак ИИ",

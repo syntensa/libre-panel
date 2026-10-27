@@ -2799,7 +2799,11 @@
     "restart reconnect hang frozen stuck reset panel": "再起動 再接続 固まる フリーズ 応答なし リセット パネル restart",
     "The panel test has the panels; they start again after it.": "パネルテストがパネルを使用中です。終わると再び起動します。",
     "A panel does not let go: quit Libre Panel and start it again.": "パネルを解放できません。Libre Panel を終了して起動し直してください。",
-    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of JPEG pictures, as it asks for them, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "実機ではまだ確認されていません。USBディスプレイにするWaveshareのカードイメージが必要で（その後はUSBでudispと名乗ります）、PCが送るものだけを表示します。カード上のテーマはそのイメージで消えます。自身が求めるとおりのJPEG画像によるビデオストリームを受け取ります。毎秒30枚、なめらかな動きです。明るさは画像に反映されるため、減光すると画像が暗くなります。"
+    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of JPEG pictures, as it asks for them, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "実機ではまだ確認されていません。USBディスプレイにするWaveshareのカードイメージが必要で（その後はUSBでudispと名乗ります）、PCが送るものだけを表示します。カード上のテーマはそのイメージで消えます。自身が求めるとおりのJPEG画像によるビデオストリームを受け取ります。毎秒30枚、なめらかな動きです。明るさは画像に反映されるため、減光すると画像が暗くなります。",
+    "Turn 15° to the left": "左に15°回転",
+    "Turn 15° to the right": "右に15°回転",
+    "degrees clockwise, all of it about its middle": "時計回りの角度。全体を中心の周りに回転します",
+    "degrees clockwise, about its middle; a text about the point it is aligned at, so a changing value stays put": "時計回りの角度。中心の周りに回転します。テキストは揃えた位置を軸に回転するので、値が変わっても動きません"
   },
   "fields": {
     "agent": "エージェント",
@@ -2945,7 +2949,8 @@
     "fans": "ファン",
     "fan_items": "対象のファン",
     "hide_unused": "未使用を非表示",
-    "threads": "スレッド"
+    "threads": "スレッド",
+    "rotate": "回転"
   },
   "widgets": {
     "agent": "AIマーク",

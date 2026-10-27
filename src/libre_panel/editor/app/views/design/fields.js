@@ -45,7 +45,27 @@ export function hintFor(widget, key, kind) {
   if (key === "ridge") return t("a name makes the rect a ridge that catches the light; rects with the same name are one ridge");
   if (key === "inset") return t("the line stays a line's width inside the box; off: the range spans the box, as SPUR II's charts");
   if (key === "direction" && widget?.type === "graph") return t("down: the curve hangs from the top and is filled from there, below an upward one it mirrors it");
+  if (key === "rotate") {
+    return widget?.type === "module"
+      ? t("degrees clockwise, all of it about its middle")
+      : t("degrees clockwise, about its middle; a text about the point it is aligned at, so a changing value stays put");
+  }
   return null;
+}
+
+// -- a turn ------------------------------------------------------------------------------------
+
+/** How far a widget is turned, degrees clockwise: typed as you like, or in steps of 15° with
+ * the buttons and the arrow keys (Shift: 150°). */
+export function TurnControl({ label, value, onChange }) {
+  const turn = (by) => onChange((((Number(value) || 0) + by) % 360 + 360) % 360);
+  return html`<div class="control-row">
+    <${NumberField} label=${label} value=${value || 0} step=${15} digits=${1} min=${-360} max=${360} unit="°" onChange=${onChange} />
+    <button type="button" class="btn btn-quiet square" title=${t("Turn 15° to the left")} aria-label=${t("Turn 15° to the left")}
+      onClick=${() => turn(-15)}><${Icon} name="turn-left" size=${15} /></button>
+    <button type="button" class="btn btn-quiet square" title=${t("Turn 15° to the right")} aria-label=${t("Turn 15° to the right")}
+      onClick=${() => turn(15)}><${Icon} name="turn-right" size=${15} /></button>
+  </div>`;
 }
 
 // -- fonts and files of the theme ------------------------------------------------------
@@ -239,6 +259,7 @@ export function FieldControl({ widget, name, kind, value, onChange }) {
   const optional = kind.endsWith("?");
   const base = kind.replace(/\?$/, "");
   const label = fieldLabel(name);
+  if (name === "rotate") return html`<${TurnControl} label=${label} value=${value} onChange=${onChange} />`;
   if (base === "int" || base === "number") {
     const unit = UNIT_RANGE.has(name);
     return html`<${NumberField} label=${label} value=${value} allowEmpty=${optional} placeholder=${optional ? t("auto") : undefined}

@@ -148,8 +148,23 @@ Also built in: the eight screens of SPUR II as a legacy collection, and the roun
 
 Every widget has `id` (unique), `type`, `x`, `y`, `visible`, `locked` (editor
 only), `hide_if_missing` (hide when its sensor has no value, e.g. weather
-switched off), `needs` and the effects `opacity` (0–1), `glow` (0–1) with
-`glow_radius`, and `shadow` (a colour) with `shadow_offset` and `shadow_blur`.
+switched off), `needs`, `rotate` and the effects `opacity` (0–1), `glow` (0–1)
+with `glow_radius`, and `shadow` (a colour) with `shadow_offset` and
+`shadow_blur`.
+
+`rotate` turns a widget, in degrees clockwise, from -360 to 360: `90` is a
+quarter turn to the right, `-90` or `270` one to the left, `15` a slant. It
+turns about the middle of its box; a text (`text`, `metric`, `clock`,
+`countdown`, `weather`) about the point it is aligned at, `x` with its `align`,
+halfway down its line, so a value that grows or shrinks stays where it starts;
+a module turns as a whole, about its middle. A quarter turn is exact to the
+pixel, any other angle smooth. Its glow and shadow turn with it, and so does
+what lies over a bar or a graph (its mark, its end dot). In the editor it is
+under *Position and size*, with buttons that turn it 15° either way (the arrow
+keys too); a turned widget is sized there, not by its corners on the panel.
+Each widget turns about its own point: to turn a label with its card, give both
+the same angle and move the label. A Libre Panel older than this shows such a
+theme upright (it leaves `rotate` aside).
 
 `needs` shows a widget only while a sensor has a value, even a widget without
 a sensor of its own: `"needs": "gpu.load"` on a card, its label and its icon

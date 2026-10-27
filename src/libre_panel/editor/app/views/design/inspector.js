@@ -144,7 +144,7 @@ const SECTION_ORDER = ["shows", "style", "colour", "size", "behaviour"];
 
 // The details page, in groups.
 const GROUPS = () => [
-  { id: "position", title: t("Position and size"), short: t("Position"), keys: ["x", "y", "w", "h", "size"] },
+  { id: "position", title: t("Position and size"), short: t("Position"), keys: ["x", "y", "w", "h", "size", "rotate"] },
   { id: "text", title: t("Text"), short: t("Font"), keys: ["font", "font_size", "align", "letter_spacing", "tabular", "max_width", "fit", "uppercase", "label_font"] },
   {
     id: "scale",
@@ -343,10 +343,13 @@ function WidgetInspector({ widget }) {
           (group) => html`<${Section} title=${group.title} key=${group.id}>
             ${group.id === "position"
               ? html`<div class="quad">
-                  ${group.keys.map((key) => html`<${Field} key=${key} label=${label(key)}>
-                    <${NumberField} label=${label(key)} value=${widget[key]} unit="px" onChange=${widgetChange(widget, key)} />
-                  <//>`)}
-                </div>`
+                    ${group.keys.filter((key) => key !== "rotate").map((key) => html`<${Field} key=${key} label=${label(key)}>
+                      <${NumberField} label=${label(key)} value=${widget[key]} unit="px" onChange=${widgetChange(widget, key)} />
+                    <//>`)}
+                  </div>
+                  ${group.keys.includes("rotate")
+                    ? html`<${FieldRow} widget=${widget} name="rotate" kind=${spec.rotate[0]} value=${widget.rotate} onChange=${widgetChange(widget, "rotate")} />`
+                    : null}`
               : group.keys.map((key) =>
                   key === "id"
                     ? html`<${Field} key=${key} label=${label(key)}><${TextField} label=${label(key)} value=${widget.id} live=${false} mono
@@ -480,6 +483,7 @@ function ModuleInspector({ widget }) {
           <${FieldRow} widget=${widget} name="visible" kind="bool" value=${widget.visible !== false} onChange=${change("visible")} />
           <${FieldRow} widget=${widget} name="locked" kind="bool" value=${Boolean(widget.locked)} onChange=${change("locked")} />
           <${FieldRow} widget=${widget} name="needs" kind="sensor" value=${widget.needs} onChange=${change("needs")} />
+          <${FieldRow} widget=${widget} name="rotate" kind="number" value=${widget.rotate} onChange=${change("rotate")} />
           <button type="button" class="btn" title=${t("Turn it into single widgets to edit each one")} onClick=${() => detachModule(widget)}>
             <${Icon} name="detach" size=${15} /> ${t("Detach into widgets")}
           </button>

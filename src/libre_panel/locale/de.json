@@ -2799,7 +2799,11 @@
     "restart reconnect hang frozen stuck reset panel": "neu starten neu verbinden hängt eingefroren steckt fest zurücksetzen panel restart",
     "The panel test has the panels; they start again after it.": "Der Panel-Test hat die Panels; sie starten danach wieder.",
     "A panel does not let go: quit Libre Panel and start it again.": "Ein Panel lässt sich nicht freigeben: Libre Panel beenden und neu starten.",
-    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of JPEG pictures, as it asks for them, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "Noch nicht an der Hardware erprobt. Es braucht Waveshares Kartenabbild, das es zum USB-Display macht (es nennt sich dann über USB udisp), und zeigt nur, was der PC sendet: Die Themes auf seiner Karte sind mit diesem Abbild weg. Es bekommt einen Videostream aus JPEG-Bildern, wie es sie verlangt, 30 pro Sekunde: flüssige Bewegung. Seine Helligkeit steckt im Bild: Dimmen macht es dunkler."
+    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of JPEG pictures, as it asks for them, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "Noch nicht an der Hardware erprobt. Es braucht Waveshares Kartenabbild, das es zum USB-Display macht (es nennt sich dann über USB udisp), und zeigt nur, was der PC sendet: Die Themes auf seiner Karte sind mit diesem Abbild weg. Es bekommt einen Videostream aus JPEG-Bildern, wie es sie verlangt, 30 pro Sekunde: flüssige Bewegung. Seine Helligkeit steckt im Bild: Dimmen macht es dunkler.",
+    "Turn 15° to the left": "15° nach links drehen",
+    "Turn 15° to the right": "15° nach rechts drehen",
+    "degrees clockwise, all of it about its middle": "Grad im Uhrzeigersinn, das Ganze um seine Mitte",
+    "degrees clockwise, about its middle; a text about the point it is aligned at, so a changing value stays put": "Grad im Uhrzeigersinn, um seine Mitte; ein Text um den Punkt, an dem er ausgerichtet ist, damit ein wechselnder Wert an seinem Platz bleibt"
   },
   "fields": {
     "agent": "Agent",
@@ -2945,7 +2949,8 @@
     "fans": "Lüfter",
     "fan_items": "Welche Lüfter",
     "hide_unused": "unbenutzte ausblenden",
-    "threads": "Threads"
+    "threads": "Threads",
+    "rotate": "Drehung"
   },
   "widgets": {
     "agent": "Agenten\u00adzeichen",

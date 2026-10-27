@@ -3,6 +3,12 @@
 ## Unreleased
 
 **New**
+- **Elements turn, by any angle** (discussion #23). *Design → Position and size* turns the
+  element chosen, in degrees clockwise: typed as you like, or 15° at a time with its buttons
+  and the arrow keys. A quarter turn is exact to the pixel, any other angle smooth; glow,
+  shadow, a bar's mark and dot turn with it, a module turns as a whole. A text turns about the
+  point it is aligned at, so a value that changes stays where it starts. In the theme file it
+  is `rotate` ([Themes](docs/THEMES.md#widgets)).
 - **Game mode knows the games of the other launchers, and of folders you name.** Besides Steam,
   a game of Epic, GOG, Ubisoft Connect, the EA app, Battle.net, Rockstar, Amazon Games or the
   Xbox app now switches the panel to game mode by itself, and on Linux one of Heroic (Epic, GOG,
