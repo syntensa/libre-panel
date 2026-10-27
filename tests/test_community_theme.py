@@ -100,6 +100,11 @@ def test_a_shared_theme_is_checked_drawn_and_described(tool, tmp_path):
                          get=lambda url, limit: data)  # fmt: skip
     assert checked["author"] == "Me, after In the theme" and len(checked["description"]) <= 400
     assert checked["description"].endswith("…") and checked["cut"] == ["description"]
+    # a picture pasted under a heading is no part of the answer (#27)
+    shot = '<img width="1323" height="867" alt="Image" src="https://github.com/a.png" />'
+    checked = tool.check(issue(author=f"Me\n\n{shot}", description="Glow ![x](https://a/b.png)"),
+                         "someone", tmp_path / "pasted", get=lambda url, limit: data)  # fmt: skip
+    assert checked["author"] == "Me, after In the theme" and checked["description"] == "Glow"
 
 
 def test_a_shared_theme_is_installed_under_the_name_and_maker_its_entry_shows(tool, tmp_path):

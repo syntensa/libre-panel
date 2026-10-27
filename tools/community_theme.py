@@ -122,9 +122,20 @@ def download(url: str, limit: int) -> bytes:
     return data
 
 
+# what a form's answer may hold besides text: a picture pasted into it (as GitHub writes it: an
+# HTML <img>, or Markdown's ![…](…)), other HTML
+PASTED = re.compile(r"!\[[^\]]*\]\([^)]*\)|<[^>]*>")
+
+
+def _plain(text: str) -> str:
+    """An answer's text on one line, without what was pasted into it."""
+    return " ".join(PASTED.sub(" ", text).split())
+
+
 def _text(answers: dict[str, str], key: str, fallback: str) -> tuple[str, bool]:
-    """A text of the entry within its length (cut at a word, said), else ``fallback``."""
-    text = " ".join((answers.get(key) or "").split()) or fallback
+    """A text of the entry within its length (cut at a word, said), else ``fallback``; a
+    picture pasted into the answer is left out (#27: one under *Made by* was in the maker)."""
+    text = _plain(answers.get(key) or "") or fallback
     most = TEXTS[key]
     if len(text) <= most:
         return text, False
@@ -134,7 +145,7 @@ def _text(answers: dict[str, str], key: str, fallback: str) -> tuple[str, bool]:
 def _maker(given: str, original: str) -> str:
     """Who made the theme, as the form says (else as the theme says), with the maker the theme
     names where that is someone else: a theme made from another one keeps its credit."""
-    given, original = " ".join(given.split()), " ".join(original.split())
+    given, original = _plain(given), " ".join(original.split())
     if not given or not original or original.casefold() in given.casefold():
         return given or original
     return f"{given}, after {original}"
