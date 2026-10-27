@@ -20,6 +20,11 @@ the firmware beside them speak it, and as the display tells it in its USB produc
   (sent as 0: the drivers do), the type (0 RGB565, 1 RGB888, 2 YUV420, 3 JPEG), a command
   byte (0), x, y, width and height (16 bits each), then 32 bits: a frame number in the low 10
   and the payload's length in the high 22.
+- A transfer ends with a packet shorter than the endpoint's (512 bytes). A picture of whole
+  packets has none, and a display that waits for one would take the next picture for the rest
+  of it: after such a picture the Windows driver sends a header of type 0xFF, a picture of 1x1
+  with nothing in it, which a display that needs no end passes over as a command it does not
+  know (the ESP32 firmware does). Libre Panel ends such a picture so too.
 
 The display has no command for its backlight that is known: the brightness goes into the
 picture. Nothing is written on its card.
@@ -49,6 +54,7 @@ VENDOR_ID = 0x303A  # (Espressif's: the protocol's first displays were ESP32s)
 PRODUCT_IDS = (0x2986, 0x2987)
 HEADER = struct.Struct("<HBBHHHHI")  # crc16, type, cmd, x, y, width, height, id | length
 RGB565, RGB888, YUV420, JPEG = 0, 1, 2, 3
+END = HEADER.pack(0, 0xFF, 0, 0, 0, 1, 1, 0)  # after a picture of whole packets
 MAX_PAYLOAD = (1 << 22) - 1
 FRAME_IDS = 1 << 10
 QUALITIES = (90, 80, 70, 60, 50)
@@ -186,6 +192,7 @@ class UdispDisplay(Display):
         self.device: Any = None
         self.place = ""
         self.endpoint: int | None = None
+        self.packet = 512  # the endpoint's largest packet
         self.said: dict[str, Any] = {}
         self.brightness = 100
         self.frame = 0
@@ -242,6 +249,7 @@ class UdispDisplay(Display):
             if self.endpoint is None:
                 raise DeviceError(t("the {panel} has no endpoint for pictures",
                                     panel=self.describe()))  # fmt: skip
+            self.packet = usb_link.packet_size(self.device, self.endpoint)
         except usb.core.USBError as exc:
             self.close()
             self.counters.usb_errors += 1
@@ -296,14 +304,17 @@ class UdispDisplay(Display):
     def _send(self, message: bytes) -> None:
         import usb.core
 
+        ended = len(message) % self.packet == 0  # (nothing short ends it: END does)
         try:
             self.device.write(self.endpoint, message, WRITE_TIMEOUT_MS)
+            if ended:
+                self.device.write(self.endpoint, END, WRITE_TIMEOUT_MS)
         except usb.core.USBError as exc:
             self.counters.usb_errors += 1  # the main loop connects again
             raise DeviceError(
                 t("the {panel} stopped answering: {error}", panel=self.describe(), error=exc)
             ) from exc
-        self.counters.bytes += len(message)
+        self.counters.bytes += len(message) + (len(END) if ended else 0)
         self._last = message
         self._keeper.sent()
 

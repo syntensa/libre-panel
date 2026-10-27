@@ -246,6 +246,31 @@ def test_the_doctor_names_the_kind_of_picture_sent_and_its_size(bus):
     assert {f["kind"] for f in display.frames} == {udisp.JPEG}
 
 
+def test_a_picture_of_whole_packets_is_ended_as_the_drivers_end_it(bus, monkeypatch):
+    """USB ends a transfer with a packet shorter than the endpoint's 512 bytes; a picture of
+    whole packets has none, and a display that waits for one would take the next picture for
+    the rest of it. The Windows driver sends a header of type 0xFF after such a picture (a
+    display that needs no end passes it over); so does Libre Panel."""
+    display = bus(FakeDisplay())
+    real, whole = udisp.jpeg, iter([True, False])
+
+    def jpeg(picture, limit):  # (a JPEG ends at its end marker: what follows is not read)
+        data = real(picture, limit)
+        fill = (-(16 + len(data))) % 512
+        return data + b"\0" * (fill if next(whole) else fill + 1)
+
+    monkeypatch.setattr(udisp, "jpeg", jpeg)
+    with opened() as screen:
+        screen.show(corner_red((480, 480)))
+        screen.show(corner_red((480, 480)))
+        sent = [len(data) for _endpoint, data in display.sent]
+        assert sent[0] % 512 == 0 and sent[1] == 16 and sent[2] % 512 == 1
+        assert display.sent[1][1] == struct.pack("<HBBHHHHI", 0, 0xFF, 0, 0, 0, 1, 1, 0)
+        assert screen.counters.bytes == sum(sent)
+    assert [f["kind"] for f in display.frames] == [udisp.JPEG, 0xFF, udisp.JPEG]
+    assert near(display.frames[0]["picture"].getpixel((5, 5)), RED)
+
+
 def test_a_display_of_another_size_is_not_driven_as_this_one(bus):
     display = bus(FakeDisplay("t113udisp1_R800x800_Ejpg5"))
     with pytest.raises(DeviceError, match="800×800"):

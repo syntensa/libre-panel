@@ -128,6 +128,16 @@ def hid_interface(device: Any) -> int | None:
     return None
 
 
+def packet_size(device: Any, address: int, default: int = 512) -> int:
+    """The largest packet of the endpoint at ``address`` (a bulk one's is 512 at USB 2.0's high
+    speed); ``default`` where the device does not say."""
+    for interface in interfaces(device):
+        for endpoint in interface:
+            if endpoint.bEndpointAddress == address:
+                return int(getattr(endpoint, "wMaxPacketSize", 0) or 0) & 0x7FF or default
+    return default
+
+
 def endpoints(device: Any, number: int) -> tuple[int | None, int | None]:
     """The first OUT and the first IN endpoint of interface ``number`` (their addresses)."""
     for interface in interfaces(device):

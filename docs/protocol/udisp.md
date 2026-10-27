@@ -58,6 +58,11 @@ One bulk transfer: a header of 16 bytes, little-endian, then the payload.
 | 8–9, 10–11 | width, height |
 | 12–15 | bits 0–9: a frame number; bits 10–31: the payload's length in bytes |
 
+A transfer ends with a packet shorter than the endpoint's 512 bytes. After a picture of whole
+packets, which has none, the Windows driver sends a header of type `0xFF` (x and y 0, 1×1,
+nothing in it) to end it; a display that needs no end passes it over as a command it does not
+know, as the ESP32 firmware does. Libre Panel sends it so too.
+
 RGB565 is 16 bits a pixel, little-endian, red in the top 5 bits; RGB888 is three bytes a
 pixel, red first (as the xfz1986 drivers pack them from an XRGB8888 framebuffer). A JPEG is
 baseline with its colours at every pixel (4:4:4), as the drivers' TinyJPEG writes it. Libre
