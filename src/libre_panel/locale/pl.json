@@ -2803,7 +2803,12 @@
     "Turn 15° to the left": "Obróć o 15° w lewo",
     "Turn 15° to the right": "Obróć o 15° w prawo",
     "degrees clockwise, all of it about its middle": "stopnie zgodnie z ruchem wskazówek zegara, całość wokół swojego środka",
-    "degrees clockwise, about its middle; a text about the point it is aligned at, so a changing value stays put": "stopnie zgodnie z ruchem wskazówek zegara, wokół środka; tekst wokół punktu, do którego jest wyrównany, by zmieniająca się wartość się nie przesuwała"
+    "degrees clockwise, about its middle; a text about the point it is aligned at, so a changing value stays put": "stopnie zgodnie z ruchem wskazówek zegara, wokół środka; tekst wokół punktu, do którego jest wyrównany, by zmieniająca się wartość się nie przesuwała",
+    "This display takes each picture whole, as a JPEG of a millisecond's work: 60 is the smoothest and costs little more. Libre Panel drives it no faster than it takes them.": "Ten wyświetlacz przyjmuje każdy obraz w całości, jako JPEG tworzony w milisekundę: 60 jest najpłynniejsze i kosztuje niewiele więcej. Libre Panel nigdy nie wysyła obrazów szybciej, niż je przyjmuje.",
+    "Did the panel stay black, without anything of the test picture?": "Czy panel pozostał czarny, bez śladu obrazu testowego?",
+    "The panel shows the test picture once more, as the other usual kind of JPEG.": "Panel pokazuje obraz testowy jeszcze raz, jako drugi typowy wariant JPEG.",
+    "Do you see it now?": "Czy teraz go widzisz?",
+    "Kind of JPEG": "Wariant JPEG"
   },
   "fields": {
     "agent": "agent",

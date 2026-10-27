@@ -23,6 +23,7 @@ from urllib.parse import urlencode
 from libre_panel import __version__, i18n
 from libre_panel.config import (
     ALARM_THEME,
+    JPEG_LAYOUTS,
     MORE_PANELS,
     MOTIONS,
     RANDOM_TRANSITION,
@@ -785,6 +786,9 @@ class Settings:
                 "fps": video.fps,
                 "on": (on := video_mode(video, model)[0] if usb else False),
                 "usb": usb,
+                # a display that takes whole pictures at the video's frames a second, without
+                # the video mode (udisp): its frames a second are set as a video panel's
+                "streams": model is not None and model.protocol == "usb-udisp",
                 "gaps": gaps,
                 "range_unseen": _range_unseen(on, gaps, config.device.video_range, model),
             },
@@ -1443,6 +1447,7 @@ RULES: dict[str, Any] = {
     "device.still": lambda n, v, c: _choice(n, v, STILLS),
     # the range of the video's values on the panel (Settings → Panel → Check the colours)
     "device.video_range": lambda n, v, c: _choice(n, v, VIDEO_RANGES),
+    "device.jpeg": lambda n, v, c: _choice(n, v, JPEG_LAYOUTS),
     "device.dark_on_quit": lambda n, v, c: _flag(n, v),
     "device.dark_on_sleep": lambda n, v, c: _flag(n, v),
     "device.night": lambda n, v, c: _flag(n, v),

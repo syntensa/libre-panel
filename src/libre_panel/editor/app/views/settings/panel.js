@@ -217,6 +217,7 @@ function VideoCard() {
   const video = info.video;
   const rates = [25, 30, 50, 60, ...(fps && ![25, 30, 50, 60].includes(fps) ? [fps] : [])].sort((a, b) => a - b);
   const applies = videoApplies(config, info);
+  const streams = !applies && Boolean(video.streams); // (a udisp display: whole pictures, no video mode)
   return html`<${Card} id="panel-video">
     <${SettingRow}
       title=${t("Smooth motion")}
@@ -234,8 +235,10 @@ function VideoCard() {
         ]}
       />
     <//>
-    ${applies
-      ? html`<${SettingRow} title=${t("Frames per second")} hint=${t("30 looks smooth and is the default. 50 is smoother still and costs about two thirds more processor time (measured with two panels: 2.0 instead of 1.2 cores); 25 asks least. 60 is an experiment: the panel is told 70, so that its player stays ahead.")}>
+    ${applies || streams
+      ? html`<${SettingRow} title=${t("Frames per second")} hint=${streams
+          ? t("This display takes each picture whole, as a JPEG of a millisecond's work: 60 is the smoothest and costs little more. Libre Panel drives it no faster than it takes them.")
+          : t("30 looks smooth and is the default. 50 is smoother still and costs about two thirds more processor time (measured with two panels: 2.0 instead of 1.2 cores); 25 asks least. 60 is an experiment: the panel is told 70, so that its player stays ahead.")}>
           <${Segmented}
             label=${t("Frames per second")}
             value=${fps}

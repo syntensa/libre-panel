@@ -368,10 +368,15 @@ do with it then.
 - Each picture goes as the kind the display names first, as the protocol's own drivers send
   it: JPEG on the 2.8" (baseline, its colours at every pixel). The 2.8" names raw pixels too,
   but the program on its card that draws the pictures decodes JPEG only: raw pixels left it
-  black (#30). The stream runs at the frames a second of a TURZX panel in video mode
-  (`[video] fps`, 30 by default, up to 60), fewer where the display says so or takes fewer:
-  Libre Panel times the first pictures and drives it no faster. The log says how many it came
-  to.
+  black (#30). Where the display's decoder shows only the other usual kind of JPEG, its
+  colours at every second pixel each way, the panel test finds it: when the test card stays
+  black it asks so, shows the card once more as that, and where it shows, writes
+  `[device] jpeg = "4:2:0"` to `config.toml`.
+- The stream runs at the frames a second of a TURZX panel in video mode, set in *Settings →
+  Panel → Frames per second* (`[video] fps`, 30 by default, up to 60), fewer where the display
+  says so or takes fewer: Libre Panel times the first pictures and drives it no faster. A JPEG
+  takes about a millisecond to make, so 60 costs little more than 30. The log says how many
+  it came to.
 - No command for the backlight is known, so the brightness goes into the picture: 100 % is as
   bright as the display's card image sets its backlight, and less is darker.
 - Close any other program that drives the display first.

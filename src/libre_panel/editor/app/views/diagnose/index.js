@@ -114,6 +114,8 @@ function questionText(question) {
   const { key } = question;
   if (key === "card-landscape") return [t("The panel shows a test picture, lying (landscape)."), CARD()];
   if (key === "card-portrait") return [t("The panel shows a test picture, standing (portrait)."), CARD()];
+  if (key === "card-black") return [t("Did the panel stay black, without anything of the test picture?")];
+  if (key === "card-jpeg") return [t("The panel shows the test picture once more, as the other usual kind of JPEG."), t("Do you see it now?")];
   if (key === "brightness-watch") return [t("Now the panel goes dark, then bright. Watch it and click Go on.")];
   if (key === "brightness") return [t("Did the panel go dark and then bright?")];
   if (key === "size") return [t("Its USB ids fit several panels. Which one is it?")];
@@ -142,6 +144,7 @@ const STEPS = {
   "brightness (command 14)": () => t("Brightness"),
   brightness: () => t("Brightness"),
   "close and reconnect": () => t("Close and connect again"),
+  "JPEG layout": () => t("Kind of JPEG"),
   "video mode": () => t("Smooth motion"),
   "panel stopped answering": () => t("The panel stopped answering"),
 };

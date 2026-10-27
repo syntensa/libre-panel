@@ -2803,7 +2803,12 @@
     "Turn 15° to the left": "Повернуть на 15° влево",
     "Turn 15° to the right": "Повернуть на 15° вправо",
     "degrees clockwise, all of it about its middle": "градусы по часовой стрелке, целиком вокруг своего центра",
-    "degrees clockwise, about its middle; a text about the point it is aligned at, so a changing value stays put": "градусы по часовой стрелке, вокруг своего центра; текст — вокруг точки выравнивания, чтобы меняющееся значение оставалось на месте"
+    "degrees clockwise, about its middle; a text about the point it is aligned at, so a changing value stays put": "градусы по часовой стрелке, вокруг своего центра; текст — вокруг точки выравнивания, чтобы меняющееся значение оставалось на месте",
+    "This display takes each picture whole, as a JPEG of a millisecond's work: 60 is the smoothest and costs little more. Libre Panel drives it no faster than it takes them.": "Этот дисплей принимает каждый кадр целиком, как JPEG, который создаётся за миллисекунду: 60 — самое плавное и почти ничего не стоит. Libre Panel никогда не шлёт кадры быстрее, чем дисплей их принимает.",
+    "Did the panel stay black, without anything of the test picture?": "Панель осталась чёрной, без какой-либо части тестового изображения?",
+    "The panel shows the test picture once more, as the other usual kind of JPEG.": "Панель ещё раз показывает тестовое изображение, в другом распространённом варианте JPEG.",
+    "Do you see it now?": "Теперь видно?",
+    "Kind of JPEG": "Вариант JPEG"
   },
   "fields": {
     "agent": "агент",

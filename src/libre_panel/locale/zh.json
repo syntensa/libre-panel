@@ -2803,7 +2803,12 @@
     "Turn 15° to the left": "向左旋转 15°",
     "Turn 15° to the right": "向右旋转 15°",
     "degrees clockwise, all of it about its middle": "顺时针角度，整体绕其中心旋转",
-    "degrees clockwise, about its middle; a text about the point it is aligned at, so a changing value stays put": "顺时针角度，绕其中心旋转；文本绕其对齐点旋转，使变化的数值保持原位"
+    "degrees clockwise, about its middle; a text about the point it is aligned at, so a changing value stays put": "顺时针角度，绕其中心旋转；文本绕其对齐点旋转，使变化的数值保持原位",
+    "This display takes each picture whole, as a JPEG of a millisecond's work: 60 is the smoothest and costs little more. Libre Panel drives it no faster than it takes them.": "此显示屏以整幅 JPEG 接收每张画面，每张只需约一毫秒生成：60 最流畅，几乎不增加开销。Libre Panel 发送画面的速度绝不会超过它的接收速度。",
+    "Did the panel stay black, without anything of the test picture?": "面板是否保持黑屏，完全看不到测试画面？",
+    "The panel shows the test picture once more, as the other usual kind of JPEG.": "面板再次显示测试画面，这次使用另一种常见的 JPEG 格式。",
+    "Do you see it now?": "现在能看到吗？",
+    "Kind of JPEG": "JPEG 格式"
   },
   "fields": {
     "agent": "智能体",

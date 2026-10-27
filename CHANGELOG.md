@@ -26,9 +26,12 @@
   it names too, but the program on its card that draws the pictures decodes JPEG only. It now
   gets the kind of picture it names first, as the protocol's own drivers send it: JPEG, its
   colours at every pixel, still a stream of 30 a second; a picture that fills its last USB
-  packet is ended as the protocol's Windows driver ends it. The panel test names the kind of
-  picture it sent and its real size, where it said RGB565 for every panel with a driver of its
-  own.
+  packet is ended as the protocol's Windows driver ends it. Should its decoder show only the
+  other usual kind of JPEG, the panel test finds that out: where the test card stays black, it
+  shows it once more as that kind and keeps it in `config.toml` where it shows. *Settings →
+  Panel → Frames per second* now sets its frame rate too, up to 60 (a JPEG takes about a
+  millisecond to make). The panel test names the kind of picture it sent and its real size,
+  where it said RGB565 for every panel with a driver of its own.
 - **On Windows, Libre Panel could hang at its start with a core busy**, without its tray icon
   and window, when it was not allowed to write to its private folder
   (`%APPDATA%\LibrePanel\private`): Python's temporary file tried new names there without end.

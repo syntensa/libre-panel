@@ -32,7 +32,7 @@ invalid is refused with the reason, and nothing is written.
 
 | Section | What it changes in `config.toml` |
 |---|---|
-| Panel | `accent`, `[device]` (`model`, `brightness`, `orientation`, `rotate`, `motion`, `dark_on_quit`, `dark_on_sleep`, `night`, `night_from`, `night_to`, `night_brightness`, `dark_when_away`, `away_brightness`, `at` (*More panels*: where it stands); under *Advanced* `driver`, `output`, `still` (TURZX USB panels), `port`) and `[video]` (`mode`, `fps`, `local_clip` while smooth motion lacks it; under *Advanced* `ffmpeg`, and `local_clip` once it is set) |
+| Panel | `accent`, `[device]` (`model`, `brightness`, `orientation`, `rotate`, `motion`, `dark_on_quit`, `dark_on_sleep`, `night`, `night_from`, `night_to`, `night_brightness`, `dark_when_away`, `away_brightness`, `at` (*More panels*: where it stands); under *Advanced* `driver`, `output`, `still` (TURZX USB panels), `port`; `jpeg` is written by the panel test) and `[video]` (`mode`, `fps` (also for a udisp USB display), `local_clip` while smooth motion lacks it; under *Advanced* `ffmpeg`, and `local_clip` once it is set) |
 | Sensors | `[sensors] providers` (which sources, and their order; those not in use under *More sources*), the hardware's names, and under *Advanced* `refresh_ms` and `[sensors.librehardwaremonitor]` (`mode`, `url`) |
 | Game mode and more | `[services] enabled` and the options of each `[services.<name>]` table: switches, numbers, texts and lists of texts or numbers. The rules of the autopilot have their own page (*Edit*, under the autopilot), the warnings of `notices` and the limits of `cooling` are still written here |
 | Weather and place | `[weather]` (`enabled`, `latitude`, `longitude`, `place`, `units`, `update_minutes`) |
@@ -88,6 +88,11 @@ video_range = "auto"           # TURZX USB panels in video mode: the range of th
                                # values, "limited" (16-235) or "full" (0-255); "auto" is
                                # full on the 9.2" and the 12.3", limited on the others
                                # (see Video)
+jpeg = "4:4:4"                 # udisp USB displays that take JPEG (Waveshare's USB display
+                               # image): its colours at every pixel, as the protocol's
+                               # drivers send them, or "4:2:0", at every second pixel each
+                               # way, for a decoder that shows only that; the panel test
+                               # tries "4:2:0" where the test card stays black and writes it
 dark_on_quit = false           # true: black and its light off when Libre Panel quits
                                # (Windows shutting down too); lit again at the next start;
                                # Turing 3.5" and UsbPCMonitor turn their screen off too

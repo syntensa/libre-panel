@@ -2803,7 +2803,12 @@
     "Turn 15° to the left": "左に15°回転",
     "Turn 15° to the right": "右に15°回転",
     "degrees clockwise, all of it about its middle": "時計回りの角度。全体を中心の周りに回転します",
-    "degrees clockwise, about its middle; a text about the point it is aligned at, so a changing value stays put": "時計回りの角度。中心の周りに回転します。テキストは揃えた位置を軸に回転するので、値が変わっても動きません"
+    "degrees clockwise, about its middle; a text about the point it is aligned at, so a changing value stays put": "時計回りの角度。中心の周りに回転します。テキストは揃えた位置を軸に回転するので、値が変わっても動きません",
+    "This display takes each picture whole, as a JPEG of a millisecond's work: 60 is the smoothest and costs little more. Libre Panel drives it no faster than it takes them.": "このディスプレイは各画像を丸ごとJPEGで受け取り、1枚の作成は約1ミリ秒です。60が最もなめらかで、負荷もほとんど増えません。Libre Panel はディスプレイが受け取れる速さを超えて送りません。",
+    "Did the panel stay black, without anything of the test picture?": "パネルは黒いままで、テスト画像が何も表示されませんでしたか？",
+    "The panel shows the test picture once more, as the other usual kind of JPEG.": "パネルにテスト画像をもう一度、もう一つの一般的なJPEG形式で表示しています。",
+    "Do you see it now?": "今度は見えますか？",
+    "Kind of JPEG": "JPEG形式"
   },
   "fields": {
     "agent": "エージェント",

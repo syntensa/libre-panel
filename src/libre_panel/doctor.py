@@ -27,7 +27,14 @@ from typing import Any
 from PIL import Image, ImageDraw, ImageFont
 
 from libre_panel import __version__
-from libre_panel.config import Config, ConfigError, VideoConfig, load_config
+from libre_panel.config import (
+    JPEG_LAYOUTS,
+    Config,
+    ConfigError,
+    VideoConfig,
+    edit_config,
+    load_config,
+)
 from libre_panel.devices.base import DeviceError, list_serial_ports
 from libre_panel.devices.models import PanelModel, models_for_usb
 
@@ -500,16 +507,55 @@ class Doctor:
         mark = {"ok": "ok", "fail": "FAIL", "skip": "skip", "info": "info"}[result]
         self.say(f"[{mark:>4}] {name}" + (f" — {detail}" if detail else ""))
 
-    def _question(self, key: str, name: str, question: str) -> None:
+    def _question(self, key: str, name: str, question: str) -> bool | None:
+        """Whether the person saw it so; None where nobody is asked."""
         if self.questions is None:
             self.pause(self.seconds_per_card)
             self._step(name, "skip", "not checked (no questions asked)")
-            return
+            return None
         seen, note = self.questions.confirm(key, question)
         if seen:
             self._step(name, "ok", "confirmed by looking at the panel")
         else:
             self._step(name, "fail", note or "not as expected")
+        return seen
+
+    def _other_jpeg(self, card: Image.Image, name: str) -> None:
+        """A display that takes JPEG and stayed black: the test card once more in the other
+        layout of JPEG (a decoder may show only one: #30), and where it shows, that layout from
+        now on ([device] jpeg in config.toml), and the card's step passed with it."""
+        display = self.display
+        layout = getattr(display, "jpeg_layout", None)
+        if display is None or layout is None or self.questions is None:
+            return
+        black, _note = self.questions.confirm(
+            "card-black", "Did the panel stay black, without anything of the test card?"
+        )
+        if not black:
+            return
+        other = next(name for name in JPEG_LAYOUTS if name != layout)
+        display.set_jpeg(other)
+        self._send(card)
+        self.say(f"\nThe panel should now show the test card as JPEG {other}.")
+        seen, note = self.questions.confirm(
+            "card-jpeg", f"The test card once more, as JPEG {other}: do you see it now?"
+        )
+        if not seen:
+            display.set_jpeg(layout)
+            self._step(
+                "JPEG layout", "fail", f"{other} stayed black too" + (f": {note}" if note else "")
+            )
+            return
+        try:
+            edit_config(("value", "device.jpeg", other))
+            kept = f'[device] jpeg = "{other}" written to config.toml'
+        except (ConfigError, OSError) as exc:
+            kept = f'set [device] jpeg = "{other}" in config.toml ({exc})'
+        for step in reversed(self.report.steps):
+            if step.name == name:
+                step.result, step.detail = "ok", f"as JPEG {other} (as {layout}: black)"
+                break
+        self._step("JPEG layout", "ok", f"{other} shows where {layout} stayed black; {kept}")
 
     def _choose_size(self, candidates: list) -> object:
         """Which of several panels with the same USB ids this one is."""
@@ -707,17 +753,20 @@ class Doctor:
             w, h = model.size(orientation)
             subtitle = f"{model.label} · {w}x{h} {orientation} · card {n}"
             hidden = {} if round_panel else model.hidden_edges(orientation)
-            self._send(test_card(w, h, "Libre Panel", subtitle, round_panel, hidden))
+            card = test_card(w, h, "Libre Panel", subtitle, round_panel, hidden)
+            self._send(card)
             self.say(f"\nThe panel should now show test card {n} ({orientation}).")
             if any(hidden.values()):  # its frame sits inside what the bezel is known to hide
                 strips = ", ".join(f"{edge} {px} px" for edge, px in hidden.items() if px)
                 self.say(f"(The frame keeps inside what the bezel hides here: {strips}.)")
-            self._question(
+            seen = self._question(
                 f"card-{orientation}",
                 f"test card, {orientation}",
                 "Is the white frame visible on all four edges, is 'UP' at the top edge, "
                 "is the text readable (not mirrored) and are RED/GREEN/BLUE the right colours?",
             )
+            if n == 1 and seen is False:
+                self._other_jpeg(card, f"test card, {orientation}")
 
         if not round_panel:
             self._ruler(model)

@@ -657,6 +657,27 @@ RUN_STATE = """async ([background, status]) => {
 }"""
 
 
+def test_a_udisp_display_has_its_frames_a_second_in_the_app(
+    app_url,  # noqa: F811
+    isolated_home,
+    monkeypatch,
+):
+    """Waveshare's USB display (#30) takes whole pictures at [video] fps: Settings → Panel
+    offers them as for a TURZX panel in video mode, 60 the most, with a word of their own."""
+    from test_app_browser import radio
+    from test_editor_settings import panel_on_the_bus
+
+    from libre_panel.config import edit_config
+
+    panel_on_the_bus(monkeypatch)
+    edit_config(("value", "device.model", "waveshare-2.8-udisp"))
+    with browser_page(app_url, "settings/panel") as page:
+        card = page.locator("#panel-video")
+        expect(card).to_contain_text("takes each picture whole")
+        radio(page, "Frames per second", "60").click()
+        waits_for(page, lambda: settings_config().device.video.fps == 60)
+
+
 def test_the_video_experiment_writes_each_choice_at_once_and_leads_back(
     app_url,  # noqa: F811
     isolated_home,

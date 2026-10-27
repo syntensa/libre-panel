@@ -42,6 +42,7 @@ from typing import Any
 
 from PIL import Image
 
+from libre_panel.config import JPEG_LAYOUTS
 from libre_panel.devices import usb_link
 from libre_panel.devices.base import DeviceError, Display, FrameError, KeepShowing, dimmed
 from libre_panel.devices.models import MODELS, PanelModel
@@ -133,14 +134,16 @@ def present_model() -> PanelModel | None:
     return None
 
 
-def jpeg(picture: Image.Image, limit: int | None) -> bytes:
+def jpeg(picture: Image.Image, limit: int | None, layout: str = "4:4:4") -> bytes:
     """``picture`` as a baseline JPEG within ``limit`` bytes (the display's buffer, where it
-    says one), its colours at every pixel (4:4:4, as the protocol's drivers send theirs:
-    coloured lines and small text stay sharp)."""
+    says one): its colours at every pixel ("4:4:4", as the protocol's drivers send theirs:
+    coloured lines and small text stay sharp), or at every second pixel each way ("4:2:0", as
+    most JPEGs are made: for a decoder that shows only those)."""
     most = min(limit or MAX_PAYLOAD, MAX_PAYLOAD)
+    subsampling = 2 if layout == "4:2:0" else 0
     for quality in QUALITIES:
         buffer = io.BytesIO()
-        picture.save(buffer, format="JPEG", quality=quality, subsampling=0)
+        picture.save(buffer, format="JPEG", quality=quality, subsampling=subsampling)
         if buffer.tell() <= most:
             return buffer.getvalue()
     raise FrameError(f"frame too detailed for the display ({buffer.tell() // 1024} KB)")
@@ -187,6 +190,8 @@ class UdispDisplay(Display):
         self.model = model or next(m for m in MODELS if m.protocol == PROTOCOL)
         self.clock = clock
         self.kind = JPEG  # the kind of picture the display names first (takes())
+        layout = getattr(config, "jpeg", "")
+        self.layout = layout if layout in JPEG_LAYOUTS else JPEG_LAYOUTS[0]
         self.rate: float | None = None  # the pictures a second it came to (_time())
         self._timed: list[float] = []
         self.device: Any = None
@@ -221,7 +226,18 @@ class UdispDisplay(Display):
 
     @property
     def picture(self) -> str:  # type: ignore[override]
-        return NAMES[self.kind]
+        return f"JPEG {self.layout}" if self.kind == JPEG else NAMES[self.kind]
+
+    @property
+    def jpeg_layout(self) -> str | None:  # type: ignore[override]
+        return self.layout if self.kind == JPEG else None
+
+    def set_jpeg(self, layout: str) -> None:
+        if layout not in JPEG_LAYOUTS:
+            raise ValueError(f"a JPEG's layout is one of {', '.join(JPEG_LAYOUTS)}")
+        self.layout = layout
+        if hasattr(self.config, "jpeg"):
+            self.config.jpeg = layout  # (and so once it is opened again)
 
     def _wanted(self) -> int:
         fps = self.config.video.fps
@@ -265,7 +281,7 @@ class UdispDisplay(Display):
     def _encoded(self, picture: Image.Image) -> bytes:
         """The picture as the kind the display names first (:func:`takes`)."""
         if self.kind == JPEG:
-            data = jpeg(picture, self.said.get("limit"))
+            data = jpeg(picture, self.said.get("limit"), self.layout)
         elif self.kind == RGB888:
             data = picture.tobytes()  # (R, G, B, a byte each)
         else:

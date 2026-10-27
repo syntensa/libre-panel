@@ -113,7 +113,7 @@ def test_the_display_is_connected_and_sent_jpeg_as_it_names_first(bus):
     display = bus(FakeDisplay())
     with opened() as screen:
         assert screen.model.id == "waveshare-2.8-udisp" and display.claimed == {0}
-        assert screen.picture == "JPEG"
+        assert screen.picture == "JPEG 4:4:4" and screen.jpeg_layout == "4:4:4"
         screen.show(corner_red((480, 480)))
         shown = display.frames[-1]
         assert shown["kind"] == udisp.JPEG and shown["size"] == (480, 480)
@@ -242,7 +242,7 @@ def test_the_doctor_names_the_kind_of_picture_sent_and_its_size(bus):
     assert report.passed, text
     speed = next(line for line in text.splitlines() if "per frame" in line)
     sent = [16 + len(f["payload"]) for f in display.frames[-4:-1]]  # (before the last card)
-    assert speed.endswith(f"JPEG {sum(sent) // len(sent) // 1024} KB"), speed
+    assert speed.endswith(f"JPEG 4:4:4 {sum(sent) // len(sent) // 1024} KB"), speed
     assert {f["kind"] for f in display.frames} == {udisp.JPEG}
 
 
@@ -254,8 +254,8 @@ def test_a_picture_of_whole_packets_is_ended_as_the_drivers_end_it(bus, monkeypa
     display = bus(FakeDisplay())
     real, whole = udisp.jpeg, iter([True, False])
 
-    def jpeg(picture, limit):  # (a JPEG ends at its end marker: what follows is not read)
-        data = real(picture, limit)
+    def jpeg(picture, limit, layout="4:4:4"):  # (a JPEG ends at its end marker)
+        data = real(picture, limit, layout)
         fill = (-(16 + len(data))) % 512
         return data + b"\0" * (fill if next(whole) else fill + 1)
 
@@ -269,6 +269,92 @@ def test_a_picture_of_whole_packets_is_ended_as_the_drivers_end_it(bus, monkeypa
         assert screen.counters.bytes == sum(sent)
     assert [f["kind"] for f in display.frames] == [udisp.JPEG, 0xFF, udisp.JPEG]
     assert near(display.frames[0]["picture"].getpixel((5, 5)), RED)
+
+
+def layout(frame):
+    """How a JPEG carries its colours: each part's sampling (2, 2) for 4:2:0's brightness."""
+    return [(h, v) for _id, h, v, _table in frame["jpeg"].layer]
+
+
+def test_the_other_layout_of_jpeg_where_the_config_says_so(bus):
+    """[device] jpeg = "4:2:0": the colours at every second pixel each way, as most JPEGs are
+    made, for a decoder that shows only those; the panel test switches it while it runs."""
+    display = bus(FakeDisplay())
+    config = DeviceConfig(driver="turzx", model="waveshare-2.8-udisp", jpeg="4:2:0")
+    with TurzxDisplay(config) as screen:
+        assert screen.jpeg_layout == "4:2:0" and screen.picture == "JPEG 4:2:0"
+        screen.show(corner_red((480, 480)))
+        screen.set_jpeg("4:4:4")
+        screen.show(corner_red((480, 480)))
+        with pytest.raises(ValueError):
+            screen.set_jpeg("4:2:2")
+    assert [layout(f) for f in display.frames] == [[(2, 2), (1, 1), (1, 1)], [(1, 1)] * 3]
+    assert near(display.frames[0]["picture"].getpixel((5, 5)), RED)
+    bus(FakeDisplay("udisp0_R480x480_Ergb16"))
+    with opened() as screen:
+        assert screen.jpeg_layout is None  # (it takes no JPEG: nothing to choose)
+
+
+class OnlyHalf(FakeDisplay):
+    """A display whose decoder shows JPEG 4:2:0 only (#30 may be one)."""
+
+    def black(self):
+        return not self.frames or layout(self.frames[-1])[0] != (2, 2)
+
+
+def doctored(answers):
+    from libre_panel.doctor import Doctor
+
+    def no_usb_panel(pid=None, beside=()):
+        raise DeviceError("no Turing/TURZX USB panel found")
+
+    def panel():
+        screen = opened()
+        screen.open()
+        return screen
+
+    said = iter(answers)
+    return Doctor(ask=lambda question: next(said), say=lambda text: None,
+                  pause=lambda seconds: None, frames=3, open_transport=no_usb_panel,
+                  open_serial=panel).run()  # fmt: skip
+
+
+def test_the_panel_test_tries_the_other_jpeg_where_the_card_stays_black(bus):
+    """Black, then asked whether nothing at all showed: the card once more as JPEG 4:2:0; it
+    shows, so the card passed, and config.toml keeps 4:2:0 for the panel from now on."""
+    from libre_panel.config import config_dir, load_config
+
+    display = bus(OnlyHalf())
+    # the card: no, black; it stayed black: yes; as 4:2:0: yes; Enter; the brightness: yes
+    report = doctored(["n", "black", "y", "y", "", "y"])
+    text = report.text()
+    assert report.passed, text
+    assert "[  OK] test card, landscape\n       as JPEG 4:2:0 (as 4:4:4: black)" in text
+    assert (
+        '[  OK] JPEG layout\n       4:2:0 shows where 4:4:4 stayed black; [device] jpeg = "4:2:0"'
+        in text
+    )
+    assert load_config(config_dir() / "config.toml").device.jpeg == "4:2:0"
+    assert not display.black() and "JPEG 4:2:0" in text  # (on with it: the speed in it too)
+
+
+def test_the_panel_test_keeps_the_jpeg_where_the_other_shows_nothing_either(bus):
+    from libre_panel.config import config_dir
+
+    display = bus(FakeDisplay())
+    report = doctored(["n", "black", "y", "n", "", "", "n", ""])
+    text = report.text()
+    assert "[FAIL] JPEG layout\n       4:2:0 stayed black too" in text
+    assert layout(display.frames[-1]) == [(1, 1)] * 3  # (back to the first)
+    assert not (config_dir() / "config.toml").exists()
+
+
+def test_a_card_that_is_wrong_but_not_black_asks_nothing_more(bus):
+    """Mirrored or in wrong colours is no matter of the JPEG: nothing else is tried."""
+    display = bus(FakeDisplay())
+    report = doctored(["n", "mirrored", "n", "", "", "y"])  # (a no asks what instead)
+    assert "JPEG layout" not in report.text()
+    assert {tuple(layout(f)[0]) for f in display.frames if f["kind"] == udisp.JPEG} == {(1, 1)}
 
 
 def test_a_display_of_another_size_is_not_driven_as_this_one(bus):

@@ -41,6 +41,9 @@ STILLS = ("auto", "png", "jpeg")
 # The range of the video's values on a TURZX USB panel ([device] video_range): "auto" as the model
 # is known to show them (PanelModel.video_range), "limited" (16-235), "full" (0-255)
 VIDEO_RANGES = ("auto", "limited", "full")
+# How a udisp USB display's JPEGs carry their colours ([device] jpeg): at every pixel, as the
+# protocol's drivers send them, or at every second pixel each way, as most JPEGs do
+JPEG_LAYOUTS = ("4:4:4", "4:2:0")
 DEFAULT_SYMBOLS = "vivid"
 
 _DEFAULT_CONFIG_TEMPLATE = """\
@@ -489,6 +492,10 @@ class DeviceConfig:
     # shows them: "limited" (16-235), "full" (0-255), "auto" as the model is known to (VIDEO_RANGES;
     # the 12.3"'s decoder shows every stream as full range). Each panel's own ([[panels]] too)
     video_range: str = "auto"
+    # udisp USB displays that take JPEG: its colours at every pixel ("4:4:4", the protocol's
+    # drivers') or at every second pixel each way ("4:2:0", most JPEGs'), for a decoder that
+    # shows only that one (JPEG_LAYOUTS; the panel test tries it where the first stays black)
+    jpeg: str = "4:4:4"
     dark_on_quit: bool = False  # a black picture and its light off when Libre Panel quits
     dark_on_sleep: bool = True  # so too while the computer sleeps (Windows), lit when it wakes
     # a brightness of its own at night (night_now): from night_from to night_to, over midnight
@@ -1062,6 +1069,10 @@ def _parse_device(dev: dict[str, Any], where: str) -> DeviceConfig:
     if video_range not in VIDEO_RANGES:
         raise ConfigError(f'{where}.video_range: "auto", "limited" or "full"')
     device.video_range = video_range
+    jpeg = _expect(dev.get("jpeg", device.jpeg), str, f"{where}.jpeg")
+    if jpeg not in JPEG_LAYOUTS:
+        raise ConfigError(f'{where}.jpeg: "4:4:4" or "4:2:0"')
+    device.jpeg = jpeg
     for name in ("dark_on_quit", "dark_on_sleep", "night", "dark_when_away"):
         given = dev.get(name, getattr(device, name))
         setattr(device, name, _expect(given, bool, f"{where}.{name}"))

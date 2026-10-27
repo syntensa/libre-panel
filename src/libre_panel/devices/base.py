@@ -150,6 +150,9 @@ class Display:
     slow = False
     # the kind of picture a frame goes to the panel as, as the doctor's speed check names it
     picture = "RGB565"
+    # the layout of the JPEGs it sends ([device] jpeg, config.JPEG_LAYOUTS): a udisp display's
+    # that takes JPEG; None for a driver that has no choice (set_jpeg changes it)
+    jpeg_layout: str | None = None
     # True once open() brought the panel back after the driver restarted it
     # (a hung video decoder): the main loop tells the services, unlike a replug.
     restarted = False
@@ -196,6 +199,10 @@ class Display:
     def describe(self) -> str:
         """What frames go to, for status displays (tray, editor)."""
         return self.name
+
+    def set_jpeg(self, layout: str) -> None:
+        """Send the JPEGs in ``layout`` from now on (the panel test, where a picture stays
+        black); nothing for a driver without a choice (``jpeg_layout`` None)."""
 
     def show(self, frame: Image.Image, region: tuple[int, int, int, int] | None = None) -> None:
         """Push ``frame`` (RGB, theme size). ``region`` is the changed box

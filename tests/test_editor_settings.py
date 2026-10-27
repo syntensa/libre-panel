@@ -536,7 +536,8 @@ def test_no_panel_found_says_so_and_has_nothing_to_tell_about_video(server, monk
     assert data["found"] is None and data["model"] is None and data["running"] is None
     assert data["configured"] == "auto"
     assert data["video"] == {
-        "mode": "auto", "fps": 30, "on": False, "usb": True, "gaps": [], "range_unseen": False,
+        "mode": "auto", "fps": 30, "on": False, "usb": True, "streams": False, "gaps": [],
+        "range_unseen": False,
     }  # fmt: skip
 
 
@@ -619,6 +620,16 @@ def test_a_zc360_screen_set_up_on_its_own_is_the_panel_found(server, monkeypatch
     panel_on_the_bus(monkeypatch, "turing-9.2-usb")
     _, data = request(server, "GET", "/api/panel")
     assert data["found"]["id"] == "turing-9.2-usb"
+
+
+def test_a_udisp_display_has_its_frames_a_second_set_without_the_video_mode(server, monkeypatch):
+    """Waveshare's USB display takes whole pictures at [video] fps (60 at most): Settings →
+    Panel offers them as for a TURZX panel in video mode, which it has none of (#30)."""
+    panel_on_the_bus(monkeypatch)
+    write(server, **{"device.model": "waveshare-2.8-udisp", "video.fps": 60})
+    _, data = request(server, "GET", "/api/panel")
+    assert data["video"]["streams"] is True and data["video"]["fps"] == 60
+    assert data["video"]["usb"] is False and data["video"]["on"] is False
 
 
 def test_a_serial_panel_has_no_video_mode(server, monkeypatch):
@@ -1203,7 +1214,7 @@ def test_the_settings_that_name_a_program_or_a_file_are_the_ones_locked():
         "device.orientation", "device.motion", "device.dark_on_quit", "device.dark_on_sleep",
         "device.night", "device.night_from", "device.night_to", "device.night_brightness",
         "device.dark_when_away", "device.away_brightness", "device.at", "device.still",
-        "device.video_range",
+        "device.video_range", "device.jpeg",
         "video.mode", "video.fps", "video.local_clip", "video.clip_asked", "refresh_ms",
         "video.device_fps", "video.crf", "video.preset", "video.keyframe_s", "video.maxrate",
         "video.profile", "video.encoder", "video.pixels",

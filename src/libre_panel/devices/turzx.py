@@ -253,6 +253,14 @@ class TurzxDisplay(Display):
     def picture(self) -> str:  # type: ignore[override]
         return self._impl.picture if self._impl else Display.picture
 
+    @property
+    def jpeg_layout(self) -> str | None:  # type: ignore[override]
+        return self._impl.jpeg_layout if self._impl else None
+
+    def set_jpeg(self, layout: str) -> None:
+        if self._impl:
+            self._impl.set_jpeg(layout)
+
     def set_brightness(self, percent: int) -> None:
         if self._impl:
             self._impl.set_brightness(percent)
