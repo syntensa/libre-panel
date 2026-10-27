@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.7.2 — 2026-10-27
+
+Round screens for the round panels; Waveshare's USB monitor as a panel of its own, a video
+stream of raw pictures at 30 a second, and the themes on its card in turn; the ZC-360's screens
+supported; Start asking how black looks on a panel nobody has compared yet; and the app opening
+from the Linux AppImage on newer systems again.
 
 **New**
 - **Round screens for the round panels of 480x480.** Lumen, Encore, Nimbus, Almanac, Arena and
