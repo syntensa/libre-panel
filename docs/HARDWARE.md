@@ -336,8 +336,8 @@ keys Waveshare's themes use (in English and in Chinese), sets the brightness and
 picture upside down where you ask, and switches between the themes on the card: one to show, or
 several in turn at random. Libre Panel's own themes do not show on them, and nothing is
 written on the card. The protocol is the one Derik-for-real24 documented in the wsmonitor
-project (#21); the same frames from its client were seen working on a display, Libre Panel's
-not yet.
+project (#21); with Libre Panel 0.7.1 his 2.8" shows Libre Panel's readings live in its own
+themes (Linux, #21).
 
 - The display is looked for by its USB ids (`1d6b:0104` "Virtual Serial Port", or the
   placeholder `1234:5678` some units have) and taken only once it answered the display's own

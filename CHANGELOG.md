@@ -3,6 +3,8 @@
 ## Unreleased
 
 **New**
+- **Waveshare's USB monitors run with Libre Panel.** An owner's 2.8" shows Libre Panel's
+  readings live in its own themes, with 0.7.1 on Linux (#21).
 - **The ZC-360's screens, each a panel of its own, are supported.** An owner ran the panel test
   on each of the three screens on Windows: all checks passed, at 22 to 24 full frames a second
   each. Notices and the volume keep clear of the 2 pixels each screen hides at its left and
