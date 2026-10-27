@@ -96,7 +96,9 @@ def test_how_long_is_set_in_the_options(web_server):
     provider = provider_with(stale_seconds=1.5)
     try:
         assert wait_for(lambda: provider.read())
-        answered = provider._answered_at
+        # a time to which 1.5 s add up exactly: Windows' clock in milliseconds gives some
+        # (126.503) to which 1.5 s later is a hair less than 1.5 s later
+        answered = provider._answered_at = 1000.0
         web_server["answer"] = OSError("gone")
         provider._poll_once(answered + 1.4)
         assert provider.read()
