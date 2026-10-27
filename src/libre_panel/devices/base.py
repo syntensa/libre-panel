@@ -148,6 +148,8 @@ class Display:
     # a slow link (the USB serial panels, pixels over a serial port): the main loop keeps the
     # motion calm and sends the parts that changed one by one (app.calm, changed_regions)
     slow = False
+    # the kind of picture a frame goes to the panel as, as the doctor's speed check names it
+    picture = "RGB565"
     # True once open() brought the panel back after the driver restarted it
     # (a hung video decoder): the main loop tells the services, unlike a replug.
     restarted = False

@@ -548,8 +548,10 @@ class Doctor:
         """Show a whole frame; (seconds it took, bytes sent)."""
         started = time.perf_counter()
         if self.display is not None:
+            sent = self.display.counters.bytes
             self.display.show(image)
-            return time.perf_counter() - started, image.width * image.height * 2  # RGB565
+            size = self.display.counters.bytes - sent  # (none counted: as RGB565)
+            return time.perf_counter() - started, size or image.width * image.height * 2
         from libre_panel.devices.turzx_usb import CMD_UPLOAD_PNG, encode_frame, to_native
 
         png = encode_frame(to_native(image))
@@ -748,7 +750,7 @@ class Doctor:
                 break
         if times:
             avg = sum(times) / len(times)
-            kind = "PNG" if usb else "RGB565"
+            kind = "PNG" if usb else self.display.picture
             self._step(
                 f"speed ({len(times)} full frames)",
                 "ok",

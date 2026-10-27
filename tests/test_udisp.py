@@ -1,5 +1,6 @@
 """udisp USB displays (devices/udisp.py): Waveshare's USB monitors as USB displays (#21). Each
-picture is one bulk transfer: a header of 16 bytes and the raw pixels (or a JPEG)."""
+picture is one bulk transfer: a header of 16 bytes and the picture, as the kind the display
+names first (JPEG on Waveshare's 2.8", whose card draws nothing else: #30)."""
 
 import io
 import struct
@@ -53,7 +54,8 @@ class FakeDisplay(FakeUsbDevice):
         assert (crc, cmd, x, y) == (0, 0, 0, 0) and packed >> 10 == len(payload)
         frame = {"kind": kind, "size": (w, h), "id": packed & 0x3FF, "payload": payload}
         if kind == udisp.JPEG:
-            frame["picture"] = Image.open(io.BytesIO(payload)).convert("RGB")
+            frame["jpeg"] = Image.open(io.BytesIO(payload))
+            frame["picture"] = frame["jpeg"].convert("RGB")
         self.frames.append(frame)
 
 
@@ -81,10 +83,13 @@ def pixel(shown, x, y):
 
 def test_what_the_product_string_says():
     said = udisp.described(PRODUCT)
-    assert said == {"size": (480, 480), "jpeg": 5, "rgb16": True, "rgb32": True, "fps": None,
-                    "limit": None}  # fmt: skip
+    assert said == {"size": (480, 480), "kind": udisp.JPEG, "jpeg": 5, "rgb16": True,
+                    "rgb32": True, "fps": None, "limit": None}  # fmt: skip
     said = udisp.described("esp32udisp0_R320x240_Ejpg4_Fps30_Bl20_Ergb16")
     assert said["size"] == (320, 240) and said["fps"] == 30 and said["limit"] == 20 * 1024
+    assert said["kind"] == udisp.JPEG  # (the kind named first)
+    assert udisp.described("udisp0_R480x480_Ergb16_Ejpg5")["kind"] == udisp.RGB565
+    assert udisp.described("udisp0_R480x480_Fps30")["kind"] is None
     assert udisp.described("Virtual Serial Port") is None  # (no size: no udisp display)
     assert udisp.model_for((480, 480)) == get_model("waveshare-2.8-udisp")
     assert udisp.model_for((320, 240)) is None
@@ -101,22 +106,40 @@ def test_the_header_of_a_picture():
         udisp.header(udisp.JPEG, (480, 480), 1 << 22)
 
 
-def test_the_display_is_connected_and_shown_every_pixel_as_drawn(bus):
-    """Raw pixels, a video stream of the pictures as they were drawn: no JPEG blurs them."""
+def test_the_display_is_connected_and_sent_jpeg_as_it_names_first(bus):
+    """Derik's 2.8" names JPEG first and raw pixels after it, but the program on its card that
+    draws the pictures decodes JPEG only: raw pixels left it black (#30). It is sent what the
+    protocol's drivers send it: baseline JPEG, its colours at every pixel (4:4:4)."""
     display = bus(FakeDisplay())
     with opened() as screen:
         assert screen.model.id == "waveshare-2.8-udisp" and display.claimed == {0}
+        assert screen.picture == "JPEG"
         screen.show(corner_red((480, 480)))
         shown = display.frames[-1]
-        assert shown["kind"] == udisp.RGB565 and shown["size"] == (480, 480)
-        assert len(shown["payload"]) == 480 * 480 * 2
-        assert pixel(shown, 5, 5) == udisp.rgb565_value(RED)
-        assert pixel(shown, 475, 475) == udisp.rgb565_value(BLUE)
+        assert shown["kind"] == udisp.JPEG and shown["size"] == (480, 480)
+        assert shown["jpeg"].size == (480, 480) and not shown["jpeg"].info.get("progressive")
+        assert [(h, v) for _id, h, v, _table in shown["jpeg"].layer] == [(1, 1)] * 3  # 4:4:4
+        assert near(shown["picture"].getpixel((5, 5)), RED)
+        assert near(shown["picture"].getpixel((475, 475)), BLUE)
+        assert screen.counters.bytes == 16 + len(shown["payload"])
         screen.set_brightness(0)  # (the brightness goes into the picture)
         screen.show(corner_red((480, 480)))
-        assert set(display.frames[-1]["payload"]) == {0}
+        assert all(most <= 2 for _least, most in display.frames[-1]["picture"].getextrema())
         assert [f["id"] for f in display.frames] == [1, 2]
+        assert {f["kind"] for f in display.frames} == {udisp.JPEG}
     assert not taken(display) and display.claimed == set()
+
+
+def test_raw_pixels_for_a_display_that_names_them_first(bus):
+    """Every pixel as it was drawn, 16 bits each, where the display asks for that first."""
+    display = bus(FakeDisplay("udisp0_R480x480_Ergb16_Ejpg5"))
+    with opened() as screen:
+        assert screen.picture == "RGB565"
+        screen.show(corner_red((480, 480)))
+    shown = display.frames[-1]
+    assert shown["kind"] == udisp.RGB565 and len(shown["payload"]) == 480 * 480 * 2
+    assert pixel(shown, 5, 5) == udisp.rgb565_value(RED)
+    assert pixel(shown, 475, 475) == udisp.rgb565_value(BLUE)
 
 
 def test_the_display_is_driven_as_a_panel_in_video_mode(bus):
@@ -155,35 +178,29 @@ def driven(display, frames, fps=None):
         screen._impl.clock = display.clock
         for _ in range(frames):
             screen.show(corner_red((480, 480)))
-        return screen._impl.kind, dict(screen._impl.rates), screen.stream_fps
+        return screen._impl.rate, screen.stream_fps
 
 
-def test_raw_pixels_are_kept_where_they_go_smoothly(bus):
-    """Raw pixels first; where they go fast enough for smooth motion nothing else is tried,
-    and the stream runs at the frames a second wanted."""
-    fast = bus(Timed({udisp.RGB565: 1 / 40, udisp.JPEG: 1 / 90}))
-    kind, rates, fps = driven(fast, udisp.TRIAL + 5)
-    assert kind == udisp.RGB565 and set(rates) == {udisp.RGB565} and fps == 30
-    assert {f["kind"] for f in fast.frames} == {udisp.RGB565}
-    more = bus(Timed({udisp.RGB565: 1 / 40}))
-    _kind, _rates, fps = driven(more, udisp.TRIAL + 5, fps=50)
+def test_the_stream_goes_no_faster_than_the_display_takes_pictures(bus):
+    """The first pictures are timed: a display that takes them as fast as wanted gets the
+    frames a second wanted, one that takes fewer a tenth fewer than it took."""
+    fast = bus(Timed({udisp.JPEG: 1 / 90}))
+    rate, fps = driven(fast, udisp.TRIAL + 5)
+    assert round(rate) == 90 and fps == 30
+    slow = bus(Timed({udisp.JPEG: 1 / 20}))
+    rate, fps = driven(slow, udisp.TRIAL + 5)
+    assert round(rate) == 20 and fps == 18
+    more = bus(Timed({udisp.JPEG: 1 / 40}))
+    _rate, fps = driven(more, udisp.TRIAL + 5, fps=50)
     assert fps == 36  # (50 wanted, 40 reached: a tenth of room)
 
 
-def test_jpeg_only_where_raw_pixels_go_too_slowly(bus):
-    """A display that takes raw pixels too slowly for smooth motion (an ESP32 at USB's full
-    speed): RGB888 and JPEG are timed too; the first smooth one is kept, else the fastest."""
-    slow_raw = bus(Timed({udisp.RGB565: 1 / 15, udisp.RGB888: 1 / 10, udisp.JPEG: 1 / 40}))
-    kind, rates, fps = driven(slow_raw, 3 * udisp.TRIAL + 5)
-    assert kind == udisp.JPEG and fps == 30
-    assert [round(rates[k]) for k in (udisp.RGB565, udisp.RGB888, udisp.JPEG)] == [15, 10, 40]
-    assert [f["kind"] for f in slow_raw.frames[-5:]] == [udisp.JPEG] * 5
-    all_slow = bus(Timed({udisp.RGB565: 1 / 12, udisp.RGB888: 1 / 9, udisp.JPEG: 1 / 18}))
-    kind, _rates, fps = driven(all_slow, 3 * udisp.TRIAL + 5)
-    assert kind == udisp.JPEG and fps == 16  # (the fastest, driven no faster than it goes)
-    alike = bus(Timed({udisp.RGB565: 1 / 15.4, udisp.RGB888: 1 / 15.2, udisp.JPEG: 1 / 15}))
-    kind, _rates, _fps = driven(alike, 3 * udisp.TRIAL + 5)
-    assert kind == udisp.RGB565  # (as fast: every pixel as drawn)
+def test_nothing_but_the_kind_named_first_is_tried(bus):
+    """However slowly the JPEG goes, the raw pixels Derik's 2.8" names after it are not tried:
+    its card would never draw them (#30)."""
+    slow_jpeg = bus(Timed({udisp.JPEG: 1 / 10, udisp.RGB565: 1 / 60, udisp.RGB888: 1 / 40}))
+    _rate, fps = driven(slow_jpeg, 3 * udisp.TRIAL)
+    assert {f["kind"] for f in slow_jpeg.frames} == {udisp.JPEG} and fps == 9
 
 
 def test_the_kinds_of_picture_a_display_takes(bus):
@@ -192,13 +209,41 @@ def test_the_kinds_of_picture_a_display_takes(bus):
         screen.show(corner_red((480, 480)))
     shown = display.frames[-1]
     assert shown["kind"] == udisp.RGB888 and shown["payload"][:3] == bytes(RED)
-    display = bus(FakeDisplay("t113udisp1_R480x480_Ejpg5"))  # (JPEG only)
-    with opened() as screen:
-        screen.show(corner_red((480, 480)))
-    shown = display.frames[-1]
-    assert shown["kind"] == udisp.JPEG and shown["size"] == (480, 480)
-    assert near(shown["picture"].getpixel((5, 5)), RED)
-    assert near(shown["picture"].getpixel((475, 475)), BLUE)
+    for product in ("t113udisp1_R480x480_Ejpg5", "udisp0_R480x480_Fps30"):  # (none named: JPEG)
+        display = bus(FakeDisplay(product))
+        with opened() as screen:
+            screen.show(corner_red((480, 480)))
+        shown = display.frames[-1]
+        assert shown["kind"] == udisp.JPEG and shown["size"] == (480, 480)
+        assert near(shown["picture"].getpixel((5, 5)), RED)
+        assert near(shown["picture"].getpixel((475, 475)), BLUE)
+
+
+def test_the_doctor_names_the_kind_of_picture_sent_and_its_size(bus):
+    """0.7.2's report said RGB565 and its size for every panel with a driver of its own, while
+    the 2.8" was sent JPEG (#30): the speed check says what went, and how much."""
+    from libre_panel.doctor import Doctor
+
+    display = bus(FakeDisplay())
+
+    def no_usb_panel(pid=None, beside=()):
+        raise DeviceError("no Turing/TURZX USB panel found")
+
+    def panel():
+        screen = opened()
+        screen.open()
+        return screen
+
+    answers = iter(["y", "", "y"])  # the test card (a round one), Enter, the brightness
+    report = Doctor(ask=lambda question: next(answers), say=lambda text: None,
+                    pause=lambda seconds: None, frames=3, open_transport=no_usb_panel,
+                    open_serial=panel).run()  # fmt: skip
+    text = report.text()
+    assert report.passed, text
+    speed = next(line for line in text.splitlines() if "per frame" in line)
+    sent = [16 + len(f["payload"]) for f in display.frames[-4:-1]]  # (before the last card)
+    assert speed.endswith(f"JPEG {sum(sent) // len(sent) // 1024} KB"), speed
+    assert {f["kind"] for f in display.frames} == {udisp.JPEG}
 
 
 def test_a_display_of_another_size_is_not_driven_as_this_one(bus):

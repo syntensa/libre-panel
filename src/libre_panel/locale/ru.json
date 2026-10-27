@@ -2788,7 +2788,6 @@
     "the USB display shows {size}, not the {panel}'s size": "USB-дисплей показывает {size}, а не размер {panel}",
     "the {panel} has no endpoint for pictures": "у {panel} нет конечной точки для изображений",
     "Waveshare's round USB Monitor with the card image that makes it a USB display": "Круглый USB-монитор Waveshare с образом карты, который делает его USB-дисплеем",
-    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of raw pictures, every pixel as drawn, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "Пока не проверялось на реальном устройстве. Нужен образ карты Waveshare, который делает его USB-дисплеем (по USB он тогда называет себя udisp), и он показывает только то, что присылает ПК: темы на его карте с этим образом пропадают. Получает видеопоток из несжатых изображений, каждый пиксель — как нарисован, 30 в секунду: плавное движение. Яркость встроена в само изображение: при уменьшении оно темнеет.",
     "Games of other launchers": "Игры других лаунчеров",
     "Epic, GOG, Ubisoft Connect, EA app, Battle.net, Rockstar, Amazon and the Xbox app; Heroic and Lutris.": "Epic, GOG, Ubisoft Connect, EA app, Battle.net, Rockstar, Amazon и приложение Xbox; Heroic и Lutris.",
     "Game folders": "Папки с играми",
@@ -2799,7 +2798,8 @@
     "opens the panels anew, for one that hangs": "открывает панели заново, если одна зависла",
     "restart reconnect hang frozen stuck reset panel": "перезапуск переподключить зависла заморожена застряла сброс панель restart",
     "The panel test has the panels; they start again after it.": "Панели заняты тестом панели; после него они запустятся снова.",
-    "A panel does not let go: quit Libre Panel and start it again.": "Панель не освобождается: закройте Libre Panel и запустите снова."
+    "A panel does not let go: quit Libre Panel and start it again.": "Панель не освобождается: закройте Libre Panel и запустите снова.",
+    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of JPEG pictures, as it asks for them, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "Пока не проверялось на реальном устройстве. Нужен образ карты Waveshare, который делает его USB-дисплеем (по USB он тогда называет себя udisp), и он показывает только то, что присылает ПК: темы на его карте с этим образом пропадают. Получает видеопоток из изображений JPEG, как он их запрашивает, 30 в секунду: плавное движение. Яркость встроена в само изображение: при уменьшении оно темнеет."
   },
   "fields": {
     "agent": "агент",

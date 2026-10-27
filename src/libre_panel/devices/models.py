@@ -35,7 +35,7 @@ PROTOCOLS = {
     "usb-nzxt": "USB bulk and HID (VID 0x1E71), an NZXT Kraken's LCD, frames through its memory",
     "usb-thermaltake": "USB HID (VID 0x264A), Thermaltake's LCD, JPEG frames",
     "usb-udisp": "USB bulk (VID 0x303A), a udisp USB display (Waveshare's USB display image), a "
-    "video stream of raw RGB565 pictures",
+    'video stream of the pictures as the display asks for them (JPEG on the 2.8" round one)',
 }
 
 
@@ -804,8 +804,8 @@ _LIMITS = {
     "waveshare-2.8-udisp": (
         "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB "
         "display (it then calls itself udisp over USB), and shows only what the PC sends: the "
-        "themes on its card are gone with that image. It gets a video stream of raw pictures, "
-        "every pixel as drawn, 30 a second: smooth motion. Its brightness goes into the picture: "
+        "themes on its card are gone with that image. It gets a video stream of JPEG pictures, "
+        "as it asks for them, 30 a second: smooth motion. Its brightness goes into the picture: "
         "dimming darkens it."
     ),
 }

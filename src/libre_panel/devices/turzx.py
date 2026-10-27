@@ -249,6 +249,10 @@ class TurzxDisplay(Display):
     def stream_fps(self) -> int:
         return self._impl.stream_fps if self._impl else 0
 
+    @property
+    def picture(self) -> str:  # type: ignore[override]
+        return self._impl.picture if self._impl else Display.picture
+
     def set_brightness(self, percent: int) -> None:
         if self._impl:
             self._impl.set_brightness(percent)

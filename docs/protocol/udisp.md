@@ -12,8 +12,11 @@ Source, read in October 2026: [chuanjinpang/win10_idd_xfz1986_usb_graphic_driver
 `c2de0f5`: the Linux driver's `src/inc/enc_base.h` (the frame header), `src/enc_base.c`,
 `src/enc_raw_rgb.c`, `src/enc_jpg.c` and `src/usb_transfer.c` (the endpoint, the product string's
 fields, a picture as one transfer), and the ESP32 firmware's `main/app_vendor.c` (how a display
-reads it). The descriptors of the 2.8" come from its owner's `lsusb -v` (#21). Nothing here was
-seen on a display by Libre Panel yet.
+reads it). The descriptors of the 2.8" come from its owner's `lsusb -v` (#21); what draws the
+pictures on it, from the card image Waveshare's wiki offers: `showJPG`, which reads them from
+`/proc/udisp/xfz1986`, decodes them with the T113's JPEG decoder and writes them to `/dev/fb0`.
+Libre Panel has seen one display so far: the 2.8" took raw RGB565 pictures, 58 a second, and
+stayed black (#30).
 
 ## Transport
 
@@ -36,6 +39,12 @@ Fields between underscores, after the device's own name:
 | `Fps30` | at most this many pictures a second (optional) |
 | `Bl20` | a JPEG of at most this many KB (optional; else 8 MB) |
 
+The kind of picture named first is the one the display is sent: the drivers read the `E`
+fields in order and keep the first ("first is high prio", `usb_transfer.c`; JPEG at quality 5
+where none is named), and send no other. What is named after it may never be drawn: the 2.8"
+names raw pixels after JPEG, but `showJPG` on its card decodes JPEG only, and raw pixels left it
+black (#30).
+
 ## A picture
 
 One bulk transfer: a header of 16 bytes, little-endian, then the payload.
@@ -50,13 +59,14 @@ One bulk transfer: a header of 16 bytes, little-endian, then the payload.
 | 12–15 | bits 0–9: a frame number; bits 10–31: the payload's length in bytes |
 
 RGB565 is 16 bits a pixel, little-endian, red in the top 5 bits; RGB888 is three bytes a
-pixel, red first (as the xfz1986 drivers pack them from an XRGB8888 framebuffer). Libre Panel
-streams whole pictures as raw RGB565, every pixel as drawn, at the frames a second of a TURZX
-panel in video mode (`[video] fps`, 30 by default; fewer where the product string says `Fps`):
-480×480 is 450 KB a picture, 13.5 MB a second at 30, well within USB 2.0's high speed. The last
-picture goes again after a second without one. The display takes the next transfer only once
-it has the last, so the time a picture takes to encode and send is what it costs the display:
-where raw pixels stay under 25 a second, Libre Panel times RGB888 and then JPEG too, keeps the
-first that goes smoothly (else the fastest), and drives the stream no faster than it goes.
+pixel, red first (as the xfz1986 drivers pack them from an XRGB8888 framebuffer). A JPEG is
+baseline with its colours at every pixel (4:4:4), as the drivers' TinyJPEG writes it. Libre
+Panel streams whole pictures as the kind the display names first, at the frames a second of a
+TURZX panel in video mode (`[video] fps`, 30 by default; fewer where the product string says
+`Fps`): a JPEG at quality 90 (lower only where `Bl` limits its size); raw pixels only for a
+display that names them first (RGB565 at 480×480 is 450 KB, 13.5 MB a second at 30, within USB
+2.0's high speed). The last picture goes again after a second without one. The display takes the next transfer only once it has the last, so the time a
+picture takes to encode and send is what it costs the display: Libre Panel times the first 24
+and drives the stream no faster than they went.
 
 No command for the backlight is known: Libre Panel's brightness goes into the picture.

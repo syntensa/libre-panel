@@ -16,6 +16,12 @@
   that only a new start of Libre Panel helps.
 
 **Fixes**
+- **Waveshare's 2.8" as a USB display stayed black** (#30). 0.7.2 sent it raw pixels, which
+  it names too, but the program on its card that draws the pictures decodes JPEG only. It now
+  gets the kind of picture it names first, as the protocol's own drivers send it: JPEG, its
+  colours at every pixel, still a stream of 30 a second. The panel test names the kind of
+  picture it sent and its real size, where it said RGB565 for every panel with a driver of its
+  own.
 - **On Windows, Libre Panel could hang at its start with a core busy**, without its tray icon
   and window, when it was not allowed to write to its private folder
   (`%APPDATA%\LibrePanel\private`): Python's temporary file tried new names there without end.

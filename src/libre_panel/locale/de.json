@@ -2788,7 +2788,6 @@
     "the USB display shows {size}, not the {panel}'s size": "das USB-Display zeigt {size}, nicht die Größe des {panel}",
     "the {panel} has no endpoint for pictures": "das {panel} hat keinen Endpunkt für Bilder",
     "Waveshare's round USB Monitor with the card image that makes it a USB display": "Waveshares runder USB-Monitor mit dem Kartenabbild, das ihn zum USB-Display macht",
-    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of raw pictures, every pixel as drawn, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "Noch nicht an der Hardware erprobt. Es braucht Waveshares Kartenabbild, das es zum USB-Display macht (es nennt sich dann über USB udisp), und zeigt nur, was der PC sendet: Die Themes auf seiner Karte sind mit diesem Abbild weg. Es bekommt einen Videostream aus Rohbildern, jedes Pixel wie gezeichnet, 30 pro Sekunde: flüssige Bewegung. Seine Helligkeit steckt im Bild: Dimmen macht es dunkler.",
     "Games of other launchers": "Spiele anderer Launcher",
     "Epic, GOG, Ubisoft Connect, EA app, Battle.net, Rockstar, Amazon and the Xbox app; Heroic and Lutris.": "Epic, GOG, Ubisoft Connect, EA app, Battle.net, Rockstar, Amazon und die Xbox-App; Heroic und Lutris.",
     "Game folders": "Spieleordner",
@@ -2799,7 +2798,8 @@
     "opens the panels anew, for one that hangs": "öffnet die Panels neu, falls eines hängt",
     "restart reconnect hang frozen stuck reset panel": "neu starten neu verbinden hängt eingefroren steckt fest zurücksetzen panel restart",
     "The panel test has the panels; they start again after it.": "Der Panel-Test hat die Panels; sie starten danach wieder.",
-    "A panel does not let go: quit Libre Panel and start it again.": "Ein Panel lässt sich nicht freigeben: Libre Panel beenden und neu starten."
+    "A panel does not let go: quit Libre Panel and start it again.": "Ein Panel lässt sich nicht freigeben: Libre Panel beenden und neu starten.",
+    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of JPEG pictures, as it asks for them, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "Noch nicht an der Hardware erprobt. Es braucht Waveshares Kartenabbild, das es zum USB-Display macht (es nennt sich dann über USB udisp), und zeigt nur, was der PC sendet: Die Themes auf seiner Karte sind mit diesem Abbild weg. Es bekommt einen Videostream aus JPEG-Bildern, wie es sie verlangt, 30 pro Sekunde: flüssige Bewegung. Seine Helligkeit steckt im Bild: Dimmen macht es dunkler."
   },
   "fields": {
     "agent": "Agent",

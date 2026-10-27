@@ -2788,7 +2788,6 @@
     "the USB display shows {size}, not the {panel}'s size": "该 USB 显示屏的尺寸为 {size}，不是 {panel} 的尺寸",
     "the {panel} has no endpoint for pictures": "{panel} 没有用于图片的端点",
     "Waveshare's round USB Monitor with the card image that makes it a USB display": "Waveshare 圆形 USB 副屏，使用把它变成 USB 显示屏的存储卡镜像",
-    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of raw pictures, every pixel as drawn, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "尚未在实机上验证。它需要 Waveshare 把它变成 USB 显示屏的存储卡镜像（之后它在 USB 上自称 udisp），并且只显示电脑发送的内容：卡上的主题会随该镜像消失。它接收由原始图像组成的视频流，每个像素都与绘制时一致，每秒 30 张：流畅动态。它的亮度体现在画面里：调暗会让画面变暗。",
     "Games of other launchers": "其他启动器的游戏",
     "Epic, GOG, Ubisoft Connect, EA app, Battle.net, Rockstar, Amazon and the Xbox app; Heroic and Lutris.": "Epic、GOG、Ubisoft Connect、EA app、Battle.net、Rockstar、Amazon 和 Xbox 应用；Heroic 和 Lutris。",
     "Game folders": "游戏文件夹",
@@ -2799,7 +2798,8 @@
     "opens the panels anew, for one that hangs": "重新打开面板，以防某个面板卡住",
     "restart reconnect hang frozen stuck reset panel": "重启 重新连接 卡住 冻结 无响应 重置 面板 restart",
     "The panel test has the panels; they start again after it.": "面板测试正在使用面板；测试结束后它们会重新启动。",
-    "A panel does not let go: quit Libre Panel and start it again.": "有面板无法释放：请退出 Libre Panel 并重新启动。"
+    "A panel does not let go: quit Libre Panel and start it again.": "有面板无法释放：请退出 Libre Panel 并重新启动。",
+    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of JPEG pictures, as it asks for them, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "尚未在实机上验证。它需要 Waveshare 把它变成 USB 显示屏的存储卡镜像（之后它在 USB 上自称 udisp），并且只显示电脑发送的内容：卡上的主题会随该镜像消失。它按自己要求的格式接收由 JPEG 图像组成的视频流，每秒 30 张：流畅动态。它的亮度体现在画面里：调暗会让画面变暗。"
   },
   "fields": {
     "agent": "智能体",
