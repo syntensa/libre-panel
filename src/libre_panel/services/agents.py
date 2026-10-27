@@ -10,7 +10,8 @@ the plan's usage, asked of the programs themselves while a theme shows ``ai.*``:
     codex_usage = true    # ask Codex's app-server every minute
 
 Readings, for ``claude`` and ``codex``: ``ai.<agent>.state`` (working, waiting, idle, off),
-``.busy`` (2 waiting for you, 1 working, 0 idle, -1 off), ``.tool``, ``.since`` (seconds in
+``.busy`` (2 waiting for you, 1 working, 0 idle, -1 off), ``.tool``, ``.task`` (what the
+session is called, where it carries a name), ``.since`` (seconds in
 the state), ``.sessions``, ``.model``, ``.context`` (% of the context window), ``.cost`` ($ of
 the session, an estimate), ``.five_hour`` and ``.week`` (% of the plan's limits used), with
 ``_reset`` (seconds until the window begins anew, ``{value:duration}``) and ``_age`` (seconds

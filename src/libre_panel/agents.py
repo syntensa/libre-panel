@@ -34,7 +34,7 @@ import subprocess
 import sys
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -49,6 +49,7 @@ STATES = ("working", "waiting", "idle", "off")
 KEY_FILE = "ai.json"
 HEADER = "X-Libre-Panel-AI"  # or ``?key=`` in the address
 MAX_BODY = 256 * 1024
+MAX_TASK = 120  # of what a session is called, on the one line a theme has for it
 
 # Hook events and what they say of a session (Claude Code's names; Codex uses the same).
 WORKING = frozenset({
@@ -78,6 +79,14 @@ def _session(value: Any) -> str:
     """A short name for a session id (the id itself is not kept)."""
     text = str(value or "")
     return hashlib.sha256(text.encode()).hexdigest()[:12] if text else "-"
+
+
+def _task(data: dict[str, Any]) -> str:
+    """What a session is called, where it carries a name; never what was asked of it."""
+    value = data.get("session_title")
+    if not isinstance(value, str) or not value.strip():
+        return ""
+    return " ".join(value.split())[:MAX_TASK]  # one line: a theme has no more room
 
 
 def _number(value: Any) -> float | None:
@@ -117,6 +126,7 @@ class Session:
     changed: float = 0.0
     seen: float = 0.0
     tool: str = ""
+    task: str = ""
 
 
 @dataclass
@@ -174,6 +184,7 @@ class Board:
                     session.tool = str(data.get("tool_name") or "")[:40]
                 elif event == "UserPromptSubmit":
                     session.tool = ""
+                    session.task = _task(data)
             elif event == "PermissionRequest":
                 state = "waiting"
             elif event == "Notification":
@@ -185,6 +196,8 @@ class Board:
             elif event in IDLE:
                 state = "idle"
                 session.tool = ""
+                if event == "SessionStart":
+                    session.task = ""  # a session taken up again begins without one
             if state is not None and state != session.state:
                 session.state, session.changed = state, now
             self.changed.set()
@@ -260,42 +273,52 @@ class Board:
 
     # -- out -------------------------------------------------------------------------------
 
+    def _best(self, agent: str, now: float) -> Session | None:
+        """The session that counts for the agent, its state as it stands (one that went stale
+        taken as idle): waiting for you before working before idle; None without any. Under
+        the lock, and sessions long gone are dropped on the way."""
+        sessions = self.agents[agent].sessions
+        for key in [k for k, s in sessions.items() if now - s.seen > SESSION_GONE_S]:
+            del sessions[key]
+        best: tuple[int, Session] | None = None
+        for session in sessions.values():
+            state = session.state
+            if state == "working" and now - session.seen > WORKING_STALE_S:
+                state = "idle"
+            elif state == "waiting" and now - session.seen > WAITING_STALE_S:
+                state = "idle"
+            rank = {"waiting": 3, "working": 2, "idle": 1}[state]
+            if best is None or rank > best[0]:
+                best = (rank, replace(session, state=state))
+        return best[1] if best is not None else None
+
     def state(self, agent: str) -> tuple[str, str, float]:
         """The agent's state (``STATES``), the tool it uses and since when it is so: waiting
         for you before working before idle, over its sessions; "off" without any."""
         now = self.clock()
         with self._lock:
-            sessions = self.agents[agent].sessions
-            for key in [k for k, s in sessions.items() if now - s.seen > SESSION_GONE_S]:
-                del sessions[key]
-            best: tuple[int, Session] | None = None
-            for session in sessions.values():
-                state = session.state
-                if state == "working" and now - session.seen > WORKING_STALE_S:
-                    state = "idle"
-                elif state == "waiting" and now - session.seen > WAITING_STALE_S:
-                    state = "idle"
-                rank = {"waiting": 3, "working": 2, "idle": 1}[state]
-                if best is None or rank > best[0]:
-                    best = (rank, Session(state, session.changed, session.seen, session.tool))
+            best = self._best(agent, now)
         if best is None:
             return "off", "", now
-        return best[1].state, best[1].tool, best[1].changed
+        return best.state, best.tool, best.changed
 
     def readings(self) -> dict[str, Any]:
         """``ai.<agent>.*`` as numbers and texts (None: not known)."""
         now = self.clock()
         out: dict[str, Any] = {}
         for agent in AGENTS:
-            state, tool, since = self.state(agent)
             with self._lock:
                 known = self.agents[agent]
+                best = self._best(agent, now)
+                state = best.state if best is not None else "off"
+                since = best.changed if best is not None else now
                 quotas = dict(known.quotas)
                 active = sum(1 for s in known.sessions.values() if now - s.seen <= SESSION_GONE_S)
                 values = {
                     "state": state,
                     "busy": {"waiting": 2, "working": 1, "idle": 0, "off": -1}[state],
-                    "tool": tool,
+                    "tool": best.tool if best is not None else "",
+                    "task": (best.task if best is not None else "") or None,
                     "since": max(0.0, now - since),  # seconds
                     "sessions": active,
                     "model": known.model or None,

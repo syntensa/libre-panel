@@ -84,6 +84,27 @@ def test_the_state_follows_the_hooks():
     assert board.state("claude")[0] == "off"
 
 
+def test_the_task_is_the_name_of_the_session():
+    clock = Clock()
+    board = agents.Board(clock)
+    hook(board, "SessionStart")
+    assert board.readings()["ai.claude.task"] is None
+    hook(board, "UserPromptSubmit", session_title="The  hooks\nof the panel",
+         prompt="the words of the prompt")  # fmt: skip
+    assert board.readings()["ai.claude.task"] == "The hooks of the panel"  # on one line
+    assert "the words" not in repr(board.agents)  # what was asked stays out
+    hook(board, "UserPromptSubmit", session_title="x" * 200)
+    assert len(board.readings()["ai.claude.task"]) == agents.MAX_TASK
+    hook(board, "SessionStart")  # a session taken up again begins without one
+    assert board.readings()["ai.claude.task"] is None
+    hook(board, "UserPromptSubmit")  # a session that carries no name: none
+    assert board.readings()["ai.claude.task"] is None
+    # of several sessions the one that counts carries it
+    hook(board, "UserPromptSubmit", session="two", session_title="The other one")
+    hook(board, "PermissionRequest", session="two")
+    assert board.readings()["ai.claude.task"] == "The other one"
+
+
 def test_the_board_knows_when_each_agent_last_said_something(caplog):
     clock = Clock()
     board = agents.Board(clock)
