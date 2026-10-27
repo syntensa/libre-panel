@@ -2785,7 +2785,11 @@
     "Compare on the panel": "Porównaj na panelu",
     "Smooth motion runs on panel {n}, a model whose black level nobody has compared yet. If its video looks washed out, as under a grey veil, compare the two ways on the panel once: the one that looks right is kept.": "Na panelu {n} działa płynny ruch, a poziomu czerni tego modelu nikt jeszcze nie porównał. Jeśli obraz wygląda na wyblakły, jak pod szarą zasłoną, porównaj raz oba sposoby na panelu: zostanie ten, który wygląda dobrze.",
     "Each theme on the card brings its own, which the display takes on as it loads it. Set here, it stays as Libre Panel switches the themes.": "Każdy motyw na karcie ma własną, którą wyświetlacz przyjmuje przy wczytaniu. Ustawiona tutaj zostaje, gdy Libre Panel zmienia motywy.",
-    "The ZC-360's three screens take their pictures one after the other, also as panels of their own, so what moves changes less often than on a single panel. No smooth motion.": "Trzy ekrany ZC-360 dostają obrazy jeden po drugim, także jako osobne panele, więc to, co się rusza, zmienia się rzadziej niż na jednym panelu. Bez płynnego ruchu."
+    "The ZC-360's three screens take their pictures one after the other, also as panels of their own, so what moves changes less often than on a single panel. No smooth motion.": "Trzy ekrany ZC-360 dostają obrazy jeden po drugim, także jako osobne panele, więc to, co się rusza, zmienia się rzadziej niż na jednym panelu. Bez płynnego ruchu.",
+    "the USB display shows {size}, not the {panel}'s size": "wyświetlacz USB pokazuje {size}, a nie rozmiar {panel}",
+    "the {panel} has no endpoint for pictures": "{panel} nie ma punktu końcowego dla obrazów",
+    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It takes whole JPEG pictures, up to 30 a second. Its brightness goes into the picture: dimming darkens it.": "Jeszcze nie sprawdzony na sprzęcie. Potrzebuje obrazu karty Waveshare, który robi z niego wyświetlacz USB (przez USB nazywa się wtedy udisp), i pokazuje tylko to, co wysyła komputer: motywy z jego karty znikają razem z tym obrazem. Przyjmuje całe obrazy JPEG, do 30 na sekundę. Jego jasność trafia do obrazu: przyciemnianie go przyciemnia.",
+    "Waveshare's round USB Monitor with the card image that makes it a USB display": "Okrągły monitor USB Waveshare z obrazem karty, który robi z niego wyświetlacz USB"
   },
   "fields": {
     "agent": "agent",

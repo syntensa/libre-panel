@@ -46,17 +46,25 @@ OTHER_DRIVERS = {
     "usb-beada": "libre_panel.devices.beadapanel:BeadaDisplay",
     "usb-nzxt": "libre_panel.devices.nzxt_kraken:KrakenDisplay",
     "usb-thermaltake": "libre_panel.devices.thermaltake:ThermaltakeDisplay",
+    "usb-udisp": "libre_panel.devices.udisp:UdispDisplay",
 }
 DRIVERS = {**SERIAL_DRIVERS, **OTHER_DRIVERS}
 
 
 def other_usb_model() -> PanelModel | None:
     """The USB screen of another maker on the bus (Lian Li, Thermalright, BeadaPanel, an NZXT
-    Kraken, Thermaltake), as ``auto`` would find it, in this order, without opening it; None
-    for none."""
-    from libre_panel.devices import beadapanel, lianli_usb, nzxt_kraken, thermalright, thermaltake
+    Kraken, Thermaltake, a udisp USB display such as Waveshare's with its USB display image), as
+    ``auto`` would find it, in this order, without opening it; None for none."""
+    from libre_panel.devices import (
+        beadapanel,
+        lianli_usb,
+        nzxt_kraken,
+        thermalright,
+        thermaltake,
+        udisp,
+    )
 
-    for family in (lianli_usb, thermalright, beadapanel, nzxt_kraken, thermaltake):
+    for family in (lianli_usb, thermalright, beadapanel, nzxt_kraken, thermaltake, udisp):
         model = family.present_model()
         if model is not None:
             return model

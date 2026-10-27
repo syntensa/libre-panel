@@ -469,7 +469,7 @@ Ende und schreibt einen Bericht ohne Seriennummern; ein Klick öffnet einen
 damit ausgefüllt, und das Modell gilt für alle als *unterstützt*.
 
 <details>
-<summary><b>Hier neu, größtenteils von noch niemandem betrieben</b>: die Panels von JONSBO, Hongtai, VMAX, Lian Li, Thermalright, BeadaPanel, NZXT und Thermaltake</summary>
+<summary><b>Hier neu, größtenteils von noch niemandem betrieben</b>: die Panels von JONSBO, Hongtai, VMAX, Lian Li, Thermalright, BeadaPanel, NZXT, Thermaltake und Waveshare (als USB-Display)</summary>
 <br>
 
 | Panel | Größen | Meldet sich als | Stand |
@@ -485,6 +485,7 @@ damit ausgefüllt, und das Modell gilt für alle als *unterstützt*.
 | BeadaPanel, jedes Modell (2" bis 11") | das Panel nennt Modell und Größe selbst | USB-Gerät (`4e58:1001`), Panel-Link-Stream | ungeprüft |
 | NZXT Kraken mit LCD (Z53/Z63/Z73, Kraken 2023, Elite RGB 2024, Plus 2024) | 240×240, 320×320, 640×640, rund | USB-Gerät (`1e71:3008`, `300e`, `3012`, `3014`), Standbilder über den Bildspeicher des Kühlers | ungeprüft |
 | Thermaltake 6"-LCD | 1480×720 | USB-Gerät (`264a:2347` HID), JPEG-Bilder | ungeprüft |
+| Waveshare USB-Monitor 2,8", als USB-Display (Waveshares udisp-Kartenabbild) | 480×480, rund | USB-Display (`303a:2986`), JPEG-Bilder bis 30 pro Sekunde | ungeprüft |
 
 Ihre Treiber folgen den Notizen anderer Projekte, und noch niemand hat sie mit Libre Panel
 betrieben. Keines hat flüssige Bewegung; das DS916, die Hongtai-Displays und die von Lian Li

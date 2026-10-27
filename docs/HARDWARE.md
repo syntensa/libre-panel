@@ -352,6 +352,28 @@ themes (Linux, #21).
   display in again afterwards. A real touchscreen with those ids is left alone: the rule only
   moves the display's serial interfaces.
 
+### As a USB display (udisp)
+
+Waveshare's wiki also offers, for each monitor, a card image that makes it a plain USB display:
+it no longer shows the themes on its card, it shows what the PC sends, whole pictures over USB.
+Libre Panel then drives it as one of its own panels, with its own themes, the way up and the
+brightness set in Libre Panel, and up to 30 pictures a second, as a panel in video mode
+(`device.model = "waveshare-2.8-udisp"`, or found by `auto`). The service above has nothing to
+do with it then.
+
+- It shows up as a USB display, `303a:2986`, whose product string says its size and what it
+  takes ("t113udisp1_R480x480_Ejpg5_Ergb16_Ergb32" on the 2.8" round one, #21). Libre Panel
+  finds it by that string; a size it does not know yet is not taken.
+- Libre Panel sends JPEG pictures. No command for the backlight is known, so the brightness goes
+  into the picture.
+- Close any other program that drives the display first.
+- **Linux:** *Settings → Sensors → Set up sensors and panel access* gives your user the display,
+  as it does the other panels. **Windows:** the display brings no driver of its own; it needs
+  WinUSB bound to it (Zadig, for example).
+- Going back to the themes on the card means writing Waveshare's own card image (or a backup of
+  the card) again.
+- The protocol: [udisp](protocol/udisp.md).
+
 ## Setup per operating system
 
 **All systems:** quit the vendor app (TURZX etc.) — it holds the panel

@@ -46,6 +46,13 @@ drivers (`devices/jonsbo_ds916.py`, `devices/ms9132.py`, `devices/hongtai.py`,
 `devices/lianli_usb.py`, `devices/thermalright.py`, `devices/beadapanel.py`,
 `devices/thermaltake.py`) are its own code.
 
+**xfz1986 USB display drivers** — chuanjinpang, GPL-2.0.
+<https://github.com/chuanjinpang/win10_idd_xfz1986_usb_graphic_driver_display>. The udisp
+protocol of the USB displays that Waveshare's udisp card image makes of its USB monitors (the
+product string's fields, the frame header, a picture as one bulk transfer, the pixel formats)
+comes from its Linux driver and ESP32 firmware. Libre Panel's driver (`devices/udisp.py`) is its
+own code.
+
 **turing-smart-screen** (.NET) — Copyright (c) 2021 machi_pon, MIT.
 <https://github.com/usausa/turing-smart-screen>. The protocol of Thermalright's Trofeo Vision
 screens (the question and its answer, the picture's header and packets, the turn for each

@@ -35,6 +35,10 @@ KERNEL=="hidraw*", ATTRS{idVendor}=="1e71", ATTRS{idProduct}=="3014", MODE="0660
 # Thermaltake's 6" LCD (a HID device)
 SUBSYSTEM=="usb", ATTRS{idVendor}=="264a", ATTRS{idProduct}=="2347", MODE="0660", TAG+="uaccess"
 
+# udisp USB displays (Waveshare's USB monitors with their USB display card image, ESP32 displays)
+SUBSYSTEM=="usb", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="2986", MODE="0660", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="2987", MODE="0660", TAG+="uaccess"
+
 # Waveshare's USB monitors (a serial port over USB; Libre Panel sends them the readings): the
 # person at the computer may use the port. Units with the placeholder ids 1234:5678 are taken by
 # the kernel's usbtouchscreen driver, which knows a touchscreen by those ids: once it has the

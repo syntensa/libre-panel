@@ -34,6 +34,7 @@ PROTOCOLS = {
     "usb-beada": "USB bulk (VID 0x4E58), BeadaPanel's Panel-Link, 16-bit frames",
     "usb-nzxt": "USB bulk and HID (VID 0x1E71), an NZXT Kraken's LCD, frames through its memory",
     "usb-thermaltake": "USB HID (VID 0x264A), Thermaltake's LCD, JPEG frames",
+    "usb-udisp": "USB bulk (VID 0x303A), a udisp USB display (Waveshare's USB display image), JPEG",
 }
 
 
@@ -685,6 +686,19 @@ MODELS: tuple[PanelModel, ...] = (
         "usb-thermaltake",
         usb_ids=((0x264A, 0x2347),),
     ),
+    PanelModel(
+        "waveshare-2.8-udisp",
+        "Waveshare",
+        "USB Monitor (USB display)",
+        2.8,
+        480,
+        480,
+        "usb-udisp",
+        shape="round",
+        usb_ids=((0x303A, 0x2986), (0x303A, 0x2987)),
+        # (its product string says 480x480: devices/udisp.py takes the model by that)
+        notes="Waveshare's round USB Monitor with the card image that makes it a USB display",
+    ),
 )
 
 # Families with a driver (devices/turzx.py lists them); the rest is planned.
@@ -706,6 +720,7 @@ _DRIVER_STATUS = {
         "usb-beada",
         "usb-nzxt",
         "usb-thermaltake",
+        "usb-udisp",
     )
 }
 # Models confirmed on the panel: with `libre-panel doctor`, or by an owner who reports it runs.
@@ -784,6 +799,12 @@ _LIMITS = {
         "Not yet seen on the hardware. It takes whole JPEG pictures: no smooth motion. Its "
         "brightness goes into the picture: dimming darkens it. Close TT RGB Plus while Libre "
         "Panel runs. When Libre Panel quits, the panel shows its own screen again."
+    ),
+    "waveshare-2.8-udisp": (
+        "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB "
+        "display (it then calls itself udisp over USB), and shows only what the PC sends: the "
+        "themes on its card are gone with that image. It takes whole JPEG pictures, up to 30 a "
+        "second. Its brightness goes into the picture: dimming darkens it."
     ),
 }
 MODELS = tuple(

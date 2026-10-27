@@ -2785,7 +2785,11 @@
     "Compare on the panel": "パネルで比べる",
     "Smooth motion runs on panel {n}, a model whose black level nobody has compared yet. If its video looks washed out, as under a grey veil, compare the two ways on the panel once: the one that looks right is kept.": "パネル {n} でなめらかな動きが動いていますが、この機種の黒レベルはまだ誰も比べていません。映像が灰色のベールをかけたように白っぽく見えたら、パネル上で 2 つの方式を一度比べてください。正しく見えるほうが残ります。",
     "Each theme on the card brings its own, which the display takes on as it loads it. Set here, it stays as Libre Panel switches the themes.": "カード上の各テーマは独自の向きを持ち、ディスプレイは読み込むときにそれに従います。ここで設定すると、Libre Panel がテーマを切り替えても保たれます。",
-    "The ZC-360's three screens take their pictures one after the other, also as panels of their own, so what moves changes less often than on a single panel. No smooth motion.": "ZC-360の3つの画面は、個別のパネルにしても画像を順番に受け取るため、動くものの更新は単独のパネルより間隔が空きます。なめらかな動きはありません。"
+    "The ZC-360's three screens take their pictures one after the other, also as panels of their own, so what moves changes less often than on a single panel. No smooth motion.": "ZC-360の3つの画面は、個別のパネルにしても画像を順番に受け取るため、動くものの更新は単独のパネルより間隔が空きます。なめらかな動きはありません。",
+    "the USB display shows {size}, not the {panel}'s size": "USBディスプレイは {size} で、{panel} のサイズではありません",
+    "the {panel} has no endpoint for pictures": "{panel} には画像用のエンドポイントがありません",
+    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It takes whole JPEG pictures, up to 30 a second. Its brightness goes into the picture: dimming darkens it.": "実機ではまだ確認されていません。USBディスプレイにするWaveshareのカードイメージが必要で（その後はUSBでudispと名乗ります）、PCが送るものだけを表示します。カード上のテーマはそのイメージで消えます。JPEG画像を丸ごと、毎秒30枚まで受け取ります。明るさは画像に反映されるため、減光すると画像が暗くなります。",
+    "Waveshare's round USB Monitor with the card image that makes it a USB display": "USBディスプレイにするカードイメージを入れたWaveshareの円形USBモニター"
   },
   "fields": {
     "agent": "エージェント",

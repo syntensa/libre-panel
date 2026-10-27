@@ -1,0 +1,57 @@
+# udisp USB displays (Waveshare's USB display image)
+
+Applies to USB displays that call themselves "udisp" in their product string: Waveshare's USB
+monitors with the card image from Waveshare's wiki that makes them a USB display (seen on the
+2.8" round one, #21:
+`303a:2986`, "t113udisp1_R480x480_Ejpg5_Ergb16_Ergb32", an Allwinner T113 with Linux 5.4.61),
+and the ESP32 displays the protocol was first made for. Driver:
+`src/libre_panel/devices/udisp.py`.
+
+Source, read in October 2026: [chuanjinpang/win10_idd_xfz1986_usb_graphic_driver_display]
+(https://github.com/chuanjinpang/win10_idd_xfz1986_usb_graphic_driver_display) (GPL-2.0), commit
+`c2de0f5`: the Linux driver's `src/inc/enc_base.h` (the frame header), `src/enc_base.c`,
+`src/enc_raw_rgb.c`, `src/enc_jpg.c` and `src/usb_transfer.c` (the endpoint, the product string's
+fields, a picture as one transfer), and the ESP32 firmware's `main/app_vendor.c` (how a display
+reads it). The descriptors of the 2.8" come from its owner's `lsusb -v` (#21). Nothing here was
+seen on a display by Libre Panel yet.
+
+## Transport
+
+USB 2.0 high speed, vendor-specific class, one interface with a bulk OUT endpoint (`0x01`, 512
+bytes) and a bulk IN endpoint (`0x81`, not used). `303a:2986` is the display with audio and
+touch beside it in the ESP32 projects, `303a:2987` the display alone. The 2.8" has two
+configurations, named as Linux's test gadgets are ("loop input to output", "source and sink
+data"); the first is the one in use.
+
+## The product string
+
+Fields between underscores, after the device's own name:
+
+| Field | Meaning |
+|---|---|
+| `R480x480` | width × height of the picture |
+| `Ejpg5` | takes JPEG; the quality its driver uses, 1 to 10 |
+| `Ergb16` | takes RGB565 |
+| `Ergb32` | takes RGB888 |
+| `Fps30` | at most this many pictures a second (optional) |
+| `Bl20` | a JPEG of at most this many KB (optional; else 8 MB) |
+
+## A picture
+
+One bulk transfer: a header of 16 bytes, little-endian, then the payload.
+
+| Bytes | Field |
+|---|---|
+| 0–1 | CRC-16 of the payload (the drivers send 0) |
+| 2 | type: 0 RGB565, 1 RGB888, 2 YUV420, 3 JPEG |
+| 3 | command (0) |
+| 4–5, 6–7 | x, y of the picture's corner (0, 0 for a whole picture) |
+| 8–9, 10–11 | width, height |
+| 12–15 | bits 0–9: a frame number; bits 10–31: the payload's length in bytes |
+
+RGB565 is 16 bits a pixel, little-endian, red in the top 5 bits; RGB888 is three bytes a
+pixel, red first. Libre Panel sends whole pictures as JPEG where the display takes it, up to 30
+a second as a panel in video mode gets them (fewer where the product string says `Fps`); the
+last picture goes again after a second without one.
+
+No command for the backlight is known: Libre Panel's brightness goes into the picture.

@@ -3,6 +3,12 @@
 ## Unreleased
 
 **New**
+- **Waveshare's USB monitors as USB displays, panels of their own.** With the card image from
+  Waveshare's wiki that makes it a USB display ("udisp"), the 2.8" round monitor shows what the
+  PC sends instead of the themes on its card; Libre Panel now drives it as one of its panels,
+  with its own themes, the way up and the brightness set in Libre Panel, up to 30 pictures a
+  second as a panel in video mode. It is found by the size it tells over USB. Nobody has run it
+  with Libre Panel yet (#21).
 - **Waveshare's USB monitors run with Libre Panel.** An owner's 2.8" shows Libre Panel's
   readings live in its own themes, with 0.7.1 on Linux (#21).
 - **The ZC-360's screens, each a panel of its own, are supported.** An owner ran the panel test

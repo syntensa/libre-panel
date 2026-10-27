@@ -2785,7 +2785,11 @@
     "Compare on the panel": "在面板上对比",
     "Smooth motion runs on panel {n}, a model whose black level nobody has compared yet. If its video looks washed out, as under a grey veil, compare the two ways on the panel once: the one that looks right is kept.": "面板 {n} 正在运行流畅动态，而这个型号的黑位还没有人对比过。如果画面发白、像蒙了一层灰纱，请在面板上对比一次两种方式：看起来正确的那种会被保留。",
     "Each theme on the card brings its own, which the display takes on as it loads it. Set here, it stays as Libre Panel switches the themes.": "卡上的每个主题都自带方向，显示屏加载时会采用它。在这里设置后，Libre Panel 切换主题时方向保持不变。",
-    "The ZC-360's three screens take their pictures one after the other, also as panels of their own, so what moves changes less often than on a single panel. No smooth motion.": "ZC-360 的三块屏幕即使作为独立面板也依次接收图片，因此动态内容的更新比单个面板慢。无流畅动态。"
+    "The ZC-360's three screens take their pictures one after the other, also as panels of their own, so what moves changes less often than on a single panel. No smooth motion.": "ZC-360 的三块屏幕即使作为独立面板也依次接收图片，因此动态内容的更新比单个面板慢。无流畅动态。",
+    "the USB display shows {size}, not the {panel}'s size": "该 USB 显示屏的尺寸为 {size}，不是 {panel} 的尺寸",
+    "the {panel} has no endpoint for pictures": "{panel} 没有用于图片的端点",
+    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It takes whole JPEG pictures, up to 30 a second. Its brightness goes into the picture: dimming darkens it.": "尚未在实机上验证。它需要 Waveshare 把它变成 USB 显示屏的存储卡镜像（之后它在 USB 上自称 udisp），并且只显示电脑发送的内容：卡上的主题会随该镜像消失。它接收整张 JPEG 图片，每秒最多 30 张。它的亮度体现在画面里：调暗会让画面变暗。",
+    "Waveshare's round USB Monitor with the card image that makes it a USB display": "Waveshare 圆形 USB 副屏，使用把它变成 USB 显示屏的存储卡镜像"
   },
   "fields": {
     "agent": "智能体",
