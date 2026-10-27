@@ -2644,7 +2644,6 @@
     "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "mit Administratorrechten startet Libre Panel das ffmpeg aus video.ffmpeg nicht: Es liegt in einem Ordner, den andere Programme ändern können",
     "Back to one picture": "Zurück zu einem Bild",
     "Each screen its own panel": "Jeder Bildschirm ein eigenes Panel",
-    "Not yet seen on the hardware. The ZC-360's three screens take their pictures one after the other, also as panels of their own, so what moves changes less often than on a single panel. No smooth motion.": "Noch nicht an der Hardware erprobt. Die drei Bildschirme des ZC-360 bekommen ihre Bilder nacheinander, auch als eigene Panels, daher ändert sich Bewegtes seltener als auf einem einzelnen Panel. Keine flüssige Bewegung.",
     "The ZC-360's screens are panels of their own. “Which is which?” shows their numbers on them.": "Die Bildschirme des ZC-360 sind eigene Panels. „Welches ist welches?“ zeigt ihre Nummern auf ihnen.",
     "The ZC-360's three screens show one picture. As panels of their own they need room for two more panels: take one out first.": "Die drei Bildschirme des ZC-360 zeigen ein Bild. Als eigene Panels brauchen sie Platz für zwei weitere Panels: Nimm zuerst eines heraus.",
     "The ZC-360's three screens show one picture. Each can be a panel of its own instead, with a theme of its own; they keep one brightness.": "Die drei Bildschirme des ZC-360 zeigen ein Bild. Stattdessen kann jeder ein eigenes Panel sein, mit eigenem Theme; die Helligkeit bleibt gemeinsam.",
@@ -2785,7 +2784,8 @@
     "Is black black on panel {n}?": "Ist Schwarz auf Panel {n} schwarz?",
     "Compare on the panel": "Auf dem Panel vergleichen",
     "Smooth motion runs on panel {n}, a model whose black level nobody has compared yet. If its video looks washed out, as under a grey veil, compare the two ways on the panel once: the one that looks right is kept.": "Auf Panel {n} läuft flüssige Bewegung, und bei diesem Modell hat noch niemand den Schwarzwert verglichen. Wirkt das Bild blass, wie unter einem grauen Schleier, vergleiche die beiden Varianten einmal auf dem Panel: Die, die richtig aussieht, bleibt.",
-    "Each theme on the card brings its own, which the display takes on as it loads it. Set here, it stays as Libre Panel switches the themes.": "Jedes Theme auf der Karte bringt seine eigene mit, die das Display beim Laden übernimmt. Hier eingestellt, bleibt sie, wenn Libre Panel die Themes wechselt."
+    "Each theme on the card brings its own, which the display takes on as it loads it. Set here, it stays as Libre Panel switches the themes.": "Jedes Theme auf der Karte bringt seine eigene mit, die das Display beim Laden übernimmt. Hier eingestellt, bleibt sie, wenn Libre Panel die Themes wechselt.",
+    "The ZC-360's three screens take their pictures one after the other, also as panels of their own, so what moves changes less often than on a single panel. No smooth motion.": "Die drei Bildschirme des ZC-360 bekommen ihre Bilder nacheinander, auch als eigene Panels, daher ändert sich Bewegtes seltener als auf einem einzelnen Panel. Keine flüssige Bewegung."
   },
   "fields": {
     "agent": "Agent",

@@ -2,7 +2,10 @@
 
 While it writes PNG files it keeps looking for a panel, so a panel that is
 plugged in later (or that the system enumerates after autostart) is picked
-up without a restart.
+up without a restart. A panel that was in use and is gone (unplugged) is not
+replaced by the file: opening fails, and the panel loop waits for it as for
+any panel (#13: the app said the panel was connected while it drew into the
+file).
 """
 
 from __future__ import annotations
@@ -13,7 +16,7 @@ from collections.abc import Callable
 
 from PIL import Image
 
-from libre_panel.devices.base import Display
+from libre_panel.devices.base import DeviceError, Display
 from libre_panel.devices.models import PanelModel
 from libre_panel.devices.turzx import TurzxDisplay
 from libre_panel.devices.virtual import VirtualDisplay
@@ -33,6 +36,7 @@ class AutoDisplay(Display):
         self._next_probe = 0.0
         self._brightness: int | None = None
         self._last_error: Exception | None = None
+        self._had_panel = False  # a panel was in use: one that is gone is waited for
 
     @property
     def using_panel(self) -> bool:
@@ -64,8 +68,10 @@ class AutoDisplay(Display):
     def open(self) -> None:
         panel = self._try_panel()
         if panel is not None:
-            self._impl = panel
+            self._impl, self._had_panel = panel, True
             return
+        if self._had_panel:
+            raise DeviceError(str(self._last_error))  # (as the panel said it)
         log.info(
             "no panel in use (%s); rendering to %s and looking for a panel every %d s",
             self._last_error,
@@ -122,6 +128,7 @@ class AutoDisplay(Display):
                 log.info("panel found: %s", panel.describe())
                 self._impl.close()
                 self._impl, region = panel, None  # the panel needs a full frame first
+                self._had_panel = True
         self._impl.show(frame, region)
 
     def close(self) -> None:

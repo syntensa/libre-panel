@@ -2644,7 +2644,6 @@
     "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "con i diritti di amministratore Libre Panel non avvia il ffmpeg di video.ffmpeg: si trova in una cartella che altri programmi possono modificare",
     "Back to one picture": "Di nuovo un'unica immagine",
     "Each screen its own panel": "Ogni display un pannello a sé",
-    "Not yet seen on the hardware. The ZC-360's three screens take their pictures one after the other, also as panels of their own, so what moves changes less often than on a single panel. No smooth motion.": "Non ancora provato sull'hardware. I tre display dello ZC-360 ricevono le immagini uno dopo l'altro, anche come pannelli a sé, perciò ciò che si muove si aggiorna meno spesso che su un singolo pannello. Nessun movimento fluido.",
     "The ZC-360's screens are panels of their own. “Which is which?” shows their numbers on them.": "I display dello ZC-360 sono pannelli a sé. “Quale è quale?” mostra su di essi il loro numero.",
     "The ZC-360's three screens show one picture. As panels of their own they need room for two more panels: take one out first.": "I tre display dello ZC-360 mostrano un'unica immagine. Come pannelli a sé serve spazio per altri due pannelli: prima toglierne uno.",
     "The ZC-360's three screens show one picture. Each can be a panel of its own instead, with a theme of its own; they keep one brightness.": "I tre display dello ZC-360 mostrano un'unica immagine. Ognuno può invece essere un pannello a sé, con un tema proprio; la luminosità resta una sola.",
@@ -2785,7 +2784,8 @@
     "Is black black on panel {n}?": "Il nero sul pannello {n} è davvero nero?",
     "Compare on the panel": "Confronta sul pannello",
     "Smooth motion runs on panel {n}, a model whose black level nobody has compared yet. If its video looks washed out, as under a grey veil, compare the two ways on the panel once: the one that looks right is kept.": "Sul pannello {n} è attivo il movimento fluido, ma il livello del nero di questo modello non l'ha ancora confrontato nessuno. Se il video appare slavato, come sotto un velo grigio, confronta una volta i due modi sul pannello: resta quello che sembra giusto.",
-    "Each theme on the card brings its own, which the display takes on as it loads it. Set here, it stays as Libre Panel switches the themes.": "Ogni tema sulla scheda porta il proprio orientamento, che il display adotta caricandolo. Impostato qui, resta quando Libre Panel cambia tema."
+    "Each theme on the card brings its own, which the display takes on as it loads it. Set here, it stays as Libre Panel switches the themes.": "Ogni tema sulla scheda porta il proprio orientamento, che il display adotta caricandolo. Impostato qui, resta quando Libre Panel cambia tema.",
+    "The ZC-360's three screens take their pictures one after the other, also as panels of their own, so what moves changes less often than on a single panel. No smooth motion.": "I tre display dello ZC-360 ricevono le immagini uno dopo l'altro, anche come pannelli a sé, perciò ciò che si muove si aggiorna meno spesso che su un singolo pannello. Nessun movimento fluido."
   },
   "fields": {
     "agent": "agente",

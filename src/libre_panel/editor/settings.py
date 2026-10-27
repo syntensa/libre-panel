@@ -748,6 +748,8 @@ class Settings:
         config = self._config()
         found = self._find_panel(config)
         configured = find_model(config.device.model)
+        if found is not None and _screen_of(configured, found["model"]):
+            found = {"model": configured, "info": _model_info(configured)}
         model = configured or (found["model"] if found else None)
         video = config.device.video
         usb = model is None or model.protocol == "usb-turing"
@@ -1183,6 +1185,16 @@ class Settings:
         except OSError as exc:
             raise SettingsError(str(exc), 501) from exc
         return {"opened": name}
+
+
+def _screen_of(configured: Any, found: Any) -> bool:
+    """Whether the panel set up is one screen of the panel on the bus: a screen of the
+    ZC-360 as a panel of its own, which the bus shows as the three together (#13: Start said
+    another panel was connected and offered the three as one)."""
+    from libre_panel.devices import jonsbo_zc360
+
+    return (configured is not None and configured.id == jonsbo_zc360.SCREEN_MODEL_ID
+            and found.id == jonsbo_zc360.MODEL_ID)  # fmt: skip
 
 
 def _range_unseen(on: bool, gaps: list[str], video_range: str, model: Any) -> bool:

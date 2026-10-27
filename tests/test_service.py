@@ -444,6 +444,17 @@ def test_auto_driver_switches_to_a_panel_that_appears(tmp_path, monkeypatch):
     assert Panel.brightness == 40
     display.close()
 
+    # unplugged: the panel loop closes it and opens it again; the file does not stand in
+    # for a panel that was in use (#13), it is waited for as any panel is
+    Panel.plugged = False
+    with pytest.raises(DeviceError, match="no Turing"):
+        display.open()
+    assert not display.using_panel
+    Panel.plugged = True
+    display.open()
+    assert display.using_panel
+    display.close()
+
 
 def test_relative_output_is_in_the_settings_folder(isolated_home, tmp_path, monkeypatch):
     from libre_panel.config import DeviceConfig

@@ -2644,7 +2644,6 @@
     "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "с правами администратора Libre Panel не запускает ffmpeg из video.ffmpeg: он лежит в папке, которую могут изменить другие программы",
     "Back to one picture": "Снова одно изображение",
     "Each screen its own panel": "Каждый экран — отдельная панель",
-    "Not yet seen on the hardware. The ZC-360's three screens take their pictures one after the other, also as panels of their own, so what moves changes less often than on a single panel. No smooth motion.": "Пока не проверялось на реальном устройстве. Три экрана ZC-360 получают изображения по очереди, и как отдельные панели тоже, поэтому движущееся обновляется реже, чем на одиночной панели. Плавного движения нет.",
     "The ZC-360's screens are panels of their own. “Which is which?” shows their numbers on them.": "Экраны ZC-360 работают как отдельные панели. «Какая из них какая?» покажет на них их номера.",
     "The ZC-360's three screens show one picture. As panels of their own they need room for two more panels: take one out first.": "Три экрана ZC-360 показывают одно изображение. Чтобы стать отдельными панелями, им нужно место ещё для двух панелей: сначала уберите одну.",
     "The ZC-360's three screens show one picture. Each can be a panel of its own instead, with a theme of its own; they keep one brightness.": "Три экрана ZC-360 показывают одно изображение. Вместо этого каждый может быть отдельной панелью со своей темой; яркость остаётся общей.",
@@ -2785,7 +2784,8 @@
     "Is black black on panel {n}?": "Чёрный на панели {n} действительно чёрный?",
     "Compare on the panel": "Сравнить на панели",
     "Smooth motion runs on panel {n}, a model whose black level nobody has compared yet. If its video looks washed out, as under a grey veil, compare the two ways on the panel once: the one that looks right is kept.": "На панели {n} работает плавное движение, а уровень чёрного этой модели ещё никто не сравнивал. Если видео выглядит блёклым, как под серой вуалью, один раз сравните оба способа на панели: останется тот, что выглядит правильно.",
-    "Each theme on the card brings its own, which the display takes on as it loads it. Set here, it stays as Libre Panel switches the themes.": "Каждая тема на карте несёт свою ориентацию, и дисплей принимает её при загрузке. Заданная здесь, она сохраняется, когда Libre Panel переключает темы."
+    "Each theme on the card brings its own, which the display takes on as it loads it. Set here, it stays as Libre Panel switches the themes.": "Каждая тема на карте несёт свою ориентацию, и дисплей принимает её при загрузке. Заданная здесь, она сохраняется, когда Libre Panel переключает темы.",
+    "The ZC-360's three screens take their pictures one after the other, also as panels of their own, so what moves changes less often than on a single panel. No smooth motion.": "Три экрана ZC-360 получают изображения по очереди, и как отдельные панели тоже, поэтому движущееся обновляется реже, чем на одиночной панели. Плавного движения нет."
   },
   "fields": {
     "agent": "агент",

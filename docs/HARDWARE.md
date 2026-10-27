@@ -148,7 +148,9 @@ with the CPU, and CPU and GPU together are there too. Behind the click: `device.
 "jonsbo-zc360-screen"` with `device.port` "1", "2" or "3", the screen by the place it hangs
 on in the ZC-360's own USB hub (*Which is which?* shows the numbers). The three still take
 their pictures one after the other, also from the panels' own processes; the four panels
-Libre Panel runs at most leave room for one more beside them.
+Libre Panel runs at most leave room for one more beside them. This way is **supported**: an
+owner ran the doctor on each of the three screens (#13, Windows), all checks passed, at 22 to
+24 full frames a second each, with 2 pixels hidden at the left and at the right of each screen.
 
 The protocol comes from the notes of the MIT-licensed
 [jonsbo-zc360-linux-driver](https://github.com/RimuruNava/jonsbo-zc360-linux-driver).

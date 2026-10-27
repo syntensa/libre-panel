@@ -3,6 +3,10 @@
 ## Unreleased
 
 **New**
+- **The ZC-360's screens, each a panel of its own, are supported.** An owner ran the panel test
+  on each of the three screens on Windows: all checks passed, at 22 to 24 full frames a second
+  each. Notices and the volume keep clear of the 2 pixels each screen hides at its left and
+  right (#13).
 - **Start asks how black looks on a panel nobody has compared yet.** A panel's decoder that
   shows video as full range lays a grey veil over it, as it did on the 9.2" and the 12.3" before
   anyone noticed. Where smooth motion runs on a model whose black level is not known yet, Start
@@ -15,6 +19,13 @@
   the themes the card has; nothing is written on it (#21).
 
 **Fixes**
+- **An unplugged panel is waited for, not replaced by the picture file.** With the panel set to
+  "automatic", unplugging the first panel switched Libre Panel over to writing
+  `libre-panel-frame.png`, and it said the panel was connected. It now says the panel is not
+  available and takes it up again when it is back, as it does for the panels beside it (#13).
+- **No "Another panel is connected" for the ZC-360's screens set up as panels of their own.**
+  Start took the three screens on the USB for another panel and offered to switch back to one
+  picture (#13).
 - **The app did not open from the Linux AppImage on newer systems** (Arch, CachyOS and others):
   the AppImage handed its own libraries on to the system's programs it starts, so the shell
   behind `xdg-open` stopped at once ("undefined symbol: rl_trim_arg_from_keyseq") and the

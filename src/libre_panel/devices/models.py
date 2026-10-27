@@ -363,6 +363,7 @@ MODELS: tuple[PanelModel, ...] = (
         # (no USB ids of its own: they are the ZC-360's, which "auto" finds as one panel; the
         # three as panels of their own are set up in the app, device.port says which screen)
         notes="one of the ZC-360's three screens under the fans as a panel of its own",
+        hidden=(0, 2, 0, 2),  # the doctor's ruler on each of an owner's three screens (#13)
     ),
     PanelModel(
         "jonsbo-tf3-pump",
@@ -712,6 +713,8 @@ _CONFIRMED: set[str] = {
     "turing-12.3-usb",  # recognised and running from the first start, on the maintainer's desk
     "turing-3.5",  # rev. A: runs, its screen turned off with the command Libre Panel sends
     "turing-8.8",  # rev. C: runs since 0.6.4, an owner's report
+    # each screen its own panel: an owner's doctor report for each of the three (#13, Windows)
+    "jonsbo-zc360-screen",
 }
 # What the panels whose drivers were written from other projects' notes cannot do (their
 # drivers say why); each begins with what all of them share: nobody has run them yet.
@@ -755,9 +758,9 @@ _LIMITS = {
         "other, so what moves changes less often than on a single panel. No smooth motion."
     ),
     "jonsbo-zc360-screen": (
-        "Not yet seen on the hardware. The ZC-360's three screens take their pictures one "
-        "after the other, also as panels of their own, so what moves changes less often than "
-        "on a single panel. No smooth motion."
+        "The ZC-360's three screens take their pictures one after the other, also as panels "
+        "of their own, so what moves changes less often than on a single panel. No smooth "
+        "motion."
     ),
     "jonsbo-ds916": (
         "Not yet seen on the hardware. It takes whole JPEG pictures: no smooth motion, and "

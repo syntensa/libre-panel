@@ -456,12 +456,12 @@ without serial numbers; one click opens a
 with it filled in, and the model becomes *supported* for everyone.
 
 <details>
-<summary><b>New here, and run by nobody yet</b>: the panels of JONSBO, Hongtai, VMAX, Lian Li, Thermalright, BeadaPanel, NZXT and Thermaltake</summary>
+<summary><b>New here, and mostly run by nobody yet</b>: the panels of JONSBO, Hongtai, VMAX, Lian Li, Thermalright, BeadaPanel, NZXT and Thermaltake</summary>
 <br>
 
 | Panel | Sizes | Connects as | Status |
 |---|---|---|---|
-| JONSBO ZC-360 (fan screens) | 3 × 3.38", as one picture of 1920×180 or each a panel of 640×180 | USB devices (`43a8:0e61`) | unverified |
+| JONSBO ZC-360 (fan screens) | 3 × 3.38", as one picture of 1920×180 or each a panel of 640×180 | USB devices (`43a8:0e61`) | each screen its own panel: **supported**, with an owner's doctor report for each screen (Windows). As one picture: unverified |
 | JONSBO TF3-360SC (AIO) | pump: 3.5", 640×480; fans: the ZC-360's three screens, a panel beside it | USB devices (`1cbe:0035`, `43a8:0e61`) | unverified |
 | JONSBO DS916 | 9.16", 1920×462 | USB serial port (`33c3:f101`), JPEG pictures | unverified |
 | JONSBO DS339 | 3.39", 960×376; choose the model (not found by "auto") | USB display chip MS9132 (`345f:9132`) | unverified |

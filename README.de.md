@@ -469,12 +469,12 @@ Ende und schreibt einen Bericht ohne Seriennummern; ein Klick öffnet einen
 damit ausgefüllt, und das Modell gilt für alle als *unterstützt*.
 
 <details>
-<summary><b>Hier neu, von noch niemandem betrieben</b>: die Panels von JONSBO, Hongtai, VMAX, Lian Li, Thermalright, BeadaPanel, NZXT und Thermaltake</summary>
+<summary><b>Hier neu, größtenteils von noch niemandem betrieben</b>: die Panels von JONSBO, Hongtai, VMAX, Lian Li, Thermalright, BeadaPanel, NZXT und Thermaltake</summary>
 <br>
 
 | Panel | Größen | Meldet sich als | Stand |
 |---|---|---|---|
-| JONSBO ZC-360 (Lüfter-Displays) | 3 × 3,38", als ein Bild von 1920×180 oder jedes ein Panel von 640×180 | USB-Geräte (`43a8:0e61`) | ungeprüft |
+| JONSBO ZC-360 (Lüfter-Displays) | 3 × 3,38", als ein Bild von 1920×180 oder jedes ein Panel von 640×180 | USB-Geräte (`43a8:0e61`) | jedes Display ein eigenes Panel: **unterstützt**, mit dem Doctor-Bericht eines Besitzers für jedes Display (Windows). Als ein Bild: ungeprüft |
 | JONSBO TF3-360SC (AIO) | Pumpe: 3,5", 640×480; Lüfter: die drei Displays des ZC-360, ein Panel daneben | USB-Geräte (`1cbe:0035`, `43a8:0e61`) | ungeprüft |
 | JONSBO DS916 | 9,16", 1920×462 | USB-Seriell-Port (`33c3:f101`), JPEG-Bilder | ungeprüft |
 | JONSBO DS339 | 3,39", 960×376; Modell auswählen (wird von „auto“ nicht gefunden) | USB-Display-Chip MS9132 (`345f:9132`) | ungeprüft |

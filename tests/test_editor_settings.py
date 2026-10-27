@@ -607,6 +607,20 @@ def test_a_zc360_is_found_as_one_usb_panel_of_three_screens(server, monkeypatch)
     assert data["found"]["screens"] == 1
 
 
+def test_a_zc360_screen_set_up_on_its_own_is_the_panel_found(server, monkeypatch):
+    """Each screen its own panel (#13): the bus shows the three together, and that is the
+    screen set up, not another panel to switch to."""
+    panel_on_the_bus(monkeypatch, zc360=True)
+    write(server, **{"device.model": "jonsbo-zc360-screen"})
+    _, data = request(server, "GET", "/api/panel")
+    assert data["model"]["id"] == "jonsbo-zc360-screen"
+    assert data["found"]["id"] == "jonsbo-zc360-screen" and data["found"]["size"] == [640, 180]
+    # another panel on the bus is still another one
+    panel_on_the_bus(monkeypatch, "turing-9.2-usb")
+    _, data = request(server, "GET", "/api/panel")
+    assert data["found"]["id"] == "turing-9.2-usb"
+
+
 def test_a_serial_panel_has_no_video_mode(server, monkeypatch):
     panel_on_the_bus(monkeypatch, serial="turing-3.5")
     _, data = request(server, "GET", "/api/panel")

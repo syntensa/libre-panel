@@ -2644,7 +2644,6 @@
     "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "avec les droits d'administrateur, Libre Panel ne lance pas le ffmpeg de video.ffmpeg : il se trouve dans un dossier que d'autres programmes peuvent modifier",
     "Back to one picture": "Revenir à une seule image",
     "Each screen its own panel": "Chaque afficheur, un écran à part",
-    "Not yet seen on the hardware. The ZC-360's three screens take their pictures one after the other, also as panels of their own, so what moves changes less often than on a single panel. No smooth motion.": "Pas encore essayé sur le matériel. Les trois afficheurs du ZC-360 reçoivent leurs images l'un après l'autre, même en écrans à part : ce qui bouge change moins souvent que sur un seul écran. Pas de mouvement fluide.",
     "The ZC-360's screens are panels of their own. “Which is which?” shows their numbers on them.": "Les afficheurs du ZC-360 sont des écrans à part. « Lequel est lequel ? » affiche leur numéro dessus.",
     "The ZC-360's three screens show one picture. As panels of their own they need room for two more panels: take one out first.": "Les trois afficheurs du ZC-360 montrent une seule image. En écrans à part, il faut de la place pour deux écrans de plus : retirez-en un d'abord.",
     "The ZC-360's three screens show one picture. Each can be a panel of its own instead, with a theme of its own; they keep one brightness.": "Les trois afficheurs du ZC-360 montrent une seule image. Chacun peut plutôt être un écran à part, avec son propre thème ; ils gardent une même luminosité.",
@@ -2785,7 +2784,8 @@
     "Is black black on panel {n}?": "Le noir est-il bien noir sur le panneau {n} ?",
     "Compare on the panel": "Comparer sur le panneau",
     "Smooth motion runs on panel {n}, a model whose black level nobody has compared yet. If its video looks washed out, as under a grey veil, compare the two ways on the panel once: the one that looks right is kept.": "Le mouvement fluide tourne sur le panneau {n}, un modèle dont personne n'a encore comparé le niveau de noir. Si sa vidéo paraît délavée, comme sous un voile gris, comparez une fois les deux façons sur le panneau : celle qui paraît juste est conservée.",
-    "Each theme on the card brings its own, which the display takes on as it loads it. Set here, it stays as Libre Panel switches the themes.": "Chaque thème de la carte apporte la sienne, que l'écran adopte en le chargeant. Réglée ici, elle reste quand Libre Panel change de thème."
+    "Each theme on the card brings its own, which the display takes on as it loads it. Set here, it stays as Libre Panel switches the themes.": "Chaque thème de la carte apporte la sienne, que l'écran adopte en le chargeant. Réglée ici, elle reste quand Libre Panel change de thème.",
+    "The ZC-360's three screens take their pictures one after the other, also as panels of their own, so what moves changes less often than on a single panel. No smooth motion.": "Les trois afficheurs du ZC-360 reçoivent leurs images l'un après l'autre, même en écrans à part : ce qui bouge change moins souvent que sur un seul écran. Pas de mouvement fluide."
   },
   "fields": {
     "agent": "agent",
