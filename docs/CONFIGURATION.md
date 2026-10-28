@@ -658,8 +658,9 @@ only while a theme or a service reads it:
   five seconds is only the safety net, and the position moves on by itself in
   between. The cover is read when the track changes. The installer brings what
   it needs; a pip install needs `pip install "libre-panel[media]"`.
-- Linux: any MPRIS player through `playerctl` (install it from your
-  distribution), asked once a second.
+- Linux: any MPRIS player (Spotify, browsers, media players) through `playerctl`, asked
+  once a second; where it is not installed, straight from the session's D-Bus with systemd's
+  `busctl` (the player that plays, else one that is paused).
 
 Two pictures go with it, for an image widget (`"src": "@media.cover"`):
 `media.cover`, the album cover, and `media.app_icon`, the icon of the program

@@ -5,7 +5,8 @@
   brings them along). Windows tells when the session, the track or the
   playback changes, so a new track shows at once; a slow poll is the safety
   net. The cover is read when the track changes, not on every look.
-- Linux: any MPRIS player (Spotify, browsers, VLC, ...) through ``playerctl``.
+- Linux: any MPRIS player (Spotify, browsers, VLC, ...) through ``playerctl``, or where that
+  is not installed, straight from the session's D-Bus with systemd's ``busctl``.
 
 Only read while a theme shows ``media.*`` readings; a cover is fetched only
 when a theme shows it, and the icon of the player (``media.app_icon``, see
@@ -16,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
 import logging
 import math
 import shutil
@@ -379,10 +381,102 @@ class _PlayerctlBackend:
         return parse_playerctl(result.stdout, time.monotonic())
 
 
+MPRIS = "org.mpris.MediaPlayer2."
+_RANK = {"playing": 0, "paused": 1, "stopped": 2}
+
+
+def _plain(value: Any) -> Any:
+    """A value of busctl's JSON without its D-Bus type (``{"type": "s", "data": "x"}``)."""
+    if isinstance(value, dict) and set(value) == {"type", "data"}:
+        return _plain(value["data"])
+    return value
+
+
+def parse_mpris(reply: Any, name: str, at: float) -> Track | None:
+    """A player's ``org.mpris.MediaPlayer2.Player`` properties, as ``busctl --json`` gives
+    GetAll's answer, as a track; None without a title."""
+    try:
+        properties = reply["data"][0]
+    except (KeyError, IndexError, TypeError):
+        return None
+    if not isinstance(properties, dict):
+        return None
+    metadata = _plain(properties.get("Metadata"))
+    metadata = metadata if isinstance(metadata, dict) else {}
+
+    def text(key: str) -> str:
+        value = _plain(metadata.get(key))
+        if isinstance(value, list):
+            return ", ".join(str(v) for v in value if v)
+        return str(value) if value not in (None, "") else ""
+
+    def seconds(value: Any) -> float | None:
+        value = _plain(value)
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            return None
+        return value / 1_000_000
+
+    title = text("xesam:title")
+    if not title:
+        return None
+    status = str(_plain(properties.get("PlaybackStatus")) or "").lower()
+    player = name[len(MPRIS) :].split(".")[0] if name.startswith(MPRIS) else name
+    return Track(
+        status if status in ("playing", "paused") else "stopped", title, text("xesam:artist"),
+        text("xesam:album"), seconds(properties.get("Position")),
+        seconds(metadata.get("mpris:length")) or None, text("mpris:artUrl") or None,
+        player.capitalize(), at, player.lower(),
+    )  # fmt: skip
+
+
+class _BusctlBackend:
+    """MPRIS players straight from the session's D-Bus, with systemd's ``busctl``: for a Linux
+    without ``playerctl`` (#33). The one that plays, else one that is paused."""
+
+    def __init__(self) -> None:
+        self.command = shutil.which("busctl")
+        if self.command is None:
+            raise RuntimeError("neither playerctl nor busctl is installed")
+
+    def _call(self, *args: str) -> Any:
+        result = subprocess.run(
+            [self.command, "--user", "--json=short", "call", *args],
+            capture_output=True, text=True, timeout=3, check=False,
+        )  # fmt: skip
+        if result.returncode != 0:
+            return None
+        try:
+            return json.loads(result.stdout)
+        except ValueError:
+            return None
+
+    def players(self) -> list[str]:
+        reply = self._call("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
+                           "ListNames")  # fmt: skip
+        try:
+            names = reply["data"][0]
+        except (KeyError, IndexError, TypeError):
+            return []
+        return [n for n in names if isinstance(n, str) and n.startswith(MPRIS)]
+
+    async def poll(self, want_cover: bool) -> Track | None:
+        found = []
+        for name in self.players():
+            reply = self._call(name, "/org/mpris/MediaPlayer2", "org.freedesktop.DBus.Properties",
+                               "GetAll", "s", "org.mpris.MediaPlayer2.Player")  # fmt: skip
+            track = parse_mpris(reply, name, time.monotonic())
+            if track is not None:
+                found.append(track)
+        return min(found, key=lambda track: _RANK[track.state], default=None)
+
+
 def _backend() -> Any:
     if sys.platform == "win32":
         return _WindowsBackend()
-    return _PlayerctlBackend()
+    try:
+        return _PlayerctlBackend()
+    except RuntimeError:
+        return _BusctlBackend()
 
 
 # -- the provider --------------------------------------------------------------

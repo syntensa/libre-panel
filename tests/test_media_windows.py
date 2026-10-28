@@ -487,8 +487,15 @@ def test_each_system_has_its_backend(winrt, monkeypatch):
     monkeypatch.setattr(media.sys, "platform", "win32")
     assert isinstance(media._backend(), media._WindowsBackend)
     monkeypatch.setattr(media.sys, "platform", "linux")
-    monkeypatch.setattr(media.shutil, "which", lambda name: "/usr/bin/playerctl")
+    monkeypatch.setattr(media.shutil, "which", lambda name: f"/usr/bin/{name}")
     assert isinstance(media._backend(), media._PlayerctlBackend)
+    # no playerctl (CachyOS has none by default, #33): straight from D-Bus with busctl
+    monkeypatch.setattr(media.shutil, "which", lambda name: "/usr/bin/busctl"
+                        if name == "busctl" else None)  # fmt: skip
+    assert isinstance(media._backend(), media._BusctlBackend)
+    monkeypatch.setattr(media.shutil, "which", lambda name: None)
+    with pytest.raises(RuntimeError, match="neither playerctl nor busctl"):
+        media._backend()
 
 
 # -- a new cover with its title, in the frame that brings it ---------------------------------------

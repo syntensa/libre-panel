@@ -65,6 +65,57 @@ def test_players_on_linux():
     assert parse_playerctl(sep.join(["Stopped", "", "", "", "", "", "", "vlc"]), 0) is None
 
 
+# what busctl --user --json=short says of two players (a fake Spotify and a paused Chromium on
+# a session bus of their own, systemd 255)
+NAMES = ('{"type":"as","data":[["org.freedesktop.DBus","org.mpris.MediaPlayer2.spotify",'
+         '"org.mpris.MediaPlayer2.chromium.instance42",":1.0",":1.1"]]}')  # fmt: skip
+GET_ALL = ('{"type":"a{sv}","data":[{"Metadata":{"type":"a{sv}","data":{"mpris:trackid":'
+           '{"type":"o","data":"/com/spotify/track/abc"},"mpris:length":{"type":"t","data":'
+           '227000000},"mpris:artUrl":{"type":"s","data":"https://i.scdn.co/image/ab67"},'
+           '"xesam:album":{"type":"s","data":"Neon Roads"},"xesam:artist":{"type":"as","data":'
+           '["The Night Owls","Guest"]},"xesam:title":{"type":"s","data":"Midnight Drive"}}},'
+           '"PlaybackStatus":{"type":"s","data":"%s"},'
+           '"Position":{"type":"x","data":83000000}}]}')  # fmt: skip
+
+
+def test_the_players_straight_from_d_bus_where_playerctl_is_not_there(monkeypatch):
+    """Linux without playerctl (#33): busctl asks the session's D-Bus for the MPRIS players
+    and each one's properties; the one that plays counts, else one that is paused."""
+    import asyncio
+    import json
+    import subprocess
+
+    from libre_panel.sensors import media
+
+    song = media.parse_mpris(json.loads(GET_ALL % "Playing"), "org.mpris.MediaPlayer2.spotify", 5)
+    assert (song.state, song.title, song.artist, song.album) == (
+        "playing", "Midnight Drive", "The Night Owls, Guest", "Neon Roads")  # fmt: skip
+    assert (song.position, song.duration, song.cover) == (83, 227, "https://i.scdn.co/image/ab67")
+    assert (song.source, song.app_id) == ("Spotify", "spotify")
+    assert media.parse_mpris({"type": "a{sv}", "data": [{}]}, "x", 0) is None  # (no title)
+    assert media.parse_mpris(None, "x", 0) is None
+    asked = []
+
+    def run(command, **kwargs):
+        asked.append(command)
+        if command[-1] == "ListNames":
+            out = NAMES
+        else:
+            out = GET_ALL % ("Playing" if "spotify" in command[4] else "Paused")
+        return subprocess.CompletedProcess(command, 0, out, "")
+
+    monkeypatch.setattr(media.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(media.subprocess, "run", run)
+    backend = media._BusctlBackend()
+    playing = asyncio.run(backend.poll(False))
+    assert playing.source == "Spotify" and playing.state == "playing"
+    assert asked[0][:4] == ["/usr/bin/busctl", "--user", "--json=short", "call"]
+    assert asked[-1][-3:] == ["GetAll", "s", "org.mpris.MediaPlayer2.Player"]
+    monkeypatch.setattr(media.subprocess, "run", lambda command, **kwargs: (
+        subprocess.CompletedProcess(command, 1, "", "no bus")))  # fmt: skip
+    assert asyncio.run(backend.poll(False)) is None  # (no session bus: nothing plays)
+
+
 def test_covers_from_files(tmp_path):
     Image.new("RGB", (900, 900), "red").save(tmp_path / "cover.png")
     cover = load_cover((tmp_path / "cover.png").as_uri())
