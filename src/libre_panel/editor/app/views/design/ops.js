@@ -22,7 +22,7 @@ import {
 } from "../../core/doc.js";
 import { t, widgetLabel } from "../../core/i18n.js";
 import { keyLabel } from "../../core/shortcuts.js";
-import { store } from "../../core/state.js";
+import { setPref, store } from "../../core/state.js";
 import { toast, toastError } from "../../ui/toast.js";
 import { blockers, cellBox, cellSteps, freeSpot, placed, unionBox } from "./geometry.js";
 
@@ -135,13 +135,100 @@ export function moduleSteps(cells = grid()) {
   return cellSteps(cells, store.get().render.size, store.get().prefs.cells || "medium");
 }
 
+// -- a fine grid -------------------------------------------------------------------------------
+
+const FINE_CELLS = 48; // cells along the short side of a fine grid
+const GRID_CELLS = 96; // columns or rows a theme may ask for (theme.modules.GRID_CELLS)
+const LEAST_STEP = 6; // px: a fine grid's cell and the gap beside it, at least (cells of 4 at least)
+
+/** Where the cells of a grid lie: its width and height, without the margins. */
+const extent = (cells) => [
+  cells.columns * cells.cell_w + (cells.columns - 1) * cells.gap,
+  cells.rows * cells.cell_h + (cells.rows - 1) * cells.gap,
+];
+
+/** Whether the theme has neither a grid nor a module: its first module gets a fine grid. */
+const withoutGrid = () => {
+  const current = theme();
+  return Boolean(current) && !current.grid && !current.widgets.some(isModule);
+};
+
+/**
+ * A fine grid over the cells of `cells` (inside the panel's margins): 48 cells along the short
+ * side, a pixel apart, as Lumen's big themes have, with its settings (the margin stays the
+ * panel's own). The automatic grid has cells of half the short side: on a 480 × 480 panel a
+ * module had four places, whose corners a round one cuts off.
+ */
+export function fineGrid(cells) {
+  const [width, height] = extent(cells);
+  const unit = Math.max(LEAST_STEP, Math.min(width, height) / FINE_CELLS);
+  const columns = Math.max(1, Math.min(GRID_CELLS, Math.round(width / unit)));
+  const rows = Math.max(1, Math.min(GRID_CELLS, Math.round(height / unit)));
+  const gap = 1;
+  return {
+    x: cells.x,
+    y: cells.y,
+    cell_w: (width - (columns - 1) * gap) / columns,
+    cell_h: (height - (rows - 1) * gap) / rows,
+    gap,
+    columns,
+    rows,
+    settings: { columns, rows, gap, margin: 0 },
+  };
+}
+
+/** The grid modules go on: the theme's, or the fine one a theme without a grid gets with its
+ * first module. null before the first drawing. */
+export function moduleGrid() {
+  const cells = grid();
+  return cells && withoutGrid() ? fineGrid(cells) : cells;
+}
+
+/**
+ * How much finer a grid can be made without moving a module: [across, down], each the cells
+ * one becomes (1: no finer), up to cells of about a 48th of the short side (and at least
+ * LEAST_STEP px with the gap); null where neither way can.
+ */
+export function finerBy(cells = grid()) {
+  if (!cells) return null;
+  const [width, height] = extent(cells);
+  const unit = Math.max(LEAST_STEP, cells.gap + 5, Math.min(width, height) / FINE_CELLS);
+  const by = (count, length) => Math.max(1, Math.min(Math.floor(GRID_CELLS / count), Math.floor((length + cells.gap) / (count * unit))));
+  const factors = [by(cells.columns, width), by(cells.rows, height)];
+  return factors.some((factor) => factor > 1) ? factors : null;
+}
+
+/**
+ * The grid made finer, each cell split into [across, down] (finerBy): the same gap and margins,
+ * each module (and each detached one, to put back together) on the same pixels as before, in as
+ * many more cells. Modules then move cell by cell (the grid mode "fine").
+ */
+export function refineGrid() {
+  const cells = grid();
+  const factors = finerBy(cells);
+  if (!factors) return;
+  const [across, down] = factors;
+  const scale = (widget) => {
+    const [col, row, cols, rows] = placed(cells, widget);
+    Object.assign(widget, { col: col * across, row: row * down, cols: cols * across, rows: rows * down });
+  };
+  edit(null, (current) => {
+    const kept = current.grid || { columns: 0, rows: 0, gap: 0, margin: 0 };
+    current.grid = { ...kept, columns: cells.columns * across, rows: cells.rows * down };
+    current.widgets.filter(isModule).forEach(scale);
+    Object.values(current.detached || {}).forEach(scale);
+  });
+  setPref("cells", "fine");
+  toast(t("The grid has {cols} × {rows} cells now; modules move cell by cell.", { cols: cells.columns * across, rows: cells.rows * down }), { kind: "success" });
+}
+
 /**
  * The free cells where a module of a kind fits best (at a cell, or anywhere): as large as its
  * kind is meant to be in whole cells as an automatic grid has them (on a theme with a fine
  * grid, many of its cells: a ring is not one sliver of it), in steps of the grid mode.
  */
 export function spotFor(kind, prefer = null, exceptId = null) {
-  const cells = grid();
+  const cells = moduleGrid();
   if (!cells) return null;
   const span = moduleKinds()[kind]?.span || [1, 1];
   const whole = cellSteps(cells, store.get().render.size, "coarse");
@@ -156,10 +243,13 @@ export function addModule(kind, area = spotFor(kind)) {
     return null;
   }
   const widget = newModule(kind, area);
+  const fine = withoutGrid() && grid() ? fineGrid(grid()) : null;
+  const { settings = { columns: 0, rows: 0, gap: 0, margin: 0 }, ...cells } = fine || {};
   edit(null, (current) => {
-    if (!current.grid) current.grid = { columns: 0, rows: 0, gap: 0, margin: 0 };
+    if (!current.grid) current.grid = { ...settings };
     current.widgets.push(widget);
   });
+  if (fine) store.set({ render: { ...store.get().render, grid: cells } }); // (until the next drawing brings the same)
   setModuleArea(widget, area);
   setSelection([widget.id]);
   return widget;

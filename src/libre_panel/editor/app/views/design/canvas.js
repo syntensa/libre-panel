@@ -37,7 +37,7 @@ import {
   snapTo,
   unionBox,
 } from "./geometry.js";
-import { addModule, addPicture, addWidget, boxOf, insertPreset, kindName, moduleKinds, moduleSteps, setModuleArea, specOf, spotFor } from "./ops.js";
+import { addModule, addPicture, addWidget, boxOf, insertPreset, kindName, moduleGrid, moduleKinds, moduleSteps, setModuleArea, specOf, spotFor } from "./ops.js";
 import { FloatingToolbar, widgetMenu } from "./toolbar.js";
 import { PageTabs } from "./pages.js";
 
@@ -83,7 +83,7 @@ export function startLibraryDrag(event, item, picture = null) {
     const point = pointToPanel(e, true);
     if (!point) return null;
     if (item.kind !== "module") return { point, ok: true };
-    const grid = store.get().render.grid;
+    const grid = moduleGrid();
     if (!grid) return null;
     const cell = cellAt(grid, point[0], point[1]);
     const spot = spotFor(item.module, cell);
@@ -192,7 +192,8 @@ export function Canvas() {
   const boxes = shownBoxes(render.boxes, interaction);
   const chosen = new Set(selection);
   const list = widgets();
-  const grid = render.grid;
+  // (a module dragged onto a theme without a grid: the fine one it gets, ops.fineGrid)
+  const grid = libDrag?.item?.kind === "module" ? moduleGrid() : render.grid;
   const gridShown = Boolean(grid) && (render.gridActive || list.some(isModule) || libDrag?.item?.kind === "module");
   const one = single();
 

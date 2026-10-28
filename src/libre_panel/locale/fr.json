@@ -2929,7 +2929,10 @@
     "No plan's usage: the account reports no limits (with an API key there are none).": "Pas d'utilisation de l'abonnement : le compte n'indique aucune limite (avec une clé API, il n'y en a pas).",
     "Set up without its status line: the plan's usage comes only by asking Claude Code in the background.": "Configuré sans sa ligne d'état : l'utilisation de l'abonnement ne vient qu'en interrogeant Claude Code en arrière-plan.",
     "The plan's usage came {ago} ago, asked of {name} in the background.": "L'utilisation de l'abonnement est arrivée il y a {ago}, demandée à {name} en arrière-plan.",
-    "The plan's usage came {ago} ago, from its status line.": "L'utilisation de l'abonnement est arrivée il y a {ago}, de sa ligne d'état."
+    "The plan's usage came {ago} ago, from its status line.": "L'utilisation de l'abonnement est arrivée il y a {ago}, de sa ligne d'état.",
+    "Finer grid": "Grille plus fine",
+    "{cols} × {rows} cells, each module where it is: modules then go anywhere, cell by cell.": "{cols} × {rows} cellules, chaque bloc reste où il est : les blocs vont ensuite partout, cellule par cellule.",
+    "The grid has {cols} × {rows} cells now; modules move cell by cell.": "La grille a maintenant {cols} × {rows} cellules ; les blocs bougent cellule par cellule."
   },
   "fields": {
     "agent": "agent",

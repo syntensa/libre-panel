@@ -2929,7 +2929,10 @@
     "No plan's usage: the account reports no limits (with an API key there are none).": "Keine Nutzung des Abos: Das Konto meldet keine Limits (mit einem API-Schlüssel gibt es keine).",
     "Set up without its status line: the plan's usage comes only by asking Claude Code in the background.": "Ohne seine Statuszeile eingerichtet: Die Nutzung des Abos kommt nur, indem Claude Code im Hintergrund gefragt wird.",
     "The plan's usage came {ago} ago, asked of {name} in the background.": "Die Nutzung des Abos kam vor {ago}, im Hintergrund von {name} erfragt.",
-    "The plan's usage came {ago} ago, from its status line.": "Die Nutzung des Abos kam vor {ago}, von seiner Statuszeile."
+    "The plan's usage came {ago} ago, from its status line.": "Die Nutzung des Abos kam vor {ago}, von seiner Statuszeile.",
+    "Finer grid": "Feineres Raster",
+    "{cols} × {rows} cells, each module where it is: modules then go anywhere, cell by cell.": "{cols} × {rows} Zellen, jeder Baustein bleibt, wo er ist: Bausteine lassen sich dann überallhin setzen, Zelle für Zelle.",
+    "The grid has {cols} × {rows} cells now; modules move cell by cell.": "Das Raster hat jetzt {cols} × {rows} Zellen; Bausteine bewegen sich Zelle für Zelle."
   },
   "fields": {
     "agent": "Agent",

@@ -2929,7 +2929,10 @@
     "No plan's usage: the account reports no limits (with an API key there are none).": "Brak wykorzystania planu: konto nie podaje limitów (przy kluczu API ich nie ma).",
     "Set up without its status line: the plan's usage comes only by asking Claude Code in the background.": "Skonfigurowano bez paska stanu: wykorzystanie planu przychodzi tylko przez pytanie Claude Code w tle.",
     "The plan's usage came {ago} ago, asked of {name} in the background.": "Wykorzystanie planu przyszło {ago} temu, zapytane od {name} w tle.",
-    "The plan's usage came {ago} ago, from its status line.": "Wykorzystanie planu przyszło {ago} temu, z jego paska stanu."
+    "The plan's usage came {ago} ago, from its status line.": "Wykorzystanie planu przyszło {ago} temu, z jego paska stanu.",
+    "Finer grid": "Gęstsza siatka",
+    "{cols} × {rows} cells, each module where it is: modules then go anywhere, cell by cell.": "{cols} × {rows} komórek, każdy blok zostaje na miejscu: bloki można potem stawiać wszędzie, komórka po komórce.",
+    "The grid has {cols} × {rows} cells now; modules move cell by cell.": "Siatka ma teraz {cols} × {rows} komórek; bloki przesuwają się komórka po komórce."
   },
   "fields": {
     "agent": "agent",

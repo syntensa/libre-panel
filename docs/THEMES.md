@@ -712,7 +712,13 @@ the picture-a-second path cuts.
 
 **The grid.** `"grid": {"columns": 0, "rows": 0, "gap": 0, "margin": 0}`; 0
 means automatic: cells of about half the panel's short side (8×2 on a 9.2"
-bar, 3×2 on a 3.5" panel) that keep clear of strips the bezel hides.
+bar, 3×2 on a 3.5" panel) that keep clear of strips the bezel hides. In
+Design, a theme without a grid gets a fine one with its first module: 48 cells
+along the short side, a pixel apart (`"gap": 1`), as Lumen's big themes have,
+so a module goes anywhere (the automatic grid gave it four places on a
+480×480 panel). *Finer grid* under the theme's *Grid of the modules* splits
+the cells of a coarse grid, the gap and margins kept and each module on the
+same pixels in as many more cells.
 
 **The look.** Modules paint with palette roles: `bg`, `bg2` (the backdrop's
 gradient), `surface`, `line`, `track`, `text`, `text2`, `text3`, `accent`,

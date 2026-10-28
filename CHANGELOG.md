@@ -18,6 +18,13 @@
   RTSS is the frame rates' source, the overview no longer warns that PresentMon is off.
 
 **Better**
+- **Modules go where you put them** (#33). A theme without a grid of its own (Lumen on the round
+  480 × 480, say) gave a module from the library one of four places: the automatic grid has
+  cells of half the short side, whose corners a round panel cuts off. Its first module now
+  brings a fine grid, 48 cells along the short side a pixel apart, as Lumen's big themes have,
+  and a module goes anywhere on it (cell by cell with *View → Steps of the modules → fine*, or
+  Alt while dragging). *Finer grid*, under the theme's *Grid of the modules*, splits the cells
+  of a coarse grid (Contrast's 2 × 2) without moving a module.
 - **Videos straight to the panel saves what it should** (`[video] direct`). Tried on the 12.3",
   Libre Panel took less of the processor and ffmpeg about as much more: the app's picture of
   the panel, at four frames a second, had ffmpeg decode every frame of the video a second time

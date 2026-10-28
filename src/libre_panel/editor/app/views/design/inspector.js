@@ -24,10 +24,12 @@ import {
   selectGroup,
   duplicateSelection,
   copySelection,
+  finerBy,
   kindName,
   lookName,
   looks,
   moduleKinds,
+  refineGrid,
   renameWidget,
   resizeModuleBy,
   setFlag,
@@ -826,6 +828,7 @@ function ThemeDetails({ theme, onBack }) {
   const toast = theme.toast || {};
   const style = { ...specs.modules.style, ...(theme.style || {}) };
   const hasModules = Boolean(theme.grid || theme.style || theme.widgets.some(isModule));
+  const finer = finerBy(grid);
   const set = (key, apply) => themeChange(key, apply);
   const setStyle = (key) => (value) => edit(`style:${key}`, (current) => (current.style = { ...style, ...(current.style || {}), [key]: value }));
   const setToast = (key) => (value) => edit(`toast:${key}`, (current) => (current.toast = { ...(current.toast || {}), [key]: value }));
@@ -856,6 +859,12 @@ function ThemeDetails({ theme, onBack }) {
               <//>`)}
             </div>
             <small class="field-hint">${t("The cells the modules are placed on; 0 = as the panel's size suggests. Now {cols} × {rows} cells.", { cols: grid?.columns ?? "?", rows: grid?.rows ?? "?" })}</small>
+            ${finer
+              ? html`<button type="button" class="btn" data-finer-grid onClick=${refineGrid}>
+                    <${Icon} name="grid" size=${15} /> ${t("Finer grid")}
+                  </button>
+                  <small class="field-hint">${t("{cols} × {rows} cells, each module where it is: modules then go anywhere, cell by cell.", { cols: grid.columns * finer[0], rows: grid.rows * finer[1] })}</small>`
+              : null}
           <//>
           <${Section} title=${t("Module style")}>
             <${Field} label=${cap(t("cards"))}>

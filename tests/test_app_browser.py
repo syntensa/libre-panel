@@ -2,6 +2,7 @@
 Chromium are missing. CI runs it with the other browser tests (the desktop job)."""
 
 import contextlib
+import json
 import re
 import threading
 
@@ -2775,6 +2776,93 @@ def test_a_module_on_a_fine_grid_comes_in_whole_cells_chosen_and_moves_by_the_gr
         page.keyboard.press("ArrowRight")
         moved[mode] = js(page, col) - before
     assert moved["fine"] == 1 and moved["medium"] > 1 and moved["coarse"] >= 2 * moved["medium"] - 1
+
+
+def test_a_theme_without_a_grid_gets_a_fine_one_with_its_first_module(page):
+    """On a theme without a grid (Lumen on the round 480 × 480) the automatic grid has cells of
+    half the short side: a module from the library had four places there, whose corners the
+    round panel cuts off (#33). The first module brings a fine grid instead, 48 cells along the
+    short side a pixel apart within the panel's margins, as the server draws it."""
+    from libre_panel.theme.modules import make_grid
+
+    js(page, "window.libre.doc.edit('grid', (theme) => { theme.widgets = []; delete theme.grid; })")
+    page.wait_for_function(
+        "window.libre.store.get().render.grid && !window.libre.doc.theme().grid"
+        " && Object.keys(window.libre.store.get().render.boxes).length === 0"
+    )
+    auto = js(page, "window.libre.store.get().render.grid")
+    fine = js(
+        page,
+        f"(async () => (await import('/app/views/design/ops.js')).fineGrid({json.dumps(auto)}))()",
+    )
+    page.locator('.tile[data-item="module:ring"]').click()
+    settings = js(page, "window.libre.doc.theme().grid")
+    assert settings == fine["settings"] and settings["gap"] == 1 and settings["margin"] == 0
+    assert min(settings["columns"], settings["rows"]) == 48
+    assert settings["columns"] * settings["rows"] > 16 * auto["columns"] * auto["rows"]
+    # the server's grid is the one the editor placed the module on
+    width, height = js(page, "window.libre.store.get().render.size")
+    drawn = make_grid(width, height, settings, js(page, "window.libre.doc.theme().model")).to_dict()
+    for key in ("x", "y", "cell_w", "cell_h", "gap", "columns", "rows"):
+        assert drawn[key] == pytest.approx(fine[key]), key
+    added = js(page, "window.libre.doc.single()")
+    assert added["module"] == "ring" and added["cols"] >= 8 and added["rows"] >= 8
+    # a second module stays on it; fine steps move cell by cell
+    page.locator('.tile[data-item="module:clock"]').click()
+    assert js(page, "window.libre.doc.theme().grid") == settings
+    js(page, "window.libre.store.set({prefs: {...window.libre.store.get().prefs, cells: 'fine'}})")
+    before = js(page, "window.libre.doc.single().row")
+    page.keyboard.press("ArrowDown")  # (beside the ring: below it there is room)
+    assert js(page, "window.libre.doc.single().row") == before + 1
+
+
+def test_a_coarse_grid_is_made_finer_without_moving_a_module(page):
+    """Contrast has 2 × 2 cells: a module went into one of four places. Finer grid splits each
+    cell (the gap and the margins kept), each module and each detached one in as many more
+    cells, drawn on the same pixels; modules then move cell by cell. One undo step."""
+    js(
+        page,
+        """(async () => {
+          const ops = await import('/app/views/design/ops.js');
+          window.libre.doc.edit('grid', (theme) => {
+            theme.widgets = [];
+            theme.grid = { columns: 2, rows: 2, gap: 10, margin: 20 };
+          });
+          ops.addModule('ring', [0, 0, 1, 1]);
+          ops.addModule('clock', [1, 0, 1, 2]);
+          window.libre.doc.theme().detached = { gone: { type: 'module', id: 'gone', module: 'stat',
+            col: 1, row: 1, cols: 1, rows: 1 } };
+        })()""",
+    )
+    page.wait_for_function(
+        "window.libre.store.get().render.grid?.columns === 2"
+        " && Object.keys(window.libre.store.get().render.boxes).length === 2"
+    )
+    boxes = js(page, "window.libre.store.get().render.boxes")
+    js(page, "window.libre.doc.setSelection([])")
+    inspector = page.locator(".inspector")
+    inspector.locator(".details-button").click()
+    expect(inspector.locator("[data-finer-grid]")).to_be_visible()
+    inspector.locator("[data-finer-grid]").click()
+    grid = js(page, "window.libre.doc.theme().grid")
+    across, down = grid["columns"] // 2, grid["rows"] // 2
+    assert across > 1 and down > 1 and (grid["gap"], grid["margin"]) == (10, 20)
+    assert sorted(m[2:] for m in modules(page)) == [
+        [0, 0, across, down],
+        [across, 0, across, 2 * down],
+    ]
+    assert js(page, "window.libre.doc.theme().detached.gone.col") == across
+    assert js(page, "window.libre.store.get().prefs.cells") == "fine"
+    page.wait_for_function(f"window.libre.store.get().render.grid?.columns === {grid['columns']}")
+    page.wait_for_function(
+        """(boxes) => Object.entries(boxes).every(([id, box]) => {
+          const now = window.libre.store.get().render.boxes[id] || [];
+          return now.length === 4 && now.every((v, i) => Math.abs(v - box[i]) <= 1);
+        })""",
+        arg=boxes,
+    )
+    page.keyboard.press("Control+z")
+    assert js(page, "window.libre.doc.theme().grid.columns") == 2
 
 
 def test_a_modules_source_and_detaching_it(page):

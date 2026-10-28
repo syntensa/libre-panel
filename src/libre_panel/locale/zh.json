@@ -2929,7 +2929,10 @@
     "No plan's usage: the account reports no limits (with an API key there are none).": "无套餐用量：该账户未报告限额（使用 API 密钥时没有限额）。",
     "Set up without its status line: the plan's usage comes only by asking Claude Code in the background.": "已设置，但未设置其状态栏：套餐用量只能通过在后台查询 Claude Code 获得。",
     "The plan's usage came {ago} ago, asked of {name} in the background.": "套餐用量在 {ago} 前获得，来自在后台查询 {name}。",
-    "The plan's usage came {ago} ago, from its status line.": "套餐用量在 {ago} 前获得，来自其状态栏。"
+    "The plan's usage came {ago} ago, from its status line.": "套餐用量在 {ago} 前获得，来自其状态栏。",
+    "Finer grid": "更细的网格",
+    "{cols} × {rows} cells, each module where it is: modules then go anywhere, cell by cell.": "{cols} × {rows} 个单元格，每个模块保持原位：之后模块可逐格放到任意位置。",
+    "The grid has {cols} × {rows} cells now; modules move cell by cell.": "网格现在有 {cols} × {rows} 个单元格；模块逐格移动。"
   },
   "fields": {
     "agent": "智能体",

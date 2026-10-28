@@ -2929,7 +2929,10 @@
     "No plan's usage: the account reports no limits (with an API key there are none).": "プランの使用量はありません。アカウントが上限を報告していません（APIキーの場合、上限はありません）。",
     "Set up without its status line: the plan's usage comes only by asking Claude Code in the background.": "ステータスラインなしで設定済みです。プランの使用量はバックグラウンドでClaude Codeに問い合わせた場合にのみ届きます。",
     "The plan's usage came {ago} ago, asked of {name} in the background.": "プランの使用量は{ago}前に届きました（バックグラウンドで{name}に問い合わせ）。",
-    "The plan's usage came {ago} ago, from its status line.": "プランの使用量は{ago}前に届きました（ステータスラインから）。"
+    "The plan's usage came {ago} ago, from its status line.": "プランの使用量は{ago}前に届きました（ステータスラインから）。",
+    "Finer grid": "グリッドを細かくする",
+    "{cols} × {rows} cells, each module where it is: modules then go anywhere, cell by cell.": "{cols} × {rows}セル。各モジュールは今の位置のまま。その後はモジュールをセル単位でどこにでも置けます。",
+    "The grid has {cols} × {rows} cells now; modules move cell by cell.": "グリッドは{cols} × {rows}セルになりました。モジュールはセル単位で動きます。"
   },
   "fields": {
     "agent": "エージェント",

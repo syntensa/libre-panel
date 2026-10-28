@@ -2929,7 +2929,10 @@
     "No plan's usage: the account reports no limits (with an API key there are none).": "Использования тарифа нет: учётная запись не сообщает лимиты (с ключом API их нет).",
     "Set up without its status line: the plan's usage comes only by asking Claude Code in the background.": "Настроено без строки состояния: использование тарифа приходит только через фоновый запрос к Claude Code.",
     "The plan's usage came {ago} ago, asked of {name} in the background.": "Использование тарифа пришло {ago} назад — из фонового запроса к {name}.",
-    "The plan's usage came {ago} ago, from its status line.": "Использование тарифа пришло {ago} назад — из строки состояния."
+    "The plan's usage came {ago} ago, from its status line.": "Использование тарифа пришло {ago} назад — из строки состояния.",
+    "Finer grid": "Мельче сетка",
+    "{cols} × {rows} cells, each module where it is: modules then go anywhere, cell by cell.": "{cols} × {rows} ячеек, каждый модуль остаётся на месте: затем модули ставятся куда угодно, по ячейке.",
+    "The grid has {cols} × {rows} cells now; modules move cell by cell.": "Теперь в сетке {cols} × {rows} ячеек; модули двигаются по ячейке."
   },
   "fields": {
     "agent": "агент",
