@@ -743,11 +743,32 @@ def test_the_game_card_says_no_game_only_where_none_was_found():
     anti-cheat, a launcher): the card names the game and waits, instead of "No game running"."""
     nothing, _, _ = drawn("game", snapshot_with(drop=("game.",)))
     assert {"idle", "idle-icon"} <= nothing and not {"idle-game", "idle-wait", "fps"} & nothing
-    waiting, _, _ = drawn("game", snapshot_with(drop=("game.",), game__name="Space Game"))
-    assert {"idle-icon", "idle-game", "idle-wait"} <= waiting
-    assert not {"idle", "fps"} & waiting
+    assert "idle-logo" not in nothing  # (the last game's logo stays for the round report)
+    waiting = snapshot_with(drop=("game.",), game__name="Space Game")
+    logo = waiting.images.pop("game.logo")
+    names, _, _ = drawn("game", waiting)
+    assert {"idle-icon-game", "idle-game", "idle-wait"} <= names
+    assert not {"idle", "idle-icon", "idle-logo", "fps"} & names
+    waiting.images["game.logo"] = logo  # its logo in place of the gamepad
+    names, _, _ = drawn("game", waiting)
+    assert {"idle-logo", "idle-game", "idle-wait"} <= names and "idle-icon-game" not in names
     playing, _, _ = drawn("game", snapshot_with(game__name="Space Game"))
     assert "fps" in playing and not {"idle", "idle-icon", "idle-game", "idle-wait"} & playing
+
+
+def test_the_game_card_shows_the_games_logo_in_place_of_its_name():
+    """Game mode's logo of the game (Steam's) heads the card; the gamepad and the name where
+    there is none, or where the theme names the card itself."""
+    snap = snapshot_with()
+    assert snap.images.get("game.logo") is not None  # (the demo's game has one)
+    names, _, _ = drawn("game", snap, 5, 3)
+    assert "logo" in names and not {"icon", "title"} & names
+    logo = widgets_of("game", 5, 3)["logo"]
+    assert logo["src"] == "@game.logo" and logo["fit"] == "contain" and logo["align"] == "left"
+    snap.images.pop("game.logo")
+    names, _, _ = drawn("game", snap, 5, 3)
+    assert {"icon", "title"} <= names and "logo" not in names
+    assert "logo" not in widgets_of("game", 5, 3, title="Racing")  # (a title of the theme's own)
 
 
 def test_the_game_card_tells_the_time_quietly_where_it_has_room():

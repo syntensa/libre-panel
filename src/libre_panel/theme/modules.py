@@ -1729,10 +1729,13 @@ def build_game(b: _Build, _src: Source) -> None:
                 color=b.c("text3"), align="right", width=clock_w, font="text_font")  # fmt: skip
     else:
         clock_w = -b.ts  # the name has the whole line
-    b.needs = "game.fps"
     title = b.module["title"]
     title_w = b.iw - b.ts * 2.1 - clock_w - b.ts
     top = b.ts * 2.4
+    # the game's logo (game mode's, from Steam's cache) in place of its name where the line has
+    # room for one; the name where there is none
+    logo = not title and title_w >= b.ts * 8
+    b.needs = "game.fps,!@game.logo" if logo else "game.fps"
     b.icon("icon", "gamepad", b.ix, b.iy - b.ts * 0.1, b.ts * 1.5, color)
     if title:
         b.label("title", title, b.ix + b.ts * 2.1, b.iy + b.ts * 0.15, b.ts * 1.05, color=color,
@@ -1741,6 +1744,7 @@ def build_game(b: _Build, _src: Source) -> None:
         b.value("title", "game.app", "{value}", b.ix + b.ts * 2.1, b.iy + b.ts * 0.15,
                 b.ts * 1.05, color=color, width=title_w, font="text_font",
                 tabular=False, fallback="", fit="ellipsis")  # fmt: skip
+    b.needs = "game.fps"
     x, y, w, h = b.ix, b.iy + top, b.iw, b.ih - top
     graph = b.large or a >= 3.0 or (a <= 0.72 and h > b.ts * 12)
     stacked = b.large or a <= 0.72  # the history under the number
@@ -1750,6 +1754,19 @@ def build_game(b: _Build, _src: Source) -> None:
     cap = y + (number_h - CAP * size) / 2 - (b.ts * 0.6 if number_h > b.ts * 6 else 0)
     b.value("fps", "game.fps", "{value:.0f}", x, cap, size, width=number_w * 0.62,
             glow=round(0.3 * b.glow, 2), glow_radius=max(2, round(size / 14)))  # fmt: skip
+    if logo:
+        # on the name's line, as large as the room above the number lets it be (the 12.3"
+        # has a lot), and then no wider than the number: the readings beside it stay clear
+        b.needs = "game.fps,@game.logo"
+        highest = max(b.iy - b.ts * 0.6, b.y + b.ts * 0.8)  # (clear of the card's edge)
+        logo_h = max(b.ts * 2.2, min(b.ts * 4.5, b.ih * 0.16, cap - b.ts - highest))
+        logo_y = max(highest, b.iy + b.ts * 0.6 - logo_h / 2)
+        logo_w = b.ts * 2.1 + title_w
+        if logo_h > b.ts * 2.4:
+            logo_w = min(logo_w, number_w * 0.62)
+        b.add("image", "logo", x=round(b.ix), y=round(logo_y), src="@game.logo",
+              w=round(logo_w), h=round(logo_h), fit="contain", align="left")  # fmt: skip
+        b.needs = "game.fps"
     unit_x = x + number_w * 0.64
     b.label("unit", "FPS", unit_x, cap + CAP * size - CAP * b.ts, b.ts, color=color,
             width=number_w * 0.36)  # fmt: skip
@@ -1819,10 +1836,17 @@ def build_game(b: _Build, _src: Source) -> None:
             gy, gw, gh = y, x + w - gx, h
         b.graph("history", "game.fps", gx, gy, gw, gh, color, None, None)  # its own range
         b.out[-1]["clip"] = clip
-    b.needs = "!game.fps"
     icon = min(b.iw, b.ih) * 0.3
-    b.icon("idle-icon", "gamepad", b.ix + (b.iw - icon) / 2, b.iy + b.ih / 2 - icon * 0.8, icon,
-           b.c("text3"))  # fmt: skip
+    # a game found, its frame rate not yet there: its logo where it has one (the logo of the
+    # game before stays for the round report, so not without a game)
+    for name, needs in (("idle-icon", "!game.fps,!game.name"),
+                        ("idle-icon-game", "!game.fps,game.name,!@game.logo")):  # fmt: skip
+        b.needs = needs
+        b.icon(name, "gamepad", b.ix + (b.iw - icon) / 2, b.iy + b.ih / 2 - icon * 0.8, icon,
+               b.c("text3"))  # fmt: skip
+    b.needs = "!game.fps,game.name,@game.logo"
+    b.add("image", "idle-logo", x=round(b.ix), y=round(b.iy + b.ih / 2 - icon * 0.8),
+          w=round(b.iw), h=round(icon), src="@game.logo", fit="contain")  # fmt: skip
     line = b.iy + b.ih / 2 + icon * 0.45
     b.needs = "!game.fps,!game.name"
     b.label("idle", t("No game running"), b.ix + b.iw / 2, line, b.ts, align="center",
