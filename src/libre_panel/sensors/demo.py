@@ -188,12 +188,12 @@ def demo_details(t: float, waves: dict[str, Reading]) -> dict[str, Reading]:
     out["timer.rounds"] = Reading("timer.rounds", 2, "", "Rounds")
     # the agents service's (agents.py): Claude Code at work, Codex waiting for you
     units = {"context": "%", "five_hour": "%", "week": "%", "cost": "$"}
-    for agent, name, state, tool, model, five, week in (
-        ("claude", "Claude Code", "working", "Edit", "Opus", 23.0, 41.0),
-        ("codex", "Codex", "waiting", "", None, 12.0, 55.0),
+    for agent, name, state, tool, task, model, five, week in (
+        ("claude", "Claude Code", "working", "Edit", "The hooks of the panel", "Opus", 23.0, 41.0),
+        ("codex", "Codex", "waiting", "", None, None, 12.0, 55.0),
     ):
         values = {
-            "state": state, "busy": 2 if state == "waiting" else 1, "tool": tool,
+            "state": state, "busy": 2 if state == "waiting" else 1, "tool": tool, "task": task,
             "since": 95.0, "sessions": 1, "model": model, "context": 34.0 if model else None,
             "five_hour": five, "five_hour_reset": 2 * 3600 + 14 * 60.0, "five_hour_age": 30.0,
             "week": week, "week_reset": 3 * 86400 + 5 * 3600.0, "week_age": 30.0,

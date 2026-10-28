@@ -1203,7 +1203,8 @@ Panel sends nothing off this PC; the programs ask their own servers with your si
 
 The readings, for `claude` and `codex`: `ai.<agent>.state` (`working`, `waiting`, `idle`,
 `off`), `.busy` (2 waiting for you, 1 working, 0 idle, -1 off: for colours and conditions),
-`.tool`, `.since` (seconds in the state), `.sessions`, `.model`, `.context` (% of the context
+`.tool`, `.task` (what the session is called, where it carries a name; never what was asked
+of it), `.since` (seconds in the state), `.sessions`, `.model`, `.context` (% of the context
 window), `.cost` ($ of the session, Claude Code's estimate), `.five_hour` and `.week` (% of the
 plan's limits used), each with `_reset` (seconds until the window begins anew; show it with
 `{value:duration}`) and `_age` (seconds since it was read), and Codex's `.tokens_today` and
