@@ -29,6 +29,7 @@ import tempfile
 import threading
 import zipfile
 import zlib
+from collections.abc import Callable
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
@@ -380,12 +381,19 @@ def retitled(data: bytes, **fields: str) -> bytes:
     theme.json (``name``, ``author``, ``description``; one left empty stays as it is), every
     other file as it was: a community theme is installed under the name and maker its entry
     shows (tools/community_theme.py)."""
+    given = {key: value for key, value in fields.items() if value}
+    return rewritten(data, lambda raw: {**raw, **given})
+
+
+def rewritten(data: bytes, change: Callable[[dict[str, Any]], dict[str, Any]]) -> bytes:
+    """A shared theme's zip (one :func:`inspect_shared` took) with its theme.json as ``change``
+    makes it of what it holds, every other file as it was: a community theme adapted to the
+    person's panel before it is put in place (editor/community.py)."""
     out = io.BytesIO()
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
         _top, files = _checked(archive)
         found = files[THEME_FILENAME]
-        raw = json.loads(archive.read(found).decode("utf-8"))
-        raw.update({key: value for key, value in fields.items() if value})
+        raw = change(json.loads(archive.read(found).decode("utf-8")))
         with zipfile.ZipFile(out, "w") as written:
             for entry in archive.infolist():
                 body = archive.read(entry)

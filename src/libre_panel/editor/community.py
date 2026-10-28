@@ -31,12 +31,11 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from libre_panel import __version__
-from libre_panel.config import user_themes_dir
 from libre_panel.devices.models import get_model
 from libre_panel.i18n import t
 from libre_panel.theme.adapt import adapt_theme
 from libre_panel.theme.model import THEME_FILENAME, parse_theme, valid_theme_name
-from libre_panel.theme.share import MAX_ZIP, import_theme, inspect_shared
+from libre_panel.theme.share import MAX_ZIP, import_theme, inspect_shared, rewritten
 
 log = logging.getLogger(__name__)
 
@@ -285,15 +284,20 @@ class Community:
         if model_id:
             get_model(model_id)  # (a panel Libre Panel knows, before anything is downloaded)
         entry, data = self._download(theme_id)
+        size: list[int] = []
+
+        def adapt(raw: dict[str, Any]) -> dict[str, Any]:
+            adapted = adapted_for(raw, model_id)
+            if adapted is None:
+                return raw
+            size[:] = [adapted["display"]["width"], adapted["display"]["height"]]
+            return adapted
+
+        if model_id:  # adapted before it is put in place: it is never there as it came
+            data = rewritten(data, adapt)
         done = import_theme(data, folder=entry["id"])
-        if model_id:
-            path = user_themes_dir() / done["id"] / THEME_FILENAME
-            adapted = adapted_for(json.loads(path.read_text(encoding="utf-8")), model_id)
-            if adapted is not None:
-                path.write_text(json.dumps(adapted, indent=2, ensure_ascii=False) + "\n",
-                                encoding="utf-8")  # fmt: skip
-                display = adapted["display"]
-                done["adapted"] = [display["width"], display["height"]]
+        if size:
+            done["adapted"] = size
         return done
 
     def look_on(self, theme_id: str, model_id: str) -> bytes:
