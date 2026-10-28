@@ -2916,7 +2916,20 @@
     "{seconds} s": "{seconds} 秒",
     "An alternative to PresentMon where RivaTuner Statistics Server runs (alone or with MSI Afterburner): its frame rates, read from the memory it shares, without rights. Without who holds the frame rate down; PresentMon, asked first, keeps that.": "在运行 RivaTuner Statistics Server（单独或随 MSI Afterburner）时替代 PresentMon：从其共享内存读取帧率，无需特殊权限。不包含限制帧率的因素；这一项仍由优先查询的 PresentMon 提供。",
     "Game frame rate from RTSS": "来自 RTSS 的游戏帧率",
-    "frame rates of games, from RivaTuner (RTSS)": "游戏帧率，来自 RivaTuner (RTSS)"
+    "frame rates of games, from RivaTuner (RTSS)": "游戏帧率，来自 RivaTuner (RTSS)",
+    "Its status line is another program's: the plan's usage comes only by asking Claude Code in the background.": "其状态栏属于另一个程序：套餐用量只能通过在后台查询 Claude Code 获得。",
+    "Its status line sends the plan's usage only while Claude Code runs in a terminal; the desktop app and editors show none.": "只有当 Claude Code 在终端中运行时，其状态栏才会发送套餐用量；桌面应用和编辑器中不显示状态栏。",
+    "No plan's usage yet: Claude Code gave none in the background. Sign in to it again, or update it.": "尚无套餐用量：Claude Code 在后台没有返回。请重新登录或更新它。",
+    "No plan's usage yet: Claude Code {version} is too old to be asked in the background; 2.1.293 or later answers (claude update).": "尚无套餐用量：Claude Code {version} 版本太旧，无法在后台查询；2.1.293 或更高版本才会回答（claude update）。",
+    "No plan's usage yet: Codex reports no limits. Sign in to Codex with ChatGPT.": "尚无套餐用量：Codex 未报告限额。请用 ChatGPT 登录 Codex。",
+    "No plan's usage yet: Libre Panel finds no {name} program on this PC's PATH to ask in the background.": "尚无套餐用量：Libre Panel 在此电脑的 PATH 中找不到可在后台查询的 {name} 程序。",
+    "No plan's usage yet: asking {name} in the background did not work ({error}).": "尚无套餐用量：在后台查询 {name} 失败（{error}）。",
+    "No plan's usage yet: asking {name} in the background is off (the service's settings above).": "尚无套餐用量：在后台查询 {name} 已关闭（见上方服务设置）。",
+    "No plan's usage yet: {name} is asked every few minutes while a theme shows the AI activity.": "尚无套餐用量：当主题显示 AI 活动时，每隔几分钟会查询一次 {name}。",
+    "No plan's usage: the account reports no limits (with an API key there are none).": "无套餐用量：该账户未报告限额（使用 API 密钥时没有限额）。",
+    "Set up without its status line: the plan's usage comes only by asking Claude Code in the background.": "已设置，但未设置其状态栏：套餐用量只能通过在后台查询 Claude Code 获得。",
+    "The plan's usage came {ago} ago, asked of {name} in the background.": "套餐用量在 {ago} 前获得，来自在后台查询 {name}。",
+    "The plan's usage came {ago} ago, from its status line.": "套餐用量在 {ago} 前获得，来自其状态栏。"
   },
   "fields": {
     "agent": "智能体",

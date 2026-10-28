@@ -2916,7 +2916,20 @@
     "{seconds} s": "{seconds} с",
     "An alternative to PresentMon where RivaTuner Statistics Server runs (alone or with MSI Afterburner): its frame rates, read from the memory it shares, without rights. Without who holds the frame rate down; PresentMon, asked first, keeps that.": "Альтернатива PresentMon там, где работает RivaTuner Statistics Server (сам или с MSI Afterburner): его частота кадров, считываемая из общей памяти, без особых прав. Без сведений о том, что ограничивает частоту кадров; их сохраняет PresentMon, опрашиваемый первым.",
     "Game frame rate from RTSS": "Частота кадров игр из RTSS",
-    "frame rates of games, from RivaTuner (RTSS)": "частота кадров игр, из RivaTuner (RTSS)"
+    "frame rates of games, from RivaTuner (RTSS)": "частота кадров игр, из RivaTuner (RTSS)",
+    "Its status line is another program's: the plan's usage comes only by asking Claude Code in the background.": "Его строка состояния принадлежит другой программе: использование тарифа приходит только через фоновый запрос к Claude Code.",
+    "Its status line sends the plan's usage only while Claude Code runs in a terminal; the desktop app and editors show none.": "Его строка состояния передаёт использование тарифа, только пока Claude Code работает в терминале; приложение для ПК и редакторы её не показывают.",
+    "No plan's usage yet: Claude Code gave none in the background. Sign in to it again, or update it.": "Использования тарифа пока нет: Claude Code ничего не сообщил в фоне. Войдите в него заново или обновите его.",
+    "No plan's usage yet: Claude Code {version} is too old to be asked in the background; 2.1.293 or later answers (claude update).": "Использования тарифа пока нет: Claude Code {version} слишком стар для фоновых запросов; отвечает версия 2.1.293 или новее (claude update).",
+    "No plan's usage yet: Codex reports no limits. Sign in to Codex with ChatGPT.": "Использования тарифа пока нет: Codex не сообщает лимиты. Войдите в Codex через ChatGPT.",
+    "No plan's usage yet: Libre Panel finds no {name} program on this PC's PATH to ask in the background.": "Использования тарифа пока нет: Libre Panel не находит программу {name} в PATH этого ПК, чтобы спросить её в фоне.",
+    "No plan's usage yet: asking {name} in the background did not work ({error}).": "Использования тарифа пока нет: фоновый запрос к {name} не удался ({error}).",
+    "No plan's usage yet: asking {name} in the background is off (the service's settings above).": "Использования тарифа пока нет: фоновый запрос к {name} выключен (настройки службы выше).",
+    "No plan's usage yet: {name} is asked every few minutes while a theme shows the AI activity.": "Использования тарифа пока нет: {name} опрашивается каждые несколько минут, пока тема показывает активность ИИ.",
+    "No plan's usage: the account reports no limits (with an API key there are none).": "Использования тарифа нет: учётная запись не сообщает лимиты (с ключом API их нет).",
+    "Set up without its status line: the plan's usage comes only by asking Claude Code in the background.": "Настроено без строки состояния: использование тарифа приходит только через фоновый запрос к Claude Code.",
+    "The plan's usage came {ago} ago, asked of {name} in the background.": "Использование тарифа пришло {ago} назад — из фонового запроса к {name}.",
+    "The plan's usage came {ago} ago, from its status line.": "Использование тарифа пришло {ago} назад — из строки состояния."
   },
   "fields": {
     "agent": "агент",

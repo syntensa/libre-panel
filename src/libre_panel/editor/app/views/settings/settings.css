@@ -1530,6 +1530,14 @@ a.btn-primary:hover {
   cursor: pointer;
 }
 
+/* where the plan's usage came from, or why none came: a second state under the first */
+.agents-usage {
+  display: block;
+  max-width: 560px;
+  margin-top: 4px;
+  font-size: 13px;
+}
+
 .agents-preview {
   max-height: 22rem;
   overflow: auto;

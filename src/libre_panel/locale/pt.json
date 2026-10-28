@@ -2916,7 +2916,20 @@
     "{seconds} s": "{seconds} s",
     "An alternative to PresentMon where RivaTuner Statistics Server runs (alone or with MSI Afterburner): its frame rates, read from the memory it shares, without rights. Without who holds the frame rate down; PresentMon, asked first, keeps that.": "Uma alternativa ao PresentMon onde o RivaTuner Statistics Server está a correr (sozinho ou com o MSI Afterburner): as suas taxas de fotogramas, lidas da memória que partilha, sem permissões especiais. Sem o que limita a taxa de fotogramas; o PresentMon, consultado primeiro, mantém isso.",
     "Game frame rate from RTSS": "Taxa de fotogramas de jogos a partir do RTSS",
-    "frame rates of games, from RivaTuner (RTSS)": "taxas de fotogramas de jogos, a partir do RivaTuner (RTSS)"
+    "frame rates of games, from RivaTuner (RTSS)": "taxas de fotogramas de jogos, a partir do RivaTuner (RTSS)",
+    "Its status line is another program's: the plan's usage comes only by asking Claude Code in the background.": "A linha de status é de outro programa: o uso do plano só vem perguntando ao Claude Code em segundo plano.",
+    "Its status line sends the plan's usage only while Claude Code runs in a terminal; the desktop app and editors show none.": "A linha de status envia o uso do plano só enquanto o Claude Code roda em um terminal; o app de desktop e os editores não a mostram.",
+    "No plan's usage yet: Claude Code gave none in the background. Sign in to it again, or update it.": "Ainda sem uso do plano: o Claude Code não informou nenhum em segundo plano. Entre nele de novo ou atualize-o.",
+    "No plan's usage yet: Claude Code {version} is too old to be asked in the background; 2.1.293 or later answers (claude update).": "Ainda sem uso do plano: o Claude Code {version} é antigo demais para ser consultado em segundo plano; a 2.1.293 ou mais nova responde (claude update).",
+    "No plan's usage yet: Codex reports no limits. Sign in to Codex with ChatGPT.": "Ainda sem uso do plano: o Codex não informa limites. Entre no Codex com o ChatGPT.",
+    "No plan's usage yet: Libre Panel finds no {name} program on this PC's PATH to ask in the background.": "Ainda sem uso do plano: o Libre Panel não encontra nenhum programa do {name} no PATH deste PC para consultar em segundo plano.",
+    "No plan's usage yet: asking {name} in the background did not work ({error}).": "Ainda sem uso do plano: consultar o {name} em segundo plano não funcionou ({error}).",
+    "No plan's usage yet: asking {name} in the background is off (the service's settings above).": "Ainda sem uso do plano: consultar o {name} em segundo plano está desligado (configurações do serviço acima).",
+    "No plan's usage yet: {name} is asked every few minutes while a theme shows the AI activity.": "Ainda sem uso do plano: o {name} é consultado a cada poucos minutos enquanto um tema mostra a atividade de IA.",
+    "No plan's usage: the account reports no limits (with an API key there are none).": "Sem uso do plano: a conta não informa limites (com uma chave de API não há nenhum).",
+    "Set up without its status line: the plan's usage comes only by asking Claude Code in the background.": "Configurado sem a linha de status: o uso do plano só vem consultando o Claude Code em segundo plano.",
+    "The plan's usage came {ago} ago, asked of {name} in the background.": "O uso do plano chegou há {ago}, consultado do {name} em segundo plano.",
+    "The plan's usage came {ago} ago, from its status line.": "O uso do plano chegou há {ago}, da linha de status."
   },
   "fields": {
     "agent": "agente",

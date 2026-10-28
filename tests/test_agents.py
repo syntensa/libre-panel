@@ -223,8 +223,12 @@ def test_claude_tells_its_usage_without_a_message_to_the_model():
                        ([json.dumps({"type": "result"})], "unexpected")):  # fmt: skip
         with pytest.raises(ValueError, match=why):
             agents.claude_usage_reply(wrong)
-    with pytest.raises(ValueError, match="no limits"):  # (an API key, no plan)
+    with pytest.raises(agents.UsageError, match="no limits") as none:  # (an API key, no plan)
         agents.claude_quotas({"rate_limits_available": False})
+    assert none.value.reason == "no_limits"  # (what Settings says: agents.js)
+    with pytest.raises(agents.UsageError) as signed_out:
+        agents.claude_usage_reply([json.dumps(failed)])
+    assert signed_out.value.reason == "signed_out"
     env = agents.claude_environment()
     assert "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC" not in env
     assert env["DISABLE_TELEMETRY"] == "1" and env["CLAUDE_CODE_ENABLE_TELEMETRY"] == "0"
@@ -281,8 +285,9 @@ sys.stdin.read()  # (it waits for more, as Claude Code does)
     )
     assert agents.ask_claude(claude) == {"five_hour": (7.0, 1_800_000_000.0)}
     old = program(tmp_path, "old-claude", 'print("2.1.100 (Claude Code)")')
-    with pytest.raises(ValueError, match="2.1.293"):
+    with pytest.raises(agents.UsageError, match="2.1.293") as too_old:
         agents.ask_claude(old)
+    assert (too_old.value.reason, too_old.value.version) == ("old", "2.1.100")
     codex = program(
         tmp_path,
         "codex",
@@ -320,14 +325,15 @@ for line in sys.stdin:
 
 def test_the_service_asks_one_program_at_a_time_and_waits_after_a_failure(monkeypatch):
     clock = Clock(1000.0)
-    board = agents.Board()
+    board = agents.Board(clock)
     host = SimpleNamespace(publish=lambda key, value: None, log=SimpleNamespace(info=print))
     agents_service = service.Agents(host, {"codex_usage": True}, board=board, clock=clock)
     monkeypatch.setattr(agents, "program", lambda name: f"/bin/{name}")
     monkeypatch.setattr(agents, "ask_claude", lambda path: {"week": (61.0, None)})
 
     def codex_fails(path):
-        raise ValueError("Codex reports no limits: sign in to Codex with ChatGPT")
+        raise agents.UsageError("Codex reports no limits: sign in to Codex with ChatGPT",
+                                "signed_out")  # fmt: skip
 
     monkeypatch.setattr(agents, "ask_codex", codex_fails)
     agents_service._ask("claude")
@@ -337,9 +343,29 @@ def test_the_service_asks_one_program_at_a_time_and_waits_after_a_failure(monkey
     assert agents_service._next["claude"] == 1000 + agents.CLAUDE_EVERY_S
     assert agents_service._next["codex"] == 1000 + service.RETRY_S
     assert "sign in" in board.agents["codex"].usage_error
+    # what Settings says of it: where the usage came from, or why none came
+    clock.now += 30
+    assert board.usage("claude") == {"source": "background", "ago": 30.0, "error": "",
+                                     "reason": "", "version": ""}  # fmt: skip
+    assert board.usage("codex")["source"] == "" and board.usage("codex")["ago"] is None
+    assert board.usage("codex")["reason"] == "signed_out"
     monkeypatch.setattr(agents, "program", lambda name: None)
     agents_service._ask("claude")
     assert board.agents["claude"].usage_error == "not installed"
+    assert board.usage("claude")["reason"] == "missing"  # (the last usage still came then)
+    monkeypatch.setattr(agents, "program", lambda name: f"/bin/{name}")
+
+    def too_old(path):
+        raise agents.UsageError("Claude Code 2.1.293 or later answers in the background",
+                                "old", "2.1.100")  # fmt: skip
+
+    monkeypatch.setattr(agents, "ask_claude", too_old)
+    agents_service._ask("claude")
+    assert (
+        board.usage("claude")["reason"] == "old" and board.usage("claude")["version"] == "2.1.100"
+    )
+    board.status("claude", {"rate_limits": {"five_hour": {"used_percentage": 20}}})
+    assert board.usage("claude")["source"] == "status" and board.usage("claude")["ago"] == 0.0
     off = service.Agents(host, {"claude_usage": False, "codex_usage": False}, board=board,
                          clock=clock)  # fmt: skip
     off._ask_when_due()
@@ -468,6 +494,14 @@ def test_settings_show_what_is_added_then_add_and_remove_it(server):
     port, home = server
     status, found = request(port, "GET", "/api/ai/setup")
     assert status == 200 and found["on"] is False
+    assert found["claude"]["usage"] == {
+        "source": "",
+        "ago": None,
+        "error": "",
+        "reason": "",
+        "version": "",
+        "asked": False,
+    }  # (switched off)
     assert found["claude"]["program"] and not found["codex"]["program"]
     assert found["claude"]["path"] == str(home / ".claude" / "settings.json")
     assert found["codex"]["path"] == str(home / ".codex" / "hooks.json")
@@ -499,10 +533,15 @@ def test_settings_show_what_is_added_then_add_and_remove_it(server):
     assert found["on"] and found["claude"]["hooks"] and found["codex"]["hooks"]
     assert found["port"] == port and found["claude"]["port"] == port  # (where the hooks call)
     assert found["claude"]["heard"] is None  # nothing heard yet
+    assert found["claude"]["usage"]["asked"] and found["claude"]["usage"]["source"] == ""
     key = agents.read_key()
     sent(port, f"/api/ai/hook?agent=claude&key={key}", {"hook_event_name": "Stop"})
     status, found = request(port, "GET", "/api/ai/setup")
     assert found["claude"]["heard"] == 0.0 and found["claude"]["heard_what"] == "Stop"
+    line = {"rate_limits": {"seven_day": {"used_percentage": 33}}}
+    sent(port, f"/api/ai/status?agent=claude&key={key}", line)
+    status, found = request(port, "GET", "/api/ai/setup")
+    assert found["claude"]["usage"]["source"] == "status" and found["claude"]["usage"]["ago"] == 0
     set_config_value("services.enabled", [])  # switched off, it can still be taken out
     for agent in ("claude", "codex"):
         status, done = request(port, "POST", "/api/ai/setup", {"agent": agent, "action": "remove"})

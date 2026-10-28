@@ -2916,7 +2916,20 @@
     "{seconds} s": "{seconds} 秒",
     "An alternative to PresentMon where RivaTuner Statistics Server runs (alone or with MSI Afterburner): its frame rates, read from the memory it shares, without rights. Without who holds the frame rate down; PresentMon, asked first, keeps that.": "RivaTuner Statistics Server（単体または MSI Afterburner と一緒に）が動いている場合の PresentMon の代わり：共有メモリからフレームレートを読み取り、特別な権限は不要です。フレームレートを制限している要因は含みません。それは先に問い合わせる PresentMon が保ちます。",
     "Game frame rate from RTSS": "RTSS からのゲームのフレームレート",
-    "frame rates of games, from RivaTuner (RTSS)": "ゲームのフレームレート（RivaTuner (RTSS) から）"
+    "frame rates of games, from RivaTuner (RTSS)": "ゲームのフレームレート（RivaTuner (RTSS) から）",
+    "Its status line is another program's: the plan's usage comes only by asking Claude Code in the background.": "ステータスラインは別のプログラムのものです。プランの使用量はバックグラウンドでClaude Codeに問い合わせた場合にのみ届きます。",
+    "Its status line sends the plan's usage only while Claude Code runs in a terminal; the desktop app and editors show none.": "ステータスラインがプランの使用量を送るのは、Claude Codeがターミナルで動いている間だけです。デスクトップアプリやエディターでは表示されません。",
+    "No plan's usage yet: Claude Code gave none in the background. Sign in to it again, or update it.": "プランの使用量はまだありません。Claude Codeはバックグラウンドで何も返しませんでした。もう一度サインインするか、更新してください。",
+    "No plan's usage yet: Claude Code {version} is too old to be asked in the background; 2.1.293 or later answers (claude update).": "プランの使用量はまだありません。Claude Code {version}は古すぎてバックグラウンドで問い合わせできません。2.1.293以降が応答します（claude update）。",
+    "No plan's usage yet: Codex reports no limits. Sign in to Codex with ChatGPT.": "プランの使用量はまだありません。Codexが上限を報告していません。ChatGPTでCodexにサインインしてください。",
+    "No plan's usage yet: Libre Panel finds no {name} program on this PC's PATH to ask in the background.": "プランの使用量はまだありません。バックグラウンドで問い合わせる{name}のプログラムが、このPCのPATHに見つかりません。",
+    "No plan's usage yet: asking {name} in the background did not work ({error}).": "プランの使用量はまだありません。バックグラウンドでの{name}への問い合わせに失敗しました（{error}）。",
+    "No plan's usage yet: asking {name} in the background is off (the service's settings above).": "プランの使用量はまだありません。バックグラウンドでの{name}への問い合わせはオフです（上のサービス設定）。",
+    "No plan's usage yet: {name} is asked every few minutes while a theme shows the AI activity.": "プランの使用量はまだありません。テーマがAIアクティビティを表示している間、{name}に数分ごとに問い合わせます。",
+    "No plan's usage: the account reports no limits (with an API key there are none).": "プランの使用量はありません。アカウントが上限を報告していません（APIキーの場合、上限はありません）。",
+    "Set up without its status line: the plan's usage comes only by asking Claude Code in the background.": "ステータスラインなしで設定済みです。プランの使用量はバックグラウンドでClaude Codeに問い合わせた場合にのみ届きます。",
+    "The plan's usage came {ago} ago, asked of {name} in the background.": "プランの使用量は{ago}前に届きました（バックグラウンドで{name}に問い合わせ）。",
+    "The plan's usage came {ago} ago, from its status line.": "プランの使用量は{ago}前に届きました（ステータスラインから）。"
   },
   "fields": {
     "agent": "エージェント",

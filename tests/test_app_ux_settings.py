@@ -1144,6 +1144,19 @@ def test_ai_activity_shows_what_it_adds_then_sets_up_and_takes_it_out(
             "its last report came", timeout=10_000
         )  # (the card asks again every few seconds)
         expect(claude.locator("[data-agents-waiting]")).to_have_count(0)
+        # the plan's usage: why none came yet, then where it came from
+        usage, hint = (
+            claude.locator("[data-agents-usage]"),
+            claude.locator("[data-agents-line-hint]"),
+        )
+        expect(usage).to_contain_text("asked every few minutes while a theme shows")
+        expect(hint).to_contain_text("only while Claude Code runs in a terminal")
+        expect(card.locator("[data-agent='codex'] [data-agents-usage]")).to_have_count(0)
+        agents.BOARD.usage_failed("claude", "too old", "old", "2.1.100")
+        expect(usage).to_contain_text("Claude Code 2.1.100 is too old", timeout=10_000)
+        agents.BOARD.status("claude", {"rate_limits": {"five_hour": {"used_percentage": 12}}})
+        expect(usage).to_contain_text("from its status line", timeout=10_000)
+        expect(hint).to_have_count(0)
         claude.get_by_role("button", name="Remove").click()
         expect(claude).to_contain_text("Not set up yet")
         assert agents.read_settings(settings) == {}

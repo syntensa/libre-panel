@@ -23,6 +23,12 @@
   the panel, at four frames a second, had ffmpeg decode every frame of the video a second time
   (a 1080p video of 60: half a core). It now decodes the video's keyframes alone for it (a
   fifteenth of that), each shown until the next; the panel's own stream is as before.
+- **Where the plan's usage comes from, and why it does not**: the AI activity card in Settings
+  says under Claude Code and Codex where their plan's usage last came from (the status line, or
+  asked in the background) and how long ago, or why none came: no program on the PATH to ask, a
+  Claude Code older than 2.1.293 (with its version), signed out, an account without the plan's
+  limits, asking switched off. Claude Code's status line runs only in a terminal; the card says
+  so where the desktop app or an editor is all that reports.
 
 ## 0.7.6 — 2026-10-28
 

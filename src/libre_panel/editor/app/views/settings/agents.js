@@ -44,6 +44,33 @@ function preview(agent, plan) {
   ).then(Boolean);
 }
 
+/** Where the plan's usage last came from, or why none came: [tone, text]; null where the agent
+ * is neither on this PC nor set up. */
+function usageText(agent, state) {
+  const usage = state.usage;
+  if (!usage || !(state.program || state.hooks)) return null;
+  const name = NAMES[agent];
+  if (usage.source === "status")
+    return ["ok", t("The plan's usage came {ago} ago, from its status line.", { ago: ago(usage.ago) })];
+  if (usage.source === "background")
+    return ["ok", t("The plan's usage came {ago} ago, asked of {name} in the background.", { ago: ago(usage.ago), name })];
+  if (usage.reason === "missing")
+    return ["warn", t("No plan's usage yet: Libre Panel finds no {name} program on this PC's PATH to ask in the background.", { name })];
+  if (usage.reason === "old")
+    return ["warn", t("No plan's usage yet: Claude Code {version} is too old to be asked in the background; 2.1.293 or later answers (claude update).", { version: usage.version || "?" })];
+  if (usage.reason === "signed_out")
+    return ["warn", agent === "codex"
+      ? t("No plan's usage yet: Codex reports no limits. Sign in to Codex with ChatGPT.")
+      : t("No plan's usage yet: Claude Code gave none in the background. Sign in to it again, or update it.")];
+  if (usage.reason === "no_limits")
+    return ["warn", t("No plan's usage: the account reports no limits (with an API key there are none).")];
+  if (usage.error)
+    return ["warn", t("No plan's usage yet: asking {name} in the background did not work ({error}).", { name, error: usage.error })];
+  if (!usage.asked)
+    return ["off", t("No plan's usage yet: asking {name} in the background is off (the service's settings above).", { name })];
+  return ["off", t("No plan's usage yet: {name} is asked every few minutes while a theme shows the AI activity.", { name })];
+}
+
 function AgentRow({ agent, info, reload }) {
   const [line, setLine] = useState(true);
   const state = info[agent];
@@ -78,11 +105,26 @@ function AgentRow({ agent, info, reload }) {
           ? html`<${Status} tone="ok">${t("Set up; its last report came {ago} ago", { ago: ago(state.heard) })}<//>`
           : html`<${Status} tone="warn">${t("Set up; no report from it yet")}<//>`
         : html`<${Status}>${state.program ? t("Not set up yet") : t("Not found on this PC")}<//>`;
+  const usage = usageText(agent, state);
+  // Claude Code's status line brings the usage only where it runs: in a terminal, as its own
+  const lineHint = agent === "claude" && state.hooks && state.usage?.source !== "status"
+    ? state.other_status_line
+      ? t("Its status line is another program's: the plan's usage comes only by asking Claude Code in the background.")
+      : state.status_line
+        ? t("Its status line sends the plan's usage only while Claude Code runs in a terminal; the desktop app and editors show none.")
+        : t("Set up without its status line: the plan's usage comes only by asking Claude Code in the background.")
+    : null;
   return html`<${SettingRow} stacked class="agents-row" data-agent=${agent} title=${NAMES[agent]}
       hint=${agent === "claude"
         ? t("Its hooks say when it works and when it waits for you; its status line brings the plan's usage while a session runs.")
         : t("Its hooks say when it works and when it waits for you.")}>
     <span class="settings-row-status">${status}</span>
+    ${usage
+      ? html`<span class="agents-usage" data-agents-usage=${state.usage.source || state.usage.reason || "none"}>
+          <${Status} tone=${usage[0]}>${usage[1]}<//>
+        </span>`
+      : null}
+    ${lineHint ? html`<span class="settings-row-hint" data-agents-line-hint>${lineHint}</span>` : null}
     ${state.hooks && state.heard == null && !moved
       ? html`<span class="settings-row-hint" data-agents-waiting>${t("It reports from its next session on this PC: in a terminal, an editor or the desktop app. Sessions in the cloud come by their own row below.")}</span>`
       : null}

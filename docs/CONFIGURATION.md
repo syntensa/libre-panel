@@ -1238,6 +1238,11 @@ without a terminal open: Claude Code (2.1.293 and later) answers a usage request
 no message to the model and keeps no session; Codex's `app-server` tells its limits and the
 tokens of the day. One program at a time, and after a failure only every 15 minutes. Libre
 Panel sends nothing off this PC; the programs ask their own servers with your sign-in.
+Claude Code's status line brings the usage too, but only while it runs in a terminal (the
+desktop app and editors show no status line). The card in Settings says where the usage last
+came from and how long ago, or why none came: no `claude` program on the PATH to ask, a Claude
+Code too old to be asked (`claude update`), signed out, or an account without the plan's
+limits (an API key).
 
 The readings, for `claude` and `codex`: `ai.<agent>.state` (`working`, `waiting`, `idle`,
 `off`), `.busy` (2 waiting for you, 1 working, 0 idle, -1 off: for colours and conditions),

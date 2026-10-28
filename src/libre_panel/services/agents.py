@@ -147,7 +147,7 @@ class Agents(Service):
         path = agents.program(agent)
         if path is None:
             self._next[agent] = self.clock() + RETRY_S
-            self.board.usage_failed(agent, "not installed")
+            self.board.usage_failed(agent, "not installed", "missing")
             return
         try:
             if agent == "claude":
@@ -161,7 +161,8 @@ class Agents(Service):
                                                                   monday.isoformat()))  # fmt: skip
         except ValueError as exc:
             self.host.log.info("%s: no usage (%s)", agent, exc)
-            self.board.usage_failed(agent, str(exc))
+            self.board.usage_failed(agent, str(exc), getattr(exc, "reason", ""),
+                                    getattr(exc, "version", ""))  # fmt: skip
             self._next[agent] = self.clock() + max(every, RETRY_S)
             return
         for window, (used, resets) in quotas.items():

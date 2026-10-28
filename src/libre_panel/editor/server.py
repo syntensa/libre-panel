@@ -1540,9 +1540,14 @@ class EditorHandler(BaseHTTPRequestHandler):
                 except (OSError, ValueError) as exc:
                     state, problem = {}, str(exc)
                 ago, what = agents.BOARD.last_heard(agent)
+                # the plan's usage: where it came from, or why not (asked: the service asks)
+                usage = {
+                    **agents.BOARD.usage(agent),
+                    "asked": on and options.get(f"{agent}_usage", True) is not False,
+                }
                 found[agent] = {"program": agents.program(agent) is not None, "path": str(path),
                                 **state, "problem": problem, "heard": ago,
-                                "heard_what": what}  # fmt: skip
+                                "heard_what": what, "usage": usage}  # fmt: skip
             problem = agents_cloud.relay_problem(relay) if relay else ""
             found["cloud"] = {"relay": relay, "heard": agents.BOARD.cloud_last_heard(),
                               "problem": problem}  # fmt: skip

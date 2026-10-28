@@ -155,6 +155,8 @@ class Agent:
     tokens_today: float | None = None
     tokens_week: float | None = None
     usage_error: str = ""
+    usage_reason: str = ""  # why, for Settings: UsageError's (missing, old, signed_out ...)
+    usage_version: str = ""  # the program's version where it is too old ("old")
     heard: float = 0.0  # when it last said something (a hook, its status line); 0: never
     heard_what: str = ""  # what that was (the hook's event, "statusLine")
     cloud_heard: float = 0.0  # when a cloud session last said something; 0: never
@@ -298,8 +300,9 @@ class Board:
     def quota(self, agent: str, window: str, used: float, resets: float | None,
               source: str = "") -> None:  # fmt: skip
         with self._lock:
-            self.agents[agent].quotas[window] = Quota(used, resets, self.clock(), source)
-            self.agents[agent].usage_error = ""
+            known = self.agents[agent]
+            known.quotas[window] = Quota(used, resets, self.clock(), source)
+            known.usage_error = known.usage_reason = known.usage_version = ""
             self.changed.set()
 
     def tokens(self, agent: str, today: float | None, week: float | None) -> None:
@@ -307,9 +310,23 @@ class Board:
             self.agents[agent].tokens_today, self.agents[agent].tokens_week = today, week
             self.changed.set()
 
-    def usage_failed(self, agent: str, why: str) -> None:
+    def usage_failed(self, agent: str, why: str, reason: str = "", version: str = "") -> None:
         with self._lock:
-            self.agents[agent].usage_error = why
+            known = self.agents[agent]
+            known.usage_error, known.usage_reason, known.usage_version = why, reason, version
+
+    def usage(self, agent: str) -> dict[str, Any]:
+        """Where the plan's usage last came from, for Settings: ``source`` ("status": its
+        status line; "background": asked in the background; "": none yet), how many seconds
+        ago (None: never), and why the last request in the background brought none
+        (``error``, ``reason`` and ``version``, UsageError's; "": it did, or none was made)."""
+        with self._lock:
+            known = self.agents[agent]
+            newest = max(known.quotas.values(), key=lambda quota: quota.seen, default=None)
+            return {"source": newest.source if newest else "",
+                    "ago": max(0.0, self.clock() - newest.seen) if newest else None,
+                    "error": known.usage_error, "reason": known.usage_reason,
+                    "version": known.usage_version}  # fmt: skip
 
     # -- out -------------------------------------------------------------------------------
 
@@ -483,6 +500,16 @@ CLAUDE_REQUEST = {"type": "control_request", "request_id": "libre-panel-usage",
                   "request": {"subtype": "get_usage", "skip_behaviors": True}}  # fmt: skip
 
 
+class UsageError(ValueError):
+    """No usage from the program; ``reason`` says why, for Settings: ``missing`` (not on this
+    PC), ``old`` (too old to be asked; ``version`` the one found), ``signed_out``,
+    ``no_limits`` (the account has no plan's limits), "" (anything else)."""
+
+    def __init__(self, text: str, reason: str = "", version: str = "") -> None:
+        super().__init__(text)
+        self.reason, self.version = reason, version
+
+
 def claude_usage_reply(lines: Any) -> dict[str, Any]:
     """The usage in Claude Code's answer (its lines of JSON); ValueError where there is none."""
     for line in lines:
@@ -499,7 +526,8 @@ def claude_usage_reply(lines: Any) -> dict[str, Any]:
             continue
         data = response.get("response")
         if response.get("subtype") != "success" or not isinstance(data, dict):
-            raise ValueError("no usage: sign in to Claude Code again, or update it")
+            raise UsageError("no usage: sign in to Claude Code again, or update it",
+                             "signed_out")  # fmt: skip
         return data
     raise ValueError("no answer")
 
@@ -508,7 +536,7 @@ def claude_quotas(data: dict[str, Any]) -> dict[str, tuple[float, float | None]]
     """``{five_hour|week: (percent used, resets at)}`` of Claude Code's usage answer."""
     limits = data.get("rate_limits") if isinstance(data.get("rate_limits"), dict) else {}
     if not data.get("rate_limits_available") or not limits:
-        raise ValueError("the plan reports no limits")
+        raise UsageError("the plan reports no limits", "no_limits")
     out = {}
     for window, name in ((FIVE_HOUR, "five_hour"), (WEEK, "seven_day")):
         value = limits.get(name) if isinstance(limits.get(name), dict) else {}
@@ -516,7 +544,7 @@ def claude_quotas(data: dict[str, Any]) -> dict[str, tuple[float, float | None]]
         if used is not None:
             out[window] = (used, _epoch(value.get("resets_at")))
     if not out:
-        raise ValueError("the plan reports no limits")
+        raise UsageError("the plan reports no limits", "no_limits")
     return out
 
 
@@ -525,7 +553,9 @@ def ask_claude(path: str) -> dict[str, tuple[float, float | None]]:
     model, nothing kept of the session."""
     version = claude_version(path)
     if version is None or version < CLAUDE_MIN_VERSION:
-        raise ValueError("Claude Code 2.1.293 or later answers in the background")
+        found = ".".join(str(part) for part in version) if version else ""
+        raise UsageError(f"Claude Code 2.1.293 or later answers in the background (here: "
+                         f"{found or 'no version'})", "old", found)  # fmt: skip
     command = [path, "--safe-mode", "--no-session-persistence", "-p", "--input-format",
                "stream-json", "--output-format", "stream-json", "--verbose"]  # fmt: skip
     lines = _exchange(command, [json.dumps(CLAUDE_REQUEST)], claude_environment(), 1)
@@ -586,7 +616,7 @@ def ask_codex(path: str) -> tuple[dict[str, tuple[float, float | None]], dict[st
             replies[message["id"]] = message
     limits = replies.get(2, {})
     if not isinstance(limits.get("result"), dict):
-        raise ValueError("Codex reports no limits: sign in to Codex with ChatGPT")
+        raise UsageError("Codex reports no limits: sign in to Codex with ChatGPT", "signed_out")
     usage = replies.get(3, {}).get("result")
     return codex_quotas(limits["result"]), usage if isinstance(usage, dict) else None
 
