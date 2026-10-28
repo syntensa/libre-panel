@@ -22,6 +22,17 @@
       "preview": "midnight-howling/preview.png",
       "zip": "midnight-howling/midnight-howling.zip",
       "sha256": "0aa076e329a8292883935b1751ea1c95363fb735ea7b5819a0346e56456a64fa"
+    },
+    {
+      "name": "Compact_Combat",
+      "author": "Varulfen 3D Designs",
+      "description": "A stylish theme for gaming. CPU stats, GPU, FPS, and fan speeds—all at a glance.",
+      "sizes": [
+        "480x320"
+      ],
+      "preview": "compact-combat/preview.png",
+      "zip": "compact-combat/compact-combat.zip",
+      "sha256": "45649268e91efa24a7ec319d460a2219351e3b4a954ac48ca19ff43cd6f65ddd"
     }
   ]
 }
