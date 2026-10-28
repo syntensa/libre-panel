@@ -533,6 +533,7 @@ def test_the_app_restarts_the_panels_and_says_why_it_cannot(app, monkeypatch):
     status, data = call(url, "POST", {"action": "restart"})
     assert status == 200 and data["available"]
     assert wait_for(lambda: app.panel.state()["state"] == "showing")
-    monkeypatch.setattr(app.panel, "_halt", lambda: False)  # the loop hangs on a panel
-    status, data = call(url, "POST", {"action": "restart"})
+    with monkeypatch.context() as patched:  # (undone before the app stops: its loop goes)
+        patched.setattr(app.panel, "_halt", lambda: False)  # the loop hangs on a panel
+        status, data = call(url, "POST", {"action": "restart"})
     assert status == 400 and "start it again" in data["error"]
