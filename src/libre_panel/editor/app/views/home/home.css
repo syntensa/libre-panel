@@ -409,6 +409,30 @@
   color: var(--muted);
 }
 
+/* the cards of the card slot: their place in the order, the arrows that change it */
+.cards-card-hint {
+  margin: 0 0 2px;
+  font-size: 13px;
+}
+
+.cards-choice-place {
+  min-width: 18px;
+  color: var(--accent);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.cards-choice-move {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.cards-choice-setup {
+  align-self: flex-start;
+  font-size: 12px;
+}
+
 .pages-card-always {
   min-width: 40px;
   color: var(--muted);

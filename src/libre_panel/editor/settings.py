@@ -35,6 +35,7 @@ from libre_panel.config import (
     Config,
     ConfigError,
     DeviceConfig,
+    card_choice,
     config_dir,
     default_providers,
     edit_config,
@@ -489,6 +490,7 @@ class Settings:
                 "hotkeys": dict(config.hotkeys),
                 "hotkeys_enabled": config.hotkeys_enabled,
                 "symbols": config.symbols,
+                "cards": list(config.cards),
                 "accent": config.accent,
                 "across": config.across,
                 # how the panel goes from one screen to the next (Settings → Panel → Transitions)
@@ -1246,6 +1248,14 @@ def _panel_device(n: int) -> DeviceConfig:
     return DeviceConfig(**panel_defaults(n))
 
 
+def _rule_cards(name: str, value: Any) -> list[str]:
+    """The cards of the card slots (config.card_choice), in the order they are asked."""
+    try:
+        return card_choice(value, name)
+    except ConfigError as exc:
+        raise SettingsError(str(exc)) from exc
+
+
 def _rule_accent(name: str, value: Any, config: Config) -> str:
     """Empty (the themes' own colours), "system" (Windows') or a colour such as "#E0457B"."""
     from libre_panel.accent import HEX, SYSTEM
@@ -1486,6 +1496,7 @@ RULES: dict[str, Any] = {
     "allow_notify": lambda n, v, c: _flag(n, v),
     "light_mode": lambda n, v, c: _flag(n, v),
     "symbols": lambda n, v, c: _choice(n, v, SYMBOL_PACKS),
+    "cards": lambda n, v, c: _rule_cards(n, v),
     "accent": _rule_accent,
     "hotkeys.enabled": lambda n, v, c: _flag(n, v),
     "hotkeys.pause": _rule_hotkey,

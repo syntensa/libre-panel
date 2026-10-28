@@ -2808,7 +2808,21 @@
     "Did the panel stay black, without anything of the test picture?": "Панель осталась чёрной, без какой-либо части тестового изображения?",
     "The panel shows the test picture once more, as the other usual kind of JPEG.": "Панель ещё раз показывает тестовое изображение, в другом распространённом варианте JPEG.",
     "Do you see it now?": "Теперь видно?",
-    "Kind of JPEG": "Вариант JPEG"
+    "Kind of JPEG": "Вариант JPEG",
+    "Cards on the panel": "Карточки на панели",
+    "Earlier: {card}": "Раньше: {card}",
+    "Later: {card}": "Позже: {card}",
+    "Set up AI activity first": "Сначала настройте активность ИИ",
+    "Show the card {card}": "Показывать карточку «{card}»",
+    "The card on the panel is the first of these that has something to show. The choice holds for every version of {theme}.": "На панели показывается первая из этих карточек, которой есть что показать. Выбор действует для каждой версии {theme}.",
+    "The card on the panel is the first of these that has something to show; the choice holds for every theme that leaves it to you.": "На панели показывается первая из этих карточек, которой есть что показать; выбор действует для каждой темы, которая оставляет его вам.",
+    "always: on show when no card before it has something": "всегда: видна, когда ни у одной карточки перед ней ничего нет",
+    "once the weather is set up": "когда погода настроена",
+    "while Claude Code or Codex works or waits for you": "пока Claude Code или Codex работает или ждёт вас",
+    "while a download runs": "пока идёт загрузка",
+    "while a track plays": "пока играет трек",
+    "The cards chosen on Start (Cards on the panel), for every theme that leaves them to you; a change here gives this theme cards of its own.": "Карточки, выбранные на «Главной» (Карточки на панели), для каждой темы, которая оставляет их вам; изменение здесь даёт этой теме собственные карточки.",
+    "Take the cards chosen on Start": "Взять карточки, выбранные на «Главной»"
   },
   "fields": {
     "agent": "агент",

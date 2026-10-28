@@ -2808,7 +2808,21 @@
     "Did the panel stay black, without anything of the test picture?": "Il pannello è rimasto nero, senza nulla dell'immagine di prova?",
     "The panel shows the test picture once more, as the other usual kind of JPEG.": "Il pannello mostra di nuovo l'immagine di prova, nell'altra variante comune di JPEG.",
     "Do you see it now?": "La vedi adesso?",
-    "Kind of JPEG": "Variante di JPEG"
+    "Kind of JPEG": "Variante di JPEG",
+    "Cards on the panel": "Schede sul pannello",
+    "Earlier: {card}": "Prima: {card}",
+    "Later: {card}": "Dopo: {card}",
+    "Set up AI activity first": "Configura prima l'attività IA",
+    "Show the card {card}": "Mostra la scheda {card}",
+    "The card on the panel is the first of these that has something to show. The choice holds for every version of {theme}.": "Il pannello mostra la prima di queste schede che ha qualcosa da mostrare. La scelta vale per ogni versione di {theme}.",
+    "The card on the panel is the first of these that has something to show; the choice holds for every theme that leaves it to you.": "Il pannello mostra la prima di queste schede che ha qualcosa da mostrare; la scelta vale per ogni tema che la lascia a te.",
+    "always: on show when no card before it has something": "sempre: visibile quando nessuna scheda prima di essa ha qualcosa",
+    "once the weather is set up": "appena il meteo è configurato",
+    "while Claude Code or Codex works or waits for you": "mentre Claude Code o Codex lavora o ti aspetta",
+    "while a download runs": "mentre è in corso un download",
+    "while a track plays": "mentre è in riproduzione un brano",
+    "The cards chosen on Start (Cards on the panel), for every theme that leaves them to you; a change here gives this theme cards of its own.": "Le schede scelte in Home (Schede sul pannello), per ogni tema che le lascia a te; una modifica qui dà a questo tema schede proprie.",
+    "Take the cards chosen on Start": "Usa le schede scelte in Home"
   },
   "fields": {
     "agent": "agente",

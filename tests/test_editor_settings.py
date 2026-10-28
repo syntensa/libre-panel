@@ -632,6 +632,24 @@ def test_a_udisp_display_has_its_frames_a_second_set_without_the_video_mode(serv
     assert data["video"]["usb"] is False and data["video"]["on"] is False
 
 
+def test_the_cards_of_the_card_slots_are_written_in_their_order_and_checked(server):
+    """Start's cards (config.toml ``cards``): the order they are asked in, each card once."""
+    status, data = write(server, cards=["forecast", "ai", "date"])
+    assert status == 200 and data["config"]["cards"] == ["forecast", "ai", "date"]
+    assert 'cards = ["forecast", "ai", "date"]' in config_text()
+    for bad in (["forecast", "forecast"], ["nothing"], [], "ai"):
+        status, data = write(server, cards=bad)
+        assert status == 400 and "cards" in data["error"]
+    assert 'cards = ["forecast", "ai", "date"]' in config_text()  # (left as it was)
+
+
+def test_the_theme_list_says_which_themes_leave_their_cards_to_the_person(server):
+    _, themes = request(server, "GET", "/api/themes")
+    cards = {item["id"]: item["cards"] for item in themes}
+    assert cards["lumen"] and cards["lumen-1920x720"] and cards["lumen-vertical"]
+    assert not cards["arena"] and not cards["studio"]  # (no slot; cards of its own)
+
+
 def test_a_serial_panel_has_no_video_mode(server, monkeypatch):
     panel_on_the_bus(monkeypatch, serial="turing-3.5")
     _, data = request(server, "GET", "/api/panel")
@@ -1218,7 +1236,7 @@ def test_the_settings_that_name_a_program_or_a_file_are_the_ones_locked():
         "video.mode", "video.fps", "video.local_clip", "video.clip_asked", "refresh_ms",
         "video.device_fps", "video.crf", "video.preset", "video.keyframe_s", "video.maxrate",
         "video.profile", "video.encoder", "video.pixels",
-        "check_updates", "allow_notify", "light_mode", "symbols", "accent", "across",
+        "check_updates", "allow_notify", "light_mode", "symbols", "cards", "accent", "across",
         "hotkeys.enabled", "hotkeys.pause",
         "hotkeys.brightness_up", "hotkeys.brightness_down", "hotkeys.open", "hotkeys.next_scene",
         "hotkeys.timer", "hotkeys.timer_reset", "hotkeys.mic_mute",

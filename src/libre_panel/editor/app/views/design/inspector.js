@@ -42,6 +42,7 @@ import { versionBase } from "../../core/orientation.js";
 import { panelName, currentModel } from "../../shell/panel-popover.js";
 import { HardwareNameField } from "../settings/hardware.js";
 import { navigate } from "../../shell/views.js";
+import { loadSettings, useConfig } from "../../core/settings.js";
 
 const cap = (text) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : text);
 const label = (key) => cap(fieldLabel(key));
@@ -397,7 +398,14 @@ const cardName = (card) => (card === "net" ? t("Network") : kindName(card));
  * ("forecast if weather.temp") stays with its card. It was a box of words a sensor's hint
  * explained ("a sensor (cpu.temp), a pattern"), which a slot does not take. */
 function SlotCards({ widget, onChange }) {
-  const lines = (widget.items || moduleKinds()[widget.module]?.items || "")
+  const config = useConfig();
+  useEffect(() => {
+    if (!store.get().settings) loadSettings();
+  }, []);
+  // a slot without items of its own takes the cards chosen on Start (config.toml cards), as Lumen's
+  const follows = widget.module === "cards" && !String(widget.items || "").trim();
+  const chosen = follows && Array.isArray(config?.cards) && config.cards.length ? config.cards.join("\n") : "";
+  const lines = (widget.items || chosen || moduleKinds()[widget.module]?.items || "")
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
@@ -408,7 +416,10 @@ function SlotCards({ widget, onChange }) {
     ...CARDS.map((card) => ({ value: card, label: cardName(card), group: t("Cards") })),
     ...others.map((kind) => ({ value: kind, label: kindName(kind), group: t("Modules") })),
   ];
-  return html`<${Field} label=${t("Cards")} hint=${t("The first one with something to show is on show: what plays while music plays, else the next.")}>
+  const hint = follows
+    ? t("The cards chosen on Start (Cards on the panel), for every theme that leaves them to you; a change here gives this theme cards of its own.")
+    : t("The first one with something to show is on show: what plays while music plays, else the next.");
+  return html`<${Field} label=${t("Cards")} hint=${hint}>
     <ol class="slot-cards">
       ${lines.map(
         (line, index) => html`<li key=${`${index}:${line}`} class="slot-card">
@@ -422,6 +433,9 @@ function SlotCards({ widget, onChange }) {
     </ol>
     <${Select} key=${lines.length} label=${t("Add a card…")} value="" options=${options}
       onChange=${(card) => card && set([...lines, card])} />
+    ${widget.module === "cards" && !follows
+      ? html`<button type="button" class="link-btn" onClick=${() => onChange("")}>${t("Take the cards chosen on Start")}</button>`
+      : null}
   <//>`;
 }
 
@@ -430,7 +444,9 @@ function moduleSubtitle(widget, sensor, sourceName) {
   if (sensor) return html`<${SensorLine} sensor=${sensor} />`;
   if (sourceName) return sourceName;
   if (widget.module === "cards") {
-    const lines = (widget.items || moduleKinds().cards?.items || "").split("\n").map(cardOf).filter(Boolean);
+    const chosen = store.get().settings?.config?.cards; // (a slot without items of its own takes them)
+    const mine = Array.isArray(chosen) && chosen.length ? chosen.join("\n") : "";
+    const lines = (widget.items || mine || moduleKinds().cards?.items || "").split("\n").map(cardOf).filter(Boolean);
     return lines.map(cardName).join(" · ");
   }
   return null;

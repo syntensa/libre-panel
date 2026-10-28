@@ -45,6 +45,10 @@ VIDEO_RANGES = ("auto", "limited", "full")
 # protocol's drivers send them, or at every second pixel each way, as most JPEGs do
 JPEG_LAYOUTS = ("4:4:4", "4:2:0")
 DEFAULT_SYMBOLS = "vivid"
+# The cards a card slot that leaves them to the person holds (Lumen's, in each of its versions:
+# config.toml ``cards``, theme.modules with_cards), in the order they are asked: the first
+# that has something to show is on show
+DEFAULT_CARDS = ("playback", "ai", "forecast", "date")
 
 _DEFAULT_CONFIG_TEMPLATE = """\
 # Libre Panel configuration
@@ -697,6 +701,9 @@ class Config:
     hotkeys: dict[str, str] = field(default_factory=dict)  # action: combination (hotkeys.py)
     hotkeys_enabled: bool = True  # [hotkeys] enabled: off holds no key, the combinations kept
     symbols: str = DEFAULT_SYMBOLS  # the look of the weather symbols and the moon
+    # the cards of the card slots that leave them to the person (Lumen's), in the order they
+    # are asked; the first that has something to show is on show (DEFAULT_CARDS)
+    cards: list[str] = field(default_factory=lambda: list(DEFAULT_CARDS))
     # an accent colour for every theme instead of its own (accent.py): "" the themes' own,
     # "system" Windows', or "#RRGGBB"
     accent: str = ""
@@ -922,6 +929,8 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
         cfg.symbols = _expect(data["symbols"], str, "symbols").strip()
         if cfg.symbols not in SYMBOL_PACKS:
             raise ConfigError(f"symbols: must be one of {', '.join(SYMBOL_PACKS)}")
+    if "cards" in data:
+        cfg.cards = card_choice(data["cards"], "cards")
     if "accent" in data:
         from libre_panel.accent import HEX, SYSTEM
 
@@ -1299,6 +1308,25 @@ def write_default_config(path: Path | None = None, overwrite: bool = False) -> P
 
 
 _BARE_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def card_choice(value: Any, where: str) -> list[str]:
+    """The cards of the card slots, as config.toml's ``cards`` has them: a list of the cards'
+    names (theme.modules CARD_NAMES), each once, one at least."""
+    from libre_panel.theme.modules import CARD_NAMES
+
+    names = _expect(value, list, where)
+    cards: list[str] = []
+    for name in names:
+        name = _expect(name, str, f"{where}[]").strip()
+        if name not in CARD_NAMES:
+            raise ConfigError(f"{where}: {name!r} is no card (e.g. {', '.join(DEFAULT_CARDS)})")
+        if name in cards:
+            raise ConfigError(f"{where}: {name!r} is named twice")
+        cards.append(name)
+    if not cards:
+        raise ConfigError(f"{where}: one card at least (e.g. {', '.join(DEFAULT_CARDS)})")
+    return cards
 
 
 def _toml_string(text: str) -> str:

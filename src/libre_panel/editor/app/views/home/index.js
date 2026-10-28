@@ -27,6 +27,7 @@ import { ScenesCard } from "./scenes.js";
 import { SequenceCard, SequencePage } from "./sequence.js";
 import { CommunityThemes, exportZip, importZip, shareWithEveryone, useDropFile } from "./sharing.js";
 import { RangeCard } from "./range.js";
+import { CardsCard } from "./cards.js";
 import { SetupCard } from "./setup.js";
 import { UpdateCard } from "./update.js";
 
@@ -321,12 +322,19 @@ function QuickThemes() {
  * (smooth motion, the first steps or what is new) and what it shows when. The themes and the
  * rest for the panel are beside it.
  */
+/** The cards of the card slot of the theme on the panel, where it leaves them to the person. */
+function StartCards() {
+  const { items } = useStartThemes();
+  return html`<${CardsCard} shown=${items.find((item) => item.shown)} />`;
+}
+
 function Launcher({ focus }) {
   return html`<div class="start launcher">
     <div class="start-main">
       <${StartNotices} />
       <${PanelCard} />
       <${ClipQuestion} focus=${focus} />
+      <${StartCards} />
       <${UpdateCard} />
       <${Welcome} />
       <${PagesCard} />

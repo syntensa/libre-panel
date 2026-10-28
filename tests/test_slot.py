@@ -25,7 +25,7 @@ RUNNING = {
 }  # fmt: skip
 
 
-def theme_of(items="", kind="cards", cols=3, rows=2, **more):
+def theme_of(items="playback\nforecast", kind="cards", cols=3, rows=2, **more):
     module = {"type": "module", "id": "m", "module": kind, "cols": cols, "rows": rows, **more}
     if items:
         module["items"] = items
@@ -38,8 +38,11 @@ def theme_of(items="", kind="cards", cols=3, rows=2, **more):
     )
 
 
-def demo(playing=1, media=True, weather=True):
+def demo(playing=1, media=True, weather=True, agents=True):
     snap = demo_snapshot(fixed_time=1_700_000_000)
+    if not agents:  # (the demo's Claude Code works, its Codex waits for you)
+        for key in [k for k in snap.readings if k.startswith("ai.")]:
+            del snap.readings[key]
     snap.readings.pop("downloads", None)  # (these tests start a download, with ``downloading``)
     if not media:
         for key in [k for k in snap.readings if k.startswith("media.")]:
@@ -80,8 +83,9 @@ def empty(pixels):
 # -- which card ------------------------------------------------------------------------------
 
 
-def test_the_cards_of_a_slot_are_its_items_and_by_default_playback_and_weather():
-    assert M.slot_items({"module": "cards", "items": ""}) == [("playback", ""), ("forecast", "")]
+def test_the_cards_of_a_slot_are_its_items_and_by_default_the_persons_first_choice():
+    default = [("playback", ""), ("ai", ""), ("forecast", ""), ("date", "")]
+    assert M.slot_items({"module": "cards", "items": ""}) == default  # (config.DEFAULT_CARDS)
     assert M.slot_items({"module": "netcard", "items": "ignored"}) == [
         ("download", ""),
         ("net", ""),
@@ -92,9 +96,7 @@ def test_the_cards_of_a_slot_are_its_items_and_by_default_playback_and_weather()
     assert M.slot_items({"module": "cards", "items": lines}) == [
         ("download", ""), ("forecast", "weather.temperature,!media.title"), ("net", ""),
     ]  # fmt: skip
-    assert M.slot_items({"module": "cards", "items": "nonsense\ncards"}) == [
-        ("playback", ""), ("forecast", ""),
-    ]  # fmt: skip
+    assert M.slot_items({"module": "cards", "items": "nonsense\ncards"}) == default
 
 
 def test_a_slot_is_made_of_cards_that_are_parts_of_it():

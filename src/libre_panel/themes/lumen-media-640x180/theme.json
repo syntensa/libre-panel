@@ -61,7 +61,7 @@
       "row": 1,
       "cols": 30,
       "rows": 10,
-      "items": "playback\nforecast\ndate",
+      "items": "",
       "change": 0.6,
       "hold": 2.0
     }

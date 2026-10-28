@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+**New**
+- **What the AI does comes up on Lumen by itself.** While Claude Code or Codex works or waits
+  for you, Lumen's card slot shows the AI activity card, without the AI screen chosen: both
+  agents' state, the tool at work and the plan's limits. It
+  stays for 45 seconds after the last one stopped, so it does not come and go between two
+  prompts, and then the next card comes back. Music comes first while a track plays. It needs
+  AI activity set up (*Settings → Game mode and more*).
+- **The cards of the card slot, chosen on Start.** *Cards on the panel*, right under the panel,
+  says which cards the slot shows and in which order, music, AI activity, weather, download and
+  calendar, each with when it has something to show: a switch takes one out, the arrows move
+  it. One choice holds for every version of Lumen, which stays Libre Panel's own and keeps
+  getting its updates (config.toml `cards`; in *Look* too).
+
 ## 0.7.3 — 2026-10-28
 
 Waveshare's 2.8" as a USB display shows what it is sent (0.7.2 left it black), up to 60

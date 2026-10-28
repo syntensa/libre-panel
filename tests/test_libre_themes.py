@@ -130,8 +130,7 @@ def slot_of(name, card="card"):
     return theme, renderer, renderer._slots[card]
 
 
-@pytest.mark.parametrize("name, card", [("lumen", "card"), ("studio", "card"),
-                                        ("libre-default", "corner")])  # fmt: skip
+@pytest.mark.parametrize("name, card", [("studio", "card"), ("libre-default", "corner")])
 def test_the_card_shows_what_plays_else_the_weather_else_the_day(name, card):
     from test_slot import demo
 
@@ -143,6 +142,23 @@ def test_the_card_shows_what_plays_else_the_weather_else_the_day(name, card):
     assert slot.shown == 1  # nothing plays: the weather
     renderer.render(demo(media=False, weather=False), 2.0)
     assert slot.shown == 2  # neither: the day
+
+
+def test_lumens_card_shows_what_plays_else_the_ai_at_work_else_the_weather_else_the_day():
+    """Lumen leaves its cards to the person (Start: Cards on the panel); drawn without settings
+    they are the first choice of them."""
+    from test_slot import demo
+
+    _, renderer, slot = slot_of("lumen")
+    assert slot.kinds == ["playback", "ai", "forecast", "date"]
+    renderer.render(demo(), 0.0)
+    assert slot.shown == 0  # a track plays
+    renderer.render(demo(media=False), 1.0)
+    assert slot.shown == 1  # nothing plays, and Claude Code works
+    renderer.render(demo(media=False, agents=False), 100.0)
+    assert slot.shown == 2  # nobody at work any more: the weather
+    renderer.render(demo(media=False, weather=False, agents=False), 200.0)
+    assert slot.shown == 3  # none of them: the day
 
 
 @pytest.mark.parametrize("name", OWN)

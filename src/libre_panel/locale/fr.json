@@ -2808,7 +2808,21 @@
     "Did the panel stay black, without anything of the test picture?": "Le panneau est-il resté noir, sans rien de l'image de test ?",
     "The panel shows the test picture once more, as the other usual kind of JPEG.": "Le panneau affiche à nouveau l'image de test, dans l'autre variante usuelle de JPEG.",
     "Do you see it now?": "La voyez-vous maintenant ?",
-    "Kind of JPEG": "Variante de JPEG"
+    "Kind of JPEG": "Variante de JPEG",
+    "Cards on the panel": "Cartes sur le panneau",
+    "Earlier: {card}": "Plus tôt : {card}",
+    "Later: {card}": "Plus tard : {card}",
+    "Set up AI activity first": "Configurer d'abord l'activité IA",
+    "Show the card {card}": "Afficher la carte {card}",
+    "The card on the panel is the first of these that has something to show. The choice holds for every version of {theme}.": "Le panneau affiche la première de ces cartes qui a quelque chose à montrer. Le choix vaut pour chaque version de {theme}.",
+    "The card on the panel is the first of these that has something to show; the choice holds for every theme that leaves it to you.": "Le panneau affiche la première de ces cartes qui a quelque chose à montrer ; le choix vaut pour chaque thème qui vous le laisse.",
+    "always: on show when no card before it has something": "toujours : affichée quand aucune carte avant elle n'a rien",
+    "once the weather is set up": "dès que la météo est configurée",
+    "while Claude Code or Codex works or waits for you": "tant que Claude Code ou Codex travaille ou vous attend",
+    "while a download runs": "pendant un téléchargement",
+    "while a track plays": "pendant la lecture d'un morceau",
+    "The cards chosen on Start (Cards on the panel), for every theme that leaves them to you; a change here gives this theme cards of its own.": "Les cartes choisies sur Accueil (Cartes sur le panneau), pour chaque thème qui vous les laisse ; une modification ici donne à ce thème ses propres cartes.",
+    "Take the cards chosen on Start": "Prendre les cartes choisies sur Accueil"
   },
   "fields": {
     "agent": "agent",

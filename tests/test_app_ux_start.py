@@ -77,7 +77,9 @@ def test_the_launcher_answers_what_is_on_the_panel_before_what_to_do_next(
     with browser_page(app_url, "home", routes={"**/api/app": a_panel_app()}, allow=PICTURE) as page:
         page.wait_for_selector(".start.launcher .clip-card")
         page.wait_for_selector(".first-steps")
-        assert main_column(page) == ["panel-card", "clip-card", "first-steps", "pages-card"]
+        assert main_column(page) == [
+            "panel-card", "clip-card", "cards-card", "first-steps", "pages-card"
+        ]  # fmt: skip
         assert page.locator(".start-tile").count() == 0
         expect(page.locator(".start-more h2")).to_have_text("More for your panel")
     routes = {
@@ -87,6 +89,43 @@ def test_the_launcher_answers_what_is_on_the_panel_before_what_to_do_next(
     with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
         page.wait_for_selector(".unlock-card")
         assert main_column(page)[:2] == ["hint-card", "panel-card"]
+
+
+def test_the_cards_of_lumens_slot_are_chosen_on_start_for_every_version_of_it(
+    app_url,  # noqa: F811
+    isolated_home,
+):
+    """Lumen's card slot (in each of its versions) leaves its cards to the person: Start shows
+    them right under the panel in the order they are asked; the arrows move one, a switch takes
+    one out or puts it back at the end, and config.toml keeps them (``cards``). AI activity that
+    is not set up yet says where it is set up."""
+    choose_theme(isolated_home, "lumen")
+    with browser_page(app_url, "home", routes={"**/api/app": a_panel_app()}, allow=PICTURE) as page:
+        card = page.locator(".cards-card")
+        expect(card.locator("h2")).to_have_text("Cards on the panel")
+        assert main_column(page)[:2] == ["panel-card", "cards-card"]
+        rows = card.locator(".pages-card-row")
+
+        def order():
+            return rows.evaluate_all("r => r.map((e) => e.dataset.card)")
+
+        assert order() == ["playback", "ai", "forecast", "date", "download"]
+        expect(card.locator("[data-card='download']")).to_have_class(re.compile(r"\boff\b"))
+        card.get_by_role("button", name="Earlier: Weather").click()
+        waits_for(page, lambda: settings_config().cards == ["playback", "forecast", "ai", "date"])
+        card.get_by_role("switch", name="Show the card Music").click()
+        waits_for(page, lambda: settings_config().cards == ["forecast", "ai", "date"])
+        card.get_by_role("switch", name="Show the card Download").click()
+        waits_for(page, lambda: settings_config().cards == ["forecast", "ai", "date", "download"])
+        expect(rows.first).to_have_attribute("data-card", "forecast")
+        setup = card.locator("[data-card='ai'] .cards-choice-setup")
+        expect(setup).to_have_text("Set up AI activity first")
+        setup.click()
+        page.wait_for_function("location.hash === '#/settings/services'")
+    choose_theme(isolated_home, "arena")  # no card slot that leaves its cards to the person
+    with browser_page(app_url, "home", routes={"**/api/app": a_panel_app()}, allow=PICTURE) as page:
+        page.wait_for_selector(".pages-card")
+        expect(page.locator(".cards-card")).to_have_count(0)
 
 
 def test_who_updated_is_told_what_is_new_once_and_each_thing_is_done_right_there(

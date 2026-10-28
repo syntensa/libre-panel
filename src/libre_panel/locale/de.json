@@ -2808,7 +2808,21 @@
     "Did the panel stay black, without anything of the test picture?": "Ist das Panel schwarz geblieben, ohne etwas vom Testbild?",
     "The panel shows the test picture once more, as the other usual kind of JPEG.": "Das Panel zeigt das Testbild noch einmal, als die andere übliche JPEG-Variante.",
     "Do you see it now?": "Siehst du es jetzt?",
-    "Kind of JPEG": "JPEG-Variante"
+    "Kind of JPEG": "JPEG-Variante",
+    "Cards on the panel": "Karten auf dem Panel",
+    "Earlier: {card}": "Früher: {card}",
+    "Later: {card}": "Später: {card}",
+    "Set up AI activity first": "Zuerst KI-Aktivität einrichten",
+    "Show the card {card}": "Karte {card} zeigen",
+    "The card on the panel is the first of these that has something to show. The choice holds for every version of {theme}.": "Auf dem Panel steht die erste dieser Karten, die gerade etwas zu zeigen hat. Die Auswahl gilt für jede Version von {theme}.",
+    "The card on the panel is the first of these that has something to show; the choice holds for every theme that leaves it to you.": "Auf dem Panel steht die erste dieser Karten, die gerade etwas zu zeigen hat; die Auswahl gilt für jedes Theme, das sie dir überlässt.",
+    "always: on show when no card before it has something": "immer: zu sehen, wenn keine Karte davor etwas hat",
+    "once the weather is set up": "sobald das Wetter eingerichtet ist",
+    "while Claude Code or Codex works or waits for you": "solange Claude Code oder Codex arbeitet oder auf dich wartet",
+    "while a download runs": "solange ein Download läuft",
+    "while a track plays": "solange ein Titel läuft",
+    "The cards chosen on Start (Cards on the panel), for every theme that leaves them to you; a change here gives this theme cards of its own.": "Die auf Start gewählten Karten (Karten auf dem Panel), für jedes Theme, das sie dir überlässt; eine Änderung hier gibt diesem Theme eigene Karten.",
+    "Take the cards chosen on Start": "Die auf Start gewählten Karten nehmen"
   },
   "fields": {
     "agent": "Agent",

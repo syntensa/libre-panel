@@ -3,8 +3,9 @@ screen does: a line of light ignites at the top edge, the card on show rolls up 
 new card rolls down out of it.
 
 Which card is on show is a rule: the first of the slot's cards that has something to show wins
-(a track that plays or has been paused a short while, the weather, a download that runs), and
-where none has, the first one shows in its empty look. A line of the slot's ``items`` may name
+(a track that plays or has been paused a short while, Claude Code or Codex at work or waiting
+for you, the weather, a download that runs), and where none has, the first one shows in its
+empty look. A line of the slot's ``items`` may name
 its own rule (``forecast if weather.temperature``, conditions as a ``needs`` has them).
 
 The cards are parts of the module (``_card`` is their number in the slot); only the parts of the
@@ -41,6 +42,8 @@ GLOW = 0.9  # how bright the line of light gets
 FADE = 0.55  # seconds the frame takes to change its colour
 MIXED = 0.72  # the frame's colour: this much of the cover's or the weather's over the ground
 PLAYBACK = ("playback", "music")
+AGENTS = ("claude", "codex")  # (agents.py)
+AI_HOLD = 45.0  # seconds the AI card stays on show after the last agent stopped working
 WEATHER = ("forecast", "weather")
 SUPER = 3  # the frame's mask is drawn at this many times its size
 GAP = 48  # px between the old track and the new one in a slide, on a bar 480 px tall
@@ -138,6 +141,7 @@ class Slot:
         self.pinned: int | None = None  # a card drawn for the warm-up, whatever the rules say
         self.paused_at: float | None = None
         self.paused_for: Any = None
+        self.busy_at: float | None = None  # when an agent last worked or waited for you
         self.rows: tuple[float, float] | None = None  # in a change: how far each has rolled
         self.line = 0.0  # in a change: the light's strength
         self.track: tuple[Any, Any] | None = None  # the track the playback card on show shows
@@ -183,6 +187,16 @@ class Slot:
             self.paused_at, self.paused_for = now, track
         return now - self.paused_at < self.hold
 
+    def _agents(self, snapshot: Any, now: float) -> bool:
+        """Claude Code or Codex at work or waiting for you (``ai.<agent>.busy`` 1 or 2), or so
+        less than ``AI_HOLD`` seconds ago: between two prompts the card stays."""
+        for agent in AGENTS:
+            busy = snapshot.value(f"ai.{agent}.busy")
+            if isinstance(busy, int | float) and not isinstance(busy, bool) and busy >= 1:
+                self.busy_at = now
+                return True
+        return self.busy_at is not None and now - self.busy_at < AI_HOLD
+
     def _has(self, i: int, snapshot: Any, now: float) -> bool:
         """Whether card ``i`` has something to show."""
         rule = self.rules[i]
@@ -195,6 +209,8 @@ class Slot:
             return self._playing(snapshot, now)
         if kind in WEATHER:
             return snapshot.value("weather.temperature") is not None
+        if kind == "ai":
+            return self._agents(snapshot, now)
         if kind == "download":
             return isinstance(snapshot.state("downloads"), dict)
         return True

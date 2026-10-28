@@ -2808,7 +2808,21 @@
     "Did the panel stay black, without anything of the test picture?": "面板是否保持黑屏，完全看不到测试画面？",
     "The panel shows the test picture once more, as the other usual kind of JPEG.": "面板再次显示测试画面，这次使用另一种常见的 JPEG 格式。",
     "Do you see it now?": "现在能看到吗？",
-    "Kind of JPEG": "JPEG 格式"
+    "Kind of JPEG": "JPEG 格式",
+    "Cards on the panel": "面板上的卡片",
+    "Earlier: {card}": "提前：{card}",
+    "Later: {card}": "延后：{card}",
+    "Set up AI activity first": "请先设置 AI 活动",
+    "Show the card {card}": "显示卡片 {card}",
+    "The card on the panel is the first of these that has something to show. The choice holds for every version of {theme}.": "面板显示这些卡片中第一张有内容可显示的。此选择适用于 {theme} 的每个版本。",
+    "The card on the panel is the first of these that has something to show; the choice holds for every theme that leaves it to you.": "面板显示这些卡片中第一张有内容可显示的；此选择适用于所有交由你决定的主题。",
+    "always: on show when no card before it has something": "始终：前面的卡片都没有内容时显示",
+    "once the weather is set up": "天气设置好后",
+    "while Claude Code or Codex works or waits for you": "当 Claude Code 或 Codex 正在工作或等待你时",
+    "while a download runs": "下载进行时",
+    "while a track plays": "播放曲目时",
+    "The cards chosen on Start (Cards on the panel), for every theme that leaves them to you; a change here gives this theme cards of its own.": "在“开始”中选择的卡片（面板上的卡片），适用于所有交由你决定的主题；在此处更改会让此主题拥有自己的卡片。",
+    "Take the cards chosen on Start": "使用在“开始”中选择的卡片"
   },
   "fields": {
     "agent": "智能体",

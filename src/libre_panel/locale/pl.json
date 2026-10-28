@@ -2808,7 +2808,21 @@
     "Did the panel stay black, without anything of the test picture?": "Czy panel pozostał czarny, bez śladu obrazu testowego?",
     "The panel shows the test picture once more, as the other usual kind of JPEG.": "Panel pokazuje obraz testowy jeszcze raz, jako drugi typowy wariant JPEG.",
     "Do you see it now?": "Czy teraz go widzisz?",
-    "Kind of JPEG": "Wariant JPEG"
+    "Kind of JPEG": "Wariant JPEG",
+    "Cards on the panel": "Karty na panelu",
+    "Earlier: {card}": "Wcześniej: {card}",
+    "Later: {card}": "Później: {card}",
+    "Set up AI activity first": "Najpierw skonfiguruj aktywność AI",
+    "Show the card {card}": "Pokaż kartę {card}",
+    "The card on the panel is the first of these that has something to show. The choice holds for every version of {theme}.": "Na panelu jest pierwsza z tych kart, która ma coś do pokazania. Wybór obowiązuje w każdej wersji {theme}.",
+    "The card on the panel is the first of these that has something to show; the choice holds for every theme that leaves it to you.": "Na panelu jest pierwsza z tych kart, która ma coś do pokazania; wybór obowiązuje w każdym motywie, który zostawia go tobie.",
+    "always: on show when no card before it has something": "zawsze: widoczna, gdy żadna wcześniejsza karta nic nie ma",
+    "once the weather is set up": "gdy pogoda jest skonfigurowana",
+    "while Claude Code or Codex works or waits for you": "gdy Claude Code lub Codex pracuje albo na ciebie czeka",
+    "while a download runs": "gdy trwa pobieranie",
+    "while a track plays": "gdy gra utwór",
+    "The cards chosen on Start (Cards on the panel), for every theme that leaves them to you; a change here gives this theme cards of its own.": "Karty wybrane na Start (Karty na panelu), dla każdego motywu, który zostawia je tobie; zmiana tutaj daje temu motywowi własne karty.",
+    "Take the cards chosen on Start": "Użyj kart wybranych na Start"
   },
   "fields": {
     "agent": "agent",

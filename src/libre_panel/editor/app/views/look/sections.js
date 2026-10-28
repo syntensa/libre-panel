@@ -20,6 +20,7 @@ import { FINISH_NAMES, FinishPicture, finishesFor } from "../design/fields.js";
 import { Background, PaletteEditor } from "../design/inspector.js";
 import { inspectorState } from "../design/inspector-state.js";
 import { activeLook, applyLook, lookName, looks, specOf, wearLook } from "../design/ops.js";
+import { CardsChoice } from "../home/cards.js";
 import { peeks } from "./stage.js";
 
 const cap = (text) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : text);
@@ -450,6 +451,17 @@ function Switches() {
   <//>`;
 }
 
+// -- the cards of the card slot (config.toml cards), where the theme leaves them to the person ------
+
+function Cards() {
+  const follows = widgets().some((widget) => widget.type === "module" && widget.module === "cards" && !String(widget.items || "").trim());
+  if (!follows) return null;
+  return html`<${Section} title=${t("Cards on the panel")}>
+    <small class="field-hint">${t("The card on the panel is the first of these that has something to show; the choice holds for every theme that leaves it to you.")}</small>
+    <${CardsChoice} />
+  <//>`;
+}
+
 // -- ridge frames: not offered, but a theme that has them can drop them -----------------------------
 
 function Ridges() {
@@ -474,6 +486,7 @@ export function LookPanel() {
     <${Colours} />
     <${Background} theme=${currentTheme()} />
     <${Switches} />
+    <${Cards} />
     <${Finish} />
     <${Light} />
     <${Grid} />

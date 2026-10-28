@@ -17,7 +17,7 @@ from __future__ import annotations
 import math
 import unicodedata
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from typing import Any
 
@@ -2501,7 +2501,7 @@ MODULE_FALLBACKS = ("auto", "none", "cpu", "gpu", "mem", "disk")
 
 # -- card slots ----------------------------------------------------------------
 
-DEFAULT_CARDS = "playback\nforecast"
+DEFAULT_CARDS = "playback\nai\nforecast\ndate"  # (config.DEFAULT_CARDS: the person's)
 CARD_NAMES = tuple(k for k in MODULE_KINDS if k not in SLOT_KINDS) + ("net",)  # "net": the
 # network as the Studio's NET section has it (UP and DOWN with the speed beside them)
 
@@ -2519,6 +2519,32 @@ def slot_items(module: dict[str, Any]) -> list[tuple[str, str]]:
         if name.strip() in CARD_NAMES:
             found.append((name.strip(), rule.strip()))
     return found or [(name, "") for name in DEFAULT_CARDS.splitlines()]
+
+
+def with_cards(theme: Any, cards: list[str] | tuple[str, ...]) -> Any:
+    """``theme`` with the person's cards (config.toml ``cards``) in each card slot that leaves
+    them to the person, its ``items`` empty: Lumen's, in each of its versions, so one choice
+    holds for all of them; a slot that names its own keeps them."""
+    names = [name for name in cards if name in CARD_NAMES]
+    if not names:
+        return theme
+    items = "\n".join(names)
+    widgets, changed = [], False
+    for widget in theme.widgets:
+        if widget.get("type") == "module" and widget.get("module") == "cards":
+            if not (widget.get("items") or "").strip():
+                widget, changed = {**widget, "items": items}, True
+        widgets.append(widget)
+    return replace(theme, widgets=widgets) if changed else theme
+
+
+def follows_cards(theme: Any) -> bool:
+    """Whether ``theme`` has a card slot that leaves its cards to the person (with_cards)."""
+    return any(
+        widget.get("type") == "module" and widget.get("module") == "cards"
+        and not (widget.get("items") or "").strip()
+        for widget in theme.widgets
+    )  # fmt: skip
 
 
 # -- expanding a theme -------------------------------------------------------

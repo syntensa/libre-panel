@@ -37,6 +37,7 @@ invalid is refused with the reason, and nothing is written.
 | Game mode and more | `[services] enabled` and the options of each `[services.<name>]` table: switches, numbers, texts and lists of texts or numbers. The rules of the autopilot have their own page (*Edit*, under the autopilot), the warnings of `notices` and the limits of `cooling` are still written here |
 | Weather and place | `[weather]` (`enabled`, `latitude`, `longitude`, `place`, `units`, `update_minutes`) |
 | Start and system | `language`, `check_updates`, `light_mode`, `[hotkeys]`, and starting with the system (`libre-panel autostart`) |
+| Start (the page) | `cards`: *Cards on the panel*, under the panel while its theme has a card slot that leaves them to you (also in *Look*) |
 | About | nothing: the version, the licence, the notices, how to report a panel, and the folders (with *Open folder*) |
 
 The running Libre Panel follows a change at once, services included (one whose options
@@ -58,6 +59,11 @@ fps = 10                       # 1-60; values glide between readings
 # default = "fade"             # (see "Transitions"; Settings → Panel → Transitions)
 # accent = "system"           # every theme in one accent colour: "system" (Windows'),
                                # "#E0457B" (your own); empty or left out: each theme's own
+# cards = ["playback", "ai", "forecast", "date"]
+                               # the cards of the card slots that leave them to you
+                               # (Lumen's, in each of its versions), in the order they are
+                               # asked: the first that has something to show is on show
+                               # (Start: Cards on the panel)
 
 # [[panels]]                   # a panel beside this one (see "More panels at once")
 # theme = "lumen"

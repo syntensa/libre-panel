@@ -34,6 +34,7 @@ from urllib.parse import ParseResult, parse_qs, unquote, urlparse
 from libre_panel import __version__, agents, i18n, modes, notify, sequence
 from libre_panel.config import (
     CONFIG_FILENAME,
+    DEFAULT_CARDS,
     DEFAULT_SYMBOLS,
     FAN_LOOKS,
     FAN_PAINTS,
@@ -100,6 +101,7 @@ from libre_panel.theme.modules import (
     make_grid,
     module_info,
     templates,
+    with_cards,
 )
 from libre_panel.theme.share import MAX_ZIP, ShareError, export_theme, import_theme
 
@@ -246,6 +248,14 @@ def _theme_list() -> list[dict[str, Any]]:
         item["model"] = display.get("model") if isinstance(display.get("model"), str) else None
         collection = data.get("collection") if isinstance(data, dict) else None
         item["collection"] = collection if isinstance(collection, str) else ""
+        # a card slot that leaves its cards to the person (theme.modules.follows_cards): Start
+        # offers the cards while the theme is on the panel
+        widgets = data.get("widgets") if isinstance(data, dict) else None
+        item["cards"] = isinstance(widgets, list) and any(
+            isinstance(w, dict) and w.get("type") == "module" and w.get("module") == "cards"
+            and not str(w.get("items") or "").strip()
+            for w in widgets
+        )  # fmt: skip
         item["size"] = (
             [display["width"], display["height"]]
             if all(isinstance(display.get(k), int) for k in ("width", "height"))
@@ -516,9 +526,12 @@ class EditorState:
         if kept is None or kept[0] != stamp:
             try:
                 config = load_config(self.config_path)
-                chosen = (fan.Choices.of(config), config.symbols, config.switches, config.accent)
+                chosen = (fan.Choices.of(config), config.symbols, config.switches, config.accent,
+                          tuple(config.cards))  # fmt: skip
             except (ConfigError, OSError):
-                chosen = kept[1] if kept is not None else (fan.Choices(), DEFAULT_SYMBOLS, {}, "")
+                chosen = kept[1] if kept is not None else (
+                    fan.Choices(), DEFAULT_SYMBOLS, {}, "", DEFAULT_CARDS
+                )  # fmt: skip
             kept = self._fan_choices = (stamp, chosen)
         return kept[1]
 
@@ -527,6 +540,11 @@ class EditorState:
 
     def symbols(self) -> str:
         return self._chosen()[1]
+
+    def cards(self) -> tuple[str, ...]:
+        """The person's cards for the card slots that leave them to the person (config.toml
+        ``cards``): the canvas and the themes' pictures show them as the panel does."""
+        return self._chosen()[4]
 
     def accent(self) -> str | None:
         """The accent colour every theme takes on the panel (config.toml ``accent``), for the
@@ -663,10 +681,11 @@ def _panel_s(config: Config, n: int, written: dict[str, Any]) -> bool:
 
 
 def _draw_theme(
-    theme: Any, width: int, accent: str | None, symbols: str, chosen: tuple[tuple[str, bool], ...]
-) -> bytes:
+    theme: Any, width: int, accent: str | None, symbols: str, chosen: tuple[tuple[str, bool], ...],
+    cards: tuple[str, ...] = DEFAULT_CARDS,
+) -> bytes:  # fmt: skip
     """A theme as a PNG ``width`` wide at most, as the panel shows it with those choices."""
-    renderer = Renderer(with_accent(theme, accent), preview=True)
+    renderer = Renderer(with_cards(with_accent(theme, accent), cards), preview=True)
     renderer.symbols = symbols
     renderer.switches = dict(chosen)
     try:
@@ -932,7 +951,8 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._error("not found", HTTPStatus.NOT_FOUND)
         chosen = self.state.chosen_switches(theme_id)  # (as the panel shows it)
         accent = self.state.accent()
-        key = (theme_id, stamp, width, i18n.language(), self.state.symbols(), chosen, accent)
+        cards = self.state.cards()
+        key = (theme_id, stamp, width, i18n.language(), self.state.symbols(), chosen, accent, cards)
         png = self._kept_preview(key)
         if png is None:
             # A page asks for a screenful of these at once: they are drawn two at a time
@@ -947,7 +967,7 @@ class EditorHandler(BaseHTTPRequestHandler):
                         theme = load_theme(folder)
                     except ThemeError as exc:
                         return self._error(str(exc), HTTPStatus.NOT_FOUND)
-                    png = _draw_theme(theme, width, accent, self.state.symbols(), chosen)
+                    png = _draw_theme(theme, width, accent, self.state.symbols(), chosen, cards)
                     with self.state.previews_lock:
                         cache = self.state.previews
                         while len(cache) >= 48:  # the oldest go first
@@ -2442,7 +2462,7 @@ class EditorHandler(BaseHTTPRequestHandler):
                 snapshot.history.update({k: v for k, v in live.history.items() if len(v) > 1})
             except Exception as exc:
                 log.warning("live sensors unavailable: %s", exc)
-        renderer = Renderer(theme, preview=True)
+        renderer = Renderer(with_cards(theme, self.state.cards()), preview=True)
         renderer.fan_choices = self.state.fan_choices()
         renderer.symbols = self.state.symbols()
         renderer.switches = self.state.switches(theme)

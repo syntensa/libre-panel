@@ -398,9 +398,12 @@ every other panel ([the theme on the panel](CONFIGURATION.md#the-theme-on-the-pa
 
 A few things they do that a theme of your own can do too:
 
-- **What plays, else the weather, else the day.** A `cards` slot with the
-  items `playback`, `forecast` and `date`: the day takes the card when there is
-  neither a track nor weather (the weather is off until you set a place).
+- **What plays, else the weather, else the day.** A `cards` slot with the items
+  `playback`, `forecast` and `date` (Studio, Libre Default): the day takes the card
+  when there is neither a track nor weather (the weather is off until you set a
+  place). Lumen's slot leaves its `items` empty and so takes the cards you choose on
+  Start (*Cards on the panel*, config.toml `cards`: `playback`, `ai`, `forecast` and
+  `date` unless you change them), one choice for every version of Lumen.
 - **A date that steps aside.** Studio's date under the clock is two widgets,
   one with `"needs": "weather.temperature"`, one with `"needs":
   "!weather.temperature, media.title"`: the date shows while the card shows
@@ -661,14 +664,17 @@ are flat thin lines in their colour: a card has no ridge, no bevel and no trough
   history of both, the upload above a line, the download hanging below it.
 
 **Slots.** `cards` holds the cards its `items` name, one per line (`playback`,
-`forecast`, `download`, `instrument`, `net`, ... any module kind but a slot;
-default `playback` and `forecast`), and shows the first that has something to
-show, else the first one in its empty look:
+`forecast`, `download`, `instrument`, `net`, ... any module kind but a slot), and
+shows the first that has something to show, else the first one in its empty look.
+Empty `items` leave the cards to the person: those chosen on Start (config.toml
+`cards`), as Lumen's do, so one choice holds for all of them; drawn without settings,
+`playback`, `ai`, `forecast` and `date`.
 
 | card | has something to show |
 |---|---|
 | `playback`, `music` | a track plays, or was paused less than `hold` minutes ago (2): a paused track stays, you will want it again |
 | `forecast`, `weather` | the weather is there (`weather.temperature`) |
+| `ai` | Claude Code or Codex works or waits for you (`ai.<agent>.busy` 1 or 2), or did so less than 45 s ago: between two prompts the card stays ([AI activity](CONFIGURATION.md#ai-activity)) |
 | `download` | a download runs (a finished one for 6 s) |
 | any other | always |
 

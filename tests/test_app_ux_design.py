@@ -30,7 +30,9 @@ def items(page, id):
 
 def test_a_card_slot_names_its_cards(app_url, isolated_home):  # noqa: F811
     """Lumen's slot holds cards; its field read "Readings" and explained sensors and patterns,
-    and the toolbar said "No sensor". The cards are named in words, moved, taken out and added."""
+    and the toolbar said "No sensor". The cards are named in words, moved, taken out and added.
+    Lumen's are those chosen on Start (``cards``) until the theme is given its own, and it can
+    take them again."""
     choose_theme(isolated_home, "lumen")
     with browser_page(app_url) as page:
         js(page, "window.libre.doc.setSelection(['card'])")
@@ -38,19 +40,23 @@ def test_a_card_slot_names_its_cards(app_url, isolated_home):  # noqa: F811
         expect(page.locator(".floating-toolbar .tool-sensor")).to_have_count(0)
         inspector = page.locator(".inspector")
         cards = inspector.locator(".slot-card-name")
-        expect(cards).to_have_text(["Playback card", "Weather card", "Calendar"])
+        expect(cards).to_have_text(["Playback card", "AI activity", "Weather card", "Calendar"])
+        expect(inspector).to_contain_text("The cards chosen on Start")
         expect(inspector.locator(".inspector-subtitle")).to_have_text(
-            "Playback card · Weather card · Calendar"
+            "Playback card · AI activity · Weather card · Calendar"
         )
         inspector.locator(".slot-card").nth(2).get_by_role("button", name="Move up").click()
-        assert items(page, "card") == "playback\ndate\nforecast"
+        assert items(page, "card") == "playback\nforecast\nai\ndate"  # (its own now)
         inspector.locator(".slot-card").nth(0).get_by_role("button", name="Take out").click()
-        assert items(page, "card") == "date\nforecast"
+        assert items(page, "card") == "forecast\nai\ndate"
         inspector.get_by_role("combobox", name="Add a card…").select_option("instrument")
-        assert items(page, "card") == "date\nforecast\ninstrument"
-        expect(cards).to_have_text(["Calendar", "Weather card", "Ring instrument"])
+        assert items(page, "card") == "forecast\nai\ndate\ninstrument"
+        expect(cards).to_have_text(["Weather card", "AI activity", "Calendar", "Ring instrument"])
         page.keyboard.press("Control+z")
-        assert items(page, "card") == "date\nforecast"
+        assert items(page, "card") == "forecast\nai\ndate"
+        inspector.get_by_role("button", name="Take the cards chosen on Start").click()
+        assert items(page, "card") == ""
+        expect(cards).to_have_text(["Playback card", "AI activity", "Weather card", "Calendar"])
         # a module that shows a source still has its chip
         js(page, "window.libre.doc.setSelection(['cpu-ring'])")
         expect(page.locator(".floating-toolbar .tool-sensor")).to_have_text("CPU")

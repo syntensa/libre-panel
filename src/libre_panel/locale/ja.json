@@ -2808,7 +2808,21 @@
     "Did the panel stay black, without anything of the test picture?": "パネルは黒いままで、テスト画像が何も表示されませんでしたか？",
     "The panel shows the test picture once more, as the other usual kind of JPEG.": "パネルにテスト画像をもう一度、もう一つの一般的なJPEG形式で表示しています。",
     "Do you see it now?": "今度は見えますか？",
-    "Kind of JPEG": "JPEG形式"
+    "Kind of JPEG": "JPEG形式",
+    "Cards on the panel": "パネルのカード",
+    "Earlier: {card}": "前へ：{card}",
+    "Later: {card}": "後へ：{card}",
+    "Set up AI activity first": "先にAIアクティビティを設定",
+    "Show the card {card}": "カード「{card}」を表示",
+    "The card on the panel is the first of these that has something to show. The choice holds for every version of {theme}.": "パネルには、これらのうち表示する内容がある最初のカードが表示されます。この選択は {theme} のすべてのバージョンに適用されます。",
+    "The card on the panel is the first of these that has something to show; the choice holds for every theme that leaves it to you.": "パネルには、これらのうち表示する内容がある最初のカードが表示されます。この選択は、選択をあなたに任せるすべてのテーマに適用されます。",
+    "always: on show when no card before it has something": "常時：前のカードに何もないときに表示",
+    "once the weather is set up": "天気を設定したら",
+    "while Claude Code or Codex works or waits for you": "Claude Code か Codex が作業中、またはあなたを待っている間",
+    "while a download runs": "ダウンロード中",
+    "while a track plays": "曲の再生中",
+    "The cards chosen on Start (Cards on the panel), for every theme that leaves them to you; a change here gives this theme cards of its own.": "ホームで選んだカード（パネルのカード）。選択をあなたに任せるすべてのテーマに適用されます。ここで変更すると、このテーマは独自のカードを持ちます。",
+    "Take the cards chosen on Start": "ホームで選んだカードを使う"
   },
   "fields": {
     "agent": "エージェント",
