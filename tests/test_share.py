@@ -344,6 +344,34 @@ def test_a_community_theme_is_installed_once_its_checksum_is_right(server, githu
     assert request(server, "POST", "/api/community/install", {})[0] == 400
 
 
+def test_a_community_theme_for_another_panel_is_adapted_and_can_be_seen_so_first(
+    server,  # noqa: F811
+    github,
+):
+    """How it looks on the chosen panel: drawn adapted, nothing installed; installed for that
+    panel, it is adapted the same way (theme/adapt.py); made for it already, it stays as it is.
+    The zip comes once for both."""
+    status, picture = request(server, "GET",
+                              "/api/community/themes/aurora/look?model=turing-9.2-usb")  # fmt: skip
+    assert status == 200 and Image.open(io.BytesIO(picture)).size == (1920, 480)
+    assert what_is_there() == []
+    status, answer = request(server, "GET", "/api/community/themes/aurora/look?model=nonsense")
+    assert status == 400 and "unknown panel model" in answer["error"]
+    status, done = request(server, "POST", "/api/community/install",
+                           {"id": "aurora", "model": "turing-9.2-usb"})  # fmt: skip
+    assert status == 200 and done["adapted"] == [1920, 480]
+    theme = load_theme(find_theme("aurora"))
+    assert (theme.width, theme.height, theme.model) == (1920, 480, "turing-9.2-usb")
+    assert GitHub.asked.count("/main/community/themes/aurora/aurora.zip") == 1
+    status, done = request(server, "POST", "/api/community/install",
+                           {"id": "aurora", "model": "turing-3.5"})  # fmt: skip
+    assert status == 200 and "adapted" not in done  # (made for its 480 x 320 already)
+    assert load_theme(find_theme(done["id"])).width == 480
+    status, answer = request(server, "POST", "/api/community/install",
+                             {"id": "aurora", "model": "nonsense"})  # fmt: skip
+    assert status == 400 and "unknown panel model" in answer["error"]
+
+
 def test_a_download_that_is_not_the_listed_file_is_not_installed(server, github):  # noqa: F811
     github["/main/community/themes/aurora/aurora.zip"] = zipped(
         {"aurora/theme.json": theme_json(name="Not Aurora"), "aurora/assets/back.png": png()}

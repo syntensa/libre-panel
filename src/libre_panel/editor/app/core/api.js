@@ -101,7 +101,9 @@ export const endpoints = {
   importThemeZip: (bytes, name) => api("POST", `/api/themes/import?name=${enc(name)}`, bytes, { raw: true }),
   communityThemes: () => get("/api/community/themes"),
   communityPreviewUrl: (id) => withToken(`/api/community/themes/${enc(id)}/preview`),
-  installCommunityTheme: (id) => post("/api/community/install", { id }),
+  // as it would show on a panel of that model, adapted where it is made for another size
+  communityLookUrl: (id, model) => withToken(`/api/community/themes/${enc(id)}/look?model=${enc(model)}`),
+  installCommunityTheme: (id, model = "") => post("/api/community/install", model ? { id, model } : { id }),
   sensors: () => get("/api/sensors"),
   readings: (keys = [], history = []) =>
     get(`/api/readings?keys=${enc(keys.join(","))}&history=${enc(history.join(","))}`),

@@ -1008,9 +1008,27 @@
   line-height: 1.45;
 }
 
-.community-card-install {
-  align-self: flex-start;
+.community-card-install,
+.community-card-look {
   gap: 6px;
+}
+
+/* Install, and for another panel's theme first how it looks on the chosen one */
+.community-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-self: flex-start;
+}
+
+/* that look, adapted, in its dialog: as wide as the dialog lets it be */
+.community-look {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 4px 0 12px;
+  border-radius: 8px;
+  background: #000;
 }
 
 .community-note {

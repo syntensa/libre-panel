@@ -541,9 +541,10 @@ def test_the_community_themes_follow_the_chosen_panel_and_one_of_yours_is_shared
     github,  # noqa: F811
     tmp_path,
 ):
-    """What fits the panel comes first, marked; one made for another asks before it installs;
-    an installed one goes on the panel with one click; and one of yours is shared through
-    GitHub's form, filled in, with the theme saved for it."""
+    """What fits the panel comes first, marked; one made for another shows how it looks on the
+    panel, adapted, and asks before it installs it adapted; an installed one goes on the panel
+    with one click; and one of yours is shared through GitHub's form, filled in, with the theme
+    saved for it."""
     import hashlib
     from urllib.parse import parse_qs, urlsplit
 
@@ -568,17 +569,27 @@ def test_the_community_themes_follow_the_chosen_panel_and_one_of_yours_is_shared
         expect(wide).to_have_count(0)  # made for 800 × 480: under All sizes
         page.locator(".community-scope").get_by_role("radio", name="All sizes").click()
         expect(wide).not_to_contain_text("Fits")
-        wide.get_by_role("button", name="Install “Wide”").click()
+        expect(aurora.locator(".community-card-look")).to_have_count(0)  # (it fits)
+        wide.get_by_role("button", name="How it looks on Turing 9.2″").click()
         dialog = page.locator(".dialog")
+        expect(dialog).to_contain_text("Wide on Turing 9.2″")
+        page.wait_for_function(
+            'document.querySelector(".dialog .community-look")?.naturalWidth === 1920'
+        )  # (drawn adapted to the panel's 1920 × 480)
+        dialog.get_by_role("button", name="Close").click()
+        assert not (isolated_home / "themes" / "wide").exists()
+        wide.get_by_role("button", name="Install “Wide”").click()
         expect(dialog).to_contain_text("Made for another panel")
         expect(dialog).to_contain_text(
-            "“Wide” is made for 800 × 480, and Turing 9.2″ is 1920 × 480"
+            "“Wide” is made for 800 × 480; Libre Panel adapts it to Turing 9.2″ (1920 × 480)"
         )
         dialog.get_by_role("button", name="Cancel").click()
         assert not (isolated_home / "themes" / "wide").exists()
         wide.get_by_role("button", name="Install “Wide”").click()
-        page.locator(".dialog").get_by_role("button", name="Install anyway").click()
+        page.locator(".dialog").get_by_role("button", name="Adapt and install").click()
         waits_for(page, lambda: (isolated_home / "themes" / "wide" / "theme.json").is_file())
+        adapted = json.loads((isolated_home / "themes" / "wide" / "theme.json").read_text())
+        assert (adapted["display"]["width"], adapted["display"]["height"]) == (1920, 480)
         aurora.get_by_role("button", name="Install “Aurora”").click()
         aurora.get_by_role("button", name="Show on the panel").click()
         waits_for(page, lambda: settings_config().theme == "aurora")

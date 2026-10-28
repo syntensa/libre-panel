@@ -185,8 +185,9 @@ export const fitsModel = (entry, model) =>
   !model || (entry.sizes || []).some((size) => same(size, model.landscape) || same(size, model.portrait));
 
 /** A theme of the community: its picture, name, author, the panels it is made for (and whether
- * the chosen panel is one), what it is, and Install; once installed, Show on the panel. */
-function CommunityCard({ entry, busy, fits, model, installed, onInstall, onShow }) {
+ * the chosen panel is one), what it is, and Install; one made for another panel also How it
+ * looks on the chosen one (adapted); once installed, Show on the panel. */
+function CommunityCard({ entry, busy, fits, model, installed, onInstall, onShow, onLook }) {
   return html`<article class="theme-card community-card" data-community=${entry.id}>
     <div class="theme-card-main">
       <span class="theme-card-picture">
@@ -205,10 +206,17 @@ function CommunityCard({ entry, busy, fits, model, installed, onInstall, onShow 
         ? html`<button type="button" class="btn btn-primary community-card-show" onClick=${() => onShow(installed)}>
             <${Icon} name="to-panel" size=${14} /> ${t("Show on the panel")}
           </button>`
-        : html`<button type="button" class="btn community-card-install" disabled=${busy}
-            aria-label=${t("Install “{name}”", { name: entry.name })} onClick=${() => onInstall(entry)}>
-            <${Icon} name="download" size=${14} /> ${busy ? t("Installing…") : t("Install")}
-          </button>`}
+        : html`<div class="community-card-actions">
+            ${model && !fits
+              ? html`<button type="button" class="btn btn-ghost community-card-look" disabled=${busy} onClick=${() => onLook(entry)}>
+                  <${Icon} name="eye" size=${14} /> ${t("How it looks on {panel}", { panel: panelName(model) })}
+                </button>`
+              : null}
+            <button type="button" class="btn community-card-install" disabled=${busy}
+              aria-label=${t("Install “{name}”", { name: entry.name })} onClick=${() => onInstall(entry)}>
+              <${Icon} name="download" size=${14} /> ${busy ? t("Installing…") : t("Install")}
+            </button>
+          </div>`}
     </div>
   </article>`;
 }
@@ -235,25 +243,28 @@ export function CommunityThemes({ model, onInstalled }) {
       shown = false;
     };
   }, [open]);
-  const install = async (entry) => {
-    if (model && !fitsModel(entry, model)) {
-      const sure = await confirmDialog({
+  // one made for another panel is adapted to the chosen one as it is installed (theme/adapt.py)
+  const adapting = (entry) => Boolean(model) && !fitsModel(entry, model);
+  const install = async (entry, sure = false) => {
+    if (adapting(entry) && !sure) {
+      const yes = await confirmDialog({
         title: t("Made for another panel"),
-        message: t("“{name}” is made for {size}, and {panel} is {own}: it would be scaled to fit. Install it anyway?", {
+        message: t("“{name}” is made for {size}; Libre Panel adapts it to {panel} ({own}) as it installs it: a start you can finish in Design.", {
           name: entry.name,
           size: sizesText(entry.sizes),
           panel: panelName(model),
           own: `${model.landscape[0]} × ${model.landscape[1]}`,
         }),
-        confirm: t("Install anyway"),
+        confirm: t("Adapt and install"),
       });
-      if (!sure) return;
+      if (!yes) return;
     }
     setBusy(entry.id);
     try {
-      const done = await endpoints.installCommunityTheme(entry.id);
+      const done = await endpoints.installCommunityTheme(entry.id, adapting(entry) ? model.id : "");
       await refreshThemes();
       added(done);
+      if (done.adapted) toast(t("Adapted to {panel}.", { panel: panelName(model) }), { kind: "success" });
       setInstalled((now) => ({ ...now, [entry.id]: done.id }));
       onInstalled?.(done.id);
     } catch (error) {
@@ -261,6 +272,23 @@ export function CommunityThemes({ model, onInstalled }) {
     } finally {
       setBusy("");
     }
+  };
+  // how it would look on the chosen panel, adapted, with made-up readings; installs from there
+  const look = async (entry) => {
+    const title = t("{name} on {panel}", { name: entry.name, panel: panelName(model) });
+    const go = await openDialog(
+      (close) => html`
+        <h2 class="dialog-title">${title}</h2>
+        <img class="community-look" src=${endpoints.communityLookUrl(entry.id, model.id)} alt=${title} />
+        <p class="dialog-text muted">${t("Adapted from {size}, with made-up readings. Installed, it is adapted the same way: a start you can finish in Design.", { size: sizesText(entry.sizes) })}</p>
+        <div class="dialog-actions">
+          <button type="button" class="btn" onClick=${() => close(false)}>${t("Close")}</button>
+          <button type="button" class="btn btn-primary" autofocus onClick=${() => close(true)}>${t("Adapt and install")}</button>
+        </div>
+      `,
+      { label: title, wide: true },
+    );
+    if (go) await install(entry, true);
   };
   const all = list?.themes || [];
   const fitting = all.filter((entry) => fitsModel(entry, model));
@@ -288,7 +316,7 @@ export function CommunityThemes({ model, onInstalled }) {
             ${themes.map(
               (entry) => html`<div role="listitem" key=${entry.id} class="theme-grid-item">
                 <${CommunityCard} entry=${entry} busy=${busy === entry.id} fits=${fitsModel(entry, model)} model=${model}
-                  installed=${installed[entry.id]} onInstall=${install} onShow=${showOnPanel} />
+                  installed=${installed[entry.id]} onInstall=${install} onShow=${showOnPanel} onLook=${look} />
               </div>`,
             )}
           </div>`;

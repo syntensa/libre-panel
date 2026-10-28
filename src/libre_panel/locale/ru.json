@@ -2695,7 +2695,6 @@
     "{file} is saved in your downloads.": "{file} сохранён в загрузках.",
     "Share “{name}” with everyone": "Поделиться «{name}» со всеми",
     "A check runs by itself and answers on the form. After a look, the theme is among the community themes, for everyone.": "Проверка запускается сама и отвечает в форме. После просмотра тема попадает в темы сообщества — для всех.",
-    "Install anyway": "Всё равно установить",
     "Save the theme": "Сохранить тему",
     "Every picture and font in it may be shared with everyone: they are my own, or their license allows it.": "Каждое изображение и каждый шрифт в ней можно раздавать всем: они мои, или их лицензия это разрешает.",
     "The theme in the download is made for {size}, not for the panels the community's list names: nothing was installed.": "Скачанная тема сделана для {size}, а не для панелей из списка сообщества: ничего не установлено.",
@@ -2703,7 +2702,6 @@
     "It goes among the community themes: everyone with Libre Panel can install it with one click.": "Тема попадёт в темы сообщества: любой с Libre Panel сможет установить её одним щелчком.",
     "Share with everyone": "Поделиться со всеми",
     "None is made for {panel} yet: these are for other panels.": "Для {panel} пока ничего нет: эти темы — для других панелей.",
-    "“{name}” is made for {size}, and {panel} is {own}: it would be scaled to fit. Install it anyway?": "«{name}» сделана для {size}, а {panel} — {own}: её придётся масштабировать. Всё равно установить?",
     "Your name or handle": "Ваше имя или ник",
     "Open the form": "Открыть форму",
     "It shows for panels of {size}, as it is made.": "Она будет показана для панелей {size}, для которых сделана.",
@@ -2848,7 +2846,13 @@
     "a video or an animated picture plays to its end, round by round, at least this long": "видео или анимированная картинка играет до конца, круг за кругом, не меньше этого времени",
     "of its videos and animated pictures: 0.5 is half as fast, 2 twice": "его видео и анимированных картинок: 0,5 — вдвое медленнее, 2 — вдвое быстрее",
     "A notice when a session waits for you": "Уведомление, когда сессия ждёт вас",
-    "On the panel, when Claude Code or Codex begins to wait for your answer; not while the theme shows AI activity itself.": "На панели, когда Claude Code или Codex начинает ждать вашего ответа; не пока тема сама показывает активность ИИ."
+    "On the panel, when Claude Code or Codex begins to wait for your answer; not while the theme shows AI activity itself.": "На панели, когда Claude Code или Codex начинает ждать вашего ответа; не пока тема сама показывает активность ИИ.",
+    "How it looks on {panel}": "Как выглядит на {panel}",
+    "“{name}” is made for {size}; Libre Panel adapts it to {panel} ({own}) as it installs it: a start you can finish in Design.": "«{name}» сделана для {size}; Libre Panel при установке подгоняет её под {panel} ({own}): основа, которую можно доделать в «Дизайне».",
+    "Adapt and install": "Подогнать и установить",
+    "Adapted to {panel}.": "Подогнано под {panel}.",
+    "{name} on {panel}": "{name} на {panel}",
+    "Adapted from {size}, with made-up readings. Installed, it is adapted the same way: a start you can finish in Design.": "Подогнано из {size}, с выдуманными показаниями. При установке подгоняется так же: основа, которую можно доделать в «Дизайне»."
   },
   "fields": {
     "agent": "агент",

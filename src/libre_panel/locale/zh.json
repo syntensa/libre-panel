@@ -2695,7 +2695,6 @@
     "{file} is saved in your downloads.": "{file} 已保存到你的下载文件夹。",
     "Share “{name}” with everyone": "与所有人分享“{name}”",
     "A check runs by itself and answers on the form. After a look, the theme is among the community themes, for everyone.": "检查会自动运行并在表单中回复。经过查看后，该主题会进入社区主题，供所有人使用。",
-    "Install anyway": "仍然安装",
     "Save the theme": "保存主题",
     "Every picture and font in it may be shared with everyone: they are my own, or their license allows it.": "其中的每张图片和每种字体都可以与所有人分享：它们是我自己的，或其许可证允许这样做。",
     "The theme in the download is made for {size}, not for the panels the community's list names: nothing was installed.": "下载的主题是为 {size} 制作的，而不是社区列表所写的面板：未安装任何内容。",
@@ -2703,7 +2702,6 @@
     "It goes among the community themes: everyone with Libre Panel can install it with one click.": "它会进入社区主题：所有使用 Libre Panel 的人都能一键安装。",
     "Share with everyone": "与所有人分享",
     "None is made for {panel} yet: these are for other panels.": "还没有为 {panel} 制作的主题：这些适用于其他面板。",
-    "“{name}” is made for {size}, and {panel} is {own}: it would be scaled to fit. Install it anyway?": "“{name}”是为 {size} 制作的，而 {panel} 是 {own}：它会被缩放以适应。仍然安装吗？",
     "Your name or handle": "你的名字或昵称",
     "Open the form": "打开表单",
     "It shows for panels of {size}, as it is made.": "它会显示给 {size} 的面板，这是它的设计尺寸。",
@@ -2848,7 +2846,13 @@
     "a video or an animated picture plays to its end, round by round, at least this long": "视频或动图会一轮一轮地播放到结尾，至少播放这么久",
     "of its videos and animated pictures: 0.5 is half as fast, 2 twice": "其视频和动图的速度：0.5 为一半速度，2 为两倍",
     "A notice when a session waits for you": "会话等待你时显示提示",
-    "On the panel, when Claude Code or Codex begins to wait for your answer; not while the theme shows AI activity itself.": "当 Claude Code 或 Codex 开始等待你的回答时，在面板上提示；主题本身显示 AI 活动时则不提示。"
+    "On the panel, when Claude Code or Codex begins to wait for your answer; not while the theme shows AI activity itself.": "当 Claude Code 或 Codex 开始等待你的回答时，在面板上提示；主题本身显示 AI 活动时则不提示。",
+    "How it looks on {panel}": "在 {panel} 上的效果",
+    "“{name}” is made for {size}; Libre Panel adapts it to {panel} ({own}) as it installs it: a start you can finish in Design.": "“{name}”是为 {size} 制作的；Libre Panel 在安装时会将其适配到 {panel}（{own}）：这是一个起点，你可以在“设计”中完善它。",
+    "Adapt and install": "适配并安装",
+    "Adapted to {panel}.": "已适配到 {panel}。",
+    "{name} on {panel}": "{panel} 上的 {name}",
+    "Adapted from {size}, with made-up readings. Installed, it is adapted the same way: a start you can finish in Design.": "从 {size} 适配而来，使用虚构的读数。安装时会以同样方式适配：这是一个起点，你可以在“设计”中完善它。"
   },
   "fields": {
     "agent": "智能体",

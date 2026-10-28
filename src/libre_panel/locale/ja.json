@@ -2695,7 +2695,6 @@
     "{file} is saved in your downloads.": "{file}をダウンロードフォルダーに保存しました。",
     "Share “{name}” with everyone": "「{name}」をみんなと共有",
     "A check runs by itself and answers on the form. After a look, the theme is among the community themes, for everyone.": "チェックは自動で実行され、フォームに結果を返します。確認が済むと、テーマはコミュニティのテーマに加わり、誰でも使えるようになります。",
-    "Install anyway": "それでもインストール",
     "Save the theme": "テーマを保存",
     "Every picture and font in it may be shared with everyone: they are my own, or their license allows it.": "含まれる画像とフォントはすべて誰とでも共有できます。自分で作ったものか、ライセンスで認められているものです。",
     "The theme in the download is made for {size}, not for the panels the community's list names: nothing was installed.": "ダウンロードしたテーマは{size}向けで、コミュニティのリストにあるパネル向けではありません。何もインストールされませんでした。",
@@ -2703,7 +2702,6 @@
     "It goes among the community themes: everyone with Libre Panel can install it with one click.": "コミュニティのテーマに加わり、Libre Panelを使う誰もがワンクリックでインストールできます。",
     "Share with everyone": "みんなと共有",
     "None is made for {panel} yet: these are for other panels.": "{panel}向けのものはまだありません。これらは別のパネル向けです。",
-    "“{name}” is made for {size}, and {panel} is {own}: it would be scaled to fit. Install it anyway?": "「{name}」は{size}向けで、{panel}は{own}です。合わせて拡大・縮小されます。それでもインストールしますか？",
     "Your name or handle": "名前またはハンドル名",
     "Open the form": "フォームを開く",
     "It shows for panels of {size}, as it is made.": "作られたサイズである{size}のパネル向けに表示されます。",
@@ -2848,7 +2846,13 @@
     "a video or an animated picture plays to its end, round by round, at least this long": "動画やアニメーション画像は最後まで、1周ずつ、少なくともこの時間は再生されます",
     "of its videos and animated pictures: 0.5 is half as fast, 2 twice": "動画とアニメーション画像の速さ：0.5 で半分、2 で2倍",
     "A notice when a session waits for you": "セッションがあなたを待っているときに通知",
-    "On the panel, when Claude Code or Codex begins to wait for your answer; not while the theme shows AI activity itself.": "Claude Code または Codex があなたの返答を待ち始めたとき、パネルに表示します。テーマ自体が AI アクティビティを表示している間は表示しません。"
+    "On the panel, when Claude Code or Codex begins to wait for your answer; not while the theme shows AI activity itself.": "Claude Code または Codex があなたの返答を待ち始めたとき、パネルに表示します。テーマ自体が AI アクティビティを表示している間は表示しません。",
+    "How it looks on {panel}": "{panel} での見た目",
+    "“{name}” is made for {size}; Libre Panel adapts it to {panel} ({own}) as it installs it: a start you can finish in Design.": "「{name}」は {size} 用に作られています。Libre Panel はインストール時に {panel}（{own}）に合わせて調整します。デザインで仕上げられる出発点です。",
+    "Adapt and install": "調整してインストール",
+    "Adapted to {panel}.": "{panel} に合わせて調整しました。",
+    "{name} on {panel}": "{panel} 上の {name}",
+    "Adapted from {size}, with made-up readings. Installed, it is adapted the same way: a start you can finish in Design.": "{size} から調整し、架空の値で表示しています。インストール時も同じように調整されます。デザインで仕上げられる出発点です。"
   },
   "fields": {
     "agent": "エージェント",

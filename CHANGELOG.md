@@ -44,6 +44,10 @@
   USB, with where the script for it is.
 
 **Community themes**
+- **A theme for another panel, adapted to yours.** A community theme made for another size
+  shows *How it looks on* your panel: drawn adapted, with made-up readings, before anything is
+  installed. *Adapt and install* puts it in place adapted to your panel (as Design's *Fit this
+  theme to …* does), a start you can finish in Design, instead of scaled as a whole.
 - **The one who shares a theme is its commit's author.** The workflow commits a shared theme in
   the name of who opened the issue (by their GitHub noreply address), so once merged they show
   among the project's contributors; its pull request says to merge with *Rebase and merge*.

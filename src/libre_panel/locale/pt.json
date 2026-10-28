@@ -2695,7 +2695,6 @@
     "{file} is saved in your downloads.": "{file} foi salvo nos seus downloads.",
     "Share “{name}” with everyone": "Compartilhar “{name}” com todos",
     "A check runs by itself and answers on the form. After a look, the theme is among the community themes, for everyone.": "Uma verificação roda sozinha e responde no formulário. Depois de uma olhada, o tema entra nos temas da comunidade, para todos.",
-    "Install anyway": "Instalar mesmo assim",
     "Save the theme": "Salvar o tema",
     "Every picture and font in it may be shared with everyone: they are my own, or their license allows it.": "Cada imagem e cada fonte nele pode ser compartilhada com todos: são minhas, ou a licença delas permite.",
     "The theme in the download is made for {size}, not for the panels the community's list names: nothing was installed.": "O tema baixado foi feito para {size}, não para os painéis que a lista da comunidade indica: nada foi instalado.",
@@ -2703,7 +2702,6 @@
     "It goes among the community themes: everyone with Libre Panel can install it with one click.": "Ele entra nos temas da comunidade: qualquer pessoa com o Libre Panel pode instalá-lo com um clique.",
     "Share with everyone": "Compartilhar com todos",
     "None is made for {panel} yet: these are for other panels.": "Ainda não há nenhum feito para {panel}: estes são para outros painéis.",
-    "“{name}” is made for {size}, and {panel} is {own}: it would be scaled to fit. Install it anyway?": "“{name}” foi feito para {size}, e {panel} tem {own}: ele seria redimensionado para caber. Instalar mesmo assim?",
     "Your name or handle": "Seu nome ou apelido",
     "Open the form": "Abrir o formulário",
     "It shows for panels of {size}, as it is made.": "Ele aparece para painéis de {size}, para os quais foi feito.",
@@ -2848,7 +2846,13 @@
     "a video or an animated picture plays to its end, round by round, at least this long": "um vídeo ou uma imagem animada reproduz-se até ao fim, volta a volta, pelo menos este tempo",
     "of its videos and animated pictures: 0.5 is half as fast, 2 twice": "dos seus vídeos e imagens animadas: 0,5 é metade da velocidade, 2 o dobro",
     "A notice when a session waits for you": "Um aviso quando uma sessão espera por si",
-    "On the panel, when Claude Code or Codex begins to wait for your answer; not while the theme shows AI activity itself.": "No painel, quando o Claude Code ou o Codex começa a esperar pela sua resposta; não enquanto o tema mostra ele próprio a atividade de IA."
+    "On the panel, when Claude Code or Codex begins to wait for your answer; not while the theme shows AI activity itself.": "No painel, quando o Claude Code ou o Codex começa a esperar pela sua resposta; não enquanto o tema mostra ele próprio a atividade de IA.",
+    "How it looks on {panel}": "Como fica em {panel}",
+    "“{name}” is made for {size}; Libre Panel adapts it to {panel} ({own}) as it installs it: a start you can finish in Design.": "“{name}” foi feito para {size}; o Libre Panel adapta-o a {panel} ({own}) ao instalá-lo: um começo que pode terminar em Design.",
+    "Adapt and install": "Adaptar e instalar",
+    "Adapted to {panel}.": "Adaptado a {panel}.",
+    "{name} on {panel}": "{name} em {panel}",
+    "Adapted from {size}, with made-up readings. Installed, it is adapted the same way: a start you can finish in Design.": "Adaptado de {size}, com leituras inventadas. Instalado, é adaptado da mesma forma: um começo que pode terminar em Design."
   },
   "fields": {
     "agent": "agente",

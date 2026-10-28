@@ -2655,17 +2655,35 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._error("not found", HTTPStatus.NOT_FOUND)
         self._send(200, data, "image/png")
 
+    def _community_look(self, theme_id: str, query: dict[str, list[str]]) -> None:
+        """``?model=turing-12.3-usb``: a theme the community shares as it would show on that
+        panel, adapted where it is made for another size (community.py); nothing installed."""
+        model = (query.get("model") or [""])[0]
+        try:
+            data = self.state.community.look_on(theme_id, model)
+        except KeyError:
+            return self._error(f"unknown panel model {model!r}")
+        except (CommunityError, ShareError, ThemeError, ValueError) as exc:
+            return self._error(str(exc))
+        self._send(200, data, "image/png")
+
     def _community_install(self) -> None:
         """``{"id": "aurora"}``: a theme the community shares, downloaded, checked against the
-        list's SHA-256 and put in the person's themes folder (community.py)."""
+        list's SHA-256 and put in the person's themes folder (community.py); with ``"model"``,
+        one made for another size adapted to that panel."""
         payload = self._read_json()
         if payload is None:
             return None
         if not isinstance(payload, dict) or not isinstance(payload.get("id"), str):
             return self._error('expected {"id": "<the id of a theme in the community list>"}')
+        model = payload.get("model") or ""
+        if not isinstance(model, str):
+            return self._error('"model" is the id of a panel model')
         try:
-            done = self.state.community.install(payload["id"])
-        except (CommunityError, ShareError) as exc:
+            done = self.state.community.install(payload["id"], model)
+        except KeyError:
+            return self._error(f"unknown panel model {model!r}")
+        except (CommunityError, ShareError, ThemeError) as exc:
             return self._error(str(exc))
         except OSError as exc:
             return self._error(str(exc), HTTPStatus.CONFLICT)
@@ -2738,6 +2756,12 @@ ROUTES: tuple[Route, ...] = (
         "GET",
         "/api/community/themes/{theme}/preview",
         lambda h, m, u: h._community_preview(m["theme"]),
+        picture=True,
+    ),
+    Route(
+        "GET",
+        "/api/community/themes/{theme}/look",
+        lambda h, m, u: h._community_look(m["theme"], parse_qs(u.query)),
         picture=True,
     ),
     Route("GET", "/api/readings", lambda h, m, u: h._json(h._readings(parse_qs(u.query)))),
