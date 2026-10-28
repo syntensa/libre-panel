@@ -1408,6 +1408,12 @@ class MainLoop:
                 # a slow piece (a new background) must not stall a video
                 renderer.background_builds = streaming
                 renderer.continuous = streaming  # graphs scroll, values glide on
+                # videos decoded as fast as the panel gets frames (a few a second where it takes
+                # a video from its file: below), else as moving.VIDEO_FPS says
+                if not streaming:
+                    renderer.video_fps = None
+                elif renderer.video_fps is None:
+                    renderer.video_fps = config.device.video.fps
                 renderer.fps = _fps(config, host, display)  # screens may pace animations by it
                 # nothing glides, turns or breathes on a calm panel (it would be sent every frame)
                 renderer.animate = config.fps > 1 and not calm(config, display)
@@ -1468,7 +1474,7 @@ class MainLoop:
                         and config.device.video.direct
                         and link.show_video(whole, background_of(renderer), out.size, started)
                     )
-                    renderer.video_fps = DIRECT_PICTURE_FPS if direct else None
+                    renderer.video_fps = DIRECT_PICTURE_FPS if direct else config.device.video.fps
                     if not direct:
                         link.show(out, None, started)
                     previous = None

@@ -82,6 +82,18 @@ def test_hardware_names_that_are_not_text_or_are_too_long_are_refused(data, mess
         parse_config(data)
 
 
+def test_a_usb_display_s_picture_quality_is_read_and_checked():
+    """[device] jpeg_quality: 90 by default, 50 to 100, for [[panels]] too (#33)."""
+    assert parse_config({}).device.jpeg_quality == 90
+    assert parse_config({"device": {"jpeg_quality": 100}}).device.jpeg_quality == 100
+    cfg = parse_config({"panels": [{"model": "waveshare-2.8-udisp", "jpeg_quality": 95}]})
+    assert cfg.panels[0].device.jpeg_quality == 95
+    for wrong, message in ((101, "between 50 and 100"), (49, "between 50 and 100"),
+                           ("95", "jpeg_quality")):  # fmt: skip
+        with pytest.raises(ConfigError, match=message):
+            parse_config({"device": {"jpeg_quality": wrong}})
+
+
 def test_set_config_value_writes_a_hardware_name_into_the_template_and_keeps_its_notes(
     isolated_home,
 ):

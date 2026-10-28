@@ -32,7 +32,7 @@ invalid is refused with the reason, and nothing is written.
 
 | Section | What it changes in `config.toml` |
 |---|---|
-| Panel | `accent`, `[device]` (`model`, `brightness`, `orientation`, `rotate`, `motion`, `dark_on_quit`, `dark_on_sleep`, `night`, `night_from`, `night_to`, `night_brightness`, `dark_when_away`, `away_brightness`, `at` (*More panels*: where it stands); under *Advanced* `driver`, `output`, `still` (TURZX USB panels), `port`; `jpeg` is written by the panel test) and `[video]` (`mode`, `fps` (also for a udisp USB display), `direct`, `local_clip` while smooth motion lacks it; under *Advanced* `ffmpeg`, and `local_clip` once it is set) |
+| Panel | `accent`, `[device]` (`model`, `brightness`, `orientation`, `rotate`, `motion`, `dark_on_quit`, `dark_on_sleep`, `night`, `night_from`, `night_to`, `night_brightness`, `dark_when_away`, `away_brightness`, `at` (*More panels*: where it stands); under *Advanced* `driver`, `output`, `still` (TURZX USB panels), `port`; `jpeg_quality` (a udisp USB display's *Picture quality*); `jpeg` is written by the panel test) and `[video]` (`mode`, `fps` (also for a udisp USB display), `direct`, `local_clip` while smooth motion lacks it; under *Advanced* `ffmpeg`, and `local_clip` once it is set) |
 | Sensors | `[sensors] providers` (which sources, and their order; those not in use under *More sources*), the hardware's names, and under *Advanced* `refresh_ms` and `[sensors.librehardwaremonitor]` (`mode`, `url`) |
 | Game mode and more | `[services] enabled` and the options of each `[services.<name>]` table: switches, numbers, texts and lists of texts or numbers. The rules of the autopilot have their own page (*Edit*, under the autopilot), the warnings of `notices` and the limits of `cooling` are still written here |
 | Weather and place | `[weather]` (`enabled`, `latitude`, `longitude`, `place`, `units`, `update_minutes`) |
@@ -99,6 +99,11 @@ jpeg = "4:4:4"                 # udisp USB displays that take JPEG (Waveshare's 
                                # drivers send them, or "4:2:0", at every second pixel each
                                # way, for a decoder that shows only that; the panel test
                                # tries "4:2:0" where the test card stays black and writes it
+jpeg_quality = 90              # ... and how much of each picture's detail its JPEG keeps,
+                               # 50 to 100: 95 finer at about a third more bytes a picture,
+                               # 100 the most at two to three times as many (Settings →
+                               # Panel → Picture quality); lower only where the display
+                               # says its JPEGs may have fewer bytes
 dark_on_quit = false           # true: black and its light off when Libre Panel quits
                                # (Windows shutting down too); lit again at the next start;
                                # Turing 3.5" and UsbPCMonitor turn their screen off too

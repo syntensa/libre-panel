@@ -79,6 +79,7 @@ def test_the_settings_are_the_config_with_its_defaults_filled_in(server):
         "motion": "auto",
         "still": "auto",
         "video_range": "auto",
+        "jpeg_quality": 90,
         "dark_on_quit": False,
         "dark_on_sleep": True,
         "night": False,
@@ -239,6 +240,19 @@ def test_how_a_turzx_usb_panel_takes_its_stills_is_written_and_read(server):
     assert load_config().device.still == "jpeg" and 'still = "jpeg"' in config_text()
     status, _ = write(server, panels=[{"model": "turing-5.2-usb", "still": "png"}])
     assert status == 200 and load_config().panels[0].device.still == "png"
+
+
+def test_a_usb_display_s_picture_quality_is_written_and_checked(server):
+    """Settings → Panel → Picture quality: a udisp display's JPEGs, 50 to 100 (#33)."""
+    _, data = request(server, "GET", "/api/settings")
+    assert data["config"]["device"]["jpeg_quality"] == 90
+    status, data = write(server, **{"device.jpeg_quality": 100})
+    assert status == 200 and data["config"]["device"]["jpeg_quality"] == 100
+    assert load_config().device.jpeg_quality == 100 and "jpeg_quality = 100" in config_text()
+    for wrong in (49, 101, "95", True):
+        status, _ = write(server, **{"device.jpeg_quality": wrong})
+        assert status == 400, wrong
+    assert load_config().device.jpeg_quality == 100
 
 
 def test_the_video_experiment_s_settings_are_written_and_checked(server):
@@ -1232,10 +1246,10 @@ def test_the_settings_that_name_a_program_or_a_file_are_the_ones_locked():
         "device.orientation", "device.motion", "device.dark_on_quit", "device.dark_on_sleep",
         "device.night", "device.night_from", "device.night_to", "device.night_brightness",
         "device.dark_when_away", "device.away_brightness", "device.at", "device.still",
-        "device.video_range", "device.jpeg",
+        "device.video_range", "device.jpeg", "device.jpeg_quality",
         "video.mode", "video.fps", "video.local_clip", "video.clip_asked", "refresh_ms",
         "video.device_fps", "video.crf", "video.preset", "video.keyframe_s", "video.maxrate",
-        "video.profile", "video.encoder", "video.pixels",
+        "video.profile", "video.encoder", "video.pixels", "video.direct",
         "check_updates", "allow_notify", "light_mode", "symbols", "cards", "accent", "across",
         "hotkeys.enabled", "hotkeys.pause",
         "hotkeys.brightness_up", "hotkeys.brightness_down", "hotkeys.open", "hotkeys.next_scene",

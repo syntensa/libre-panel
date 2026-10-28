@@ -218,6 +218,8 @@ function VideoCard() {
   const rates = [25, 30, 50, 60, ...(fps && ![25, 30, 50, 60].includes(fps) ? [fps] : [])].sort((a, b) => a - b);
   const applies = videoApplies(config, info);
   const streams = !applies && Boolean(video.streams); // (a udisp display: whole pictures, no video mode)
+  const quality = config.device.jpeg_quality ?? 90;
+  const qualities = [80, 90, 95, 100, ...(![80, 90, 95, 100].includes(quality) ? [quality] : [])].sort((a, b) => a - b);
   return html`<${Card} id="panel-video">
     <${SettingRow}
       title=${t("Smooth motion")}
@@ -244,6 +246,16 @@ function VideoCard() {
             value=${fps}
             onChange=${(value) => change({ "video.fps": value, "video.device_fps": value >= 60 ? value + 10 : 60 })}
             options=${rates.map((rate) => ({ value: rate, label: String(rate) }))}
+          />
+        <//>`
+      : null}
+    ${streams
+      ? html`<${SettingRow} title=${t("Picture quality")} hint=${t("How much of each picture's detail its JPEG keeps. 90 is the default; 95 keeps finer detail at about a third more bytes a picture, 100 the most at two to three times as many. Libre Panel drives the display no faster than it takes them: where it comes to fewer pictures a second, 90 is the smoother.")}>
+          <${Segmented}
+            label=${t("Picture quality")}
+            value=${quality}
+            onChange=${(value) => change({ "device.jpeg_quality": value })}
+            options=${qualities.map((step) => ({ value: step, label: String(step) }))}
           />
         <//>`
       : null}

@@ -2854,7 +2854,9 @@
     "{name} on {panel}": "{name} на {panel}",
     "Adapted from {size}, with made-up readings. Installed, it is adapted the same way: a start you can finish in Design.": "Подогнано из {size}, с выдуманными показаниями. При установке подгоняется так же: основа, которую можно доделать в «Дизайне».",
     "Videos straight to the panel": "Видео прямо на панель",
-    "A theme that is one video across the panel goes to it from its file, not drawn picture by picture: less of the processor. Pictures again as soon as anything else shows, a notice or a transition. An experiment.": "Тема, состоящая из одного видео на всю панель, идёт на неё прямо из файла, а не рисуется кадр за кадром: меньше нагрузки на процессор. Как только появляется что-то ещё, уведомление или переход, снова кадр за кадром. Эксперимент."
+    "A theme that is one video across the panel goes to it from its file, not drawn picture by picture: less of the processor. Pictures again as soon as anything else shows, a notice or a transition. An experiment.": "Тема, состоящая из одного видео на всю панель, идёт на неё прямо из файла, а не рисуется кадр за кадром: меньше нагрузки на процессор. Как только появляется что-то ещё, уведомление или переход, снова кадр за кадром. Эксперимент.",
+    "Picture quality": "Качество изображения",
+    "How much of each picture's detail its JPEG keeps. 90 is the default; 95 keeps finer detail at about a third more bytes a picture, 100 the most at two to three times as many. Libre Panel drives the display no faster than it takes them: where it comes to fewer pictures a second, 90 is the smoother.": "Сколько деталей каждого изображения сохраняет его JPEG. 90 — по умолчанию; 95 сохраняет более мелкие детали примерно на треть больше байт на изображение, 100 — больше всего, в два-три раза больше байт. Libre Panel никогда не отправляет изображения быстрее, чем дисплей их принимает: если он тогда показывает меньше изображений в секунду, 90 будет плавнее."
   },
   "fields": {
     "agent": "агент",

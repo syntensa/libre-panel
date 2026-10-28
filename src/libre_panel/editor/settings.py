@@ -24,6 +24,7 @@ from libre_panel import __version__, i18n
 from libre_panel.config import (
     ALARM_THEME,
     JPEG_LAYOUTS,
+    JPEG_QUALITY,
     MORE_PANELS,
     MOTIONS,
     RANDOM_TRANSITION,
@@ -435,6 +436,7 @@ class Settings:
                     "motion": device.motion,
                     "still": device.still,
                     "video_range": device.video_range,
+                    "jpeg_quality": device.jpeg_quality,
                     "dark_on_quit": device.dark_on_quit,
                     "dark_on_sleep": device.dark_on_sleep,
                     "night": device.night,
@@ -1459,6 +1461,7 @@ RULES: dict[str, Any] = {
     # the range of the video's values on the panel (Settings → Panel → Check the colours)
     "device.video_range": lambda n, v, c: _choice(n, v, VIDEO_RANGES),
     "device.jpeg": lambda n, v, c: _choice(n, v, JPEG_LAYOUTS),
+    "device.jpeg_quality": lambda n, v, c: _whole(n, v, *JPEG_QUALITY),
     "device.dark_on_quit": lambda n, v, c: _flag(n, v),
     "device.dark_on_sleep": lambda n, v, c: _flag(n, v),
     "device.night": lambda n, v, c: _flag(n, v),

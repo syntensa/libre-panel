@@ -44,6 +44,7 @@ VIDEO_RANGES = ("auto", "limited", "full")
 # How a udisp USB display's JPEGs carry their colours ([device] jpeg): at every pixel, as the
 # protocol's drivers send them, or at every second pixel each way, as most JPEGs do
 JPEG_LAYOUTS = ("4:4:4", "4:2:0")
+JPEG_QUALITY = (50, 100)  # [device] jpeg_quality: the least and the most
 DEFAULT_SYMBOLS = "vivid"
 # The cards a card slot that leaves them to the person holds (Lumen's, in each of its versions:
 # config.toml ``cards``, theme.modules with_cards), in the order they are asked: the first
@@ -505,6 +506,10 @@ class DeviceConfig:
     # drivers') or at every second pixel each way ("4:2:0", most JPEGs'), for a decoder that
     # shows only that one (JPEG_LAYOUTS; the panel test tries it where the first stays black)
     jpeg: str = "4:4:4"
+    # ... and how much of each picture's detail its JPEG keeps (JPEG_QUALITY; Settings → Panel →
+    # Picture quality): 90, or more for finer detail at more bytes a picture; lower only where
+    # the display says its JPEGs may have fewer
+    jpeg_quality: int = 90
     dark_on_quit: bool = False  # a black picture and its light off when Libre Panel quits
     dark_on_sleep: bool = True  # so too while the computer sleeps (Windows), lit when it wakes
     # a brightness of its own at night (night_now): from night_from to night_to, over midnight
@@ -1087,6 +1092,11 @@ def _parse_device(dev: dict[str, Any], where: str) -> DeviceConfig:
     if jpeg not in JPEG_LAYOUTS:
         raise ConfigError(f'{where}.jpeg: "4:4:4" or "4:2:0"')
     device.jpeg = jpeg
+    quality = _expect(dev.get("jpeg_quality", device.jpeg_quality), int, f"{where}.jpeg_quality")
+    if not JPEG_QUALITY[0] <= quality <= JPEG_QUALITY[1]:
+        raise ConfigError(f"{where}.jpeg_quality: must be between {JPEG_QUALITY[0]} and "
+                          f"{JPEG_QUALITY[1]}")  # fmt: skip
+    device.jpeg_quality = quality
     for name in ("dark_on_quit", "dark_on_sleep", "night", "dark_when_away"):
         given = dev.get(name, getattr(device, name))
         setattr(device, name, _expect(given, bool, f"{where}.{name}"))

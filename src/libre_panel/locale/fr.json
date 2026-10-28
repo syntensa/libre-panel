@@ -2854,7 +2854,9 @@
     "{name} on {panel}": "{name} sur {panel}",
     "Adapted from {size}, with made-up readings. Installed, it is adapted the same way: a start you can finish in Design.": "Adapté depuis {size}, avec des valeurs inventées. Installé, il est adapté de la même façon : un point de départ à finir dans Design.",
     "Videos straight to the panel": "Vidéos directement au panneau",
-    "A theme that is one video across the panel goes to it from its file, not drawn picture by picture: less of the processor. Pictures again as soon as anything else shows, a notice or a transition. An experiment.": "Un thème qui n'est qu'une vidéo sur tout le panneau y va depuis son fichier, au lieu d'être dessiné image par image : moins de processeur. De nouveau image par image dès que quelque chose d'autre s'affiche, un avis ou une transition. Une expérience."
+    "A theme that is one video across the panel goes to it from its file, not drawn picture by picture: less of the processor. Pictures again as soon as anything else shows, a notice or a transition. An experiment.": "Un thème qui n'est qu'une vidéo sur tout le panneau y va depuis son fichier, au lieu d'être dessiné image par image : moins de processeur. De nouveau image par image dès que quelque chose d'autre s'affiche, un avis ou une transition. Une expérience.",
+    "Picture quality": "Qualité d'image",
+    "How much of each picture's detail its JPEG keeps. 90 is the default; 95 keeps finer detail at about a third more bytes a picture, 100 the most at two to three times as many. Libre Panel drives the display no faster than it takes them: where it comes to fewer pictures a second, 90 is the smoother.": "La part des détails de chaque image que garde son JPEG. 90 est la valeur par défaut ; 95 garde des détails plus fins pour environ un tiers d'octets en plus par image, 100 le plus pour deux à trois fois plus. Libre Panel n'envoie jamais les images plus vite que l'écran ne les prend : s'il en affiche alors moins par seconde, 90 est plus fluide."
   },
   "fields": {
     "agent": "agent",

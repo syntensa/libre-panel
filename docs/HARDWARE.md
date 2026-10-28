@@ -378,7 +378,12 @@ since 0.7.5, through cold starts and sleep (#30, #33).
   Panel → Frames per second* (`[video] fps`, 30 by default, up to 60), fewer where the display
   says so or takes fewer: Libre Panel times the first pictures and drives it no faster. A JPEG
   takes about a millisecond to make, so 60 costs little more than 30. The log says how many
-  it came to.
+  it came to. A video in a theme plays as many frames a second, up to its own.
+- Each JPEG keeps as much of the picture's detail as *Settings → Panel → Picture quality* says
+  (`[device] jpeg_quality`, 90 by default, 50 to 100): 95 is finer at about a third more bytes
+  a picture, 100 the finest at two to three times as many. At 480×480 that is about 30 to
+  200 KB a picture at 90, 2 to 12 MB a second at 60: well within USB 2.0, so what limits it is
+  how fast the display decodes them, and Libre Panel drives it no faster than it takes them.
 - The 2.8" shows a picture turned by 180° (upside down as it is mounted, #33): Libre Panel
   turns what it sends it, so *Upside down* stays off for it (switch it off again if you had
   switched it on before 0.7.5).

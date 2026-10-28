@@ -2854,7 +2854,9 @@
     "{name} on {panel}": "{name} na {panel}",
     "Adapted from {size}, with made-up readings. Installed, it is adapted the same way: a start you can finish in Design.": "Dopasowany z {size}, z wymyślonymi odczytami. Po instalacji zostaje dopasowany tak samo: początek, który możesz dokończyć w Projekcie.",
     "Videos straight to the panel": "Filmy prosto na panel",
-    "A theme that is one video across the panel goes to it from its file, not drawn picture by picture: less of the processor. Pictures again as soon as anything else shows, a notice or a transition. An experiment.": "Motyw, który jest tylko jednym filmem na całym panelu, trafia na niego prosto z pliku, zamiast być rysowany klatka po klatce: mniej pracy procesora. Znów klatka po klatce, gdy tylko pojawi się coś innego, powiadomienie lub przejście. Eksperyment."
+    "A theme that is one video across the panel goes to it from its file, not drawn picture by picture: less of the processor. Pictures again as soon as anything else shows, a notice or a transition. An experiment.": "Motyw, który jest tylko jednym filmem na całym panelu, trafia na niego prosto z pliku, zamiast być rysowany klatka po klatce: mniej pracy procesora. Znów klatka po klatce, gdy tylko pojawi się coś innego, powiadomienie lub przejście. Eksperyment.",
+    "Picture quality": "Jakość obrazu",
+    "How much of each picture's detail its JPEG keeps. 90 is the default; 95 keeps finer detail at about a third more bytes a picture, 100 the most at two to three times as many. Libre Panel drives the display no faster than it takes them: where it comes to fewer pictures a second, 90 is the smoother.": "Ile szczegółów każdego obrazu zachowuje jego JPEG. 90 to wartość domyślna; 95 zachowuje drobniejsze szczegóły kosztem około jednej trzeciej więcej bajtów na obraz, 100 najwięcej kosztem dwa do trzech razy więcej. Libre Panel nigdy nie wysyła obrazów szybciej, niż wyświetlacz je przyjmuje: jeśli wyświetla wtedy mniej obrazów na sekundę, 90 działa płynniej."
   },
   "fields": {
     "agent": "agent",

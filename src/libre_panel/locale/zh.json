@@ -2854,7 +2854,9 @@
     "{name} on {panel}": "{panel} 上的 {name}",
     "Adapted from {size}, with made-up readings. Installed, it is adapted the same way: a start you can finish in Design.": "从 {size} 适配而来，使用虚构的读数。安装时会以同样方式适配：这是一个起点，你可以在“设计”中完善它。",
     "Videos straight to the panel": "视频直接发送到面板",
-    "A theme that is one video across the panel goes to it from its file, not drawn picture by picture: less of the processor. Pictures again as soon as anything else shows, a notice or a transition. An experiment.": "整个面板只有一个视频的主题会直接从其文件发送到面板，而不是逐帧绘制：占用更少处理器。一旦出现其他内容（提示或过渡），就恢复逐帧绘制。这是一项实验。"
+    "A theme that is one video across the panel goes to it from its file, not drawn picture by picture: less of the processor. Pictures again as soon as anything else shows, a notice or a transition. An experiment.": "整个面板只有一个视频的主题会直接从其文件发送到面板，而不是逐帧绘制：占用更少处理器。一旦出现其他内容（提示或过渡），就恢复逐帧绘制。这是一项实验。",
+    "Picture quality": "画面质量",
+    "How much of each picture's detail its JPEG keeps. 90 is the default; 95 keeps finer detail at about a third more bytes a picture, 100 the most at two to three times as many. Libre Panel drives the display no faster than it takes them: where it comes to fewer pictures a second, 90 is the smoother.": "每张图片的 JPEG 保留多少细节。默认为 90；95 保留更精细的细节，每张图片约多三分之一字节；100 保留最多，字节数为两到三倍。Libre Panel 发送图片的速度从不超过显示屏的接收速度：如果它每秒显示的图片因此变少，90 会更流畅。"
   },
   "fields": {
     "agent": "智能体",

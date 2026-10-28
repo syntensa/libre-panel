@@ -63,7 +63,7 @@ RGB565, RGB888, YUV420, JPEG = 0, 1, 2, 3
 END = HEADER.pack(0, 0xFF, 0, 0, 0, 1, 1, 0)  # after a picture of whole packets
 MAX_PAYLOAD = (1 << 22) - 1
 FRAME_IDS = 1 << 10
-QUALITIES = (90, 80, 70, 60, 50)
+QUALITIES = (90, 80, 70, 60, 50)  # a JPEG's: [device] jpeg_quality, then lower where too large
 WRITE_TIMEOUT_MS = 3000
 REACHED = 0.9  # of the pictures a second the display came to: the most it is driven at
 TRIAL = 24  # the first frames, timed for how many the display takes a second
@@ -142,16 +142,18 @@ def present_model() -> PanelModel | None:
     return None
 
 
-def jpeg(picture: Image.Image, limit: int | None, layout: str = "4:4:4") -> bytes:
+def jpeg(picture: Image.Image, limit: int | None, layout: str = "4:4:4",
+         quality: int = QUALITIES[0]) -> bytes:  # fmt: skip
     """``picture`` as a baseline JPEG within ``limit`` bytes (the display's buffer, where it
     says one): its colours at every pixel ("4:4:4", as the protocol's drivers send theirs:
     coloured lines and small text stay sharp), or at every second pixel each way ("4:2:0", as
-    most JPEGs are made: for a decoder that shows only those)."""
+    most JPEGs are made: for a decoder that shows only those). At ``quality`` ([device]
+    jpeg_quality), lower only where it would be more than ``limit``."""
     most = min(limit or MAX_PAYLOAD, MAX_PAYLOAD)
     subsampling = 2 if layout == "4:2:0" else 0
-    for quality in QUALITIES:
+    for step in (quality, *(lower for lower in QUALITIES if lower < quality)):
         buffer = io.BytesIO()
-        picture.save(buffer, format="JPEG", quality=quality, subsampling=subsampling)
+        picture.save(buffer, format="JPEG", quality=step, subsampling=subsampling)
         if buffer.tell() <= most:
             return buffer.getvalue()
     raise FrameError(f"frame too detailed for the display ({buffer.tell() // 1024} KB)")
@@ -200,6 +202,7 @@ class UdispDisplay(Display):
         self.kind = JPEG  # the kind of picture the display names first (takes())
         layout = getattr(config, "jpeg", "")
         self.layout = layout if layout in JPEG_LAYOUTS else JPEG_LAYOUTS[0]
+        self.quality = getattr(config, "jpeg_quality", QUALITIES[0])  # (a JPEG's)
         self.rate: float | None = None  # the pictures a second it came to (_time())
         self._timed: list[float] = []
         self.device: Any = None
@@ -292,7 +295,7 @@ class UdispDisplay(Display):
     def _encoded(self, picture: Image.Image) -> bytes:
         """The picture as the kind the display names first (:func:`takes`)."""
         if self.kind == JPEG:
-            data = jpeg(picture, self.said.get("limit"), self.layout)
+            data = jpeg(picture, self.said.get("limit"), self.layout, self.quality)
         elif self.kind == RGB888:
             data = picture.tobytes()  # (R, G, B, a byte each)
         else:

@@ -2854,7 +2854,9 @@
     "{name} on {panel}": "{panel} 上の {name}",
     "Adapted from {size}, with made-up readings. Installed, it is adapted the same way: a start you can finish in Design.": "{size} から調整し、架空の値で表示しています。インストール時も同じように調整されます。デザインで仕上げられる出発点です。",
     "Videos straight to the panel": "動画をパネルへ直接送る",
-    "A theme that is one video across the panel goes to it from its file, not drawn picture by picture: less of the processor. Pictures again as soon as anything else shows, a notice or a transition. An experiment.": "パネル全体が1本の動画だけのテーマは、1枚ずつ描画せずにファイルから直接パネルへ送ります。プロセッサの負荷が下がります。通知やトランジションなど他のものが表示されると、すぐに1枚ずつの描画に戻ります。実験的な機能です。"
+    "A theme that is one video across the panel goes to it from its file, not drawn picture by picture: less of the processor. Pictures again as soon as anything else shows, a notice or a transition. An experiment.": "パネル全体が1本の動画だけのテーマは、1枚ずつ描画せずにファイルから直接パネルへ送ります。プロセッサの負荷が下がります。通知やトランジションなど他のものが表示されると、すぐに1枚ずつの描画に戻ります。実験的な機能です。",
+    "Picture quality": "画質",
+    "How much of each picture's detail its JPEG keeps. 90 is the default; 95 keeps finer detail at about a third more bytes a picture, 100 the most at two to three times as many. Libre Panel drives the display no faster than it takes them: where it comes to fewer pictures a second, 90 is the smoother.": "各画像の JPEG がどれだけ細部を保つか。既定は 90 です。95 は画像1枚あたり約3分の1多いバイト数でより細かい部分を保ち、100 は2〜3倍のバイト数で最も多くを保ちます。Libre Panel はディスプレイが受け取れる速さを超えて画像を送りません。そのために1秒あたりの画像が減る場合は、90 のほうが滑らかです。"
   },
   "fields": {
     "agent": "エージェント",

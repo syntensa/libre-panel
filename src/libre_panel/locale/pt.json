@@ -2854,7 +2854,9 @@
     "{name} on {panel}": "{name} em {panel}",
     "Adapted from {size}, with made-up readings. Installed, it is adapted the same way: a start you can finish in Design.": "Adaptado de {size}, com leituras inventadas. Instalado, é adaptado da mesma forma: um começo que pode terminar em Design.",
     "Videos straight to the panel": "Vídeos diretamente para o painel",
-    "A theme that is one video across the panel goes to it from its file, not drawn picture by picture: less of the processor. Pictures again as soon as anything else shows, a notice or a transition. An experiment.": "Um tema que é apenas um vídeo em todo o painel vai para ele a partir do seu ficheiro, em vez de ser desenhado imagem a imagem: menos processador. Volta a ser imagem a imagem assim que aparece outra coisa, um aviso ou uma transição. Uma experiência."
+    "A theme that is one video across the panel goes to it from its file, not drawn picture by picture: less of the processor. Pictures again as soon as anything else shows, a notice or a transition. An experiment.": "Um tema que é apenas um vídeo em todo o painel vai para ele a partir do seu ficheiro, em vez de ser desenhado imagem a imagem: menos processador. Volta a ser imagem a imagem assim que aparece outra coisa, um aviso ou uma transição. Uma experiência.",
+    "Picture quality": "Qualidade de imagem",
+    "How much of each picture's detail its JPEG keeps. 90 is the default; 95 keeps finer detail at about a third more bytes a picture, 100 the most at two to three times as many. Libre Panel drives the display no faster than it takes them: where it comes to fewer pictures a second, 90 is the smoother.": "Quanto detalhe de cada imagem o seu JPEG mantém. 90 é o predefinido; 95 mantém detalhes mais finos com cerca de um terço mais de bytes por imagem, 100 o máximo com duas a três vezes mais. O Libre Panel nunca envia as imagens mais depressa do que o ecrã as aceita: se então mostrar menos imagens por segundo, 90 é mais fluido."
   },
   "fields": {
     "agent": "agente",

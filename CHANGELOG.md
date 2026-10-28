@@ -10,6 +10,15 @@
   app's picture of the panel shows it at four frames a second meanwhile. As soon as anything
   else shows (a notice, a transition, the alarm's edge) the frames take over again, and a video
   ffmpeg cannot play from its file is drawn as before.
+- **Picture quality for a USB display** (*Settings → Panel*, `[device] jpeg_quality`, #33).
+  Waveshare's 2.8" takes each picture as a JPEG: 90 keeps its detail as before, 95 and 100
+  keep finer detail at more bytes a picture. Libre Panel still drives the display no faster
+  than it takes them.
+
+**Better**
+- **Videos in a theme play as smoothly as the panel is sent frames** (#33): at 60 frames a
+  second on a panel set to 60, where the video has them. They were decoded at 30 at most; a
+  video of fewer frames is decoded at its own, none of them twice.
 
 ## 0.7.6 — 2026-10-28
 

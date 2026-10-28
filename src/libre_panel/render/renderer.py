@@ -717,12 +717,14 @@ class Renderer:
         # a slideshow with pictures that move: the one on show, since when and until when
         self._shows: dict[str, tuple[int, float, float]] = {}
         self._moves: dict[str, bool] = {}  # a slideshow's picture: does it move?
-        self._video_infos: dict[str, moving.VideoInfo] = {}  # a video's length and size
+        self._video_infos: dict[str, moving.VideoInfo] = {}  # a video's length, size, fps
         # [video] direct: the video of this frame, and the frame being it alone across the theme
-        # (the main loop then has the panel take it from its file: app.py); the frames a second
-        # its feed is decoded at meanwhile, for the app's picture alone (None: as it plays)
+        # (the main loop then has the panel take it from its file: app.py)
         self._video_drawn: tuple[str, str, dict[str, Any], tuple[int, int, int, int]] | None = None
         self.full_video: tuple[str, str, float] | None = None  # (path, fit, speed)
+        # the frames a second videos are decoded at, no more than each one's own (the main loop
+        # sets it: a streamed panel's, or a few for the app's picture alone where the panel
+        # takes the video from its file; None: moving.VIDEO_FPS)
         self.video_fps: int | None = None
         self._ffmpeg: str | None = None  # where ffmpeg is ("": not found)
         self._slide_lists: dict[str, tuple[float, list[str]]] = {}  # widget id -> pictures
@@ -2500,6 +2502,9 @@ class Renderer:
         speed = moving.speed_of(widget.get("speed", 1))
         self._video_drawn = (widget["id"], str(path), widget, (x, y, w, h))
         rate = self.video_fps or moving.VIDEO_FPS
+        own = None if self.preview else self._video_info(rel, path).fps
+        if own:  # no faster than the video's own: no frame twice (29.97 is 30)
+            rate = min(rate, max(1, math.ceil(own - 0.05)))
         key = (rel, w, h, fit, speed, rate)
         frame, count = None, -1
         if not self.preview:

@@ -37,7 +37,7 @@ VIDEO_SUFFIXES = (".mp4", ".webm", ".mov", ".m4v", ".mkv")
 FRAMES_BYTES = 96 * 1024 * 1024  # the frames of one animated picture, at most
 LEAST_FRAME_S = 0.02  # a frame said to show for less (or 0): as browsers do, 0.1 s
 USUAL_FRAME_S = 0.1
-VIDEO_FPS = 30  # the most frames a second a video is decoded at
+VIDEO_FPS = 30  # the frames a second a video is decoded at, at most, where nothing says more
 IDLE_S = 5.0  # a video nobody asked a frame of for this long: ffmpeg stops
 START_TIMEOUT_S = 10.0
 SPEEDS = (0.25, 4.0)  # how much slower or faster a moving picture plays, at most
@@ -145,15 +145,17 @@ def _quiet() -> dict:
 
 @dataclass(frozen=True)
 class VideoInfo:
-    """What ffmpeg reads of a video file: how long it plays (seconds) and the size its pictures
-    come out at (turned as it says, as ffmpeg turns them); None where it cannot tell."""
+    """What ffmpeg reads of a video file: how long it plays (seconds), the size its pictures
+    come out at (turned as it says, as ffmpeg turns them) and its frames a second; None where
+    it cannot tell."""
 
     length: float | None = None
     size: tuple[int, int] | None = None
+    fps: float | None = None
 
 
 def video_info(ffmpeg: str, path: Path) -> VideoInfo:
-    """A video's length and size, from what ``ffmpeg -i`` says of it."""
+    """A video's length, size and frames a second, from what ``ffmpeg -i`` says of it."""
     try:
         result = subprocess.run([ffmpeg, "-hide_banner", "-nostdin", "-i", str(path)],
                                 capture_output=True, timeout=START_TIMEOUT_S, check=False,
@@ -175,7 +177,11 @@ def video_info(ffmpeg: str, path: Path) -> VideoInfo:
         if turned is not None and round(float(turned[1] or turned[2])) % 180 == 90:
             width, height = height, width  # (played upright: ffmpeg turns it)
         size = (width, height)
-    return VideoInfo(length, size)
+    fps = None  # (the stream's "fps", else its "tbr": the rate its frames' times come at)
+    found = re.search(rb"Stream #[^\n]*?Video: [^\n]*?, (\d+(?:\.\d+)?) (?:fps|tbr)", said)
+    if found is not None:
+        fps = float(found[1]) or None
+    return VideoInfo(length, size, fps)
 
 
 def video_length(ffmpeg: str, path: Path) -> float | None:

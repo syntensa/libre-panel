@@ -106,6 +106,22 @@ def test_the_header_of_a_picture():
         udisp.header(udisp.JPEG, (480, 480), 1 << 22)
 
 
+def test_a_jpeg_keeps_as_much_detail_as_the_picture_quality_says(bus):
+    """[device] jpeg_quality (Settings → Panel → Picture quality, #33): 90 by default, 95 and
+    100 finer at more bytes; lower only where the display limits a JPEG's bytes."""
+    detailed = Image.effect_noise((480, 480), 48).convert("RGB")
+    sizes = {step: len(udisp.jpeg(detailed, None, "4:4:4", step)) for step in (90, 95, 100)}
+    assert sizes[90] < sizes[95] < sizes[100]
+    assert udisp.jpeg(detailed, None) == udisp.jpeg(detailed, None, "4:4:4", 90)
+    assert udisp.jpeg(detailed, sizes[90], "4:4:4", 100) == udisp.jpeg(detailed, None)  # (limit)
+    display = bus(FakeDisplay())
+    config = DeviceConfig(driver="turzx", model="waveshare-2.8-udisp", jpeg_quality=100)
+    with TurzxDisplay(config) as screen:
+        screen.show(detailed)
+        turned = detailed.transpose(Image.Transpose.ROTATE_180)  # (as the 2.8" is sent it)
+        assert display.frames[-1]["payload"] == udisp.jpeg(turned, None, "4:4:4", 100)
+
+
 def test_the_display_is_connected_and_sent_jpeg_as_it_names_first(bus):
     """Derik's 2.8" names JPEG first and raw pixels after it, but the program on its card that
     draws the pictures decodes JPEG only: raw pixels left it black (#30). It is sent what the
@@ -265,8 +281,8 @@ def test_a_picture_of_whole_packets_is_ended_as_the_drivers_end_it(bus, monkeypa
     display = bus(FakeDisplay())
     real, whole = udisp.jpeg, iter([True, False])
 
-    def jpeg(picture, limit, layout="4:4:4"):  # (a JPEG ends at its end marker)
-        data = real(picture, limit, layout)
+    def jpeg(picture, limit, layout="4:4:4", quality=90):  # (a JPEG ends at its end marker)
+        data = real(picture, limit, layout, quality)
         fill = (-(16 + len(data))) % 512
         return data + b"\0" * (fill if next(whole) else fill + 1)
 

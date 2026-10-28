@@ -2854,7 +2854,9 @@
     "{name} on {panel}": "{name} en {panel}",
     "Adapted from {size}, with made-up readings. Installed, it is adapted the same way: a start you can finish in Design.": "Adaptado desde {size}, con lecturas inventadas. Al instalarlo se adapta igual: un punto de partida que puedes terminar en Diseño.",
     "Videos straight to the panel": "Vídeos directamente al panel",
-    "A theme that is one video across the panel goes to it from its file, not drawn picture by picture: less of the processor. Pictures again as soon as anything else shows, a notice or a transition. An experiment.": "Un tema que es solo un vídeo en todo el panel va a él desde su archivo, en lugar de dibujarse imagen a imagen: menos procesador. Vuelve a ser imagen a imagen en cuanto aparece otra cosa, un aviso o una transición. Un experimento."
+    "A theme that is one video across the panel goes to it from its file, not drawn picture by picture: less of the processor. Pictures again as soon as anything else shows, a notice or a transition. An experiment.": "Un tema que es solo un vídeo en todo el panel va a él desde su archivo, en lugar de dibujarse imagen a imagen: menos procesador. Vuelve a ser imagen a imagen en cuanto aparece otra cosa, un aviso o una transición. Un experimento.",
+    "Picture quality": "Calidad de imagen",
+    "How much of each picture's detail its JPEG keeps. 90 is the default; 95 keeps finer detail at about a third more bytes a picture, 100 the most at two to three times as many. Libre Panel drives the display no faster than it takes them: where it comes to fewer pictures a second, 90 is the smoother.": "Cuánto detalle de cada imagen conserva su JPEG. 90 es el valor predeterminado; 95 conserva detalles más finos con aproximadamente un tercio más de bytes por imagen, 100 el máximo con dos o tres veces más. Libre Panel nunca envía las imágenes más rápido de lo que la pantalla las acepta: si entonces muestra menos imágenes por segundo, 90 es más fluido."
   },
   "fields": {
     "agent": "agente",

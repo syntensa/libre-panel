@@ -663,7 +663,8 @@ def test_a_udisp_display_has_its_frames_a_second_in_the_app(
     monkeypatch,
 ):
     """Waveshare's USB display (#30) takes whole pictures at [video] fps: Settings → Panel
-    offers them as for a TURZX panel in video mode, 60 the most, with a word of their own."""
+    offers them as for a TURZX panel in video mode, 60 the most, with a word of their own; and
+    how much detail its JPEGs keep (#33)."""
     from test_app_browser import radio
     from test_editor_settings import panel_on_the_bus
 
@@ -676,6 +677,10 @@ def test_a_udisp_display_has_its_frames_a_second_in_the_app(
         expect(card).to_contain_text("takes each picture whole")
         radio(page, "Frames per second", "60").click()
         waits_for(page, lambda: settings_config().device.video.fps == 60)
+        expect(card).to_contain_text("How much of each picture's detail its JPEG keeps")
+        expect(radio(page, "Picture quality", "90")).to_be_checked()
+        radio(page, "Picture quality", "100").click()
+        waits_for(page, lambda: settings_config().device.jpeg_quality == 100)
 
 
 def test_the_video_experiment_writes_each_choice_at_once_and_leads_back(

@@ -68,7 +68,7 @@ pixel, red first (as the xfz1986 drivers pack them from an XRGB8888 framebuffer)
 baseline with its colours at every pixel (4:4:4), as the drivers' TinyJPEG writes it. Libre
 Panel streams whole pictures as the kind the display names first, at the frames a second of a
 TURZX panel in video mode (`[video] fps`, 30 by default; fewer where the product string says
-`Fps`): a JPEG at quality 90 (lower only where `Bl` limits its size); raw pixels only for a
+`Fps`): a JPEG at quality 90 or as `[device] jpeg_quality` says (lower only where `Bl` limits its size); raw pixels only for a
 display that names them first (RGB565 at 480×480 is 450 KB, 13.5 MB a second at 30, within USB
 2.0's high speed). The last picture goes again after a second without one. The display takes the next transfer only once it has the last, so the time a
 picture takes to encode and send is what it costs the display: Libre Panel times the first 24

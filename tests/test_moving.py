@@ -28,9 +28,9 @@ def gif(path, durations=(100, 200, 300), size=(64, 64)):
     return path
 
 
-def video(path, size="64x48", seconds=2):
+def video(path, size="64x48", seconds=2, rate=30):
     subprocess.run([FFMPEG, "-v", "error", "-y", "-f", "lavfi", "-i",
-                    f"testsrc=size={size}:rate=30", "-t", str(seconds), "-pix_fmt", "yuv420p",
+                    f"testsrc=size={size}:rate={rate}", "-t", str(seconds), "-pix_fmt", "yuv420p",
                     str(path)], check=True, timeout=60)  # fmt: skip
     return path
 
@@ -217,6 +217,33 @@ def test_a_video_added_in_design_at_size_0_shows_at_its_own_size(tmp_path):
     frame, _boxes = renderer.render(Snapshot())
     assert frame.getpixel((190, 40))[:3] != (0, 0, 0) and frame.getpixel((100, 60))[:3] == (0, 0, 0)
     renderer.close()
+
+
+@needs_ffmpeg
+def test_a_video_plays_as_fast_as_the_panel_gets_frames_up_to_its_own(tmp_path):
+    """Decoded at the panel's frames a second (the main loop's video_fps: 60 on a display set
+    to 60), not at 30 alone: a video of 60 a second plays at 60 there (#33). No faster than
+    its own: a video of 30 is not decoded at 60, each frame twice."""
+    video(tmp_path / "smooth.mp4", seconds=1, rate=60)
+    video(tmp_path / "film.mp4", seconds=1, rate=24)
+    assert moving.video_info(FFMPEG, tmp_path / "smooth.mp4").fps == pytest.approx(60)
+    assert moving.video_info(FFMPEG, tmp_path / "film.mp4").fps == pytest.approx(24)
+
+    def decoded(src, video_fps):
+        renderer = Renderer(theme(tmp_path, src), animate=True)
+        renderer.video_fps = video_fps
+        try:
+            renderer.render(Snapshot(), time.monotonic())
+            (feed,) = renderer._feeds.values()
+            return [part for part in feed.command[feed.command.index("-vf") + 1].split(",")
+                    if part.startswith("fps=")]  # fmt: skip
+        finally:
+            renderer.close()
+
+    assert decoded("smooth.mp4", 60) == ["fps=60"]
+    assert decoded("smooth.mp4", None) == [f"fps={moving.VIDEO_FPS}"]  # (a panel not streamed)
+    assert decoded("film.mp4", 60) == ["fps=24"]
+    assert decoded("smooth.mp4", 4) == ["fps=4"]  # (the app's picture alone: [video] direct)
 
 
 @needs_ffmpeg

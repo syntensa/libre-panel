@@ -2854,7 +2854,9 @@
     "{name} on {panel}": "{name} auf {panel}",
     "Adapted from {size}, with made-up readings. Installed, it is adapted the same way: a start you can finish in Design.": "Angepasst von {size}, mit erfundenen Werten. Installiert wird es genauso angepasst: ein Anfang, den du in Gestalten fertig machen kannst.",
     "Videos straight to the panel": "Videos direkt ans Panel",
-    "A theme that is one video across the panel goes to it from its file, not drawn picture by picture: less of the processor. Pictures again as soon as anything else shows, a notice or a transition. An experiment.": "Ein Theme, das nur aus einem Video über das ganze Panel besteht, geht direkt aus seiner Datei ans Panel, statt Bild für Bild gezeichnet zu werden: weniger Prozessorlast. Sobald etwas anderes erscheint, ein Hinweis oder ein Übergang, wieder Bild für Bild. Ein Experiment."
+    "A theme that is one video across the panel goes to it from its file, not drawn picture by picture: less of the processor. Pictures again as soon as anything else shows, a notice or a transition. An experiment.": "Ein Theme, das nur aus einem Video über das ganze Panel besteht, geht direkt aus seiner Datei ans Panel, statt Bild für Bild gezeichnet zu werden: weniger Prozessorlast. Sobald etwas anderes erscheint, ein Hinweis oder ein Übergang, wieder Bild für Bild. Ein Experiment.",
+    "Picture quality": "Bildqualität",
+    "How much of each picture's detail its JPEG keeps. 90 is the default; 95 keeps finer detail at about a third more bytes a picture, 100 the most at two to three times as many. Libre Panel drives the display no faster than it takes them: where it comes to fewer pictures a second, 90 is the smoother.": "Wie viel von den Details jedes Bildes sein JPEG behält. 90 ist der Standard; 95 behält feinere Details bei etwa einem Drittel mehr Bytes pro Bild, 100 am meisten bei zwei- bis dreimal so vielen. Libre Panel betreibt das Display nie schneller, als es die Bilder annimmt: Schafft es dann weniger Bilder pro Sekunde, läuft 90 flüssiger."
   },
   "fields": {
     "agent": "Agent",
