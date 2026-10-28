@@ -830,12 +830,14 @@ there is no `game.limiter` (nor the round report's share of the round the GPU, t
 frame cap held it back): that needs what PresentMon sees of every frame. Sources are asked in
 their order: with PresentMon before it (as switching it on puts it), PresentMon's readings come
 first and RTSS's fill in where PresentMon has none (no rights for it); switched off, RTSS's
-alone. To do without PresentMon, switching it off is all it takes: it is no program installed
-of its own but a file in the download's `tools` folder, and Libre Panel never starts it then.
-What the setup does for it is the membership in Performance Log Users (the box *Game frame
-rates*, which can stay unchecked); `libre-panel system-setup --remove --perf-log-users`, as
-administrator, takes it back from the next sign-in, and so does uninstalling Libre Panel. RTSS
-needs none of it.
+alone. To do without PresentMon: the Windows setup has a box for it (*PresentMon: frame rates
+of games*, checked); left unchecked, the setup says first what will not work, then leaves it
+out, and gives no membership in Performance Log Users, which only PresentMon needs. Running the
+setup again with the box checked brings it back. Where it is installed, switching the source
+off is enough: it is no program installed of its own but a file in the `tools` folder, and
+Libre Panel never starts it then; `libre-panel system-setup --remove --perf-log-users`, as
+administrator, takes the membership back from the next sign-in, and so does uninstalling
+Libre Panel. RTSS needs none of it.
 
 ```toml
 [sensors]

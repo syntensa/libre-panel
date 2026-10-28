@@ -327,8 +327,9 @@ export function healthOf(facts) {
     });
   }
 
-  // -- the frame rate of games (Windows: PresentMon)
-  if (windows && gameOn && config) {
+  // -- the frame rate of games (Windows: PresentMon; where RTSS is switched on as their source,
+  //    PresentMon switched off, missing or without its permission is a choice, not a problem)
+  if (windows && gameOn && config && !config.sensors.providers.includes("rtss")) {
     const title = t("Games show no frame rate");
     if (!config.sensors.providers.includes("presentmon")) {
       add({

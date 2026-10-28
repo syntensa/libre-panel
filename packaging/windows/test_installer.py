@@ -28,7 +28,7 @@ SMOKE = Path(__file__).resolve().parent.parent / "smoke_test.py"
 CHECK_TOOLS = Path(__file__).resolve().parent.parent / "check_tools.py"
 SERVICE = "LibrePanelSensors"
 PIPE = r"\\.\pipe\LibrePanelSensors"
-TASKS = "autostart,sensorservice,pawnio,perflogusers"
+TASKS = "autostart,presentmon,sensorservice,pawnio,perflogusers"
 # SDDL rights by name, as Windows writes them back (a mask without names is hex)
 RIGHTS = {
     "GA": 0x10000000, "GR": 0x80000000, "GW": 0x40000000, "GX": 0x20000000,
@@ -334,7 +334,8 @@ def check_sensor_service():
     check(code == 0 and "read through the sensor service" in said, "a plain user reads too")
 
 
-def main(setup):
+def install(setup, tasks):
+    """The setup, silent, for all users, with the boxes ``tasks`` checked (the rest not)."""
     log = Path(tempfile.gettempdir()) / "libre-panel-setup.log"
     subprocess.run(
         [
@@ -343,12 +344,16 @@ def main(setup):
             "/SUPPRESSMSGBOXES",
             "/NORESTART",
             "/ALLUSERS",
-            f"/TASKS={TASKS}",
+            f"/TASKS={tasks}",
             f"/LOG={log}",
         ],
         check=True,
         timeout=900,
     )
+
+
+def main(setup):
+    install(setup, TASKS)
     check((APP / "LibrePanel.exe").is_file(), "LibrePanel.exe installed")
     check((APP / "libre-panel.exe").is_file(), "libre-panel.exe installed")
     check((APP / "sensors" / "libre-panel-sensors.exe").is_file(), "the sensor service installed")
@@ -381,6 +386,12 @@ def main(setup):
         [sys.executable, str(SMOKE), "--tools", str(APP / "LibrePanel.exe"), "--background"],
         check=True,
     )
+
+    # PresentMon is a box of its own: the same setup without it leaves it out (an update clears
+    # the tools folder first), and the rest stays.
+    install(setup, TASKS.replace("presentmon,", ""))
+    check(not (APP / "tools" / "PresentMon.exe").exists(), "without its box, no PresentMon")
+    check((APP / "tools" / "ffmpeg.exe").is_file(), "and ffmpeg is still there")
 
     # Uninstalling quits a running Libre Panel and removes everything it added.
     with tempfile.TemporaryDirectory() as home:

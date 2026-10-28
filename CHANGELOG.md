@@ -10,6 +10,12 @@
   (`game.fps`, the 1% lows, the frame time, the round's figures), from RTSS's samples of the
   last frame time; who holds the frame rate down stays PresentMon's. With both switched on,
   PresentMon's come first and RTSS's fill in where it has none.
+- **PresentMon is a box of its own in the Windows setup** (checked). Left unchecked, the setup
+  says before anything is installed what will not work without it (the frame rates, unless
+  RTSS gives them, and in any case who holds them down and the round report's share of it),
+  and *No* goes back to the boxes; it then leaves PresentMon out and gives no membership in
+  Performance Log Users. Running the setup again with the box checked brings it back. Where
+  RTSS is the frame rates' source, the overview no longer warns that PresentMon is off.
 
 ## 0.7.6 — 2026-10-28
 

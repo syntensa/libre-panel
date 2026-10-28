@@ -154,6 +154,9 @@ def test_the_overview_tells_each_thing_with_what_mends_it(app_url):  # noqa: F81
         sign_in = {**missing, "presentmon": True, "frame_rates": "sign-in"}
         result = of(panelInfo=found, settings=reading, unlockInfo=sign_in)
         assert result == {"ready": True, "good": True, "items": [["game-fps", "info", None]]}
+        # RTSS as their source (PresentMon switched off, or not installed): a choice, no fault
+        rtss = config(**{"sensors.providers": ["rtss", "psutil"]})
+        assert of(panelInfo=found, settings=rtss, unlockInfo=missing)["items"] == []
         # the weather: a theme that shows it while it is off, with a place or without
         weather = {**found, "weather_theme": "nimbus"}
         assert of(panelInfo=weather, settings=config())["items"][-1] == [

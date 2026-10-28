@@ -566,7 +566,7 @@ without administrator rights.
 | **Processor, mainboard, memory and drive sensors** | the sensor service and the PawnIO driver, two checked boxes | *Unlock all sensors* on Start and in *Settings → Sensors* sets up the same | the processor and NVMe drives are read without rights; *Set up sensors and panel access* loads the kernel's drivers for the board's fan chip and for SATA drives |
 | **Processor power** | read by the sensor service | the same | a switch in that card, off until you turn it on |
 | **Graphics card** | built in (LibreHardwareMonitor) | built in | AMD, Intel and NVIDIA, read without rights |
-| **Game frame rates** | PresentMon is in the download; the third box adds you to *Performance Log Users* | PresentMon is in the download; *Unlock all sensors* adds you | Windows only |
+| **Game frame rates** | PresentMon is in the download, a box of its own (unchecked, the setup says first what will not work); the third box of the sensors adds you to *Performance Log Users* | PresentMon is in the download; *Unlock all sensors* adds you | Windows only |
 | **Video mode** | ffmpeg is in the download | ffmpeg is in the download | ffmpeg is in the download |
 | **The panel's USB access** | nothing to do | nothing to do | the same card writes the udev rule |
 | **Settings** | in your own folder | in the folder `data` beside the program: it moves with it | in your own folder |

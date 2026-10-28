@@ -149,3 +149,38 @@ def test_a_release_candidate_is_never_for_everyone():
     forget = workflow[workflow.index("  forget-the-files:") :]
     assert "if: always()" in forget and "github-release, pypi]" in forget
     assert 'gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id"' in forget
+
+
+def test_presentmon_is_a_box_of_the_setup_that_says_first_what_will_not_work_without_it():
+    """PresentMon (game frame rates) has a box of its own in the Windows setup, checked. Left
+    unchecked, the setup says before anything is installed what will not work (the frame
+    rates, but where RTSS gives them, and in any case who holds them down), and "No" goes back
+    to the boxes; the file is left out, and the membership in Performance Log Users, which only
+    PresentMon needs, is not given. A silent setup takes its boxes as given."""
+    script = read("packaging", "windows", "libre-panel.iss")
+    fetch_tools = load("fetch_tools_wiring", PACKAGING / "fetch_tools.py")
+    assert "PresentMon.exe" in {tool.file for tool in fetch_tools.TOOLS}  # (the file left out)
+    assert re.search(r'^Name: "presentmon"; Description: "\{cm:PresentMon\}"$', script, re.M)
+    files = script.split("\n[Files]\n", 1)[1].split("\n[", 1)[0]
+    (everything,) = [line for line in files.splitlines() if 'Source: "{#SourceDir}\\*"' in line]
+    assert 'Excludes: "\\tools\\PresentMon.exe"' in everything
+    assert (
+        'Source: "{#SourceDir}\\tools\\PresentMon.exe"; DestDir: "{app}\\tools"; '
+        "Flags: ignoreversion; Tasks: presentmon"
+    ) in files
+    code = script.split("<event('NextButtonClick')>", 1)[1].split("\nend;", 1)[0]
+    assert "CurPageID = wpSelectTasks" in code and "not WizardSilent" in code
+    assert "WizardIsTaskSelected('presentmon')" in code and "CustomMessage('PresentMonOff')" in code
+    assert "= IDYES" in code  # ("No" stays on the page with the boxes)
+    for language in ("en", "de"):
+        said = re.search(rf"^{language}\.PresentMonOff=(.+)$", script, re.M).group(1)
+        assert "RTSS" in said and "PresentMon" in said
+        assert "%" not in said.replace("%n", "")  # (Inno Setup's placeholders begin with one)
+    assert re.search(
+        r'Parameters: "system-setup --perf-log-users".*Tasks: perflogusers and presentmon$',
+        script,
+        re.M,
+    )
+    tester = read("packaging", "windows", "test_installer.py")
+    assert 'TASKS = "autostart,presentmon,' in tester
+    assert 'install(setup, TASKS.replace("presentmon,", ""))' in tester
