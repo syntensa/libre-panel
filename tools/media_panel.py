@@ -232,6 +232,46 @@ def silence(prefix: str, start: float, end: float) -> Tweak:
     return tweak
 
 
+def agents_story(steps: list[tuple[float, dict[str, dict[str, Any]]]]) -> Tweak:
+    """What Claude Code and Codex do (``ai.*``): from each step's second on, what it says of
+    each agent it names (``{"claude": {"state": "working", "tool": "Edit"}}``), on top of the
+    steps before; ``busy`` and ``since`` go with the state, the tool only while it works. An
+    agent that is ``off`` has no more than its state; one named nowhere keeps the demo's."""
+
+    def tweak(readings: dict[str, Reading], seconds: float) -> None:
+        said: dict[str, dict[str, Any]] = {}
+        began: dict[str, float] = {}
+        for at, agents in steps:
+            if at > seconds:
+                break
+            for agent, values in agents.items():
+                if "state" in values and values["state"] != said.get(agent, {}).get("state"):
+                    began[agent] = at
+                said[agent] = {**said.get(agent, {}), **values}
+        for agent, values in said.items():
+            state = values.get("state", "idle")
+            parts = {
+                "state": state,
+                "busy": {"waiting": 2, "working": 1, "idle": 0, "off": -1}[state],
+                "tool": values.get("tool", "") if state == "working" else "",
+                "task": values.get("task"),
+                "since": 60.0 + seconds - began.get(agent, seconds),
+            }
+            if state == "off":
+                for key in [k for k in readings if k.startswith(f"ai.{agent}.")]:
+                    del readings[key]
+                parts = {"state": state, "busy": -1}
+            for part, value in parts.items():
+                key = f"ai.{agent}.{part}"
+                if value is None:
+                    readings.pop(key, None)
+                    continue
+                old = readings.get(key)
+                readings[key] = replace(old, value=value) if old else Reading(key, value)
+
+    return tweak
+
+
 # -- what a clip is recorded in -----------------------------------------------------------------
 
 
@@ -875,6 +915,37 @@ def card_ignition(stage: Stage, themes: tuple[str, ...]) -> None:
     stage.tweak(silence("media.", 2.0, 5.0))
 
 
+# AI activity on Lumen, without the AI screen: the weather, until Claude Code sets to work; then
+# the AI card rolls down out of the line of light by itself, Claude Code alone on it (Codex does
+# not run): its session, the tools at work, and at last waiting for you. Nothing plays.
+def ai_card(stage: Stage, themes: tuple[str, ...]) -> None:
+    stage.show(stage.theme(themes[0]))
+    stage.tweak(silence("media.", -60.0, 60.0))
+    stage.tweak(agents_story([
+        (-60.0, {"claude": {"state": "idle", "task": "Cards on the panel"},
+                 "codex": {"state": "off"}}),
+        (1.0, {"claude": {"state": "working", "tool": "Read"}}),
+        (3.2, {"claude": {"tool": "Edit"}}),
+        (4.8, {"claude": {"tool": "Bash"}}),
+        (6.4, {"claude": {"state": "waiting"}}),
+    ]))  # fmt: skip
+
+
+# The AI screen on its own: Claude Code and Codex side by side, each sign moving as it works or
+# waits for you, the tools changing, Claude Code's session under them.
+def agents_screen(stage: Stage, themes: tuple[str, ...]) -> None:
+    stage.show(stage.theme(themes[0]))
+    stage.tweak(agents_story([
+        (-60.0, {"claude": {"state": "working", "tool": "Read", "task": "Cards on the panel"},
+                 "codex": {"state": "working", "tool": "shell"}}),
+        (1.4, {"claude": {"tool": "Edit"}}),
+        (2.8, {"codex": {"state": "waiting"}}),
+        (4.2, {"claude": {"tool": "Bash"}}),
+        (5.8, {"claude": {"state": "waiting"},
+               "codex": {"state": "working", "tool": "apply_patch"}}),
+    ]))  # fmt: skip
+
+
 # The small panel: a burst of work fills the rings, the history scrolls, and what plays in the
 # corner gives way to the weather and comes back (a card on a small panel is small).
 def small_panel(stage: Stage, themes: tuple[str, ...]) -> None:
@@ -900,6 +971,14 @@ CLIPS: dict[str, PanelClip] = {
     "card-ignition": PanelClip(
         "the card slot changes from playback to the weather and back, with its line of light",
         ("lumen",), 6.6, card_ignition, poster=3.4,
+    ),
+    "ai-card": PanelClip(
+        "AI activity on Lumen by itself: Claude Code sets to work and its card rolls in",
+        ("lumen",), 8.4, ai_card, poster=4.0,
+    ),
+    "agents": PanelClip(
+        "the AI screen: Claude Code and Codex at work and waiting for you, side by side",
+        ("agents",), 7.2, agents_screen, poster=3.6,
     ),
     "small-panel": PanelClip(
         "the small panel: lit rings filling, a history that scrolls, a card that changes",

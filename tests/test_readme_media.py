@@ -240,9 +240,10 @@ LONG = ("card-ignition", "volume-band", "volume-looks", "theme-tube", "game-entr
 
 def test_every_panel_recipe_runs_headless_and_makes_a_clip(panel, clip, short):
     assert list(panel.CLIPS) == [
-        "video-mode", "card-ignition", "small-panel", "volume-band", "volume-looks", "theme-tube",
-        "game-entrance", "close-up-rings", "close-up-curves", "encore", "nimbus", "almanac",
-        "music-page", "round-report", "screens-in-turn", "where-it-started",
+        "video-mode", "card-ignition", "ai-card", "agents", "small-panel", "volume-band",
+        "volume-looks", "theme-tube", "game-entrance", "close-up-rings", "close-up-curves",
+        "encore", "nimbus", "almanac", "music-page", "round-report", "screens-in-turn",
+        "where-it-started",
     ]  # fmt: skip
     widths = {}
     for name, recipe in panel.CLIPS.items():
