@@ -17,6 +17,13 @@
   Performance Log Users. Running the setup again with the box checked brings it back. Where
   RTSS is the frame rates' source, the overview no longer warns that PresentMon is off.
 
+**Better**
+- **Videos straight to the panel saves what it should** (`[video] direct`). Tried on the 12.3",
+  Libre Panel took less of the processor and ffmpeg about as much more: the app's picture of
+  the panel, at four frames a second, had ffmpeg decode every frame of the video a second time
+  (a 1080p video of 60: half a core). It now decodes the video's keyframes alone for it (a
+  fifteenth of that), each shown until the next; the panel's own stream is as before.
+
 ## 0.7.6 — 2026-10-28
 
 The Player plays your videos, GIFs and pictures on a panel instead of its theme, and a video in

@@ -726,6 +726,7 @@ class Renderer:
         # sets it: a streamed panel's, or a few for the app's picture alone where the panel
         # takes the video from its file; None: moving.VIDEO_FPS)
         self.video_fps: int | None = None
+        self.video_keys = False  # ... their keyframes alone (that picture: a few a second)
         self._ffmpeg: str | None = None  # where ffmpeg is ("": not found)
         self._slide_lists: dict[str, tuple[float, list[str]]] = {}  # widget id -> pictures
         self._gauge_parts: dict[tuple[Any, ...], Image.Image] = {}  # static rings, colour fields
@@ -2509,13 +2510,15 @@ class Renderer:
         own = None if self.preview else self._video_info(rel, path).fps
         if own:  # no faster than the video's own: no frame twice (29.97 is 30)
             rate = min(rate, max(1, math.ceil(own - 0.05)))
-        key = (rel, w, h, fit, speed, rate)
+        keys = self.video_keys
+        key = (rel, w, h, fit, speed, rate, keys)
         frame, count = None, -1
         if not self.preview:
             feed = self._feeds.get(key)
             if feed is None:
                 feed = self._feeds[key] = moving.VideoFeed(self._ffmpeg_path(), path, w, h, fit,
-                                                           fps=rate, speed=speed)  # fmt: skip
+                                                           fps=rate, speed=speed,
+                                                           keys=keys)  # fmt: skip
             count, frame = feed.frame(now)
             if self.animate:
                 self.moving = True

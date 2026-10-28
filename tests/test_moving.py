@@ -247,6 +247,36 @@ def test_a_video_plays_as_fast_as_the_panel_gets_frames_up_to_its_own(tmp_path):
 
 
 @needs_ffmpeg
+def test_the_app_s_picture_of_a_video_from_its_file_decodes_its_keyframes_alone(tmp_path):
+    """[video] direct: the panel takes the video from its file, the app's picture shows it at
+    a few frames a second; decoding every frame for that cost ffmpeg about what the panel's
+    stream saved (a 1080p video of 60: half a core). Its keyframes alone do, each until the
+    next, at the time it has in the video."""
+    command = moving.video_command("ffmpeg", moving.Path("v.mp4"), 80, 60, "cover", keys=True)
+    assert command[command.index("-skip_frame") + 1] == "nokey"
+    assert command.index("-skip_frame") < command.index("-i")
+    assert "-skip_frame" not in moving.video_command(
+        "ffmpeg", moving.Path("v.mp4"), 80, 60, "cover"
+    )
+    clip = tmp_path / "keys.mp4"
+    subprocess.run([FFMPEG, "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=64x48:rate=10",
+                    "-t", "3", "-g", "10", "-pix_fmt", "yuv420p", str(clip)], check=True,
+                   timeout=60)  # fmt: skip
+    renderer = Renderer(theme(tmp_path, "keys.mp4"), animate=True)
+    renderer.video_fps, renderer.video_keys = 4, True
+    try:
+        deadline, frames = time.monotonic() + 10, set()
+        while time.monotonic() < deadline and len(frames) < 2:
+            frame, _boxes = renderer.render(Snapshot(), time.monotonic())
+            frames.add(frame.crop((0, 0, 80, 60)).tobytes())
+            time.sleep(0.1)
+        (feed,) = renderer._feeds.values()
+        assert "-skip_frame" in feed.command and len(frames) >= 2  # (a keyframe a second)
+    finally:
+        renderer.close()
+
+
+@needs_ffmpeg
 def test_each_frame_of_a_video_shows_at_its_moment(tmp_path):
     """The frame of the moment the panel's frame is drawn for, not the newest ffmpeg has: at
     the video's own rate one new frame per frame of the panel, none twice and none passed over

@@ -1414,7 +1414,7 @@ class MainLoop:
                 # videos decoded as fast as the panel gets frames (a few a second where it takes
                 # a video from its file: below), else as moving.VIDEO_FPS says
                 if not streaming:
-                    renderer.video_fps = None
+                    renderer.video_fps, renderer.video_keys = None, False
                 elif renderer.video_fps is None:
                     renderer.video_fps = config.device.video.fps
                 renderer.fps = _fps(config, host, display)  # screens may pace animations by it
@@ -1485,6 +1485,9 @@ class MainLoop:
                         and link.show_video(whole, background_of(renderer), out.size, started)
                     )
                     renderer.video_fps = DIRECT_PICTURE_FPS if direct else config.device.video.fps
+                    # (and from its keyframes alone: decoded twice, the video cost ffmpeg about
+                    # what the panel's stream from its file saved)
+                    renderer.video_keys = direct
                     if not direct:
                         link.show(out, None, started)
                     previous = None

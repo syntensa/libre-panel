@@ -128,12 +128,17 @@ def _filter(w: int, h: int, fit: str) -> str:
 
 def video_command(ffmpeg: str, path: Path, w: int, h: int, fit: str, fps: int = VIDEO_FPS,
                   once: bool = False, speed: float = 1.0, start: float = 0.0,
-                  rounds: bool = True) -> list[str]:  # fmt: skip
+                  rounds: bool = True, keys: bool = False) -> list[str]:  # fmt: skip
     """ffmpeg reading the video at ``path`` into raw RGBA frames of w x h on its output, ``fps``
     of them to a second of it played ``speed`` times as fast, round and round (``rounds``
     False: to its end; ``once``: its first frame alone), from ``start`` seconds into it. It goes
-    as fast as they are read (:class:`VideoFeed` takes each at its moment)."""
+    as fast as they are read (:class:`VideoFeed` takes each at its moment). ``keys``: only its
+    keyframes are decoded, each shown until the next (a picture of a few a second needs every
+    frame decoded all the same: a 1080p video of 60 cost half a core so, a fifteenth of that
+    with its keyframes alone)."""
     command = [ffmpeg, "-v", "error", "-nostdin"]
+    if keys:
+        command += ["-skip_frame", "nokey"]
     paced = ""
     if not once:
         command += ["-stream_loop", "-1"] if rounds else []
@@ -240,10 +245,10 @@ class VideoFeed:
 
     def __init__(self, ffmpeg: str, path: Path, w: int, h: int, fit: str, fps: int = VIDEO_FPS,
                  clock: Callable[[], float] = time.monotonic, speed: float = 1.0,
-                 start: float = 0.0, rounds: bool = True,
-                 began: float | None = None) -> None:  # fmt: skip
+                 start: float = 0.0, rounds: bool = True, began: float | None = None,
+                 keys: bool = False) -> None:  # fmt: skip
         self.command = video_command(ffmpeg, path, w, h, fit, fps, speed=speed, start=start,
-                                     rounds=rounds)  # fmt: skip
+                                     rounds=rounds, keys=keys)  # fmt: skip
         self.name, self.size, self.fps, self.clock = path.name, (w, h), fps, clock
         self.rounds = rounds
         self.ended = False  # (played to its end, ``rounds`` False: its last frame stays)

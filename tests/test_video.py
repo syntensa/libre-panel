@@ -2487,9 +2487,11 @@ def test_the_main_loop_hands_a_video_alone_to_the_panel(monkeypatch, isolated_ho
         source, size = displays[0].videos[-1]
         assert source.path.endswith("loop.mp4") and source.fit == "cover" and size == (480, 320)
         assert renderers[0].video_fps == app.DIRECT_PICTURE_FPS  # (for the app's picture)
+        assert renderers[0].video_keys  # (from its keyframes alone)
     else:
         assert not displays[0].videos
         assert renderers[0].video_fps == config.device.video.fps  # (as fast as the panel's)
+        assert not renderers[0].video_keys
 
 
 def test_direct_videos_change_on_the_open_panel():
