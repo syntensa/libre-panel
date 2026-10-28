@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+**New**
+- **Game frame rates from RTSS**, an alternative to PresentMon on Windows (*Settings → Sensors →
+  Game frame rate from RTSS*, off by default; discussion #32). Where RivaTuner Statistics
+  Server runs anyway (alone or with MSI Afterburner), Libre Panel reads the frame rates it
+  shares in its memory: no program started, no rights needed. The readings are PresentMon's
+  (`game.fps`, the 1% lows, the frame time, the round's figures), from RTSS's samples of the
+  last frame time; who holds the frame rate down stays PresentMon's. With both switched on,
+  PresentMon's come first and RTSS's fill in where it has none.
+
 ## 0.7.6 — 2026-10-28
 
 The Player plays your videos, GIFs and pictures on a panel instead of its theme, and a video in

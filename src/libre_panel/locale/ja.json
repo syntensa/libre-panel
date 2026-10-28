@@ -2913,7 +2913,10 @@
     "{name} is no video or picture that can be played": "{name} は再生できる動画や画像ではありません",
     "{name} is no video or picture the Player plays.": "{name} はプレーヤーで再生できる動画や画像ではありません。",
     "{name}: a video or a picture with a name of its own": "{name}：独自の名前を持つ動画または画像が必要です",
-    "{seconds} s": "{seconds} 秒"
+    "{seconds} s": "{seconds} 秒",
+    "An alternative to PresentMon where RivaTuner Statistics Server runs (alone or with MSI Afterburner): its frame rates, read from the memory it shares, without rights. Without who holds the frame rate down; PresentMon, asked first, keeps that.": "RivaTuner Statistics Server（単体または MSI Afterburner と一緒に）が動いている場合の PresentMon の代わり：共有メモリからフレームレートを読み取り、特別な権限は不要です。フレームレートを制限している要因は含みません。それは先に問い合わせる PresentMon が保ちます。",
+    "Game frame rate from RTSS": "RTSS からのゲームのフレームレート",
+    "frame rates of games, from RivaTuner (RTSS)": "ゲームのフレームレート（RivaTuner (RTSS) から）"
   },
   "fields": {
     "agent": "エージェント",

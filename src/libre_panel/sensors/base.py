@@ -170,6 +170,7 @@ _BUILTIN_PROVIDERS = {
     "presentmon": "libre_panel.sensors.presentmon:PresentMonProvider",
     "hardware": "libre_panel.sensors.hardware:HardwareProvider",
     "mangohud": "libre_panel.sensors.mangohud:MangoHudProvider",
+    "rtss": "libre_panel.sensors.rtss:RTSSProvider",
     "json": "libre_panel.sensors.json_source:JsonProvider",
     "nut": "libre_panel.sensors.nut:NutProvider",
 }

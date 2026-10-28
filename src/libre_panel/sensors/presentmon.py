@@ -105,6 +105,11 @@ def set_target(exe: str | None) -> None:
         provider.set_target(_target)
 
 
+def target() -> str | None:
+    """The game the ``game`` service found (:func:`set_target`), lower case; None for none."""
+    return _target
+
+
 def find_presentmon(path: str = "") -> str | None:
     """The PresentMon program: the path named in the settings, the one a download carries
     (its ``tools`` folder), PATH, or Intel's folder under Program Files. With the highest rights

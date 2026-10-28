@@ -819,6 +819,29 @@ only while a theme shows `game.*`. `game.fps`, `game.frametime`, `game.low`,
 (`game.fps_1low` ...) mean what they mean above; the lows are those of MangoHud's samples (one
 every `log_interval` ms). There is no `game.limiter`.
 
+On **Windows**, where [RivaTuner Statistics Server](https://www.guru3d.com/download/rtss-rivatuner-statistics-server-download/)
+runs anyway (alone, or with MSI Afterburner), its frame rates are an alternative to
+PresentMon's: *Settings → Sensors → Game frame rate from RTSS* (`rtss` in `providers`), off
+by default. RTSS shares what it measures of the games it shows its overlay in, in a memory of
+its own (`RTSSSharedMemoryV2`); Libre Panel reads it ten times a second while a theme shows
+`game.*`, starts no program and needs no rights for it. The readings mean what PresentMon's
+do; RTSS shares the time of each game's last frame, so the lows are those of the samples, and
+there is no `game.limiter` (nor the round report's share of the round the GPU, the CPU or a
+frame cap held it back): that needs what PresentMon sees of every frame. Sources are asked in
+their order: with PresentMon before it (as switching it on puts it), PresentMon's readings come
+first and RTSS's fill in where PresentMon has none (no rights for it); switched off, RTSS's
+alone. To do without PresentMon, switching it off is all it takes: it is no program installed
+of its own but a file in the download's `tools` folder, and Libre Panel never starts it then.
+What the setup does for it is the membership in Performance Log Users (the box *Game frame
+rates*, which can stay unchecked); `libre-panel system-setup --remove --perf-log-users`, as
+administrator, takes it back from the next sign-in, and so does uninstalling Libre Panel. RTSS
+needs none of it.
+
+```toml
+[sensors]
+providers = ["load", "audio", "librehardwaremonitor", "presentmon", "rtss", "psutil"]
+```
+
 **Values from JSON** (`json.*`): what the address of a NAS, a router, a Proxmox host or a
 second PC answers, or a file another program writes. Nothing to sign up for: the address is
 asked as it is, every `update_s` seconds, in a thread of its own. With the source switched on,

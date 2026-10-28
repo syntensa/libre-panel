@@ -2913,7 +2913,10 @@
     "{name} is no video or picture that can be played": "{name} 不是可播放的视频或图片",
     "{name} is no video or picture the Player plays.": "{name} 不是播放器能播放的视频或图片。",
     "{name}: a video or a picture with a name of its own": "{name}：需要是有自己名称的视频或图片",
-    "{seconds} s": "{seconds} 秒"
+    "{seconds} s": "{seconds} 秒",
+    "An alternative to PresentMon where RivaTuner Statistics Server runs (alone or with MSI Afterburner): its frame rates, read from the memory it shares, without rights. Without who holds the frame rate down; PresentMon, asked first, keeps that.": "在运行 RivaTuner Statistics Server（单独或随 MSI Afterburner）时替代 PresentMon：从其共享内存读取帧率，无需特殊权限。不包含限制帧率的因素；这一项仍由优先查询的 PresentMon 提供。",
+    "Game frame rate from RTSS": "来自 RTSS 的游戏帧率",
+    "frame rates of games, from RivaTuner (RTSS)": "游戏帧率，来自 RivaTuner (RTSS)"
   },
   "fields": {
     "agent": "智能体",

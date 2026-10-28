@@ -2913,7 +2913,10 @@
     "{name} is no video or picture that can be played": "{name} n'est pas une vidéo ou une image lisible",
     "{name} is no video or picture the Player plays.": "{name} n'est pas une vidéo ou une image que le lecteur lit.",
     "{name}: a video or a picture with a name of its own": "{name} : une vidéo ou une image avec un nom à elle",
-    "{seconds} s": "{seconds} s"
+    "{seconds} s": "{seconds} s",
+    "An alternative to PresentMon where RivaTuner Statistics Server runs (alone or with MSI Afterburner): its frame rates, read from the memory it shares, without rights. Without who holds the frame rate down; PresentMon, asked first, keeps that.": "Une alternative à PresentMon là où RivaTuner Statistics Server tourne (seul ou avec MSI Afterburner) : ses fréquences d'images, lues dans la mémoire qu'il partage, sans droits particuliers. Sans ce qui freine la fréquence d'images ; PresentMon, interrogé en premier, le garde.",
+    "Game frame rate from RTSS": "Fréquence d'images des jeux depuis RTSS",
+    "frame rates of games, from RivaTuner (RTSS)": "fréquences d'images des jeux, depuis RivaTuner (RTSS)"
   },
   "fields": {
     "agent": "agent",
