@@ -360,7 +360,9 @@ it no longer shows the themes on its card, it shows what the PC sends, whole pic
 Libre Panel then drives it as one of its own panels, with its own themes, the way up and the
 brightness set in Libre Panel, and a video stream of its pictures, 30 a second as a TURZX panel
 in video mode gets them (`device.model = "waveshare-2.8-udisp"`, or found by `auto`). The service above has nothing to
-do with it then.
+do with it then. **Verified** on the 2.8" round one: its owner runs Libre Panel's themes on it
+with live readings at 60 frames a second on Linux, the picture upright and the backlight at full
+since 0.7.5, through cold starts and sleep (#30, #33).
 
 - It shows up as a USB display, `303a:2986`, whose product string says its size and what it
   takes ("t113udisp1_R480x480_Ejpg5_Ergb16_Ergb32" on the 2.8" round one, #21). Libre Panel

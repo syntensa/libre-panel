@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+**Panels**
+- **Waveshare's 2.8" as a USB display: verified** (#30, #33). Its owner runs Libre Panel's
+  themes on it with live readings at 60 frames a second, the picture upright and its backlight
+  at full since 0.7.5, through cold starts and sleep.
+
 ## 0.7.5 — 2026-10-28
 
 Pictures that move: a picture element plays an animated GIF or a video (MP4, WebM, MOV), round

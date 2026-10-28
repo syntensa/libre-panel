@@ -733,6 +733,9 @@ _CONFIRMED: set[str] = {
     "turing-8.8",  # rev. C: runs since 0.6.4, an owner's report
     # each screen its own panel: an owner's doctor report for each of the three (#13, Windows)
     "jonsbo-zc360-screen",
+    # its USB display image: themes with live readings at 60 fps, upright and its backlight at
+    # full since 0.7.5, through cold starts and sleep; an owner's reports (#30, #33, Linux)
+    "waveshare-2.8-udisp",
 }
 # What the panels whose drivers were written from other projects' notes cannot do (their
 # drivers say why); each begins with what all of them share: nobody has run them yet.

@@ -64,6 +64,7 @@ die Hersteller-App.
   <img alt="Turing / TURZX: 8,8&quot;, 9,2&quot;, 12,3&quot;" src="https://img.shields.io/badge/Turing%20%2F%20TURZX-8%2C8%22%20%C2%B7%209%2C2%22%20%C2%B7%2012%2C3%22-34D399?style=for-the-badge&labelColor=111820">
   <img alt="Turing Smart Screen: 3,5&quot;, 8,8&quot;" src="https://img.shields.io/badge/Turing%20Smart%20Screen-3%2C5%22%20%C2%B7%208%2C8%22-34D399?style=for-the-badge&labelColor=111820">
   <img alt="JONSBO ZC-360: jedes Display ein eigenes Panel" src="https://img.shields.io/badge/JONSBO%20ZC--360-jedes%20Display%20ein%20eigenes%20Panel-34D399?style=for-the-badge&labelColor=111820">
+  <img alt="Waveshare USB-Monitor: 2,8&quot;, als USB-Display" src="https://img.shields.io/badge/Waveshare%20USB--Monitor-2%2C8%22%2C%20als%20USB--Display-34D399?style=for-the-badge&labelColor=111820">
 </p>
 
 Mit Libre Panel auf echten Panels betrieben, wie ihre Besitzer berichten.
@@ -85,7 +86,6 @@ Mit Libre Panel auf echten Panels betrieben, wie ihre Besitzer berichten.
   <img alt="BeadaPanel: jedes Modell" src="https://img.shields.io/badge/BeadaPanel-jedes%20Modell-F5C46B?style=for-the-badge&labelColor=111820">
   <img alt="NZXT Kraken: mit LCD" src="https://img.shields.io/badge/NZXT%20Kraken-mit%20LCD-F5C46B?style=for-the-badge&labelColor=111820">
   <img alt="Thermaltake: 6&quot;-LCD" src="https://img.shields.io/badge/Thermaltake-6%22--LCD-F5C46B?style=for-the-badge&labelColor=111820">
-  <img alt="Waveshare USB-Monitor: 2,8&quot;, als USB-Display" src="https://img.shields.io/badge/Waveshare%20USB--Monitor-2%2C8%22%2C%20als%20USB--Display-F5C46B?style=for-the-badge&labelColor=111820">
 </p>
 
 Der Treiber folgt einem Protokoll, das auf echten Panels erprobt ist, aber noch

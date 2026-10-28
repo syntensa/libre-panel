@@ -64,6 +64,7 @@ app's place.
   <img alt="Turing / TURZX: 8.8&quot;, 9.2&quot;, 12.3&quot;" src="https://img.shields.io/badge/Turing%20%2F%20TURZX-8.8%22%20%C2%B7%209.2%22%20%C2%B7%2012.3%22-34D399?style=for-the-badge&labelColor=111820">
   <img alt="Turing Smart Screen: 3.5&quot;, 8.8&quot;" src="https://img.shields.io/badge/Turing%20Smart%20Screen-3.5%22%20%C2%B7%208.8%22-34D399?style=for-the-badge&labelColor=111820">
   <img alt="JONSBO ZC-360: each screen its own panel" src="https://img.shields.io/badge/JONSBO%20ZC--360-each%20screen%20its%20own%20panel-34D399?style=for-the-badge&labelColor=111820">
+  <img alt="Waveshare USB Monitor: 2.8&quot;, as a USB display" src="https://img.shields.io/badge/Waveshare%20USB%20Monitor-2.8%22%2C%20as%20a%20USB%20display-34D399?style=for-the-badge&labelColor=111820">
 </p>
 
 Run with Libre Panel on real panels, as their owners report.
@@ -85,7 +86,6 @@ Run with Libre Panel on real panels, as their owners report.
   <img alt="BeadaPanel: every model" src="https://img.shields.io/badge/BeadaPanel-every%20model-F5C46B?style=for-the-badge&labelColor=111820">
   <img alt="NZXT Kraken: with an LCD" src="https://img.shields.io/badge/NZXT%20Kraken-with%20an%20LCD-F5C46B?style=for-the-badge&labelColor=111820">
   <img alt="Thermaltake: 6&quot; LCD" src="https://img.shields.io/badge/Thermaltake-6%22%20LCD-F5C46B?style=for-the-badge&labelColor=111820">
-  <img alt="Waveshare USB Monitor: 2.8&quot;, as a USB display" src="https://img.shields.io/badge/Waveshare%20USB%20Monitor-2.8%22%2C%20as%20a%20USB%20display-F5C46B?style=for-the-badge&labelColor=111820">
 </p>
 
 The driver follows a protocol proven on real panels, but nobody has confirmed the
