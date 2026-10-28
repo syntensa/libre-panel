@@ -509,6 +509,7 @@ def test_a_release_build_finds_the_systems_python_that_shows_the_window(monkeypa
     assert window.system_python() is None and not window.installed()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="the window runs in the system's Python on Linux")
 def test_a_program_that_runs_is_found_without_psutil(monkeypatch):
     """The window in the system's Python may have no psutil: the system tells it."""
     monkeypatch.setitem(sys.modules, "psutil", None)
