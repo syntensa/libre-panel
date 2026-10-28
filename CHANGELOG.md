@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.7.5 — 2026-10-28
+
+Pictures that move: a picture element plays an animated GIF or a video (MP4, WebM, MOV), round
+and round, at full speed on a panel that is sent every frame. Waveshare's 2.8" as a USB display
+shows its picture upright and takes a change of the brightness at once, and the hardware guide
+sets its backlight to full on its card; music on Linux shows without playerctl.
 
 **New**
 - **Animated GIFs and videos in themes** (#33). A picture element plays an animated GIF (or
@@ -15,11 +20,6 @@
   nothing over USB sets it. The hardware guide now has a small script for the card that sets it
   as soon as the display driver takes it and again every 10 seconds, with the steps to put it
   on the card ([Hardware](docs/HARDWARE.md#the-28s-backlight-at-full)).
-
-## 0.7.5 — 2026-10-28
-
-Waveshare's 2.8" as a USB display shows its picture upright and takes a change of the
-brightness at once, and music on Linux shows without playerctl.
 
 **Fixes**
 - **Waveshare's 2.8" upright** (#33). On its USB display image it shows a picture turned by
