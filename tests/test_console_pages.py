@@ -592,7 +592,8 @@ def test_a_source_that_says_how_it_is_read_is_explained(running):
     tells = {"librehardwaremonitor", "linux", "media"}
     assert all(s["status"] is None for s in sources if s["name"] not in tells)
     for source in [s for s in sources if s["name"] == "media"]:  # (nothing plays here)
-        assert source["details"] == [] or source["details"][0][0] == "read with"
+        # how it reads, or why it cannot (Windows without the media packages: an error)
+        assert {row[0] for row in source["details"]} <= {"read with", "now", "error"}
         assert source["problem"] is bool(source["status"]["error"])
     kernel = [s for s in sources if s["name"] == "linux"]
     assert bool(kernel) is sys.platform.startswith("linux")  # (it is in the default list there)
