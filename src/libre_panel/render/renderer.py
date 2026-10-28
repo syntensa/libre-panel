@@ -1037,14 +1037,18 @@ class Renderer:
     ) -> None:
         """alpha_composite that tolerates layers hanging off the canvas. Onto an
         ``opaque`` canvas, a paste through the layer's alpha gives the same
-        colours in place (the canvas's own alpha is not used afterwards)."""
+        colours in place (the canvas's own alpha is not used afterwards); a layer
+        without transparency (a video's frame: moving.solid) is pasted as it is."""
         x0, y0 = max(x, 0), max(y, 0)
         x1, y1 = min(x + layer.width, canvas.width), min(y + layer.height, canvas.height)
         if x1 <= x0 or y1 <= y0:
             return
+        solid = moving.solid(layer)
         if (x0, y0, x1, y1) != (x, y, x + layer.width, y + layer.height):
             layer = layer.crop((x0 - x, y0 - y, x1 - x, y1 - y))
-        if opaque:
+        if solid:
+            canvas.paste(layer, (x0, y0))
+        elif opaque:
             canvas.paste(layer, (x0, y0), layer)
         else:
             canvas.alpha_composite(layer, (x0, y0))
@@ -2404,7 +2408,7 @@ class Renderer:
         if rel.startswith("@"):  # a picture a sensor source or service has (an album cover)
             return self._live_image(widget, snapshot.images.get(rel[1:]))
         if moving.is_video(rel):
-            return self._draw_video(widget, rel)
+            return self._draw_video(widget, rel, now)
         animation = self._animation(widget, rel)
         if animation is not None:  # an animated picture: the frame of the moment, from its first
             began = self._began.setdefault((widget["id"], rel), now)
@@ -2477,9 +2481,9 @@ class Renderer:
             found = self._video_infos[rel] = moving.video_info(self._ffmpeg_path(), path)
         return found
 
-    def _draw_video(self, widget: dict[str, Any], rel: str) -> Piece | None:
-        """A video, round and round: the newest frame ffmpeg has (moving.VideoFeed); in a preview
-        or until the first one comes, its first frame. Without a size of its own (0, as a
+    def _draw_video(self, widget: dict[str, Any], rel: str, now: float) -> Piece | None:
+        """A video, round and round: its frame of the moment ``now`` (moving.VideoFeed); in a
+        preview or until the first one comes, its first frame. Without a size of its own (0, as a
         picture added in Design starts) at the video's, within the theme's (#33: a picture
         of 0 x 0 showed nothing where it was a video)."""
         x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
@@ -2512,7 +2516,7 @@ class Renderer:
             if feed is None:
                 feed = self._feeds[key] = moving.VideoFeed(self._ffmpeg_path(), path, w, h, fit,
                                                            fps=rate, speed=speed)  # fmt: skip
-            count, frame = feed.frame()
+            count, frame = feed.frame(now)
             if self.animate:
                 self.moving = True
         if frame is None:  # a preview, or the video has not begun yet: its first frame
@@ -2523,8 +2527,10 @@ class Renderer:
             frame, count = poster, -1
         if frame is None:
             return None
+        # (ffmpeg fitted it already: as it is, unless blurred or rounded)
+        same = frame.size == (w, h) and not widget.get("blur", 0) and not widget["radius"]
         return self._cached(widget, (rel, key, count, id(frame)),
-                            lambda: Piece(finish(frame), x, y))  # fmt: skip
+                            lambda: Piece(frame if same else finish(frame), x, y))  # fmt: skip
 
     def _whole_video(
         self,

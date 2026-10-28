@@ -16,9 +16,18 @@
   than it takes them.
 
 **Better**
-- **Videos in a theme play as smoothly as the panel is sent frames** (#33): at 60 frames a
-  second on a panel set to 60, where the video has them. They were decoded at 30 at most; a
-  video of fewer frames is decoded at its own, none of them twice.
+- **Videos in a theme play smoothly** on a panel that is sent every frame (TURZX panels in
+  video mode, USB displays; #33):
+  - **Each frame at its moment.** A video's frame on show was the newest ffmpeg had, at its
+    own pace beside the panel's: at 30 frames a second a third of the panel's frames showed
+    one twice or passed one over (measured: 69 % right at 30, 58 % at 60). Now ffmpeg decodes
+    a few ahead and each frame shows at the moment the panel's frame is drawn for: every one
+    once, at an even pace (100 %); one of 24 a second on 60 in the even 3:2 of film.
+  - **As many frames a second as the panel is sent**, up to 60, no more than the video's own:
+    they were decoded at 30 at most, so a video of 60 played at 30 on a panel set to 50 or 60.
+  - **Half the work per frame**: a video's frames, opaque, are laid on as they are instead of
+    through their alpha. A video across 1920×720 (the 12.3") with a clock over it took
+    14.7 ms a frame to draw, now 8.1; at 60 a second a frame has 16.7 in all.
 
 ## 0.7.6 — 2026-10-28
 

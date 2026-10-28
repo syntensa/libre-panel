@@ -113,7 +113,8 @@ def test_a_video_plays_round_and_round_and_a_preview_shows_its_first_frame(tmp_p
 
 def test_ffmpeg_fits_a_video_as_the_widget_says():
     cover = moving.video_command("ffmpeg", moving.Path("v.mp4"), 80, 60, "cover")
-    assert "-re" in cover and cover[cover.index("-stream_loop") + 1] == "-1"
+    assert cover[cover.index("-stream_loop") + 1] == "-1"
+    assert "-re" not in cover  # (as fast as it is read: each frame is taken at its moment)
     assert "force_original_aspect_ratio=increase,crop=80:60" in cover[cover.index("-vf") + 1]
     contain = moving.video_command("ffmpeg", moving.Path("v.mp4"), 80, 60, "contain", once=True)
     assert "pad=80:60" in contain[contain.index("-vf") + 1] and "-re" not in contain
@@ -126,10 +127,9 @@ def test_a_moving_picture_plays_faster_or_slower():
     assert moving.speed_of(100) == 4 and moving.speed_of(0) == 0.25  # (within reason)
     assert moving.speed_of(None) == 1 and moving.speed_of(float("nan")) == 1
     fast = moving.video_command("ffmpeg", moving.Path("v.mp4"), 80, 60, "cover", speed=2)
-    assert "-re" not in fast and fast[fast.index("-readrate") + 1] == "2"
-    assert fast[fast.index("-vf") + 1].startswith("setpts=PTS/2,scale=")
+    assert fast[fast.index("-vf") + 1].startswith("setpts=PTS/2,scale=")  # (its frames' times)
     slow = moving.video_command("ffmpeg", moving.Path("v.mp4"), 80, 60, "cover", speed=0.5)
-    assert slow[slow.index("-readrate") + 1] == "0.5" and "setpts=PTS/0.5," in " ".join(slow)
+    assert "setpts=PTS/0.5," in " ".join(slow) and "-readrate" not in slow
 
 
 def test_the_image_widget_plays_an_animated_gif_twice_as_fast(tmp_path):
@@ -244,6 +244,62 @@ def test_a_video_plays_as_fast_as_the_panel_gets_frames_up_to_its_own(tmp_path):
     assert decoded("smooth.mp4", None) == [f"fps={moving.VIDEO_FPS}"]  # (a panel not streamed)
     assert decoded("film.mp4", 60) == ["fps=24"]
     assert decoded("smooth.mp4", 4) == ["fps=4"]  # (the app's picture alone: [video] direct)
+
+
+@needs_ffmpeg
+def test_each_frame_of_a_video_shows_at_its_moment(tmp_path):
+    """The frame of the moment the panel's frame is drawn for, not the newest ffmpeg has: at
+    the video's own rate one new frame per frame of the panel, none twice and none passed over
+    (the newest did that for a third of them at 30 and at 60 a second, as ffmpeg's pace and the
+    panel's drift apart). After a pause it goes on from the frame it has."""
+    clip = video(tmp_path / "clip.mp4", seconds=4, rate=10)
+    feed = moving.VideoFeed(FFMPEG, clip, 40, 30, "cover", fps=10)
+    try:
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and feed.frame(100.0)[1] is None:
+            time.sleep(0.02)
+        assert feed.frame(100.0)[0] == 1  # (the first frame: the moment of the first ask)
+
+        def at(moment):
+            time.sleep(0.03)  # (ffmpeg decodes the next few meanwhile)
+            return feed.frame(moment)[0]
+
+        assert [at(100.0 + n / 10) for n in range(1, 9)] == list(range(2, 10))
+        assert at(100.85) == 9 and at(100.9) == 10  # (the same frame until the next's moment)
+        assert at(101.1) == 12  # (a panel frame later than planned: the frame of its moment)
+        later = at(110.0)  # (a pause: on from the frame it has, not racing to catch up)
+        assert later <= 12 + moving.AHEAD
+        assert at(110.1) == later + 1 and at(110.2) == later + 2
+    finally:
+        feed.close()
+
+
+@needs_ffmpeg
+def test_a_video_s_frames_are_drawn_without_their_alpha(tmp_path):
+    """A video's frames have no transparency: pasted as they are, not through their alpha
+    (6.5 ms instead of 0.9 for a frame across the 12.3"), the same pixels. A video fitted
+    into a box of another shape (contain) has transparent sides: through its alpha."""
+    video(tmp_path / "clip.mp4", size="80x60", seconds=2)
+    for fit, solid in (("cover", True), ("contain", False)):
+        renderer = Renderer(theme(tmp_path, "clip.mp4", w=120 if fit == "contain" else 80,
+                                  fit=fit), animate=True)  # fmt: skip
+        try:
+            deadline, count = time.monotonic() + 10, -1
+            while time.monotonic() < deadline and count < 2:  # (its frames, not the first's)
+                renderer.render(Snapshot(), time.monotonic())
+                (piece,) = [hit[1] for hit in renderer._cache.values()]
+                count = renderer._cache["p"][0][2]
+                time.sleep(0.05)
+            assert count >= 2 and moving.solid(piece.layer) is solid, fit
+            if solid:
+                canvas = Image.new("RGBA", (200, 100), "#123456")
+                expected = canvas.copy()
+                expected.alpha_composite(piece.layer, (piece.x, piece.y))
+                Renderer._paste(canvas, piece.layer, piece.x, piece.y, opaque=True)
+                assert canvas.tobytes() == expected.tobytes()
+        finally:
+            renderer.close()
+    assert not moving.solid(Image.new("RGBA", (4, 4), "red"))  # (only what is known so)
 
 
 @needs_ffmpeg

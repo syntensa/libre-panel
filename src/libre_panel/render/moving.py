@@ -6,11 +6,14 @@ round and round, at the pace it was made for, or faster or slower (the widget's 
   wants it, and kept with its time: the frame on show is the one the time says
   (:class:`Animation`). One that would take more than ``FRAMES_BYTES`` keeps every second frame
   (or third ...), each showing as long as those it stands for.
-- **A video** is decoded by ffmpeg into frames of the widget's size, fitted as the widget wants
-  (``-re``: as fast as it plays), read in a thread of its own; the newest frame is the one on
-  show (:class:`VideoFeed`). ffmpeg starts when the video is first shown and stops when nobody
-  has asked for a frame for a few seconds (another theme). A preview or a still picture of a
-  theme shows its first frame (:func:`first_frame`).
+- **A video** is decoded by ffmpeg into frames of the widget's size, fitted as the widget wants,
+  read in a thread of its own a few frames ahead; the frame on show is the one of the moment
+  the panel's frame is drawn for (:class:`VideoFeed`), so each of the video's frames lands on
+  frames of the panel of its own, none shown twice or passed over where the rates are the same
+  (the newest frame, as ffmpeg played it at its own pace, did that for a third of them). ffmpeg
+  starts when the video is first shown and stops when nobody has asked for a frame for a few
+  seconds (another theme). A preview or a still picture of a theme shows its first frame
+  (:func:`first_frame`).
 
 A panel driven every frame (in video mode, or a USB display as Waveshare's 2.8") shows them as
 they are; another shows the frame of the moment each time it is drawn. In a slideshow each plays
@@ -20,11 +23,13 @@ whole rounds, as many as take its seconds at least: a video longer than them to 
 
 from __future__ import annotations
 
+import collections
 import logging
 import re
 import subprocess
 import threading
 import time
+import weakref
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,6 +44,12 @@ LEAST_FRAME_S = 0.02  # a frame said to show for less (or 0): as browsers do, 0.
 USUAL_FRAME_S = 0.1
 VIDEO_FPS = 30  # the frames a second a video is decoded at, at most, where nothing says more
 IDLE_S = 5.0  # a video nobody asked a frame of for this long: ffmpeg stops
+AHEAD = 3  # frames of a video decoded before their moment (ffmpeg waits for room meanwhile)
+# A video's frames without transparency anywhere (its first frame says: VideoFeed): drawn over
+# what lies beneath without their alpha, which changes nothing there (a full-screen frame on
+# the 12.3": 0.9 ms instead of 6.5 through its alpha; renderer._paste)
+_SOLID: weakref.WeakValueDictionary[int, Image.Image] = weakref.WeakValueDictionary()
+BEHIND_S = 0.5  # a video further behind its moment than this (after a pause): on from there
 START_TIMEOUT_S = 10.0
 SPEEDS = (0.25, 4.0)  # how much slower or faster a moving picture plays, at most
 
@@ -117,15 +128,15 @@ def _filter(w: int, h: int, fit: str) -> str:
 
 def video_command(ffmpeg: str, path: Path, w: int, h: int, fit: str, fps: int = VIDEO_FPS,
                   once: bool = False, speed: float = 1.0) -> list[str]:  # fmt: skip
-    """ffmpeg reading the video at ``path`` into raw RGBA frames of w x h on its output: at the
-    pace it plays times ``speed``, round and round (``once``: its first frame alone)."""
+    """ffmpeg reading the video at ``path`` into raw RGBA frames of w x h on its output, ``fps``
+    of them to a second of it played ``speed`` times as fast, round and round (``once``: its
+    first frame alone). It goes as fast as they are read (:class:`VideoFeed` takes each at its
+    moment)."""
     command = [ffmpeg, "-v", "error", "-nostdin"]
     paced = ""
     if not once:
-        # read as fast as it plays (-re), or faster or slower, its frames' times along with it
-        command += ["-re"] if speed == 1 else ["-readrate", f"{speed:g}"]
         command += ["-stream_loop", "-1"]
-        paced = f"setpts=PTS/{speed:g}," if speed != 1 else ""
+        paced = f"setpts=PTS/{speed:g}," if speed != 1 else ""  # (its frames' times so)
     command += ["-i", str(path), "-an", "-sn",
                 "-vf", f"{paced}{_filter(w, h, fit)},fps={fps}" if not once else _filter(w, h, fit),
                 "-pix_fmt", "rgba", "-f", "rawvideo"]  # fmt: skip
@@ -206,31 +217,58 @@ def first_frame(ffmpeg: str, path: Path, w: int, h: int, fit: str) -> Image.Imag
     return Image.frombytes("RGBA", (w, h), result.stdout[: w * h * 4])
 
 
+def solid(image: Image.Image) -> bool:
+    """Whether every pixel of ``image`` is known to be opaque: a video's frame, as it came."""
+    return _SOLID.get(id(image)) is image
+
+
 class VideoFeed:
-    """A video played round and round by ffmpeg into frames of w x h; :meth:`frame` is the
-    newest. ffmpeg starts with the first ask and stops after ``IDLE_S`` without one."""
+    """A video played round and round by ffmpeg into frames of w x h, ``fps`` to a second.
+
+    ffmpeg decodes up to :data:`AHEAD` frames before their moment and then waits; :meth:`frame`
+    gives the frame of the moment it is asked for (``at``: when the panel's frame is planned to
+    show): the first frame at the first ask, each next one ``1 / fps`` later. So a video of the
+    panel's frames a second shows each of its frames on one frame of the panel, one of fewer
+    each on as many as its time spans, at an even pace. Further behind than :data:`BEHIND_S`
+    (it was not asked for a while, or ffmpeg decodes slower than it plays) it goes on from the
+    frame it has. ffmpeg starts with the first ask and stops after ``IDLE_S`` without one."""
 
     def __init__(self, ffmpeg: str, path: Path, w: int, h: int, fit: str, fps: int = VIDEO_FPS,
                  clock: Callable[[], float] = time.monotonic,
                  speed: float = 1.0) -> None:  # fmt: skip
         self.command = video_command(ffmpeg, path, w, h, fit, fps, speed=speed)
-        self.name, self.size, self.clock = path.name, (w, h), clock
+        self.name, self.size, self.fps, self.clock = path.name, (w, h), fps, clock
         self._lock = threading.Lock()
+        self._room = threading.Condition(self._lock)  # (for ffmpeg's next frame)
+        self._ready: collections.deque[Image.Image] = collections.deque()  # before their moment
         self._newest: Image.Image | None = None
-        self._count = 0  # frames read: a new one is a new picture to draw
+        self._count = 0  # frames shown: a new one is a new picture to draw
+        self._began: float | None = None  # the moment of the first frame shown (moved on after
+        # a pause): frame n shows from _began + n / fps
         self._asked = 0.0
         self._process: subprocess.Popen | None = None
         self._thread: threading.Thread | None = None
         self._failed = 0.0  # when ffmpeg last ended by itself (tried again after a while)
 
-    def frame(self) -> tuple[int, Image.Image | None]:
-        """The number of the newest frame and the frame (None before the first)."""
+    def frame(self, at: float | None = None) -> tuple[int, Image.Image | None]:
+        """The number of the frame of the moment ``at`` (on any clock, the same each time; the
+        feed's own by default) and the frame (None before the first)."""
         now = self.clock()
+        at = now if at is None else at
         with self._lock:
             self._asked = now
             running = self._thread is not None and self._thread.is_alive()
             if not running and now - self._failed >= IDLE_S:
                 self._start()
+            if self._ready and self._began is None:
+                self._began = at  # (the first frame: now)
+            if self._began is not None:
+                due = int((at - self._began) * self.fps + 1e-6)  # the frame of the moment
+                while self._ready and self._count <= due:
+                    self._newest, self._count = self._ready.popleft(), self._count + 1
+                    self._room.notify()
+                if due - self._count > BEHIND_S * self.fps:  # (a pause: from the one it has)
+                    self._began = at - max(self._count - 1, 0) / self.fps
             return self._count, self._newest
 
     def _start(self) -> None:
@@ -248,14 +286,24 @@ class VideoFeed:
     def _read(self, process: subprocess.Popen) -> None:
         size = self.size[0] * self.size[1] * 4
         stream = process.stdout
+        opaque = None  # (its first frame says: a video with transparency has it there)
         try:
             while stream is not None:
                 data = stream.read(size)
                 if len(data) < size:
                     break  # (it ended: a video it cannot read, or it was stopped)
                 picture = Image.frombytes("RGBA", self.size, data)
+                if opaque is None:
+                    opaque = picture.getchannel("A").getextrema()[0] == 255
+                if opaque:
+                    _SOLID[id(picture)] = picture
                 with self._lock:
-                    self._newest, self._count = picture, self._count + 1
+                    while (len(self._ready) >= AHEAD and self._process is process
+                           and self.clock() - self._asked <= IDLE_S):  # fmt: skip
+                        self._room.wait(0.5)  # (ffmpeg waits on its pipe meanwhile)
+                    if self._process is not process:
+                        break  # closed
+                    self._ready.append(picture)
                     idle = self.clock() - self._asked > IDLE_S
                 if idle:
                     break  # nobody looks: another theme
@@ -274,6 +322,9 @@ class VideoFeed:
             process, self._process = self._process, None
             self._asked = -IDLE_S * 2
             self._newest = None  # (shown again, it begins with its first frame)
+            self._ready.clear()
+            self._began = None
+            self._room.notify_all()
         if process is not None:
             process.kill()
 
