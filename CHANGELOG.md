@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.7.6 — 2026-10-28
+
+Claude Code in the cloud gets through to the panel at home, a video added in Design plays, and
+the AppImage opens the app in a window of its own where the distribution has WebKitGTK. Claude
+Code's AI card lists its other sessions and what today cost, and a notice can say when a session
+waits for you. Slideshows play videos and GIFs to their end, at a speed of their own; the game
+card shows the game's logo; a community theme made for another panel can be seen and installed
+adapted to yours; and Waveshare's 2.8" as a USB display is verified.
 
 **New**
 - **The AppImage opens the app in a window of its own** (#33). Its Python has no GTK, so it
