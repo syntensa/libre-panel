@@ -176,6 +176,7 @@ def test_a_checked_theme_goes_beside_the_list_under_a_name_of_its_own(tool, tmp_
     assert tool.add(tmp_path / "lumen", 14, root)["id"] == "lumen-2"  # not over a built-in one
     text = tool.pull_request_text(entry, 12)
     assert "Closes #12" in text and "480 × 320" in text and "community/theme-12" in text
+    assert "Rebase and merge" in text  # (the commit stays the maker's)
     # what the first job left is data: a zip that is not the one its entry names stays out
     (checked / "theme.zip").write_bytes(theme_zip("Other"))
     with pytest.raises(tool.Refused, match="not the one"):
@@ -195,3 +196,7 @@ def test_the_form_and_the_workflow_fit_the_tool(tool):
     # the issue's text reaches the steps only through the environment, never the script itself
     runs = re.findall(r"run: \|\n((?:          .*\n?)+)", flow)
     assert runs and not any("${{" in run for run in runs)
+    # the one who opened the issue is the commit's author, by their noreply address
+    assert "LOGIN: ${{ github.event.issue.user.login }}" in add
+    assert "USER_ID: ${{ github.event.issue.user.id }}" in add
+    assert '--author "$LOGIN <$USER_ID+$LOGIN@users.noreply.github.com>"' in add

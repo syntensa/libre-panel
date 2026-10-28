@@ -7,6 +7,11 @@
   themes on it with live readings at 60 frames a second, the picture upright and its backlight
   at full since 0.7.5, through cold starts and sleep.
 
+**Community themes**
+- **The one who shares a theme is its commit's author.** The workflow commits a shared theme in
+  the name of who opened the issue (by their GitHub noreply address), so once merged they show
+  among the project's contributors; its pull request says to merge with *Rebase and merge*.
+
 **Fixed**
 - **Claude Code in the cloud: reports that get through.** The cloud's sessions share a few
   addresses, and ntfy.sh often turned them away (HTTP 429). The hook asks a busy relay again a

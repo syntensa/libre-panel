@@ -291,6 +291,9 @@ def pull_request_text(entry: dict[str, Any], number: int) -> str:
         "merging, look that it shows what its entry says, that nothing "
         "in it should not be shared, and that its license is named.",
         "",
+        f"Its commit is by the one who opened #{number}: merge with **Rebase and merge** (or a "
+        "merge commit), which keeps it as it is, so they show among the contributors.",
+        "",
         f"Closes #{number}",
     ])  # fmt: skip
 
