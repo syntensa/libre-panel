@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.7.6 — 2026-10-28
+
+The Player plays your videos, GIFs and pictures on a panel instead of its theme, and a video in
+a theme plays smoothly: each frame at its moment, up to 60 a second, for half the work. Claude
+Code in the cloud gets through to the panel at home, a video added in Design plays, and the
+AppImage opens the app in a window of its own where the distribution has WebKitGTK. Claude
+Code's AI card lists its other sessions and what today cost, and a notice can say when a session
+waits for you. Slideshows play videos and GIFs to their end, at a speed of their own; the game
+card shows the game's logo; a community theme made for another panel can be seen and installed
+adapted to yours; and Waveshare's 2.8" as a USB display is verified.
 
 **New**
 - **The Player** (a tab of its own in the app). Your videos, GIFs and pictures on a panel instead
@@ -14,6 +23,14 @@
   several panels at once where you have them. A video plays as smoothly as a theme's (each
   frame at its moment, up to the panel's frames a second); notices and the alarm still go over
   it. Ctrl+K knows *Play in the Player*, *The next in the Player* and *Stop the Player*.
+- **The AppImage opens the app in a window of its own** (#33). Its Python has no GTK, so it
+  opened the browser; now the window runs in the system's Python, with the distribution's
+  PyGObject and WebKitGTK (`python-gobject` and `webkit2gtk-4.1` on Arch and CachyOS,
+  `python3-gi` and `gir1.2-webkit2-4.1` on Debian and Ubuntu), from Libre Panel's sources the
+  AppImage and the Linux archive carry. Without those packages it opens the browser, as before.
+  Libre Panel draws that window itself where pywebview is missing (gtk_window): the page's
+  title, the question before closing with unsaved changes, saving an exported theme, links to
+  other sites in the browser. `libre-panel window --check` says which way it would open.
 - **Videos straight to the panel** (an experiment, *Settings → Panel*, `[video] direct`). A
   theme that is one video alone across a TURZX panel in video mode goes to it from its file:
   ffmpeg reads and encodes it in one, with the frames' own encoder and settings, instead of
@@ -25,39 +42,6 @@
   Waveshare's 2.8" takes each picture as a JPEG: 90 keeps its detail as before, 95 and 100
   keep finer detail at more bytes a picture. Libre Panel still drives the display no faster
   than it takes them.
-
-**Better**
-- **Videos in a theme play smoothly** on a panel that is sent every frame (TURZX panels in
-  video mode, USB displays; #33):
-  - **Each frame at its moment.** A video's frame on show was the newest ffmpeg had, at its
-    own pace beside the panel's: at 30 frames a second a third of the panel's frames showed
-    one twice or passed one over (measured: 69 % right at 30, 58 % at 60). Now ffmpeg decodes
-    a few ahead and each frame shows at the moment the panel's frame is drawn for: every one
-    once, at an even pace (100 %); one of 24 a second on 60 in the even 3:2 of film.
-  - **As many frames a second as the panel is sent**, up to 60, no more than the video's own:
-    they were decoded at 30 at most, so a video of 60 played at 30 on a panel set to 50 or 60.
-  - **Half the work per frame**: a video's frames, opaque, are laid on as they are instead of
-    through their alpha. A video across 1920×720 (the 12.3") with a clock over it took
-    14.7 ms a frame to draw, now 8.1; at 60 a second a frame has 16.7 in all.
-
-## 0.7.6 — 2026-10-28
-
-Claude Code in the cloud gets through to the panel at home, a video added in Design plays, and
-the AppImage opens the app in a window of its own where the distribution has WebKitGTK. Claude
-Code's AI card lists its other sessions and what today cost, and a notice can say when a session
-waits for you. Slideshows play videos and GIFs to their end, at a speed of their own; the game
-card shows the game's logo; a community theme made for another panel can be seen and installed
-adapted to yours; and Waveshare's 2.8" as a USB display is verified.
-
-**New**
-- **The AppImage opens the app in a window of its own** (#33). Its Python has no GTK, so it
-  opened the browser; now the window runs in the system's Python, with the distribution's
-  PyGObject and WebKitGTK (`python-gobject` and `webkit2gtk-4.1` on Arch and CachyOS,
-  `python3-gi` and `gir1.2-webkit2-4.1` on Debian and Ubuntu), from Libre Panel's sources the
-  AppImage and the Linux archive carry. Without those packages it opens the browser, as before.
-  Libre Panel draws that window itself where pywebview is missing (gtk_window): the page's
-  title, the question before closing with unsaved changes, saving an exported theme, links to
-  other sites in the browser. `libre-panel window --check` says which way it would open.
 
 **AI activity**
 - **Several sessions at a glance.** Claude Code's own AI card lists its other sessions under
@@ -72,6 +56,18 @@ adapted to yours; and Waveshare's 2.8" as a USB display is verified.
   called; not while the theme shows AI activity itself.
 
 **Pictures that move**
+- **Videos in a theme play smoothly** on a panel that is sent every frame (TURZX panels in
+  video mode, USB displays; #33):
+  - **Each frame at its moment.** A video's frame on show was the newest ffmpeg had, at its
+    own pace beside the panel's: at 30 frames a second a third of the panel's frames showed
+    one twice or passed one over (measured: 69 % right at 30, 58 % at 60). Now ffmpeg decodes
+    a few ahead and each frame shows at the moment the panel's frame is drawn for: every one
+    once, at an even pace (100 %); one of 24 a second on 60 in the even 3:2 of film.
+  - **As many frames a second as the panel is sent**, up to 60, no more than the video's own:
+    they were decoded at 30 at most, so a video of 60 played at 30 on a panel set to 50 or 60.
+  - **Half the work per frame**: a video's frames, opaque, are laid on as they are instead of
+    through their alpha. A video across 1920×720 (the 12.3") with a clock over it took
+    14.7 ms a frame to draw, now 8.1; at 60 a second a frame has 16.7 in all.
 - **Slideshows play videos to their end.** In a slideshow with a video or an animated picture,
   each that moves plays from its start, whole rounds, as many as take the seconds per picture
   at least: a longer video to its end, a short GIF a few times; stills keep their seconds.
