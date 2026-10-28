@@ -2,10 +2,17 @@
 
 ## Unreleased
 
+**Game mode**
+- **The game's logo on the game card.** Where game mode has the game's logo (Steam's), it
+  heads the game card in place of the gamepad and the name, as large as the room above the frame
+  rate lets it be: on the 12.3" Arena it stands big over the number. While the frame rate has
+  not come yet, the logo stands in the card's middle over the game's name.
+
 **Panels**
 - **Waveshare's 2.8" as a USB display: verified** (#30, #33). Its owner runs Libre Panel's
   themes on it with live readings at 60 frames a second, the picture upright and its backlight
-  at full since 0.7.5, through cold starts and sleep.
+  at full since 0.7.5, through cold starts and sleep. Settings → Panel no longer says it has not
+  been seen on the hardware.
 
 **Community themes**
 - **The one who shares a theme is its commit's author.** The workflow commits a shared theme in

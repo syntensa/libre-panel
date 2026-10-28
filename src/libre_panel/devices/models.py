@@ -805,11 +805,11 @@ _LIMITS = {
         "Panel runs. When Libre Panel quits, the panel shows its own screen again."
     ),
     "waveshare-2.8-udisp": (
-        "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB "
-        "display (it then calls itself udisp over USB), and shows only what the PC sends: the "
-        "themes on its card are gone with that image. It gets a video stream of JPEG pictures, "
-        "as it asks for them, 30 a second: smooth motion. Its brightness goes into the picture: "
-        "dimming darkens it."
+        "It needs Waveshare's card image that makes it a USB display (it then calls itself udisp "
+        "over USB), and shows only what the PC sends: the themes on its card are gone with that "
+        "image. It gets a video stream of JPEG pictures, as it asks for them, up to 60 a second: "
+        "smooth motion. Its brightness goes into the picture: dimming darkens it; its backlight "
+        "is set on its card (the hardware guide says how)."
     ),
 }
 MODELS = tuple(

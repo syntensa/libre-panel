@@ -2797,7 +2797,6 @@
     "restart reconnect hang frozen stuck reset panel": "再起動 再接続 固まる フリーズ 応答なし リセット パネル restart",
     "The panel test has the panels; they start again after it.": "パネルテストがパネルを使用中です。終わると再び起動します。",
     "A panel does not let go: quit Libre Panel and start it again.": "パネルを解放できません。Libre Panel を終了して起動し直してください。",
-    "Not yet seen on the hardware. It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of JPEG pictures, as it asks for them, 30 a second: smooth motion. Its brightness goes into the picture: dimming darkens it.": "実機ではまだ確認されていません。USBディスプレイにするWaveshareのカードイメージが必要で（その後はUSBでudispと名乗ります）、PCが送るものだけを表示します。カード上のテーマはそのイメージで消えます。自身が求めるとおりのJPEG画像によるビデオストリームを受け取ります。毎秒30枚、なめらかな動きです。明るさは画像に反映されるため、減光すると画像が暗くなります。",
     "Turn 15° to the left": "左に15°回転",
     "Turn 15° to the right": "右に15°回転",
     "degrees clockwise, all of it about its middle": "時計回りの角度。全体を中心の周りに回転します",
@@ -2843,7 +2842,8 @@
     "“{name}” is not a file a theme carries (theme.json, pictures: PNG, JPEG, GIF, WebP, videos: MP4, WebM, MOV, fonts: TTF, OTF): nothing was imported.": "「{name}」はテーマが含めるファイルではありません（theme.json、画像：PNG、JPEG、GIF、WebP、動画：MP4、WebM、MOV、フォント：TTF、OTF）。何も取り込まれませんでした。",
     "Network access: Limited (Custom in older apps), with the default list, and {domain} added.": "ネットワークアクセス：Limited（古いアプリでは Custom）を選び、既定のリストを残して {domain} を追加します。",
     "Recommended: a free account at ntfy.sh, and its access token as the environment's network secret (API credentials in older apps) for ntfy.sh: header Authorization, Bearer before the token. Without it ntfy.sh often turns the cloud's sessions away (HTTP 429), as they share a few addresses.": "推奨：ntfy.sh の無料アカウントを作り、そのアクセストークンを環境の ntfy.sh 向け Network secret（古いアプリでは API credentials）にします。ヘッダーは Authorization、トークンの前に Bearer。これがないと、クラウドのセッションは少数のアドレスを共有しているため、ntfy.sh にしばしば断られます（HTTP 429）。",
-    "In a session, ~/.claude/libre-panel-cloud.log says what the hook sent.": "セッション内の ~/.claude/libre-panel-cloud.log に、フックが送った内容が記録されます。"
+    "In a session, ~/.claude/libre-panel-cloud.log says what the hook sent.": "セッション内の ~/.claude/libre-panel-cloud.log に、フックが送った内容が記録されます。",
+    "It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of JPEG pictures, as it asks for them, up to 60 a second: smooth motion. Its brightness goes into the picture: dimming darkens it; its backlight is set on its card (the hardware guide says how).": "USBディスプレイにするWaveshareのカードイメージが必要で（その後はUSBでudispと名乗ります）、PCが送るものだけを表示します。カード上のテーマはそのイメージで消えます。自身が求めるとおりのJPEG画像によるビデオストリームを受け取ります。最大で毎秒60枚、なめらかな動きです。明るさは画像に反映されるため、減光すると画像が暗くなります。バックライトはカード側で設定します（方法はハードウェアガイドにあります）。"
   },
   "fields": {
     "agent": "エージェント",
