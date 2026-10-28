@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.7.5 — 2026-10-28
+
+Waveshare's 2.8" as a USB display shows its picture upright and takes a change of the
+brightness at once, and music on Linux shows without playerctl.
+
+**Fixes**
+- **Waveshare's 2.8" upright** (#33). On its USB display image it shows a picture turned by
+  180°; Libre Panel now turns what it sends it, so it is upright with *Upside down* off. If
+  you switched *Upside down* on for it, switch it off again.
+- **The brightness of the 2.8" changes at once** (#33). Its brightness goes into the picture,
+  and a change showed only with the next one: the panel test, which draws nothing new while it
+  changes it, saw no change. The last picture now goes again at the new brightness. (100 % is
+  the picture as it is: how bright that looks is the display's own backlight, for which no
+  command is known.)
+- **Music on Linux without playerctl** (#33). Where `playerctl` is not installed (CachyOS and
+  others have none by default), Libre Panel reads the players straight from the session's
+  D-Bus with systemd's `busctl`: what plays in Spotify, a browser or a media player shows
+  instead of "Nothing playing".
+
 ## 0.7.4 — 2026-10-28
 
 What Claude Code and Codex do comes up on Lumen by itself: while one works or waits for you,
