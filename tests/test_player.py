@@ -415,11 +415,11 @@ def test_the_player_in_the_app_adds_plays_pauses_and_stops(isolated_home, tmp_pa
             assert "Picture" in tile.inner_text()
             assert wait_for(lambda: not magenta())  # (the theme)
             tile.locator(".player-tile-play").click()
-            page.get_by_role("button", name="Pause").wait_for()
+            page.get_by_role("button", name="Pause", exact=True).wait_for()
             assert wait_for(magenta)  # the panel plays it
             assert "Magenta (1).png" in page.locator(".player-title").inner_text()
-            page.get_by_role("button", name="Pause").click()
-            page.get_by_role("button", name="Play").wait_for()
+            page.get_by_role("button", name="Pause", exact=True).click()
+            page.get_by_role("button", name="Play", exact=True).wait_for()
             assert player.status()["paused"] is True
             page.get_by_role("button", name="Stop: the theme again").click()
             assert wait_for(lambda: not magenta())  # the theme again

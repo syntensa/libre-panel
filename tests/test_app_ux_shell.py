@@ -250,7 +250,7 @@ def test_the_header_is_the_same_in_every_view(app_url, isolated_home, language):
     routes = a_bar(isolated_home)
     i18n.set_language(language)
     with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
-        for view in ("home", "design", "look", "live", "settings/panel"):
+        for view in ("home", "design", "look", "live", "player", "settings/panel"):
             page.goto(f"{app_url}#/{view}")
             page.wait_for_selector(".view > *")
             order = js(
@@ -263,7 +263,7 @@ def test_the_header_is_the_same_in_every_view(app_url, isolated_home, language):
             )
             assert order == ["tabs", "search", "settings"], view
         titles = page.locator(".tabs .tab").evaluate_all("tabs => tabs.map((t) => t.title)")
-        assert len(titles) == 4 and all(len(title) > 12 for title in titles)
+        assert len(titles) == 5 and all(len(title) > 12 for title in titles)
 
 
 def test_the_settings_button_leads_back_to_where_you_were(app_url, isolated_home):  # noqa: F811
