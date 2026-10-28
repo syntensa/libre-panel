@@ -2852,7 +2852,9 @@
     "Adapt and install": "Anpassen und installieren",
     "Adapted to {panel}.": "An {panel} angepasst.",
     "{name} on {panel}": "{name} auf {panel}",
-    "Adapted from {size}, with made-up readings. Installed, it is adapted the same way: a start you can finish in Design.": "Angepasst von {size}, mit erfundenen Werten. Installiert wird es genauso angepasst: ein Anfang, den du in Gestalten fertig machen kannst."
+    "Adapted from {size}, with made-up readings. Installed, it is adapted the same way: a start you can finish in Design.": "Angepasst von {size}, mit erfundenen Werten. Installiert wird es genauso angepasst: ein Anfang, den du in Gestalten fertig machen kannst.",
+    "Videos straight to the panel": "Videos direkt ans Panel",
+    "A theme that is one video across the panel goes to it from its file, not drawn picture by picture: less of the processor. Pictures again as soon as anything else shows, a notice or a transition. An experiment.": "Ein Theme, das nur aus einem Video über das ganze Panel besteht, geht direkt aus seiner Datei ans Panel, statt Bild für Bild gezeichnet zu werden: weniger Prozessorlast. Sobald etwas anderes erscheint, ein Hinweis oder ein Übergang, wieder Bild für Bild. Ein Experiment."
   },
   "fields": {
     "agent": "Agent",

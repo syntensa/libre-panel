@@ -51,6 +51,7 @@ import time
 from collections import deque
 from collections.abc import Callable
 from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
 from PIL import Image
@@ -63,9 +64,11 @@ from libre_panel.devices.h264 import (
     EncoderSettings,
     EncoderStopped,
     RateControl,
+    VideoSource,
     auto_rate,
     feed_text,
     ffmpeg_command,
+    ffmpeg_file_command,
     find_ffmpeg,
     mbit,
     passes_through,
@@ -481,6 +484,8 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         self._rate_kept, self._rate_kept_at = 0.0, -1e9  # what video-state.json has, and when
         self._restarts: list[float] = []
         self._last_frame: Image.Image | None = None
+        # [video] direct: the videos ffmpeg could not play from their file (frames for them)
+        self._sources_failed: set[VideoSource] = set()
 
     # -- connection ----------------------------------------------------------
 
@@ -558,9 +563,12 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
 
     # -- encoder ---------------------------------------------------------------
 
-    def _start_encoder(self, size: tuple[int, int], beside: bool = False) -> None:
+    def _start_encoder(
+        self, size: tuple[int, int], beside: bool = False, source: VideoSource | None = None
+    ) -> None:
         """A new ffmpeg for pictures of ``size``; ``beside``: next to the one running now,
-        which goes on until the new one has its first picture (:meth:`_switch`)."""
+        which goes on until the new one has its first picture (:meth:`_switch`); ``source``:
+        a video it reads from its file, not frames (:meth:`show_video`)."""
         if not beside:
             self._stop_encoder()
         rotate = rotation_of(size)
@@ -568,11 +576,14 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         name = resolve_encoder(self.settings.encoder, self._ffmpeg, self._encoders_failed)
         self._ask_refused(name)
         full = self._full()
-        if self.video.pixels == "auto" and self.feed is None and self.range is None:
+        fed = source is None  # (frames that the card might convert)
+        if fed and self.video.pixels == "auto" and self.feed is None and self.range is None:
             self._ask_the_card(name, full, size, rotate, model_id)  # (not for a check's A/B)
         settings = resolved(self.settings, model_id, name, self._pixels(name), full)
         said = f"{feed_text(settings)}, profile {settings.profile}"
         said += ", full range" if settings.full else ", limited range"
+        if source is not None:
+            said += f", straight from {Path(source.path).name}"
         if said != self._encoder_said:
             self._encoder_said = said
             log.info("video: encoding with %s", said)
@@ -587,7 +598,10 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             if key != self._rate_key:
                 self._rate_key, self._rate_kept = key, self.rate.rate
             settings = replace(settings, maxrate=rate_text(self.rate.rate))
-        command = ffmpeg_command(self._ffmpeg, size, rotate, settings)
+        if source is not None:
+            command = ffmpeg_file_command(self._ffmpeg, source, size, rotate, settings)
+        else:
+            command = ffmpeg_command(self._ffmpeg, size, rotate, settings)
         self._streams += 1
         generation = self._streams
         raised = False
@@ -614,6 +628,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         encoder = Encoder(command, size, deliver)
         encoder.name, encoder.maxrate = settings.encoder, settings.maxrate
         encoder.settings = settings  # (what it is fed: _feed gives each its own)
+        encoder.source = source  # (a video from its file: it is fed nothing)
         if beside:
             self._leaving, self._coming = self.encoder, generation
             self._switch_began = time.monotonic()
@@ -727,7 +742,8 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         one's pictures until the new one has its first (:meth:`_hand_over`). Starting ffmpeg
         anew instead leaves the picture standing still for its start and the first keyframe."""
         try:
-            self._start_encoder(self.encoder.size, beside=True)
+            source = getattr(self.encoder, "source", None)  # (a video from its file goes on so)
+            self._start_encoder(self.encoder.size, beside=True, source=source)
         except DeviceError as exc:
             self._switch_held = time.monotonic() + self.SWITCH_HOLD_S
             log.warning("video: no new ffmpeg (%s); the old one goes on for a minute", exc)
@@ -801,7 +817,10 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         self._hand_over()
         self._follow_the_panel()
         encoder = self._leaving or self.encoder  # during a switch: the one the panel shows
-        if (
+        if encoder is not None and getattr(encoder, "source", None) is not None:
+            log.info("video: frames again, after the video from its file")
+            self._start_encoder(frame.size)  # (the theme shows more than the video now)
+        elif (
             encoder is not None
             and encoder.alive
             and encoder.size == frame.size
@@ -821,6 +840,36 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             self._stopped(str(exc))
             self._start_encoder(frame.size)
             self._feed(frame)
+
+    def show_video(self, source: VideoSource, size: tuple[int, int]) -> bool:
+        """A theme that is one video across the panel ([video] direct): ffmpeg encodes it
+        straight from its file (h264.ffmpeg_file_command), not from the frames drawn of it;
+        the next frame (:meth:`show`) takes over again. False where it is not done so: a
+        colour check under way, or a video ffmpeg could not play from its file (frames then)."""
+        if self.transport is None or self.session is None:
+            raise DeviceError("panel not open")
+        if self.feed is not None or self.range is not None or source in self._sources_failed:
+            return False
+        if isinstance(self._error, DecoderHung):
+            self._restart_panel(self._error)  # a new connection does not help
+        if self._error is not None:
+            self._heal(self._error)
+        self._hand_over()
+        self._follow_the_panel()
+        encoder = self._leaving or self.encoder
+        same = encoder is not None and getattr(encoder, "source", None) == source
+        if same and encoder.size == size and encoder.alive:
+            return True
+        if same and encoder.size == size and not encoder.pictures:  # it never played
+            self._sources_failed.add(source)
+            log.warning("video: ffmpeg could not play %s from its file (%s); frames for it",
+                        Path(source.path).name, encoder.reason())  # fmt: skip
+            self._start_encoder(size)
+            return False
+        if same and encoder.size == size:
+            self._stopped(encoder.reason())  # (it stopped by itself: counted)
+        self._start_encoder(size, source=source)
+        return True
 
     def _stopped(self, reason: str) -> None:
         """ffmpeg stopped by itself: a restart, unless it stopped before its first picture

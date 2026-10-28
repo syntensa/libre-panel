@@ -718,6 +718,12 @@ class Renderer:
         self._shows: dict[str, tuple[int, float, float]] = {}
         self._moves: dict[str, bool] = {}  # a slideshow's picture: does it move?
         self._video_infos: dict[str, moving.VideoInfo] = {}  # a video's length and size
+        # [video] direct: the video of this frame, and the frame being it alone across the theme
+        # (the main loop then has the panel take it from its file: app.py); the frames a second
+        # its feed is decoded at meanwhile, for the app's picture alone (None: as it plays)
+        self._video_drawn: tuple[str, str, dict[str, Any], tuple[int, int, int, int]] | None = None
+        self.full_video: tuple[str, str, float] | None = None  # (path, fit, speed)
+        self.video_fps: int | None = None
         self._ffmpeg: str | None = None  # where ffmpeg is ("": not found)
         self._slide_lists: dict[str, tuple[float, list[str]]] = {}  # widget id -> pictures
         self._gauge_parts: dict[tuple[Any, ...], Image.Image] = {}  # static rings, colour fields
@@ -1570,6 +1576,7 @@ class Renderer:
         self.snapshot = snapshot
         self.light_edges, self.edge_owners = [], {}
         self.motion.begin(snapshot.readings, now, self._glide_s(), self._lead())
+        self._video_drawn = None
         boxes: dict[str, Box] = {}
         pieces: list[tuple[str, Piece]] = []
         turns: dict[str, Turn] = {}  # the turned widgets' and modules' ("<id>/")
@@ -1650,6 +1657,7 @@ class Renderer:
             self._forget_strips(now)
         kept.tick()  # (what nothing used for a while goes: the weather bodies)
         dust = self._dust_on()
+        self.full_video = self._whole_video(pieces, turns, screen, dust)
         if screen is not None:
             alone = not pieces and self.look is None and not dust
             if alone and screen.mode == "RGB" and screen.size == (theme.width, theme.height):
@@ -2490,13 +2498,15 @@ class Renderer:
             widget = {**widget, "w": w, "h": h}
         fit, finish = widget["fit"], self._finish({**widget, "fit": "stretch"})
         speed = moving.speed_of(widget.get("speed", 1))
-        key = (rel, w, h, fit, speed)
+        self._video_drawn = (widget["id"], str(path), widget, (x, y, w, h))
+        rate = self.video_fps or moving.VIDEO_FPS
+        key = (rel, w, h, fit, speed, rate)
         frame, count = None, -1
         if not self.preview:
             feed = self._feeds.get(key)
             if feed is None:
                 feed = self._feeds[key] = moving.VideoFeed(self._ffmpeg_path(), path, w, h, fit,
-                                                           speed=speed)  # fmt: skip
+                                                           fps=rate, speed=speed)  # fmt: skip
             count, frame = feed.frame()
             if self.animate:
                 self.moving = True
@@ -2510,6 +2520,32 @@ class Renderer:
             return None
         return self._cached(widget, (rel, key, count, id(frame)),
                             lambda: Piece(finish(frame), x, y))  # fmt: skip
+
+    def _whole_video(
+        self,
+        pieces: list[tuple[str, Piece]],
+        turns: dict[str, Any],
+        screen: Image.Image | None,
+        dust: bool,
+    ) -> tuple[str, str, float] | None:
+        """The video of this frame, ``(path, fit, speed)``, where the frame is that video alone:
+        drawn edge to edge across the theme and nothing else with it (a look, dust, a screen's
+        picture, a turn, a rounded or blurred corner, an effect, a picture behind one that is
+        contained); None otherwise. [video] direct has the panel take it from its file then."""
+        drawn = self._video_drawn
+        if drawn is None or screen is not None or self.look is not None or dust or turns:
+            return None
+        wid, path, widget, box = drawn
+        whole = (0, 0, self.theme.width, self.theme.height)
+        if [name for name, _piece in pieces] != [wid] or box != whole:
+            return None
+        if widget.get("radius") or widget.get("blur") or widget.get("glow") or widget.get("shadow"):
+            return None
+        if widget.get("opacity", 1) != 1 or (
+            widget["fit"] == "contain" and self.theme.background_image
+        ):
+            return None
+        return path, widget["fit"], moving.speed_of(widget.get("speed", 1))
 
     def _live_image(self, widget: dict[str, Any], image: Any) -> Piece | None:
         if image is None:

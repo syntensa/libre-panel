@@ -49,7 +49,7 @@ import subprocess
 import sys
 import threading
 from collections.abc import Callable, Collection
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -494,6 +494,57 @@ def ffmpeg_command(
     video_filter = ",".join(part for part in filters if part)
     if video_filter:
         command += ["-vf", video_filter]
+    command += codec_args(settings, keyint, maxrate)
+    return command + [*stamp(settings.full), "-f", "h264", "-"]
+
+
+@dataclass(frozen=True)
+class VideoSource:
+    """A theme that is one video across the whole panel ([video] direct): ffmpeg reads the
+    file itself, instead of the frames Libre Panel would draw of it. ``fit`` as the picture
+    widget's (cover, contain or stretch); ``background`` (a colour) round a contained one."""
+
+    path: str
+    fit: str = "cover"
+    speed: float = 1.0
+    background: str = "#000000"
+
+
+def _fitted(source: VideoSource, width: int, height: int) -> str:
+    """ffmpeg's filter that fits the video into the panel's frame as the widget does."""
+    if source.fit == "cover":
+        return f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}"
+    if source.fit == "contain":
+        return (f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
+                f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color={source.background}")  # fmt: skip
+    return f"scale={width}:{height}"
+
+
+def ffmpeg_file_command(
+    ffmpeg: str,
+    source: VideoSource,
+    size: tuple[int, int],
+    rotate: int | None,
+    settings: EncoderSettings,
+) -> list[str]:
+    """ffmpeg reading the video file of ``source`` round and round, at the pace it plays (times
+    its speed), fitted into frames of ``size``, turned into the panel's framebuffer and encoded
+    as the frames of :func:`ffmpeg_command` are: the same encoder, settings and colours (YUV
+    made by ffmpeg on the processor), so the panel gets the stream it was measured with."""
+    width, height = size
+    keyint = max(1, round(settings.fps * settings.keyframe_s))
+    maxrate = bit_rate(settings, size)
+    settings = replace(settings, card=False)  # (no frames of four bytes for a card to convert)
+    command = [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin"]
+    command += ["-re"] if source.speed == 1 else ["-readrate", f"{source.speed:g}"]
+    command += ["-stream_loop", "-1", "-i", source.path, "-an", "-sn"]
+    filters = [f"setpts=PTS/{source.speed:g}" if source.speed != 1 else None,
+               _fitted(source, width, height), f"fps={settings.fps}",
+               ROTATION_FILTERS[rotate]]  # fmt: skip
+    if settings.full:  # full-range YUV, made on the processor
+        made = "yuv420p" if settings.encoder == "libx264" else "nv12"
+        filters += [FULL_RANGE, f"format={made}"]
+    command += ["-vf", ",".join(part for part in filters if part)]
     command += codec_args(settings, keyint, maxrate)
     return command + [*stamp(settings.full), "-f", "h264", "-"]
 

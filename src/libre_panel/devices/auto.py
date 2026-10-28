@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
+from typing import Any
 
 from PIL import Image
 
@@ -118,6 +119,9 @@ class AutoDisplay(Display):
 
     def describe(self) -> str:
         return self._impl.describe() if self._impl else t("no panel yet")
+
+    def show_video(self, source: Any, size: tuple[int, int]) -> bool:
+        return bool(self.using_panel and self._impl.show_video(source, size))
 
     def show(self, frame: Image.Image, region: tuple[int, int, int, int] | None = None) -> None:
         if self._impl is None:

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from typing import Any
 
 from PIL import Image
 
@@ -282,6 +283,11 @@ class TurzxDisplay(Display):
         if self._impl is not None:
             return self._impl.describe()
         return self.model.label if self.model else t("TURZX panel")
+
+    def show_video(self, source: Any, size: tuple[int, int]) -> bool:
+        if self._impl is None:
+            raise DeviceError("panel not open")
+        return self._impl.show_video(source, size)
 
     def show(self, frame: Image.Image, region: tuple[int, int, int, int] | None = None) -> None:
         if self._impl is None:

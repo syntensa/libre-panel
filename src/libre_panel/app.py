@@ -142,6 +142,11 @@ def target_size(config: Config, theme: Theme, name: str | None = None) -> tuple[
     return size
 
 
+# [video] direct: how many frames a second the renderer decodes of a video the panel takes
+# from its file (for the app's picture of the panel alone)
+DIRECT_PICTURE_FPS = 4
+
+
 def fit_frame(
     frame: Image.Image, size: tuple[int, int], background: str | tuple[int, ...]
 ) -> Image.Image:
@@ -315,6 +320,28 @@ class _Link:
         self.connected, self.failures = True, 0
         self.status.target = self.display.describe()
         self.status.state, self.status.detail = "showing", ""
+        return True
+
+    def show_video(
+        self, video: tuple[str, str, float], background: tuple[int, ...], size: tuple[int, int],
+        now: float,
+    ) -> bool:  # fmt: skip
+        """A theme that is one video alone (``video``: its path, fit and speed) to the panel
+        from its file ([video] direct); False where the panel takes frames for it."""
+        from libre_panel.devices.h264 import VideoSource
+
+        path, fit, speed = video
+        colour = "#{:02x}{:02x}{:02x}".format(*background[:3])  # (round a contained video)
+        try:
+            if not self.display.show_video(VideoSource(path, fit, speed, colour), size):
+                return False
+        except DeviceError as exc:
+            self.display.close()
+            self.connected = False
+            self._failed(exc, now)
+            return True  # (no frame either: the panel is gone)
+        self.status.frames += 1
+        self.status.target = self.display.describe()
         return True
 
     def show(self, frame: Image.Image, region: Box | list[Box], now: float) -> bool:
@@ -689,11 +716,13 @@ NIGHT_CHECK_S = 30.0  # how often the loop looks whether night began or ended
 
 
 def _same_device(a, b) -> bool:
-    """Brightness and the picture's turn change on the open panel, and how the frames go into
-    ffmpeg (video.pixels: the video display starts ffmpeg anew); anything else needs it opened
+    """Brightness and the picture's turn change on the open panel, how the frames go into
+    ffmpeg (video.pixels: the video display starts ffmpeg anew) and whether a video alone goes
+    from its file (video.direct: the loop asks it each frame); anything else needs it opened
     again."""
     followed = {name: getattr(b, name) for name in _FOLLOWED}
-    return replace(a, **followed, video=replace(a.video, pixels=b.video.pixels)) == b
+    video = replace(a.video, pixels=b.video.pixels, direct=b.video.direct)
+    return replace(a, **followed, video=video) == b
 
 
 class MainLoop:
@@ -1391,7 +1420,7 @@ class MainLoop:
                 snapshot.now = datetime.fromtimestamp(time.time() - (self.clock() - now))
                 drawing = self.clock()
                 frame, _ = renderer.render(snapshot, now)
-                frame = fit_frame(frame, size, background_of(renderer))
+                frame = rendered = fit_frame(frame, size, background_of(renderer))
                 if blend is not None:
                     playing_kind = blend[0]
                     frame, blend = _blend(blend, frame, now)
@@ -1429,7 +1458,19 @@ class MainLoop:
                     previous, turn = None, upside
                 out = turned(frame, turn)  # as the panel is mounted
                 if streaming:
-                    link.show(out, None, started)
+                    # [video] direct: a theme that is one video alone, with nothing drawn over
+                    # it (a notice, a transition, the alarm's edge would be a new picture), goes
+                    # to the panel from its file; its frames are drawn only for the app's
+                    # picture then, at a few a second
+                    whole = renderer.full_video if out is rendered else None
+                    direct = (
+                        bool(whole)
+                        and config.device.video.direct
+                        and link.show_video(whole, background_of(renderer), out.size, started)
+                    )
+                    renderer.video_fps = DIRECT_PICTURE_FPS if direct else None
+                    if not direct:
+                        link.show(out, None, started)
                     previous = None
                 elif display.slow:  # the parts that changed, each on its own
                     parts = changed_regions(previous, out)

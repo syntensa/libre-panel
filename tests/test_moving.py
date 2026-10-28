@@ -267,3 +267,32 @@ def test_a_theme_carries_its_videos_when_shared(isolated_home):
     with pytest.raises(ShareError, match="not the picture or font"):
         import_theme(shared("clip.mp4", b"<html>" + bytes(64)))
     assert any((user_themes_dir()).rglob("clip.mp4"))
+
+
+@needs_ffmpeg
+def test_the_renderer_says_when_its_frame_is_one_video_alone(tmp_path):
+    """[video] direct: the frame is the video alone, edge to edge across the theme (200 x 100),
+    or not (another part, a smaller box, a rounded corner, an effect)."""
+    video(tmp_path / "loop.mp4", size="200x100", seconds=1)
+
+    def whole(**fields):
+        data = {"format": THEME_FORMAT, "display": {"width": 200, "height": 100},
+                "widgets": [{"type": "image", "id": "v", "x": 0, "y": 0, "w": 200, "h": 100,
+                             "src": "loop.mp4", "fit": "cover", **fields}]}  # fmt: skip
+        renderer = Renderer(parse_theme(data, root=tmp_path), preview=True)
+        renderer.render(Snapshot())
+        renderer.close()
+        return renderer.full_video
+
+    assert whole() == (str(tmp_path / "loop.mp4"), "cover", 1.0)
+    assert whole(speed=2)[2] == 2.0 and whole(w=0, h=0) is not None  # (its own size: the same)
+    assert whole(w=150) is None and whole(x=10) is None
+    assert whole(radius=8) is None and whole(glow=0.5) is None and whole(opacity=0.5) is None
+    text = {"type": "text", "id": "t", "x": 4, "y": 4, "text": "over it", "font_size": 12}
+    data = {"format": THEME_FORMAT, "display": {"width": 200, "height": 100},
+            "widgets": [{"type": "image", "id": "v", "x": 0, "y": 0, "w": 200, "h": 100,
+                         "src": "loop.mp4", "fit": "cover"}, text]}  # fmt: skip
+    renderer = Renderer(parse_theme(data, root=tmp_path), preview=True)
+    renderer.render(Snapshot())
+    renderer.close()
+    assert renderer.full_video is None  # something else in the frame

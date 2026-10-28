@@ -196,6 +196,12 @@ class Display:
         screen off, where it has one (its next open() turns it on again); whether it did."""
         return False
 
+    def show_video(self, source: Any, size: tuple[int, int]) -> bool:
+        """A theme that is one video across the panel ([video] direct): whether the panel
+        takes it straight from its file (``source``: h264.VideoSource) instead of frames. Only
+        a TURZX panel in video mode does (turzx_video.py); the others show frames."""
+        return False
+
     def describe(self) -> str:
         """What frames go to, for status displays (tray, editor)."""
         return self.name

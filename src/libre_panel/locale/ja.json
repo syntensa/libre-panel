@@ -2852,7 +2852,9 @@
     "Adapt and install": "調整してインストール",
     "Adapted to {panel}.": "{panel} に合わせて調整しました。",
     "{name} on {panel}": "{panel} 上の {name}",
-    "Adapted from {size}, with made-up readings. Installed, it is adapted the same way: a start you can finish in Design.": "{size} から調整し、架空の値で表示しています。インストール時も同じように調整されます。デザインで仕上げられる出発点です。"
+    "Adapted from {size}, with made-up readings. Installed, it is adapted the same way: a start you can finish in Design.": "{size} から調整し、架空の値で表示しています。インストール時も同じように調整されます。デザインで仕上げられる出発点です。",
+    "Videos straight to the panel": "動画をパネルへ直接送る",
+    "A theme that is one video across the panel goes to it from its file, not drawn picture by picture: less of the processor. Pictures again as soon as anything else shows, a notice or a transition. An experiment.": "パネル全体が1本の動画だけのテーマは、1枚ずつ描画せずにファイルから直接パネルへ送ります。プロセッサの負荷が下がります。通知やトランジションなど他のものが表示されると、すぐに1枚ずつの描画に戻ります。実験的な機能です。"
   },
   "fields": {
     "agent": "エージェント",

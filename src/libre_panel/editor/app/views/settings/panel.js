@@ -248,6 +248,13 @@ function VideoCard() {
         <//>`
       : null}
     ${applies && video.gaps.includes("clip") ? html`<${ClipRow} value=${clip} />` : null}
+    ${applies
+      ? html`<${SettingRow} title=${t("Videos straight to the panel")}
+          hint=${t("A theme that is one video across the panel goes to it from its file, not drawn picture by picture: less of the processor. Pictures again as soon as anything else shows, a notice or a transition. An experiment.")}>
+          <${Toggle} label=${t("Videos straight to the panel")} checked=${Boolean(config.video.direct)}
+            onChange=${(on) => change({ "video.direct": on })} />
+        <//>`
+      : null}
     <${MotionRow} motion=${config.device.motion} serial=${info.model?.connection === "serial"} />
   <//>
   ${applies ? html`<${ExperimentCard} video=${config.video} />` : null}

@@ -468,6 +468,11 @@ class VideoConfig:
     # (AMD's, NVIDIA's and Intel's encoders; the colour check measured AMD's shifting the
     # colours when left to itself)
     pixels: str = "auto"  # "auto" | "rgb" | "card"
+    # A theme that is one video across the panel goes to it straight from its file: ffmpeg
+    # reads and encodes it in one, instead of Libre Panel drawing its frames and ffmpeg
+    # encoding those (less of the processor). Frames again as soon as anything else shows: a
+    # notice, a transition, the alarm's edge. An experiment, off by default
+    direct: bool = False
     ffmpeg: str = ""  # path to ffmpeg; empty = the download's own (bundled.py), else PATH
     # The name the video start command (110) needs: the panel's own standby
     # clip, so its standby behaviour stays as it was.
@@ -1244,6 +1249,7 @@ def _parse_video(v: dict[str, Any]) -> VideoConfig:
     video.encoder = _expect(v.get("encoder", video.encoder), str, "video.encoder")
     if video.encoder not in ENCODERS:
         raise ConfigError(f"video.encoder: must be one of {', '.join(ENCODERS)}")
+    video.direct = _expect(v.get("direct", video.direct), bool, "video.direct")
     video.pixels = _expect(v.get("pixels", video.pixels), str, "video.pixels")
     if video.pixels not in PIXELS:
         raise ConfigError(f"video.pixels: must be one of {', '.join(PIXELS)}")

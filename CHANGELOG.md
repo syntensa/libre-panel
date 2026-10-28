@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+**New**
+- **Videos straight to the panel** (an experiment, *Settings → Panel*, `[video] direct`). A
+  theme that is one video alone across a TURZX panel in video mode goes to it from its file:
+  ffmpeg reads and encodes it in one, with the frames' own encoder and settings, instead of
+  Libre Panel drawing each frame and ffmpeg encoding those, so it costs the processor less; the
+  app's picture of the panel shows it at four frames a second meanwhile. As soon as anything
+  else shows (a notice, a transition, the alarm's edge) the frames take over again, and a video
+  ffmpeg cannot play from its file is drawn as before.
+
 ## 0.7.6 — 2026-10-28
 
 Claude Code in the cloud gets through to the panel at home, a video added in Design plays, and

@@ -2358,3 +2358,141 @@ def test_a_portrait_theme_comes_out_upside_down_as_before(panel, pixels):
     for source, picture in zip(frames, decoded, strict=False):
         native = turzx_usb.to_native(source)
         assert max(ImageStat.Stat(ImageChops.difference(native, picture)).mean) < 6
+
+
+# -- a theme that is one video alone, straight from its file ([video] direct) ---------------------
+
+
+def clip(path, colour="red", size="320x240", seconds=2):
+    subprocess.run([FFMPEG, "-v", "error", "-y", "-f", "lavfi", "-i",
+                    f"color=c={colour}:size={size}:rate=30", "-t", str(seconds),
+                    "-pix_fmt", "yuv420p", str(path)], check=True, timeout=60)  # fmt: skip
+    return path
+
+
+def test_a_video_alone_is_encoded_from_its_file_as_frames_are():
+    """ffmpeg reads the file round and round at its pace (times its speed), fits it as the
+    picture widget does, turns it into the framebuffer and encodes it with the frames' own
+    settings: the panel gets the stream it was measured with."""
+    settings = EncoderSettings(fps=30, encoder="libx264", profile="high", maxrate="3M")
+    source = h264.VideoSource("/videos/loop.mp4", "cover", 1.0, "#0a0e13")
+    command = h264.ffmpeg_file_command("ffmpeg", source, (1920, 480), 270, settings)
+    assert command[command.index("-i") - 3 : command.index("-i") + 2] == [
+        "-re", "-stream_loop", "-1", "-i", "/videos/loop.mp4"]  # fmt: skip
+    assert "-nostdin" in command and "-an" in command
+    assert command[command.index("-vf") + 1] == (
+        "scale=1920:480:force_original_aspect_ratio=increase,crop=1920:480,fps=30,transpose=1"
+    )
+    frames = ffmpeg_command("ffmpeg", (1920, 480), 270, settings)
+    assert command[command.index("-c:v") :] == frames[frames.index("-c:v") :]  # (the same)
+    faster = h264.ffmpeg_file_command(
+        "ffmpeg", h264.VideoSource("/v.mp4", "contain", 2.0, "#0a0e13"), (1920, 480), 270,
+        EncoderSettings(fps=30, encoder="libx264", profile="high", full=True),
+    )  # fmt: skip
+    assert faster[faster.index("-readrate") + 1] == "2" and "-re" not in faster
+    shown = faster[faster.index("-vf") + 1]
+    assert shown.startswith("setpts=PTS/2,scale=1920:480:force_original_aspect_ratio=decrease,")
+    assert "pad=1920:480:(ow-iw)/2:(oh-ih)/2:color=#0a0e13" in shown
+    assert shown.endswith(f"transpose=1,{h264.FULL_RANGE},format=yuv420p")  # (its range)
+
+
+@needs_ffmpeg
+def test_a_video_alone_goes_from_its_file_and_frames_take_over_again(panel, tmp_path):
+    display = TurzxVideoDisplay(video_config())
+    display.open()
+    source = h264.VideoSource(str(clip(tmp_path / "red.mp4")), "cover", 1.0, "#000000")
+    try:
+        end = time.monotonic() + 60
+        while len(panel.blocks) < 20 and time.monotonic() < end:
+            assert display.show_video(source, (1920, 480))  # (each frame: it goes on as it is)
+            time.sleep(1 / 30)
+        arrive(panel, 20)
+        assert display.encoder.source == source and display.encoder.command[-1] == "-"
+        from_file = len(panel.blocks)
+        stream_frames(display, [Image.new("RGB", (1920, 480), "blue")] * 40, fps=30)
+        assert display.encoder.source is None  # frames again
+        settle(panel, timeout=20, at_least=from_file + 20)
+    finally:
+        display.close()
+    assert all(slice_count(block) == 1 for block in panel.blocks)  # one picture per block
+    decoded = decode(panel.stream())
+    red, blue = decoded[2].getpixel((240, 960)), decoded[-1].getpixel((240, 960))
+    assert red[0] > 200 and red[2] < 60, red  # the video, turned into the framebuffer
+    assert blue[2] > 200 and blue[0] < 60, blue  # then the frames
+
+
+@needs_ffmpeg
+def test_a_video_that_ffmpeg_cannot_play_from_its_file_has_frames(panel, tmp_path):
+    (tmp_path / "broken.mp4").write_bytes(b"no video in here")
+    display = TurzxVideoDisplay(video_config())
+    display.open()
+    source = h264.VideoSource(str(tmp_path / "broken.mp4"), "cover", 1.0, "#000000")
+    try:
+        assert display.show_video(source, (1920, 480))  # (started: ffmpeg says soon)
+        end = time.monotonic() + 30
+        while display.encoder.alive and time.monotonic() < end:
+            time.sleep(0.05)
+        assert not display.show_video(source, (1920, 480))  # it never played: frames for it
+        assert not display.show_video(source, (1920, 480)) and display.encoder.source is None
+        stream_frames(display, moving_frames(20), fps=30)
+        arrive(panel, 5)
+    finally:
+        display.close()
+
+
+class VideoDisplay(StreamingDisplay):
+    """A panel that takes a video alone from its file."""
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.videos = []
+
+    def show_video(self, source, size):
+        self.videos.append((source, size))
+        return True
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("direct", [True, False])
+def test_the_main_loop_hands_a_video_alone_to_the_panel(monkeypatch, isolated_home, direct):
+    from libre_panel.config import user_themes_dir
+
+    folder = user_themes_dir() / "loop"
+    (folder / "assets").mkdir(parents=True)
+    clip(folder / "assets" / "loop.mp4", size="480x320", seconds=1)
+    (folder / "theme.json").write_text(json.dumps({
+        "format": "libre-panel-theme/1", "name": "Loop",
+        "display": {"model": "custom", "width": 480, "height": 320},
+        "widgets": [{"type": "image", "id": "v", "x": 0, "y": 0, "w": 480, "h": 320,
+                     "src": "assets/loop.mp4", "fit": "cover"}],
+    }), encoding="utf-8")  # fmt: skip
+    displays, renderers = [], []
+    monkeypatch.setattr(app, "create_display", lambda config: displays.append(
+        VideoDisplay(config)) or displays[-1])  # fmt: skip
+    real_renderer = app.Renderer
+    monkeypatch.setattr(app, "Renderer", lambda *a, **k: renderers.append(
+        real_renderer(*a, **k)) or renderers[-1])  # fmt: skip
+    config = Config(theme="loop", sensors=SensorsConfig(providers=["demo"]),
+                    device=DeviceConfig(video=VideoConfig(direct=direct)))  # fmt: skip
+    stop = threading.Event()
+    thread = threading.Thread(target=app.run, args=(config,), kwargs={"stop": stop})
+    thread.start()
+    end = time.monotonic() + 60
+    while time.monotonic() < end and not (displays and (displays[0].videos or
+                                                         len(displays[0].shown) > 30)):  # fmt: skip
+        time.sleep(0.05)
+    stop.set()
+    thread.join(10)
+    if direct:
+        source, size = displays[0].videos[-1]
+        assert source.path.endswith("loop.mp4") and source.fit == "cover" and size == (480, 320)
+        assert renderers[0].video_fps == app.DIRECT_PICTURE_FPS  # (for the app's picture)
+    else:
+        assert not displays[0].videos and renderers[0].video_fps is None
+
+
+def test_direct_videos_change_on_the_open_panel():
+    assert app._same_device(DeviceConfig(), DeviceConfig(video=VideoConfig(direct=True)))
+    assert parse_config({"video": {"direct": True}}).device.video.direct
+    with pytest.raises(ConfigError, match="video.direct"):
+        parse_config({"video": {"direct": "yes"}})

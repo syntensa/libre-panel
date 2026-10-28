@@ -2852,7 +2852,9 @@
     "Adapt and install": "Подогнать и установить",
     "Adapted to {panel}.": "Подогнано под {panel}.",
     "{name} on {panel}": "{name} на {panel}",
-    "Adapted from {size}, with made-up readings. Installed, it is adapted the same way: a start you can finish in Design.": "Подогнано из {size}, с выдуманными показаниями. При установке подгоняется так же: основа, которую можно доделать в «Дизайне»."
+    "Adapted from {size}, with made-up readings. Installed, it is adapted the same way: a start you can finish in Design.": "Подогнано из {size}, с выдуманными показаниями. При установке подгоняется так же: основа, которую можно доделать в «Дизайне».",
+    "Videos straight to the panel": "Видео прямо на панель",
+    "A theme that is one video across the panel goes to it from its file, not drawn picture by picture: less of the processor. Pictures again as soon as anything else shows, a notice or a transition. An experiment.": "Тема, состоящая из одного видео на всю панель, идёт на неё прямо из файла, а не рисуется кадр за кадром: меньше нагрузки на процессор. Как только появляется что-то ещё, уведомление или переход, снова кадр за кадром. Эксперимент."
   },
   "fields": {
     "agent": "агент",

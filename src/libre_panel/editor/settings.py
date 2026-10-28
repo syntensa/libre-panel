@@ -458,6 +458,7 @@ class Settings:
                     "profile": video.profile,
                     "encoder": video.encoder,
                     "pixels": video.pixels,
+                    "direct": video.direct,
                     "local_clip": video.local_clip,
                     "clip_asked": video.clip_asked,
                     "ffmpeg": video.ffmpeg,
@@ -1488,6 +1489,7 @@ RULES: dict[str, Any] = {
     "video.encoder": lambda n, v, c: _choice(n, v, ENCODERS),
     # how the frames reach ffmpeg (Settings → Panel → Check the colours writes it)
     "video.pixels": lambda n, v, c: _choice(n, v, PIXELS),
+    "video.direct": lambda n, v, c: _flag(n, v),  # a video alone from its file (an experiment)
     "video.local_clip": lambda n, v, c: _text(n, v, 200),
     "video.clip_asked": lambda n, v, c: _flag(n, v),
     "video.ffmpeg": lambda n, v, c: _text(n, v, 260),
