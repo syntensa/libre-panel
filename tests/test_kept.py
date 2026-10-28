@@ -125,9 +125,10 @@ def test_stats_sum_up_by_name():
 # on the 12.3" and the 9.2": held by bytes, each hits within a few percent as often (most more
 # often).
 BEFORE = {
+    # (its card slot warms the AI card too since 0.7.4: eight pictures more, made once)
     "lumen-1920x720": {"renderer.texts": 0.944, "renderer.glyphs": 0.915,
                        "renderer.underlays": 0.712, "renderer.fans": 0.654, "fan.images": 0.685,
-                       "lit.pictures": 0.969},
+                       "lit.pictures": 0.962},
     "lumen-companion": {"renderer.list_bars": 0.706, "renderer.glyphs": 0.842,
                         "renderer.underlays": 0.976, "renderer.texts": 0.993, "fan.images": 0.801},
     "arena-1920x720": {"renderer.texts": 0.899, "renderer.glyphs": 0.895,
