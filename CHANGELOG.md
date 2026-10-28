@@ -7,6 +7,15 @@
   themes on it with live readings at 60 frames a second, the picture upright and its backlight
   at full since 0.7.5, through cold starts and sleep.
 
+**Fixed**
+- **Claude Code in the cloud: reports that get through.** The cloud's sessions share a few
+  addresses, and ntfy.sh often turned them away (HTTP 429). The hook asks a busy relay again a
+  few times within a minute, and notes what it sent, or why not, in
+  `~/.claude/libre-panel-cloud.log` in the session. The setup recommends a free ntfy.sh
+  account, its access token as the environment's network secret for ntfy.sh, which counts what
+  your account sends instead; network access is *Limited* in current apps (*Custom* before).
+  Run the new setup script in the environment (*Show the setup script*).
+
 ## 0.7.5 — 2026-10-28
 
 Pictures that move: a picture element plays an animated GIF or a video (MP4, WebM, MOV), round

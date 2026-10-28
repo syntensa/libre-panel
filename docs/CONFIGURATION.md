@@ -1227,9 +1227,15 @@ Anthropic's that cannot reach this PC. They come by a relay, an [ntfy](https://n
 and shows a setup script for the cloud environment, with what to do on claude.ai/code:
 
 1. Open the settings of the environment your sessions run in.
-2. Network access: *Custom*, with the default list kept and `ntfy.sh` added.
-3. Setup script: add the script (*Copy the script*).
-4. Start a session in it: it reports from then on, and the card says when it last did.
+2. Network access: *Limited* (*Custom* in older apps), with the default list kept and
+   `ntfy.sh` added.
+3. Recommended: a free account at [ntfy.sh](https://ntfy.sh/app), an access token from it
+   (*Account → Access tokens*), and that token as the environment's network secret (*API
+   credentials* in older apps) for `ntfy.sh`: header `Authorization`, `Bearer` before the
+   token. The cloud's sessions share a few addresses, and without an account ntfy.sh often
+   turns them away (HTTP 429); with one it counts what your account sends.
+4. Setup script: add the script (*Copy the script*).
+5. Start a session in it: it reports from then on, and the card says when it last did.
 
 The script writes a hook into the session's own Claude Code settings in the cloud
 (`~/.claude/libre-panel-cloud.py`, called on each event; your own hooks stay). The hook works
@@ -1240,6 +1246,12 @@ or a file. Libre Panel listens to the topic and shows such a session as Claude C
 *In the cloud* where the tool or the model stands (`ai.claude.cloud`). It takes from the
 topic nothing but such states: whoever knows the address could read along and post, so it is
 long and random, and *Remove* stops listening (take the script out of the environment too).
+
+When the relay is busy (HTTP 429, or a server error), the hook asks it again a few times
+within a minute; a refusal for good (a wrong token, HTTP 401) it does not repeat. What it
+sent, or why not, it notes in the session in `~/.claude/libre-panel-cloud.log` (its last
+hundred lines): no such file after a prompt means the setup script did not run, a line with
+`not sent` names the relay's answer.
 
 ntfy.sh passes some 250 messages a day for each sender, which is a few a prompt. For more, or
 for a relay of your own, put the address of a topic on your own ntfy server in `cloud` (the

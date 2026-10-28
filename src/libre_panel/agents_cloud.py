@@ -177,9 +177,11 @@ MARK = "libre-panel-cloud.py"  # what tells Libre Panel's hook in the cloud from
 HOOK = r'''"""Libre Panel: what this cloud session of Claude Code does, for the panel at home.
 
 On each event: the session's state (working, waiting for you, idle), to the relay when it
-changes and every five minutes while it works; never a prompt, a tool's input or a file.
-Written by the environment's setup script (Libre Panel: Settings -> AI activity)."""
-import fcntl, hashlib, json, os, sys, time, urllib.request
+changes and every five minutes while it works; never a prompt, a tool's input or a file. A
+relay that is busy (429) is asked again a few times. What went is noted in
+~/.claude/libre-panel-cloud.log. Written by the environment's setup script (Libre Panel:
+Settings -> AI activity)."""
+import fcntl, hashlib, json, os, sys, time, urllib.error, urllib.request
 
 RELAY = __RELAY__
 NAMED = __NAMED__  # what the session is called goes along
@@ -187,6 +189,26 @@ AGAIN_S = __AGAIN__
 WORKING = __WORKING__
 IDLE = __IDLE__
 WAITING = __WAITING__
+TRIES = (0, 2, 5, 10, 20)  # seconds before each try: a relay shared by many is often busy
+WITHIN_S = 45  # (the hook's own time is a minute)
+LOG = os.path.expanduser("~/.claude/libre-panel-cloud.log")
+
+
+def note(*parts):
+    """A line in the log (its last hundred lines kept), for a look at what the hook does."""
+    try:
+        if os.path.getsize(LOG) > 32768:
+            with open(LOG, encoding="utf-8") as f:
+                tail = f.readlines()[-100:]
+            with open(LOG, "w", encoding="utf-8") as f:
+                f.writelines(tail)
+    except OSError:
+        pass
+    try:
+        with open(LOG, "a", encoding="utf-8") as f:
+            f.write(time.strftime("%Y-%m-%d %H:%M:%S ") + " ".join(p for p in parts if p) + "\n")
+    except OSError:
+        pass
 
 
 def state_of(event, kind):
@@ -236,10 +258,25 @@ def main():
         token = os.environ.get("LIBRE_PANEL_RELAY_TOKEN")
         if token:
             request.add_header("Authorization", "Bearer " + token)
-        try:
-            urllib.request.urlopen(request, timeout=5).close()
-        except Exception:
+        failed, sent = [], False
+        for wait in TRIES:
+            if time.time() + wait - now > WITHIN_S:
+                break
+            time.sleep(wait)
+            try:
+                urllib.request.urlopen(request, timeout=10).close()
+                sent = True
+                break
+            except urllib.error.HTTPError as exc:
+                failed.append("HTTP %d" % exc.code)
+                if exc.code != 429 and exc.code < 500:
+                    break  # (refused for good: a token that is wrong, an address that is not)
+            except Exception as exc:
+                failed.append("%s: %s" % (type(exc).__name__, str(exc)[:120]))
+        if not sent:
+            note(event, state, "not sent:", ", ".join(failed))
             return  # (the next event tries again)
+        note(event, state, "sent", "(after %s)" % ", ".join(failed) if failed else "")
         kept.seek(0)
         kept.truncate()
         kept.write(json.dumps({"state": state, "at": now, "title": title or last.get("title", "")}))
@@ -263,7 +300,7 @@ command = "python3 " + os.path.expanduser(__FILE__)
 for event in __EVENTS__:
     groups = [g for g in hooks.get(event, []) if __MARK__ not in json.dumps(g)]
     groups.append({"hooks": [{"type": "command", "command": command, "async": True,
-                              "timeout": 10}]})
+                              "timeout": 60}]})
     hooks[event] = groups
 os.makedirs(os.path.dirname(path), exist_ok=True)
 with open(path, "w", encoding="utf-8") as f:
@@ -298,6 +335,7 @@ def setup_script(relay: str, named: bool = True) -> str:
         "# Libre Panel: AI activity of this environment's Claude Code sessions, for the panel\n"
         "# at home (Settings -> Game mode and more -> AI activity). It needs the relay's host\n"
         f"# among the environment's allowed domains: {relay_domain(relay)}\n"
+        "# What it sends, in a session: ~/.claude/libre-panel-cloud.log\n"
         "mkdir -p ~/.claude\n"
         f"cat > {HOOK_FILE} <<'LIBRE_PANEL_HOOK'\n{hook_script(relay, named)}LIBRE_PANEL_HOOK\n"
         f"python3 - <<'LIBRE_PANEL_MERGE'\n{merge}LIBRE_PANEL_MERGE\n"

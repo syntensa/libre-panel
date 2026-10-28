@@ -130,9 +130,14 @@ class Relay(BaseHTTPRequestHandler):
     """An ntfy topic: what is posted to it."""
 
     posted: list = []
+    answers: list = []  # what it says before it takes one (429: busy)
 
     def do_POST(self):  # noqa: N802
         body = self.rfile.read(int(self.headers["Content-Length"]))
+        if Relay.answers:
+            self.send_response(Relay.answers.pop(0))
+            self.end_headers()
+            return
         Relay.posted.append((self.path, json.loads(body), dict(self.headers)))
         self.send_response(200)
         self.end_headers()
@@ -143,7 +148,7 @@ class Relay(BaseHTTPRequestHandler):
 
 @pytest.fixture
 def relay():
-    Relay.posted = []
+    Relay.posted, Relay.answers = [], []
     srv = ThreadingHTTPServer(("127.0.0.1", 0), Relay)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{srv.server_address[1]}/libre-panel-abcdefghijklmnop"
@@ -155,13 +160,14 @@ def relay():
 def test_the_hook_says_the_state_when_it_changes_and_never_the_prompt(relay, tmp_path):
     hook = tmp_path / "hook.py"
     hook.write_text(agents_cloud.hook_script(relay, named=True), encoding="utf-8")
-    env = {**os.environ, "TMPDIR": str(tmp_path), "NO_PROXY": "127.0.0.1", "no_proxy": "127.0.0.1"}
+    env = {**os.environ, "TMPDIR": str(tmp_path), "HOME": str(tmp_path), "NO_PROXY": "127.0.0.1",
+           "no_proxy": "127.0.0.1"}  # fmt: skip
 
     def event(name, **more):
         data = {"hook_event_name": name, "session_id": "abc", "prompt": "the secret prompt",
                 "tool_input": {"file_path": "/secret"}, **more}  # fmt: skip
         subprocess.run([sys.executable, str(hook)], input=json.dumps(data), text=True,
-                       env=env, check=True, timeout=30)  # fmt: skip
+                       env=env, check=True, timeout=60)  # fmt: skip
 
     event("UserPromptSubmit", session_title="Cards on the panel")
     event("PreToolUse", tool_name="Edit")  # (still working: nothing)
@@ -191,6 +197,33 @@ def test_the_hook_says_the_state_when_it_changes_and_never_the_prompt(relay, tmp
 
 
 @UNIX
+def test_the_hook_asks_a_busy_relay_again_and_notes_what_went(relay, tmp_path):
+    hook = tmp_path / "hook.py"
+    hook.write_text(agents_cloud.hook_script(relay, named=False), encoding="utf-8")
+    env = {**os.environ, "TMPDIR": str(tmp_path), "HOME": str(tmp_path), "NO_PROXY": "127.0.0.1",
+           "no_proxy": "127.0.0.1"}  # fmt: skip
+    (tmp_path / ".claude").mkdir()
+
+    def event(name):
+        data = {"hook_event_name": name, "session_id": "abc"}
+        subprocess.run([sys.executable, str(hook)], input=json.dumps(data), text=True,
+                       env=env, check=True, timeout=60)  # fmt: skip
+
+    Relay.answers = [429]  # (a relay shared by many: busy for a moment)
+    event("UserPromptSubmit")
+    assert [body["event"] for _p, body, _h in Relay.posted] == ["UserPromptSubmit"]
+    Relay.answers = [401]  # (a token that is wrong: no use asking again)
+    event("Stop")
+    assert len(Relay.posted) == 1 and not Relay.answers
+    event("Stop")  # (not kept as said: the next event tries again)
+    assert [body["event"] for _p, body, _h in Relay.posted] == ["UserPromptSubmit", "Stop"]
+    log = (tmp_path / ".claude" / "libre-panel-cloud.log").read_text(encoding="utf-8")
+    lines = [line.split(" ", 2)[2] for line in log.splitlines()]
+    assert lines == ["UserPromptSubmit working sent (after HTTP 429)",
+                     "Stop idle not sent: HTTP 401", "Stop idle sent"]  # fmt: skip
+
+
+@UNIX
 def test_the_setup_script_puts_the_hook_into_the_sessions_settings_once(relay, tmp_path):
     home = tmp_path / "home"
     (home / ".claude").mkdir(parents=True)
@@ -206,7 +239,7 @@ def test_the_setup_script_puts_the_hook_into_the_sessions_settings_once(relay, t
     for event in agents.HOOK_EVENTS:
         ours = [g for g in settings["hooks"][event] if agents_cloud.MARK in json.dumps(g)]
         assert ours == [{"hooks": [{"type": "command", "command": command, "async": True,
-                                    "timeout": 10}]}], event  # fmt: skip
+                                    "timeout": 60}]}], event  # fmt: skip
     assert settings["hooks"]["Stop"][0] == own["hooks"]["Stop"][0]  # theirs stays
     hook = (home / ".claude" / "libre-panel-cloud.py").read_text(encoding="utf-8")
     assert json.dumps(relay) in hook

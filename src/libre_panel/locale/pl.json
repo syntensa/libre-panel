@@ -2831,7 +2831,6 @@
     "Its sessions on claude.ai/code cannot reach this PC: a hook in the cloud environment says by a relay when they work and when they wait for you.": "Jego sesje na claude.ai/code nie docierają do tego PC: hook w środowisku chmurowym zgłasza przez przekaźnik, kiedy pracują i kiedy czekają na ciebie.",
     "Libre Panel listens to the relay of the cloud sessions.": "Libre Panel nasłuchuje przekaźnika sesji w chmurze.",
     "Libre Panel no longer listens to the cloud sessions; take the script out of the environment too.": "Libre Panel nie nasłuchuje już sesji w chmurze; usuń też skrypt ze środowiska.",
-    "Network access: Custom, with the default list, and {domain} added.": "Dostęp do sieci: Custom, z domyślną listą i dodanym {domain}.",
     "On claude.ai/code, open the settings of the environment your sessions run in.": "Na claude.ai/code otwórz ustawienia środowiska, w którym działają twoje sesje.",
     "Only for a topic of the relay that is not open to everyone.": "Tylko dla tematu przekaźnika, który nie jest otwarty dla wszystkich.",
     "Relay of the cloud sessions": "Przekaźnik sesji w chmurze",
@@ -2841,7 +2840,10 @@
     "Start a session in it: it reports from then on.": "Uruchom w nim sesję: od tej chwili będzie się zgłaszać.",
     "The relay at {domain} passes on whether a session works, waits for you or is done, and what it is called where that is on; never a prompt or a file. Its address is a secret: whoever knows it can read along. ntfy.sh passes some 250 messages a day.": "Przekaźnik na {domain} przekazuje, czy sesja pracuje, czeka na ciebie czy skończyła, oraz jak się nazywa, gdzie to włączone; nigdy promptu ani pliku. Jego adres jest tajny: kto go zna, może czytać. ntfy.sh przekazuje około 250 wiadomości dziennie.",
     "An animated GIF moves, and so does a video (MP4, WebM, MOV): round and round, on a panel that is sent every frame at full speed.": "Animowany GIF się porusza, wideo (MP4, WebM, MOV) też: w pętli, a na panelu, który dostaje każdą klatkę, z pełną prędkością.",
-    "“{name}” is not a file a theme carries (theme.json, pictures: PNG, JPEG, GIF, WebP, videos: MP4, WebM, MOV, fonts: TTF, OTF): nothing was imported.": "„{name}” nie jest plikiem, który zawiera motyw (theme.json, obrazy: PNG, JPEG, GIF, WebP, wideo: MP4, WebM, MOV, czcionki: TTF, OTF): nic nie zaimportowano."
+    "“{name}” is not a file a theme carries (theme.json, pictures: PNG, JPEG, GIF, WebP, videos: MP4, WebM, MOV, fonts: TTF, OTF): nothing was imported.": "„{name}” nie jest plikiem, który zawiera motyw (theme.json, obrazy: PNG, JPEG, GIF, WebP, wideo: MP4, WebM, MOV, czcionki: TTF, OTF): nic nie zaimportowano.",
+    "Network access: Limited (Custom in older apps), with the default list, and {domain} added.": "Dostęp do sieci: Limited (w starszych aplikacjach Custom), z domyślną listą i dodanym {domain}.",
+    "Recommended: a free account at ntfy.sh, and its access token as the environment's network secret (API credentials in older apps) for ntfy.sh: header Authorization, Bearer before the token. Without it ntfy.sh often turns the cloud's sessions away (HTTP 429), as they share a few addresses.": "Zalecane: darmowe konto w ntfy.sh i jego token dostępu jako Network secret środowiska (w starszych aplikacjach API credentials) dla ntfy.sh: nagłówek Authorization, Bearer przed tokenem. Bez niego ntfy.sh często odrzuca sesje w chmurze (HTTP 429), bo dzielą one niewiele adresów.",
+    "In a session, ~/.claude/libre-panel-cloud.log says what the hook sent.": "W sesji plik ~/.claude/libre-panel-cloud.log mówi, co hook wysłał."
   },
   "fields": {
     "agent": "agent",

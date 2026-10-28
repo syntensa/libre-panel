@@ -111,13 +111,17 @@ function cloudSteps(plan, first) {
       <h2 class="dialog-title">${title}</h2>
       <ol class="dialog-text agents-cloud-steps">
         <li>${t("On claude.ai/code, open the settings of the environment your sessions run in.")}</li>
-        <li>${t("Network access: Custom, with the default list, and {domain} added.", { domain: plan.domain })}</li>
+        <li>${t("Network access: Limited (Custom in older apps), with the default list, and {domain} added.", { domain: plan.domain })}</li>
+        ${plan.domain === "ntfy.sh"
+          ? html`<li>${t("Recommended: a free account at ntfy.sh, and its access token as the environment's network secret (API credentials in older apps) for ntfy.sh: header Authorization, Bearer before the token. Without it ntfy.sh often turns the cloud's sessions away (HTTP 429), as they share a few addresses.")}</li>`
+          : null}
         <li>${t("Setup script: add the script below.")}</li>
         <li>${t("Start a session in it: it reports from then on.")}</li>
       </ol>
       <pre class="command agents-preview" tabindex="0" data-agents-cloud-script>${plan.script}</pre>
       <p class="dialog-text muted">
         ${t("The relay at {domain} passes on whether a session works, waits for you or is done, and what it is called where that is on; never a prompt or a file. Its address is a secret: whoever knows it can read along. ntfy.sh passes some 250 messages a day.", { domain: plan.domain })}
+        ${" "}${t("In a session, ~/.claude/libre-panel-cloud.log says what the hook sent.")}
       </p>
       <div class="dialog-actions">
         <button type="button" class="btn" onClick=${() => copyText(plan.script)}>${t("Copy the script")}</button>

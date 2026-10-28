@@ -1174,6 +1174,7 @@ def test_claude_code_in_the_cloud_gives_the_setup_script_and_listens_to_a_relay(
         cloud.get_by_role("button", name="Set up").click()
         dialog = page.locator(".dialog")
         expect(dialog).to_contain_text("ntfy.sh added")
+        expect(dialog).to_contain_text("(HTTP 429)")  # (the token as a network secret)
         expect(dialog.locator("[data-agents-cloud-script]")).to_contain_text("libre-panel-cloud.py")
         assert relay() == ""  # not before it is confirmed
         dialog.get_by_role("button", name="Set up").click()

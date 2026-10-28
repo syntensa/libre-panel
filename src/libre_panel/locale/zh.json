@@ -2831,7 +2831,6 @@
     "Its sessions on claude.ai/code cannot reach this PC: a hook in the cloud environment says by a relay when they work and when they wait for you.": "它在 claude.ai/code 上的会话无法连到这台电脑：云环境中的一个钩子通过中继告知它们何时在工作、何时在等你。",
     "Libre Panel listens to the relay of the cloud sessions.": "Libre Panel 正在监听云端会话的中继。",
     "Libre Panel no longer listens to the cloud sessions; take the script out of the environment too.": "Libre Panel 不再监听云端会话；也请把脚本从环境中移除。",
-    "Network access: Custom, with the default list, and {domain} added.": "网络访问：选 Custom，保留默认列表，并添加 {domain}。",
     "On claude.ai/code, open the settings of the environment your sessions run in.": "在 claude.ai/code 上，打开你的会话所运行环境的设置。",
     "Only for a topic of the relay that is not open to everyone.": "仅用于不对所有人开放的中继主题。",
     "Relay of the cloud sessions": "云端会话的中继",
@@ -2841,7 +2840,10 @@
     "Start a session in it: it reports from then on.": "在其中开始一个会话：从那时起它就会报告。",
     "The relay at {domain} passes on whether a session works, waits for you or is done, and what it is called where that is on; never a prompt or a file. Its address is a secret: whoever knows it can read along. ntfy.sh passes some 250 messages a day.": "{domain} 上的中继只转发会话是在工作、在等你还是已完成，以及在开启时它的名称；从不转发提示或文件。它的地址是机密：知道地址的人都能读取。ntfy.sh 每天约转发 250 条消息。",
     "An animated GIF moves, and so does a video (MP4, WebM, MOV): round and round, on a panel that is sent every frame at full speed.": "动态 GIF 会动，视频（MP4、WebM、MOV）也会：循环播放；在逐帧接收画面的面板上全速播放。",
-    "“{name}” is not a file a theme carries (theme.json, pictures: PNG, JPEG, GIF, WebP, videos: MP4, WebM, MOV, fonts: TTF, OTF): nothing was imported.": "“{name}”不是主题会带的文件（theme.json，图片：PNG、JPEG、GIF、WebP，视频：MP4、WebM、MOV，字体：TTF、OTF）：未导入任何内容。"
+    "“{name}” is not a file a theme carries (theme.json, pictures: PNG, JPEG, GIF, WebP, videos: MP4, WebM, MOV, fonts: TTF, OTF): nothing was imported.": "“{name}”不是主题会带的文件（theme.json，图片：PNG、JPEG、GIF、WebP，视频：MP4、WebM、MOV，字体：TTF、OTF）：未导入任何内容。",
+    "Network access: Limited (Custom in older apps), with the default list, and {domain} added.": "网络访问：选 Limited（旧版应用中为 Custom），保留默认列表，并添加 {domain}。",
+    "Recommended: a free account at ntfy.sh, and its access token as the environment's network secret (API credentials in older apps) for ntfy.sh: header Authorization, Bearer before the token. Without it ntfy.sh often turns the cloud's sessions away (HTTP 429), as they share a few addresses.": "建议：在 ntfy.sh 注册一个免费账户，并把它的访问令牌设为该环境针对 ntfy.sh 的 Network secret（旧版应用中为 API credentials）：标头 Authorization，令牌前加 Bearer。没有它，ntfy.sh 常会拒绝云端会话（HTTP 429），因为它们共用少数几个地址。",
+    "In a session, ~/.claude/libre-panel-cloud.log says what the hook sent.": "在会话中，~/.claude/libre-panel-cloud.log 记录了钩子发送的内容。"
   },
   "fields": {
     "agent": "智能体",

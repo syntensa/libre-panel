@@ -2831,7 +2831,6 @@
     "Its sessions on claude.ai/code cannot reach this PC: a hook in the cloud environment says by a relay when they work and when they wait for you.": "claude.ai/code のセッションはこの PC に届きません。クラウド環境のフックが、作業中かあなたを待っているかをリレー経由で知らせます。",
     "Libre Panel listens to the relay of the cloud sessions.": "Libre Panel がクラウドセッションのリレーを受信しています。",
     "Libre Panel no longer listens to the cloud sessions; take the script out of the environment too.": "Libre Panel はクラウドセッションの受信をやめました。環境からもスクリプトを外してください。",
-    "Network access: Custom, with the default list, and {domain} added.": "ネットワークアクセス：Custom を選び、既定のリストを残して {domain} を追加します。",
     "On claude.ai/code, open the settings of the environment your sessions run in.": "claude.ai/code で、セッションが動く環境の設定を開きます。",
     "Only for a topic of the relay that is not open to everyone.": "誰にでも開かれているわけではないリレーのトピック用です。",
     "Relay of the cloud sessions": "クラウドセッションのリレー",
@@ -2841,7 +2840,10 @@
     "Start a session in it: it reports from then on.": "その環境でセッションを始めると、そこから報告が届きます。",
     "The relay at {domain} passes on whether a session works, waits for you or is done, and what it is called where that is on; never a prompt or a file. Its address is a secret: whoever knows it can read along. ntfy.sh passes some 250 messages a day.": "{domain} のリレーが伝えるのは、セッションが作業中か、あなたを待っているか、終わったか、そして有効なときはその名前だけです。プロンプトやファイルは送りません。アドレスは秘密で、知っている人は読めます。ntfy.sh は 1 日に約 250 件まで中継します。",
     "An animated GIF moves, and so does a video (MP4, WebM, MOV): round and round, on a panel that is sent every frame at full speed.": "アニメーション GIF も動画（MP4、WebM、MOV）も動きます。繰り返し再生され、毎フレーム送られるパネルではフルスピードで動きます。",
-    "“{name}” is not a file a theme carries (theme.json, pictures: PNG, JPEG, GIF, WebP, videos: MP4, WebM, MOV, fonts: TTF, OTF): nothing was imported.": "「{name}」はテーマが含めるファイルではありません（theme.json、画像：PNG、JPEG、GIF、WebP、動画：MP4、WebM、MOV、フォント：TTF、OTF）。何も取り込まれませんでした。"
+    "“{name}” is not a file a theme carries (theme.json, pictures: PNG, JPEG, GIF, WebP, videos: MP4, WebM, MOV, fonts: TTF, OTF): nothing was imported.": "「{name}」はテーマが含めるファイルではありません（theme.json、画像：PNG、JPEG、GIF、WebP、動画：MP4、WebM、MOV、フォント：TTF、OTF）。何も取り込まれませんでした。",
+    "Network access: Limited (Custom in older apps), with the default list, and {domain} added.": "ネットワークアクセス：Limited（古いアプリでは Custom）を選び、既定のリストを残して {domain} を追加します。",
+    "Recommended: a free account at ntfy.sh, and its access token as the environment's network secret (API credentials in older apps) for ntfy.sh: header Authorization, Bearer before the token. Without it ntfy.sh often turns the cloud's sessions away (HTTP 429), as they share a few addresses.": "推奨：ntfy.sh の無料アカウントを作り、そのアクセストークンを環境の ntfy.sh 向け Network secret（古いアプリでは API credentials）にします。ヘッダーは Authorization、トークンの前に Bearer。これがないと、クラウドのセッションは少数のアドレスを共有しているため、ntfy.sh にしばしば断られます（HTTP 429）。",
+    "In a session, ~/.claude/libre-panel-cloud.log says what the hook sent.": "セッション内の ~/.claude/libre-panel-cloud.log に、フックが送った内容が記録されます。"
   },
   "fields": {
     "agent": "エージェント",
