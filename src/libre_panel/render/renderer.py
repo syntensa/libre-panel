@@ -713,6 +713,10 @@ class Renderer:
         self._animations = Kept("renderer.animations", self.ANIMATION_BYTES)
         self._feeds: dict[Any, moving.VideoFeed] = {}
         self._began: dict[tuple[str, str], float] = {}  # when an animated picture first showed
+        # a slideshow with pictures that move: the one on show, since when and until when
+        self._shows: dict[str, tuple[int, float, float]] = {}
+        self._moves: dict[str, bool] = {}  # a slideshow's picture: does it move?
+        self._lengths: dict[str, float | None] = {}  # a video's seconds, as ffmpeg reads them
         self._ffmpeg: str | None = None  # where ffmpeg is ("": not found)
         self._slide_lists: dict[str, tuple[float, list[str]]] = {}  # widget id -> pictures
         self._gauge_parts: dict[tuple[Any, ...], Image.Image] = {}  # static rings, colour fields
@@ -2384,10 +2388,7 @@ class Renderer:
 
     def _draw_image(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
         pictures = self._slides(widget)
-        rel = ""
-        if pictures:
-            seconds = max(1, widget["seconds"])
-            rel = pictures[int(snapshot.now.timestamp() // seconds) % len(pictures)]
+        rel = self._slide(widget, pictures, snapshot, now) if pictures else ""
         x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
         if rel.startswith("@"):  # a picture a sensor source or service has (an album cover)
             return self._live_image(widget, snapshot.images.get(rel[1:]))
@@ -2395,7 +2396,8 @@ class Renderer:
             return self._draw_video(widget, rel)
         animation = self._animation(widget, rel)
         if animation is not None:  # an animated picture: the frame of the moment, from its first
-            n = animation.index(now - self._began.setdefault((widget["id"], rel), now))
+            began = self._began.setdefault((widget["id"], rel), now)
+            n = animation.index((now - began) * moving.speed_of(widget.get("speed", 1)))
             if self.animate:
                 self.moving = True
             frame = animation.frames[n]
@@ -2470,12 +2472,14 @@ class Renderer:
             self._warn(f"video {rel!r}: {exc}")
             return None
         fit, finish = widget["fit"], self._finish({**widget, "fit": "stretch"})
-        key = (rel, w, h, fit)
+        speed = moving.speed_of(widget.get("speed", 1))
+        key = (rel, w, h, fit, speed)
         frame, count = None, -1
         if not self.preview:
             feed = self._feeds.get(key)
             if feed is None:
-                feed = self._feeds[key] = moving.VideoFeed(self._ffmpeg_path(), path, w, h, fit)
+                feed = self._feeds[key] = moving.VideoFeed(self._ffmpeg_path(), path, w, h, fit,
+                                                           speed=speed)  # fmt: skip
             count, frame = feed.frame()
             if self.animate:
                 self.moving = True
@@ -2509,6 +2513,65 @@ class Renderer:
         # (the picture is part of what the piece is made of, so it is kept as long as the piece is:
         # another picture could else be made where it was, and be taken for it by its id)
         return self._cached(widget, (id(image), image), build)
+
+    def _slide(self, widget: dict[str, Any], pictures: list[str], snapshot: Snapshot,
+               now: float) -> str:  # fmt: skip
+        """The picture on show. Still pictures take turns by the clock, ``seconds`` each; in a
+        slideshow with one that moves (a video, an animated picture), each that moves plays
+        whole rounds, as many as take ``seconds`` at least (a longer video: to its end), and
+        begins at its start."""
+        seconds = max(1, widget["seconds"])
+        if len(pictures) == 1 or not any(self._moving(rel) for rel in pictures):
+            return pictures[int(snapshot.now.timestamp() // seconds) % len(pictures)]
+        index, began, ends = self._shows.get(widget["id"], (-1, now, now))
+        if index < 0 or now >= ends or now < began or index >= len(pictures):
+            index = (index + 1) % len(pictures)
+            rel = pictures[index]
+            self._shows[widget["id"]] = (index, now, now + self._slide_seconds(widget, rel))
+            self._began[(widget["id"], rel)] = now  # (an animated picture: from its first frame)
+            for key, feed in self._feeds.items():
+                if key[0] == rel:  # (a video: from its start)
+                    feed.from_start()
+        return pictures[index]
+
+    def _moving(self, rel: str) -> bool:
+        """Does the slideshow's picture move: a video, or a picture of more than one frame?"""
+        found = self._moves.get(rel)
+        if found is None:
+            found = moving.is_video(rel)
+            if not found and rel.lower().endswith((".gif", ".webp", ".png")) and self.theme.root:
+                try:
+                    with Image.open(resolve_asset(self.theme.root, rel)) as picture:
+                        found = getattr(picture, "n_frames", 1) > 1
+                except (OSError, ThemeError, ValueError):
+                    found = False
+            self._moves[rel] = found
+        return found
+
+    def _slide_seconds(self, widget: dict[str, Any], rel: str) -> float:
+        """How long a picture of a slideshow shows: ``seconds``; one that moves whole rounds,
+        as many as take that long at least."""
+        seconds = max(1, widget["seconds"])
+        if not self._moving(rel) or self.theme.root is None:
+            return seconds
+        speed = moving.speed_of(widget.get("speed", 1))
+        if moving.is_video(rel):
+            if rel not in self._lengths:
+                ffmpeg = self._ffmpeg_path()
+                try:
+                    path = resolve_asset(self.theme.root, rel)
+                except ThemeError:
+                    path = None
+                found = moving.video_length(ffmpeg, path) if ffmpeg and path else None
+                self._lengths[rel] = found
+            length = self._lengths[rel]
+        else:
+            animation = self._animation(widget, rel)
+            length = animation.length if animation is not None else None
+        if not length:
+            return seconds
+        length /= speed
+        return math.ceil(seconds / length - 1e-6) * length if length < seconds else length
 
     def _slides(self, widget: dict[str, Any]) -> list[str]:
         """The picture and the slideshow's others, folders read every half minute."""

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+**Pictures that move**
+- **Slideshows play videos to their end.** In a slideshow with a video or an animated picture,
+  each that moves plays from its start, whole rounds, as many as take the seconds per picture
+  at least: a longer video to its end, a short GIF a few times; stills keep their seconds.
+- **Playback speed** (*Design → the picture → Playback speed*, `speed` in theme.json): videos and
+  animated pictures play from a quarter as fast to four times as fast.
+- A video with a condition (*Advanced → needs*: a sensor, or `!` and one) plays only while it
+  shows, and from its start once it has been away a few seconds.
+
 **Game mode**
 - **The game's logo on the game card.** Where game mode has the game's logo (Steam's), it
   heads the game card in place of the gamepad and the name, as large as the room above the frame

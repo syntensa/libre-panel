@@ -286,7 +286,10 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "blur": ("int", 0),
         # more pictures for a slideshow, one per line ("photos/*.jpg" takes a folder)
         "slides": ("text", ""),
-        "seconds": ("int", 10),  # per picture
+        # per picture; one that moves (a video, an animated GIF) plays whole rounds, at least
+        # this long: a longer video to its end
+        "seconds": ("int", 10),
+        "speed": ("number", 1.0),  # how fast a video or an animated picture plays (0.25 to 4)
     },
     "weather": {
         "field": (
@@ -412,6 +415,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "timezone": ("string", ""),  # analog clock: e.g. "Asia/Tokyo"
         "target": ("string", ""),  # countdown: "2026-12-24", "2026-12-24 18:00", "12-24"
         "seconds": ("int", 10),  # picture: seconds per picture in a slideshow
+        "speed": ("number", 1.0),  # picture: how fast its videos and animated pictures play
         # the cards (theme.cards): the weather card's symbols move (the symbol's own
         # field); a slot keeps a paused track on show this long (minutes), and a change of
         # card takes so long (seconds)
@@ -458,7 +462,7 @@ PRIMARY_FIELDS: dict[str, tuple[str, ...]] = {
     "countdown": ("target", "part", "color", "font_size"),
     "moon": ("color", "color2", "mirror"),
     "agent": ("sensor", "color", "color2"),
-    "image": ("src", "fit", "slides", "seconds"),
+    "image": ("src", "fit", "slides", "seconds", "speed"),
     "weather": ("field", "format", "color", "font_size"),
     "icon": ("icon", "finish", "color", "sensor"),
     "calendar": ("first_day", "color", "color2", "muted"),

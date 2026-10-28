@@ -1,6 +1,6 @@
 """Pictures that move, in an image widget: an animated GIF (or WebP, or PNG) plays its frames
 for as long as each says, round and round; a video (MP4, WebM, MOV, ...) plays through ffmpeg,
-round and round, at the pace it was made for.
+round and round, at the pace it was made for, or faster or slower (the widget's ``speed``).
 
 - **An animated picture** is read once, each frame fitted, rounded and blurred as the widget
   wants it, and kept with its time: the frame on show is the one the time says
@@ -13,12 +13,15 @@ round and round, at the pace it was made for.
   theme shows its first frame (:func:`first_frame`).
 
 A panel driven every frame (in video mode, or a USB display as Waveshare's 2.8") shows them as
-they are; another shows the frame of the moment each time it is drawn.
+they are; another shows the frame of the moment each time it is drawn. In a slideshow each plays
+whole rounds, as many as take its seconds at least: a video longer than them to its end
+(:func:`video_length`).
 """
 
 from __future__ import annotations
 
 import logging
+import re
 import subprocess
 import threading
 import time
@@ -37,6 +40,16 @@ USUAL_FRAME_S = 0.1
 VIDEO_FPS = 30  # the most frames a second a video is decoded at
 IDLE_S = 5.0  # a video nobody asked a frame of for this long: ffmpeg stops
 START_TIMEOUT_S = 10.0
+SPEEDS = (0.25, 4.0)  # how much slower or faster a moving picture plays, at most
+
+
+def speed_of(value: object) -> float:
+    """The widget's ``speed`` within ``SPEEDS`` (1: as it was made)."""
+    try:
+        speed = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 1.0
+    return min(SPEEDS[1], max(SPEEDS[0], speed)) if speed == speed else 1.0
 
 
 def is_video(rel: str) -> bool:
@@ -103,14 +116,18 @@ def _filter(w: int, h: int, fit: str) -> str:
 
 
 def video_command(ffmpeg: str, path: Path, w: int, h: int, fit: str, fps: int = VIDEO_FPS,
-                  once: bool = False) -> list[str]:  # fmt: skip
+                  once: bool = False, speed: float = 1.0) -> list[str]:  # fmt: skip
     """ffmpeg reading the video at ``path`` into raw RGBA frames of w x h on its output: at the
-    pace it plays, round and round (``once``: its first frame alone)."""
+    pace it plays times ``speed``, round and round (``once``: its first frame alone)."""
     command = [ffmpeg, "-v", "error", "-nostdin"]
+    paced = ""
     if not once:
-        command += ["-re", "-stream_loop", "-1"]
+        # read as fast as it plays (-re), or faster or slower, its frames' times along with it
+        command += ["-re"] if speed == 1 else ["-readrate", f"{speed:g}"]
+        command += ["-stream_loop", "-1"]
+        paced = f"setpts=PTS/{speed:g}," if speed != 1 else ""
     command += ["-i", str(path), "-an", "-sn",
-                "-vf", f"{_filter(w, h, fit)},fps={fps}" if not once else _filter(w, h, fit),
+                "-vf", f"{paced}{_filter(w, h, fit)},fps={fps}" if not once else _filter(w, h, fit),
                 "-pix_fmt", "rgba", "-f", "rawvideo"]  # fmt: skip
     if once:
         command += ["-frames:v", "1"]
@@ -124,6 +141,24 @@ def _quiet() -> dict:
     if sys.platform == "win32":
         return {"creationflags": subprocess.CREATE_NO_WINDOW}
     return {}
+
+
+def video_length(ffmpeg: str, path: Path) -> float | None:
+    """How long the video plays (seconds), as ffmpeg reads it from the file; None where it
+    cannot tell."""
+    try:
+        result = subprocess.run([ffmpeg, "-hide_banner", "-nostdin", "-i", str(path)],
+                                capture_output=True, timeout=START_TIMEOUT_S, check=False,
+                                **_quiet())  # fmt: skip
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        log.warning("video %s: no length (%s)", path.name, exc)
+        return None
+    found = re.search(rb"Duration: (\d+):(\d\d):(\d\d(?:\.\d+)?)", result.stderr)
+    if found is None:
+        return None
+    hours, minutes, seconds = (float(part) for part in found.groups())
+    length = hours * 3600 + minutes * 60 + seconds
+    return length if length > 0 else None
 
 
 def first_frame(ffmpeg: str, path: Path, w: int, h: int, fit: str) -> Image.Image | None:
@@ -147,8 +182,9 @@ class VideoFeed:
     newest. ffmpeg starts with the first ask and stops after ``IDLE_S`` without one."""
 
     def __init__(self, ffmpeg: str, path: Path, w: int, h: int, fit: str, fps: int = VIDEO_FPS,
-                 clock: Callable[[], float] = time.monotonic) -> None:  # fmt: skip
-        self.command = video_command(ffmpeg, path, w, h, fit, fps)
+                 clock: Callable[[], float] = time.monotonic,
+                 speed: float = 1.0) -> None:  # fmt: skip
+        self.command = video_command(ffmpeg, path, w, h, fit, fps, speed=speed)
         self.name, self.size, self.clock = path.name, (w, h), clock
         self._lock = threading.Lock()
         self._newest: Image.Image | None = None
@@ -208,5 +244,16 @@ class VideoFeed:
         with self._lock:
             process, self._process = self._process, None
             self._asked = -IDLE_S * 2
+            self._newest = None  # (shown again, it begins with its first frame)
         if process is not None:
             process.kill()
+
+    def from_start(self) -> None:
+        """Play it from its start (a slideshow comes to it again): ffmpeg starts anew with the
+        next ask, and its first frame shows until the new one's first comes."""
+        thread = self._thread
+        self.close()
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(1.0)
+        with self._lock:
+            self._failed = -IDLE_S  # (not a failure: at once)

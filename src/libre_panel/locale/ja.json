@@ -2843,7 +2843,10 @@
     "Network access: Limited (Custom in older apps), with the default list, and {domain} added.": "ネットワークアクセス：Limited（古いアプリでは Custom）を選び、既定のリストを残して {domain} を追加します。",
     "Recommended: a free account at ntfy.sh, and its access token as the environment's network secret (API credentials in older apps) for ntfy.sh: header Authorization, Bearer before the token. Without it ntfy.sh often turns the cloud's sessions away (HTTP 429), as they share a few addresses.": "推奨：ntfy.sh の無料アカウントを作り、そのアクセストークンを環境の ntfy.sh 向け Network secret（古いアプリでは API credentials）にします。ヘッダーは Authorization、トークンの前に Bearer。これがないと、クラウドのセッションは少数のアドレスを共有しているため、ntfy.sh にしばしば断られます（HTTP 429）。",
     "In a session, ~/.claude/libre-panel-cloud.log says what the hook sent.": "セッション内の ~/.claude/libre-panel-cloud.log に、フックが送った内容が記録されます。",
-    "It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of JPEG pictures, as it asks for them, up to 60 a second: smooth motion. Its brightness goes into the picture: dimming darkens it; its backlight is set on its card (the hardware guide says how).": "USBディスプレイにするWaveshareのカードイメージが必要で（その後はUSBでudispと名乗ります）、PCが送るものだけを表示します。カード上のテーマはそのイメージで消えます。自身が求めるとおりのJPEG画像によるビデオストリームを受け取ります。最大で毎秒60枚、なめらかな動きです。明るさは画像に反映されるため、減光すると画像が暗くなります。バックライトはカード側で設定します（方法はハードウェアガイドにあります）。"
+    "It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of JPEG pictures, as it asks for them, up to 60 a second: smooth motion. Its brightness goes into the picture: dimming darkens it; its backlight is set on its card (the hardware guide says how).": "USBディスプレイにするWaveshareのカードイメージが必要で（その後はUSBでudispと名乗ります）、PCが送るものだけを表示します。カード上のテーマはそのイメージで消えます。自身が求めるとおりのJPEG画像によるビデオストリームを受け取ります。最大で毎秒60枚、なめらかな動きです。明るさは画像に反映されるため、減光すると画像が暗くなります。バックライトはカード側で設定します（方法はハードウェアガイドにあります）。",
+    "Playback speed": "再生速度",
+    "a video or an animated picture plays to its end, round by round, at least this long": "動画やアニメーション画像は最後まで、1周ずつ、少なくともこの時間は再生されます",
+    "of its videos and animated pictures: 0.5 is half as fast, 2 twice": "動画とアニメーション画像の速さ：0.5 で半分、2 で2倍"
   },
   "fields": {
     "agent": "エージェント",
@@ -2990,7 +2993,8 @@
     "fan_items": "対象のファン",
     "hide_unused": "未使用を非表示",
     "threads": "スレッド",
-    "rotate": "回転"
+    "rotate": "回転",
+    "speed": "再生速度"
   },
   "widgets": {
     "agent": "AIマーク",

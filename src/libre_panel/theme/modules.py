@@ -1497,7 +1497,8 @@ def build_image(b: _Build, _src: Source) -> None:
                 width=b.w * 0.9)  # fmt: skip
         return
     b.add("image", "picture", x=b.x, y=b.y, w=b.w, h=b.h, src="", slides="\n".join(pictures),
-          seconds=max(1, b.module["seconds"]), fit="cover", radius=radius)  # fmt: skip
+          seconds=max(1, b.module["seconds"]), speed=b.module["speed"], fit="cover",
+          radius=radius)  # fmt: skip
     if b.module["title"]:
         shade = round(b.h * 0.4)
         b.add("rect", "shade", x=b.x, y=b.y + b.h - shade, w=b.w, h=shade, color="#00000000",

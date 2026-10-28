@@ -2843,7 +2843,10 @@
     "Network access: Limited (Custom in older apps), with the default list, and {domain} added.": "网络访问：选 Limited（旧版应用中为 Custom），保留默认列表，并添加 {domain}。",
     "Recommended: a free account at ntfy.sh, and its access token as the environment's network secret (API credentials in older apps) for ntfy.sh: header Authorization, Bearer before the token. Without it ntfy.sh often turns the cloud's sessions away (HTTP 429), as they share a few addresses.": "建议：在 ntfy.sh 注册一个免费账户，并把它的访问令牌设为该环境针对 ntfy.sh 的 Network secret（旧版应用中为 API credentials）：标头 Authorization，令牌前加 Bearer。没有它，ntfy.sh 常会拒绝云端会话（HTTP 429），因为它们共用少数几个地址。",
     "In a session, ~/.claude/libre-panel-cloud.log says what the hook sent.": "在会话中，~/.claude/libre-panel-cloud.log 记录了钩子发送的内容。",
-    "It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of JPEG pictures, as it asks for them, up to 60 a second: smooth motion. Its brightness goes into the picture: dimming darkens it; its backlight is set on its card (the hardware guide says how).": "它需要 Waveshare 把它变成 USB 显示屏的存储卡镜像（之后它在 USB 上自称 udisp），并且只显示电脑发送的内容：卡上的主题会随该镜像消失。它按自己要求的格式接收由 JPEG 图像组成的视频流，每秒最多 60 张：流畅动态。它的亮度体现在画面里：调暗会让画面变暗；它的背光在其存储卡上设置（硬件指南中有说明）。"
+    "It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of JPEG pictures, as it asks for them, up to 60 a second: smooth motion. Its brightness goes into the picture: dimming darkens it; its backlight is set on its card (the hardware guide says how).": "它需要 Waveshare 把它变成 USB 显示屏的存储卡镜像（之后它在 USB 上自称 udisp），并且只显示电脑发送的内容：卡上的主题会随该镜像消失。它按自己要求的格式接收由 JPEG 图像组成的视频流，每秒最多 60 张：流畅动态。它的亮度体现在画面里：调暗会让画面变暗；它的背光在其存储卡上设置（硬件指南中有说明）。",
+    "Playback speed": "播放速度",
+    "a video or an animated picture plays to its end, round by round, at least this long": "视频或动图会一轮一轮地播放到结尾，至少播放这么久",
+    "of its videos and animated pictures: 0.5 is half as fast, 2 twice": "其视频和动图的速度：0.5 为一半速度，2 为两倍"
   },
   "fields": {
     "agent": "智能体",
@@ -2990,7 +2993,8 @@
     "fan_items": "哪些风扇",
     "hide_unused": "隐藏未使用的",
     "threads": "线程",
-    "rotate": "旋转"
+    "rotate": "旋转",
+    "speed": "播放速度"
   },
   "widgets": {
     "agent": "AI 标志",

@@ -2843,7 +2843,10 @@
     "Network access: Limited (Custom in older apps), with the default list, and {domain} added.": "Accesso alla rete: Limited (Custom nelle app meno recenti), con l'elenco predefinito e {domain} aggiunto.",
     "Recommended: a free account at ntfy.sh, and its access token as the environment's network secret (API credentials in older apps) for ntfy.sh: header Authorization, Bearer before the token. Without it ntfy.sh often turns the cloud's sessions away (HTTP 429), as they share a few addresses.": "Consigliato: un account gratuito su ntfy.sh e il suo token di accesso come Network secret dell'ambiente (API credentials nelle app meno recenti) per ntfy.sh: intestazione Authorization, Bearer prima del token. Senza, ntfy.sh respinge spesso le sessioni nel cloud (HTTP 429), perché condividono pochi indirizzi.",
     "In a session, ~/.claude/libre-panel-cloud.log says what the hook sent.": "In una sessione, ~/.claude/libre-panel-cloud.log dice cosa ha inviato l'hook.",
-    "It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of JPEG pictures, as it asks for them, up to 60 a second: smooth motion. Its brightness goes into the picture: dimming darkens it; its backlight is set on its card (the hardware guide says how).": "Richiede l'immagine della scheda di Waveshare che lo rende un display USB (via USB si chiama allora udisp) e mostra solo ciò che invia il PC: i temi sulla sua scheda spariscono con quell'immagine. Riceve un flusso video di immagini JPEG, come le chiede, fino a 60 al secondo: movimento fluido. La luminosità è parte dell'immagine: attenuando, questa si scurisce; la retroilluminazione si imposta sulla sua scheda (la guida all'hardware spiega come)."
+    "It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of JPEG pictures, as it asks for them, up to 60 a second: smooth motion. Its brightness goes into the picture: dimming darkens it; its backlight is set on its card (the hardware guide says how).": "Richiede l'immagine della scheda di Waveshare che lo rende un display USB (via USB si chiama allora udisp) e mostra solo ciò che invia il PC: i temi sulla sua scheda spariscono con quell'immagine. Riceve un flusso video di immagini JPEG, come le chiede, fino a 60 al secondo: movimento fluido. La luminosità è parte dell'immagine: attenuando, questa si scurisce; la retroilluminazione si imposta sulla sua scheda (la guida all'hardware spiega come).",
+    "Playback speed": "Velocità di riproduzione",
+    "a video or an animated picture plays to its end, round by round, at least this long": "un video o un'immagine animata va fino alla fine, giro dopo giro, almeno per questo tempo",
+    "of its videos and animated pictures: 0.5 is half as fast, 2 twice": "dei suoi video e immagini animate: 0,5 è la metà, 2 il doppio"
   },
   "fields": {
     "agent": "agente",
@@ -2990,7 +2993,8 @@
     "fan_items": "Quali ventole",
     "hide_unused": "nascondi inutilizzati",
     "threads": "thread",
-    "rotate": "Rotazione"
+    "rotate": "Rotazione",
+    "speed": "Velocità di riproduzione"
   },
   "widgets": {
     "agent": "Segno IA",

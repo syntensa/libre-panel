@@ -489,8 +489,11 @@ function ModuleInspector({ widget }) {
               <//>`
             : null}
           ${widget.module === "image"
-            ? html`<${Field} label=${t("Seconds per picture")}>
+            ? html`<${Field} label=${t("Seconds per picture")} hint=${t("a video or an animated picture plays to its end, round by round, at least this long")}>
                 <${NumberField} label=${t("Seconds per picture")} value=${widget.seconds} min=${1} max=${3600} onChange=${change("seconds")} />
+              <//>
+              <${Field} label=${t("Playback speed")} hint=${t("of its videos and animated pictures: 0.5 is half as fast, 2 twice")}>
+                <${NumberField} label=${t("Playback speed")} value=${widget.speed ?? 1} min=${0.25} max=${4} step=${0.25} digits=${2} onChange=${change("speed")} />
               <//>`
             : null}
         <//>

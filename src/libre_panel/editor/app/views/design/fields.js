@@ -13,7 +13,7 @@ import { ColorSwatches, resolveColor } from "./color.js";
 import { SensorButton } from "./sensors.js";
 
 export const FORMAT_HINT = "{value:.0f}{unit} · {value:.1f} · {value:bytes}/s · {value:duration} · {label}";
-const STEPS = { opacity: 0.05, glow: 0.05, stroke: 0.1, alpha: 0.05, strength: 0.05, sweep_seconds: 0.1 };
+const STEPS = { opacity: 0.05, glow: 0.05, stroke: 0.1, alpha: 0.05, strength: 0.05, sweep_seconds: 0.1, speed: 0.25 };
 const UNIT_RANGE = new Set(["opacity", "glow", "alpha"]);
 const PX = new Set(["x", "y", "w", "h", "size", "font_size", "radius", "thickness", "line_width", "glow_radius", "shadow_offset", "shadow_blur", "outline_width", "letter_spacing", "max_width", "segment_gap", "backdrop_blur"]);
 
@@ -26,6 +26,8 @@ export function hintFor(widget, key, kind) {
   if (key === "needs") return t("show only while this sensor has a value (e.g. weather.temperature); with ! in front, only while it has none");
   if (key === "hide_unused") return t("fans: none that has stood still since Libre Panel started (a header of the mainboard with nothing on it); the graphics card's stays");
   if (key === "smooth" && widget?.type === "metric") return t("the number glides between readings, together with the bars and rings of its sensor");
+  if (key === "seconds" && widget?.type === "image") return t("a video or an animated picture plays to its end, round by round, at least this long");
+  if (key === "speed" && widget?.type === "image") return t("of its videos and animated pictures: 0.5 is half as fast, 2 twice");
   if (key === "seconds" && widget?.type === "graph") return t("video mode: the seconds the curve spans, at any frame rate; 0 = a pixel per point, 25 a second, as SPUR II's graphs (the most fluid)");
   if (key === "sensor" && widget?.type === "module" && widget.source === "fan") return t("which fan; empty: the graphics card's (gpu.fan)");
   if (key === "per_frame") return t("older themes: a point a pixel apart, as every graph whose seconds are 0 now");

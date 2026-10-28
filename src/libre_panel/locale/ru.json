@@ -2843,7 +2843,10 @@
     "Network access: Limited (Custom in older apps), with the default list, and {domain} added.": "Доступ к сети: Limited (в старых приложениях Custom), со списком по умолчанию и добавленным {domain}.",
     "Recommended: a free account at ntfy.sh, and its access token as the environment's network secret (API credentials in older apps) for ntfy.sh: header Authorization, Bearer before the token. Without it ntfy.sh often turns the cloud's sessions away (HTTP 429), as they share a few addresses.": "Рекомендуется: бесплатный аккаунт на ntfy.sh и его токен доступа как Network secret окружения (в старых приложениях API credentials) для ntfy.sh: заголовок Authorization, Bearer перед токеном. Без него ntfy.sh часто отклоняет облачные сессии (HTTP 429), ведь у них немного общих адресов.",
     "In a session, ~/.claude/libre-panel-cloud.log says what the hook sent.": "В сессии файл ~/.claude/libre-panel-cloud.log показывает, что отправил хук.",
-    "It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of JPEG pictures, as it asks for them, up to 60 a second: smooth motion. Its brightness goes into the picture: dimming darkens it; its backlight is set on its card (the hardware guide says how).": "Нужен образ карты Waveshare, который делает его USB-дисплеем (по USB он тогда называет себя udisp), и он показывает только то, что присылает ПК: темы на его карте с этим образом пропадают. Получает видеопоток из изображений JPEG, как он их запрашивает, до 60 в секунду: плавное движение. Яркость встроена в само изображение: при уменьшении оно темнеет; подсветка настраивается на его карте (как — сказано в руководстве по оборудованию)."
+    "It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of JPEG pictures, as it asks for them, up to 60 a second: smooth motion. Its brightness goes into the picture: dimming darkens it; its backlight is set on its card (the hardware guide says how).": "Нужен образ карты Waveshare, который делает его USB-дисплеем (по USB он тогда называет себя udisp), и он показывает только то, что присылает ПК: темы на его карте с этим образом пропадают. Получает видеопоток из изображений JPEG, как он их запрашивает, до 60 в секунду: плавное движение. Яркость встроена в само изображение: при уменьшении оно темнеет; подсветка настраивается на его карте (как — сказано в руководстве по оборудованию).",
+    "Playback speed": "Скорость воспроизведения",
+    "a video or an animated picture plays to its end, round by round, at least this long": "видео или анимированная картинка играет до конца, круг за кругом, не меньше этого времени",
+    "of its videos and animated pictures: 0.5 is half as fast, 2 twice": "его видео и анимированных картинок: 0,5 — вдвое медленнее, 2 — вдвое быстрее"
   },
   "fields": {
     "agent": "агент",
@@ -2990,7 +2993,8 @@
     "fan_items": "Какие вентиляторы",
     "hide_unused": "скрыть неиспользуемые",
     "threads": "потоки",
-    "rotate": "Поворот"
+    "rotate": "Поворот",
+    "speed": "Скорость воспроизведения"
   },
   "widgets": {
     "agent": "Знак ИИ",

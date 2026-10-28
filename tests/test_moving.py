@@ -121,6 +121,95 @@ def test_ffmpeg_fits_a_video_as_the_widget_says():
     assert moving.is_video("assets/Clip.MP4") and not moving.is_video("a.gif")
 
 
+def test_a_moving_picture_plays_faster_or_slower():
+    assert moving.speed_of(2) == 2 and moving.speed_of("0.5") == 0.5
+    assert moving.speed_of(100) == 4 and moving.speed_of(0) == 0.25  # (within reason)
+    assert moving.speed_of(None) == 1 and moving.speed_of(float("nan")) == 1
+    fast = moving.video_command("ffmpeg", moving.Path("v.mp4"), 80, 60, "cover", speed=2)
+    assert "-re" not in fast and fast[fast.index("-readrate") + 1] == "2"
+    assert fast[fast.index("-vf") + 1].startswith("setpts=PTS/2,scale=")
+    slow = moving.video_command("ffmpeg", moving.Path("v.mp4"), 80, 60, "cover", speed=0.5)
+    assert slow[slow.index("-readrate") + 1] == "0.5" and "setpts=PTS/0.5," in " ".join(slow)
+
+
+def test_the_image_widget_plays_an_animated_gif_twice_as_fast(tmp_path):
+    gif(tmp_path / "a.gif")  # (0.1, 0.2 and 0.3 seconds: twice as fast, half of each)
+    renderer = Renderer(theme(tmp_path, "a.gif", speed=2), animate=True)
+    seen = []
+    for at in (100.0, 100.075, 100.2):  # (as 0, 0.15 and 0.4 into it)
+        frame, _boxes = renderer.render(Snapshot(), at)
+        seen.append(frame.getpixel((40, 30))[:3])
+    assert seen[0][0] > 200 and seen[1][1] > 100 and seen[2][2] > 200  # red, green, blue
+    renderer.close()
+
+
+def test_a_slideshow_plays_a_moving_picture_whole_rounds_from_its_start(tmp_path):
+    """A still shows its seconds; an animated picture as many whole rounds as take them at
+    least (0.6 s round, 1 s: two rounds), from its first frame, then the next."""
+    Image.new("RGB", (8, 8), "white").save(tmp_path / "still.png")
+    gif(tmp_path / "a.gif")
+    renderer = Renderer(theme(tmp_path, "still.png", slides="a.gif", seconds=1), animate=True)
+
+    def colour(at):
+        frame, _boxes = renderer.render(Snapshot(), at)
+        return frame.getpixel((40, 30))[:3]
+
+    assert colour(10.0) == (255, 255, 255)  # the still, until 11
+    assert colour(10.9) == (255, 255, 255)
+    red = colour(11.0)  # the GIF from its first frame, until 12.2
+    assert red[0] > 200 and red[1] < 60
+    assert colour(11.45)[2] > 200  # (0.45 into its first round: blue)
+    assert colour(12.15)[2] > 200  # (its second round, at its end)
+    assert colour(12.2) == (255, 255, 255)  # the still again
+    renderer.close()
+    still = Renderer(theme(tmp_path, "still.png", slides="still.png", seconds=1))
+    assert still._shows == {} and colour  # (stills only: by the clock, as ever)
+    still.render(Snapshot(), 1.0)
+    assert still._shows == {}
+    still.close()
+
+
+@needs_ffmpeg
+def test_a_slideshow_plays_a_video_to_its_end(tmp_path):
+    clip = video(tmp_path / "clip.mp4", seconds=2)
+    assert moving.video_length(FFMPEG, clip) == pytest.approx(2.0, abs=0.1)
+    assert moving.video_length(FFMPEG, tmp_path / "missing.mp4") is None
+    Image.new("RGB", (8, 8), "white").save(tmp_path / "still.png")
+    preview = Renderer(theme(tmp_path, "still.png", slides="clip.mp4", seconds=1), preview=True)
+
+    def white(at):
+        frame, _boxes = preview.render(Snapshot(), at)
+        return frame.getpixel((40, 30))[:3] == (255, 255, 255)
+
+    assert white(0.0) and white(0.95)
+    assert not white(1.0) and not white(2.9)  # the video: its two seconds, longer than one
+    assert white(3.05)
+    preview.close()
+    faster = Renderer(theme(tmp_path, "still.png", slides="clip.mp4", seconds=1, speed=2),
+                      preview=True)  # fmt: skip
+    assert faster._slide_seconds(faster.widgets[0], "clip.mp4") == pytest.approx(1.0, abs=0.05)
+    faster.close()
+
+
+@needs_ffmpeg
+def test_a_video_starts_over_from_its_first_frame(tmp_path):
+    clip = video(tmp_path / "clip.mp4")
+    feed = moving.VideoFeed(FFMPEG, clip, 40, 30, "contain")
+    try:
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and feed.frame()[1] is None:
+            time.sleep(0.05)
+        assert feed.frame()[1] is not None
+        feed.from_start()
+        assert feed.frame()[1] is None  # (anew: its first frame shows until a new one comes)
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and feed.frame()[1] is None:
+            time.sleep(0.05)
+        assert feed.frame()[1] is not None
+    finally:
+        feed.close()
+
+
 def test_a_theme_carries_its_videos_when_shared(isolated_home):
     from libre_panel.config import user_themes_dir
     from libre_panel.theme.share import ShareError, import_theme
