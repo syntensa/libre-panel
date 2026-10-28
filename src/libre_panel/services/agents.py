@@ -8,10 +8,11 @@ the plan's usage, asked of the programs themselves while a theme shows ``ai.*``:
 
     claude_usage = true   # ask Claude Code every three minutes (2.1.293 and later)
     codex_usage = true    # ask Codex's app-server every minute
+    task = true           # what the session is called (Claude Code may name it after the prompt)
 
 Readings, for ``claude`` and ``codex``: ``ai.<agent>.state`` (working, waiting, idle, off),
 ``.busy`` (2 waiting for you, 1 working, 0 idle, -1 off), ``.tool``, ``.task`` (what the
-session is called, where it carries a name), ``.since`` (seconds in
+session is called, where it carries a name and ``task`` is on), ``.since`` (seconds in
 the state), ``.sessions``, ``.model``, ``.context`` (% of the context window), ``.cost`` ($ of
 the session, an estimate), ``.five_hour`` and ``.week`` (% of the plan's limits used), with
 ``_reset`` (seconds until the window begins anew, ``{value:duration}``) and ``_age`` (seconds
@@ -41,6 +42,7 @@ class Agents(Service):
     options = {
         "claude_usage": ("bool", True),
         "codex_usage": ("bool", True),
+        "task": ("bool", True),
     }
 
     def __init__(self, host: Any, options: dict[str, Any], board: agents.Board | None = None,
@@ -75,7 +77,10 @@ class Agents(Service):
                 break
 
     def publish(self) -> None:
+        named = self.options.get("task", True)
         for key, value in self.board.readings().items():
+            if not named and key.endswith(".task"):
+                value = None  # (what a session is called stays off the panels)
             self.host.publish(key, value)
 
     # -- the plan's usage ---------------------------------------------------------------------

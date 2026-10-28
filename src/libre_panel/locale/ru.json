@@ -2822,7 +2822,9 @@
     "while a download runs": "пока идёт загрузка",
     "while a track plays": "пока играет трек",
     "The cards chosen on Start (Cards on the panel), for every theme that leaves them to you; a change here gives this theme cards of its own.": "Карточки, выбранные на «Главной» (Карточки на панели), для каждой темы, которая оставляет их вам; изменение здесь даёт этой теме собственные карточки.",
-    "Take the cards chosen on Start": "Взять карточки, выбранные на «Главной»"
+    "Take the cards chosen on Start": "Взять карточки, выбранные на «Главной»",
+    "Show what the session is called": "Показывать название сеанса",
+    "Claude Code may name a session after its first prompt: whoever sees the panel reads the name.": "Claude Code может назвать сеанс по его первому запросу: любой, кто видит панель, прочтёт это название."
   },
   "fields": {
     "agent": "агент",

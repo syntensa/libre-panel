@@ -200,6 +200,10 @@ const OPTIONS = {
     label: () => t("Ask Codex for the plan's usage"),
     hint: () => t("Every minute while a theme shows it, from Codex's app-server, also without a terminal open."),
   },
+  "agents.task": {
+    label: () => t("Show what the session is called"),
+    hint: () => t("Claude Code may name a session after its first prompt: whoever sees the panel reads the name."),
+  },
   "power.sensors": { label: () => t("Sensors that add up to the watts"), hint: () => t("Sensors such as cpu.power and gpu.power.") },
   "power.rest_w": { label: () => t("The rest of the PC"), hint: () => t("Mainboard, drives, fans and what the power supply loses, in watts: some 40 to 80."), unit: "W", min: 0, max: 2000 },
   "power.price": { label: () => t("Price of a kWh"), hint: () => t("0: no cost."), min: 0, max: 100, step: 0.01 },

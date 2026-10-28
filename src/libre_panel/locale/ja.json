@@ -2822,7 +2822,9 @@
     "while a download runs": "ダウンロード中",
     "while a track plays": "曲の再生中",
     "The cards chosen on Start (Cards on the panel), for every theme that leaves them to you; a change here gives this theme cards of its own.": "ホームで選んだカード（パネルのカード）。選択をあなたに任せるすべてのテーマに適用されます。ここで変更すると、このテーマは独自のカードを持ちます。",
-    "Take the cards chosen on Start": "ホームで選んだカードを使う"
+    "Take the cards chosen on Start": "ホームで選んだカードを使う",
+    "Show what the session is called": "セッションの名前を表示",
+    "Claude Code may name a session after its first prompt: whoever sees the panel reads the name.": "Claude Code はセッションに最初のプロンプトから名前を付けることがあります。パネルを見る人には誰でもその名前が見えます。"
   },
   "fields": {
     "agent": "エージェント",

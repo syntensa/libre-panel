@@ -2822,7 +2822,9 @@
     "while a download runs": "mentre è in corso un download",
     "while a track plays": "mentre è in riproduzione un brano",
     "The cards chosen on Start (Cards on the panel), for every theme that leaves them to you; a change here gives this theme cards of its own.": "Le schede scelte in Home (Schede sul pannello), per ogni tema che le lascia a te; una modifica qui dà a questo tema schede proprie.",
-    "Take the cards chosen on Start": "Usa le schede scelte in Home"
+    "Take the cards chosen on Start": "Usa le schede scelte in Home",
+    "Show what the session is called": "Mostra il nome della sessione",
+    "Claude Code may name a session after its first prompt: whoever sees the panel reads the name.": "Claude Code può dare a una sessione il nome del suo primo prompt: chi vede il pannello ne legge il nome."
   },
   "fields": {
     "agent": "agente",

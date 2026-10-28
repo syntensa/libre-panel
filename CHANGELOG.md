@@ -4,16 +4,27 @@
 
 **New**
 - **What the AI does comes up on Lumen by itself.** While Claude Code or Codex works or waits
-  for you, Lumen's card slot shows the AI activity card, without the AI screen chosen: both
-  agents' state, the tool at work and the plan's limits. It
-  stays for 45 seconds after the last one stopped, so it does not come and go between two
-  prompts, and then the next card comes back. Music comes first while a track plays. It needs
-  AI activity set up (*Settings → Game mode and more*).
+  for you, Lumen's card slot shows the AI activity card, without the AI screen chosen: what each
+  one does, the tool at work and the plan's limits. It stays for 45 seconds after the last one
+  stopped, so it does not come and go between two prompts, and then the next card comes back.
+  Music comes first while a track plays. It needs AI activity set up (*Settings → Game mode and
+  more*).
 - **The cards of the card slot, chosen on Start.** *Cards on the panel*, right under the panel,
   says which cards the slot shows and in which order, music, AI activity, weather, download and
   calendar, each with when it has something to show: a switch takes one out, the arrows move
   it. One choice holds for every version of Lumen, which stays Libre Panel's own and keeps
   getting its updates (config.toml `cards`; in *Look* too).
+- **What the session is called, on the AI screens** (#31, contributed by @srenner06). Claude
+  Code's session name, where the session carries one, stands under the tool at work: on Agents
+  Claude, on the card where Claude Code runs alone, and beside the other where the card is tall
+  enough. Never the prompt itself; as Claude Code may name a session after its first prompt,
+  *Show what the session is called* (`task` in `[services.agents]`) takes it off the panels.
+
+**Changes**
+- **The AI card for one agent.** Where only Claude Code runs (or only Codex), the AI activity
+  card shows it alone across the card, with its session, the plan's limits and how full the
+  context is, instead of the other one not running beside it; on Lumen and the Agents screens
+  of the 8.8" and 9.2" (1920x480, also on end) and of the 12.3" (1920x720) alike.
 
 ## 0.7.3 — 2026-10-28
 

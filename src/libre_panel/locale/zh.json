@@ -2822,7 +2822,9 @@
     "while a download runs": "下载进行时",
     "while a track plays": "播放曲目时",
     "The cards chosen on Start (Cards on the panel), for every theme that leaves them to you; a change here gives this theme cards of its own.": "在“开始”中选择的卡片（面板上的卡片），适用于所有交由你决定的主题；在此处更改会让此主题拥有自己的卡片。",
-    "Take the cards chosen on Start": "使用在“开始”中选择的卡片"
+    "Take the cards chosen on Start": "使用在“开始”中选择的卡片",
+    "Show what the session is called": "显示会话的名称",
+    "Claude Code may name a session after its first prompt: whoever sees the panel reads the name.": "Claude Code 可能会按第一条提示为会话命名：看到面板的人都能读到这个名称。"
   },
   "fields": {
     "agent": "智能体",

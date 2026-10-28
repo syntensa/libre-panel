@@ -2322,31 +2322,46 @@ def build_ai(b: _Build, _src: Source) -> None:
     """What Claude Code and Codex do (the agents service): their sign, moving while they work
     or wait for you, the state in words, the tool at work, what the session is called, and how
     much of the plan's 5-hour and weekly limits is used, with the time until each begins anew.
-    Both side by side, or one over the other, or the one the module's ``agent`` names."""
+    Both side by side, or one over the other, or the one the module's ``agent`` names; of both,
+    while one of them is not running, the other alone across the module."""
     b.card()
     which = b.module.get("agent") or "both"
-    names = ["claude", "codex"] if which == "both" else [which]
-    if len(names) == 1:
-        boxes = [(b.ix, b.iy, b.iw, b.ih)]
-    elif b.aspect >= 1.6:  # side by side
+    if which != "both":
+        _ai_agent(b, which, b.ix, b.iy, b.iw, b.ih, alone=True)
+        return
+    if b.aspect >= 1.6:  # side by side
         w = (b.iw - b.pad) / 2
         boxes = [(b.ix, b.iy, w, b.ih), (b.ix + w + b.pad, b.iy, w, b.ih)]
     else:  # one over the other
         h = (b.ih - b.pad) / 2
         boxes = [(b.ix, b.iy, b.iw, h), (b.ix, b.iy + h + b.pad, b.iw, h)]
-    for name, box in zip(names, boxes, strict=True):
-        _ai_agent(b, name, *box, alone=len(names) == 1)
+    own = b.needs
+    off = {name: f"ai.{name}.state=off" for name in AI_NAMES}
+    # both while both run (or nothing is known yet: AI activity not set up) and while neither
+    # does; while one is off, the one that runs alone, with room for its session and its context
+    parts = [("", f"!{off['claude']},!{off['codex']}", None),
+             ("none-", f"{off['claude']},{off['codex']}", None),
+             ("only-", f"!{off['claude']},{off['codex']}", "claude"),
+             ("only-", f"{off['claude']},!{off['codex']}", "codex")]  # fmt: skip
+    for tag, needs, alone in parts:
+        b.needs = f"{needs},{own}" if own else needs
+        if alone is None:
+            for name, box in zip(AI_NAMES, boxes, strict=True):
+                _ai_agent(b, name, *box, tag=tag)
+        else:
+            _ai_agent(b, alone, b.ix, b.iy, b.iw, b.ih, alone=True, tag=tag)
+    b.needs = own
 
 
 def _ai_agent(b: _Build, name: str, x: float, y: float, w: float, h: float,
-              alone: bool = False) -> None:  # fmt: skip
+              alone: bool = False, tag: str = "") -> None:  # fmt: skip
     """One agent's part: its name, sign and state, and below the state what the session is
     called and the rows of the plan's limits that fit; alone (Claude Code's own screen) also
-    how full its context is."""
-    key = f"ai.{name}"
+    how full its context is. ``tag`` sets its parts apart from another of the same agent."""
+    key, part = f"ai.{name}", f"{tag}{name}"  # (part: the start of its parts' names)
     color, wait, calm = b.tint("accent"), b.c("warn"), b.c("text3")
     title = max(7.0, min(b.ts * 1.05, h * 0.11))
-    b.label(f"{name}-name", AI_NAMES[name], x, y, title, color=calm, width=w)
+    b.label(f"{part}-name", AI_NAMES[name], x, y, title, color=calm, width=w)
     top = y + title * 1.9
     room = max(8.0, y + h - top)
     wide = w / room >= 1.5
@@ -2372,12 +2387,17 @@ def _ai_agent(b: _Build, name: str, x: float, y: float, w: float, h: float,
     meters = [("five_hour", t("5 hours")), ("week", t("7 days"))]
     if alone and name == "claude":  # (its status line tells it)
         meters.append(("context", t("Context")))
-    # what the session is called has a line of its own, before the meters take what is left (a
-    # long name is cut, not shrunk); side by side the plan's limits are the better use of it
-    task = alone
-    task_h = small * 1.5 if task else 0.0
-    fit = (text_room - size * CAP - small * 2.0 - task_h) // (small * 1.5 + small * 0.9 + 6)
-    rows = max(0, min(len(meters), int(fit)))
+    # what the session is called has a line of its own: alone always, before the meters take
+    # what is left (a long name is cut, not shrunk); beside the other only where every meter
+    # fits too, as the plan's limits are the better use of a short part
+
+    def fit(above: float) -> int:
+        return int((text_room - size * CAP - small * 2.0 - above) // (small * 2.4 + 6))
+
+    task_h = small * 1.8
+    task = alone or fit(task_h) >= len(meters)
+    task_h = task_h if task else 0.0
+    rows = max(0, min(len(meters), fit(task_h)))
     rows = 0 if rows == 1 and not alone else rows  # (side by side: both rows or none)
     block = (CAP * size + small * 2.0 + task_h
              + rows * (small * 1.5 + max(4, small * 0.5) + small * 0.6))  # fmt: skip
@@ -2387,46 +2407,46 @@ def _ai_agent(b: _Build, name: str, x: float, y: float, w: float, h: float,
     else:  # the sign and the words together, a little above the middle
         sign_y += free * 0.4
         cap = text_top + free * 0.4
-    b.add("agent", f"{name}-sign", x=round(sign_x), y=round(sign_y), size=max(8, round(d)),
+    b.add("agent", f"{part}-sign", x=round(sign_x), y=round(sign_y), size=max(8, round(d)),
           sensor=f"{key}.state", color=color, color2=wait, muted=calm)  # fmt: skip
     for state, word, tone in words:
-        b.add("text", f"{name}-{state}", x=round(ax), text=word, color=tone, align=align,
+        b.add("text", f"{part}-{state}", x=round(ax), text=word, color=tone, align=align,
               needs=f"{key}.state={state}", max_width=round(tw), fit="shrink",
               **b._text_fields(size, cap, "display_font"))  # fmt: skip
     line = cap + CAP * size + small * 1.0
     # since when it is so, at the right of the line, where the line is wide enough for both
     since = align == "left" and tw >= small * 14
     words_w = tw * 0.62 if since else tw
-    b.value(f"{name}-tool", f"{key}.tool", "{value}", ax, line, small, color=calm, align=align,
+    b.value(f"{part}-tool", f"{key}.tool", "{value}", ax, line, small, color=calm, align=align,
             width=words_w, font="text_font", tabular=False, needs=f"{key}.state=working",
             fallback="", hide_if_missing=True)  # fmt: skip
-    b.value(f"{name}-model", f"{key}.model", "{value}", ax, line, small, color=calm,
+    b.value(f"{part}-model", f"{key}.model", "{value}", ax, line, small, color=calm,
             align=align, width=words_w, font="text_font", tabular=False,
             needs=f"{key}.state!=working,{key}.state!=off", fallback="",
             hide_if_missing=True)  # fmt: skip
     if since:
-        b.value(f"{name}-since", f"{key}.since", "{value:duration}", tx + tw, line, small,
+        b.value(f"{part}-since", f"{key}.since", "{value:duration}", tx + tw, line, small,
                 color=calm, align="right", width=tw * 0.34, font="text_font", tabular=False,
                 needs=f"{key}.state!=off", fallback="", hide_if_missing=True)  # fmt: skip
     row = line + small * 2.0
     if task:
-        b.value(f"{name}-task", f"{key}.task", "{value}", ax, row, small * 0.9, color=calm,
+        b.value(f"{part}-task", f"{key}.task", "{value}", ax, row, small, color=b.c("text2"),
                 align=align, width=tw, font="text_font", tabular=False, fit="ellipsis",
                 fallback="", hide_if_missing=True)  # fmt: skip
-        row += small * 1.5
+        row += task_h
     bar_h = max(4, round(small * 0.5))
     # when a window begins anew, where it fits between the window's name and its share
     reset = tw >= small * 15
     for window, label in meters[:rows]:
-        b.label(f"{name}-{window}-label", label, tx, row, small * 0.9, width=tw * 0.5)
+        b.label(f"{part}-{window}-label", label, tx, row, small * 0.9, width=tw * 0.5)
         if window != "context" and reset:
-            b.value(f"{name}-{window}-reset", f"{key}.{window}_reset", "{value:duration}",
+            b.value(f"{part}-{window}-reset", f"{key}.{window}_reset", "{value:duration}",
                     tx + tw - small * 4.2, row, small * 0.9, color=calm, align="right",
                     width=tw * 0.3, font="text_font", tabular=False, fallback="",
                     hide_if_missing=True)  # fmt: skip
-        b.value(f"{name}-{window}", f"{key}.{window}", "{value:.0f} %", tx + tw, row,
+        b.value(f"{part}-{window}", f"{key}.{window}", "{value:.0f} %", tx + tw, row,
                 small * 0.9, align="right", width=tw * 0.25, fallback="--")  # fmt: skip
-        b.bar(f"{name}-{window}-bar", f"{key}.{window}", tx, row + small * 1.3, tw, bar_h, color)
+        b.bar(f"{part}-{window}-bar", f"{key}.{window}", tx, row + small * 1.3, tw, bar_h, color)
         b.out[-1]["color_rules"] = _heat_rules(b, 80, 95)
         row += small * 1.5 + bar_h + small * 0.6
 

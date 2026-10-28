@@ -105,6 +105,17 @@ def test_the_task_is_the_name_of_the_session():
     assert board.readings()["ai.claude.task"] == "The other one"
 
 
+def test_with_task_off_the_service_keeps_what_the_session_is_called_off_the_panels():
+    board = agents.Board(Clock())
+    hook(board, "UserPromptSubmit", session_title="The hooks of the panel")
+    sent: dict = {}
+    host = SimpleNamespace(publish=sent.__setitem__, log=SimpleNamespace(info=print))
+    service.Agents(host, {}, board=board).publish()  # (on by default)
+    assert sent["ai.claude.task"] == "The hooks of the panel"
+    service.Agents(host, {"task": False}, board=board).publish()
+    assert sent["ai.claude.task"] is None and sent["ai.claude.state"] == "working"
+
+
 def test_the_board_knows_when_each_agent_last_said_something(caplog):
     clock = Clock()
     board = agents.Board(clock)
@@ -572,15 +583,18 @@ def test_the_agents_theme_shows_both(name):
 def test_claude_code_alone_also_shows_how_full_its_context_is():
     from libre_panel.theme.modules import expand
 
-    def read(name):
+    def read(name, tag=""):
         widgets, _boxes = expand(load_theme(find_theme(name)))
-        return {w.get("sensor") for w in widgets if str(w.get("sensor", "")).startswith("ai.")}
+        starts = (f"{tag}claude-", f"{tag}codex-")
+        mine = [w for w in widgets if w["id"].partition("/")[2].startswith(starts)]
+        return {w.get("sensor") for w in mine if str(w.get("sensor", "")).startswith("ai.")}
 
     alone, both = read("agents-claude"), read("agents")
     shown = {"ai.claude.state", "ai.claude.five_hour", "ai.claude.week", "ai.claude.context"}
     assert shown <= alone
     assert not any(key.startswith("ai.codex.") for key in alone)
     assert "ai.codex.state" in both and "ai.claude.context" not in both  # (side by side: alike)
+    assert shown <= read("agents", "only-")  # (as alone while Codex is not running)
 
 
 def test_the_module_says_when_a_window_begins_anew_only_where_it_fits():
@@ -592,7 +606,9 @@ def test_the_module_says_when_a_window_begins_anew_only_where_it_fits():
                 "widgets": [{"type": "module", "id": "m0", "module": "ai", "col": 0, "row": 0,
                              "cols": cols, "rows": rows}]}  # fmt: skip
         widgets, _boxes = expand(parse_theme(data))
-        return {w["id"].split("/")[1] for w in widgets if w["id"].endswith(("-reset", "-label"))}
+        both = [w["id"].partition("/")[2] for w in widgets]  # (the two side by side)
+        return {i for i in both if i.startswith(("claude-", "codex-")) and
+                i.endswith(("-reset", "-label"))}  # fmt: skip
 
     windows = {f"{a}-{window}" for a in ("claude", "codex") for window in ("five_hour", "week")}
     # two cells: the name of each window and its share, with no room for the time between them
@@ -603,15 +619,47 @@ def test_the_module_says_when_a_window_begins_anew_only_where_it_fits():
 def test_the_module_says_what_the_session_is_called_on_the_screen_of_one_agent():
     from libre_panel.theme.modules import expand
 
-    def parts(cols, rows, agent):
+    def parts(cols, rows, agent, tag=""):
         data = {"format": "libre-panel-theme/1", "name": "ai",
                 "display": {"model": "turing-9.2-usb"},
                 "widgets": [{"type": "module", "id": "m0", "module": "ai", "col": 0, "row": 0,
                              "cols": cols, "rows": rows, "agent": agent}]}  # fmt: skip
         widgets, _boxes = expand(parse_theme(data))
-        sensors = {w.get("sensor") for w in widgets}
-        return "ai.claude.task" in sensors, len([w for w in widgets if w["id"].endswith("-bar")])
+        mine = [w for w in widgets if w["id"].partition("/")[2].startswith(f"{tag}claude-")]
+        return (any(w.get("sensor") == "ai.claude.task" for w in mine),
+                len([w for w in mine if w["id"].endswith("-bar")]))  # fmt: skip
 
     assert parts(6, 2, "claude")[0] and parts(2, 1, "claude")[0]  # however small the module is
-    # side by side the plan's limits are the better use of the line, and keep every bar
-    assert parts(6, 2, "both") == (False, 4) and parts(2, 1, "both") == (False, 4)
+    # side by side the plan's limits are the better use of a short part, and keep every bar;
+    # where the part is tall enough for both, it says it too
+    assert parts(2, 1, "both") == (False, 2) and parts(4, 2, "both") == (False, 2)
+    assert parts(6, 2, "both") == (True, 2)
+    # Claude Code alone while Codex is not running: as on its own screen
+    assert parts(6, 2, "both", "only-") == parts(6, 2, "claude") == (True, 3)
+
+
+def test_of_both_the_one_that_runs_has_the_module_to_itself_while_the_other_is_off():
+    """A card of AI activity for someone who uses only Claude Code shows Claude Code, not
+    Codex not running beside it; both while both run, or neither, or nothing is known yet."""
+    from libre_panel.render.renderer import need_holds
+    from libre_panel.sensors.base import Snapshot
+    from libre_panel.theme.modules import expand
+
+    data = {"format": "libre-panel-theme/1", "name": "ai", "display": {"model": "turing-9.2-usb"},
+            "widgets": [{"type": "module", "id": "m0", "module": "ai", "col": 0, "row": 0,
+                         "cols": 6, "rows": 2}]}  # fmt: skip
+    widgets, _boxes = expand(parse_theme(data))
+
+    def signs(**states):
+        snapshot = Snapshot(readings={f"ai.{agent}.state": Reading(f"ai.{agent}.state", state)
+                                      for agent, state in states.items()})  # fmt: skip
+        return sorted(
+            w["id"].partition("/")[2] for w in widgets if w["id"].endswith("-sign")
+            and all(need_holds(n, snapshot) for n in w.get("needs", "").split(",") if n)
+        )  # fmt: skip
+
+    assert signs(claude="working", codex="waiting") == ["claude-sign", "codex-sign"]
+    assert signs() == ["claude-sign", "codex-sign"]  # (no AI activity set up)
+    assert signs(claude="working", codex="off") == ["only-claude-sign"]
+    assert signs(claude="off", codex="idle") == ["only-codex-sign"]
+    assert signs(claude="off", codex="off") == ["none-claude-sign", "none-codex-sign"]
