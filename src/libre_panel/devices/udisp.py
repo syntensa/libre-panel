@@ -26,8 +26,13 @@ the firmware beside them speak it, and as the display tells it in its USB produc
   with nothing in it, which a display that needs no end passes over as a command it does not
   know (the ESP32 firmware does). Libre Panel ends such a picture so too.
 
+Waveshare's 2.8" on its USB display image (``t113udisp``) shows a picture turned by 180°: the
+picture's top is at the edge away from the cable, upright as the display is mounted (#33).
+Libre Panel turns what it sends it, so that it is upright with *Upside down* off.
+
 The display has no command for its backlight that is known: the brightness goes into the
-picture. Nothing is written on its card.
+picture, and a change of it sends the last picture again at once. Nothing is written on its
+card.
 """
 
 from __future__ import annotations
@@ -64,6 +69,7 @@ REACHED = 0.9  # of the pictures a second the display came to: the most it is dr
 TRIAL = 24  # the first frames, timed for how many the display takes a second
 NAMES = {RGB565: "RGB565", RGB888: "RGB888", YUV420: "YUV420", JPEG: "JPEG"}
 AGAIN_S = 1.0  # the last picture again after this long without one
+TURNED = ("t113udisp",)  # displays that show a picture turned by 180° (the 2.8": #33)
 
 
 def header(kind: int, size: tuple[int, int], payload: int, frame: int = 0,
@@ -76,12 +82,14 @@ def header(kind: int, size: tuple[int, int], payload: int, frame: int = 0,
 
 
 def described(product: str) -> dict[str, Any] | None:
-    """What a product string says: ``{"size": (w, h), "kind": the kind of picture named first
-    (None for none), "jpeg": quality or None, "rgb16", "rgb32", "fps", "limit"}``; None where
-    it is no udisp display's (no ``R<w>x<h>``)."""
+    """What a product string says: ``{"name": the display's own (its first field), "size":
+    (w, h), "kind": the kind of picture named first (None for none), "jpeg": quality or None,
+    "rgb16", "rgb32", "fps", "limit"}``; None where it is no udisp display's (no
+    ``R<w>x<h>``)."""
     fields = (product or "").split("_")
-    said: dict[str, Any] = {"size": None, "kind": None, "jpeg": None, "rgb16": False,
-                            "rgb32": False, "fps": None, "limit": None}  # fmt: skip
+    said: dict[str, Any] = {"name": fields[0], "size": None, "kind": None, "jpeg": None,
+                            "rgb16": False, "rgb32": False, "fps": None,
+                            "limit": None}  # fmt: skip
     named: list[int] = []
     for field in fields:
         if found := re.fullmatch(r"R(\d+)x(\d+)", field):
@@ -200,8 +208,10 @@ class UdispDisplay(Display):
         self.packet = 512  # the endpoint's largest packet
         self.said: dict[str, Any] = {}
         self.brightness = 100
+        self.turned = 0  # degrees the display shows a picture turned by (TURNED): undone
         self.frame = 0
         self._last: bytes = b""
+        self._shown: Image.Image | None = None  # the last picture, before it was dimmed
         self._keeper = KeepShowing(AGAIN_S, self._again, name="udisp-keep")
 
     def describe(self) -> str:
@@ -260,6 +270,7 @@ class UdispDisplay(Display):
                 )
             self.said = said
             self.kind, self.rate, self._timed = takes(said), None, []
+            self.turned = 180 if str(said["name"]).startswith(TURNED) else 0
             usb_link.claim(self.device, (0,))
             self.endpoint, _into = usb_link.endpoints(self.device, 0)
             if self.endpoint is None:
@@ -305,13 +316,28 @@ class UdispDisplay(Display):
     # -- pictures ---------------------------------------------------------------------------
 
     def set_brightness(self, percent: int) -> None:
-        self.brightness = max(0, min(100, int(percent)))
+        """The brightness goes into the picture: the last one goes again at once, so that a
+        change shows also while nothing new is drawn (the panel test watches it)."""
+        brightness = max(0, min(100, int(percent)))
+        changed, self.brightness = brightness != self.brightness, brightness
+        if changed and self.device is not None and self._shown is not None:
+            message = self._encoded(dimmed(self._shown, brightness))
+            try:
+                with self._keeper.lock:  # (a fault of the keeper's stays for show() to raise)
+                    self._send(message)
+            except DeviceError as exc:  # (the next frame finds it out too and connects again)
+                log.debug("%s: the picture at the new brightness did not go: %s",
+                          self.describe(), exc)  # fmt: skip
 
     def show(self, frame: Image.Image, region: tuple[int, int, int, int] | None = None) -> None:
         if self.device is None:
             raise DeviceError(t("the {panel} is not open", panel=self.describe()))
         began = self.clock()
-        message = self._encoded(dimmed(to_native(frame, self.size), self.brightness))
+        picture = to_native(frame, self.size)
+        if self.turned:
+            picture = picture.transpose(Image.Transpose.ROTATE_180)
+        self._shown = picture
+        message = self._encoded(dimmed(picture, self.brightness))
         with self._keeper.lock:
             self._keeper.check()
             self._send(message)
@@ -343,4 +369,4 @@ class UdispDisplay(Display):
         if self.device is not None:
             usb_link.release(self.device, (0,), self.place)
         self.device, self.place, self.endpoint = None, "", None
-        self._last = b""
+        self._last, self._shown = b"", None

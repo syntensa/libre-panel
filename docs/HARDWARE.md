@@ -377,8 +377,12 @@ do with it then.
   says so or takes fewer: Libre Panel times the first pictures and drives it no faster. A JPEG
   takes about a millisecond to make, so 60 costs little more than 30. The log says how many
   it came to.
+- The 2.8" shows a picture turned by 180° (upside down as it is mounted, #33): Libre Panel
+  turns what it sends it, so *Upside down* stays off for it (switch it off again if you had
+  switched it on before 0.7.5).
 - No command for the backlight is known, so the brightness goes into the picture: 100 % is as
-  bright as the display's card image sets its backlight, and less is darker.
+  bright as the display's card image sets its backlight, and less is darker. A change shows at
+  once.
 - Close any other program that drives the display first.
 - **Linux:** *Settings → Sensors → Set up sensors and panel access* gives your user the display,
   as it does the other panels. **Windows:** the display brings no driver of its own; it needs

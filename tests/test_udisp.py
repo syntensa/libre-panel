@@ -83,8 +83,8 @@ def pixel(shown, x, y):
 
 def test_what_the_product_string_says():
     said = udisp.described(PRODUCT)
-    assert said == {"size": (480, 480), "kind": udisp.JPEG, "jpeg": 5, "rgb16": True,
-                    "rgb32": True, "fps": None, "limit": None}  # fmt: skip
+    assert said == {"name": "t113udisp1", "size": (480, 480), "kind": udisp.JPEG, "jpeg": 5,
+                    "rgb16": True, "rgb32": True, "fps": None, "limit": None}  # fmt: skip
     said = udisp.described("esp32udisp0_R320x240_Ejpg4_Fps30_Bl20_Ergb16")
     assert said["size"] == (320, 240) and said["fps"] == 30 and said["limit"] == 20 * 1024
     assert said["kind"] == udisp.JPEG  # (the kind named first)
@@ -109,7 +109,8 @@ def test_the_header_of_a_picture():
 def test_the_display_is_connected_and_sent_jpeg_as_it_names_first(bus):
     """Derik's 2.8" names JPEG first and raw pixels after it, but the program on its card that
     draws the pictures decodes JPEG only: raw pixels left it black (#30). It is sent what the
-    protocol's drivers send it: baseline JPEG, its colours at every pixel (4:4:4)."""
+    protocol's drivers send it: baseline JPEG, its colours at every pixel (4:4:4). It shows a
+    picture turned by 180° (#33): it is sent turned, so that it is upright."""
     display = bus(FakeDisplay())
     with opened() as screen:
         assert screen.model.id == "waveshare-2.8-udisp" and display.claimed == {0}
@@ -119,13 +120,17 @@ def test_the_display_is_connected_and_sent_jpeg_as_it_names_first(bus):
         assert shown["kind"] == udisp.JPEG and shown["size"] == (480, 480)
         assert shown["jpeg"].size == (480, 480) and not shown["jpeg"].info.get("progressive")
         assert [(h, v) for _id, h, v, _table in shown["jpeg"].layer] == [(1, 1)] * 3  # 4:4:4
-        assert near(shown["picture"].getpixel((5, 5)), RED)
-        assert near(shown["picture"].getpixel((475, 475)), BLUE)
+        assert near(shown["picture"].getpixel((475, 475)), RED)  # (turned: the top left)
+        assert near(shown["picture"].getpixel((5, 5)), BLUE)
         assert screen.counters.bytes == 16 + len(shown["payload"])
-        screen.set_brightness(0)  # (the brightness goes into the picture)
+        # the brightness goes into the picture, and the last one goes again at once (the panel
+        # test changes it and draws nothing new)
+        screen.set_brightness(0)
+        assert all(most <= 2 for _least, most in display.frames[-1]["picture"].getextrema())
+        screen.set_brightness(0)  # (no change: nothing sent)
         screen.show(corner_red((480, 480)))
         assert all(most <= 2 for _least, most in display.frames[-1]["picture"].getextrema())
-        assert [f["id"] for f in display.frames] == [1, 2]
+        assert [f["id"] for f in display.frames] == [1, 2, 3]
         assert {f["kind"] for f in display.frames} == {udisp.JPEG}
     assert not taken(display) and display.claimed == set()
 
@@ -209,14 +214,16 @@ def test_the_kinds_of_picture_a_display_takes(bus):
         screen.show(corner_red((480, 480)))
     shown = display.frames[-1]
     assert shown["kind"] == udisp.RGB888 and shown["payload"][:3] == bytes(RED)
-    for product in ("t113udisp1_R480x480_Ejpg5", "udisp0_R480x480_Fps30"):  # (none named: JPEG)
+    # (none named: JPEG; Waveshare's T113 turned by 180°, the ESP32s' as it is)
+    for product, red in (("t113udisp1_R480x480_Ejpg5", (475, 475)),
+                         ("udisp0_R480x480_Fps30", (5, 5))):  # fmt: skip
         display = bus(FakeDisplay(product))
         with opened() as screen:
             screen.show(corner_red((480, 480)))
         shown = display.frames[-1]
         assert shown["kind"] == udisp.JPEG and shown["size"] == (480, 480)
-        assert near(shown["picture"].getpixel((5, 5)), RED)
-        assert near(shown["picture"].getpixel((475, 475)), BLUE)
+        assert near(shown["picture"].getpixel(red), RED)
+        assert near(shown["picture"].getpixel((480 - 1 - red[0], 480 - 1 - red[1])), BLUE)
 
 
 def test_the_doctor_names_the_kind_of_picture_sent_and_its_size(bus):
@@ -243,7 +250,11 @@ def test_the_doctor_names_the_kind_of_picture_sent_and_its_size(bus):
     speed = next(line for line in text.splitlines() if "per frame" in line)
     sent = [16 + len(f["payload"]) for f in display.frames[-4:-1]]  # (before the last card)
     assert speed.endswith(f"JPEG 4:4:4 {sum(sent) // len(sent) // 1024} KB"), speed
-    assert {f["kind"] for f in display.frames} == {udisp.JPEG}
+    assert {f["kind"] for f in display.frames} - {0xFF} == {udisp.JPEG}  # (0xFF: an end)
+    # the brightness check is seen: the card goes again, dark and then bright (#33)
+    pictures = [f["picture"] for f in display.frames if f["kind"] == udisp.JPEG]
+    darkest = min(max(most for _least, most in p.getextrema()) for p in pictures)
+    assert darkest < 60
 
 
 def test_a_picture_of_whole_packets_is_ended_as_the_drivers_end_it(bus, monkeypatch):
@@ -268,7 +279,7 @@ def test_a_picture_of_whole_packets_is_ended_as_the_drivers_end_it(bus, monkeypa
         assert display.sent[1][1] == struct.pack("<HBBHHHHI", 0, 0xFF, 0, 0, 0, 1, 1, 0)
         assert screen.counters.bytes == sum(sent)
     assert [f["kind"] for f in display.frames] == [udisp.JPEG, 0xFF, udisp.JPEG]
-    assert near(display.frames[0]["picture"].getpixel((5, 5)), RED)
+    assert near(display.frames[0]["picture"].getpixel((475, 475)), RED)  # (turned)
 
 
 def layout(frame):
@@ -289,7 +300,7 @@ def test_the_other_layout_of_jpeg_where_the_config_says_so(bus):
         with pytest.raises(ValueError):
             screen.set_jpeg("4:2:2")
     assert [layout(f) for f in display.frames] == [[(2, 2), (1, 1), (1, 1)], [(1, 1)] * 3]
-    assert near(display.frames[0]["picture"].getpixel((5, 5)), RED)
+    assert near(display.frames[0]["picture"].getpixel((475, 475)), RED)  # (turned)
     bus(FakeDisplay("udisp0_R480x480_Ergb16"))
     with opened() as screen:
         assert screen.jpeg_layout is None  # (it takes no JPEG: nothing to choose)

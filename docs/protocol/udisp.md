@@ -74,4 +74,11 @@ display that names them first (RGB565 at 480×480 is 450 KB, 13.5 MB a second at
 picture takes to encode and send is what it costs the display: Libre Panel times the first 24
 and drives the stream no faster than they went.
 
-No command for the backlight is known: Libre Panel's brightness goes into the picture.
+Waveshare's 2.8" (`t113udisp` in its product string) shows a picture turned by 180°: its top
+lands at the edge away from the cable, upside down as the display is mounted (#33; CluView
+found the same). Libre Panel sends it turned, so that it is upright with *Upside down* off; the
+ESP32 displays get it as it is.
+
+No command for the backlight is known: Libre Panel's brightness goes into the picture, and a
+change of it sends the last picture again at once (the panel test changes it and draws nothing
+new). At 100 % the picture goes as it is: how bright that looks is the display's own backlight.
