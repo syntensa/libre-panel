@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+**AI activity**
+- **Several sessions at a glance.** Claude Code's own AI card lists its other sessions under
+  the plan's limits where it has room (on the 12.3"), a line each with its sign, what it is
+  called, its state (waiting for you in the warning colour) and since when; themes read them as
+  `ai.<agent>.s1` to `.s3`, the one that counts first.
+- **What today cost**: *Today $4.37* at the right of Claude Code's name, its sessions' costs by
+  their status lines added up since midnight (`ai.claude.cost_today`, an estimate as Claude
+  Code's own).
+- **A notice when a session waits for you** (*Settings → Game mode and more → AI activity*, off
+  by default): on the panel as a session begins to wait for your answer, with what it is
+  called; not while the theme shows AI activity itself.
+
 **Pictures that move**
 - **Slideshows play videos to their end.** In a slideshow with a video or an animated picture,
   each that moves plays from its start, whole rounds, as many as take the seconds per picture

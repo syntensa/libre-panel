@@ -2340,6 +2340,7 @@ def _battery_state(b: _Build, x: float, cap: float, width: float, align: str = "
             hide_if_missing=True)  # fmt: skip
 
 
+AI_LISTED = 3  # the sessions the agents service lists one by one (agents.LISTED)
 AI_NAMES = {"claude": "Claude Code", "codex": "Codex"}
 
 
@@ -2387,6 +2388,10 @@ def _ai_agent(b: _Build, name: str, x: float, y: float, w: float, h: float,
     color, wait, calm = b.tint("accent"), b.c("warn"), b.c("text3")
     title = max(7.0, min(b.ts * 1.05, h * 0.11))
     b.label(f"{part}-name", AI_NAMES[name], x, y, title, color=calm, width=w)
+    if name == "claude" and w >= title * 18:  # what its sessions cost today, by its status line
+        b.value(f"{part}-cost", f"{key}.cost_today", t("Today") + " ${value:.2f}", x + w, y,
+                title, color=calm, align="right", width=w * 0.4, font="text_font",
+                tabular=False, fallback="", hide_if_missing=True)  # fmt: skip
     top = y + title * 1.9
     room = max(8.0, y + h - top)
     wide = w / room >= 1.5
@@ -2426,6 +2431,12 @@ def _ai_agent(b: _Build, name: str, x: float, y: float, w: float, h: float,
     rows = 0 if rows == 1 and not alone else rows  # (side by side: both rows or none)
     block = (CAP * size + small * 2.0 + task_h
              + rows * (small * 1.5 + max(4, small * 0.5) + small * 0.6))  # fmt: skip
+    # alone, where there is room under the meters: its other sessions, a line each
+    step = small * 1.9
+    others = 0
+    if alone and rows == len(meters):
+        others = max(0, min(AI_LISTED - 1, int((text_room - block - small) // step)))
+    block += others * step + (small if others else 0.0)
     free = max(0.0, text_room - block)
     if wide:
         cap = text_top + free / 2
@@ -2482,6 +2493,23 @@ def _ai_agent(b: _Build, name: str, x: float, y: float, w: float, h: float,
         b.bar(f"{part}-{window}-bar", f"{key}.{window}", tx, row + small * 1.3, tw, bar_h, color)
         b.out[-1]["color_rules"] = _heat_rules(b, 80, 95)
         row += small * 1.5 + bar_h + small * 0.6
+    row += small if others else 0.0
+    for n in range(2, 2 + others):  # its sign, what it is called, its state and since when
+        one, dot = f"{key}.s{n}", small * 1.2
+        b.add("agent", f"{part}-s{n}-sign", x=round(tx), y=round(row - small * 0.1),
+              size=max(8, round(dot)), sensor=f"{one}.state", color=color, color2=wait,
+              muted=calm, needs=f"{one}.state")  # fmt: skip
+        b.value(f"{part}-s{n}-task", f"{one}.task", "{value}", tx + dot + small * 0.6, row,
+                small, color=b.c("text2"), width=tw * 0.55 - dot, font="text_font",
+                tabular=False, fit="ellipsis", fallback="", hide_if_missing=True)  # fmt: skip
+        for state, word, tone in words[:3]:
+            b.add("text", f"{part}-s{n}-{state}", x=round(tx + tw * 0.6), text=word, color=tone,
+                  max_width=round(tw * 0.26), fit="shrink", needs=f"{one}.state={state}",
+                  **b._text_fields(small * 0.9, row, "text_font"))  # fmt: skip
+        b.value(f"{part}-s{n}-since", f"{one}.since", "{value:duration}", tx + tw, row,
+                small * 0.9, color=calm, align="right", width=tw * 0.13, font="text_font",
+                tabular=False, fallback="", hide_if_missing=True)  # fmt: skip
+        row += step
 
 
 @dataclass(frozen=True)

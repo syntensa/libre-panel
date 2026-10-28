@@ -187,7 +187,7 @@ def demo_details(t: float, waves: dict[str, Reading]) -> dict[str, Reading]:
     out["timer.phase"] = Reading("timer.phase", "Focus", "", "Timer")
     out["timer.rounds"] = Reading("timer.rounds", 2, "", "Rounds")
     # the agents service's (agents.py): Claude Code at work, Codex waiting for you
-    units = {"context": "%", "five_hour": "%", "week": "%", "cost": "$"}
+    units = {"context": "%", "five_hour": "%", "week": "%", "cost": "$", "cost_today": "$"}
     for agent, name, state, tool, task, model, five, week in (
         ("claude", "Claude Code", "working", "Edit", "The hooks of the panel", "Opus", 23.0, 41.0),
         ("codex", "Codex", "waiting", "", None, None, 12.0, 55.0),
@@ -198,6 +198,15 @@ def demo_details(t: float, waves: dict[str, Reading]) -> dict[str, Reading]:
             "five_hour": five, "five_hour_reset": 2 * 3600 + 14 * 60.0, "five_hour_age": 30.0,
             "week": week, "week_reset": 3 * 86400 + 5 * 3600.0, "week_age": 30.0,
         }  # fmt: skip
+        if agent == "claude":  # three sessions: one at work, one waiting, one idle; $ today
+            values.update({
+                "sessions": 3, "cost_today": 4.37,
+                "s1.state": "working", "s1.task": task, "s1.since": 95.0, "s1.cloud": 0,
+                "s2.state": "waiting", "s2.task": "Release notes for 0.7.6", "s2.since": 40.0,
+                "s2.cloud": 1,
+                "s3.state": "idle", "s3.task": "The video element", "s3.since": 1260.0,
+                "s3.cloud": 0,
+            })  # fmt: skip
         for part, value in values.items():
             if value is not None:
                 key = f"ai.{agent}.{part}"

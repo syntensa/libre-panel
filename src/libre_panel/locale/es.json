@@ -2846,7 +2846,9 @@
     "It needs Waveshare's card image that makes it a USB display (it then calls itself udisp over USB), and shows only what the PC sends: the themes on its card are gone with that image. It gets a video stream of JPEG pictures, as it asks for them, up to 60 a second: smooth motion. Its brightness goes into the picture: dimming darkens it; its backlight is set on its card (the hardware guide says how).": "Necesita la imagen de tarjeta de Waveshare que lo convierte en una pantalla USB (entonces se llama udisp por USB) y solo muestra lo que envía el PC: los temas de su tarjeta desaparecen con esa imagen. Recibe un flujo de vídeo de imágenes JPEG, tal como las pide, hasta 60 por segundo: movimiento fluido. Su brillo va en la imagen: atenuar la oscurece; su retroiluminación se ajusta en su tarjeta (la guía de hardware explica cómo).",
     "Playback speed": "Velocidad de reproducción",
     "a video or an animated picture plays to its end, round by round, at least this long": "un vídeo o una imagen animada se reproduce hasta su final, vuelta a vuelta, al menos este tiempo",
-    "of its videos and animated pictures: 0.5 is half as fast, 2 twice": "de sus vídeos e imágenes animadas: 0,5 es la mitad de rápido, 2 el doble"
+    "of its videos and animated pictures: 0.5 is half as fast, 2 twice": "de sus vídeos e imágenes animadas: 0,5 es la mitad de rápido, 2 el doble",
+    "A notice when a session waits for you": "Un aviso cuando una sesión te espera",
+    "On the panel, when Claude Code or Codex begins to wait for your answer; not while the theme shows AI activity itself.": "En el panel, cuando Claude Code o Codex empieza a esperar tu respuesta; no mientras el tema muestre la actividad de IA."
   },
   "fields": {
     "agent": "agente",
@@ -3186,7 +3188,8 @@
     "weather": "Tiempo",
     "wind": "Viento",
     "mic": "Micrófono",
-    "mic_off": "Micrófono apagado"
+    "mic_off": "Micrófono apagado",
+    "agent": "Agente de IA"
   },
   "days": [
     "lunes",

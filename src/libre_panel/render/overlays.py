@@ -34,7 +34,11 @@ SWITCH_POLICIES = ("wait", "follow", "restart")
 
 # The kinds of message a screen shows itself when it reads these: the volume where its number or
 # bar is, what plays where its title is. Their band would only cover them (SPUR II's Studio).
-SHOWN_BY = {"volume": ("audio.volume",), "music": ("media.title",)}
+SHOWN_BY = {
+    "volume": ("audio.volume",),
+    "music": ("media.title",),
+    "agent": ("ai.claude.state", "ai.codex.state"),  # (a session waiting for you)
+}
 
 
 def shown_by(renderer: Any) -> frozenset[str]:

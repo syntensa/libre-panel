@@ -663,3 +663,94 @@ def test_of_both_the_one_that_runs_has_the_module_to_itself_while_the_other_is_o
     assert signs(claude="working", codex="off") == ["only-claude-sign"]
     assert signs(claude="off", codex="idle") == ["only-codex-sign"]
     assert signs(claude="off", codex="off") == ["none-claude-sign", "none-codex-sign"]
+
+
+def test_the_sessions_one_by_one_the_one_that_counts_first():
+    """``.s1`` to ``.s3``: waiting for you before working before idle, and of the same state the
+    one that came to it last first; ``.s1`` is the one the agent's state is of."""
+    clock = Clock()
+    board = agents.Board(clock)
+    hook(board, "UserPromptSubmit", session="a", session_title="The hooks")
+    clock.now += 10
+    hook(board, "Stop", session="b")
+    clock.now += 10
+    hook(board, "PermissionRequest", session="c")
+    board.hook("claude", {"hook_event_name": "UserPromptSubmit", "session_id": "d",
+                          "session_title": "In the cloud"}, cloud=True)  # fmt: skip
+    clock.now += 5
+    seen = board.readings()
+    assert seen["ai.claude.state"] == "waiting" and seen["ai.claude.sessions"] == 4
+    assert [seen[f"ai.claude.s{n}.state"] for n in (1, 2, 3)] == ["waiting", "working", "working"]
+    assert (seen["ai.claude.s2.task"], seen["ai.claude.s2.cloud"]) == ("In the cloud", 1)
+    assert (seen["ai.claude.s3.task"], seen["ai.claude.s3.since"]) == ("The hooks", 25)
+    assert seen["ai.codex.s1.state"] is None and seen["ai.codex.s1.since"] is None
+    published: dict = {}
+    host = SimpleNamespace(publish=published.__setitem__, log=SimpleNamespace(info=print))
+    service.Agents(host, {"task": False}, board=board).publish()
+    assert published["ai.claude.s2.task"] is None  # (what a session is called stays off)
+
+
+def test_the_cost_of_the_day_adds_up_what_each_session_cost_since_it_last_said():
+    clock = Clock(datetime(2026, 10, 28, 22, 0).timestamp())
+    board = agents.Board(clock)
+    assert board.readings()["ai.claude.cost_today"] is None  # (nothing said yet)
+
+    def said(session, dollars):
+        board.status("claude", {"session_id": session, "cost": {"total_cost_usd": dollars}})
+
+    said("a", 1.0)
+    said("a", 1.5)
+    said("b", 0.25)
+    assert board.readings()["ai.claude.cost_today"] == pytest.approx(1.75)
+    said("a", 0.5)  # (less than before: a session begun anew under its name)
+    assert board.readings()["ai.claude.cost_today"] == pytest.approx(2.25)
+    clock.now += 3 * 3600  # after midnight: what came before is yesterday's
+    assert board.readings()["ai.claude.cost_today"] == 0
+    said("a", 0.75)  # (a's 0.25 since midnight)
+    assert board.readings()["ai.claude.cost_today"] == pytest.approx(0.25)
+    assert board.readings()["ai.codex.cost_today"] is None
+
+
+def test_a_notice_when_a_session_begins_to_wait_where_it_is_switched_on():
+    board = agents.Board(Clock())
+    told: list = []
+    host = SimpleNamespace(publish=lambda key, value: None, log=SimpleNamespace(info=print),
+                           notify=lambda text, **options: told.append((text, options)))  # fmt: skip
+    quiet = service.Agents(host, {}, board=board)  # (off by default)
+    on = service.Agents(host, {"notice": True}, board=board)
+    hook(board, "UserPromptSubmit", session_title="The hooks of the panel")
+    quiet.publish()
+    on.publish()
+    hook(board, "PermissionRequest")
+    quiet.publish()
+    on.publish()
+    on.publish()  # (still waiting: once)
+    assert len(told) == 1
+    text, options = told[0]
+    assert text == "The hooks of the panel" and options["kind"] == "agent"
+    assert options["icon"] == "agent" and "Claude Code" in options["payload"]["label"]
+    hook(board, "PostToolUse")
+    on.publish()
+    hook(board, "PermissionRequest")
+    on.publish()
+    assert len(told) == 2  # (it waits again)
+    from libre_panel.icons import draw_icon
+    from libre_panel.render.overlays import SHOWN_BY
+
+    assert draw_icon("agent", 24, (255, 255, 255, 255)).getbbox() is not None
+    assert "ai.claude.state" in SHOWN_BY["agent"]  # (a theme that shows it leaves it out)
+
+
+def test_claude_code_alone_lists_its_other_sessions_and_the_cost_of_the_day():
+    from libre_panel.theme.modules import expand
+
+    def parts(name):
+        widgets, _boxes = expand(load_theme(find_theme(name)))
+        return {w["id"].partition("/")[2] for w in widgets}
+
+    tall = parts("agents-claude-1920x720")  # (room under the meters for two)
+    assert {"claude-s2-sign", "claude-s2-task", "claude-s3-waiting", "claude-cost"} <= tall
+    assert "claude-s4-sign" not in tall
+    low = parts("agents-claude")  # (the 9.2": no room)
+    assert "claude-cost" in low and not any(p.startswith("claude-s2") for p in low)
+    assert "codex-cost" not in parts("agents")

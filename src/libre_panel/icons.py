@@ -50,6 +50,7 @@ ICON_NAMES = (
     "calendar",
     "home",
     "gamepad",
+    "agent",
     "usb",
     "stick",
     "phone",
@@ -397,6 +398,12 @@ def _home(pen: _Pen) -> None:
     pen.line((10, 21), (10, 15), (14, 15), (14, 21))
 
 
+def _agent(pen: _Pen) -> None:
+    """An AI agent at work, as the agent widget draws it: a ring with its light at the top."""
+    pen.circle(12, 12.8, 8)
+    pen.circle(12, 4.8, 2.4, fill=True)
+
+
 def _gamepad(pen: _Pen) -> None:
     pen.shape(
         lambda d, p: (
@@ -532,6 +539,7 @@ _ICONS: dict[str, Callable[[_Pen], None]] = {
     "calendar": _calendar,
     "home": _home,
     "gamepad": _gamepad,
+    "agent": _agent,
     "usb": _usb,
     "stick": _stick,
     "phone": _phone,

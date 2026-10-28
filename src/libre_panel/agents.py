@@ -77,6 +77,8 @@ WORKING_STALE_S = 15 * 60  # working without a word for so long: taken as idle (
 WAITING_STALE_S = 2 * 3600
 SESSION_GONE_S = 6 * 3600  # a session that said nothing for so long is over
 FIVE_HOUR, WEEK = "five_hour", "week"
+LISTED = 3  # sessions a theme can list one by one (ai.<agent>.s1 ... .s3)
+RANK = {"waiting": 3, "working": 2, "idle": 1}
 
 
 def _session(value: Any) -> str:
@@ -132,6 +134,7 @@ class Session:
     tool: str = ""
     task: str = ""
     where: str = ""  # "cloud": a cloud session's, by the relay (agents_cloud)
+    cost: float | None = None  # what its status line last said it cost so far ($)
 
 
 @dataclass
@@ -155,6 +158,8 @@ class Agent:
     heard: float = 0.0  # when it last said something (a hook, its status line); 0: never
     heard_what: str = ""  # what that was (the hook's event, "statusLine")
     cloud_heard: float = 0.0  # when a cloud session last said something; 0: never
+    cost_today: float | None = None  # $ of all its sessions today, by their status lines
+    cost_day: str = ""  # the day cost_today is of (ISO date)
 
 
 class Board:
@@ -232,17 +237,33 @@ class Board:
             known.context = _percent(context.get("used_percentage"))
             spent = _number(cost.get("total_cost_usd"))
             known.cost = spent if spent is not None and spent >= 0 else None
+            key = _session(data.get("session_id"))
+            if known.cost is not None and key != "-":
+                self._spent(known, known.sessions.setdefault(key, Session(changed=now)),
+                            known.cost, now)  # fmt: skip
             for window, name in ((FIVE_HOUR, "five_hour"), (WEEK, "seven_day")):
                 value = limits.get(name) if isinstance(limits.get(name), dict) else {}
                 used = _percent(value.get("used_percentage"))
                 if used is not None:
                     known.quotas[window] = Quota(used, _epoch(value.get("resets_at")), now,
                                                  "status")  # fmt: skip
-            key = _session(data.get("session_id"))
             if key != "-":
                 known.sessions.setdefault(key, Session(changed=now)).seen = now
             self.changed.set()
             return self._line(known, now)
+
+    @staticmethod
+    def _spent(known: Agent, session: Session, spent: float, now: float) -> None:
+        """What a session cost since its last status line, added to the day's: all of it the
+        first time (a session begun today; one Libre Panel meets later counts from then on in
+        full), and from midnight on what it costs after it."""
+        day = datetime.fromtimestamp(now).date().isoformat()
+        if known.cost_day != day:
+            known.cost_day, known.cost_today = day, 0.0
+        before = session.cost
+        grew = spent if before is None or spent < before else spent - before
+        known.cost_today = (known.cost_today or 0.0) + grew
+        session.cost = spent
 
     def _heard(self, agent: str, now: float, what: str) -> None:
         known = self.agents[agent]
@@ -292,24 +313,27 @@ class Board:
 
     # -- out -------------------------------------------------------------------------------
 
-    def _best(self, agent: str, now: float) -> Session | None:
-        """The session that counts for the agent, its state as it stands (one that went stale
-        taken as idle): waiting for you before working before idle; None without any. Under
-        the lock, and sessions long gone are dropped on the way."""
+    def _ranked(self, agent: str, now: float) -> list[Session]:
+        """The agent's sessions, each with its state as it stands (one that went stale taken
+        as idle): waiting for you before working before idle, and of the same state the one
+        that came to it last first. Under the lock; sessions long gone are dropped on the way."""
         sessions = self.agents[agent].sessions
         for key in [k for k, s in sessions.items() if now - s.seen > SESSION_GONE_S]:
             del sessions[key]
-        best: tuple[int, Session] | None = None
+        found = []
         for session in sessions.values():
             state = session.state
             if state == "working" and now - session.seen > WORKING_STALE_S:
                 state = "idle"
             elif state == "waiting" and now - session.seen > WAITING_STALE_S:
                 state = "idle"
-            rank = {"waiting": 3, "working": 2, "idle": 1}[state]
-            if best is None or rank > best[0]:
-                best = (rank, replace(session, state=state))
-        return best[1] if best is not None else None
+            found.append(replace(session, state=state))
+        return sorted(found, key=lambda s: (-RANK[s.state], -s.changed))
+
+    def _best(self, agent: str, now: float) -> Session | None:
+        """The session that counts for the agent (:meth:`_ranked`'s first); None without any."""
+        ranked = self._ranked(agent, now)
+        return ranked[0] if ranked else None
 
     def state(self, agent: str) -> tuple[str, str, float]:
         """The agent's state (``STATES``), the tool it uses and since when it is so: waiting
@@ -328,8 +352,10 @@ class Board:
         for agent in AGENTS:
             with self._lock:
                 known = self.agents[agent]
-                best = self._best(agent, now)
+                ranked = self._ranked(agent, now)
+                best = ranked[0] if ranked else None
                 state = best.state if best is not None else "off"
+                today = datetime.fromtimestamp(now).date().isoformat()
                 since = best.changed if best is not None else now
                 quotas = dict(known.quotas)
                 active = sum(1 for s in known.sessions.values() if now - s.seen <= SESSION_GONE_S)
@@ -346,7 +372,20 @@ class Board:
                     "cost": known.cost,
                     "tokens_today": known.tokens_today,
                     "tokens_week": known.tokens_week,
+                    # what its sessions cost today, by their status lines (an estimate)
+                    "cost_today": (known.cost_today if known.cost_day == today else 0.0)
+                    if known.cost_today is not None
+                    else None,
                 }
+                # the sessions one by one, as ranked (s1 is the one the state above is of)
+                for n in range(LISTED):
+                    session = ranked[n] if n < len(ranked) else None
+                    values[f"s{n + 1}.state"] = session.state if session else None
+                    values[f"s{n + 1}.task"] = (session.task or None) if session else None
+                    values[f"s{n + 1}.since"] = max(0.0, now - session.changed) if session else None
+                    values[f"s{n + 1}.cloud"] = (
+                        (1 if session.where == "cloud" else 0) if session else None
+                    )
             for window, name in ((FIVE_HOUR, "five_hour"), (WEEK, "week")):
                 quota = quotas.get(window)
                 if quota is not None and quota.resets is not None and quota.resets < now:

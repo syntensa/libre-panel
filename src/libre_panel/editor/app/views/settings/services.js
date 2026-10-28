@@ -208,6 +208,10 @@ const OPTIONS = {
     label: () => t("Access token of the relay"),
     hint: () => t("Only for a topic of the relay that is not open to everyone."),
   },
+  "agents.notice": {
+    label: () => t("A notice when a session waits for you"),
+    hint: () => t("On the panel, when Claude Code or Codex begins to wait for your answer; not while the theme shows AI activity itself."),
+  },
   "agents.task": {
     label: () => t("Show what the session is called"),
     hint: () => t("Claude Code may name a session after its first prompt: whoever sees the panel reads the name."),

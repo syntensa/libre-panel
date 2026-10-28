@@ -1200,6 +1200,7 @@ codex_usage = true    # ask Codex's app-server every minute
 task = true           # show what the session is called (ai.<agent>.task)
 cloud = ""            # the relay of the cloud sessions (set up in Settings)
 cloud_token = ""      # the relay's access token, for a topic not open to everyone
+notice = false        # a notice on the panel when a session begins to wait for you
 ```
 
 While a theme shows `ai.*`, the service asks the programs themselves for the plan's usage, also
@@ -1215,9 +1216,20 @@ name a session after its first prompt, so with `task = false` it reads nothing),
 the session that counts runs in the cloud), `.since` (seconds in the state), `.sessions`,
 `.model`, `.context` (% of the context window), `.cost` ($ of the session, Claude Code's estimate), `.five_hour` and `.week` (% of the
 plan's limits used), each with `_reset` (seconds until the window begins anew; show it with
-`{value:duration}`) and `_age` (seconds since it was read), and Codex's `.tokens_today` and
-`.tokens_week`. A widget can show a part only in a state:
-`"needs": "ai.claude.state=waiting"`.
+`{value:duration}`) and `_age` (seconds since it was read), Claude Code's `.cost_today` (what
+its sessions cost today by their status lines, an estimate: each session's cost since its last
+status line, from midnight on, added up; a session Libre Panel meets later counts in full) and
+Codex's `.tokens_today` and `.tokens_week`. The sessions one by one, as many as three, the one
+that counts first (waiting for you before working before idle, then the one that came to it
+last): `.s1.state` to `.s3.state`, with `.task`, `.since` and `.cloud`. A widget can show a part
+only in a state: `"needs": "ai.claude.state=waiting"`. The AI card of Claude Code alone lists
+its other sessions where it has room under the plan's limits (the 12.3"), and shows *Today $…*
+at the right of its name.
+
+With `notice` on, a notice comes on the panel when a session begins to wait for your answer
+(a question, a permission): what the session is called where `task` is on, else *Waiting for
+you*. A theme that shows `ai.*` itself leaves it out, as one that shows what plays leaves out
+the notice of a new track.
 
 #### Claude Code in the cloud
 
