@@ -392,7 +392,8 @@ der Standby-Clip des Panels werden ebenfalls hochkant gezeichnet.
 <img src="docs/images/agents.png" width="100%" alt="Agents auf einer 9,2-Zoll-Leiste: Claude Code arbeitet, mit seinem bewegten Zeichen und dem Werkzeug bei der Arbeit, Codex wartet auf dich, jedes mit dem verbrauchten Anteil von fünf Stunden und sieben Tagen des Abos und wann sie neu beginnen, neben der Uhrzeit">
 
 **Agents** zeigt, was Claude Code und Codex auf diesem PC tun: arbeitet, wartet auf dich oder
-ruht, und wie viel von den Limits des Abos verbraucht ist.
+ruht, und wie viel von den Limits des Abos verbraucht ist. Auf Lumen kommt die KI-Karte von
+selbst, während eines davon arbeitet, und auch die Cloud-Sitzungen von Claude Code kommen an.
 
 <details>
 <summary>Mehr</summary>
@@ -401,7 +402,8 @@ ruht, und wie viel von den Limits des Abos verbraucht ist.
 Jedes mit einem bewegten Zeichen, dem Werkzeug bei der Arbeit und der Zeit, bis die Limits neu
 beginnen. Unter *Einstellungen → Spielmodus und mehr → KI-Aktivität* siehst du, was in den
 Einstellungen der Programme ergänzt wird, bevor etwas geschrieben wird, und nimmst es dort
-wieder heraus; nichts verlässt diesen PC ([KI-Aktivität](docs/CONFIGURATION.md#ai-activity)).
+wieder heraus; nichts verlässt diesen PC. Sitzungen auf claude.ai/code melden sich über ein
+eigenes Relay, mit nicht mehr als ihrem Zustand ([KI-Aktivität](docs/CONFIGURATION.md#ai-activity)).
 </details>
 
 ### Jede Panelgröße
@@ -667,7 +669,9 @@ Anfragen mit einem geheimen Token, der bei jedem Start neu ist.
 - **Die KI-Aktivität** ist aus, bis du sie einschaltest und Claude Code oder Codex einrichtest.
   Ihre Hooks geben, was sie tun, nur an Libre Panel auf diesem PC weiter, mit einem eigenen
   Schlüssel; für die Nutzung des Abos fragt Libre Panel die Programme, die mit deiner Anmeldung
-  bei ihren eigenen Servern nachfragen.
+  bei ihren eigenen Servern nachfragen. Die Cloud-Sitzungen von Claude Code schicken, wenn du
+  sie einrichtest, ihren Zustand (nie einen Prompt) an ein ntfy-Topic mit einer langen
+  Zufallsadresse, das Libre Panel liest.
 - **Die Namen deiner Hardware** landen nie im Log, und `libre-panel doctor` schreibt keine
   Seriennummern und keine persönlichen Pfade in seinen Bericht.
 </details>

@@ -17,6 +17,10 @@ Hooks and the status line are set up from the app (Settings → Game mode and mo
 shows what it adds to ``~/.claude/settings.json`` and ``~/.codex/hooks.json``, keeps a copy
 of each file, and takes out again only what it added. The address carries the AI key, a
 secret of its own in ``ai.json`` beside config.toml (as the notify key).
+
+Claude Code's cloud sessions cannot reach this computer: their hook says what they do by a
+relay, which the service listens to (agents_cloud); the board takes such a session's events as
+a hook's, marked as the cloud's.
 """
 
 from __future__ import annotations
@@ -127,6 +131,7 @@ class Session:
     seen: float = 0.0
     tool: str = ""
     task: str = ""
+    where: str = ""  # "cloud": a cloud session's, by the relay (agents_cloud)
 
 
 @dataclass
@@ -149,6 +154,7 @@ class Agent:
     usage_error: str = ""
     heard: float = 0.0  # when it last said something (a hook, its status line); 0: never
     heard_what: str = ""  # what that was (the hook's event, "statusLine")
+    cloud_heard: float = 0.0  # when a cloud session last said something; 0: never
 
 
 class Board:
@@ -162,20 +168,26 @@ class Board:
 
     # -- in --------------------------------------------------------------------------------
 
-    def hook(self, agent: str, data: dict[str, Any]) -> None:
-        """One hook event (its JSON as the agent sends it)."""
+    def hook(self, agent: str, data: dict[str, Any], cloud: bool = False) -> None:
+        """One hook event (its JSON as the agent sends it); ``cloud``: of a cloud session, by
+        the relay."""
         if agent not in self.agents or not isinstance(data, dict):
             return
         event = str(data.get("hook_event_name") or "")
         key, now = _session(data.get("session_id")), self.clock()
         with self._lock:
-            self._heard(agent, now, event[:40] or "?")
+            if cloud:
+                if not self.agents[agent].cloud_heard:
+                    log.info("AI activity: the first word from %s in the cloud", agent)
+                self.agents[agent].cloud_heard = now
+            else:
+                self._heard(agent, now, event[:40] or "?")
             sessions = self.agents[agent].sessions
             if event == "SessionEnd":
                 sessions.pop(key, None)
                 self.changed.set()
                 return
-            session = sessions.setdefault(key, Session(changed=now))
+            session = sessions.setdefault(key, Session(changed=now, where="cloud" if cloud else ""))
             session.seen = now
             state = None
             if event in WORKING:
@@ -243,6 +255,13 @@ class Board:
         with self._lock:
             known = self.agents[agent]
             return (max(0.0, self.clock() - known.heard) if known.heard else None), known.heard_what
+
+    def cloud_last_heard(self, agent: str = "claude") -> float | None:
+        """How many seconds ago a cloud session of the agent last said something (None:
+        never)."""
+        with self._lock:
+            heard = self.agents[agent].cloud_heard
+            return max(0.0, self.clock() - heard) if heard else None
 
     @staticmethod
     def _line(known: Agent, now: float) -> str:
@@ -319,6 +338,7 @@ class Board:
                     "busy": {"waiting": 2, "working": 1, "idle": 0, "off": -1}[state],
                     "tool": best.tool if best is not None else "",
                     "task": (best.task if best is not None else "") or None,
+                    "cloud": 1 if best is not None and best.where == "cloud" else 0,
                     "since": max(0.0, now - since),  # seconds
                     "sessions": active,
                     "model": known.model or None,

@@ -1160,12 +1160,14 @@ or delete there.
 
 ### AI activity
 
-What Claude Code and Codex do on this PC: working, waiting for you (a question, a
-permission), idle or not running; the tool at work, the model, and how much of the plan's
-limits of five hours and of the week is used. The AI activity module shows it, with a sign of
-its own for each state (no maker's logo). Two themes are made for it, each for the 9.2" and the
-12.3" panel, under *All themes*: Agents (Claude Code and Codex side by side) and Agents Claude
-(Claude Code alone, with how full its context is).
+What Claude Code and Codex do on this PC, and Claude Code in the cloud: working, waiting for
+you (a question, a permission), idle or not running; the tool at work, the model, and how much
+of the plan's limits of five hours and of the week is used. The AI activity module shows it,
+with a sign of its own for each state (no maker's logo); where one of them does not run, the
+other alone. Lumen's card slot brings it in by itself while one works or waits for you, and two
+themes are made for it, each for the 8.8" and 9.2" bars and the 12.3" panel, under *All
+themes*: Agents (Claude Code and Codex side by side) and Agents Claude (Claude Code alone,
+with how full its context is).
 
 Switch it on in *Settings → Game mode and more → AI activity*, then *Set up* each program there. The app
 shows what it adds before it writes it:
@@ -1182,9 +1184,10 @@ Each hook is a `curl` (`curl.exe` on Windows) that hands the event to Libre Pane
 program and does nothing when Libre Panel is not running. A copy of the file as it was is kept
 beside it (`settings.json.libre-panel.bak`, once: the first copy is yours); *Remove* takes out
 only Libre Panel's entries, those that call `/api/ai/`. The card says when each program last
-reported. Only its sessions on this PC report (in a terminal, an editor or the desktop app);
-sessions in the cloud do not reach it. Where Libre Panel had to take another port (its own
-was taken when it started), the card says so and sets the hooks up again with a click.
+reported. These hooks bring the sessions on this PC (in a terminal, an editor or the desktop
+app); Claude Code's sessions in the cloud come by a relay, below. Where Libre Panel had to take
+another port (its own was taken when it started), the card says so and sets the hooks up again
+with a click.
 
 ```toml
 [services]
@@ -1194,6 +1197,8 @@ enabled = ["agents"]
 claude_usage = true   # ask Claude Code for the plan's usage every three minutes
 codex_usage = true    # ask Codex's app-server every minute
 task = true           # show what the session is called (ai.<agent>.task)
+cloud = ""            # the relay of the cloud sessions (set up in Settings)
+cloud_token = ""      # the relay's access token, for a topic not open to everyone
 ```
 
 While a theme shows `ai.*`, the service asks the programs themselves for the plan's usage, also
@@ -1205,12 +1210,42 @@ Panel sends nothing off this PC; the programs ask their own servers with your si
 The readings, for `claude` and `codex`: `ai.<agent>.state` (`working`, `waiting`, `idle`,
 `off`), `.busy` (2 waiting for you, 1 working, 0 idle, -1 off: for colours and conditions),
 `.tool`, `.task` (the session's name, where it carries one, never the prompt; Claude Code may
-name a session after its first prompt, so with `task = false` it reads nothing), `.since` (seconds in the state), `.sessions`, `.model`, `.context` (% of the context
-window), `.cost` ($ of the session, Claude Code's estimate), `.five_hour` and `.week` (% of the
+name a session after its first prompt, so with `task = false` it reads nothing), `.cloud` (1:
+the session that counts runs in the cloud), `.since` (seconds in the state), `.sessions`,
+`.model`, `.context` (% of the context window), `.cost` ($ of the session, Claude Code's estimate), `.five_hour` and `.week` (% of the
 plan's limits used), each with `_reset` (seconds until the window begins anew; show it with
 `{value:duration}`) and `_age` (seconds since it was read), and Codex's `.tokens_today` and
 `.tokens_week`. A widget can show a part only in a state:
 `"needs": "ai.claude.state=waiting"`.
+
+#### Claude Code in the cloud
+
+Claude Code's cloud sessions (claude.ai/code, `claude --cloud`) run on a machine of
+Anthropic's that cannot reach this PC. They come by a relay, an [ntfy](https://ntfy.sh) topic:
+*Claude Code in the cloud → Set up* on the same card makes a long random address on ntfy.sh
+and shows a setup script for the cloud environment, with what to do on claude.ai/code:
+
+1. Open the settings of the environment your sessions run in.
+2. Network access: *Custom*, with the default list kept and `ntfy.sh` added.
+3. Setup script: add the script (*Copy the script*).
+4. Start a session in it: it reports from then on, and the card says when it last did.
+
+The script writes a hook into the session's own Claude Code settings in the cloud
+(`~/.claude/libre-panel-cloud.py`, called on each event; your own hooks stay). The hook works
+out the session's state as Libre Panel does and posts it to the relay only when it changes,
+and every five minutes while it works: the event's name, a short name for the session (a hash
+of its id) and what the session is called where `task` is on. Never a prompt, a tool's input
+or a file. Libre Panel listens to the topic and shows such a session as Claude Code's, with
+*In the cloud* where the tool or the model stands (`ai.claude.cloud`). It takes from the
+topic nothing but such states: whoever knows the address could read along and post, so it is
+long and random, and *Remove* stops listening (take the script out of the environment too).
+
+ntfy.sh passes some 250 messages a day for each sender, which is a few a prompt. For more, or
+for a relay of your own, put the address of a topic on your own ntfy server in `cloud` (the
+host has to be among the environment's allowed domains) and, for a topic that is not open to
+everyone, its token in `cloud_token`; the hook in the cloud sends with the token in
+`LIBRE_PANEL_RELAY_TOKEN` (an environment variable of the environment), or the environment
+adds it itself as a network secret for that host.
 
 ### Game mode
 

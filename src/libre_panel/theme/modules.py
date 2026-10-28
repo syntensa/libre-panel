@@ -2417,13 +2417,21 @@ def _ai_agent(b: _Build, name: str, x: float, y: float, w: float, h: float,
     # since when it is so, at the right of the line, where the line is wide enough for both
     since = align == "left" and tw >= small * 14
     words_w = tw * 0.62 if since else tw
+    # a cloud session says no tool and no model (its status line stays in the cloud): where
+    # it works instead
+    here = f",!{key}.cloud=1" if name == "claude" else ""
     b.value(f"{part}-tool", f"{key}.tool", "{value}", ax, line, small, color=calm, align=align,
-            width=words_w, font="text_font", tabular=False, needs=f"{key}.state=working",
+            width=words_w, font="text_font", tabular=False, needs=f"{key}.state=working{here}",
             fallback="", hide_if_missing=True)  # fmt: skip
     b.value(f"{part}-model", f"{key}.model", "{value}", ax, line, small, color=calm,
             align=align, width=words_w, font="text_font", tabular=False,
-            needs=f"{key}.state!=working,{key}.state!=off", fallback="",
+            needs=f"{key}.state!=working,{key}.state!=off{here}", fallback="",
             hide_if_missing=True)  # fmt: skip
+    if here:
+        b.add("text", f"{part}-cloud", x=round(ax), text=t("In the cloud"), color=calm,
+              align=align, max_width=round(words_w), tabular=False,
+              needs=f"{key}.cloud=1,{key}.state!=off",
+              **b._text_fields(small, line, "text_font"))  # fmt: skip
     if since:
         b.value(f"{part}-since", f"{key}.since", "{value:duration}", tx + tw, line, small,
                 color=calm, align="right", width=tw * 0.34, font="text_font", tabular=False,

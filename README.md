@@ -384,7 +384,8 @@ clip are drawn upright too.
 <img src="docs/images/agents.png" width="100%" alt="Agents on a 9.2-inch bar: Claude Code working, with its moving sign and the tool at work, Codex waiting for you, each with how much of the plan's five hours and seven days is used and when they begin anew, beside the time">
 
 **Agents** shows what Claude Code and Codex do on this PC: working, waiting for you or idle,
-and how much of the plan's limits is used.
+and how much of the plan's limits is used. On Lumen the AI card comes up by itself while one of
+them works, and Claude Code's cloud sessions come too.
 
 <details>
 <summary>More</summary>
@@ -392,7 +393,8 @@ and how much of the plan's limits is used.
 
 Each with a moving sign, the tool at work and the time until the limits begin anew.
 *Settings → Game mode and more → AI activity* shows what it adds to the programs' settings
-before it writes, and takes it out again; nothing leaves this PC
+before it writes, and takes it out again; nothing leaves this PC. Sessions on claude.ai/code
+report by a relay of their own, with no more than their state
 ([AI activity](docs/CONFIGURATION.md#ai-activity)).
 </details>
 
@@ -643,7 +645,9 @@ every start.
   configuration and never writes it. No track title, window title or file name is read.
 - **AI activity** is off until you switch it on and set up Claude Code or Codex. Their hooks
   hand what they do to Libre Panel on this PC only, with a key of its own; for the plan's
-  usage Libre Panel asks the programs, which ask their own servers with your sign-in.
+  usage Libre Panel asks the programs, which ask their own servers with your sign-in. Claude
+  Code's cloud sessions, once you set them up, send their state (never a prompt) to an ntfy
+  topic with a long random address, which Libre Panel reads.
 - **The hardware's names** never go to the log, and `libre-panel doctor` writes no serial
   numbers or personal paths into its report.
 </details>

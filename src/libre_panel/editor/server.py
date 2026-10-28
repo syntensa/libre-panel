@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import ParseResult, parse_qs, unquote, urlparse
 
-from libre_panel import __version__, agents, i18n, modes, notify, sequence
+from libre_panel import __version__, agents, agents_cloud, i18n, modes, notify, sequence
 from libre_panel.config import (
     CONFIG_FILENAME,
     DEFAULT_CARDS,
@@ -1508,16 +1508,19 @@ class EditorHandler(BaseHTTPRequestHandler):
         self._send(HTTPStatus.OK, line.encode("utf-8"), "text/plain; charset=utf-8")
 
     def _ai_setup(self, method: str) -> None:
-        """For Settings: whether Claude Code and Codex are there and set up (GET); with
-        ``{"agent", "action": "preview" | "install" | "remove", "status_line"}`` (POST) what
-        Libre Panel adds to their settings, or adds it (a copy of the file is kept), or takes
-        it out again."""
+        """For Settings: whether Claude Code and Codex are there and set up, and the relay of
+        the cloud sessions (GET); with ``{"agent", "action": "preview" | "install" | "remove",
+        "status_line"}`` (POST) what Libre Panel adds to their settings, or adds it (a copy of
+        the file is kept), or takes it out again; with ``{"agent": "cloud", "action":
+        "preview", "relay"}`` the cloud environment's setup script (agents_cloud)."""
         try:
             config = load_config(self.state.config_path)
         except ConfigError as exc:
             return self._error(str(exc), HTTPStatus.CONFLICT)
         on = "agents" in config.services.enabled
         paths = {"claude": agents.claude_settings_path(), "codex": agents.codex_hooks_path()}
+        options = config.services.options.get("agents", {})
+        relay = options.get("cloud") if isinstance(options.get("cloud"), str) else ""
         if method == "GET":
             found = {}
             for agent, path in paths.items():
@@ -1530,12 +1533,27 @@ class EditorHandler(BaseHTTPRequestHandler):
                 found[agent] = {"program": agents.program(agent) is not None, "path": str(path),
                                 **state, "problem": problem, "heard": ago,
                                 "heard_what": what}  # fmt: skip
+            problem = agents_cloud.relay_problem(relay) if relay else ""
+            found["cloud"] = {"relay": relay, "heard": agents.BOARD.cloud_last_heard(),
+                              "problem": problem}  # fmt: skip
             return self._json({"on": on, "port": self.server.server_address[1], **found})
         payload = self._read_json()
         if payload is None:
             return None
         agent = payload.get("agent") if isinstance(payload, dict) else None
         action = payload.get("action") if isinstance(payload, dict) else None
+        if agent == "cloud" and action == "preview":
+            # the setup script of the cloud environment: for the relay given (or set), else
+            # for a new one, which Settings then sets (services.agents.cloud)
+            given = payload.get("relay") or relay
+            given = given.strip() if isinstance(given, str) and given.strip() else ""
+            problem = agents_cloud.relay_problem(given) if given else ""
+            if problem:
+                return self._error(f"{given}: {problem}")
+            given = given or agents_cloud.new_relay()
+            named = options.get("task", True) is not False
+            return self._json({"relay": given, "domain": agents_cloud.relay_domain(given),
+                               "script": agents_cloud.setup_script(given, named)})  # fmt: skip
         if agent not in paths or action not in ("preview", "install", "remove"):
             return self._error('expected {"agent": "claude"|"codex", "action": ...}')
         if not on and action != "remove":

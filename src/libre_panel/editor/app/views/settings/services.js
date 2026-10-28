@@ -200,6 +200,14 @@ const OPTIONS = {
     label: () => t("Ask Codex for the plan's usage"),
     hint: () => t("Every minute while a theme shows it, from Codex's app-server, also without a terminal open."),
   },
+  "agents.cloud": {
+    label: () => t("Relay of the cloud sessions"),
+    hint: () => t("Set up with Claude Code in the cloud below; an ntfy server of your own takes its place here."),
+  },
+  "agents.cloud_token": {
+    label: () => t("Access token of the relay"),
+    hint: () => t("Only for a topic of the relay that is not open to everyone."),
+  },
   "agents.task": {
     label: () => t("Show what the session is called"),
     hint: () => t("Claude Code may name a session after its first prompt: whoever sees the panel reads the name."),

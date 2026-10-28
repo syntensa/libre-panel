@@ -1152,6 +1152,45 @@ def test_ai_activity_shows_what_it_adds_then_sets_up_and_takes_it_out(
         assert agents.installed(agents.read_settings(settings))["port"] != 1
 
 
+def test_claude_code_in_the_cloud_gives_the_setup_script_and_listens_to_a_relay(
+    app_url,  # noqa: F811
+    isolated_home,
+    monkeypatch,
+):
+    from libre_panel import agents
+    from libre_panel.config import set_config_value
+
+    monkeypatch.setattr(agents, "BOARD", agents.Board())
+    choose_theme(isolated_home, "lumen")
+    set_config_value("services.enabled", ["agents"])
+
+    def relay():
+        return settings_config().services.options.get("agents", {}).get("cloud", "")
+
+    with browser_page(app_url, "settings/services") as page:
+        cloud = page.locator("[data-service='agents'] [data-agent='cloud']")
+        expect(cloud).to_contain_text("Claude Code in the cloud")
+        expect(cloud.locator(".settings-row-status")).to_have_text("Not set up yet")
+        cloud.get_by_role("button", name="Set up").click()
+        dialog = page.locator(".dialog")
+        expect(dialog).to_contain_text("ntfy.sh added")
+        expect(dialog.locator("[data-agents-cloud-script]")).to_contain_text("libre-panel-cloud.py")
+        assert relay() == ""  # not before it is confirmed
+        dialog.get_by_role("button", name="Set up").click()
+        waits_for(page, lambda: relay().startswith("https://ntfy.sh/libre-panel-"))
+        expect(cloud.locator(".settings-row-status")).to_have_text("Set up; no report from it yet")
+        cloud.get_by_role("button", name="Show the setup script").click()
+        expect(page.locator(".dialog [data-agents-cloud-script]")).to_contain_text(relay())
+        page.locator(".dialog").get_by_role("button", name="Close").click()
+        agents.BOARD.hook("claude", {"hook_event_name": "Stop", "session_id": "c"}, cloud=True)
+        expect(cloud.locator(".settings-row-status")).to_contain_text(
+            "its last report came", timeout=10_000
+        )
+        cloud.get_by_role("button", name="Remove").click()
+        expect(cloud.locator(".settings-row-status")).to_have_text("Not set up yet")
+        assert relay() == ""
+
+
 def test_a_shortcut_is_set_by_pressing_the_keys_and_taken_away_again(app_url, isolated_home):  # noqa: F811
     choose_theme(isolated_home, "lumen")
     # (the settings refuse two of the shortcuts: a 400 the browser logs)

@@ -19,6 +19,13 @@
   Claude, on the card where Claude Code runs alone, and beside the other where the card is tall
   enough. Never the prompt itself; as Claude Code may name a session after its first prompt,
   *Show what the session is called* (`task` in `[services.agents]`) takes it off the panels.
+- **Claude Code in the cloud, on the panel.** Sessions on claude.ai/code cannot reach your PC;
+  *Claude Code in the cloud → Set up* (*Settings → Game mode and more → AI activity*) gives a
+  setup script for the cloud environment, whose hook says by a relay (an ntfy topic with a long
+  random address) when a session works, waits for you or is done. Libre Panel listens and shows
+  it as Claude Code's, *In the cloud* where the tool stands. Only state changes go, a few a
+  prompt; never a prompt or a file. ntfy.sh passes some 250 messages a day, an ntfy server of
+  your own more ([AI activity](docs/CONFIGURATION.md#claude-code-in-the-cloud)).
 
 **Changes**
 - **The AI card for one agent.** Where only Claude Code runs (or only Codex), the AI activity

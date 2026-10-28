@@ -1536,6 +1536,14 @@ a.btn-primary:hover {
   white-space: pre;
 }
 
+/* Claude Code in the cloud: what to do in the environment, in turn */
+.agents-cloud-steps {
+  margin: 0;
+  padding-left: 1.4em;
+  display: grid;
+  gap: 0.3rem;
+}
+
 /* Settings → Panel → Transitions: a choice and its Show beside it, what "random" picks from */
 .transition-choice {
   display: inline-flex;
