@@ -285,6 +285,14 @@ a:hover {
   background: rgba(255, 255, 255, 0.03);
 }
 
+/* five tabs (with the Player) in a window under 1500 px: closer together, so that the theme's
+   name stays whole (German at 1280 px came 37 px short) */
+@media (max-width: 1500px) {
+  .tab {
+    padding: 7px 9px;
+  }
+}
+
 .tab[aria-current="page"] {
   background: var(--surface-3);
   color: var(--text);
