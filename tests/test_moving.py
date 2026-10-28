@@ -192,6 +192,43 @@ def test_a_slideshow_plays_a_video_to_its_end(tmp_path):
 
 
 @needs_ffmpeg
+def test_a_video_added_in_design_at_size_0_shows_at_its_own_size(tmp_path):
+    """Design adds a picture at 0 x 0, "as it is": a still and a GIF showed, a video nothing,
+    in the editor and on the panel (#33). It takes its own size, within the theme's."""
+    video(tmp_path / "round.mp4", size="64x48", seconds=1)
+    info = moving.video_info(FFMPEG, tmp_path / "round.mp4")
+    assert info.size == (64, 48) and info.length == pytest.approx(1.0, abs=0.1)
+    assert moving.video_info(FFMPEG, tmp_path / "missing.mp4") == moving.VideoInfo()
+    for preview in (True, False):
+        renderer = Renderer(theme(tmp_path, "round.mp4", w=0, h=0), preview=preview,
+                            animate=not preview)  # fmt: skip
+        deadline, frame = time.monotonic() + 10, None
+        while time.monotonic() < deadline:
+            frame, boxes = renderer.render(Snapshot(), time.monotonic())
+            if frame.getpixel((32, 24))[:3] != (0, 0, 0):
+                break
+            time.sleep(0.05)
+        assert frame.getpixel((32, 24))[:3] != (0, 0, 0), preview  # (drawn)
+        assert frame.getpixel((100, 70))[:3] == (0, 0, 0)  # (its own 64 x 48, no more)
+        renderer.close()
+    # larger than the theme (200 x 100): within it, its shape kept
+    video(tmp_path / "big.mp4", size="400x100", seconds=1)
+    renderer = Renderer(theme(tmp_path, "big.mp4", w=0, h=0), preview=True)
+    frame, _boxes = renderer.render(Snapshot())
+    assert frame.getpixel((190, 40))[:3] != (0, 0, 0) and frame.getpixel((100, 60))[:3] == (0, 0, 0)
+    renderer.close()
+
+
+@needs_ffmpeg
+def test_a_turned_video_is_read_upright(tmp_path):
+    clip = video(tmp_path / "wide.mp4", size="64x48", seconds=1)
+    turned = tmp_path / "turned.mp4"
+    subprocess.run([FFMPEG, "-v", "error", "-y", "-display_rotation", "90", "-i", str(clip),
+                    "-c", "copy", str(turned)], check=True, timeout=60)  # fmt: skip
+    assert moving.video_info(FFMPEG, turned).size == (48, 64)
+
+
+@needs_ffmpeg
 def test_a_video_starts_over_from_its_first_frame(tmp_path):
     clip = video(tmp_path / "clip.mp4")
     feed = moving.VideoFeed(FFMPEG, clip, 40, 30, "contain")

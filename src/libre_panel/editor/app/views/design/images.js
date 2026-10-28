@@ -38,7 +38,7 @@ export function Images() {
               onClick=${(event) => event.detail === 0 && dropItem(item, null)}>
               <span class="tile-picture checker">
                 ${video(path)
-                  ? html`<video src=${src} muted playsinline preload="metadata" draggable="false" data-video-tile></video>`
+                  ? html`<video src=${src} muted playsinline autoplay loop preload="metadata" draggable="false" data-video-tile></video>`
                   : html`<img src=${src} alt="" draggable="false" loading="lazy" />`}
               </span>
               <span class="tile-name">${path.replace(/^assets\//, "")}</span>

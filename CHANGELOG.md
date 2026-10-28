@@ -53,6 +53,10 @@
   among the project's contributors; its pull request says to merge with *Rebase and merge*.
 
 **Fixed**
+- **A video added in Design shows** (#33). *Design → Pictures → Add a picture…* puts a picture in
+  at its own size (0 × 0), which a still and a GIF took and a video did not: an MP4 stayed black
+  in the editor and on the panel. A video at 0 × 0 now plays at its own size, shrunk into the
+  theme where it is larger, turned upright where it says so; its tile in *Pictures* plays too.
 - **Claude Code in the cloud: reports that get through.** The cloud's sessions share a few
   addresses, and ntfy.sh often turned them away (HTTP 429). The hook asks a busy relay again a
   few times within a minute, and notes what it sent, or why not, in

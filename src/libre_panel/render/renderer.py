@@ -27,6 +27,7 @@ from concurrent.futures import Future
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter, ImageFont, ImageOps
@@ -716,7 +717,7 @@ class Renderer:
         # a slideshow with pictures that move: the one on show, since when and until when
         self._shows: dict[str, tuple[int, float, float]] = {}
         self._moves: dict[str, bool] = {}  # a slideshow's picture: does it move?
-        self._lengths: dict[str, float | None] = {}  # a video's seconds, as ffmpeg reads them
+        self._video_infos: dict[str, moving.VideoInfo] = {}  # a video's length and size
         self._ffmpeg: str | None = None  # where ffmpeg is ("": not found)
         self._slide_lists: dict[str, tuple[float, list[str]]] = {}  # widget id -> pictures
         self._gauge_parts: dict[tuple[Any, ...], Image.Image] = {}  # static rings, colour fields
@@ -2460,17 +2461,33 @@ class Renderer:
                 self._warn(f"a video needs ffmpeg ({exc})")
         return self._ffmpeg
 
+    def _video_info(self, rel: str, path: Path) -> moving.VideoInfo:
+        found = self._video_infos.get(rel)
+        if found is None:
+            found = self._video_infos[rel] = moving.video_info(self._ffmpeg_path(), path)
+        return found
+
     def _draw_video(self, widget: dict[str, Any], rel: str) -> Piece | None:
         """A video, round and round: the newest frame ffmpeg has (moving.VideoFeed); in a preview
-        or until the first one comes, its first frame."""
+        or until the first one comes, its first frame. Without a size of its own (0, as a
+        picture added in Design starts) at the video's, within the theme's (#33: a picture
+        of 0 x 0 showed nothing where it was a video)."""
         x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
-        if self.theme.root is None or w <= 0 or h <= 0 or not self._ffmpeg_path():
+        if self.theme.root is None or not self._ffmpeg_path():
             return None
         try:
             path = resolve_asset(self.theme.root, rel)
         except ThemeError as exc:
             self._warn(f"video {rel!r}: {exc}")
             return None
+        if w <= 0 or h <= 0:
+            own = self._video_info(rel, path).size
+            if own is None:
+                self._warn(f"video {rel!r}: ffmpeg cannot read it")
+                return None
+            room = min(1.0, self.theme.width / own[0], self.theme.height / own[1])
+            w, h = max(1, round(own[0] * room)), max(1, round(own[1] * room))
+            widget = {**widget, "w": w, "h": h}
         fit, finish = widget["fit"], self._finish({**widget, "fit": "stretch"})
         speed = moving.speed_of(widget.get("speed", 1))
         key = (rel, w, h, fit, speed)
@@ -2556,15 +2573,12 @@ class Renderer:
             return seconds
         speed = moving.speed_of(widget.get("speed", 1))
         if moving.is_video(rel):
-            if rel not in self._lengths:
-                ffmpeg = self._ffmpeg_path()
-                try:
-                    path = resolve_asset(self.theme.root, rel)
-                except ThemeError:
-                    path = None
-                found = moving.video_length(ffmpeg, path) if ffmpeg and path else None
-                self._lengths[rel] = found
-            length = self._lengths[rel]
+            try:
+                path = resolve_asset(self.theme.root, rel)
+            except ThemeError:
+                path = None
+            ready = path is not None and self._ffmpeg_path()
+            length = self._video_info(rel, path).length if ready else None
         else:
             animation = self._animation(widget, rel)
             length = animation.length if animation is not None else None

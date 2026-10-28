@@ -143,22 +143,45 @@ def _quiet() -> dict:
     return {}
 
 
-def video_length(ffmpeg: str, path: Path) -> float | None:
-    """How long the video plays (seconds), as ffmpeg reads it from the file; None where it
-    cannot tell."""
+@dataclass(frozen=True)
+class VideoInfo:
+    """What ffmpeg reads of a video file: how long it plays (seconds) and the size its pictures
+    come out at (turned as it says, as ffmpeg turns them); None where it cannot tell."""
+
+    length: float | None = None
+    size: tuple[int, int] | None = None
+
+
+def video_info(ffmpeg: str, path: Path) -> VideoInfo:
+    """A video's length and size, from what ``ffmpeg -i`` says of it."""
     try:
         result = subprocess.run([ffmpeg, "-hide_banner", "-nostdin", "-i", str(path)],
                                 capture_output=True, timeout=START_TIMEOUT_S, check=False,
                                 **_quiet())  # fmt: skip
     except (OSError, subprocess.TimeoutExpired) as exc:
-        log.warning("video %s: no length (%s)", path.name, exc)
-        return None
-    found = re.search(rb"Duration: (\d+):(\d\d):(\d\d(?:\.\d+)?)", result.stderr)
-    if found is None:
-        return None
-    hours, minutes, seconds = (float(part) for part in found.groups())
-    length = hours * 3600 + minutes * 60 + seconds
-    return length if length > 0 else None
+        log.warning("video %s: not read (%s)", path.name, exc)
+        return VideoInfo()
+    said = result.stderr
+    length = None
+    found = re.search(rb"Duration: (\d+):(\d\d):(\d\d(?:\.\d+)?)", said)
+    if found is not None:
+        hours, minutes, seconds = (float(part) for part in found.groups())
+        length = hours * 3600 + minutes * 60 + seconds or None
+    size = None
+    found = re.search(rb"Stream #[^\n]*?Video: [^\n]*?, (\d{2,5})x(\d{2,5})", said)
+    if found is not None:
+        width, height = int(found[1]), int(found[2])
+        turned = re.search(rb"rotation of (-?\d+(?:\.\d+)?) degrees|rotate\s*:\s*(-?\d+)", said)
+        if turned is not None and round(float(turned[1] or turned[2])) % 180 == 90:
+            width, height = height, width  # (played upright: ffmpeg turns it)
+        size = (width, height)
+    return VideoInfo(length, size)
+
+
+def video_length(ffmpeg: str, path: Path) -> float | None:
+    """How long the video plays (seconds), as ffmpeg reads it from the file; None where it
+    cannot tell."""
+    return video_info(ffmpeg, path).length
 
 
 def first_frame(ffmpeg: str, path: Path, w: int, h: int, fit: str) -> Image.Image | None:
