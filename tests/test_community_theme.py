@@ -128,6 +128,8 @@ def test_a_shared_theme_is_installed_under_the_name_and_maker_its_entry_shows(to
         assert archive.getinfo("glow/theme.json").date_time == WHEN
     # the maker the form names is the theme's already, or the form names none: as it is
     assert tool._maker("In the theme", "In the theme") == "In the theme"
+    # the same maker, written otherwise (#34)
+    assert tool._maker("Varulfen 3D Designs", "Varulfen-3D-Designs") == "Varulfen 3D Designs"
     assert tool._maker("", "In the theme") == "In the theme" and tool._maker("Me", "") == "Me"
 
 

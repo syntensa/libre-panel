@@ -144,9 +144,15 @@ def _text(answers: dict[str, str], key: str, fallback: str) -> tuple[str, bool]:
 
 def _maker(given: str, original: str) -> str:
     """Who made the theme, as the form says (else as the theme says), with the maker the theme
-    names where that is someone else: a theme made from another one keeps its credit."""
+    names where that is someone else: a theme made from another one keeps its credit. The same
+    name written otherwise ("Varulfen-3D-Designs" for "Varulfen 3D Designs", #34) is no one
+    else."""
     given, original = _plain(given), " ".join(original.split())
-    if not given or not original or original.casefold() in given.casefold():
+
+    def bare(name: str) -> str:
+        return "".join(ch for ch in name.casefold() if ch.isalnum())
+
+    if not given or not original or bare(original) in bare(given):
         return given or original
     return f"{given}, after {original}"
 
