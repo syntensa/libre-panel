@@ -2950,7 +2950,7 @@ def test_a_time_modules_settings(page):
     seconds.fill("30")
     seconds.press("Enter")
     assert widget(page, first)["seconds"] == 30
-    page.locator(".inspector").get_by_label("Back").click()
+    page.locator(".inspector").get_by_label("Back", exact=True).click()  # (not Playback speed)
     kind.select_option("world")
     places = page.locator(".inspector .field", has_text="Places").locator("textarea")
     assert "Asia/Tokyo = Tokyo" in places.get_attribute("placeholder")

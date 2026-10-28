@@ -611,5 +611,5 @@ def test_a_screen_that_shows_the_volume_or_what_plays_gets_no_band_of_it():
         return shown_by(Renderer(load_theme(find_theme(name)), preview=True))
 
     assert kinds("spur-studio") == {"volume", "music"} and kinds("encore") == {"volume", "music"}
-    assert kinds("lumen") == {"music"}  # (its card shows what plays)
+    assert kinds("lumen") == {"music", "agent"}  # (its cards show what plays and AI activity)
     assert kinds("studio") == {"music"} and kinds("almanac") == frozenset()
