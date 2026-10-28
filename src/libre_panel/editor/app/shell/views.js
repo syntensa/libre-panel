@@ -35,6 +35,7 @@ const HINTS = {
   design: () => t("Arrange the building blocks of a theme, and its pages"),
   look: () => t("The colours, the finish and the light of a theme"),
   live: () => t("What the panel shows now, and the history of the last days"),
+  player: () => t("Videos and pictures on the panel, instead of its theme"),
   settings: () => t("The panel, sensors, services, weather and start"),
 };
 const KEYWORDS = {
@@ -42,6 +43,7 @@ const KEYWORDS = {
   design: () => t("editor edit layout arrange modules blocks widgets"),
   look: () => t("colours colors palette finish style appearance light"),
   live: () => t("now running status readings values sensors services log"),
+  player: () => t("player media video movie gif pictures photos slideshow"),
   settings: () => t("options preferences configuration setup"),
 };
 

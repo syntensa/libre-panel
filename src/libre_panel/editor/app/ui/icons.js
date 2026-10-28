@@ -88,6 +88,14 @@ export const ICONS = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   pause: '<rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none"/>',
   play: '<path d="M8 5l11 7-11 7z" fill="currentColor"/>',
+  // the Player's: stop, the next and the one before, in another order, again
+  stop: '<rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor" stroke="none"/>',
+  next: '<path d="M5 5l9 7-9 7z" fill="currentColor"/><path d="M18 5v14"/>',
+  previous: '<path d="M19 5l-9 7 9 7z" fill="currentColor"/><path d="M6 5v14"/>',
+  shuffle:
+    '<path d="M3 7h3c2 0 3.2 1 4.2 2.6l2.6 4.8c1 1.6 2.2 2.6 4.2 2.6h4"/><path d="M3 17h3c1.3 0 2.3-.4 3.1-1.1M14.9 8.1c.8-.7 1.8-1.1 3.1-1.1h3"/><path d="M18 4l3 3-3 3M18 14l3 3-3 3"/>',
+  repeat: '<path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 014-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 01-4 4H4"/>',
+  film: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/>',
   power: '<path d="M12 3v9"/><path d="M6.3 6.3a8 8 0 1011.4 0"/>',
   landscape: '<rect x="3" y="7" width="18" height="10" rx="2"/>',
   portrait: '<rect x="7" y="3" width="10" height="18" rx="2"/>',

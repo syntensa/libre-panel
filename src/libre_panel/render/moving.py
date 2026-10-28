@@ -127,16 +127,19 @@ def _filter(w: int, h: int, fit: str) -> str:
 
 
 def video_command(ffmpeg: str, path: Path, w: int, h: int, fit: str, fps: int = VIDEO_FPS,
-                  once: bool = False, speed: float = 1.0) -> list[str]:  # fmt: skip
+                  once: bool = False, speed: float = 1.0, start: float = 0.0,
+                  rounds: bool = True) -> list[str]:  # fmt: skip
     """ffmpeg reading the video at ``path`` into raw RGBA frames of w x h on its output, ``fps``
-    of them to a second of it played ``speed`` times as fast, round and round (``once``: its
-    first frame alone). It goes as fast as they are read (:class:`VideoFeed` takes each at its
-    moment)."""
+    of them to a second of it played ``speed`` times as fast, round and round (``rounds``
+    False: to its end; ``once``: its first frame alone), from ``start`` seconds into it. It goes
+    as fast as they are read (:class:`VideoFeed` takes each at its moment)."""
     command = [ffmpeg, "-v", "error", "-nostdin"]
     paced = ""
     if not once:
-        command += ["-stream_loop", "-1"]
+        command += ["-stream_loop", "-1"] if rounds else []
         paced = f"setpts=PTS/{speed:g}," if speed != 1 else ""  # (its frames' times so)
+    if start > 0:
+        command += ["-ss", f"{start:.3f}"]  # (to the picture before, decoded on from there)
     command += ["-i", str(path), "-an", "-sn",
                 "-vf", f"{paced}{_filter(w, h, fit)},fps={fps}" if not once else _filter(w, h, fit),
                 "-pix_fmt", "rgba", "-f", "rawvideo"]  # fmt: skip
@@ -201,10 +204,12 @@ def video_length(ffmpeg: str, path: Path) -> float | None:
     return video_info(ffmpeg, path).length
 
 
-def first_frame(ffmpeg: str, path: Path, w: int, h: int, fit: str) -> Image.Image | None:
-    """The video's first frame at w x h; None where ffmpeg cannot read it."""
+def first_frame(ffmpeg: str, path: Path, w: int, h: int, fit: str,
+                start: float = 0.0) -> Image.Image | None:  # fmt: skip
+    """The video's first frame at w x h (``start`` seconds into it: the one there); None where
+    ffmpeg cannot read it."""
     try:
-        result = subprocess.run(video_command(ffmpeg, path, w, h, fit, once=True),
+        result = subprocess.run(video_command(ffmpeg, path, w, h, fit, once=True, start=start),
                                 capture_output=True, timeout=START_TIMEOUT_S, check=False,
                                 **_quiet())  # fmt: skip
     except (OSError, subprocess.TimeoutExpired) as exc:
@@ -234,17 +239,22 @@ class VideoFeed:
     frame it has. ffmpeg starts with the first ask and stops after ``IDLE_S`` without one."""
 
     def __init__(self, ffmpeg: str, path: Path, w: int, h: int, fit: str, fps: int = VIDEO_FPS,
-                 clock: Callable[[], float] = time.monotonic,
-                 speed: float = 1.0) -> None:  # fmt: skip
-        self.command = video_command(ffmpeg, path, w, h, fit, fps, speed=speed)
+                 clock: Callable[[], float] = time.monotonic, speed: float = 1.0,
+                 start: float = 0.0, rounds: bool = True,
+                 began: float | None = None) -> None:  # fmt: skip
+        self.command = video_command(ffmpeg, path, w, h, fit, fps, speed=speed, start=start,
+                                     rounds=rounds)  # fmt: skip
         self.name, self.size, self.fps, self.clock = path.name, (w, h), fps, clock
+        self.rounds = rounds
+        self.ended = False  # (played to its end, ``rounds`` False: its last frame stays)
         self._lock = threading.Lock()
         self._room = threading.Condition(self._lock)  # (for ffmpeg's next frame)
         self._ready: collections.deque[Image.Image] = collections.deque()  # before their moment
         self._newest: Image.Image | None = None
         self._count = 0  # frames shown: a new one is a new picture to draw
-        self._began: float | None = None  # the moment of the first frame shown (moved on after
-        # a pause): frame n shows from _began + n / fps
+        # the moment of its first frame (``began``, else the first ask once one is there; moved
+        # on after a pause): frame n shows from _began + n / fps
+        self._began = began
         self._asked = 0.0
         self._process: subprocess.Popen | None = None
         self._thread: threading.Thread | None = None
@@ -258,7 +268,7 @@ class VideoFeed:
         with self._lock:
             self._asked = now
             running = self._thread is not None and self._thread.is_alive()
-            if not running and now - self._failed >= IDLE_S:
+            if not running and not self.ended and now - self._failed >= IDLE_S:
                 self._start()
             if self._ready and self._began is None:
                 self._began = at  # (the first frame: now)
@@ -287,11 +297,13 @@ class VideoFeed:
         size = self.size[0] * self.size[1] * 4
         stream = process.stdout
         opaque = None  # (its first frame says: a video with transparency has it there)
+        whole = False  # (to its end, as asked: not a failure)
         try:
             while stream is not None:
                 data = stream.read(size)
-                if len(data) < size:
-                    break  # (it ended: a video it cannot read, or it was stopped)
+                if len(data) < size:  # (it ended: a video it cannot read, or it was stopped)
+                    whole = not data and not self.rounds and opaque is not None
+                    break
                 picture = Image.frombytes("RGBA", self.size, data)
                 if opaque is None:
                     opaque = picture.getchannel("A").getextrema()[0] == 255
@@ -313,7 +325,9 @@ class VideoFeed:
             with self._lock:
                 if self._process is process:
                     self._process = None
-                    if self.clock() - self._asked <= IDLE_S:  # it ended by itself
+                    if whole:
+                        self.ended = True
+                    elif self.clock() - self._asked <= IDLE_S:  # it ended by itself
                         self._failed = self.clock()
                         log.warning("video %s: ffmpeg stopped", self.name)
 
@@ -323,7 +337,7 @@ class VideoFeed:
             self._asked = -IDLE_S * 2
             self._newest = None  # (shown again, it begins with its first frame)
             self._ready.clear()
-            self._began = None
+            self._began, self.ended = None, False
             self._room.notify_all()
         if process is not None:
             process.kill()

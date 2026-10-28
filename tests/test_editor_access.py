@@ -143,6 +143,7 @@ def test_the_files_that_need_no_token_are_the_apps_own_and_a_few_pictures():
         "/api/backup/file",  # the backup to keep, a link in Settings → System
         "/api/across/picture",  # the picture across the panels, in Settings → Panel
         "/api/panels/photo",  # ... and the picture of all panels, a link that downloads it
+        "/api/player/picture",  # a picture of each file of the Player's library
     }
     assert all(route.method == "GET" and not route.public for route in ROUTES if route.picture)
     # another program's notice, with the notify key instead of the token (test_notify.py), and

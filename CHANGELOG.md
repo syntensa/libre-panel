@@ -3,6 +3,17 @@
 ## Unreleased
 
 **New**
+- **The Player** (a tab of its own in the app). Your videos, GIFs and pictures on a panel instead
+  of its theme, and the theme back when you stop. Drop files onto the library or add them with
+  *Add files…* (a video of gigabytes too: it is written as it comes), or put them into the
+  Player's folder yourself (*Open the folder*); each shows as a tile with a picture of it, and a
+  click plays the library from there. While it plays the app shows the panel's own picture,
+  where it stands with a slider that seeks, the one before, pause, the next and stop, and
+  chooses how it fills the panel (to the edges or whole), what comes after the last (from the
+  first, the same again, or the theme), how long a picture shows and a shuffled order; on
+  several panels at once where you have them. A video plays as smoothly as a theme's (each
+  frame at its moment, up to the panel's frames a second); notices and the alarm still go over
+  it. Ctrl+K knows *Play in the Player*, *The next in the Player* and *Stop the Player*.
 - **Videos straight to the panel** (an experiment, *Settings → Panel*, `[video] direct`). A
   theme that is one video alone across a TURZX panel in video mode goes to it from its file:
   ffmpeg reads and encodes it in one, with the frames' own encoder and settings, instead of

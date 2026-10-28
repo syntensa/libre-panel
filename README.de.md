@@ -454,7 +454,10 @@ Prozessor, Grafikkarte und Arbeitsspeicher findet Libre Panel selbst, und du kan
 eintippen. **Start** zeigt das Panel auf einen Blick und die Themes, die dafür gemacht sind, und
 sagt, wenn eine neue Version da ist, sofern du es nachsehen lässt. **Live** zeigt, wie es läuft,
 und mit eingeschaltetem Gedächtnis den **Verlauf**: Temperaturen, Last und Leistung über einen
-Tag, eine Woche oder einen Monat, dazu die gespielten Spiele. **Tastenkürzel** für den ganzen PC
+Tag, eine Woche oder einen Monat, dazu die gespielten Spiele. Der **Player** spielt deine
+Videos, GIFs und Bilder auf einem Panel statt seines Themes: hineinziehen, eines anklicken,
+anhalten, weiterspringen, spulen, immer wieder oder gemischt, und beim Stoppen kommt das Theme
+zurück. **Tastenkürzel** für den ganzen PC
 halten das Panel an, ändern seine Helligkeit oder öffnen die App aus jedem Fenster (Windows,
 Linux mit X11) und lassen sich als Ganzes ausschalten. Die App spricht Deutsch, Englisch,
 Französisch, Spanisch, Italienisch, Polnisch, Portugiesisch (Brasilien), Russisch, Japanisch

@@ -408,13 +408,13 @@ def test_the_shared_parts_have_names_rings_and_escape(app_url, isolated_home):  
         page.reload()
         page.wait_for_selector(".panel-canvas .preview")
         seen = []
-        for _ in range(10):
+        for _ in range(11):
             page.keyboard.press("Tab")
             focused = page.evaluate(FOCUSED)
             assert focused["ring"], focused
             seen.append(focused["text"].split("\n")[0])
-        assert seen[:7] == ["Libre Panel: start", "Lumen", "Start", "Design", "Look", "Live",
-                            "Search or command …"]  # fmt: skip
+        assert seen[:8] == ["Libre Panel: start", "Lumen", "Start", "Design", "Look", "Live",
+                            "Player", "Search or command …"]  # fmt: skip
         assert seen[-1] == "Settings"
         for opener, floating, root in (
             (".panel-chip", ".popover", ".popover"),

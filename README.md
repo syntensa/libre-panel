@@ -442,7 +442,9 @@ among themes, panels and building blocks, and Enter applies it to the whole pane
 graphics card and memory are found by themselves, and you can type your own. **Start** shows
 the panel at a glance and the themes made for it, and says when a new version is out if you let
 it look. **Live** shows how it runs, and with the memory on, the **history**: temperatures, load
-and power over a day, a week or a month, and the games you played.
+and power over a day, a week or a month, and the games you played. The **Player** plays your
+videos, GIFs and pictures on a panel instead of its theme: drop them in, click one, pause, skip,
+seek, round and round or shuffled, and the theme comes back when you stop.
 **Keyboard shortcuts** for the whole PC pause the panel, turn its brightness or open the app
 from any window (Windows, Linux with X11), and switch off as a whole. The app speaks English,
 German, French, Spanish, Italian, Polish, Portuguese (Brazil), Russian, Japanese and

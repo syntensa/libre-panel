@@ -21,6 +21,7 @@ from libre_panel import (
     i18n,
     identify,
     modes,
+    player,
     presence,
     timing,
     transition_show,
@@ -850,6 +851,8 @@ class MainLoop:
         self.blend: tuple[Any, Image.Image, float] | None = None  # a transition under way
         self.occasion = "manual"  # where the theme on show came from ([transitions])
         self.showing: transition_show.Show | None = None  # a transition shown to see it
+        self.player = player.Screen()  # what the player plays here (player.py), drawn
+        self.playing = False  # ... instead of the theme
         self.began_in: str | None = None  # the mode it began in
         self.shown_frame: Image.Image | None = None  # the last frame as it went out, toasts and all
         self.switches = host.switches if host is not None else 0  # mode changes with a transition
@@ -1425,8 +1428,16 @@ class MainLoop:
                 # the clock ticks between readings too, at the planned frame's time
                 snapshot.now = datetime.fromtimestamp(time.time() - (self.clock() - now))
                 drawing = self.clock()
-                frame, _ = renderer.render(snapshot, now)
-                frame = rendered = fit_frame(frame, size, background_of(renderer))
+                number = 1 if self.panel is None else self.panel + 2
+                playing = player.now(number)  # the app's Player: instead of the theme
+                if playing is not None:
+                    frame = rendered = self.player.frame(playing, size, renderer.fps)
+                else:
+                    frame, _ = renderer.render(snapshot, now)
+                    frame = rendered = fit_frame(frame, size, background_of(renderer))
+                if self.playing and playing is None:  # (it ended: ffmpeg stops)
+                    self.player.close()
+                self.playing = playing is not None
                 if blend is not None:
                     playing_kind = blend[0]
                     frame, blend = _blend(blend, frame, now)
@@ -1439,7 +1450,6 @@ class MainLoop:
                 self.alarm.follow(_alarm(snapshot), now)
                 frame = self.alarm.draw(frame, now, renderer.theme.palette.get("crit"),
                                         still=not renderer.animate)  # fmt: skip
-                number = 1 if self.panel is None else self.panel + 2
                 # the colour check's picture (Settings → Panel), its video made as its moment
                 # says: converted by the card or the processor ("feed"), or in which range
                 checking = colour_show.now(number) if streaming else None
@@ -1468,7 +1478,7 @@ class MainLoop:
                     # it (a notice, a transition, the alarm's edge would be a new picture), goes
                     # to the panel from its file; its frames are drawn only for the app's
                     # picture then, at a few a second
-                    whole = renderer.full_video if out is rendered else None
+                    whole = renderer.full_video if out is rendered and not self.playing else None
                     direct = (
                         bool(whole)
                         and config.device.video.direct
@@ -1546,7 +1556,8 @@ class MainLoop:
         # While something glides, draw at full fps; otherwise wake for the next
         # reading, but at least twice a second so a seconds clock never skips.
         interval = 1 / _fps(config, host, self.display)
-        if not (renderer.moving or blend is not None or toasts.active or self.showing):
+        if not (renderer.moving or blend is not None or toasts.active or self.showing
+                or self.playing):  # fmt: skip
             interval = max(interval, min(0.5, next_sample - started))
         return max(0.0, interval - (self.clock() - started))
 
@@ -1582,6 +1593,7 @@ class MainLoop:
         self.warmup.close()
         self._ahead.close()
         self.renderer.close()
+        self.player.close()
         self.hub.close()
 
 

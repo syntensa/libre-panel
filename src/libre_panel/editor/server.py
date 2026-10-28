@@ -113,6 +113,9 @@ APP_DIR = Path(__file__).resolve().parent / "app"  # the app: shell, views, vend
 MAX_JSON = 2 * 1024 * 1024
 MAX_ASSET = 10 * 1024 * 1024
 MAX_VIDEO = 64 * 1024 * 1024  # a video for an image widget (render/moving.py)
+MAX_MEDIA = 32 * 2**30  # a file for the Player (player.py), written as it comes
+PLAYER_ACTIONS = ("play", "pause", "resume", "toggle", "next", "previous", "seek", "set", "stop",
+                  "remove", "folder")  # fmt: skip
 VIDEO_EXTENSIONS = {".mp4", ".webm", ".mov", ".m4v", ".mkv"}
 ASSET_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ttf", ".otf", *VIDEO_EXTENSIONS}
 # Parts of the language catalog the editor needs.
@@ -1845,6 +1848,165 @@ class EditorHandler(BaseHTTPRequestHandler):
             follow()
         self._json({"across": name, "stamp": (folder / name).stat().st_mtime_ns})
 
+    # -- the Player (player.py) ------------------------------------------------------------
+
+    def _player(self) -> None:
+        """``GET /api/player``: the library (the videos and pictures of its folder), what plays,
+        the panels it can play on, and whether the running app is there to play them."""
+        from dataclasses import asdict
+
+        from libre_panel import player
+
+        self._json({
+            "available": self.controls is not None,
+            "folder": str(player.folder()),
+            "library": [asdict(found) for found in player.library()],
+            "playing": player.status(),
+            "panels": self._player_panels(),
+            "ffmpeg": player.has_ffmpeg(),
+            "fits": list(player.FITS),
+            "loops": list(player.LOOPS),
+        })  # fmt: skip
+
+    def _player_panels(self) -> list[dict[str, Any]]:
+        """The panels to play on: ``{number, name}``, 1 the first, then [[panels]] that are on."""
+        from libre_panel.devices.models import find_model
+
+        try:
+            config = load_config(self.state.config_path)
+        except ConfigError:
+            return [{"number": 1, "name": ""}]
+        status = getattr(getattr(self.controls, "panel", None), "status", None)
+        model = find_model(config.device.model) or find_model(getattr(status, "model", "") or "")
+        panels = [{"number": 1, "name": model.label if model is not None else ""}]
+        for n, panel in enumerate(config.panels):
+            if panel.on:
+                beside = find_model(panel.device.model)
+                panels.append({"number": n + 2, "name": beside.label if beside else ""})
+        return panels
+
+    def _player_picture(self, query: dict[str, list[str]]) -> None:
+        """``GET /api/player/picture?name=...&w=320``: a picture of a file of the library."""
+        from libre_panel import player
+
+        name = (query.get("name") or [""])[0]
+        try:
+            width = int((query.get("w") or ["320"])[0])
+        except ValueError:
+            return self._error("w: expected a whole number")
+        data = player.thumbnail(name, width)
+        if data is None:
+            return self._error(t("no picture of it"), HTTPStatus.NOT_FOUND)
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _player_action(self) -> None:
+        """``POST /api/player {"action": ...}``: play the library's ``names`` on ``panels`` from
+        ``start`` ("play", with ``fit``, ``loop``, ``shuffle``, ``picture_s``), "pause",
+        "resume", "toggle", "next", "previous", "seek" (``seconds``), "set" (``fit``, ``loop``,
+        ``shuffle``, ``picture_s``), "stop"; "remove" a file (``name``), open the "folder".
+        The answer is :meth:`_player`'s."""
+        from libre_panel import player
+
+        payload = self._read_json()
+        if payload is None:
+            return
+        if not isinstance(payload, dict):
+            return self._error('expected {"action": ...}')
+        action = payload.get("action")
+        try:
+            if action == "play":
+                if self.controls is None:
+                    return self._error(t("the Player plays on the panels of the running app"),
+                                       HTTPStatus.CONFLICT)  # fmt: skip
+                names = payload.get("names")
+                if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
+                    return self._error('names: expected ["file.mp4", ...]')
+                panels = payload.get("panels", [1])
+                if not isinstance(panels, list) or not all(
+                    isinstance(n, int) and not isinstance(n, bool) for n in panels
+                ):
+                    return self._error("panels: expected [1, ...]")
+                player.play(names, panels, start=payload.get("start"),
+                            fit=payload.get("fit", "cover"), loop=payload.get("loop", "all"),
+                            shuffle=bool(payload.get("shuffle", False)),
+                            picture_s=payload.get("picture_s", player.PICTURE_S))  # fmt: skip
+            elif action in ("pause", "resume", "toggle", "next", "previous", "stop"):
+                {"pause": player.pause, "resume": player.resume, "toggle": player.toggle,
+                 "next": player.next_item, "previous": player.previous_item,
+                 "stop": player.stop}[action]()  # fmt: skip
+            elif action == "seek":
+                seconds = payload.get("seconds")
+                if isinstance(seconds, bool) or not isinstance(seconds, (int, float)):
+                    return self._error("seconds: expected a number")
+                player.seek(float(seconds))
+            elif action == "set":
+                player.configure(fit=payload.get("fit"), loop=payload.get("loop"),
+                                 shuffle=payload.get("shuffle"),
+                                 picture_s=payload.get("picture_s"))  # fmt: skip
+            elif action == "remove":
+                player.remove(payload.get("name"))
+            elif action == "folder":
+                from libre_panel.tray import open_path
+
+                where = player.folder()
+                where.mkdir(parents=True, exist_ok=True)
+                open_path(where)
+            else:
+                return self._error(f"action: one of {', '.join(PLAYER_ACTIONS)}")
+        except player.PlayerError as exc:
+            return self._error(str(exc))
+        self._player()
+
+    def _player_upload(self, query: dict[str, list[str]]) -> None:
+        """``POST /api/player/media?name=clip.mp4`` with the file: into the library, written as
+        it comes (a video of gigabytes too) and put in place once it is whole."""
+        from libre_panel import player
+
+        name = (query.get("name") or [""])[0]
+        if not player.valid_name(name):
+            return self._error(t("{name}: a video or a picture with a name of its own",
+                                 name=name[:80]))  # fmt: skip
+        try:
+            length = int(self.headers.get("Content-Length", "-1"))
+        except ValueError:
+            length = -1
+        if length < 0 or length > MAX_MEDIA:
+            return self._error(t("a file of {gb} GB at most", gb=MAX_MEDIA // 2**30),
+                               HTTPStatus.REQUEST_ENTITY_TOO_LARGE)  # fmt: skip
+        where = player.folder()
+        part = where / f".{name}.part"
+        try:
+            where.mkdir(parents=True, exist_ok=True)
+            import shutil
+
+            if shutil.disk_usage(where).free < length + 64 * 2**20:
+                return self._error(t("not enough room on the disk for it"),
+                                   HTTPStatus.INSUFFICIENT_STORAGE)  # fmt: skip
+            self._body_read = True
+            left = length
+            with part.open("wb") as out:
+                while left > 0:
+                    chunk = self.rfile.read(min(left, 2**20))
+                    if not chunk:
+                        raise OSError("the upload ended before the file did")
+                    out.write(chunk)
+                    left -= len(chunk)
+            os.replace(part, where / name)
+        except OSError as exc:
+            part.unlink(missing_ok=True)
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        found = player.info(where / name)
+        if found is None:
+            (where / name).unlink(missing_ok=True)
+            return self._error(t("{name} is no video or picture that can be played", name=name))
+        log.info("player: %s added (%d MB)", name, length // 2**20)
+        self._player()
+
     def _panels_photo(self) -> None:
         """``GET /api/panels/photo``: one picture of all panels that are on, where they stand
         (Settings → Panels), each with what it shows now, to keep or share."""
@@ -2794,6 +2956,13 @@ ROUTES: tuple[Route, ...] = (
     Route("GET", "/api/logs", lambda h, m, u: h._logs(parse_qs(u.query))),
     Route("GET", "/api/experiment", lambda h, m, u: h._experiment()),
     Route("GET", "/api/colour-check", lambda h, m, u: h._colour_check(parse_qs(u.query))),
+    Route("GET", "/api/player", lambda h, m, u: h._player()),
+    Route(
+        "GET",
+        "/api/player/picture",
+        lambda h, m, u: h._player_picture(parse_qs(u.query)),
+        picture=True,
+    ),
     Route("GET", "/api/logs/file", lambda h, m, u: h._logs_file(), picture=True),
     Route("GET", "/api/hardware", lambda h, m, u: h._hardware(_refresh_asked(u.query))),
     Route("GET", "/api/fan-look", lambda h, m, u: h._fan_look(parse_qs(u.query)), picture=True),
@@ -2839,6 +3008,8 @@ ROUTES: tuple[Route, ...] = (
     Route("POST", "/api/logs", lambda h, m, u: h._logs_action()),
     Route("POST", "/api/experiment", lambda h, m, u: h._experiment_action()),
     Route("POST", "/api/colour-check", lambda h, m, u: h._colour_check_action()),
+    Route("POST", "/api/player", lambda h, m, u: h._player_action()),
+    Route("POST", "/api/player/media", lambda h, m, u: h._player_upload(parse_qs(u.query))),
     Route("POST", "/api/language", lambda h, m, u: h._set_language()),
     Route("POST", "/api/pages", lambda h, m, u: h._set_panel_page()),
     Route("POST", "/api/sequence", lambda h, m, u: h._set_sequence()),

@@ -75,6 +75,39 @@ function refused(error) {
   store.set((state) => ({ app: { ...state.app, gone: true, refused: error.message } }));
 }
 
+/** A file sent as it is, saying how far it is (``onProgress(share)``, 0 to 1): as `api`, but
+ * through XMLHttpRequest, which tells that (fetch does not). */
+export function sendFile(url, file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("POST", url);
+    for (const [name, value] of Object.entries(authHeaders())) request.setRequestHeader(name, value);
+    request.setRequestHeader("Content-Type", "application/octet-stream");
+    request.upload.addEventListener("progress", (event) => {
+      if (event.lengthComputable) onProgress?.(event.loaded / event.total);
+    });
+    request.addEventListener("load", () => {
+      let data = {};
+      try {
+        data = JSON.parse(request.responseText || "{}");
+      } catch {
+        data = { error: request.statusText };
+      }
+      if (request.status >= 200 && request.status < 300) return resolve(data);
+      const error = new Error(readable(data.error || request.statusText || String(request.status), request.status));
+      error.status = request.status;
+      if (data.reason === "token") refused(error);
+      return reject(error);
+    });
+    request.addEventListener("error", () => {
+      const error = new Error(t("Libre Panel does not answer."));
+      error.status = 0;
+      reject(error);
+    });
+    request.send(file);
+  });
+}
+
 export const get = (url, options) => api("GET", url, undefined, options);
 export const post = (url, body, options) => api("POST", url, body ?? {}, options);
 
@@ -140,6 +173,10 @@ export const endpoints = {
   experiment: () => get("/api/experiment"),
   experimentAction: (action) => post("/api/experiment", { action }),
   // Settings → Panel → Check the colours, for panel ``panel`` (1: the first; editor/colours.py)
+  // the Player (player.py): its library and what plays, a change of that, a file into it
+  player: () => get("/api/player"),
+  playerAction: (body) => post("/api/player", body),
+  playerUpload: (name, file, onProgress) => sendFile(`/api/player/media?name=${enc(name)}`, file, onProgress),
   colourCheck: (panel = 1) => get(`/api/colour-check?panel=${panel}`),
   colourCheckAction: (action, panel = 1) => post("/api/colour-check", { action, panel }),
   setDetailedLog: (verbose) => post("/api/logs", { verbose }),
