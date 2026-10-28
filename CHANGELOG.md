@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.7.4 — 2026-10-28
+
+What Claude Code and Codex do comes up on Lumen by itself: while one works or waits for you,
+the AI activity card rolls into the card slot, and which cards the slot shows is chosen right on
+Start. Claude Code's sessions in the cloud reach the panel too; the AI card and the Agents
+screens give the one that runs the whole card, on the 8.8", 9.2" and 12.3" alike, and say what
+its session is called, contributed by @srenner06.
+
+![Lumen on a 1920x480 bar with nothing playing: the weather card, until Claude Code sets to work; then the AI activity card rolls down out of a line of light, with the session, the tool at work and the plan's limits, until Claude Code waits for you](https://raw.githubusercontent.com/syntensa/libre-panel/a193f5742eebd5f6be928ff13b07462e4a6be9ef/docs/media/ai-card.gif)
+
+![The Agents screen on a 1920x480 bar: Claude Code and Codex side by side, each sign moving while it works or waits for you, the tools at work changing, Claude Code's session under them](https://raw.githubusercontent.com/syntensa/libre-panel/a193f5742eebd5f6be928ff13b07462e4a6be9ef/docs/media/agents.gif)
 
 **New**
 - **What the AI does comes up on Lumen by itself.** While Claude Code or Codex works or waits
