@@ -498,6 +498,36 @@ def test_each_system_has_its_backend(winrt, monkeypatch):
         media._backend()
 
 
+def test_the_source_says_how_it_reads_what_plays_or_why_it_cannot(monkeypatch):
+    """Settings → Sensors and `libre-panel sensors` show it: playerctl, busctl or Windows'
+    media controls, or what is missing (a Linux with neither: a problem of the source)."""
+    made = media.MediaProvider()
+    assert made.status() == {"read with": None, "now": None, "error": None}  # (not asked yet)
+
+    def missing():
+        raise RuntimeError("neither playerctl nor busctl is installed")
+
+    monkeypatch.setattr(media.sys, "platform", "linux")
+    monkeypatch.setattr(media, "_backend", missing)
+    made._run()
+    assert made.status()["error"] == "neither playerctl nor busctl is installed"
+
+    async def done(backend):
+        return None
+
+    monkeypatch.setattr(
+        media, "_backend", lambda: media._BusctlBackend.__new__(media._BusctlBackend)
+    )
+    monkeypatch.setattr(made, "_loop", done)
+    made._run()
+    made._track = media.Track("playing", "Song", "Band")
+    said = made.status()
+    assert (
+        said["read with"].startswith("busctl") and "playerctl is not installed" in said["read with"]
+    )
+    assert said["now"] == "playing: Song" and said["error"] is None
+
+
 # -- a new cover with its title, in the frame that brings it ---------------------------------------
 
 

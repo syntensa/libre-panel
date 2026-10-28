@@ -14,6 +14,14 @@
   at full since 0.7.5, through cold starts and sleep. Settings → Panel no longer says it has not
   been seen on the hardware.
 
+**Diagnosis**
+- **Music says how it reads what plays.** The music source tells under *Settings → Sensors*
+  (and the console's sources) whether it reads with playerctl, straight from D-Bus with busctl,
+  or Windows' media controls, and what plays; on a Linux with neither, the overview shows it as
+  a problem of the source instead of an empty music card without a word.
+- **The 2.8" USB display's panel test** notes that its backlight is set on its card, not over
+  USB, with where the script for it is.
+
 **Community themes**
 - **The one who shares a theme is its commit's author.** The workflow commits a shared theme in
   the name of who opened the issue (by their GitHub noreply address), so once merged they show

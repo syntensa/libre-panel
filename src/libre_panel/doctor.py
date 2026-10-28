@@ -785,6 +785,10 @@ class Doctor:
             "brightness (command 14)" if usb else "brightness",
             "Did the panel go dark and then bright?",
         )
+        if model.protocol == "usb-udisp":  # (Waveshare's USB display: #33)
+            self._step("backlight", "info", "not set over USB: the brightness dims the picture. "
+                       "The backlight is set on the display's card, at full by the script in "
+                       "docs/HARDWARE.md (Waveshare USB Monitor)")  # fmt: skip
 
         w, h = model.size("landscape")
         cards = [

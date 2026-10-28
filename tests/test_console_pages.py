@@ -587,9 +587,13 @@ def test_a_source_that_says_how_it_is_read_is_explained(running):
         "service": "", "version": "",
     }  # fmt: skip
     # (on Windows the configured LibreHardwareMonitor is there as well, and says its own; on Linux
-    # the source of the kernel's chips says what it found; the others say nothing)
-    tells = {"librehardwaremonitor", "linux"}
+    # the source of the kernel's chips says what it found; music says how it reads what plays,
+    # once asked; the others say nothing)
+    tells = {"librehardwaremonitor", "linux", "media"}
     assert all(s["status"] is None for s in sources if s["name"] not in tells)
+    for source in [s for s in sources if s["name"] == "media"]:  # (nothing plays here)
+        assert source["details"] == [] or source["details"][0][0] == "read with"
+        assert source["problem"] is bool(source["status"]["error"])
     kernel = [s for s in sources if s["name"] == "linux"]
     assert bool(kernel) is sys.platform.startswith("linux")  # (it is in the default list there)
     for source in kernel:  # (no chips here: the numbers are there, what is missing is left out)

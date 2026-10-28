@@ -133,6 +133,7 @@ class _WindowsBackend:
     """
 
     MANAGER_EVENTS = ("current_session_changed",)
+    via = "Windows media controls"  # (how it reads, for the source's status)
     SESSION_EVENTS = ("media_properties_changed", "playback_info_changed",
                       "timeline_properties_changed")  # fmt: skip
     TIMELINE = "timeline_properties_changed"
@@ -366,6 +367,8 @@ def parse_playerctl(text: str, at: float) -> Track | None:
 
 
 class _PlayerctlBackend:
+    via = "playerctl"
+
     def __init__(self) -> None:
         self.command = shutil.which("playerctl")
         if self.command is None:
@@ -432,6 +435,8 @@ def parse_mpris(reply: Any, name: str, at: float) -> Track | None:
 class _BusctlBackend:
     """MPRIS players straight from the session's D-Bus, with systemd's ``busctl``: for a Linux
     without ``playerctl`` (#33). The one that plays, else one that is paused."""
+
+    via = "busctl (MPRIS on D-Bus; playerctl is not installed)"
 
     def __init__(self) -> None:
         self.command = shutil.which("busctl")
@@ -531,6 +536,8 @@ class MediaProvider(SensorProvider):
         self._stop = threading.Event()
         self._lock = threading.Lock()
         self._warned = False
+        self._via = ""  # how what plays is read, once it is
+        self._problem = ""  # why it cannot be read
 
     def _start(self) -> None:
         with self._lock:
@@ -543,11 +550,13 @@ class MediaProvider(SensorProvider):
         try:
             backend = _backend()
         except Exception as exc:  # noqa: BLE001
+            hint = ' (pip install "libre-panel[media]")' if sys.platform == "win32" else ""
+            self._problem = f"{exc}{hint}"
             if not self._warned:
-                hint = ' (pip install "libre-panel[media]")' if sys.platform == "win32" else ""
-                log.warning("media: what is playing cannot be read: %s%s", exc, hint)
+                log.warning("media: what is playing cannot be read: %s", self._problem)
                 self._warned = True
             return
+        self._via, self._problem = getattr(backend, "via", type(backend).__name__), ""
         asyncio.run(self._loop(backend))
 
     async def _loop(self, backend: Any) -> None:
@@ -652,6 +661,17 @@ class MediaProvider(SensorProvider):
         with self._lock:
             track = self._track
         return track.readings(time.monotonic()) if track else {}
+
+    def status(self) -> dict[str, Any]:
+        """How what plays is read and what plays, or why it cannot be read (the app's Sensors
+        page and ``libre-panel sensors``); nothing before a theme or a service asks."""
+        with self._lock:
+            track = self._track
+        return {
+            "read with": self._via or None,
+            "now": f"{track.state}: {track.title}" if track is not None and track.title else None,
+            "error": self._problem or None,
+        }
 
     def images(self) -> dict[str, Any]:
         with self._lock:

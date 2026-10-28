@@ -347,6 +347,7 @@ def test_the_panel_test_tries_the_other_jpeg_where_the_card_stays_black(bus):
     )
     assert load_config(config_dir() / "config.toml").device.jpeg == "4:2:0"
     assert not display.black() and "JPEG 4:2:0" in text  # (on with it: the speed in it too)
+    assert "[INFO] backlight\n       not set over USB" in text  # (its card sets it, #33)
 
 
 def test_the_panel_test_keeps_the_jpeg_where_the_other_shows_nothing_either(bus):
@@ -404,4 +405,6 @@ def test_the_model():
     model = get_model("waveshare-2.8-udisp")
     assert models_for_usb(0x303A, 0x2986) == [model]
     assert model.size("landscape") == (480, 480) and model.shape == "round"
-    assert model.driver == "unverified" and "udisp" in model.limits
+    # verified on an owner's desk (#30, #33): no "not yet seen", what it needs and its backlight
+    assert model.driver == "supported" and "udisp" in model.limits
+    assert not model.limits.startswith("Not yet seen") and "backlight" in model.limits
