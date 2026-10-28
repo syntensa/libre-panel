@@ -10,6 +10,12 @@
   Waveshare's 2.8", shows them at their own pace; *Design → Pictures* takes videos too (up to
   64 MB) and shows them, and a theme carries them when shared.
 
+**Changes**
+- **The 2.8"'s backlight at full** (#33). Its card image starts the backlight below full, and
+  nothing over USB sets it. The hardware guide now has a small script for the card that sets it
+  as soon as the display driver takes it and again every 10 seconds, with the steps to put it
+  on the card ([Hardware](docs/HARDWARE.md#the-28s-backlight-at-full)).
+
 ## 0.7.5 — 2026-10-28
 
 Waveshare's 2.8" as a USB display shows its picture upright and takes a change of the

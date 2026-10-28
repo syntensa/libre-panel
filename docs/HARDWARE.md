@@ -382,7 +382,8 @@ do with it then.
   switched it on before 0.7.5).
 - No command for the backlight is known, so the brightness goes into the picture: 100 % is as
   bright as the display's card image sets its backlight, and less is darker. A change shows at
-  once.
+  once. The card image starts the backlight below full; on the card itself it can be set to
+  full ([below](#the-28s-backlight-at-full)), and Libre Panel's brightness then dims from there.
 - Close any other program that drives the display first.
 - **Linux:** *Settings → Sensors → Set up sensors and panel access* gives your user the display,
   as it does the other panels. **Windows:** the display brings no driver of its own; it needs
@@ -390,6 +391,51 @@ do with it then.
 - Going back to the themes on the card means writing Waveshare's own card image (or a backup of
   the card) again.
 - The protocol: [udisp](protocol/udisp.md).
+
+#### The 2.8"'s backlight at full
+
+The card image's own start (`/etc/init.d/qt_app`, which starts `showJPG`) leaves the backlight
+below full, and nothing over USB sets it. On the card, the display driver's debug interface does
+(`/sys/kernel/debug/dispdbg`: `lcd0`, `setbl`, 0 to 255; found by the makers of CluView, #33).
+Set once at the start, it is sometimes too early for the driver and does nothing; this small
+script sets it as soon as the driver takes it, and again every 10 seconds. With the display
+unplugged, put its card into a card reader of a Linux PC, find the card's partition 5, the one
+called *rootfs* (`lsblk`; `/dev/sdf5` below), and run these one after the other: the lines
+from `sudo tee` to `SCRIPT` are one command, pasted at once. The card is opened in a folder of
+its own, as one opened on `/mnt` itself would hide what else is mounted there.
+
+```sh
+sudo mkdir -p /mnt/sdcard
+sudo mount /dev/sdf5 /mnt/sdcard
+sudo test -e /mnt/sdcard/etc/init.d/qt_app.orig || sudo cp /mnt/sdcard/etc/init.d/qt_app /mnt/sdcard/etc/init.d/qt_app.orig
+sudo tee /mnt/sdcard/usr/bin/libre-panel-backlight > /dev/null <<'SCRIPT'
+#!/bin/sh
+# Libre Panel: the backlight of Waveshare's 2.8" (lcd0, 0 to 255), set as soon as the display
+# driver takes it, and again every 10 seconds in case something sets it back. Started in the
+# background by /etc/init.d/qt_app before showJPG. Libre Panel dims the picture itself.
+LEVEL=${1:-255}
+D=${DISPDBG:-/sys/kernel/debug/dispdbg}
+n=0
+while :; do
+  [ -e "$D/name" ] || mount -t debugfs none /sys/kernel/debug 2>/dev/null
+  if [ -e "$D/name" ]; then
+    echo lcd0 > "$D/name" && echo setbl > "$D/command" && echo "$LEVEL" > "$D/param" \
+      && echo 1 > "$D/start"
+  fi
+  n=$((n + 1))
+  if [ "$n" -lt 30 ]; then sleep 1; else sleep 10; fi
+done
+SCRIPT
+sudo chmod 755 /mnt/sdcard/usr/bin/libre-panel-backlight
+grep -q libre-panel-backlight /mnt/sdcard/etc/init.d/qt_app || sudo sed -i '/dispdbg/d; s#^    /usr/bin/showJPG#    /usr/bin/libre-panel-backlight \&\n    /usr/bin/showJPG#' /mnt/sdcard/etc/init.d/qt_app
+grep -nE "backlight|dispdbg|showJPG" /mnt/sdcard/etc/init.d/qt_app
+sync; sudo umount /mnt/sdcard
+```
+
+The `grep` shows `/usr/bin/libre-panel-backlight &` on the line before `/usr/bin/showJPG`.
+`/usr/bin/libre-panel-backlight 180 &` in `qt_app` sets a lower level; `qt_app.orig` is the
+start as it was (copy it back over `qt_app` to undo). An earlier one-off `dispdbg` line in
+`qt_app` is replaced.
 
 ## Setup per operating system
 
