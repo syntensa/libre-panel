@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+**New**
+- **Animated GIFs and videos in themes** (#33). A picture element plays an animated GIF (or
+  WebP, or PNG) frame by frame, each as long as it says, and a video (MP4, WebM, MOV, MKV)
+  through ffmpeg, which the downloads carry: both round and round, fitted, rounded and blurred
+  as the element says. A panel that is sent every frame, in video mode or as a USB display as
+  Waveshare's 2.8", shows them at their own pace; *Design → Pictures* takes videos too (up to
+  64 MB) and shows them, and a theme carries them when shared.
+
 ## 0.7.5 — 2026-10-28
 
 Waveshare's 2.8" as a USB display shows its picture upright and takes a change of the

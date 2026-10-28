@@ -99,7 +99,7 @@ export function AssetControl({ value, onChange }) {
     <${Select} value=${value || ""} options=${options} onChange=${onChange} label=${t("Picture")} />
     <button type="button" class="btn btn-quiet square" title=${t("Upload a picture…")} aria-label=${t("Upload a picture…")}
       onClick=${async () => {
-        const path = await uploadAsset(".png,.jpg,.jpeg,.gif,.webp");
+        const path = await uploadAsset(".png,.jpg,.jpeg,.gif,.webp,.mp4,.webm,.mov,.m4v,.mkv");
         if (path) {
           onChange(path);
           refreshAssets();

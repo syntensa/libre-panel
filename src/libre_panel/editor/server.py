@@ -112,7 +112,9 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 APP_DIR = Path(__file__).resolve().parent / "app"  # the app: shell, views, vendored libraries
 MAX_JSON = 2 * 1024 * 1024
 MAX_ASSET = 10 * 1024 * 1024
-ASSET_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ttf", ".otf"}
+MAX_VIDEO = 64 * 1024 * 1024  # a video for an image widget (render/moving.py)
+VIDEO_EXTENSIONS = {".mp4", ".webm", ".mov", ".m4v", ".mkv"}
+ASSET_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ttf", ".otf", *VIDEO_EXTENSIONS}
 # Parts of the language catalog the editor needs.
 _EDITOR_TABLES = ("messages", "fields", "widgets", "enums", "icons")
 # Readings of sources that work on demand: a running panel has none of them until a theme (or a
@@ -199,6 +201,11 @@ _ASSET_TYPES = {
     ".webp": "image/webp",
     ".ttf": "font/ttf",
     ".otf": "font/otf",
+    ".mp4": "video/mp4",
+    ".m4v": "video/mp4",
+    ".mov": "video/quicktime",
+    ".webm": "video/webm",
+    ".mkv": "video/x-matroska",
 }
 # A page of the panel: "normal", "report" or a mode ([modes.<name>] in config.toml).
 _MODE_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
@@ -2673,7 +2680,8 @@ class EditorHandler(BaseHTTPRequestHandler):
         folder = user_themes_dir() / theme_id
         if not (folder / "theme.json").is_file():
             return self._error("save the theme before adding images or fonts")
-        body = self._read_body(MAX_ASSET)
+        video = Path(name).suffix.lower() in VIDEO_EXTENSIONS
+        body = self._read_body(MAX_VIDEO if video else MAX_ASSET)
         if body is None:
             return
         target = folder / "assets" / name

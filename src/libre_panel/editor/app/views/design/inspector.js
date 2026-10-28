@@ -619,7 +619,7 @@ function ModuleInspector({ widget }) {
               <${TextField} multiline rows=${3} mono label=${t("Pictures")} value=${widget.items}
                 placeholder=${["assets/photo.jpg", "assets/*.jpg"].join("\n")} onChange=${change("items")} />
               <button type="button" class="btn btn-quiet" onClick=${async () => {
-                const path = await uploadAsset(".png,.jpg,.jpeg,.gif,.webp");
+                const path = await uploadAsset(".png,.jpg,.jpeg,.gif,.webp,.mp4,.webm,.mov,.m4v,.mkv");
                 if (path) change("items")([widget.items, path].filter(Boolean).join("\n"));
               }}><${Icon} name="upload" size=${14} /> ${t("Add a picture…")}</button>
             <//>`

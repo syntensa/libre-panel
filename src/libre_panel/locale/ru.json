@@ -2523,7 +2523,6 @@
     "“{name}” in the .zip is locked with a password: nothing was imported.": "«{name}» в .zip защищён паролем: ничего не импортировано.",
     "“{name}” in the .zip leaves the theme's folder or names a whole path: nothing was imported.": "«{name}» в .zip выходит за пределы папки темы или задаёт полный путь: ничего не импортировано.",
     "“{name}” is added to your themes": "«{name}» добавлена к вашим темам",
-    "“{name}” is not a file a theme carries (theme.json, pictures: PNG, JPEG, GIF, WebP, fonts: TTF, OTF): nothing was imported.": "«{name}» — не тот файл, который содержит тема (theme.json, изображения: PNG, JPEG, GIF, WebP, шрифты: TTF, OTF): ничего не импортировано.",
     "“{name}” is not the picture or font its name says: nothing was imported.": "«{name}» — не то изображение или шрифт, каким его называет имя: ничего не импортировано.",
     "Checking the download …": "Проверка загрузки …",
     "Downloaded and checked against the release's checksums.": "Загружено и сверено с контрольными суммами релиза.",
@@ -2840,7 +2839,9 @@
     "Setup script: add the script below.": "Скрипт настройки: добавьте скрипт ниже.",
     "Show the setup script": "Показать скрипт настройки",
     "Start a session in it: it reports from then on.": "Запустите в ней сеанс: с этого момента он сообщает о себе.",
-    "The relay at {domain} passes on whether a session works, waits for you or is done, and what it is called where that is on; never a prompt or a file. Its address is a secret: whoever knows it can read along. ntfy.sh passes some 250 messages a day.": "Ретранслятор на {domain} передаёт, работает ли сеанс, ждёт ли вас или завершён, и как он называется, если это включено; никогда не запрос и не файл. Его адрес — секрет: кто его знает, может читать. ntfy.sh передаёт около 250 сообщений в день."
+    "The relay at {domain} passes on whether a session works, waits for you or is done, and what it is called where that is on; never a prompt or a file. Its address is a secret: whoever knows it can read along. ntfy.sh passes some 250 messages a day.": "Ретранслятор на {domain} передаёт, работает ли сеанс, ждёт ли вас или завершён, и как он называется, если это включено; никогда не запрос и не файл. Его адрес — секрет: кто его знает, может читать. ntfy.sh передаёт около 250 сообщений в день.",
+    "An animated GIF moves, and so does a video (MP4, WebM, MOV): round and round, on a panel that is sent every frame at full speed.": "Анимированный GIF движется, и видео (MP4, WebM, MOV) тоже: по кругу, а на панели, получающей каждый кадр, — на полной скорости.",
+    "“{name}” is not a file a theme carries (theme.json, pictures: PNG, JPEG, GIF, WebP, videos: MP4, WebM, MOV, fonts: TTF, OTF): nothing was imported.": "«{name}» — не файл, который несёт тема (theme.json, изображения: PNG, JPEG, GIF, WebP, видео: MP4, WebM, MOV, шрифты: TTF, OTF): ничего не импортировано."
   },
   "fields": {
     "agent": "агент",

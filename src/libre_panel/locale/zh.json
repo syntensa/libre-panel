@@ -2522,7 +2522,6 @@
     "“{name}” in the .zip is locked with a password: nothing was imported.": ".zip 中的“{name}”受密码保护：未导入任何内容。",
     "“{name}” in the .zip leaves the theme's folder or names a whole path: nothing was imported.": ".zip 中的“{name}”超出了主题文件夹，或是一个完整路径：未导入任何内容。",
     "“{name}” is added to your themes": "“{name}”已添加到你的主题",
-    "“{name}” is not a file a theme carries (theme.json, pictures: PNG, JPEG, GIF, WebP, fonts: TTF, OTF): nothing was imported.": "“{name}”不是主题会包含的文件（theme.json、图片：PNG、JPEG、GIF、WebP，字体：TTF、OTF）：未导入任何内容。",
     "“{name}” is not the picture or font its name says: nothing was imported.": "“{name}”并不是其名称所示的图片或字体：未导入任何内容。",
     "Checking the download …": "正在校验下载…",
     "Downloaded and checked against the release's checksums.": "已下载，并已按该版本的校验和核对。",
@@ -2840,7 +2839,9 @@
     "Setup script: add the script below.": "设置脚本：添加下面的脚本。",
     "Show the setup script": "显示设置脚本",
     "Start a session in it: it reports from then on.": "在其中开始一个会话：从那时起它就会报告。",
-    "The relay at {domain} passes on whether a session works, waits for you or is done, and what it is called where that is on; never a prompt or a file. Its address is a secret: whoever knows it can read along. ntfy.sh passes some 250 messages a day.": "{domain} 上的中继只转发会话是在工作、在等你还是已完成，以及在开启时它的名称；从不转发提示或文件。它的地址是机密：知道地址的人都能读取。ntfy.sh 每天约转发 250 条消息。"
+    "The relay at {domain} passes on whether a session works, waits for you or is done, and what it is called where that is on; never a prompt or a file. Its address is a secret: whoever knows it can read along. ntfy.sh passes some 250 messages a day.": "{domain} 上的中继只转发会话是在工作、在等你还是已完成，以及在开启时它的名称；从不转发提示或文件。它的地址是机密：知道地址的人都能读取。ntfy.sh 每天约转发 250 条消息。",
+    "An animated GIF moves, and so does a video (MP4, WebM, MOV): round and round, on a panel that is sent every frame at full speed.": "动态 GIF 会动，视频（MP4、WebM、MOV）也会：循环播放；在逐帧接收画面的面板上全速播放。",
+    "“{name}” is not a file a theme carries (theme.json, pictures: PNG, JPEG, GIF, WebP, videos: MP4, WebM, MOV, fonts: TTF, OTF): nothing was imported.": "“{name}”不是主题会带的文件（theme.json，图片：PNG、JPEG、GIF、WebP，视频：MP4、WebM、MOV，字体：TTF、OTF）：未导入任何内容。"
   },
   "fields": {
     "agent": "智能体",

@@ -2523,7 +2523,6 @@
     "“{name}” in the .zip is locked with a password: nothing was imported.": ".zip内の「{name}」はパスワードで保護されています。何もインポートされませんでした。",
     "“{name}” in the .zip leaves the theme's folder or names a whole path: nothing was imported.": ".zip内の「{name}」はテーマのフォルダーの外を指しているか、完全なパスを指定しています。何もインポートされませんでした。",
     "“{name}” is added to your themes": "「{name}」をテーマに追加しました",
-    "“{name}” is not a file a theme carries (theme.json, pictures: PNG, JPEG, GIF, WebP, fonts: TTF, OTF): nothing was imported.": "「{name}」はテーマに含められるファイルではありません（theme.json、画像：PNG・JPEG・GIF・WebP、フォント：TTF・OTF）。何もインポートされませんでした。",
     "“{name}” is not the picture or font its name says: nothing was imported.": "「{name}」は、名前が示すような画像またはフォントではありません。何もインポートされませんでした。",
     "Checking the download …": "ダウンロードを確認中…",
     "Downloaded and checked against the release's checksums.": "ダウンロードが完了し、リリースのチェックサムで検証しました。",
@@ -2840,7 +2839,9 @@
     "Setup script: add the script below.": "セットアップスクリプト：下のスクリプトを追加します。",
     "Show the setup script": "セットアップスクリプトを表示",
     "Start a session in it: it reports from then on.": "その環境でセッションを始めると、そこから報告が届きます。",
-    "The relay at {domain} passes on whether a session works, waits for you or is done, and what it is called where that is on; never a prompt or a file. Its address is a secret: whoever knows it can read along. ntfy.sh passes some 250 messages a day.": "{domain} のリレーが伝えるのは、セッションが作業中か、あなたを待っているか、終わったか、そして有効なときはその名前だけです。プロンプトやファイルは送りません。アドレスは秘密で、知っている人は読めます。ntfy.sh は 1 日に約 250 件まで中継します。"
+    "The relay at {domain} passes on whether a session works, waits for you or is done, and what it is called where that is on; never a prompt or a file. Its address is a secret: whoever knows it can read along. ntfy.sh passes some 250 messages a day.": "{domain} のリレーが伝えるのは、セッションが作業中か、あなたを待っているか、終わったか、そして有効なときはその名前だけです。プロンプトやファイルは送りません。アドレスは秘密で、知っている人は読めます。ntfy.sh は 1 日に約 250 件まで中継します。",
+    "An animated GIF moves, and so does a video (MP4, WebM, MOV): round and round, on a panel that is sent every frame at full speed.": "アニメーション GIF も動画（MP4、WebM、MOV）も動きます。繰り返し再生され、毎フレーム送られるパネルではフルスピードで動きます。",
+    "“{name}” is not a file a theme carries (theme.json, pictures: PNG, JPEG, GIF, WebP, videos: MP4, WebM, MOV, fonts: TTF, OTF): nothing was imported.": "「{name}」はテーマが含めるファイルではありません（theme.json、画像：PNG、JPEG、GIF、WebP、動画：MP4、WebM、MOV、フォント：TTF、OTF）。何も取り込まれませんでした。"
   },
   "fields": {
     "agent": "エージェント",

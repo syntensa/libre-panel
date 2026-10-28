@@ -36,7 +36,7 @@ from libre_panel.config import DEFAULT_SYMBOLS, SYMBOL_PACKS
 from libre_panel.fonts import DEFAULT_FONT, builtin_font_path
 from libre_panel.fonts.fallback import cursive, truetype
 from libre_panel.icons import draw_icon, weather_icon_name
-from libre_panel.render import cover, fan, fan_looks, kept, lists
+from libre_panel.render import cover, fan, fan_looks, kept, lists, moving
 from libre_panel.render import finish as finishes
 from libre_panel.render.countdown import countdown_text
 from libre_panel.render.dust import Dust
@@ -709,6 +709,11 @@ class Renderer:
         self._digit_width: dict[int, float] = {}
         # the theme's pictures, fitted (one that could not be read: None)
         self._images = Kept("renderer.pictures", self.IMAGE_BYTES)
+        # animated pictures' frames, finished (a still: None), and the videos playing
+        self._animations = Kept("renderer.animations", self.ANIMATION_BYTES)
+        self._feeds: dict[Any, moving.VideoFeed] = {}
+        self._began: dict[tuple[str, str], float] = {}  # when an animated picture first showed
+        self._ffmpeg: str | None = None  # where ffmpeg is ("": not found)
         self._slide_lists: dict[str, tuple[float, list[str]]] = {}  # widget id -> pictures
         self._gauge_parts: dict[tuple[Any, ...], Image.Image] = {}  # static rings, colour fields
         # Video mode (the main loop sets these): every frame goes out, so graphs
@@ -856,6 +861,7 @@ class Renderer:
         return self._fonts[key]
 
     IMAGE_BYTES = 64 * MB  # pictures kept fitted: a slideshow of a folder reads the rest again
+    ANIMATION_BYTES = 192 * MB  # the frames of animated pictures (each at most moving.FRAMES_BYTES)
 
     def _asset_image(
         self, rel: str, w: int, h: int, fit: str = "stretch", align: str = "center"
@@ -1332,6 +1338,9 @@ class Renderer:
         if self._builder is not None:
             self._builder.close()
             self._builder = None
+        for feed in self._feeds.values():
+            feed.close()
+        self._feeds.clear()
         if self._strip_builder is not None:
             self._strip_builder.close()
             self._strip_builder = None
@@ -2382,6 +2391,15 @@ class Renderer:
         x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
         if rel.startswith("@"):  # a picture a sensor source or service has (an album cover)
             return self._live_image(widget, snapshot.images.get(rel[1:]))
+        if moving.is_video(rel):
+            return self._draw_video(widget, rel)
+        animation = self._animation(widget, rel)
+        if animation is not None:  # an animated picture: the frame of the moment, from its first
+            n = animation.index(now - self._began.setdefault((widget["id"], rel), now))
+            if self.animate:
+                self.moving = True
+            frame = animation.frames[n]
+            return self._cached(widget, (rel, id(animation), n), lambda: Piece(frame, x, y))
 
         def build() -> Piece:
             image = self._asset_image(rel, w, h, widget["fit"], widget.get("align", "center"))
@@ -2395,6 +2413,82 @@ class Renderer:
             return Piece(image, x, y)
 
         return self._cached(widget, rel, build)
+
+    def _finish(self, widget: dict[str, Any]) -> Callable[[Image.Image], Image.Image]:
+        """What becomes of a picture in the widget: fitted, blurred, rounded."""
+        w, h = widget["w"], widget["h"]
+        fit, align = widget["fit"], widget.get("align", "center")
+        blur, radius = widget.get("blur", 0), widget["radius"]
+
+        def finish(image: Image.Image) -> Image.Image:
+            if blur > 0:
+                image = _blurred(image, blur, w, h, fit, align)
+            elif w > 0 and h > 0:
+                image = _fitted(image, w, h, fit, align)
+            return _rounded(image, radius) if radius > 0 else image
+
+        return finish
+
+    def _animation(self, widget: dict[str, Any], rel: str) -> moving.Animation | None:
+        """The frames of an animated picture (GIF, WebP, PNG) as the widget shows them, kept;
+        None for a still picture (drawn as one) or one that cannot be read."""
+        if not rel.lower().endswith((".gif", ".webp", ".png")) or self.theme.root is None:
+            return None
+        key = (rel, widget["w"], widget["h"], widget["fit"], widget.get("align", "center"),
+               widget.get("blur", 0), widget["radius"])  # fmt: skip
+        found = self._animations.get(key, _UNREAD)
+        if found is not _UNREAD:
+            return found
+        try:
+            found = moving.read_animation(resolve_asset(self.theme.root, rel),
+                                          self._finish(widget))  # fmt: skip
+        except (OSError, ThemeError, ValueError):
+            found = None  # (drawn as a still, which says what is wrong)
+        return self._animations.put(key, found, 4096 if found is None else found.size)
+
+    def _ffmpeg_path(self) -> str:
+        if self._ffmpeg is None:
+            from libre_panel.devices.base import DeviceError
+            from libre_panel.devices.h264 import find_ffmpeg
+
+            try:
+                self._ffmpeg = find_ffmpeg()
+            except DeviceError as exc:
+                self._ffmpeg = ""
+                self._warn(f"a video needs ffmpeg ({exc})")
+        return self._ffmpeg
+
+    def _draw_video(self, widget: dict[str, Any], rel: str) -> Piece | None:
+        """A video, round and round: the newest frame ffmpeg has (moving.VideoFeed); in a preview
+        or until the first one comes, its first frame."""
+        x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
+        if self.theme.root is None or w <= 0 or h <= 0 or not self._ffmpeg_path():
+            return None
+        try:
+            path = resolve_asset(self.theme.root, rel)
+        except ThemeError as exc:
+            self._warn(f"video {rel!r}: {exc}")
+            return None
+        fit, finish = widget["fit"], self._finish({**widget, "fit": "stretch"})
+        key = (rel, w, h, fit)
+        frame, count = None, -1
+        if not self.preview:
+            feed = self._feeds.get(key)
+            if feed is None:
+                feed = self._feeds[key] = moving.VideoFeed(self._ffmpeg_path(), path, w, h, fit)
+            count, frame = feed.frame()
+            if self.animate:
+                self.moving = True
+        if frame is None:  # a preview, or the video has not begun yet: its first frame
+            poster = self._images.get((rel, w, h, fit, "first"), _UNREAD)
+            if poster is _UNREAD:
+                poster = moving.first_frame(self._ffmpeg_path(), path, w, h, fit)
+                self._images.put((rel, w, h, fit, "first"), poster, w * h * 4)
+            frame, count = poster, -1
+        if frame is None:
+            return None
+        return self._cached(widget, (rel, key, count, id(frame)),
+                            lambda: Piece(finish(frame), x, y))  # fmt: skip
 
     def _live_image(self, widget: dict[str, Any], image: Any) -> Piece | None:
         if image is None:
@@ -2437,7 +2531,14 @@ class Renderer:
                         resolve_asset(root, path.relative_to(root).as_posix())
                     except (ThemeError, ValueError):
                         continue  # nothing outside the theme folder
-                    if path.suffix.lower() in (".png", ".jpg", ".jpeg", ".gif", ".webp"):
+                    if path.suffix.lower() in (
+                        ".png",
+                        ".jpg",
+                        ".jpeg",
+                        ".gif",
+                        ".webp",
+                        *moving.VIDEO_SUFFIXES,
+                    ):
                         found.append(path.relative_to(root).as_posix())
             else:
                 found.append(line)

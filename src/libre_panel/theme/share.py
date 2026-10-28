@@ -58,7 +58,15 @@ MAGIC: dict[str, tuple[bytes, ...]] = {
     ".webp": (b"RIFF",),  # (and "WEBP" at 8)
     ".ttf": (b"\x00\x01\x00\x00", b"true", b"OTTO"),
     ".otf": (b"OTTO", b"\x00\x01\x00\x00", b"true"),
+    # videos (render/moving.py): an MP4 or MOV says its kind at 4 ("ftyp", in an older MOV the
+    # first box's name), WebM and MKV are EBML
+    ".mp4": (b"",),
+    ".mov": (b"",),
+    ".m4v": (b"",),
+    ".webm": (b"\x1aE\xdf\xa3",),
+    ".mkv": (b"\x1aE\xdf\xa3",),
 }
+_BOXES = (b"ftyp", b"moov", b"mdat", b"wide", b"free", b"skip")
 FILE_TYPES = frozenset(MAGIC)
 # what the file managers of macOS and Windows put into a zip by themselves: left out
 _LITTER = {".DS_Store", "Thumbs.db", "desktop.ini"}
@@ -247,16 +255,19 @@ def _checked(archive: zipfile.ZipFile) -> tuple[str, dict[str, zipfile.ZipInfo]]
         if rel != THEME_FILENAME and PurePosixPath(rel).suffix.lower() not in FILE_TYPES:
             raise ShareError(
                 t("“{name}” is not a file a theme carries (theme.json, pictures: PNG, JPEG, "
-                  "GIF, WebP, fonts: TTF, OTF): nothing was imported.", name=entry.filename)
+                  "GIF, WebP, videos: MP4, WebM, MOV, fonts: TTF, OTF): nothing was imported.",
+                  name=entry.filename)
             )  # fmt: skip
     return top, inside
 
 
 def _what_it_says(rel: str, content: bytes) -> bool:
-    """Whether a picture or font is the kind its name says, by its first bytes."""
+    """Whether a picture, a video or a font is the kind its name says, by its first bytes."""
     suffix = PurePosixPath(rel).suffix.lower()
     if not content.startswith(MAGIC[suffix]):
         return False
+    if suffix in (".mp4", ".mov", ".m4v"):
+        return content[4:8] in _BOXES
     return suffix != ".webp" or content[8:12] == b"WEBP"
 
 

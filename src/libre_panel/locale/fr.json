@@ -2522,7 +2522,6 @@
     "“{name}” in the .zip is locked with a password: nothing was imported.": "« {name} » dans le .zip est protégé par un mot de passe : rien n'a été importé.",
     "“{name}” in the .zip leaves the theme's folder or names a whole path: nothing was imported.": "« {name} » dans le .zip sort du dossier du thème ou désigne un chemin complet : rien n'a été importé.",
     "“{name}” is added to your themes": "« {name} » est ajouté à vos thèmes",
-    "“{name}” is not a file a theme carries (theme.json, pictures: PNG, JPEG, GIF, WebP, fonts: TTF, OTF): nothing was imported.": "« {name} » n'est pas un fichier qu'un thème contient (theme.json, images : PNG, JPEG, GIF, WebP, polices : TTF, OTF) : rien n'a été importé.",
     "“{name}” is not the picture or font its name says: nothing was imported.": "« {name} » n'est pas l'image ou la police que son nom annonce : rien n'a été importé.",
     "Checking the download …": "Vérification du téléchargement …",
     "Downloaded and checked against the release's checksums.": "Téléchargé et vérifié avec les sommes de contrôle de la version.",
@@ -2840,7 +2839,9 @@
     "Setup script: add the script below.": "Script de configuration : ajoutez le script ci-dessous.",
     "Show the setup script": "Afficher le script de configuration",
     "Start a session in it: it reports from then on.": "Lancez-y une session : elle se signale dès lors.",
-    "The relay at {domain} passes on whether a session works, waits for you or is done, and what it is called where that is on; never a prompt or a file. Its address is a secret: whoever knows it can read along. ntfy.sh passes some 250 messages a day.": "Le relais sur {domain} transmet si une session travaille, vous attend ou a fini, et son nom là où c'est activé ; jamais une invite ni un fichier. Son adresse est un secret : qui la connaît peut lire. ntfy.sh transmet quelque 250 messages par jour."
+    "The relay at {domain} passes on whether a session works, waits for you or is done, and what it is called where that is on; never a prompt or a file. Its address is a secret: whoever knows it can read along. ntfy.sh passes some 250 messages a day.": "Le relais sur {domain} transmet si une session travaille, vous attend ou a fini, et son nom là où c'est activé ; jamais une invite ni un fichier. Son adresse est un secret : qui la connaît peut lire. ntfy.sh transmet quelque 250 messages par jour.",
+    "An animated GIF moves, and so does a video (MP4, WebM, MOV): round and round, on a panel that is sent every frame at full speed.": "Un GIF animé bouge, une vidéo aussi (MP4, WebM, MOV) : en boucle, et à pleine vitesse sur un panneau qui reçoit chaque image.",
+    "“{name}” is not a file a theme carries (theme.json, pictures: PNG, JPEG, GIF, WebP, videos: MP4, WebM, MOV, fonts: TTF, OTF): nothing was imported.": "« {name} » n'est pas un fichier qu'un thème contient (theme.json, images : PNG, JPEG, GIF, WebP, vidéos : MP4, WebM, MOV, polices : TTF, OTF) : rien n'a été importé."
   },
   "fields": {
     "agent": "agent",
