@@ -224,12 +224,28 @@ def read_token(url: str | None = None) -> str | None:
             return None
         if port is None or info.get("port") != port:
             return None
-        import psutil
-
         pid = info.get("pid")
-        if not isinstance(pid, int) or not psutil.pid_exists(pid):
+        if not isinstance(pid, int) or not pid_exists(pid):
             return None  # a run that ended: its token opens nothing
     return token
+
+
+def pid_exists(pid: int) -> bool:
+    """Whether a program of that number runs: psutil's answer, or where it is missing (the
+    window of a release build in the system's Python, window.py) the system's own."""
+    try:
+        import psutil
+    except ImportError:
+        if pid <= 0 or os.name == "nt":
+            return False
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True  # (another user's: it runs)
+        return True
+    return psutil.pid_exists(pid)
 
 
 # -- rights --------------------------------------------------------------------------------------

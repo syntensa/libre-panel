@@ -2942,7 +2942,9 @@ def serve(
         f"Libre Panel theme editor running at {access.with_token(url, server.token)}"
         "  (Ctrl+C to stop)"
     )
-    backend = None if browser or not open_browser else window.load_backend()
+    # a release build for Linux has no window of its own: the system's Python draws it
+    system = open_browser and not browser and window.system_python() is not None
+    backend = None if browser or not open_browser or system else window.load_backend()
     if backend is not None:
         thread = threading.Thread(target=server.serve_forever, name="editor", daemon=True)
         thread.start()
@@ -2953,7 +2955,9 @@ def serve(
             server.server_close()
             server.editor_state.close()  # type: ignore[attr-defined]
         return
-    if open_browser:
+    if system:  # (in a process of its own; this one serves until Ctrl+C)
+        window.open_window(url, view, token=server.token)
+    elif open_browser:
         webbrowser.open(access.with_token(window.view_url(url, view), server.token))
     try:
         server.serve_forever()

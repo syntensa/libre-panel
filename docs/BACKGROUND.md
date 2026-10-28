@@ -123,8 +123,13 @@ first; quitting Libre Panel closes it.
 
   pywebview goes into the environment Libre Panel runs in, which must see the
   system's PyGObject: `pipx install --system-site-packages
-  "libre-panel[usb,serial,tray]"`, then `pipx inject libre-panel pywebview`.
-  The AppImage and the Linux archive have no window yet: they open the browser.
+  "libre-panel[usb,serial,tray]"`, then `pipx inject libre-panel pywebview`
+  (without pywebview, Libre Panel draws its window with PyGObject itself).
+  **The AppImage and the Linux archive** open their window with the same packages
+  of your distribution: their own Python has no GTK, so the window runs in the
+  system's Python (3.11 or later), from Libre Panel's sources they carry. With the
+  packages above installed it opens by itself; without them the app opens in the
+  browser, as before.
 - **Without a window** (no WebView2 runtime, no WebKitGTK, no desktop, an SSH
   session) the app opens in the browser as it always did. `libre-panel editor
   --browser` asks for the browser, `libre-panel editor --no-browser` only

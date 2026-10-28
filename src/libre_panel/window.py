@@ -1,6 +1,11 @@
 """Libre Panel's own window: the app (start, design, look, live, settings) in a native
 window through pywebview: WebView2 on Windows, WebKitGTK on Linux.
 
+The AppImage and the Linux archive bring a Python without GTK: their window runs in the
+system's Python (``python3 -m libre_panel.window``, its sources beside the program), with
+the distribution's PyGObject and WebKitGTK and, without pywebview, gtk_window in its place
+(:func:`window_command`). Where the system has neither, the browser opens as before.
+
 There is one window at a time. Whoever wants the app shown (the tray, ``libre-panel
 start``, ``libre-panel editor``, a second start) calls :func:`open_window`: an open window
 is brought to the front and shows the asked view; otherwise a new window process starts
@@ -31,6 +36,7 @@ import logging
 import os
 import queue
 import secrets
+import shutil
 import socket
 import subprocess
 import sys
@@ -95,15 +101,96 @@ def local_url(url: str) -> bool:
     return parts.scheme == "http" and parts.hostname in ("127.0.0.1", "localhost")
 
 
+GTK_ENV = "LIBRE_PANEL_WINDOW_GTK"  # set: the window is drawn by gtk_window, not pywebview
+# what the system's Python must have for the window of a build that has no GTK of its own
+SYSTEM_CHECK = (
+    "import sys; assert sys.version_info >= (3, 11); import gi; gi.require_version('Gtk', '3.0')\n"
+    "for v in ('4.1', '4.0'):\n"
+    "    try:\n"
+    "        gi.require_version('WebKit2', v); break\n"
+    "    except ValueError: pass\n"
+    "else: raise SystemExit(1)\n"
+    "from gi.repository import Gtk, WebKit2; import libre_panel.window"
+)
+_system: list[str | None] = []  # the system's Python that can show the window, once looked for
+
+
+def _bundled_sources() -> Path | None:
+    """Where a Linux release build keeps Libre Panel's sources for the system's Python: a
+    folder of their own beside its other files (``pysrc`` in PyInstaller's ``_internal``)."""
+    folder = getattr(sys, "_MEIPASS", None)
+    if folder and (Path(folder) / "pysrc" / "libre_panel" / "window.py").is_file():
+        return Path(folder) / "pysrc"
+    return None
+
+
+def system_environment(environ: Any = None) -> dict[str, str]:
+    """The environment for the system's Python: as it was before the release build changed it
+    (PyInstaller points the libraries at its own, which the system's Python must not load),
+    with the build's sources to import Libre Panel's window from."""
+    env = dict(os.environ if environ is None else environ)
+    for name in ("LD_LIBRARY_PATH", "PYTHONHOME", "PYTHONPATH", "GI_TYPELIB_PATH",
+                 "GDK_PIXBUF_MODULE_FILE", "GIO_MODULE_DIR", "GTK_PATH"):  # fmt: skip
+        before = env.pop(f"{name}_ORIG", None)  # (PyInstaller keeps what was there)
+        env.pop(name, None)
+        if before:
+            env[name] = before
+    sources = _bundled_sources()
+    if sources is not None:
+        env["PYTHONPATH"] = str(sources)
+    env[GTK_ENV] = "1"
+    return env
+
+
+def system_python() -> str | None:
+    """The system's Python that can show the window (3.11 or later, with PyGObject and
+    WebKitGTK), for a Linux release build; None elsewhere, or where there is none."""
+    if _system:
+        return _system[0]
+    found = None
+    if getattr(sys, "frozen", False) and sys.platform.startswith("linux"):
+        env = system_environment()
+        # the system's own first; then the others (Debian's PyGObject is for one of them)
+        candidates = ["/usr/bin/python3", shutil.which("python3", path=env.get("PATH"))]
+        candidates += [f"/usr/bin/python3.{minor}" for minor in range(14, 10, -1)]
+        for candidate in dict.fromkeys(candidates):
+            if not candidate or not Path(candidate).is_file():
+                continue
+            try:
+                done = subprocess.run([candidate, "-c", SYSTEM_CHECK], env=env, timeout=20,
+                                      capture_output=True, check=False)  # fmt: skip
+            except (OSError, subprocess.TimeoutExpired):
+                continue
+            if done.returncode == 0:
+                found = candidate
+                break
+        if found is None:
+            log.info("no window: the system's Python has no PyGObject with WebKitGTK")
+    _system.append(found)
+    return found
+
+
+def has_pywebview() -> bool:
+    """pywebview can be imported here (whether it has a backend is found out in the window)."""
+    try:
+        return importlib.util.find_spec("webview") is not None
+    except (ImportError, ValueError):  # (one that is there broken, or blocked)
+        return False
+
+
 def installed() -> bool:
-    """pywebview is there (whether it has a backend is found out in the window process)."""
-    return importlib.util.find_spec("webview") is not None
+    """pywebview is there, or (a Linux release build) the system's Python can show the window
+    (whether it has a backend is found out in the window process)."""
+    return has_pywebview() or system_python() is not None
 
 
 def window_command(url: str, config_path: Path | None = None) -> list[str]:
     """The command that opens the window, for this program as it was started."""
     options = ["--config", str(Path(config_path).resolve())] if config_path else []
     if getattr(sys, "frozen", False):  # release build
+        python = system_python() if not has_pywebview() else None
+        if python is not None:  # (Linux: the system's Python draws it)
+            return [python, "-m", "libre_panel.window", url, *options]
         appimage = os.environ.get("APPIMAGE")
         if appimage and sys.platform.startswith("linux"):
             return [appimage, *options, "window", url]
@@ -190,15 +277,14 @@ def _running_file() -> Path:
 
 def running() -> dict[str, Any] | None:
     """What the open window wrote about itself, if a window is open."""
-    import psutil
-
     try:
         info = json.loads(_running_file().read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     if not isinstance(info, dict) or not isinstance(info.get("port"), int):
         return None
-    if not psutil.pid_exists(info.get("pid", -1)):
+    pid = info.get("pid", -1)
+    if not isinstance(pid, int) or not access.pid_exists(pid):
         return None
     return info
 
@@ -287,12 +373,16 @@ def open_window(
         if focus_window(base, view, token):
             return "focused"
         if installed():
-            # the token goes in the environment: a command line is for everybody to read
-            env = {**os.environ, access.ENV: token} if token else None
+            command = window_command(target, config_path)
+            # the system's Python for a release build's window: the build's environment undone
+            system = command[1:3] == ["-m", "libre_panel.window"]
+            env = system_environment() if system else None
+            if token:  # the token goes in the environment: a command line is for all to read
+                env = {**(env if env is not None else os.environ), access.ENV: token}
             errors = _error_output()
             try:
                 process = subprocess.Popen(  # noqa: S603
-                    window_command(target, config_path),
+                    command,
                     env=env,
                     **{**_detached(), "stderr": errors},
                 )
@@ -345,10 +435,21 @@ def save_state(state: dict[str, Any]) -> None:
 
 
 def load_backend() -> Any:
-    """pywebview with a backend that can show the app, or None (the reason is logged).
+    """pywebview with a backend that can show the app, or None (the reason is logged). On
+    Linux without pywebview, and for a release build's window in the system's Python,
+    gtk_window in its place.
 
     On Windows pythonnet is started on the .NET Framework first, as LibreHardwareMonitor
     starts it: both must run on the same runtime in a process."""
+    linux = sys.platform.startswith("linux")
+    if os.environ.get(GTK_ENV) or (linux and not has_pywebview()):
+        from libre_panel import gtk_window
+
+        why = gtk_window.ready()
+        if why:
+            log.info("no window: %s", why)
+            return None
+        return gtk_window
     try:
         import webview
         from webview.guilib import initialize
@@ -379,7 +480,11 @@ def check(open_one: bool = False, seconds: float = 60.0) -> tuple[bool, list[str
     nothing is opened, and a missing WebView2 runtime on the machine is said, but not a
     failure of the build. With it a real window opens, minimized, as the app's own does (the
     same options to webview.start), until its page has loaded or ``seconds`` have passed:
-    only that proves a window shows (0.5.0's died at once, at an icon .NET could not use)."""
+    only that proves a window shows (0.5.0's died at once, at an icon .NET could not use).
+    On Linux without pywebview: GTK with WebKitGTK (gtk_window), the system's for a release
+    build."""
+    if sys.platform.startswith("linux") and not has_pywebview():
+        return _check_gtk(open_one, seconds)
     lines = []
     try:
         import webview
@@ -413,6 +518,28 @@ def check(open_one: bool = False, seconds: float = 60.0) -> tuple[bool, list[str
         return not open_one, lines
     if open_one:
         loaded = _open_for_a_moment(webview, seconds)
+        lines.append("window: opened and loaded" if loaded else "window: did not load")
+        return loaded, lines
+    return True, lines
+
+
+def _check_gtk(open_one: bool, seconds: float) -> tuple[bool, list[str]]:
+    """:func:`check` where GTK draws the window: the system's Python for a release build, or
+    this one's PyGObject."""
+    if getattr(sys, "frozen", False):
+        python = system_python()
+        if python is None:
+            said = "window: the system's Python has no PyGObject with WebKitGTK"
+            return False, [f"{said} (python-gobject, webkit2gtk-4.1): the app opens in the browser"]
+        return True, [f"window: the system's Python ({python}) with GTK and WebKitGTK"]
+    from libre_panel import gtk_window
+
+    why = gtk_window.ready()
+    if why:
+        return False, [f"window: GTK with WebKitGTK is not there ({why})"]
+    lines = ["window: GTK and WebKitGTK through PyGObject (gtk_window)"]
+    if open_one:
+        loaded = _open_for_a_moment(gtk_window, seconds)
         lines.append("window: opened and loaded" if loaded else "window: did not load")
         return loaded, lines
     return True, lines
@@ -576,6 +703,7 @@ def _start_options() -> dict[str, Any]:
             "global.quitConfirmation": t("Close the window? Changes that are not saved are lost."),
             "global.ok": t("Close"),
             "global.cancel": t("Cancel"),
+            "global.saveFile": t("Save"),  # (where a file the page saves goes: gtk_window's)
         },
     }
 
@@ -718,3 +846,29 @@ def _show(webview: Any, url: str, listener: socket.socket, secret: str) -> int:
     webview.start(**_start_options())
     save_state(state)
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    """``python3 -m libre_panel.window <url> [--view VIEW]``: the window of a release build, in
+    the system's Python (:func:`window_command`), which has none of the app's other parts."""
+    import argparse
+
+    parser = argparse.ArgumentParser(prog="libre-panel window")
+    parser.add_argument("url")
+    parser.add_argument("--view", default=None)
+    parser.add_argument("--config", default=None)  # (the app's; the window keeps its own state)
+    args = parser.parse_args(argv)
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
+    code = run_window(args.url, args.view if args.view in VIEWS else None)
+    # Its state is saved and its lock let go: the process ends here, before Python takes
+    # WebKitGTK apart, which ends in a segmentation fault (as with pywebview's GTK)
+    logging.shutdown()
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(code)
+
+
+if __name__ == "__main__":
+    main()

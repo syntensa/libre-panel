@@ -19,6 +19,19 @@ HERE = Path(SPECPATH)  # noqa: F821 - provided by PyInstaller
 ROOT = HERE.parent.parent
 
 datas = collect_data_files("libre_panel") + copy_metadata("libre-panel")
+if sys.platform.startswith("linux"):
+    # The window of the AppImage and the archive runs in the system's Python, which has GTK
+    # (window.py, gtk_window.py): Libre Panel's sources for it, with its texts and icon, in a
+    # folder of their own (pysrc), where no package of the build lies half (compiled, without
+    # its Python) for that Python to take
+    SOURCE = ROOT / "src" / "libre_panel"
+    for path in sorted(SOURCE.rglob("*")):
+        if path.is_file() and (
+            path.suffix == ".py"
+            or path.parent.name == "locale"
+            or path.relative_to(SOURCE).as_posix() == "editor/static/icon.png"
+        ):
+            datas.append((str(path), str(Path("pysrc/libre_panel") / path.parent.relative_to(SOURCE))))
 binaries = []
 # Sensor sources and drivers are loaded by name (entry points), which the
 # import analysis cannot see.

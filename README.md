@@ -540,8 +540,9 @@ Python needed:
    services (all off until you switch them on). The tray icon has the theme, brightness,
    pause and *Start with system*.
 
-The app opens in a window of its own (WebView2 on Windows, WebKitGTK on Linux); the AppImage
-opens it in the browser for now ([details](docs/BACKGROUND.md#the-apps-window)).
+The app opens in a window of its own (WebView2 on Windows, WebKitGTK on Linux: the AppImage
+too, where your distribution's `python-gobject` and `webkit2gtk-4.1` are installed, else the
+browser; [details](docs/BACKGROUND.md#the-apps-window)).
 
 ### Out of the box
 

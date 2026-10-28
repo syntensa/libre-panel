@@ -128,9 +128,16 @@ def test_the_command_that_opens_the_window(monkeypatch, tmp_path):
     assert window.window_command(URL) == [str(tmp_path / window.WINDOWED_EXE), "window", URL]
     monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setenv("APPIMAGE", "/apps/Libre_Panel.AppImage")
+    monkeypatch.setattr(window, "has_pywebview", lambda: False)
+    monkeypatch.setattr(window, "system_python", lambda: None)  # (no GTK in the system either)
     config = tmp_path / "config.toml"
     assert window.window_command(URL, config) == [
         "/apps/Libre_Panel.AppImage", "--config", str(config.resolve()), "window", URL,
+    ]  # fmt: skip
+    # the system's Python has GTK and WebKitGTK: it draws the window of the AppImage
+    monkeypatch.setattr(window, "system_python", lambda: "/usr/bin/python3")
+    assert window.window_command(URL, config) == [
+        "/usr/bin/python3", "-m", "libre_panel.window", URL, "--config", str(config.resolve()),
     ]  # fmt: skip
 
 
@@ -439,9 +446,74 @@ def test_only_libre_panels_own_pages(monkeypatch):
 
 def test_check_without_pywebview(monkeypatch):
     monkeypatch.setitem(sys.modules, "webview", None)  # importing it fails
+    monkeypatch.setattr(sys, "platform", "win32")
     worked, lines = window.check()
     assert not worked and lines[0].startswith("pywebview: not available")
     assert window.load_backend() is None
+    # on Linux, GTK with WebKitGTK through PyGObject in its place (gtk_window): here not there
+    from libre_panel import gtk_window
+
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(gtk_window, "ready", lambda: "no PyGObject")
+    worked, lines = window.check()
+    assert not worked and lines == ["window: GTK with WebKitGTK is not there (no PyGObject)"]
+    assert window.load_backend() is None
+    monkeypatch.setattr(gtk_window, "ready", lambda: "")
+    assert window.load_backend() is gtk_window
+    assert window.check() == (True, ["window: GTK and WebKitGTK through PyGObject (gtk_window)"])
+
+
+def test_a_release_build_finds_the_systems_python_that_shows_the_window(monkeypatch, tmp_path):
+    """The AppImage's Python has no GTK: the system's, with PyGObject and WebKitGTK, draws the
+    window, from the build's sources (pysrc), in the environment the build had found."""
+    sources = tmp_path / "pysrc" / "libre_panel"
+    sources.mkdir(parents=True)
+    (sources / "window.py").write_text("")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(window, "_system", [])
+    environ = {"PATH": "/usr/bin", "LD_LIBRARY_PATH": str(tmp_path),  # (PyInstaller's)
+               "LD_LIBRARY_PATH_ORIG": "/opt/own/lib", "PYTHONPATH": "x"}  # fmt: skip
+    env = window.system_environment(environ)
+    assert env["LD_LIBRARY_PATH"] == "/opt/own/lib" and "LD_LIBRARY_PATH_ORIG" not in env
+    assert env["PYTHONPATH"] == str(tmp_path / "pysrc") and env[window.GTK_ENV] == "1"
+    asked = []
+
+    def run(command, **options):
+        asked.append((command, options["env"].get("PYTHONPATH")))
+        return SimpleNamespace(returncode=0 if command[0] == "/usr/bin/python3" else 1)
+
+    monkeypatch.setattr(window.subprocess, "run", run)
+    monkeypatch.setattr(window.Path, "is_file", lambda self: True)
+    assert window.system_python() == "/usr/bin/python3"
+    assert asked[0][0][1:] == ["-c", window.SYSTEM_CHECK]  # GTK, WebKitGTK and the sources
+    assert asked[0][1] == str(tmp_path / "pysrc")
+    assert window.system_python() == "/usr/bin/python3" and len(asked) == 1  # (looked for once)
+    monkeypatch.setattr(window, "has_pywebview", lambda: False)
+    assert window.installed()
+    # the window process gets that environment, and the token beside it
+    started = []
+    monkeypatch.setattr(window.subprocess, "Popen", started_into(started))
+    monkeypatch.setattr(window, "focus_window", lambda *a: False)
+    assert window.open_window(URL, "design", token=TOKEN) == "window"
+    command, options = started[0]
+    assert command[:3] == ["/usr/bin/python3", "-m", "libre_panel.window"]
+    assert options["env"][window.GTK_ENV] == "1" and options["env"][access.ENV] == TOKEN
+    assert options["env"]["PYTHONPATH"] == str(tmp_path / "pysrc")
+    # a system without it: the browser, as before
+    monkeypatch.setattr(window, "_system", [])
+    monkeypatch.setattr(
+        window.subprocess, "run", lambda command, **o: SimpleNamespace(returncode=1)
+    )
+    assert window.system_python() is None and not window.installed()
+
+
+def test_a_program_that_runs_is_found_without_psutil(monkeypatch):
+    """The window in the system's Python may have no psutil: the system tells it."""
+    monkeypatch.setitem(sys.modules, "psutil", None)
+    assert access.pid_exists(os.getpid())
+    assert not access.pid_exists(0) and not access.pid_exists(2**22 + 12345)
 
 
 def test_cli_window_command(monkeypatch, capsys):

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+**New**
+- **The AppImage opens the app in a window of its own** (#33). Its Python has no GTK, so it
+  opened the browser; now the window runs in the system's Python, with the distribution's
+  PyGObject and WebKitGTK (`python-gobject` and `webkit2gtk-4.1` on Arch and CachyOS,
+  `python3-gi` and `gir1.2-webkit2-4.1` on Debian and Ubuntu), from Libre Panel's sources the
+  AppImage and the Linux archive carry. Without those packages it opens the browser, as before.
+  Libre Panel draws that window itself where pywebview is missing (gtk_window): the page's
+  title, the question before closing with unsaved changes, saving an exported theme, links to
+  other sites in the browser. `libre-panel window --check` says which way it would open.
+
 **AI activity**
 - **Several sessions at a glance.** Claude Code's own AI card lists its other sessions under
   the plan's limits where it has room (on the 12.3"), a line each with its sign, what it is
