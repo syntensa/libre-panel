@@ -375,6 +375,9 @@ def play(names: list[str], panels: tuple[int, ...] | list[int] = (1,), start: st
     first = next((item for item in items if item.name == start), items[0])
     if shuffle:
         items = [first, *_shuffled(tuple(item for item in items if item is not first))]
+    from libre_panel import mirror
+
+    mirror.stop()  # (one or the other on a panel: the Player, or a monitor)
     global _own
     with _lock:
         _own = Playback(tuple(items), panels, items.index(first), clock(), None, fit, loop,

@@ -457,7 +457,11 @@ und mit eingeschaltetem Gedächtnis den **Verlauf**: Temperaturen, Last und Leis
 Tag, eine Woche oder einen Monat, dazu die gespielten Spiele. Der **Player** spielt deine
 Videos, GIFs und Bilder auf einem Panel statt seines Themes: hineinziehen, eines anklicken,
 anhalten, weiterspringen, spulen, immer wieder oder gemischt, und beim Stoppen kommt das Theme
-zurück. **Tastenkürzel** für den ganzen PC
+zurück. **Als Monitor**, ebenfalls im Player, zeigt ein Panel statt seines Themes einen
+Bildschirm des Computers: einen deiner Monitore, einen Teil davon, ein Fenster oder einen
+eigenen Monitor, auf den der Desktop sich erweitert (Windows mit dem quelloffenen Virtual
+Display Driver, aus der App eingerichtet; Linux unter X11 und unter Wayland, GNOME und KDE). Ein
+TURZX-Panel im Videomodus bekommt ihn direkt als Videostrom. **Tastenkürzel** für den ganzen PC
 halten das Panel an, ändern seine Helligkeit oder öffnen die App aus jedem Fenster (Windows,
 Linux mit X11) und lassen sich als Ganzes ausschalten. Die App spricht Deutsch, Englisch,
 Französisch, Spanisch, Italienisch, Polnisch, Portugiesisch (Brasilien), Russisch, Japanisch

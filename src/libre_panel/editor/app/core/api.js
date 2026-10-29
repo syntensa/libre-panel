@@ -177,6 +177,9 @@ export const endpoints = {
   player: () => get("/api/player"),
   playerAction: (body) => post("/api/player", body),
   playerUpload: (name, file, onProgress) => sendFile(`/api/player/media?name=${enc(name)}`, file, onProgress),
+  // a panel as a monitor (mirror.py): what it can show, what it shows; show, stop, set up
+  mirror: (windows = false) => get(`/api/mirror${windows ? "?windows=1" : ""}`),
+  mirrorAction: (body) => post("/api/mirror", body),
   colourCheck: (panel = 1) => get(`/api/colour-check?panel=${panel}`),
   colourCheckAction: (action, panel = 1) => post("/api/colour-check", { action, panel }),
   setDetailedLog: (verbose) => post("/api/logs", { verbose }),

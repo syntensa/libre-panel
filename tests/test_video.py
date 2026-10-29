@@ -2499,3 +2499,112 @@ def test_direct_videos_change_on_the_open_panel():
     assert parse_config({"video": {"direct": True}}).device.video.direct
     with pytest.raises(ConfigError, match="video.direct"):
         parse_config({"video": {"direct": "yes"}})
+
+
+# -- the screen as a panel's picture (mirror.py) ---------------------------------------------
+
+
+def test_the_screen_is_encoded_as_frames_are():
+    """ffmpeg captures the screen itself (its input, what brings its pictures to the processor),
+    fits it as the panel is shown it and encodes it with the frames' own settings."""
+    settings = EncoderSettings(fps=50, encoder="libx264", profile="high", maxrate="3M")
+    source = h264.CaptureSource(("-f", "lavfi", "-i", "gfxcapture=hmonitor=0x1"),
+                                "hwdownload,format=bgra", "contain", name="Display 2")  # fmt: skip
+    command = h264.ffmpeg_capture_command("ffmpeg", source, (1920, 720), None, settings)
+    assert command[command.index("-i") - 2 : command.index("-i") + 2] == [
+        "-f", "lavfi", "-i", "gfxcapture=hmonitor=0x1"]  # fmt: skip
+    assert "-re" not in command and "-stream_loop" not in command  # (it comes as it comes)
+    assert command[command.index("-vf") + 1] == (
+        "hwdownload,format=bgra,scale=1920:720:force_original_aspect_ratio=decrease,"
+        "pad=1920:720:(ow-iw)/2:(oh-ih)/2:color=#000000,fps=50"
+    )
+    frames = ffmpeg_command("ffmpeg", (1920, 720), None, settings)
+    assert command[command.index("-c:v") :] == frames[frames.index("-c:v") :]
+    assert h264.source_name(source) == "Display 2"
+
+
+@needs_ffmpeg
+def test_the_screen_goes_straight_to_the_panel_and_frames_take_over_again(panel):
+    display = TurzxVideoDisplay(video_config())
+    display.open()
+    red = h264.CaptureSource(("-re", "-f", "lavfi", "-i", "color=c=red:s=640x360:r=30"),
+                             fit="cover", name="a red screen")  # fmt: skip
+    try:
+        end = time.monotonic() + 60
+        while len(panel.blocks) < 20 and time.monotonic() < end:
+            assert display.show_video(red, (1920, 480))
+            time.sleep(1 / 30)
+        arrive(panel, 20)
+        assert display.encoder.source == red
+        before = len(panel.blocks)
+        stream_frames(display, [Image.new("RGB", (1920, 480), "blue")] * 40, fps=30)
+        assert display.encoder.source is None
+        settle(panel, timeout=20, at_least=before + 20)
+    finally:
+        display.close()
+    decoded = decode(panel.stream())
+    shown, after = decoded[2].getpixel((240, 960)), decoded[-1].getpixel((240, 960))
+    assert shown[0] > 200 and shown[2] < 60, shown
+    assert after[2] > 200 and after[0] < 60, after
+
+
+@needs_ffmpeg
+def test_a_program_feeds_ffmpeg_the_screen(panel):
+    """Wayland: a program of its own writes the raw frames (wayland_feed.py), ffmpeg reads them
+    on its input (h264.Fed); both end together."""
+    feeder = (FFMPEG, "-v", "error", "-re", "-f", "lavfi", "-i", "color=c=green:s=320x180:r=30",
+              "-pix_fmt", "bgr0", "-f", "rawvideo", "-")  # fmt: skip
+    green = h264.CaptureSource(("-f", "rawvideo", "-pix_fmt", "bgr0", "-video_size", "320x180",
+                                "-framerate", "30", "-i", "pipe:0"), feeder=feeder,
+                               name="a green screen")  # fmt: skip
+    display = TurzxVideoDisplay(video_config())
+    display.open()
+    try:
+        end = time.monotonic() + 60
+        while len(panel.blocks) < 15 and time.monotonic() < end:
+            assert display.show_video(green, (1920, 480))
+            time.sleep(1 / 30)
+        arrive(panel, 15)
+        fed = display.encoder.proc
+        assert isinstance(fed, h264.Fed) and fed.feeder.poll() is None
+    finally:
+        display.close()
+    assert fed.feeder.poll() is not None  # (it ended with ffmpeg)
+    shown = decode(panel.stream())[3].getpixel((240, 960))
+    assert shown[1] > 90 and shown[0] < 60 and shown[2] < 60, shown
+
+
+@needs_ffmpeg
+def test_the_main_loop_hands_the_screen_to_the_panel(monkeypatch, isolated_home):
+    """A panel shown as a monitor: the screen into its stream straight (its source looked up
+    once), a few pictures a second for the app's own picture of it."""
+    from libre_panel import mirror
+
+    displays = []
+    monkeypatch.setattr(app, "create_display", lambda config: displays.append(
+        VideoDisplay(config)) or displays[-1])  # fmt: skip
+    looked = []
+
+    def capture_source(ffmpeg, source, fps, size):
+        looked.append((source, fps, size))
+        return h264.CaptureSource(("-re", "-f", "lavfi", "-i", "color=c=red:s=64x36"))
+
+    monkeypatch.setattr(mirror, "capture_source", capture_source)
+    monkeypatch.setattr(mirror, "capture_of", lambda ffmpeg, source, fps, size=None: (
+        mirror.capture.Capture(("-re", "-f", "lavfi", "-i", "color=c=red:s=64x36"))))  # fmt: skip
+    mirror.show(mirror.Source("monitor", "DP-1", "Display 1"), [1])
+    config = Config(theme=SMALL, sensors=SensorsConfig(providers=["demo"]))
+    stop = threading.Event()
+    thread = threading.Thread(target=app.run, args=(config,), kwargs={"stop": stop})
+    try:
+        thread.start()
+        end = time.monotonic() + 60
+        while time.monotonic() < end and not (displays and len(displays[0].videos) > 10):
+            time.sleep(0.05)
+    finally:
+        stop.set()
+        thread.join(10)
+        mirror.stop()
+    source, size = displays[0].videos[-1]
+    assert isinstance(source, h264.CaptureSource) and size == displays[0].videos[0][1]
+    assert len(looked) == 1 and looked[0][0].id == "DP-1"  # (looked up once, not each frame)

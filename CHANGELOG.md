@@ -3,6 +3,25 @@
 ## Unreleased
 
 **New**
+- **A panel as a monitor** (*Player → As a monitor*). A panel shows a screen of the computer
+  instead of its theme, as it changes: one of your monitors, a part of one, a window, or a
+  monitor of its own that the desktop extends to, where windows go as to any monitor. That
+  one goes on the desktop as the panel starts showing it and off again as it stops.
+  - **Windows**: monitors and windows through Windows.Graphics.Capture (ffmpeg 8.1's
+    `gfxcapture`, the cursor with them), else GDI. The panel's own monitor comes from the
+    Virtual Display Driver (open source, signed): *Set it up* installs it with winget and gives
+    it the panel's size, and Windows asks for permission once.
+  - **Linux on X11**: monitors and windows through `x11grab`; the panel's own monitor is room
+    beyond the others, made a monitor with `xrandr --setmonitor`.
+  - **Linux on Wayland**: GNOME shares a monitor, or makes the panel's own at its size,
+    without asking (Mutter's screen cast); KDE and other desktops ask once in their
+    screen-sharing dialog (a monitor, a window, or KDE's *New virtual output*, 1920 × 1080 until
+    Plasma 6.8, cropped to the panel), and the choice is kept. The pictures come through
+    PipeWire and GStreamer (`gst-launch-1.0` with its PipeWire plugin).
+  - A TURZX panel in video mode gets the screen straight as its stream: one ffmpeg captures,
+    fits and encodes it, nothing goes through Libre Panel; other panels get its newest
+    picture each frame. A picture is about a tenth of a second old on a TURZX panel: for
+    windows, chats and music, not for games. Notices and the alarm still show over it.
 - **Game frame rates from RTSS**, an alternative to PresentMon on Windows (*Settings → Sensors →
   Game frame rate from RTSS*, off by default; discussion #32). Where RivaTuner Statistics
   Server runs anyway (alone or with MSI Afterburner), Libre Panel reads the frame rates it

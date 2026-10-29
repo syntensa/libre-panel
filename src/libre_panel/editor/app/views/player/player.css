@@ -369,3 +369,90 @@
     max-height: 45vh;
   }
 }
+
+/* -- as a monitor (monitor.js) -- */
+
+.mirror-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mirror-head h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.mirror-head .muted,
+.mirror-small {
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.mirror-small {
+  margin: 0;
+}
+
+.mirror-sources {
+  justify-content: flex-start;
+  gap: 6px;
+}
+
+.mirror-sources .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mirror-window {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.mirror-window .select {
+  min-width: 0;
+  max-width: 260px;
+}
+
+.mirror-hint {
+  padding: 10px 12px;
+}
+
+.mirror-hint.info {
+  background: var(--accent-softer);
+}
+
+.mirror-hint.info > .icon {
+  color: var(--accent);
+}
+
+.mirror-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mirror-showing {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.mirror-showing .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}

@@ -1967,6 +1967,84 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._error(str(exc))
         self._player()
 
+    def _mirror(self, query: dict[str, list[str]] | None = None) -> None:
+        """``GET /api/mirror``: what a panel can show as a monitor here (the monitors; with
+        ``?windows=1`` the windows too), what it shows now, the panels, and whether the running
+        app is there to show it (mirror.py, capture.py)."""
+        from dataclasses import asdict
+
+        from libre_panel import capture, extend, mirror
+
+        where = capture.platform()
+        listed = (query or {}).get("windows", ["0"])[0] == "1"
+        size = self._panel_frame(1)
+        self._json({
+            "available": self.controls is not None,
+            "platform": where,
+            "monitors": [asdict(m) for m in capture.monitors(where)],
+            "windows": [asdict(w) for w in capture.windows(where)] if listed else None,
+            "showing": mirror.status(),
+            "panels": self._player_panels(),
+            "fits": list(mirror.FITS),
+            "size": list(size) if size else None,
+            "extend": {**extend.state(size, where), **extend.setup_state()},
+        })  # fmt: skip
+
+    def _panel_frame(self, number: int) -> tuple[int, int] | None:
+        """The size of panel ``number``'s frames (1 the first), as config.toml and the panel
+        say; None where its model is not known."""
+        from libre_panel.app import panel_config, panel_size
+        from libre_panel.devices.models import find_model
+
+        try:
+            config = load_config(self.state.config_path)
+            config = panel_config(config, None if number <= 1 else number - 2)
+        except ConfigError:
+            return None
+        status = getattr(getattr(self.controls, "panel", None), "status", None)
+        reported = find_model(getattr(status, "model", "") or "") if number <= 1 else None
+        return panel_size(config, reported)
+
+    def _mirror_action(self) -> None:
+        """``POST /api/mirror``: ``{"action": "show", "source": {kind, id, name, region, fit,
+        cursor}, "panels": [1]}`` shows it on those panels as a monitor; ``{"action":
+        "stop"}`` the themes again. The answer is :meth:`_mirror`'s."""
+        from libre_panel import mirror
+
+        payload = self._read_json()
+        if payload is None:
+            return
+        if not isinstance(payload, dict):
+            return self._error('expected {"action": ...}')
+        action = payload.get("action")
+        if action == "show":
+            if self.controls is None:
+                return self._error(t("a panel shows the screen in the running app"),
+                                   HTTPStatus.CONFLICT)  # fmt: skip
+            panels = payload.get("panels", [1])
+            if not isinstance(panels, list) or not all(
+                isinstance(n, int) and not isinstance(n, bool) for n in panels
+            ):
+                return self._error("panels: expected [1, ...]")
+            try:
+                source = mirror.source_of(payload.get("source"))
+                size = self._panel_frame(min(panels)) if panels else None
+                mirror.show(source, panels, size)
+            except mirror.MirrorError as exc:
+                return self._error(str(exc))
+        elif action == "stop":
+            mirror.stop()
+        elif action == "setup":  # the panel's own monitor (Windows: the driver, its size)
+            from libre_panel import extend
+
+            size = self._panel_frame(1)
+            if size is None:
+                return self._error(t("the panel's size is not known: choose its model in Settings"))
+            extend.start_setup(size)
+        else:
+            return self._error("action: show, stop or setup")
+        self._mirror()
+
     def _player_upload(self, query: dict[str, list[str]]) -> None:
         """``POST /api/player/media?name=clip.mp4`` with the file: into the library, written as
         it comes (a video of gigabytes too) and put in place once it is whole."""
@@ -2962,6 +3040,7 @@ ROUTES: tuple[Route, ...] = (
     Route("GET", "/api/experiment", lambda h, m, u: h._experiment()),
     Route("GET", "/api/colour-check", lambda h, m, u: h._colour_check(parse_qs(u.query))),
     Route("GET", "/api/player", lambda h, m, u: h._player()),
+    Route("GET", "/api/mirror", lambda h, m, u: h._mirror(parse_qs(u.query))),
     Route(
         "GET",
         "/api/player/picture",
@@ -3014,6 +3093,7 @@ ROUTES: tuple[Route, ...] = (
     Route("POST", "/api/experiment", lambda h, m, u: h._experiment_action()),
     Route("POST", "/api/colour-check", lambda h, m, u: h._colour_check_action()),
     Route("POST", "/api/player", lambda h, m, u: h._player_action()),
+    Route("POST", "/api/mirror", lambda h, m, u: h._mirror_action()),
     Route("POST", "/api/player/media", lambda h, m, u: h._player_upload(parse_qs(u.query))),
     Route("POST", "/api/language", lambda h, m, u: h._set_language()),
     Route("POST", "/api/pages", lambda h, m, u: h._set_panel_page()),

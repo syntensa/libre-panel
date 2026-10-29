@@ -78,7 +78,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - run: pip install ".[usb,serial,tray,media,mqtt]" pyinstaller
+      - run: pip install ".[usb,serial,tray,media,mqtt,screen]" pyinstaller
       - name: Version
         shell: bash
         run: |

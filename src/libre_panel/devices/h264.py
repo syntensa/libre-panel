@@ -510,7 +510,29 @@ class VideoSource:
     background: str = "#000000"
 
 
-def _fitted(source: VideoSource, width: int, height: int) -> str:
+@dataclass(frozen=True)
+class CaptureSource:
+    """The screen as a panel's picture (mirror.py): ffmpeg captures it itself (``inputs``, then
+    ``prefilter`` to bring its pictures to the processor), fitted as ``fit`` says; on Wayland a
+    program feeds it the raw frames (``feeder``, handed ``fds``). ``name``: for the log."""
+
+    inputs: tuple[str, ...]
+    prefilter: str = ""
+    fit: str = "contain"
+    background: str = "#000000"
+    feeder: tuple[str, ...] = ()
+    fds: tuple[int, ...] = ()
+    name: str = ""
+
+
+def source_name(source: VideoSource | CaptureSource) -> str:
+    """What the log calls a source: a video's file name, a capture's name."""
+    if isinstance(source, CaptureSource):
+        return source.name or "the screen"
+    return Path(source.path).name
+
+
+def _fitted(source: VideoSource | CaptureSource, width: int, height: int) -> str:
     """ffmpeg's filter that fits the video into the panel's frame as the widget does."""
     if source.fit == "cover":
         return f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}"
@@ -547,6 +569,70 @@ def ffmpeg_file_command(
     command += ["-vf", ",".join(part for part in filters if part)]
     command += codec_args(settings, keyint, maxrate)
     return command + [*stamp(settings.full), "-f", "h264", "-"]
+
+
+def ffmpeg_capture_command(
+    ffmpeg: str,
+    source: CaptureSource,
+    size: tuple[int, int],
+    rotate: int | None,
+    settings: EncoderSettings,
+) -> list[str]:
+    """ffmpeg capturing the screen of ``source`` (mirror.py) as it changes, fitted into frames
+    of ``size``, turned into the panel's framebuffer and encoded as :func:`ffmpeg_file_command`
+    encodes a video: the panel gets the stream it was measured with."""
+    width, height = size
+    keyint = max(1, round(settings.fps * settings.keyframe_s))
+    maxrate = bit_rate(settings, size)
+    settings = replace(settings, card=False)
+    command = [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", *source.inputs, "-an"]
+    filters = [source.prefilter or None, _fitted(source, width, height), f"fps={settings.fps}",
+               ROTATION_FILTERS[rotate]]  # fmt: skip
+    if settings.full:
+        made = "yuv420p" if settings.encoder == "libx264" else "nv12"
+        filters += [FULL_RANGE, f"format={made}"]
+    command += ["-vf", ",".join(part for part in filters if part)]
+    command += codec_args(settings, keyint, maxrate)
+    return command + [*stamp(settings.full), "-f", "h264", "-"]
+
+
+class Fed:
+    """ffmpeg fed by a program (a capture's ``feeder``): started as Popen is, the feeder's
+    output its input; what Encoder asks of a process (``poll``, ``stdout`` ...) is ffmpeg's,
+    and both end together."""
+
+    def __init__(self, feeder: tuple[str, ...], fds: tuple[int, ...],
+                 command: list[str], **options: Any) -> None:  # fmt: skip
+        self.feeder = subprocess.Popen(feeder, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                       pass_fds=fds)  # fmt: skip
+        options.update(stdin=self.feeder.stdout)
+        try:
+            self.ffmpeg = subprocess.Popen(command, **options)
+        except OSError:
+            self.feeder.kill()
+            raise
+        self.stdin, self.stdout, self.stderr = None, self.ffmpeg.stdout, self.ffmpeg.stderr
+        self.pid = self.ffmpeg.pid
+
+    def poll(self) -> int | None:
+        code = self.ffmpeg.poll()
+        if code is not None and self.feeder.poll() is None:
+            self.feeder.kill()
+        return code
+
+    def wait(self, timeout: float | None = None) -> int:
+        code = self.ffmpeg.wait(timeout)
+        self.feeder.kill()
+        self.feeder.wait()
+        return code
+
+    def kill(self) -> None:
+        self.ffmpeg.kill()
+        self.feeder.kill()
+
+    def terminate(self) -> None:
+        self.ffmpeg.terminate()
+        self.feeder.terminate()
 
 
 def passes_through(settings: EncoderSettings) -> bool:
@@ -752,6 +838,8 @@ class Encoder:
 
     def _write_loop(self) -> None:
         stdin = self.proc.stdin
+        if stdin is None:  # (fed by a program of its own: Fed)
+            return
         try:
             while True:
                 frame = self._frames.get()

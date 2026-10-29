@@ -9,7 +9,8 @@ The first panel's process (:class:`PanelProcess`) starts it and tells it what it
 first: the readings the first panel's loop took (asked for at the pace of this panel's theme),
 the ones that follow on every frame, the first panel's mode, theme and fans' beats, where the
 panels stand, whether the app quits, *Which is which?*, the colour check's A and B on a panel
-(colour_show.py), what the app's Player plays (player.py), and the device places its own
+(colour_show.py), what the app's Player plays (player.py), the screen a panel shows as a
+monitor (mirror.py), and the device places its own
 panels hold. The panel's process
 (:func:`child`) runs its loop on those (:func:`libre_panel.app.run` with its ``[[panels]]``
 table, which it reads and follows itself) and says back how it is doing
@@ -170,7 +171,7 @@ class PanelProcess:
                 pass  # the process ended: the receiver says so
 
     def _state(self) -> dict[str, Any]:
-        from libre_panel import colour_show, identify, player, transition_show
+        from libre_panel import colour_show, identify, mirror, player, transition_show
         from libre_panel.devices import base
 
         more = self.more
@@ -180,7 +181,8 @@ class PanelProcess:
                 "quitting": quitting, "identify": identify.left(), "beats": beats,
                 "transition": transition_show.export(),
                 "taken": sorted(base.places_taken() - self._held),
-                "colours": colour_show.export(), "player": player.export()}  # fmt: skip
+                "colours": colour_show.export(), "player": player.export(),
+                "mirror": mirror.export()}  # fmt: skip
 
     def _push(self) -> None:
         hub = self.more.hub
@@ -301,7 +303,7 @@ class _Link:
             return self._replies.pop() if self._replies else None
 
     def hear(self) -> None:
-        from libre_panel import colour_show, identify, player, transition_show
+        from libre_panel import colour_show, identify, mirror, player, transition_show
         from libre_panel.devices import base
 
         while True:
@@ -322,6 +324,7 @@ class _Link:
                 transition_show.adopt(state.get("transition"))  # a transition shown, everywhere
                 colour_show.adopt(state.get("colours"))  # the colour check's A and B
                 player.adopt(state.get("player"))  # what the app's Player plays
+                mirror.adopt(state.get("mirror"))  # the screen a panel shows as a monitor
                 if self.beats is not None and state.get("beats"):
                     self.beats.adopt(state["beats"])
                 foreign = set(state.get("taken", ()))

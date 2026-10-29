@@ -20,6 +20,7 @@ from libre_panel import (
     colour_show,
     i18n,
     identify,
+    mirror,
     modes,
     player,
     presence,
@@ -146,6 +147,7 @@ def target_size(config: Config, theme: Theme, name: str | None = None) -> tuple[
 # [video] direct: how many frames a second the renderer decodes of a video the panel takes
 # from its file (for the app's picture of the panel alone)
 DIRECT_PICTURE_FPS = 4
+CAPTURE_RETRY_S = 10.0  # a screen that could not be captured for the panel's stream: again then
 
 
 def fit_frame(
@@ -333,8 +335,13 @@ class _Link:
 
         path, fit, speed = video
         colour = "#{:02x}{:02x}{:02x}".format(*background[:3])  # (round a contained video)
+        return self.show_source(VideoSource(path, fit, speed, colour), size, now)
+
+    def show_source(self, source: Any, size: tuple[int, int], now: float) -> bool:
+        """A video from its file or the screen (h264.VideoSource, h264.CaptureSource) to the
+        panel's stream as ffmpeg makes it; False where the panel takes frames for it."""
         try:
-            if not self.display.show_video(VideoSource(path, fit, speed, colour), size):
+            if not self.display.show_video(source, size):
                 return False
         except DeviceError as exc:
             self.display.close()
@@ -853,6 +860,10 @@ class MainLoop:
         self.showing: transition_show.Show | None = None  # a transition shown to see it
         self.player = player.Screen()  # what the player plays here (player.py), drawn
         self.playing = False  # ... instead of the theme
+        self.mirror = mirror.Screen()  # the screen shown here as a monitor (mirror.py)
+        self.mirrored: mirror.Source | None = None  # ... instead of the theme
+        self.mirror_direct = False  # ... straight into the panel's stream: few pictures here
+        self.captures: dict[tuple[Any, ...], Any] = {}  # (mirror.capture_source, by its key)
         self.began_in: str | None = None  # the mode it began in
         self.shown_frame: Image.Image | None = None  # the last frame as it went out, toasts and all
         self.switches = host.switches if host is not None else 0  # mode changes with a transition
@@ -1429,8 +1440,13 @@ class MainLoop:
                 snapshot.now = datetime.fromtimestamp(time.time() - (self.clock() - now))
                 drawing = self.clock()
                 number = 1 if self.panel is None else self.panel + 2
-                playing = player.now(number)  # the app's Player: instead of the theme
-                if playing is not None:
+                mirrored = mirror.now(number)  # the panel as a monitor: instead of the theme
+                playing = player.now(number) if mirrored is None else None  # the app's Player
+                if mirrored is not None:
+                    rate = DIRECT_PICTURE_FPS if self.mirror_direct else renderer.fps
+                    frame = rendered = self.mirror.frame(mirrored, size, rate,
+                                                         still=self.mirror_direct)  # fmt: skip
+                elif playing is not None:
                     frame = rendered = self.player.frame(playing, size, renderer.fps)
                 else:
                     frame, _ = renderer.render(snapshot, now)
@@ -1438,6 +1454,10 @@ class MainLoop:
                 if self.playing and playing is None:  # (it ended: ffmpeg stops)
                     self.player.close()
                 self.playing = playing is not None
+                if self.mirrored is not None and mirrored is None:
+                    self.mirror.close()
+                    self.mirror_direct = False
+                self.mirrored = mirrored
                 if blend is not None:
                     playing_kind = blend[0]
                     frame, blend = _blend(blend, frame, now)
@@ -1478,12 +1498,20 @@ class MainLoop:
                     # it (a notice, a transition, the alarm's edge would be a new picture), goes
                     # to the panel from its file; its frames are drawn only for the app's
                     # picture then, at a few a second
-                    whole = renderer.full_video if out is rendered and not self.playing else None
-                    direct = (
-                        bool(whole)
-                        and config.device.video.direct
-                        and link.show_video(whole, background_of(renderer), out.size, started)
-                    )
+                    if mirrored is not None:  # the screen, straight into the panel's stream
+                        found = self._capture(mirrored, out.size) if out is rendered else None
+                        direct = self.mirror_direct = found is not None and link.show_source(
+                            found, out.size, started
+                        )
+                    else:
+                        whole = (
+                            renderer.full_video if out is rendered and not self.playing else None
+                        )
+                        direct = (
+                            bool(whole)
+                            and config.device.video.direct
+                            and link.show_video(whole, background_of(renderer), out.size, started)
+                        )
                     renderer.video_fps = DIRECT_PICTURE_FPS if direct else config.device.video.fps
                     # (and from its keyframes alone: decoded twice, the video cost ffmpeg about
                     # what the panel's stream from its file saved)
@@ -1560,9 +1588,33 @@ class MainLoop:
         # reading, but at least twice a second so a seconds clock never skips.
         interval = 1 / _fps(config, host, self.display)
         if not (renderer.moving or blend is not None or toasts.active or self.showing
-                or self.playing):  # fmt: skip
+                or self.playing or self.mirrored is not None):  # fmt: skip
             interval = max(interval, min(0.5, next_sample - started))
         return max(0.0, interval - (self.clock() - started))
+
+    def _capture(self, source: mirror.Source, size: tuple[int, int]) -> Any:
+        """The screen of ``source`` for the panel's stream (mirror.capture_source), looked up
+        once for it and its size (a monitor's place, a window's handle: programs are asked);
+        None where it cannot be captured so (the frames say why), asked again after a while."""
+        fps = self.config.device.video.fps
+        key = (source, size, fps)
+        known = self.captures.get(key)
+        if isinstance(known, float):  # (it failed then)
+            if self.clock() - known < CAPTURE_RETRY_S:
+                return None
+        elif known is not None:
+            return known
+        from libre_panel.devices.h264 import find_ffmpeg
+
+        try:
+            ffmpeg = find_ffmpeg(self.config.device.video.ffmpeg)
+            found = mirror.capture_source(ffmpeg, source, fps, size)
+        except (mirror.MirrorError, DeviceError) as exc:
+            log.warning("monitor: %s", exc)
+            self.captures = {key: self.clock()}
+            return None
+        self.captures = {key: found}
+        return found
 
     def go_dark(self) -> None:
         """Libre Panel quits ([device] dark_on_quit): a black picture, and the panel's light
@@ -1597,6 +1649,7 @@ class MainLoop:
         self._ahead.close()
         self.renderer.close()
         self.player.close()
+        self.mirror.close()
         self.hub.close()
 
 

@@ -444,7 +444,11 @@ the panel at a glance and the themes made for it, and says when a new version is
 it look. **Live** shows how it runs, and with the memory on, the **history**: temperatures, load
 and power over a day, a week or a month, and the games you played. The **Player** plays your
 videos, GIFs and pictures on a panel instead of its theme: drop them in, click one, pause, skip,
-seek, round and round or shuffled, and the theme comes back when you stop.
+seek, round and round or shuffled, and the theme comes back when you stop. **As a monitor**,
+in the Player too, a panel shows a screen of the computer instead of its theme: one of your
+monitors, a part of one, a window, or a monitor of its own that the desktop extends to
+(Windows with the open-source Virtual Display Driver, set up from the app; Linux on X11 and on
+Wayland, GNOME and KDE). A TURZX panel in video mode gets it straight as its video stream.
 **Keyboard shortcuts** for the whole PC pause the panel, turn its brightness or open the app
 from any window (Windows, Linux with X11), and switch off as a whole. The app speaks English,
 German, French, Spanish, Italian, Polish, Portuguese (Brazil), Russian, Japanese and

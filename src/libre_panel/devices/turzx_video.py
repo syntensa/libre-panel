@@ -42,6 +42,7 @@ The name sent with 110 stays in the panel's memory until it restarts.
 
 from __future__ import annotations
 
+import functools
 import logging
 import queue
 import statistics
@@ -51,7 +52,6 @@ import time
 from collections import deque
 from collections.abc import Callable
 from dataclasses import replace
-from pathlib import Path
 from typing import Any
 
 from PIL import Image
@@ -60,13 +60,16 @@ from libre_panel import timing
 from libre_panel.devices import card_choice, h264, video_state
 from libre_panel.devices.base import Counters, DeviceError, FrameError
 from libre_panel.devices.h264 import (
+    CaptureSource,
     Encoder,
     EncoderSettings,
     EncoderStopped,
+    Fed,
     RateControl,
     VideoSource,
     auto_rate,
     feed_text,
+    ffmpeg_capture_command,
     ffmpeg_command,
     ffmpeg_file_command,
     find_ffmpeg,
@@ -76,6 +79,7 @@ from libre_panel.devices.h264 import (
     resolve_encoder,
     resolve_feed,
     resolve_profile,
+    source_name,
 )
 from libre_panel.devices.models import PanelModel, orientation_of
 from libre_panel.devices.turzx_usb import (
@@ -564,7 +568,10 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
     # -- encoder ---------------------------------------------------------------
 
     def _start_encoder(
-        self, size: tuple[int, int], beside: bool = False, source: VideoSource | None = None
+        self,
+        size: tuple[int, int],
+        beside: bool = False,
+        source: VideoSource | CaptureSource | None = None,
     ) -> None:
         """A new ffmpeg for pictures of ``size``; ``beside``: next to the one running now,
         which goes on until the new one has its first picture (:meth:`_switch`); ``source``:
@@ -583,7 +590,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         said = f"{feed_text(settings)}, profile {settings.profile}"
         said += ", full range" if settings.full else ", limited range"
         if source is not None:
-            said += f", straight from {Path(source.path).name}"
+            said += f", straight from {source_name(source)}"
         if said != self._encoder_said:
             self._encoder_said = said
             log.info("video: encoding with %s", said)
@@ -598,7 +605,12 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             if key != self._rate_key:
                 self._rate_key, self._rate_kept = key, self.rate.rate
             settings = replace(settings, maxrate=rate_text(self.rate.rate))
-        if source is not None:
+        fed: dict[str, Any] = {}
+        if isinstance(source, CaptureSource):  # the screen (mirror.py)
+            command = ffmpeg_capture_command(self._ffmpeg, source, size, rotate, settings)
+            if source.feeder:  # (Wayland: a program hands ffmpeg the raw frames)
+                fed["popen"] = functools.partial(Fed, source.feeder, source.fds)
+        elif source is not None:
             command = ffmpeg_file_command(self._ffmpeg, source, size, rotate, settings)
         else:
             command = ffmpeg_command(self._ffmpeg, size, rotate, settings)
@@ -625,7 +637,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             if generation != self._quiet:  # what a switch leaves behind is no loss: the other shows
                 self.counters.drops += 1  # the stream was replaced, or the panel failed meanwhile
 
-        encoder = Encoder(command, size, deliver)
+        encoder = Encoder(command, size, deliver, **fed)
         encoder.name, encoder.maxrate = settings.encoder, settings.maxrate
         encoder.settings = settings  # (what it is fed: _feed gives each its own)
         encoder.source = source  # (a video from its file: it is fed nothing)
@@ -841,7 +853,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             self._start_encoder(frame.size)
             self._feed(frame)
 
-    def show_video(self, source: VideoSource, size: tuple[int, int]) -> bool:
+    def show_video(self, source: VideoSource | CaptureSource, size: tuple[int, int]) -> bool:
         """A theme that is one video across the panel ([video] direct): ffmpeg encodes it
         straight from its file (h264.ffmpeg_file_command), not from the frames drawn of it;
         the next frame (:meth:`show`) takes over again. False where it is not done so: a
@@ -862,8 +874,8 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             return True
         if same and encoder.size == size and not encoder.pictures:  # it never played
             self._sources_failed.add(source)
-            log.warning("video: ffmpeg could not play %s from its file (%s); frames for it",
-                        Path(source.path).name, encoder.reason())  # fmt: skip
+            log.warning("video: ffmpeg could not play %s itself (%s); frames for it",
+                        source_name(source), encoder.reason())  # fmt: skip
             self._start_encoder(size)
             return False
         if same and encoder.size == size:

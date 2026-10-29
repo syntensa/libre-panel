@@ -402,6 +402,12 @@ def _cmd_editor(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_wayland_feed(args: argparse.Namespace) -> int:
+    from libre_panel import wayland_feed
+
+    return wayland_feed.run(args)
+
+
 def _cmd_window(args: argparse.Namespace) -> int:
     """The app's window (the tray starts it as a process of its own), or --check."""
     from libre_panel import window
@@ -782,6 +788,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="with --check: open a real window for a moment, minimized, as the app does",
     )
     p.set_defaults(func=_cmd_window)
+
+    # the screen on Wayland, for a panel shown as a monitor (wayland_feed.py): started by the app
+    from libre_panel import wayland_feed
+
+    p = sub.add_parser("wayland-feed", help=argparse.SUPPRESS)
+    wayland_feed.add_arguments(p)
+    p.set_defaults(func=_cmd_wayland_feed)
 
     p = sub.add_parser("themes", help="list installed themes")
     p.set_defaults(func=_cmd_themes)

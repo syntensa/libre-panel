@@ -95,6 +95,8 @@ export const ICONS = {
   shuffle:
     '<path d="M3 7h3c2 0 3.2 1 4.2 2.6l2.6 4.8c1 1.6 2.2 2.6 4.2 2.6h4"/><path d="M3 17h3c1.3 0 2.3-.4 3.1-1.1M14.9 8.1c.8-.7 1.8-1.1 3.1-1.1h3"/><path d="M18 4l3 3-3 3M18 14l3 3-3 3"/>',
   repeat: '<path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 014-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 01-4 4H4"/>',
+  monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+  window: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M6.5 6.5h.01M9 6.5h.01"/>',
   film: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/>',
   power: '<path d="M12 3v9"/><path d="M6.3 6.3a8 8 0 1011.4 0"/>',
   landscape: '<rect x="3" y="7" width="18" height="10" rx="2"/>',

@@ -41,6 +41,8 @@ media = [
     "winrt-Windows.Storage.Streams>=2; sys_platform == 'win32'",
 ]
 mqtt = ["paho-mqtt>=2"]
+# a panel as a monitor on Wayland: the desktop's screen cast over D-Bus (wayland.py)
+screen = ["jeepney>=0.8; sys_platform == 'linux'"]
 # LibreHardwareMonitor inside Libre Panel on Windows (GPU, temperatures, power, fans), with the
 # .NET libraries named by dll_dir (docs/CONFIGURATION.md). 3.0.5 is the first that runs on
 # Python 3.13, 3.1 the first on 3.14; the loading it needs is the same in all of 3.x so far.
@@ -52,7 +54,7 @@ window = [
     "pywebview>=6.2,<7; sys_platform == 'win32'",
     "pythonnet>=3.0.5,<3.3; sys_platform == 'win32'",
 ]
-dev = ["pytest>=8", "ruff==0.16.9", "pyserial>=3.5", "pycryptodome>=3.19"]
+dev = ["pytest>=8", "ruff==0.16.9", "pyserial>=3.5", "pycryptodome>=3.19", "jeepney>=0.8"]
 
 [project.scripts]
 libre-panel = "libre_panel.cli:main"
