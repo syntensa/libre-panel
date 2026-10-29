@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+**Fixed**
+- **The panel's own monitor is set up on Windows again** (the app's *Screen*). *Set it up*
+  stopped with "the driver's settings cannot be read": winget's package of the Virtual Display
+  Driver is now its control app alone, which installs the driver from its own window, so no
+  driver came and its settings were nowhere. Setting it up now installs the driver itself, as
+  the driver's own silent install does: its release's package and NefCon (MIT, which makes the
+  device the driver is for), downloaded and checked against their SHA-256, the driver's signer
+  trusted, its settings in `C:\VirtualDisplayDriver` with the panel's size among them, all in
+  one step that Windows asks permission for once. A driver that is there without its settings
+  gets its own, from its package. The control app winget put there can stay or go
+  (`winget uninstall VirtualDrivers.Virtual-Display-Driver`); Libre Panel does not use it.
+
 ## 0.7.7 — 2026-10-29
 
 A panel can be a monitor: it shows one of your screens, a window, or a monitor of its own that

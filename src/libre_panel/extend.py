@@ -3,10 +3,14 @@ any monitor, and the panel shows it (mirror.py, ``virtual``). It is on the deskt
 shows it, and taken off again after, so the mouse never wanders onto a monitor nobody sees.
 
 - **Windows**: a monitor needs a display driver; the Virtual Display Driver (MIT, signed,
-  VirtualDrivers/Virtual-Display-Driver) gives one. Setting it up (:func:`setup`) installs it
-  with winget and puts the panel's size among its resolutions: its settings file
-  (``vdd_settings.xml`` in ``C:\\VirtualDisplayDriver``) is the administrators', so Windows
-  asks once; the driver then reads it again when told so through its pipe, which anyone may
+  VirtualDrivers/Virtual-Display-Driver) gives one. Setting it up (:func:`setup`) installs the
+  driver as the driver's own silent install does: its release's package and NefCon (MIT,
+  nefarius/nefcon, which makes the device the driver is for), both downloaded and checked
+  against their SHA-256, the driver's signer trusted and the device made, its settings
+  (``vdd_settings.xml`` in ``C:\\VirtualDisplayDriver``) with the panel's size among its
+  resolutions; all of it in one step with the administrator's rights, so Windows asks once.
+  (winget's package of the driver is its control app alone, which installs the driver from its
+  window.) The driver reads its settings again when told so through its pipe, which anyone may
   use. Showing it puts its monitor on the desktop at the panel's size, right of the others
   (ChangeDisplaySettingsEx, no rights needed); stopping takes it off.
 - **Linux on X11**: a part of the screen beyond the monitors, as a monitor of its own
@@ -20,8 +24,11 @@ shows it, and taken off again after, so the mouse never wanders onto a monitor n
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import logging
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -29,19 +36,35 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.request
+import zipfile
 from pathlib import Path
 from typing import Any
 
-from libre_panel import capture
+from libre_panel import __version__, capture
 
 log = logging.getLogger(__name__)
 
-VDD_ID = "VirtualDrivers.Virtual-Display-Driver"
 VDD_PIPE = r"\\.\pipe\MTTVirtualDisplayPipe"
 VDD_FOLDER = Path(r"C:\VirtualDisplayDriver")
 VDD_NAME = "virtual display driver"  # (its adapter's name, lowercase)
+VDD_HARDWARE_ID = r"Root\MttVDD"  # the device its INF is for, made by NefCon
+_RELEASES = "https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/download/25.7.23/"
+# The driver alone, for Windows' own machine (its x64 package is named x86), and its SHA-256
+VDD_PACKAGES = {
+    "AMD64": (_RELEASES + "VirtualDisplayDriver-x86.Driver.Only.zip",
+              "e24210692b442b39af763536330ce78b423f19342b7a7792c26de3944e418b3a"),
+    "ARM64": (_RELEASES + "VirtualDisplayDriver-ARM64.Driver.Only.zip",
+              "dcd487161469c726bab60f174a7e7f70ee02afd437cad0d5c0e6755953de5a25"),
+}  # fmt: skip
+NEFCON = ("https://github.com/nefarius/nefcon/releases/download/v1.21.0/nefcon_v1.21.0.zip",
+          "4c8e68f6b663598d77b7c3f76459b16fad00994e53ea8af0bd106a805dd5c18b")  # fmt: skip
+NEFCON_FOLDERS = {"AMD64": "x64", "ARM64": "ARM64"}  # (its program for each machine)
+DOWNLOAD_LIMIT = 16 * 1024 * 1024
+DOWNLOAD_TIMEOUT_S = 60.0
+INSTALL_TIMEOUT_S = 300.0
+REBOOT_REQUIRED = 3010  # (ERROR_SUCCESS_REBOOT_REQUIRED)
 X11_NAME = "LibrePanel"  # the X11 monitor's name
-SETUP_TIMEOUT_S = 600.0
 REFRESH = 60
 
 
@@ -159,32 +182,208 @@ def with_resolution(text: str, size: tuple[int, int], refresh: int = REFRESH) ->
 
 
 def setup(size: tuple[int, int]) -> str:
-    """Windows: the driver installed (winget) and the panel's size among its resolutions;
-    Windows asks for the administrator's consent. What was done, said for the person."""
+    """Windows: the driver installed and the panel's size among its resolutions; Windows asks
+    for the administrator's consent once. What was done, said for the person."""
     if sys.platform != "win32":
         raise ExtendError("only on Windows")
     done = []
-    if not vdd_installed():
-        winget = shutil.which("winget")
-        if winget is None:
-            raise ExtendError("winget is missing: install the Virtual Display Driver from its "
-                              "releases page, then set it up here again")  # fmt: skip
-        result = subprocess.run(
-            [winget, "install", "--id", VDD_ID, "-e", "--accept-package-agreements",
-             "--accept-source-agreements", "--disable-interactivity"],
-            capture_output=True, text=True, timeout=SETUP_TIMEOUT_S, **capture._quiet(),
-        )  # fmt: skip
-        if result.returncode != 0 and not vdd_installed():
-            said = (result.stdout or result.stderr or "").strip().splitlines()
-            raise ExtendError(f"winget: {said[-1] if said else result.returncode}")
-        done.append("driver")
-        time.sleep(2.0)  # (its adapter comes a moment later)
+    installed = not vdd_installed()
+    if installed:
+        restart = _vdd_install(size) == REBOOT_REQUIRED
+        done.append("driver (Windows wants a restart)" if restart else "driver")
+        if not _wait_for(vdd_installed, 20.0):  # (its adapter comes a moment later)
+            raise ExtendError("the driver is installed, but Windows shows no display of it "
+                              "yet: restart Windows, then set it up here again")  # fmt: skip
     if not vdd_has_resolution(size):
         _vdd_write_resolution(size)
         done.append("resolution")
-    _vdd_reload()
+    try:
+        _vdd_reload(tries=5)
+    except ExtendError:
+        if not installed:
+            raise
+        log.info("monitor: the new driver read its settings as it started")
     _vdd_detach()  # (the driver puts its monitor on the desktop: off until a panel shows it)
     return ", ".join(done) or "nothing"
+
+
+def _wait_for(ready: Any, seconds: float, step: float = 0.5) -> bool:
+    """Whether ``ready()`` comes true within ``seconds``."""
+    end = time.monotonic() + seconds
+    while True:
+        if ready():
+            return True
+        if time.monotonic() >= end:
+            return False
+        time.sleep(step)
+
+
+def windows_machine() -> str:
+    """Windows' own machine, "AMD64" or "ARM64" (not the one an emulated program sees)."""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            process, native = wintypes.USHORT(), wintypes.USHORT()
+            kernel32 = ctypes.WinDLL("kernel32")
+            if kernel32.IsWow64Process2(kernel32.GetCurrentProcess(), ctypes.byref(process),
+                                        ctypes.byref(native)):  # fmt: skip
+                return "ARM64" if native.value == 0xAA64 else "AMD64"
+        except (OSError, AttributeError):  # (before Windows 10 1709)
+            pass
+    return "ARM64" if platform.machine().upper() in ("ARM64", "AARCH64") else "AMD64"
+
+
+def download(url: str, sha256: str, folder: Path) -> Path:
+    """``url`` into ``folder``, if it is the file ``sha256`` names (ExtendError: why not)."""
+    target = folder / url.rsplit("/", 1)[-1]
+    request = urllib.request.Request(url, headers={"User-Agent": f"libre-panel/{__version__}"})
+    try:
+        with urllib.request.urlopen(request, timeout=DOWNLOAD_TIMEOUT_S) as answer:
+            data = answer.read(DOWNLOAD_LIMIT + 1)
+    except OSError as exc:
+        raise ExtendError(f"{target.name} could not be downloaded ({exc})") from exc
+    if len(data) > DOWNLOAD_LIMIT or hashlib.sha256(data).hexdigest() != sha256:
+        raise ExtendError(f"{target.name} is not the file it should be")
+    target.write_bytes(data)
+    return target
+
+
+def package_settings(package: Path) -> str:
+    """The driver's own settings, as its package brings them."""
+    with zipfile.ZipFile(package) as archive:
+        return archive.read("VirtualDisplayDriver/vdd_settings.xml").decode("utf-8-sig")
+
+
+def _ps_quote(text: str) -> str:
+    """``text`` as a PowerShell string that is taken as it is."""
+    return "'" + text.replace("'", "''") + "'"
+
+
+def install_script(nefcon: Path, nefcon_sha: str, nefcon_program: str, package: Path,
+                   package_sha: str, settings: Path, settings_sha: str, target: Path,
+                   said: Path) -> str:  # fmt: skip
+    """What runs with the administrator's rights to install the driver (PowerShell). The files
+    it is given lie where the person's other programs may change them, so it checks each again
+    as it reads it and takes what runs or is installed from those bytes, into a folder that
+    only administrators may change: the driver's files and NefCon from their packages, the
+    settings with the panel's size. It trusts the driver's signer (the certificates of its
+    catalog that are no authority, as the driver's own silent install does), writes the
+    settings, makes the device and installs the driver on it, and says how it went in ``said``
+    (NefCon's exit code, or what failed); its own exit code is NefCon's."""
+    q = _ps_quote
+    return f"""$ErrorActionPreference = 'Stop'
+$work = $null
+$code = 1
+try {{
+    Add-Type -AssemblyName System.IO.Compression
+    function Read-Checked([string]$path, [string]$sha) {{
+        $bytes = [IO.File]::ReadAllBytes($path)
+        $hasher = [Security.Cryptography.SHA256]::Create()
+        $hash = [BitConverter]::ToString($hasher.ComputeHash($bytes))
+        $hash = $hash.Replace('-', '').ToLowerInvariant()
+        if ($hash -ne $sha) {{ throw "$path is not the file that was downloaded" }}
+        return ,$bytes
+    }}
+    function Read-Entry([byte[]]$zip, [string]$name) {{
+        $archive = [IO.Compression.ZipArchive]::new([IO.MemoryStream]::new($zip))
+        try {{
+            $entry = $archive.GetEntry($name)
+            if ($null -eq $entry) {{ throw "$name is not in its package" }}
+            $out = [IO.MemoryStream]::new()
+            $in = $entry.Open()
+            try {{ $in.CopyTo($out) }} finally {{ $in.Dispose() }}
+            return ,$out.ToArray()
+        }} finally {{ $archive.Dispose() }}
+    }}
+    $nefconZip = Read-Checked {q(str(nefcon))} {q(nefcon_sha)}
+    $driverZip = Read-Checked {q(str(package))} {q(package_sha)}
+    $settings = Read-Checked {q(str(settings))} {q(settings_sha)}
+    $work = Join-Path $env:ProgramData ('LibrePanel-vdd-' + [Guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $work | Out-Null
+    $admins, $system = '*S-1-5-32-544:(OI)(CI)F', '*S-1-5-18:(OI)(CI)F'
+    & icacls.exe $work /inheritance:r /grant:r $admins $system | Out-Null
+    if ($LASTEXITCODE -ne 0) {{ throw 'the folder for the driver could not be closed to others' }}
+    $nefconExe = Join-Path $work 'nefconc.exe'
+    [IO.File]::WriteAllBytes($nefconExe, (Read-Entry $nefconZip {q(nefcon_program)}))
+    foreach ($name in 'MttVDD.inf', 'MttVDD.dll', 'mttvdd.cat') {{
+        $bytes = Read-Entry $driverZip ('VirtualDisplayDriver/' + $name)
+        [IO.File]::WriteAllBytes((Join-Path $work $name), $bytes)
+    }}
+    $x509 = 'System.Security.Cryptography.X509Certificates'
+    $certificates = ([type]"$x509.X509Certificate2Collection")::new()
+    $certificates.Import((Read-Entry $driverZip 'VirtualDisplayDriver/mttvdd.cat'))
+    $basic = [type]"$x509.X509BasicConstraintsExtension"
+    $store = ([type]"$x509.X509Store")::new('TrustedPublisher', 'LocalMachine')
+    $store.Open('ReadWrite')
+    try {{
+        foreach ($certificate in $certificates) {{
+            $authority = $false
+            foreach ($extension in $certificate.Extensions) {{
+                $isAuthority = $extension -is $basic -and $extension.CertificateAuthority
+                if ($isAuthority) {{ $authority = $true }}
+            }}
+            if (-not $authority) {{ $store.Add($certificate) }}
+        }}
+    }} finally {{ $store.Close() }}
+    $target = {q(str(target))}
+    New-Item -ItemType Directory -Force -Path $target | Out-Null
+    [IO.File]::WriteAllBytes((Join-Path $target 'vdd_settings.xml'), $settings)
+    $inf = Join-Path $work 'MttVDD.inf'
+    & $nefconExe install $inf {q(VDD_HARDWARE_ID)} --no-duplicates --remove-duplicates | Out-Null
+    $code = $LASTEXITCODE
+    [IO.File]::WriteAllText({q(str(said))}, [string]$code)
+}} catch {{
+    $code = 1
+    [IO.File]::WriteAllText({q(str(said))}, 'error: ' + $_.Exception.Message)
+}} finally {{
+    if ($work) {{ Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue }}
+}}
+exit $code
+"""
+
+
+def powershell(script: str) -> tuple[str, str]:
+    """Windows' own PowerShell and its parameters to run ``script``: given encoded, so that
+    nothing on the way reads it as anything else, and without a window."""
+    program = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32",
+                           "WindowsPowerShell", "v1.0", "powershell.exe")  # fmt: skip
+    encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
+    return program, ("-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden "
+                     f"-EncodedCommand {encoded}")  # fmt: skip
+
+
+def _vdd_install(size: tuple[int, int]) -> int:
+    """The driver installed, with the panel's size among its resolutions (one question of
+    Windows): NefCon's exit code, 0 or :data:`REBOOT_REQUIRED` (ExtendError: why not)."""
+    machine = windows_machine()
+    with tempfile.TemporaryDirectory(prefix="libre-panel-vdd-") as scratch:
+        folder = Path(scratch)
+        package = download(*VDD_PACKAGES[machine], folder)
+        nefcon = download(*NEFCON, folder)
+        try:  # (settings that are there already are kept, with the panel's size)
+            current = (vdd_folder() / "vdd_settings.xml").read_text(encoding="utf-8-sig")
+        except OSError:
+            current = package_settings(package)
+        settings = folder / "vdd_settings.xml"
+        settings.write_bytes(with_resolution(current, size).encode("utf-8"))
+        said = folder / "said.txt"
+        script = install_script(
+            nefcon, NEFCON[1], f"{NEFCON_FOLDERS[machine]}/nefconc.exe", package,
+            VDD_PACKAGES[machine][1], settings, hashlib.sha256(settings.read_bytes()).hexdigest(),
+            vdd_folder(), said,
+        )  # fmt: skip
+        code = _run_elevated(*powershell(script), INSTALL_TIMEOUT_S)
+        try:
+            told = said.read_text(encoding="utf-8", errors="replace").strip()
+        except OSError:
+            told = ""
+    if code in (0, REBOOT_REQUIRED):
+        log.info("monitor: the Virtual Display Driver installed (%s)", code)
+        return code
+    reason = told[len("error: ") :] if told.startswith("error: ") else f"NefCon said {code}"
+    raise ExtendError(f"the driver was not installed ({reason})")
 
 
 _setting_up = threading.Lock()
@@ -192,8 +391,8 @@ _setup: dict[str, Any] = {"running": False, "said": "", "error": ""}
 
 
 def start_setup(size: tuple[int, int]) -> None:
-    """:func:`setup` in the background (winget takes minutes): :func:`setup_state` says how
-    it goes. Nothing new while one runs."""
+    """:func:`setup` in the background (the downloads and the driver take a while):
+    :func:`setup_state` says how it goes. Nothing new while one runs."""
     if not _setting_up.acquire(blocking=False):
         return
     _setup.update(running=True, said="", error="")
@@ -221,7 +420,10 @@ def setup_state() -> dict[str, Any]:
 def _vdd_write_resolution(size: tuple[int, int]) -> None:
     target = vdd_folder() / "vdd_settings.xml"
     try:
-        text = target.read_text(encoding="utf-8")
+        text = target.read_text(encoding="utf-8-sig")
+    except FileNotFoundError:  # (a driver installed without them: its own, from its package)
+        with tempfile.TemporaryDirectory(prefix="libre-panel-vdd-") as scratch:
+            text = package_settings(download(*VDD_PACKAGES[windows_machine()], Path(scratch)))
     except OSError as exc:
         raise ExtendError(f"the driver's settings cannot be read ({exc})") from exc
     changed = with_resolution(text, size)
@@ -238,7 +440,17 @@ def _vdd_write_resolution(size: tuple[int, int]) -> None:
 
 
 def _elevated_copy(source: Path, target: Path) -> None:
-    """``source`` over ``target`` as the administrator (Windows asks): the driver's settings."""
+    """``source`` over ``target`` as the administrator (Windows asks): the driver's settings,
+    its folder made if it is not there."""
+    command = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "cmd.exe")
+    folder = target.parent
+    _run_elevated(command, f'/c (if not exist "{folder}" mkdir "{folder}") & '
+                           f'copy /y "{source}" "{target}"', 30.0)  # fmt: skip
+
+
+def _run_elevated(program: str, parameters: str, timeout: float) -> int:
+    """``program`` with ``parameters`` as the administrator, Windows asking the person first;
+    its exit code once it has ended (ExtendError: refused, or it did not end in time)."""
     import ctypes
     from ctypes import wintypes
 
@@ -252,28 +464,39 @@ def _elevated_copy(source: Path, target: Path) -> None:
                     ("hotkey", wintypes.DWORD), ("icon", wintypes.HANDLE),
                     ("process", wintypes.HANDLE)]  # fmt: skip
 
-    command = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "cmd.exe")
     info = ShellExecuteInfo()
     info.size = ctypes.sizeof(info)
     info.mask = 0x00000040  # SEE_MASK_NOCLOSEPROCESS
-    info.verb, info.file = "runas", command
-    info.parameters = f'/c copy /y "{source}" "{target}"'
+    info.verb, info.file, info.parameters = "runas", program, parameters
     info.show = 0
     shell32 = ctypes.WinDLL("shell32", use_last_error=True)
     if not shell32.ShellExecuteExW(ctypes.byref(info)):
-        raise ExtendError("Windows did not let the driver's settings be changed")
+        refused = ctypes.get_last_error() == 1223  # ERROR_CANCELLED: the person said no
+        raise ExtendError("Windows was not given the permission" if refused
+                          else "Windows did not start the setup")  # fmt: skip
     kernel32 = ctypes.WinDLL("kernel32")
-    kernel32.WaitForSingleObject(info.process, 30_000)
-    kernel32.CloseHandle(info.process)
-
-
-def _vdd_reload() -> None:
-    """The driver reads its settings again (its pipe: RELOAD_DRIVER)."""
     try:
-        with open(VDD_PIPE, "r+b", buffering=0) as pipe:
-            pipe.write("RELOAD_DRIVER".encode("utf-16-le"))
-    except OSError as exc:
-        raise ExtendError(f"the driver did not answer ({exc})") from exc
+        if kernel32.WaitForSingleObject(info.process, round(timeout * 1000)) != 0:
+            raise ExtendError("the setup did not end in time")
+        code = wintypes.DWORD()
+        kernel32.GetExitCodeProcess(info.process, ctypes.byref(code))
+        return int(code.value)
+    finally:
+        kernel32.CloseHandle(info.process)
+
+
+def _vdd_reload(tries: int = 1) -> None:
+    """The driver reads its settings again (its pipe: RELOAD_DRIVER); a driver that has just
+    started opens its pipe a moment later, so it is tried ``tries`` times, a second apart."""
+    for attempt in range(tries):
+        try:
+            with open(VDD_PIPE, "r+b", buffering=0) as pipe:
+                pipe.write("RELOAD_DRIVER".encode("utf-16-le"))
+            break
+        except OSError as exc:
+            if attempt + 1 >= tries:
+                raise ExtendError(f"the driver did not answer ({exc})") from exc
+            time.sleep(1.0)
     time.sleep(1.5)
 
 
