@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.7.8 — 2026-10-29
+
+A hotfix for 0.7.7. The panel's own monitor is set up on Windows again: Libre Panel installs the
+Virtual Display Driver itself, since winget's package of it is now the driver's control app
+alone. And Arena's frame rate graph runs from 0, its top in steps of 30 fps that come at once:
+a dip or a peak no longer sets its range gliding, and the graph is drawn anew half as often.
 
 **Fixed**
 - **The panel's own monitor is set up on Windows again** (the app's *Screen*). *Set it up*
