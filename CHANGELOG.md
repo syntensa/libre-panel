@@ -13,6 +13,18 @@
   one step that Windows asks permission for once. A driver that is there without its settings
   gets its own, from its package. The control app winget put there can stay or go
   (`winget uninstall VirtualDrivers.Virtual-Display-Driver`); Libre Panel does not use it.
+- **Arena's frame rate graph keeps its range, and asks less of the computer** (the 12.3" most
+  of all). Its range went from the lowest frame rate in its window to the highest, with room
+  around them, in steps of 30 fps: a frame that took long moved the bottom as it came into the
+  window and again as it left it, 37 seconds later, and a new peak moved the top, each gliding
+  there for seconds. While a range glides the graph is drawn anew ten times a second, on the
+  12.3" at 35 ms or more a time beside the panel's frames. The graph now runs from 0: a dip
+  shows as deep as it was and moves nothing. Its top goes to the next step of 30 fps when a
+  peak needs it, there within a tenth of a second, and comes down only when the window has used
+  less than 60 % of it for three seconds. With a game's frame rates as they come (scenes
+  between 100 and 200 fps, short spikes, stutters, a loading screen) the 12.3"'s Arena was
+  drawn anew 2.2 times a second instead of 4.2, and with every core of the processor busy, as
+  in a game, a frame took a fifth less time.
 
 ## 0.7.7 — 2026-10-29
 

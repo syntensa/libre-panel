@@ -414,6 +414,27 @@ def test_a_range_in_whole_steps_changes_seldom_and_its_top_starts_the_fade():
     )
 
 
+def test_a_games_frame_rate_from_0_keeps_its_range_through_dips_and_is_quick_to_a_new_top():
+    """The game's graph: from 0, its top in steps of 30. A frame that took long (a dip to 25
+    fps) comes into the window and leaves it again: the range stays as it is, and the graph is
+    not drawn anew for a range on its way. A peak past the top: the next step, there at once
+    (a range on its way draws its graph anew ten times a second)."""
+    renderer = Renderer(theme(graph(min=0, max=None, range_step=30)), animate=True)
+    widget = renderer.widgets[0]
+    steady = [138.0, 141.5, 144.0]
+    assert renderer._glided_bounds(widget, steady, 0.0) == ((0, 180.0), False)
+    for k in range(1, 40):  # a dip in the window and out of it again: nothing moves
+        dip = [*steady, 25.0] if k % 10 < 5 else steady
+        assert renderer._glided_bounds(widget, dip, k / 10) == ((0, 180.0), False), k
+    t = 4.0
+    bounds, moving = renderer._glided_bounds(widget, [*steady, 171.0], t)  # past 180 with room
+    assert moving and bounds[1] >= 171.0
+    while moving and t < 6.0:
+        t += 0.1
+        bounds, moving = renderer._glided_bounds(widget, [*steady, 171.0], t)
+    assert bounds == (0, 210.0) and t <= 4.0 + 0.6  # there within half a second
+
+
 # -- warming up the next theme ---------------------------------------------------
 
 PREPARED = """

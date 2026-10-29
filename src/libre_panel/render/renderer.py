@@ -3690,6 +3690,10 @@ class Renderer:
 
     RANGE_ROOM = 0.1  # room above and below the values, of their span
     RANGE_GLIDE_S = 0.6  # the range on show reaches a new one at this pace (a time constant)
+    # ... a range in whole steps, which changes seldom and then by a step, at once: while a
+    # range glides its graph is drawn anew ten times a second, a wide one at some cost
+    RANGE_STEP_GLIDE_S = 0.12
+    RANGE_STEP_NEAR = 0.01  # (it is there once this close, of its span)
     RANGE_NARROW_S = 3.0  # it narrows once the values have used ...
     RANGE_USED = 0.6  # ... less than this share of it for so long
 
@@ -3715,7 +3719,7 @@ class Renderer:
             self._ranges[widget["id"]] = _Range(want, now, (lo, hi))
             return want, False
         # on to now on the way it was going (a new target takes over from here on) ...
-        k = 1 - math.exp(-(now - state.at) / self.RANGE_GLIDE_S)
+        k = 1 - math.exp(-(now - state.at) / self._range_glide(widget))
         shown = tuple(a + (b - a) * k for a, b in zip(state.shown, state.target, strict=True))
         shown = (min(shown[0], lo), max(shown[1], hi))  # the values always inside
         target = state.target  # ... and where to now
@@ -3727,8 +3731,14 @@ class Renderer:
         elif now - state.full >= self.RANGE_NARROW_S:  # little of it used for a while
             target, state.full = want, now
         state.target, state.shown, state.at, state.values = target, shown, now, (lo, hi)
-        near = (target[1] - target[0]) * 0.002
+        near = (target[1] - target[0]) * (self.RANGE_STEP_NEAR if step > 0 else 0.002)
+        if step > 0 and abs(shown[0] - target[0]) <= near and abs(shown[1] - target[1]) <= near:
+            state.shown = shown = target  # (there: the strip drawn now is the last of its glide)
         return shown, abs(shown[0] - target[0]) > near or abs(shown[1] - target[1]) > near
+
+    def _range_glide(self, widget: dict[str, Any]) -> float:
+        """How fast a graph's own range goes to a new one (a time constant)."""
+        return self.RANGE_STEP_GLIDE_S if widget.get("range_step") else self.RANGE_GLIDE_S
 
     def _range_now(self, widget: dict[str, Any], now: float) -> tuple[float, float] | None:
         """A graph's own range at ``now``, on its way to the one it glides to (in video mode
@@ -3738,7 +3748,7 @@ class Renderer:
             return None
         if not self.animate:
             return state.shown
-        k = 1 - math.exp(-max(0.0, now - state.at) / self.RANGE_GLIDE_S)
+        k = 1 - math.exp(-max(0.0, now - state.at) / self._range_glide(widget))
         lo, hi = (a + (b - a) * k for a, b in zip(state.shown, state.target, strict=True))
         lo, hi = min(lo, state.values[0]), max(hi, state.values[1])
         live = self.motion.value(widget["sensor"], now) if self.continuous else None

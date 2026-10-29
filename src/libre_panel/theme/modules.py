@@ -1835,9 +1835,10 @@ def build_game(b: _Build, _src: Source) -> None:
         else:
             gx = x + number_w + b.pad
             gy, gw, gh = y, x + w - gx, h
-        b.graph("history", "game.fps", gx, gy, gw, gh, color, None, None)  # its own range
-        # every frame's rate as measured (25 points a second, where the source has them), on
-        # a range in steps of 30 fps that changes seldom
+        # from 0, its top its own: a dip shows as deep as it was and moves no range
+        b.graph("history", "game.fps", gx, gy, gw, gh, color, 0, None)
+        # every frame's rate as measured (25 points a second, where the source has them), up
+        # to a top in steps of 30 fps that changes seldom
         b.out[-1].update(clip=clip, trace="game.fps_trace", range_step=30)
     icon = min(b.iw, b.ih) * 0.3
     # a game found, its frame rate not yet there: its logo where it has one (the logo of the

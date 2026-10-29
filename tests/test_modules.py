@@ -678,8 +678,9 @@ def test_the_games_graph_runs_from_one_edge_of_its_card_to_the_other(model, cols
     graph = next(w for w in parts if w["type"] == "graph")
     line = card["outline_width"]
     assert graph["x"] == card["x"] + line and graph["w"] == card["w"] - 2 * line
-    assert graph["clip"] is True and graph["min"] is None and graph["max"] is None
-    # every frame's rate as measured where the source has it, on a range in steps of 30 fps
+    # from 0 (a dip moves no range), its top its own
+    assert graph["clip"] is True and graph["min"] == 0 and graph["max"] is None
+    # every frame's rate as measured where the source has it, up to a top in steps of 30 fps
     assert (graph["trace"], graph["range_step"]) == ("game.fps_trace", 30)
     bottom = graph["y"] + graph["h"]
     assert card["y"] + card["h"] - card["radius"] <= bottom <= card["y"] + card["h"] - line
