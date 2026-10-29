@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.7.7 — 2026-10-29
+
+A panel can be a monitor: it shows one of your screens, a window, or a monitor of its own that
+the desktop extends to, on Windows, on Linux with X11 and on Wayland (the app's *Screen*).
+Lumen's cards can take turns, each for its minutes, and go from one to the next as you choose,
+with more cards to choose from. Arena's frame rate graph shows every frame as measured instead
+of a soft glide from second to second. RTSS gives the frame rates where it runs anyway,
+PresentMon is a box of its own in the Windows setup, a module goes where you put it on a theme
+without a grid, and the AI card says where the plan's usage comes from, or why it does not.
 
 **New**
 - **A panel as a monitor** (the app's *Screen*). A panel shows a screen of the computer
