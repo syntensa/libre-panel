@@ -1760,7 +1760,6 @@
     "Cards": "Card",
     "Take out": "Togli",
     "Move up": "Sposta su",
-    "The first one with something to show is on show: what plays while music plays, else the next.": "Viene mostrata la prima che ha qualcosa da mostrare: ciò che suona mentre c'è musica, altrimenti la successiva.",
     "Click to add it, or drag it onto the panel": "Fare clic per aggiungerlo, oppure trascinarlo sul pannello",
     "Click a block to add it, or drag it to where it should go. A module fits itself to the room it gets.": "Fare clic su un modulo per aggiungerlo, oppure trascinarlo dove deve andare. Un modulo si adatta allo spazio che riceve.",
     "No room left for it on the panel: make a module smaller or remove one, then add it again.": "Sul pannello non c'è più spazio: rimpicciolire un modulo o rimuoverne uno, poi aggiungerlo di nuovo.",
@@ -2809,9 +2808,6 @@
     "Later: {card}": "Dopo: {card}",
     "Set up AI activity first": "Configura prima l'attività IA",
     "Show the card {card}": "Mostra la scheda {card}",
-    "The card on the panel is the first of these that has something to show. The choice holds for every version of {theme}.": "Il pannello mostra la prima di queste schede che ha qualcosa da mostrare. La scelta vale per ogni versione di {theme}.",
-    "The card on the panel is the first of these that has something to show; the choice holds for every theme that leaves it to you.": "Il pannello mostra la prima di queste schede che ha qualcosa da mostrare; la scelta vale per ogni tema che la lascia a te.",
-    "always: on show when no card before it has something": "sempre: visibile quando nessuna scheda prima di essa ha qualcosa",
     "once the weather is set up": "appena il meteo è configurato",
     "while Claude Code or Codex works or waits for you": "mentre Claude Code o Codex lavora o ti aspetta",
     "while a download runs": "mentre è in corso un download",
@@ -2967,7 +2963,25 @@
     "A screen of the computer, a window or a monitor of its own on the panel": "Uno schermo del computer, una finestra o un monitor tutto suo sul pannello",
     "Screen": "Schermo",
     "screen monitor mirror extend window desktop": "schermo monitor duplica estendi finestra desktop",
-    "the computer's screen on the panel": "lo schermo del computer sul pannello"
+    "the computer's screen on the panel": "lo schermo del computer sul pannello",
+    "Each card is on show for its minutes, then the next; one with nothing to show is passed over.": "Ogni scheda resta visibile per i suoi minuti, poi la successiva; una senza niente da mostrare viene saltata.",
+    "From one card to the next": "Da una scheda alla successiva",
+    "Minutes on show: {card}": "Minuti visibile: {card}",
+    "More cards": "Altre schede",
+    "More cards ({n})": "Altre schede ({n})",
+    "Push to the left": "Spingi a sinistra",
+    "Push upwards": "Spingi in alto",
+    "The card on show is the first that has something to show: what plays while music plays, else the next.": "È visibile la prima scheda che ha qualcosa da mostrare: la musica mentre suona, altrimenti la successiva.",
+    "The choice holds for every theme that leaves the cards to you.": "La scelta vale per ogni tema che lascia a te le schede.",
+    "The choice holds for every version of {theme}.": "La scelta vale per ogni versione di {theme}.",
+    "The week's weather": "Il meteo della settimana",
+    "Which card is on show": "Quale scheda è visibile",
+    "World clocks": "Orologi del mondo",
+    "always: your appointments once a calendar is set up": "sempre: i tuoi appuntamenti appena un calendario è configurato",
+    "first with something to show": "la prima con contenuto",
+    "in turn": "a turno",
+    "At once": "Subito",
+    "Never on show: {card} before it always has something. Move this one up, or let the cards take turns.": "Mai visibile: {card}, prima di lei, ha sempre qualcosa da mostrare. Spostala più in alto o fai alternare le schede."
   },
   "fields": {
     "agent": "agente",
@@ -3115,7 +3129,10 @@
     "hide_unused": "nascondi inutilizzati",
     "threads": "thread",
     "rotate": "Rotazione",
-    "speed": "Velocità di riproduzione"
+    "speed": "Velocità di riproduzione",
+    "order": "Ordine",
+    "turn": "Minuti per scheda",
+    "transition": "Transizione"
   },
   "widgets": {
     "agent": "Segno IA",
@@ -3257,7 +3274,15 @@
     "power": "consumo",
     "mic": "microfono",
     "ups": "UPS",
-    "huge": "numero molto grande"
+    "huge": "numero molto grande",
+    "first": "la prima con contenuto",
+    "turns": "a turno",
+    "light": "linea di luce",
+    "slide": "spingi a sinistra",
+    "rise": "spingi in alto",
+    "wipe": "tendina",
+    "cut": "subito",
+    "random": "casuale"
   },
   "icons": {
     "battery": "Batteria",

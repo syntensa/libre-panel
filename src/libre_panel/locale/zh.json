@@ -1760,7 +1760,6 @@
     "Cards": "卡片",
     "Take out": "取出",
     "Move up": "上移",
-    "The first one with something to show is on show: what plays while music plays, else the next.": "显示第一张有待显示内容的卡片：播放音乐时显示正在播放的内容，否则显示下一张。",
     "Click to add it, or drag it onto the panel": "点击添加，或将其拖到面板上",
     "Click a block to add it, or drag it to where it should go. A module fits itself to the room it gets.": "点击积木以添加，或将其拖到目标位置。模块会适应所给的空间。",
     "No room left for it on the panel: make a module smaller or remove one, then add it again.": "面板上没有空间了：请缩小某个模块或移除一个，然后重新添加。",
@@ -2809,9 +2808,6 @@
     "Later: {card}": "延后：{card}",
     "Set up AI activity first": "请先设置 AI 活动",
     "Show the card {card}": "显示卡片 {card}",
-    "The card on the panel is the first of these that has something to show. The choice holds for every version of {theme}.": "面板显示这些卡片中第一张有内容可显示的。此选择适用于 {theme} 的每个版本。",
-    "The card on the panel is the first of these that has something to show; the choice holds for every theme that leaves it to you.": "面板显示这些卡片中第一张有内容可显示的；此选择适用于所有交由你决定的主题。",
-    "always: on show when no card before it has something": "始终：前面的卡片都没有内容时显示",
     "once the weather is set up": "天气设置好后",
     "while Claude Code or Codex works or waits for you": "当 Claude Code 或 Codex 正在工作或等待你时",
     "while a download runs": "下载进行时",
@@ -2967,7 +2963,25 @@
     "A screen of the computer, a window or a monitor of its own on the panel": "在面板上显示电脑屏幕、窗口或专属显示器",
     "Screen": "屏幕",
     "screen monitor mirror extend window desktop": "屏幕 显示器 镜像 扩展 窗口 桌面",
-    "the computer's screen on the panel": "在面板上显示电脑屏幕"
+    "the computer's screen on the panel": "在面板上显示电脑屏幕",
+    "Each card is on show for its minutes, then the next; one with nothing to show is passed over.": "每张卡片显示其设定的分钟数,然后换下一张;没有内容可显示的卡片会被跳过。",
+    "From one card to the next": "卡片之间的切换",
+    "Minutes on show: {card}": "显示分钟数:{card}",
+    "More cards": "更多卡片",
+    "More cards ({n})": "更多卡片({n})",
+    "Push to the left": "向左推出",
+    "Push upwards": "向上推出",
+    "The card on show is the first that has something to show: what plays while music plays, else the next.": "显示第一张有内容可显示的卡片:播放音乐时显示音乐,否则显示下一张。",
+    "The choice holds for every theme that leaves the cards to you.": "此选择适用于所有让你自选卡片的主题。",
+    "The choice holds for every version of {theme}.": "此选择适用于 {theme} 的每个版本。",
+    "The week's weather": "一周天气",
+    "Which card is on show": "显示哪张卡片",
+    "World clocks": "世界时钟",
+    "always: your appointments once a calendar is set up": "始终:设置好日历后显示你的日程",
+    "first with something to show": "第一张有内容的",
+    "in turn": "轮流",
+    "At once": "立即",
+    "Never on show: {card} before it always has something. Move this one up, or let the cards take turns.": "永远不会显示:它前面的「{card}」总有内容可显示。把它往上移,或让卡片轮流显示。"
   },
   "fields": {
     "agent": "智能体",
@@ -3115,7 +3129,10 @@
     "hide_unused": "隐藏未使用的",
     "threads": "线程",
     "rotate": "旋转",
-    "speed": "播放速度"
+    "speed": "播放速度",
+    "order": "顺序",
+    "turn": "每张卡片分钟数",
+    "transition": "过渡效果"
   },
   "widgets": {
     "agent": "AI 标志",
@@ -3257,7 +3274,15 @@
     "power": "耗电",
     "mic": "麦克风",
     "ups": "UPS 电源",
-    "huge": "超大数字"
+    "huge": "超大数字",
+    "first": "第一张有内容的",
+    "turns": "轮流",
+    "light": "光线",
+    "slide": "向左推出",
+    "rise": "向上推出",
+    "wipe": "擦除",
+    "cut": "立即",
+    "random": "随机"
   },
   "icons": {
     "battery": "电池",

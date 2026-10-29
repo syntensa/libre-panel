@@ -37,7 +37,7 @@ invalid is refused with the reason, and nothing is written.
 | Game mode and more | `[services] enabled` and the options of each `[services.<name>]` table: switches, numbers, texts and lists of texts or numbers. The rules of the autopilot have their own page (*Edit*, under the autopilot), the warnings of `notices` and the limits of `cooling` are still written here |
 | Weather and place | `[weather]` (`enabled`, `latitude`, `longitude`, `place`, `units`, `update_minutes`) |
 | Start and system | `language`, `check_updates`, `light_mode`, `[hotkeys]`, and starting with the system (`libre-panel autostart`) |
-| Start (the page) | `cards`: *Cards on the panel*, under the panel while its theme has a card slot that leaves them to you (also in *Look*) |
+| Start (the page) | `cards`, `card_order`, `card_transition`: *Cards on the panel*, under the panel while its theme has a card slot that leaves them to you (also in *Look*) |
 | About | nothing: the version, the licence, the notices, how to report a panel, and the folders (with *Open folder*) |
 
 The running Libre Panel follows a change at once, services included (one whose options
@@ -64,6 +64,11 @@ fps = 10                       # 1-60; values glide between readings
                                # (Lumen's, in each of its versions), in the order they are
                                # asked: the first that has something to show is on show
                                # (Start: Cards on the panel)
+# card_order = "turns"         # "first" (the default): the first with something to show;
+                               # "turns": each in turn for its time, "forecast for 10m"
+                               # in cards (else 5 minutes), those with nothing passed over
+# card_transition = "fade"     # from one card to the next: "light" (the default, a line of
+                               # light), "fade", "slide", "rise", "wipe", "cut", "random"
 
 # [[panels]]                   # a panel beside this one (see "More panels at once")
 # theme = "lumen"

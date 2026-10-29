@@ -1815,6 +1815,11 @@
   font-size: 13px;
 }
 
+.slot-card-time {
+  width: 92px;
+  flex: none;
+}
+
 /* -- the first visit's three steps, on top of the blocks ----------------------------------- */
 
 .design-steps {

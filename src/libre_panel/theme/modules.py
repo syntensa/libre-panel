@@ -2596,36 +2596,103 @@ MODULE_FALLBACKS = ("auto", "none", "cpu", "gpu", "mem", "disk")
 DEFAULT_CARDS = "playback\nai\nforecast\ndate"  # (config.DEFAULT_CARDS: the person's)
 CARD_NAMES = tuple(k for k in MODULE_KINDS if k not in SLOT_KINDS) + ("net",)  # "net": the
 # network as the Studio's NET section has it (UP and DOWN with the speed beside them)
+# Which card a slot shows (its ``order``): the first that has something to show, or each in
+# turn for its time, those with nothing to show passed over (render.slot)
+CARD_ORDERS = ("first", "turns")
+# How a slot goes from one card to the next (its ``transition``, render.slot): the old card
+# rolls up into a line of light and the new one rolls down out of it (SPUR II's Studio), they
+# fade, the new one pushes the old one out to the left or up, wipes it away from the left, or
+# is there at once; "random" takes one of the moving ones, another each time
+CARD_TRANSITIONS = ("light", "fade", "slide", "rise", "wipe", "cut", "random")
+TURN_S = (5, 24 * 3600)  # a card's turn: the shortest and the longest, in seconds
+_UNITS = {"s": 1, "sec": 1, "m": 60, "min": 60, "h": 3600}
+
+
+@dataclass(frozen=True)
+class SlotCard:
+    """A card of a slot: its name, its rule (the conditions after ``if``, as a ``needs`` has
+    them; "": the card's own) and how long its turn lasts in seconds (None: the slot's
+    ``turn``)."""
+
+    name: str
+    rule: str = ""
+    seconds: float | None = None
+
+
+def card_time(text: str) -> float | None:
+    """The time of a card's turn in seconds, as a line has it after ``for``: ``5m``, ``90s``,
+    ``1h``, ``2.5 min`` (a bare number: minutes); None for what is no time, or out of
+    :data:`TURN_S`."""
+    text = text.strip().lower()
+    number = text.rstrip("abcdefghijklmnopqrstuvwxyz").strip()
+    unit = text[len(number) :].strip() or "min"
+    try:
+        seconds = float(number) * _UNITS[unit]
+    except (KeyError, ValueError):
+        return None
+    if not math.isfinite(seconds) or not TURN_S[0] <= seconds <= TURN_S[1]:
+        return None
+    return seconds
+
+
+def time_text(seconds: float) -> str:
+    """A turn's time as a line writes it: ``5m``, ``90s``, ``1h`` (card_time reads it back)."""
+    for unit, size in (("h", 3600), ("m", 60)):
+        if seconds % size == 0:
+            return f"{int(seconds // size)}{unit}"
+    return f"{seconds:g}s"
+
+
+def card_line(line: str) -> SlotCard | None:
+    """A line of a slot's ``items``: ``name``, then ``for <time>`` if it has a turn of its own,
+    then ``if <conditions>`` if it has a rule of its own (``forecast for 5m if
+    weather.temperature``); a ``#`` begins a comment. None for a line that names no card."""
+    head, _, rule = line.partition("#")[0].strip().partition(" if ")
+    name, _, time = head.strip().partition(" for ")
+    name = name.strip()
+    if name not in CARD_NAMES:
+        return None
+    return SlotCard(name, rule.strip(), card_time(time) if time.strip() else None)
+
+
+def slot_cards(module: dict[str, Any]) -> list[SlotCard]:
+    """The cards a slot module holds, in the order they are asked (render.slot). A line that
+    names no card is left out. ``netcard`` holds a download card and the network."""
+    if module["module"] == "netcard":
+        return [SlotCard("download"), SlotCard("net")]
+    found = [card_line(line) for line in (module["items"] or DEFAULT_CARDS).splitlines()]
+    return [card for card in found if card is not None] or [
+        SlotCard(name) for name in DEFAULT_CARDS.splitlines()
+    ]
 
 
 def slot_items(module: dict[str, Any]) -> list[tuple[str, str]]:
-    """The cards a slot module holds, in the order they are asked, each with its rule: the
-    conditions (as a ``needs`` has them) after ``if`` on its line of ``items``, else ``""``
-    for the card's own (see render.slot). A line that names no card is left out. ``netcard``
-    holds a download card and the network."""
-    if module["module"] == "netcard":
-        return [("download", ""), ("net", "")]
-    found = []
-    for line in (module["items"] or DEFAULT_CARDS).splitlines():
-        name, _, rule = line.partition("#")[0].strip().partition(" if ")
-        if name.strip() in CARD_NAMES:
-            found.append((name.strip(), rule.strip()))
-    return found or [(name, "") for name in DEFAULT_CARDS.splitlines()]
+    """The cards a slot module holds, each with its rule: the conditions (as a ``needs`` has
+    them) after ``if`` on its line of ``items``, else ``""`` for the card's own (slot_cards)."""
+    return [(card.name, card.rule) for card in slot_cards(module)]
 
 
-def with_cards(theme: Any, cards: list[str] | tuple[str, ...]) -> Any:
-    """``theme`` with the person's cards (config.toml ``cards``) in each card slot that leaves
-    them to the person, its ``items`` empty: Lumen's, in each of its versions, so one choice
-    holds for all of them; a slot that names its own keeps them."""
-    names = [name for name in cards if name in CARD_NAMES]
-    if not names:
+def with_cards(
+    theme: Any, cards: list[str] | tuple[str, ...], order: str = "first", transition: str = "light"
+) -> Any:
+    """``theme`` with the person's cards (config.toml ``cards``: lines as a slot's ``items``
+    has them, ``forecast for 5m``), their order and their transition (``card_order``,
+    ``card_transition``) in each card slot that leaves them to the person, its ``items``
+    empty: Lumen's, in each of its versions, so one choice holds for all of them; a slot that
+    names its own keeps them."""
+    lines = [line.strip() for line in cards if card_line(line) is not None]
+    if not lines:
         return theme
-    items = "\n".join(names)
+    chosen = {"items": "\n".join(lines)}
+    if order in CARD_ORDERS:
+        chosen["order"] = order
+    if transition in CARD_TRANSITIONS:
+        chosen["transition"] = transition
     widgets, changed = [], False
     for widget in theme.widgets:
         if widget.get("type") == "module" and widget.get("module") == "cards":
             if not (widget.get("items") or "").strip():
-                widget, changed = {**widget, "items": items}, True
+                widget, changed = {**widget, **chosen}, True
         widgets.append(widget)
     return replace(theme, widgets=widgets) if changed else theme
 

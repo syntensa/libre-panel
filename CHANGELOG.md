@@ -36,6 +36,18 @@
   Performance Log Users. Running the setup again with the box checked brings it back. Where
   RTSS is the frame rates' source, the overview no longer warns that PresentMon is off.
 
+- **Cards in turn, and ways from one to the next** (Lumen's card slot, *Start → Cards on the
+  panel*, also in *Look* and for a slot in Design). The cards can take turns as the screens of
+  a sequence do: each for its minutes (5 by default, `cards = ["forecast for 10m", ...]`),
+  then the next; a card with nothing to show is passed over, and one that runs out of it (the
+  music stops) gives way at once (`card_order = "turns"`). Or, as before, the first with
+  something to show is on show; a card that can never come there now says so. From one card to
+  the next the slot goes as you choose (`card_transition`): the line of light as before, a
+  fade, the new card pushing the old one out to the left or upwards, a beam of light that
+  wipes across, at once, or a different one each time. More cards to choose from: the analog
+  clock, the clock with the date, world clocks, the week's weather, the moon, sun and moon,
+  the agenda and the network.
+
 **Better**
 - **Modules go where you put them** (#33). A theme without a grid of its own (Lumen on the round
   480 × 480, say) gave a module from the library one of four places: the automatic grid has

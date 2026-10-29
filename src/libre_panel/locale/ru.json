@@ -1760,7 +1760,6 @@
     "Cards": "Карточки",
     "Take out": "Убрать",
     "Move up": "Выше",
-    "The first one with something to show is on show: what plays while music plays, else the next.": "Показывается первая карточка, у которой есть что показать: пока играет музыка — то, что играет, иначе следующая.",
     "Click to add it, or drag it onto the panel": "Щёлкните, чтобы добавить, или перетащите на панель",
     "Click a block to add it, or drag it to where it should go. A module fits itself to the room it gets.": "Щёлкните модуль, чтобы добавить его, или перетащите туда, где он должен быть. Модуль сам подстраивается под отведённое место.",
     "No room left for it on the panel: make a module smaller or remove one, then add it again.": "На панели для него не осталось места: уменьшите какой-нибудь модуль или удалите один, затем добавьте снова.",
@@ -2809,9 +2808,6 @@
     "Later: {card}": "Позже: {card}",
     "Set up AI activity first": "Сначала настройте активность ИИ",
     "Show the card {card}": "Показывать карточку «{card}»",
-    "The card on the panel is the first of these that has something to show. The choice holds for every version of {theme}.": "На панели показывается первая из этих карточек, которой есть что показать. Выбор действует для каждой версии {theme}.",
-    "The card on the panel is the first of these that has something to show; the choice holds for every theme that leaves it to you.": "На панели показывается первая из этих карточек, которой есть что показать; выбор действует для каждой темы, которая оставляет его вам.",
-    "always: on show when no card before it has something": "всегда: видна, когда ни у одной карточки перед ней ничего нет",
     "once the weather is set up": "когда погода настроена",
     "while Claude Code or Codex works or waits for you": "пока Claude Code или Codex работает или ждёт вас",
     "while a download runs": "пока идёт загрузка",
@@ -2967,7 +2963,25 @@
     "A screen of the computer, a window or a monitor of its own on the panel": "Экран компьютера, окно или собственный монитор на панели",
     "Screen": "Экран",
     "screen monitor mirror extend window desktop": "экран монитор дублировать расширить окно рабочий стол",
-    "the computer's screen on the panel": "экран компьютера на панели"
+    "the computer's screen on the panel": "экран компьютера на панели",
+    "Each card is on show for its minutes, then the next; one with nothing to show is passed over.": "Каждая карточка показывается свои минуты, затем следующая; карточка, которой нечего показать, пропускается.",
+    "From one card to the next": "Переход между карточками",
+    "Minutes on show: {card}": "Минут на экране: {card}",
+    "More cards": "Другие карточки",
+    "More cards ({n})": "Другие карточки ({n})",
+    "Push to the left": "Сдвиг влево",
+    "Push upwards": "Сдвиг вверх",
+    "The card on show is the first that has something to show: what plays while music plays, else the next.": "Показывается первая карточка, которой есть что показать: музыка, пока она играет, иначе следующая.",
+    "The choice holds for every theme that leaves the cards to you.": "Выбор действует для каждой темы, которая оставляет карточки на ваш выбор.",
+    "The choice holds for every version of {theme}.": "Выбор действует для каждой версии {theme}.",
+    "The week's weather": "Погода на неделю",
+    "Which card is on show": "Какая карточка показана",
+    "World clocks": "Мировые часы",
+    "always: your appointments once a calendar is set up": "всегда: ваши встречи, когда календарь настроен",
+    "first with something to show": "первая с содержимым",
+    "in turn": "по очереди",
+    "At once": "Сразу",
+    "Never on show: {card} before it always has something. Move this one up, or let the cards take turns.": "Никогда не видна: у карточки «{card}» перед ней всегда есть что показать. Поднимите эту выше или включите показ по очереди."
   },
   "fields": {
     "agent": "агент",
@@ -3115,7 +3129,10 @@
     "hide_unused": "скрыть неиспользуемые",
     "threads": "потоки",
     "rotate": "Поворот",
-    "speed": "Скорость воспроизведения"
+    "speed": "Скорость воспроизведения",
+    "order": "Порядок",
+    "turn": "Минут на карточку",
+    "transition": "Переход"
   },
   "widgets": {
     "agent": "Знак ИИ",
@@ -3257,7 +3274,15 @@
     "power": "потребление",
     "mic": "микрофон",
     "ups": "ИБП",
-    "huge": "очень крупное число"
+    "huge": "очень крупное число",
+    "first": "первая с содержимым",
+    "turns": "по очереди",
+    "light": "линия света",
+    "slide": "сдвиг влево",
+    "rise": "сдвиг вверх",
+    "wipe": "шторка",
+    "cut": "сразу",
+    "random": "случайно"
   },
   "icons": {
     "battery": "Батарея",

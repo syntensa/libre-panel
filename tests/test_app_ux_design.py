@@ -62,6 +62,39 @@ def test_a_card_slot_names_its_cards(app_url, isolated_home):  # noqa: F811
         expect(page.locator(".floating-toolbar .tool-sensor")).to_have_text("CPU")
 
 
+def test_a_card_slot_takes_turns_each_card_for_its_minutes_and_changes_as_chosen(
+    app_url,  # noqa: F811
+    isolated_home,
+):
+    """A slot that leaves its cards to the person shows the person's order and transition and
+    sets them (config.toml ``card_order``, ``card_transition``); one with cards of its own has
+    its own, and in turn each card's minutes beside its name (``forecast for 10m``)."""
+    choose_theme(isolated_home, "lumen")
+    with browser_page(app_url) as page:
+        js(page, "window.libre.doc.setSelection(['card'])")
+        inspector = page.locator(".inspector")
+        expect(inspector.get_by_role("radio", name="first with something to show")).to_be_checked()
+        inspector.get_by_role("combobox", name="From one card to the next").select_option("slide")
+        waits_for(page, lambda: settings_config().card_transition == "slide")
+        assert widget(page, "card").get("transition", "light") == "light"  # (the person's)
+        expect(inspector.get_by_role("textbox", name=re.compile("Minutes on show"))).to_have_count(
+            0
+        )
+        inspector.locator(".slot-card").nth(2).get_by_role("button", name="Move up").click()
+        assert items(page, "card") == "playback\nforecast\nai\ndate"  # (its own now)
+        inspector.get_by_role("radio", name="in turn").click()
+        assert widget(page, "card")["order"] == "turns"
+        expect(inspector).to_contain_text("Each card is on show for its minutes")
+        minutes = inspector.get_by_role("textbox", name="Minutes on show: Weather card")
+        expect(minutes).to_have_value("5")
+        minutes.fill("10")
+        minutes.press("Enter")
+        assert items(page, "card") == "playback\nforecast for 10m\nai\ndate"
+        inspector.get_by_role("combobox", name="From one card to the next").select_option("rise")
+        assert widget(page, "card")["transition"] == "rise"
+        assert settings_config().card_order == "first"  # (the slot's own, not the person's)
+
+
 def test_a_block_is_added_with_a_click_and_taken_back_from_the_message(app_url):  # noqa: F811
     """The library said "Drag onto the panel" while a click adds a block too; its "+" and its
     hint say so. What is removed can be taken back from the message, but not past a change

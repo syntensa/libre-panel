@@ -99,6 +99,23 @@ def test_the_cards_of_a_slot_are_its_items_and_by_default_the_persons_first_choi
     assert M.slot_items({"module": "cards", "items": "nonsense\ncards"}) == default
 
 
+def test_a_card_may_name_the_time_of_its_turn():
+    assert M.card_line("forecast for 5m if weather.temperature # the weather") == M.SlotCard(
+        "forecast", "weather.temperature", 300.0
+    )
+    times = {"5m": 300, "90s": 90, "1h": 3600, "2.5 min": 150, "10": 600, "30 sec": 30}
+    for text, seconds in times.items():
+        assert M.card_line(f"date for {text}").seconds == seconds, text
+        assert M.card_time(M.time_text(seconds)) == seconds
+    for wrong in ("soon", "2s", "25h", "-5m", "inf", "5 days"):
+        assert M.card_line(f"date for {wrong}") == M.SlotCard("date"), wrong
+    assert M.card_line("nonsense for 5m") is None
+    assert M.slot_cards({"module": "cards", "items": "clock for 1m\nnet"}) == [
+        M.SlotCard("clock", "", 60.0), M.SlotCard("net")
+    ]  # fmt: skip
+    assert M.slot_items({"module": "cards", "items": "clock for 1m if a"}) == [("clock", "a")]
+
+
 def test_a_slot_is_made_of_cards_that_are_parts_of_it():
     renderer = Renderer(theme_of(), preview=True)
     cards = {w["_card"] for w in renderer.widgets if w.get("_module") == "m" and "_card" in w}
@@ -360,6 +377,178 @@ def test_what_the_old_card_showed_is_what_rolls_up():
     ids = [wid for wid, _ in renderer._last[0]]
     assert "m/c0-title" in ids and "m/c0-progress" in ids
     assert not any(wid.startswith("m/c1-") for wid in ids)  # nothing of the new one yet
+
+
+# -- other ways from one card to the next ----------------------------------------------------
+
+
+def card_pieces(renderer, card):
+    """The pieces of card ``card`` in the last frame."""
+    return [p for wid, p in renderer._last[0] if wid.startswith(f"m/c{card}-") and "\0" not in wid]
+
+
+def test_a_fade_takes_the_old_card_out_and_brings_the_new_one_in():
+    renderer, weather = started(transition="fade")
+    box = renderer._slots["m"]
+    renderer.render(weather, 1.0)
+    assert (box.leaving, box.shown, box.effect) == (0, 1, "fade")
+    for p in (0.1, 0.3, 0.5, 0.7, 0.9):
+        renderer.render(weather, 1.0 + p * box.change)
+        old = 1 - light.smooth(min(1.0, p / slot.FADE_OUT))
+        new = light.smooth(max(0.0, (p - slot.FADE_IN) / (1 - slot.FADE_IN)))
+        assert box.alpha == pytest.approx((old, new)), p
+        assert box.rows is None and box.line == 0.0  # no rolling, no line of light
+        for piece in card_pieces(renderer, 0):  # the old card, at its share
+            alpha = piece.layer.getchannel("A") if not piece.add else piece.layer.convert("L")
+            assert alpha.getextrema()[1] <= round(255 * old) + 1, p
+        if new <= 0.004:
+            assert card_pieces(renderer, 1) == [], p
+    assert "m/\0line" not in [wid for wid, _ in renderer._last[0]]
+    renderer.render(weather, 1.0 + box.change)
+    assert box.leaving is None and box.alpha is None
+
+
+@pytest.mark.parametrize("transition", ["slide", "rise"])
+def test_the_new_card_pushes_the_old_one_out_and_both_stay_in_the_card(transition):
+    renderer, weather = started(transition=transition)
+    box = renderer._slots["m"]
+    x, y, w, h = box._inner()
+    reach = round(w if transition == "slide" else h) + round(slot.GAP * renderer.theme.height / 480)
+    renderer.render(weather, 1.0)
+    assert box.push == (0, reach)  # the old card where it was, the new one a reach away
+    steady = {id(p): p for p in box.frozen.values()}
+    for p in (0.25, 0.5, 0.75):
+        renderer.render(weather, 1.0 + p * box.change)
+        away = round(reach * light.smooth(p))
+        assert box.push == (-away, reach - away)
+        for card in (0, 1):
+            for piece in card_pieces(renderer, card):
+                if transition == "slide":
+                    assert x - 1 <= piece.x and piece.x + piece.layer.width <= x + w + 1
+                else:
+                    assert y - 1 <= piece.y and piece.y + piece.layer.height <= y + h + 1
+    assert steady  # (what the old card showed is what moves)
+    renderer.render(weather, 1.0 + box.change)
+    assert box.leaving is None and box.push is None
+
+
+def test_a_wipe_shows_the_new_card_left_of_its_edge_and_the_old_one_right_of_it():
+    renderer, weather = started(transition="wipe")
+    box = renderer._slots["m"]
+    x, _, w, _ = box._inner()
+    renderer.render(weather, 1.0)
+    renderer.render(weather, 1.0 + 0.5 * box.change)
+    edge = round(x + w * light.smooth(0.5))
+    assert round(box.edge) == edge
+    assert all(p.x + p.layer.width <= edge for p in card_pieces(renderer, 1))
+    assert all(p.x >= edge for p in card_pieces(renderer, 0))
+    assert card_pieces(renderer, 0) and card_pieces(renderer, 1)
+
+
+def test_a_cut_changes_the_card_at_once():
+    renderer, weather = started(transition="cut")
+    box = renderer._slots["m"]
+    renderer.render(weather, 1.0)
+    assert (box.leaving, box.shown) == (None, 1) and not card_pieces(renderer, 0)
+
+
+def test_random_takes_one_of_the_moving_ways_never_the_same_twice_running():
+    renderer = Renderer(theme_of(transition="random"), animate=True)
+    box = renderer._slots["m"]
+    renderer.render(demo(), 0.0)
+    effects = []
+    for i in range(12):
+        renderer.render(demo(media=bool(i % 2)), 1.0 + i)  # a change every second
+        effects.append(box.effect)
+    assert set(effects) <= set(slot.MOVING) and len(set(effects)) > 1
+    assert all(a != b for a, b in zip(effects, effects[1:], strict=False))
+
+
+def test_an_unknown_transition_or_order_is_the_first_one():
+    renderer = Renderer(theme_of(), animate=True)
+    box = renderer._slots["m"]
+    module = {**box.module, "transition": "spin", "order": "shuffle", "turn": "soon"}
+    other = slot.Slot(renderer, module, M.slot_cards(module), box.box)
+    assert (other.transition, other.order, other.turns) == ("light", "first", [300.0, 300.0])
+
+
+def test_a_faded_piece_keeps_its_colour_or_its_light_dims_and_its_glow_with_it():
+    glow = solid(x=0, y=96, w=40, h=20, colour=(100, 80, 60, 255), add=True)
+    piece = Piece(Image.new("RGBA", (20, 10), (200, 100, 50, 255)), 10, 100, light=glow)
+    half = slot.faded(piece, 0.5)
+    assert half.layer.getpixel((0, 0)) == pytest.approx((200, 100, 50, 128), abs=1)
+    assert half.light.layer.getpixel((0, 0))[:3] == pytest.approx((50, 40, 30), abs=1)
+    assert slot.faded(piece, 0.0) is None and slot.faded(piece, 1.0) is piece
+    assert piece.layer.getpixel((0, 0))[3] == 255  # (the piece stays as it was)
+    moved = slot.moved(piece, 5, -3)
+    assert (moved.x, moved.y, moved.light.x, moved.light.y) == (15, 97, 5, 93)
+
+
+# -- cards in turn ----------------------------------------------------------------------------
+
+
+def turns(items, animate=True, **more):
+    return Renderer(theme_of(items, order="turns", **more), animate=animate)
+
+
+def test_in_turn_each_card_is_on_show_for_its_time_then_the_next():
+    renderer = turns("forecast for 10s\ndate for 20s\nanalog", turn=0.5)  # (analog: 30 s)
+    box = renderer._slots["m"]
+    assert box.turns == [10.0, 20.0, 30.0]
+    snap = demo()
+    shown = []
+    for t in (0.0, 9.9, 10.0, 10.7, 29.9, 30.0, 30.7, 59.9, 60.0, 60.7):
+        renderer.render(snap, t)
+        shown.append(box.shown)
+    assert shown == [0, 0, 1, 1, 1, 2, 2, 2, 0, 0]
+    renderer.render(snap, 60.1)
+    assert box.leaving is None  # (the change at 60 s is over)
+
+
+def test_in_turn_a_card_with_nothing_to_show_is_passed_over_and_one_that_runs_out_gives_way():
+    renderer = turns("playback for 10s\nforecast for 10s\ndate for 10s", animate=False)
+    box = renderer._slots["m"]
+    quiet = demo(media=False)
+    renderer.render(quiet, 0.0)
+    assert box.shown == 1  # no music: the weather first
+    renderer.render(quiet, 10.0)
+    assert box.shown == 2
+    renderer.render(quiet, 20.0)
+    assert box.shown == 1  # not the music card
+    renderer.render(demo(), 25.0)  # music now: it waits for its turn
+    assert box.shown == 1
+    renderer.render(demo(), 30.0)
+    assert box.shown == 2
+    renderer.render(demo(), 40.0)
+    assert box.shown == 0
+    renderer.render(quiet, 41.0)  # the music stops (no track at all): the next at once
+    assert box.shown == 1
+
+
+def test_in_turn_a_card_alone_with_something_to_show_stays_without_a_change():
+    renderer = turns("playback for 10s\nforecast for 10s")
+    box = renderer._slots["m"]
+    weather_only = demo(media=False)
+    for t in (0.0, 10.0, 20.0, 35.0):
+        renderer.render(weather_only, t)
+        assert box.shown == 1 and box.leaving is None, t
+    renderer.render(demo(media=False, weather=False), 40.0)  # nothing at all: the first
+    assert box.shown == 0
+
+
+def test_in_turn_the_time_is_the_planned_time_and_the_warm_up_starts_again():
+    a = turns("forecast for 10s\ndate for 10s", animate=False)
+    b = turns("forecast for 10s\ndate for 10s", animate=False)
+    for t in (0.0, 3.0, 6.0, 9.0, 10.0):
+        a.render(demo(), t)
+    b.render(demo(), 0.0)
+    b.render(demo(), 10.0)
+    assert a._slots["m"].shown == b._slots["m"].shown == 1
+    box = a._slots["m"]
+    box.settle()
+    assert box.turn_at is None and box.shown == 0
+    a.render(demo(), 100.0)
+    assert box.shown == 0 and box.turn_at == 100.0
 
 
 # -- a new track ------------------------------------------------------------------------------

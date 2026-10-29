@@ -428,6 +428,40 @@
   gap: 2px;
 }
 
+/* which card is on show, and how one goes to the next */
+.cards-choice-how {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 4px 16px;
+  margin-bottom: 4px;
+}
+
+.cards-choice-how .select {
+  flex: none; /* (in the field's column: as tall as the select, under its name) */
+}
+
+.cards-choice-more > summary {
+  padding: 8px 0 4px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.cards-choice-more > summary:hover {
+  color: var(--text);
+}
+
+.cards-choice-time {
+  width: 112px;
+  flex: none;
+}
+
+.cards-choice-never {
+  color: var(--warn);
+  font-size: 12px;
+}
+
 .cards-choice-setup {
   align-self: flex-start;
   font-size: 12px;

@@ -1760,7 +1760,6 @@
     "Cards": "カード",
     "Take out": "外す",
     "Move up": "上へ移動",
-    "The first one with something to show is on show: what plays while music plays, else the next.": "表示する内容がある最初のカードが表示されます。音楽の再生中は再生中のもの、それ以外は次のカードです。",
     "Click to add it, or drag it onto the panel": "クリックして追加するか、パネルにドラッグしてください",
     "Click a block to add it, or drag it to where it should go. A module fits itself to the room it gets.": "モジュールをクリックして追加するか、配置したい場所にドラッグしてください。モジュールは、与えられたスペースに合わせて自動的に調整されます。",
     "No room left for it on the panel: make a module smaller or remove one, then add it again.": "パネルに空きがありません。モジュールを小さくするか削除してから、もう一度追加してください。",
@@ -2809,9 +2808,6 @@
     "Later: {card}": "後へ：{card}",
     "Set up AI activity first": "先にAIアクティビティを設定",
     "Show the card {card}": "カード「{card}」を表示",
-    "The card on the panel is the first of these that has something to show. The choice holds for every version of {theme}.": "パネルには、これらのうち表示する内容がある最初のカードが表示されます。この選択は {theme} のすべてのバージョンに適用されます。",
-    "The card on the panel is the first of these that has something to show; the choice holds for every theme that leaves it to you.": "パネルには、これらのうち表示する内容がある最初のカードが表示されます。この選択は、選択をあなたに任せるすべてのテーマに適用されます。",
-    "always: on show when no card before it has something": "常時：前のカードに何もないときに表示",
     "once the weather is set up": "天気を設定したら",
     "while Claude Code or Codex works or waits for you": "Claude Code か Codex が作業中、またはあなたを待っている間",
     "while a download runs": "ダウンロード中",
@@ -2967,7 +2963,25 @@
     "A screen of the computer, a window or a monitor of its own on the panel": "コンピューターの画面、ウィンドウ、または専用のモニターをパネルに",
     "Screen": "画面",
     "screen monitor mirror extend window desktop": "画面 モニター ミラー 拡張 ウィンドウ デスクトップ",
-    "the computer's screen on the panel": "コンピューターの画面をパネルに"
+    "the computer's screen on the panel": "コンピューターの画面をパネルに",
+    "Each card is on show for its minutes, then the next; one with nothing to show is passed over.": "各カードは設定した分数だけ表示され、次のカードに移ります。表示するものがないカードは飛ばします。",
+    "From one card to the next": "カードの切り替え",
+    "Minutes on show: {card}": "表示する分数：{card}",
+    "More cards": "その他のカード",
+    "More cards ({n})": "その他のカード（{n}）",
+    "Push to the left": "左へ押し出す",
+    "Push upwards": "上へ押し出す",
+    "The card on show is the first that has something to show: what plays while music plays, else the next.": "表示するものがある最初のカードが表示されます。音楽の再生中は音楽、それ以外は次のカードです。",
+    "The choice holds for every theme that leaves the cards to you.": "この選択は、カードをあなたに任せるすべてのテーマに適用されます。",
+    "The choice holds for every version of {theme}.": "この選択は {theme} のすべてのバージョンに適用されます。",
+    "The week's weather": "週間天気",
+    "Which card is on show": "表示するカード",
+    "World clocks": "世界時計",
+    "always: your appointments once a calendar is set up": "常に：カレンダーを設定すると予定を表示",
+    "first with something to show": "内容のある最初のカード",
+    "in turn": "順番に",
+    "At once": "即時",
+    "Never on show: {card} before it always has something. Move this one up, or let the cards take turns.": "表示されません：前にある「{card}」が常に表示するものを持っています。上へ移動するか、カードを順番に表示してください。"
   },
   "fields": {
     "agent": "エージェント",
@@ -3115,7 +3129,10 @@
     "hide_unused": "未使用を非表示",
     "threads": "スレッド",
     "rotate": "回転",
-    "speed": "再生速度"
+    "speed": "再生速度",
+    "order": "順序",
+    "turn": "カードごとの分数",
+    "transition": "切り替え効果"
   },
   "widgets": {
     "agent": "AIマーク",
@@ -3257,7 +3274,15 @@
     "power": "消費電力",
     "mic": "マイク",
     "ups": "UPS",
-    "huge": "特大の数字"
+    "huge": "特大の数字",
+    "first": "内容のある最初のカード",
+    "turns": "順番に",
+    "light": "光のライン",
+    "slide": "左へ押し出す",
+    "rise": "上へ押し出す",
+    "wipe": "ワイプ",
+    "cut": "即時",
+    "random": "ランダム"
   },
   "icons": {
     "battery": "バッテリー",

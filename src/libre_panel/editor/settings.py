@@ -49,6 +49,7 @@ from libre_panel.config import (
 from libre_panel.devices.h264 import ENCODERS, PIXELS, PROFILES, X264_PRESETS
 from libre_panel.editor import access
 from libre_panel.i18n import t
+from libre_panel.theme.modules import CARD_ORDERS, CARD_TRANSITIONS
 
 log = logging.getLogger(__name__)
 
@@ -494,6 +495,8 @@ class Settings:
                 "hotkeys_enabled": config.hotkeys_enabled,
                 "symbols": config.symbols,
                 "cards": list(config.cards),
+                "card_order": config.card_order,
+                "card_transition": config.card_transition,
                 "accent": config.accent,
                 "across": config.across,
                 # how the panel goes from one screen to the next (Settings → Panel → Transitions)
@@ -1502,6 +1505,8 @@ RULES: dict[str, Any] = {
     "light_mode": lambda n, v, c: _flag(n, v),
     "symbols": lambda n, v, c: _choice(n, v, SYMBOL_PACKS),
     "cards": lambda n, v, c: _rule_cards(n, v),
+    "card_order": lambda n, v, c: _choice(n, v, CARD_ORDERS),
+    "card_transition": lambda n, v, c: _choice(n, v, CARD_TRANSITIONS),
     "accent": _rule_accent,
     "hotkeys.enabled": lambda n, v, c: _flag(n, v),
     "hotkeys.pause": _rule_hotkey,

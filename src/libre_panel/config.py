@@ -48,7 +48,8 @@ JPEG_QUALITY = (50, 100)  # [device] jpeg_quality: the least and the most
 DEFAULT_SYMBOLS = "vivid"
 # The cards a card slot that leaves them to the person holds (Lumen's, in each of its versions:
 # config.toml ``cards``, theme.modules with_cards), in the order they are asked: the first
-# that has something to show is on show
+# that has something to show is on show, or with ``card_order = "turns"`` each in turn for its
+# time ("forecast for 5m"; theme.modules CARD_ORDERS, CARD_TRANSITIONS)
 DEFAULT_CARDS = ("playback", "ai", "forecast", "date")
 
 _DEFAULT_CONFIG_TEMPLATE = """\
@@ -714,6 +715,11 @@ class Config:
     # the cards of the card slots that leave them to the person (Lumen's), in the order they
     # are asked; the first that has something to show is on show (DEFAULT_CARDS)
     cards: list[str] = field(default_factory=lambda: list(DEFAULT_CARDS))
+    # which of them is on show: the first that has something to show ("first"), or each in
+    # turn for its time ("turns": a card's own "for 5m", else 5 minutes); and how one card
+    # goes to the next ("light", "fade", "slide", "rise", "wipe", "cut", "random")
+    card_order: str = "first"
+    card_transition: str = "light"
     # an accent colour for every theme instead of its own (accent.py): "" the themes' own,
     # "system" Windows', or "#RRGGBB"
     accent: str = ""
@@ -941,6 +947,15 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
             raise ConfigError(f"symbols: must be one of {', '.join(SYMBOL_PACKS)}")
     if "cards" in data:
         cfg.cards = card_choice(data["cards"], "cards")
+    if "card_order" in data or "card_transition" in data:
+        from libre_panel.theme.modules import CARD_ORDERS, CARD_TRANSITIONS
+
+        for key, allowed in (("card_order", CARD_ORDERS), ("card_transition", CARD_TRANSITIONS)):
+            if key in data:
+                value = _expect(data[key], str, key).strip()
+                if value not in allowed:
+                    raise ConfigError(f"{key}: must be one of {', '.join(allowed)}")
+                setattr(cfg, key, value)
     if "accent" in data:
         from libre_panel.accent import HEX, SYSTEM
 
@@ -1328,18 +1343,28 @@ _BARE_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
 
 def card_choice(value: Any, where: str) -> list[str]:
     """The cards of the card slots, as config.toml's ``cards`` has them: a list of the cards'
-    names (theme.modules CARD_NAMES), each once, one at least."""
-    from libre_panel.theme.modules import CARD_NAMES
+    names (theme.modules CARD_NAMES), each once, one at least, each with the time of its turn
+    if it has one of its own (``"forecast for 5m"``, theme.modules card_line)."""
+    from libre_panel.theme.modules import TURN_S, card_line
 
-    names = _expect(value, list, where)
+    lines = _expect(value, list, where)
     cards: list[str] = []
-    for name in names:
-        name = _expect(name, str, f"{where}[]").strip()
-        if name not in CARD_NAMES:
+    names: list[str] = []
+    for line in lines:
+        line = " ".join(_expect(line, str, f"{where}[]").split())
+        card = card_line(line)
+        if card is None or "#" in line or card.rule:
+            name = line.partition(" for ")[0]
             raise ConfigError(f"{where}: {name!r} is no card (e.g. {', '.join(DEFAULT_CARDS)})")
-        if name in cards:
-            raise ConfigError(f"{where}: {name!r} is named twice")
-        cards.append(name)
+        if " for " in line and card.seconds is None:
+            raise ConfigError(
+                f"{where}: {line!r}: a time such as 5m, 90s or 1h, "
+                f"{TURN_S[0]} s to {TURN_S[1] // 3600} h"
+            )
+        if card.name in names:
+            raise ConfigError(f"{where}: {card.name!r} is named twice")
+        cards.append(line)
+        names.append(card.name)
     if not cards:
         raise ConfigError(f"{where}: one card at least (e.g. {', '.join(DEFAULT_CARDS)})")
     return cards

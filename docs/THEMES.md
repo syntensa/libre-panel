@@ -228,7 +228,7 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 | `calendar` | `w`, `h`, `font`, `font_size`, `color`, `color2`, `muted`, `first_day` | the month as a grid of days, today marked in `color2`; weekday names in `muted` and the language; `first_day` `monday` or `sunday` |
 | `list` | `w`, `h`, `items`, `style`, `columns`, `max_items`, `sort`, `format`, `detail`, `detail_format`, `min`, `max`, `scale`, `levels`, `font`, `font_size`, `label_font`, `uppercase`, `color`, `muted`, `color2`, `background`, `empty`, `color_rules` | readings found by name or pattern, as many as fit, see [Lists](#lists) |
 | `rect` | `w`, `h`, `color`, `color2`, `gradient`, `radius`, `outline`, `outline_width`, `backdrop_blur`, `ridge` | cards, frames, separators; `backdrop_blur` gives frosted glass, `ridge` a ridge (see [Look and finish](#look-and-finish)) |
-| `module` | `module`, `col`, `row`, `cols`, `rows`, `source`, `sensor`, `format`, `title`, `text`, `color`, `fallback`, `card`, `forecast`, `step`, `items`, `sort`, `threads`, `total`, `history`, `moving`, `hold`, `change`, `slide`, `time` | a building block on the grid, see [Modules](#modules) and [Cards](#cards) |
+| `module` | `module`, `col`, `row`, `cols`, `rows`, `source`, `sensor`, `format`, `title`, `text`, `color`, `fallback`, `card`, `forecast`, `step`, `items`, `sort`, `threads`, `total`, `history`, `moving`, `hold`, `change`, `slide`, `order`, `turn`, `transition`, `time` | a building block on the grid, see [Modules](#modules) and [Cards](#cards) |
 
 `scale` is `linear`, `sqrt` or `log`: the latter two keep small values visible
 on huge ranges such as network rates.
@@ -403,7 +403,8 @@ A few things they do that a theme of your own can do too:
   when there is neither a track nor weather (the weather is off until you set a
   place). Lumen's slot leaves its `items` empty and so takes the cards you choose on
   Start (*Cards on the panel*, config.toml `cards`: `playback`, `ai`, `forecast` and
-  `date` unless you change them), one choice for every version of Lumen.
+  `date` unless you change them), one choice for every version of Lumen: the first with
+  something to show, or each in turn for its minutes, with the transition you choose.
 - **A date that steps aside.** Studio's date under the clock is two widgets,
   one with `"needs": "weather.temperature"`, one with `"needs":
   "!weather.temperature, media.title"`: the date shows while the card shows
@@ -666,9 +667,15 @@ are flat thin lines in their colour: a card has no ridge, no bevel and no trough
 **Slots.** `cards` holds the cards its `items` name, one per line (`playback`,
 `forecast`, `download`, `instrument`, `net`, ... any module kind but a slot), and
 shows the first that has something to show, else the first one in its empty look.
-Empty `items` leave the cards to the person: those chosen on Start (config.toml
-`cards`), as Lumen's do, so one choice holds for all of them; drawn without settings,
-`playback`, `ai`, `forecast` and `date`.
+With `order` `turns` (`first` by default) the cards take turns instead, as the screens of
+a [sequence](CONFIGURATION.md#screens-in-turn) do: each is on show for its time, then the
+next that has something to show; one with nothing to show is passed over, and the card on
+show gives way at once when it runs out (the music stops). A line names its card's time
+after `for` (`forecast for 5m`, `analog for 90s`, `date for 1h`; a bare number is minutes,
+5 s to 24 h), else the slot's `turn` minutes (5). Empty `items` leave the cards to the
+person: those chosen on Start (config.toml `cards`, `card_order` and `card_transition`),
+as Lumen's do, so one choice holds for all of them; drawn without settings, `playback`,
+`ai`, `forecast` and `date`, the first with something to show, with the line of light.
 
 | card | has something to show |
 |---|---|
@@ -680,16 +687,26 @@ Empty `items` leave the cards to the person: those chosen on Start (config.toml
 
 A line brings its own rule after `if`: `forecast if weather.temperature` or
 `playback if media.playing=1, !game.fps`: conditions as `needs` has them, separated
-by commas; the rule replaces the card's own. A line that names no card is left
-out, `#` starts a comment.
+by commas; the rule replaces the card's own. The time comes before it: `forecast for 10m
+if weather.temperature`. A line that names no card is left out, `#` starts a comment.
 
-**A change** takes `change` seconds (0.6) and moves as the Studio screen does: a line
-of light ignites at the slot's top edge, the card on show rolls up into it, and the
-new card rolls down out of it. What the old card shows while it rolls up is what it
-showed last: its track is gone from the readings, its words are not. The time is the
-frame's planned time, so a change takes as long at 50 frames a second as at 5; on a
-panel that gets one picture a second it is a cut. A change that is under way is
-finished before the next begins.
+**A change** takes `change` seconds (0.6) and moves as `transition` says; by default
+(`light`) as the Studio screen does: a line of light ignites at the slot's top edge, the
+card on show rolls up into it, and the new card rolls down out of it. What the old card
+shows while it goes is what it showed last: its track is gone from the readings, its words
+are not. The time is the frame's planned time, so a change takes as long at 50 frames a
+second as at 5; on a panel that gets one picture a second it is a cut. A change that is
+under way is finished before the next begins.
+
+| `transition` | from one card to the next |
+|---|---|
+| `light` | the old card rolls up into a line of light at the top edge, the new one rolls down out of it (the default) |
+| `fade` | the old card fades out and the new one in, the second beginning as the first ends |
+| `slide` | the new card comes in from the right and pushes the old one out to the left, a gap between them |
+| `rise` | the new card comes up from below and pushes the old one out at the top |
+| `wipe` | a beam of light sweeps across from the left, the new card behind it |
+| `cut` | the new card is there at once |
+| `random` | one of `light`, `fade`, `slide`, `rise` and `wipe`, another each time |
 
 **A new track** on the playback card that stays on show does not roll: with `slide` (seconds;
 0, none, by default, SPUR Studio sets 0.55) the content of the card moves out to the left and

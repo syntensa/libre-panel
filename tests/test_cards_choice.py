@@ -33,6 +33,47 @@ def test_the_cards_are_a_list_of_cards_each_once(tmp_path):
             configured(tmp_path, bad + "\n")
 
 
+def test_a_card_may_have_the_time_of_its_turn_and_the_slot_its_order_and_transition(tmp_path):
+    config = configured(
+        tmp_path,
+        'cards = ["forecast for 5m", "date  for   90s", "analog"]\n'
+        'card_order = "turns"\ncard_transition = "fade"\n',
+    )
+    assert config.cards == ["forecast for 5m", "date for 90s", "analog"]
+    assert (config.card_order, config.card_transition) == ("turns", "fade")
+    plain = configured(tmp_path, "")
+    assert (plain.card_order, plain.card_transition) == ("first", "light")
+    for bad, says in (
+        ('cards = ["forecast for 2s"]', "a time such as 5m"),
+        ('cards = ["forecast for soon"]', "a time such as 5m"),
+        ('cards = ["forecast if weather.temperature"]', "is no card"),
+        ('cards = ["forecast # the weather"]', "is no card"),
+        ('cards = ["forecast for 5m", "forecast for 1m"]', "named twice"),
+        ('card_order = "shuffle"', "card_order: must be one of first, turns"),
+        ('card_transition = "spin"', "card_transition: must be one of light, fade"),
+        ("card_order = 1", "card_order"),
+    ):
+        with pytest.raises(ConfigError, match=says):
+            configured(tmp_path, bad + "\n")
+
+
+def test_the_person_s_order_and_transition_go_to_the_slots_that_leave_their_cards_to_them():
+    theme = load_theme(builtin_themes_dir() / "lumen")
+    dressed = with_cards(theme, ["forecast for 5m", "date"], "turns", "wipe")
+    slot = next(w for w in dressed.widgets if w.get("module") == "cards")
+    assert (slot["items"], slot["order"], slot["transition"]) == (
+        "forecast for 5m\ndate",
+        "turns",
+        "wipe",
+    )
+    renderer = Renderer(dressed, animate=True)
+    box = next(iter(renderer._slots.values()))
+    assert (box.order, box.transition, box.turns) == ("turns", "wipe", [300.0, 300.0])
+    kept = with_cards(theme, ["date"], "nonsense", "spin")  # (a theme's own where it is no choice)
+    slot = next(w for w in kept.widgets if w.get("module") == "cards")
+    assert "order" not in slot or slot["order"] == "first"
+
+
 def test_libre_panels_own_slots_take_the_persons_cards_and_one_of_its_own_keeps_them():
     for name in OWN:
         theme = load_theme(builtin_themes_dir() / name)
@@ -92,3 +133,11 @@ def test_the_panel_draws_its_theme_with_the_persons_cards(tmp_path):
     assert slot["items"] == "forecast\nai"
     other = configured(tmp_path, 'cards = ["ai"]\n')
     assert MainLoop._warm_key(theme, config) != MainLoop._warm_key(theme, other)  # (drawn anew)
+    turns = configured(tmp_path, 'cards = ["forecast", "ai"]\ncard_order = "turns"\n')
+    fades = configured(tmp_path, 'cards = ["forecast", "ai"]\ncard_transition = "fade"\n')
+    keys = {MainLoop._warm_key(theme, c) for c in (config, turns, fades)}
+    assert len(keys) == 3
+    slot = next(
+        w for w in MainLoop._dressed(theme, turns, None).widgets if w.get("module") == "cards"
+    )
+    assert slot["order"] == "turns"

@@ -425,6 +425,12 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         # a slot's playback card: a new track moves in from the right as the old one moves out
         # to the left, in this many seconds (0: the new track is there at once)
         "slide": ("number", 0),
+        # a card slot: which card is on show, the first with something to show or each in
+        # turn for ``turn`` minutes (a line's own time first: "forecast for 5m"), and how it
+        # goes from one card to the next (theme.modules CARD_ORDERS, CARD_TRANSITIONS)
+        "order": ("enum:first|turns", "first"),
+        "turn": ("number", 5.0),
+        "transition": ("enum:light|fade|slide|rise|wipe|cut|random", "light"),
         # the playback card: the time at the right of the progress, the track's length (3:47)
         # or what is left of it (-2:24)
         "time": ("enum:total|remaining", "total"),

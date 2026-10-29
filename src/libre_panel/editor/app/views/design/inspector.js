@@ -44,7 +44,8 @@ import { versionBase } from "../../core/orientation.js";
 import { panelName, currentModel } from "../../shell/panel-popover.js";
 import { HardwareNameField } from "../settings/hardware.js";
 import { navigate } from "../../shell/views.js";
-import { loadSettings, useConfig } from "../../core/settings.js";
+import { loadSettings, saveSettings, useConfig } from "../../core/settings.js";
+import { CardsHow, TURN_MINUTES, cardOfLine, lineWith, minutesOf } from "../home/cards.js";
 
 const cap = (text) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : text);
 const label = (key) => cap(fieldLabel(key));
@@ -391,15 +392,17 @@ function WidgetInspector({ widget }) {
 const SLOTS = ["cards", "netcard"];
 const CARDS = ["playback", "forecast", "download", "instrument", "net"];
 
-/** A card's name in words (a line of a slot's items: "forecast", "date if weather.temp"). */
-const cardOf = (line) => line.split("#")[0].split(" if ")[0].trim();
+/** A card's name in words (a line of a slot's items: "forecast", "date for 5m if weather.temp"). */
+const cardOf = cardOfLine;
 const cardName = (card) => (card === "net" ? t("Network") : kindName(card));
 
 /** What a card slot holds (its items, one card a line; the first with something to show is on
- * show): named in words, each moved up or taken out, one more from a list. A line's condition
- * ("forecast if weather.temp") stays with its card. It was a box of words a sensor's hint
- * explained ("a sensor (cpu.temp), a pattern"), which a slot does not take. */
-function SlotCards({ widget, onChange }) {
+ * show, or each in turn for its minutes): named in words, each moved up or taken out, one more
+ * from a list, and how they take turns and change. A line's condition ("forecast if
+ * weather.temp") stays with its card. It was a box of words a sensor's hint explained ("a sensor
+ * (cpu.temp), a pattern"), which a slot does not take. A slot that leaves its cards to the person
+ * shows the person's order and transition (Start's), which it takes. */
+function SlotCards({ widget, onChange, change }) {
   const config = useConfig();
   useEffect(() => {
     if (!store.get().settings) loadSettings();
@@ -418,14 +421,28 @@ function SlotCards({ widget, onChange }) {
     ...CARDS.map((card) => ({ value: card, label: cardName(card), group: t("Cards") })),
     ...others.map((kind) => ({ value: kind, label: kindName(kind), group: t("Modules") })),
   ];
-  const hint = follows
+  const order = (follows ? config?.card_order : widget.order) || "first";
+  const transition = (follows ? config?.card_transition : widget.transition) || "light";
+  const hint = follows // (the order's field says what the order does)
     ? t("The cards chosen on Start (Cards on the panel), for every theme that leaves them to you; a change here gives this theme cards of its own.")
-    : t("The first one with something to show is on show: what plays while music plays, else the next.");
-  return html`<${Field} label=${t("Cards")} hint=${hint}>
+    : null;
+  const how = follows
+    ? html`<${CardsHow} order=${order} transition=${transition}
+        onOrder=${(value) => saveSettings({ card_order: value })} onTransition=${(value) => saveSettings({ card_transition: value })} />`
+    : html`<${CardsHow} order=${order} transition=${transition} onOrder=${change("order")} onTransition=${change("transition")} />`;
+  const turn = Number(widget.turn) > 0 ? Number(widget.turn) : TURN_MINUTES;
+  return html`${how}<${Field} label=${t("Cards")} hint=${hint}>
     <ol class="slot-cards">
       ${lines.map(
         (line, index) => html`<li key=${`${index}:${line}`} class="slot-card">
           <span class="slot-card-name" title=${line}>${cardName(cardOf(line))}</span>
+          ${order === "turns" && !follows
+            ? html`<span class="slot-card-time">
+                <${NumberField} label=${t("Minutes on show: {card}", { card: cardName(cardOf(line)) })} value=${minutesOf(line) ?? turn}
+                  min=${0.25} max=${1440} step=${0.25} digits=${2} unit=${t("min")}
+                  onChange=${(minutes) => set(lines.map((other, i) => (i === index ? lineWith(other, minutes) : other)))} />
+              </span>`
+            : null}
           <${IconButton} icon="arrow-up" size=${14} label=${t("Move up")} disabled=${index === 0}
             onClick=${() => set([...lines.slice(0, index - 1), line, lines[index - 1], ...lines.slice(index + 1)])} />
           <${IconButton} icon="close" size=${14} label=${t("Take out")} disabled=${lines.length < 2}
@@ -514,7 +531,7 @@ function ModuleInspector({ widget }) {
   }
 
   const items = widget.module === "cards"
-    ? html`<${SlotCards} widget=${widget} onChange=${(value) => edit(null, () => (widget.items = value))} />`
+    ? html`<${SlotCards} widget=${widget} change=${change} onChange=${(value) => edit(null, () => (widget.items = value))} />`
     : info.items
     ? html`<${Field}
         label=${widget.module === "world" ? t("Places") : t("Readings")}

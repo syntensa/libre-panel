@@ -16,6 +16,16 @@ that is driven at 5, and a test can set the clock. The frame of the slot is a th
 the colour of the card on show (the colour a cover carries, the weather's, the network's); it
 changes its colour over half a second where the card, or the track, changes.
 
+A slot's ``transition`` chooses another way from one card to the next: they ``fade`` (the old one
+out, the new one in, over the same time), the new one pushes the old one out to the left
+(``slide``) or upwards (``rise``), ``wipe``s it away from the left, or is there at once
+(``cut``); ``random`` takes one of the moving ones, another each time.
+
+With ``order`` ``turns`` the cards take turns instead, as the screens of a sequence do: each
+is on show for its time (its line's ``for 5m``, else the slot's ``turn`` minutes), then the
+next that has something to show; a card with nothing to show is passed over, and one that
+runs out of it (the music stops) gives way at once.
+
 A new track on the playback card that stays on show does not roll: with ``slide`` the content of
 the card moves out to the left and the new track's moves in from the right, a gap between them
 that closes as it arrives (SPUR II's Studio: one movement for a change of track, nothing while
@@ -25,6 +35,7 @@ a track plays). The old track is what the card showed last, cut to the card's in
 from __future__ import annotations
 
 import math
+import random
 import weakref
 from collections import OrderedDict
 from dataclasses import replace
@@ -47,10 +58,19 @@ AI_HOLD = 45.0  # seconds the AI card stays on show after the last agent stopped
 WEATHER = ("forecast", "weather")
 SUPER = 3  # the frame's mask is drawn at this many times its size
 GAP = 48  # px between the old track and the new one in a slide, on a bar 480 px tall
+FADE_OUT = 0.6  # in a fade the old card has gone by this share of the change,
+FADE_IN = 0.4  # and the new one comes from this share on
+MOVING = ("light", "fade", "slide", "rise", "wipe")  # what "random" takes from
 
 
 def _rgb(colour: str) -> tuple[int, int, int]:
     return M._rgb(colour)
+
+
+def _number(value: Any, default: float) -> float:
+    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
+        return default
+    return float(value)
 
 
 # -- cutting a piece to rows -------------------------------------------------------------------
@@ -114,19 +134,53 @@ def slid(piece: Piece | None, dx: int, left: int, right: int) -> Piece | None:
     return replace(piece, layer=layer, x=a, light=glow)
 
 
+def moved(piece: Piece | None, dx: int, dy: int) -> Piece | None:
+    """``piece`` moved ``dx`` px to the right and ``dy`` px down, its glow with it."""
+    if piece is None:
+        return None
+    glow = moved(piece.light, dx, dy) if piece.light is not None else None
+    return replace(piece, x=piece.x + dx, y=piece.y + dy, light=glow)
+
+
+def faded(piece: Piece | None, share: float) -> Piece | None:
+    """``piece`` at ``share`` of its strength: light dimmed in its colour, anything else in
+    its alpha, its glow with it. None: nothing of it shows."""
+    if piece is None or share <= 0.004:
+        return None
+    if share >= 0.996:
+        return piece
+    glow = faded(piece.light, share) if piece.light is not None else None
+    table = [round(v * share) for v in range(256)]
+    layer = piece.layer if piece.layer.mode == "RGBA" else piece.layer.convert("RGBA")
+    if piece.add:  # light: its colour is what is added
+        layer = layer.point(table * 4)
+    else:
+        layer = layer.copy()
+        layer.putalpha(layer.getchannel("A").point(table))
+    return replace(piece, layer=layer, light=glow)
+
+
 # -- the slot ----------------------------------------------------------------------------------
 
 
 class Slot:
     """One slot module: which card is on show, and a change from one to the next."""
 
-    def __init__(self, renderer: Any, module: dict[str, Any], items: list[tuple[str, str]],
+    def __init__(self, renderer: Any, module: dict[str, Any], cards: list[M.SlotCard],
                  box: list[int]) -> None:  # fmt: skip
         self.renderer = weakref.proxy(renderer)  # (it holds the slot: no cycle)
         self.id = module["id"]
         self.module = module
-        self.kinds = [kind for kind, _ in items]
-        self.rules = [rule for _, rule in items]
+        self.kinds = [card.name for card in cards]
+        self.rules = [card.rule for card in cards]
+        self.order = module.get("order") if module.get("order") in M.CARD_ORDERS else "first"
+        turn = _number(module.get("turn"), 5.0) * 60
+        turn = min(max(turn, M.TURN_S[0]), M.TURN_S[1])
+        self.turns = [card.seconds or turn for card in cards]  # seconds each card is on show
+        transition = module.get("transition")
+        self.transition = transition if transition in M.CARD_TRANSITIONS else "light"
+        self.effect = "light"  # how the change on its way moves ("random": chosen as it begins)
+        self.turn_at: float | None = None  # turns: when the card on show began its turn
         self.change = max(0.0, float(module["change"]))  # seconds
         self.slide = max(0.0, float(module["slide"]))  # seconds a new track takes to move in
         self.hold = max(0.0, float(module["hold"])) * 60  # seconds a paused track stays on show
@@ -144,6 +198,9 @@ class Slot:
         self.busy_at: float | None = None  # when an agent last worked or waited for you
         self.rows: tuple[float, float] | None = None  # in a change: how far each has rolled
         self.line = 0.0  # in a change: the light's strength
+        self.alpha: tuple[float, float] | None = None  # in a fade: the old card's, the new one's
+        self.push: tuple[int, int] | None = None  # in a slide or a rise: the old's and new's px
+        self.edge: float | None = None  # in a wipe: the column the new card has reached
         self.track: tuple[Any, Any] | None = None  # the track the playback card on show shows
         self.sliding: tuple[float, dict[str, Piece]] | None = None  # since, what the old one showed
         self.shift: tuple[int, int] | None = None  # in a slide: the old track's and new one's x
@@ -216,47 +273,98 @@ class Slot:
         return True
 
     def wants(self, snapshot: Any, now: float) -> int:
-        """The card that has something to show: the first, else the first of all."""
+        """The card that has something to show: the first, else the first of all; in turns
+        the one on show until its turn is over, then the next that has something to show."""
+        if self.order == "turns":
+            return self._turn([self._has(i, snapshot, now) for i in range(len(self.kinds))], now)
         for i in range(len(self.kinds)):
             if self._has(i, snapshot, now):
                 return i
         return 0
 
+    def _turn(self, has: list[bool], now: float) -> int:
+        """In turns: the card on show while it has something to show and its turn lasts, else
+        the next that has (itself again where no other has), else the first of all."""
+        if not any(has):
+            return 0
+        at = self.shown
+        if self.turn_at is None:  # (the first frame: the first that has something to show)
+            return has.index(True)
+        if has[at] and now - self.turn_at < self.turns[at]:
+            return at
+        return next(i % len(has) for i in range(at + 1, at + len(has) + 1) if has[i % len(has)])
+
+    def _still(self) -> None:
+        """No change on its way: nothing rolls, fades or moves."""
+        self.rows, self.line, self.alpha, self.push, self.edge = None, 0.0, None, None, None
+
     def begin(self, snapshot: Any, now: float) -> None:
         """Decide the card for this frame, and where a change has got to."""
         renderer = self.renderer
         if self.pinned is not None:  # (the warm-up draws each card once, without a change)
-            self.shown, self.leaving, self.rows, self.line = self.pinned, None, None, 0.0
+            self.shown, self.leaving = self.pinned, None
+            self._still()
             self.track = self.sliding = self.shift = None
             return
         if self.leaving is not None and now - self.since >= self.change:
-            self.leaving, self.frozen, self.rows = None, {}, None
+            self.leaving, self.frozen = None, {}
         want = self.wants(snapshot, now)
-        if want != self.shown and self.leaving is None:  # (a change on its way finishes first)
-            roll = self.started and renderer.animate and self.change > 0
-            if roll:
-                self.leaving, self.since, self.frozen = self.shown, now, self.last
-            self.last = {}
-            self.shown = want
+        if self.leaving is None:  # (a change on its way finishes first)
+            if want != self.shown:
+                moves = (
+                    self.started and renderer.animate and self.change > 0
+                    and self.transition != "cut"
+                )  # fmt: skip
+                if moves:
+                    self.leaving, self.since, self.frozen = self.shown, now, self.last
+                    self.effect = self._effect()
+                self.last = {}
+                self.shown, self.turn_at = want, now
+            elif self.turn_at is None or (
+                self.order == "turns" and now - self.turn_at >= self.turns[self.shown]
+            ):  # (the first frame, or its turn again: no other has something to show)
+                self.turn_at = now
         self.started = True
-        self.rows, self.line = None, 0.0
+        self._still()
         if self.leaving is not None:
             renderer.moving = True
-            p = (now - self.since) / self.change
-            height = self._inner()[3]
-            rolled_up = height * (1.0 - light.ease_in(p / ROLL_UP)) if p < ROLL_UP else 0.0
+            self._move(light.clamp((now - self.since) / self.change))
+        self._slide(snapshot, now)
+        self._accent(snapshot, now)
+
+    def _effect(self) -> str:
+        """How the change that begins moves: the slot's transition, or for "random" one of
+        the moving ones, not the last one again."""
+        if self.transition != "random":
+            return self.transition
+        return random.choice([name for name in MOVING if name != self.effect])
+
+    def _move(self, p: float) -> None:
+        """Where the change has got to at ``p`` (0 to 1) of its time."""
+        x, y, w, h = self._inner()
+        if self.effect == "fade":
+            self.alpha = (
+                1.0 - light.smooth(light.clamp(p / FADE_OUT)),
+                light.smooth(light.clamp((p - FADE_IN) / (1.0 - FADE_IN))),
+            )
+        elif self.effect in ("slide", "rise"):  # the new card pushes the old one out
+            unit = min(self.renderer.theme.width, self.renderer.theme.height) / 480
+            reach = round(w if self.effect == "slide" else h) + round(GAP * unit)
+            away = round(reach * light.smooth(p))
+            self.push = (-away, reach - away)
+        elif self.effect == "wipe":  # a beam of light sweeps across, the new card behind it
+            self.edge = x + w * light.smooth(p)
+            self.line = GLOW * math.sin(math.pi * p)
+        else:  # light: the old card rolls up into a line of light, the new one rolls down
+            rolled_up = h * (1.0 - light.ease_in(p / ROLL_UP)) if p < ROLL_UP else 0.0
             rolled_down = (
-                height * light.ease_out((p - ROLL_DOWN) / (1.0 - ROLL_DOWN))
-                if p > ROLL_DOWN
-                else 0.0
+                h * light.ease_out((p - ROLL_DOWN) / (1.0 - ROLL_DOWN)) if p > ROLL_DOWN else 0.0
             )
             self.rows = (rolled_up, rolled_down)
             if p < ROLL_UP:
                 self.line = GLOW * light.ease_out(p / ROLL_UP)
             else:
                 self.line = GLOW * (1.0 - light.ease_out((p - ROLL_UP) / (1.0 - ROLL_UP)))
-        self._slide(snapshot, now)
-        self._accent(snapshot, now)
 
     def _slide(self, snapshot: Any, now: float) -> None:
         """Where a slide has got to: it begins when the playback card on show has a new track
@@ -295,8 +403,9 @@ class Slot:
     def settle(self) -> None:
         """Forget what the warm-up showed: the first frame decides the card, with no change."""
         self.pinned = None
-        self.shown, self.started, self.leaving = 0, False, None
-        self.last, self.frozen, self.rows, self.line = {}, {}, None, 0.0
+        self.shown, self.started, self.leaving, self.turn_at = 0, False, None, None
+        self.last, self.frozen = {}, {}
+        self._still()
         self.track = self.sliding = self.shift = None
         self._to = self._from = self._colour = None
 
@@ -318,9 +427,9 @@ class Slot:
         return None
 
     def live(self, part: str, piece: Piece | None) -> Piece | None:
-        """A part of the card on show, as drawn: kept for when the card rolls up or the track
-        changes, and cut to the rows the new card has rolled down to during a change, or moved
-        in from the right (and cut to the card) during a slide."""
+        """A part of the card on show, as drawn: kept for when the card goes or the track
+        changes, and during a change as the new card is (cut to the rows it has rolled down
+        to, faded, moved), or moved in from the right (and cut to the card) during a slide."""
         if piece is not None:
             self.last[part] = piece
         if piece is None:
@@ -328,18 +437,34 @@ class Slot:
         if self.shift is not None:
             x, _, w, _ = self._inner()
             return slid(piece, self.shift[1], round(x), round(x + w))
-        if self.rows is None:
+        if self.leaving is None:
             return piece
-        top = self._inner()[1]
-        return window(piece, top, top + self.rows[1])
+        return self._changing(piece, 1)
 
     def leave(self, part: str) -> Piece | None:
-        """A part of the card that rolls up: what it showed last, from the rows below the
-        new card's to the ones the rolling up has left."""
+        """A part of the card that goes: what it showed last, as the change has it (in the
+        rows between the new card's and the ones the rolling up has left, faded, moved)."""
+        if self.leaving is None:
+            return None
+        return self._changing(self.frozen.get(part), 0)
+
+    def _changing(self, piece: Piece | None, which: int) -> Piece | None:
+        """``piece`` of the old card (``which`` 0) or the new one (1) as the change has it."""
+        x, y, w, h = self._inner()
+        if self.alpha is not None:
+            return faded(piece, self.alpha[which])
+        if self.push is not None and self.effect == "slide":
+            return slid(piece, self.push[which], round(x), round(x + w))
+        if self.push is not None:  # rise
+            return window(moved(piece, 0, self.push[which]), y, y + h)
+        if self.edge is not None:
+            edge = round(self.edge)
+            return slid(piece, 0, round(x), edge) if which else slid(piece, 0, edge, round(x + w))
         if self.rows is None:
             return None
-        top = self._inner()[1]
-        return window(self.frozen.get(part), top + self.rows[1], top + self.rows[0])
+        if which:
+            return window(piece, y, y + self.rows[1])
+        return window(piece, y + self.rows[1], y + self.rows[0])
 
     # -- the frame and the line of light -------------------------------------------------------
 
@@ -422,20 +547,26 @@ class Slot:
         return big.resize((w, h), Image.Resampling.BOX)  # (an area average: no ringing)
 
     def _ignition(self) -> Piece | None:
-        """The line of light at the top edge, over the module's width."""
+        """The line of light at the top edge, over the module's width; in a wipe the beam at
+        its edge, down the card's height."""
         if self.line <= 0.004:
             return None
         x, y, w, h = self.box
         unit = min(self.renderer.theme.width, self.renderer.theme.height) / 480
         half = max(3, round(32 * unit))
-        row = y + self.width / 2
-        strip = Image.new("RGB", (w, 2 * half))
+        across = w if self.edge is None else self._inner()[3]
+        strip = Image.new("RGB", (round(across), 2 * half))
         colour = self._to or self._colour or (255, 255, 255)  # (the card's that comes: one strip)
-        light.add_line(strip, 0, w, half, colour, self.line, unit, 40 * unit, 7.0, 0.8,
+        light.add_line(strip, 0, across, half, colour, self.line, unit, 40 * unit, 7.0, 0.8,
                        light.role_color(self.renderer.theme, "text"))  # fmt: skip
         red, green, blue = strip.split()
         strip.putalpha(ImageChops.lighter(ImageChops.lighter(red, green), blue))
-        return Piece(strip, x, round(row) - half, add=True)
+        if self.edge is None:
+            return Piece(strip, x, round(y + self.width / 2) - half, add=True)
+        inner = self._inner()
+        beam = Piece(strip.transpose(Image.Transpose.ROTATE_90), round(self.edge) - half,
+                     round(inner[1]), add=True)  # fmt: skip
+        return slid(beam, 0, round(inner[0]), round(inner[0] + inner[2]))
 
     def overlay(self, pieces: list[tuple[str, Piece]]) -> None:
         """Put the frame, and during a change the line of light, over the module's pieces."""

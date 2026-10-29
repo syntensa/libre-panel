@@ -986,7 +986,7 @@ class MainLoop:
         """``theme`` as it is drawn: in the first panel's look (``source``), in the accent, with
         the person's cards in its card slots."""
         dressed = with_accent(with_look(theme, source), accent_of(config.accent))
-        return with_cards(dressed, config.cards)
+        return with_cards(dressed, config.cards, config.card_order, config.card_transition)
 
     @staticmethod
     def _switched(theme: Theme, config: Config, source: Theme | None) -> dict[str, bool]:
@@ -1054,7 +1054,8 @@ class MainLoop:
         switches = tuple(sorted(switches_for(theme, config.switches).items()))
         accent = accent_of(config.accent)
         return (str(theme.root), stamp, theme.name, config.fps > 1, config.symbols, switches,
-                accent, dress, tuple(config.cards))  # fmt: skip
+                accent, dress, tuple(config.cards), config.card_order,
+                config.card_transition)  # fmt: skip
 
     def _warmed(
         self, config: Config, host: Any, shown: str, refused: str | None, watcher: _Watcher,

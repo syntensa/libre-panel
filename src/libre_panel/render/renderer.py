@@ -47,7 +47,7 @@ from libre_panel.render.motion import MAX_POINTS, RATE, History, Motion, Spring,
 from libre_panel.render.motion import number as motion_number
 from libre_panel.sensors.base import Snapshot, want
 from libre_panel.theme.model import COVER_COLOR, SWITCH, Theme, ThemeError, resolve_asset
-from libre_panel.theme.modules import SLOT_KINDS, slot_items
+from libre_panel.theme.modules import SLOT_KINDS, slot_cards
 from libre_panel.theme.modules import expand as expand_modules
 
 log = logging.getLogger(__name__)
@@ -828,8 +828,8 @@ class Renderer:
             if module["module"] in SLOT_KINDS and module["id"] in self.module_boxes:
                 from libre_panel.render.slot import Slot
 
-                items = slot_items(module)
-                slots[module["id"]] = Slot(self, module, items, self.module_boxes[module["id"]])
+                cards = slot_cards(module)
+                slots[module["id"]] = Slot(self, module, cards, self.module_boxes[module["id"]])
         return slots
 
     # -- resources ---------------------------------------------------------

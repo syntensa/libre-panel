@@ -457,7 +457,7 @@ function Cards() {
   const follows = widgets().some((widget) => widget.type === "module" && widget.module === "cards" && !String(widget.items || "").trim());
   if (!follows) return null;
   return html`<${Section} title=${t("Cards on the panel")}>
-    <small class="field-hint">${t("The card on the panel is the first of these that has something to show; the choice holds for every theme that leaves it to you.")}</small>
+    <small class="field-hint">${t("The choice holds for every theme that leaves the cards to you.")}</small>
     <${CardsChoice} />
   <//>`;
 }

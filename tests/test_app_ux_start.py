@@ -109,12 +109,18 @@ def test_the_cards_of_lumens_slot_are_chosen_on_start_for_every_version_of_it(
         def order():
             return rows.evaluate_all("r => r.map((e) => e.dataset.card)")
 
-        assert order() == ["playback", "ai", "forecast", "date", "download"]
+        assert order() == [
+            "playback", "ai", "forecast", "date",  # chosen, then under "More cards"
+            "download", "analog", "clock", "world", "outlook", "moon", "sun", "agenda", "net",
+        ]  # fmt: skip
         expect(card.locator("[data-card='download']")).to_have_class(re.compile(r"\boff\b"))
+        expect(card.locator("[data-card='download']")).to_be_hidden()
         card.get_by_role("button", name="Earlier: Weather").click()
         waits_for(page, lambda: settings_config().cards == ["playback", "forecast", "ai", "date"])
         card.get_by_role("switch", name="Show the card Music").click()
         waits_for(page, lambda: settings_config().cards == ["forecast", "ai", "date"])
+        card.locator(".cards-choice-more > summary").click()
+        expect(card.locator(".cards-choice-more > summary")).to_have_text("More cards (10)")
         card.get_by_role("switch", name="Show the card Download").click()
         waits_for(page, lambda: settings_config().cards == ["forecast", "ai", "date", "download"])
         expect(rows.first).to_have_attribute("data-card", "forecast")
@@ -126,6 +132,48 @@ def test_the_cards_of_lumens_slot_are_chosen_on_start_for_every_version_of_it(
     with browser_page(app_url, "home", routes={"**/api/app": a_panel_app()}, allow=PICTURE) as page:
         page.wait_for_selector(".pages-card")
         expect(page.locator(".cards-card")).to_have_count(0)
+
+
+def test_the_cards_take_turns_each_for_its_minutes_and_change_as_chosen(
+    app_url,  # noqa: F811
+    isolated_home,
+):
+    """The cards of Lumen's slot are the first with something to show, or take turns, each for
+    its minutes (``cards = ["forecast for 10m", ...]``, ``card_order``), and go from one to the
+    next as chosen (``card_transition``). In the first order a card after one that always has
+    something is never on show, which its row says."""
+    choose_theme(isolated_home, "lumen")
+    with browser_page(app_url, "home", routes={"**/api/app": a_panel_app()}, allow=PICTURE) as page:
+        card = page.locator(".cards-card")
+        card.locator(".cards-choice-more > summary").click()
+        card.get_by_role("switch", name="Show the card Analog clock").click()
+        waits_for(page, lambda: settings_config().cards[-1] == "analog")
+        never = card.locator("[data-card='analog'] .cards-choice-never")
+        expect(never).to_contain_text("Never on show: Calendar before it always has something")
+        expect(card.get_by_role("textbox", name="Minutes on show: Weather")).to_have_count(0)
+        card.get_by_role("radio", name="in turn").click()
+        waits_for(page, lambda: settings_config().card_order == "turns")
+        expect(never).to_have_count(0)
+        minutes = card.get_by_role("textbox", name="Minutes on show: Weather")
+        expect(minutes).to_have_value("5")  # the slot's turn
+        minutes.fill("10")
+        minutes.press("Enter")
+        waits_for(page, lambda: "forecast for 10m" in settings_config().cards)
+        minutes = card.get_by_role("textbox", name="Minutes on show: Calendar")
+        minutes.fill("1.5")
+        minutes.press("Enter")
+        waits_for(page, lambda: "date for 90s" in settings_config().cards)
+        expect(card.get_by_role("textbox", name="Minutes on show: Calendar")).to_have_value("1.5")
+        card.get_by_role("combobox", name="From one card to the next").select_option("fade")
+        waits_for(page, lambda: settings_config().card_transition == "fade")
+        card.get_by_role("button", name="Earlier: Weather").click()  # its time goes with it
+        waits_for(page, lambda: settings_config().cards[:2] == ["playback", "forecast for 10m"])
+    config = settings_config()
+    assert (config.cards, config.card_order, config.card_transition) == (
+        ["playback", "forecast for 10m", "ai", "date for 90s", "analog"],
+        "turns",
+        "fade",
+    )
 
 
 def test_who_updated_is_told_what_is_new_once_and_each_thing_is_done_right_there(
