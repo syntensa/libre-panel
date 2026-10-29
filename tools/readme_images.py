@@ -20,6 +20,7 @@ import contextlib
 import io
 import os
 import re
+import sys
 import tempfile
 import threading
 from datetime import datetime
@@ -27,14 +28,22 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-from libre_panel.branding import logo
-from libre_panel.fonts import builtin_font_path
-from libre_panel.render.renderer import Renderer
-from libre_panel.sensors.base import Reading
-from libre_panel.sensors.demo import demo_snapshot
-from libre_panel.theme.adapt import adapt_theme
-from libre_panel.theme.model import find_theme, load_theme, pair_version, parse_theme
-from libre_panel.theme.modules import LOOKS, look_theme_parts, make_grid, templates
+# this checkout's Libre Panel, not one installed elsewhere (an older one drew older pictures)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+
+from libre_panel.branding import logo  # noqa: E402
+from libre_panel.fonts import builtin_font_path  # noqa: E402
+from libre_panel.render.renderer import Renderer  # noqa: E402
+from libre_panel.sensors.base import Reading  # noqa: E402
+from libre_panel.sensors.demo import demo_snapshot  # noqa: E402
+from libre_panel.theme.adapt import adapt_theme  # noqa: E402
+from libre_panel.theme.model import (  # noqa: E402
+    find_theme,
+    load_theme,
+    pair_version,
+    parse_theme,
+)
+from libre_panel.theme.modules import LOOKS, look_theme_parts, make_grid, templates  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 WHEN = datetime(2026, 10, 9, 10, 8, 24).timestamp()  # a Friday morning
