@@ -2934,7 +2934,6 @@
     "{cols} × {rows} cells, each module where it is: modules then go anywhere, cell by cell.": "{cols} × {rows} 个单元格，每个模块保持原位：之后模块可逐格放到任意位置。",
     "The grid has {cols} × {rows} cells now; modules move cell by cell.": "网格现在有 {cols} × {rows} 个单元格；模块逐格移动。",
     "A monitor (the desktop asks)": "一台显示器（由桌面询问）",
-    "A panel shows the screen in the running app. Start Libre Panel and open the Player from it.": "面板在正在运行的应用中显示屏幕。请启动 Libre Panel，再从中打开播放器。",
     "A picture is about a tenth of a second old on a TURZX panel, a little more on others: for windows, chats and music, not for games. A panel takes no touch.": "在 TURZX 面板上画面约有十分之一秒延迟，其他面板稍多：适合窗口、聊天和音乐，不适合游戏。面板不支持触摸。",
     "A screen of this computer on the panel instead of its theme, as it changes.": "在面板上实时显示这台电脑的屏幕，替代其主题。",
     "A window": "一个窗口",
@@ -2963,7 +2962,12 @@
     "a panel shows the screen in the running app": "面板在正在运行的应用中显示屏幕",
     "main": "主",
     "the panel's own monitor": "面板的专属显示器",
-    "the panel's size is not known: choose its model in Settings": "面板尺寸未知：请在设置中选择其型号"
+    "the panel's size is not known: choose its model in Settings": "面板尺寸未知：请在设置中选择其型号",
+    "A panel shows the screen in the running app. Start Libre Panel and open this page from it.": "面板在正在运行的应用中显示屏幕。请启动 Libre Panel，再从中打开此页面。",
+    "A screen of the computer, a window or a monitor of its own on the panel": "在面板上显示电脑屏幕、窗口或专属显示器",
+    "Screen": "屏幕",
+    "screen monitor mirror extend window desktop": "屏幕 显示器 镜像 扩展 窗口 桌面",
+    "the computer's screen on the panel": "在面板上显示电脑屏幕"
   },
   "fields": {
     "agent": "智能体",

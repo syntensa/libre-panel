@@ -2934,7 +2934,6 @@
     "{cols} × {rows} cells, each module where it is: modules then go anywhere, cell by cell.": "{cols} × {rows}セル。各モジュールは今の位置のまま。その後はモジュールをセル単位でどこにでも置けます。",
     "The grid has {cols} × {rows} cells now; modules move cell by cell.": "グリッドは{cols} × {rows}セルになりました。モジュールはセル単位で動きます。",
     "A monitor (the desktop asks)": "モニター（デスクトップが尋ねます）",
-    "A panel shows the screen in the running app. Start Libre Panel and open the Player from it.": "パネルに画面を表示するのは実行中のアプリです。Libre Panel を起動し、そこからプレーヤーを開いてください。",
     "A picture is about a tenth of a second old on a TURZX panel, a little more on others: for windows, chats and music, not for games. A panel takes no touch.": "TURZX パネルでは映像の遅れは約 0.1 秒、ほかのパネルではもう少し大きくなります。ウィンドウ、チャット、音楽向けで、ゲーム向けではありません。パネルはタッチに反応しません。",
     "A screen of this computer on the panel instead of its theme, as it changes.": "テーマの代わりに、このコンピューターの画面を変化そのままにパネルへ表示します。",
     "A window": "ウィンドウ",
@@ -2963,7 +2962,12 @@
     "a panel shows the screen in the running app": "パネルに画面を表示するのは実行中のアプリです",
     "main": "メイン",
     "the panel's own monitor": "パネル専用のモニター",
-    "the panel's size is not known: choose its model in Settings": "パネルのサイズが不明です。設定でモデルを選んでください"
+    "the panel's size is not known: choose its model in Settings": "パネルのサイズが不明です。設定でモデルを選んでください",
+    "A panel shows the screen in the running app. Start Libre Panel and open this page from it.": "パネルに画面を表示するのは実行中のアプリです。Libre Panel を起動し、そこからこのページを開いてください。",
+    "A screen of the computer, a window or a monitor of its own on the panel": "コンピューターの画面、ウィンドウ、または専用のモニターをパネルに",
+    "Screen": "画面",
+    "screen monitor mirror extend window desktop": "画面 モニター ミラー 拡張 ウィンドウ デスクトップ",
+    "the computer's screen on the panel": "コンピューターの画面をパネルに"
   },
   "fields": {
     "agent": "エージェント",

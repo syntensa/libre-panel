@@ -274,7 +274,7 @@ needs_x11 = pytest.mark.skipif(
 
 @needs_x11
 def test_the_app_shows_a_monitor_on_the_panel_and_the_theme_again(isolated_home, xvfb):  # noqa: F811
-    """Player → As a monitor, on X11 (Xvfb, a magenta window across its screen): the monitor
+    """Screen → As a monitor, on X11 (Xvfb, a magenta window across its screen): the monitor
     chosen, Show it on the panel: the panel shows the screen; The theme again: the theme."""
     import subprocess
 
@@ -297,7 +297,7 @@ def test_the_app_shows_a_monitor_on_the_panel_and_the_theme_again(isolated_home,
 
     try:
         assert wait_for(lambda: running.panel.state()["state"] == "showing")
-        with browser_page(url, "player") as page:
+        with browser_page(url, "screen") as page:
             section = page.locator("[data-mirror]")
             section.wait_for()
             section.locator("[data-mirror-source='screen']").click()

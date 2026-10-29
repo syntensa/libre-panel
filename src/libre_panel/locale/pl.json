@@ -2934,7 +2934,6 @@
     "{cols} × {rows} cells, each module where it is: modules then go anywhere, cell by cell.": "{cols} × {rows} komórek, każdy blok zostaje na miejscu: bloki można potem stawiać wszędzie, komórka po komórce.",
     "The grid has {cols} × {rows} cells now; modules move cell by cell.": "Siatka ma teraz {cols} × {rows} komórek; bloki przesuwają się komórka po komórce.",
     "A monitor (the desktop asks)": "Monitor (pulpit zapyta)",
-    "A panel shows the screen in the running app. Start Libre Panel and open the Player from it.": "Panel pokazuje ekran w działającej aplikacji. Uruchom Libre Panel i otwórz odtwarzacz z niej.",
     "A picture is about a tenth of a second old on a TURZX panel, a little more on others: for windows, chats and music, not for games. A panel takes no touch.": "Obraz ma na panelu TURZX około jednej dziesiątej sekundy opóźnienia, na innych nieco więcej: do okien, czatów i muzyki, nie do gier. Panel nie obsługuje dotyku.",
     "A screen of this computer on the panel instead of its theme, as it changes.": "Ekran tego komputera na panelu zamiast jego motywu, na bieżąco.",
     "A window": "Okno",
@@ -2963,7 +2962,12 @@
     "a panel shows the screen in the running app": "panel pokazuje ekran w działającej aplikacji",
     "main": "główny",
     "the panel's own monitor": "własny monitor panelu",
-    "the panel's size is not known: choose its model in Settings": "rozmiar panelu jest nieznany: wybierz jego model w Ustawieniach"
+    "the panel's size is not known: choose its model in Settings": "rozmiar panelu jest nieznany: wybierz jego model w Ustawieniach",
+    "A panel shows the screen in the running app. Start Libre Panel and open this page from it.": "Panel pokazuje ekran w działającej aplikacji. Uruchom Libre Panel i otwórz tę stronę z niej.",
+    "A screen of the computer, a window or a monitor of its own on the panel": "Ekran komputera, okno lub własny monitor na panelu",
+    "Screen": "Ekran",
+    "screen monitor mirror extend window desktop": "ekran monitor powielanie rozszerzanie okno pulpit",
+    "the computer's screen on the panel": "ekran komputera na panelu"
   },
   "fields": {
     "agent": "agent",

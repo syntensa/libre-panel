@@ -20,6 +20,7 @@ import "./views/home/index.js";
 import "./views/live/index.js";
 import "./views/look/index.js";
 import "./views/player/index.js";
+import "./views/screen/index.js";
 import "./views/settings/index.js";
 
 render(html`<${App} />`, document.getElementById("root"));

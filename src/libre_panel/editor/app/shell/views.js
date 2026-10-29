@@ -36,6 +36,7 @@ const HINTS = {
   look: () => t("The colours, the finish and the light of a theme"),
   live: () => t("What the panel shows now, and the history of the last days"),
   player: () => t("Videos and pictures on the panel, instead of its theme"),
+  screen: () => t("A screen of the computer, a window or a monitor of its own on the panel"),
   settings: () => t("The panel, sensors, services, weather and start"),
 };
 const KEYWORDS = {
@@ -44,6 +45,7 @@ const KEYWORDS = {
   look: () => t("colours colors palette finish style appearance light"),
   live: () => t("now running status readings values sensors services log"),
   player: () => t("player media video movie gif pictures photos slideshow"),
+  screen: () => t("screen monitor mirror extend window desktop"),
   settings: () => t("options preferences configuration setup"),
 };
 

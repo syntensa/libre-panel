@@ -2934,7 +2934,6 @@
     "{cols} × {rows} cells, each module where it is: modules then go anywhere, cell by cell.": "{cols} × {rows} cellules, chaque bloc reste où il est : les blocs vont ensuite partout, cellule par cellule.",
     "The grid has {cols} × {rows} cells now; modules move cell by cell.": "La grille a maintenant {cols} × {rows} cellules ; les blocs bougent cellule par cellule.",
     "A monitor (the desktop asks)": "Un écran (le bureau demande)",
-    "A panel shows the screen in the running app. Start Libre Panel and open the Player from it.": "Un panneau affiche l'écran dans l'application en cours. Lancez Libre Panel et ouvrez le lecteur depuis celle-ci.",
     "A picture is about a tenth of a second old on a TURZX panel, a little more on others: for windows, chats and music, not for games. A panel takes no touch.": "Une image a environ un dixième de seconde de retard sur un panneau TURZX, un peu plus sur les autres : pour des fenêtres, des discussions et de la musique, pas pour les jeux. Un panneau ne réagit pas au toucher.",
     "A screen of this computer on the panel instead of its theme, as it changes.": "Un écran de cet ordinateur sur le panneau à la place de son thème, au fil de ses changements.",
     "A window": "Une fenêtre",
@@ -2963,7 +2962,12 @@
     "a panel shows the screen in the running app": "un panneau affiche l'écran dans l'application en cours",
     "main": "principal",
     "the panel's own monitor": "l'écran propre au panneau",
-    "the panel's size is not known: choose its model in Settings": "la taille du panneau est inconnue : choisissez son modèle dans les réglages"
+    "the panel's size is not known: choose its model in Settings": "la taille du panneau est inconnue : choisissez son modèle dans les réglages",
+    "A panel shows the screen in the running app. Start Libre Panel and open this page from it.": "Un panneau affiche l'écran dans l'application en cours. Lancez Libre Panel et ouvrez cette page depuis celle-ci.",
+    "A screen of the computer, a window or a monitor of its own on the panel": "Un écran de l'ordinateur, une fenêtre ou un écran à lui sur le panneau",
+    "Screen": "Écran",
+    "screen monitor mirror extend window desktop": "écran moniteur miroir étendre fenêtre bureau",
+    "the computer's screen on the panel": "l'écran de l'ordinateur sur le panneau"
   },
   "fields": {
     "agent": "agent",
@@ -3120,7 +3124,7 @@
     "calendar": "Calendrier",
     "clock": "Horloge",
     "countdown": "Compte à rebours",
-    "downloads": "Télé\u00adcharge\u00adments",
+    "downloads": "Télé­charge­ments",
     "fan": "Ventilateur",
     "gauge": "Anneau",
     "graph": "Graphique",

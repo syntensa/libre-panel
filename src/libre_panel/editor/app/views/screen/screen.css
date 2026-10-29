@@ -1,0 +1,154 @@
+/* Screen: the panel as a monitor (views/screen) */
+
+.screen-view {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.screen-main {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 28px 24px 40px;
+}
+
+.screen-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+}
+
+.screen-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.screen-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.screen-panels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.screen-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--warn-soft);
+  border: 1px solid var(--line-3);
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.screen-note > .icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--warn);
+}
+
+/* -- what it shows, how (monitor.js) -- */
+
+.mirror-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mirror-head h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.mirror-head .muted,
+.mirror-small {
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.mirror-small {
+  margin: 0;
+}
+
+.mirror-sources {
+  justify-content: flex-start;
+  gap: 6px;
+}
+
+.mirror-sources .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mirror-window {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.mirror-window .select {
+  min-width: 0;
+  max-width: 260px;
+}
+
+.mirror-hint {
+  padding: 10px 12px;
+}
+
+.mirror-hint.info {
+  background: var(--accent-softer);
+}
+
+.mirror-hint.info > .icon {
+  color: var(--accent);
+}
+
+.mirror-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mirror-showing {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.mirror-showing .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}

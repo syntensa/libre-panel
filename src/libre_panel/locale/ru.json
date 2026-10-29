@@ -2934,7 +2934,6 @@
     "{cols} × {rows} cells, each module where it is: modules then go anywhere, cell by cell.": "{cols} × {rows} ячеек, каждый модуль остаётся на месте: затем модули ставятся куда угодно, по ячейке.",
     "The grid has {cols} × {rows} cells now; modules move cell by cell.": "Теперь в сетке {cols} × {rows} ячеек; модули двигаются по ячейке.",
     "A monitor (the desktop asks)": "Монитор (спросит рабочий стол)",
-    "A panel shows the screen in the running app. Start Libre Panel and open the Player from it.": "Панель показывает экран в запущенном приложении. Запустите Libre Panel и откройте плеер из него.",
     "A picture is about a tenth of a second old on a TURZX panel, a little more on others: for windows, chats and music, not for games. A panel takes no touch.": "Изображение на панели TURZX запаздывает примерно на десятую долю секунды, на других — чуть больше: для окон, чатов и музыки, не для игр. Панель не реагирует на касания.",
     "A screen of this computer on the panel instead of its theme, as it changes.": "Экран этого компьютера на панели вместо её темы — так, как он меняется.",
     "A window": "Окно",
@@ -2963,7 +2962,12 @@
     "a panel shows the screen in the running app": "панель показывает экран в запущенном приложении",
     "main": "основной",
     "the panel's own monitor": "собственный монитор панели",
-    "the panel's size is not known: choose its model in Settings": "размер панели неизвестен: выберите её модель в настройках"
+    "the panel's size is not known: choose its model in Settings": "размер панели неизвестен: выберите её модель в настройках",
+    "A panel shows the screen in the running app. Start Libre Panel and open this page from it.": "Панель показывает экран в запущенном приложении. Запустите Libre Panel и откройте эту страницу из него.",
+    "A screen of the computer, a window or a monitor of its own on the panel": "Экран компьютера, окно или собственный монитор на панели",
+    "Screen": "Экран",
+    "screen monitor mirror extend window desktop": "экран монитор дублировать расширить окно рабочий стол",
+    "the computer's screen on the panel": "экран компьютера на панели"
   },
   "fields": {
     "agent": "агент",

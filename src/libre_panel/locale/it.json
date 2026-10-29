@@ -2934,7 +2934,6 @@
     "{cols} × {rows} cells, each module where it is: modules then go anywhere, cell by cell.": "{cols} × {rows} celle, ogni modulo resta dov'è: i moduli poi vanno ovunque, cella per cella.",
     "The grid has {cols} × {rows} cells now; modules move cell by cell.": "La griglia ha ora {cols} × {rows} celle; i moduli si spostano cella per cella.",
     "A monitor (the desktop asks)": "Un monitor (lo chiede il desktop)",
-    "A panel shows the screen in the running app. Start Libre Panel and open the Player from it.": "Un pannello mostra lo schermo nell'app in esecuzione. Avvia Libre Panel e apri il lettore da lì.",
     "A picture is about a tenth of a second old on a TURZX panel, a little more on others: for windows, chats and music, not for games. A panel takes no touch.": "Un'immagine arriva con circa un decimo di secondo di ritardo su un pannello TURZX, un po' di più sugli altri: per finestre, chat e musica, non per i giochi. Un pannello non accetta il tocco.",
     "A screen of this computer on the panel instead of its theme, as it changes.": "Uno schermo di questo computer sul pannello al posto del suo tema, così come cambia.",
     "A window": "Una finestra",
@@ -2963,7 +2962,12 @@
     "a panel shows the screen in the running app": "un pannello mostra lo schermo nell'app in esecuzione",
     "main": "principale",
     "the panel's own monitor": "il monitor del pannello",
-    "the panel's size is not known: choose its model in Settings": "le dimensioni del pannello non sono note: scegli il modello nelle Impostazioni"
+    "the panel's size is not known: choose its model in Settings": "le dimensioni del pannello non sono note: scegli il modello nelle Impostazioni",
+    "A panel shows the screen in the running app. Start Libre Panel and open this page from it.": "Un pannello mostra lo schermo nell'app in esecuzione. Avvia Libre Panel e apri questa pagina da lì.",
+    "A screen of the computer, a window or a monitor of its own on the panel": "Uno schermo del computer, una finestra o un monitor tutto suo sul pannello",
+    "Screen": "Schermo",
+    "screen monitor mirror extend window desktop": "schermo monitor duplica estendi finestra desktop",
+    "the computer's screen on the panel": "lo schermo del computer sul pannello"
   },
   "fields": {
     "agent": "agente",

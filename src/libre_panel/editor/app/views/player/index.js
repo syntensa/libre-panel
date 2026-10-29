@@ -5,7 +5,7 @@
 // the one before, play or pause, the next, stop, where it stands (a slider that seeks), on
 // which panel, how it fills it, what comes after the last, in another order, and how long a
 // picture shows. While nothing plays the choices are this window's preferences; while it plays
-// they change the playback. Below them: the panel as a monitor (monitor.js).
+// they change the playback.
 
 import { withToken } from "/static/token.js";
 import { endpoints } from "../../core/api.js";
@@ -19,7 +19,6 @@ import { IconButton, Segmented, Toggle } from "../../ui/controls.js";
 import { confirmDialog } from "../../ui/dialog.js";
 import { Icon } from "../../ui/icons.js";
 import { toast, toastError } from "../../ui/toast.js";
-import { MonitorSection } from "./monitor.js";
 
 const SUFFIXES = [".mp4", ".webm", ".mov", ".m4v", ".mkv", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"];
 const ACCEPT = `video/*,image/*,${SUFFIXES.join(",")}`;
@@ -353,7 +352,6 @@ function PlayerView() {
         : null}
       <${NowPlaying} data=${data} position=${position} />
       <${Choices} data=${data} />
-      <${MonitorSection} />
     </div>
     <${Library} data=${data} />
   </div>`;

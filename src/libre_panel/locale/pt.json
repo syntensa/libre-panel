@@ -2934,7 +2934,6 @@
     "{cols} × {rows} cells, each module where it is: modules then go anywhere, cell by cell.": "{cols} × {rows} células, cada bloco onde está: depois os blocos vão a qualquer lugar, célula a célula.",
     "The grid has {cols} × {rows} cells now; modules move cell by cell.": "A grade agora tem {cols} × {rows} células; os blocos se movem célula a célula.",
     "A monitor (the desktop asks)": "Um monitor (o ambiente de trabalho pergunta)",
-    "A panel shows the screen in the running app. Start Libre Panel and open the Player from it.": "Um painel mostra o ecrã na aplicação em execução. Inicie o Libre Panel e abra o leitor a partir dela.",
     "A picture is about a tenth of a second old on a TURZX panel, a little more on others: for windows, chats and music, not for games. A panel takes no touch.": "Uma imagem chega com cerca de uma décima de segundo de atraso num painel TURZX, um pouco mais noutros: para janelas, conversas e música, não para jogos. Um painel não aceita toque.",
     "A screen of this computer on the panel instead of its theme, as it changes.": "Um ecrã deste computador no painel em vez do seu tema, tal como muda.",
     "A window": "Uma janela",
@@ -2963,7 +2962,12 @@
     "a panel shows the screen in the running app": "um painel mostra o ecrã na aplicação em execução",
     "main": "principal",
     "the panel's own monitor": "o monitor próprio do painel",
-    "the panel's size is not known: choose its model in Settings": "o tamanho do painel é desconhecido: escolha o modelo nas Definições"
+    "the panel's size is not known: choose its model in Settings": "o tamanho do painel é desconhecido: escolha o modelo nas Definições",
+    "A panel shows the screen in the running app. Start Libre Panel and open this page from it.": "Um painel mostra o ecrã na aplicação em execução. Inicie o Libre Panel e abra esta página a partir dela.",
+    "A screen of the computer, a window or a monitor of its own on the panel": "Um ecrã do computador, uma janela ou um monitor próprio no painel",
+    "Screen": "Ecrã",
+    "screen monitor mirror extend window desktop": "ecrã monitor espelhar estender janela ambiente de trabalho",
+    "the computer's screen on the panel": "o ecrã do computador no painel"
   },
   "fields": {
     "agent": "agente",

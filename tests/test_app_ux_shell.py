@@ -250,7 +250,7 @@ def test_the_header_is_the_same_in_every_view(app_url, isolated_home, language):
     routes = a_bar(isolated_home)
     i18n.set_language(language)
     with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
-        for view in ("home", "design", "look", "live", "player", "settings/panel"):
+        for view in ("home", "design", "look", "live", "player", "screen", "settings/panel"):
             page.goto(f"{app_url}#/{view}")
             page.wait_for_selector(".view > *")
             order = js(
@@ -263,7 +263,7 @@ def test_the_header_is_the_same_in_every_view(app_url, isolated_home, language):
             )
             assert order == ["tabs", "search", "settings"], view
         titles = page.locator(".tabs .tab").evaluate_all("tabs => tabs.map((t) => t.title)")
-        assert len(titles) == 5 and all(len(title) > 12 for title in titles)
+        assert len(titles) == 6 and all(len(title) > 12 for title in titles)
 
 
 def test_the_settings_button_leads_back_to_where_you_were(app_url, isolated_home):  # noqa: F811
@@ -408,13 +408,13 @@ def test_the_shared_parts_have_names_rings_and_escape(app_url, isolated_home):  
         page.reload()
         page.wait_for_selector(".panel-canvas .preview")
         seen = []
-        for _ in range(11):
+        for _ in range(12):
             page.keyboard.press("Tab")
             focused = page.evaluate(FOCUSED)
             assert focused["ring"], focused
             seen.append(focused["text"].split("\n")[0])
-        assert seen[:8] == ["Libre Panel: start", "Lumen", "Start", "Design", "Look", "Live",
-                            "Player", "Search or command …"]  # fmt: skip
+        assert seen[:9] == ["Libre Panel: start", "Lumen", "Start", "Design", "Look", "Live",
+                            "Player", "Screen", "Search or command …"]  # fmt: skip
         assert seen[-1] == "Settings"
         for opener, floating, root in (
             (".panel-chip", ".popover", ".popover"),

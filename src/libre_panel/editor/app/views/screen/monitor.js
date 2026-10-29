@@ -1,8 +1,9 @@
-// Player → As a monitor (/api/mirror, mirror.py): a screen of this computer on a panel instead of
-// its theme, as it changes. What it shows: the panel's own monitor (the computer extends its
+// Screen (#/screen): the panel as a monitor (/api/mirror, mirror.py): a screen of this computer
+// on a panel instead of its theme, as it changes. What it shows: the panel's own monitor (the computer extends its
 // desktop to it: extend.py; on Windows the Virtual Display Driver, set up here once), one of the
 // monitors, or a window; how it fills the panel, the mouse pointer with it or not, on which
 // panels. On Wayland the desktop's dialog may ask which monitor or window, once.
+// (index.js: the view)
 
 import { endpoints } from "../../core/api.js";
 import { t } from "../../core/i18n.js";
@@ -65,7 +66,7 @@ function ownState(data) {
 }
 
 function Hint({ tone = "info", children }) {
-  return html`<p class=${`player-note mirror-hint ${tone}`}>
+  return html`<p class=${`screen-note mirror-hint ${tone}`}>
     <${Icon} name=${tone === "info" ? "info" : "warning"} size=${15} /> <span>${children}</span>
   </p>`;
 }
@@ -89,7 +90,7 @@ export function MonitorSection() {
     };
   }, []);
   if (!data) return null;
-  if (data.error && !data.platform) return html`<section class="player-choices mirror"><${Hint} tone="warn">${data.error}<//></section>`;
+  if (data.error && !data.platform) return html`<section class="screen-card mirror"><${Hint} tone="warn">${data.error}<//></section>`;
   const choice = chosen(prefs);
   const showing = data.showing;
   const wayland = data.platform === "wayland";
@@ -115,13 +116,13 @@ export function MonitorSection() {
       ? t("the panel's own monitor")
       : showing.source.name || showing.source.id
     : "";
-  return html`<section class="player-choices mirror" data-mirror>
+  return html`<section class="screen-card mirror" data-mirror>
     <header class="mirror-head">
       <h2><${Icon} name="monitor" size=${18} /> ${t("As a monitor")}</h2>
       <span class="muted">${t("A screen of this computer on the panel instead of its theme, as it changes.")}</span>
     </header>
-    ${!data.available ? html`<${Hint}>${t("A panel shows the screen in the running app. Start Libre Panel and open the Player from it.")}<//>` : null}
-    <div class="player-choice mirror-sources" role="group" aria-label=${t("What the panel shows")}>
+    ${!data.available ? html`<${Hint}>${t("A panel shows the screen in the running app. Start Libre Panel and open this page from it.")}<//>` : null}
+    <div class="screen-row mirror-sources" role="group" aria-label=${t("What the panel shows")}>
       <button type="button" class=${`chip${isOn("virtual") ? " is-on" : ""}`} aria-pressed=${String(isOn("virtual"))}
         data-mirror-source="virtual" onClick=${() => choose({ kind: "virtual", id: "", name: "" })}>
         <${Icon} name="monitor" size=${14} /> ${t("Its own monitor")}
@@ -156,8 +157,8 @@ export function MonitorSection() {
           ? t("The desktop makes the panel's monitor as it starts and takes it away as it stops. Arrange it in the system's display settings; on KDE the dialog offers it as a new virtual output.")
           : t("It goes on the desktop as it starts, right of the others, and off again as it stops. Windows go there as to any monitor.")}<//>`
       : null}
-    <div class="player-choice">
-      <span class="player-choice-label">${t("Fills the panel")}</span>
+    <div class="screen-row">
+      <span class="screen-label">${t("Fills the panel")}</span>
       <${Segmented} label=${t("How it fills the panel")} value=${choice.fit} onChange=${(value) => setPref("mirrorFit", value)}
         options=${[
           { value: "contain", label: t("Whole") },
@@ -165,14 +166,14 @@ export function MonitorSection() {
           { value: "stretch", label: t("Stretched") },
         ]} />
     </div>
-    <div class="player-choice">
-      <span class="player-choice-label">${t("The mouse pointer")}</span>
+    <div class="screen-row">
+      <span class="screen-label">${t("The mouse pointer")}</span>
       <${Toggle} label=${t("The mouse pointer")} checked=${choice.cursor} onChange=${(on) => setPref("mirrorCursor", on)} />
     </div>
     ${panels.length > 1
-      ? html`<div class="player-choice">
-          <span class="player-choice-label">${t("On")}</span>
-          <div class="player-panels" role="group" aria-label=${t("The panels it shows on")}>
+      ? html`<div class="screen-row">
+          <span class="screen-label">${t("On")}</span>
+          <div class="screen-panels" role="group" aria-label=${t("The panels it shows on")}>
             ${panels.map((panel) => {
               const on = choice.panels.includes(panel.number);
               return html`<button type="button" class=${`chip${on ? " is-on" : ""}`} aria-pressed=${String(on)}

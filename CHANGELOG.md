@@ -3,7 +3,7 @@
 ## Unreleased
 
 **New**
-- **A panel as a monitor** (*Player → As a monitor*). A panel shows a screen of the computer
+- **A panel as a monitor** (the app's *Screen*). A panel shows a screen of the computer
   instead of its theme, as it changes: one of your monitors, a part of one, a window, or a
   monitor of its own that the desktop extends to, where windows go as to any monitor. That
   one goes on the desktop as the panel starts showing it and off again as it stops.

@@ -1,4 +1,4 @@
-"""A panel as a monitor (the app's *Player → Monitor*): a monitor of this computer, a part of
+"""A panel as a monitor (the app's *Screen*): a monitor of this computer, a part of
 one or a window on a panel instead of its theme, as it changes, until it is stopped.
 
 - **What is shown** (:class:`Source`): a monitor (``monitor``, by its id: capture.py), a part
