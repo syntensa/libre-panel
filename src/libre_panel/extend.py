@@ -287,14 +287,16 @@ try {{
         return ,$bytes
     }}
     function Read-Entry([byte[]]$zip, [string]$name) {{
-        $archive = [IO.Compression.ZipArchive]::new([IO.MemoryStream]::new($zip))
+        $stream = New-Object IO.MemoryStream -ArgumentList @(, $zip)
+        $archive = New-Object IO.Compression.ZipArchive -ArgumentList @(, $stream)
         try {{
             $entry = $archive.GetEntry($name)
             if ($null -eq $entry) {{ throw "$name is not in its package" }}
-            $out = [IO.MemoryStream]::new()
+            $out = New-Object IO.MemoryStream
             $in = $entry.Open()
             try {{ $in.CopyTo($out) }} finally {{ $in.Dispose() }}
-            return ,$out.ToArray()
+            [byte[]]$data = $out.ToArray()
+            return ,$data
         }} finally {{ $archive.Dispose() }}
     }}
     $nefconZip = Read-Checked {q(str(nefcon))} {q(nefcon_sha)}
@@ -312,10 +314,11 @@ try {{
         [IO.File]::WriteAllBytes((Join-Path $work $name), $bytes)
     }}
     $x509 = 'System.Security.Cryptography.X509Certificates'
-    $certificates = ([type]"$x509.X509Certificate2Collection")::new()
-    $certificates.Import((Read-Entry $driverZip 'VirtualDisplayDriver/mttvdd.cat'))
+    $certificates = New-Object "$x509.X509Certificate2Collection"
+    [byte[]]$catalog = Read-Entry $driverZip 'VirtualDisplayDriver/mttvdd.cat'
+    $certificates.Import($catalog)
     $basic = [type]"$x509.X509BasicConstraintsExtension"
-    $store = ([type]"$x509.X509Store")::new('TrustedPublisher', 'LocalMachine')
+    $store = New-Object "$x509.X509Store" -ArgumentList 'TrustedPublisher', 'LocalMachine'
     $store.Open('ReadWrite')
     try {{
         foreach ($certificate in $certificates) {{
@@ -336,7 +339,8 @@ try {{
     [IO.File]::WriteAllText({q(str(said))}, [string]$code)
 }} catch {{
     $code = 1
-    [IO.File]::WriteAllText({q(str(said))}, 'error: ' + $_.Exception.Message)
+    $line = $_.InvocationInfo.ScriptLineNumber  # (where: for whoever looks into it)
+    [IO.File]::WriteAllText({q(str(said))}, "error: $($_.Exception.Message) (line $line)")
 }} finally {{
     if ($work) {{ Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue }}
 }}
