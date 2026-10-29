@@ -813,6 +813,20 @@ def screens_in_turn(stage: Stage, themes: tuple[str, ...]) -> None:
     stage.show(names[0], transition="tube", turns=[(name, 2.6) for name in names])
 
 
+# Libre Panel's own screens on the bar, one after the other as screens in turn go (a beam of
+# light across): the README's tour of its themes. Each a moment, and round again. It begins in
+# the first one's time (which runs through the warm-up too), so that the last beam, back to the
+# first, is over before the clip ends, and its end is blended into its start.
+TOUR_S = 2.6
+
+
+def themes_tour(stage: Stage, themes: tuple[str, ...]) -> None:
+    names = [stage.theme(theme) for theme in themes]
+    turns = [(name, TOUR_S) for name in names]
+    turns[0] = (names[0], WARMUP_S + TOUR_S * 0.5 - 0.2)
+    stage.show(names[0], transition="tube", turns=turns)
+
+
 @dataclass(frozen=True)
 class StartClip:
     """The panel's own screens (render/bootscreen.py): the boot logo of a panel (by its model's
@@ -865,6 +879,7 @@ def music_page(stage: Stage, themes: tuple[str, ...]) -> None:
     stage.show(home, transition="tube", pages={"media": music}, leave_s=0.6)
     stage.tweak(silence("media.", -1000.0, 1.0))  # nothing plays: the theme of every day
     stage.tweak(silence("media.", 7.0, 1000.0))  # the track stops
+    stage.tweak(silence("ai.", -1000.0, 1000.0))  # (the demo's AI tools would take the card)
     start = stage.speakers.percent
     steps = [(3.2 + 0.1 * k, start + 4 * (k + 1)) for k in range(8)]
     steps += [(4.8 + 0.1 * k, start + 32 - 4 * (k + 1)) for k in range(5)]
@@ -913,6 +928,45 @@ def game_entrance(stage: Stage, themes: tuple[str, ...]) -> None:
 def card_ignition(stage: Stage, themes: tuple[str, ...]) -> None:
     stage.show(stage.theme(themes[0]))
     stage.tweak(silence("media.", 2.0, 5.0))
+    stage.tweak(silence("ai.", -1000.0, 1000.0))  # (the demo's AI tools would come first)
+
+
+# Lumen's cards in turn, each a moment (2.3 s: in a clip the time of a card is cut short, a
+# card's own is five seconds at least), and from one to the next another way each time: a fade,
+# the new card pushing the old one out to the left, upwards, and a beam of light that wipes
+# across. After four changes the first card is on show again (a card changes at the reading
+# after its time is up), and the clip ends a moment later: it loops.
+CARD_TURN_S = 2.3
+CARD_WAYS = ("fade", "slide", "rise", "wipe")
+
+
+def card_turns(stage: Stage, themes: tuple[str, ...]) -> None:
+    data, _ = theme_data(themes[0])
+    widgets = [
+        {**w, "items": "playback\nforecast\nanalog\ndate", "order": "turns"}
+        if w.get("type") == "module" and w.get("module") in ("cards",) else w
+        for w in data["widgets"]
+    ]  # fmt: skip
+    stage.show(stage.theme(themes[0], widgets=widgets))
+
+    def slot(s: Stage) -> Any:
+        assert s.loop is not None
+        found = list(s.loop.renderer._slots.values())
+        assert found, "the theme has no card slot"
+        return found[0]
+
+    def begin(s: Stage) -> None:  # (the cards' time, from now on)
+        box = slot(s)
+        box.turns = [CARD_TURN_S] * len(box.turns)
+        box.turn_at = s.clock.now
+        box.transition = CARD_WAYS[0]
+
+    def way(name: str) -> Callable[[Stage], None]:
+        return lambda s: setattr(slot(s), "transition", name)
+
+    stage.at(0.0, begin)
+    for n, name in enumerate(CARD_WAYS[1:], start=1):
+        stage.at(n * CARD_TURN_S + 0.3, way(name))
 
 
 # AI activity on Lumen, without the AI screen: the weather, until Claude Code sets to work; then
@@ -971,6 +1025,10 @@ CLIPS: dict[str, PanelClip] = {
     "card-ignition": PanelClip(
         "the card slot changes from playback to the weather and back, with its line of light",
         ("lumen",), 6.6, card_ignition, poster=3.4,
+    ),
+    "card-turns": PanelClip(
+        "the card slot's cards in turn, each a moment, and four ways from one to the next",
+        ("lumen",), 4 * CARD_TURN_S + 1.2, card_turns, poster=CARD_TURN_S * 1.5,
     ),
     "ai-card": PanelClip(
         "AI activity on Lumen by itself: Claude Code sets to work and its card rolls in",
@@ -1034,6 +1092,11 @@ CLIPS: dict[str, PanelClip] = {
         "screens in turn: Almanac, Nimbus and Encore one after another, each for its time",
         ("almanac", "nimbus", "encore"), 7.8, screens_in_turn, poster=1.2, loop="cut",
         clock_runs=True,
+    ),
+    "themes-tour": PanelClip(
+        "Libre Panel's own screens on the bar, one after another through the tube",
+        ("lumen", "studio", "encore", "nimbus", "almanac", "arena"), 6 * TOUR_S, themes_tour,
+        poster=TOUR_S * 0.25, clock_runs=True,
     ),
     # SPUR II's classic screen, where Libre Panel started: the only clip of its own look
     "where-it-started": PanelClip(

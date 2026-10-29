@@ -6,6 +6,8 @@ things that must hold on every run: the same frames twice, the files that come o
 fallbacks and the size check.
 """
 
+import io
+import json
 import shutil
 from dataclasses import replace
 from functools import partial
@@ -235,15 +237,16 @@ def differ(recorded, a, b):
 
 
 # what the tests below use
-LONG = ("card-ignition", "volume-band", "volume-looks", "theme-tube", "game-entrance")
+LONG = ("card-ignition", "card-turns", "volume-band", "volume-looks", "theme-tube",
+        "game-entrance", "themes-tour")  # fmt: skip
 
 
 def test_every_panel_recipe_runs_headless_and_makes_a_clip(panel, clip, short):
     assert list(panel.CLIPS) == [
-        "video-mode", "card-ignition", "ai-card", "agents", "small-panel", "volume-band",
-        "volume-looks", "theme-tube", "game-entrance", "close-up-rings", "close-up-curves",
-        "encore", "nimbus", "almanac", "music-page", "round-report", "screens-in-turn",
-        "where-it-started",
+        "video-mode", "card-ignition", "card-turns", "ai-card", "agents", "small-panel",
+        "volume-band", "volume-looks", "theme-tube", "game-entrance", "close-up-rings",
+        "close-up-curves", "encore", "nimbus", "almanac", "music-page", "round-report",
+        "screens-in-turn", "themes-tour", "where-it-started",
     ]  # fmt: skip
     widths = {}
     for name, recipe in panel.CLIPS.items():
@@ -363,6 +366,79 @@ def test_the_screens_in_turn_come_one_after_another_and_round_again(panel, clip)
     assert differ(recorded, 4, 28) > 8 and differ(recorded, 28, 52) > 8  # three screens
     assert differ(recorded, 4, 52) > 8
     assert differ(recorded, 4, 76) < 1  # and round again to the first
+
+
+def test_the_cards_take_turns_in_the_slot_and_come_round_again(panel, clip):
+    turns = panel.CLIPS["card-turns"]
+    assert turns.seconds == pytest.approx(len(panel.CARD_WAYS) * panel.CARD_TURN_S + 1.2)
+    recorded = clip("card-turns")
+    slot = slice(0, recorded.frames.size[0] * 2 // 5)  # (the card slot is at the left of the bar)
+
+    def card(at):
+        return pixels(recorded, round(at * 10))[:, slot]
+
+    # each card in the middle of its time (it changes at the reading after its time is up): what
+    # plays, the weather, a clock face, the date
+    shown = [card((n + 0.6) * panel.CARD_TURN_S) for n in range(len(panel.CARD_WAYS))]
+    for i in range(len(shown)):
+        for j in range(i + 1, len(shown)):
+            assert float(np.abs(shown[i] - shown[j]).mean()) > 4, (i, j)
+    # and the fourth goes back to what plays, before the clip ends (its progress moved on)
+    assert float(np.abs(shown[0] - card(turns.seconds - 0.1)).mean()) < 3
+
+
+def test_the_cards_go_from_one_to_the_next_another_way_each_time(panel):
+    """The recipe's moments, on a stand-in for the stage: the cards' time is cut short at once,
+    and before each change the slot is given the next way."""
+    from types import SimpleNamespace
+
+    box = SimpleNamespace(turns=[300.0] * 4, turn_at=0.0, transition="light")
+
+    class Stage:
+        clock = SimpleNamespace(now=12.0)
+        loop = SimpleNamespace(renderer=SimpleNamespace(_slots={"cards": box}))
+        moments: list = []
+
+        def theme(self, name, widgets=None):
+            self.widgets = widgets
+            return name
+
+        def show(self, name, **how):
+            pass
+
+        def at(self, at, do):
+            self.moments.append((at, do))
+
+    stage = Stage()
+    panel.card_turns(stage, ("lumen",))
+    slots = [w for w in stage.widgets if w.get("module") == "cards"]
+    assert slots and all(w["order"] == "turns" for w in slots)
+    assert slots[0]["items"].split() == ["playback", "forecast", "analog", "date"]
+    ways = []
+    for at, do in sorted(stage.moments, key=lambda moment: moment[0]):
+        do(stage)
+        ways.append((round(at, 2), box.transition))
+    assert ways == [
+        (0.0, "fade"), (round(panel.CARD_TURN_S + 0.3, 2), "slide"),
+        (round(2 * panel.CARD_TURN_S + 0.3, 2), "rise"),
+        (round(3 * panel.CARD_TURN_S + 0.3, 2), "wipe"),
+    ]  # fmt: skip
+    assert box.turns == [panel.CARD_TURN_S] * 4 and box.turn_at == 12.0
+
+
+def test_the_tour_shows_each_of_the_themes_and_comes_round_to_the_first(panel, clip):
+    tour = panel.CLIPS["themes-tour"]
+    assert tour.loop == "fade" and tour.clock_runs  # (Lumen at both ends: blended)
+    assert tour.seconds == pytest.approx(len(tour.themes) * panel.TOUR_S)  # the clip is one round
+    recorded = clip("themes-tour")
+    # it begins in the first one's time; each of the others clear of the beam between two
+    others = range(1, len(tour.themes))
+    middles = [0] + [round((k * panel.TOUR_S + 0.4) * 10) for k in others]
+    for i in range(len(middles)):
+        for j in range(i + 1, len(middles)):
+            assert differ(recorded, middles[i], middles[j]) > 6, (i, j)
+    # and comes round to it at the end: Lumen, as the clip begins
+    assert differ(recorded, 0, recorded.frames.count - 1) < differ(recorded, 0, middles[1]) / 3
 
 
 def test_the_start_clip_is_the_boot_logo_then_the_standby_clip_round_and_round(
@@ -512,7 +588,7 @@ def app_clips(panel):
 def test_the_app_recipes_are_listed_with_a_panel_each_to_open_them_on(app_clips, panel):
     assert list(app_clips.CLIPS) == [
         "app-look", "app-drag-module", "app-ring-style", "app-command-palette",
-        "app-hardware-names",
+        "app-hardware-names", "player",
     ]  # fmt: skip
     for name, recipe in app_clips.CLIPS.items():
         assert recipe.kind == "app" and recipe.about and recipe.seconds > 0, name
@@ -588,6 +664,250 @@ def test_an_app_clip_is_shot_in_a_browser_and_ends_as_it_began(app_clips, encode
     assert len({frames.path(n).read_bytes() for n in range(frames.count)}) > 6  # it moves
 
 
+@pytest.fixture(scope="module")
+def samples():
+    """tools/media_samples.py: the made-up library of the Player's clip."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.syspath_prepend(str(TOOLS))
+        import media_samples
+
+        yield media_samples
+
+
+def test_the_made_up_library_draws_each_file_at_any_size_and_time(samples):
+    from libre_panel import player
+
+    assert len(samples.SAMPLES) >= 5
+    for name, sample in samples.SAMPLES.items():
+        assert sample.kind in player.KINDS, name
+        first, again = samples.frame(name, 3.0, (160, 90)), samples.frame(name, 3.0, (160, 90))
+        assert first.size == (160, 90) and first.mode == "RGB", name
+        assert first.tobytes() == again.tobytes(), name  # the same on every run
+        assert np.asarray(first).std() > 8, name  # a picture, not a plain colour
+        later = samples.frame(name, 3.4, (160, 90))
+        moved = np.abs(np.asarray(first, np.int16) - np.asarray(later, np.int16)).mean()
+        # a video and an animation move; a picture does not
+        assert (moved > 0.5) == (sample.kind != "picture"), name
+        if sample.seconds:  # round and round
+            assert samples.frame(name, 3.0 + sample.seconds, (160, 90)).tobytes() == first.tobytes()
+    assert samples.frame("Night drive.mp4", 1.0, (320, 120)).size == (320, 120)  # the panel's
+
+
+class _Route:
+    """What Playwright hands a route's handler to answer with."""
+
+    def fulfill(self, status=200, content_type=None, body=""):
+        self.status, self.content_type, self.body = status, content_type, body
+
+
+class _Page:
+    """What the Player's stage asks of the page: scripts before the app, and routes."""
+
+    def __init__(self):
+        self.scripts, self.routes = [], {}
+
+    def add_init_script(self, script):
+        self.scripts.append(script)
+
+    def route(self, pattern, handler):
+        self.routes[pattern] = handler
+
+    def ask(self, pattern, url, method="GET", body=None):
+        from types import SimpleNamespace
+
+        answer = _Route()
+        request = SimpleNamespace(url=url, method=method, post_data=body and json.dumps(body))
+        self.routes[pattern](answer, request)
+        return answer
+
+
+def test_the_player_of_the_clip_plays_the_made_up_library_on_its_own_time(app_clips, samples):
+    from types import SimpleNamespace
+
+    page = _Page()
+    stage = app_clips.PlayerStage(page)
+    assert app_clips.LIVE_GATE in page.scripts  # the panel's picture waits for the clip's
+    assert "__liveGate" in app_clips.INIT_SCRIPT and "__liveNext" in app_clips.INIT_SCRIPT
+    stage.camera = SimpleNamespace(seconds=2.0)
+    player, live = "**/api/player", "**/api/plugins/control/live?**"
+
+    def ask(pattern, query="", body=None):
+        address = pattern.strip("*?").replace("**", "") + query
+        return page.ask(pattern, "http://127.0.0.1" + address, "POST" if body else "GET", body)
+
+    state = json.loads(ask(player).body)
+    assert state["available"] and state["playing"] is None
+    assert [item["name"] for item in state["library"]] == list(samples.SAMPLES)
+    assert ask(live, "?w=480").status == 404  # nothing plays: the theme is on the panel
+    played = ask(player, body={"action": "play", "start": "Northern lights.mp4"})
+    playing = json.loads(played.body)["playing"]
+    # (well into it, a fifth of it at most: 3:07 long, at 0:37.4)
+    assert playing["name"] == "Northern lights.mp4" and playing["position"] == 37.4
+    stage.camera.seconds = 3.5  # the clip goes on, and the video with it
+    assert stage.status()["position"] == pytest.approx(38.9)
+    picture = ask(live, "?w=480")
+    assert picture.content_type == "image/jpeg"
+    assert Image.open(io.BytesIO(picture.body)).size == (480, 180)  # the 12.3"'s shape
+    ask(player, body={"action": "next"})  # an animated picture of 12 s: a little way into it
+    assert stage.status()["name"] == "Lava lamp.gif" and stage.status()["position"] == 2.4
+    stage.camera.seconds = 15.5  # (and round again at its end)
+    assert stage.status()["position"] == pytest.approx(2.4)
+    ask(player, body={"action": "previous"})
+    assert stage.status()["name"] == "Northern lights.mp4"
+    ask(player, body={"action": "stop"})
+    assert stage.status() is None
+    tile = ask("**/api/player/picture?**", "?name=Dusk%20at%20sea.jpg&w=320&v=900000")
+    assert Image.open(io.BytesIO(tile.body)).size == (320, 180)
+
+
+# -- the scenes and the README's own pictures --------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def scene(panel):
+    """tools/media_scene.py: the scenes drawn around the panel and the app."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.syspath_prepend(str(TOOLS))
+        import media_scene
+
+        yield media_scene
+
+
+def test_the_window_goes_onto_the_panel_is_made_as_large_and_comes_back(scene):
+    """The panel as a monitor of its own: the moments of the scene, frame by frame."""
+    assert scene.CLIPS["screen-monitor"].kind == "scene"
+    assert scene.CLIPS["screen-monitor"].seconds == scene.SCENE_S
+    frames = round(scene.SCENE_S * scene.FPS)
+    moments = [scene.moment(n / scene.FPS, 800.0) for n in range(frames + 1)]
+    start, end = moments[0], moments[-1]
+    assert start == (scene.BROWSER, 0.0, scene.REST, False)  # on the monitor, the pointer aside
+    assert end[0] == scene.BROWSER and end[1] == 0.0 and not end[3]  # back, where it began
+    assert np.hypot(end[2][0] - scene.REST[0], end[2][1] - scene.REST[1]) < 1  # (it loops)
+    middle = scene.moment(4.6, 800.0)  # (the poster)
+    assert middle[0] == scene.ON_PANEL and middle[1] == pytest.approx(800.0) and not middle[3]
+    jumps = []
+    pairs = zip(moments, moments[1:], strict=False)
+    for n, ((box, scroll, pointer, pressed), (after, _, then, held)) in enumerate(pairs):
+        if pressed:  # held by its title bar
+            assert 0 <= pointer[1] - box.y <= scene.TITLE
+            assert box.x <= pointer[0] <= box.x + box.w
+        # the pointer never jumps; the window only as it is taken off the panel, back to its
+        # own size under the pointer (as a desktop does with a window as large as its monitor)
+        assert np.hypot(then[0] - pointer[0], then[1] - pointer[1]) < 160
+        if max(abs(a - b) for a, b in zip(box.astuple(), after.astuple(), strict=True)) >= 160:
+            jumps.append(n)
+            assert box == scene.ON_PANEL and after.w == scene.BROWSER.w and held
+        assert 0.0 <= scroll <= 800.0
+    assert len(jumps) == 1
+
+
+def test_the_desk_has_the_panel_below_the_monitor_as_the_desktop_has_it(scene):
+    desk = scene.Desk()
+    assert desk.to_picture(0, 0) == (desk.mx, desk.my)
+    assert desk.to_picture(*scene.PANEL_AT) == (desk.px, desk.py)
+    assert desk.py > desk.my + desk.screen_m[1]  # (the panel stands in front, under it)
+    assert desk.base.size == (desk.width, desk.height)
+    page = Image.new("RGB", (200, 100), (255, 0, 0))
+    drawn = scene.window(page, (300, 200), "Libre Panel", "syntensa.github.io/libre-panel")
+    assert drawn.size == (300, 200)
+    assert drawn.getpixel((150, 150)) == (255, 0, 0)  # the page fills it under the title bar
+    assert drawn.getpixel((150, scene.TITLE // 2))[0] < 100
+
+
+def test_the_top_of_the_readme_is_the_headline_over_lumen_in_its_frame(
+    scene, encode, tmp_path, monkeypatch
+):
+    made = []
+
+    def lumen(settings):  # (Lumen, made up: a colour a frame)
+        sink = encode.FrameSink(tmp_path / f"lumen-{len(made)}", fps=50)
+        for n in range(4):
+            sink.add(Image.new("RGB", (384, 96), (40 * n, 90, 200)))
+        made.append(sink.frames().folder)
+        return sink.frames(), 1
+
+    monkeypatch.setattr(scene, "_bare_lumen", lumen)
+    pictures = {}
+    for language in ("en", "de"):
+        out = encode.FrameSink(tmp_path / language, fps=scene.FPS)
+        poster = scene.hero(language)(encode.Settings(), out)
+        assert not made[-1].exists()  # (Lumen's frames are gone once they are in it)
+        frames = out.frames()
+        assert frames.count == 2 and poster == 0  # every second frame: 50 a second to 25
+        first, second = (np.asarray(frames.image(n), np.int16) for n in range(2))
+        w, h = frames.size
+        assert w > 384 and h > 96 * 1.5  # the frame round the screen, the headline above it
+        top = scene._headline(w, language, 96 / 480).height
+        head = first[:top]
+        lit = (head[..., 1] > 150) & (head[..., 2] > 150) & (head[..., 0] < 120)
+        assert lit.sum() > 30  # the lit words, in the accent
+        assert np.abs(first - second)[top:].mean() > 1  # Lumen moves below
+        assert np.abs(first - second)[:top].mean() == 0  # the headline stands
+        pictures[language] = first
+    assert np.abs(pictures["en"] - pictures["de"]).mean() > 0.5  # in each README's language
+
+
+def test_a_scene_draws_the_website_and_the_app_in_their_windows(scene, encode, tmp_path):
+    pytest.importorskip("playwright", reason="Playwright is not installed")
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(scene, "SCENE_S", 0.4)  # (ten frames: the first moments of the scene)
+        sink = encode.FrameSink(tmp_path / "scene", fps=scene.FPS)
+        try:
+            scene.screen_monitor(encode.Settings(scale=0.5), sink)
+        except scene.media_app.Unavailable as error:
+            pytest.skip(str(error))
+    frames = sink.frames()
+    desk = scene.Desk()
+    assert frames.count == 10 and frames.size == (round(desk.width / 2), round(desk.height / 2))
+    picture = np.asarray(frames.image(0), np.int16)
+    monitor = picture[desk.my // 2 : (desk.my + desk.screen_m[1]) // 2,
+                      desk.mx // 2 : (desk.mx + desk.screen_m[0]) // 2]  # fmt: skip
+    assert monitor.std() > 20  # the app and the website, not a bare wallpaper
+
+
+@pytest.fixture(scope="module")
+def images(panel):
+    """tools/readme_images.py, the README's and the website's pictures."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.syspath_prepend(str(TOOLS))
+        import readme_images
+
+        yield readme_images
+
+
+def test_the_overview_shows_the_apps_own_icons_lit_on_a_tile(images):
+    from xml.etree import ElementTree
+
+    assert set(images.ICONS) <= set(images.pictures())
+    for name, icon in images.ICONS.items():
+        drawing = images.app_icon(icon)
+        assert "<path" in drawing or "<circle" in drawing, name
+        svg = ElementTree.fromstring(images.icon_tile(icon))  # (well formed)
+        assert svg.get("width") == svg.get("height") == "56", name
+        assert drawing in images.icon_tile(icon)
+    assert images.app_icon("palette").count("<circle") == 3  # its dots, as the app draws them
+    with pytest.raises(KeyError):
+        images.app_icon("nothing-of-the-sort")
+
+
+def test_the_download_buttons_are_the_websites_on_a_clear_background(images, tmp_path):
+    pytest.importorskip("playwright", reason="Playwright is not installed")
+    try:
+        images.buttons(tmp_path)
+    except Exception as error:  # no Chromium
+        if "Executable doesn't exist" in str(error):
+            pytest.skip(str(error).splitlines()[0])
+        raise
+    for name in images.BUTTONS:
+        picture = np.asarray(Image.open(tmp_path / name).convert("RGBA"))
+        h, w = picture.shape[:2]
+        assert w > 2 * h, name  # a button, with room for its glow
+        assert picture[0, 0, 3] == 0 and picture[-1, -1, 3] == 0, name  # clear round it
+        assert picture[h // 2, w // 2, 3] == 255, name  # and solid in it
+    windows = np.asarray(Image.open(tmp_path / "button-windows.png").convert("RGB"), np.int16)
+    assert windows[..., 1].mean() > windows[..., 0].mean() + 20  # the primary one, in the accent
+
+
 # -- the program -------------------------------------------------------------------------------
 
 
@@ -629,7 +949,8 @@ def test_the_list_says_what_there_is_and_what_each_shows(cli, capsys):
                  "small-panel", "close-up-rings", "close-up-curves", "where-it-started",
                  "app-look", "app-drag-module", "app-ring-style", "app-command-palette",
                  "app-hardware-names", "encore", "nimbus", "almanac", "music-page",
-                 "round-report", "screens-in-turn", "start-screen"):  # fmt: skip
+                 "round-report", "screens-in-turn", "start-screen", "card-turns",
+                 "themes-tour", "player", "hero", "hero-de", "screen-monitor"):  # fmt: skip
         assert name in shown
     assert "shows: lumen, studio" in shown  # (the tube goes from one theme to another)
     assert "shows: libre-default" in shown and "shows: layout-rings" in shown

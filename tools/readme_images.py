@@ -19,6 +19,7 @@ import argparse
 import contextlib
 import io
 import os
+import re
 import tempfile
 import threading
 from datetime import datetime
@@ -35,6 +36,7 @@ from libre_panel.theme.adapt import adapt_theme
 from libre_panel.theme.model import find_theme, load_theme, pair_version, parse_theme
 from libre_panel.theme.modules import LOOKS, look_theme_parts, make_grid, templates
 
+ROOT = Path(__file__).resolve().parent.parent
 WHEN = datetime(2026, 10, 9, 10, 8, 24).timestamp()  # a Friday morning
 BG_TOP, BG_BOTTOM = (13, 20, 29), (6, 9, 13)
 TX_1, TX_3, ACCENT = (238, 246, 255), (140, 160, 184), (19, 229, 215)
@@ -50,6 +52,14 @@ COMPOSED = ("hero.png", "gallery.png", "social-preview.png", "studio-adapts.png"
             "panels-at-once.png", "round-screens.png", "zc360-screens.png")  # fmt: skip
 APP_SHOTS = ("editor-new.png", "editor.png", "editor-drag.png", "palette.png", "start.png",
              "settings.png")  # fmt: skip
+# The README's own parts: the website's download buttons in each language of the README (they
+# need Playwright), and the icons of its overview, drawn from the app's own (ui/icons.js).
+BUTTONS = {
+    "button-windows.png": ("en", "setup"), "button-linux.png": ("en", "appimage"),
+    "button-windows-de.png": ("de", "setup"), "button-linux-de.png": ("de", "appimage"),
+}  # fmt: skip
+ICONS = {f"icon-{name}.svg": name for name in ("pulse", "layers", "palette", "blocks", "check",
+                                                "lock")}  # fmt: skip
 
 
 def pictures() -> list[str]:
@@ -57,7 +67,8 @@ def pictures() -> list[str]:
     website may show from docs/images."""
     return (
         [f"{theme_id}.png" for theme_id in THEMES] + list(COMPOSED) + list(APP_SHOTS) + list(TILES)
-    )
+        + list(BUTTONS) + list(ICONS)
+    )  # fmt: skip
 
 
 def snapshot():
@@ -988,6 +999,100 @@ def tiles(out: Path, media: Path) -> None:
             tile(picture, part).save(out / name, optimize=True)
 
 
+# -- the README's own parts ------------------------------------------------------------------
+
+
+def app_icon(name: str) -> str:
+    """The drawing of one of the app's icons (src/libre_panel/editor/app/ui/icons.js): the
+    inside of its 24 x 24 SVG, stroked in the text colour (its strings, and its dots, as the
+    app's ``DOT(x, y)`` draws them, in the order they come)."""
+    source = (ROOT / "src/libre_panel/editor/app/ui/icons.js").read_text(encoding="utf-8")
+    key = re.search(rf"^  \"?{re.escape(name)}\"?:", source, re.M)
+    if key is None:
+        raise KeyError(f"the app has no icon {name!r}")
+    rest = source[key.end() :]
+    following = re.search(r"^  \"?[a-z0-9-]+\"?:|^};", rest, re.M)
+    entry = rest[: following.start() if following else len(rest)]
+    parts = []
+    for text, x, y in re.findall(r"'([^']*)'|DOT\(([\d.]+),\s*([\d.]+)\)", entry):
+        parts.append(
+            text or f'<circle cx="{x}" cy="{y}" r="1.3" fill="currentColor" stroke="none"/>'
+        )
+    return "".join(parts)
+
+
+def icon_tile(name: str) -> str:
+    """One of the app's icons as the README's overview shows it: lit in the accent on a dark
+    tile with rounded corners, which reads on GitHub's light pages and its dark ones alike."""
+    drawing = app_icon(name)
+    accent = "#2EE6D6"
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 56 56">'
+        '<defs><linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">'
+        '<stop offset="0" stop-color="#17222e"/><stop offset="1" stop-color="#0b1118"/>'
+        '</linearGradient><filter id="glow" x="-50%" y="-50%" width="200%" height="200%">'
+        '<feGaussianBlur stdDeviation="1.6"/></filter></defs>'
+        '<rect x="0.75" y="0.75" width="54.5" height="54.5" rx="14" fill="url(#tile)" '
+        'stroke="#2b3846" stroke-width="1.5"/>'
+        f'<g transform="translate(14 14) scale(1.1667)" fill="none" stroke="{accent}" '
+        f'color="{accent}" '
+        'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">'
+        f'<g opacity="0.55" filter="url(#glow)">{drawing}</g>{drawing}</g></svg>\n'
+    )
+
+
+ISOLATE_BUTTONS = """() => {
+  const actions = document.querySelector('.hero .actions');
+  const holder = document.createElement('div');
+  holder.id = '__buttons';
+  holder.appendChild(actions);
+  document.body.appendChild(holder);
+  const style = document.createElement('style');
+  style.textContent = 'html,body{background:transparent!important}' +
+    'body>*:not(svg):not(#__buttons){display:none!important}' +
+    '#__buttons{position:absolute;left:40px;top:40px}' +
+    '#__buttons .actions{display:flex;gap:60px;margin:0}' +
+    '*{transition:none!important;animation:none!important}';
+  document.head.appendChild(style);
+}"""
+
+
+def buttons(out: Path) -> None:
+    """The website's two download buttons (for Windows, for Linux), in English and German, each
+    as it is on the website's first screen, its glow with it, on a clear background."""
+    import check_pages
+    from playwright.sync_api import sync_playwright
+
+    with tempfile.TemporaryDirectory(prefix="readme-buttons-") as scratch:
+        site = Path(scratch) / "site"
+        check_pages.build(ROOT, site)
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            try:
+                for language in ("en", "de"):
+                    page = browser.new_page(viewport={"width": 1280, "height": 600},
+                                            device_scale_factor=2, bypass_csp=True)  # fmt: skip
+                    index = site / ("de" if language == "de" else "") / "index.html"
+                    page.goto(index.as_uri())
+                    page.evaluate(ISOLATE_BUTTONS)
+                    page.wait_for_timeout(200)
+                    for name, (lang, asset) in BUTTONS.items():
+                        if lang != language:
+                            continue
+                        box = page.locator(f'#__buttons a[data-asset="{asset}"]').bounding_box()
+                        room = 22  # (the glow under the primary one)
+                        clip = {
+                            "x": box["x"] - room,
+                            "y": box["y"] - room // 2,
+                            "width": box["width"] + 2 * room,
+                            "height": box["height"] + 2 * room,
+                        }
+                        page.screenshot(path=str(out / name), clip=clip, omit_background=True)
+                    page.close()
+            finally:
+                browser.close()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("out", nargs="?", default="docs/images", type=Path)
@@ -1060,6 +1165,14 @@ def main() -> None:
             editor_shots(out)
         except ImportError:
             print("Playwright is not installed: the editor pictures are left as they are")
+    for name, icon in ICONS.items():
+        if wanted(name):
+            (out / name).write_text(icon_tile(icon), encoding="utf-8")
+    if wanted(*BUTTONS):
+        try:
+            buttons(out)
+        except ImportError:
+            print("Playwright is not installed: the download buttons are left as they are")
     if wanted(*TILES):  # (last: they are made of the pictures above)
         tiles(out, args.media)
     print(f"wrote the images to {out}")

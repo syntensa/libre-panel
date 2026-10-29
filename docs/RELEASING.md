@@ -211,7 +211,7 @@ the pictures (`--only tile-cards.png panels-at-once.png`).
 
 | Where | What it shows |
 |---|---|
-| README.md, README.de.md | `docs/media/video-mode.gif` on top (with `docs/images/hero.png` for those who ask for less motion); the feature grid's stills `docs/images/tile-*.png` (PNG, not clips: the first screen stays light); `panels-at-once.png` (the app's *Picture of all panels* of three virtual panels; a photo of real panels may take its place under the same name) and `more-panels.gif`; a clip or picture for each part of the tour (`close-up-rings`, `card-ignition`, `volume-looks`, `round-report`, `nimbus`, `screens-in-turn`, `start-screen`, `small-panel`, `app-drag-module`; `vertical.png`, `agents.png`) with the others linked from its *More*; `where-it-started.png` linking its GIF; `gallery.png` and `module-catalog.png` |
+| README.md, README.de.md | `docs/media/hero.gif` on top (`hero-de.gif` in German; their posters `hero.png` and `hero-de.png` for those who ask for less motion), under it the website's download buttons `docs/images/button-windows.png` and `button-linux.png` (`button-windows-de.png` and `button-linux-de.png` in German) and the overview's icons `icon-*.svg`; a clip for each feature (`close-up-rings`, `card-turns`, `volume-looks`, `game-entrance`, `round-report`, `screens-in-turn`, `ai-card`, `more-panels`, `screen-monitor`, `player`, `start-screen`, `small-panel`) with `round-screens.png` and `vertical.png`; the app's `app-drag-module`, `app-look` and `app-command-palette`; `themes-tour.gif` over `gallery.png`, and `module-catalog.png`; `where-it-started.png` linking its GIF |
 | site/, site/de/ | every clip of `docs/media` as WebM and MP4 with its poster (`*.png`), the GIF only where a browser has no script or no video; from `docs/images` the feature grid's `tile-*.png`, `panels-at-once`, the themes (`lumen`, `studio`, `libre-default`, `slate`, `orbit`, `column`, `pico`), `looks`, `studio-adapts`, `editor-new` and, for links shared elsewhere, `social-preview` |
 | CHANGELOG.md (the release notes) | `docs/media/video-mode.gif`, `card-ignition.gif`, `game-entrance.gif`, `app-drag-module.gif` and `app-look.gif` on the tag (raw.githubusercontent.com, so the tag must hold them), in the highlights at the top of the version's section |
 | The repository's social preview | `docs/images/social-preview.png`, uploaded by hand in *Settings → General → Social preview* |
@@ -226,12 +226,16 @@ one.
 The GIFs of the README and of forum posts, and the small videos of the website, are made by
 `python tools/readme_media.py` into `docs/media` (`--list` says what there is). A clip is a
 recipe: the panel in video mode in `tools/media_panel.py` (the real main loop, frame by frame on a
-clock of its own, so a clip is the same on every run) or the app in a browser in
-`tools/media_app.py`. Each clip gives a GIF (960 px wide, 25 frames a second, under 4 MB, and
+clock of its own, so a clip is the same on every run), the app in a browser in
+`tools/media_app.py`, or a scene drawn round them in `tools/media_scene.py`: the README's top (the
+website's headline over Lumen in video mode, in English and German) and the panel as a monitor of
+its own (the desktop's monitor, the panel below it, the app and the website in their windows). The
+Player's clip plays made-up videos, drawn frame by frame in `tools/media_samples.py`, so that
+nothing of anybody else's is in it. Each clip gives a GIF (960 px wide, 25 frames a second, under 4 MB, and
 the run stops if one cannot be made smaller than 8 MB, what a forum takes), an MP4 and a WebM
 for the website, and a poster. ffmpeg makes the videos and the best GIFs (without it Pillow writes
-the GIFs); the app's clips need `pip install playwright` and `playwright install chromium`
-(without them they are skipped, with a word about it).
+the GIFs); the app's clips and the scenes need `pip install playwright` and `playwright install
+chromium` (without them they are skipped, with a word about it).
 
 Make them again for every release, so that they show the release's look and nothing else:
 

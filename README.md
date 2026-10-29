@@ -1,14 +1,30 @@
-<p align="right"><b>English</b> · <a href="README.de.md">Deutsch</a></p>
+<p align="right"><sub><b>English</b> · <a href="README.de.md">Deutsch</a></sub></p>
 
-<h1 align="center">
-  <img src="src/libre_panel/assets/libre-panel.png" alt="" width="64"><br>
-  Libre Panel
-</h1>
+<p>
+  <picture>
+    <source media="(prefers-reduced-motion: reduce)" srcset="docs/media/hero.png">
+    <img src="docs/media/hero.gif" width="100%" alt="Libre Panel. Your PC's vitals as moving light. Free and open source, for the small USB screens in your PC's case. Below it Lumen, Libre Panel's own theme, in video mode on a 9.2-inch panel: what is playing with its cover, the time with the load scrolling past as light, four fans turning, and lit rings for CPU, GPU and RAM">
+  </picture>
+</p>
 
 <p align="center">
-  <b>Your PC's vitals as moving light, on the small USB screen in its case.</b><br>
-  Free, open-source software for TURZX, Turing Smart Screen, WeAct, Kipye and compatible
-  system-monitor panels. Windows and Linux, no account, no cloud.
+  Libre Panel drives the small USB system-monitor panels sold as TURZX, Turing Smart Screen,
+  WeAct, Kipye and more, up to four at once: your processor, graphics card, fans, network, what
+  is playing and the weather, at up to 50 frames a second. It works out of the box, on Windows
+  and Linux, without an account or a cloud.
+</p>
+
+<p align="center">
+  <a href="https://github.com/syntensa/libre-panel/releases/latest"><img src="docs/images/button-windows.png" width="300" alt="Download for Windows: the setup, for Windows 10 and 11, 64-bit"></a>
+  <a href="https://github.com/syntensa/libre-panel/releases/latest"><img src="docs/images/button-linux.png" width="260" alt="Download for Linux: the AppImage, x86-64"></a>
+  <br>
+  <sub>
+    <a href="https://github.com/syntensa/libre-panel/releases/latest">Portable zip</a> ·
+    <a href="https://github.com/syntensa/libre-panel/releases/latest">Linux tarball</a> ·
+    <a href="#with-python">With Python</a> ·
+    <a href="CHANGELOG.md">What's new</a> ·
+    <a href="https://syntensa.github.io/libre-panel/">Website</a>
+  </sub>
 </p>
 
 <p align="center">
@@ -18,497 +34,240 @@
   <img alt="Windows and Linux" src="https://img.shields.io/badge/runs_on-Windows%20%C2%B7%20Linux-E0A8FF?labelColor=0A0E13">
 </p>
 
-<picture>
-  <source media="(prefers-reduced-motion: reduce)" srcset="docs/images/hero.png">
-  <img src="docs/media/video-mode.gif" width="100%" alt="Lumen, Libre Panel's own theme, in video mode on a 9.2-inch panel: what is playing with its cover, the time with the load scrolling past as light, four fans turning, and lit rings for CPU, GPU and RAM that fill as the load rises">
-</picture>
-
 <p align="center">
-  <b>A video mode at up to 50 fps, screens of its own and an editor to build yours, up to four panels
-  at once with companion screens, and all of it works out of the box, with no other program.</b>
+  <b>
+    <a href="#features">Features</a> ·
+    <a href="#the-app">The app</a> ·
+    <a href="#themes">Themes</a> ·
+    <a href="#supported-panels">Panels</a> ·
+    <a href="#install">Install</a> ·
+    <a href="#privacy">Privacy</a> ·
+    <a href="#faq">FAQ</a> ·
+    <a href="#documentation">Docs</a>
+  </b>
 </p>
 
-<p align="center">
-  <a href="https://github.com/syntensa/libre-panel/releases/latest"><img alt="Download for Windows: setup" src="https://img.shields.io/badge/Windows-Setup-2EE6D6?style=for-the-badge&labelColor=111820"></a>
-  <a href="https://github.com/syntensa/libre-panel/releases/latest"><img alt="Download for Windows: portable zip" src="https://img.shields.io/badge/Windows-Portable_zip-2EE6D6?style=for-the-badge&labelColor=111820"></a>
-  <a href="https://github.com/syntensa/libre-panel/releases/latest"><img alt="Download for Linux: AppImage" src="https://img.shields.io/badge/Linux-AppImage-2EE6D6?style=for-the-badge&labelColor=111820"></a>
-  <br>
-  <sub>Windows 10 and 11 (x64) · Linux (x86-64) · every file and the release notes on the
-  <a href="https://github.com/syntensa/libre-panel/releases/latest">latest release</a></sub>
-</p>
-
-<p align="center">
-  <a href="#supported-panels">Panels</a> ·
-  <a href="#features">Features</a> ·
-  <a href="#several-panels-at-once">Several panels</a> ·
-  <a href="#a-30-second-tour">Tour</a> ·
-  <a href="#themes">Themes</a> ·
-  <a href="#install-and-first-start">Install</a> ·
-  <a href="#out-of-the-box">Out of the box</a> ·
-  <a href="#privacy">Privacy</a> ·
-  <a href="#faq">FAQ</a> ·
-  <a href="#contributing">Contributing</a> ·
-  <a href="https://syntensa.github.io/libre-panel/">Website</a>
-</p>
-
-Plug in the panel, start Libre Panel, and it shows your processor, graphics card, memory,
-fans, network, what is playing and the weather outside, in a theme you pick, build yourself
-or install from the community, on up to four panels at once. It runs quietly in the tray and takes the vendor
-app's place.
-
-## Supported panels
-
-### Supported and verified
-
-<p>
-  <img alt="Turing / TURZX: 8.8&quot;, 9.2&quot;, 12.3&quot;" src="https://img.shields.io/badge/Turing%20%2F%20TURZX-8.8%22%20%C2%B7%209.2%22%20%C2%B7%2012.3%22-34D399?style=for-the-badge&labelColor=111820">
-  <img alt="Turing Smart Screen: 3.5&quot;, 8.8&quot;" src="https://img.shields.io/badge/Turing%20Smart%20Screen-3.5%22%20%C2%B7%208.8%22-34D399?style=for-the-badge&labelColor=111820">
-  <img alt="JONSBO ZC-360: each screen its own panel" src="https://img.shields.io/badge/JONSBO%20ZC--360-each%20screen%20its%20own%20panel-34D399?style=for-the-badge&labelColor=111820">
-  <img alt="Waveshare USB Monitor: 2.8&quot;, as a USB display" src="https://img.shields.io/badge/Waveshare%20USB%20Monitor-2.8%22%2C%20as%20a%20USB%20display-34D399?style=for-the-badge&labelColor=111820">
-</p>
-
-Run with Libre Panel on real panels, as their owners report.
-
-### Supported and unverified
-
-<p>
-  <img alt="Turing / TURZX: 1.6&quot;, 2.1&quot; round, 2.8&quot; round, 4.6&quot;, 5.2&quot;, 8&quot;" src="https://img.shields.io/badge/Turing%20%2F%20TURZX-1.6%22%20%C2%B7%202.1%22%20round%20%C2%B7%202.8%22%20round%20%C2%B7%204.6%22%20%C2%B7%205.2%22%20%C2%B7%208%22-F5C46B?style=for-the-badge&labelColor=111820">
-  <img alt="Turing Smart Screen: 2.1&quot; round, 5&quot;" src="https://img.shields.io/badge/Turing%20Smart%20Screen-2.1%22%20round%20%C2%B7%205%22-F5C46B?style=for-the-badge&labelColor=111820">
-  <img alt="UsbPCMonitor: 3.5&quot;, 5&quot;, 7&quot;" src="https://img.shields.io/badge/UsbPCMonitor-3.5%22%20%C2%B7%205%22%20%C2%B7%207%22-F5C46B?style=for-the-badge&labelColor=111820">
-  <img alt="XuanFang: 3.5&quot;" src="https://img.shields.io/badge/XuanFang-3.5%22-F5C46B?style=for-the-badge&labelColor=111820">
-  <img alt="Kipye Qiye: 3.5&quot;" src="https://img.shields.io/badge/Kipye%20Qiye-3.5%22-F5C46B?style=for-the-badge&labelColor=111820">
-  <img alt="WeAct Display FS V1: 0.96&quot;, 3.5&quot;" src="https://img.shields.io/badge/WeAct%20Display%20FS%20V1-0.96%22%20%C2%B7%203.5%22-F5C46B?style=for-the-badge&labelColor=111820">
-  <img alt="JONSBO: ZC-360 as one picture, TF3-360SC, DS916, DS339" src="https://img.shields.io/badge/JONSBO-ZC--360%20as%20one%20picture%20%C2%B7%20TF3--360SC%20%C2%B7%20DS916%20%C2%B7%20DS339-F5C46B?style=for-the-badge&labelColor=111820">
-  <img alt="VMAX: 4.6&quot;" src="https://img.shields.io/badge/VMAX-4.6%22-F5C46B?style=for-the-badge&labelColor=111820">
-  <img alt="Hongtai / Jungle Leopard: Chill Arc 360, MSI EZ Display and more" src="https://img.shields.io/badge/Hongtai%20%2F%20Jungle%20Leopard-Chill%20Arc%20360%2C%20MSI%20EZ%20Display%20and%20more-F5C46B?style=for-the-badge&labelColor=111820">
-  <img alt="Lian Li: Universal Screen, HydroShift II, OLED Curve" src="https://img.shields.io/badge/Lian%20Li-Universal%20Screen%20%C2%B7%20HydroShift%20II%20%C2%B7%20OLED%20Curve-F5C46B?style=for-the-badge&labelColor=111820">
-  <img alt="Thermalright: Trofeo Vision" src="https://img.shields.io/badge/Thermalright-Trofeo%20Vision-F5C46B?style=for-the-badge&labelColor=111820">
-  <img alt="BeadaPanel: every model" src="https://img.shields.io/badge/BeadaPanel-every%20model-F5C46B?style=for-the-badge&labelColor=111820">
-  <img alt="NZXT Kraken: with an LCD" src="https://img.shields.io/badge/NZXT%20Kraken-with%20an%20LCD-F5C46B?style=for-the-badge&labelColor=111820">
-  <img alt="Thermaltake: 6&quot; LCD" src="https://img.shields.io/badge/Thermaltake-6%22%20LCD-F5C46B?style=for-the-badge&labelColor=111820">
-</p>
-
-The driver follows a protocol proven on real panels, but nobody has confirmed the
-model with Libre Panel yet. **Own one?** The panel test in the app (*Live →
-Diagnose*, or `libre-panel doctor` in a terminal) checks it end to end and writes a
-report without serial numbers; one click opens a
-[panel report](https://github.com/syntensa/libre-panel/issues/new?template=panel_support.yml)
-with it filled in, and the model becomes verified for everyone.
-
-### Not supported
-
-<p>
-  <img alt="GUITION: 3.5&quot;" src="https://img.shields.io/badge/GUITION-3.5%22-5F6E80?style=for-the-badge&labelColor=111820">
-  <img alt="Fuldho: 3.5&quot;" src="https://img.shields.io/badge/Fuldho-3.5%22-5F6E80?style=for-the-badge&labelColor=111820">
-  <img alt="AX206: picture frames" src="https://img.shields.io/badge/AX206-picture%20frames-5F6E80?style=for-the-badge&labelColor=111820">
-  <img alt="Lian Li: TL LCD, Galahad II LCD, Lancool 207" src="https://img.shields.io/badge/Lian%20Li-TL%20LCD%20%C2%B7%20Galahad%20II%20LCD%20%C2%B7%20Lancool%20207-5F6E80?style=for-the-badge&labelColor=111820">
-</p>
-
-No driver here yet.
-
-What a panel can and cannot do (motion, brightness, the maker's driver) *Settings →
-Panel* says under its name; all of it, with the USB ids and the setup:
-[docs/HARDWARE.md](docs/HARDWARE.md).
-
-**The panels on a virtual COM port are slower.** They are the older kind, and Libre Panel keeps
-their motion calm by itself. For the most motion, the TURZX USB panels are the ones to have.
-
-<details>
-<summary>More</summary>
 <br>
-
-Libre Panel sends them a picture a second, of which it sends only the parts that changed, so
-numbers, bars and the clock keep up. Graphs move on a step a second, numbers change without
-gliding, the weather symbols stand still, themes change without a fade, and a new theme builds
-up for a moment. *Settings → Panel → Motion on the panel* turns full motion on for a panel that
-keeps up with it. Video mode is for the TURZX USB panels; the others have no video decoder.
-Details, Linux permissions and the panels of other brands: [docs/HARDWARE.md](docs/HARDWARE.md).
-</details>
-
-## Features
 
 <table>
 <tr>
-<td width="50%" valign="top"><a href="#smooth-in-video-mode"><img src="docs/images/tile-video-mode.png" width="100%" alt="Lumen's rings for CPU, GPU and RAM close up, with their temperature, power and clock"></a><br>
-<b><a href="#smooth-in-video-mode">Smooth, in video mode</a></b><br>
-Up to 50 frames a second on the TURZX USB panels: numbers count, rings glide, fans turn.</td>
-<td width="50%" valign="top"><a href="#several-panels-at-once"><img src="docs/images/tile-panels.png" width="100%" alt="Three panels at once: a 12.3-inch screen with Lumen, a 9.2-inch bar with Lumen Companion and a 5.2-inch panel with Encore"></a><br>
-<b><a href="#several-panels-at-once">Several panels at once</a></b><br>
-Up to four, in one beat: companions show what the first leaves out.</td>
-</tr>
-<tr>
-<td width="50%" valign="top"><a href="#cards-that-change-by-themselves"><img src="docs/images/tile-cards.png" width="100%" alt="Lumen's card slot with the weather: now, and the next hours"></a><br>
-<b><a href="#cards-that-change-by-themselves">Cards that change by themselves</a></b><br>
-What plays, else the weather, else the day, a line of light between them.</td>
-<td width="50%" valign="top"><a href="#notices"><img src="docs/images/tile-notices.png" width="100%" alt="The volume as a ring over Lumen, in the place of the RAM ring"></a><br>
-<b><a href="#notices">Notices</a></b><br>
-The volume in four looks, a new track, a sensor past its limit, your own scripts.</td>
-</tr>
-<tr>
-<td width="50%" valign="top"><a href="#game-mode"><img src="docs/images/tile-game.png" width="100%" alt="Arena, the game screen: the frame rate large with its 1% low and frame time, and its course"></a><br>
-<b><a href="#game-mode">Game mode</a></b><br>
-An entrance for every game, the frame rate with its lows, a report after the round.</td>
-<td width="50%" valign="top"><a href="#screens-for-music-weather-and-time"><img src="docs/images/tile-screens.png" width="100%" alt="Encore: the cover large, the track, the artist and the album"></a><br>
-<b><a href="#screens-for-music-weather-and-time">Music, weather and time</a></b><br>
-Encore, Nimbus and Almanac, which take over while music plays or you are away.</td>
-</tr>
-<tr>
-<td width="50%" valign="top"><a href="#screens-in-turn"><img src="docs/images/tile-screens-in-turn.png" width="100%" alt="Nimbus opening from a line of light, as one screen follows another"></a><br>
-<b><a href="#screens-in-turn">Screens in turn</a></b><br>
-Five minutes this, ten minutes that, and round again.</td>
-<td width="50%" valign="top"><a href="#the-panels-own-start-screen"><img src="docs/images/tile-start-screen.png" width="100%" alt="The panel's boot logo in Libre Panel's look: its mark and its name"></a><br>
-<b><a href="#the-panels-own-start-screen">The panel's own start screen</a></b><br>
-Its boot logo and standby clip in Libre Panel's look, with one click.</td>
-</tr>
-<tr>
-<td width="50%" valign="top"><a href="#bars-on-end"><img src="docs/images/tile-vertical.png" width="100%" alt="Libre Panel's screens for a bar on end, side by side"></a><br>
-<b><a href="#bars-on-end">Bars on end</a></b><br>
-Mounted upright? Every screen is laid out anew, not turned.</td>
-<td width="50%" valign="top"><a href="#what-your-ai-tools-are-doing"><img src="docs/images/tile-agents.png" width="100%" alt="Agents: Claude Code working, with how much of five hours and seven days is used"></a><br>
-<b><a href="#what-your-ai-tools-are-doing">What your AI tools are doing</a></b><br>
-Claude Code and Codex: working, waiting for you, and the plan's limits.</td>
-</tr>
-<tr>
-<td width="50%" valign="top"><a href="#every-panel-size"><img src="docs/images/tile-sizes.png" width="100%" alt="Studio on a bar, and Slate, Libre Default, Orbit, Column and Pico on the smaller panels"></a><br>
-<b><a href="#every-panel-size">Every panel size</a></b><br>
-From the 0.96" stick to the 12.3" screen, round and portrait ones too.</td>
-<td width="50%" valign="top"><a href="#the-app"><img src="docs/images/tile-app.png" width="100%" alt="The app's Design view: a weather module on a 3.5-inch panel, the building blocks beside it"></a><br>
-<b><a href="#the-app">The app</a></b><br>
-Drag 35 modules onto the panel, pick a look, find anything with Ctrl+K.</td>
+<td width="33%" align="center" valign="top">
+<a href="#up-to-50-frames-a-second"><img src="docs/images/icon-pulse.svg" width="56" height="56" alt=""></a><br>
+<b>Up to 50 frames a second</b><br>
+<sub>Numbers count, rings glide and fans turn, in video mode on the TURZX USB panels.</sub>
+<br><br>
+<a href="#the-app"><img src="docs/images/icon-blocks.svg" width="56" height="56" alt=""></a><br>
+<b>Build your own</b><br>
+<sub>Drag 35 modules onto the panel, pick a look, and share it with everyone.</sub>
+</td>
+<td width="33%" align="center" valign="top">
+<a href="#several-panels-at-once"><img src="docs/images/icon-layers.svg" width="56" height="56" alt=""></a><br>
+<b>Up to four panels</b><br>
+<sub>Each with its own theme, in one beat; companions show what the first leaves out.</sub>
+<br><br>
+<a href="#everything-comes-with-it"><img src="docs/images/icon-check.svg" width="56" height="56" alt=""></a><br>
+<b>Works out of the box</b><br>
+<sub>Sensors, game frame rates and video mode need no other program.</sub>
+</td>
+<td width="33%" align="center" valign="top">
+<a href="#screens-for-music-weather-and-time"><img src="docs/images/icon-palette.svg" width="56" height="56" alt=""></a><br>
+<b>Screens for every moment</b><br>
+<sub>Music, the weather, the time, your games and your AI tools, by themselves or in turn.</sub>
+<br><br>
+<a href="#privacy"><img src="docs/images/icon-lock.svg" width="56" height="56" alt=""></a><br>
+<b>Private by design</b><br>
+<sub>No account, no telemetry: nothing leaves your PC that you have not turned on.</sub>
+</td>
 </tr>
 </table>
 
-## Several panels at once
+<p align="center">
+  <sub><b>Works with</b> Turing / TURZX · Turing Smart Screen · JONSBO · Waveshare · WeAct ·
+  Kipye · UsbPCMonitor · XuanFang · Lian Li · Thermalright · BeadaPanel · NZXT Kraken ·
+  Thermaltake · <a href="#supported-panels">every panel</a></sub>
+</p>
 
-<a name="more-panels-at-once"></a>
+## Features
 
-<p align="center"><img src="docs/images/panels-at-once.png" width="100%" alt="Three panels at once, where they stand: a 12.3-inch screen with Lumen (the weather, the time with the load, the rings and the network), under it a 9.2-inch bar with Lumen Companion (every core, the temperatures with the fans, the drives and the processes) and a 5.2-inch panel with Encore (what plays, the time and the volume)"></p>
+Every clip shows Libre Panel itself, with demo values.
 
-Up to four panels at once, each with its own theme, on the same readings and in the same beat.
+### Up to 50 frames a second
 
-- **Companions, nothing shown twice.** A panel added beside Lumen gets **Lumen Companion**:
-  every core, the temperatures with the fans turning, the drives and the processes, while Lumen
-  leaves out what its companion shows. Encore, Almanac and Arena have companions too, and a
-  companion follows the first panel into a game.
-- **One picture across all panels**, each showing the part where it stands, and **scenes**
-  that put a theme on every panel with one click.
-- **Panel 1 | 2 | 3** in the app's header picks the panel *Live* shows and *Design* edits; a
-  module moves from one panel to another.
-- **Each its own**: brightness (or the first panel's, with an offset), the way it is mounted,
-  its start screen, and a process of its own, so two panels in video mode wait for nothing.
-- **In their real sizes**: *Settings → Panels* places them beside your monitor, and *Add a
-  panel* asks step by step which panel it is, how it is mounted and what it shows.
-
-A JONSBO ZC-360 has three screens under its fans: each is a panel of its own, and they start
-with Lumen for the processor, the graphics card and the memory.
-
-<p align="center"><img src="docs/images/zc360-screens.png" width="70%" alt="The JONSBO ZC-360's three fan screens, each a panel of its own: 1 Lumen CPU, 2 Lumen GPU and 3 Lumen Memory, each a lit ring beside its history"></p>
-
-When a sensor reaches its critical limit, every panel's edge pulses red:
-
-<picture>
-  <source media="(prefers-reduced-motion: reduce)" srcset="docs/images/more-panels.png">
-  <img src="docs/media/more-panels.gif" width="100%" alt="Two 9.2-inch bars one above the other: Lumen with the track, the time and the rings, and Lumen Companion below it with every core, the temperatures with the fans turning, the drives and the processes; a burst of work goes up on both in the same beat, then the processor gets too hot, both edges pulse red and the second panel shows High Contrast until it has cooled">
-</picture>
-
-<details>
-<summary>More</summary>
-<br>
-
-Live, the tray and the Overview show each panel, and *Picture of all panels* saves them where
-they stand, to share. Everything about it: [More panels at
-once](docs/CONFIGURATION.md#more-panels-at-once) and [Scenes](docs/CONFIGURATION.md#scenes).
-</details>
-
-## A 30-second tour
-
-### Smooth, in video mode
-
-<img src="docs/media/close-up-rings.gif" width="100%" alt="Lumen's rings for CPU, GPU and RAM close up, at twice their size, in video mode: lit arcs fill as the load rises, and the numbers glide to each new reading">
+<p><img src="docs/media/close-up-rings.gif" width="100%" alt="Lumen's rings for CPU, GPU and RAM close up, at twice their size, in video mode: lit arcs fill as the load rises, and the numbers glide to each new reading"></p>
 
 TURZX USB panels have a video decoder, and Libre Panel feeds it up to 50 frames a second:
 numbers count to each new reading, rings and bars glide, graphs scroll a little on every frame
-and fans turn at their own speed. 30 by default, which looks smooth and asks far less of the PC;
-50 is smoother still, at about two thirds more processor time (Settings → Panel).
+and fans turn at their own speed. Values sit as light in milled grooves, and fine dust drifts in
+the depth behind. 30 frames a second is the default, smooth and far lighter on the PC; every
+other panel gets still frames, sent where something changed.
 
-<details>
-<summary>More</summary>
-<br>
+### Cards that take turns
 
-Values sit as light in milled grooves; lettering can be faceted metal, and fine dust drifts in
-the depth behind. The downloads carry the ffmpeg it needs, and it turns itself on on the 9.2"
-once the panel's standby clip is named ([what it needs](#faq)); every other panel gets still
-frames, sent where something changed.
+<p><img src="docs/media/card-turns.gif" width="100%" alt="Lumen's card slot, its cards in turn: what is playing gives way to the weather in a fade, a clock face pushes the weather out to the left, the day with its month rises in place of the clock, and a beam of light wipes across to what is playing again"></p>
 
-[The picture](docs/images/hero.png): Lumen on a 9.2-inch panel: what is playing with its
-cover, the time with the load as light, the fans, and lit rings for CPU, GPU and RAM.
-</details>
-
-### Cards that change by themselves
-
-<img src="docs/media/card-ignition.gif" width="100%" alt="Lumen's card slot: the playing track gives way to the weather card with a moving symbol and the next hours; a line of light ignites between the two">
-
-One slot, several cards: what is playing, with its cover and the player's icon; when nothing
-plays, the weather; when there is neither, the day.
-
-<details>
-<summary>More</summary>
-<br>
-
-The weather comes with moving symbols, the next hours and the rain of the next two hours. A
-change ignites a line of light, the card rolls up into it and the next one rolls down. With the
-downloads service on, the network card shows a download in its place while one runs.
-</details>
+One slot on Lumen, several cards: what is playing with its cover, the weather with moving
+symbols and the next hours, the day, a clock face, the moon or your agenda. The first with
+something to show is on show, or they take turns, each for its minutes. From one to the next
+the slot goes as you choose: a line of light, a fade, a push to the side or upwards, or a beam
+of light that wipes across.
 
 ### Notices
 
-<img src="docs/media/volume-looks.gif" width="100%" alt="The volume over Lumen in its four looks, one after the other: a bar along the bottom edge, levels that rise, a ring that fills with the number in it, and a large number in the middle">
+<p><img src="docs/media/volume-looks.gif" width="100%" alt="The volume over Lumen in its four looks, one after the other: a bar along the bottom edge, levels that rise, a ring that fills with the number in it, and a large number in the middle"></p>
 
 Turn the volume and it shows over every screen, in the look you pick: a *Bar* along the edge,
-*Levels* that rise, a *Ring* that fills or a *Large* number.
-
-<details>
-<summary>More</summary>
-<br>
-
-It is switched on with one click on *Start*. A new track with its cover, a sensor past a limit
-you set, a stick or a game controller plugged in (Windows): short notices in the theme's
-colours, as a band or a card; a screen that shows the volume or the track itself gets none over
-it. Your own scripts and a Stream Deck button can show one too, once you allow it:
-`libre-panel notify "Render done"`, or an address with a key, from this PC only. Like every
-service, they are off until you switch them on.
-</details>
+*Levels* that rise, a *Ring* that fills or a *Large* number. A new track with its cover, a
+sensor past a limit you set, a controller plugged in (Windows) and your own scripts
+(`libre-panel notify "Render done"`) get short notices in the theme's colours.
 
 ### Game mode
 
-<img src="docs/media/round-report.gif" width="100%" alt="After a game the round report opens from a line of light: the average frame rate against the last rounds, the 1% and 0.1% lows, the frame time and the longest frame, how much the GPU, the CPU or the frame cap held it back, the share of the round at each frame rate, the temperatures over the round, and the highest temperatures, power and video memory against the average">
+<p><img src="docs/media/game-entrance.gif" width="100%" alt="A game starts on Lumen: the screen closes to a line of light, the game's name, Starfall, lights up over GAME MODE, and Arena opens: the frame rate large with its 1% low, the frame time and what holds it back, its course frame by frame, CPU and GPU, every core and the temperatures; when the game ends, the same way back to Lumen"></p>
 
-Start a game and the screen closes to a line, the game's name lights up and the game screen
-opens: the frame rate, its 1% low and who holds it back. After a round, an optional report
-compares it with your last ten.
-
-<details>
-<summary>More</summary>
-<br>
-
+Start a game and the screen closes to a line, the game's name lights up and **Arena** opens:
+the frame rate with every frame as measured, its 1% low, the frame time and who holds it back.
 The game comes from your launcher (Steam, Epic, GOG, Ubisoft Connect, the EA app, Battle.net,
-Rockstar, Amazon, the Xbox app, Heroic or Lutris) or a list and folders of your own, its frame
-rate is counted by Intel's PresentMon, and the time shows small in a corner. Its screen is yours to pick in
-*Design → Pages*: **Arena**, Libre Panel's own, or one of SPUR II's.
+the Xbox app, Heroic, Lutris and more), its frame rate from PresentMon, RTSS or MangoHud.
 
-[The game screen](docs/images/arena.png): Arena, the game screen: the frame rate large with
-its 1% low, the frame time and what holds it back, its course, CPU and GPU as instruments,
-every core and the temperatures with the fans.
-</details>
+<p><img src="docs/media/round-report.gif" width="100%" alt="After a game the round report opens from a line of light: the average frame rate against the last rounds, the 1% and 0.1% lows, the frame time and the longest frame, how much the GPU, the CPU or the frame cap held it back, the share of the round at each frame rate, the temperatures over the round, and the highest temperatures, power and video memory against the average"></p>
+
+After a round, an optional **round report** compares it with your last ten: the lows, the
+longest frame, what held it back and how warm it got.
 
 ### Screens for music, weather and time
 
-<img src="docs/media/nimbus.gif" width="100%" alt="Nimbus: the weather now with a moving symbol, the next hours, the next seven days with rain, the moon as it is lit tonight and a small clock">
+<p><img src="docs/media/screens-in-turn.gif" width="100%" alt="Screens in turn: Almanac, then Nimbus, then Encore, each for its time, one opening from a line of light after the other, and from the top again"></p>
 
-**Encore** is for music, **Nimbus** for the weather and **Almanac** is a clock with the month;
-switched on as pages, Encore takes over while a track plays and Almanac when you step away.
-
-<details>
-<summary>More</summary>
-<br>
-
-**Encore**: the cover large and its colours behind the whole screen, the time with rolling
-digits, and the volume as levels that rise while you turn it.
-[The picture](docs/images/encore.png): Encore: the cover large with its colours behind the
-whole screen, the track, artist and album, the time and the volume as levels.
-
-**Nimbus**: now and the next hours, the next days with their rain, the moon as it is lit
-tonight and a small clock.
-
-**Almanac**: a clock with the month, today and the week; **Almanac Analog** puts the time on a
-face whose second hand glides, ticks or sweeps.
-▶ [The clip](docs/media/almanac.gif): Almanac: the time large with rolling digits beside the
-month; the tube opens Almanac Analog, a face whose second hand glides, and goes back.
-
-They come by themselves too: switch on the **Music** page in *Design → Pages* and Encore takes
-over while a track plays, the **Idle** page and Almanac shows when you step away from the PC.
-▶ [The clip](docs/media/music-page.gif): The music page: nothing plays on Lumen; a track
-starts and Encore opens by itself from a line of light, the volume levels rise and fall as it
-is turned, and when the track stops the panel goes back to Lumen.
-</details>
-
-### Screens in turn
-
-<img src="docs/media/screens-in-turn.gif" width="100%" alt="Screens in turn: Almanac, then Nimbus, then Encore, each for its time, one opening from a line of light after the other, and from the top again">
-
-Five minutes Almanac, five minutes Nimbus, ten minutes Studio, and round again: on **Start**,
-pick the screens and give each its time.
-
-<details>
-<summary>More</summary>
-<br>
-
-Each gets its seconds, minutes or hours, and the panel shows them one after another. A game, a
-notice or a theme a service asks for still comes first.
-</details>
-
-### The panel's own start screen
-
-<img src="docs/media/start-screen.gif" width="100%" alt="The 9.2-inch panel's own screens in Libre Panel's look: the boot logo with the Libre Panel mark and name, then the standby clip, a light that runs out from the middle along the bar">
-
-TURZX USB panels show a logo of their own when they are switched on and play a clip when the
-PC starts. Libre Panel draws both in its own look and puts them on the panel with one click.
-
-<details>
-<summary>More</summary>
-<br>
-
-Both show before any app talks to the panel. Libre Panel makes them for the size of your
-panel and puts them on it from **Settings → Panel → Start screen**, after a question; the
-factory logo stays on the panel and comes back with another click.
-</details>
-
-### Bars on end
-
-<img src="docs/images/vertical.png" width="100%" alt="Libre Panel's screens for a bar that stands on end, side by side: Lumen with the track, the time, the load, the fans and the rings; Studio with a large clock, the card and a row for each ring; Encore with the cover large and the volume as levels; Nimbus with the weather, the next days and the moon; Almanac with the hours over the minutes; Almanac Analog with a clock face; Arena with the frame rate, CPU, GPU, cores and temperatures; the round report in four cards one under the other">
-
-Mounted your bar upright? Every screen then shows in its version for a bar on end, laid out
-anew, not turned on its side.
-
-<details>
-<summary>More</summary>
-<br>
-
-Say so on the first start, on *Start* or in *Settings → Panel*. Lumen, Studio, Encore, Nimbus,
-Almanac, Arena and the round report each have one, and the panel's own boot logo and standby
-clip are drawn upright too.
-</details>
+**Encore** is for music, with the cover large and its colours behind the whole screen;
+**Nimbus** for the weather, with the next days and the moon; **Almanac** is a clock with the
+month, and **Almanac Analog** a face whose second hand glides. Encore takes over while a track
+plays and Almanac when you step away, or the screens take turns: five minutes this, ten minutes
+that, and round again.
 
 ### What your AI tools are doing
 
-<img src="docs/images/agents.png" width="100%" alt="Agents on a 9.2-inch bar: Claude Code working, with its moving sign and the tool at work, Codex waiting for you, each with how much of the plan's five hours and seven days is used and when they begin anew, beside the time">
+<p><img src="docs/media/ai-card.gif" width="100%" alt="AI activity on Lumen: the weather card gives way by itself to Claude Code at work, with its moving sign, the tool at work, its session, what today cost and how much of five hours, seven days and the context is used; then it waits for you, in amber"></p>
 
-**Agents** shows what Claude Code and Codex do on this PC: working, waiting for you or idle,
-and how much of the plan's limits is used. On Lumen the AI card comes up by itself while one of
-them works, and Claude Code's cloud sessions come too.
+Claude Code and Codex on this PC, and Claude Code's cloud sessions: working, waiting for you or
+idle, with the tool at work, what today cost and how much of the plan's limits is used. On Lumen
+the AI card comes up by itself while one of them works; **Agents** gives them a screen of their
+own. Nothing leaves this PC ([AI activity](docs/CONFIGURATION.md#ai-activity)).
 
-<details>
-<summary>More</summary>
-<br>
+### Several panels at once
 
-Each with a moving sign, the tool at work and the time until the limits begin anew.
-*Settings → Game mode and more → AI activity* shows what it adds to the programs' settings
-before it writes, and takes it out again; nothing leaves this PC. Sessions on claude.ai/code
-report by a relay of their own, with no more than their state
-([AI activity](docs/CONFIGURATION.md#ai-activity)).
-</details>
+<p><img src="docs/media/more-panels.gif" width="100%" alt="Two 9.2-inch bars one above the other: Lumen with the track, the time and the rings, and Lumen Companion below it with every core, the temperatures with the fans turning, the drives and the processes; a burst of work goes up on both in the same beat, then the processor gets too hot, both edges pulse red and the second panel shows High Contrast until it has cooled"></p>
 
-### Every panel size
+Up to four panels, each with its own theme, on the same readings and in the same beat. A panel
+beside Lumen gets **Lumen Companion**: every core, the temperatures with the fans turning, the
+drives and the processes, while Lumen leaves out what its companion shows. One picture can span
+all panels, **scenes** put a theme on every panel with one click, and when a sensor reaches its
+critical limit every panel's edge pulses red. A JONSBO ZC-360's three fan screens are three
+panels of their own ([more panels at once](docs/CONFIGURATION.md#more-panels-at-once)).
 
-<img src="docs/media/small-panel.gif" width="100%" alt="Libre Default on a 3.5-inch panel: the time, lit rings for CPU and memory that fill, the CPU temperature, disk and network, a CPU history that scrolls, and a small card in the corner that changes from the playing track to the weather">
+### The panel as a monitor
 
-From the 0.96" stick to the 12.3" screen: every theme moves to every panel and lays itself out
-for it. On the round panels of 480x480, the screens come in versions of their own, laid out for the
-circle:
+<p><img src="docs/media/screen-monitor.gif" width="100%" alt="A desk's monitor with the app's Screen page, and below it a 12.3-inch panel that is a monitor of its own: a browser window with Libre Panel's website is dragged from the monitor down onto the panel, made as large as the panel and scrolled to the features, then dragged back up"></p>
 
-<img src="docs/images/round-screens.png" width="100%" alt="Libre Panel's screens for the round panels of 480x480, in round bezels: Lumen, Encore, Nimbus, Almanac, Arena and the round report">
+The app's **Screen** puts a screen of the computer on a panel: one of your monitors, a part of
+one, a window, or a monitor of its own that the desktop extends to, where windows go as to any
+other. On Windows (with the open-source Virtual Display Driver, set up from the app) and on
+Linux with X11 and Wayland. A TURZX panel in video mode gets it straight as its video stream.
 
-<details>
-<summary>More</summary>
-<br>
+### The Player
 
-Libre Default, here on a 3.5" panel, is the default on every panel but the bars.
-</details>
+<p><img src="docs/media/player.gif" width="100%" alt="The app's Player: a click on Night drive in the library plays it on a 12.3-inch panel, and the app shows the panel's picture as the video runs, with its slider, pause, the next and stop; the next is Northern lights, then an animated picture of a lava lamp, and Stop gives the panel its theme again"></p>
 
-### The app
+Your videos, GIFs and pictures on a panel instead of its theme: drop them into the **Player**,
+click one, and the library plays from there, each frame at its moment. Pause, skip and seek
+while the app shows the panel's own picture, round and round or shuffled; the theme comes back
+when you stop.
 
-<img src="docs/media/app-drag-module.gif" width="100%" alt="Design: a weather module is dragged from the library onto a 3.5-inch panel and made wider, and shows more as it grows">
+### The panel's own start screen
 
-**Design**: drag building blocks onto the panel. **Look**: colour worlds and how everything is
-drawn. **Ctrl+K** finds everything.
+<p><img src="docs/media/start-screen.gif" width="100%" alt="The 9.2-inch panel's own screens in Libre Panel's look: the boot logo with the Libre Panel mark and name, then the standby clip, a light that runs out from the middle along the bar"></p>
 
-<details>
-<summary>More</summary>
-<br>
+TURZX USB panels show a logo of their own when they are switched on and play a clip when the PC
+starts. Libre Panel draws both in its own look, for your panel's size, and puts them on it with
+one click; the factory logo comes back with another.
 
-**Design**: a module fits itself to the room you give it and shows more the larger it is; 35 of
-them, from every core to the ping, a timer, the power the PC draws and your next appointment.
+### Every size, round and upright
 
-**Look**: six colour worlds, and how rings, bars, graphs and lettering are drawn (light, facet,
-acrylic or flat), the panel light, the grid, the depth dust and the notices, beside the picture
-of the panel. ▶ [The clip](docs/media/app-look.gif): Look: a click on the colour world Neon
-recolours the whole of Lumen, and a test notice shows how notices will look.
+<table>
+<tr>
+<td width="50%" valign="top"><img src="docs/media/small-panel.gif" width="100%" alt="Libre Default on a 3.5-inch panel: the time, lit rings for CPU and memory that fill, the CPU temperature, disk and network, a CPU history that scrolls, and a small card in the corner that changes from the playing track to the weather"></td>
+<td width="50%" valign="top"><img src="docs/images/round-screens.png" width="100%" alt="Libre Panel's screens for the round panels of 480x480, in round bezels: Lumen, Encore, Nimbus, Almanac, Arena and the round report"></td>
+</tr>
+</table>
 
-**Ctrl+K** finds every command, theme, module, sensor and setting by a few letters.
-▶ [The clip](docs/media/app-command-palette.gif): Ctrl+K: typing neon finds the look Neon
-among themes, panels and building blocks, and Enter applies it to the whole panel.
+From the 0.96" stick to the 12.3" screen, every theme moves to every panel and lays itself out
+for it. The round panels get screens of their own, laid out for the circle, and a bar mounted
+upright gets every screen laid out anew, not turned on its side.
 
-**Settings** writes `config.toml` for you, comments kept; the names of your processor,
-graphics card and memory are found by themselves, and you can type your own. **Start** shows
-the panel at a glance and the themes made for it, and says when a new version is out if you let
-it look. **Live** shows how it runs, and with the memory on, the **history**: temperatures, load
-and power over a day, a week or a month, and the games you played. The **Player** plays your
-videos, GIFs and pictures on a panel instead of its theme: drop them in, click one, pause, skip,
-seek, round and round or shuffled, and the theme comes back when you stop. **Screen**, a page
-of its own: a panel shows a screen of the computer instead of its theme: one of your
-monitors, a part of one, a window, or a monitor of its own that the desktop extends to
-(Windows with the open-source Virtual Display Driver, set up from the app; Linux on X11 and on
-Wayland, GNOME and KDE). A TURZX panel in video mode gets it straight as its video stream.
-**Keyboard shortcuts** for the whole PC pause the panel, turn its brightness or open the app
-from any window (Windows, Linux with X11), and switch off as a whole. The app speaks English,
-German, French, Spanish, Italian, Polish, Portuguese (Brazil), Russian, Japanese and
-Simplified Chinese.
-</details>
+<p><img src="docs/images/vertical.png" width="100%" alt="Libre Panel's screens for a bar that stands on end, side by side: Lumen with the track, the time, the load, the fans and the rings; Studio with a large clock, the card and a row for each ring; Encore with the cover large and the volume as levels; Nimbus with the weather, the next days and the moon; Almanac with the hours over the minutes; Almanac Analog with a clock face; Arena with the frame rate, CPU, GPU, cores and temperatures; the round report in four cards one under the other"></p>
+
+## The app
+
+<p><img src="docs/media/app-drag-module.gif" width="100%" alt="Design: a weather module is dragged from the library onto a 3.5-inch panel and made wider, and shows more as it grows"></p>
+
+<table>
+<tr>
+<td width="50%" valign="top"><img src="docs/media/app-look.gif" width="100%" alt="Look: a click on the colour world Neon recolours the whole of Lumen, and a test notice shows how notices will look"><br>
+<b>Look</b>: six colour worlds, and how rings, bars, graphs and lettering are drawn: as light,
+facets, acrylic or flat.</td>
+<td width="50%" valign="top"><img src="docs/media/app-command-palette.gif" width="100%" alt="Ctrl+K: typing neon finds the look Neon among themes, panels and building blocks, and Enter applies it to the whole panel"><br>
+<b>Ctrl+K</b> finds every command, theme, module, sensor and setting by a few letters.</td>
+</tr>
+</table>
+
+- **Design**: drag building blocks onto the panel. A module fits itself to the room you give
+  it and shows more the larger it is; 35 of them, from every core to the ping, a timer, the
+  power the PC draws and your next appointment.
+- **Start** shows the panel at a glance, the themes made for it and the community's, the cards
+  and the screens in turn; **Live** shows how it runs, and with the memory on, the **history**:
+  temperatures, load and power over a day, a week or a month, and the games you played.
+- **Settings** writes `config.toml` for you, comments kept, and finds the names of your
+  processor, graphics card and memory by itself. **Keyboard shortcuts** pause the panel, turn
+  its brightness or open the app from any window.
+- In a window of its own, in ten languages: English, German, French, Spanish, Italian, Polish,
+  Portuguese (Brazil), Russian, Japanese and Simplified Chinese.
 
 ## Themes
 
+<p><img src="docs/media/themes-tour.gif" width="100%" alt="Libre Panel's own screens on a 9.2-inch bar, one after another through the tube: Lumen, Studio with its large clock, Encore with the cover large, Nimbus with the weather, Almanac with the month, Arena for games, and Lumen again"></p>
+
 <p align="center"><img src="docs/images/gallery.png" width="100%" alt="Libre Panel's own themes on their panels: Lumen and Studio on 9.2-inch bars, then Slate (5 inch), Libre Default (3.5 inch), Orbit (round), Column (3.5 inch portrait) and Pico (0.96 inch)"></p>
 
-| Theme | Made for | |
+| Theme | Made for | What it shows |
 |---|---|---|
-| **Lumen** | 8.8" and 9.2" bars (1920×480); the default there | what plays, the time with the load as light, lit rings named after your hardware |
+| **Lumen** | 8.8" and 9.2" bars, the default there | what plays, the time with the load as light, lit rings named after your hardware |
 | **Studio** | 8.8" and 9.2" bars | calm: a large clock, the card slot and lit rings |
 | **Encore** | 8.8" and 9.2" bars | for music: the cover large, its colours behind the whole screen |
 | **Nimbus** | 8.8" and 9.2" bars | for the weather: now, the next hours and days, the moon |
 | **Almanac** | 8.8" and 9.2" bars | a clock with the month; **Almanac Analog** on a face |
-| **Arena** | 8.8" and 9.2" bars | for game mode: the frame rate large, CPU and GPU, every core |
+| **Arena** | 8.8" and 9.2" bars, 12.3" | for game mode: the frame rate large, CPU and GPU, every core |
 | **Agents** | 8.8" and 9.2" bars, 12.3" | what Claude Code and Codex do; **Agents Claude** for Claude Code alone |
-| **Libre Default** | 3.5" (480×320); the default on every other panel | two lit rings, a history that scrolls, a card in the corner |
-| **Slate** | 5" (800×480) | four cards: CPU, GPU, memory and network |
+| **Libre Default** | 3.5", the default on every other panel | two lit rings, a history that scrolls, a card in the corner |
+| **Slate** | 5" | four cards: CPU, GPU, memory and network |
 | **Orbit** | round 2.1" and 2.8" | three rings around a large clock |
 | **Column** | 3.5" portrait | the clock, a row per resource and the network |
-| **Pico** | 0.96" (160×80) | CPU with its temperature, and memory |
-| **Companions** | a panel beside the first, 9.2" either way up and 12.3" | Lumen, Arena, Encore and Almanac Companion: what the first panel leaves out |
-| **High Contrast** | every size from 2.1" to 12.3", upright too | white on black in very large digits, to read from across the room |
+| **Pico** | 0.96" | CPU with its temperature, and memory |
+| **Companions** | a panel beside the first | Lumen, Arena, Encore and Almanac Companion: what the first panel leaves out |
+| **High Contrast** | every size from 2.1" to 12.3" | white on black in very large digits, to read from across the room |
 
-What each one shows, in full: [every built-in theme](docs/THEMES.md#every-built-in-theme).
-Every theme moves to any other panel from the panel button at the top of *Design*. Themes are
-plain JSON with their pictures and fonts, and cannot run code ([theme format](docs/THEMES.md)).
+Every theme moves to any other panel and lays itself out for it. Themes are plain JSON with
+their pictures and fonts and cannot run code ([every built-in theme](docs/THEMES.md#every-built-in-theme),
+[the theme format](docs/THEMES.md)). The eight screens of SPUR II are built in too, as a legacy
+collection ([where it started](#where-it-started)).
 
 ### Community themes
 
-Themes other Libre Panel users made, one click away: *Start → Themes → Community themes*
-shows first the ones made for the panel you chose in the header, marked *Fits*, and the others
-under *All sizes*. **Install** puts one among yours, and **Show on the panel** puts it there;
-one made for another size asks first, as it would be scaled.
-
-- **Share yours in two clicks.** *Share with everyone…* (the globe on your theme's card) asks
-  what it is called and shows, saves it as one `.zip` and opens GitHub's form, filled in: drag
-  the file in and send. A check runs by itself, draws its picture and prepares it for the list;
-  after a look it is in everyone's app. *Export…* and *Import…* pass a theme on directly.
-- **Safe by design.** A theme is plain JSON with its pictures and fonts and cannot run code.
-  The app takes the list and the zips from this repository only, checks each zip against its
-  SHA-256 and the panel size its entry names before anything is unpacked, and every theme is
-  looked at before it is listed.
-- **No account.** The app asks GitHub for the list only when you open it, and the request
-  carries nothing of you or your panel.
-
-The gallery is new, so the first themes in it can be yours
-([sharing, step by step](community/themes/README.md)). Themes to talk about or still in the
-making belong in [Discussions](https://github.com/syntensa/libre-panel/discussions).
-
-<details>
-<summary><b>SPUR II's screens</b></summary>
-<br>
-
-Also built in: the eight screens of SPUR II as a legacy collection, see
-[Where it started](#where-it-started).
-</details>
+Themes other Libre Panel users made, one click away: *Start → Themes → Community themes* shows
+first the ones made for your panel, and **Install** puts one among yours. *Share with
+everyone…* on your own theme's card saves it as one `.zip` and opens GitHub's form, filled in:
+a check draws its picture, and after a look it is in everyone's app. The app takes the list and
+the zips from this repository only, checks each against its SHA-256 before anything is
+unpacked, and tells GitHub nothing of you or your panel
+([sharing, step by step](community/themes/README.md)).
 
 <details>
 <summary><b>All 35 modules</b>: the building blocks of your own themes</summary>
@@ -523,43 +282,93 @@ Each module shows more the larger it is, steps aside when its readings are missi
 nothing while no theme shows it.
 </details>
 
-## <a name="install"></a>Install and first start
+## Supported panels
 
-From the [latest release](https://github.com/syntensa/libre-panel/releases/latest), no
-Python needed:
+| Brand | Verified on real panels | Supported, not yet verified | Connects as |
+|---|---|---|---|
+| **Turing / TURZX** | 8.8", 9.2", 12.3" | 1.6", 2.1" round, 2.8" round, 4.6", 5.2", 8" | USB, video mode |
+| **Turing Smart Screen** | 3.5", 8.8" | 2.1" round, 5" | COM port |
+| **JONSBO** | ZC-360, each screen its own panel | ZC-360 as one picture, TF3-360SC, DS916, DS339 | USB |
+| **Waveshare USB Monitor** | 2.8", as a USB display | – | USB |
+| **UsbPCMonitor** | – | 3.5", 5", 7" | COM port |
+| **XuanFang** | – | 3.5" | COM port |
+| **Kipye Qiye** | – | 3.5" | COM port |
+| **WeAct Display FS V1** | – | 0.96", 3.5" | COM port |
+| **VMAX** | – | 4.6" | USB |
+| **Hongtai / Jungle Leopard** | – | Chill Arc 360, MSI EZ Display and more | COM port |
+| **Lian Li** | – | Universal Screen, HydroShift II, OLED Curve | USB |
+| **Thermalright** | – | Trofeo Vision | USB |
+| **BeadaPanel** | – | every model | USB |
+| **NZXT Kraken** | – | with an LCD | USB |
+| **Thermaltake** | – | 6" LCD | USB |
 
-- **Windows 10 and 11:** `libre-panel-…-windows-x64-setup.exe` installs for all users, with
-  a start menu entry, an optional start at login and, in checked boxes that say what each
-  is, the sensor service, the PawnIO driver and what game frame rates need; Windows asks
-  once for administrator rights, Libre Panel itself runs without them. A portable zip is
-  there too: its *Unlock all sensors* sets up the same.
-- **Linux (x86-64):** `Libre_Panel-…-x86_64.AppImage`: make it executable and start it, no
-  installation. A tarball is there too.
+**Not supported yet:** GUITION 3.5", Fuldho 3.5", AX206 picture frames, and Lian Li's TL LCD,
+Galahad II LCD and Lancool 207.
+
+**Own an unverified one?** The panel test in the app (*Live → Diagnose*, or `libre-panel
+doctor`) checks it end to end and writes a report without serial numbers; one click opens a
+[panel report](https://github.com/syntensa/libre-panel/issues/new?template=panel_support.yml)
+with it filled in, and the model becomes verified for everyone. The panels on a COM port are the
+older kind and slower, so Libre Panel keeps their motion calm; video mode is for the TURZX USB
+panels. Every model with its USB ids and its setup: [docs/HARDWARE.md](docs/HARDWARE.md).
+
+## Install
+
+<table>
+<tr>
+<td width="33%" valign="top">
+<b>Windows 10 and 11</b><br>
+<sub>64-bit</sub>
+<br><br>
+The <b>setup</b> installs for all users, with a start menu entry and, in boxes that say what
+each is, a start at login and the sensor service. Or the <b>portable zip</b>.
+<br><br>
+<a href="https://github.com/syntensa/libre-panel/releases/latest">Download</a>
+</td>
+<td width="33%" valign="top">
+<b>Linux</b><br>
+<sub>x86-64</sub>
+<br><br>
+The <b>AppImage</b>: make it executable and start it, no installation. <i>Start</i> gives
+your user the panel's USB access with one click. Or the <b>tarball</b>.
+<br><br>
+<a href="https://github.com/syntensa/libre-panel/releases/latest">Download</a>
+</td>
+<td width="33%" valign="top">
+<b>With Python</b><br>
+<sub>3.11 or newer</sub>
+<br><br>
+<b>pipx</b> installs it from this repository, with the panel's drivers and the tray, on
+Windows and Linux.
+<br><br>
+<a href="#with-python">The commands</a>
+</td>
+</tr>
+</table>
+
+### First start
 
 1. **Close the vendor app.** It keeps the panel to itself.
 2. **Start Libre Panel** with the panel plugged in. The Windows downloads are not code-signed
    yet: SmartScreen asks once (*More info → Run anyway*). On Linux, *Start* offers to give your
-   user access to the panel with one click ([what it does](docs/CONFIGURATION.md#linux-sensors-and-panel-access)).
+   user access to the panel ([what it does](docs/CONFIGURATION.md#linux-sensors-and-panel-access)).
 3. **Pick a look.** *Start* asks "How should it look?" with the themes made for the panel it
    found: Lumen on the 8.8" and 9.2" bars, Libre Default on the others.
 4. **Turn on what you want.** In *Settings*: the weather and your place, video mode, the
-   services (all off until you switch them on). The tray icon has the theme, brightness,
-   pause and *Start with system*.
+   services (all off until you switch them on). The tray icon has the theme, brightness, pause
+   and *Start with system*.
 
-The app opens in a window of its own (WebView2 on Windows, WebKitGTK on Linux: the AppImage
-too, where your distribution's `python-gobject` and `webkit2gtk-4.1` are installed, else the
-browser; [details](docs/BACKGROUND.md#the-apps-window)).
+The app opens in a window of its own (WebView2 on Windows, WebKitGTK on Linux, else the browser;
+[details](docs/BACKGROUND.md#the-apps-window)).
 
-### Out of the box
+### Everything comes with it
 
-**Everything works out of the box.** Sensors, fans, graphics card, game frame rates (Windows)
-and the video mode need no other program, and nothing else is to be downloaded or
-installed. The downloads carry the programs the features run, in a `tools` folder next to the
-program: ffmpeg for the video mode (Windows and Linux), and on Windows PresentMon for game
-frame rates and the installer of the PawnIO driver. One setup step does the rest: the installer
-on Windows, one click on a card in the app for the portable zip and for Linux. It asks once, for
-administrator rights on Windows and for your password on Linux; Libre Panel itself runs
-without administrator rights.
+Sensors, fans, graphics card, game frame rates (Windows) and the video mode need no other
+program, and nothing else is to be downloaded. The downloads carry what the features run, in a
+`tools` folder next to the program: ffmpeg for the video mode, and on Windows PresentMon for game
+frame rates and the installer of the PawnIO driver. One setup step does the rest and asks once:
+for administrator rights on Windows, for your password on Linux. Libre Panel itself runs without
+administrator rights.
 
 <details>
 <summary><b>What each download sets up, and why</b></summary>
@@ -599,7 +408,7 @@ without administrator rights.
 ### With Python
 
 ```bash
-pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.7.0"
+pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.7.7"
 libre-panel tray                    # the background app with its tray icon; opens its window
 libre-panel autostart enable        # start it whenever you log in
 ```
@@ -733,8 +542,9 @@ Windows downloads. The *Game frame rate* source is on by default on Windows and 
 game's frames while a theme shows them. PresentMon needs administrator rights or your
 account in the Windows group "Performance Log Users", which the setup's third box (or
 *Unlock all sensors*) arranges; it applies from your next sign-in
-([how](docs/CONFIGURATION.md#more-sensor-sources)). The cooling analysis reads FanControl's
-fan curves, if you use FanControl.
+([how](docs/CONFIGURATION.md#more-sensor-sources)). Where RivaTuner Statistics Server runs
+anyway, Libre Panel can take the frame rates from it instead. The cooling analysis reads
+FanControl's fan curves, if you use FanControl.
 </details>
 
 <details>
@@ -742,7 +552,8 @@ fan curves, if you use FanControl.
 <br>
 
 Libre Panel sends display commands only: pictures, brightness, video. It never touches the
-firmware and stores nothing on the panel; firmware updates stay the vendor app's job.
+firmware; it stores nothing on the panel but a start screen you put there yourself, and
+firmware updates stay the vendor app's job.
 </details>
 
 <details>
@@ -753,31 +564,38 @@ Not since 0.5: Windows and Linux are supported, and nobody downloaded the macOS 
 earlier releases.
 </details>
 
+## Documentation
+
+| Guide | What it covers |
+|---|---|
+| [Panels](docs/HARDWARE.md) | every model, its USB ids, the setup per system, and how to add yours |
+| [Configuration](docs/CONFIGURATION.md) | every setting of `config.toml`: sensors, services, video, languages |
+| [Background app](docs/BACKGROUND.md) | the tray, autostart, the app's window and the sensor service |
+| [Themes](docs/THEMES.md) | the theme format, the modules and every sensor key |
+| [Plugins](docs/PLUGINS.md) | sensors, services and drivers of your own |
+| [Architecture](docs/ARCHITECTURE.md) | how it is built, from the readings to the panel |
+| [Protocols](docs/protocol/turzx-usb.md) | the TURZX USB protocol, and the [serial ones](docs/protocol/serial.md) |
+| [Roadmap](docs/ROADMAP.md) · [Changelog](CHANGELOG.md) | what comes, and what came |
+
 ## Contributing
 
-The most valuable help right now is a **panel report**: `libre-panel doctor` on a model
-marked *unverified* turns it *supported* for everyone. Themes are welcome in
+The most valuable help right now is a **panel report**: `libre-panel doctor` on a model marked
+*unverified* turns it *verified* for everyone. Themes are welcome in the
+[community gallery](community/themes/README.md) and in
 [Discussions](https://github.com/syntensa/libre-panel/discussions); a language needs one JSON
 file ([how](docs/CONFIGURATION.md#language)); code, drivers and plugins start at
-[CONTRIBUTING.md](CONTRIBUTING.md) and the [plugin API](docs/PLUGINS.md). Security issues go
-through a [private advisory](SECURITY.md).
-
-**Documentation:** [panels](docs/HARDWARE.md) ·
-[background app and autostart](docs/BACKGROUND.md) ·
-[configuration](docs/CONFIGURATION.md) · [themes and sensor keys](docs/THEMES.md) ·
-[plugins](docs/PLUGINS.md) · [architecture](docs/ARCHITECTURE.md) ·
-[TURZX USB protocol](docs/protocol/turzx-usb.md) · [serial protocols](docs/protocol/serial.md) ·
-[roadmap](docs/ROADMAP.md) · [releasing](docs/RELEASING.md) · [changelog](CHANGELOG.md)
+[CONTRIBUTING.md](CONTRIBUTING.md). Security issues go through a
+[private advisory](SECURITY.md).
 
 ## Where it started
+
+<a href="docs/media/where-it-started.gif"><img src="docs/media/where-it-started.png" width="38%" align="right" alt="SPUR II's classic screen in video mode: the SPUR II wordmark, the fans and the clock above, CPU and GPU load charts, and CPU, RAM, GPU and network sections with values as light"></a>
 
 Libre Panel grew out of SPUR II, a private dashboard for one 9.2" panel on one PC, which proved
 the panel's USB protocol and its video mode on real hardware. Its ideas (light in milled
 grooves, the cards, the band, the tube) are now Libre Panel's own, for every panel and every
 PC, and its eight screens ship as the legacy collection *SPUR II*, at the end of *Start → All*
 ([what came from it](docs/SPUR2_MIGRATION.md)).
-
-<p align="center"><a href="docs/media/where-it-started.gif"><img src="docs/media/where-it-started.png" width="70%" alt="SPUR II's classic screen in video mode: the SPUR II wordmark, the fans and the clock above, CPU and GPU load charts, and CPU, RAM, GPU and network sections with values as light"></a></p>
 
 ## License and notices
 

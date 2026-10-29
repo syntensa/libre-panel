@@ -28,9 +28,12 @@ def recipes(pages):
 def test_every_picture_and_clip_the_pages_show_is_made_by_a_recipe(pages, recipes):
     shown = pages.shown()
     assert set(shown) == {*pages.READMES, *pages.SITE, pages.NOTES}  # all of them, read
-    assert ("media", "video-mode.gif") in shown["README.md"]  # the hero, Lumen in video mode
+    assert ("media", "hero.gif") in shown["README.md"]  # the headline over Lumen in video mode
+    assert ("media", "hero-de.gif") in shown["README.de.md"]  # (the headline in German)
     assert ("media", "video-mode.webm") in shown["site/index.html"]
-    assert shown["README.md"] == shown["README.de.md"]  # the German page shows the same
+    # the German page shows the same, its own where a picture has words (the top, the buttons)
+    german = {(folder, name.replace("-de.", ".")) for folder, name in shown["README.de.md"]}
+    assert german == shown["README.md"]
     assert shown["site/index.html"] == shown["site/de/index.html"]
     assert pages.check_recipes(recipes=recipes) == []
 

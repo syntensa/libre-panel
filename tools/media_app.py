@@ -24,12 +24,14 @@ import os
 import shutil
 import tempfile
 import threading
+import urllib.parse
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from unittest import mock
 
+import media_samples
 import readme_images as images
 from media_encode import FrameSink, Recorded, Settings
 from media_panel import LAYOUTS, modules_theme, theme_data
@@ -55,11 +57,24 @@ INIT_SCRIPT = """
   let last = performance.now();
   const touch = () => { last = performance.now(); };
   const realFetch = window.fetch;
-  window.fetch = function (...args) {
+  const counted = (args) => {
     pending++;
     touch();
-    return realFetch.apply(this, args).finally(() => { pending--; touch(); });
+    return realFetch.apply(window, args).finally(() => { pending--; touch(); });
   };
+  // Where a clip's stage asks for it (window.__liveGate), the panel's picture the app asks for
+  // waits for the clip's next picture (window.__liveNext), uncounted until then.
+  const waiting = [];
+  window.fetch = function (...args) {
+    const url = typeof args[0] === "string" ? args[0] : (args[0] && args[0].url) || "";
+    if (window.__liveGate && url.includes("/api/plugins/control/live")) {
+      return new Promise((resolve, reject) =>
+        waiting.push(() => counted(args).then(resolve, reject)));
+    }
+    return counted(args);
+  };
+  window.__liveWaiting = () => waiting.length;
+  window.__liveNext = () => waiting.splice(0).forEach((go) => go());
   window.__idle = (ms) => pending === 0 && performance.now() - last >= ms;
   // A long timer (a message that goes away after four seconds) runs on the clip's own time, which
   // moves with its pictures: on the wall clock it would go at a different picture on a slower
@@ -160,6 +175,7 @@ class Camera:
         self.box = box  # the part of the window that is in the picture
         self.pointer = self.home = pointer or (VIEWPORT[0] * 0.62, VIEWPORT[1] * 0.8)
         self.poster = -1
+        self.before: Callable[[], None] | None = None  # done before each picture (a stage's)
 
     # -- pictures
 
@@ -170,8 +186,16 @@ class Camera:
         except Exception:  # a page that never settles is shot as it is
             pass
 
+    @property
+    def seconds(self) -> float:
+        """The clip's own time: how far its pictures have got."""
+        return self.sink.count / FPS
+
     def shot(self, copies: int = 1) -> None:
         """A picture of the window, for ``copies`` frames; the clip's time goes on by that."""
+        if self.before is not None:
+            self.before()
+            self.settle()
         png = self.page.screenshot(clip=self.box)
         self.sink.add(Image.open(io.BytesIO(png)), copies)
         self.page.evaluate("(seconds) => window.__advance(seconds)", copies / FPS)
@@ -183,6 +207,13 @@ class Camera:
         """Stand still for ``seconds``."""
         self.settle()
         self.shot(self.frames(seconds))
+
+    def watch(self, seconds: float) -> None:
+        """Stand still for ``seconds`` while something moves by itself (the Player's video): a
+        picture for every frame, not one held."""
+        for _ in range(self.frames(seconds)):
+            self.settle()
+            self.shot()
 
     def mark(self) -> None:
         """The next picture is the clip's poster."""
@@ -402,6 +433,9 @@ class AppClip:
     route: str = "design"  # where the app is opened
     ready: str = ".panel-canvas .preview"  # what is there when it is
     room: bool = False  # the theme is given room on its grid for a module of two cells
+    # what stands in for the running app where the clip needs it (the Player's playback): made
+    # with the page before the app opens, given the camera when there is one
+    stage: Callable[[Any], Any] | None = None
 
     @property
     def kind(self) -> str:
@@ -495,9 +529,13 @@ def record(
             context.add_init_script(INIT_SCRIPT)
             page = context.new_page()
             hardware_names(page)  # (the app asks what this computer is called)
+            stage = clip.stage(page) if clip.stage is not None else None
             page.goto(url)
             rest = clip.cursor and (clip.cursor[0] * VIEWPORT[0], clip.cursor[1] * VIEWPORT[1])
             camera = Camera(page, sink, settings, window_box(page, None), rest)
+            if stage is not None:
+                stage.camera = camera
+                camera.before = getattr(stage, "before_shot", None)
             camera.open(clip.route, clip.ready)
             camera.box = window_box(page, clip.crop)
             clip.script(camera)
@@ -658,6 +696,141 @@ def settings_names(camera: Camera) -> None:
     camera.scroll(-down, 0.8)  # and up again
 
 
+# -- the Player: a library of made-up videos, played on the 12.3" ---------------------------------
+
+PLAYER_PANEL = (1920, 720)  # the 12.3": the panel the Player's clip plays on
+PLAYER_BYTES = {"video": 48_000_000, "animation": 6_400_000, "picture": 900_000}
+# The panel's picture while something plays comes as the app asks for it (every 200 ms of the
+# wall clock); with the gate (INIT_SCRIPT) each request waits for the clip's next picture, so
+# that the video on the panel moves on with the clip's own time, a frame of it for each picture.
+LIVE_GATE = "window.__liveGate = true;"
+
+
+def _query(url: str) -> dict[str, str]:
+    """The parameters of an address, decoded."""
+    return dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query))
+
+
+class PlayerStage:
+    """What the running app would say of the Player: the library (tools/media_samples.py), what
+    plays and where it stands on the clip's own time, and the panel's picture of it."""
+
+    def __init__(self, page: Any) -> None:
+        self.page = page
+        self.camera: Camera | None = None
+        self.names = list(media_samples.SAMPLES)
+        self.index: int | None = None  # what plays (None: nothing)
+        self.began = 0.0  # the clip's time it began at
+        page.add_init_script(LIVE_GATE)
+        page.route("**/api/player", self.answer)
+        page.route("**/api/player/picture?**", self.thumbnail)
+        page.route("**/api/plugins/control/live?**", self.live)
+
+    def now(self) -> float:
+        return self.camera.seconds if self.camera is not None else 0.0
+
+    def item(self, name: str) -> dict[str, Any]:
+        sample = media_samples.SAMPLES[name]
+        return {"name": name, "kind": sample.kind, "seconds": sample.seconds, "fps": sample.fps}
+
+    def status(self) -> dict[str, Any] | None:
+        if self.index is None:
+            return None
+        name = self.names[self.index]
+        return {
+            "items": [self.item(n) for n in self.names], "index": self.index, "name": name,
+            "kind": media_samples.SAMPLES[name].kind, "position": round(self.position(), 3),
+            "seconds": media_samples.SAMPLES[name].seconds, "paused": False, "panels": [1],
+            "fit": "cover", "loop": "all", "shuffle": False, "picture_s": 10,
+        }  # fmt: skip
+
+    def position(self) -> float:
+        """Where what plays stands: well into it (not its first frame), round and round."""
+        assert self.index is not None
+        seconds = media_samples.SAMPLES[self.names[self.index]].seconds
+        if not seconds:  # a picture
+            return 0.0
+        return (min(41.0, seconds * 0.2) + self.now() - self.began) % seconds
+
+    def state(self) -> dict[str, Any]:
+        library = [
+            {"name": name, "kind": sample.kind, "bytes": PLAYER_BYTES[sample.kind],
+             "length": sample.seconds, "size": [1920, 1080], "fps": sample.fps}
+            for name, sample in media_samples.SAMPLES.items()
+        ]  # fmt: skip
+        return {
+            "available": True, "folder": "Videos/Libre Panel", "library": library,
+            "playing": self.status(), "panels": [{"number": 1, "name": 'Turing 12.3"'}],
+            "ffmpeg": True, "fits": ["cover", "contain"], "loops": ["all", "one", "off"],
+        }  # fmt: skip
+
+    def answer(self, route: Any, request: Any) -> None:
+        if request.method == "POST":
+            body = json.loads(request.post_data or "{}")
+            action = body.get("action")
+            if action == "play":
+                self.index, self.began = (
+                    self.names.index(body.get("start") or self.names[0]),
+                    self.now(),
+                )
+            elif action in ("next", "previous") and self.index is not None:
+                step = 1 if action == "next" else -1
+                self.index, self.began = (self.index + step) % len(self.names), self.now()
+            elif action == "stop":
+                self.index = None
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(self.state()))
+
+    def jpeg(self, picture: Image.Image) -> bytes:
+        out = io.BytesIO()
+        picture.save(out, "JPEG", quality=92)
+        return out.getvalue()
+
+    def thumbnail(self, route: Any, request: Any) -> None:
+        query = _query(request.url)
+        width = int(query.get("w", "320"))
+        picture = media_samples.frame(query.get("name", ""), 6.0, (width, round(width * 9 / 16)))
+        route.fulfill(status=200, content_type="image/jpeg", body=self.jpeg(picture))
+
+    def live(self, route: Any, request: Any) -> None:
+        width = int(_query(request.url).get("w", "480"))
+        size = (width, round(width * PLAYER_PANEL[1] / PLAYER_PANEL[0]))
+        if self.index is None:
+            route.fulfill(status=404, body="")
+            return
+        name = self.names[self.index]
+        picture = media_samples.frame(name, self.position(), size)
+        route.fulfill(status=200, content_type="image/jpeg", body=self.jpeg(picture))
+
+    def before_shot(self) -> None:
+        """While something plays: the panel's next picture, for the clip's next picture."""
+        if self.index is None or self.camera is None:
+            return
+        try:
+            self.page.wait_for_function("window.__liveWaiting() > 0", timeout=3000, polling=10)
+        except Exception:  # the view asks no more (it stopped): the picture as it is
+            return
+        self.page.evaluate("window.__liveNext()")
+
+
+def player(camera: Camera) -> None:
+    """The Player: a video from the library on the panel, the next, an animated picture, and
+    back to the theme."""
+    page = camera.page
+    camera.hold(0.8)
+    tile = page.get_by_role("button", name="Play Night drive.mp4")
+    camera.click(*camera.point(tile), 0.9)
+    camera.watch(0.6)
+    camera.mark()
+    camera.watch(2.6)
+    following = page.get_by_role("button", name="The next")
+    camera.click(*camera.point(following), 0.8)
+    camera.watch(2.4)
+    camera.click(*camera.point(following), 0.4)
+    camera.watch(2.2)
+    camera.click(*camera.point(page.get_by_role("button", name="Stop: the theme again")), 0.6)
+    camera.hold(0.8)
+
+
 CLIPS: dict[str, AppClip] = {
     "app-look": AppClip(
         "the app: Look, a colour world for the whole screen, notices as a band, and one shown",
@@ -680,5 +853,10 @@ CLIPS: dict[str, AppClip] = {
         "the app: Settings, Sensors, a name of your own for the processor",
         7.5, settings_names, route="settings/sensors", ready="#hardware-cpu-row",
         cursor=(0.6, 0.78),
+    ),
+    "player": AppClip(
+        "the Player: a video from the library on the panel, the next one, and the theme again",
+        12.0, player, themes=("lumen",), route="player", ready=".player-grid img",
+        cursor=(0.55, 0.88), stage=PlayerStage,
     ),
 }  # fmt: skip

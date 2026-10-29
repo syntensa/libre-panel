@@ -3,12 +3,13 @@
     python tools/readme_media.py [OUT] [--only NAME ...] [--gif-only] [--list]
 
 Each clip is a named recipe: the panel in video mode (the real main loop, frame by frame on a
-clock of its own, so a clip is the same on every run) or the app in a browser (Playwright, a
-cursor drawn on it). For each, a GIF for the README and forums (960 px wide, 25 frames a
-second, under 4 MB, never over 8 MB), an MP4 and a WebM for the website's ``<video autoplay
-loop muted playsinline>`` (the GIF is its fallback) and a poster PNG. ``--gif-only`` makes only
-the GIFs. OUT is docs/media unless given; ``--list`` says what there is. Needs ffmpeg for the
-videos; without it Pillow writes the GIFs.
+clock of its own, so a clip is the same on every run), the app in a browser (Playwright, a
+cursor drawn on it), or a scene drawn round them (tools/media_scene.py: the README's top, the
+panel as a monitor below the desk's). For each, a GIF for the README and forums (960 px wide,
+25 frames a second, under 4 MB, never over 8 MB), an MP4 and a WebM for the website's ``<video
+autoplay loop muted playsinline>`` (the GIF is its fallback) and a poster PNG. ``--gif-only``
+makes only the GIFs. OUT is docs/media unless given; ``--list`` says what there is. Needs ffmpeg
+for the videos; without it Pillow writes the GIFs.
 
 Which theme a clip shows is a parameter: ``--theme video-mode=NAME`` (two names, comma between,
 for a clip that goes from one theme to another; an app clip opens the app with the theme). A
@@ -32,14 +33,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 import media_app  # noqa: E402
 import media_encode as encode  # noqa: E402
 import media_panel  # noqa: E402
+import media_scene  # noqa: E402
 
-Clip = media_panel.PanelClip | media_panel.PanelsClip | media_panel.StartClip | media_app.AppClip
+Clip = (
+    media_panel.PanelClip | media_panel.PanelsClip | media_panel.StartClip | media_app.AppClip
+    | media_scene.SceneClip
+)  # fmt: skip
 
 
 def clips() -> dict[str, Clip]:
     """Every recipe, by name."""
     return {**media_panel.CLIPS, **media_panel.PANELS_CLIPS, **media_panel.START_CLIPS,
-            **media_app.CLIPS}  # fmt: skip
+            **media_app.CLIPS, **media_scene.CLIPS}  # fmt: skip
 
 
 def parse_themes(given: list[str], known: dict[str, Clip]) -> dict[str, tuple[str, ...]]:
@@ -81,6 +86,8 @@ def record(
         return media_panel.record_start(name, clip, settings, folder, themes)
     if isinstance(clip, media_panel.PanelsClip):
         return media_panel.record_panels(name, clip, settings, folder, themes)
+    if isinstance(clip, media_scene.SceneClip):
+        return media_scene.record(name, clip, settings, folder, themes)
     module = media_panel if isinstance(clip, media_panel.PanelClip) else media_app
     return module.record(name, clip, settings, folder, themes)
 
