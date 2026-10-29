@@ -293,6 +293,18 @@ a:hover {
   }
 }
 
+/* six tabs, in German, beside the theme's name and its unsaved mark: closer still */
+@media (max-width: 1400px) {
+  .tab {
+    padding: 7px 6px;
+  }
+
+  /* the search field, giving way, keeps its glass rather than the hint of its keys */
+  .search-trigger.wide .kbd {
+    display: none;
+  }
+}
+
 .tab[aria-current="page"] {
   background: var(--surface-3);
   color: var(--text);
@@ -379,7 +391,7 @@ a:hover {
 
 .search-trigger.wide {
   width: 260px;
-  min-width: 104px;
+  min-width: 56px; /* its glass and a letter or two: the theme's name comes first */
   gap: 10px;
   font-size: 14px;
 }
