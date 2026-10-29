@@ -49,6 +49,15 @@
   the agenda and the network.
 
 **Better**
+- **Arena's frame rate graph shows every frame as measured** (on the 12.3" most of all). It drew
+  the reading of the last second, once a second, gliding from one to the next: soft hills, no
+  stutter between two readings, and a fill whose fade moved with the highest point of each new
+  piece of the curve. PresentMon, RTSS and MangoHud now give the frame rate finely
+  (`game.fps_trace`, 25 points a second, PresentMon's frames placed by their own times, not by
+  when its lines came); the graph draws those points a pixel apart, a dip for a frame that took
+  long, and shows them about a second and a half after they happened, so it moves on evenly
+  and its newest end is never a guess. Its range goes in steps of 30 fps and changes seldom;
+  the fill fades from the range's top.
 - **Modules go where you put them** (#33). A theme without a grid of its own (Lumen on the round
   480 × 480, say) gave a module from the library one of four places: the automatic grid has
   cells of half the short side, whose corners a round panel cuts off. Its first module now

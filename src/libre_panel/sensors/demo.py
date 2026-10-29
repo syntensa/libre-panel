@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import time
 from dataclasses import replace
@@ -11,7 +12,7 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
-from libre_panel.sensors.base import Reading, SensorProvider, Snapshot
+from libre_panel.sensors.base import TRACE_LAG_S, TRACE_RATE, Reading, SensorProvider, Snapshot
 from libre_panel.sensors.sky import sky_readings
 
 DEMO_PLACE = (50.0, 10.0)  # somewhere in the middle of Europe, for the sun's times
@@ -125,6 +126,9 @@ class DemoProvider(SensorProvider):
         out.update(sky_readings(t, *DEMO_PLACE))
         out.update(demo_media(t))
         out.update(demo_calendar(t))
+        out["game.fps_trace"] = Reading(
+            "game.fps_trace", demo_fps_trace(t), "fps", "Frame rate, 25 points a second"
+        )  # fmt: skip
         out["cpu.name"] = Reading("cpu.name", "8-Core Processor", "", "CPU")
         out["gpu.name"] = Reading("gpu.name", "Graphics Card", "", "GPU")
         out["mem.name"] = Reading("mem.name", "DDR5-5600 32 GB", "", "Memory")
@@ -133,6 +137,25 @@ class DemoProvider(SensorProvider):
                 out[key] = Reading(key, value, unit, label)
             out.update(demo_forecast(t))
         return out
+
+
+def demo_fps_trace(t: float, seconds: float = 5.0) -> str:
+    """The game's frame rate finely (``game.fps_trace``), as PresentMon's: 25 points a second
+    up to a quarter of a second before ``t``, around the demo's ``game.fps`` with the jitter
+    of real frames and now and then a frame that took long. Each point depends on its own time
+    only, so one reading's course goes on where the last one's ended."""
+    _label, _unit, base, amp, period = _WAVES["game.fps"]
+    count = round(seconds * TRACE_RATE)
+    last = round((t - TRACE_LAG_S) * TRACE_RATE)
+    points = []
+    for k in range(last - count + 1, last + 1):
+        at = k / TRACE_RATE
+        value = base + amp * math.sin(2 * math.pi * at / period)
+        value += 2.5 * math.sin(at * 7.3) * math.sin(at * 2.9) + 1.2 * math.sin(at * 23.0)
+        if k % 173 in (0, 1):  # a frame that took long, every seven seconds
+            value *= 0.62 if k % 173 == 0 else 0.84
+        points.append(round(value, 1))
+    return json.dumps(points, separators=(",", ":"))
 
 
 def demo_details(t: float, waves: dict[str, Reading]) -> dict[str, Reading]:

@@ -3132,7 +3132,9 @@
     "speed": "Vitesse de lecture",
     "order": "Ordre",
     "turn": "Minutes par carte",
-    "transition": "Transition"
+    "transition": "Transition",
+    "trace": "Tracé fin",
+    "range_step": "Plage par paliers"
   },
   "widgets": {
     "agent": "Signe IA",

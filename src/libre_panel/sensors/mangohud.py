@@ -136,7 +136,7 @@ class MangoHudProvider(SensorProvider):
         super().__init__(options)
         folder = self.options.get("folder")
         self.folder = Path(str(folder)).expanduser() if folder else None
-        self._counter = FrameCounter()
+        self._counter = FrameCounter(every_frame=False)  # (a frame every log_interval)
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None

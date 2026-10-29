@@ -3132,7 +3132,9 @@
     "speed": "Velocidad de reproducción",
     "order": "Orden",
     "turn": "Minutos por tarjeta",
-    "transition": "Transición"
+    "transition": "Transición",
+    "trace": "Curso fino",
+    "range_step": "Rango por pasos"
   },
   "widgets": {
     "agent": "Signo de IA",

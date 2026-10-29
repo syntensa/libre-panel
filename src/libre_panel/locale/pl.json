@@ -3132,7 +3132,9 @@
     "speed": "Szybkość odtwarzania",
     "order": "Kolejność",
     "turn": "Minuty na kartę",
-    "transition": "Przejście"
+    "transition": "Przejście",
+    "trace": "Dokładny przebieg",
+    "range_step": "Zakres w krokach"
   },
   "widgets": {
     "agent": "Znak AI",

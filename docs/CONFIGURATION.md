@@ -780,6 +780,7 @@ as that installation is
 | `game.frametime_peak` | the longest frame time since the last reading, in ms. A stutter of 60 ms between two readings shows in the next one even though the readings are a second apart. It is there all the time a game runs (0 when no frame came), so a graph of it never stops |
 | `game.limiter` | `cpu`, `gpu` or `cap`: who holds the frame rate down. It is judged from how long each side waits for the other, not from the load: the CPU if the GPU waits longer for it than it waits for the GPU, the GPU in the other case, and `cap` when neither waits much and both work much less than a frame takes (a frame rate limit, or vertical sync). Needs PresentMon 2 |
 | `game.app` | the program |
+| `game.fps_trace` | the frame rate finely, for a graph that shows every stutter: 25 points a second over the last 5 s, as a list of numbers in text, up to a quarter of a second before the reading. Each point is the rate of the frames of the tenth of a second up to it and the one under way then, so a frame that took long shows as a dip however short; the frames are placed by their own times, not by when PresentMon told them. Arena's frame rate graph draws it (a graph's `trace`, [Themes](THEMES.md)) |
 | `game.fps_avg`, `game.fps_1low`, `game.fps_01low` | what every frame of the round has come to so far: the mean frame rate (all the frames over the time they took), and the 1 % and 0.1 % lows as the frame rate at the 99th and the 99.9th percentile of the frame times (the frame time that 99 % and 99.9 % of the frames do not exceed) |
 | `game.frametime_avg`, `game.frametime_max` | the same round's mean frame time and its longest frame, in ms |
 
@@ -820,9 +821,9 @@ Libre Panel looks in the folder MangoHud.conf names (else the home folder), or i
 given in `[sensors.mangohud] folder = "..."`, for the newest log written in the last ten
 seconds. The source needs no entry in `providers`: on Linux it is there by itself and reads
 only while a theme shows `game.*`. `game.fps`, `game.frametime`, `game.low`,
-`game.frametime_peak`, `game.app` (the program, from the log's name) and the round's figures
-(`game.fps_1low` ...) mean what they mean above; the lows are those of MangoHud's samples (one
-every `log_interval` ms). There is no `game.limiter`.
+`game.frametime_peak`, `game.app` (the program, from the log's name), `game.fps_trace` and the
+round's figures (`game.fps_1low` ...) mean what they mean above; the lows and the fine rate are
+those of MangoHud's samples (one every `log_interval` ms). There is no `game.limiter`.
 
 On **Windows**, where [RivaTuner Statistics Server](https://www.guru3d.com/download/rtss-rivatuner-statistics-server-download/)
 runs anyway (alone, or with MSI Afterburner), its frame rates are an alternative to
@@ -830,7 +831,8 @@ PresentMon's: *Settings → Sensors → Game frame rate from RTSS* (`rtss` in `p
 by default. RTSS shares what it measures of the games it shows its overlay in, in a memory of
 its own (`RTSSSharedMemoryV2`); Libre Panel reads it ten times a second while a theme shows
 `game.*`, starts no program and needs no rights for it. The readings mean what PresentMon's
-do; RTSS shares the time of each game's last frame, so the lows are those of the samples, and
+do; RTSS shares the time of each game's last frame, so the lows and the fine rate
+(`game.fps_trace`) are those of the samples, and
 there is no `game.limiter` (nor the round report's share of the round the GPU, the CPU or a
 frame cap held it back): that needs what PresentMon sees of every frame. Sources are asked in
 their order: with PresentMon before it (as switching it on puts it), PresentMon's readings come

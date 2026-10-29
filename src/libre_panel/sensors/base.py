@@ -62,6 +62,13 @@ def wanted_keys() -> frozenset[str]:
     return frozenset().union(*list(_WANTED.values()))
 
 
+# A fine course of a reading (``game.fps_trace``): this many points a second (render.motion's
+# RATE, a pixel each on a graph), the last this long before the reading that brings it (later
+# ones may not be known yet: ``null`` at its end); a graph shows it later by about a reading
+TRACE_RATE = 25
+TRACE_LAG_S = 0.25
+
+
 # The seconds of the minute with their fraction (0 to 60), at the time of the frame, not
 # of a reading: a bar on it (0 to 60) runs once a minute, smoothly (Studio's seconds run)
 TIME_SECOND = "time.second"

@@ -173,7 +173,7 @@ class RTSSProvider(SensorProvider):
         super().__init__(options)
         self.mapping = str(self.options.get("mapping") or MAPPING)  # (another, for the tests)
         self._opener, self._clock = opener, clock
-        self._counter = FrameCounter()
+        self._counter = FrameCounter(every_frame=False)  # (samples of the last frame's time)
         # pid -> (time1, frame time) last read, and when they last changed (None: not seen yet)
         self._seen: dict[int, tuple[tuple[int, int], float | None]] = {}
         self._lock = threading.Lock()

@@ -3132,7 +3132,9 @@
     "speed": "播放速度",
     "order": "顺序",
     "turn": "每张卡片分钟数",
-    "transition": "过渡效果"
+    "transition": "过渡效果",
+    "trace": "精细曲线",
+    "range_step": "范围步长"
   },
   "widgets": {
     "agent": "AI 标志",

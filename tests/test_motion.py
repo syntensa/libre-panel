@@ -307,6 +307,113 @@ def test_a_graph_moves_on_with_a_gap_while_its_sensor_has_no_value():
     assert rows[40] < rows[190]  # 60 before, 30 after (higher up is a smaller y)
 
 
+# -- a fine course -----------------------------------------------------------------
+
+
+def course(values):
+    import json
+
+    return json.dumps(values)
+
+
+def fed(motion, key, values, end, now):
+    text = course(values)
+    motion.trace(key, text, tuple(values), end, now)
+
+
+def test_a_fine_course_stands_point_by_point_and_only_what_is_new_is_taken():
+    motion = Motion()
+    fed(motion, "t", [10.0, 20.0, 30.0, None], end=10.0, now=9.0)  # the last: not known yet
+    assert [motion.value("t", 9.88 + k / 25) for k in range(3)] == [10.0, 20.0, 30.0]
+    assert motion.value("t", 9.96 + 0.039) == 30.0  # (each until the next)
+    assert motion.fed["t"][1] == round(9.96 * 25)
+    made = motion.springs["t"].made
+    fed(motion, "t", [99.0, 40.0, 50.0], end=10.04, now=9.02)  # 9.96 again: kept as it was
+    assert motion.springs["t"].made == made + 2
+    assert [motion.value("t", 9.96 + k / 25) for k in range(3)] == [30.0, 40.0, 50.0]
+    fed(motion, "t", [99.0, 40.0, 50.0], end=10.04, now=9.04)  # the same course: nothing
+    assert motion.springs["t"].made == made + 2
+    fed(motion, "t", [1.0, None, 3.0], end=10.16, now=9.06)  # a gap in it stays a gap
+    assert motion.value("t", 10.12) is None and motion.value("t", 10.16) == 3.0
+    fed(motion, "t", [7.0, 8.0], end=20.0, now=19.0)  # after a while off the panel: anew
+    assert motion.springs["t"].made == made + 5 + 2 and motion.value("t", 19.98) == 7.0
+
+
+def test_a_fine_course_does_not_glide_with_its_readings():
+    motion = Motion()
+    renderer = video(Renderer(theme(graph(trace="t")), animate=True, motion=motion))
+    renderer.new_sample(100.0, 1.0)
+    text = course([40.0] * 125)
+    snapshot = Snapshot(readings={"v": Reading("v", 40.0), "t": Reading("t", text)})
+    renderer.render(snapshot, 100.0)
+    renderer.render(snapshot, 100.02)  # (the history's frame records it)
+    assert "t" in motion.fed and motion.springs["t"].pieces[-1][2] == 40.0  # no gap from it
+
+
+def square(t):
+    """30 and 70 by turns, 0.4 s each: a glide from reading to reading (a second apart) has
+    none of it."""
+    return 30.0 if math.floor(t * 2.5) % 2 == 0 else 70.0
+
+
+def traced(renderer, start, seconds, fps, value=square):
+    """Frames at ``fps``; a reading once a second with the course of the last five seconds
+    (25 points a second up to a quarter of a second before it), as PresentMon's."""
+    frames, readings = {}, []
+    text = None
+    for n in range(round(seconds * fps)):
+        now = start + n / fps
+        if n % fps == 0:
+            renderer.new_sample(now, 1.0)
+            end = round((now - 0.25) * 25)
+            text = course([value(k / 25) for k in range(end - 124, end + 1)])
+            readings.append(50.0)
+        snapshot = Snapshot(readings={"v": Reading("v", 50.0), "t": Reading("t", text)},
+                            history={"v": readings})  # fmt: skip
+        frames[round(now, 6)] = renderer.render(snapshot, now)[0]
+    return frames
+
+
+def test_a_graph_draws_its_fine_course_as_measured_and_moves_on_evenly():
+    """The course's points one by one, 25 a second: 0.4 s of 30, 0.4 s of 70, as 10 px each
+    way at 25 px a second; shown later than the reading by the time to the next one and a
+    little, its newest end is always one that came, and it moves on as a graph does, 25 px a
+    second."""
+    renderer = video(Renderer(theme(graph(trace="t", seconds=8, min=0, max=100)),
+                              animate=True))  # fmt: skip
+    frames = traced(renderer, 100.0, 12, 50)
+    rows = curve_rows(frames[111.0])
+    assert all(row is not None for row in rows[2:198])  # no flat end, no gap at the right
+    low, high = 60 - 1 - round(58 * 0.3), 60 - 1 - round(58 * 0.7)
+    levels = [row for row in rows[20:180]]
+    assert (
+        sum(abs(r - low) <= 2 for r in levels) > 50 and sum(abs(r - high) <= 2 for r in levels) > 50
+    )
+    later = curve_rows(frames[111.5])  # half a second on: 12.5 px further left
+    pairs = [(later[x], rows[x + 12]) for x in range(20, 170)]
+    assert sum(abs(a - b) <= 6 for a, b in pairs) > 0.85 * len(pairs)
+
+
+def test_without_its_fine_course_a_graph_draws_its_values_glide():
+    renderer = video(Renderer(theme(graph(trace="t")), animate=True))
+    run(renderer, 100.0, 3, 50)  # no "t" among the readings
+    assert "v" in renderer.motion.histories and "t" not in renderer.motion.fed
+
+
+def test_a_range_in_whole_steps_changes_seldom_and_its_top_starts_the_fade():
+    renderer = Renderer(theme(graph(min=None, max=None, range_step=30)), animate=False)
+    widget = renderer.widgets[0]
+    assert renderer._glided_bounds(widget, [121.0, 133.0, 147.5], 1.0)[0] == (90.0, 180.0)
+    assert renderer._glided_bounds(widget, [8.0, 11.0], 2.0)[0] == (0.0, 30.0)  # never below 0
+    assert renderer._glided_bounds(widget, [-12.0, 11.0], 3.0)[0] == (-30.0, 30.0)
+    first, _ = renderer._range_rows(widget, 2)
+    assert renderer._fade_top(widget, [121.0], (90.0, 180.0), 2) == int(first)
+    plain = Renderer(theme(graph(min=None, max=None)), animate=False)
+    assert plain._glided_bounds(plain.widgets[0], [121.0, 147.5], 1.0)[0] == pytest.approx(
+        (118.35, 150.15)
+    )
+
+
 # -- warming up the next theme ---------------------------------------------------
 
 PREPARED = """

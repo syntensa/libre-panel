@@ -202,6 +202,12 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "end_dot": ("number", 0),
         "smooth": ("bool", True),
         "per_frame": ("bool", False),  # older themes: a point a pixel apart (seconds = w / 25)
+        # video mode: a reading with the value's course finely ("game.fps_trace", 25 points a
+        # second), drawn instead of the value's glide where it comes: every dip as measured
+        "trace": ("string", ""),
+        # an automatic range (min or max null) in whole steps of this (0: as the values are):
+        # it changes seldom, and the fill's fade starts at its top
+        "range_step": ("number", 0),
         "line_width": ("int", 2),
         "grid": ("int", 0),
         "grid_color": ("color?", "#ffffff1f"),

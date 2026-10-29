@@ -10,6 +10,11 @@ engine per process for the same reason). Editor previews get their own.
 Everything here runs on the planned time of the frame being drawn, never the
 clock: the same look at 25, 30 and 50 fps, and no stutter from a frame that
 started late.
+
+A reading that brings its course finely (``game.fps_trace``, 25 points a second) does not
+glide: its points stand in its spring each until the next (:meth:`Motion.trace`), so a
+graph of it draws what was measured, every dip, instead of a glide from one reading to the
+next.
 """
 
 from __future__ import annotations
@@ -144,6 +149,7 @@ class Motion:
         self.springs: dict[str, Spring] = {}
         self.fades: dict[Any, tuple[float, float]] = {}  # key -> (step, when)
         self.histories: dict[str, History] = {}
+        self.fed: dict[str, tuple[str, int]] = {}  # a fine course: the last taken, its last point
         self.previous: float | None = None  # the frame before this one
         self.now: float | None = None  # the frame being drawn
         # The panel light's sweeps and the moments that start them (render.look
@@ -165,9 +171,11 @@ class Motion:
             history = self.histories[key]
             if now - history.used > KEEP_S:
                 del self.histories[key]
+                self.fed.pop(key, None)
                 continue
-            reading = readings.get(key)
-            self.glide(key, number(getattr(reading, "value", None)), now, glide, lead)
+            if key not in self.fed:  # (a fine course stands in its spring: no glide)
+                reading = readings.get(key)
+                self.glide(key, number(getattr(reading, "value", None)), now, glide, lead)
             self._record(key, history, last)
         for key, spring in list(self.springs.items()):  # old pieces, and values long gone
             if spring.seen is not None and now - spring.seen > KEEP_S:
@@ -222,6 +230,41 @@ class Motion:
                 spring.add(start, target, state[0] - target, state[1], omega)
         spring.target, spring.seen = target, now
         return spring.state(now)
+
+    def trace(self, key: str, text: str, course: tuple[float | None, ...], end: float,
+              now: float) -> None:  # fmt: skip
+        """A fine course of ``key`` (``text``, read as ``course``: ``RATE`` points a second,
+        the last at ``end``; ``None`` at its end are points not known yet): the points after
+        the last one taken stand in ``key``'s spring, each until the next, a None as a gap.
+        A course taken already is not looked at again; one that comes after ``key`` was off
+        the panel for a while begins it anew."""
+        spring = self.springs.get(key)
+        if spring is None:
+            spring = self.springs[key] = Spring()
+        fed = self.fed.get(key)
+        fresh = self._fresh(spring.seen, now)
+        spring.seen = now
+        if fed is not None and fed[0] == text and not fresh:
+            return
+        if fresh:
+            spring.pieces.clear()
+            self.fed.pop(key, None)
+            fed = None
+        known = len(course)
+        while known and course[known - 1] is None:
+            known -= 1
+        newest = fed[1] if fed is not None else None
+        base = round(end * RATE) - len(course) + 1  # the grid number of the first point
+        for i in range(known):
+            k = base + i
+            if newest is not None and k <= newest:
+                continue
+            spring.add(k / RATE, course[i])
+            newest = k
+        if newest is None:  # nothing known yet
+            return
+        spring.target = course[known - 1] if known else spring.target
+        self.fed[key] = (text, newest)
 
     def value(self, key: str, t: float) -> float | None:
         """The gliding value of ``key`` at ``t`` (None if it was not drawn then)."""
@@ -298,6 +341,7 @@ class Motion:
             twin.pieces, twin.target = list(spring.pieces), spring.target
             twin.seen, twin.made = spring.seen, spring.made
         other.fades = dict(self.fades)
+        other.fed = dict(self.fed)
         for key, history in self.histories.items():
             twin = other.histories[key] = History(history.points.maxlen)
             twin.points.extend(history.points)
@@ -312,6 +356,8 @@ class Motion:
                 self.histories[key] = history
                 if key not in self.springs and key in other.springs:
                     self.springs[key] = other.springs[key]
+                    if key in other.fed:
+                        self.fed[key] = other.fed[key]
 
 
 def _replay(readings: list[float], last_at: float, interval: float, glide: float) -> Spring:

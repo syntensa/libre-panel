@@ -45,7 +45,7 @@ from libre_panel.render.formatting import FormatError, auto_format, safe_format
 from libre_panel.render.kept import MB, Kept, cached, size_of
 from libre_panel.render.motion import MAX_POINTS, RATE, History, Motion, Spring, grid
 from libre_panel.render.motion import number as motion_number
-from libre_panel.sensors.base import Snapshot, want
+from libre_panel.sensors.base import TRACE_LAG_S, Snapshot, want
 from libre_panel.theme.model import COVER_COLOR, SWITCH, Theme, ThemeError, resolve_asset
 from libre_panel.theme.modules import SLOT_KINDS, slot_cards
 from libre_panel.theme.modules import expand as expand_modules
@@ -656,6 +656,8 @@ def _reads(widgets: list[dict[str, Any]]) -> set[str]:
             keys.add(widget["sensor"])
         if widget.get("mark"):
             keys.add(widget["mark"])
+        if widget.get("trace"):  # a graph's fine course of its value
+            keys.add(widget["trace"])
         for need in (widget.get("needs") or "").split(","):
             need = need_key(need)
             if need and not need.startswith(SWITCH):  # (a switch is the theme's, no sensor)
@@ -3575,6 +3577,8 @@ class Renderer:
         widget's glow around it, where the line ends: at the right edge, at the newest value.
         Drawn in quarter pixels, as SPUR II draws it, so it glides with the value. None where
         the line has no end (too few points, no value)."""
+        if self.continuous:  # (where it draws its fine course, the dot ends that)
+            widget = self._traced(widget, snapshot)[0]
         x, y, w = widget["x"], widget["y"], widget["w"]
         key = widget["sensor"]
         if self.continuous:  # the curve is drawn from the gliding value: so is its end
@@ -3699,6 +3703,13 @@ class Renderer:
             return (lo, hi), False
         room = (hi - lo) * self.RANGE_ROOM
         want = (lo if fixed_lo else lo - room, hi if fixed_hi else hi + room)
+        step = widget.get("range_step") or 0
+        if step > 0:  # whole steps: it changes seldom, and then by a step
+            down = math.floor(want[0] / step) * step
+            if lo >= 0:  # (no room below nothing: a frame rate is never less than 0)
+                down = max(0.0, down)
+            up = max(down + step, math.ceil(want[1] / step) * step)
+            want = (want[0] if fixed_lo else down, want[1] if fixed_hi else up)
         state = self._ranges.get(widget["id"])
         if state is None or now < state.at or not self.animate:  # (still: the values, roomy)
             self._ranges[widget["id"]] = _Range(want, now, (lo, hi))
@@ -3798,23 +3809,53 @@ class Renderer:
             shadow = 3 * widget.get("shadow_blur", 6) + abs(widget.get("shadow_offset", 3))
         return max(glow, shadow) + widget["line_width"] + 2
 
+    # A graph with a ``trace`` (the game's frame rate: ``game.fps_trace``, 25 points a second)
+    # draws that course instead of its value's glide, as it was measured: every dip, no glide
+    # between readings. Each reading brings it up to a moment before it; shown this much
+    # later than the reading's time (and the time to the next), the curve's newest point is
+    # always one that came, and it moves on evenly.
+    TRACE_MARGIN_S = 0.35
+
+    def _traced(
+        self, widget: dict[str, Any], snapshot: Snapshot
+    ) -> tuple[dict[str, Any], tuple[str, tuple[float | None, ...]] | None]:
+        """The graph as it draws now: with its ``trace``'s key as its sensor where that has a
+        course (and the course, as text and as numbers); else as it is (and None)."""
+        trace = widget.get("trace")
+        value = snapshot.value(trace) if trace else None
+        course = course_of(value)
+        if course is None:
+            return widget, None
+        return {**widget, "sensor": trace, "\0value": widget["sensor"]}, (value, course)
+
+    def _trace_delay(self) -> float:
+        """How much later than its time a fine course is shown (see ``TRACE_MARGIN_S``)."""
+        return TRACE_LAG_S + self.sample[1] + self.TRACE_MARGIN_S
+
     def _timeline(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
+        widget, fine = self._traced(widget, snapshot)
         wid, key, w, h = widget["id"], widget["sensor"], widget["w"], widget["h"]
         s = self.STRIP_SCALE
         glide = self._glide_s()
-        self.motion.glide(key, motion_number(snapshot.value(key)), now, glide, self._lead())
+        readings, last_at = snapshot.history.get(key, []), self.sample[0]
+        if fine is not None:  # (a new history: the value's glide before the course came)
+            delay = self._trace_delay()
+            self.motion.trace(key, fine[0], fine[1], self.sample[0] - TRACE_LAG_S + delay, now)
+            readings, last_at = snapshot.history.get(widget["\0value"], []), last_at + delay
+        else:
+            self.motion.glide(key, motion_number(snapshot.value(key)), now, glide, self._lead())
         span = self._graph_seconds(widget) * RATE  # points across the window
         per_point = (w * s - 1) / span  # their distance, in pixels at ``s``
         every = max(1, int(s / per_point))  # long windows: about a point per pixel
         margin = math.ceil(s * (self._pad(widget) + self._reach(widget) + 1) / per_point)
         history = self.motion.history(
-            key, math.ceil(span) + margin + 2 * every, now,
-            snapshot.history.get(key, []), self.sample[0], self.sample[1], glide,
+            key, math.ceil(span) + margin + 2 * every, now, readings, last_at, self.sample[1],
+            glide,
         )  # fmt: skip
         self.moving = True
         strips = self._strips.get(wid)
-        if strips is None or strips.per_point != per_point:  # new, or another window
-            strips = self._strips[wid] = _Strips(per_point)
+        if strips is None or strips.per_point != per_point or strips.key != key:
+            strips = self._strips[wid] = _Strips(per_point, key)  # new, or another window
         strips.drawn = now
         strips.collect()
         # The window's left edge at ``s``, point k sitting at k * per_point on
@@ -4099,10 +4140,13 @@ class Renderer:
     def _fade_top(
         self, widget: dict[str, Any], numbers: list[float], bounds: tuple[float, float], s: int
     ) -> int:
-        """Where a strip's fill starts to fade: its highest point."""
+        """Where a strip's fill starts to fade: its highest point; for a range in whole steps
+        the range's top, which stays where the peak would move from strip to strip."""
+        first, last = self._range_rows(widget, s)
+        if widget.get("range_step"):
+            return int(first)
         if not numbers:
             return 0
-        first, last = self._range_rows(widget, s)
         scale = widget.get("scale", "linear")
         highest = max(_fraction(v, *bounds, scale) for v in numbers)
         return int(first + (last - first) * (1 - highest))
@@ -4170,6 +4214,8 @@ class Renderer:
             solid = min(1.0, max(0.0, widget.get("fill_alpha", 0)))
             if widget["fill_fade"]:
                 peak = round(255 * solid) if solid else 115
+                if top is None and widget.get("range_step"):  # the range's top (_fade_top)
+                    top = int(first)
                 if top is None:  # the peak, counted from where the fill starts
                     ys = [py for run in runs for _, py in run]
                     top = int(first + last - max(ys) if down else min(ys))
@@ -4323,8 +4369,9 @@ class _Range:
 class _Strips:
     """A graph's strip on show and the one being drawn."""
 
-    def __init__(self, per_point: float) -> None:
+    def __init__(self, per_point: float, key: str = "") -> None:
         self.per_point = per_point
+        self.key = key  # the sensor whose course it draws (a graph's value, or its trace)
         self.ready: _Strip | None = None
         self.building: Future | None = None
         self.asked = -math.inf

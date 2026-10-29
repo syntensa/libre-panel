@@ -47,6 +47,67 @@ def play(counter, app, frames, ms, start=100.0, waits=None):
     return start + frames * ms / 1000
 
 
+# -- the frame rate finely ----------------------------------------------------------------------
+
+
+def numbers(text):
+    import json
+
+    return json.loads(text)
+
+
+def test_the_fine_frame_rate_has_25_points_a_second_placed_by_the_frames_own_times():
+    """PresentMon's lines come in bunches; each frame is placed by the sum of the frame times
+    before it, from the frame that came the soonest: a steady 100 fps is 100 at every point,
+    not a bunch's worth now and nothing then."""
+    counter = FrameCounter()
+    for i in range(600):  # 6 s of frames of 10 ms, each bunch of 20 told at its end
+        shown = 100.0 + (i + 1) * 0.01
+        told = 100.0 + 0.2 * -(-(i + 1) // 20)
+        counter.add("Game.exe", 10.0, told + (0.03 if i % 40 > 20 else 0.0))
+        assert shown <= told + 0.03 + 1e-9
+    points = numbers(counter.trace("Game.exe", 106.0))
+    assert len(points) == round(presentmon.TRACE_S * presentmon.TRACE_RATE) == 125
+    known = [p for p in points if p is not None]
+    assert len(known) >= 120 and all(abs(p - 100.0) <= 0.5 for p in known), known
+    assert counter.readings(106.0)["game.fps_trace"].value == counter.trace("Game.exe", 106.0)
+
+
+def test_a_frame_that_took_long_shows_as_a_dip_however_short():
+    counter = FrameCounter()
+    end = play(counter, "Game.exe", 300, 10.0)  # 3 s at 100 fps
+    counter.add("Game.exe", 60.0, end + 0.06)  # one frame of 60 ms
+    play(counter, "Game.exe", 300, 10.0, start=end + 0.06)
+    points = numbers(counter.trace("Game.exe", end + 3.0))
+    dips = [p for p in points if p is not None and p < 60]
+    assert dips and 45 < min(dips) < 60  # (with the frames of the tenth of a second before it)
+    assert sum(1 for p in points if p is not None and p < 95) <= 5  # a dip, not a valley
+
+
+def test_the_fine_rate_is_unknown_before_the_first_frame_and_where_the_next_has_not_come():
+    counter = FrameCounter()
+    end = play(counter, "Game.exe", 100, 10.0, start=100.0)  # 1 s of frames
+    points = numbers(counter.trace("Game.exe", end + presentmon.TRACE_LAG_S))
+    assert points[:90] == [None] * 90  # 5 s back: the game began a second ago
+    assert all(p == 100.0 for p in points[-24:-1]), points[-26:]
+    # half a second on without a frame: the frame under way then has not come, not known yet
+    later = numbers(counter.trace("Game.exe", end + 0.5 + presentmon.TRACE_LAG_S))
+    assert later[-12:] == [None] * 12 and later[-14] == 100.0
+
+
+def test_samples_hold_between_them_and_are_placed_when_they_came():
+    """RTSS and MangoHud give the time of a frame now and then: each holds until the next."""
+    counter = FrameCounter(every_frame=False)
+    for n in range(50):  # five seconds, a sample every tenth of a second
+        counter.add("Game.exe", 8.0 if n < 25 else 16.0, 100.0 + n / 10)
+    points = numbers(counter.trace("Game.exe", 105.0))
+    known = [p for p in points if p is not None]
+    assert known[0] == 125.0 and known[-1] == 62.5
+    assert set(known) <= {125.0, 62.5, round(1000 * 2 / 24, 1), round(1000 * 3 / 40, 1),
+                          round(1000 * 3 / 32, 1), round(1000 * 3 / 40, 1)}  # fmt: skip
+    assert None not in points[points.index(125.0) :]  # held: no gap between two samples
+
+
 def test_the_peak_is_the_longest_frame_since_the_last_readings():
     counter = FrameCounter()
     end = play(counter, "Game.exe", 100, 8.0)

@@ -3132,7 +3132,9 @@
     "speed": "再生速度",
     "order": "順序",
     "turn": "カードごとの分数",
-    "transition": "切り替え効果"
+    "transition": "切り替え効果",
+    "trace": "細かな推移",
+    "range_step": "範囲の刻み"
   },
   "widgets": {
     "agent": "AIマーク",

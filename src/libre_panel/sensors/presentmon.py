@@ -28,6 +28,14 @@ down, judged from how long each waits for the other) and ``game.app`` (the
 program). The peak is there all the time a game runs, 0 when no frame came, so
 a graph of it never stops.
 
+And the frame rate finely, for a graph that shows every stutter (``game.fps_trace``): 25
+points a second over the last :data:`TRACE_S` seconds, as a list of numbers in text, ending
+:data:`TRACE_LAG_S` before the reading. Each point is the rate of the frames of the tenth of
+a second up to it and the one under way then, so a frame that took long shows as a dip
+however short. The frames are placed by their own times (each one's time from the one
+before), not by when PresentMon's lines came: those come in bunches. A point whose frame
+under way has not come yet is ``null`` at the end: not known yet, the next reading has it.
+
 And what every frame of the round has come to (``FrameTimes``): ``game.fps_avg``,
 ``game.fps_1low`` and ``game.fps_01low`` (the frame rate at the 99th and the 99.9th
 percentile of the frame times), ``game.frametime_avg`` and ``game.frametime_max`` (ms). A
@@ -45,6 +53,7 @@ from __future__ import annotations
 import collections
 import csv
 import functools
+import json
 import logging
 import statistics
 import subprocess
@@ -58,7 +67,7 @@ from pathlib import Path
 from typing import Any
 
 from libre_panel import bundled, rights, winsession
-from libre_panel.sensors.base import Reading, SensorProvider, wanted
+from libre_panel.sensors.base import TRACE_LAG_S, TRACE_RATE, Reading, SensorProvider, wanted
 
 log = logging.getLogger(__name__)
 
@@ -68,6 +77,10 @@ LOWS_WINDOW = 30.0  # seconds the 1% lows are taken over
 FINE_MS = 100.0  # a round's frame times up to this are counted in steps of 0.01 ms, longer of 1 ms
 ROUND_EVERY_S = 1.0  # what a round's frames come to is worked out anew at most this often
 HOLD_SECONDS = 3.0  # with no game found for us: the peak goes on this long after the last frame
+TRACE_S = 5.0  # seconds of the fine frame rate in each reading (a few readings' worth)
+TRACE_WINDOW_S = 0.1  # a point is the rate of the frames of this long up to it ...
+SAMPLED_WINDOW_S = 0.3  # ... of the samples of this long, where they are samples (RTSS's)
+TRACE_SLACK_S = 0.5  # a frame placed this much earlier than it came: placed anew from it
 IGNORED = {
     "dwm.exe", "explorer.exe", "<unknown>", "steamwebhelper.exe", "discord.exe",
     "nvidia overlay.exe", "gamebar.exe", "librepanel.exe", "libre-panel.exe",
@@ -221,8 +234,15 @@ class FrameCounter:
     its menu is still the same round), and ends when another program, or none, is.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, every_frame: bool = True) -> None:
+        # every frame (PresentMon's), or samples of the frame time (RTSS's, MangoHud's): those
+        # are placed when they came, and between them the last one holds
+        self.every_frame = every_frame
         self._frames: dict[str, deque[Frame]] = {}  # app -> frames of the last LOWS_WINDOW
+        # app -> (when it was shown, how long it took) of the last TRACE_S and a bit, the
+        # sum of its frame times so far, and the clock's time at that sum's 0
+        self._shown: dict[str, deque[tuple[float, float]]] = {}
+        self._sums: dict[str, tuple[float, float]] = {}
         self._peaks: dict[str, float] = {}  # app -> longest frame since the last readings()
         self._rounds: dict[str, FrameTimes] = {}  # app -> every frame of its round
         self.target: str | None = None
@@ -247,6 +267,26 @@ class FrameCounter:
         self._rounds.setdefault(app, FrameTimes()).add(ms)
         while frames and at - frames[0][0] > LOWS_WINDOW:
             frames.popleft()
+        shown = self._shown.setdefault(app, deque())
+        placed = self._placed(app, ms, at)
+        shown.append((max(placed, shown[-1][0]) if shown else placed, ms))  # (in their order)
+        while shown and shown[-1][0] - shown[0][0] > TRACE_S + 1.0:
+            shown.popleft()
+
+    def _placed(self, app: str, ms: float, at: float) -> float:
+        """When a frame that came at ``at`` was shown, on the clock of ``at``. Every frame:
+        the sum of the frame times so far, from the moment that fits the frame that came the
+        soonest after it was shown (lines come in bunches, never before their frame); it is
+        placed anew where a frame comes much later than it would be placed (frames missed, a
+        pause). Samples: when they came."""
+        if not self.every_frame:
+            return at
+        total, zero = self._sums.get(app, (0.0, at))
+        total += ms / 1000
+        if at - total < zero or at - (zero + total) > TRACE_SLACK_S:
+            zero = at - total
+        self._sums[app] = (total, zero)
+        return zero + total
 
     def readings(self, now: float) -> dict[str, Reading]:
         """What the frames say at ``now``. Call it once per reading of the sensors: the
@@ -281,6 +321,8 @@ class FrameCounter:
             if not frames:
                 del self._frames[app]
                 self._peaks.pop(app, None)
+                self._shown.pop(app, None)
+                self._sums.pop(app, None)
                 if app.lower() != self.target:  # (the game's round goes on while it is the game)
                     self._rounds.pop(app, None)
                 continue
@@ -313,6 +355,11 @@ class FrameCounter:
             ),  # fmt: skip
             "game.app": Reading("game.app", name, "", "Game"),
         }
+        trace = self.trace(app, now)
+        if trace is not None:
+            out["game.fps_trace"] = Reading(
+                "game.fps_trace", trace, "fps", "Frame rate, 25 points a second"
+            )  # fmt: skip
         limiter = limited_by([w for _at, _ms, w in recent if w is not None], mean)
         if limiter:
             out["game.limiter"] = Reading("game.limiter", limiter, "", "Limited by")
@@ -323,6 +370,42 @@ class FrameCounter:
             key = f"game.{name}"
             out[key] = Reading(key, round(value, 1 if unit == "fps" else 2), unit, label)
         return out
+
+    def trace(self, app: str, now: float) -> str | None:
+        """``app``'s frame rate finely (``game.fps_trace``): :data:`TRACE_RATE` points a second
+        over the last :data:`TRACE_S`, the last :data:`TRACE_LAG_S` before ``now``, as a list
+        of numbers in text: ``null`` before its first frame, and at the end where the frame
+        under way has not come yet (the next reading has it); None without frames."""
+        shown = list(self._shown.get(app) or ())
+        if not shown:
+            return None
+        count = round(TRACE_S * TRACE_RATE)
+        end = now - TRACE_LAG_S
+        window = TRACE_WINDOW_S if self.every_frame else SAMPLED_WINDOW_S
+        points: list[float | None] = []
+        first = 0  # the first frame after the window's start
+        for k in range(count):
+            at = end - (count - 1 - k) / TRACE_RATE
+            while first < len(shown) and shown[first][0] <= at - window:
+                first += 1
+            last = first  # the first frame after ``at``
+            total = 0.0
+            while last < len(shown) and shown[last][0] <= at:
+                total += shown[last][1]
+                last += 1
+            frames = last - first
+            if self.every_frame:
+                if last == len(shown):  # the frame under way then has not come yet
+                    break
+                if not last and at <= shown[0][0] - shown[0][1] / 1000:  # before the first
+                    points.append(None)
+                    continue
+                total, frames = total + shown[last][1], frames + 1
+            elif not frames and first:  # between two samples the last one holds
+                total, frames = shown[first - 1][1], 1
+            points.append(round(1000 * frames / total, 1) if frames and total > 0 else None)
+        points += [None] * (count - len(points))  # (not known yet)
+        return json.dumps(points, separators=(",", ":"))
 
 
 def limited_by(waits: list[Waits], mean: float) -> str | None:

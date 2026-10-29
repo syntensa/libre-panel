@@ -3132,7 +3132,9 @@
     "speed": "Wiedergabetempo",
     "order": "Reihenfolge",
     "turn": "Minuten je Karte",
-    "transition": "Übergang"
+    "transition": "Übergang",
+    "trace": "Feiner Verlauf",
+    "range_step": "Bereich in Schritten"
   },
   "widgets": {
     "agent": "Agenten­zeichen",
