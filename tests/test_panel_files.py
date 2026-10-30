@@ -366,7 +366,8 @@ def test_the_clip_is_made_in_the_range_the_panel_shows(monkeypatch, model, video
     made = []
     monkeypatch.setattr(F, "clip_h264", lambda found, ffmpeg, **how: made.append(how) or b"c")
     found = get_model(model)
-    jobs(FakePanel(), found).write_clip(50, found, design="aurora", video_range=video_range)
+    screen = F.StartScreen(opener=lambda asked: (FakePanel(), found), ffmpeg=lambda: "ffmpeg")
+    screen.write_clip(50, found, design="aurora", video_range=video_range)  # (no ffmpeg needed)
     assert made == [{"orientation": "landscape", "design": "aurora", "full": full}]
 
 
