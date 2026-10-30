@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.7.9 — 2026-10-30
+
+The panel's own start screen comes in seven looks: Libre Panel's own, Aurora, Pulse, Circuit,
+Night, Levels and Dark, for every TURZX USB panel's size, round and upright, each a boot logo and
+a standby clip to choose on the card. And they look as they should on the 12.3": no bands in
+their gradients, no blocks round them, and black where they are black.
+
+![The 9.2-inch panel's own screens: the boot logo with the Libre Panel mark and name, the standby clip's light running out from the middle, then the clips of the other looks: an aurora, a heartbeat, traces into a chip, a night sky with the moon, an equaliser's bars, and a faint mark on black](https://raw.githubusercontent.com/syntensa/libre-panel/v0.7.9/docs/media/start-screen.gif)
 
 **New**
 - **The panel's start screen in seven looks** (*Settings → Panel → Start screen*). The boot
