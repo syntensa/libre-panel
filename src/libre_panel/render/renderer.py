@@ -106,10 +106,13 @@ class _Builder:
 
     One thread, so fonts (FreeType faces are not thread-safe) are never used
     twice at once; a daemon, so it can never keep the program alive. The graphs'
-    strips, which draw no text, have one of their own.
+    strips, which draw no text, have one of their own. ``gate`` runs before each
+    job: it waits for the gap between two frames (:meth:`Renderer._wait_for_gap`).
     """
 
-    def __init__(self, name: str = "render-builder") -> None:
+    def __init__(self, name: str = "render-builder",
+                 gate: Callable[[], Any] | None = None) -> None:  # fmt: skip
+        self._gate = gate
         self._jobs: queue.Queue[tuple[Future, Callable[[], Any]] | None] = queue.Queue()
         self._thread = threading.Thread(target=self._work, name=name, daemon=True)
         self._thread.start()
@@ -121,6 +124,8 @@ class _Builder:
 
     def _work(self) -> None:
         while (item := self._jobs.get()) is not None:
+            if self._gate is not None:
+                self._gate()
             future, job = item
             try:
                 future.set_result(job())
@@ -791,6 +796,12 @@ class Renderer:
         # changed piece is built in a helper thread while frames keep going out
         # with the previous piece; the change shows a frame or two later.
         self.background_builds = False
+        # ... and each of them waits for the gap between two frames first (MainLoop gives it
+        # that wait in video mode, at most a little while): a new reading every second set the
+        # rings, the lists and the texts going at once, and the helper threads, building them
+        # beside the frame under way, held it up (Arena on the 12.3": a frame of 45 to 60 ms
+        # every second, the graph stood and jumped)
+        self.between_frames: Callable[[], Any] | None = None
         self._builder: _Builder | None = None
         # the graphs' strips in a thread of their own (they draw no text): a big one takes
         # tens of milliseconds, and a ring's next picture waited behind it, so the ring
@@ -1342,7 +1353,7 @@ class Renderer:
             if built_for == content:
                 return hit[1]
         if self._builder is None:
-            self._builder = _Builder()
+            self._builder = _Builder(gate=self._gate())
 
         def job() -> Piece | None:
             built = build()
@@ -1749,8 +1760,22 @@ class Renderer:
 
     def _submit(self, job: Callable[[], Any]) -> Future:
         if self._builder is None:
-            self._builder = _Builder()
+            self._builder = _Builder(gate=self._gate())
         return self._builder.submit(job)
+
+    def _gate(self) -> Callable[[], None]:
+        """What the helper threads run before each job: :attr:`between_frames`, while the
+        renderer lives (they must not keep it alive)."""
+        ref = weakref.ref(self)
+
+        def gate() -> None:
+            renderer = ref()
+            wait = renderer.between_frames if renderer is not None else None
+            del renderer
+            if wait is not None:
+                wait()
+
+        return gate
 
     def _holds(self, need: str, snapshot: Snapshot) -> bool:
         """Whether a condition of ``needs`` holds (need_holds); one on a switch of the theme
@@ -3885,7 +3910,7 @@ class Renderer:
             job = self._strip_job(widget, history, now, per_point, every, margin, parts)
             if self.background_builds:
                 if self._strip_builder is None:
-                    self._strip_builder = _Builder("render-strips")
+                    self._strip_builder = _Builder("render-strips", self._gate())
                 strips.building = self._strip_builder.submit(job)
             else:
                 strip = strips.ready = job()

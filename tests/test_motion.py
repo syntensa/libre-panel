@@ -601,6 +601,9 @@ def test_a_theme_comes_on_warmed_up(monkeypatch):
 class Instant:
     """The helper thread, run at once: frames that do not depend on timing."""
 
+    def __init__(self, name="render-builder", gate=None):
+        pass
+
     def submit(self, job):
         from concurrent.futures import Future
 
@@ -720,3 +723,30 @@ def test_lumen_moves_on_every_frame_in_video_mode(monkeypatch):
     assert len(graph) >= 0.25 * len(late)  # 60 s across 470 px: a half pixel every 3 frames
     assert len([n for n in changes(frames, "fan") if n in late]) >= 0.8 * len(late)  # it turns
     assert len([n for n in changes(frames, "ring") if n % every]) >= 20
+
+
+def test_in_video_mode_the_helper_threads_wait_for_the_gap_between_frames():
+    """The main loop gives its renderer the wait for the gap between two frames in video mode
+    (its ``idle``: set once a frame is out), at most GAP_WAIT_S; with still frames none."""
+    import time
+
+    from libre_panel import app
+
+    clock = Clock(1000.0)
+    loop = loop_for("pico", clock)
+    try:
+        loop.step(clock.now)
+        assert loop.renderer.between_frames is loop.between_frames
+        loop.idle.set()  # between two frames: at once
+        began = time.perf_counter()
+        loop.between_frames()
+        assert time.perf_counter() - began < 0.02
+        loop.idle.clear()  # a frame under way: at most a little while
+        began = time.perf_counter()
+        loop.between_frames()
+        assert app.GAP_WAIT_S * 0.8 <= time.perf_counter() - began < app.GAP_WAIT_S + 0.5
+        loop.display.streaming = loop.display.slow = False  # still frames, whole
+        loop.step(clock.now + 0.02)
+        assert loop.renderer.between_frames is None
+    finally:
+        loop.close()

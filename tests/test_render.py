@@ -596,3 +596,39 @@ def test_a_picture_a_widget_shows_stays_known_so_that_no_other_picture_takes_its
     blue = Image.new("RGBA", (8, 8), (0, 0, 255, 255))
     frame, _ = renderer.render(Snapshot(images={"media.cover": blue}))
     assert frame.getpixel((20, 20))[:3] == (0, 0, 255)  # a new picture is a new picture
+
+
+def test_a_helper_thread_builds_in_the_gap_between_two_frames():
+    """In video mode each helper job waits for the gap between two frames first
+    (Renderer.between_frames): a new reading set the rings, the lists and the texts going at
+    once, and the helper threads, building them beside the frame under way, held it up."""
+    import gc
+    import threading
+
+    from libre_panel.render.renderer import _Builder
+
+    gap, order = threading.Event(), []
+
+    def wait():
+        order.append("waits")
+        gap.wait(5)
+
+    builder = _Builder("test-builder", wait)
+    try:
+        built = builder.submit(lambda: order.append("builds") or 1)
+        assert not built.done()  # a frame is under way: it waits
+        gap.set()  # the frame is out
+        assert built.result(5) == 1 and order == ["waits", "builds"]
+    finally:
+        builder.close()
+    renderer = Renderer(load_theme(find_theme("pico")))
+    gate = renderer._gate()
+    asked = []
+    renderer.between_frames = lambda: asked.append(1)
+    gate()
+    renderer.between_frames = None
+    gate()  # (still images: no wait)
+    assert asked == [1]
+    del renderer
+    gc.collect()
+    gate()  # the gate does not keep the renderer, nor fails without it

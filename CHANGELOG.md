@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+**Fixed**
+- **Arena on the 12.3" runs smoothly, its frame rate graph without jumps.** Every second, with
+  each new reading, the rings, the lists and the numbers set off gliding at once, and the
+  pieces they are drawn from were built in helper threads beside the frame under way. Python
+  runs one thread at a time, so that frame waited for them: 45 to 60 ms instead of 20, once a
+  second, and the graph, which moves with the time of each frame, stood still and then jumped.
+  The helper threads now build in the gap between two frames (waiting for it at most 50 ms,
+  so that they are never starved), and on Windows Libre Panel and its encoder for the panel's
+  video run at *above normal* priority while they drive a panel (left alone if they were
+  started higher, back to normal when they stop), so that a game, which keeps every core
+  busy, takes less time from them. In 30 seconds of Arena on the 12.3" at 50 fps, frames came
+  late 4 times instead of 32 with the computer idle; with every core busy, as in a game, and
+  the priority raised, 12 times instead of 155, at 50 fps instead of 42, the longest frame
+  46 ms instead of 114.
+
 ## 0.7.9 — 2026-10-30
 
 The panel's own start screen comes in seven looks: Libre Panel's own, Aurora, Pulse, Circuit,

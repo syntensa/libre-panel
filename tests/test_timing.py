@@ -39,8 +39,9 @@ class Collector:
 
 
 class Kernel32:
-    def __init__(self):
+    def __init__(self, priority_class=timing.NORMAL_PRIORITY_CLASS):
         self.calls = []
+        self.priority_class = priority_class
 
     def GetCurrentThread(self):  # noqa: N802
         return -2  # the pseudo handle
@@ -49,10 +50,21 @@ class Kernel32:
         self.calls.append((handle, priority))
         return 1
 
+    def GetCurrentProcess(self):  # noqa: N802
+        return -1  # the pseudo handle
+
+    def GetPriorityClass(self, handle):  # noqa: N802
+        return self.priority_class
+
+    def SetPriorityClass(self, handle, priority_class):  # noqa: N802
+        self.calls.append(("class", handle, priority_class))
+        self.priority_class = priority_class
+        return 1
+
 
 def test_windows_timer_at_one_millisecond_while_the_loop_runs():
     winmm = Winmm()
-    guards = timing.Guards("win32", winmm, Collector())
+    guards = timing.Guards("win32", winmm, Collector(), Kernel32())
     guards.start()
     guards.start()
     guards.stop()
@@ -78,6 +90,48 @@ def test_the_collector_leaves_out_what_lives_from_start_up(monkeypatch):
     assert collector.calls[-1] == ("threshold", (50000, 200, 200))  # the other one still runs
     second.stop()
     assert collector.calls[-2:] == [("unfreeze",), ("threshold", (700, 10, 10))]
+
+
+def test_the_process_goes_above_normal_while_the_loop_runs_on_windows():
+    """With a game on every core the threads that draw the frames got their turn too late:
+    the process goes above normal while it drives the panel, and back after; a priority the
+    person set is left as it is, and nothing happens elsewhere."""
+    kernel32 = Kernel32()
+    guards = timing.Guards("win32", Winmm(), Collector(), kernel32)
+    guards.start()
+    assert kernel32.priority_class == timing.ABOVE_NORMAL_PRIORITY_CLASS
+    guards.stop()
+    assert kernel32.priority_class == timing.NORMAL_PRIORITY_CLASS
+    assert kernel32.calls == [("class", -1, timing.ABOVE_NORMAL_PRIORITY_CLASS),
+                              ("class", -1, timing.NORMAL_PRIORITY_CLASS)]  # fmt: skip
+    high = Kernel32(priority_class=0x80)  # HIGH_PRIORITY_CLASS, as someone set it
+    guards = timing.Guards("win32", Winmm(), Collector(), high)
+    guards.start()
+    guards.stop()
+    assert high.calls == [] and high.priority_class == 0x80
+    elsewhere = Kernel32()
+    guards = timing.Guards("linux", Winmm(), Collector(), elsewhere)
+    guards.start()
+    guards.stop()
+    assert elsewhere.calls == []
+
+
+def test_the_panels_encoder_starts_above_normal_on_windows(monkeypatch):
+    from libre_panel.devices import h264
+
+    asked = {}
+
+    def popen(command, **options):
+        asked.update(options)
+        raise OSError("no ffmpeg here")
+
+    monkeypatch.setattr(h264, "NO_WINDOW", 0x08000000)
+    monkeypatch.setattr(h264, "ABOVE_NORMAL", 0x8000)  # (as on Windows)
+    try:
+        h264.Encoder(["ffmpeg"], (16, 16), lambda picture: None, popen=popen)
+    except h264.DeviceError:
+        pass
+    assert asked["creationflags"] == 0x08000000 | 0x8000
 
 
 def test_threads_that_feed_the_panel_go_above_normal_on_windows():

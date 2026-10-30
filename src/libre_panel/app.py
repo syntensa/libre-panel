@@ -497,6 +497,9 @@ PAIR_HOLD_S = 10.0  # a companion that is away a moment (a reconnect) keeps the 
 # a panel beside the first takes its readings this long after the first panel took them, so
 # they glide on both at once (the first panel's frames come up to a frame late)
 IN_STEP_S = 0.1
+# The most a renderer's helper thread waits for the gap between two frames before it builds a
+# piece all the same (Renderer.between_frames): a loop that is never idle must not starve them
+GAP_WAIT_S = 0.05
 
 
 def _alarm(snapshot: Snapshot | None) -> bool:
@@ -774,7 +777,8 @@ class MainLoop:
         # the next sample's readings, taken between two frames (run() switches it on; a test
         # that drives step() on a clock of its own reads them in the frame)
         self.ahead, self._ahead = False, _Ahead()
-        self.idle = threading.Event()  # set between frames: the warm-up works then
+        self.idle = threading.Event()  # set between frames: the warm-up works then ...
+        self.between_frames = lambda: self.idle.wait(GAP_WAIT_S)  # ... and the helper threads
         i18n.set_language(config.language)
         # A config that names no theme shows its panel's own: worked out from the config (or
         # the USB bus) now, and again when the display says which panel it is (step).
@@ -1420,8 +1424,9 @@ class MainLoop:
             was_connected = link.connected
             if link.ensure(started):
                 streaming = display.streaming
-                # a slow piece (a new background) must not stall a video
+                # a slow piece (a new background) must not stall a video, nor hold up a frame
                 renderer.background_builds = streaming
+                renderer.between_frames = self.between_frames if streaming else None
                 renderer.continuous = streaming  # graphs scroll, values glide on
                 # videos decoded as fast as the panel gets frames (a few a second where it takes
                 # a video from its file: below), else as moving.VIDEO_FPS says

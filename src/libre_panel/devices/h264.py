@@ -150,6 +150,9 @@ _OPENS_PICTURE = {6, 7, 8, 9, 14, 15, 16, 17, 18}
 # Windows: a console program started from a program without a console (the
 # tray app) gets a black window of its own unless told not to.
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+# the panel's encoder above normal priority (Windows): with a game on every core it got its turn
+# too late, and so did the panel's frames (timing.py does the same for Libre Panel itself)
+ABOVE_NORMAL = getattr(subprocess, "ABOVE_NORMAL_PRIORITY_CLASS", 0)
 
 
 @dataclass(frozen=True)
@@ -802,7 +805,7 @@ class Encoder:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 bufsize=0,
-                creationflags=NO_WINDOW,
+                creationflags=NO_WINDOW | ABOVE_NORMAL,
             )
         except OSError as exc:
             raise DeviceError(t("cannot start ffmpeg: {error}", error=exc)) from exc
