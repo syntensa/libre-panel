@@ -1211,6 +1211,20 @@ a.btn-primary:hover {
   font-size: 13px;
 }
 
+/* the looks: a small boot logo each */
+.boot-look-tiles {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  margin-bottom: 0;
+}
+
+.fan-look-tile.boot-look-tile img {
+  width: 100%;
+  height: 72px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: #000;
+}
+
 .boot-tiles {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));

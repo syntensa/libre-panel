@@ -1,4 +1,4 @@
-// Settings → Panel → Start screen: the panel's own two screens in Libre Panel's look, made for
+// Settings → Panel → Start screen: the panel's own two screens in a look chosen here, made for
 // its size: the boot logo it shows when it is switched on, and the standby clip it plays when
 // the PC starts, until Libre Panel shows themes (devices/panel_files.py). Each is written only
 // on a click, after a question; the panel's themes are paused for it, and the panel then shows
@@ -18,6 +18,20 @@ import { toast, toastError } from "../../ui/toast.js";
 import { Card, Note } from "./parts.js";
 
 const kilobytes = (bytes) => `${Math.max(1, Math.round(bytes / 1024))} KB`;
+
+// The looks the screens come in (render/bootscreen.py, bootlooks.py): their names, and what their
+// clip does
+const LOOKS = {
+  "libre-panel": [() => t("Libre Panel"), () => t("a light that runs out from the middle")],
+  aurora: [() => t("Aurora"), () => t("curtains of light that shimmer")],
+  pulse: [() => t("Pulse"), () => t("a light that sweeps along a heartbeat")],
+  circuit: [() => t("Circuit"), () => t("light that runs along the traces into the chip")],
+  night: [() => t("Night"), () => t("stars that twinkle under the moon")],
+  levels: [() => t("Levels"), () => t("an equaliser's bars that rise and fall")],
+  dark: [() => t("Dark"), () => t("the mark, faintly, breathing")],
+};
+const lookName = (id) => (LOOKS[id] ? LOOKS[id][0]() : id);
+const lookMotion = (id) => (LOOKS[id] ? LOOKS[id][1]() : "");
 
 function Tile({ title, text, picture, upright, children }) {
   return html`<div class=${`boot-tile${upright ? " upright" : ""}`}>
@@ -39,6 +53,7 @@ export function StartScreenCard() {
   const [busy, setBusy] = useState("");
   const [held, setHeld] = useState(false); // the themes are paused for what the panel shows
   const [found, setFound] = useState(null); // what "What is on the panel" read
+  const [design, setDesign] = useState("libre-panel"); // the look both screens are made in
   useEffect(() => {
     setFound(null);
     endpoints
@@ -56,7 +71,7 @@ export function StartScreenCard() {
     if (question && !(await confirmDialog(question))) return;
     setBusy(action);
     try {
-      const answer = await endpoints.startScreenAction(action, model, panel);
+      const answer = await endpoints.startScreenAction(action, model, panel, design);
       if (info.runs_panel) setHeld(true);
       if (action === "state") setFound(answer);
       else if (action === "logo") toast(t("The boot logo is on the panel ({size}); it shows at the next power-on.", { size: kilobytes(answer.boot_logo) }), { kind: "success" });
@@ -77,7 +92,7 @@ export function StartScreenCard() {
   const more = (config.panels || []).length > 0; // more panels: this card is the one chosen at the top
   return html`<${Card} id="start-screen"
     title=${more ? `${t("Start screen")} · ${t("Panel {number}", { number: panel })}` : t("Start screen")}
-    text=${t("The panel's own screens, in Libre Panel's look and made for its size: the logo it shows when it is switched on, and the clip it plays when the PC starts, until Libre Panel shows its themes.")}>
+    text=${t("The panel's own screens, in the look you choose and made for its size: the logo it shows when it is switched on, and the clip it plays when the PC starts, until Libre Panel shows its themes.")}>
     ${more ? html`<${Note}>${t("For the panel chosen at the top; choose another there for its own logo and clip.")}<//>` : null}
     <div class="boot-body">
     <div class="boot-panel">
@@ -91,6 +106,15 @@ export function StartScreenCard() {
     ${chosen && !chosen.measured
       ? html`<${Note}>${t("Measured on the 9.2\"; this panel has the same firmware, but writing to it has not been tried yet.")}<//>`
       : null}
+    <div class="fan-look-tiles boot-look-tiles" role="radiogroup" aria-label=${t("Look of the start screen")}>
+      ${(info.designs || ["libre-panel"]).map(
+        (id) => html`<button type="button" role="radio" key=${id} class="fan-look-tile boot-look-tile" data-look=${id}
+          aria-checked=${String(id === design)} onClick=${() => setDesign(id)}>
+          <img src=${endpoints.startScreenPicture(model, "logo", 320, way, panel, id)} alt="" decoding="async" loading="lazy" />
+          <span>${lookName(id)}</span>
+        </button>`,
+      )}
+    </div>
     ${held
       ? html`<${Note} action=${html`<button type="button" class="btn btn-primary" onClick=${resume}>${t("Show the themes again")}</button>`}>
           ${t("The panel shows what was written; its themes are paused.")}
@@ -98,7 +122,7 @@ export function StartScreenCard() {
       : null}
     <div class="boot-tiles">
       <${Tile} title=${t("Boot logo")} text=${t("When the panel is switched on. The factory logo stays on the panel and can always come back.")}
-        picture=${endpoints.startScreenPicture(model, "logo", 960, way, panel)} upright=${way === "portrait"}>
+        picture=${endpoints.startScreenPicture(model, "logo", 960, way, panel, design)} upright=${way === "portrait"}>
         <button type="button" class="btn btn-primary" disabled=${writing}
           onClick=${() => run("logo", {
             title: t("Write the boot logo to the panel?"),
@@ -111,10 +135,10 @@ export function StartScreenCard() {
           onClick=${() => run("remove-logo", { title: t("Bring back the factory logo?"), message: t("Libre Panel's boot logo is taken off the panel."), confirm: t("Factory logo again") })}>
           ${t("Factory logo again")}
         </button>
-        <a class="btn" href=${endpoints.startScreenFile(model, "logo", way, panel)} download><${Icon} name="download" size=${15} /> JPEG</a>
+        <a class="btn" href=${endpoints.startScreenFile(model, "logo", way, panel, design)} download><${Icon} name="download" size=${15} /> JPEG</a>
       <//>
-      <${Tile} title=${t("Standby clip")} text=${t("When the PC starts, until Libre Panel shows its themes: a light that runs out from the middle.")}
-        picture=${endpoints.startScreenPicture(model, "clip", 960, way, panel)} upright=${way === "portrait"}>
+      <${Tile} title=${t("Standby clip")} text=${t("When the PC starts, until Libre Panel shows its themes: {motion}.", { motion: lookMotion(design) })}
+        picture=${endpoints.startScreenPicture(model, "clip", 960, way, panel, design)} upright=${way === "portrait"}>
         <button type="button" class="btn btn-primary" disabled=${writing}
           onClick=${() => run("clip", {
             title: t("Write the standby clip to the panel?"),
@@ -124,7 +148,7 @@ export function StartScreenCard() {
           })}>
           ${busy === "clip" ? t("Writing…") : t("Put on the panel")}
         </button>
-        <a class="btn" href=${endpoints.startScreenFile(model, "clip", way, panel)} download><${Icon} name="download" size=${15} /> H.264</a>
+        <a class="btn" href=${endpoints.startScreenFile(model, "clip", way, panel, design)} download><${Icon} name="download" size=${15} /> H.264</a>
       <//>
     </div>
     <div class="boot-foot">

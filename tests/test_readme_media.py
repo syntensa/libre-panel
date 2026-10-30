@@ -458,6 +458,11 @@ def test_the_start_clip_is_the_boot_logo_then_the_standby_clip_round_and_round(
     assert differ(recorded, logo - 1, logo) > 0  # the clip begins
     after = logo + bootscreen.CLIP_FRAMES  # and comes round
     assert differ(recorded, logo, after) == 0 < differ(recorded, logo, logo + 20)
+    looks = len(start.looks)  # then the other looks, each for a while
+    assert set(start.looks) == set(bootscreen.designs()) - {bootscreen.DEFAULT}
+    for k in range(looks):
+        at = frames.count - round((looks - k - 0.5) * start.look_s * fps)
+        assert differ(recorded, logo, at) > 1  # (not Libre Panel's own any more)
 
 
 def test_a_clip_is_the_same_on_every_run(short):

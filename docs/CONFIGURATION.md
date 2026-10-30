@@ -560,10 +560,26 @@ minutes = 10
 
 A TURZX USB panel has two screens of its own, shown without any program on the PC: a
 **boot logo** when it is switched on, and a **standby clip** it plays when the PC starts,
-until Libre Panel shows its themes. *Settings → Panel → Start screen* has both in Libre
-Panel's look, made for each USB panel's size (the 2.8" round, 4.6", 5.2", 8", 8.8", 9.2" and
-12.3"): the mark, the name and the line of light, and in the clip a light that runs out from
-the middle. The card shows them as they will look.
+until Libre Panel shows its themes. *Settings → Panel → Start screen* makes both for each USB
+panel's size (the 1.6", the round 2.1" and 2.8", 4.6", 5.2", 8", 8.8", 9.2", 12.3" and the
+Jonsbo TF3's pump), in the look chosen on the card, which shows them as they will look:
+
+| Look | The boot logo | The clip |
+|---|---|---|
+| Libre Panel | the mark, the name and a line of light | a light runs out from the middle along the line |
+| Aurora | curtains of light over a dark horizon | their rays shimmer |
+| Pulse | a heartbeat on a monitor's grid (on a bar on end several, one under the other) | a light sweeps along it |
+| Circuit | traces from both sides into a chip with the mark | light runs along them into the chip |
+| Night | a sky of stars, a crescent moon, a glow low down | the stars twinkle |
+| Levels | an equaliser's bars, teal to violet | they rise and fall |
+| Dark | black, the mark faint in the middle | the mark breathes |
+
+They are drawn in floating point and made 8 bits only at the end, with a dither of a level's
+worth, so that a dark gradient has no bands and a glow no rings. The boot logo is a JPEG of
+quality 95 with every pixel's colour; the clip is as fine as fits in the panel's 1 MiB (crf 20,
+coarser where a look moves everywhere, finer where it leaves room), and in full range on a panel
+whose decoder shows every stream so (the 9.2" and the 12.3", or `video_range = "full"`): in
+limited range their black was grey.
 
 - **Put on the panel** writes one, after a question: the panel's themes pause, the panel
   shows what was written (the logo at once, the clip playing), and *Show the themes again*

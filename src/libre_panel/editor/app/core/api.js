@@ -154,13 +154,13 @@ export const endpoints = {
   sequence: () => get("/api/sequence"),
   // the Start screen of panel ``panel`` (1: the first, 2: the first beside it, ...)
   startScreen: (panel = 1) => get(`/api/start-screen?panel=${panel - 1}`),
-  startScreenAction: (action, model, panel = 1) => post("/api/start-screen", { action, model, panel: panel - 1 }),
+  startScreenAction: (action, model, panel = 1, design = "") => post("/api/start-screen", { action, model, panel: panel - 1, design }),
   // (the way the panel is mounted is config.toml's: in the address too, so that a picture
   // of the other way is not taken from the cache)
-  startScreenPicture: (model, what, width = 960, way = "", panel = 1) =>
-    withToken(`/api/start-screen/picture?model=${enc(model)}&what=${enc(what)}&w=${width}&o=${enc(way)}&panel=${panel - 1}`),
-  startScreenFile: (model, what, way = "", panel = 1) =>
-    withToken(`/api/start-screen/file?model=${enc(model)}&what=${enc(what)}&o=${enc(way)}&panel=${panel - 1}`),
+  startScreenPicture: (model, what, width = 960, way = "", panel = 1, design = "") =>
+    withToken(`/api/start-screen/picture?model=${enc(model)}&what=${enc(what)}&w=${width}&o=${enc(way)}&panel=${panel - 1}&design=${enc(design)}`),
+  startScreenFile: (model, what, way = "", panel = 1, design = "") =>
+    withToken(`/api/start-screen/file?model=${enc(model)}&what=${enc(what)}&o=${enc(way)}&panel=${panel - 1}&design=${enc(design)}`),
   setSequence: (on, steps) => post("/api/sequence", { on, steps }),
   app: () => get("/api/app"),
   appAction: (action, value) => post("/api/app", { action, value }),

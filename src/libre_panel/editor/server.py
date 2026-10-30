@@ -1740,8 +1740,10 @@ class EditorHandler(BaseHTTPRequestHandler):
     def _start_screen(self, query: dict[str, list[str]] | None = None) -> None:
         """The TURZX USB panels whose boot logo and standby clip Libre Panel can make, and the
         one at hand: panel ``panel`` (0, the first, if not given), as config.toml names it, else
-        as found on the USB bus where it is; drawn upright for a bar on end."""
+        as found on the USB bus where it is; drawn upright for a bar on end; and the looks they
+        come in."""
         from libre_panel.devices import panel_files
+        from libre_panel.render import bootscreen
 
         n = _whole_of(query, "panel")
         try:
@@ -1778,6 +1780,7 @@ class EditorHandler(BaseHTTPRequestHandler):
                 "orientation": way,
                 "runs_panel": self.controls is not None,
                 "names": {"logo": panel_files.BOOT_LOGO, "clip": panel_files.STANDBY_CLIP},
+                "designs": list(bootscreen.designs()),  # the looks, Libre Panel's own first
             }
         )
 
@@ -1786,6 +1789,16 @@ class EditorHandler(BaseHTTPRequestHandler):
 
         try:
             return panel_files.model_of((query.get("model") or [""])[0])
+        except DeviceError:
+            return None
+
+    @staticmethod
+    def _start_screen_design(query: dict[str, list[str]]) -> str | None:
+        """The look ``?design=`` names (Libre Panel's own without one); None for no such look."""
+        from libre_panel.devices import panel_files
+
+        try:
+            return panel_files.design_of((query.get("design") or [""])[0])
         except DeviceError:
             return None
 
@@ -2245,33 +2258,44 @@ class EditorHandler(BaseHTTPRequestHandler):
         self._send(200, buffer.getvalue(), "image/jpeg")
 
     def _start_screen_picture(self, query: dict[str, list[str]]) -> None:
-        """``?model=turing-9.2-usb&what=logo|clip&w=960``: the boot logo (PNG) or the standby
-        clip (an animated PNG) as the app shows them."""
+        """``?model=turing-9.2-usb&what=logo|clip&w=960&design=aurora``: the boot logo (PNG)
+        or the standby clip (an animated WebP) in a look as the app shows them."""
         from libre_panel.devices import panel_files
 
         model = self._start_screen_model(query)
         what = (query.get("what") or ["logo"])[0]
-        if model is None or what not in ("logo", "clip"):
-            return self._error("unknown panel or picture", HTTPStatus.NOT_FOUND)
+        design = self._start_screen_design(query)
+        if model is None or what not in ("logo", "clip") or design is None:
+            return self._error("unknown panel, picture or look", HTTPStatus.NOT_FOUND)
         try:
             width = max(120, min(1920, int((query.get("w") or ["960"])[0])))
         except ValueError:
             width = 960
         way = self._mounted(_whole_of(query, "panel"))
-        picture = panel_files.cached_preview(model.id, what, width, way)
-        self._send(200, picture, "image/png")
+        picture = panel_files.cached_preview(model.id, what, width, way, design)
+        self._send(200, picture, panel_files.picture_type(picture))
 
     def _start_screen_file(self, query: dict[str, list[str]]) -> None:
-        """``?model=...&what=logo|clip``: the boot logo's JPEG or the standby clip (H.264) as
-        the panel takes them, to keep."""
+        """``?model=...&what=logo|clip&design=...``: the boot logo's JPEG or the standby clip
+        (H.264) as the panel takes them, to keep: the clip in the range of values the panel at
+        ``panel`` gets its video in."""
         from libre_panel.devices import panel_files
+        from libre_panel.devices.turzx_video import full_range
 
         model = self._start_screen_model(query)
         what = (query.get("what") or ["logo"])[0]
-        if model is None or what not in ("logo", "clip"):
-            return self._error("unknown panel or file", HTTPStatus.NOT_FOUND)
+        design = self._start_screen_design(query)
+        if model is None or what not in ("logo", "clip") or design is None:
+            return self._error("unknown panel, file or look", HTTPStatus.NOT_FOUND)
+        n = _whole_of(query, "panel")
         try:
-            data = panel_files.cached_file(model.id, what, self._mounted(_whole_of(query, "panel")))
+            place = _panel_at(load_config(self.state.config_path), n)
+        except ConfigError:
+            place = None
+        video_range = place[0].video_range if place is not None else "auto"
+        try:
+            data = panel_files.cached_file(model.id, what, self._mounted(n), design,
+                                           full_range(video_range, model))  # fmt: skip
         except DeviceError as exc:
             return self._error(str(exc), HTTPStatus.CONFLICT)
         name = f"{model.id}-{'boot.jpg' if what == 'logo' else 'standby.h264'}"
@@ -2279,7 +2303,8 @@ class EditorHandler(BaseHTTPRequestHandler):
         self._send(200, data, kind, filename=name)
 
     def _start_screen_action(self) -> None:
-        """``{"action": "state" | "logo" | "remove-logo" | "clip", "model": ..., "panel": n}``:
+        """``{"action": "state" | "logo" | "remove-logo" | "clip", "model": ..., "panel": n,
+        "design": ...}``:
         what is on panel ``n`` (0, the first, if not given), or its boot logo or standby clip
         written or taken away. Only on the person's own click: the panels' themes are paused
         first (and stay paused, so the panel shows what was written; the app resumes them)."""
@@ -2297,6 +2322,10 @@ class EditorHandler(BaseHTTPRequestHandler):
                 model = panel_files.model_of(str(payload["model"]))
             except DeviceError as exc:
                 return self._error(str(exc))
+        try:
+            design = panel_files.design_of(payload.get("design") or None)
+        except DeviceError as exc:
+            return self._error(str(exc))
         n = payload.get("panel", 0)
         if isinstance(n, bool) or not isinstance(n, int):
             return self._error("panel: expected a whole number")
@@ -2318,11 +2347,12 @@ class EditorHandler(BaseHTTPRequestHandler):
             if action == "state":
                 result = screen.state(model, where)
             elif action == "logo":
-                result = screen.write_logo(model, way, where)
+                result = screen.write_logo(model, way, where, design)
             elif action == "remove-logo":
                 result = screen.remove_logo(model, where)
             else:
-                result = screen.write_clip(device.brightness, model, way, where)
+                result = screen.write_clip(device.brightness, model, way, where, design,
+                                           device.video_range)  # fmt: skip
                 # the video mode names the clip it plays: the panel's own, where it went there
                 if not device.video.local_clip and _panel_s(config, n, result):
                     self._name_clip(n)

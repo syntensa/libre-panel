@@ -56,7 +56,12 @@ STANDBY_CLIP = VENDOR_CLIP  # the vendor app's name, which the video mode names 
 MAX_FILE = 1024 * 1024
 LIST_PIECES = 20
 PIECE = 512
-JPEG_QUALITY = 88
+# the boot logo's JPEG: (quality, subsampling) in turn until it fits (0: a colour every pixel)
+JPEG_STEPS = ((95, 0), (92, 0), (90, 2), (85, 2), (75, 2), (60, 2))
+# the standby clip's x264 crf: this first, then coarser in steps of 2 up to the most where it does
+# not fit in CLIP_ROOM, or the finest where it fills less than half of it
+CLIP_CRF, CLIP_CRF_MIN, CLIP_CRF_MAX = 20, 17, 30
+CLIP_ROOM = MAX_FILE
 
 CMD_WRITE_FILE = 40
 CMD_DELETE_FILE = 42
@@ -95,33 +100,44 @@ def file_args(name: bytes, size: int = 0) -> bytes:
 
 
 def logo_jpeg(
-    model: PanelModel, picture: Image.Image | None = None, orientation: str = "landscape"
-) -> bytes:
+    model: PanelModel, picture: Image.Image | None = None, orientation: str = "landscape",
+    design: str = bootscreen.DEFAULT,
+) -> bytes:  # fmt: skip
     """The boot logo for ``model`` (drawn upright for a bar on end with ``orientation``
-    "portrait") as the JPEG the panel shows: turned into its framebuffer (480 x 1920 on the
-    9.2"), quality 88 (less where it would not fit in 1 MiB)."""
-    native = to_native(picture or bootscreen.boot_logo(model, orientation)).convert("RGB")
-    for quality in (JPEG_QUALITY, 80, 70, 60):
+    "portrait", in the look ``design``) as the JPEG the panel shows: turned into its
+    framebuffer (480 x 1920 on the 9.2"), at quality 95 with every pixel's colour (a dark
+    gradient's blocks showed at 88 with a colour for four), less where it would not fit."""
+    native = to_native(picture or bootscreen.boot_logo(model, orientation, design)).convert("RGB")
+    for quality, subsampling in JPEG_STEPS:
         buffer = io.BytesIO()
-        native.save(buffer, format="JPEG", quality=quality, optimize=True)
+        native.save(buffer, format="JPEG", quality=quality, subsampling=subsampling,
+                    optimize=True)  # fmt: skip
         if buffer.tell() <= MAX_FILE:
             return buffer.getvalue()
     raise DeviceError("the boot logo does not fit in 1 MiB")
 
 
-def clip_command(ffmpeg: str, size: tuple[int, int]) -> list[str]:
+def clip_command(ffmpeg: str, size: tuple[int, int], crf: int = CLIP_CRF,
+                 full: bool = False) -> list[str]:  # fmt: skip
     """ffmpeg for the standby clip, as the panel's decoder plays it: one slice a picture, a
-    sequence (headers and a keyframe) every 11 pictures, baseline, no B pictures."""
+    sequence (headers and a keyframe) every 11 pictures, baseline, no B pictures; in full range
+    for a panel whose decoder shows every stream so (``full``: the 9.2" and the 12.3" showed
+    the clip of before under a grey veil), and with the dark parts kept as smooth as the light
+    ones (aq-mode 3)."""
+    from libre_panel.devices.h264 import FULL_RANGE, colour_tags, stamp
+
     width, height = size
+    convert = f"{FULL_RANGE},format=yuv420p" if full else "format=yuv420p"
     return [
         ffmpeg, "-hide_banner", "-loglevel", "error",
         "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{width}x{height}",
-        "-framerate", str(bootscreen.CLIP_FPS), "-i", "-", "-an",
-        "-c:v", "libx264", "-profile:v", "baseline", "-preset", "veryslow", "-threads", "1",
-        "-crf", "23", "-pix_fmt", "yuv420p",
+        "-framerate", str(bootscreen.CLIP_FPS), "-i", "-", "-an", "-vf", convert,
+        "-c:v", "libx264", "-profile:v", "baseline", "-preset", "slow", "-threads", "1",
+        "-crf", str(crf), *colour_tags(full),
         "-x264-params",
-        "sliced-threads=0:bframes=0:scenecut=0:keyint=11:min-keyint=11:repeat-headers=1",
-        "-f", "h264", "-",
+        "sliced-threads=0:bframes=0:scenecut=0:keyint=11:min-keyint=11:repeat-headers=1"
+        ":aq-mode=3",
+        *stamp(full), "-f", "h264", "-",
     ]  # fmt: skip
 
 
@@ -130,26 +146,41 @@ def clip_h264(
     ffmpeg: str,
     frames: list[Image.Image] | None = None,
     orientation: str = "landscape",
+    design: str = bootscreen.DEFAULT,
+    full: bool = False,
 ) -> bytes:
-    """The standby clip for ``model`` (upright with ``orientation`` "portrait"): its pictures
-    turned into the framebuffer and encoded."""
+    """The standby clip for ``model`` (upright with ``orientation`` "portrait", in the look
+    ``design``, in full range with ``full``): its pictures turned into the framebuffer and
+    encoded as finely as fits in 1 MiB: at crf 20, coarser in steps where it does not fit, and
+    finer where it leaves most of the room."""
     from libre_panel.devices.h264 import slice_count
 
-    pictures = frames or bootscreen.standby_frames(model, orientation=orientation)
+    pictures = frames or bootscreen.standby_frames(model, orientation=orientation, design=design)
     native = [to_native(frame).convert("RGB") for frame in pictures]
     raw = b"".join(frame.tobytes() for frame in native)
-    try:
-        done = subprocess.run(
-            clip_command(ffmpeg, native[0].size), input=raw, capture_output=True, timeout=120,
-            check=False,
-        )  # fmt: skip
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise DeviceError(f"ffmpeg could not make the standby clip: {exc}") from exc
-    if done.returncode != 0 or not done.stdout:
-        raise DeviceError(f"ffmpeg could not make the standby clip: {done.stderr[-300:]!r}")
-    data = done.stdout
-    if len(data) > MAX_FILE:
+
+    def encoded(crf: int) -> bytes:
+        try:
+            done = subprocess.run(
+                clip_command(ffmpeg, native[0].size, crf, full), input=raw,
+                capture_output=True, timeout=300, check=False,
+            )  # fmt: skip
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise DeviceError(f"ffmpeg could not make the standby clip: {exc}") from exc
+        if done.returncode != 0 or not done.stdout:
+            raise DeviceError(f"ffmpeg could not make the standby clip: {done.stderr[-300:]!r}")
+        return done.stdout
+
+    crf = CLIP_CRF
+    data = encoded(crf)
+    while len(data) > CLIP_ROOM and crf < CLIP_CRF_MAX:
+        crf += 2
+        data = encoded(crf)
+    if len(data) > CLIP_ROOM:
         raise DeviceError("the standby clip does not fit in 1 MiB")
+    if len(data) < CLIP_ROOM * 0.4 and crf == CLIP_CRF:  # room to spare: finer
+        finer = encoded(CLIP_CRF_MIN)
+        data = finer if len(finer) <= CLIP_ROOM else data
     if slice_count(data) != len(native):  # one slice a picture, or the panel shows nothing
         raise DeviceError("the standby clip came out with more than one slice a picture")
     return data
@@ -307,16 +338,16 @@ class StartScreen:
 
     def write_logo(
         self, model: PanelModel | None = None, orientation: str = "landscape",
-        where: Where = FIRST,
+        where: Where = FIRST, design: str = bootscreen.DEFAULT,
     ) -> dict[str, Any]:  # fmt: skip
         """The boot logo written and shown (it shows at the next cold start)."""
 
         def job(files: PanelFiles, found: PanelModel) -> dict[str, Any]:
-            data = logo_jpeg(found, orientation=orientation)
+            data = logo_jpeg(found, orientation=orientation, design=design)
             files.noted_listing()  # what is there before, in the log of the panel's folder
             files.write(BOOT_LOGO, data)
             files.show_jpeg(BOOT_LOGO)
-            return {"model": found.id, "boot_logo": len(data)}
+            return {"model": found.id, "boot_logo": len(data), "design": design}
 
         return self._with_panel(model, job, where)
 
@@ -331,45 +362,67 @@ class StartScreen:
 
     def write_clip(
         self, brightness: int, model: PanelModel | None = None, orientation: str = "landscape",
-        where: Where = FIRST,
+        where: Where = FIRST, design: str = bootscreen.DEFAULT, video_range: str = "auto",
     ) -> dict[str, Any]:  # fmt: skip
         """The standby clip written, played (as it will be) and saved as what the panel
-        starts with."""
+        starts with; in the range of values its decoder shows ([device] video_range, "auto"
+        as its model is known to)."""
         from libre_panel.devices.h264 import find_ffmpeg
+        from libre_panel.devices.turzx_video import full_range
 
         ffmpeg = self.ffmpeg() if self.ffmpeg else find_ffmpeg()
 
         def job(files: PanelFiles, found: PanelModel) -> dict[str, Any]:
-            data = clip_h264(found, ffmpeg, orientation=orientation)
+            data = clip_h264(found, ffmpeg, orientation=orientation, design=design,
+                             full=full_range(video_range, found))  # fmt: skip
             files.noted_listing()
             files.write(STANDBY_CLIP, data)
             files.play(STANDBY_CLIP)
             files.save_start(brightness)
-            return {"model": found.id, "standby_clip": len(data), "name": STANDBY_CLIP}
+            return {"model": found.id, "standby_clip": len(data), "name": STANDBY_CLIP,
+                    "design": design}  # fmt: skip
 
         return self._with_panel(model, job, where)
 
 
-def preview_png(model: PanelModel, width: int = 960, orientation: str = "landscape") -> bytes:
-    """The boot logo as a PNG for the app, ``width`` px wide (upright for a bar on end)."""
-    picture = bootscreen.boot_logo(model, orientation)
-    scale = min(1.0, width / picture.width)
-    size = (max(1, round(picture.width * scale)), max(1, round(picture.height * scale)))
+def _preview_scale(model: PanelModel, width: int, orientation: str) -> float:
+    """How much smaller the app's picture is drawn than the panel's (at most as large)."""
+    return min(1.0, width / bootscreen.design_size(model, orientation)[0])
+
+
+def preview_png(model: PanelModel, width: int = 960, orientation: str = "landscape",
+                design: str = bootscreen.DEFAULT) -> bytes:  # fmt: skip
+    """The boot logo as a PNG for the app, ``width`` px wide (upright for a bar on end), drawn
+    at that size."""
+    scale = _preview_scale(model, width, orientation)
+    picture = bootscreen.boot_logo(model, orientation, design, scale=scale)
     buffer = io.BytesIO()
-    picture.resize(size, Image.Resampling.LANCZOS).save(buffer, format="PNG", optimize=True)
+    picture.save(buffer, format="PNG", optimize=True)
     return buffer.getvalue()
 
 
-def preview_clip(model: PanelModel, width: int = 960, orientation: str = "landscape") -> bytes:
-    """The standby clip as an animated PNG for the app, ``width`` px wide, at its rate."""
-    frames = bootscreen.standby_frames(model, orientation=orientation)
-    scale = min(1.0, width / frames[0].width)
-    size = (max(1, round(frames[0].width * scale)), max(1, round(frames[0].height * scale)))
-    small = [frame.resize(size, Image.Resampling.LANCZOS) for frame in frames]
+def preview_clip(model: PanelModel, width: int = 960, orientation: str = "landscape",
+                 design: str = bootscreen.DEFAULT) -> bytes:  # fmt: skip
+    """The standby clip as an animated WebP for the app (an animated PNG where Pillow has no
+    WebP), ``width`` px wide, at its rate, drawn at that size: a clip whose light moves all
+    over (Aurora's) came to 14 MB as a PNG, and to a few hundred KB so."""
+    from PIL import features
+
+    scale = _preview_scale(model, width, orientation)
+    frames = bootscreen.standby_frames(model, orientation=orientation, design=design, scale=scale)
     buffer = io.BytesIO()
-    small[0].save(buffer, format="PNG", save_all=True, append_images=small[1:],
-                  duration=round(1000 / bootscreen.CLIP_FPS), loop=0)  # fmt: skip
+    timing = {"save_all": True, "append_images": frames[1:], "loop": 0,
+              "duration": round(1000 / bootscreen.CLIP_FPS)}  # fmt: skip
+    if features.check("webp"):
+        frames[0].save(buffer, format="WEBP", quality=90, method=4, **timing)
+    else:
+        frames[0].save(buffer, format="PNG", **timing)
     return buffer.getvalue()
+
+
+def picture_type(data: bytes) -> str:
+    """The media type of a picture of :func:`cached_preview`."""
+    return "image/webp" if data[:4] == b"RIFF" and data[8:12] == b"WEBP" else "image/png"
 
 
 def model_of(model_id: str) -> PanelModel:
@@ -380,22 +433,33 @@ def model_of(model_id: str) -> PanelModel:
     return found
 
 
-@lru_cache(maxsize=8)
-def cached_preview(model_id: str, what: str, width: int, orientation: str = "landscape") -> bytes:
-    """The app's picture of the boot logo (PNG) or of the standby clip (an animated PNG)."""
+def design_of(name: str | None) -> str:
+    """A look of the panel's own screens by its name (render/bootscreen.py), Libre Panel's own
+    for none; DeviceError for one there is not."""
+    try:
+        return bootscreen.design_of(name).id
+    except KeyError:
+        raise DeviceError(f"{name!r} is no look of the start screen") from None
+
+
+@lru_cache(maxsize=16)
+def cached_preview(model_id: str, what: str, width: int, orientation: str = "landscape",
+                   design: str = bootscreen.DEFAULT) -> bytes:  # fmt: skip
+    """The app's picture of the boot logo (PNG) or of the standby clip (animated)."""
     model = model_of(model_id)
     if what == "clip":
-        return preview_clip(model, width, orientation)
-    return preview_png(model, width, orientation)
+        return preview_clip(model, width, orientation, design)
+    return preview_png(model, width, orientation, design)
 
 
 @lru_cache(maxsize=4)
-def cached_file(model_id: str, what: str, orientation: str = "landscape") -> bytes:
-    """The boot logo's JPEG or the standby clip as the panel takes them, to keep or to put
-    on the panel with another program."""
+def cached_file(model_id: str, what: str, orientation: str = "landscape",
+                design: str = bootscreen.DEFAULT, full: bool = False) -> bytes:  # fmt: skip
+    """The boot logo's JPEG or the standby clip as the panel takes them (in full range with
+    ``full``), to keep or to put on the panel with another program."""
     from libre_panel.devices.h264 import find_ffmpeg
 
     model = model_of(model_id)
     if what == "clip":
-        return clip_h264(model, find_ffmpeg(), orientation=orientation)
-    return logo_jpeg(model, orientation=orientation)
+        return clip_h264(model, find_ffmpeg(), orientation=orientation, design=design, full=full)
+    return logo_jpeg(model, orientation=orientation, design=design)

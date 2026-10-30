@@ -184,11 +184,12 @@ when you stop.
 
 ### The panel's own start screen
 
-<p><img src="docs/media/start-screen.gif" width="100%" alt="The 9.2-inch panel's own screens in Libre Panel's look: the boot logo with the Libre Panel mark and name, then the standby clip, a light that runs out from the middle along the bar"></p>
+<p><img src="docs/media/start-screen.gif" width="100%" alt="The 9.2-inch panel's own screens: the boot logo with the Libre Panel mark and name, the standby clip's light running out from the middle along the bar, then the clips of the other looks: curtains of an aurora, a heartbeat, traces running into a chip, a night sky with the moon, an equaliser's bars, and a faint mark on black"></p>
 
 TURZX USB panels show a logo of their own when they are switched on and play a clip when the PC
-starts. Libre Panel draws both in its own look, for your panel's size, and puts them on it with
-one click; the factory logo comes back with another.
+starts. Libre Panel draws both in the look you choose (its own, Aurora, Pulse, Circuit, Night,
+Levels or Dark) for your panel's size, as finely as the panel can show them, and puts them on
+it with one click; the factory logo comes back with another.
 
 ### Every size, round and upright
 

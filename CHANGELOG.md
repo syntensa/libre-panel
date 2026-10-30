@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+**New**
+- **The panel's start screen in seven looks** (*Settings → Panel → Start screen*). The boot
+  logo and the standby clip came in Libre Panel's look alone; the card now offers seven, each
+  as a small boot logo to choose from, for every USB panel's size, round and upright: Libre
+  Panel's own; **Aurora**, curtains of light over a dark horizon whose rays shimmer;
+  **Pulse**, a heartbeat on a monitor's grid with a light sweeping along it (on a bar on end
+  several, one under the other); **Circuit**, traces running from both sides into a chip with
+  the app's mark, light running along them; **Night**, a sky of stars that twinkle, a crescent
+  moon and a glow low down; **Levels**, an equaliser's bars that rise and fall; and **Dark**,
+  black with the mark faintly breathing, for a panel that should stay dark. As before, each clip moves only in brightness at fixed
+  places, which the panel's uneven playback forgives, and loops without a seam. The look
+  chosen is what both pictures show, what is downloaded and what is written.
+
+**Fixed**
+- **The start screen without bands and blocks, and black where it is black** (the 12.3" most
+  of all). Its dark gradient spans a handful of levels across the panel: they showed as bands,
+  the boot logo's JPEG (quality 88, a colour for every four pixels) added blocks at their
+  edges, and a glow blurred in 8 bits ended in rings. The 9.2" and the 12.3" show every stream
+  as full range, so the clip of limited range showed under a grey veil, its black at 16. Both
+  pictures are now drawn in floating point and made 8 bits only at the end, with a dither of a
+  level's worth; the boot logo is a JPEG of quality 95 with every pixel's colour (130 to
+  550 KB on the 12.3"), and the clip is in full range on those panels (as `video_range`
+  says) and as fine as fits in 1 MiB: crf 20, coarser in steps where a look moves everywhere,
+  finer where it leaves room. The app shows the clips as animated WebP: as PNG, one whose
+  light moves all over came to 14 MB.
+
 ## 0.7.8 — 2026-10-29
 
 A hotfix for 0.7.7. The panel's own monitor is set up on Windows again: Libre Panel installs the

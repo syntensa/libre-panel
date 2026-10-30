@@ -190,11 +190,12 @@ gemischt; beim Stoppen kommt das Theme zurück.
 
 ### Der eigene Startbildschirm des Panels
 
-<p><img src="docs/media/start-screen.gif" width="100%" alt="Die eigenen Bildschirme des 9,2-Zoll-Panels im Look von Libre Panel: das Startlogo mit Zeichen und Namen von Libre Panel, dann der Standby-Clip, ein Licht, das von der Mitte aus über die Leiste läuft"></p>
+<p><img src="docs/media/start-screen.gif" width="100%" alt="Die eigenen Bildschirme des 9,2-Zoll-Panels: das Startlogo mit Zeichen und Namen von Libre Panel, das Licht des Standby-Clips, das von der Mitte aus über die Leiste läuft, dann die Clips der anderen Looks: Vorhänge eines Polarlichts, ein Herzschlag, Leiterbahnen, die in einen Chip laufen, ein Nachthimmel mit Mond, die Balken eines Equalizers und ein schwaches Zeichen auf Schwarz"></p>
 
 TURZX-USB-Panels zeigen beim Einschalten ein eigenes Logo und spielen beim Start des PCs einen
-Clip. Libre Panel zeichnet beides in seinem Look, passend zur Größe deines Panels, und spielt
-es mit einem Klick auf; das Werkslogo kommt mit einem weiteren Klick zurück.
+Clip. Libre Panel zeichnet beides im Look deiner Wahl (dem eigenen, Polarlicht, Puls, Platine,
+Nacht, Pegel oder Dunkel), passend zur Größe deines Panels und so fein, wie das Panel es zeigen
+kann, und spielt es mit einem Klick auf; das Werkslogo kommt mit einem weiteren Klick zurück.
 
 ### Jede Größe, rund und hochkant
 

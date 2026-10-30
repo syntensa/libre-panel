@@ -1216,7 +1216,7 @@ def test_a_standby_clip_written_is_named_in_its_own_panel_s_settings(panels, nam
     srv = make_server(port=0, config_path=path)
     written = []
     srv.editor_state.start_screen_jobs = SimpleNamespace(
-        write_clip=lambda brightness, model, mounted, where: (
+        write_clip=lambda brightness, model, mounted, where, *look: (
             written.append(model)
             or {"model": "turing-9.2-usb", "standby_clip": 3, "name": "standby.h264"}
         ),
@@ -1247,13 +1247,15 @@ def test_panel_two_gets_its_own_start_screen_and_its_clip_in_its_own_settings(tm
     srv = make_server(port=0, config_path=path)
     asked = []
 
-    def write_clip(brightness, model, mounted, where):
+    def write_clip(brightness, model, mounted, where, *look):
         asked.append((brightness, mounted, where))
         return {"model": "turing-9.2-usb", "standby_clip": 3, "name": STANDBY_CLIP}
 
     srv.editor_state.start_screen_jobs = SimpleNamespace(
         write_clip=write_clip,
-        write_logo=lambda model, mounted, where: asked.append((mounted, where)) or {"boot_logo": 9},
+        write_logo=lambda model, mounted, where, *look: (
+            asked.append((mounted, where)) or {"boot_logo": 9}
+        ),
     )
     thread = threading.Thread(target=srv.serve_forever, daemon=True)
     thread.start()

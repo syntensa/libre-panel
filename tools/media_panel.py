@@ -830,13 +830,17 @@ def themes_tour(stage: Stage, themes: tuple[str, ...]) -> None:
 @dataclass(frozen=True)
 class StartClip:
     """The panel's own screens (render/bootscreen.py): the boot logo of a panel (by its model's
-    id), then its standby clip, round and round, in the device frame."""
+    id), then its standby clip, round and round, in the device frame; then the clips of the
+    other ``looks``, ``look_s`` each, one fading into the next."""
 
     about: str
     themes: tuple[str, ...]  # the panel's model
     seconds: float
     logo_s: float = 1.6
     poster: float = 3.0
+    looks: tuple[str, ...] = ()
+    look_s: float = 2.2
+    fade_s: float = 0.3
 
     @property
     def kind(self) -> str:
@@ -851,23 +855,33 @@ def record_start(
     themes: tuple[str, ...] | None = None,
 ) -> Recorded:
     """The boot logo for ``logo_s``, then the standby clip at its own rate, as the panel shows
-    them."""
+    them; then the other looks' clips."""
     from libre_panel.devices.models import get_model
     from libre_panel.render import bootscreen
 
     model = get_model((themes or clip.themes)[0])
-    logo = bootscreen.boot_logo(model)
-    loop = bootscreen.standby_frames(model)
-    size = (round(logo.width * settings.scale), round(logo.height * settings.scale))
+    scale = min(1.0, settings.scale)  # (drawn at the clip's size: quicker than made smaller)
+    logo = bootscreen.boot_logo(model, scale=scale)
+    size = logo.size
     present = Presenter(size, None, settings.bare)
     fps = settings.fps
     sink = FrameSink(folder, fps)
-    shown = present(logo.resize(size, Image.Resampling.LANCZOS))
+    shown = present(logo)
     sink.add(shown, round(clip.logo_s * fps))
-    count = round((clip.seconds - clip.logo_s) * fps)
-    for n in range(count):
-        picture = loop[int(n / fps * bootscreen.CLIP_FPS) % len(loop)]
-        sink.add(present(picture.resize(size, Image.Resampling.LANCZOS)))
+    own = clip.seconds - clip.logo_s - len(clip.looks) * clip.look_s
+    parts = [(bootscreen.DEFAULT, own), *((look, clip.look_s) for look in clip.looks)]
+    fade = round(clip.fade_s * fps)
+    before: list[Image.Image] = []  # the last pictures of the look before, to fade from
+    for look, seconds in parts:
+        loop = bootscreen.standby_frames(model, design=look, scale=scale)
+        count = round(seconds * fps)
+        for n in range(count):
+            picture = loop[int(n / fps * bootscreen.CLIP_FPS) % len(loop)]
+            if n < fade and before:
+                picture = Image.blend(before[n], picture, (n + 1) / (fade + 1))
+            sink.add(present(picture))
+        ends = [loop[int((count + k) / fps * bootscreen.CLIP_FPS) % len(loop)] for k in range(fade)]
+        before = ends
     frames = sink.frames()
     return Recorded(frames, min(frames.count - 1, round(clip.poster * fps)))
 
@@ -1246,7 +1260,9 @@ PANELS_CLIPS: dict[str, PanelsClip] = {
 # The panel's own screens: its boot logo, then its standby clip, as the panel shows them.
 START_CLIPS: dict[str, StartClip] = {
     "start-screen": StartClip(
-        "the panel's own screens: the boot logo, then the standby clip's light running out",
-        ("turing-9.2-usb",), 6.0, poster=2.0,
+        "the panel's own screens: the boot logo, then the standby clip's light running out, then"
+        " the clips of the other looks",
+        ("turing-9.2-usb",), 5.0 + 6 * 2.2, poster=2.0,
+        looks=("aurora", "pulse", "circuit", "night", "levels", "dark"),
     ),
 }  # fmt: skip
