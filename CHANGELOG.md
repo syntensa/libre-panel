@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.7.10 — 2026-10-31
+
+A hotfix for 0.7.9: Arena on the 12.3" runs smoothly, its frame rate graph without jumps. The
+pieces the rings, the lists and the numbers glide with are built between the panel's frames, no
+longer beside them, and on Windows Libre Panel and its encoder run above normal priority while
+they drive a panel, so that a game takes less time from them.
 
 **Fixed**
 - **Arena on the 12.3" runs smoothly, its frame rate graph without jumps.** Every second, with
