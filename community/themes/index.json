@@ -33,6 +33,17 @@
       "preview": "compact-combat/preview.png",
       "zip": "compact-combat/compact-combat.zip",
       "sha256": "45649268e91efa24a7ec319d460a2219351e3b4a954ac48ca19ff43cd6f65ddd"
+    },
+    {
+      "name": "Gold Time Vertical",
+      "author": "WM, after MAdRGB (TURZX forum)",
+      "description": "Ein Portrait Theme für 8.8\" Displays. Gebaut für einen weißen PC",
+      "sizes": [
+        "480x1920"
+      ],
+      "preview": "gold-time-vertical/preview.png",
+      "zip": "gold-time-vertical/gold-time-vertical.zip",
+      "sha256": "4d6137250db864a8fc5b01bd478ed3a52676b8f9128f474864bfd9004c61add9"
     }
   ]
 }
