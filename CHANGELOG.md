@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+**Fixed**
+- **Round frames with a ridge are lit all round, without steps.** A theme can make its rects'
+  outlines ridges (`ridge` in its theme.json, as SPUR II's frames were), whose two facets catch
+  the light or lie in its shade. Which way each point faces was worked out across rows and
+  columns, right for straight frames but not for round ones: a ring turned in steps of light
+  and shade at its diagonals, as on the gold rings of the community theme Gold Time Vertical
+  (#36). An outline with round corners now faces as its shape does, a ring all round, and the
+  seam along its middle is soft; straight frames are drawn as before.
+
 ## 0.7.10 — 2026-10-31
 
 A hotfix for 0.7.9: Arena on the 12.3" runs smoothly, its frame rate graph without jumps. The

@@ -16,7 +16,14 @@ from libre_panel.render import finish as finishes
 from libre_panel.render import light3d, lit
 from libre_panel.render.finish import Finish, register
 from libre_panel.render.light import sun_position
-from libre_panel.render.look import LightEdge, Sweeps, grid_image, ridge_normals
+from libre_panel.render.look import (
+    LightEdge,
+    Sweeps,
+    grid_image,
+    outline,
+    ridge_normals,
+    rounded_ridge_normals,
+)
 from libre_panel.render.renderer import Piece, Renderer, changed_region
 from libre_panel.sensors.base import Reading, Snapshot
 from libre_panel.sensors.demo import demo_snapshot
@@ -553,6 +560,32 @@ def test_ridges_are_mitred_and_flat_in_their_middle():
     assert normals[0, 4, 1] < 0 and normals[2, 4, 1] > 0  # up and down from the middle
     assert tuple(normals[1, 4]) == (0.0, 0.0, 1.0)  # the middle faces the viewer
     assert not normals[5:].any()
+
+
+def test_a_round_outline_is_a_ridge_all_round():
+    ring = rounded_ridge_normals(100, 100, 50, 10)  # a ring 10 px wide
+    out, inner = ring[16, 16], ring[20, 20]  # on the diagonal: its outer half, its inner one
+    assert out[0] == pytest.approx(out[1], abs=0.02) and out[0] < -0.45  # out, to the top left
+    assert inner[0] == pytest.approx(inner[1], abs=0.02) and inner[0] > 0.45  # in
+    # along the straight sides of a rect with round corners, as the runs make them
+    band = outline(200, 60, 10, 4) > 0
+    assert np.allclose(rounded_ridge_normals(200, 60, 10, 4)[:, 20:180][band[:, 20:180]],
+                       ridge_normals(band)[:, 20:180][band[:, 20:180]], atol=1e-5)  # fmt: skip
+
+
+def test_a_ring_with_a_ridge_name_is_lit_without_steps_round_it():
+    """Gold Time Vertical's rings (#36): a ridge worked out from runs across rows and columns
+    turned at the diagonals in steps of light and shade."""
+    ring = {"type": "rect", "id": "rim", "x": 40, "y": 40, "w": 176, "h": 176, "radius": 88,
+            "color": None, "outline": "#B8860B", "outline_width": 18, "ridge": "rim"}  # fmt: skip
+    frame, _ = Renderer(theme_of([ring])).render(snap(), 0.0)
+    a = np.asarray(frame.convert("L"), np.float32)
+    turn = np.linspace(0, 2 * np.pi, 720, endpoint=False)
+    for across in (84.0, 74.0):  # its outer half and its inner one
+        x, y = 128 + across * np.cos(turn), 128 + across * np.sin(turn)
+        round_it = a[np.round(y).astype(int), np.round(x).astype(int)]
+        assert np.abs(np.diff(round_it)).max() < 24, across
+    assert a[128 - 60, 128 - 60] > a[128 + 60, 128 + 60]  # its outer half lit at the top left
 
 
 def test_rects_with_a_ridge_name_are_ridges_whose_gloss_lies_on_them():

@@ -121,6 +121,31 @@ def ridge_normals(mask: Any, tilt: float = RIDGE_TILT) -> np.ndarray:
     return normals
 
 
+def rounded_ridge_normals(w: int, h: int, radius: float, width: float,
+                          tilt: float = RIDGE_TILT) -> np.ndarray:  # fmt: skip
+    """Normals (h, w, 3) that make the outline of a ``w`` x ``h`` rect with round corners
+    (``radius``), ``width`` px wide as :func:`outline` draws it, a ridge: as
+    :func:`ridge_normals` makes it, each point tilts towards the nearer edge across the band,
+    but round its corners too, worked out from the shape (the runs across rows and columns
+    of :func:`ridge_normals` made a ring's diagonals steps of light and shade). Within half a
+    point of the band's middle the tilt fades to flat, so that its seam is not jagged."""
+    r = max(0.0, min(radius, w / 2, h / 2))
+    ys, xs = np.mgrid[0:h, 0:w].astype(np.float32) + 0.5
+    px, py = xs - w / 2, ys - h / 2
+    qx, qy = np.abs(px) - (w / 2 - r), np.abs(py) - (h / 2 - r)
+    corner = (qx > 0) & (qy > 0)
+    bend = np.hypot(qx, qy)
+    across = np.where(corner, bend, np.maximum(qx, qy)) - r  # 0 on the edge, < 0 inside
+    safe = np.where(corner, np.maximum(bend, 1e-6), 1.0)
+    gx = np.where(corner, qx / safe, (qx >= qy).astype(np.float32)) * np.sign(px)
+    gy = np.where(corner, qy / safe, (qy > qx).astype(np.float32)) * np.sign(py)
+    side = np.clip(2 * (across + width / 2), -1.0, 1.0) * math.sin(math.radians(tilt))
+    normals = np.empty((h, w, 3), np.float32)
+    normals[..., 0], normals[..., 1] = gx * side, gy * side
+    normals[..., 2] = np.sqrt(1 - side * side)
+    return normals
+
+
 def facets(normals: np.ndarray, colour: Any, shadow: float = RIDGE_SHADOW) -> np.ndarray:
     """RGB (…, 3, 0 to 255) of faces with ``normals`` under the guide light:
     turned to the viewer they keep ``colour`` (one, or one per face), towards
@@ -593,7 +618,8 @@ def ridges(renderer: Any) -> dict[str, Finish]:
 class Ridge(Finish):
     """Rects that share a ``ridge`` name as one ridge, as SPUR II's frames:
     every point of their union tilts towards its nearest edge (mitred where
-    bands meet), so two facets catch the guide light or lie in its shadow.
+    bands meet; an outline with round corners follows them, a ring all round),
+    so two facets catch the guide light or lie in its shadow.
     The lit facets add a little light to the ridge itself, and the ridge is
     a light edge the panel light glints on. An outlined rect gives its
     outline, a filled one its fill. The first rect of the name draws the
@@ -640,8 +666,10 @@ class Ridge(Finish):
         y1 = max(m["y"] + m["h"] for m in self.members)
         base = Image.new("RGBA", (x1 - x0, y1 - y0), (0, 0, 0, 0))  # fills under outlines
         ridge = np.zeros((y1 - y0, x1 - x0, 4), np.float32)  # straight colour and alpha
+        rounded = []  # outlines with round corners: their own normals, from their shape
         for m in self.members:  # a later rect lies over an earlier one, as drawn
             ox, oy, w, h = m["x"] - x0, m["y"] - y0, m["w"], m["h"]
+            radius = min(m["radius"], w // 2, h // 2)
             if m["outline"]:
                 if m["color"]:
                     base.alpha_composite(renderer._rect_piece({**m, "outline": None}).layer,
@@ -649,15 +677,20 @@ class Ridge(Finish):
                 colour = renderer.color(m["outline"])
                 layer = np.zeros((h, w, 4), np.float32)
                 layer[..., :3] = colour[:3]
-                layer[..., 3] = outline(w, h, min(m["radius"], w // 2, h // 2),
-                                        m["outline_width"]) * colour[3]  # fmt: skip
+                layer[..., 3] = outline(w, h, radius, m["outline_width"]) * colour[3]
             else:
                 layer = np.asarray(renderer._rect_piece(m).layer, np.float32)
             region = ridge[oy : oy + h, ox : ox + w]
             on = layer[..., 3] > 0
             region[on] = layer[on]
+            if m["outline"] and radius > 0:
+                rounded.append((ox, oy, on, (w, h, radius, m["outline_width"])))
         alpha = ridge[..., 3] / 255
         normals = ridge_normals(alpha > 0)
+        for ox, oy, on, shape in rounded:  # (in turn, as their colour)
+            normals[oy : oy + on.shape[0], ox : ox + on.shape[1]][on] = rounded_ridge_normals(
+                *shape
+            )[on]
         rgb = facets(normals, ridge)
         # SPUR II's frames: light from the lit facets, blurred, a share of their
         # colour, and only on the ridge itself (beside it stays dark)
