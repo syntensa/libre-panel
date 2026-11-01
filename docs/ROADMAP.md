@@ -20,12 +20,15 @@ under its id, and themes in the 0.7 format, community themes among them, are rea
 
 ### 1. Pictures without bands
 
-- [ ] Gradients, glows and shadows dithered where they are made (as the start screens are
-      since 0.7.9): no bands on the 12.3" and the other large panels, black stays black, and
-      the same pattern in every frame, so that video and JPEG frames differ only where
-      something moves
-- [ ] Before and after for every built-in theme at its sizes; what dithering costs measured
-      (frame time, the size of JPEG frames and of the video stream)
+- [x] Gradients (the themes' backgrounds, rects and cards) and glows that shine brighter than
+      their shape worked out in floating point, and dithered in the panel's video (as the
+      start screens are since 0.7.9): black stays black, and the same pattern in every frame,
+      so that video frames differ only where something moves
+- [x] Before and after for every built-in theme; what it costs measured (frame time, the size
+      of PNG and JPEG frames and of the video stream: still frames keep whole levels)
+- [ ] The light of `lit` rings and bars (its halo is made 1.45 times stronger): its tip is
+      blurred anew in every frame while a ring glides, so first that is kept (2. Lighter),
+      then it is worked out in floating point at no cost; shadows and fainter glows too
 
 ### 2. Lighter
 

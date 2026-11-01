@@ -3,6 +3,24 @@
 ## Unreleased
 
 **New**
+- **Gradients and glows without bands on the panel's video** (the 12.3" most of all). A dark
+  gradient across a large panel spans a handful of levels: Libre Panel's own background
+  (Lumen, Encore, Almanac, the round report) went from #0A0E13 to #06090D, six levels across
+  the 12.3"'s 720 rows, so it stood in bands a hundred rows tall, and the panel's H.264 made
+  them sharper still, with a tint each (its YUV steps a level and a half where the picture
+  stepped one). Glows that shine brighter than the shape they surround (Encore's seconds,
+  the time's digits) were blurred in whole levels and then made stronger, which spread the
+  levels apart, as rings round them. Now the background's gradient is the theme's
+  (`"gradient"` in its `background`, under its picture: the dot grid of the editor's stage
+  alone), and gradients and these glows are worked out in floating point and, for the
+  panel's video, made 8 bits with a level's worth of noise that is the same in every frame,
+  as the start screens are since 0.7.9: each row is the colour between, on average. What it
+  costs, measured over 12 seconds through the panel's own encoder settings: Lumen's stream
+  on the 12.3" 4 % more (290 instead of 278 KB a second, the cap is 375), the 9.2"'s 4 %;
+  text and rings as sharp as before (33.99 against 33.97 dB); a frame no slower, but where a
+  glow that shines brighter is made anew in each frame (the seconds while their digits
+  roll), half a millisecond. Still frames, the editor's pictures and the README's keep whole
+  levels: a PNG of noise is twice as large (a still frame over USB), and JPEG loses it.
 - **Thermal Grizzly's WireView Pro II on the panel** (discussion #38). What flows through the
   graphics card's 12V-2x6 cable, as the WireView between them measures it, can be shown:
   `gpu.cable.power` and `gpu.cable.current`, each of the six pins' current and voltage

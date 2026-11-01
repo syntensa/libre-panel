@@ -32,7 +32,11 @@
   "font": "builtin:Barlow-Medium",
   "background": {
     "color": "@bg",
-    "image": "assets/backdrop.png"
+    "image": "assets/backdrop.png",
+    "gradient": [
+      "#0A0E13",
+      "#06090D"
+    ]
   },
   "refresh_ms": 1000,
   "animation": {

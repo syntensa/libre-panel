@@ -1036,8 +1036,11 @@ class MainLoop:
         warmed = self.warmup.take(self._warm_key(theme, config, dress))
         source = self._look_source(dress[0])
         if warmed is None:
+            current = getattr(self, "renderer", None)  # (made with the dither as it will be)
+            dither = current is not None and current.continuous
             renderer = Renderer(self._dressed(theme, config, source), animate=config.fps > 1,
-                                motion=self.motion, backdrop=self._backdrop(dress[1]))  # fmt: skip
+                                motion=self.motion, backdrop=self._backdrop(dress[1]),
+                                dither=dither)  # fmt: skip
         else:
             renderer, motion = warmed
             renderer.motion = self.motion  # from now on the panel's
@@ -1135,7 +1138,7 @@ class MainLoop:
 
         def build() -> tuple[Renderer, Motion]:
             renderer = Renderer(self._dressed(theme, config, source), animate=animate,
-                                motion=motion, backdrop=backdrop)  # fmt: skip
+                                motion=motion, backdrop=backdrop, dither=continuous)  # fmt: skip
             renderer.continuous, renderer.fps, renderer.sample = continuous, fps, sample
             renderer.fan_choices = fan.Choices.of(config)  # their rotors, warmed as shown
             renderer.beats = self.beats
@@ -1428,6 +1431,7 @@ class MainLoop:
                 renderer.background_builds = streaming
                 renderer.between_frames = self.between_frames if streaming else None
                 renderer.continuous = streaming  # graphs scroll, values glide on
+                renderer.dither = streaming  # soft light without bands (render.dither)
                 # videos decoded as fast as the panel gets frames (a few a second where it takes
                 # a video from its file: below), else as moving.VIDEO_FPS says
                 if not streaming:

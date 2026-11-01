@@ -750,3 +750,19 @@ def test_in_video_mode_the_helper_threads_wait_for_the_gap_between_frames():
         assert loop.renderer.between_frames is None
     finally:
         loop.close()
+
+
+def test_in_video_mode_soft_light_is_dithered():
+    """The panel's video gets its gradients and glows with a level's worth of noise (whole
+    levels showed as bands once made YUV); still frames do not (a PNG of noise is twice as
+    large, JPEG loses it)."""
+    clock = Clock(1000.0)
+    loop = loop_for("pico", clock)
+    try:
+        loop.step(clock.now)
+        assert loop.renderer.dither is True
+        loop.display.streaming = loop.display.slow = False
+        loop.step(clock.now + 0.02)
+        assert loop.renderer.dither is False
+    finally:
+        loop.close()

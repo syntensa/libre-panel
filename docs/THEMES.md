@@ -74,6 +74,13 @@ Also built in: the eight screens of SPUR II as a legacy collection, and the roun
   its average; the palette's `accent` while there is no cover or it is grey): it
   follows the track. Use it for bars, rings and icons; a text keeps the colour it
   was first drawn in.
+- `background`: a `color`, over it an optional `gradient` of two colours (top to bottom,
+  `"gradient_direction": "horizontal"` left to right), and over both an optional `image`
+  from the theme's folder, fitted to the panel. A gradient here is drawn by Libre Panel and
+  has no bands: in video mode with a level's worth of noise, as a dark one across a large
+  panel would otherwise show its few levels as stripes (Libre Panel's own themes keep the
+  editor's dot grid as their `image` over `["#0A0E13", "#06090D"]`). A gradient baked into
+  the picture keeps its levels as it has them.
 - `font` is the default for all text; `builtin:Barlow-Regular`, `-Medium`,
   `-SemiBold`, `-Bold`, `builtin:BarlowCondensed-Medium`, `-SemiBold`,
   `builtin:JetBrainsMono-Medium`, `-Bold`, `builtin:LiberationSans-Regular`,

@@ -548,6 +548,10 @@ class Theme:
     collection: str = ""
     background_color: str = "#000000"
     background_image: str | None = None
+    # A gradient over the colour and under the picture: (from, to), top to bottom (or left to
+    # right: background_direction "horizontal"), drawn by the renderer without bands
+    background_gradient: tuple[str, str] | None = None
+    background_direction: str = "vertical"
     refresh_ms: int = 1000
     model: str = "custom"
     palette: dict[str, str] = field(default_factory=dict)
@@ -579,6 +583,17 @@ class Theme:
     def toast_anchor(self) -> str:
         return self.toast["anchor"]
 
+    def _background(self) -> dict[str, Any]:
+        background: dict[str, Any] = {
+            "color": self.background_color,
+            "image": self.background_image,
+        }
+        if self.background_gradient is not None:
+            background["gradient"] = list(self.background_gradient)
+            if self.background_direction != "vertical":
+                background["gradient_direction"] = self.background_direction
+        return background
+
     def to_dict(self) -> dict[str, Any]:
         data = {
             "format": THEME_FORMAT,
@@ -595,7 +610,7 @@ class Theme:
             },
             "palette": dict(self.palette),
             "font": self.font,
-            "background": {"color": self.background_color, "image": self.background_image},
+            "background": self._background(),
             "refresh_ms": self.refresh_ms,
             "animation": {"smoothing_ms": self.smoothing_ms},
             "widgets": deepcopy(self.widgets),
@@ -1152,6 +1167,16 @@ def parse_theme(data: Any, root: Path | None = None) -> Theme:
         bg_image = _coerce("string", bg_image, "background.image")
         if root is not None:
             resolve_asset(root, bg_image)
+    bg_gradient = background.get("gradient")
+    if bg_gradient is not None:
+        if not isinstance(bg_gradient, list) or len(bg_gradient) != 2:
+            raise ThemeError('background.gradient: two colours, e.g. ["#0A0E13", "#06090D"]')
+        bg_gradient = tuple(
+            _check_color(c, "background.gradient", False, palette) for c in bg_gradient
+        )
+    bg_direction = background.get("gradient_direction", "vertical")
+    if bg_direction not in ("vertical", "horizontal"):
+        raise ThemeError('background.gradient_direction: "vertical" or "horizontal"')
     refresh_ms = _coerce("int", data.get("refresh_ms", 1000), "refresh_ms")
     if refresh_ms < 100:
         raise ThemeError("refresh_ms must be at least 100")
@@ -1183,6 +1208,8 @@ def parse_theme(data: Any, root: Path | None = None) -> Theme:
         height=height,
         background_color=bg_color,
         background_image=bg_image,
+        background_gradient=bg_gradient,
+        background_direction=bg_direction,
         refresh_ms=refresh_ms,
         model=model_id,
         palette=palette,

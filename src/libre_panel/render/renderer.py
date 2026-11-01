@@ -384,6 +384,55 @@ def _blur(img: Image.Image, radius: float, exact: bool = False) -> Image.Image:
     return pre.convert("RGBA")
 
 
+def _soft_light(
+    base: Image.Image, radius: float, gain: float = 1.0, noise: bool = True
+) -> Image.Image:
+    """``base`` (RGBA, straight) blurred as :func:`_blur` blurs it, with its alpha times ``gain``
+    (at most full), its alpha worked out in floating point and made 8 bits, with the dither
+    (render.dither) where ``noise`` says: a glow made stronger than it was blurred then steps
+    no more than a level at a time (whole levels made stronger spread apart, as rings round it
+    on a large panel), and with the dither not even that. Its colour is blurred as before.
+    Only the part where there is light is worked on (what is lit, and three radii round it)."""
+    import numpy as np
+
+    from libre_panel.render import dither
+
+    lit = base.getchannel("A").getbbox()
+    if lit is None:
+        return Image.new("RGBA", base.size, (0, 0, 0, 0))
+    reach = math.ceil(3 * radius) + 2
+    box = (max(0, lit[0] - reach), max(0, lit[1] - reach),
+           min(base.width, lit[2] + reach), min(base.height, lit[3] + reach))  # fmt: skip
+    part = base.crop(box)
+    size = part.size
+    # one colour (a text, a symbol, a ring in one colour): the light is that colour, unblurred
+    found = part.getcolors(maxcolors=16)
+    one = {c[:3] for _n, c in found if c[3]} if found else set()
+    half = max(base.size) > 320 and radius >= 4  # half size: 4x cheaper, the same look (as _blur)
+    if half:
+        small = (max(1, size[0] // 2), max(1, size[1] // 2))
+        alpha = Image.fromarray(np.asarray(part.getchannel("A"), np.float32), "F")
+        alpha = np.asarray(alpha.resize(small, Image.BILINEAR), np.float32)
+        soft = Image.fromarray(dither.blur(alpha, radius / 2), "F").resize(size, Image.BILINEAR)
+    else:
+        soft = dither.blur(np.asarray(part.getchannel("A"), np.float32), radius)
+    if len(one) == 1:
+        out = np.empty((size[1], size[0], 4), np.uint8)
+        out[..., :3] = next(iter(one))
+    elif half:
+        colour = part.convert("RGBa").resize(small, Image.BILINEAR)
+        colour = colour.filter(ImageFilter.GaussianBlur(radius / 2)).resize(size, Image.BILINEAR)
+        out = np.asarray(colour.convert("RGBA")).copy()
+    else:
+        colour = part.convert("RGBa").filter(ImageFilter.GaussianBlur(radius))
+        out = np.asarray(colour.convert("RGBA")).copy()
+    soft = np.minimum(255.0, np.asarray(soft, np.float32) * gain)
+    out[..., 3] = dither.to_u8(soft, box[0], box[1], noise)
+    whole = Image.new("RGBA", base.size, (0, 0, 0, 0))
+    whole.paste(Image.fromarray(out, "RGBA"), box[:2])
+    return whole
+
+
 @cached("renderer.ramps", 2 * MB)
 def _ramp(w: int, h: int, edge: int) -> Image.Image:
     """Opacity over ``h`` rows: full, but soft over ``edge`` rows at the top and the bottom."""
@@ -494,19 +543,26 @@ def _turned(piece: Piece, turn: Turn) -> Piece:
 
 # (gradients as large as the panel are made once for a card, kept as a piece: not kept here)
 @cached("renderer.gradients", 4 * MB)
-def _gradient(size: tuple[int, int], a: RGBA, b: RGBA, horizontal: bool) -> Image.Image:
-    """Linear gradient from ``a`` to ``b`` (cached: callers must not modify it)."""
+def _gradient(size: tuple[int, int], a: RGBA, b: RGBA, horizontal: bool,
+              noise: bool = False) -> Image.Image:  # fmt: skip
+    """Linear gradient from ``a`` to ``b`` (cached: callers must not modify it); with ``noise``
+    worked out in floating point and made 8 bits with the dither (render.dither)."""
     steps = size[0] if horizontal else size[1]
+    if noise:
+        return _dithered(size, _ramp_floats(a, b, steps, 1), horizontal)
     strip = Image.new("RGBA", (steps, 1) if horizontal else (1, steps))
     strip.putdata([_lerp(a, b, i / max(1, steps - 1)) for i in range(steps)])
     return strip.resize(size, Image.NEAREST)
 
 
 @cached("renderer.gradients_down", 1 * MB)  # (for cards and rects: made once, kept as pieces)
-def _gradient_down(size: tuple[int, int], a: RGBA, b: RGBA, horizontal: bool) -> Image.Image:
+def _gradient_down(size: tuple[int, int], a: RGBA, b: RGBA, horizontal: bool,
+                   noise: bool = False) -> Image.Image:  # fmt: skip
     """The colours a gradient three times the size has once reduced (cached:
-    callers must not modify it)."""
+    callers must not modify it); with ``noise`` made 8 bits with the dither."""
     steps = size[0] if horizontal else size[1]
+    if noise:
+        return _dithered(size, _ramp_floats(a, b, steps, SUPERSAMPLE), horizontal)
     last = max(1, steps * SUPERSAMPLE - 1)
     colours = []
     for i in range(steps):
@@ -515,6 +571,26 @@ def _gradient_down(size: tuple[int, int], a: RGBA, b: RGBA, horizontal: bool) ->
     strip = Image.new("RGBA", (steps, 1) if horizontal else (1, steps))
     strip.putdata(colours)
     return strip.resize(size, Image.NEAREST)
+
+
+def _ramp_floats(a: RGBA, b: RGBA, steps: int, sub: int) -> Any:
+    """The colours (steps, 4) from ``a`` to ``b``, each the mean of ``sub`` as a gradient ``sub``
+    times as long has them (as :func:`_gradient_down` reduces it), in floating point."""
+    import numpy as np
+
+    last = max(1, steps * sub - 1)
+    t = np.clip(np.arange(steps * sub, dtype=np.float32) / last, 0, 1).reshape(steps, sub)
+    lo, hi = np.asarray(a, np.float32), np.asarray(b, np.float32)
+    return (lo + (hi - lo) * t[..., None]).mean(axis=1)
+
+
+def _dithered(size: tuple[int, int], ramp: Any, horizontal: bool) -> Image.Image:
+    """A gradient of ``size`` running along ``ramp`` (steps, 4: floats), made 8 bits with the
+    dither: its colours and its alpha, a fully transparent or opaque one stays so."""
+    from libre_panel.render import dither
+
+    w, h = size
+    return Image.fromarray(dither.ramp_u8(ramp, h if horizontal else w, horizontal), "RGBA")
 
 
 @lru_cache(maxsize=64)
@@ -694,6 +770,7 @@ class Renderer:
         preview: bool = False,
         motion: Motion | None = None,
         backdrop: Image.Image | None = None,
+        dither: bool = False,
     ) -> None:
         self.theme = theme
         # a picture under the theme instead of its own background picture: the panel's part of
@@ -740,6 +817,7 @@ class Renderer:
         # Video mode (the main loop sets these): every frame goes out, so graphs
         # scroll between readings and values glide until the next one.
         self.continuous = False
+        self._dither = dither  # (dither): the main loop sets it with video mode
         self.sample: tuple[float, float] = (0.0, 1.0)  # (when, seconds to the next)
         self._strips: dict[str, _Strips] = {}  # graph id -> its strips (video mode)
         self._ranges: dict[str, _Range] = {}  # graph id -> its own range as it glides
@@ -917,6 +995,23 @@ class Renderer:
             self._warn(f"image {rel!r} could not be loaded ({exc})")
             return None
 
+    @property
+    def dither(self) -> bool:
+        """Whether soft light and gradients made here get a level's worth of noise (render.dither):
+        for the panel's video, where whole levels showed as bands. Changed, what was made with
+        it or without it is made again."""
+        return self._dither
+
+    @dither.setter
+    def dither(self, on: bool) -> None:
+        if on == self._dither:
+            return
+        self._dither = on
+        self._cache.clear()
+        self._underlays.clear()
+        self._grounds, self._last = None, None
+        self._background = self._load_background()
+
     def _load_background(self) -> Image.Image | None:
         """The background picture at the theme's size. Read for it alone, not kept as read
         (a picture the size of the 12.3" is five megabytes: it was kept twice)."""
@@ -924,9 +1019,31 @@ class Renderer:
             fitted = ImageOps.fit(self.backdrop, (self.theme.width, self.theme.height))
             return fitted.convert("RGBA")
         image = self._read_picture(self.theme.background_image or "")
-        if image is None:
-            return None
-        return ImageOps.fit(image, (self.theme.width, self.theme.height))
+        if image is not None:
+            image = ImageOps.fit(image, (self.theme.width, self.theme.height))
+        if self.theme.background_gradient is None:
+            return image
+        ground = self._gradient_ground()
+        if image is not None:
+            ground.alpha_composite(image.convert("RGBA"))
+        return ground
+
+    def _gradient_ground(self) -> Image.Image:
+        """The theme's background gradient, the panel's size, worked out in floating point and
+        made 8 bits with the dither in video mode: a dark one spans a handful of levels across
+        the panel (Lumen's: 4 to 6 across 720 rows on the 12.3"), whole levels showed as bands."""
+        import numpy as np
+
+        from libre_panel.render import dither
+
+        w, h = self.theme.width, self.theme.height
+        a, b = (np.asarray(self.color(c) or (0, 0, 0, 255), np.float32)
+                for c in self.theme.background_gradient or ())  # fmt: skip
+        across = self.theme.background_direction == "horizontal"
+        t = np.linspace(0.0, 1.0, w if across else h, dtype=np.float32)
+        line = a[None, :3] + (b - a)[None, :3] * t[:, None]  # (n, 3): from the first to the second
+        rgb = dither.ramp_u8(line, h if across else w, across, self.dither)
+        return Image.fromarray(rgb, "RGB").convert("RGBA")  # (opaque, as a picture is)
 
     # -- animation ---------------------------------------------------------
 
@@ -1039,9 +1156,16 @@ class Renderer:
         if glow:
             base = Image.new("RGBA", size, (0, 0, 0, 0))
             base.paste(layer, (pad, pad))
-            halo = _blur(base, widget.get("glow_radius", 10), exact)
+            radius = widget.get("glow_radius", 10)
             boost = 1.0 + glow * 2.5  # light spills: brighter than the shape's own alpha
-            halo.putalpha(halo.getchannel("A").point(lambda a: min(255, int(a * boost * glow))))
+            # made stronger, the alpha's levels would be spread apart, as bands: worked out in
+            # floating point (a graph's strips, ``exact``, keep whole levels: a part is the same
+            # wherever it is cut)
+            if exact or boost * glow <= 1.0:
+                halo = _blur(base, radius, exact)
+                halo.putalpha(halo.getchannel("A").point(lambda a: min(255, int(a * boost * glow))))
+            else:
+                halo = _soft_light(base, radius, boost * glow, self.dither)
             out.alpha_composite(halo)
         return out, pad
 
@@ -3256,7 +3380,7 @@ class Renderer:
             return
         mask = Image.new("L", layer.size, 0)
         ImageDraw.Draw(mask).rounded_rectangle(box, radius=radius, fill=255)
-        layer.paste(_gradient(layer.size, a, b, horizontal), (0, 0), mask)
+        layer.paste(_gradient(layer.size, a, b, horizontal, self.dither), (0, 0), mask)
 
     def _draw_rect(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
         return self._cached(widget, None, lambda: self._rect_piece(widget))
@@ -3326,7 +3450,8 @@ class Renderer:
             if b is None:
                 layer = Image.new("RGBA", (w, h), a)
             else:
-                layer = _gradient_down((w, h), a, b, widget["gradient"] == "horizontal").copy()
+                across = widget["gradient"] == "horizontal"
+                layer = _gradient_down((w, h), a, b, across, self.dither).copy()
             inside = full if edge is None else ImageChops.subtract(full, edge)
             alpha = layer.getchannel("A")
             layer.putalpha(
