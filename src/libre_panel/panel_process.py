@@ -28,6 +28,7 @@ import logging
 import logging.handlers
 import multiprocessing
 import os
+import queue
 import threading
 import time
 from dataclasses import fields
@@ -115,6 +116,7 @@ class PanelProcess:
         self._held: set[str] = set()  # the device places the process holds (as it said)
         self._marked: set[str] = set()  # those of them noted as taken here
         self._wanting = _Wanting()  # the readings its theme reads, wanted here in its name
+        self._answers = _Answers(self._send, f"panel-{n + 2}-answer")
         status._ask = lambda: self._send(("shown?",))
         self.process = ctx.Process(target=child, args=(n, str(path), theirs, self._logs),
                                    name=f"panel-{n + 2}", daemon=True)  # fmt: skip
@@ -152,6 +154,7 @@ class PanelProcess:
         if not self.process.is_alive():
             _PIDS.pop(self.process.pid, None)
         self._stop.set()
+        self._answers.close()
         self._unmark()
         _forget(self._wanting)
         try:
@@ -203,7 +206,6 @@ class PanelProcess:
 
     def _hear(self) -> None:
         from libre_panel.devices import base
-        from libre_panel.sensors.base import HubView
 
         while not self._stop.is_set():
             try:
@@ -212,10 +214,7 @@ class PanelProcess:
                 break
             kind = message[0]
             if kind == "snapshot?":  # its loop takes a sample: the first's readings, shared
-                hub = self.more.hub
-                readings, images = hub.shared(HubView.SHARE_S)
-                readings.update(hub.fresh())
-                self._send(("snapshot", readings, images, hub.age(), hub.every_frame))
+                self._answers.put(self._snapshot)
             elif kind == "status":
                 self.heard = True
                 for name, value in message[1].items():
@@ -238,6 +237,14 @@ class PanelProcess:
             self.status.state = "error"
             self.status.detail = "the panel's process ended"
 
+    def _snapshot(self) -> tuple[Any, ...]:
+        from libre_panel.sensors.base import HubView
+
+        hub = self.more.hub
+        readings, images = hub.shared(HubView.SHARE_S)
+        readings.update(hub.fresh())
+        return ("snapshot", readings, images, hub.age(), hub.every_frame)
+
     def _unmark(self) -> None:
         from libre_panel.devices import base
 
@@ -254,6 +261,37 @@ class PanelProcess:
             if record is None:
                 return
             logging.getLogger(record.name).handle(record)
+
+
+class _Answers:
+    """The answers of a thread that hears the other process, sent by a thread of their own (made
+    there: ``put`` takes what makes one): the thread that hears never waits for the pipe. The
+    other end may be sending something large just then and wait for this end to read; had the
+    thread that reads waited to send its answer, neither end would have read again (on Windows
+    the panels stood still for good: the readings with their pictures went one way, the panel's
+    picture the other)."""
+
+    def __init__(self, send: Any, name: str) -> None:
+        self._send = send
+        self._queue: queue.SimpleQueue[Any] = queue.SimpleQueue()
+        threading.Thread(target=self._run, name=name, daemon=True).start()
+
+    def put(self, make: Any) -> None:
+        """Answer with what ``make()`` returns (None: nothing)."""
+        self._queue.put(make)
+
+    def close(self) -> None:
+        self._queue.put(None)
+
+    def _run(self) -> None:
+        while (make := self._queue.get()) is not None:
+            try:
+                message = make()
+            except Exception:  # noqa: BLE001 - an answer that fails is not given
+                log.exception("an answer to the other process failed")
+                continue
+            if message is not None:
+                self._send(message)
 
 
 class _Wanting:
@@ -286,6 +324,7 @@ class _Link:
         self.status: Any = None
         self.beats: Any = None
         self._foreign: set[str] = set()  # device places the other process's panels hold
+        self._answers = _Answers(self.send, f"{threading.current_thread().name}-answer")
 
     def send(self, message: tuple[Any, ...]) -> None:
         with self._lock:
@@ -315,6 +354,7 @@ class _Link:
             kind = message[0]
             if kind == "stop":
                 self.stop.set()
+                self._answers.close()
                 return
             if kind == "state":
                 state = message[1]
@@ -345,15 +385,15 @@ class _Link:
                     self._replies.append(message)
                     self._replied.notify_all()
             elif kind == "shown?":
-                self._picture()
+                self._answers.put(self._picture)
 
-    def _picture(self) -> None:
+    def _picture(self) -> tuple[Any, ...] | None:
         frame = getattr(self.status, "shown", None)
         if frame is None:
-            return
+            return None
         buffer = io.BytesIO()
         frame.convert("RGB").save(buffer, "JPEG", quality=88)
-        self.send(("shown", buffer.getvalue()))
+        return ("shown", buffer.getvalue())
 
     def tell(self) -> None:
         """How the panel is doing and the device places it holds, every :data:`STATUS_S`, and

@@ -192,3 +192,43 @@ def test_a_panels_process_loads_only_what_it_draws_with(tmp_path):
     sensors = {m for m in modules if m.startswith("libre_panel.sensors")}
     assert sensors <= SENSORS_OF_ITS_OWN
     assert "libre_panel.render.renderer" in modules and "libre_panel.devices.virtual" in modules
+
+
+def test_the_ends_of_the_pipe_never_wait_for_each_other():
+    """The thread that hears never waits for the pipe: it answers through a thread of its own.
+    (On Windows the panels stood still for good: the first's process sent the readings with
+    their pictures while the panel's process sent its picture, each waiting for the other to
+    read, and the threads that read were the ones waiting.)"""
+    import multiprocessing
+
+    import numpy as np
+    from PIL import Image
+
+    from libre_panel import panel_process
+
+    ours, theirs = multiprocessing.get_context("spawn").Pipe()
+    link = panel_process._Link(theirs)
+    noise = np.random.default_rng(1).integers(0, 255, (720, 1920, 3), dtype=np.uint8)
+    link.status = app.RunStatus()
+    link.status.shown = Image.fromarray(noise)  # (its picture: megabytes as a JPEG)
+    threading.Thread(target=link.hear, daemon=True).start()
+    big = {"pictures": bytes(3_000_000)}
+
+    def ask_and_tell():
+        for _ in range(3):  # asked for its picture, then told much while it answers
+            ours.send(("shown?",))
+            for _ in range(4):
+                ours.send(("fresh", big, {}, []))
+
+    talking = threading.Thread(target=ask_and_tell, daemon=True)
+    talking.start()
+    talking.join(20)
+    assert not talking.is_alive(), "the panel's process stopped reading"
+    pictures = 0
+    while ours.poll(5):
+        kind = ours.recv()[0]
+        pictures += kind == "shown"
+        if pictures == 3:
+            break
+    assert pictures == 3  # (each answer came, after all)
+    ours.send(("stop",))

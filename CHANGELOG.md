@@ -135,6 +135,12 @@
   no slower.
 
 **Fixed**
+- **A panel beside the first no longer stands still for good** (seen on Windows). Its process
+  and the first panel's talk through a pipe, and each answered a question from the thread
+  that reads: when the first sent the readings with their pictures while the panel's process
+  sent its picture, each waited for the other to read, and the threads that read were the
+  ones waiting. The answers go out from a thread of their own now; the threads that read
+  never wait.
 - **A WireView Pro II is no longer taken for a second graphics card.** LibreHardwareMonitor
   names it `/gpu-powermonitor/<port>`, and Libre Panel took everything whose name begins with
   "gpu" for a graphics card: read through LibreHardwareMonitor's web server, the WireView came
