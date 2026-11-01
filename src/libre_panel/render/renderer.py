@@ -762,6 +762,11 @@ def _live_pictures(widget: dict[str, Any]) -> set[str]:
 _UNREAD = object()  # (a picture not kept yet: None is one that could not be read)
 
 
+# The theme's card colour: a frame filled with it is a card, as see-through as the person asks
+# (theme style ``card_opacity``, config.toml card_opacity)
+SURFACE = "@surface"
+
+
 class Renderer:
     def __init__(
         self,
@@ -994,6 +999,11 @@ class Renderer:
         except (OSError, ThemeError) as exc:
             self._warn(f"image {rel!r} could not be loaded ({exc})")
             return None
+
+    @property
+    def _card_opacity(self) -> float:
+        """How much of the background a card covers (its style's ``card_opacity``)."""
+        return float((self.theme.style or {}).get("card_opacity", 1.0))
 
     @property
     def dither(self) -> bool:
@@ -3447,6 +3457,8 @@ class Renderer:
         layer = None
         if widget["color"]:
             a, b = self.color(widget["color"]), self.color(widget["color2"])
+            if widget["color"] == SURFACE and a is not None:  # a card, as see-through as asked
+                a = (*a[:3], round(a[3] * self._card_opacity))
             if b is None:
                 layer = Image.new("RGBA", (w, h), a)
             else:

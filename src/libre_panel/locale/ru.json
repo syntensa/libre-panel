@@ -2995,7 +2995,9 @@
     "the mark, faintly, breathing": "знак, едва заметно дышащий",
     "Look of the start screen": "Вид стартового экрана",
     "When the PC starts, until Libre Panel shows its themes: {motion}.": "При запуске ПК, пока Libre Panel не покажет свои темы: {motion}.",
-    "The panel's own screens, in the look you choose and made for its size: the logo it shows when it is switched on, and the clip it plays when the PC starts, until Libre Panel shows its themes.": "Собственные экраны панели в выбранном вами стиле и под её размер: логотип, который она показывает при включении, и клип, который проигрывает при запуске ПК, пока Libre Panel не покажет свои темы."
+    "The panel's own screens, in the look you choose and made for its size: the logo it shows when it is switched on, and the clip it plays when the PC starts, until Libre Panel shows its themes.": "Собственные экраны панели в выбранном вами стиле и под её размер: логотип, который она показывает при включении, и клип, который проигрывает при запуске ПК, пока Libre Panel не покажет свои темы.",
+    "Card opacity": "Непрозрачность карточек",
+    "How much of the background the cards of every screen cover. Libre Panel's own themes let a little of it through; 100 % covers it all. What is on a card stays as it is.": "Насколько карточки каждого экрана закрывают фон. Карточки Libre Panel слегка его пропускают; 100 % закрывает полностью. То, что на карточке, остаётся без изменений."
   },
   "fields": {
     "agent": "агент",

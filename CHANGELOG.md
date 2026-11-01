@@ -3,6 +3,16 @@
 ## Unreleased
 
 **New**
+- **Cards that let the background through, a little** (*Settings → Panel → Card opacity*).
+  The cards of Libre Panel's own screens cover the background a little less now: just enough
+  for its gradient and the dot grid to show through them, not so much that reading suffers
+  (the contrast of the text against what is behind the card falls by 3 % at most). Lumen,
+  Almanac and Nimbus cover 70 %, Arena 80 %, Studio and Agents 85 %, Encore 90 % (its cards
+  lie over the album's cover). It is the surface of the module cards and of the frames a
+  theme fills with its card colour (`@surface`), not what is on them; High Contrast, the
+  round report and SPUR's screens cover it as before. In *Settings* you can set your own for
+  every screen, from 40 to 100 % (100: as before); a theme sets its own with `card_opacity`
+  in its `style`.
 - **Gradients and glows without bands on the panel's video** (the 12.3" most of all). A dark
   gradient across a large panel spans a handful of levels: Libre Panel's own background
   (Lumen, Encore, Almanac, the round report) went from #0A0E13 to #06090D, six levels across

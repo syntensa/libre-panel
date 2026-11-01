@@ -93,6 +93,7 @@ from libre_panel.theme.model import (
     valid_theme_name,
     version_base,
     with_accent,
+    with_card_opacity,
 )
 from libre_panel.theme.modules import (
     MODULE_KINDS,
@@ -537,10 +538,10 @@ class EditorState:
             try:
                 config = load_config(self.config_path)
                 chosen = (fan.Choices.of(config), config.symbols, config.switches, config.accent,
-                          tuple(config.cards))  # fmt: skip
+                          tuple(config.cards), config.card_opacity)  # fmt: skip
             except (ConfigError, OSError):
                 chosen = kept[1] if kept is not None else (
-                    fan.Choices(), DEFAULT_SYMBOLS, {}, "", DEFAULT_CARDS
+                    fan.Choices(), DEFAULT_SYMBOLS, {}, "", DEFAULT_CARDS, 0
                 )  # fmt: skip
             kept = self._fan_choices = (stamp, chosen)
         return kept[1]
@@ -562,6 +563,16 @@ class EditorState:
         from libre_panel.accent import accent_of
 
         return accent_of(self._chosen()[3])
+
+    def card_opacity(self) -> int:
+        """How much of the background the cards cover on the panel (config.toml
+        ``card_opacity``, per cent), for the previews of the themes."""
+        return self._chosen()[5]
+
+    def dressed(self, theme: Any) -> Any:
+        """``theme`` for a preview, as the panel shows it: in the accent, its cards as
+        see-through as on the panel."""
+        return with_card_opacity(with_accent(theme, self.accent()), self.card_opacity())
 
     def switches(self, theme: Any) -> dict[str, bool]:
         """The person's choice of the switches of ``theme`` (one with its folder)."""
@@ -692,10 +703,11 @@ def _panel_s(config: Config, n: int, written: dict[str, Any]) -> bool:
 
 def _draw_theme(
     theme: Any, width: int, accent: str | None, symbols: str, chosen: tuple[tuple[str, bool], ...],
-    cards: tuple[str, ...] = DEFAULT_CARDS,
+    cards: tuple[str, ...] = DEFAULT_CARDS, card_opacity: int = 0,
 ) -> bytes:  # fmt: skip
     """A theme as a PNG ``width`` wide at most, as the panel shows it with those choices."""
-    renderer = Renderer(with_cards(with_accent(theme, accent), cards), preview=True)
+    dressed = with_card_opacity(with_accent(theme, accent), card_opacity)
+    renderer = Renderer(with_cards(dressed, cards), preview=True)
     renderer.symbols = symbols
     renderer.switches = dict(chosen)
     try:
@@ -962,7 +974,9 @@ class EditorHandler(BaseHTTPRequestHandler):
         chosen = self.state.chosen_switches(theme_id)  # (as the panel shows it)
         accent = self.state.accent()
         cards = self.state.cards()
-        key = (theme_id, stamp, width, i18n.language(), self.state.symbols(), chosen, accent, cards)
+        see = self.state.card_opacity()
+        key = (theme_id, stamp, width, i18n.language(), self.state.symbols(), chosen, accent, cards,
+               see)  # fmt: skip
         png = self._kept_preview(key)
         if png is None:
             # A page asks for a screenful of these at once: they are drawn two at a time
@@ -977,7 +991,8 @@ class EditorHandler(BaseHTTPRequestHandler):
                         theme = load_theme(folder)
                     except ThemeError as exc:
                         return self._error(str(exc), HTTPStatus.NOT_FOUND)
-                    png = _draw_theme(theme, width, accent, self.state.symbols(), chosen, cards)
+                    png = _draw_theme(theme, width, accent, self.state.symbols(), chosen, cards,
+                                      see)  # fmt: skip
                     with self.state.previews_lock:
                         cache = self.state.previews
                         while len(cache) >= 48:  # the oldest go first
@@ -2193,7 +2208,7 @@ class EditorHandler(BaseHTTPRequestHandler):
         ended = float(report["session"]["ended"])
         snapshot = Snapshot(readings=found_readings, now=datetime.fromtimestamp(ended),
                             images=images)  # fmt: skip
-        renderer = Renderer(with_accent(theme, self.state.accent()), preview=True)
+        renderer = Renderer(self.state.dressed(theme), preview=True)
         renderer.symbols = self.state.symbols()
         renderer.switches = dict(self.state.chosen_switches(name))
         try:

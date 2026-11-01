@@ -477,6 +477,7 @@ function DisplayCard() {
       />
     <//>
     <${AccentRow} accent=${config.accent || ""} windows=${catalog?.platform === "win32"} />
+    <${CardOpacity} level=${config.card_opacity ?? 0} />
     <${SettingRow}
       title=${t("How the panel is mounted")}
       hint=${t("Libre Panel's screens show in their version for it: Lumen Vertical for Lumen on a bar that stands on end.")}
@@ -558,6 +559,40 @@ function AccentRow({ accent, windows }) {
       ${own
         ? html`<input type="color" class="accent-colour" aria-label=${t("My accent colour")} value=${accent.toLowerCase()}
             onChange=${(event) => saveSettings({ accent: event.currentTarget.value.toUpperCase() })} />`
+        : null}
+    </div>
+  <//>`;
+}
+
+/**
+ * How much of the background the cards of every screen cover (config.toml card_opacity): as
+ * each theme has them (Libre Panel's own let it through a little), or the person's own, from
+ * 40 to 100 %; what is on them stays as it is.
+ */
+function CardOpacity({ level }) {
+  const [chosen, setChosen] = useState(null); // as the brightness slider above
+  const shown = chosen ?? level;
+  const own = shown > 0;
+  const choose = (value) => {
+    if (value === level) return;
+    setChosen(value);
+    saveSettings({ card_opacity: value }).finally(() => setChosen(null));
+  };
+  return html`<${SettingRow}
+    class="card-opacity-row"
+    title=${t("Card opacity")}
+    hint=${t("How much of the background the cards of every screen cover. Libre Panel's own themes let a little of it through; 100 % covers it all. What is on a card stays as it is.")}
+  >
+    <div class="card-opacity">
+      <${Segmented}
+        label=${t("Card opacity")}
+        value=${own ? "own" : "theme"}
+        onChange=${(value) => choose(value === "own" ? 80 : 0)}
+        options=${[{ value: "theme", label: t("The theme's") }, { value: "own", label: t("My own") }]}
+      />
+      ${own
+        ? html`<${Slider} label=${t("Card opacity")} value=${shown} min=${40} max=${100} step=${5}
+            format=${(value) => `${value} %`} onCommit=${choose} />`
         : null}
     </div>
   <//>`;

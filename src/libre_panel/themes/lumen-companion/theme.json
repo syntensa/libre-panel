@@ -48,7 +48,8 @@
     "glow": 0.6,
     "backdrop": "flat",
     "display_font": "builtin:Barlow-SemiBold",
-    "text_font": "builtin:Barlow-Medium"
+    "text_font": "builtin:Barlow-Medium",
+    "card_opacity": 0.7
   },
   "widgets": [
     {

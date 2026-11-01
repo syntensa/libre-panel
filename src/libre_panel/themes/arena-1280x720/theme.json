@@ -255,7 +255,8 @@
     "glow": 0.6,
     "backdrop": "gradient",
     "display_font": "builtin:Barlow-SemiBold",
-    "text_font": "builtin:Barlow-Medium"
+    "text_font": "builtin:Barlow-Medium",
+    "card_opacity": 0.8
   },
   "look": {},
   "grid": {

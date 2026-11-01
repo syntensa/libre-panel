@@ -42,8 +42,11 @@ STYLE_DEFAULTS: dict[str, Any] = {
     "radius": 18,  # corner radius of a card 200 px tall
     "glow": 0.6,  # 0 = none, 1 = strong
     "backdrop": "gradient",  # gradient | flat: the screen behind the modules
+    # how much of the background the cards cover (1: all; config.toml card_opacity for every
+    # theme): their surface, not what is on them
     "display_font": "builtin:Barlow-SemiBold",  # numbers and the clock
     "text_font": "builtin:Barlow-Medium",  # labels
+    "card_opacity": 1.0,
 }
 CARDS = ("glass", "flat", "outline", "none")
 BACKDROPS = ("gradient", "flat")
@@ -374,7 +377,9 @@ class _Build:
             return
         radius = round(self.style["radius"] * self.frame_u / 200)
         kind = self.style["card"]
-        fill = {"glass": faded(self.c("surface"), 0.9), "flat": self.c("surface")}.get(kind)
+        see = float(self.style.get("card_opacity", 1.0))  # (a theme from before: all of it)
+        fill = {"glass": faded(self.c("surface"), 0.9 * see),
+                "flat": faded(self.c("surface"), see)}.get(kind)  # fmt: skip
         outline = self.c("line") if outline and kind in ("glass", "outline") else None
         self.add(
             "rect", "card", x=self.x, y=self.y, w=self.w, h=self.h, color=fill,
@@ -1487,7 +1492,8 @@ def build_image(b: _Build, _src: Source) -> None:
     pictures = [line.strip() for line in b.module["items"].splitlines() if line.strip()]
     radius = round(b.style["radius"] * b.frame_u / 200) if b.style["card"] != "none" else 0
     if not pictures:
-        b.add("rect", "frame", x=b.x, y=b.y, w=b.w, h=b.h, color=b.c("surface"),
+        see = float(b.style.get("card_opacity", 1.0))
+        b.add("rect", "frame", x=b.x, y=b.y, w=b.w, h=b.h, color=faded(b.c("surface"), see),
               outline=b.c("line"), radius=radius)  # fmt: skip
         icon = min(b.w, b.h) * 0.28
         b.icon("icon", "image", b.x + (b.w - icon) / 2, b.y + b.h / 2 - icon * 0.75, icon,

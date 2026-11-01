@@ -2995,7 +2995,9 @@
     "the mark, faintly, breathing": "标志微弱地呼吸",
     "Look of the start screen": "启动画面的外观",
     "When the PC starts, until Libre Panel shows its themes: {motion}.": "PC 启动时，直到 Libre Panel 显示其主题：{motion}。",
-    "The panel's own screens, in the look you choose and made for its size: the logo it shows when it is switched on, and the clip it plays when the PC starts, until Libre Panel shows its themes.": "面板自带的屏幕，采用你选择的外观并按其尺寸制作：通电时显示的 Logo，以及 PC 启动时播放的短片，直到 Libre Panel 显示其主题。"
+    "The panel's own screens, in the look you choose and made for its size: the logo it shows when it is switched on, and the clip it plays when the PC starts, until Libre Panel shows its themes.": "面板自带的屏幕，采用你选择的外观并按其尺寸制作：通电时显示的 Logo，以及 PC 启动时播放的短片，直到 Libre Panel 显示其主题。",
+    "Card opacity": "卡片不透明度",
+    "How much of the background the cards of every screen cover. Libre Panel's own themes let a little of it through; 100 % covers it all. What is on a card stays as it is.": "每个屏幕的卡片遮住背景的程度。Libre Panel 自带的主题会略微透出背景；100% 则完全遮住。卡片上的内容保持不变。"
   },
   "fields": {
     "agent": "智能体",

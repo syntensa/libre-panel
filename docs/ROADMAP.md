@@ -45,7 +45,10 @@ under its id, and themes in the 0.7 format, community themes among them, are rea
 - [ ] A theme format with layouts per shape (long bar, very long bar, 16:9, 3:2, square,
       round, on end), from which every size is laid out; a hand-made layout for a size stays
       possible and wins
-- [ ] One design system for the built-in themes: colours, type sizes, spacing, cards
+- [ ] One design system for the built-in themes: colours, type sizes, spacing, cards; cards
+      that let the background through a little, as they do since 0.8 (`card_opacity`,
+      measured per family: the dot grid shows through, the text loses at most 3 % of its
+      contrast)
 - [ ] Lumen first, at all 28 sizes, measured against its hand-made layouts; then Arena,
       Encore, Almanac, Nimbus, Studio and the others
 - [ ] A light variant of each family (for white builds)

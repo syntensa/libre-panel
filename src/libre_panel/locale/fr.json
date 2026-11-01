@@ -2995,7 +2995,9 @@
     "the mark, faintly, breathing": "le symbole, faiblement, qui respire",
     "Look of the start screen": "Style de l'écran de démarrage",
     "When the PC starts, until Libre Panel shows its themes: {motion}.": "Au démarrage du PC, jusqu'à ce que Libre Panel affiche ses thèmes : {motion}.",
-    "The panel's own screens, in the look you choose and made for its size: the logo it shows when it is switched on, and the clip it plays when the PC starts, until Libre Panel shows its themes.": "Les écrans propres au panneau, dans le style de votre choix et faits pour sa taille : le logo qu'il affiche à l'allumage, et la vidéo qu'il joue au démarrage du PC, jusqu'à ce que Libre Panel affiche ses thèmes."
+    "The panel's own screens, in the look you choose and made for its size: the logo it shows when it is switched on, and the clip it plays when the PC starts, until Libre Panel shows its themes.": "Les écrans propres au panneau, dans le style de votre choix et faits pour sa taille : le logo qu'il affiche à l'allumage, et la vidéo qu'il joue au démarrage du PC, jusqu'à ce que Libre Panel affiche ses thèmes.",
+    "Card opacity": "Opacité des cartes",
+    "How much of the background the cards of every screen cover. Libre Panel's own themes let a little of it through; 100 % covers it all. What is on a card stays as it is.": "Quelle part de l’arrière-plan les cartes de chaque écran couvrent. Celles de Libre Panel en laissent transparaître un peu ; 100 % le couvre. Ce qui est sur une carte reste tel quel."
   },
   "fields": {
     "agent": "agent",

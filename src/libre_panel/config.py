@@ -723,6 +723,10 @@ class Config:
     # an accent colour for every theme instead of its own (accent.py): "" the themes' own,
     # "system" Windows', or "#RRGGBB"
     accent: str = ""
+    # how much of the background the cards of every theme cover, in per cent (40 to 100; 0: as
+    # each theme has them): the module cards' surface and the frames in a theme's surface colour
+    # (theme with_card_opacity)
+    card_opacity: int = 0
     # one picture across all panels that are placed (arrangement.py): a file in the settings
     # folder (or a path of its own); "" none
     across: str = ""
@@ -962,6 +966,10 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
         cfg.accent = _expect(data["accent"], str, "accent").strip()
         if cfg.accent and cfg.accent != SYSTEM and not HEX.fullmatch(cfg.accent):
             raise ConfigError('accent: "system", a colour such as "#E0457B", or empty')
+    if "card_opacity" in data:
+        cfg.card_opacity = _expect(data["card_opacity"], int, "card_opacity")
+        if cfg.card_opacity != 0 and not 40 <= cfg.card_opacity <= 100:
+            raise ConfigError("card_opacity: 0 (each theme's own) or between 40 and 100")
     if "across" in data:
         cfg.across = _expect(data["across"], str, "across").strip()
         if len(cfg.across) > 300:

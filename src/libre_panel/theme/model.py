@@ -958,11 +958,14 @@ def _parse_style(raw: Any, root: Path | None) -> dict[str, Any] | None:
         "backdrop": "enum:" + "|".join(BACKDROPS),
         "display_font": "string",
         "text_font": "string",
+        "card_opacity": "number",
     }
     for key, kind in kinds.items():
         style[key] = _coerce(kind, raw.get(key, STYLE_DEFAULTS[key]), f"style.{key}")
     if not 0 <= style["glow"] <= 1:
         raise ThemeError("style.glow: must be between 0 and 1")
+    if not CARD_OPACITY_MIN <= style["card_opacity"] <= 1:
+        raise ThemeError(f"style.card_opacity: must be between {CARD_OPACITY_MIN} and 1")
     if not 0 <= style["radius"] <= 100:
         raise ThemeError("style.radius: must be between 0 and 100")
     for key in ("display_font", "text_font"):
@@ -1336,6 +1339,21 @@ def with_accent(theme: Theme, colour: str | None) -> Theme:
         for name, value in theme.palette.items()
     }
     return replace(theme, palette=palette)
+
+
+CARD_OPACITY_MIN = 0.4  # cards that cover less: what is on them stands on the background
+
+
+def with_card_opacity(theme: Theme, percent: int) -> Theme:
+    """``theme`` with cards that cover ``percent`` % of the background (config.toml
+    ``card_opacity``): the module cards' surface and the frames in the theme's surface colour
+    (``@surface``, Lumen's), not what is on them; 0: as the theme has them (its style's
+    ``card_opacity``, 1 where it has none)."""
+    if percent <= 0:
+        return theme
+    style = {**STYLE_DEFAULTS, **(theme.style or {})}
+    style["card_opacity"] = max(CARD_OPACITY_MIN, percent / 100)
+    return replace(theme, style=style)
 
 
 _COMPANION = re.compile(r"-companion(-vertical|-\d+x\d+)?$")

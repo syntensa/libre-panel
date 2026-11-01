@@ -756,8 +756,18 @@ the Arctic look. `"style"` sets the rest:
 
 `card` is `glass`, `flat`, `outline` or `none`; `radius` is the corner of a
 card 200 px tall (smaller cards get smaller corners); `glow` 0–1 scales the
-light on rings, graphs and the clock. The editor's looks (Arctic, Neon,
-Graphite, Paper, Sunset, Mono) set palette and style in one go.
+light on rings, graphs and the clock; `card_opacity` (0.4–1, 1 when left
+out) is how much of the background the cards cover: the module cards'
+surface, and every rect filled with the palette's `@surface`, which is how a
+theme's own frames are cards; what is on them stays as it is. Libre Panel's
+own themes let a little of it through, just enough to be seen (Lumen, Almanac
+and Nimbus 0.7, Arena 0.8, Studio and Agents 0.85, Encore 0.9, whose cards lie
+over the cover; the contrast of the text against what is behind it falls by
+3 % at most); High Contrast, the round report and SPUR's screens cover it.
+The person's `card_opacity` in config.toml (*Settings → Panel → Card
+opacity*) holds for every theme and goes before the theme's. The editor's
+looks (Arctic, Neon, Graphite, Paper, Sunset, Mono) set palette and style in
+one go.
 
 Modules and plain widgets mix: plain widgets are drawn in their order, a
 module's parts where the module is in the list.
