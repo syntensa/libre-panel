@@ -99,6 +99,13 @@
   them as well.
 
 **Better**
+- **Lit rings take half the time for a new value.** The arc of a round ring is worked out
+  from each pixel's distance to its edges instead of drawn twice as large and made smaller:
+  a gliding ring's new value 1.1 instead of 2.3 ms, and its light now lies exactly on the
+  middle of its groove (it lay half a pixel off on two sides), its edges without the steps
+  along the curve. A theme's conditions (`needs`) are worked out once a frame, not for every
+  part that asks (Arena's frame asked for `game.fps` sixty times). Arena on the 12.3" in the
+  panel's video: 107 to 108 % of a core instead of 111 to 113 %.
 - **The panel's video takes far less of the processor and of the memory** (0.8, "lighter"). A
   frame of the 12.3" was handed to ffmpeg whole, five and a half megabytes, and ffmpeg turned
   it into the panel's framebuffer and converted it to YUV, every frame, though from one frame

@@ -344,14 +344,61 @@ def _groove_ring(renderer: Any, widget: dict[str, Any]) -> Image.Image | None:
     return out
 
 
+def _round(widget: dict[str, Any]) -> bool:
+    """Whether a gauge's arc is worked out (:func:`_cover`): round, turning clockwise."""
+    return widget["w"] == widget["h"] and widget["end_angle"] > widget["start_angle"]
+
+
+def _field(widget: dict[str, Any], room: int) -> tuple[np.ndarray, np.ndarray]:
+    """Of each pixel of a round gauge's canvas (``room`` px around it): how far its middle is
+    from the gauge's (px), and at what angle from the gauge's start, clockwise (0 to 2 pi).
+    Kept: a value's arc is cut from them."""
+
+    def make() -> tuple[np.ndarray, np.ndarray]:
+        side = widget["w"] + 2 * room
+        at = np.arange(side, dtype=np.float32) + np.float32(0.5 - side / 2)
+        dx, dy = at[None, :], at[:, None]
+        far = np.sqrt(dx * dx + dy * dy)
+        angle = np.arctan2(dy, dx) - np.float32(math.radians(widget["start_angle"]))
+        return far, angle % np.float32(2 * math.pi)
+
+    return _PICTURES.make(("ring-field", widget["w"], widget["start_angle"], room), make)
+
+
+def _cover(widget: dict[str, Any], frac: float, stroke: int, room: int,
+           box: tuple[int, int, int, int]) -> np.ndarray:  # fmt: skip
+    """How much of each pixel of ``box`` (x0, y0, x1, y1) of a round gauge's canvas the arc of
+    ``frac`` covers, ``stroke`` px wide on the middle of its groove, its ends cut along the
+    radius: worked out from each pixel's distance to its edges (a pixel an edge runs through
+    the middle of is half covered). As finely as a drawing four times as large made smaller,
+    without its steps along the curve, and in a fraction of the time."""
+    far, angle = _field(widget, room)
+    x0, y0, x1, y1 = box
+    far, angle = far[y0:y1, x0:x1], angle[y0:y1, x0:x1]
+    middle = np.float32((widget["w"] - widget["thickness"]) / 2)  # (the groove's, exactly)
+    cover = np.clip(np.float32(stroke / 2 + 0.5) - np.abs(far - middle), 0, 1)
+    sweep = math.radians((widget["end_angle"] - widget["start_angle"]) * frac)
+    if sweep >= 2 * math.pi:
+        return cover
+    sweep = np.float32(sweep)
+    within = np.minimum(angle, sweep - angle)  # (in the arc: how far from its nearer end)
+    beyond = -np.minimum(angle - sweep, np.float32(2 * math.pi) - angle)
+    ends = np.where(angle <= sweep, within, beyond)  # in radians: times the distance, in px
+    return cover * np.clip(ends * far + np.float32(0.5), 0, 1)
+
+
 def _arc(widget: dict[str, Any], frac: float, stroke: int, room: int) -> np.ndarray:
     """The arc of ``frac`` of a gauge, ``stroke`` px wide on the middle of its
     groove, with ``room`` around the gauge: coverage."""
+    size = (widget["w"] + 2 * room, widget["h"] + 2 * room)
+    if _round(widget):
+        key = ("cover", widget["w"], widget["thickness"], widget["start_angle"],
+               widget["end_angle"], frac, stroke, room)  # fmt: skip
+        return _PICTURES.make(key, lambda: _cover(widget, frac, stroke, room, (0, 0, *size)))
 
-    def make() -> np.ndarray:
+    def make() -> np.ndarray:  # (an oval: drawn twice as large, made smaller)
         u = 2
         w, h, th = widget["w"], widget["h"], widget["thickness"]
-        size = (w + 2 * room, h + 2 * room)
         mask = Image.new("L", (size[0] * u, size[1] * u), 0)
         cx, cy = size[0] * u / 2, size[1] * u / 2
         rx, ry = (w - th) / 2 + stroke / 2, (h - th) / 2 + stroke / 2  # PIL draws inwards
@@ -371,6 +418,8 @@ def _arc_part(widget: dict[str, Any], frac: float, stroke: int, room: int,
               box: tuple[int, int, int, int]) -> np.ndarray:  # fmt: skip
     """:func:`_arc`'s coverage in ``box`` (x0, y0, x1, y1) of its canvas alone, drawn on the
     same grid: the same pixels there."""
+    if _round(widget):
+        return _cover(widget, frac, stroke, room, box)
     u = 2
     w, h, th = widget["w"], widget["h"], widget["thickness"]
     x0, y0, x1, y1 = box

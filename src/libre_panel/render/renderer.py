@@ -709,6 +709,12 @@ def need_key(need: str) -> str:
     return (found["key"].strip() if found else need).lstrip("@")
 
 
+@lru_cache(maxsize=1024)
+def _needs_of(needs: str) -> tuple[str, ...]:
+    """The conditions of a ``needs``, one by one."""
+    return tuple(need for need in (part.strip() for part in needs.split(",")) if need)
+
+
 def need_holds(need: str, snapshot: Snapshot) -> bool:
     """Whether one condition of ``needs`` holds: a reading that has a value (``"gpu.load"``),
     none (``"!gpu.load"``; a state that is ``null`` has none), a picture that a source has
@@ -890,6 +896,8 @@ class Renderer:
         # None all of it or not known; a video panel converts those parts only (devices/yuv.py)
         self.damage: list[tuple[int, int, int, int]] | None = None
         self.rendered = 0  # the frames rendered (what the damage is counted against)
+        self._held: dict[str, bool] = {}  # the conditions of needs worked out in this frame ...
+        self._held_for: tuple[Any, ...] = ()  # ... for these readings (and pictures)
         self._composed: list[tuple[int, int, int, int]] | None = None
         self._swept = False  # a sweep of light ran over the frame before (look.light)
         self._finite = _Finite()  # (the readings it found drawable the frame before)
@@ -1761,6 +1769,7 @@ class Renderer:
         self.rendered += 1
         self.damage = None  # (unknown, until the frame is composed)
         snapshot = self._finite(snapshot)
+        self._held, self._held_for = {}, ()  # (a condition holds or not for the whole frame)
         if self._slots and self.animate and not self.preview and not self._slots_warm:
             self._slots_warm = True  # (once, with the first frame, or with the warm-up's)
             self._warm_slots(snapshot, now)
@@ -1972,15 +1981,22 @@ class Renderer:
         (``switch.frames``, ``!switch.frames``) as the person set it, else as the theme does."""
         body = need.lstrip("!").strip()
         if not body.startswith(SWITCH):
-            return need_holds(need, snapshot)
+            of = (snapshot, snapshot.readings, snapshot.images)
+            if len(self._held_for) != 3 or any(
+                a is not b for a, b in zip(of, self._held_for, strict=True)
+            ):
+                self._held, self._held_for = {}, of  # (other readings: worked out anew)
+            held = self._held.get(need)
+            if held is None:  # (Arena's frame asks for "game.fps" sixty times)
+                held = self._held[need] = need_holds(need, snapshot)
+            return held
         name = body[len(SWITCH) :]
         on = self.switches.get(name, self.theme.switches.get(name, {}).get("on", False))
         return on != need.startswith("!")
 
     def _missing(self, widget: dict[str, Any], snapshot: Snapshot) -> bool:
-        for need in (widget.get("needs") or "").split(","):  # all of them must hold
-            need = need.strip()
-            if need and not self._holds(need, snapshot):
+        for need in _needs_of(widget.get("needs") or ""):  # all of them must hold
+            if not self._holds(need, snapshot):
                 return True
         if widget["type"] == "module":
             return False
