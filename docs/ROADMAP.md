@@ -49,7 +49,8 @@ under its id, and themes in the 0.7 format, community themes among them, are rea
 
 - [ ] A theme format with layouts per shape (long bar, very long bar, 16:9, 3:2, square,
       round, on end), from which every size is laid out; a hand-made layout for a size stays
-      possible and wins
+      possible and wins (the first step: a panel without a version of its own shows the
+      version made for the nearest shape, laid out on its size)
 - [ ] One design system for the built-in themes: colours, type sizes, spacing, cards; cards
       that let the background through a little, as they do since 0.8 (`card_opacity`,
       measured per family: the dot grid shows through, the text loses at most 3 % of its
@@ -59,7 +60,9 @@ under its id, and themes in the 0.7 format, community themes among them, are rea
 - [ ] A light variant of each family (for white builds)
 - [ ] The screens in the same design: Arena's game mode, the round report, alarms, cards,
       the start screens
-- [ ] In the editor: a theme at every size side by side, one's own too
+- [x] In the editor: a theme at every size side by side, one's own too (the theme's menu →
+      *Every panel size*: each panel's picture, and whether it is made for it, laid out from
+      the version for the nearest shape, or scaled into it)
 
 ### 4. Finding the sensors
 

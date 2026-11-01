@@ -7,11 +7,26 @@ result is a starting point the user finishes in the editor.
 
 from __future__ import annotations
 
+import functools
+import glob
+import json
+import math
+import re
 from copy import deepcopy
+from pathlib import Path
 from typing import Any
 
 from libre_panel.devices.models import get_model
-from libre_panel.theme.model import BLUR_MAX, parse_theme
+from libre_panel.theme.model import (
+    _SIZED,
+    BLUR_MAX,
+    THEME_FILENAME,
+    VERTICAL,
+    Theme,
+    ThemeError,
+    builtin_themes_dir,
+    parse_theme,
+)
 from libre_panel.theme.modules import Grid, make_grid
 
 # Sizes that should grow with the smaller scale factor (not stretched).
@@ -194,3 +209,119 @@ def adapt_theme(
         result["widgets"] = _move_modules(result["widgets"], old, new)
     parse_theme(deepcopy(result))  # the adapted theme must still be valid
     return result
+
+
+# -- a theme laid out for a panel it has no version for -----------------------------------------
+#
+# Libre Panel's own themes come in versions made by hand for some sizes ("lumen-1920x720", the
+# 12.3"), for a panel on end ("lumen-vertical") and for the round panels ("lumen-480x480"). A
+# panel without its own (the 4.6", the 7", the 8", NZXT's round screens, most of BeadaPanel's,
+# Thermalright's and JONSBO's) showed the theme made for another shape scaled into its frame,
+# with bars round it. Now it shows the version made for the shape nearest to its own, laid out
+# on its size (:func:`adapt_theme`, "scale"): Lumen of the 12.3" on Thermalright's 6.86"
+# (1280x480, the same shape), Lumen of the 5.2" on the 5" and 7" and the 8", Lumen of the round
+# 2.1" on NZXT's round screens. A version made for a size goes before it, as it did.
+
+TINY_SIDE = 300  # a version made for a shorter side (the ZC-360's screens) is for such panels
+# a version whose shape is further from the panel's than this (a factor of 1.5) is not laid out
+# on it: a round screen on a bar, a bar on a square would be pulled apart (scaled into the
+# frame with bars round it, as before)
+SHAPE_MOST = math.log(1.5)
+
+
+def _shape_gap(a: tuple[int, int], b: tuple[int, int]) -> float:
+    """How far apart two sizes' shapes are: their aspect ratios, as a factor (log)."""
+    return abs(math.log((a[0] / a[1]) / (b[0] / b[1])))
+
+
+@functools.lru_cache(maxsize=256)
+def _made_size(theme_file: str, stamp: int) -> tuple[int, int] | None:
+    try:
+        display = json.loads(Path(theme_file).read_text(encoding="utf-8"))["display"]
+        return int(display["width"]), int(display["height"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def versions_of(folder: Path) -> dict[str, tuple[int, int]]:
+    """The versions of the theme in ``folder`` beside it (itself among them), by name: those of
+    the same stem, on end and for a size ("lumen", "lumen-vertical", "lumen-1920x720"), with
+    the size each is made for."""
+    name = folder.name
+    sized = _SIZED.match(name)
+    stem = sized[1] if sized else name[: -len(VERTICAL)] if name.endswith(VERTICAL) else name
+    found = {}
+    for other in folder.parent.glob(f"{glob.escape(stem)}*"):
+        tail = other.name[len(stem) :]
+        if tail and tail != VERTICAL and not re.fullmatch(r"-\d{2,5}x\d{2,5}", tail):
+            continue  # another theme of that stem ("lumen-pair", "lumen-companion")
+        theme_file = other / THEME_FILENAME
+        try:
+            stamp = theme_file.stat().st_mtime_ns
+        except OSError:
+            continue
+        size = _made_size(str(theme_file), stamp)
+        if size is not None:
+            found[other.name] = size
+    return found
+
+
+def nearest_version(folder: Path, size: tuple[int, int]) -> str | None:
+    """The version (:func:`versions_of`) whose shape is nearest to ``size``'s, no further from it
+    than :data:`SHAPE_MOST`: one made for a side shorter than :data:`TINY_SIDE` only for such a
+    panel (a small round panel takes the 2.1"'s, smaller). None where there is none."""
+    tiny = min(size) < TINY_SIDE
+    fits = {n: s for n, s in versions_of(folder).items()
+            if (tiny or min(s) >= TINY_SIDE) and _shape_gap(size, s) <= SHAPE_MOST}  # fmt: skip
+    if not fits:
+        return None
+    # the shape first; between two alike, the one made nearest to the size (a little)
+    return min(
+        fits,
+        key=lambda n: (
+            _shape_gap(size, fits[n]) + 0.15 * abs(math.log(min(size) / min(fits[n]))),
+            n,
+        ),
+    )
+
+
+@functools.lru_cache(maxsize=32)
+def _laid_out_data(theme_file: str, stamp: int, width: int, height: int, model: str) -> str:
+    data = json.loads(Path(theme_file).read_text(encoding="utf-8"))
+    orientation = "portrait" if height > width else "landscape"
+    if any(w.get("type") == "module" for w in data.get("widgets", [])):
+        # its modules keep their cells: the grid it was made on, its columns and rows, on the
+        # new size (a grid worked out anew for the size moved a module where another stood)
+        made = data.get("display") or {}
+        grid = make_grid(int(made["width"]), int(made["height"]), data.get("grid"),
+                         str(made.get("model") or "custom"))  # fmt: skip
+        data["grid"] = {**(data.get("grid") or {}), "columns": grid.columns, "rows": grid.rows}
+    if model == "custom" or get_model(model).size(orientation) != (width, height):
+        model = "custom"
+    return json.dumps(adapt_theme(data, model, orientation, "scale", width, height))
+
+
+def laid_out(theme: Theme, size: tuple[int, int] | None, model: str = "custom") -> Theme:
+    """``theme`` for a panel whose frames are ``size``: as it is where it is made for that size
+    (or the size is not known), else, for one of Libre Panel's own, its version made for the
+    nearest shape laid out on ``size`` (the pictures of the folder it is made in; ``model``:
+    the panel's, whose bezel it keeps clear of); anyone else's as it is (its frames scaled
+    into the panel's, as before)."""
+    if size is None or (theme.width, theme.height) == tuple(size) or theme.root is None:
+        return theme
+    folder = Path(theme.root)
+    try:
+        if folder.resolve().parent != builtin_themes_dir().resolve():
+            return theme
+    except OSError:
+        return theme
+    name = nearest_version(folder, tuple(size))
+    if name is None:
+        return theme
+    made = folder.parent / name
+    theme_file = made / THEME_FILENAME
+    try:
+        data = _laid_out_data(str(theme_file), theme_file.stat().st_mtime_ns, *size, model)
+        return parse_theme(json.loads(data), root=made)
+    except (OSError, ValueError, ThemeError):
+        return theme

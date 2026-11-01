@@ -3002,7 +3002,14 @@
     "The companion of panel 1's theme changes with it: Arena Companion while panel 1 shows Arena. A theme chosen by name stays, whatever panel 1 shows.": "Il companion del tema del pannello 1 cambia con esso: Arena Companion mentre il pannello 1 mostra Arena. Un tema scelto per nome resta, qualunque cosa mostri il pannello 1.",
     "A companion's name ends in “-companion”: panel 1 then leaves out what it shows.": "Il nome di un companion finisce con «-companion»: così il pannello 1 tralascia ciò che mostra.",
     "Panel {number} takes the colours, fonts and module frames of panel 1's theme: what you change of them here shows on it once it has a look of its own.": "Il pannello {number} prende colori, font e cornici dei moduli dal tema del pannello 1: ciò che ne cambi qui si vedrà su di esso quando avrà un aspetto proprio.",
-    "A look of its own": "Un aspetto proprio"
+    "A look of its own": "Un aspetto proprio",
+    "Every panel size": "Ogni dimensione di pannello",
+    "made for it": "fatto per essa",
+    "laid out from {theme}": "adattato da {theme}",
+    "scaled into it": "scalato dentro",
+    "How the panels show this theme: a version made for the size, the version for the nearest shape laid out on it, or the theme scaled into the panel.": "Come i pannelli mostrano questo tema: una versione fatta per la dimensione, la versione per la forma più vicina adattata a essa, o il tema scalato nel pannello.",
+    "As saved: changes not saved yet are not in it.": "Come salvato: le modifiche non salvate non ci sono.",
+    "round": "rotondo"
   },
   "fields": {
     "agent": "agente",

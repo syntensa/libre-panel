@@ -77,6 +77,7 @@ export function ThemeTitle() {
     { icon: "file", label: t("Save as…"), keys: "mod+shift+s", run: saveAs },
     { icon: "upload", label: t("Import…"), run: () => importTheme() },
     { icon: "download", label: t("Export"), run: exportTheme },
+    ...(id ? [{ icon: "monitor", label: t("Every panel size"), run: () => sizesDialog(id) }] : []),
     {
       icon: "sliders",
       label: t("Theme settings"),
@@ -122,6 +123,50 @@ export function ThemeTitle() {
       </div>
     <//>
   `;
+}
+
+// -- the theme on every panel size -------------------------------------------------------------
+
+/**
+ * The theme as every panel Libre Panel drives shows it, side by side, tall to long: where it has
+ * a version made for the size, where its version for the nearest shape is laid out on it (theme
+ * .adapt.laid_out: Libre Panel's own), and where it is scaled into the panel with the
+ * background round it. As saved: unsaved changes show once saved.
+ */
+function Sizes({ id }) {
+  const [sizes, setSizes] = useState(null);
+  const dirty = useStore((s) => s.dirty && s.doc?.id === id);
+  useEffect(() => {
+    endpoints.themeSizes(id).then((data) => setSizes(data.sizes)).catch(() => setSizes([]));
+  }, [id]);
+  const how = (entry) =>
+    entry.how === "made"
+      ? t("made for it")
+      : entry.how === "laid_out"
+        ? t("laid out from {theme}", { theme: entry.from })
+        : t("scaled into it");
+  return html`<div class="theme-sizes">
+    <h2 class="dialog-title">${t("Every panel size")}</h2>
+    <p class="dialog-text">${t("How the panels show this theme: a version made for the size, the version for the nearest shape laid out on it, or the theme scaled into the panel.")}
+      ${dirty ? html` <strong>${t("As saved: changes not saved yet are not in it.")}</strong>` : null}</p>
+    ${sizes === null ? html`<p class="muted">${t("Loading…")}</p>` : null}
+    <div class="theme-sizes-grid">
+      ${(sizes || []).map(
+        (entry) => html`<figure class=${`theme-size ${entry.how}`} key=${entry.size.join("x")} data-size=${entry.size.join("x")}>
+          <img alt="" loading="lazy" src=${endpoints.previewUrl(id, 320, entry.size)} />
+          <figcaption>
+            <strong>${entry.size[0]} × ${entry.size[1]}${entry.shape === "round" ? ` · ${t("round")}` : ""}</strong>
+            <span class="muted">${entry.panels.slice(0, 2).join(", ")}${entry.panels.length > 2 ? " …" : ""}</span>
+            <span class="theme-size-how">${how(entry)}</span>
+          </figcaption>
+        </figure>`,
+      )}
+    </div>
+  </div>`;
+}
+
+function sizesDialog(id) {
+  return openDialog(() => html`<${Sizes} id=${id} />`, { label: t("Every panel size"), wide: true });
 }
 
 // -- a new theme: a starting layout and a look ---------------------------------

@@ -123,7 +123,9 @@ export const endpoints = {
   assets: (id) => get(`/api/themes/${enc(id)}/assets`),
   assetUrl: (id, path) =>
     withToken(`/api/themes/${enc(id)}/assets/${path.split("/").map(enc).join("/")}`),
-  previewUrl: (id, width = 480) => withToken(`/api/themes/${enc(id)}/preview?w=${width}`),
+  previewUrl: (id, width = 480, size = null) =>
+    withToken(`/api/themes/${enc(id)}/preview?w=${width}${size ? `&size=${size[0]}x${size[1]}` : ""}`),
+  themeSizes: (id) => get(`/api/themes/${enc(id)}/sizes`),
   fanLookUrl: (look, paint) => withToken(`/api/fan-look?look=${enc(look)}&paint=${enc(paint)}`),
   symbolsLookUrl: (pack) => withToken(`/api/symbols-look?pack=${enc(pack)}`),
   uploadAsset: (id, name, bytes) =>

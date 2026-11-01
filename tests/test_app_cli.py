@@ -32,9 +32,18 @@ def test_theme_is_fitted_to_a_different_panel():
 
 
 def test_a_theme_with_a_palette_background_fits_another_panel(tmp_path):
-    # libre-default's background is "@bg", a palette name (issue #3: it crashed)
+    # libre-default's background is "@bg", a palette name (issue #3: it crashed); a theme of
+    # one's own is scaled into another panel with the background round it (Libre Panel's own
+    # are laid out on it: theme.adapt.laid_out)
+    import json
+
+    from libre_panel.theme.model import save_theme
+
+    data = json.loads((find_theme("libre-default") / "theme.json").read_text(encoding="utf-8"))
+    save_theme("my-default", data, source="libre-default")
     out = tmp_path / "frame.png"
     config = Config(
+        theme="my-default",
         device=DeviceConfig(model="turing-5", driver="virtual", output=str(out)),
         sensors=SensorsConfig(providers=["demo"]),
     )
@@ -45,6 +54,10 @@ def test_a_theme_with_a_palette_background_fits_another_panel(tmp_path):
         assert frame.size == (800, 480)
         bg = theme.palette[theme.background_color[1:]].lstrip("#")
         assert frame.convert("RGB").getpixel((2, 240)) == tuple(bytes.fromhex(bg[:6]))
+    out.unlink()
+    run(Config(device=config.device, sensors=config.sensors), once=True)  # Libre Default's own
+    with Image.open(out) as frame:
+        assert frame.size == (800, 480)  # (laid out on it: no background round it to look at)
 
 
 def static_theme():

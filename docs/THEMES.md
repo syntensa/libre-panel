@@ -400,6 +400,15 @@ theme of your own gets one the same way: a theme named `<id>-vertical` is shown 
 `<id>` where `device.orientation = "portrait"` ([a panel on
 end](CONFIGURATION.md#a-panel-on-end)), and the lists show the two as one.
 
+**Every panel in its own size.** On a panel that has no version of its own, a theme of Libre
+Panel's shows its version made for the shape nearest to the panel's, laid out on the panel's
+size (as *adapt* in the editor scales it): the 12.3"'s on the 4.6" (960×320) and Thermalright's
+6.86" (1280×480), the 5.2"'s on the 5", 7" and 8", the 9.2"'s on the 11.3" bars, the round
+2.1"'s on NZXT's round screens, the bar on end's on the 4.6" on end. Before, such a panel got
+the theme of another shape scaled into its frame, with bars round it. A version made for a
+size goes first; the ZC-360's small screens (640×180) have their own and lend them to none.
+A theme of your own is drawn as it is, scaled into the panel (adapt it in Design).
+
 A `config.toml` without a `theme` shows `lumen` on the 1920×480 bars and `libre-default` on
 every other panel ([the theme on the panel](CONFIGURATION.md#the-theme-on-the-panel)).
 

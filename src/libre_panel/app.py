@@ -60,6 +60,7 @@ from libre_panel.sensors.base import (
 )
 from libre_panel.sensors.fan_names import FanNames
 from libre_panel.sequence import Rotation
+from libre_panel.theme.adapt import laid_out
 from libre_panel.theme.defaults import default_theme, panel_model
 from libre_panel.theme.model import (
     THEME_FILENAME,
@@ -854,7 +855,7 @@ class MainLoop:
         status.hub = self.hub
         self.meter = Meter(status, self.clock())
         self.config, self.shown, self.theme = config, shown, theme
-        self.size = target_size(config, theme, shown)
+        self.size = target_size(config, renderer.theme, shown)  # (laid out on it: the same)
         known = {config.path: config.stamp} if config.path and config.stamp else None
         self.watcher = _Watcher(config.path, _theme_file(theme), known=known)
         self.link = _Link(self.display, _brightness(config), status)
@@ -1036,6 +1037,15 @@ class MainLoop:
         while not self.warmup.ready(key, now) and time.monotonic() < give_up:
             time.sleep(0.005)
 
+    def _laid_out(self, config: Config, theme: Theme) -> Theme:
+        """``theme`` on the panel's frames (theme.adapt.laid_out): a theme of Libre Panel's own
+        laid out on the size of the panel, as far as it is known (the configured model's, else
+        the one the display said it is), where it has no version for it."""
+        panel = panel_model(config.device, getattr(self, "reported", None))
+        if panel is None:
+            return theme
+        return laid_out(theme, panel.size(theme.orientation), panel.id)
+
     def _renderer(self, theme: Theme, config: Config) -> Renderer:
         """The renderer for ``theme``: warmed up if it was, else a new one."""
         self.dressed = dress = self._dress(config)
@@ -1044,6 +1054,7 @@ class MainLoop:
         if warmed is None:
             current = getattr(self, "renderer", None)  # (made with the dither as it will be)
             dither = current is not None and current.continuous
+            theme = self._laid_out(config, theme)
             renderer = Renderer(self._dressed(theme, config, source), animate=config.fps > 1,
                                 motion=self.motion, backdrop=self._backdrop(dress[1]),
                                 dither=dither)  # fmt: skip
@@ -1142,9 +1153,10 @@ class MainLoop:
         dress = self._dress(config)
         source, backdrop = self._look_source(dress[0]), self._backdrop(dress[1])
 
-        def build() -> tuple[Renderer, Motion]:
-            renderer = Renderer(self._dressed(theme, config, source), animate=animate,
-                                motion=motion, backdrop=backdrop, dither=continuous)  # fmt: skip
+        def build() -> tuple[Renderer, Motion]:  # (laid out here too: it reads a theme's file)
+            renderer = Renderer(self._dressed(self._laid_out(config, theme), config, source),
+                                animate=animate, motion=motion, backdrop=backdrop,
+                                dither=continuous)  # fmt: skip
             renderer.continuous, renderer.fps, renderer.sample = continuous, fps, sample
             renderer.fan_choices = fan.Choices.of(config)  # their rotors, warmed as shown
             renderer.beats = self.beats
@@ -1359,7 +1371,8 @@ class MainLoop:
                     self._ahead.drop()  # (what was read before it is not that)
                     renderer.close()
                     theme, renderer = new_theme, self._renderer(new_theme, config)
-                    size, previous, next_sample = target_size(config, theme, wanted), None, 0.0
+                    size = target_size(config, renderer.theme, wanted)  # (laid out: the same)
+                    previous, next_sample = None, 0.0
                     known = {config.path: config.stamp} if config.path and config.stamp else None
                     watcher = _Watcher(config.path, _theme_file(theme), known=known)
                     toasts.set_renderer(renderer)

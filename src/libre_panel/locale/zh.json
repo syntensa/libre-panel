@@ -3002,7 +3002,14 @@
     "The companion of panel 1's theme changes with it: Arena Companion while panel 1 shows Arena. A theme chosen by name stays, whatever panel 1 shows.": "面板 1 主题的伴侣主题会随之切换：面板 1 显示 Arena 时为 Arena Companion。按名称选择的主题会保持不变，无论面板 1 显示什么。",
     "A companion's name ends in “-companion”: panel 1 then leaves out what it shows.": "伴侣主题的名称以“-companion”结尾：这样面板 1 会省去它所显示的内容。",
     "Panel {number} takes the colours, fonts and module frames of panel 1's theme: what you change of them here shows on it once it has a look of its own.": "面板 {number} 使用面板 1 主题的颜色、字体和模块边框：你在这里对它们的更改，要等它有了自己的外观后才会显示。",
-    "A look of its own": "自己的外观"
+    "A look of its own": "自己的外观",
+    "Every panel size": "每种面板尺寸",
+    "made for it": "专为此尺寸制作",
+    "laid out from {theme}": "由 {theme} 调整而来",
+    "scaled into it": "缩放适配",
+    "How the panels show this theme: a version made for the size, the version for the nearest shape laid out on it, or the theme scaled into the panel.": "各面板如何显示此主题：专为该尺寸制作的版本、按最接近形状的版本调整到该尺寸，或将主题缩放到面板中。",
+    "As saved: changes not saved yet are not in it.": "按已保存的状态：尚未保存的更改不包含在内。",
+    "round": "圆形"
   },
   "fields": {
     "agent": "智能体",

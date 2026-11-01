@@ -554,3 +554,22 @@ def test_while_its_companion_runs_design_edits_the_pair_version(app_url, isolate
         js(page, "window.libre.doc.edit('n', (theme) => { theme.description = 'mine'; })")
         page.locator(".btn-apply").click()
         expect(page.locator(".dialog input")).to_have_value("lumen-mine-pair")
+
+
+def test_the_theme_on_every_panel_size_side_by_side(app_url, isolated_home):  # noqa: F811
+    """The theme's menu → Every panel size: each panel's picture of the theme, and how it comes
+    there (made for it, laid out from the version for the nearest shape, scaled into it)."""
+    choose_theme(isolated_home, "lumen")
+    with browser_page(app_url, "design") as page:
+        page.wait_for_function("window.libre.store.get().doc?.id?.startsWith('lumen')")
+        page.locator(".theme-name").click()
+        page.get_by_role("menuitem", name="Every panel size").click()
+        sizes = page.locator(".theme-size")
+        expect(sizes.first).to_be_visible()
+        assert sizes.count() > 25
+        expect(page.locator(".theme-size[data-size='960x320']")).to_contain_text(
+            "laid out from lumen-1920x720"
+        )
+        expect(page.locator(".theme-size[data-size='1920x480']")).to_contain_text("made for it")
+        page.keyboard.press("Escape")
+        expect(sizes).to_have_count(0)

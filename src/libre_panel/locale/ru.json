@@ -3002,7 +3002,14 @@
     "The companion of panel 1's theme changes with it: Arena Companion while panel 1 shows Arena. A theme chosen by name stays, whatever panel 1 shows.": "Компаньон темы панели 1 меняется вместе с ней: Arena Companion, пока панель 1 показывает Arena. Тема, выбранная по имени, остаётся, что бы ни показывала панель 1.",
     "A companion's name ends in “-companion”: panel 1 then leaves out what it shows.": "Имя компаньона оканчивается на «-companion»: тогда панель 1 не показывает то, что показывает он.",
     "Panel {number} takes the colours, fonts and module frames of panel 1's theme: what you change of them here shows on it once it has a look of its own.": "Панель {number} берёт цвета, шрифты и рамки модулей из темы панели 1: то, что вы здесь в них измените, появится на ней, когда у неё будет свой стиль.",
-    "A look of its own": "Свой стиль"
+    "A look of its own": "Свой стиль",
+    "Every panel size": "Все размеры панелей",
+    "made for it": "сделано для него",
+    "laid out from {theme}": "подогнано из {theme}",
+    "scaled into it": "масштабировано",
+    "How the panels show this theme: a version made for the size, the version for the nearest shape laid out on it, or the theme scaled into the panel.": "Как панели показывают эту тему: версия, сделанная для размера, версия для ближайшей формы, подогнанная под него, или тема, масштабированная в панель.",
+    "As saved: changes not saved yet are not in it.": "Как сохранено: несохранённых изменений здесь нет.",
+    "round": "круглый"
   },
   "fields": {
     "agent": "агент",

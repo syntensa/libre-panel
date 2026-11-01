@@ -3002,7 +3002,14 @@
     "The companion of panel 1's theme changes with it: Arena Companion while panel 1 shows Arena. A theme chosen by name stays, whatever panel 1 shows.": "パネル1のテーマのコンパニオンは、パネル1に合わせて切り替わります。パネル1がArenaを表示している間はArena Companionです。名前で選んだテーマは、パネル1が何を表示していても変わりません。",
     "A companion's name ends in “-companion”: panel 1 then leaves out what it shows.": "コンパニオンの名前は「-companion」で終わります。そうするとパネル1は、コンパニオンが表示する内容を省きます。",
     "Panel {number} takes the colours, fonts and module frames of panel 1's theme: what you change of them here shows on it once it has a look of its own.": "パネル{number}は、パネル1のテーマの色、フォント、モジュールの枠を使います。ここで変更した内容は、独自の外観にしたときに反映されます。",
-    "A look of its own": "独自の外観"
+    "A look of its own": "独自の外観",
+    "Every panel size": "すべてのパネルサイズ",
+    "made for it": "このサイズ専用",
+    "laid out from {theme}": "{theme} から調整",
+    "scaled into it": "拡大縮小で表示",
+    "How the panels show this theme: a version made for the size, the version for the nearest shape laid out on it, or the theme scaled into the panel.": "各パネルでのこのテーマの見え方：そのサイズ専用のバージョン、最も近い形のバージョンをそのサイズに調整したもの、またはテーマをパネルに合わせて拡大縮小したもの。",
+    "As saved: changes not saved yet are not in it.": "保存済みの状態：まだ保存していない変更は含まれません。",
+    "round": "円形"
   },
   "fields": {
     "agent": "エージェント",

@@ -3,6 +3,10 @@
 ## Unreleased
 
 **New**
+- **A theme on every panel size, side by side.** Design → the theme's menu → *Every panel
+  size* shows the theme on each panel Libre Panel drives, and how it comes there: made for
+  that size, laid out from the version made for the nearest shape, or scaled into it. Your
+  own themes too.
 - **A second panel shows what you choose for it, in a look of its own.** Beside the first
   panel, a companion followed the first panel's theme whatever was chosen for it: Arena
   Companion chosen for panel 2 turned into Lumen Companion while panel 1 showed Lumen. Now
@@ -55,6 +59,15 @@
   them as well.
 
 **Better**
+- **Libre Panel's themes on every panel in its own size** (0.8, "themes that fit every
+  panel"). A panel without a version of the theme made for it, the 4.6" (960×320), the 5" and
+  7", the 8", BeadaPanel's, Thermalright's and JONSBO's sizes, NZXT's round screens, got the
+  theme of another shape scaled into its frame, with bars round it: Lumen of the 9.2" on the
+  4.6" was a strip with a third of the panel empty. Now it shows the version made for the
+  shape nearest to its own, laid out on its size: the 12.3"'s on the 4.6" and on
+  Thermalright's 6.86", the 5.2"'s on the 5", 7" and 8", the 9.2"'s on the 11.3" bars, the
+  round 2.1"'s on NZXT's round screens. A version made for the size still goes first, and a
+  theme of your own is drawn as it is.
 - **Rings and bars of light without steps in their glow.** The `lit` finish's halo is made
   1.45 times stronger than it is blurred; blurred to whole levels, its faint edge stood in
   steps of two, as rings round a ring. It is blurred in floating point now, as the glows of

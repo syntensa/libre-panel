@@ -31,6 +31,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import ParseResult, parse_qs, unquote, urlparse
 
+from PIL import Image, ImageOps
+
 from libre_panel import __version__, agents, agents_cloud, i18n, modes, notify, sequence
 from libre_panel.config import (
     ALARM_THEME,
@@ -67,7 +69,7 @@ from libre_panel.render.renderer import Renderer
 from libre_panel.sensors.base import TIME_SECOND, Reading, SensorHub, Snapshot
 from libre_panel.sensors.demo import demo_snapshot
 from libre_panel.sensors.hardware import detected_names
-from libre_panel.theme.adapt import adapt_theme
+from libre_panel.theme.adapt import adapt_theme, laid_out
 from libre_panel.theme.defaults import default_theme, panel_model
 from libre_panel.theme.model import (
     COMMON_FIELDS,
@@ -705,11 +707,34 @@ def _panel_s(config: Config, n: int, written: dict[str, Any]) -> bool:
     return bool(model) and written.get("model") == model
 
 
+def _size_of(text: str) -> tuple[int, int] | None:
+    """``"960x320"``: a panel's size (None for anything else)."""
+    found = re.fullmatch(r"(\d{2,5})x(\d{2,5})", text or "")
+    return (int(found[1]), int(found[2])) if found else None
+
+
+def panel_sizes() -> list[dict[str, Any]]:
+    """Every size of a panel Libre Panel drives, landscape, and on end for a bar (as the
+    catalogue's models have them): ``size``, ``shape`` ("rect", "round") and the ``panels``."""
+    from libre_panel.theme.defaults import is_bar
+
+    found: dict[tuple[int, int, str], list[str]] = {}
+    for model in MODELS:
+        ways = ("landscape", "portrait") if is_bar(model) else ("landscape",)
+        for way in ways:
+            found.setdefault((*model.size(way), model.shape), []).append(model.label)
+    ordered = sorted(found.items(), key=lambda kv: kv[0][0] / kv[0][1])  # (tall to long)
+    return [{"size": [w, h], "shape": shape, "panels": sorted(set(names))}
+            for (w, h, shape), names in ordered]  # fmt: skip
+
+
 def _draw_theme(
     theme: Any, width: int, accent: str | None, symbols: str, chosen: tuple[tuple[str, bool], ...],
     cards: tuple[str, ...] = DEFAULT_CARDS, card_opacity: int = 0,
+    size: tuple[int, int] | None = None,
 ) -> bytes:  # fmt: skip
-    """A theme as a PNG ``width`` wide at most, as the panel shows it with those choices."""
+    """A theme as a PNG ``width`` wide at most, as the panel shows it with those choices (on a
+    panel of ``size``: scaled into it where it is not laid out on it)."""
     dressed = with_card_opacity(with_accent(theme, accent), card_opacity)
     renderer = Renderer(with_cards(dressed, cards), preview=True)
     renderer.symbols = symbols
@@ -719,6 +744,8 @@ def _draw_theme(
     finally:
         renderer.close()
     frame = frame.convert("RGB")
+    if size is not None and frame.size != tuple(size):  # (as the panel's loop fits it)
+        frame = ImageOps.pad(frame, size, method=Image.Resampling.LANCZOS, color="black")
     if frame.width > width:
         frame = frame.resize((width, max(1, round(frame.height * width / frame.width))))
     buffer = io.BytesIO()
@@ -964,12 +991,14 @@ class EditorHandler(BaseHTTPRequestHandler):
         self._send(200, file.read_bytes(), content_type)
 
     def _theme_preview(self, theme_id: str, query: dict[str, list[str]]) -> None:
-        """A saved theme as a picture (``?w=`` its width), for lists of themes. The
-        pictures are kept until the theme changes."""
+        """A saved theme as a picture (``?w=`` its width), for lists of themes; with
+        ``?size=WxH`` as a panel of that size shows it (theme.adapt.laid_out: Design's
+        sizes). The pictures are kept until the theme changes."""
         try:
             width = max(64, min(1920, int((query.get("w") or ["480"])[0])))
         except ValueError:
             width = 480
+        size = _size_of((query.get("size") or [""])[0])
         try:
             folder = find_theme(theme_id)
             stamp = (folder / THEME_FILENAME).stat().st_mtime_ns
@@ -980,7 +1009,7 @@ class EditorHandler(BaseHTTPRequestHandler):
         cards = self.state.cards()
         see = self.state.card_opacity()
         key = (theme_id, stamp, width, i18n.language(), self.state.symbols(), chosen, accent, cards,
-               see)  # fmt: skip
+               see, size)  # fmt: skip
         png = self._kept_preview(key)
         if png is None:
             # A page asks for a screenful of these at once: they are drawn two at a time
@@ -995,14 +1024,43 @@ class EditorHandler(BaseHTTPRequestHandler):
                         theme = load_theme(folder)
                     except ThemeError as exc:
                         return self._error(str(exc), HTTPStatus.NOT_FOUND)
+                    if size is not None:
+                        theme = laid_out(theme, size)
                     png = _draw_theme(theme, width, accent, self.state.symbols(), chosen, cards,
-                                      see)  # fmt: skip
+                                      see, size)  # fmt: skip
                     with self.state.previews_lock:
                         cache = self.state.previews
                         while len(cache) >= 48:  # the oldest go first
                             cache.pop(next(iter(cache)))
                         cache[key] = png
         self._send(200, png, "image/png")
+
+    def _theme_sizes(self, theme_id: str) -> None:
+        """How the theme comes on every panel size (Design → the theme's menu → Every panel
+        size): ``version`` the one shown there (its version for that size or way up), ``how``
+        "made" for it, "laid_out" from ``from`` (its version for the nearest shape:
+        theme.adapt.laid_out), or "scaled" into it with the background round it."""
+        try:
+            find_theme(theme_id)
+        except ThemeError:
+            return self._error("not found", HTTPStatus.NOT_FOUND)
+        out = []
+        for entry in panel_sizes():
+            size = tuple(entry["size"])
+            way = "portrait" if size[1] > size[0] else "landscape"
+            version = theme_for(theme_id, way, size)
+            try:
+                theme = load_theme(find_theme(version))
+            except ThemeError:
+                continue
+            fitted = laid_out(theme, size)
+            if fitted is not theme:
+                how, source = "laid_out", fitted.root.name if fitted.root else version
+            else:
+                how = "made" if (theme.width, theme.height) == size else "scaled"
+                source = version
+            out.append({**entry, "version": version, "how": how, "from": source})
+        self._json({"theme": theme_id, "sizes": out})
 
     def _kept_preview(self, key: tuple) -> bytes | None:
         with self.state.previews_lock:
@@ -3058,6 +3116,7 @@ ROUTES: tuple[Route, ...] = (
         picture=True,
     ),
     Route("GET", "/api/themes/{theme}/export", lambda h, m, u: h._export_theme(m["theme"])),
+    Route("GET", "/api/themes/{theme}/sizes", lambda h, m, u: h._theme_sizes(m["theme"])),
     # the themes the community shares: the list and the previews, from GitHub (community.py)
     Route("GET", "/api/community/themes", lambda h, m, u: h._json(h.state.community.themes())),
     Route(
