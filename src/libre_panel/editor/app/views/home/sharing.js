@@ -77,7 +77,12 @@ function ShareDialog({ item, close }) {
   const [allowed, setAllowed] = useState(false);
   const [file, setFile] = useState("");
   const [busy, setBusy] = useState(false);
-  const set = (key) => (event) => setFields({ ...fields, [key]: event.currentTarget.value.slice(0, TEXT_MOST[key]) });
+  // (from the fields as they are then: two written one after the other before a new render,
+  // the second took the first's back)
+  const set = (key) => (event) => {
+    const value = event.currentTarget.value.slice(0, TEXT_MOST[key]);
+    setFields((now) => ({ ...now, [key]: value }));
+  };
   const ready = fields.name.trim() && fields.description.trim() && allowed && !busy;
   const save = async () => {
     setBusy(true);
