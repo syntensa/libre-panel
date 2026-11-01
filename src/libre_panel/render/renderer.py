@@ -1178,16 +1178,20 @@ class Renderer:
             offset = widget.get("shadow_offset", 3)
             base = Image.new("RGBA", size, (0, 0, 0, 0))
             base.paste(silhouette, (pad + offset, pad + offset))
-            out.alpha_composite(_blur(base, widget.get("shadow_blur", 6), exact))
+            blur = widget.get("shadow_blur", 6)
+            # in floating point, made 8 bits with the dither in the panel's video (a graph's
+            # strips, ``exact``, keep whole levels: a part is the same wherever it is cut)
+            shade = _blur(base, blur, exact) if exact else _soft_light(base, blur, 1.0, self.dither)
+            out.alpha_composite(shade)
         if glow:
             base = Image.new("RGBA", size, (0, 0, 0, 0))
             base.paste(layer, (pad, pad))
             radius = widget.get("glow_radius", 10)
             boost = 1.0 + glow * 2.5  # light spills: brighter than the shape's own alpha
-            # made stronger, the alpha's levels would be spread apart, as bands: worked out in
-            # floating point (a graph's strips, ``exact``, keep whole levels: a part is the same
-            # wherever it is cut)
-            if exact or boost * glow <= 1.0:
+            # made stronger, the alpha's levels would be spread apart, as bands, and a fainter
+            # one keeps fewer of them: worked out in floating point (a graph's strips,
+            # ``exact``, keep whole levels: a part is the same wherever it is cut)
+            if exact:
                 halo = _blur(base, radius, exact)
                 halo.putalpha(halo.getchannel("A").point(lambda a: min(255, int(a * boost * glow))))
             else:

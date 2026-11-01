@@ -55,6 +55,11 @@
   them as well.
 
 **Better**
+- **Rings and bars of light without steps in their glow.** The `lit` finish's halo is made
+  1.45 times stronger than it is blurred; blurred to whole levels, its faint edge stood in
+  steps of two, as rings round a ring. It is blurred in floating point now, as the glows of
+  0.8 are, and takes less time than before (a gliding ring's tip, made anew in each frame:
+  0.4 instead of 0.5 ms); every text's glow and shadow too, with the panel's dither.
 - **A frame takes less of the processor** (the first step of 0.8's "lighter"). Measured on the
   12.3" in the panel's video, the time a frame takes the drawing thread: Lumen 9.5 instead of
   10.2 ms on average, Arena 8.4 instead of 9.0, Encore 3.4 instead of 4.0, Almanac 3.9 instead

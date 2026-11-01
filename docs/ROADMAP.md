@@ -26,9 +26,9 @@ under its id, and themes in the 0.7 format, community themes among them, are rea
       so that video frames differ only where something moves
 - [x] Before and after for every built-in theme; what it costs measured (frame time, the size
       of PNG and JPEG frames and of the video stream: still frames keep whole levels)
-- [ ] The light of `lit` rings and bars (its halo is made 1.45 times stronger): its tip is
-      blurred anew in every frame while a ring glides, so first that is kept (2. Lighter),
-      then it is worked out in floating point at no cost; shadows and fainter glows too
+- [x] The light of `lit` rings and bars (its halo is made 1.45 times stronger) worked out in
+      floating point, faster than it was in whole levels (its blur a product of matrices);
+      every glow and shadow of a text too, with the dither in the panel's video
 
 ### 2. Lighter
 

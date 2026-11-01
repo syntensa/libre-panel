@@ -34,7 +34,7 @@ from typing import Any
 import numpy as np
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
-from libre_panel.render import facets, light3d
+from libre_panel.render import dither, facets, light3d
 from libre_panel.render.finish import Finish, register
 from libre_panel.render.kept import MB, Kept, size_of
 from libre_panel.render.light import mix, role_color
@@ -100,8 +100,11 @@ def light(mask: np.ndarray, colour: Any, halo: float,
     towards white, the halo in the colour. With ``box`` (x0, y0, x1, y1) the
     light in that part alone, the same pixels: its halo is still worked out
     from all of ``mask``."""
-    soft = Image.fromarray((mask * 255).astype(np.uint8), "L")  # cut to whole levels, as SPUR II
-    soft = np.asarray(soft.filter(ImageFilter.GaussianBlur(halo)), np.float32) / 255
+    # the coverage cut to whole levels, as SPUR II's, and blurred in floating point: the halo,
+    # made LIGHT_HALO times stronger, steps a level at a time (blurred to whole levels, its
+    # faint edge stood in steps of two, as rings round a ring)
+    cut = (mask * 255).astype(np.uint8).astype(np.float32)
+    soft = dither.blur(cut, halo) * np.float32(1 / 255)
     c = np.broadcast_to(np.asarray(colour, np.float32)[..., :3], (*mask.shape, 3))
     if box is not None:
         x0, y0, x1, y1 = box
