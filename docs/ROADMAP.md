@@ -34,9 +34,15 @@ under its id, and themes in the 0.7 format, community themes among them, are rea
 
 - [ ] Frames that would show nothing new are not made again or sent (a frame in which nothing
       changed is the one before since 0.8: not copied, nor compared on the still-frame path;
-      the video panel's YUV is made anew only where a frame changed: ffmpeg 30 instead of 55 %
-      of a core on the 12.3")
-- [ ] What does not move (backgrounds, frames, labels) composed once, not in every frame
+      a video panel still gets it, to be tried on the panels before it is left out)
+- [x] What does not move (backgrounds, frames, labels) composed once, not in every frame: a
+      region composed anew starts from what lies under its first changed part, kept from the
+      frame before while the parts under it stay the same
+- [x] The video panel's frames made anew only where they changed: the YUV that ffmpeg encodes
+      is converted, block by block, where the frame differs from the one before (12.3": Lumen
+      1.0 instead of 1.2 cores, ffmpeg 30 instead of 55 % and 70 instead of 102 MB); a lit
+      ring's arc worked out instead of drawn (a new value 1.1 instead of 2.3 ms; Arena 108
+      instead of 112 % of a core)
 - [x] Measured where a frame's time goes (12.3", video): composing the parts that changed
       (3 ms: the graphs' pieces, pasted through their alpha, the most), the frame for the
       panel (1.4), the rolling seconds' glow, the numbers; frames composed in RGB, the glow's

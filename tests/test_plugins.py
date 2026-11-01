@@ -243,6 +243,24 @@ def test_a_stopped_service_leaves_nothing_behind(plugin_folder):
     host.close()
 
 
+def test_a_video_panel_takes_fewer_frames_while_a_game_runs():
+    from types import SimpleNamespace
+
+    video = SimpleNamespace(streaming=True, stream_fps=30)
+    host = PluginHost()
+    plain = parse_config({"fps": 10})
+    assert app._fps(plain, host, video) == 30
+    host.set_mode("game")
+    assert app._fps(plain, host, video) == app.GAME_STREAM_FPS == 24
+    slow = SimpleNamespace(streaming=True, stream_fps=20)
+    assert app._fps(plain, host, slow) == 20  # (never more than the panel's own)
+    chosen = parse_config({"fps": 10, "modes": {"game": {"fps": 30}}})
+    assert app._fps(chosen, host, video) == 30  # [modes.game] fps says so
+    host.set_mode("media")
+    assert app._fps(plain, host, video) == 30
+    host.close()
+
+
 def test_option_types():
     from libre_panel.plugins.host import apply_options
     from libre_panel.plugins.loader import PluginError

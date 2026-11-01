@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import collections
 import logging
+import os
 import queue
 import subprocess
 import sys
@@ -779,6 +780,51 @@ class PictureSplitter:
         return [rest] if rest else []
 
 
+# The room a pipe to ffmpeg has: half a 12.3" frame in YUV. In 64 KB (Linux) or 4 KB (Windows)
+# ffmpeg woke for every few kilobytes of the two megabytes of a frame, and the writer with it
+# (Linux: writing a frame took 0.8 instead of 0.3 ms of the processor)
+PIPE_BYTES = 1 << 20
+
+
+def _widen(pipe: Any) -> None:
+    """Give a pipe to ffmpeg :data:`PIPE_BYTES` of room where the system lets it (Linux: up to
+    /proc/sys/fs/pipe-max-size, a megabyte by default); else it stays as it is."""
+    if pipe is None or not sys.platform.startswith("linux"):
+        return
+    import fcntl
+
+    try:
+        fcntl.fcntl(pipe.fileno(), getattr(fcntl, "F_SETPIPE_SZ", 1031), PIPE_BYTES)
+    except (OSError, ValueError):
+        pass
+
+
+def _wide_pipe() -> tuple[int, Any] | None:
+    """Windows: a pipe to ffmpeg's stdin with :data:`PIPE_BYTES` of room (Popen's has the
+    system's 4 KB): the descriptor of its end for ffmpeg, and the file this process writes
+    to (its handle not inherited: ffmpeg sees the end of the input when it is closed). None
+    elsewhere, or where it cannot be made: Popen's own then."""
+    if sys.platform != "win32":
+        return None
+    try:
+        import _winapi
+        import msvcrt
+
+        read, write = _winapi.CreatePipe(None, PIPE_BYTES)
+        ours = open(msvcrt.open_osfhandle(write, 0), "wb", buffering=0)  # noqa: SIM115
+        return msvcrt.open_osfhandle(read, 0), ours  # (the encoder closes it, as Popen's)
+    except (OSError, ImportError):
+        return None
+
+
+def _close_pipe(pipe: tuple[int, Any]) -> None:
+    for close in (lambda: os.close(pipe[0]), pipe[1].close):
+        try:
+            close()
+        except OSError:
+            pass
+
+
 class EncoderStopped(DeviceError):
     """ffmpeg ended or stopped taking frames."""
 
@@ -812,17 +858,25 @@ class Encoder:
         self.pictures = 0
         if winsession.ending():  # Windows refuses a new program now, with a box that names it
             raise DeviceError("Windows is ending the session: no ffmpeg now")
+        wide = _wide_pipe() if popen is subprocess.Popen else None
         try:
             self.proc = popen(
                 command,
-                stdin=subprocess.PIPE,
+                stdin=subprocess.PIPE if wide is None else wide[0],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 bufsize=0,
                 creationflags=NO_WINDOW | ABOVE_NORMAL,
             )
         except OSError as exc:
+            if wide is not None:
+                _close_pipe(wide)
             raise DeviceError(t("cannot start ffmpeg: {error}", error=exc)) from exc
+        if wide is not None:  # (ffmpeg has its end: this process keeps the one it writes to)
+            os.close(wide[0])
+            self.proc.stdin = wide[1]
+        else:
+            _widen(self.proc.stdin)
         self._threads = [
             threading.Thread(target=target, name=f"ffmpeg-{name}", daemon=True)
             for name, target in (

@@ -942,6 +942,7 @@ class Renderer:
         self._over: dict[str, list[tuple[Piece, str]]] = {}
         self._fans_clear: dict[str, tuple[Piece, tuple, bool]] = {}
         self._turning: dict[tuple[str, str], tuple[tuple, Image.Image, Piece]] = {}
+        self._laid_fans: dict[str, tuple[tuple, Image.Image]] = {}  # (a list's fans: _laid_fan)
         # the pieces of turned widgets last frame, by id: the piece, its turn, the turned one
         self._turned: dict[str, tuple[Piece, Turn, Piece]] = {}
         self._downloads: dict[str, tuple[Any, Any]] = {}  # download widget id -> what it shows
@@ -3294,7 +3295,10 @@ class Renderer:
         on the names and numbers (``piece``, kept while they stay the same). Where no name or
         number lies under a fan, the fans go over the list as pieces of their own (the frame
         lays them on it: :attr:`_over`) and the names and numbers stay as they are: a frame
-        composes the fans again, not the whole list (Arena's on the 12.3"), the same pixels."""
+        composes the fans again, not the whole list (Arena's on the 12.3"), the same pixels.
+        Each fan is laid from its ring and its rotor (:func:`fan.fan_parts`, :meth:`_laid_fan`):
+        six fans of 48 positions each, their rings changing, did not stay in the pictures kept
+        as pictures of the whole fan and were made anew at every other frame."""
         size = self._list_fan_grid(widget, len(items))[4]
         color = self.color(widget["color2"])[:3]
         frame = "ring" if widget["levels"] else "none"
@@ -3313,7 +3317,8 @@ class Renderer:
                 self.moving = self.moving or rotor.turning
             else:
                 rotor.settle(item.number, max_rpm)
-            image = fan.fan_image(color, size, size, rotor, frame, look, paint)
+            parts = fan.fan_parts(color, size, size, rotor, frame, look, paint)
+            image = self._laid_fan(key, parts, fan.geometry(size, size)[2])
             x, y = ox + x0 + (size - image.width) / 2, oy + y0 + (size - image.height) / 2
             fans.append((image, round(x), round(y)))
         if self.keep_static and "_card" not in widget and self._fans_apart(widget, piece, fans):
@@ -3323,6 +3328,21 @@ class Renderer:
         for image, x, y in fans:
             self._paste(layer, image, x, y)
         return replace(piece, layer=layer)
+
+    def _laid_fan(self, key: str, parts: list[tuple[Image.Image, int]], canvas: int) -> Image.Image:
+        """The picture of a list's fan, its ``parts`` laid one on the other (as
+        :func:`fan.fan_image` lays them): the one before while they are the same (a fan that
+        stands), else laid anew (a small picture, not kept beyond the frame)."""
+        images = tuple(image for image, _at in parts)
+        hit = self._laid_fans.get(key)
+        if hit is not None and len(hit[0]) == len(images):
+            if all(a is b for a, b in zip(hit[0], images, strict=True)):
+                return hit[1]
+        laid = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))
+        for image, at in parts:
+            laid.alpha_composite(image, (at, at))
+        self._laid_fans[key] = (images, laid)
+        return laid
 
     @staticmethod
     def _within(layer: Image.Image, image: Image.Image, x: int, y: int) -> tuple[int, ...] | None:

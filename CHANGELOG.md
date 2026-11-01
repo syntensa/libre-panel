@@ -99,6 +99,18 @@
   them as well.
 
 **Better**
+- **Game mode takes a fifth less of the processor on a video panel.** While a game runs, a
+  video panel shows 24 frames a second instead of 30 unless `[modes.game] fps` says
+  otherwise: the game gets the processor, Arena's graph still scrolls smoothly.
+- **Frames reach ffmpeg in fewer, larger steps.** The pipe to ffmpeg had 64 KB of room on
+  Linux and 4 KB on Windows, for the 2 to 5.5 MB of each frame: ffmpeg woke for every few
+  kilobytes, and the writer with it. It has a megabyte now (Linux: writing a frame 0.3
+  instead of 0.8 ms of the processor; on Windows, where the steps were smaller, more).
+- **Fans in a list turn without being drawn anew.** A fan's picture is laid from its ring and
+  its rotor, each kept on its own, instead of kept as one picture for each position and each
+  length of its ring: Arena's six fans made 600 to 1000 pictures every ten seconds (the
+  pictures kept could not hold them all), now 241 in the first ten seconds and 33 in the
+  third. Theme and config files are looked at once a frame, not twice.
 - **Lit rings take half the time for a new value.** The arc of a round ring is worked out
   from each pixel's distance to its edges instead of drawn twice as large and made smaller:
   a gliding ring's new value 1.1 instead of 2.3 ms, and its light now lies exactly on the

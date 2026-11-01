@@ -215,14 +215,25 @@ class _Watcher:
         except OSError:
             return None
 
+    def _now(self) -> list[int | None]:
+        """The files' stamps now; those :meth:`pending` read a moment ago, in the same step of
+        the loop (it asks before :meth:`changed`: each file looked at once a frame, not twice)."""
+        looked = getattr(self, "_looked", None)
+        if looked is not None and time.monotonic() - looked[0] < 0.01:
+            return looked[1]
+        return [self._stamp(p) for p in self.paths]
+
     def changed(self) -> bool:
-        stamps = [self._stamp(p) for p in self.paths]
+        stamps = self._now()
+        self._looked = None
         changed, self.stamps = stamps != self.stamps, stamps
         return changed
 
     def pending(self) -> bool:
         """Whether :meth:`changed` would say so, without taking the change."""
-        return [self._stamp(p) for p in self.paths] != self.stamps
+        stamps = [self._stamp(p) for p in self.paths]
+        self._looked = (time.monotonic(), stamps)
+        return stamps != self.stamps
 
 
 def _theme_file(theme: Theme) -> Path | None:
@@ -521,15 +532,23 @@ def calm(config: Config, display: Any) -> bool:
     return motion == "calm" or (motion == "auto" and bool(getattr(display, "slow", False)))
 
 
+# A video panel's frame rate while a game runs, where [modes.game] names none: a fifth less of
+# the processor than at 30 while the game wants it (0.8), the graph of its frame rate smooth
+GAME_STREAM_FPS = 24
+
+
 def _fps(config: Config, host: Any, display: Any = None) -> int:
     """Frames per second: one where the motion is calm, else the active mode's, else a
-    streaming display's, else config.fps."""
+    streaming display's (in game mode at most :data:`GAME_STREAM_FPS`), else config.fps."""
     if display is not None and not display.streaming and calm(config, display):
         return 1
-    mode = config.modes.get(host.mode or "") if host is not None else None
+    name = (host.mode or "") if host is not None else ""
+    mode = config.modes.get(name)
     if mode is not None and mode.fps:
         return mode.fps
     if display is not None and display.streaming:
+        if name == "game":
+            return min(GAME_STREAM_FPS, display.stream_fps)
         return display.stream_fps
     return config.fps
 

@@ -560,17 +560,63 @@ def fan_image(
             at = (canvas - size) // 2
             steps = round(rotor.ring * SHADES)
             image.alpha_composite(frame_image(color, size, steps, look, paint), (at, at))
-        main, second = colours(look, paint, color)
-        blades = rotor_image(main, k, rotor.phase, look, second)
-        if rotor.blur:
-            disc = disc_image(main, k, look, second)
-            blades = Image.blend(blades, disc, BLUR * rotor.blur / SHADES)
-        if rotor.dim:
-            blades = blades.copy()
-            alpha = blades.getchannel("A")
-            blades.putalpha(alpha.point([round(v * (1 - rotor.dim / SHADES)) for v in range(256)]))
+        main, second = colours(look, paint, color)  # (its blades not kept apart: the fan is)
+        blades = _blades(main, k, rotor.phase, rotor.blur, rotor.dim, look, second)
         at = (canvas - k) // 2
         image.alpha_composite(blades, (at, at))
         return image
 
     return _kept(key, make)
+
+
+# how opaque the blades are at each step of dimming (0 to SHADES)
+_DIMMED = [[round(v * (1 - dim / SHADES)) for v in range(256)] for dim in range(SHADES + 1)]
+
+
+def blades_image(
+    color: tuple[int, int, int], k: int, phase: int, blur: int, dim: int,
+    look: str = fan_looks.DEFAULT, second: tuple[int, int, int] | None = None,
+) -> Image.Image:  # fmt: skip
+    """The rotor at ``phase``, ``k`` px square, blurred into its disc by ``blur`` and dimmed
+    by ``dim`` (steps of :data:`SHADES`): kept by those, apart from the frame round it."""
+    if not blur and not dim:
+        return rotor_image(color, k, phase, look, second)
+    key = ("blades", look, color, second, k, phase % POSITIONS, blur, dim)
+    return _kept(key, lambda: _blades(color, k, phase, blur, dim, look, second))
+
+
+def _blades(
+    color: tuple[int, int, int], k: int, phase: int, blur: int, dim: int, look: str,
+    second: tuple[int, int, int] | None,
+) -> Image.Image:  # fmt: skip
+    blades = rotor_image(color, k, phase, look, second)
+    if blur:
+        blades = Image.blend(blades, disc_image(color, k, look, second), BLUR * blur / SHADES)
+    if dim:
+        blades = blades.copy()
+        blades.putalpha(blades.getchannel("A").point(_DIMMED[dim]))
+    return blades
+
+
+def fan_parts(
+    color: tuple[int, int, int], w: int, h: int, rotor: Rotor, frame: str = "ring",
+    look: str = fan_looks.DEFAULT, paint: str = "theme",
+) -> list[tuple[Image.Image, int]]:  # fmt: skip
+    """The pictures :func:`fan_image` is laid from, each with where it lies in the fan's
+    square (its offset on both axes): its frame, kept by how far it is lit, and its rotor, kept
+    by its position, blur and light. Laid over a list one after the other they give what the
+    fan's picture gives (to a level), and a fan that turns while its ring changes is no new
+    picture at every position: six fans of 48 positions each, their rings changing, did not
+    stay in the pictures kept and were made anew at every other frame (Arena's, on the 12.3")."""
+    size, _, canvas = geometry(w, h)
+    k = rotor_size(size)
+    parts = []
+    if frame == "ring":
+        parts.append((ring_image(color, size, round(rotor.ring * RING_STEPS), canvas), 0))
+    elif frame == "square":
+        steps = round(rotor.ring * SHADES)
+        parts.append((frame_image(color, size, steps, look, paint), (canvas - size) // 2))
+    main, second = colours(look, paint, color)
+    blades = blades_image(main, k, rotor.phase, rotor.blur, rotor.dim, look, second)
+    parts.append((blades, (canvas - k) // 2))
+    return parts

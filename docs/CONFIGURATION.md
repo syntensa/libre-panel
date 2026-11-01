@@ -1375,9 +1375,12 @@ linger_s = 6           # the mode stays this long after the game's program ended
 poll_s = 2             # how often to look for a game (0.25 to 60)
 
 [modes.game]
-fps = 30               # frames per second while the mode is on
+fps = 30               # frames per second while the mode is on (a video panel: 24 if not set)
 theme = "slate"        # optional: another theme
 ```
+
+A video panel runs at 24 frames a second in game mode unless `fps` says otherwise (its own
+rate, `[device.video] fps`, outside it): a fifth less of the processor while the game wants it.
 
 - **What is a game.** A program in `programs` (its file name, case does not
   matter; `name = A Better Name` sets the name to show), and with `steam` any
