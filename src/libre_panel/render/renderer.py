@@ -139,7 +139,10 @@ class _Builder:
 def changed_region(
     previous: Image.Image | None, current: Image.Image
 ) -> tuple[int, int, int, int] | None:
-    """Bounding box (x0, y0, x1, y1) of pixels that differ, or None if identical."""
+    """Bounding box (x0, y0, x1, y1) of pixels that differ, or None if identical (the same
+    picture handed out again: Renderer.render while nothing changed)."""
+    if previous is current:
+        return None
     if previous is None or previous.size != current.size or previous.mode != current.mode:
         return (0, 0, current.width, current.height)
     return ImageChops.difference(previous, current).getbbox()
@@ -405,20 +408,24 @@ def _soft_light(
            min(base.width, lit[2] + reach), min(base.height, lit[3] + reach))  # fmt: skip
     part = base.crop(box)
     size = part.size
+    pixels = np.asarray(part)
     # one colour (a text, a symbol, a ring in one colour): the light is that colour, unblurred
-    found = part.getcolors(maxcolors=16)
-    one = {c[:3] for _n, c in found if c[3]} if found else set()
+    # (a text's soft edges are many levels of alpha, of the one colour)
+    packed = pixels.view(np.uint32)[..., 0]  # (each pixel's four bytes as one number)
+    colour = packed & np.uint32(0xFFFFFF)
+    first = colour.flat[int(np.argmax(packed > 0xFFFFFF))]
+    one = bool((np.where(packed > 0xFFFFFF, colour, first) == first).all())
+    alpha = pixels[..., 3].astype(np.float32)
     half = max(base.size) > 320 and radius >= 4  # half size: 4x cheaper, the same look (as _blur)
     if half:
         small = (max(1, size[0] // 2), max(1, size[1] // 2))
-        alpha = Image.fromarray(np.asarray(part.getchannel("A"), np.float32), "F")
-        alpha = np.asarray(alpha.resize(small, Image.BILINEAR), np.float32)
+        alpha = np.asarray(Image.fromarray(alpha, "F").resize(small, Image.BILINEAR), np.float32)
         soft = Image.fromarray(dither.blur(alpha, radius / 2), "F").resize(size, Image.BILINEAR)
     else:
-        soft = dither.blur(np.asarray(part.getchannel("A"), np.float32), radius)
-    if len(one) == 1:
+        soft = dither.blur(alpha, radius)
+    if one:
         out = np.empty((size[1], size[0], 4), np.uint8)
-        out[..., :3] = next(iter(one))
+        out[..., :3] = pixels[np.unravel_index(int(np.argmax(packed > 0xFFFFFF)), packed.shape)][:3]
     elif half:
         colour = part.convert("RGBa").resize(small, Image.BILINEAR)
         colour = colour.filter(ImageFilter.GaussianBlur(radius / 2)).resize(size, Image.BILINEAR)
@@ -859,6 +866,11 @@ class Renderer:
         self._background = self._load_background()
         # Frames start from an opaque colour: pieces go on with a paste in place
         self._opaque = (self.color(theme.background_color) or (0, 0, 0, 0))[3] == 255
+        # and such frames are composed in RGB (Pillow keeps it in four bytes a pixel too, and
+        # pastes RGBA into it as it pastes into RGBA): the frame the panel gets is then a copy
+        # of it, not a conversion (a millisecond and a half less on the 12.3"); the dust lays
+        # its grains on RGBA
+        self._mode = "RGB" if self._opaque and not (theme.look or {}).get("dust") else "RGBA"
         # Incremental compositing: the last frame and the pieces it was made of.
         # Only regions whose pieces changed are composed again, so a mostly
         # static screen costs little at 50 fps. The result is pixel-identical.
@@ -870,6 +882,10 @@ class Renderer:
         # frame (for tests: the pixels are the same).
         self.keep_static = True
         self._last: tuple[list[tuple[str, Piece]], Image.Image] | None = None
+        # the frame handed out last, while the composed one stays as it was (_compose): handed
+        # out again rather than copied anew (a theme at rest, between its readings)
+        self._handed: Image.Image | None = None
+        self._unchanged = False
         self._finite = _Finite()  # (the readings it found drawable the frame before)
         # Per region, what lies under the first piece that changes (a graph that
         # moves every frame over a card): the same pieces need not be laid again.
@@ -1019,7 +1035,7 @@ class Renderer:
         self._dither = on
         self._cache.clear()
         self._underlays.clear()
-        self._grounds, self._last = None, None
+        self._grounds, self._last, self._handed = None, None, None
         self._background = self._load_background()
 
     def _load_background(self) -> Image.Image | None:
@@ -1246,6 +1262,8 @@ class Renderer:
             return
         if (x0, y0, x1, y1) != (x, y, x + layer.width, y + layer.height):
             layer = layer.crop((x0 - x, y0 - y, x1 - x, y1 - y))
+        if layer.mode != canvas.mode:  # (an RGB frame: the light's colour, as it adds up)
+            layer = layer.convert(canvas.mode)
         canvas.paste(ImageChops.add(canvas.crop((x0, y0, x1, y1)), layer), (x0, y0))
 
     @staticmethod
@@ -1366,7 +1384,7 @@ class Renderer:
         if reused:
             done, part = len(hit[0]), hit[1].copy()
         elif self.keep_static:
-            done, part = 0, self._ground_of(region)
+            done, part = 0, self._ground_of(region)  # (in the frames' mode)
         else:
             done = 0
             part = Image.new("RGBA", (x1 - x0, y1 - y0), self.color(self.theme.background_color))
@@ -1395,6 +1413,8 @@ class Renderer:
                 ground = Image.new("RGBA", (self.theme.width, self.theme.height), color)
                 if background is not None:
                     ground.alpha_composite(background)
+            if self._mode == "RGB":
+                ground = ground.convert("RGB")
             self._grounds = (color, ground)
         return self._grounds[1]
 
@@ -1403,7 +1423,8 @@ class Renderer:
         (no picture the size of the panel is kept for that), else cut from :meth:`_ground`."""
         color = self.color(self.theme.background_color)
         if self._background is None and color is not None:
-            return Image.new("RGBA", (region[2] - region[0], region[3] - region[1]), color)
+            size = (region[2] - region[0], region[3] - region[1])
+            return Image.new(self._mode, size, color if self._mode == "RGBA" else color[:3])
         return self._ground().crop(region)
 
     def _keep_underlay(self, region: tuple[int, int, int, int], under: list[Piece], part) -> None:
@@ -1415,7 +1436,8 @@ class Renderer:
         full = (0, 0, theme.width, theme.height)
         last = self._last if self.incremental else None
         regions = [full] if last is None else self._dirty(last[0], pieces)
-        if last is not None and not regions:
+        self._unchanged = last is not None and not regions
+        if self._unchanged:
             self._last = (pieces, last[1])
             return last[1]
         area = sum((r[2] - r[0]) * (r[3] - r[1]) for r in regions)
@@ -1441,6 +1463,8 @@ class Renderer:
         megabytes kept for it."""
         if not self.keep_static:
             return canvas.convert("RGB")
+        if canvas.mode == "RGB":  # (composed in RGB: the frame is a copy)
+            return canvas.copy()
         rgb = Image.new("RGB", canvas.size)
         rgb.paste(canvas)
         return rgb
@@ -1720,6 +1744,8 @@ class Renderer:
     def render(
         self, snapshot: Snapshot, now: float | None = None
     ) -> tuple[Image.Image, dict[str, Box]]:
+        """The frame at ``now`` (RGB) and the widgets' boxes. While nothing on it changed, the
+        frame is the one handed out before: callers draw on a copy of it, never on it."""
         now = clock() if now is None else now
         snapshot = self._finite(snapshot)
         if self._slots and self.animate and not self.preview and not self._slots_warm:
@@ -1822,9 +1848,16 @@ class Renderer:
         if self.look is not None:
             self.look.compose(pieces, snapshot, now)  # the grid beneath, the sun's gloss on top
         canvas = self._compose(pieces)
-        if dust:
-            canvas = self._dusted(canvas, now)  # RGB once there is dust on it
-        frame = canvas if canvas.mode == "RGB" else self._as_rgb(canvas)
+        dusted = self._dusted(canvas, now) if dust else canvas  # RGB once there is dust on it
+        # (the composed frame stays for the next: the panel gets a picture of its own, the one
+        # before again while nothing changed; a look's light sweeps over the frame in place)
+        if dusted is not canvas:
+            frame, self._handed = dusted, None
+        elif self._unchanged and self._handed is not None and self.look is None:
+            frame = self._handed
+        else:
+            frame = self._as_rgb(canvas)
+            self._handed = frame if self.look is None and self.keep_static else None
         return (frame if self.look is None else self.look.finish(frame, now)), boxes
 
     # -- turned widgets ----------------------------------------------------

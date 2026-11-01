@@ -32,8 +32,13 @@ under its id, and themes in the 0.7 format, community themes among them, are rea
 
 ### 2. Lighter
 
-- [ ] Frames that would show nothing new are not made again or sent
+- [ ] Frames that would show nothing new are not made again or sent (a frame in which nothing
+      changed is the one before since 0.8: not copied, nor compared on the still-frame path)
 - [ ] What does not move (backgrounds, frames, labels) composed once, not in every frame
+- [x] Measured where a frame's time goes (12.3", video): composing the parts that changed
+      (3 ms: the graphs' pieces, pasted through their alpha, the most), the frame for the
+      panel (1.4), the rolling seconds' glow, the numbers; frames composed in RGB, the glow's
+      blur as matrices: 6 to 16 % less of the processor
 - [ ] The panel's loop runs lean while the app's window is closed (discussion #4: about
       480 MB on Windows)
 - [ ] Targets, measured on the 12.3" in video mode with every core busy (as in a game): at

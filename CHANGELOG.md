@@ -38,10 +38,11 @@
   as the start screens are since 0.7.9: each row is the colour between, on average. What it
   costs, measured over 12 seconds through the panel's own encoder settings: Lumen's stream
   on the 12.3" 4 % more (290 instead of 278 KB a second, the cap is 375), the 9.2"'s 4 %;
-  text and rings as sharp as before (33.99 against 33.97 dB); a frame no slower, but where a
-  glow that shines brighter is made anew in each frame (the seconds while their digits
-  roll), half a millisecond. Still frames, the editor's pictures and the README's keep whole
-  levels: a PNG of noise is twice as large (a still frame over USB), and JPEG loses it.
+  text and rings as sharp as before (33.99 against 33.97 dB); a frame no slower, and a glow
+  made anew in each frame (the seconds while their digits roll) faster than before: 0.7
+  instead of 1.0 ms on the 12.3" (its blur is one product of matrices). Still frames, the
+  editor's pictures and the README's keep whole levels: a PNG of noise is twice as large (a
+  still frame over USB), and JPEG loses it.
 - **Thermal Grizzly's WireView Pro II on the panel** (discussion #38). What flows through the
   graphics card's 12V-2x6 cable, as the WireView between them measures it, can be shown:
   `gpu.cable.power` and `gpu.cable.current`, each of the six pins' current and voltage
@@ -52,6 +53,15 @@
   LibreHardwareMonitor's power monitors too (the WireView's port only for each reading, so
   Thermal Grizzly's own app still connects beside it); LibreHardwareMonitor's web server gives
   them as well.
+
+**Better**
+- **A frame takes less of the processor** (the first step of 0.8's "lighter"). Measured on the
+  12.3" in the panel's video, the time a frame takes the drawing thread: Lumen 9.5 instead of
+  10.2 ms on average, Arena 8.4 instead of 9.0, Encore 3.4 instead of 4.0, Almanac 3.9 instead
+  of 4.6. Frames on an opaque background are composed in RGB, so the panel gets a copy of the
+  frame instead of a conversion; a frame in which nothing changed is the one before, not a
+  copy of it, and the still-frame path does not compare it again; the glows of rolling digits
+  take a quarter of the time they took (a text's soft edges are one colour, its glow too).
 
 **Fixed**
 - **A WireView Pro II is no longer taken for a second graphics card.** LibreHardwareMonitor

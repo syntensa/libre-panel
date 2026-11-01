@@ -24,7 +24,13 @@ from functools import lru_cache
 
 import numpy as np
 
+from libre_panel.render.kept import MB, cached
+
 TILE = 128  # the noise's tile, laid side by side: no pattern shows at this size
+# A side this long at most is blurred as one product with its blur as a matrix (_operator): a
+# glow's few hundred pixels in a tenth of the time the passes take (a clock's rolling seconds,
+# whose glow is made anew in every frame of the roll), and longer ones in half of it
+PRODUCT_MOST = 640
 
 
 @lru_cache(maxsize=1)
@@ -113,12 +119,28 @@ def reach(radius: float) -> int:
     return 3 * (side + 1) + 1
 
 
+@cached("dither.operators", 16 * MB, least=2)
+def _operator(n: int, radius: float) -> np.ndarray:
+    """The three passes along a line of ``n`` pixels as a matrix: row i is what they make of a
+    single pixel at i, so a line times it is the line blurred (each pass is linear, its edges
+    held too)."""
+    side, frac = _box_radius(radius)
+    out = np.eye(n, dtype=np.float32)
+    for _ in range(3):
+        out = _rows(out, side, frac)
+    return out
+
+
 def blur(a: np.ndarray, radius: float) -> np.ndarray:
     """A Gaussian blur of ``a`` (h, w) in floating point, as Pillow's GaussianBlur of ``radius``
-    blurs whole levels: three box passes each way."""
+    blurs whole levels: three box passes each way (as a product with their matrices, where
+    neither side is longer than :data:`PRODUCT_MOST`: the same to a thousandth of a level)."""
     out = np.ascontiguousarray(a, np.float32)
     if radius <= 0 or out.size == 0:
         return out.copy() if out is a else out
+    h, w = out.shape
+    if max(h, w) <= PRODUCT_MOST:
+        return _operator(h, radius).T @ out @ _operator(w, radius)
     side, frac = _box_radius(radius)
     for _ in range(3):
         out = _rows(out, side, frac)
