@@ -161,15 +161,17 @@ def test_adapt_keep_mode_and_custom_size():
 def test_hidden_edges_follow_the_frame_into_the_framebuffer():
     """The catalog gives the strip in the framebuffer; a frame's edges get there as
     the USB driver turns them (the doctor saw the 9.2"'s strip at the top in
-    landscape and on the left in portrait)."""
+    landscape). On end its owner sees the whole width in the panel's video: a portrait
+    frame keeps 9 px clear at each side, its layouts in the middle."""
     from PIL import Image, ImageDraw
 
     from libre_panel.devices.turzx_usb import to_native
 
     model = get_model("turing-9.2-usb")
     assert model.hidden_edges("landscape") == {"top": 18, "right": 0, "bottom": 0, "left": 0}
-    assert model.hidden_edges("portrait") == {"top": 0, "right": 0, "bottom": 0, "left": 18}
-    for orientation in ("landscape", "portrait"):
+    assert model.hidden_edges("portrait") == {"top": 0, "right": 9, "bottom": 0, "left": 9}
+    assert model.to_dict()["hidden"]["portrait"] == {"top": 0, "right": 9, "bottom": 0, "left": 9}
+    for orientation in ("landscape",):
         w, h = model.size(orientation)
         frame = Image.new("RGB", (w, h))
         draw = ImageDraw.Draw(frame)
@@ -237,7 +239,8 @@ def test_built_in_layouts_keep_clear_of_hidden_strips():
             x, y, bw, bh = boxes[widget["id"]]
             left, top, right, bottom = visible
             box_inside = x >= left and y >= top and x + bw <= right and y + bh <= bottom
-            if widget["type"] == "rect" or box_inside:
+            ground = (x, y, bw, bh) == (0, 0, w, h)  # (a picture across the whole frame)
+            if widget["type"] == "rect" or box_inside or ground:
                 checked += 1
                 continue
             # the layout box reaches the strip (it includes glow): check the drawn pixels

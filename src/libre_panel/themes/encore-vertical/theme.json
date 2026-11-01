@@ -66,9 +66,9 @@
     {
       "type": "image",
       "id": "ambient",
-      "x": 18,
+      "x": 0,
       "y": 0,
-      "w": 462,
+      "w": 480,
       "h": 1920,
       "src": "@media.cover",
       "fit": "cover",
@@ -79,9 +79,9 @@
     {
       "type": "rect",
       "id": "veil",
-      "x": 18,
+      "x": 0,
       "y": 0,
-      "w": 462,
+      "w": 480,
       "h": 1920,
       "color": "#0A0E1338",
       "color2": "#0A0E13F2",
@@ -91,7 +91,7 @@
     {
       "type": "rect",
       "id": "frame-text",
-      "x": 34,
+      "x": 25,
       "y": 494,
       "w": 430,
       "h": 444,
@@ -105,7 +105,7 @@
     {
       "type": "rect",
       "id": "frame-time",
-      "x": 34,
+      "x": 25,
       "y": 958,
       "w": 430,
       "h": 946,
@@ -119,7 +119,7 @@
     {
       "type": "rect",
       "id": "cover-frame",
-      "x": 18,
+      "x": 9,
       "y": 0,
       "w": 462,
       "h": 462,
@@ -129,7 +129,7 @@
     {
       "type": "icon",
       "id": "cover-icon",
-      "x": 175,
+      "x": 166,
       "y": 157,
       "icon": "music",
       "size": 148,
@@ -140,7 +140,7 @@
     {
       "type": "image",
       "id": "cover",
-      "x": 18,
+      "x": 9,
       "y": 0,
       "w": 462,
       "h": 462,
@@ -153,7 +153,7 @@
     {
       "type": "icon",
       "id": "playing-sign",
-      "x": 52,
+      "x": 43,
       "y": 528,
       "icon": "play",
       "size": 23,
@@ -163,7 +163,7 @@
     {
       "type": "icon",
       "id": "paused-sign",
-      "x": 52,
+      "x": 43,
       "y": 528,
       "icon": "pause",
       "size": 23,
@@ -173,7 +173,7 @@
     {
       "type": "metric",
       "id": "state",
-      "x": 86,
+      "x": 77,
       "y": 525,
       "sensor": "media.state",
       "format": "{value:upper}",
@@ -189,7 +189,7 @@
     {
       "type": "metric",
       "id": "title",
-      "x": 52,
+      "x": 43,
       "y": 574,
       "sensor": "media.title",
       "format": "{value}",
@@ -205,7 +205,7 @@
     {
       "type": "metric",
       "id": "artist",
-      "x": 52,
+      "x": 43,
       "y": 660,
       "sensor": "media.artist",
       "format": "{value}",
@@ -221,7 +221,7 @@
     {
       "type": "metric",
       "id": "album",
-      "x": 52,
+      "x": 43,
       "y": 718,
       "sensor": "media.album",
       "format": "{value}",
@@ -237,7 +237,7 @@
     {
       "type": "image",
       "id": "app-icon",
-      "x": 52,
+      "x": 43,
       "y": 766,
       "w": 30,
       "h": 30,
@@ -248,7 +248,7 @@
     {
       "type": "metric",
       "id": "app",
-      "x": 94,
+      "x": 85,
       "y": 767,
       "sensor": "media.source",
       "format": "{value}",
@@ -265,7 +265,7 @@
     {
       "type": "metric",
       "id": "app-bare",
-      "x": 52,
+      "x": 43,
       "y": 767,
       "sensor": "media.source",
       "format": "{value}",
@@ -282,7 +282,7 @@
     {
       "type": "bar",
       "id": "progress",
-      "x": 52,
+      "x": 43,
       "y": 855,
       "w": 394,
       "h": 8,
@@ -302,7 +302,7 @@
     {
       "type": "metric",
       "id": "position",
-      "x": 52,
+      "x": 43,
       "y": 877,
       "sensor": "media.position",
       "format": "{value:clock}",
@@ -316,7 +316,7 @@
     {
       "type": "metric",
       "id": "left",
-      "x": 446,
+      "x": 437,
       "y": 877,
       "sensor": "media.remaining",
       "format": "-{value:clock}",
@@ -331,7 +331,7 @@
     {
       "type": "text",
       "id": "idle",
-      "x": 52,
+      "x": 43,
       "y": 653,
       "text": "Nothing playing",
       "font": "builtin:Barlow-SemiBold",
@@ -344,7 +344,7 @@
     {
       "type": "clock",
       "id": "clock",
-      "x": 56,
+      "x": 47,
       "y": 980,
       "format": "%H:%M",
       "font": "builtin:Barlow-SemiBold",
@@ -356,7 +356,7 @@
     {
       "type": "clock",
       "id": "seconds",
-      "x": 395,
+      "x": 386,
       "y": 1004,
       "format": "%S",
       "font": "builtin:Barlow-SemiBold",
@@ -369,7 +369,7 @@
     {
       "type": "rect",
       "id": "seconds-groove",
-      "x": 56,
+      "x": 47,
       "y": 1176,
       "w": 386,
       "h": 2,
@@ -378,7 +378,7 @@
     {
       "type": "bar",
       "id": "seconds-run",
-      "x": 56,
+      "x": 47,
       "y": 1176,
       "w": 386,
       "h": 2,
@@ -394,7 +394,7 @@
     {
       "type": "clock",
       "id": "date",
-      "x": 249,
+      "x": 240,
       "y": 1127,
       "format": "%A · %d %B",
       "font": "builtin:Barlow-Medium",

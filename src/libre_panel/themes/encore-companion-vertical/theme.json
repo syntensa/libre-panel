@@ -66,9 +66,9 @@
     {
       "type": "image",
       "id": "ambient",
-      "x": 18,
+      "x": 0,
       "y": 0,
-      "w": 462,
+      "w": 480,
       "h": 1920,
       "src": "@media.cover",
       "fit": "cover",
@@ -79,9 +79,9 @@
     {
       "type": "rect",
       "id": "veil",
-      "x": 18,
+      "x": 0,
       "y": 0,
-      "w": 462,
+      "w": 480,
       "h": 1920,
       "color": "#0A0E1338",
       "color2": "#0A0E13F2",
@@ -91,7 +91,7 @@
     {
       "type": "rect",
       "id": "cover-frame",
-      "x": 18,
+      "x": 9,
       "y": 0,
       "w": 462,
       "h": 462,
@@ -100,7 +100,7 @@
     {
       "type": "icon",
       "id": "cover-icon",
-      "x": 175,
+      "x": 166,
       "y": 157,
       "icon": "music",
       "size": 148,
@@ -111,7 +111,7 @@
     {
       "type": "image",
       "id": "cover",
-      "x": 18,
+      "x": 9,
       "y": 0,
       "w": 462,
       "h": 462,

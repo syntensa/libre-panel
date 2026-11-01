@@ -61,7 +61,7 @@
     {
       "type": "rect",
       "id": "frame-mid",
-      "x": 34,
+      "x": 25,
       "y": 507,
       "w": 430,
       "h": 494,
@@ -75,7 +75,7 @@
     {
       "type": "rect",
       "id": "frame-rings",
-      "x": 34,
+      "x": 25,
       "y": 1021,
       "w": 430,
       "h": 687,
@@ -89,7 +89,7 @@
     {
       "type": "rect",
       "id": "frame-net",
-      "x": 34,
+      "x": 25,
       "y": 1728,
       "w": 430,
       "h": 156,
@@ -115,7 +115,7 @@
     {
       "type": "clock",
       "id": "clock",
-      "x": 66,
+      "x": 57,
       "y": 503,
       "format": "%H:%M",
       "digits": "roll",
@@ -128,7 +128,7 @@
     {
       "type": "clock",
       "id": "seconds",
-      "x": 388,
+      "x": 379,
       "y": 527,
       "format": "%S",
       "digits": "roll",
@@ -141,7 +141,7 @@
     {
       "type": "icon",
       "id": "uptime-icon",
-      "x": 389,
+      "x": 380,
       "y": 610,
       "icon": "uptime",
       "size": 13,
@@ -152,7 +152,7 @@
     {
       "type": "metric",
       "id": "uptime",
-      "x": 406,
+      "x": 397,
       "y": 608,
       "sensor": "sys.uptime",
       "format": "{value:duration}",
@@ -166,7 +166,7 @@
     {
       "type": "clock",
       "id": "date",
-      "x": 249,
+      "x": 240,
       "y": 643,
       "format": "%A · %d %B",
       "uppercase": true,
@@ -180,7 +180,7 @@
     {
       "type": "text",
       "id": "legend-cpu",
-      "x": 52,
+      "x": 43,
       "y": 701,
       "text": "CPU",
       "font": "builtin:Barlow-SemiBold",
@@ -192,7 +192,7 @@
     {
       "type": "text",
       "id": "legend-gpu",
-      "x": 111,
+      "x": 102,
       "y": 701,
       "text": "GPU",
       "font": "builtin:Barlow-SemiBold",
@@ -205,7 +205,7 @@
     {
       "type": "text",
       "id": "legend-span",
-      "x": 446,
+      "x": 437,
       "y": 701,
       "text": "60 S",
       "font": "builtin:Barlow-SemiBold",
@@ -218,7 +218,7 @@
     {
       "type": "graph",
       "id": "gpu-graph",
-      "x": 52,
+      "x": 43,
       "y": 725,
       "w": 394,
       "h": 253,
@@ -239,7 +239,7 @@
     {
       "type": "graph",
       "id": "cpu-graph",
-      "x": 52,
+      "x": 43,
       "y": 725,
       "w": 394,
       "h": 253,
@@ -259,7 +259,7 @@
     {
       "type": "rect",
       "id": "graph-base",
-      "x": 52,
+      "x": 43,
       "y": 978,
       "w": 394,
       "h": 1,
@@ -279,7 +279,7 @@
     {
       "type": "metric",
       "id": "cpu-name",
-      "x": 148,
+      "x": 139,
       "y": 1242,
       "sensor": "cpu.name",
       "format": "{value}",
@@ -306,7 +306,7 @@
     {
       "type": "metric",
       "id": "gpu-name",
-      "x": 148,
+      "x": 139,
       "y": 1458,
       "sensor": "gpu.name",
       "format": "{value}",
@@ -333,7 +333,7 @@
     {
       "type": "metric",
       "id": "mem-name",
-      "x": 148,
+      "x": 139,
       "y": 1675,
       "sensor": "mem.name",
       "format": "{value}",

@@ -61,7 +61,7 @@
     {
       "type": "rect",
       "id": "frame-clock",
-      "x": 30,
+      "x": 21,
       "y": 24,
       "w": 438,
       "h": 886,
@@ -75,7 +75,7 @@
     {
       "type": "analog",
       "id": "face",
-      "x": 48,
+      "x": 39,
       "y": 108,
       "w": 402,
       "h": 402,
@@ -91,7 +91,7 @@
     {
       "type": "clock",
       "id": "clock",
-      "x": 67,
+      "x": 58,
       "y": 543,
       "format": "%H:%M",
       "font": "builtin:Barlow-SemiBold",
@@ -103,7 +103,7 @@
     {
       "type": "clock",
       "id": "seconds",
-      "x": 387,
+      "x": 378,
       "y": 566,
       "format": "%S",
       "font": "builtin:Barlow-SemiBold",
@@ -116,7 +116,7 @@
     {
       "type": "rect",
       "id": "seconds-groove",
-      "x": 67,
+      "x": 58,
       "y": 698,
       "w": 364,
       "h": 2,
@@ -125,7 +125,7 @@
     {
       "type": "bar",
       "id": "seconds-run",
-      "x": 67,
+      "x": 58,
       "y": 698,
       "w": 364,
       "h": 2,
@@ -141,7 +141,7 @@
     {
       "type": "clock",
       "id": "weekday",
-      "x": 249,
+      "x": 240,
       "y": 700,
       "format": "%A",
       "font": "builtin:Barlow-SemiBold",
@@ -153,7 +153,7 @@
     {
       "type": "clock",
       "id": "date",
-      "x": 249,
+      "x": 240,
       "y": 800,
       "format": "%d %B %Y",
       "font": "builtin:Barlow-Medium",
@@ -167,7 +167,7 @@
     {
       "type": "rect",
       "id": "month-card",
-      "x": 30,
+      "x": 21,
       "y": 930,
       "w": 438,
       "h": 966,
@@ -179,7 +179,7 @@
     {
       "type": "rect",
       "id": "frame-month",
-      "x": 30,
+      "x": 21,
       "y": 930,
       "w": 438,
       "h": 966,
@@ -193,7 +193,7 @@
     {
       "type": "clock",
       "id": "month",
-      "x": 60,
+      "x": 51,
       "y": 957,
       "format": "%B %Y",
       "font": "builtin:Barlow-Medium",
@@ -206,7 +206,7 @@
     {
       "type": "clock",
       "id": "week",
-      "x": 438,
+      "x": 429,
       "y": 957,
       "format": "%V",
       "font": "builtin:Barlow-Medium",
@@ -218,7 +218,7 @@
     {
       "type": "text",
       "id": "week-label",
-      "x": 399,
+      "x": 390,
       "y": 957,
       "text": "Week",
       "font": "builtin:Barlow-Medium",
@@ -233,7 +233,7 @@
     {
       "type": "calendar",
       "id": "days",
-      "x": 52,
+      "x": 43,
       "y": 1010,
       "w": 394,
       "h": 868,

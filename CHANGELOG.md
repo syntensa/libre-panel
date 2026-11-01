@@ -187,6 +187,13 @@
   no slower.
 
 **Fixed**
+- **The 9.2" on end shows its screens in the middle.** Its portrait layouts kept 18 pixels
+  clear on the left, for a strip of the framebuffer the bezel was taken to hide there; in
+  the panel's video the whole width shows, and every screen stood 9 pixels right of the
+  middle, on the panel as in the app's picture of it. They now keep 9 pixels at each side:
+  Lumen, Arena, Encore, Almanac, Studio, Nimbus, High Contrast and the round report on end,
+  and their companions, each as wide as before and in the middle (Encore's ambient light
+  across the whole width). The Live page and the panel show the same.
 - **A panel beside the first no longer stands still for good** (seen on Windows). Its process
   and the first panel's talk through a pipe, and each answered a question from the thread
   that reads: when the first sent the readings with their pictures while the panel's process

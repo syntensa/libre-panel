@@ -542,9 +542,11 @@ bar you can still see; the report lists the hidden pixels per edge (that
 number minus 2), so layouts can keep clear of them. Before the brightness
 check `doctor` waits for Enter, so you are watching the panel when it dims.
 
-Known so far: the 9.2" hides 18 px at the top in landscape (on the left in
-portrait). The editor shows such a strip as a hatched guide and snaps to its
-edge; the built-in layouts keep text and values out of it. Nothing is cut
+Known so far: the 9.2" hides 18 px at the top in landscape. On end, in the
+panel's video, its owner sees the whole width: portrait layouts keep 9 px
+clear at each side and sit in the middle (until 0.8.0 they kept the 18 px on
+the left, and stood 9 px right of the middle). The editor shows such a strip
+as a hatched guide and snaps to its edge; the built-in layouts keep text and values out of it. Nothing is cut
 off or moved: a background may run under the bezel (with JPEG stills the
 9.2" gets only 2 of those 18 rows, see above). With `rotate = 180`
 (upside down) the strip is at the opposite edge of the picture; the layouts

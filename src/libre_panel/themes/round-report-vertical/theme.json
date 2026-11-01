@@ -54,7 +54,7 @@
     {
       "type": "rect",
       "id": "round-card",
-      "x": 30,
+      "x": 21,
       "y": 40,
       "w": 438,
       "h": 590,
@@ -66,7 +66,7 @@
     {
       "type": "metric",
       "id": "round-title",
-      "x": 56,
+      "x": 47,
       "y": 67,
       "sensor": "report.title",
       "format": "{value:upper}",
@@ -82,7 +82,7 @@
     {
       "type": "image",
       "id": "game-logo",
-      "x": 292,
+      "x": 283,
       "y": 62,
       "w": 150,
       "h": 42,
@@ -94,7 +94,7 @@
     {
       "type": "metric",
       "id": "game",
-      "x": 56,
+      "x": 47,
       "y": 105,
       "sensor": "report.game",
       "format": "{value}",
@@ -110,7 +110,7 @@
     {
       "type": "metric",
       "id": "game-with-logo",
-      "x": 56,
+      "x": 47,
       "y": 105,
       "sensor": "report.game",
       "format": "{value}",
@@ -126,7 +126,7 @@
     {
       "type": "metric",
       "id": "when",
-      "x": 56,
+      "x": 47,
       "y": 162,
       "sensor": "report.when",
       "format": "{value}",
@@ -140,7 +140,7 @@
     {
       "type": "text",
       "id": "dot-1",
-      "x": 184,
+      "x": 175,
       "y": 162,
       "text": "·",
       "font": "builtin:Barlow-Medium",
@@ -152,7 +152,7 @@
     {
       "type": "metric",
       "id": "length",
-      "x": 200,
+      "x": 191,
       "y": 162,
       "sensor": "report.length",
       "format": "{value:duration}",
@@ -166,7 +166,7 @@
     {
       "type": "metric",
       "id": "outside",
-      "x": 442,
+      "x": 433,
       "y": 162,
       "sensor": "report.outside",
       "format": "{label} {value:.0f} °C",
@@ -182,7 +182,7 @@
     {
       "type": "metric",
       "id": "fps",
-      "x": 52,
+      "x": 43,
       "y": 189,
       "sensor": "report.fps",
       "format": "{value:.0f}",
@@ -195,7 +195,7 @@
     {
       "type": "text",
       "id": "fps-label",
-      "x": 285,
+      "x": 276,
       "y": 226,
       "text": "Ø FPS",
       "font": "builtin:Barlow-SemiBold",
@@ -207,7 +207,7 @@
     {
       "type": "metric",
       "id": "fps-delta",
-      "x": 285,
+      "x": 276,
       "y": 263,
       "sensor": "report.fps_delta",
       "format": "{value:+.0f}",
@@ -229,7 +229,7 @@
     {
       "type": "metric",
       "id": "fps-delta-label",
-      "x": 56,
+      "x": 47,
       "y": 336,
       "sensor": "report.fps_delta",
       "format": "{label:upper}",
@@ -246,7 +246,7 @@
     {
       "type": "metric",
       "id": "first-round",
-      "x": 56,
+      "x": 47,
       "y": 336,
       "sensor": "report.versus",
       "format": "{value:upper}",
@@ -263,7 +263,7 @@
     {
       "type": "metric",
       "id": "low-label",
-      "x": 56,
+      "x": 47,
       "y": 388,
       "sensor": "report.fps_1low",
       "format": "{label:upper}",
@@ -280,7 +280,7 @@
     {
       "type": "metric",
       "id": "low-value",
-      "x": 56,
+      "x": 47,
       "y": 410,
       "sensor": "report.fps_1low",
       "format": "{value:.0f}",
@@ -293,7 +293,7 @@
     {
       "type": "metric",
       "id": "low-delta",
-      "x": 138,
+      "x": 129,
       "y": 422,
       "sensor": "report.fps_1low_delta",
       "format": "{value:+.0f}",
@@ -315,7 +315,7 @@
     {
       "type": "metric",
       "id": "low01-label",
-      "x": 249,
+      "x": 240,
       "y": 388,
       "sensor": "report.fps_01low",
       "format": "{label:upper}",
@@ -332,7 +332,7 @@
     {
       "type": "metric",
       "id": "low01-value",
-      "x": 249,
+      "x": 240,
       "y": 410,
       "sensor": "report.fps_01low",
       "format": "{value:.0f}",
@@ -345,7 +345,7 @@
     {
       "type": "metric",
       "id": "low01-delta",
-      "x": 331,
+      "x": 322,
       "y": 422,
       "sensor": "report.fps_01low_delta",
       "format": "{value:+.0f}",
@@ -367,7 +367,7 @@
     {
       "type": "metric",
       "id": "frame-label",
-      "x": 56,
+      "x": 47,
       "y": 460,
       "sensor": "report.frametime_avg",
       "format": "{label:upper}",
@@ -384,7 +384,7 @@
     {
       "type": "metric",
       "id": "frame-value",
-      "x": 56,
+      "x": 47,
       "y": 482,
       "sensor": "report.frametime_avg",
       "format": "{value:.1f}",
@@ -397,7 +397,7 @@
     {
       "type": "text",
       "id": "frame-unit",
-      "x": 128,
+      "x": 119,
       "y": 500,
       "text": "ms",
       "font": "builtin:Barlow-Medium",
@@ -409,7 +409,7 @@
     {
       "type": "metric",
       "id": "frame-delta",
-      "x": 158,
+      "x": 149,
       "y": 494,
       "sensor": "report.frametime_avg_delta",
       "format": "{value:+.1f}",
@@ -431,7 +431,7 @@
     {
       "type": "metric",
       "id": "longest-label",
-      "x": 249,
+      "x": 240,
       "y": 460,
       "sensor": "report.frametime_max",
       "format": "{label:upper}",
@@ -448,7 +448,7 @@
     {
       "type": "metric",
       "id": "longest-value",
-      "x": 249,
+      "x": 240,
       "y": 482,
       "sensor": "report.frametime_max",
       "format": "{value:.0f}",
@@ -461,7 +461,7 @@
     {
       "type": "text",
       "id": "longest-unit",
-      "x": 321,
+      "x": 312,
       "y": 500,
       "text": "ms",
       "font": "builtin:Barlow-Medium",
@@ -473,7 +473,7 @@
     {
       "type": "metric",
       "id": "longest-delta",
-      "x": 351,
+      "x": 342,
       "y": 494,
       "sensor": "report.frametime_max_delta",
       "format": "{value:+.0f}",
@@ -495,7 +495,7 @@
     {
       "type": "metric",
       "id": "low-seconds-label",
-      "x": 56,
+      "x": 47,
       "y": 388,
       "sensor": "report.low",
       "format": "{label:upper}",
@@ -511,7 +511,7 @@
     {
       "type": "metric",
       "id": "low-seconds-value",
-      "x": 56,
+      "x": 47,
       "y": 410,
       "sensor": "report.low",
       "format": "{value:.0f}",
@@ -524,7 +524,7 @@
     {
       "type": "metric",
       "id": "low-seconds-delta",
-      "x": 138,
+      "x": 129,
       "y": 422,
       "sensor": "report.low_delta",
       "format": "{value:+.0f}",
@@ -546,7 +546,7 @@
     {
       "type": "metric",
       "id": "frame-seconds-label",
-      "x": 249,
+      "x": 240,
       "y": 388,
       "sensor": "report.frametime",
       "format": "{label:upper}",
@@ -562,7 +562,7 @@
     {
       "type": "metric",
       "id": "frame-seconds-value",
-      "x": 249,
+      "x": 240,
       "y": 410,
       "sensor": "report.frametime",
       "format": "{value:.1f}",
@@ -575,7 +575,7 @@
     {
       "type": "text",
       "id": "frame-seconds-unit",
-      "x": 321,
+      "x": 312,
       "y": 428,
       "text": "ms",
       "font": "builtin:Barlow-Medium",
@@ -587,7 +587,7 @@
     {
       "type": "metric",
       "id": "frame-seconds-delta",
-      "x": 351,
+      "x": 342,
       "y": 422,
       "sensor": "report.frametime_delta",
       "format": "{value:+.1f}",
@@ -609,7 +609,7 @@
     {
       "type": "metric",
       "id": "limit-label",
-      "x": 56,
+      "x": 47,
       "y": 540,
       "sensor": "report.limit",
       "format": "{label:upper}",
@@ -626,7 +626,7 @@
     {
       "type": "metric",
       "id": "limit-gpu",
-      "x": 56,
+      "x": 47,
       "y": 565,
       "sensor": "report.limit.gpu",
       "format": "{label} {value:.0f} %",
@@ -641,7 +641,7 @@
     {
       "type": "metric",
       "id": "limit-cpu",
-      "x": 184,
+      "x": 175,
       "y": 565,
       "sensor": "report.limit.cpu",
       "format": "{label} {value:.0f} %",
@@ -656,7 +656,7 @@
     {
       "type": "metric",
       "id": "limit-cap",
-      "x": 312,
+      "x": 303,
       "y": 565,
       "sensor": "report.limit.cap",
       "format": "{label} {value:.0f} %",
@@ -671,7 +671,7 @@
     {
       "type": "rect",
       "id": "limit-groove",
-      "x": 56,
+      "x": 47,
       "y": 596,
       "w": 386,
       "h": 10,
@@ -682,7 +682,7 @@
     {
       "type": "rect",
       "id": "limit-cap-bar",
-      "x": 56,
+      "x": 47,
       "y": 596,
       "w": 386,
       "h": 10,
@@ -693,7 +693,7 @@
     {
       "type": "bar",
       "id": "limit-gpu-bar",
-      "x": 56,
+      "x": 47,
       "y": 596,
       "w": 386,
       "h": 10,
@@ -711,7 +711,7 @@
     {
       "type": "bar",
       "id": "limit-cpu-bar",
-      "x": 56,
+      "x": 47,
       "y": 596,
       "w": 386,
       "h": 10,
@@ -729,7 +729,7 @@
     {
       "type": "rect",
       "id": "levels-card",
-      "x": 30,
+      "x": 21,
       "y": 642,
       "w": 438,
       "h": 394,
@@ -741,7 +741,7 @@
     {
       "type": "metric",
       "id": "levels-title",
-      "x": 56,
+      "x": 47,
       "y": 670,
       "sensor": "report.head.levels",
       "format": "{value:upper}",
@@ -757,7 +757,7 @@
     {
       "type": "metric",
       "id": "level-5-name",
-      "x": 152,
+      "x": 143,
       "y": 714,
       "sensor": "report.level.5",
       "format": "{label}",
@@ -772,7 +772,7 @@
     {
       "type": "bar",
       "id": "level-5-bar",
-      "x": 166,
+      "x": 157,
       "y": 722,
       "w": 206,
       "h": 14,
@@ -792,7 +792,7 @@
     {
       "type": "metric",
       "id": "level-5-value",
-      "x": 422,
+      "x": 413,
       "y": 711,
       "sensor": "report.level.5",
       "format": "{value:.0f}",
@@ -806,7 +806,7 @@
     {
       "type": "text",
       "id": "level-5-unit",
-      "x": 442,
+      "x": 433,
       "y": 725,
       "text": "%",
       "font": "builtin:Barlow-Medium",
@@ -819,7 +819,7 @@
     {
       "type": "metric",
       "id": "level-4-name",
-      "x": 152,
+      "x": 143,
       "y": 768,
       "sensor": "report.level.4",
       "format": "{label}",
@@ -834,7 +834,7 @@
     {
       "type": "bar",
       "id": "level-4-bar",
-      "x": 166,
+      "x": 157,
       "y": 776,
       "w": 206,
       "h": 14,
@@ -854,7 +854,7 @@
     {
       "type": "metric",
       "id": "level-4-value",
-      "x": 422,
+      "x": 413,
       "y": 765,
       "sensor": "report.level.4",
       "format": "{value:.0f}",
@@ -868,7 +868,7 @@
     {
       "type": "text",
       "id": "level-4-unit",
-      "x": 442,
+      "x": 433,
       "y": 779,
       "text": "%",
       "font": "builtin:Barlow-Medium",
@@ -881,7 +881,7 @@
     {
       "type": "metric",
       "id": "level-3-name",
-      "x": 152,
+      "x": 143,
       "y": 822,
       "sensor": "report.level.3",
       "format": "{label}",
@@ -896,7 +896,7 @@
     {
       "type": "bar",
       "id": "level-3-bar",
-      "x": 166,
+      "x": 157,
       "y": 830,
       "w": 206,
       "h": 14,
@@ -916,7 +916,7 @@
     {
       "type": "metric",
       "id": "level-3-value",
-      "x": 422,
+      "x": 413,
       "y": 819,
       "sensor": "report.level.3",
       "format": "{value:.0f}",
@@ -930,7 +930,7 @@
     {
       "type": "text",
       "id": "level-3-unit",
-      "x": 442,
+      "x": 433,
       "y": 833,
       "text": "%",
       "font": "builtin:Barlow-Medium",
@@ -943,7 +943,7 @@
     {
       "type": "metric",
       "id": "level-2-name",
-      "x": 152,
+      "x": 143,
       "y": 876,
       "sensor": "report.level.2",
       "format": "{label}",
@@ -958,7 +958,7 @@
     {
       "type": "bar",
       "id": "level-2-bar",
-      "x": 166,
+      "x": 157,
       "y": 884,
       "w": 206,
       "h": 14,
@@ -978,7 +978,7 @@
     {
       "type": "metric",
       "id": "level-2-value",
-      "x": 422,
+      "x": 413,
       "y": 873,
       "sensor": "report.level.2",
       "format": "{value:.0f}",
@@ -992,7 +992,7 @@
     {
       "type": "text",
       "id": "level-2-unit",
-      "x": 442,
+      "x": 433,
       "y": 887,
       "text": "%",
       "font": "builtin:Barlow-Medium",
@@ -1005,7 +1005,7 @@
     {
       "type": "metric",
       "id": "level-1-name",
-      "x": 152,
+      "x": 143,
       "y": 930,
       "sensor": "report.level.1",
       "format": "{label}",
@@ -1020,7 +1020,7 @@
     {
       "type": "bar",
       "id": "level-1-bar",
-      "x": 166,
+      "x": 157,
       "y": 938,
       "w": 206,
       "h": 14,
@@ -1040,7 +1040,7 @@
     {
       "type": "metric",
       "id": "level-1-value",
-      "x": 422,
+      "x": 413,
       "y": 927,
       "sensor": "report.level.1",
       "format": "{value:.0f}",
@@ -1054,7 +1054,7 @@
     {
       "type": "text",
       "id": "level-1-unit",
-      "x": 442,
+      "x": 433,
       "y": 941,
       "text": "%",
       "font": "builtin:Barlow-Medium",
@@ -1067,7 +1067,7 @@
     {
       "type": "metric",
       "id": "level-0-name",
-      "x": 152,
+      "x": 143,
       "y": 984,
       "sensor": "report.level.0",
       "format": "{label}",
@@ -1082,7 +1082,7 @@
     {
       "type": "bar",
       "id": "level-0-bar",
-      "x": 166,
+      "x": 157,
       "y": 992,
       "w": 206,
       "h": 14,
@@ -1102,7 +1102,7 @@
     {
       "type": "metric",
       "id": "level-0-value",
-      "x": 422,
+      "x": 413,
       "y": 981,
       "sensor": "report.level.0",
       "format": "{value:.0f}",
@@ -1116,7 +1116,7 @@
     {
       "type": "text",
       "id": "level-0-unit",
-      "x": 442,
+      "x": 433,
       "y": 995,
       "text": "%",
       "font": "builtin:Barlow-Medium",
@@ -1129,7 +1129,7 @@
     {
       "type": "rect",
       "id": "course-card",
-      "x": 30,
+      "x": 21,
       "y": 1048,
       "w": 438,
       "h": 244,
@@ -1141,7 +1141,7 @@
     {
       "type": "metric",
       "id": "course-title",
-      "x": 56,
+      "x": 47,
       "y": 1076,
       "sensor": "report.head.course",
       "format": "{value:upper}",
@@ -1157,7 +1157,7 @@
     {
       "type": "rect",
       "id": "course-cpu_temp-dot",
-      "x": 56,
+      "x": 47,
       "y": 1117,
       "w": 8,
       "h": 8,
@@ -1168,7 +1168,7 @@
     {
       "type": "metric",
       "id": "course-cpu_temp-label",
-      "x": 76,
+      "x": 67,
       "y": 1112,
       "sensor": "report.course.cpu_temp",
       "format": "{label:upper}",
@@ -1185,7 +1185,7 @@
     {
       "type": "rect",
       "id": "course-gpu_temp-dot",
-      "x": 246,
+      "x": 237,
       "y": 1117,
       "w": 8,
       "h": 8,
@@ -1196,7 +1196,7 @@
     {
       "type": "metric",
       "id": "course-gpu_temp-label",
-      "x": 266,
+      "x": 257,
       "y": 1112,
       "sensor": "report.course.gpu_temp",
       "format": "{label:upper}",
@@ -1213,7 +1213,7 @@
     {
       "type": "graph",
       "id": "course-cpu_temp",
-      "x": 56,
+      "x": 47,
       "y": 1146,
       "w": 350,
       "h": 126,
@@ -1231,7 +1231,7 @@
     {
       "type": "graph",
       "id": "course-gpu_temp",
-      "x": 56,
+      "x": 47,
       "y": 1146,
       "w": 350,
       "h": 126,
@@ -1249,7 +1249,7 @@
     {
       "type": "text",
       "id": "course-scale-90",
-      "x": 442,
+      "x": 433,
       "y": 1155,
       "text": "90",
       "font": "builtin:Barlow-Medium",
@@ -1262,7 +1262,7 @@
     {
       "type": "text",
       "id": "course-scale-60",
-      "x": 442,
+      "x": 433,
       "y": 1209,
       "text": "60",
       "font": "builtin:Barlow-Medium",
@@ -1275,7 +1275,7 @@
     {
       "type": "text",
       "id": "course-none",
-      "x": 231,
+      "x": 222,
       "y": 1189,
       "text": "–",
       "font": "builtin:Barlow-Medium",
@@ -1288,7 +1288,7 @@
     {
       "type": "rect",
       "id": "compare-card",
-      "x": 30,
+      "x": 21,
       "y": 1304,
       "w": 438,
       "h": 576,
@@ -1300,7 +1300,7 @@
     {
       "type": "metric",
       "id": "compare-title",
-      "x": 56,
+      "x": 47,
       "y": 1332,
       "sensor": "report.head.peaks",
       "format": "{value:upper}",
@@ -1316,7 +1316,7 @@
     {
       "type": "text",
       "id": "round-head",
-      "x": 292,
+      "x": 283,
       "y": 1382,
       "text": "Round",
       "font": "builtin:Barlow-Medium",
@@ -1331,7 +1331,7 @@
     {
       "type": "metric",
       "id": "mean-head",
-      "x": 374,
+      "x": 365,
       "y": 1382,
       "sensor": "report.count",
       "format": "Ø {value:.0f}",
@@ -1346,7 +1346,7 @@
     {
       "type": "text",
       "id": "delta-head",
-      "x": 442,
+      "x": 433,
       "y": 1382,
       "text": "Δ",
       "font": "builtin:Barlow-Medium",
@@ -1359,7 +1359,7 @@
     {
       "type": "rect",
       "id": "cpu_temp-dot",
-      "x": 56,
+      "x": 47,
       "y": 1429,
       "w": 8,
       "h": 8,
@@ -1370,7 +1370,7 @@
     {
       "type": "metric",
       "id": "cpu_temp-label",
-      "x": 76,
+      "x": 67,
       "y": 1424,
       "sensor": "report.cpu_temp",
       "format": "{label:upper}",
@@ -1387,7 +1387,7 @@
     {
       "type": "metric",
       "id": "cpu_temp-value",
-      "x": 262,
+      "x": 253,
       "y": 1443,
       "sensor": "report.cpu_temp",
       "format": "{value:.0f}",
@@ -1401,7 +1401,7 @@
     {
       "type": "text",
       "id": "cpu_temp-unit",
-      "x": 268,
+      "x": 259,
       "y": 1460,
       "text": "°C",
       "font": "builtin:Barlow-Medium",
@@ -1413,7 +1413,7 @@
     {
       "type": "metric",
       "id": "cpu_temp-mean",
-      "x": 374,
+      "x": 365,
       "y": 1452,
       "sensor": "report.cpu_temp_mean",
       "format": "{value:.0f}",
@@ -1427,7 +1427,7 @@
     {
       "type": "metric",
       "id": "cpu_temp-delta",
-      "x": 442,
+      "x": 433,
       "y": 1452,
       "sensor": "report.cpu_temp_delta",
       "format": "{value:+.0f}",
@@ -1451,7 +1451,7 @@
     {
       "type": "rect",
       "id": "cpu_temp-rule",
-      "x": 56,
+      "x": 47,
       "y": 1481,
       "w": 386,
       "h": 1,
@@ -1461,7 +1461,7 @@
     {
       "type": "rect",
       "id": "gpu_temp-dot",
-      "x": 56,
+      "x": 47,
       "y": 1491,
       "w": 8,
       "h": 8,
@@ -1472,7 +1472,7 @@
     {
       "type": "metric",
       "id": "gpu_temp-label",
-      "x": 76,
+      "x": 67,
       "y": 1486,
       "sensor": "report.gpu_temp",
       "format": "{label:upper}",
@@ -1489,7 +1489,7 @@
     {
       "type": "metric",
       "id": "gpu_temp-value",
-      "x": 262,
+      "x": 253,
       "y": 1505,
       "sensor": "report.gpu_temp",
       "format": "{value:.0f}",
@@ -1503,7 +1503,7 @@
     {
       "type": "text",
       "id": "gpu_temp-unit",
-      "x": 268,
+      "x": 259,
       "y": 1522,
       "text": "°C",
       "font": "builtin:Barlow-Medium",
@@ -1515,7 +1515,7 @@
     {
       "type": "metric",
       "id": "gpu_temp-mean",
-      "x": 374,
+      "x": 365,
       "y": 1514,
       "sensor": "report.gpu_temp_mean",
       "format": "{value:.0f}",
@@ -1529,7 +1529,7 @@
     {
       "type": "metric",
       "id": "gpu_temp-delta",
-      "x": 442,
+      "x": 433,
       "y": 1514,
       "sensor": "report.gpu_temp_delta",
       "format": "{value:+.0f}",
@@ -1553,7 +1553,7 @@
     {
       "type": "rect",
       "id": "gpu_temp-rule",
-      "x": 56,
+      "x": 47,
       "y": 1543,
       "w": 386,
       "h": 1,
@@ -1563,7 +1563,7 @@
     {
       "type": "rect",
       "id": "gpu_hotspot-dot",
-      "x": 56,
+      "x": 47,
       "y": 1553,
       "w": 8,
       "h": 8,
@@ -1574,7 +1574,7 @@
     {
       "type": "metric",
       "id": "gpu_hotspot-label",
-      "x": 76,
+      "x": 67,
       "y": 1548,
       "sensor": "report.gpu_hotspot",
       "format": "{label:upper}",
@@ -1591,7 +1591,7 @@
     {
       "type": "metric",
       "id": "gpu_hotspot-value",
-      "x": 262,
+      "x": 253,
       "y": 1567,
       "sensor": "report.gpu_hotspot",
       "format": "{value:.0f}",
@@ -1605,7 +1605,7 @@
     {
       "type": "text",
       "id": "gpu_hotspot-unit",
-      "x": 268,
+      "x": 259,
       "y": 1584,
       "text": "°C",
       "font": "builtin:Barlow-Medium",
@@ -1617,7 +1617,7 @@
     {
       "type": "metric",
       "id": "gpu_hotspot-mean",
-      "x": 374,
+      "x": 365,
       "y": 1576,
       "sensor": "report.gpu_hotspot_mean",
       "format": "{value:.0f}",
@@ -1631,7 +1631,7 @@
     {
       "type": "metric",
       "id": "gpu_hotspot-delta",
-      "x": 442,
+      "x": 433,
       "y": 1576,
       "sensor": "report.gpu_hotspot_delta",
       "format": "{value:+.0f}",
@@ -1655,7 +1655,7 @@
     {
       "type": "rect",
       "id": "gpu_hotspot-rule",
-      "x": 56,
+      "x": 47,
       "y": 1605,
       "w": 386,
       "h": 1,
@@ -1665,7 +1665,7 @@
     {
       "type": "rect",
       "id": "cpu_power-dot",
-      "x": 56,
+      "x": 47,
       "y": 1615,
       "w": 8,
       "h": 8,
@@ -1676,7 +1676,7 @@
     {
       "type": "metric",
       "id": "cpu_power-label",
-      "x": 76,
+      "x": 67,
       "y": 1610,
       "sensor": "report.cpu_power",
       "format": "{label:upper}",
@@ -1693,7 +1693,7 @@
     {
       "type": "metric",
       "id": "cpu_power-value",
-      "x": 262,
+      "x": 253,
       "y": 1629,
       "sensor": "report.cpu_power",
       "format": "{value:.0f}",
@@ -1707,7 +1707,7 @@
     {
       "type": "text",
       "id": "cpu_power-unit",
-      "x": 268,
+      "x": 259,
       "y": 1646,
       "text": "W",
       "font": "builtin:Barlow-Medium",
@@ -1719,7 +1719,7 @@
     {
       "type": "metric",
       "id": "cpu_power-mean",
-      "x": 374,
+      "x": 365,
       "y": 1638,
       "sensor": "report.cpu_power_mean",
       "format": "{value:.0f}",
@@ -1733,7 +1733,7 @@
     {
       "type": "metric",
       "id": "cpu_power-delta",
-      "x": 442,
+      "x": 433,
       "y": 1638,
       "sensor": "report.cpu_power_delta",
       "format": "{value:+.0f}",
@@ -1757,7 +1757,7 @@
     {
       "type": "rect",
       "id": "cpu_power-rule",
-      "x": 56,
+      "x": 47,
       "y": 1667,
       "w": 386,
       "h": 1,
@@ -1767,7 +1767,7 @@
     {
       "type": "rect",
       "id": "gpu_power-dot",
-      "x": 56,
+      "x": 47,
       "y": 1677,
       "w": 8,
       "h": 8,
@@ -1778,7 +1778,7 @@
     {
       "type": "metric",
       "id": "gpu_power-label",
-      "x": 76,
+      "x": 67,
       "y": 1672,
       "sensor": "report.gpu_power",
       "format": "{label:upper}",
@@ -1795,7 +1795,7 @@
     {
       "type": "metric",
       "id": "gpu_power-value",
-      "x": 262,
+      "x": 253,
       "y": 1691,
       "sensor": "report.gpu_power",
       "format": "{value:.0f}",
@@ -1809,7 +1809,7 @@
     {
       "type": "text",
       "id": "gpu_power-unit",
-      "x": 268,
+      "x": 259,
       "y": 1708,
       "text": "W",
       "font": "builtin:Barlow-Medium",
@@ -1821,7 +1821,7 @@
     {
       "type": "metric",
       "id": "gpu_power-mean",
-      "x": 374,
+      "x": 365,
       "y": 1700,
       "sensor": "report.gpu_power_mean",
       "format": "{value:.0f}",
@@ -1835,7 +1835,7 @@
     {
       "type": "metric",
       "id": "gpu_power-delta",
-      "x": 442,
+      "x": 433,
       "y": 1700,
       "sensor": "report.gpu_power_delta",
       "format": "{value:+.0f}",
@@ -1859,7 +1859,7 @@
     {
       "type": "rect",
       "id": "gpu_power-rule",
-      "x": 56,
+      "x": 47,
       "y": 1729,
       "w": 386,
       "h": 1,
@@ -1869,7 +1869,7 @@
     {
       "type": "rect",
       "id": "vram_used-dot",
-      "x": 56,
+      "x": 47,
       "y": 1739,
       "w": 8,
       "h": 8,
@@ -1880,7 +1880,7 @@
     {
       "type": "metric",
       "id": "vram_used-label",
-      "x": 76,
+      "x": 67,
       "y": 1734,
       "sensor": "report.vram_used",
       "format": "{label:upper}",
@@ -1897,7 +1897,7 @@
     {
       "type": "metric",
       "id": "vram_used-value",
-      "x": 262,
+      "x": 253,
       "y": 1753,
       "sensor": "report.vram_used",
       "format": "{value:.1f}",
@@ -1911,7 +1911,7 @@
     {
       "type": "text",
       "id": "vram_used-unit",
-      "x": 268,
+      "x": 259,
       "y": 1770,
       "text": "GB",
       "font": "builtin:Barlow-Medium",
@@ -1923,7 +1923,7 @@
     {
       "type": "metric",
       "id": "vram_used-mean",
-      "x": 374,
+      "x": 365,
       "y": 1762,
       "sensor": "report.vram_used_mean",
       "format": "{value:.1f}",
@@ -1937,7 +1937,7 @@
     {
       "type": "metric",
       "id": "vram_used-delta",
-      "x": 442,
+      "x": 433,
       "y": 1762,
       "sensor": "report.vram_used_delta",
       "format": "{value:+.1f}",
@@ -1952,7 +1952,7 @@
     {
       "type": "rect",
       "id": "vram_used-rule",
-      "x": 56,
+      "x": 47,
       "y": 1791,
       "w": 386,
       "h": 1,
@@ -1962,7 +1962,7 @@
     {
       "type": "rect",
       "id": "power-dot",
-      "x": 56,
+      "x": 47,
       "y": 1801,
       "w": 8,
       "h": 8,
@@ -1973,7 +1973,7 @@
     {
       "type": "metric",
       "id": "power-label",
-      "x": 76,
+      "x": 67,
       "y": 1796,
       "sensor": "report.power",
       "format": "{label:upper}",
@@ -1990,7 +1990,7 @@
     {
       "type": "metric",
       "id": "power-value",
-      "x": 262,
+      "x": 253,
       "y": 1815,
       "sensor": "report.power",
       "format": "{value:.0f}",
@@ -2004,7 +2004,7 @@
     {
       "type": "text",
       "id": "power-unit",
-      "x": 268,
+      "x": 259,
       "y": 1832,
       "text": "W",
       "font": "builtin:Barlow-Medium",
@@ -2016,7 +2016,7 @@
     {
       "type": "metric",
       "id": "power-mean",
-      "x": 374,
+      "x": 365,
       "y": 1824,
       "sensor": "report.power_mean",
       "format": "{value:.0f}",
@@ -2030,7 +2030,7 @@
     {
       "type": "metric",
       "id": "power-delta",
-      "x": 442,
+      "x": 433,
       "y": 1824,
       "sensor": "report.power_delta",
       "format": "{value:+.0f}",

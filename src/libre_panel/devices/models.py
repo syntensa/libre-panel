@@ -63,6 +63,9 @@ class PanelModel:
     # Pixels of the framebuffer (native, portrait) behind the bezel:
     # top, right, bottom, left. Measured with the ruler card of `libre-panel doctor`.
     hidden: tuple[int, int, int, int] = (0, 0, 0, 0)
+    # The strips a portrait frame keeps clear at its edges (top, right, bottom, left), where an
+    # owner saw them otherwise than ``hidden`` turned into it gives; None: those
+    portrait_clear: tuple[int, int, int, int] | None = None
     # Video mode (H.264) proven on this model: ``video.mode = "auto"`` uses it here.
     video: bool = False
     # How its H.264 decoder shows the video's values ([device] video_range "auto"): "limited"
@@ -89,6 +92,8 @@ class PanelModel:
         top, right, bottom, left = self.hidden
         if orientation == "landscape":
             return {"top": right, "right": bottom, "bottom": left, "left": top}
+        if self.portrait_clear is not None:
+            return dict(zip(("top", "right", "bottom", "left"), self.portrait_clear, strict=True))
         return {"top": bottom, "right": left, "bottom": top, "left": right}
 
     @property
@@ -248,6 +253,11 @@ MODELS: tuple[PanelModel, ...] = (
         usb_ids=((0x1CBE, 0x0092),),
         notes="protocol verified on hardware",
         hidden=(0, 18, 0, 0),
+        # On end its owner sees the frame's whole width in the panel's video (both edges, the
+        # layouts 18 px to the right of the middle): the layouts made for the 462 columns keep
+        # their width in the middle, 9 px clear at each side (a still, cut to its 464 columns,
+        # shows 9 px of it further left)
+        portrait_clear=(0, 9, 0, 9),
         video=True,
         # as the 12.3": the owner's panel showed limited-range video under a grey veil and
         # full range right (the A/B comparison of Check the colours)

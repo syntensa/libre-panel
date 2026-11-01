@@ -84,7 +84,7 @@
     {
       "type": "rect",
       "id": "frame-time",
-      "x": 40,
+      "x": 31,
       "y": 22,
       "w": 418,
       "h": 371,
@@ -98,7 +98,7 @@
     {
       "type": "rect",
       "id": "frame-rings",
-      "x": 40,
+      "x": 31,
       "y": 1136,
       "w": 418,
       "h": 762,
@@ -112,7 +112,7 @@
     {
       "type": "clock",
       "id": "clock",
-      "x": 56,
+      "x": 47,
       "y": 45,
       "format": "%H:%M",
       "digits": "roll",
@@ -125,7 +125,7 @@
     {
       "type": "clock",
       "id": "seconds",
-      "x": 392,
+      "x": 383,
       "y": 69,
       "format": "%S",
       "digits": "roll",
@@ -138,7 +138,7 @@
     {
       "type": "rect",
       "id": "signature",
-      "x": 64,
+      "x": 55,
       "y": 198,
       "w": 97,
       "h": 4,
@@ -150,7 +150,7 @@
     {
       "type": "clock",
       "id": "date",
-      "x": 62,
+      "x": 53,
       "y": 219,
       "format": "%A · %d %B",
       "font_size": 29,
@@ -162,7 +162,7 @@
     {
       "type": "clock",
       "id": "date-music",
-      "x": 48,
+      "x": 39,
       "y": 212,
       "format": "%A · %d %B",
       "font_size": 30,
@@ -174,7 +174,7 @@
     {
       "type": "icon",
       "id": "net.down-icon",
-      "x": 64,
+      "x": 55,
       "y": 295,
       "icon": "download",
       "size": 25,
@@ -185,7 +185,7 @@
     {
       "type": "metric",
       "id": "net.down-value",
-      "x": 101,
+      "x": 92,
       "y": 291,
       "sensor": "net.down",
       "format": "{value:bytes}/s",
@@ -199,7 +199,7 @@
     {
       "type": "icon",
       "id": "net.up-icon",
-      "x": 267,
+      "x": 258,
       "y": 295,
       "icon": "upload",
       "size": 25,
@@ -210,7 +210,7 @@
     {
       "type": "metric",
       "id": "net.up-value",
-      "x": 304,
+      "x": 295,
       "y": 291,
       "sensor": "net.up",
       "format": "{value:bytes}/s",
@@ -224,7 +224,7 @@
     {
       "type": "icon",
       "id": "sys.uptime-icon",
-      "x": 64,
+      "x": 55,
       "y": 343,
       "icon": "clock",
       "size": 25,
@@ -235,7 +235,7 @@
     {
       "type": "metric",
       "id": "sys.uptime-value",
-      "x": 101,
+      "x": 92,
       "y": 339,
       "sensor": "sys.uptime",
       "format": "{value:duration}",
@@ -260,7 +260,7 @@
     {
       "type": "rect",
       "id": "names-rule",
-      "x": 56,
+      "x": 47,
       "y": 1187,
       "w": 386,
       "h": 1,
@@ -269,7 +269,7 @@
     {
       "type": "gauge",
       "id": "cpu-ring",
-      "x": 56,
+      "x": 47,
       "y": 1209,
       "w": 177,
       "h": 177,
@@ -287,7 +287,7 @@
     {
       "type": "metric",
       "id": "cpu-load",
-      "x": 145,
+      "x": 136,
       "y": 1258,
       "sensor": "cpu.load",
       "format": "{value:.0f}%",
@@ -302,7 +302,7 @@
     {
       "type": "text",
       "id": "cpu-label",
-      "x": 145,
+      "x": 136,
       "y": 1319,
       "text": "CPU",
       "font_size": 16,
@@ -315,7 +315,7 @@
     {
       "type": "metric",
       "id": "cpu-temp",
-      "x": 265,
+      "x": 256,
       "y": 1241,
       "sensor": "cpu.temp",
       "format": "{value:.0f}°C",
@@ -341,7 +341,7 @@
     {
       "type": "metric",
       "id": "cpu-power",
-      "x": 265,
+      "x": 256,
       "y": 1295,
       "sensor": "cpu.power",
       "format": "{value:.0f} W",
@@ -357,7 +357,7 @@
     {
       "type": "metric",
       "id": "cpu-name",
-      "x": 265,
+      "x": 256,
       "y": 1340,
       "sensor": "cpu.name",
       "format": "{value}",
@@ -374,7 +374,7 @@
     {
       "type": "gauge",
       "id": "mem-ring",
-      "x": 56,
+      "x": 47,
       "y": 1438,
       "w": 177,
       "h": 177,
@@ -392,7 +392,7 @@
     {
       "type": "metric",
       "id": "mem-load",
-      "x": 145,
+      "x": 136,
       "y": 1486,
       "sensor": "mem.load",
       "format": "{value:.0f}%",
@@ -407,7 +407,7 @@
     {
       "type": "text",
       "id": "mem-label",
-      "x": 145,
+      "x": 136,
       "y": 1548,
       "text": "RAM",
       "font_size": 16,
@@ -420,7 +420,7 @@
     {
       "type": "metric",
       "id": "mem-used",
-      "x": 265,
+      "x": 256,
       "y": 1469,
       "sensor": "mem.used",
       "format": "{value:.1f} GB",
@@ -437,7 +437,7 @@
     {
       "type": "metric",
       "id": "mem-total",
-      "x": 265,
+      "x": 256,
       "y": 1523,
       "sensor": "mem.total",
       "format": "/ {value:.0f} GB",
@@ -453,7 +453,7 @@
     {
       "type": "metric",
       "id": "mem-name",
-      "x": 265,
+      "x": 256,
       "y": 1568,
       "sensor": "mem.name",
       "format": "{value}",
@@ -470,7 +470,7 @@
     {
       "type": "gauge",
       "id": "gpu-ring",
-      "x": 56,
+      "x": 47,
       "y": 1666,
       "w": 177,
       "h": 177,
@@ -488,7 +488,7 @@
     {
       "type": "metric",
       "id": "gpu-load",
-      "x": 145,
+      "x": 136,
       "y": 1715,
       "sensor": "gpu.load",
       "format": "{value:.0f}%",
@@ -503,7 +503,7 @@
     {
       "type": "text",
       "id": "gpu-label",
-      "x": 145,
+      "x": 136,
       "y": 1776,
       "text": "GPU",
       "font_size": 16,
@@ -516,7 +516,7 @@
     {
       "type": "metric",
       "id": "gpu-temp",
-      "x": 265,
+      "x": 256,
       "y": 1698,
       "sensor": "gpu.temp",
       "format": "{value:.0f}°C",
@@ -542,7 +542,7 @@
     {
       "type": "metric",
       "id": "gpu-power",
-      "x": 265,
+      "x": 256,
       "y": 1752,
       "sensor": "gpu.power",
       "format": "{value:.0f} W",
@@ -558,7 +558,7 @@
     {
       "type": "gauge",
       "id": "disk-ring",
-      "x": 42,
+      "x": 33,
       "y": 1640,
       "w": 190,
       "h": 190,
@@ -576,7 +576,7 @@
     {
       "type": "metric",
       "id": "disk-load",
-      "x": 137,
+      "x": 128,
       "y": 1692,
       "sensor": "disk.load",
       "format": "{value:.0f}%",
@@ -591,7 +591,7 @@
     {
       "type": "text",
       "id": "disk-label",
-      "x": 137,
+      "x": 128,
       "y": 1758,
       "text": "DISK",
       "font_size": 17,
@@ -604,7 +604,7 @@
     {
       "type": "metric",
       "id": "disk-used",
-      "x": 266,
+      "x": 257,
       "y": 1674,
       "sensor": "disk.used",
       "format": "{value:.0f} GB",
@@ -621,7 +621,7 @@
     {
       "type": "metric",
       "id": "disk-total",
-      "x": 266,
+      "x": 257,
       "y": 1732,
       "sensor": "disk.total",
       "format": "/ {value:.0f} GB",
@@ -637,7 +637,7 @@
     {
       "type": "metric",
       "id": "gpu-name",
-      "x": 265,
+      "x": 256,
       "y": 1797,
       "sensor": "gpu.name",
       "format": "{value}",
