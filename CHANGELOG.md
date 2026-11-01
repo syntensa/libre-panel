@@ -99,6 +99,12 @@
   them as well.
 
 **Better**
+- **A graph's strip grows instead of being drawn anew.** A graph scrolls over a strip of its
+  curve drawn ahead, glow and all, made anew at each reading: all of it, though only the last
+  second of it was new. Now the strip before is kept where the curve stays the same and only
+  the rest is drawn, the same pixels as drawn whole: on the 12.3" Lumen's 5.6 instead of 27 ms
+  a strip, Arena's 21 instead of 57 (the thread that draws them: Lumen 3.5 instead of 5.3 % of
+  a core, Arena 2.2 instead of 4.3).
 - **Game mode takes a fifth less of the processor on a video panel.** While a game runs, a
   video panel shows 24 frames a second instead of 30 unless `[modes.game] fps` says
   otherwise: the game gets the processor, Arena's graph still scrolls smoothly.

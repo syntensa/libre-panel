@@ -4139,7 +4139,8 @@ class Renderer:
         every_s = self.STRIP_GLIDE_S if strip.gliding else self.STRIP_EVERY_S
         if due and strips.building is None and now - strips.asked >= every_s:
             strips.asked = now
-            job = self._strip_job(widget, history, now, per_point, every, margin, parts)
+            job = self._strip_job(widget, history, now, per_point, every, margin, parts,
+                                  strips.ready)  # fmt: skip
             if self.background_builds:
                 if self._strip_builder is None:
                     self._strip_builder = _Builder("render-strips", self._gate())
@@ -4272,7 +4273,7 @@ class Renderer:
 
     def _strip_job(
         self, widget: dict[str, Any], history: History, now: float, per_point: float,
-        every: int, margin: int, parts: int = 1,
+        every: int, margin: int, parts: int = 1, before: _Strip | None = None,
     ) -> Callable[[], _Strip]:  # fmt: skip
         """A strip of the curve to draw (in the helper thread): its values are
         taken now, on the render thread; the drawing happens when it runs."""
@@ -4298,9 +4299,128 @@ class Renderer:
         def job() -> _Strip:
             strip = _Strip(made, now, until, pieces)
             strip.parts, strip.gliding = parts, gliding
+            grown = self._grown_strip(widget, before, values, first, per_point, every, strip,
+                                      bounds)  # fmt: skip
+            if grown is not None:
+                return grown
             return self._draw_strip(widget, values, first, per_point, every, strip, bounds)
 
         return job
+
+    def _grown_strip(
+        self, widget: dict[str, Any], before: _Strip | None, values: list[float | None],
+        first: int, per_point: float, every: int, strip: _Strip, bounds: tuple[float, float],
+    ) -> _Strip | None:  # fmt: skip
+        """The strip :meth:`_draw_strip` would draw, made of the one ``before`` where the curve
+        stays as it was and drawn anew only from where its values change (a reading came: from
+        the point before it, and what its glow reaches), with the same range and fade: about a
+        tenth of it each second instead of all of it (the drawing, its glow, its steps). None
+        where that is not so (another range, another fade, a strip drawn otherwise): drawn
+        whole. The pixels are the whole drawing's, but in its first columns, where the one
+        before saw further back (no window shows them: they are its glow's margin)."""
+        if (
+            before is None or not before.phases or before.values is None
+            or before.per_point != per_point or before.every != every
+            or before.parts != strip.parts or before.bounds != bounds
+            or (first - before.first) % every or first < before.first
+        ):  # fmt: skip
+            return None
+        s, h = self.STRIP_SCALE, widget["h"]
+        dense = self._dense(widget, every * per_point)
+        numbers = [v for v in values if v is not None]
+        if not numbers or self._fade_top(dense, numbers, bounds, s) != before.top:
+            return None
+        start = (first - before.first) // every  # (where ``values`` begin in the one before)
+        same = 0
+        for value, was in zip(values, before.values[start:], strict=False):
+            if value != was:
+                break
+            same += 1
+        changed = first + same * every  # the first point that is not as it was
+        grid = self.STRIP_GRID * s
+        origin = self._strip_origin(first, per_point)
+        last = first + (len(values) - 1) * every
+        width = math.ceil((last * per_point - origin + 1) / s) + 1
+        pad = before.pad
+        reach = self._reach(dense) + 3 * dense.get("glow_radius", 10) + grid  # (the lit halo too)
+        shift = (origin - before.origin) // s  # the one before's columns, this one's from
+        # this one's columns from ``seam`` on are drawn anew: from the segment that leads to the
+        # first point changed on, and the glow and line around it
+        seam = math.floor(((changed - every) * per_point - origin) / s) - reach - 2
+        seam = min(seam, before.width - shift - reach - 2)
+        if seam < 2 * reach + pad or seam >= width:
+            return None  # (little of it stays: drawn whole)
+        step = grid // s  # (columns)
+        begin = (seam - reach - 2) // step * step  # drawn from here: the glow at ``seam`` is the
+        # whole's, and its grid the same
+        x0 = origin + s * begin  # its left edge, at ``s``
+        lo = max(0, (math.floor(x0 / per_point) - first) // every - 1)
+        points = [((first + i * every) * per_point - x0, values[i]) for i in range(lo, len(values))]
+        tail_w = width - begin
+        layer = self._curve(dense, points, tail_w + 1, s, bounds, before.top)
+        opacity = dense.get("opacity", 1.0)
+        lines = [
+            _scale_alpha(
+                self._down(layer.crop((p, 0, p + s * tail_w, s * h)), tail_w, h, s), opacity
+            )  # fmt: skip
+            for p in range(s)
+        ]
+        del layer
+        halo, tail_pad = self._halo(dense, lines[0], exact=True)
+        if tail_pad != pad:
+            return None
+        tails = self._strip_phases(lines, halo, pad, strip.parts)
+
+        def joined(old: Image.Image, tail: Image.Image) -> Image.Image:
+            out = Image.new("RGBA", (width + 2 * pad, h + 2 * pad), (0, 0, 0, 0))
+            out.paste(old.crop((shift, 0, shift + seam + pad, old.height)), (0, 0))
+            cut = seam - begin + pad  # the tail's column of this one's column ``seam``
+            out.paste(tail.crop((cut, 0, tail.width, tail.height)), (seam + pad, 0))
+            return out
+
+        strip.per_point, strip.every, strip.origin, strip.width = per_point, every, origin, width
+        strip.bounds, strip.top, strip.pad = bounds, before.top, pad
+        strip.phases = [joined(old, tail) for old, tail in zip(before.phases, tails, strict=True)]
+        strip.halo = None if halo is None else joined(before.halo, halo)
+        strip.values, strip.first = list(values), first
+        return strip
+
+    # A strip's left edge lies on a grid of this many pixels (at its scale, times it): the lit
+    # line's halo is worked out at a quarter of the size (lit._lay_halo), on a grid that starts
+    # at the picture's edge. On the same grid, a strip made of the one before (_grown_strip)
+    # is the strip drawn whole, pixel for pixel
+    STRIP_GRID = 4
+
+    def _strip_origin(self, first: int, per_point: float) -> int:
+        """The left edge (at the strip's scale) of a strip whose first point is ``first``: a
+        pixel before it, on the grid of :data:`STRIP_GRID`."""
+        grid = self.STRIP_GRID * self.STRIP_SCALE
+        return (math.floor(first * per_point) - 1) // grid * grid
+
+    @staticmethod
+    def _strip_phases(lines: list[Image.Image], halo: Image.Image | None, pad: int,
+                      parts: int) -> list[Image.Image]:  # fmt: skip
+        """A strip's images (see :meth:`_draw_strip`): per half-pixel step its line on its
+        glow, and per part of a step (``parts``) one between it and the next."""
+        phases = []
+        for line in lines:
+            if halo is None:
+                phases.append(line)
+                continue
+            out = halo.copy()
+            out.alpha_composite(line, (pad, pad))
+            phases.append(out)
+        if parts > 1:  # after the last step comes the first, a pixel on
+            weighed = [phase.convert("RGBa") for phase in phases]
+            width0, height0 = weighed[0].size
+            following = [*weighed[1:], weighed[0].crop((1, 0, width0 + 1, height0))]
+            cut = []
+            for one, mixed, after in zip(phases, weighed, following, strict=True):
+                cut.append(one)
+                for q in range(1, parts):
+                    cut.append(Image.blend(mixed, after, q / parts).convert("RGBA"))
+            phases = cut
+        return phases
 
     def _draw_strip(
         self, widget: dict[str, Any], values: list[float | None], first: int, per_point: float,
@@ -4316,7 +4436,7 @@ class Renderer:
         if bounds is None:
             bounds = self._graph_bounds(widget, numbers) if numbers else (0.0, 1.0)
         top = self._fade_top(widget, numbers, bounds, s)
-        origin = math.floor(first * per_point) - 1  # the strip's left edge, at ``s``
+        origin = self._strip_origin(first, per_point)  # the strip's left edge, at ``s``
         last = first + (len(values) - 1) * every
         width = math.ceil((last * per_point - origin + 1) / s) + 1
         layer = self._graph_layer(
@@ -4330,28 +4450,12 @@ class Renderer:
         ]
         del layer  # (drawn twice as large: the biggest picture here, let go before the next)
         halo, pad = self._halo(widget, lines[0], exact=True)
-        phases = []
-        for line in lines:
-            if halo is None:
-                phases.append(line)
-                continue
-            out = halo.copy()
-            out.alpha_composite(line, (pad, pad))
-            phases.append(out)
+        phases = self._strip_phases(lines, halo, pad, strip.parts)
         del lines
-        if strip.parts > 1:  # after the last step comes the first, a pixel on
-            weighed = [phase.convert("RGBa") for phase in phases]
-            width0, height0 = weighed[0].size
-            following = [*weighed[1:], weighed[0].crop((1, 0, width0 + 1, height0))]
-            cut = []
-            for one, mixed, after in zip(phases, weighed, following, strict=True):
-                cut.append(one)
-                for q in range(1, strip.parts):
-                    cut.append(Image.blend(mixed, after, q / strip.parts).convert("RGBA"))
-            phases = cut
         strip.per_point, strip.every, strip.origin, strip.width = per_point, every, origin, width
         strip.bounds, strip.top, strip.pad, strip.phases = bounds, top, pad, phases
         strip.halo = halo
+        strip.values, strip.first = list(values), first
         return strip
 
     def _patch(
@@ -4605,6 +4709,10 @@ class _Strip:
         self.parts = 1
         self.halo: Image.Image | None = None  # the glow alone, for beside the window
         self.gliding = False  # drawn while the graph's own range glided: the next comes soon
+        # the values it was drawn through, from point ``first`` (the next is made of it where
+        # they stay the same: Renderer._grown_strip)
+        self.values: list[float | None] | None = None
+        self.first = 0
 
     def covers(self, left: int, w: int, s: int) -> bool:
         """Whether a window of ``w`` pixels from ``left`` (at scale ``s``) lies on it."""
