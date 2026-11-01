@@ -49,6 +49,10 @@ export const SOURCES = {
     title: () => t("Game frame rate"),
     hint: () => t("The frames per second of the game you play, through PresentMon (Windows; the download carries it)."),
   },
+  hwinfo: {
+    title: () => "HWiNFO",
+    hint: () => t("Temperatures, power, clocks, loads and fans as HWiNFO reads them, where it runs with its shared memory on (Windows): the common ones under the keys LibreHardwareMonitor's have, every other one under its name in HWiNFO."),
+  },
   rtss: {
     title: () => t("Game frame rate from RTSS"),
     hint: () => t("An alternative to PresentMon where RivaTuner Statistics Server runs (alone or with MSI Afterburner): its frame rates, read from the memory it shares, without rights. Without who holds the frame rate down; PresentMon, asked first, keeps that."),
@@ -77,11 +81,11 @@ export const SOURCES = {
   media: { title: () => t("What is playing"), hint: () => t("The title, the cover and the player of the music that plays.") },
   sky: { title: () => t("Sun and moon"), hint: () => t("Sunrise, sunset and the phase of the moon.") },
 };
-const ORDER = ["load", "audio", "librehardwaremonitor", "linux", "psutil", "presentmon", "rtss", "calendar", "homeassistant", "mqtt", "json", "nut", "demo"];
+const ORDER = ["load", "audio", "librehardwaremonitor", "hwinfo", "linux", "psutil", "presentmon", "rtss", "calendar", "homeassistant", "mqtt", "json", "nut", "demo"];
 
 /** Whether a source can work on this system (`platform` is Python's sys.platform). */
 function worksHere(name, platform) {
-  if (["librehardwaremonitor", "presentmon", "rtss"].includes(name)) return platform === "win32";
+  if (["librehardwaremonitor", "hwinfo", "presentmon", "rtss"].includes(name)) return platform === "win32";
   if (name === "linux") return platform.startsWith("linux");
   if (name === "audio") return platform === "win32" || platform.startsWith("linux");
   return true;

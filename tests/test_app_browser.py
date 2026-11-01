@@ -2583,7 +2583,12 @@ def test_a_view_that_cannot_be_drawn_says_so_and_the_others_stay_reachable(app_u
         # (the app asks for the plugins' pages without waiting: their answer, coming after the
         # broken list, would mend it before it is drawn)
         page.wait_for_function("(window.libre.store.get().plugins || []).length > 0")
-        js(page, "window.libre.store.set({ plugins: null })")
+        # (broken until the view says so: a list that came later would mend it first)
+        page.wait_for_function(
+            "() => { window.libre.store.set({ plugins: null });"
+            " return !!document.querySelector('.view-message.error'); }",
+            polling=100,
+        )
         alert = page.locator(".view-message.error")
         expect(alert).to_contain_text("This view could not be drawn")
         assert page.locator(".topbar").is_visible()
@@ -4809,3 +4814,42 @@ def test_values_from_json_are_set_up_in_the_settings(app_url, isolated_home):
         source.get_by_role("button", name="Remove this source").click()
         waits_for(page, lambda: not settings_config().sensors.options.get("json", {})
                   .get("sources"))  # fmt: skip
+
+
+def test_a_sources_raw_readings_are_found_by_their_device_and_put_on_the_panel(app_url):
+    """Design's sensors: a source's raw readings listed under the device they are read from (a
+    WireView's, not under "lhm"), closed until opened or searched for; the library's search finds
+    them too, and a click puts one on the panel."""
+    wire = [
+        {"key": f"lhm:/gpu-powermonitor/com3/current/{n}", "unit": "A", "label": f"Pin {n} Current",
+         "device": "WireView Pro II"}
+        for n in range(1, 4)
+    ]  # fmt: skip
+
+    def sensors(route, request):
+        response = route.fetch()
+        route.fulfill(response=response, json=[*response.json(), *wire])
+
+    with browser_page(app_url, routes={"**/api/sensors": sensors}) as page:
+        page.wait_for_function("window.libre.store.get().sensors.some((s) => s.device)")
+        js(page, "window.libre.doc.setSelection(['cpu-ring'])")
+        page.locator(".floating-toolbar .tool-sensor").click()
+        picker = page.locator(".sensor-picker")
+        device = picker.locator(".sensor-group.device[data-group='WireView Pro II']")
+        expect(device.locator(".sensor-device")).to_contain_text("WireView Pro II3")
+        expect(device.locator(".sensor-row")).to_have_count(0)  # closed
+        device.locator(".sensor-device").click()
+        expect(device.locator(".sensor-row")).to_have_count(3)
+        picker.locator("input").fill("wireview")  # found by the device's name, the others not
+        expect(picker.locator(".sensor-group .sensor-row")).to_have_count(3)
+        picker.locator(".sensor-row", has_text="Pin 2 Current").click()
+        assert widget(page, "cpu-ring")["sensor"] == "lhm:/gpu-powermonitor/com3/current/2"
+        page.locator(".library input").fill("pin 3")
+        hits = page.locator("[data-sensor-hits]")
+        expect(hits).to_contain_text("WireView Pro II")
+        before = js(page, "window.libre.doc.widgets().length")
+        hits.locator(".sensor-row[data-key='lhm:/gpu-powermonitor/com3/current/3']").click()
+        assert js(page, "window.libre.doc.widgets().length") == before + 1
+        added = js(page, "window.libre.doc.widgets().at(-1)")
+        assert added["type"] == "metric" and added["sensor"].endswith("current/3")
+        assert js(page, "window.libre.store.get().selection") == [added["id"]]

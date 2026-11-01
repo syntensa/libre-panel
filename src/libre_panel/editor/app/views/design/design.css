@@ -1466,6 +1466,24 @@
   font-weight: 600;
 }
 
+/* a device's raw readings: its name as a button that opens and closes them, with how many */
+.sensor-device {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  border: 0;
+  background: none;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12.5px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.sensor-device span:nth-child(2) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sensor-device:hover { color: var(--text); }
+
 .sensor-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;

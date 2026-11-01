@@ -87,6 +87,9 @@ class Reading:
     origin: str = ""
     # A state (``publish_state``): when it was published, on the main loop's clock.
     stamp: float | None = None
+    # The device it is read from, as its source names it ("AMD Ryzen 9 7950X", "WireView Pro
+    # II"): the editor lists a source's raw readings under it; "" where it says none
+    device: str = ""
 
 
 @dataclass
@@ -178,6 +181,7 @@ _BUILTIN_PROVIDERS = {
     "hardware": "libre_panel.sensors.hardware:HardwareProvider",
     "mangohud": "libre_panel.sensors.mangohud:MangoHudProvider",
     "rtss": "libre_panel.sensors.rtss:RTSSProvider",
+    "hwinfo": "libre_panel.sensors.hwinfo:HWiNFOProvider",
     "json": "libre_panel.sensors.json_source:JsonProvider",
     "nut": "libre_panel.sensors.nut:NutProvider",
 }

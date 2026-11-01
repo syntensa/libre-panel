@@ -3009,7 +3009,10 @@
     "scaled into it": "拡大縮小で表示",
     "How the panels show this theme: a version made for the size, the version for the nearest shape laid out on it, or the theme scaled into the panel.": "各パネルでのこのテーマの見え方：そのサイズ専用のバージョン、最も近い形のバージョンをそのサイズに調整したもの、またはテーマをパネルに合わせて拡大縮小したもの。",
     "As saved: changes not saved yet are not in it.": "保存済みの状態：まだ保存していない変更は含まれません。",
-    "round": "円形"
+    "round": "円形",
+    "Temperatures, power, clocks, loads and fans as HWiNFO reads them, where it runs with its shared memory on (Windows): the common ones under the keys LibreHardwareMonitor's have, every other one under its name in HWiNFO.": "HWiNFO が読み取る温度、電力、クロック、負荷、ファン。共有メモリをオンにして HWiNFO が動いている場合（Windows）：よく使う値は LibreHardwareMonitor と同じキーで、それ以外は HWiNFO での名前で。",
+    "temperatures, power and fans, from HWiNFO": "HWiNFO からの温度、電力、ファン",
+    "Put it on the panel": "パネルに置く"
   },
   "fields": {
     "agent": "エージェント",

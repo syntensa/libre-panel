@@ -1349,6 +1349,8 @@ class EditorHandler(BaseHTTPRequestHandler):
             log.debug("live sensors unavailable: %s", exc)
         for key, reading in readings.items():
             found[key] = {"key": key, "unit": reading.unit, "label": reading.label}
+            if reading.device:  # (the editor lists a source's raw readings under it)
+                found[key]["device"] = reading.device
         for key, label in PICTURES:
             found[key] = {"key": key, "unit": "", "label": label, "picture": True}
         return [found[key] for key in sorted(found)]

@@ -12,7 +12,8 @@ import { Icon } from "../../ui/icons.js";
 import { dropItem, startLibraryDrag } from "./canvas.js";
 import { FirstSteps, useFirstSteps } from "./guide.js";
 import { TYPE_ICONS } from "./inspector.js";
-import { moduleKinds } from "./ops.js";
+import { addSensor, moduleKinds } from "./ops.js";
+import { formatValue, sensorGroups, useReadings } from "./sensors.js";
 
 const MODULE_GROUPS = {
   system: ["ring", "stat", "graph", "bars", "network", "system", "temps", "cores", "drives", "processes", "netinfo", "ping", "power", "battery", "ups", "values", "ai"],
@@ -144,10 +145,37 @@ export function Library() {
                 icon=${TYPE_ICONS[type] || "plugin"} name=${widgetLabel(type)} />`)}
             </div>`
         : null}
-      ${nothing ? html`<p class="side-hint">${t("Nothing of that name.")}</p>` : null}
+      ${q ? html`<${SensorHits} query=${q} />` : null}
+      ${nothing && !(q && sensorGroups(store.get().sensors || [], q).length) ? html`<p class="side-hint">${t("Nothing of that name.")}</p>` : null}
     </div>
     ${firstVisit ? null : html`<p class="library-hint">${t("Click a block to add it, or drag it to where it should go. A module fits itself to the room it gets.")}</p>`}
   </div>`;
+}
+
+/** The sensors the search finds, by device or kind, with their values now: a click puts one on
+ * the panel as a number (a WireView's pins, a drive's temperature, wherever the source has it). */
+function SensorHits({ query }) {
+  const sensors = useStore((s) => s.sensors);
+  const live = useReadings([], [], true);
+  const groups = sensorGroups(sensors || [], query).slice(0, 8);
+  if (!groups.length) return null;
+  return html`<h3 class="library-heading">${t("Sensors")}</h3>
+    <div class="sensor-hits" data-sensor-hits>
+      ${groups.map(
+        (group) => html`<div class="sensor-group" key=${group.name}>
+          <div class="sensor-group-title">${group.name}</div>
+          ${group.items.slice(0, 12).map((sensor) => {
+            const reading = live.values[sensor.key];
+            return html`<button type="button" class="sensor-row" key=${sensor.key} data-key=${sensor.key}
+              title=${t("Put it on the panel")} onClick=${() => addSensor(sensor, reading?.value)}>
+              <span class="sensor-name">${sensor.name}</span>
+              <span class="sensor-value mono">${reading ? formatValue(reading.value, reading.unit) : ""}</span>
+              <${Icon} name="plus" size=${13} />
+            </button>`;
+          })}
+        </div>`,
+      )}
+    </div>`;
 }
 
 export { store };

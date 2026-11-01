@@ -81,6 +81,17 @@ export function addWidget(type, at = null) {
   return widget;
 }
 
+/** A sensor put on the panel (the library's search finds it): its value as a number, a text
+ * as it is (a name), where there is room, selected. */
+export function addSensor(sensor, value = null) {
+  const widget = newWidget("metric", null);
+  widget.sensor = sensor.key;
+  if (typeof value === "string" || sensor.key.endsWith(".name")) widget.format = "{value}";
+  edit(null, (current) => current.widgets.push(widget));
+  setSelection([widget.id]);
+  return widget;
+}
+
 /** Building blocks name colours as "$accent": the theme's own when it has one. */
 function resolveTokens(value) {
   const palette = theme()?.palette || {};

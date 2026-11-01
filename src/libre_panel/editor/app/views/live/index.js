@@ -46,6 +46,7 @@ const SOURCE_ABOUT = () => ({
   presentmon: t("frame rates of games"),
   mangohud: t("frame rates of games, from MangoHud's log"),
   rtss: t("frame rates of games, from RivaTuner (RTSS)"),
+  hwinfo: t("temperatures, power and fans, from HWiNFO"),
   json: t("values from addresses and files"),
   demo: t("made-up readings"),
   services: t("what game mode and the other services publish"),

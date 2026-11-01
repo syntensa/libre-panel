@@ -2088,6 +2088,30 @@ panel shows "--" instead of numbers that stand still. A line in the log says
 so, and another when it answers again. The same limit hides the readings
 of the library inside Libre Panel if its thread ever stops.
 
+### Through HWiNFO
+
+For those who run [HWiNFO](https://www.hwinfo.com/) anyway: *Settings → Sensors → HWiNFO*
+(`hwinfo` in `providers`), off by default. Switch on *Shared Memory Support* in HWiNFO's
+settings (the free version keeps it on for twelve hours at a time, then HWiNFO asks again);
+Libre Panel reads the memory HWiNFO shares, `Global\HWiNFO_SENS_SM2`, once a second at most
+and only when HWiNFO has polled anew. It starts no program and needs no rights; without HWiNFO
+it reads nothing and looks again every few seconds.
+
+Every reading HWiNFO shows comes as `hwinfo:<device>/<sensor>/<reading>`, with HWiNFO's label
+(or yours where you renamed it), and the
+common ones under the keys LibreHardwareMonitor's give, so a theme made for one shows the same
+with the other: `cpu.temp` (Tctl/Tdie, else the package), `cpu.load`, `cpu.power`, `cpu.freq`
+(the cores' average), `gpu.temp`, `gpu.hotspot`, `gpu.load`, `gpu.power` (the board's, else
+the chip's), `gpu.freq`, `gpu.mem.load`, `gpu.mem.used` (MB), `gpu.fan`, `cpu.name`,
+`gpu.name`, and every temperature and fan by device and name (`temp.gpu.gpu_temperature`,
+`fan.lpc.chassis1` for the mainboard's). Sources are asked in their order: with both on, the one
+earlier in `providers` gives a key the two have.
+
+```toml
+[sensors]
+providers = ["load", "audio", "hwinfo", "librehardwaremonitor", "psutil"]
+```
+
 ## Linux sensors and panel access
 
 On Linux Libre Panel reads what the kernel lets everyone read: no administrator rights, no

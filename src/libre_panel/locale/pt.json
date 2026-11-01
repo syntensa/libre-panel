@@ -3009,7 +3009,10 @@
     "scaled into it": "escalado para dentro",
     "How the panels show this theme: a version made for the size, the version for the nearest shape laid out on it, or the theme scaled into the panel.": "Como os painéis mostram este tema: uma versão feita para o tamanho, a versão para a forma mais próxima adaptada a ele, ou o tema escalado para dentro do painel.",
     "As saved: changes not saved yet are not in it.": "Como salvo: alterações ainda não salvas não aparecem.",
-    "round": "redondo"
+    "round": "redondo",
+    "Temperatures, power, clocks, loads and fans as HWiNFO reads them, where it runs with its shared memory on (Windows): the common ones under the keys LibreHardwareMonitor's have, every other one under its name in HWiNFO.": "Temperaturas, potência, frequências, cargas e ventoinhas como o HWiNFO as lê, onde ele roda com a memória compartilhada ligada (Windows): as comuns com as chaves do LibreHardwareMonitor, todas as outras com o nome no HWiNFO.",
+    "temperatures, power and fans, from HWiNFO": "temperaturas, potência e ventoinhas, do HWiNFO",
+    "Put it on the panel": "Colocar no painel"
   },
   "fields": {
     "agent": "agente",

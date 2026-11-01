@@ -156,25 +156,47 @@ const GROUPS = () => ({
 /** Common sensors to offer next to the one chosen. */
 export const QUICK_SENSORS = ["cpu.load", "gpu.load", "mem.load", "cpu.temp", "gpu.temp", "net.down"];
 
+/** A source's raw reading ("lhm:/gpu-powermonitor/com3/power/0", "hwinfo:..."): listed under
+ * the device it is read from, not under its source. */
+const isRaw = (key) => /^[a-z]+:/i.test(key);
+
+/**
+ * The sensors in groups: the common ones by what they are (CPU, GPU, temperatures, ...), then a
+ * source's raw readings by the device they are read from ("WireView Pro II", "NVIDIA GeForce
+ * RTX 4090"), each with how many it holds (`device`: collapsed until opened or searched).
+ * `query` finds a sensor by its name, its key, its label or its device.
+ */
+export function sensorGroups(sensors, query = "") {
+  const q = query.trim().toLowerCase();
+  const names = GROUPS();
+  const found = new Map();
+  for (const sensor of sensors) {
+    const name = sensorName(sensor.key, sensor.label);
+    const device = isRaw(sensor.key) && sensor.device ? sensor.device : "";
+    if (q && !`${sensor.key} ${name} ${sensor.label} ${sensor.device || ""}`.toLowerCase().includes(q)) continue;
+    const prefix = sensor.key.split(/[.:]/)[0];
+    const group = device || names[prefix] || prefix.charAt(0).toUpperCase() + prefix.slice(1);
+    if (!found.has(group)) found.set(group, { name: group, device: Boolean(device), items: [] });
+    found.get(group).items.push({ ...sensor, name });
+  }
+  return [...found.values()].sort((a, b) => Number(a.device) - Number(b.device));
+}
+
 function SensorList({ value, onPick, close }) {
   const sensors = useStore((s) => s.sensors);
   const live = useReadings([], [], true);
   const [query, setQuery] = useState("");
+  const [opened, setOpened] = useState(() => new Set());
   const list = useRef(null);
-  const groups = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const names = GROUPS();
-    const found = new Map();
-    for (const sensor of sensors) {
-      const name = sensorName(sensor.key, sensor.label);
-      if (q && !`${sensor.key} ${name} ${sensor.label}`.toLowerCase().includes(q)) continue;
-      const prefix = sensor.key.split(".")[0];
-      const group = names[prefix] || prefix.charAt(0).toUpperCase() + prefix.slice(1);
-      if (!found.has(group)) found.set(group, []);
-      found.get(group).push({ ...sensor, name });
-    }
-    return [...found.entries()];
-  }, [sensors, query]);
+  const groups = useMemo(() => sensorGroups(sensors, query), [sensors, query]);
+  // a device's readings show while it is opened, searched for, or holds the sensor chosen
+  const shows = (group) => !group.device || query.trim() || opened.has(group.name) || group.items.some((s) => s.key === value);
+  const toggle = (name) => setOpened((now) => {
+    const next = new Set(now);
+    if (next.has(name)) next.delete(name);
+    else next.add(name);
+    return next;
+  });
   const typed = query.trim();
   const custom = typed && /^[!a-z0-9_.*:-]+$/i.test(typed) && !sensors.some((s) => s.key === typed);
   const pick = (key) => {
@@ -205,9 +227,15 @@ function SensorList({ value, onPick, close }) {
           </button>`
         : null}
       ${groups.map(
-        ([group, items]) => html`<div class="sensor-group" key=${group}>
-          <div class="sensor-group-title">${group}</div>
-          ${items.map((sensor) => {
+        (group) => html`<div class=${`sensor-group${group.device ? " device" : ""}`} key=${group.name} data-group=${group.name}>
+          ${group.device
+            ? html`<button type="button" class="sensor-group-title sensor-device" aria-expanded=${String(shows(group))}
+                onClick=${() => toggle(group.name)}>
+                <${Icon} name=${shows(group) ? "chevron-down" : "chevron-right"} size=${12} />
+                <span>${group.name}</span><span class="muted">${group.items.length}</span>
+              </button>`
+            : html`<div class="sensor-group-title">${group.name}</div>`}
+          ${(shows(group) ? group.items : []).map((sensor) => {
             const reading = live.values[sensor.key];
             return html`<button type="button" role="option" key=${sensor.key} data-key=${sensor.key}
               aria-selected=${String(sensor.key === value)} class="sensor-row" onClick=${() => pick(sensor.key)}>

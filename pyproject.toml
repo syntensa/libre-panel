@@ -77,6 +77,7 @@ presentmon = "libre_panel.sensors.presentmon:PresentMonProvider"
 hardware = "libre_panel.sensors.hardware:HardwareProvider"
 mangohud = "libre_panel.sensors.mangohud:MangoHudProvider"
 json = "libre_panel.sensors.json_source:JsonProvider"
+hwinfo = "libre_panel.sensors.hwinfo:HWiNFOProvider"
 
 [project.entry-points."libre_panel.devices"]
 auto = "libre_panel.devices.auto:AutoDisplay"

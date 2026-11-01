@@ -68,9 +68,12 @@ under its id, and themes in the 0.7 format, community themes among them, are rea
 
 ### 4. Finding the sensors
 
-- [ ] Every sensor as a tree by device, with live values, a search and "put it on the panel"
-      (discussion #38: a WireView Pro II's readings were there under names no one would find)
-- [ ] HWiNFO as a sensor source (its shared memory)
+- [x] Every sensor by device, with live values, a search and "put it on the panel"
+      (discussion #38: a WireView Pro II's readings were there under names no one would find):
+      a source's raw readings under the device they are read from, the library's search finds
+      them, a click puts one on the panel
+- [x] HWiNFO as a sensor source (its shared memory), its readings under the keys
+      LibreHardwareMonitor's have
 
 ### For everyone (needs the maintainer)
 

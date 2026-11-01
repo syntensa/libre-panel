@@ -238,7 +238,8 @@ def readings_from_sensors(
     out: dict[str, Reading] = {}
     devices: dict[str, _Device] = {}
     for sensor in map(_as_before, sensors):
-        reading = Reading(f"lhm:{sensor.sensor_id}", sensor.value, sensor.unit, sensor.label)
+        reading = Reading(f"lhm:{sensor.sensor_id}", sensor.value, sensor.unit, sensor.label,
+                          device=sensor.hardware_name)  # fmt: skip
         out[reading.key] = reading
         device = devices.get(sensor.hardware_id)
         if device is None:
@@ -262,7 +263,8 @@ def readings_from_sensors(
         for alias, (sensor_type, names) in aliases.items():
             src = device.get(sensor_type, names)
             if src is not None:
-                out[alias] = Reading(alias, src.value, src.unit, src.label, src.key)
+                out[alias] = Reading(alias, src.value, src.unit, src.label, src.key,
+                                     device=src.device)  # fmt: skip
     averaged: tuple[str, ...] = ()
     if cpus and "cpu.freq" not in out:
         # No average clock (Intel, and older versions): use the mean of the cores.
@@ -325,7 +327,8 @@ def _temperatures_and_fans(devices: list[_Device], out: dict[str, Reading]) -> N
                 name = f"{device.name} {label}"
             else:
                 name = label
-            out.setdefault(key, Reading(key, reading.value, reading.unit, name, reading.key))
+            out.setdefault(key, Reading(key, reading.value, reading.unit, name, reading.key,
+                                        device=device.name))  # fmt: skip
 
 
 def _memory_temperature(devices: list[_Device], out: dict[str, Reading]) -> tuple[str, ...]:
@@ -363,7 +366,7 @@ def _cable(devices: list[_Device], out: dict[str, Reading]) -> tuple[str, ...]:
     for alias, (sensor_type, name, label) in _CABLE_ALIASES.items():
         src = monitor.sensors.get((sensor_type, name))
         if src is not None:
-            out[alias] = Reading(alias, src.value, src.unit, label, src.key)
+            out[alias] = Reading(alias, src.value, src.unit, label, src.key, device=src.device)
     pins = [
         reading
         for n in range(1, 7)

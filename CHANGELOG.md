@@ -3,6 +3,22 @@
 ## Unreleased
 
 **New**
+- **Every sensor found by the device it is read from, and put on the panel in a click**
+  (discussion #38). In *Design*, a source's raw readings (LibreHardwareMonitor's, HWiNFO's)
+  were one long list under the source's name, as `lhm:/gpu-powermonitor/com3/current/2`: a
+  WireView Pro II's pins were there, under names no one would find. Now they are listed under
+  the device they are read from (the processor, the graphics card, the WireView, the
+  mainboard's chip, each drive), with how many it has, closed until it is opened or searched
+  for, and a search finds a device by its name. The library's search finds sensors too, with
+  their values now: a click puts one on the panel as a number, where there is room.
+- **HWiNFO as a sensor source** (*Settings → Sensors → HWiNFO*, Windows). For those who run
+  HWiNFO anyway, with its *Shared Memory Support* on: Libre Panel reads the memory HWiNFO
+  shares, once a second at most and only when HWiNFO polled anew, without rights and without
+  starting anything. The common readings come under the keys LibreHardwareMonitor's have
+  (`cpu.temp`, `cpu.load`, `cpu.power`, `cpu.freq`, `gpu.temp`, `gpu.hotspot`, `gpu.load`,
+  `gpu.power`, `gpu.freq`, `gpu.mem.*`, `gpu.fan`, the names, every temperature and fan by
+  device), so a theme shows the same with either; every other one under
+  `hwinfo:<device>/<sensor>/<reading>`, with HWiNFO's label or yours.
 - **A theme on every panel size, side by side.** Design → the theme's menu → *Every panel
   size* shows the theme on each panel Libre Panel drives, and how it comes there: made for
   that size, laid out from the version made for the nearest shape, or scaled into it. Your
