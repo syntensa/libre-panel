@@ -1437,6 +1437,7 @@ def test_main_loop_sends_every_frame_at_the_stream_rate(monkeypatch, tmp_path):
 
     monkeypatch.setattr(app, "Renderer", renderer)
     config = Config(theme=SMALL, fps=5, sensors=SensorsConfig(providers=["demo"]))
+    config.device.video.rest = False  # (the frame clock: also the frames that show nothing new)
     stop = threading.Event()
     thread = threading.Thread(target=app.run, args=(config,), kwargs={"stop": stop})
     thread.start()

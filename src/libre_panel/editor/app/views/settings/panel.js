@@ -479,6 +479,7 @@ function DisplayCard() {
     <${AccentRow} accent=${config.accent || ""} windows=${catalog?.platform === "win32"} />
     <${CardOpacity} level=${config.card_opacity ?? 0} />
     <${LightColours} on=${Boolean(config.light_colours)} />
+    <${GraphSteps} on=${Boolean(config.graph_steps)} />
     <${SettingRow}
       title=${t("How the panel is mounted")}
       hint=${t("Libre Panel's screens show in their version for it: Lumen Vertical for Lumen on a bar that stands on end.")}
@@ -614,6 +615,25 @@ function LightColours({ on }) {
       value=${on ? "light" : "made"}
       onChange=${(value) => saveSettings({ light_colours: value === "light" })}
       options=${[{ value: "made", label: t("As made") }, { value: "light", label: t("Light colours") }]}
+    />
+  <//>`;
+}
+
+/**
+ * How graphs move (config.toml graph_steps): scrolling on, or a step at each reading with the
+ * panel at rest between (fewer frames on a video panel).
+ */
+function GraphSteps({ on }) {
+  return html`<${SettingRow}
+    class="graph-steps-row"
+    title=${t("Graphs")}
+    hint=${t("A step at each reading: a graph glides a moment when a reading comes and rests until the next one, and the panel takes fewer frames, less of the processor. Arena's frame rate scrolls on.")}
+  >
+    <${Segmented}
+      label=${t("Graphs")}
+      value=${on ? "steps" : "scroll"}
+      onChange=${(value) => saveSettings({ graph_steps: value === "steps" })}
+      options=${[{ value: "scroll", label: t("Scroll on") }, { value: "steps", label: t("A step at each reading") }]}
     />
   <//>`;
 }

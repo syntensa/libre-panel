@@ -3017,7 +3017,10 @@
     "Light colours": "Cores claras",
     "Light colours suit a white PC: every screen keeps its own colours, worked out for a light ground. The pictures of the themes show them as the panel does.": "Cores claras combinam com um PC branco: cada ecrã mantém as suas cores, recalculadas para um fundo claro. As imagens dos temas mostram-nas como o painel.",
     "Wi-Fi": "Wi-Fi",
-    "LAN": "Ethernet"
+    "LAN": "Ethernet",
+    "Scroll on": "Contínuo",
+    "A step at each reading": "Um passo por leitura",
+    "A step at each reading: a graph glides a moment when a reading comes and rests until the next one, and the panel takes fewer frames, less of the processor. Arena's frame rate scrolls on.": "Um passo por leitura: um gráfico desliza um instante quando chega uma leitura e fica parado até a seguinte; o painel recebe menos imagens e o processador trabalha menos. A taxa de quadros da Arena continua rolando."
   },
   "fields": {
     "agent": "agente",

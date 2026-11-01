@@ -476,6 +476,11 @@ class VideoConfig:
     # encoding those (less of the processor). Frames again as soon as anything else shows: a
     # notice, a transition, the alarm's edge. An experiment, off by default
     direct: bool = False
+    # While nothing on the panel moves, it gets a frame when one is due (a reading, the clock's
+    # next second), at least two a second, not the same picture at the frame rate
+    # (MainLoop.rest): its player shows the last one meanwhile, as it does between the pictures
+    # it gets at 30 a second while it plays at 60. False: a frame at every step of the rate
+    rest: bool = True
     ffmpeg: str = ""  # path to ffmpeg; empty = the download's own (bundled.py), else PATH
     # The name the video start command (110) needs: the panel's own standby
     # clip, so its standby behaviour stays as it was.
@@ -735,6 +740,10 @@ class Config:
     # every theme in light colours, for a white PC (theme.light_colours; Settings → Panel →
     # Colours); false: as made
     light_colours: bool = False
+    # graphs step from reading to reading, gliding a moment, and rest between, instead of
+    # scrolling on (Settings → Panel → Graphs): a video panel then gets fewer frames (a graph
+    # with its own fine course, Arena's frame rate, scrolls on)
+    graph_steps: bool = False
     # one picture across all panels that are placed (arrangement.py): a file in the settings
     # folder (or a path of its own); "" none
     across: str = ""
@@ -983,6 +992,8 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
             raise ConfigError("card_opacity: 0 (each theme's own) or between 40 and 100")
     if "light_colours" in data:
         cfg.light_colours = _expect(data["light_colours"], bool, "light_colours")
+    if "graph_steps" in data:
+        cfg.graph_steps = _expect(data["graph_steps"], bool, "graph_steps")
     if "across" in data:
         cfg.across = _expect(data["across"], str, "across").strip()
         if len(cfg.across) > 300:
@@ -1299,6 +1310,7 @@ def _parse_video(v: dict[str, Any]) -> VideoConfig:
     if video.encoder not in ENCODERS:
         raise ConfigError(f"video.encoder: must be one of {', '.join(ENCODERS)}")
     video.direct = _expect(v.get("direct", video.direct), bool, "video.direct")
+    video.rest = _expect(v.get("rest", video.rest), bool, "video.rest")
     video.pixels = _expect(v.get("pixels", video.pixels), str, "video.pixels")
     if video.pixels not in PIXELS:
         raise ConfigError(f"video.pixels: must be one of {', '.join(PIXELS)}")

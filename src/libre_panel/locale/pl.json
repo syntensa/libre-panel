@@ -3017,7 +3017,10 @@
     "Light colours": "Jasne kolory",
     "Light colours suit a white PC: every screen keeps its own colours, worked out for a light ground. The pictures of the themes show them as the panel does.": "Jasne kolory pasują do białego komputera: każdy ekran zachowuje własne kolory, przeliczone na jasne tło. Obrazy motywów pokazują je tak jak panel.",
     "Wi-Fi": "Wi-Fi",
-    "LAN": "Ethernet"
+    "LAN": "Ethernet",
+    "Scroll on": "Płynnie",
+    "A step at each reading": "Krok na odczyt",
+    "A step at each reading: a graph glides a moment when a reading comes and rests until the next one, and the panel takes fewer frames, less of the processor. Arena's frame rate scrolls on.": "Krok na odczyt: wykres przesuwa się na chwilę, gdy przychodzi odczyt, i stoi do następnego – panel dostaje mniej klatek, procesor ma mniej pracy. Liczba klatek w Arenie przewija się dalej płynnie."
   },
   "fields": {
     "agent": "agent",

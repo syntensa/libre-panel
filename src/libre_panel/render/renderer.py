@@ -804,6 +804,10 @@ class Renderer:
         self.snapshot: Snapshot | None = None  # the readings it drew last (context.image)
         self.warnings: list[str] = []
         self.moving = False  # True while an animation has not settled yet
+        # a graph that scrolls steps a reading at a time, gliding, and rests between (config.toml
+        # graph_steps; one with its own fine course, Arena's frame rate, scrolls on)
+        self.graph_steps = False
+        self.sample_before: float | None = None  # when the reading before the last was taken
         # the person's choice of the theme's switches (Theme.switches): {"frames": False}; one
         # not chosen is as the theme has it
         self.switches: dict[str, bool] = {}
@@ -1090,6 +1094,9 @@ class Renderer:
 
     def new_sample(self, at: float, interval: float) -> None:
         """The main loop took fresh readings at ``at``; the next follow after ``interval`` s."""
+        before = getattr(self, "sample", None)  # (one long before: a start, a graph jumps there)
+        near = before is not None and 0 < at - before[0] <= 3 * max(before[1], interval)
+        self.sample_before = before[0] if near else None
         self.sample = (at, max(0.001, interval))
 
     def progress(self, now: float, delay: float = 0.0) -> float:
@@ -4115,11 +4122,14 @@ class Renderer:
         per_point = (w * s - 1) / span  # their distance, in pixels at ``s``
         every = max(1, int(s / per_point))  # long windows: about a point per pixel
         margin = math.ceil(s * (self._pad(widget) + self._reach(widget) + 1) / per_point)
+        view, scrolls = self._graph_view(now, fine is not None, glide)
+        self.moving = self.moving or scrolls
+        # a graph that steps shows up to a reading or two before now: as many points more
+        lag = 0 if view >= now else math.ceil(max(now - view, 2 * self.sample[1]) * RATE)
         history = self.motion.history(
-            key, math.ceil(span) + margin + 2 * every, now, readings, last_at, self.sample[1],
-            glide,
+            key, math.ceil(span) + margin + 2 * every + lag, now, readings, last_at,
+            self.sample[1], glide,
         )  # fmt: skip
-        self.moving = True
         strips = self._strips.get(wid)
         if strips is None or strips.per_point != per_point or strips.key != key:
             strips = self._strips[wid] = _Strips(per_point, key)  # new, or another window
@@ -4127,20 +4137,20 @@ class Renderer:
         strips.collect()
         # The window's left edge at ``s``, point k sitting at k * per_point on
         # every strip: the newest point at the right edge, now.
-        exact = now * RATE * per_point - (w * s - 1)
+        exact = view * RATE * per_point - (w * s - 1)
         left = math.floor(exact)
         parts = self._parts(per_point)
         strip = strips.ready
         if strip is None or not (strip.covers(left, w, s) and strip.covers(left + 1, w, s)):
-            job = self._strip_job(widget, history, now, per_point, every, margin, parts)
+            job = self._strip_job(widget, history, now, per_point, every, margin, parts, edge=view)
             strip = strips.ready = job()
         valid = self._valid_until(strip, key)
-        due = strip.gliding or valid < strip.until or now >= strip.until - self.STRIP_EVERY_S
+        due = strip.gliding or valid < strip.until or view >= strip.until - self.STRIP_EVERY_S
         every_s = self.STRIP_GLIDE_S if strip.gliding else self.STRIP_EVERY_S
         if due and strips.building is None and now - strips.asked >= every_s:
             strips.asked = now
             job = self._strip_job(widget, history, now, per_point, every, margin, parts,
-                                  strips.ready)  # fmt: skip
+                                  strips.ready, view)  # fmt: skip
             if self.background_builds:
                 if self._strip_builder is None:
                     self._strip_builder = _Builder("render-strips", self._gate())
@@ -4153,9 +4163,9 @@ class Renderer:
         pad = strip.pad
         # A reading the strip did not know: draw the end again once it shows,
         # at the newest point or in the glow just past it (a big change).
-        beyond = now + s * (pad + self._reach(widget)) / (per_point * RATE)
-        patch = valid < now and (
-            self._apart(widget, strip, now) >= 0.4 or self._apart(widget, strip, beyond) >= 4
+        beyond = view + s * (pad + self._reach(widget)) / (per_point * RATE)
+        patch = valid < view and (
+            self._apart(widget, strip, view) >= 0.4 or self._apart(widget, strip, beyond) >= 4
         )
         now_range = self._range_now(widget, now)  # (its own range: where it is this frame)
         if now_range is not None:
@@ -4194,6 +4204,24 @@ class Renderer:
             piece = _clip_sides(piece)
         self._cache[wid] = (None if patch else content, piece)
         return piece
+
+    STEP_S = 0.35  # how long a graph that steps (graph_steps) glides to a new reading
+
+    def _graph_view(self, now: float, fine: bool, glide: float) -> tuple[float, bool]:
+        """The time at a scrolling graph's right edge, and whether it moves: ``now``, the curve
+        scrolling on; with :attr:`graph_steps` (not for a graph with its own fine course) the
+        time the last reading's value is there (``glide`` after it), glided to from the one
+        before in :data:`STEP_S` and still until the next reading: a graph of readings a
+        second apart moves a third of the time, and a panel on which nothing else moves rests
+        (MainLoop.rest)."""
+        if not self.graph_steps or fine:
+            return now, True
+        at, before = self.sample[0], self.sample_before
+        k = (now - at) / self.STEP_S
+        if before is None or k >= 1:
+            return at + glide, False
+        k = max(0.0, k)
+        return before + glide + (at - before) * k * k * (3 - 2 * k), True
 
     def _forget_strips(self, now: float) -> None:
         """Let the strips of a graph not on show go (on a card of a slot that is not on show):
@@ -4274,11 +4302,14 @@ class Renderer:
     def _strip_job(
         self, widget: dict[str, Any], history: History, now: float, per_point: float,
         every: int, margin: int, parts: int = 1, before: _Strip | None = None,
+        edge: float | None = None,
     ) -> Callable[[], _Strip]:  # fmt: skip
         """A strip of the curve to draw (in the helper thread): its values are
-        taken now, on the render thread; the drawing happens when it runs."""
+        taken now, on the render thread; the drawing happens when it runs. It reaches from
+        the window's width before ``edge`` (the time at its right edge: ``now``, or the last
+        reading's on a graph that steps) to past the next reading."""
         key = widget["sensor"]
-        last = grid(now)
+        last = grid(now if edge is None else edge)
         ahead = math.ceil((self.sample[1] + self.STRIP_AHEAD_S) * RATE)
         span = (widget["w"] * self.STRIP_SCALE - 1) / per_point
         values, first = self._values(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import logging
+import math
 import sys
 import threading
 import time
@@ -532,6 +533,11 @@ def calm(config: Config, display: Any) -> bool:
     return motion == "calm" or (motion == "auto" and bool(getattr(display, "slow", False)))
 
 
+# A streaming panel at rest gets a frame at least this often (the panel shows the last one), and
+# one this long after a second of the clock begins
+REST_S = 0.5
+REST_LATE_S = 0.002
+
 # A video panel's frame rate while a game runs, where [modes.game] names none: a fifth less of
 # the processor than at 30 while the game wants it (0.8), the graph of its frame rate smooth
 GAME_STREAM_FPS = 24
@@ -597,6 +603,12 @@ class _Pacer:
             self.reanchored += 1
             return now
         return due
+
+    def rest(self, seconds: float, fps: int, stop: threading.Event) -> float:
+        """A panel at rest (MainLoop.rest) for up to ``seconds``: the frames meanwhile left
+        out, the next one due on the same clock (what moves again goes on in its steps)."""
+        self.frames += max(0, math.floor(seconds * fps) - 1)
+        return self.wait(fps, stop)
 
 
 def _blend(
@@ -1477,6 +1489,7 @@ class MainLoop:
                 renderer.between_frames = self.between_frames if streaming else None
                 renderer.continuous = streaming  # graphs scroll, values glide on
                 renderer.dither = streaming  # soft light without bands (render.dither)
+                renderer.graph_steps = config.graph_steps  # (graphs that rest: frames that rest)
                 # videos decoded as fast as the panel gets frames (a few a second where it takes
                 # a video from its file: below), else as moving.VIDEO_FPS says
                 if not streaming:
@@ -1660,6 +1673,21 @@ class MainLoop:
             self.showing = None
             return frame
         return out
+
+    def rest(self) -> float | None:
+        """A streaming panel's rest: while nothing on it moves (no glide, no graph that
+        scrolls, no message, transition or video), the seconds until the next frame is due:
+        the next reading, or the clock's next second (a clock may show it), at most half a
+        second (Almanac's 12.3": a frame in six to ten). None while something moves: a frame on
+        each tick of the frame clock, and with [video] rest off. The panel shows the last frame
+        it got meanwhile."""
+        if not self.config.device.video.rest:
+            return None
+        if (self.renderer.moving or self.blend is not None or self.toasts.active
+                or self.showing or self.playing or self.mirrored is not None):  # fmt: skip
+            return None
+        second = 1.0 - time.time() % 1.0 + REST_LATE_S  # (just after it begins)
+        return max(0.0, min(REST_S, self.next_sample - self.clock(), second))
 
     def pause(self) -> float:
         """Seconds to wait before the next frame when the display is not streaming."""
@@ -2089,8 +2117,12 @@ def run(
                 guards.settled()  # after the first frame
             if more is not None:
                 more.follow(loop.config)
-            if loop.streaming:
-                planned = pacer.wait(loop.fps, stop)  # a steady clock
+            if loop.streaming:  # a steady clock; while nothing moves, no frame until one is due
+                rest = loop.rest()
+                if rest is None:
+                    planned = pacer.wait(loop.fps, stop)
+                else:
+                    planned = pacer.rest(rest, loop.fps, stop)
                 continue
             planned = None
             pacer.reset()

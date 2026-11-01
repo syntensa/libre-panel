@@ -33,8 +33,10 @@ under its id, and themes in the 0.7 format, community themes among them, are rea
 ### 2. Lighter
 
 - [ ] Frames that would show nothing new are not made again or sent (a frame in which nothing
-      changed is the one before since 0.8: not copied, nor compared on the still-frame path;
-      a video panel still gets it, to be tried on the panels before it is left out)
+      changed is the one before since 0.8: not copied, nor compared on the still-frame path).
+      A video panel rests while nothing on it moves (`[video] rest`, on: Almanac 8 to 14 %
+      of a core instead of 72), to be tried on the panels; graphs can step at each reading
+      instead of scrolling (`graph_steps`); a graph's strip grows instead of being drawn anew
 - [x] What does not move (backgrounds, frames, labels) composed once, not in every frame: a
       region composed anew starts from what lies under its first changed part, kept from the
       frame before while the parts under it stay the same

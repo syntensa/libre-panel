@@ -1249,9 +1249,9 @@ def test_the_settings_that_name_a_program_or_a_file_are_the_ones_locked():
         "device.video_range", "device.jpeg", "device.jpeg_quality",
         "video.mode", "video.fps", "video.local_clip", "video.clip_asked", "refresh_ms",
         "video.device_fps", "video.crf", "video.preset", "video.keyframe_s", "video.maxrate",
-        "video.profile", "video.encoder", "video.pixels", "video.direct",
+        "video.profile", "video.encoder", "video.pixels", "video.direct", "video.rest",
         "check_updates", "allow_notify", "light_mode", "symbols", "cards", "card_order",
-        "card_transition", "accent", "card_opacity", "light_colours", "across",
+        "card_transition", "accent", "card_opacity", "light_colours", "graph_steps", "across",
         "hotkeys.enabled", "hotkeys.pause",
         "hotkeys.brightness_up", "hotkeys.brightness_down", "hotkeys.open", "hotkeys.next_scene",
         "hotkeys.timer", "hotkeys.timer_reset", "hotkeys.mic_mute",
@@ -1406,6 +1406,15 @@ def test_the_transitions_are_read_and_written_by_occasion(server):
                 {"transitions.random": ["random"]}, {"transitions.random": []},
                 {"transitions.default": ""}):  # fmt: skip
         assert write(server, **bad)[0] == 400, bad
+
+
+def test_graph_steps_are_written_as_asked(server):
+    status, data = write(server, graph_steps=True)
+    assert status == 200 and data["config"]["graph_steps"] is True
+    assert "graph_steps = true" in config_text()
+    status, data = write(server, graph_steps=False)
+    assert status == 200 and data["config"]["graph_steps"] is False
+    assert write(server, graph_steps="steps")[0] == 400
 
 
 def test_light_colours_are_written_as_asked_and_the_pictures_follow(server):

@@ -3,6 +3,12 @@
 ## Unreleased
 
 **New**
+- **Graphs that take a step at each reading** (*Settings → Panel → Graphs*, `graph_steps`).
+  A graph scrolls on, 25 pixels a second; set to *A step at each reading*, it glides to a new
+  reading in a third of a second and then stands until the next one, showing what a
+  scrolling graph shows at that moment. A panel on which nothing else moves then rests
+  between the steps; on Lumen the fans, the seconds and the rings move on, and its frame
+  takes 7 % less. A graph with its own fine course (Arena's frame rate) scrolls on.
 - **Lumen says how the PC is connected, and how long it has been on.** The NET card names, at
   the right of its title, what the PC reaches the internet by: a cable with its speed
   ("LAN · 1 Gbit/s", a plug) or Wi-Fi with its speed and a symbol whose three arcs light as
@@ -99,6 +105,13 @@
   them as well.
 
 **Better**
+- **A video panel rests while nothing on it moves.** It got the same picture thirty times a
+  second, drawn, converted and encoded each time. While no value glides, no graph scrolls and
+  no notice, transition or video shows, it now gets a frame when one is due: at the next
+  reading, at the clock's next second, at least two a second; its player shows the last one
+  meanwhile, as it does between the frames it gets while it plays at 60. On the 12.3"
+  Almanac takes 8 to 14 % of a core instead of 72 (ffmpeg's x264 included), Encore 40 to 55
+  instead of 80. `[video] rest = false` sends every frame, as before.
 - **A graph's strip grows instead of being drawn anew.** A graph scrolls over a strip of its
   curve drawn ahead, glow and all, made anew at each reading: all of it, though only the last
   second of it was new. Now the strip before is kept where the curve stays the same and only

@@ -462,6 +462,7 @@ class Settings:
                     "encoder": video.encoder,
                     "pixels": video.pixels,
                     "direct": video.direct,
+                    "rest": video.rest,
                     "local_clip": video.local_clip,
                     "clip_asked": video.clip_asked,
                     "ffmpeg": video.ffmpeg,
@@ -500,6 +501,7 @@ class Settings:
                 "accent": config.accent,
                 "card_opacity": config.card_opacity,
                 "light_colours": config.light_colours,
+                "graph_steps": config.graph_steps,
                 "across": config.across,
                 # how the panel goes from one screen to the next (Settings → Panel → Transitions)
                 "transitions": {
@@ -1501,6 +1503,7 @@ RULES: dict[str, Any] = {
     # how the frames reach ffmpeg (Settings → Panel → Check the colours writes it)
     "video.pixels": lambda n, v, c: _choice(n, v, PIXELS),
     "video.direct": lambda n, v, c: _flag(n, v),  # a video alone from its file (an experiment)
+    "video.rest": lambda n, v, c: _flag(n, v),  # (frames only when due while nothing moves)
     "video.local_clip": lambda n, v, c: _text(n, v, 200),
     "video.clip_asked": lambda n, v, c: _flag(n, v),
     "video.ffmpeg": lambda n, v, c: _text(n, v, 260),
@@ -1515,6 +1518,7 @@ RULES: dict[str, Any] = {
     "accent": _rule_accent,
     "card_opacity": lambda n, v, c: 0 if v == 0 else _whole(n, v, 40, 100),
     "light_colours": lambda n, v, c: _flag(n, v),
+    "graph_steps": lambda n, v, c: _flag(n, v),
     "hotkeys.enabled": lambda n, v, c: _flag(n, v),
     "hotkeys.pause": _rule_hotkey,
     "hotkeys.brightness_up": _rule_hotkey,

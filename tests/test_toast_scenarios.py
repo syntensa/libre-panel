@@ -78,6 +78,9 @@ class Script:
             action()
         return self.base + self.n * STEP
 
+    def rest(self, seconds, fps, stop):
+        return self.wait(fps, stop)  # (the frames are counted: one at every step)
+
 
 class Panel(Display):
     """An in-memory video panel: every frame goes out."""

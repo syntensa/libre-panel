@@ -3017,7 +3017,10 @@
     "Light colours": "Светлые цвета",
     "Light colours suit a white PC: every screen keeps its own colours, worked out for a light ground. The pictures of the themes show them as the panel does.": "Светлые цвета подходят к белому ПК: каждый экран сохраняет свои цвета, пересчитанные для светлого фона. Картинки тем показывают их так же, как панель.",
     "Wi-Fi": "Wi-Fi",
-    "LAN": "Ethernet"
+    "LAN": "Ethernet",
+    "Scroll on": "Плавно",
+    "A step at each reading": "Шаг на измерение",
+    "A step at each reading: a graph glides a moment when a reading comes and rests until the next one, and the panel takes fewer frames, less of the processor. Arena's frame rate scrolls on.": "Шаг на измерение: график коротко сдвигается при каждом новом значении и стоит до следующего — панель получает меньше кадров, процессору меньше работы. Частота кадров в Arena по-прежнему прокручивается плавно."
   },
   "fields": {
     "agent": "агент",
