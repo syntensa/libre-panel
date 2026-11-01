@@ -100,6 +100,7 @@ from libre_panel.theme.model import (
     version_base,
     with_accent,
     with_card_opacity,
+    with_light_colours,
 )
 from libre_panel.theme.modules import (
     MODULE_KINDS,
@@ -544,10 +545,11 @@ class EditorState:
             try:
                 config = load_config(self.config_path)
                 chosen = (fan.Choices.of(config), config.symbols, config.switches, config.accent,
-                          tuple(config.cards), config.card_opacity)  # fmt: skip
+                          tuple(config.cards), config.card_opacity,
+                          config.light_colours)  # fmt: skip
             except (ConfigError, OSError):
                 chosen = kept[1] if kept is not None else (
-                    fan.Choices(), DEFAULT_SYMBOLS, {}, "", DEFAULT_CARDS, 0
+                    fan.Choices(), DEFAULT_SYMBOLS, {}, "", DEFAULT_CARDS, 0, False
                 )  # fmt: skip
             kept = self._fan_choices = (stamp, chosen)
         return kept[1]
@@ -575,10 +577,16 @@ class EditorState:
         ``card_opacity``, per cent), for the previews of the themes."""
         return self._chosen()[5]
 
+    def light_colours(self) -> bool:
+        """Whether the panel shows every theme in light colours (config.toml
+        ``light_colours``), for the previews of the themes."""
+        return self._chosen()[6]
+
     def dressed(self, theme: Any) -> Any:
-        """``theme`` for a preview, as the panel shows it: in the accent, its cards as
-        see-through as on the panel."""
-        return with_card_opacity(with_accent(theme, self.accent()), self.card_opacity())
+        """``theme`` for a preview, as the panel shows it: in the accent, in light colours
+        where asked, its cards as see-through as on the panel."""
+        dressed = with_light_colours(with_accent(theme, self.accent()), self.light_colours())
+        return with_card_opacity(dressed, self.card_opacity())
 
     def switches(self, theme: Any) -> dict[str, bool]:
         """The person's choice of the switches of ``theme`` (one with its folder)."""
@@ -731,11 +739,13 @@ def panel_sizes() -> list[dict[str, Any]]:
 def _draw_theme(
     theme: Any, width: int, accent: str | None, symbols: str, chosen: tuple[tuple[str, bool], ...],
     cards: tuple[str, ...] = DEFAULT_CARDS, card_opacity: int = 0,
-    size: tuple[int, int] | None = None,
+    size: tuple[int, int] | None = None, light: bool = False,
 ) -> bytes:  # fmt: skip
     """A theme as a PNG ``width`` wide at most, as the panel shows it with those choices (on a
-    panel of ``size``: scaled into it where it is not laid out on it)."""
-    dressed = with_card_opacity(with_accent(theme, accent), card_opacity)
+    panel of ``size``: scaled into it where it is not laid out on it; ``light``: in light
+    colours)."""
+    dressed = with_light_colours(with_accent(theme, accent), light)
+    dressed = with_card_opacity(dressed, card_opacity)
     renderer = Renderer(with_cards(dressed, cards), preview=True)
     renderer.symbols = symbols
     renderer.switches = dict(chosen)
@@ -1008,8 +1018,9 @@ class EditorHandler(BaseHTTPRequestHandler):
         accent = self.state.accent()
         cards = self.state.cards()
         see = self.state.card_opacity()
+        light = self.state.light_colours()
         key = (theme_id, stamp, width, i18n.language(), self.state.symbols(), chosen, accent, cards,
-               see, size)  # fmt: skip
+               see, size, light)  # fmt: skip
         png = self._kept_preview(key)
         if png is None:
             # A page asks for a screenful of these at once: they are drawn two at a time
@@ -1027,7 +1038,7 @@ class EditorHandler(BaseHTTPRequestHandler):
                     if size is not None:
                         theme = laid_out(theme, size)
                     png = _draw_theme(theme, width, accent, self.state.symbols(), chosen, cards,
-                                      see, size)  # fmt: skip
+                                      see, size, light)  # fmt: skip
                     with self.state.previews_lock:
                         cache = self.state.previews
                         while len(cache) >= 48:  # the oldest go first

@@ -59,7 +59,9 @@ under its id, and themes in the 0.7 format, community themes among them, are rea
       contrast)
 - [ ] Lumen first, at all 28 sizes, measured against its hand-made layouts; then Arena,
       Encore, Almanac, Nimbus, Studio and the others
-- [ ] A light variant of each family (for white builds)
+- [x] A light variant of each family (for white builds): `light_colours`, every theme's
+      colours worked out for a light ground by their job (OKLab), measured against the Paper
+      look and for contrast over every built-in theme
 - [ ] The screens in the same design: Arena's game mode, the round report, alarms, cards,
       the start screens
 - [x] In the editor: a theme at every size side by side, one's own too (the theme's menu →

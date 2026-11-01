@@ -478,6 +478,7 @@ function DisplayCard() {
     <//>
     <${AccentRow} accent=${config.accent || ""} windows=${catalog?.platform === "win32"} />
     <${CardOpacity} level=${config.card_opacity ?? 0} />
+    <${LightColours} on=${Boolean(config.light_colours)} />
     <${SettingRow}
       title=${t("How the panel is mounted")}
       hint=${t("Libre Panel's screens show in their version for it: Lumen Vertical for Lumen on a bar that stands on end.")}
@@ -595,6 +596,25 @@ function CardOpacity({ level }) {
             format=${(value) => `${value} %`} onCommit=${choose} />`
         : null}
     </div>
+  <//>`;
+}
+
+/**
+ * Every screen in light colours, for a white PC (config.toml light_colours): each theme's own
+ * colours worked out for a light ground, or as they are made.
+ */
+function LightColours({ on }) {
+  return html`<${SettingRow}
+    class="light-colours-row"
+    title=${t("Colours")}
+    hint=${t("Light colours suit a white PC: every screen keeps its own colours, worked out for a light ground. The pictures of the themes show them as the panel does.")}
+  >
+    <${Segmented}
+      label=${t("Colours")}
+      value=${on ? "light" : "made"}
+      onChange=${(value) => saveSettings({ light_colours: value === "light" })}
+      options=${[{ value: "made", label: t("As made") }, { value: "light", label: t("Light colours") }]}
+    />
   <//>`;
 }
 

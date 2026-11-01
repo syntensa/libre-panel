@@ -732,6 +732,9 @@ class Config:
     # each theme has them): the module cards' surface and the frames in a theme's surface colour
     # (theme with_card_opacity)
     card_opacity: int = 0
+    # every theme in light colours, for a white PC (theme.light_colours; Settings → Panel →
+    # Colours); false: as made
+    light_colours: bool = False
     # one picture across all panels that are placed (arrangement.py): a file in the settings
     # folder (or a path of its own); "" none
     across: str = ""
@@ -978,6 +981,8 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
         cfg.card_opacity = _expect(data["card_opacity"], int, "card_opacity")
         if cfg.card_opacity != 0 and not 40 <= cfg.card_opacity <= 100:
             raise ConfigError("card_opacity: 0 (each theme's own) or between 40 and 100")
+    if "light_colours" in data:
+        cfg.light_colours = _expect(data["light_colours"], bool, "light_colours")
     if "across" in data:
         cfg.across = _expect(data["across"], str, "across").strip()
         if len(cfg.across) > 300:

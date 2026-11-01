@@ -499,6 +499,7 @@ class Settings:
                 "card_transition": config.card_transition,
                 "accent": config.accent,
                 "card_opacity": config.card_opacity,
+                "light_colours": config.light_colours,
                 "across": config.across,
                 # how the panel goes from one screen to the next (Settings → Panel → Transitions)
                 "transitions": {
@@ -1513,6 +1514,7 @@ RULES: dict[str, Any] = {
     "card_transition": lambda n, v, c: _choice(n, v, CARD_TRANSITIONS),
     "accent": _rule_accent,
     "card_opacity": lambda n, v, c: 0 if v == 0 else _whole(n, v, 40, 100),
+    "light_colours": lambda n, v, c: _flag(n, v),
     "hotkeys.enabled": lambda n, v, c: _flag(n, v),
     "hotkeys.pause": _rule_hotkey,
     "hotkeys.brightness_up": _rule_hotkey,

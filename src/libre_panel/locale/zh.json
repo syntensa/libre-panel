@@ -3012,7 +3012,10 @@
     "round": "圆形",
     "Temperatures, power, clocks, loads and fans as HWiNFO reads them, where it runs with its shared memory on (Windows): the common ones under the keys LibreHardwareMonitor's have, every other one under its name in HWiNFO.": "HWiNFO 读取的温度、功率、频率、负载和风扇，前提是它在开启共享内存的情况下运行（Windows）：常用的使用与 LibreHardwareMonitor 相同的键，其余的使用其在 HWiNFO 中的名称。",
     "temperatures, power and fans, from HWiNFO": "来自 HWiNFO 的温度、功率和风扇",
-    "Put it on the panel": "放到面板上"
+    "Put it on the panel": "放到面板上",
+    "As made": "原样",
+    "Light colours": "浅色",
+    "Light colours suit a white PC: every screen keeps its own colours, worked out for a light ground. The pictures of the themes show them as the panel does.": "浅色适合白色电脑：每个屏幕保留自己的颜色，并针对浅色背景重新计算。主题图片按面板的显示方式呈现。"
   },
   "fields": {
     "agent": "智能体",

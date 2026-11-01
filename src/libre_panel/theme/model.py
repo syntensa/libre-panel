@@ -1376,6 +1376,16 @@ def with_card_opacity(theme: Theme, percent: int) -> Theme:
     return replace(theme, style=style)
 
 
+def with_light_colours(theme: Theme, on: bool) -> Theme:
+    """``theme`` in light colours for a white PC (config.toml ``light_colours``,
+    theme.light_colours); off: as it is."""
+    if not on:
+        return theme
+    from libre_panel.theme.light_colours import light_theme
+
+    return light_theme(theme)
+
+
 _COMPANION = re.compile(r"-companion(-vertical|-\d+x\d+)?$")
 
 

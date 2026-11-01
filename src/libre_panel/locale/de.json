@@ -3012,7 +3012,10 @@
     "round": "rund",
     "Temperatures, power, clocks, loads and fans as HWiNFO reads them, where it runs with its shared memory on (Windows): the common ones under the keys LibreHardwareMonitor's have, every other one under its name in HWiNFO.": "Temperaturen, Leistung, Takte, Auslastungen und Lüfter, wie HWiNFO sie liest, wo es mit eingeschaltetem Shared Memory läuft (Windows): die üblichen unter den Schlüsseln, die auch LibreHardwareMonitor liefert, alle anderen unter ihrem Namen in HWiNFO.",
     "temperatures, power and fans, from HWiNFO": "Temperaturen, Leistung und Lüfter, aus HWiNFO",
-    "Put it on the panel": "Aufs Panel legen"
+    "Put it on the panel": "Aufs Panel legen",
+    "As made": "Wie gemacht",
+    "Light colours": "Helle Farben",
+    "Light colours suit a white PC: every screen keeps its own colours, worked out for a light ground. The pictures of the themes show them as the panel does.": "Helle Farben passen zu einem weißen PC: Jeder Bildschirm behält seine eigenen Farben, für einen hellen Grund umgerechnet. Die Bilder der Themes zeigen sie so, wie das Panel sie zeigt."
   },
   "fields": {
     "agent": "Agent",

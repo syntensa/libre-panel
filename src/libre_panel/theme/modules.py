@@ -365,6 +365,10 @@ class _Build:
             own = widget.get("needs", "")
             widget["needs"] = f"{own},{self.needs}" if own else self.needs
         finish = self.module.get("finish", "flat")
+        if self.style.get("light"):  # in light colours (theme.light_colours)
+            from libre_panel.theme.light_colours import light_part
+
+            finish = light_part(widget, finish)
         if finish != "flat" and kind in _finished():  # its parts are drawn with it where they can
             widget.setdefault("finish", finish)
         self.out.append(widget)
@@ -2738,6 +2742,7 @@ def build_module(
     kind = kinds()[module["module"]]
     if module.get("finish") == "auto":  # the module's own look: a card is lit
         module = {**module, "finish": kind.finish}
+
     sources = _sources()
     source = module["source"] if kind.sources else "cpu"
     if source not in kind.sources and kind.sources:

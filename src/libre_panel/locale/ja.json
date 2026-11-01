@@ -3012,7 +3012,10 @@
     "round": "円形",
     "Temperatures, power, clocks, loads and fans as HWiNFO reads them, where it runs with its shared memory on (Windows): the common ones under the keys LibreHardwareMonitor's have, every other one under its name in HWiNFO.": "HWiNFO が読み取る温度、電力、クロック、負荷、ファン。共有メモリをオンにして HWiNFO が動いている場合（Windows）：よく使う値は LibreHardwareMonitor と同じキーで、それ以外は HWiNFO での名前で。",
     "temperatures, power and fans, from HWiNFO": "HWiNFO からの温度、電力、ファン",
-    "Put it on the panel": "パネルに置く"
+    "Put it on the panel": "パネルに置く",
+    "As made": "作成どおり",
+    "Light colours": "明るい色",
+    "Light colours suit a white PC: every screen keeps its own colours, worked out for a light ground. The pictures of the themes show them as the panel does.": "明るい色は白い PC に合います。各画面は自分の色を保ったまま、明るい背景向けに計算し直されます。テーマの画像はパネルと同じように表示します。"
   },
   "fields": {
     "agent": "エージェント",

@@ -32,7 +32,7 @@ invalid is refused with the reason, and nothing is written.
 
 | Section | What it changes in `config.toml` |
 |---|---|
-| Panel | `accent`, `card_opacity`, `[device]` (`model`, `brightness`, `orientation`, `rotate`, `motion`, `dark_on_quit`, `dark_on_sleep`, `night`, `night_from`, `night_to`, `night_brightness`, `dark_when_away`, `away_brightness`, `at` (*More panels*: where it stands); under *Advanced* `driver`, `output`, `still` (TURZX USB panels), `port`; `jpeg_quality` (a udisp USB display's *Picture quality*); `jpeg` is written by the panel test) and `[video]` (`mode`, `fps` (also for a udisp USB display), `direct`, `local_clip` while smooth motion lacks it; under *Advanced* `ffmpeg`, and `local_clip` once it is set) |
+| Panel | `accent`, `card_opacity`, `light_colours`, `[device]` (`model`, `brightness`, `orientation`, `rotate`, `motion`, `dark_on_quit`, `dark_on_sleep`, `night`, `night_from`, `night_to`, `night_brightness`, `dark_when_away`, `away_brightness`, `at` (*More panels*: where it stands); under *Advanced* `driver`, `output`, `still` (TURZX USB panels), `port`; `jpeg_quality` (a udisp USB display's *Picture quality*); `jpeg` is written by the panel test) and `[video]` (`mode`, `fps` (also for a udisp USB display), `direct`, `local_clip` while smooth motion lacks it; under *Advanced* `ffmpeg`, and `local_clip` once it is set) |
 | Sensors | `[sensors] providers` (which sources, and their order; those not in use under *More sources*), the hardware's names, and under *Advanced* `refresh_ms` and `[sensors.librehardwaremonitor]` (`mode`, `url`) |
 | Game mode and more | `[services] enabled` and the options of each `[services.<name>]` table: switches, numbers, texts and lists of texts or numbers. The rules of the autopilot have their own page (*Edit*, under the autopilot), the warnings of `notices` and the limits of `cooling` are still written here |
 | Weather and place | `[weather]` (`enabled`, `latitude`, `longitude`, `place`, `units`, `update_minutes`) |
@@ -62,6 +62,9 @@ fps = 10                       # 1-60; values glide between readings
 # card_opacity = 80            # 40-100 %: how much of the background the cards cover,
                                # less lets it show through them; 0 or left out: as each
                                # theme has them (Settings → Panel → Card opacity)
+# light_colours = true         # every screen in light colours, for a white PC: each
+                               # theme's own colours worked out for a light ground
+                               # (Settings → Panel → Colours); false or left out: as made
 # cards = ["playback", "ai", "forecast", "date"]
                                # the cards of the card slots that leave them to you
                                # (Lumen's, in each of its versions), in the order they are

@@ -778,6 +778,30 @@ opacity*) holds for every theme and goes before the theme's. The editor's
 looks (Arctic, Neon, Graphite, Paper, Sunset, Mono) set palette and style in
 one go.
 
+### Light colours
+
+For a white PC, `light_colours = true` in config.toml (*Settings → Panel →
+Colours → Light colours*) draws every theme on a light ground, each in its own
+colours (`theme/light_colours.py`). Each colour is worked out anew in OKLab by
+the job it does: the ground (the palette's `bg`, `bg2` and `surface`, and any
+colour darker than a lightness of 0.26) turns light in the same order, the gaps
+between its colours wider, so a card a shade lighter than the ground on black
+is white on light grey; ink (lines, tracks, texts, nearly grey colours) turns
+dark, the brightest text the darkest; colours keep their hue, at a lightness
+that reads on a light ground (0.56, yellows and greens a little lighter) and a
+little more saturated. Black, the ground of the plainest themes, turns white.
+A dark look turned light this way comes within 0.05 of the lightness of the
+Paper look, made by hand for a light ground, role by role; over the built-in
+themes, the texts read at least 4:1 against the ground and the cards, the
+colours of the readings at least 2.5:1.
+
+What gives light on a dark ground is drawn for a light one: the `lit` finish's
+rings and bars are drawn `flat` (their light runs towards white), glows are a
+third as strong, and a background picture goes (the gradient of its colours
+stays). The weather's symbols stay lit, their clouds and the moon a light grey.
+A theme of your own is drawn the same way; for a light theme made by hand, make
+it with light colours and leave `light_colours` off.
+
 Modules and plain widgets mix: plain widgets are drawn in their order, a
 module's parts where the module is in the list.
 

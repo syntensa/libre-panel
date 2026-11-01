@@ -1251,7 +1251,7 @@ def test_the_settings_that_name_a_program_or_a_file_are_the_ones_locked():
         "video.device_fps", "video.crf", "video.preset", "video.keyframe_s", "video.maxrate",
         "video.profile", "video.encoder", "video.pixels", "video.direct",
         "check_updates", "allow_notify", "light_mode", "symbols", "cards", "card_order",
-        "card_transition", "accent", "card_opacity", "across",
+        "card_transition", "accent", "card_opacity", "light_colours", "across",
         "hotkeys.enabled", "hotkeys.pause",
         "hotkeys.brightness_up", "hotkeys.brightness_down", "hotkeys.open", "hotkeys.next_scene",
         "hotkeys.timer", "hotkeys.timer_reset", "hotkeys.mic_mute",
@@ -1406,3 +1406,15 @@ def test_the_transitions_are_read_and_written_by_occasion(server):
                 {"transitions.random": ["random"]}, {"transitions.random": []},
                 {"transitions.default": ""}):  # fmt: skip
         assert write(server, **bad)[0] == 400, bad
+
+
+def test_light_colours_are_written_as_asked_and_the_pictures_follow(server):
+    status, data = write(server, light_colours=True)
+    assert status == 200 and data["config"]["light_colours"] is True
+    assert "light_colours = true" in config_text()
+    status, light = request(server, "GET", "/api/themes/lumen/preview?width=240")
+    assert status == 200
+    status, data = write(server, light_colours=False)
+    assert status == 200 and data["config"]["light_colours"] is False
+    status, made = request(server, "GET", "/api/themes/lumen/preview?width=240")
+    assert status == 200 and made != light  # (the pictures of the themes as the panel shows them)

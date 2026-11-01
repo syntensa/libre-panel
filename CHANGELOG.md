@@ -3,6 +3,16 @@
 ## Unreleased
 
 **New**
+- **Light colours, for a white PC** (*Settings → Panel → Colours*, `light_colours`). Every
+  screen on a light ground, each in its own colours: Lumen's teal, Arena's, Encore's cover,
+  Almanac's calendar, the weather's clouds. Each colour is worked out anew by the job it does
+  (the ground light in the same order, so cards are white on light grey; texts and lines
+  dark; the accents in their hue, as light as reads on white), so a dark look turned light
+  comes within a hair of the Paper look made by hand for a light ground, and over every
+  built-in theme the texts read at least 4:1. Rings and bars of light are drawn flat (light
+  is no light on white), glows are softer, the weather's clouds a lit light grey. The
+  pictures of the themes in the app show them as the panel does; your own themes turn light
+  the same way.
 - **Every sensor found by the device it is read from, and put on the panel in a click**
   (discussion #38). In *Design*, a source's raw readings (LibreHardwareMonitor's, HWiNFO's)
   were one long list under the source's name, as `lhm:/gpu-powermonitor/com3/current/2`: a

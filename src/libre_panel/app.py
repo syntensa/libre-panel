@@ -77,6 +77,7 @@ from libre_panel.theme.model import (
     unpaired_version,
     with_accent,
     with_card_opacity,
+    with_light_colours,
     with_look,
 )
 from libre_panel.theme.modules import with_cards
@@ -993,9 +994,11 @@ class MainLoop:
 
     @staticmethod
     def _dressed(theme: Theme, config: Config, source: Theme | None) -> Theme:
-        """``theme`` as it is drawn: in the first panel's look (``source``), in the accent, its
-        cards as see-through as asked, with the person's cards in its card slots."""
+        """``theme`` as it is drawn: in the first panel's look (``source``), in the accent, in
+        light colours where asked, its cards as see-through as asked, with the person's cards
+        in its card slots."""
         dressed = with_accent(with_look(theme, source), accent_of(config.accent))
+        dressed = with_light_colours(dressed, config.light_colours)
         dressed = with_card_opacity(dressed, config.card_opacity)
         return with_cards(dressed, config.cards, config.card_order, config.card_transition)
 
@@ -1079,7 +1082,7 @@ class MainLoop:
         accent = accent_of(config.accent)
         return (str(theme.root), stamp, theme.name, config.fps > 1, config.symbols, switches,
                 accent, dress, tuple(config.cards), config.card_order,
-                config.card_transition, config.card_opacity)  # fmt: skip
+                config.card_transition, config.card_opacity, config.light_colours)  # fmt: skip
 
     def _warmed(
         self, config: Config, host: Any, shown: str, refused: str | None, watcher: _Watcher,
