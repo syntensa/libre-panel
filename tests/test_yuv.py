@@ -4,6 +4,7 @@ ffmpeg fed it (fed as before where much changes)."""
 
 import random
 import time
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -249,3 +250,25 @@ def test_a_graph_whose_clock_went_back_is_drawn_not_miles_wide():
     renderer.render(demo_snapshot(fixed_time=1_700_000_000), 50_000.0)
     renderer.render(demo_snapshot(fixed_time=1_700_000_000), 1_000.0)
     assert not [w for w in renderer.warnings if "graph" in w], renderer.warnings
+
+
+@pytest.mark.parametrize("encoder", ["libx264", "h264_amf", "h264_nvenc", "h264_qsv"])
+def test_a_card_that_does_not_convert_the_frames_itself_is_fed_yuv_made_here(encoder):
+    """A card's encoder whose frames the processor converts (the colour check did not find it
+    converting as the processor does: AMD's) took the frames whole, and ffmpeg turned and
+    converted each of them: it is fed the YUV made here, as x264 is. One that converts them
+    itself is fed the frames."""
+    display = TurzxVideoDisplay(video_config())
+    display._made_here = True
+    processor = h264.EncoderSettings(encoder=encoder, pixels="rgb0", card=False)
+    assert display._makes_yuv(processor, (1920, 720), None)
+    if encoder != "libx264":
+        itself = h264.EncoderSettings(encoder=encoder, pixels="rgb0", card=True)
+        assert not display._makes_yuv(itself, (1920, 720), None)
+        command = h264.ffmpeg_command(
+            "ffmpeg", (1920, 720), 270, replace(processor, pixels=h264.YUV)
+        )
+        at = command.index("-pix_fmt")
+        assert command[at + 1] == "yuv420p" and command[command.index("-s") + 1] == "720x1920"
+        assert "transpose=1" not in command and "-vf" not in command  # (turned already)
+        assert command[len(command) - command[::-1].index("-pix_fmt")] == "nv12"  # for the card

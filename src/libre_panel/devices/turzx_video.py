@@ -60,6 +60,7 @@ from libre_panel import timing
 from libre_panel.devices import card_choice, h264, video_state
 from libre_panel.devices.base import Counters, DeviceError, FrameError
 from libre_panel.devices.h264 import (
+    CARD_ENCODERS,
     YUV,
     CaptureSource,
     Encoder,
@@ -685,12 +686,14 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         source: VideoSource | CaptureSource | None,
     ) -> bool:  # fmt: skip
         """Whether ffmpeg is fed YUV made here (devices/yuv.py) rather than the frames' pixels:
-        for x264, whose frames the processor converts, while the frames change little
+        where the processor converts them (x264, or a card's encoder that does not convert
+        them itself: ffmpeg turned and converted each whole frame, a quarter of a core for Arena
+        on the 12.3" at 24 frames, only to hand the card NV12), while the frames change little
         (:meth:`_follow_the_frames`) and no colour check compares the ways of converting."""
         return (
             source is None
             and self._made_here is True
-            and settings.encoder == "libx264"
+            and (settings.encoder == "libx264" or settings.encoder in CARD_ENCODERS)
             and settings.pixels == "rgb0"
             and not settings.card
             and self.feed is None

@@ -3124,7 +3124,10 @@ class Renderer:
         look = (w, h, direction, rule, widget["color2"], widget["background"])
         kept = self._list_bars.get((*look, frac))
         if kept is not None:
-            kept.paste(self, layer, x, y)
+            if isinstance(layer, _Levels):
+                layer.put_bar(kept, x, y)
+            else:
+                kept.paste(self, layer, x, y)
             return
         accent = self.color(widget["color2"])
         track = self.color(widget["background"])
@@ -3137,14 +3140,17 @@ class Renderer:
         paint = self._paint(bar, rule)
         image = self._bar_piece(bar, frac, paint, x, y, w, h).layer
 
-        def ends() -> tuple[Image.Image, Image.Image]:
+        def ends() -> tuple:
             empty, full = (self._bar_piece(bar, f, paint, x, y, w, h).layer for f in (0.0, 1.0))
-            return empty, full
+            return empty, full, _planes(empty), _planes(full)  # (pictures, and their arrays)
 
         kept = _Bar.of(image, frac, direction, bar["radius"],
                        lambda: self._list_bar_ends.make(look, ends))  # fmt: skip
         self._list_bars.put((*look, frac), kept)
-        self._paste(layer, image, x, y)
+        if isinstance(layer, _Levels):
+            layer.put_bar(kept, x, y)
+        else:
+            self._paste(layer, image, x, y)
 
     def _list_piece(self, widget: dict[str, Any], rows: list[tuple],
                     part: str = "all") -> Piece:  # fmt: skip
@@ -3152,6 +3158,14 @@ class Renderer:
         and tiles; they glide, the text stays: :meth:`_draw_list`)."""
         w, h = max(1, widget["w"]), max(1, widget["h"])
         margin = max(2, widget["font_size"] // 3)  # room for glyphs that overhang
+        x, y = widget["x"], widget["y"]
+        if part == "levels" and rows and widget["style"] != "cells":  # (the bars of rows, columns)
+            levels = _Levels((w + 2 * margin, h + 2 * margin), (margin, margin), (w, h))
+            if widget["style"] == "columns":
+                self._list_columns(None, levels, widget, rows)
+            elif widget["style"] != "fans":
+                self._list_rows(None, levels, widget, rows)
+            return Piece(levels.image(), x - margin, y - margin, [x, y, w, h])
         layer = Image.new("RGBA", (w + 2 * margin, h + 2 * margin), (0, 0, 0, 0))
         inner = Image.new("RGBA", (w, h), (0, 0, 0, 0))
         texts = inner if part != "levels" else None
@@ -3170,7 +3184,6 @@ class Renderer:
         else:
             self._list_rows(texts, levels, widget, rows)
         layer.alpha_composite(inner, (margin, margin))
-        x, y = widget["x"], widget["y"]
         return Piece(layer, x - margin, y - margin, [x, y, w, h])
 
     def _list_name(self, widget: dict[str, Any], name: str) -> str:
@@ -4651,24 +4664,26 @@ class Renderer:
 class _Bar:
     """A list's bar at one value (:meth:`Renderer._list_bar`), kept small: the part round the
     end of its fill (``cut``, from the start of the bar on along it, in pixels), the bar empty
-    and the bar full (``ends``, kept once for the look) the rest of it, as it is drawn: a bar
-    whose other parts are not exactly those is kept whole."""
+    and the bar full (``ends``, kept once for the look: the pictures and their arrays) the rest
+    of it, as it is drawn: a bar whose other parts are not exactly those is kept whole. Its
+    own part is kept as an array (:func:`_planes`): laid in one array with the others while
+    the bars glide (:class:`_Levels`), as a picture on a list's picture otherwise."""
 
     __slots__ = ("cut", "ends", "middle", "vertical", "whole", "filled_first")
 
     MARGIN = 2  # pixels beyond the rounded end: where the reduction meets it, and a rounding
 
     def __init__(self) -> None:
-        self.whole: Image.Image | None = None
-        self.middle: Image.Image | None = None
-        self.ends: tuple[Image.Image, Image.Image] | None = None
+        self.whole: Any = None  # (arrays: _planes)
+        self.middle: Any = None
+        self.ends: tuple | None = None  # (empty, full, their arrays)
         self.cut = (0, 0)
         self.vertical = False
         self.filled_first = False  # the full bar's part comes first (down, right)
 
     @classmethod
     def of(cls, image: Image.Image, frac: float, direction: str, radius: int,
-           ends: Callable[[], tuple[Image.Image, Image.Image]]) -> _Bar:  # fmt: skip
+           ends: Callable[[], tuple]) -> _Bar:  # fmt: skip
         bar = cls()
         bar.vertical = direction in ("up", "down")
         bar.filled_first = direction in ("down", "right")
@@ -4677,17 +4692,18 @@ class _Bar:
         end = frac * length if bar.filled_first else (1 - frac) * length
         a, b = max(0, math.floor(end) - r), min(length, math.ceil(end) + r)
         if b - a > 0.6 * length:  # (short: as small whole)
-            bar.whole = image
+            bar.whole = _planes(image)
             return bar
-        empty, full = ends()
+        pair = ends()
+        empty, full = pair[0], pair[1]
         first, last = (full, empty) if bar.filled_first else (empty, full)
         if bar._part(image, 0, a) != bar._part(first, 0, a) or bar._part(
             image, b, length
         ) != bar._part(last, b, length):
-            bar.whole = image  # (not the same pixels there: whole, as drawn)
+            bar.whole = _planes(image)  # (not the same pixels there: whole, as drawn)
             return bar
-        bar.cut, bar.ends = (a, b), (empty, full)
-        bar.middle = bar._crop(image, a, b)
+        bar.cut, bar.ends = (a, b), pair
+        bar.middle = _planes(bar._crop(image, a, b))
         return bar
 
     def _crop(self, image: Image.Image, a: int, b: int) -> Image.Image:
@@ -4698,25 +4714,92 @@ class _Bar:
 
     @property
     def nbytes(self) -> int:
-        return size_of(self.whole if self.whole is not None else self.middle)
+        return int((self.whole if self.whole is not None else self.middle).nbytes)
 
     def paste(self, renderer: Renderer, layer: Image.Image, x: int, y: int) -> None:
-        """Onto ``layer`` at ``x``, ``y``: the same pixels the whole bar gives there."""
+        """Onto ``layer`` at ``x``, ``y``: the same pixels the whole bar gives there (a pixel
+        that does not show lays nothing, whatever its colour)."""
         if self.whole is not None:
-            renderer._paste(layer, self.whole, x, y)
+            renderer._paste(layer, Image.fromarray(self.whole, "RGBA"), x, y)
             return
-        empty, full = self.ends  # type: ignore[misc]
+        empty, full = self.ends[0], self.ends[1]  # type: ignore[index]
         first, last = (full, empty) if self.filled_first else (empty, full)
         a, b = self.cut
         length = first.height if self.vertical else first.width
-        for image, at in ((self._crop(first, 0, a), 0), (self.middle, a),
+        middle = Image.fromarray(self.middle, "RGBA")
+        for image, at in ((self._crop(first, 0, a), 0), (middle, a),
                           (self._crop(last, b, length), b)):  # fmt: skip
-            if image is None or not (image.width and image.height):
+            if not (image.width and image.height):
                 continue
             if self.vertical:
                 renderer._paste(layer, image, x, y + at)
             else:
                 renderer._paste(layer, image, x + at, y)
+
+
+def _planes(image: Image.Image) -> Any:
+    """``image``'s pixels as an array, as :meth:`Image.alpha_composite` lays them on a
+    transparent picture: as they are, and nothing where they do not show."""
+    import numpy as np
+
+    pixels = np.array(image.convert("RGBA") if image.mode != "RGBA" else image)
+    pixels[pixels[..., 3] == 0] = 0
+    return pixels
+
+
+class _Levels:
+    """A list's bars on nothing (its levels alone, :meth:`Renderer._list_piece`): each bar's
+    kept arrays put in place in one array, what alpha_composite gives on a transparent picture
+    (:func:`_planes`), without a picture of the place and three composites for every bar
+    (Arena's threads: 32 bars a frame while they glide). A bar on another (they stand apart)
+    is laid on it as it would be. ``origin`` is where the place of the bars lies in the array,
+    ``room`` its size: a bar is cut to it, as on a picture of that size."""
+
+    def __init__(self, size: tuple[int, int], origin: tuple[int, int],
+                 room: tuple[int, int]) -> None:  # fmt: skip
+        import numpy as np
+
+        self.array = np.zeros((size[1], size[0], 4), np.uint8)
+        self.origin, self.room = origin, room
+
+    def put(self, pixels: Any, x: int, y: int) -> None:
+        """``pixels`` (from :func:`_planes`) with their top left at (x, y) of the place."""
+        h, w = pixels.shape[:2]
+        x0, y0 = max(x, 0), max(y, 0)
+        x1, y1 = min(x + w, self.room[0]), min(y + h, self.room[1])
+        if x1 <= x0 or y1 <= y0:
+            return
+        part = pixels[y0 - y : y1 - y, x0 - x : x1 - x]
+        ox, oy = self.origin
+        under = self.array[oy + y0 : oy + y1, ox + x0 : ox + x1]
+        if under[..., 3].any():  # (on another: laid on it)
+            import numpy as np
+
+            laid = Image.fromarray(np.ascontiguousarray(under), "RGBA")
+            laid.alpha_composite(Image.fromarray(np.ascontiguousarray(part), "RGBA"))
+            under[...] = np.asarray(laid)
+        else:
+            under[...] = part
+
+    def put_bar(self, bar: _Bar, x: int, y: int) -> None:
+        """A kept bar: the pixels :meth:`_Bar.paste` gives."""
+        if bar.whole is not None:
+            self.put(bar.whole, x, y)
+            return
+        empty, full = bar.ends[2], bar.ends[3]  # type: ignore[index]
+        first, last = (full, empty) if bar.filled_first else (empty, full)
+        a, b = bar.cut
+        length = first.shape[0] if bar.vertical else first.shape[1]
+        for plane, at in ((first[:a] if bar.vertical else first[:, :a], 0), (bar.middle, a),
+                          (last[b:] if bar.vertical else last[:, b:], b)):  # fmt: skip
+            if plane.shape[0] and plane.shape[1] and at < length:
+                if bar.vertical:
+                    self.put(plane, x, y + at)
+                else:
+                    self.put(plane, x + at, y)
+
+    def image(self) -> Image.Image:
+        return Image.fromarray(self.array, "RGBA")
 
 
 class _Strip:

@@ -105,6 +105,15 @@
   them as well.
 
 **Better**
+- **A graphics card's encoder gets its frames converted where they changed.** Where the card
+  does not convert the colours itself (the colour check found AMD's shifting them), ffmpeg
+  turned every whole frame of the 12.3" a quarter and converted it on the processor, only to
+  hand the card NV12: a quarter of a core for Arena at 24 frames a second. It is now fed the
+  YUV Libre Panel keeps and makes anew only where a frame changed, as x264 is since 0.8:
+  ffmpeg 3.5 % of a core instead of 24, Libre Panel and ffmpeg together 64 to 67 % instead of
+  72 to 77 (the card's encoding aside; `h264_amf, yuv420p` in the log).
+  A list's gliding bars are laid in one array from the bars kept as arrays (Arena's 32
+  threads), not composited picture by picture.
 - **A video panel rests while nothing on it moves.** It got the same picture thirty times a
   second, drawn, converted and encoded each time. While no value glides, no graph scrolls and
   no notice, transition or video shows, it now gets a frame when one is due: at the next
