@@ -89,8 +89,9 @@ language = "auto"
 # allow_notify = false
 
 # Light mode: while the app's window is closed, Libre Panel lets go of what only the app needs
-# (its pictures of the themes), so it takes less memory; the app opens a moment slower.
-# light_mode = false
+# (its pictures of the themes, what they were drawn with) and gives the memory back to the
+# system; the panel keeps what it draws with. On unless set to false.
+# light_mode = true
 
 # Keyboard shortcuts for the whole PC (Windows; Linux with X11), set in Settings → Start and
 # system by pressing the keys. The actions: pause, brightness_up, brightness_down, open,
@@ -701,7 +702,7 @@ class Config:
     transitions: TransitionsConfig = field(default_factory=TransitionsConfig)
     check_updates: bool | None = None  # a look for a newer version once a day; None: not asked
     allow_notify: bool = False  # other programs may show a notice (notify.py)
-    light_mode: bool = False  # less memory while the app is closed (light.py)
+    light_mode: bool = True  # less memory while the app is closed (light.py), since 0.8
     device: DeviceConfig = field(default_factory=DeviceConfig)
     sensors: SensorsConfig = field(default_factory=SensorsConfig)
     hardware: HardwareConfig = field(default_factory=HardwareConfig)

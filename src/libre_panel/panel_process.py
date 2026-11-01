@@ -436,6 +436,9 @@ class _Whose(logging.Filter):
 def child(n: int, path: str, conn: Any, logs: Any) -> None:
     """The panel's process: its loop for ``[[panels]]`` ``n`` of the config.toml at ``path``,
     on what the first panel's process tells it, until it is told to stop."""
+    from libre_panel import light
+
+    light.fewer_heaps()  # (a process started anew: before its threads)
     whose = threading.current_thread().name = f"panel-{n + 2}"
     handler = logging.handlers.QueueHandler(logs)
     handler.addFilter(_Whose(whose))

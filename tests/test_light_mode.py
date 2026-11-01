@@ -1,5 +1,6 @@
 """Light mode (libre_panel.light): what only the app needs goes once it has been closed for a
-minute, while the setting is on; once per time the app was open."""
+minute (what the panel draws with stays), and the memory goes back while the setting is on; once
+per time the app was open."""
 
 import threading
 
@@ -8,7 +9,6 @@ from test_editor_server import request
 
 from libre_panel import light
 from libre_panel.config import parse_config
-from libre_panel.render import facets
 from libre_panel.render.renderer import Renderer
 from libre_panel.sensors.demo import demo_snapshot
 from libre_panel.theme.model import find_theme, load_theme
@@ -23,14 +23,22 @@ class Clock:
 
 
 def watch(on=True, last=None):
-    state = {"on": on, "last": last, "released": 0, "closed": 0}
+    state = {"on": on, "last": last, "released": 0, "closed": 0, "marked": 0, "shed": 0,
+             "unmarked": 0}  # fmt: skip
+
+    def count(name):
+        return lambda: state.__setitem__(name, state[name] + 1)
+
     clock = Clock()
     w = light.Watch(
         light=lambda: state["on"],
         last_request=lambda: state["last"],
-        release=lambda: state.__setitem__("released", state["released"] + 1),
+        release=count("released"),
         clock=clock,
-        closed=lambda: state.__setitem__("closed", state["closed"] + 1),
+        closed=count("closed"),
+        mark=count("marked"),
+        shed=count("shed"),
+        unmark=count("unmarked"),
     )
     return w, state, clock
 
@@ -42,16 +50,20 @@ def test_the_apps_own_pictures_go_a_minute_after_it_was_closed_light_mode_or_not
     w, state, clock = watch(on=on, last=1000.0)
     clock.now = 1000 + light.IDLE_S - 1
     w.look()
-    assert state["closed"] == 0  # (still open, or just closed)
+    assert state["closed"] == state["marked"] == 0  # (still open, or just closed)
     clock.now = 1000 + light.IDLE_S
-    assert w.look() is on and state["closed"] == 1 and state["released"] == int(on)
+    assert not w.look() and state["closed"] == state["marked"] == 1 and state["shed"] == 0
+    clock.now += light.LOOK_S  # the caches noted what the panel draws with meanwhile
+    assert w.look() is on and state["shed"] == 1 and state["released"] == int(on)
     clock.now += 600
     w.look()
-    assert state["closed"] == 1 and state["released"] == int(on)
+    assert state["closed"] == state["shed"] == 1 and state["released"] == int(on)
     state["last"] = clock.now  # opened again, and closed
     clock.now += light.IDLE_S
     w.look()
-    assert state["closed"] == 2 and state["released"] == 2 * int(on)
+    clock.now += light.LOOK_S
+    w.look()
+    assert state["closed"] == state["shed"] == 2 and state["released"] == 2 * int(on)
 
 
 def test_the_memory_goes_a_minute_after_the_app_was_closed_and_once():
@@ -59,12 +71,28 @@ def test_the_memory_goes_a_minute_after_the_app_was_closed_and_once():
     clock.now = 1000 + light.IDLE_S - 1
     assert not w.look() and state["released"] == 0  # (still open, or just closed)
     clock.now = 1000 + light.IDLE_S
+    assert not w.look() and state["released"] == 0  # (the caches note what the panel uses)
+    clock.now += light.LOOK_S
     assert w.look() and state["released"] == 1
     clock.now += 600
     assert not w.look() and state["released"] == 1  # once for the time it was open
     state["last"] = clock.now  # the app is opened again ...
     clock.now += light.IDLE_S
+    w.look()
+    clock.now += light.LOOK_S
     assert w.look() and state["released"] == 2  # ... and closed
+
+
+def test_the_caches_keep_all_when_the_app_is_opened_again_before_they_let_go():
+    w, state, clock = watch(last=1000.0)
+    clock.now = 1000 + light.IDLE_S
+    w.look()
+    assert state["marked"] == 1
+    state["last"] = clock.now + 5  # opened again
+    clock.now += light.LOOK_S
+    assert not w.look() and state["unmarked"] == 1 and state["shed"] == state["released"] == 0
+    w.look()
+    assert state["unmarked"] == 1
 
 
 @pytest.mark.parametrize(("on", "last"), [(False, 1000.0), (True, None)])
@@ -74,20 +102,55 @@ def test_nothing_goes_with_light_mode_off_or_before_the_app_was_ever_open(on, la
     assert not w.look() and state["released"] == 0
 
 
-def test_release_empties_the_renderers_caches_and_the_apps_own():
-    renderer = Renderer(load_theme(find_theme("lumen")), preview=True)
-    renderer.render(demo_snapshot(fixed_time=1_700_000_000))
-    renderer.close()
-    assert len(facets._glyphs) or len(facets._patches) or len(facets._images)
+def test_the_caches_let_go_of_what_only_the_apps_pictures_drew_with_and_keep_the_panels():
+    from libre_panel.render import kept, symbols
+
+    snapshot = demo_snapshot(fixed_time=1_700_000_000)
+    panel = Renderer(load_theme(find_theme("lumen")), preview=True)
+    panel.render(snapshot)
+    for other in ("arena", "almanac", "encore"):  # the app's pictures of other themes
+        picture = Renderer(load_theme(find_theme(other)), preview=True)
+        picture.render(snapshot)
+        picture.close()
+    held = kept.stats()
+    light.mark()
+    panel.render(snapshot)  # the panel draws on: what it draws with is noted
+    light.shed()
+    left = kept.stats()
+    total = sum(row["bytes"] for row in held.values())
+    assert sum(row["bytes"] for row in left.values()) < total / 2
+    hits = kept.stats()
+    panel.render(snapshot)  # ... and finds it all kept
+    after = kept.stats()
+    misses = sum(after[n]["misses"] - hits[n]["misses"] for n in after if n in hits)
+    assert misses == 0
+    panel.close()
     told = []
-    light.release(lambda: told.append(True))
-    assert told == [True] and len(facets._glyphs) == len(facets._patches) == 0
+    light.release(lambda: told.append(True))  # light mode: also the caches that cannot tell
+    assert told == [True] and len(symbols._sets) == 0
     light.give_back("win32")  # (no Windows here: it says so in the log, no error)
 
 
-def test_the_setting_is_off_unless_set():
-    assert parse_config({}).light_mode is False
-    assert parse_config({"light_mode": True}).light_mode is True
+def test_a_cache_notes_what_is_used_and_lets_go_of_the_rest():
+    from libre_panel.render.kept import Kept
+
+    kept = Kept("test.shed", 1 << 20)
+    for key in "abcd":
+        kept.put(key, bytes(100))
+    assert kept.shed() == 0 and len(kept) == 4  # (no mark: all stay)
+    kept.mark()
+    kept.get("a")
+    kept.make("e", lambda: bytes(10))
+    _ = kept["b"]
+    assert kept.shed() > 0 and sorted(kept) == ["a", "b", "e"]
+    kept.mark()
+    kept.unmark()
+    assert kept.shed() == 0 and len(kept) == 3
+
+
+def test_the_setting_is_on_unless_set_off():
+    assert parse_config({}).light_mode is True
+    assert parse_config({"light_mode": False}).light_mode is False
 
 
 def test_only_a_page_of_this_run_counts_as_the_app_being_open(isolated_home):
@@ -122,3 +185,11 @@ def test_the_app_lets_go_of_its_pictures_of_the_themes_and_of_the_communitys(iso
         assert state.previews == {} and state.community.previews == {}
     finally:
         service.stop()
+
+
+def test_two_heaps_on_linux_as_the_app_starts(monkeypatch):
+    """glibc's heaps per thread held a frame's memory each: two for all threads, set where the
+    app starts (light.fewer_heaps), not as a side effect of importing Libre Panel."""
+    assert light.fewer_heaps("win32") is False
+    monkeypatch.setenv("MALLOC_ARENA_MAX", "4")
+    assert light.fewer_heaps("linux") is False  # (one set in the environment holds)

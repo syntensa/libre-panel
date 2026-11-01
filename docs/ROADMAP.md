@@ -39,8 +39,10 @@ under its id, and themes in the 0.7 format, community themes among them, are rea
       (3 ms: the graphs' pieces, pasted through their alpha, the most), the frame for the
       panel (1.4), the rolling seconds' glow, the numbers; frames composed in RGB, the glow's
       blur as matrices: 6 to 16 % less of the processor
-- [ ] The panel's loop runs lean while the app's window is closed (discussion #4: about
-      480 MB on Windows)
+- [x] The panel's loop runs lean while the app's window is closed (discussion #4: about
+      480 MB on Windows): the caches keep what the panel draws with and let go of the rest,
+      light mode is on unless switched off, two heaps on Linux; on Linux with the 12.3" 175 to
+      190 MB instead of 330 (to be measured on Windows)
 - [ ] Targets, measured on the 12.3" in video mode with every core busy (as in a game): at
       most 8 ms a frame (p95; Arena takes 12 to 18 ms today), and well under 200 MB of
       memory on Windows with the window closed

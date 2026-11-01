@@ -938,8 +938,9 @@ def _portable() -> None:
 
 
 def main(argv: list[str] | None = None, default_command: str = "start") -> int:
-    from libre_panel import bundled
+    from libre_panel import bundled, light
 
+    light.fewer_heaps()  # (before any thread: each would take a heap of its own)
     bundled.system_libraries()  # (first: before anything starts a program of the system)
     parser = build_parser()
     argv = sys.argv[1:] if argv is None else list(argv)

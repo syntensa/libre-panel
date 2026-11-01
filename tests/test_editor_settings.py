@@ -1326,10 +1326,14 @@ def test_the_preview_of_the_app_draws_the_theme_as_switched(server):
     assert status == 200 and "frame-mid" not in shown["boxes"]
 
 
-def test_light_mode_is_written_as_asked(server):
+def test_light_mode_is_on_unless_switched_off_and_written_as_asked(server):
+    status, data = request(server, "GET", "/api/settings")
+    assert status == 200 and data["config"]["light_mode"] is True
+    status, data = write(server, light_mode=False)
+    assert status == 200 and data["config"]["light_mode"] is False
+    assert "light_mode = false" in config_text()
     status, data = write(server, light_mode=True)
     assert status == 200 and data["config"]["light_mode"] is True
-    assert "light_mode = true" in config_text()
 
 
 def test_the_sources_of_values_from_json_are_set_in_the_app_and_keep_their_headers(server):

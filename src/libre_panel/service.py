@@ -440,7 +440,7 @@ class BackgroundApp:
         # what only the app needs goes while it is closed, more of it in light mode (light.py)
         from libre_panel import light
 
-        self.light_mode = False
+        self.light_mode = True  # (until config.toml is read: its default)
         self.light = light.Watch(
             light=lambda: self.light_mode,
             last_request=self.editor.last_request,

@@ -80,6 +80,15 @@
   frame instead of a conversion; a frame in which nothing changed is the one before, not a
   copy of it, and the still-frame path does not compare it again; the glows of rolling digits
   take a quarter of the time they took (a text's soft edges are one colour, its glow too).
+- **Less memory while the app's window is closed** (discussion #4). Its pictures of every
+  theme filled the renderer's caches with the letters and pieces of all of them, and they
+  stayed. Now, a minute after the window was closed, the caches note for fifteen seconds what
+  the panel draws with and let go of the rest; and light mode, which gives the memory back to
+  the system, is on unless switched off. Measured on Linux with the 12.3" and Lumen, after the
+  app had shown all 91 themes: 175 to 190 MB with the window closed instead of 330 (220 to 280
+  with light mode on), the caches 6 instead of 38 MB, the panel's own kept. On Linux all
+  threads share two heaps instead of up to eight per core: some 30 MB less held, and a frame
+  no slower.
 
 **Fixed**
 - **A WireView Pro II is no longer taken for a second graphics card.** LibreHardwareMonitor

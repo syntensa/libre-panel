@@ -198,16 +198,19 @@ administrator rights, a backup is not restored from the app.
 ## Light mode
 
 ```toml
-light_mode = true              # Settings → Start and system → Light mode; off unless set
+light_mode = false             # Settings → Start and system → Light mode; on unless set (0.8)
 ```
 
 While the app's window is closed (or hidden) for a minute, Libre Panel lets go of what only
-the app needs, such as the letters, symbols and pieces of every theme its pictures were drawn
-with, and gives the memory back to the system; Windows also takes back the pages the panel
-does not touch, which is what Task Manager shows. The panel draws on as before; the app takes a
-moment longer to open again. The app's pictures of the themes themselves (and of the
-community's) go a minute after its window was closed in any case, light mode or not: nothing
-but the app shows them, and it draws them again when it opens.
+the app needs: its pictures of the themes (and of the community's), and the letters, symbols
+and pieces of every theme they were drawn with. For fifteen seconds after that the renderer's
+caches note what the panel draws with; that stays, the rest goes, so the panel draws on as
+before. That happens light mode or not. Light mode also gives the memory back to the system;
+Windows also takes back the pages the panel does not touch, which is what Task Manager shows
+(they come back as the panel touches them). The app takes a moment longer to open again.
+
+On Linux Libre Panel keeps its memory in two heaps for all its threads, not up to eight per
+core (glibc's `MALLOC_ARENA_MAX`; set in the environment, yours holds).
 
 ## New versions
 

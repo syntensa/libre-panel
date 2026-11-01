@@ -10,6 +10,10 @@ glyphs would hold a gigabyte of regions, and one that holds the regions too few 
 Every :class:`Kept` counts its hits and misses and the bytes it holds; :func:`stats` sums them
 by name over all of them (for the tests, and for measuring a theme), so that a budget can be
 set to what the themes need: as small as keeps the hit rate, no smaller.
+
+What the app's pictures of every theme filled them with is let go once its window has been
+closed a while (light.py): :func:`mark_all` notes from then on what is used, and
+:func:`shed_all` lets go of the rest, so that what the panel draws with stays.
 """
 
 from __future__ import annotations
@@ -74,6 +78,7 @@ class Kept:
         self.peak = 0  # the most it held
         self.hits = self.misses = self.dropped = 0
         self._items: OrderedDict[Hashable, tuple[Any, int]] = OrderedDict()
+        self._used: set[Hashable] | None = None  # the keys used since mark() (shed)
         self._lock = threading.Lock()
         with _ALL_LOCK:
             _ALL.add(self)
@@ -94,6 +99,8 @@ class Kept:
                 return default
             self._items.move_to_end(key)
             self.hits += 1
+            if self._used is not None:
+                self._used.add(key)
         return value
 
     def put(self, key: Hashable, value: Any, size: int | None = None) -> Any:
@@ -108,6 +115,8 @@ class Kept:
                 return value
             self._items[key] = (_NONE if value is None else value, n)
             self.size += n
+            if self._used is not None:
+                self._used.add(key)
             self._trim()
         return value
 
@@ -128,6 +137,8 @@ class Kept:
                 return made
             self._items[key] = (_NONE if made is None else made, n)
             self.size += n
+            if self._used is not None:
+                self._used.add(key)
             self._trim()
         return made
 
@@ -143,6 +154,31 @@ class Kept:
         with self._lock:
             self._items.clear()
             self.size = 0
+
+    def mark(self) -> None:
+        """From now on note which values are used (got, made, put or read): :meth:`shed` lets
+        go of the others."""
+        with self._lock:
+            self._used = set()
+
+    def unmark(self) -> None:
+        """Stop noting what is used, and keep all."""
+        with self._lock:
+            self._used = None
+
+    def shed(self) -> int:
+        """Let go of what was not used since :meth:`mark`, and stop noting (without a mark it
+        keeps all); the bytes let go."""
+        with self._lock:
+            used, self._used = self._used, None
+            if used is None:
+                return 0
+            before = self.size
+            for key in [key for key in self._items if key not in used]:
+                _value, n = self._items.pop(key)
+                self.size -= n
+                self.dropped += 1
+            return before - self.size
 
     def resize(self, budget: int) -> None:
         """Another budget (the tests): what no longer fits goes at once."""
@@ -172,6 +208,8 @@ class Kept:
 
     def __getitem__(self, key: Hashable) -> Any:
         value = self._items[key][0]
+        if self._used is not None:
+            self._used.add(key)
         return None if value is _NONE else value
 
     def __iter__(self) -> Iterator[Hashable]:
@@ -221,6 +259,30 @@ def stats() -> dict[str, dict[str, Any]]:
         asked = row["hits"] + row["misses"]
         row["rate"] = round(row["hits"] / asked, 4) if asked else None
     return dict(sorted(out.items()))
+
+
+def mark_all() -> None:
+    """Every :class:`Kept` notes from now on what is used (:func:`shed_all`)."""
+    with _ALL_LOCK:
+        everyone = list(_ALL)
+    for kept in everyone:
+        kept.mark()
+
+
+def unmark_all() -> None:
+    """Every :class:`Kept` stops noting what is used and keeps all (the app was opened again)."""
+    with _ALL_LOCK:
+        everyone = list(_ALL)
+    for kept in everyone:
+        kept.unmark()
+
+
+def shed_all() -> int:
+    """Every :class:`Kept` lets go of what was not used since :func:`mark_all`; the bytes let
+    go."""
+    with _ALL_LOCK:
+        everyone = list(_ALL)
+    return sum(kept.shed() for kept in everyone)
 
 
 def reset_counts() -> None:
