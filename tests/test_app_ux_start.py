@@ -650,14 +650,20 @@ def test_the_community_themes_follow_the_chosen_panel_and_one_of_yours_is_shared
         dialog.get_by_label("Made by").fill("Northern")
         dialog.get_by_label("What it shows").fill("Lights over the time.")
         dialog.get_by_role("checkbox").check()
+        # (each field holds what was written in it: where the form below lacks one, it was lost
+        # here or afterwards; two of three CI runs lost the maker, none on this machine)
+        expect(dialog.get_by_label("Name")).to_have_value("Aurora")
+        expect(dialog.get_by_label("Made by")).to_have_value("Northern")
+        expect(dialog.get_by_label("What it shows")).to_have_value("Lights over the time.")
         with page.expect_download() as saved:
             save.click()
         assert saved.value.suggested_filename == "aurora.zip"
         expect(dialog).to_contain_text("aurora.zip is saved in your downloads.")
         form = urlsplit(dialog.locator("[data-share-form]").get_attribute("href"))
         fields = {key: values[0] for key, values in parse_qs(form.query).items()}
-        assert form.netloc == "github.com" and fields["template"] == "share_theme.yml"
-        assert (fields["title"], fields["name"], fields["author"], fields["description"]) == (
+        assert form.netloc == "github.com" and fields["template"] == "share_theme.yml", fields
+        assert (fields.get("title"), fields.get("name"), fields.get("author"),
+                fields.get("description")) == (
             "Theme: Aurora", "Aurora", "Northern", "Lights over the time.")  # fmt: skip
         dialog.get_by_role("button", name="Close").click()
         mine.get_by_role("button", name="Share “Aurora” with everyone…").click()
