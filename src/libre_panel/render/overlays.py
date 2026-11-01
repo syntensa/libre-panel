@@ -87,6 +87,7 @@ class ToastLayer:
         # (toast, when it began, (the toast it replaced, its age then) or None)
         self.current: tuple[Any, float, tuple[Any, float] | None] | None = None
         self.ends = 0.0  # when the current toast is gone (ToastStyle.lifetime)
+        self.box: tuple[int, int, int, int] | None = None  # where the last draw drew (draw)
         self.style: Any = None
         self.looks: dict[str, Any] = {}  # the volume's looks in use (volume_looks.py), by name
         self.settings: dict[str, Any] = {}
@@ -274,7 +275,9 @@ class ToastLayer:
 
     def draw(self, frame: Image.Image, now: float, hidden: bool = False) -> Image.Image:
         """The frame with the toast on show drawn on it. ``hidden``: a transition
-        that hides toasts plays; the toast on show starts again after it."""
+        that hides toasts plays; the toast on show starts again after it. :attr:`box`: where
+        it drew (x0, y0, x1, y1), where its style says so; else None."""
+        self.box = None
         if self.current is None:
             return frame
         toast, began, previous = self.current
@@ -285,9 +288,14 @@ class ToastLayer:
             return frame
         style = self.style_of(toast)
         try:
+            style.last_box = None
             if style is self.style and not self._previous:
-                return style.draw(frame, toast, now - began)
-            return style.draw(frame, toast, now - began, previous=previous)
+                drawn = style.draw(frame, toast, now - began)
+            else:
+                drawn = style.draw(frame, toast, now - began, previous=previous)
+            # where it drew (a style that says so): a video panel's frame is made anew there
+            self.box = getattr(style, "last_box", None) if drawn is not frame else None
+            return drawn
         except Exception as exc:  # a broken style must not blank the panel
             message = f"{type(exc).__name__}: {exc}"
             if message != self._failed:
@@ -346,6 +354,7 @@ class CardStyle(ToastStyle):
         alpha = card.getchannel("A").point(lambda a: int(a * fade))
         out = frame.copy()
         out.paste(card.convert(frame.mode), (x, y), alpha)
+        self.last_box = (x, y, x + card.width, y + card.height)  # (ToastLayer.box)
         return out
 
     def _role(self, role: str) -> str:

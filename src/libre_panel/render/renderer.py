@@ -886,6 +886,12 @@ class Renderer:
         # out again rather than copied anew (a theme at rest, between its readings)
         self._handed: Image.Image | None = None
         self._unchanged = False
+        # What changed since the frame before (render): the boxes composed anew, [] nothing,
+        # None all of it or not known; a video panel converts those parts only (devices/yuv.py)
+        self.damage: list[tuple[int, int, int, int]] | None = None
+        self.rendered = 0  # the frames rendered (what the damage is counted against)
+        self._composed: list[tuple[int, int, int, int]] | None = None
+        self._swept = False  # a sweep of light ran over the frame before (look.light)
         self._finite = _Finite()  # (the readings it found drawable the frame before)
         # Per region, what lies under the first piece that changes (a graph that
         # moves every frame over a card): the same pieces need not be laid again.
@@ -1441,6 +1447,7 @@ class Renderer:
         last = self._last if self.incremental else None
         regions = [full] if last is None else self._dirty(last[0], pieces)
         self._unchanged = last is not None and not regions
+        self._composed = None if last is None else list(regions)  # (render: self.damage)
         if self._unchanged:
             self._last = (pieces, last[1])
             return last[1]
@@ -1751,6 +1758,8 @@ class Renderer:
         """The frame at ``now`` (RGB) and the widgets' boxes. While nothing on it changed, the
         frame is the one handed out before: callers draw on a copy of it, never on it."""
         now = clock() if now is None else now
+        self.rendered += 1
+        self.damage = None  # (unknown, until the frame is composed)
         snapshot = self._finite(snapshot)
         if self._slots and self.animate and not self.preview and not self._slots_warm:
             self._slots_warm = True  # (once, with the first frame, or with the warm-up's)
@@ -1852,6 +1861,16 @@ class Renderer:
         if self.look is not None:
             self.look.compose(pieces, snapshot, now)  # the grid beneath, the sun's gloss on top
         canvas = self._compose(pieces)
+        # what changed since the frame before: the regions composed anew, where nothing but the
+        # pieces changes the frame (dust moves all over it, a sweep of light over a part)
+        sweeping = (
+            self.look is not None
+            and getattr(self.look, "light", None) is not None
+            and bool(self.look.light.running(now))
+        )
+        if not dust and not sweeping and not self._swept:
+            self.damage = self._composed
+        self._swept = sweeping
         dusted = self._dusted(canvas, now) if dust else canvas  # RGB once there is dust on it
         # (the composed frame stays for the next: the panel gets a picture of its own, the one
         # before again while nothing changed; a look's light sweeps over the frame in place)
@@ -4201,7 +4220,10 @@ class Renderer:
         ``every``-th): recorded ones from the history, later ones ahead of time
         from the spring. Returns them and the first point's number."""
         first -= first % every
-        values = history.since(first)[: max(0, history.last - first + 1)][::every]
+        if history.last is not None and history.last > last:  # a clock that went back: none
+            values = []  # (they would be drawn from a time long past: a picture miles wide)
+        else:
+            values = history.since(first)[: max(0, history.last - first + 1)][::every]
         spring = self.motion.springs.get(key)
         future = Spring()
         future.pieces = list(spring.pieces) if spring is not None else []

@@ -60,6 +60,7 @@ from libre_panel import timing
 from libre_panel.devices import card_choice, h264, video_state
 from libre_panel.devices.base import Counters, DeviceError, FrameError
 from libre_panel.devices.h264 import (
+    YUV,
     CaptureSource,
     Encoder,
     EncoderSettings,
@@ -95,6 +96,7 @@ from libre_panel.devices.turzx_usb import (
     to_native,
     transparent_layer,
 )
+from libre_panel.devices.yuv import YuvFrame, block_of
 from libre_panel.i18n import t
 
 log = logging.getLogger(__name__)
@@ -175,8 +177,19 @@ def _frame_for(
     encoder: Encoder, frame: Image.Image, settings: EncoderSettings
 ) -> Callable[[Any], None]:
     """``frame`` as ``encoder`` takes it (its own settings, else ``settings``): the job its
-    writer thread does (:func:`write_frame`). Frames are not drawn on once shown."""
+    writer thread does (:func:`write_frame`; fed YUV, its YUV made anew where the frame changed,
+    as the main loop says in ``frame.info["damage"]``, and written). Frames are not drawn on
+    once shown."""
     pixels = (getattr(encoder, "settings", None) or settings).pixels
+    made = getattr(encoder, "yuv", None)
+    if pixels == YUV and made is not None:
+        damage = frame.info.get("damage")  # (taken now: the loop may tag the frame again)
+
+        def made_anew(out: Any) -> None:
+            made.update(frame, damage)
+            made.write(out)
+
+        return made_anew
 
     def write(out: Any) -> None:
         write_frame(out, frame, pixels)
@@ -452,6 +465,13 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
     START_S = 15.0  # the same until its first picture: a cold start (virus scanner, busy PC)
     SWITCH_S = 3.0  # a planned switch: this long for the new ffmpeg's first picture
     SWITCH_HOLD_S = 60.0  # a switch that did not come about waits this long to be tried again
+    # YUV made here (devices/yuv.py): a share of the frame changing on average (over about a
+    # second: each frame weighs MADE_EASE) above which ffmpeg converts the frames itself, and
+    # below which, for MADE_CALM_S, YUV is made here again
+    MADE_EASE = 0.1
+    MADE_BUSY = 0.5
+    MADE_CALM = 0.15
+    MADE_CALM_S = 5.0
     RATE_KEPT_S = 10.0  # the rate "auto" found goes into video-state.json at most this often
 
     def __init__(self, config, model: PanelModel | None = None) -> None:
@@ -488,6 +508,12 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         self._rate_kept, self._rate_kept_at = 0.0, -1e9  # what video-state.json has, and when
         self._restarts: list[float] = []
         self._last_frame: Image.Image | None = None
+        # YUV made here where the frames change (devices/yuv.py), while they change little (None:
+        # not known yet; frames that do not say what changed in them never): how much of a
+        # frame changes, on average over the last ones, and since when it is calm
+        self._made_here: bool | None = None
+        self._busy = 0.0
+        self._calm_since: float | None = None
         # [video] direct: the videos ffmpeg could not play from their file (frames for them)
         self._sources_failed: set[VideoSource] = set()
 
@@ -587,6 +613,8 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         if fed and self.video.pixels == "auto" and self.feed is None and self.range is None:
             self._ask_the_card(name, full, size, rotate, model_id)  # (not for a check's A/B)
         settings = resolved(self.settings, model_id, name, self._pixels(name), full)
+        if self._makes_yuv(settings, size, source):
+            settings = replace(settings, pixels=YUV)
         said = f"{feed_text(settings)}, profile {settings.profile}"
         said += ", full range" if settings.full else ", limited range"
         if source is not None:
@@ -640,6 +668,8 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         encoder = Encoder(command, size, deliver, **fed)
         encoder.name, encoder.maxrate = settings.encoder, settings.maxrate
         encoder.settings = settings  # (what it is fed: _feed gives each its own)
+        # (fed YUV: the YUV it is fed, made where the frames change; its first frame whole)
+        encoder.yuv = YuvFrame(size, rotate, settings.full) if settings.pixels == YUV else None
         encoder.source = source  # (a video from its file: it is fed nothing)
         if beside:
             self._leaving, self._coming = self.encoder, generation
@@ -649,6 +679,64 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         self.encoder = encoder
         self.counters.bit_rate = mbit(settings.maxrate)
         self.counters.encoder = feed_text(settings)
+
+    def _makes_yuv(
+        self, settings: EncoderSettings, size: tuple[int, int],
+        source: VideoSource | CaptureSource | None,
+    ) -> bool:  # fmt: skip
+        """Whether ffmpeg is fed YUV made here (devices/yuv.py) rather than the frames' pixels:
+        for x264, whose frames the processor converts, while the frames change little
+        (:meth:`_follow_the_frames`) and no colour check compares the ways of converting."""
+        return (
+            source is None
+            and self._made_here is True
+            and settings.encoder == "libx264"
+            and settings.pixels == "rgb0"
+            and not settings.card
+            and self.feed is None
+            and self.range is None
+            and block_of(size) is not None
+        )
+
+    def _follow_the_frames(self, frame: Image.Image) -> None:
+        """While the frames change little (Lumen's 12.3": four in a hundred of its blocks),
+        ffmpeg is fed YUV made where they changed; where much changes most frames (a video, the
+        screen as a monitor, the Player, a theme with dust), ffmpeg converts them as before,
+        which costs less then: a new ffmpeg beside the one running takes over (:meth:`_switch`).
+        Back after a calm while."""
+        if "damage" not in frame.info:
+            return  # (frames that do not say what changed: ffmpeg converts them, as before)
+        damage = frame.info.get("damage")
+        area = frame.width * frame.height
+        share = 1.0 if damage is None else min(
+            1.0, sum((b[2] - b[0]) * (b[3] - b[1]) for b in damage) / max(1, area)
+        )  # fmt: skip
+        self._busy += (share - self._busy) * self.MADE_EASE
+        now = time.monotonic()
+        if self._made_here and self._busy > self.MADE_BUSY:
+            self._made_here, self._calm_since = False, None
+        elif not self._made_here:
+            if self._busy >= self.MADE_CALM:
+                self._calm_since = None
+            elif self._calm_since is None:
+                self._calm_since = now
+            elif now - self._calm_since >= self.MADE_CALM_S:
+                self._made_here = True
+        encoder = self.encoder
+        if encoder is None or self._leaving is not None or not encoder.alive:
+            return
+        settings = getattr(encoder, "settings", None)
+        if settings is None or getattr(encoder, "source", None) is not None:
+            return
+        fed_yuv = settings.pixels == YUV
+        wanted = self._makes_yuv(replace(settings, pixels="rgb0"), encoder.size, None)
+        if fed_yuv != wanted and now >= self._switch_held:
+            log.info(
+                "video: %s",
+                "the frames change little: YUV made here" if wanted
+                else "much changes in every frame: ffmpeg converts the frames",
+            )  # fmt: skip
+            self._switch()
 
     def _pixels(self, name: str) -> str:
         """Who converts the frames' colours for the encoder ``name``: "card", "processor", or
@@ -712,7 +800,10 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         wanted = self._pixels(settings.encoder)
         if settings.full != self._full():
             return True
-        return settings.pixels != resolve_feed(wanted) or settings.card != (wanted == "card")
+        fed = "rgb0" if settings.pixels == YUV else settings.pixels  # (YUV: _follow_the_frames)
+        if settings.pixels == YUV and (self.feed is not None or self.range is not None):
+            return True  # (a colour check compares the ways of converting: ffmpeg converts)
+        return fed != resolve_feed(wanted) or settings.card != (wanted == "card")
 
     def _stop_encoder(self) -> None:
         if self.encoder is not None:
@@ -826,6 +917,8 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             self._heal(self._error)
         if self.feed is None and self.range is None:  # (a colour check's picture does not stay)
             self._last_frame = frame
+        if self._made_here is None:  # (the main loop's frames say what changed: Renderer.damage)
+            self._made_here = "damage" in frame.info
         self._hand_over()
         self._follow_the_panel()
         encoder = self._leaving or self.encoder  # during a switch: the one the panel shows
@@ -844,6 +937,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             if encoder is not None and encoder.size == frame.size:
                 self._stopped(encoder.reason())
             self._start_encoder(frame.size)
+        self._follow_the_frames(frame)
         try:
             self._feed(frame)
         except EncoderStopped as exc:
@@ -936,8 +1030,10 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         else:
             try:
                 self.encoder.write(_frame_for(self.encoder, frame, self.settings), timeout=0)
-            except EncoderStopped:
-                pass  # starting, or stopped: _hand_over sees to it
+            except EncoderStopped:  # starting, or stopped: _hand_over sees to it
+                made = getattr(self.encoder, "yuv", None)
+                if made is not None:  # it missed a frame: the next is made whole
+                    made.whole = True
         data = _frame_for(encoder, frame, self.settings)
         idle = 0.0
         while True:

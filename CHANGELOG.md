@@ -85,6 +85,24 @@
   them as well.
 
 **Better**
+- **The panel's video takes far less of the processor and of the memory** (0.8, "lighter"). A
+  frame of the 12.3" was handed to ffmpeg whole, five and a half megabytes, and ffmpeg turned
+  it into the panel's framebuffer and converted it to YUV, every frame, though from one frame
+  to the next about a hundredth of its pixels changes. Now Libre Panel keeps the panel's YUV and
+  makes it anew only where the frame changed: what the renderer composed anew (and a notice),
+  of that the blocks of 16 pixels that differ, converted all at once and turned already; ffmpeg
+  reads two megabytes a frame and only encodes. The same colours (BT.601, the light within one
+  level of ffmpeg's own conversion), the same stream. Measured on the 12.3" at 30 frames a
+  second, Libre Panel and ffmpeg together: Lumen 1.0 to 1.06 cores instead of 1.18 to 1.24,
+  Arena 1.09 instead of 1.21; ffmpeg 30 instead of 55 % of a core and 70 instead of 102 MB.
+  Where much of each frame changes (a video, the screen as a monitor, the Player, a theme
+  scaled to fit), ffmpeg converts the frames itself again, by itself, and the way that costs
+  less comes back after five calm seconds. For x264 (an AMD card that converts the frames
+  itself goes on so).
+- **A graph's clock that went back no longer draws a picture miles wide.** A frame planned at
+  an earlier time than a graph's newest point (a warm-up's clock) drew its curve from a time
+  long past: a picture of hundreds of millions of pixels, refused, the graph gone for that
+  frame.
 - **Libre Panel's themes on every panel in its own size** (0.8, "themes that fit every
   panel"). A panel without a version of the theme made for it, the 4.6" (960×320), the 5" and
   7", the 8", BeadaPanel's, Thermalright's and JONSBO's sizes, NZXT's round screens, got the

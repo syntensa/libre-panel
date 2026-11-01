@@ -672,7 +672,9 @@ def arrive(panel, count, timeout=60.0):
 @needs_ffmpeg
 def test_a_frame_goes_to_ffmpeg_without_a_copy_of_it(panel, monkeypatch):
     """The RGB bytes are taken from the frame as the renderer made it (RGBA): a copy of the
-    picture on every frame was a good part of a frame's time, on two panels at once more so."""
+    picture on every frame was a good part of a frame's time, on two panels at once more so.
+    (Where ffmpeg converts the frames: not the YUV made here, test_yuv.py.)"""
+    monkeypatch.setattr(TurzxVideoDisplay, "_makes_yuv", lambda *args: False)
     display = TurzxVideoDisplay(video_config())
     display.open()
     frames = [frame.convert("RGBA") for frame in moving_frames(20)]
@@ -1565,6 +1567,8 @@ def test_the_colour_check_s_a_and_b_and_its_one_click_start_ffmpeg_anew_on_the_o
     from libre_panel.devices import card_choice
 
     card_stand_in(monkeypatch)
+    # (the processor's way as ffmpeg takes it: the YUV made here is test_yuv.py's)
+    monkeypatch.setattr(turzx_video.TurzxVideoDisplay, "_makes_yuv", lambda *args: False)
     ffmpeg = find_ffmpeg("")
     card_choice.record(ffmpeg, {"encoder": "libx264", "compared": ["card", "processor"],
                                 "state": "done", "verdict": "matrix", "worst": None},

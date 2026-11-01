@@ -880,6 +880,10 @@ class MainLoop:
         self.switches = host.switches if host is not None else 0  # mode changes with a transition
         self.last_frame: Image.Image | None = None
         self.previous: Image.Image | None = None
+        # the frame the panel got last, where its damage was known: (renderer, its count), and
+        # where a notice was on it (_damage)
+        self._fed: tuple[Renderer, int] | None = None
+        self._fed_toast: Box | None = None
         self.turn = 0  # how the last frame went out: turned (180) or not
         self.snapshot: Snapshot | None = None
         self.next_sample = 0.0
@@ -1474,6 +1478,7 @@ class MainLoop:
                 number = 1 if self.panel is None else self.panel + 2
                 mirrored = mirror.now(number)  # the panel as a monitor: instead of the theme
                 playing = player.now(number) if mirrored is None else None  # the app's Player
+                drawn = None  # the renderer's frame, of which it knows what changed (damage)
                 if mirrored is not None:
                     rate = DIRECT_PICTURE_FPS if self.mirror_direct else renderer.fps
                     frame = rendered = self.mirror.frame(mirrored, size, rate,
@@ -1481,8 +1486,8 @@ class MainLoop:
                 elif playing is not None:
                     frame = rendered = self.player.frame(playing, size, renderer.fps)
                 else:
-                    frame, _ = renderer.render(snapshot, now)
-                    frame = rendered = fit_frame(frame, size, background_of(renderer))
+                    drawn, _ = renderer.render(snapshot, now)
+                    frame = rendered = fit_frame(drawn, size, background_of(renderer))
                 if self.playing and playing is None:  # (it ended: ffmpeg stops)
                     self.player.close()
                 self.playing = playing is not None
@@ -1498,7 +1503,9 @@ class MainLoop:
                 last_frame = frame
                 # decided after _blend: the frame a hiding transition ends shows the toast
                 hidden = blend is not None and getattr(blend[0], "toasts", "wait") == "hide"
+                bare = frame
                 frame = shown_frame = renderer.shown = toasts.draw(frame, now, hidden=hidden)
+                toasted, toast_box = frame, toasts.box
                 self.alarm.follow(_alarm(snapshot), now)
                 frame = self.alarm.draw(frame, now, renderer.theme.palette.get("crit"),
                                         still=not renderer.animate)  # fmt: skip
@@ -1549,6 +1556,13 @@ class MainLoop:
                     # what the panel's stream from its file saved)
                     renderer.video_keys = direct
                     if not direct:
+                        # what changed since the frame before, for a panel that makes its
+                        # video of those parts only (devices/yuv.py)
+                        out.info["damage"] = self._damage(
+                            renderer, drawn is not None and rendered is drawn and bare is rendered
+                            and frame is toasted and (toasted is bare or toast_box is not None),
+                            toast_box, turn, out.size,
+                        )  # fmt: skip
                         link.show(out, None, started)
                     previous = None
                 elif display.slow:  # the parts that changed, each on its own
@@ -1580,6 +1594,24 @@ class MainLoop:
             if self.clock() + self.pause() + half >= self.next_sample:
                 self._ahead.start(self.hub.snapshot)
         return out
+
+    def _damage(
+        self, renderer: Renderer, known: bool, toast: Box | None, turn: int, size: tuple[int, int]
+    ) -> list[Box] | None:
+        """What changed in the frame for the panel since the one it got before (boxes; [] for
+        nothing; None for all of it, or not known): what the renderer composed anew
+        (Renderer.damage) and where a notice is and was, where the frame is the renderer's, a
+        notice at most drawn over it (``known``) and the frame before was its frame before."""
+        before, self._fed = self._fed, (renderer, renderer.rendered) if known else None
+        last_toast, self._fed_toast = self._fed_toast, toast if known else None
+        damage = renderer.damage
+        if not known or damage is None or before != (renderer, renderer.rendered - 1):
+            return None
+        boxes = [tuple(box) for box in damage] + [box for box in (toast, last_toast) if box]
+        if turn == 180:  # (upside down: so are the boxes)
+            width, height = size
+            boxes = [(width - x1, height - y1, width - x0, height - y0) for x0, y0, x1, y1 in boxes]
+        return boxes  # type: ignore[return-value]
 
     def _show_transition(
         self, frame: Image.Image, renderer: Renderer, config: Config, display: Any, now: float

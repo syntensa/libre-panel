@@ -165,7 +165,8 @@ class EncoderSettings:
     threads: int = 1  # frame threads add a frame of latency each
     profile: str = "high"  # PROFILES, resolved (never "auto" here: resolve_profile)
     encoder: str = "libx264"  # ENCODERS, resolved (never "auto" here: resolve_encoder)
-    # the frames as they go into ffmpeg (resolve_feed): "rgb24", or "rgb0" (four bytes a pixel)
+    # the frames as they go into ffmpeg (resolve_feed): "rgb24", or "rgb0" (four bytes a pixel);
+    # or YUV made in Libre Panel, turned already (YUV: devices/yuv.py)
     pixels: str = "rgb24"
     # the card converts them itself (video.pixels "card": passes_through), else ffmpeg does
     card: bool = False
@@ -309,6 +310,11 @@ def resolve_encoder(encoder: str, ffmpeg: str, failed: Collection[str] = ()) -> 
         if candidate not in failed and encoder_works(ffmpeg, candidate):
             return candidate
     return "libx264"
+
+
+# The frames as YUV 4:2:0 made in Libre Panel where they changed, turned into the panel's
+# framebuffer (devices/yuv.py), for x264 fed by the processor: ffmpeg neither turns nor converts.
+YUV = "yuv420p"
 
 
 def resolve_feed(pixels: str) -> str:
@@ -466,12 +472,17 @@ def ffmpeg_command(
     ffmpeg: str, size: tuple[int, int], rotate: int | None, settings: EncoderSettings
 ) -> list[str]:
     """ffmpeg reading raw frames of ``size`` on stdin (``settings.pixels``), turning them into
-    the panel's framebuffer (``rotate``), writing H.264 (Annex B) to stdout."""
+    the panel's framebuffer (``rotate``), writing H.264 (Annex B) to stdout. Fed YUV, the
+    frames come turned and converted already (devices/yuv.py): ffmpeg encodes them as they
+    are."""
     width, height = size
     keyint = max(1, round(settings.fps * settings.keyframe_s))
     maxrate = bit_rate(settings, size)
     card = passes_through(settings)
     device, converts = card_chain(settings.encoder, settings.full) if card else ([], [])
+    made = settings.pixels == YUV
+    if made and rotate == 270:  # (the YUV is the panel's framebuffer: a quarter turned)
+        width, height = height, width
     command = [
         ffmpeg,
         "-hide_banner",
@@ -486,12 +497,15 @@ def ffmpeg_command(
         f"{width}x{height}",
         "-framerate",
         str(settings.fps),
+        # (YUV made here is in the panel's range: said, so that nothing converts it again)
+        *(["-color_range", "pc" if settings.full else "tv", "-colorspace", "smpte170m"]
+          if made else []),
         "-i",
         "-",
         "-an",
-    ]
-    filters = [ROTATION_FILTERS[rotate], *converts]
-    if settings.full and not card:  # full-range YUV, made on the processor
+    ]  # fmt: skip
+    filters = [] if made else [ROTATION_FILTERS[rotate], *converts]
+    if settings.full and not card and not made:  # full-range YUV, made on the processor
         made = "yuv420p" if settings.encoder == "libx264" else "nv12"
         filters += [FULL_RANGE, f"format={made}"]
     video_filter = ",".join(part for part in filters if part)
