@@ -3,11 +3,31 @@
 // that goes beside panel 1's), so "Next" all the way adds the panel as it is suggested.
 
 import { t } from "../../core/i18n.js";
+import { isCompanion } from "../../core/orientation.js";
 import { html, useState } from "../../lib/preact.js";
 import { panelName } from "../../shell/panel-popover.js";
 import { Segmented, Select, Toggle } from "../../ui/controls.js";
 
 const STEPS = ["panel", "mounted", "shows"];
+
+// The theme select's choice to show the companion of panel 1's theme, whichever that is (Arena
+// Companion while panel 1 shows Arena): [[panels]] follow = true. Any theme chosen by name stays.
+export const FOLLOW = "@follow";
+
+/** Whether a panel beside the first shows the companion of panel 1's theme: as its table says,
+ * else (a table of 0.7) when its own theme is a companion (theme.model.follows_first). */
+export const follows = (panel) => panel.follow ?? isCompanion(panel.theme);
+
+/** The theme select's value for a panel's table. */
+export const themeChoice = (panel) => (follows(panel) ? FOLLOW : panel.theme || "");
+
+/** What choosing `value` in the theme select writes: the companion of panel 1's theme, which it
+ * then follows (`companion`, where panel 1's theme has one), or the theme chosen, kept. */
+export function chooseTheme(value, panel, companion) {
+  if (value !== FOLLOW) return { theme: value, follow: false };
+  const theme = companion?.id || (isCompanion(panel.theme) ? panel.theme : "lumen-companion");
+  return { theme, follow: true };
+}
 
 /**
  * The steps in a dialog; `close` gets the new panel's table ([[panels]]: model, port,
@@ -15,9 +35,10 @@ const STEPS = ["panel", "mounted", "shows"];
  * `start`: what is known already ({model, port} of a panel plugged in), `models` the
  * catalogue's, `spare` the panels plugged in that nothing shows on, `themes` the options of
  * the theme select (the companion of panel 1's theme first), `suggested` the table a panel
- * would get without the steps (its companion and the game's).
+ * would get without the steps (its companion and the game's), `companion` that of panel 1's
+ * theme.
  */
-export function NewPanel({ close, start = {}, models, spare = [], themes, suggested }) {
+export function NewPanel({ close, start = {}, models, spare = [], themes, suggested, companion = null }) {
   const [step, setStep] = useState(start.model ? 1 : 0);
   const [panel, setPanel] = useState({ model: "auto", orientation: "", rotate: 0, follow_brightness: true, ...suggested, ...start });
   const change = (changes) => setPanel((now) => ({ ...now, ...changes }));
@@ -52,7 +73,7 @@ export function NewPanel({ close, start = {}, models, spare = [], themes, sugges
       />
       <${Toggle} label=${t("Upside down")} checked=${panel.rotate === 180} onChange=${(on) => change({ rotate: on ? 180 : 0 })} />`,
     shows: html`<p class="dialog-text">${t("What should it show? The theme made to go beside panel 1's comes first.")}</p>
-      <${Select} label=${t("Theme")} value=${panel.theme || ""} options=${themes} onChange=${(value) => change({ theme: value })} />
+      <${Select} label=${t("Theme")} value=${themeChoice(panel)} options=${themes} onChange=${(value) => change(chooseTheme(value, panel, companion))} />
       <${Toggle} label=${t("Look as panel 1's")} checked=${panel.same_look === true} onChange=${(on) => change({ same_look: on })} />
       <${Toggle} label=${t("Brightness as panel 1's")} checked=${panel.follow_brightness !== false} onChange=${(on) => change({ follow_brightness: on })} />`,
   }[STEPS[step]];

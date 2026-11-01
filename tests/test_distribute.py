@@ -27,6 +27,7 @@ def test_a_built_in_theme_gets_a_copy_of_one_s_own_with_the_module_and_the_panel
     done = distribute.send([CPU], 2, config_path)
     assert done["copied"] and done["theme"] == "slate-own"
     assert load_config(config_path).panels[0].theme == "slate-own"
+    assert load_config(config_path).panels[0].follow is False  # its own from now on
     copy = json.loads((user_themes_dir() / "slate-own" / "theme.json").read_text("utf-8"))
     assert copy["name"].endswith("(mine)")
     sent = [w for w in copy["widgets"] if w.get("type") == "module"]
@@ -38,6 +39,18 @@ def test_a_built_in_theme_gets_a_copy_of_one_s_own_with_the_module_and_the_panel
     modules = [w for w in load_theme(find_theme("slate-own")).widgets if w["type"] == "module"]
     assert len(modules) == 2 and modules[0]["id"] != modules[1]["id"]  # a new id
     assert (modules[1]["col"], modules[1]["row"]) != (0, 0)
+
+
+def test_a_companion_s_copy_of_one_s_own_is_a_companion_still():
+    """So the first panel goes on leaving out what it shows (theme.model.is_companion)."""
+    from libre_panel.theme.model import is_companion
+
+    assert distribute._own_copy_name("lumen-companion-vertical") == "lumen-own-companion-vertical"
+    assert distribute._own_copy_name("arena-companion") == "arena-own-companion"
+    (user_themes_dir() / "arena-own-companion").mkdir(parents=True)
+    assert distribute._own_copy_name("arena-companion") == "arena-own-2-companion"
+    assert is_companion(distribute._own_copy_name("encore-companion-1920x720"))
+    assert distribute._own_copy_name("slate") == "slate-own"
 
 
 def test_a_module_goes_where_cells_are_free_and_says_so_where_none_are(config_path):

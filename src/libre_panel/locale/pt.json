@@ -2997,7 +2997,12 @@
     "When the PC starts, until Libre Panel shows its themes: {motion}.": "Quando o PC inicia, até o Libre Panel mostrar seus temas: {motion}.",
     "The panel's own screens, in the look you choose and made for its size: the logo it shows when it is switched on, and the clip it plays when the PC starts, until Libre Panel shows its themes.": "As telas próprias do painel, no visual que você escolher e feitas para o seu tamanho: o logo que mostra ao ligar e o clipe que toca quando o PC inicia, até o Libre Panel mostrar seus temas.",
     "Card opacity": "Opacidade dos cartões",
-    "How much of the background the cards of every screen cover. Libre Panel's own themes let a little of it through; 100 % covers it all. What is on a card stays as it is.": "Quanto do fundo os cartões de cada tela cobrem. Os do Libre Panel deixam passar um pouco; 100 % cobre-o. O que está num cartão fica como está."
+    "How much of the background the cards of every screen cover. Libre Panel's own themes let a little of it through; 100 % covers it all. What is on a card stays as it is.": "Quanto do fundo os cartões de cada tela cobrem. Os do Libre Panel deixam passar um pouco; 100 % cobre-o. O que está num cartão fica como está.",
+    "The companion of panel 1's theme (now {name})": "O acompanhante do tema do painel 1 (agora {name})",
+    "The companion of panel 1's theme changes with it: Arena Companion while panel 1 shows Arena. A theme chosen by name stays, whatever panel 1 shows.": "O acompanhante do tema do painel 1 muda com ele: Arena Companion enquanto o painel 1 mostra Arena. Um tema escolhido pelo nome fica, mostre o painel 1 o que mostrar.",
+    "A companion's name ends in “-companion”: panel 1 then leaves out what it shows.": "O nome de um acompanhante termina em “-companion”: assim o painel 1 deixa de fora o que ele mostra.",
+    "Panel {number} takes the colours, fonts and module frames of panel 1's theme: what you change of them here shows on it once it has a look of its own.": "O painel {number} usa as cores, as fontes e as molduras dos módulos do tema do painel 1: o que você mudar nelas aqui aparece nele quando tiver um visual próprio.",
+    "A look of its own": "Um visual próprio"
   },
   "fields": {
     "agent": "agente",

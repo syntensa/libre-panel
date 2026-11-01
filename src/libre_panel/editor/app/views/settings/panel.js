@@ -32,7 +32,7 @@ import { toastError } from "../../ui/toast.js";
 import { openDialog } from "../../ui/dialog.js";
 import { Arrangement, arranged, arrangementItem } from "./arrangement.js";
 import { ColourCard } from "./colours.js";
-import { NewPanel } from "./newpanel.js";
+import { FOLLOW, NewPanel, chooseTheme, themeChoice } from "./newpanel.js";
 import { Card, CommitField, Disclosure, SettingRow, Status, copyText, usePolling } from "./parts.js";
 import { StartScreenCard } from "./startscreen.js";
 import { TransitionsCard } from "./transitions.js";
@@ -687,7 +687,7 @@ function MorePanelsCard() {
     const first = normalTheme();
     const other = panels[n].theme || running.find((item) => item.index === n)?.theme;
     if (!first || !other) return;
-    await write(panels.map((panel, i) => (i === n ? { ...panel, theme: first } : panel)));
+    await write(panels.map((panel, i) => (i === n ? { ...panel, theme: first, follow: null } : panel)));
     store.set({ pages: await endpoints.setPage("normal", { theme: other }) });
   };
   const spare = panels.length < MORE_PANELS ? info?.spare || [] : [];
@@ -696,13 +696,14 @@ function MorePanelsCard() {
   const companion = normal ? themes.find((theme) => theme.id === `${versionBase(normal) || normal}-companion`) : null;
   // and while a game runs, Arena's companion beside Arena (the game's page)
   const gaming = themes.some((theme) => theme.id === "arena-companion") ? { game_theme: "arena-companion" } : {};
-  const suggested = { ...(companion ? { theme: companion.id, same_look: true } : {}), ...gaming };
+  const suggested = { ...(companion ? { theme: companion.id, follow: true, same_look: true } : {}), ...gaming };
   // step by step: which panel, how it is mounted, what it shows (newpanel.js)
   const newPanel = async (start) => {
     const spareNow = panels.length < MORE_PANELS ? info?.spare || [] : [];
     const chosen = await openDialog(
       (close) => html`<${NewPanel} close=${close} start=${start} models=${models} spare=${spareNow}
-        themes=${panelThemes(themes, companion, models.find((item) => item.id === start.model) || null)} suggested=${suggested} />`,
+        themes=${panelThemes(themes, companion, models.find((item) => item.id === start.model) || null)} suggested=${suggested}
+        companion=${companion} />`,
       { label: t("Add a panel") },
     );
     if (chosen) await write([...panels, chosen]);
@@ -807,19 +808,28 @@ function MoreStatus({ panel, running }) {
   return html`<${Status} tone="warn">${stateText(running.state)}${running.detail ? `: ${running.detail}` : ""}<//>`;
 }
 
-/** The themes a panel beside the first can show: its own, the companion of panel 1's theme, then
- * those made for `model` and those for other panels. */
+/** The themes a panel beside the first can show: its own; the companion of panel 1's theme,
+ * whichever that is (it changes with it); then each theme by name, which stays whatever panel 1
+ * shows, those made for `model` first. */
 function panelThemes(themes, companion, model) {
   const fits = (theme) => fitsPanel(theme, model);
   return [
     { value: "", label: t("The panel's own") },
-    ...(companion ? [{ value: companion.id, label: companion.name || companion.id, group: t("Beside panel 1's theme") }] : []),
+    {
+      value: FOLLOW,
+      label: companion
+        ? t("The companion of panel 1's theme (now {name})", { name: companion.name || companion.id })
+        : t("The companion of panel 1's theme"),
+      group: t("Beside panel 1's theme"),
+    },
     ...[...themes]
-      .filter((theme) => theme !== companion)
       .sort((a, b) => Number(!fits(a)) - Number(!fits(b)))
       .map((theme) => ({ value: theme.id, label: theme.name || theme.id, group: fits(theme) ? t("Themes") : t("For other panels") })),
   ];
 }
+
+/** The themes a page of a panel beside the first can show: each by name ("" as ever). */
+const pageThemes = (themes) => themes.filter((option) => option.value && option.value !== FOLLOW);
 
 function MorePanel({ n, panel, running, video, models, themes, companion, onChange, onRemove, onSwap }) {
   const [chosen, setChosen] = useState(null); // as the brightness slider above
@@ -837,7 +847,7 @@ function MorePanel({ n, panel, running, video, models, themes, companion, onChan
       <button type="button" class="btn" title=${t("Its theme and this panel's change places")} onClick=${onSwap}>${t("Swap with panel 1")}</button>
       <button type="button" class="btn" onClick=${onRemove}>${t("Remove")}</button>
     <//>
-    ${panel.on === false ? null : html`<${MoreSettings} n=${n} panel=${panel} video=${video} models=${models} themes=${themeOptions} chosen=${chosen} onBrightness=${brightness} onChange=${onChange} />`}
+    ${panel.on === false ? null : html`<${MoreSettings} n=${n} panel=${panel} video=${video} models=${models} themes=${themeOptions} companion=${companion} chosen=${chosen} onBrightness=${brightness} onChange=${onChange} />`}
   </div>`;
 }
 
@@ -875,7 +885,7 @@ function MoreVideo({ panel, video, onChange }) {
       : null}`;
 }
 
-function MoreSettings({ n, panel, video, models, themes, chosen, onBrightness, onChange }) {
+function MoreSettings({ n, panel, video, models, themes, companion, chosen, onBrightness, onChange }) {
   // (said once, at the first: it holds for all)
   const hint = n === 0 ? t("Detect automatically takes a panel the others do not use. Two serial panels of the same kind: name the port of each below.") : null;
   return html`
@@ -890,22 +900,22 @@ function MoreSettings({ n, panel, video, models, themes, chosen, onBrightness, o
         onChange=${(value) => onChange({ model: value })}
       />
     <//>
-    <${SettingRow} title=${t("Theme")}>
-      <${Select} label=${t("Theme")} value=${panel.theme || ""} options=${themes} onChange=${(value) => onChange({ theme: value })} />
+    <${SettingRow} title=${t("Theme")} hint=${n === 0 ? t("The companion of panel 1's theme changes with it: Arena Companion while panel 1 shows Arena. A theme chosen by name stays, whatever panel 1 shows.") : null}>
+      <${Select} label=${t("Theme")} value=${themeChoice(panel)} options=${themes} onChange=${(value) => onChange(chooseTheme(value, panel, companion))} />
     <//>
     <${SettingRow} title=${t("Look as panel 1's")} hint=${t("Its theme takes the colours, fonts and module frames of the theme panel 1 shows, and follows a change in Design.")}>
       <${Toggle} label=${t("Look as panel 1's")} checked=${panel.same_look === true} onChange=${(on) => onChange({ same_look: on })} />
     <//>
     <${SettingRow} title=${t("While a game runs")} hint=${n === 0 ? t("While panel 1 shows the game's page or music's, this panel can show a theme of its own: the temperatures and fans during a game, say.") : null}>
-      <${Select} label=${t("While a game runs")} value=${panel.game_theme || ""} options=${[{ value: "", label: t("As ever") }, ...themes.slice(1)]}
+      <${Select} label=${t("While a game runs")} value=${panel.game_theme || ""} options=${[{ value: "", label: t("As ever") }, ...pageThemes(themes)]}
         onChange=${(value) => onChange({ game_theme: value })} />
     <//>
     <${SettingRow} title=${t("While music plays")}>
-      <${Select} label=${t("While music plays")} value=${panel.media_theme || ""} options=${[{ value: "", label: t("As ever") }, ...themes.slice(1)]}
+      <${Select} label=${t("While music plays")} value=${panel.media_theme || ""} options=${[{ value: "", label: t("As ever") }, ...pageThemes(themes)]}
         onChange=${(value) => onChange({ media_theme: value })} />
     <//>
     <${SettingRow} title=${t("During an alarm")} hint=${n === 0 ? t("While a sensor is at its critical limit (the warnings of the notices): the temperatures and what keeps the PC busy, say.") : null}>
-      <${Select} label=${t("During an alarm")} value=${panel.alarm_theme ?? "lumen-companion"} options=${[{ value: "", label: t("As ever") }, ...themes.slice(1)]}
+      <${Select} label=${t("During an alarm")} value=${panel.alarm_theme ?? "lumen-companion"} options=${[{ value: "", label: t("As ever") }, ...pageThemes(themes)]}
         onChange=${(value) => onChange({ alarm_theme: value })} />
     <//>
     <${SettingRow} title=${t("Brightness as panel 1's")} hint=${t("At night and while you are away too. Some panels look brighter than others at the same setting: even them out with the difference below.")}>

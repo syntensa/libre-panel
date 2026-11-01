@@ -557,6 +557,7 @@ def test_more_panels_are_in_the_tray_each_with_its_state_switch_and_theme(tray, 
     assert themes["Lumen"].checked
     themes["Slate"](tray.icon)
     assert wait_for(lambda: load_config().panels[0].theme == "slate")
+    assert load_config().panels[0].follow is False  # (by name: it stays)
     assert load_config().theme == "libre-default"  # the first panel's as it was
     # its brightness: as the first panel's, or its own
     shades = items(second["Brightness"].submenu)

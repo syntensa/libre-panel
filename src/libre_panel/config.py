@@ -661,6 +661,10 @@ class PanelConfig:
     # the look of the first panel's theme as it shows (its colours, fonts and module frames)
     # on this panel's own theme; a change in Design follows (theme.model.with_look)
     same_look: bool = False
+    # whether it shows the companion of the first panel's theme, where that has one (Arena
+    # Companion beside Arena), instead of its own theme: None as its theme says (a companion
+    # follows, theme.model.follows_first), false its theme whatever the first panel shows
+    follow: bool | None = None
     # smooth motion on this panel too (``video = { mode = "auto", local_clip = "..." }``):
     # its own mode, off to begin with, and the name of its own standby clip, never another
     # panel's; the rate and the encoder's settings are the first panel's ([video])
@@ -734,8 +738,10 @@ class Config:
     # theme ([switches] frames = false, kept under "*") and by theme, all its versions
     # ([switches.lumen] frames = true), which goes before
     switches: dict[str, dict[str, bool]] = field(default_factory=dict)
-    # for a panel beside the first (for_panel): its theme in the first panel's look
+    # for a panel beside the first (for_panel): its theme in the first panel's look, and
+    # whether it shows the companion of the first panel's theme (PanelConfig.follow)
     same_look: bool = False
+    follow: bool | None = None
     path: Path | None = None
     # config.toml's modification time when it was read: a change made while
     # the program starts up is noticed too.
@@ -788,6 +794,7 @@ class Config:
             panels=[],
             modes=pages,  # (those of a game and of music, while the first panel shows them)
             same_look=panel.same_look,
+            follow=panel.follow,
         )
 
 
@@ -1242,6 +1249,9 @@ def _panels(value: Any) -> list[PanelConfig]:
         media = _expect(table.pop("media_theme", ""), str, f"{where}.media_theme").strip()
         alarm = _expect(table.pop("alarm_theme", ALARM_THEME), str, f"{where}.alarm_theme").strip()
         look = _expect(table.pop("same_look", False), bool, f"{where}.same_look")
+        follows = table.pop("follow", None)  # (the first panel's theme's companion)
+        if follows is not None:
+            follows = _expect(follows, bool, f"{where}.follow")
         video = _panel_video(table.pop("video", {}), f"{where}.video")
         offset = _expect(table.pop("brightness_offset", 0), int, f"{where}.brightness_offset")
         if not -50 <= offset <= 50:
@@ -1250,7 +1260,7 @@ def _panels(value: Any) -> list[PanelConfig]:
         panels.append(PanelConfig(theme=theme, on=on, device=_parse_device(table, where),
                                   follow_brightness=follow, brightness_offset=offset,
                                   game_theme=game, media_theme=media, alarm_theme=alarm,
-                                  same_look=look, **video))  # fmt: skip
+                                  same_look=look, follow=follows, **video))  # fmt: skip
     return panels
 
 

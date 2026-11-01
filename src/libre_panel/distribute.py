@@ -2,14 +2,15 @@
 2, Move to panel 2): the theme that panel shows gets them, each on free cells of its grid.
 
 A theme of the person's own is written as it is; a built-in one (Lumen Companion) gets a copy of
-its own first (``lumen-companion-own``), which the panel then shows: what comes with Libre Panel
-is never written over. The modules keep their settings and get a new id where the theme has
-theirs already.
+its own first (``lumen-own-companion``, a companion still), which the panel then shows: what
+comes with Libre Panel is never written over. The modules keep their settings and get a new id
+where the theme has theirs already.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from copy import deepcopy
 from pathlib import Path
@@ -29,7 +30,7 @@ from libre_panel.theme.model import (
 )
 from libre_panel.theme.modules import make_grid
 
-OWN = "-own"  # a built-in theme's copy of the person's own: "lumen-companion-own"
+OWN = "-own"  # a built-in theme's copy of the person's own: "slate-own", "lumen-own-companion"
 
 
 class SendError(ValueError):
@@ -50,12 +51,19 @@ def shown_theme(config: Any, n: int, status: Any = None) -> str:
 
 
 def _own_copy_name(name: str) -> str:
-    """A name for the person's copy of the built-in theme ``name`` that no theme has yet."""
-    base = name[: 64 - len(OWN) - 3]
-    candidate, number = f"{base}{OWN}", 2
+    """A name for the person's copy of the built-in theme ``name`` that no theme has yet. A
+    companion's is a companion still ("lumen-own-companion-vertical" for
+    "lumen-companion-vertical"), so the first panel goes on leaving out what it shows."""
+    found = _BESIDE.search(name)
+    end = found.group(0) if found else ""
+    base = name[: len(name) - len(end)][: 64 - len(OWN) - len(end) - 3]
+    candidate, number = f"{base}{OWN}{end}", 2
     while (user_themes_dir() / candidate).exists():
-        candidate, number = f"{base}{OWN}-{number}", number + 1
+        candidate, number = f"{base}{OWN}-{number}{end}", number + 1
     return candidate
+
+
+_BESIDE = re.compile(r"-companion(-vertical|-\d+x\d+)?$")  # (theme.model.is_companion)
 
 
 def _free_cells(columns: int, rows: int, taken: set[tuple[int, int]], cols: int, height: int):
@@ -146,6 +154,6 @@ def send(
 
         settings = Settings(config.path, None, Restart())
         panels = settings.read()["config"]["panels"]
-        panels[n] = {**panels[n], "theme": target}
+        panels[n] = {**panels[n], "theme": target, "follow": False}  # (its own, from now on)
         settings.write({"set": {"panels": panels}})
     return {"theme": target, "copied": built_in, "ids": ids}

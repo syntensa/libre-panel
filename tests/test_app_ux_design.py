@@ -456,8 +456,44 @@ def test_design_edits_the_theme_of_the_panel_chosen_in_the_header(app_url, isola
         dialog.get_by_role("button", name="Save").click()
         waits_for(page, lambda: settings_config().panels[0].theme == "my-companion")
         assert settings_config().theme == "lumen"
+        assert settings_config().panels[0].follow is False  # (chosen: whatever panel 1 shows)
         switch.get_by_role("radio", name="Panel 1").click()
         page.wait_for_function("window.libre.store.get().doc?.id === 'lumen'")
+
+
+def test_panel_2_has_a_companion_and_a_look_of_its_own(app_url, isolated_home):  # noqa: F811
+    """Panel 2 in panel 1's look: Look says that its colours, fonts and module frames are panel
+    1's there, with the way to a look of its own. A copy of Lumen Companion is a companion still
+    ("lumen-mine-companion-vertical": panel 1 leaves out what it shows) and stays on panel 2,
+    whatever panel 1 shows."""
+    choose_theme(isolated_home, "lumen")
+    with isolated_home.joinpath("config.toml").open("a", encoding="utf-8") as config:
+        config.write('\n[[panels]]\nmodel = "turing-9.2-usb"\norientation = "portrait"\n'
+                     'theme = "lumen-companion"\nsame_look = true\n')  # fmt: skip
+    with browser_page(app_url, "look") as page:
+        page.wait_for_function("window.libre.store.get().doc?.id?.startsWith('lumen')")
+        expect(page.locator("[data-same-look]")).to_have_count(0)  # (panel 1)
+        switch = page.get_by_role("radiogroup", name="Which panel Live shows and Design edits")
+        switch.get_by_role("radio", name="Panel 2").click()
+        page.wait_for_function("window.libre.store.get().doc?.id === 'lumen-companion-vertical'")
+        note = page.locator("[data-same-look]")
+        expect(note).to_contain_text("Panel 2 takes the colours, fonts and module frames")
+        note.get_by_role("button", name="A look of its own").click()
+        waits_for(page, lambda: not settings_config().panels[0].same_look)
+        expect(note).to_have_count(0)
+        js(page, "window.libre.doc.edit('n', (theme) => { theme.description = 'mine'; })")
+        page.locator(".btn-apply").click()
+        dialog = page.locator(".dialog")
+        name = dialog.locator("input")
+        expect(name).to_have_value("lumen-mine-companion-vertical")
+        name.fill("lumen-mine-vertical")  # a companion's copy is one still
+        expect(dialog.locator(".field-hint.error")).to_contain_text("ends in “-companion”")
+        expect(dialog.get_by_role("button", name="Save")).to_be_disabled()
+        name.fill("lumen-mine-companion-vertical")
+        dialog.get_by_role("button", name="Save").click()
+        waits_for(page, lambda: settings_config().panels[0].theme
+                  == "lumen-mine-companion-vertical")  # fmt: skip
+        assert settings_config().panels[0].follow is False and settings_config().theme == "lumen"
 
 
 def test_look_and_the_panel_chip_follow_the_panel_chosen_in_the_header(app_url, isolated_home):  # noqa: F811

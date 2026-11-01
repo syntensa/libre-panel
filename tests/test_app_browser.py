@@ -4526,7 +4526,7 @@ def test_a_new_panel_is_added_step_by_step(app_url, isolated_home):
         dialog.locator(mounted, has_text="Vertical").click()  # (Settings has one for panel 1)
         dialog.get_by_label("Upside down").click()
         dialog.get_by_role("button", name="Next").click()
-        expect(dialog.get_by_label("Theme")).to_have_value("lumen-companion")  # beside Lumen
+        expect(dialog.get_by_label("Theme")).to_have_value("@follow")  # beside Lumen: its own
         expect(dialog.get_by_label("Look as panel 1's")).to_be_checked()
         dialog.get_by_role("button", name="Back").click()
         expect(dialog).to_have_attribute("data-new-panel", "mounted")
@@ -4537,7 +4537,7 @@ def test_a_new_panel_is_added_step_by_step(app_url, isolated_home):
         panel = settings_config().panels[0]
         assert (panel.device.model, panel.device.orientation, panel.device.rotate) == (
             "turing-9.2-usb", "portrait", 180)  # fmt: skip
-        assert panel.theme == "lumen-companion" and panel.same_look
+        assert panel.theme == "lumen-companion" and panel.follow and panel.same_look
         assert not panel.follow_brightness and panel.game_theme == "arena-companion"
 
 
@@ -4763,9 +4763,21 @@ def test_a_panel_added_beside_lumen_shows_lumen_s_companion(app_url, isolated_ho
         through_the_steps(page)
         waits_for(page, lambda: len(settings_config().panels) == 1)
         assert settings_config().panels[0].theme == "lumen-companion"
+        assert settings_config().panels[0].follow  # with panel 1's theme: Arena's beside Arena
         assert settings_config().panels[0].same_look  # in panel 1's look, as Design changes it
         more = page.locator("[data-more-panel='0']")
-        expect(more.get_by_label("Theme")).to_have_value("lumen-companion")
+        theme = more.get_by_label("Theme")
+        expect(theme).to_have_value("@follow")
+        expect(theme.locator("option[value='@follow']")).to_have_text(
+            "The companion of panel 1's theme (now Lumen Companion)"
+        )
+        theme.select_option("arena-companion")  # by name: it stays, whatever panel 1 shows
+        waits_for(page, lambda: settings_config().panels[0].follow is False)
+        assert settings_config().panels[0].theme == "arena-companion"
+        expect(theme).to_have_value("arena-companion")
+        theme.select_option("@follow")
+        waits_for(page, lambda: settings_config().panels[0].follow is True)
+        assert settings_config().panels[0].theme == "lumen-companion"
         look = more.get_by_label("Look as panel 1's")
         expect(look).to_be_checked()
         look.click()  # its own look

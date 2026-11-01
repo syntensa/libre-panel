@@ -2997,7 +2997,12 @@
     "When the PC starts, until Libre Panel shows its themes: {motion}.": "Au démarrage du PC, jusqu'à ce que Libre Panel affiche ses thèmes : {motion}.",
     "The panel's own screens, in the look you choose and made for its size: the logo it shows when it is switched on, and the clip it plays when the PC starts, until Libre Panel shows its themes.": "Les écrans propres au panneau, dans le style de votre choix et faits pour sa taille : le logo qu'il affiche à l'allumage, et la vidéo qu'il joue au démarrage du PC, jusqu'à ce que Libre Panel affiche ses thèmes.",
     "Card opacity": "Opacité des cartes",
-    "How much of the background the cards of every screen cover. Libre Panel's own themes let a little of it through; 100 % covers it all. What is on a card stays as it is.": "Quelle part de l’arrière-plan les cartes de chaque écran couvrent. Celles de Libre Panel en laissent transparaître un peu ; 100 % le couvre. Ce qui est sur une carte reste tel quel."
+    "How much of the background the cards of every screen cover. Libre Panel's own themes let a little of it through; 100 % covers it all. What is on a card stays as it is.": "Quelle part de l’arrière-plan les cartes de chaque écran couvrent. Celles de Libre Panel en laissent transparaître un peu ; 100 % le couvre. Ce qui est sur une carte reste tel quel.",
+    "The companion of panel 1's theme (now {name})": "Le compagnon du thème de l’écran 1 (actuellement {name})",
+    "The companion of panel 1's theme changes with it: Arena Companion while panel 1 shows Arena. A theme chosen by name stays, whatever panel 1 shows.": "Le compagnon du thème de l’écran 1 change avec lui : Arena Companion tant que l’écran 1 affiche Arena. Un thème choisi par son nom reste, quoi qu’affiche l’écran 1.",
+    "A companion's name ends in “-companion”: panel 1 then leaves out what it shows.": "Le nom d’un compagnon se termine par « -companion » : l’écran 1 laisse alors de côté ce qu’il affiche.",
+    "Panel {number} takes the colours, fonts and module frames of panel 1's theme: what you change of them here shows on it once it has a look of its own.": "L’écran {number} reprend les couleurs, les polices et les cadres des modules du thème de l’écran 1 : ce que vous en changez ici s’y verra quand il aura sa propre apparence.",
+    "A look of its own": "Une apparence à lui"
   },
   "fields": {
     "agent": "agent",

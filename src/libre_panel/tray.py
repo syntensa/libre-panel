@@ -337,7 +337,10 @@ class Tray:
             themes = self._theme_menu(
                 model,
                 None,
-                choose=lambda theme_id, n=n: self._later(self._set_panel, n, {"theme": theme_id}),
+                # (chosen by name: it stays, whatever the first panel shows)
+                choose=lambda theme_id, n=n: self._later(
+                    self._set_panel, n, {"theme": theme_id, "follow": False}
+                ),
                 chosen=lambda n=n: next((p.theme for i, p, _ in self._more() if i == n), None),
             )
             yield item(

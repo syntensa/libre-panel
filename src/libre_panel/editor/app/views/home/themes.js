@@ -7,7 +7,7 @@
 import { endpoints } from "../../core/api.js";
 import { t } from "../../core/i18n.js";
 import { html, useEffect, useRef, useState } from "../../lib/preact.js";
-import { mounted, themeEntry, useMounted, versionBase, versionFor } from "../../core/orientation.js";
+import { isCompanion, mounted, themeEntry, useMounted, versionBase, versionFor } from "../../core/orientation.js";
 import { store } from "../../core/state.js";
 import { panelName } from "../../shell/panel-popover.js";
 import { Icon } from "../../ui/icons.js";
@@ -35,8 +35,6 @@ const sourceText = (theme) => (theme.source === "plugin" ? t("from a plugin") : 
  * chosen). Order: the one on the panel or the default, then Libre Panel's own and yours (those
  * that fit first: yours, built in, kept for a page), then the collections' the same way.
  */
-// a theme made to go beside another on a second panel (its versions too): kept for that
-const COMPANION = /-companion(-vertical|-\d+x\d+)?$/;
 // a screen of the AI agents (AI activity, which is off until it is set up): kept for those who use them
 const AGENTS = /^agents(-|$)/;
 
@@ -61,7 +59,7 @@ export function startThemes({ themes, models, pages, model, defaultId = null }) 
       fits: fitsPanel(theme, model),
       sideways: upright && Boolean(w) && w > h, // on a panel on end, a theme that has no version for it
       collection: typeof theme.collection === "string" ? theme.collection : "",
-      special: (special.has(theme.id) || COMPANION.test(theme.id) || (theme.builtin && AGENTS.test(theme.id))) && !shown,
+      special: (special.has(theme.id) || isCompanion(theme.id) || (theme.builtin && AGENTS.test(theme.id))) && !shown,
       isDefault: first && theme.id === defaultId,
       note: where || sourceText(theme),
       own: !theme.builtin && theme.source !== "plugin",

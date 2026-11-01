@@ -1317,6 +1317,26 @@ def pair_version(shown: str) -> str | None:
     return paired if _installed(paired) else None
 
 
+_PAIRED = re.compile(r"-pair(?=(-vertical|-\d+x\d+)?$)")
+
+
+def unpaired_version(shown: str) -> str | None:
+    """The version of the pair version ``shown`` for a panel without a companion beside it,
+    where that is installed: "lumen-1920x720" for "lumen-pair-1920x720" (put on the panel from
+    Design while a companion ran beside it); None for any other theme."""
+    if not _PAIRED.search(shown):
+        return None
+    alone = _PAIRED.sub("", shown, count=1)
+    return alone if alone and _installed(alone) else None
+
+
+def follows_first(follow: bool | None, theme: str) -> bool:
+    """Whether a panel beside the first shows the companion of the first panel's theme (Arena
+    Companion beside Arena) instead of its own ``theme``: as its ``[[panels]] follow`` says,
+    else (None, a config of 0.7) when its theme is a companion."""
+    return is_companion(theme) if follow is None else follow
+
+
 def companion_for(first: str) -> str | None:
     """The companion of the theme the first panel shows ("arena-companion" while it shows
     Arena, its pair version too), where one is installed; None else."""

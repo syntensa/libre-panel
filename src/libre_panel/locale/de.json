@@ -2997,7 +2997,12 @@
     "When the PC starts, until Libre Panel shows its themes: {motion}.": "Beim Start des PCs, bis Libre Panel seine Themes zeigt: {motion}.",
     "The panel's own screens, in the look you choose and made for its size: the logo it shows when it is switched on, and the clip it plays when the PC starts, until Libre Panel shows its themes.": "Die eigenen Screens des Panels, im Look deiner Wahl und für seine Größe gemacht: das Logo beim Einschalten und der Clip, den es beim Start des PCs abspielt, bis Libre Panel seine Themes zeigt.",
     "Card opacity": "Deckkraft der Karten",
-    "How much of the background the cards of every screen cover. Libre Panel's own themes let a little of it through; 100 % covers it all. What is on a card stays as it is.": "Wie viel vom Hintergrund die Karten jedes Screens abdecken. Libre Panels eigene Themes lassen ein wenig davon durch; 100 % deckt ihn ganz ab. Was auf einer Karte steht, bleibt, wie es ist."
+    "How much of the background the cards of every screen cover. Libre Panel's own themes let a little of it through; 100 % covers it all. What is on a card stays as it is.": "Wie viel vom Hintergrund die Karten jedes Screens abdecken. Libre Panels eigene Themes lassen ein wenig davon durch; 100 % deckt ihn ganz ab. Was auf einer Karte steht, bleibt, wie es ist.",
+    "The companion of panel 1's theme (now {name})": "Der Begleiter des Themes von Panel 1 (jetzt {name})",
+    "The companion of panel 1's theme changes with it: Arena Companion while panel 1 shows Arena. A theme chosen by name stays, whatever panel 1 shows.": "Der Begleiter des Themes von Panel 1 wechselt mit ihm: Arena Companion, solange Panel 1 Arena zeigt. Ein Theme, das du mit Namen wählst, bleibt, was Panel 1 auch zeigt.",
+    "A companion's name ends in “-companion”: panel 1 then leaves out what it shows.": "Der Name eines Begleiters endet auf „-companion“: Dann lässt Panel 1 weg, was er zeigt.",
+    "Panel {number} takes the colours, fonts and module frames of panel 1's theme: what you change of them here shows on it once it has a look of its own.": "Panel {number} übernimmt Farben, Schriften und Modulrahmen vom Theme von Panel 1: Was du hier daran änderst, zeigt es erst mit einem eigenen Look.",
+    "A look of its own": "Eigener Look"
   },
   "fields": {
     "agent": "Agent",

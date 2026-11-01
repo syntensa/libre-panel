@@ -2997,7 +2997,12 @@
     "When the PC starts, until Libre Panel shows its themes: {motion}.": "При запуске ПК, пока Libre Panel не покажет свои темы: {motion}.",
     "The panel's own screens, in the look you choose and made for its size: the logo it shows when it is switched on, and the clip it plays when the PC starts, until Libre Panel shows its themes.": "Собственные экраны панели в выбранном вами стиле и под её размер: логотип, который она показывает при включении, и клип, который проигрывает при запуске ПК, пока Libre Panel не покажет свои темы.",
     "Card opacity": "Непрозрачность карточек",
-    "How much of the background the cards of every screen cover. Libre Panel's own themes let a little of it through; 100 % covers it all. What is on a card stays as it is.": "Насколько карточки каждого экрана закрывают фон. Карточки Libre Panel слегка его пропускают; 100 % закрывает полностью. То, что на карточке, остаётся без изменений."
+    "How much of the background the cards of every screen cover. Libre Panel's own themes let a little of it through; 100 % covers it all. What is on a card stays as it is.": "Насколько карточки каждого экрана закрывают фон. Карточки Libre Panel слегка его пропускают; 100 % закрывает полностью. То, что на карточке, остаётся без изменений.",
+    "The companion of panel 1's theme (now {name})": "Компаньон темы панели 1 (сейчас {name})",
+    "The companion of panel 1's theme changes with it: Arena Companion while panel 1 shows Arena. A theme chosen by name stays, whatever panel 1 shows.": "Компаньон темы панели 1 меняется вместе с ней: Arena Companion, пока панель 1 показывает Arena. Тема, выбранная по имени, остаётся, что бы ни показывала панель 1.",
+    "A companion's name ends in “-companion”: panel 1 then leaves out what it shows.": "Имя компаньона оканчивается на «-companion»: тогда панель 1 не показывает то, что показывает он.",
+    "Panel {number} takes the colours, fonts and module frames of panel 1's theme: what you change of them here shows on it once it has a look of its own.": "Панель {number} берёт цвета, шрифты и рамки модулей из темы панели 1: то, что вы здесь в них измените, появится на ней, когда у неё будет свой стиль.",
+    "A look of its own": "Свой стиль"
   },
   "fields": {
     "agent": "агент",

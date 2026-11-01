@@ -3,6 +3,17 @@
 ## Unreleased
 
 **New**
+- **A second panel shows what you choose for it, in a look of its own.** Beside the first
+  panel, a companion followed the first panel's theme whatever was chosen for it: Arena
+  Companion chosen for panel 2 turned into Lumen Companion while panel 1 showed Lumen. Now
+  *Settings → Panels* (and Design's pages of panel 2) have *The companion of panel 1's theme*,
+  which changes with it, as *Add a panel* suggests; a theme chosen by name stays, whatever
+  panel 1 shows (`follow` in its `[[panels]]` table). A companion changed in Design is saved as
+  a companion of your own (`lumen-mine-companion`): panel 1 goes on leaving out what it shows,
+  where before the copy's name made panel 1 show its fans twice. *Look* says when panel 2 takes
+  panel 1's colours, fonts and module frames, which kept what was changed there off the panel,
+  with *A look of its own*. And a pair version put on panel 1 from Design while the companion
+  ran (Lumen without its fans) is Lumen again, whole, once the companion is gone.
 - **Cards that let the background through, a little** (*Settings → Panel → Card opacity*).
   The cards of Libre Panel's own screens cover the background a little less now: just enough
   for its gradient and the dot grid to show through them, not so much that reading suffers

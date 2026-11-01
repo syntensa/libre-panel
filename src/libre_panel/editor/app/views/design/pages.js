@@ -208,10 +208,15 @@ function PageCard({ item, current, open }) {
     }
   };
   const switchable = item.id !== "normal" && !item.beside; // (a panel beside the first: always)
-  // a page of a panel beside the first without a theme: the companion of panel 1's, or its own
-  const empty = !item.beside || item.id === "normal" ? null : item.follows || designPages()?.pages?.[0]?.companion
-    ? t("The companion of panel 1's theme")
-    : t("Its own theme");
+  // a panel beside the first: its theme, or the companion of panel 1's, whichever that is
+  // (follows); a page of it without a theme shows that companion, or its own theme
+  const following = item.beside && item.id === "normal" && item.follows;
+  const empty = !item.beside
+    ? null
+    : item.id === "normal" || item.follows || designPages()?.pages?.[0]?.companion
+      ? t("The companion of panel 1's theme")
+      : t("Its own theme");
+  const choose = (id) => setDesignPage(item.id, item.beside && item.id === "normal" && !id ? { follow: true } : { theme: id });
   const name = pageName(item.id);
   return html`<div class=${`page-card${current ? " current" : ""}${item.theme ? "" : " empty"}${switchable && !item.on ? " off" : ""}`}
       data-page=${item.id}>
@@ -231,9 +236,9 @@ function PageCard({ item, current, open }) {
         </button>`
       : null /* the normal theme shows then, as the choice under it says: no empty picture */}
     <div class="page-card-theme">
-      <${PageThemeSelect} page=${item.id} theme=${item.theme} suggested=${item.suggested || []}
+      <${PageThemeSelect} page=${item.id} theme=${following ? "" : item.theme} suggested=${item.suggested || []}
         normal=${Boolean(item.mode) && !item.own} empty=${empty}
-        onChoose=${(id) => setDesignPage(item.id, { theme: id })}
+        onChoose=${choose}
         label=${t("Theme of the page {page}", { page: name })} />
       ${item.theme && !current
         ? html`<button type="button" class="link-btn page-card-edit" onClick=${() => open(item)}>${t("Edit")}</button>`

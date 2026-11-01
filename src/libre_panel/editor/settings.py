@@ -519,6 +519,7 @@ class Settings:
                         "media_theme": panel.media_theme,
                         "alarm_theme": panel.alarm_theme,
                         "same_look": panel.same_look,
+                        "follow": panel.follow,
                         "video": {
                             "mode": panel.video_mode,
                             "local_clip": panel.local_clip,
@@ -654,7 +655,7 @@ class Settings:
                 raise SettingsError(f"panels[{n}]: expected a table")
             default = {"theme": "", "on": True, "follow_brightness": True, "brightness_offset": 0,
                        "game_theme": "", "media_theme": "", "alarm_theme": ALARM_THEME,
-                       "same_look": False,
+                       "same_look": False, "follow": None,
                        "video": {}, **_device_table(_panel_device(n))}  # fmt: skip
             now = config.panels[n].device.output if n < len(config.panels) else default["output"]
             kept = {}
@@ -664,6 +665,8 @@ class Settings:
                     cleaned = _text(name, item, 64)
                 elif key in ("on", "follow_brightness", "same_look"):
                     cleaned = _flag(name, item)
+                elif key == "follow":  # (None: as its theme says)
+                    cleaned = None if item is None else _flag(name, item)
                 elif key == "brightness_offset":
                     cleaned = _whole(name, item, -50, 50)
                 elif key == "video":

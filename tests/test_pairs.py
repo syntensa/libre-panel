@@ -3,6 +3,7 @@ which leaves out what the companion shows, and the companion follows the first p
 (Arena Companion beside Arena, Encore's beside Encore)."""
 
 import json
+import threading
 from types import SimpleNamespace
 
 from libre_panel import app
@@ -11,8 +12,10 @@ from libre_panel.config import parse_config
 from libre_panel.theme.model import (
     builtin_themes_dir,
     companion_for,
+    follows_first,
     is_companion,
     pair_version,
+    unpaired_version,
     version_base,
 )
 
@@ -176,3 +179,62 @@ def test_no_screen_beside_its_companion_shows_what_the_companion_shows():
             on_first = _shown(first)
             for companion in companions:
                 assert not on_first & shown[companion], (first, companion)
+
+
+def test_a_panel_beside_the_first_follows_only_as_long_as_it_is_asked_to():
+    """A companion chosen by name stays, whatever the first panel shows (Arena Companion beside
+    Lumen); following the first panel's theme is a choice of its own ([[panels]] follow), and a
+    table of 0.7 without it follows where its theme is a companion, as it did."""
+    beside = {"model": "turing-9.2-usb", "orientation": "portrait", "theme": "arena-companion"}
+
+    def config(**table):
+        data = {"theme": "lumen", "device": {"model": "turing-12.3-usb"},
+                "panels": [{**beside, **table}]}  # fmt: skip
+        return parse_config(data).for_panel(0)
+
+    assert shown(config(), first="lumen-pair-1920x720") == "lumen-companion-vertical"  # (0.7)
+    assert shown(config(follow=True), first="lumen-pair-1920x720") == "lumen-companion-vertical"
+    kept = config(follow=False)
+    assert shown(kept, first="lumen-pair-1920x720") == "arena-companion-vertical"
+    assert shown(kept, first="encore-pair-1920x720", mode="media") == "arena-companion-vertical"
+    own = config(theme="nimbus", follow=True)  # following, beside a theme without a companion
+    assert shown(own, first="nimbus-1920x720") == "nimbus-vertical"  # (its own)
+    assert shown(own, first="encore-1920x720") == "encore-companion-vertical"
+    assert follows_first(None, "lumen-mine-companion") and not follows_first(None, "nimbus")
+    assert not follows_first(False, "lumen-companion") and follows_first(True, "nimbus")
+
+
+def test_a_pair_version_put_on_the_panel_is_the_theme_again_without_a_companion(tmp_path):
+    """Design edits the pair version while a companion runs beside the panel: put on the panel
+    from there, it is that theme's, and without the companion the panel shows it whole."""
+    assert unpaired_version("lumen-pair-1920x720") == "lumen-1920x720"
+    assert unpaired_version("lumen-pair") == "lumen"
+    assert unpaired_version("arena-pair-vertical") == "arena-vertical"
+    assert unpaired_version("lumen-1920x720") is None and unpaired_version("pair") is None
+    assert unpaired_version("lumen-mine-pair-1920x720") is None  # (no whole one to show)
+    config = parse_config({"theme": "lumen-pair-1920x720", "device": {"model": "turing-12.3-usb"}})
+    assert shown(config) == "lumen-1920x720"
+    assert shown(config, paired=True) == "lumen-pair-1920x720"
+    path = tmp_path / "config.toml"  # and Design puts it on the panel as the theme
+    path.write_text('theme = "lumen"\n', encoding="utf-8")
+    from test_editor_server import request
+
+    from libre_panel.config import load_config
+    from libre_panel.editor.server import make_server
+
+    srv = make_server(port=0, config_path=path)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        change = {"page": "normal", "theme": "lumen-pair-1920x720"}
+        assert request(srv.server_address[1], "POST", "/api/pages", change)[0] == 200
+        assert load_config(path).theme == "lumen-1920x720"
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        srv.editor_state.close()
+
+
+def test_a_companion_of_ones_own_still_has_the_first_panel_leave_out_what_it_shows():
+    more = {0: RunStatus(state="showing", theme="lumen-mine-companion-vertical")}
+    loop = SimpleNamespace(panel=None, status=SimpleNamespace(more=more), clock=lambda: 5.0)
+    assert app.MainLoop._pairing(loop) == {"paired": True}

@@ -1287,7 +1287,8 @@ def test_panel_two_gets_its_own_start_screen_and_its_clip_in_its_own_settings(tm
 
 def test_the_pages_of_a_panel_beside_the_first_are_read_and_written(tmp_path):
     """Design about panel 2: its theme, and those of a game, music and an alarm; one without its
-    own follows panel 1's theme with its companion."""
+    own follows panel 1's theme with its companion, and so does the panel while it is asked to
+    (a theme chosen by name stays)."""
     path = tmp_path / "config.toml"
     beside = 'model = "turing-9.2-usb"\norientation = "portrait"\ntheme = "lumen-companion"\n'
     path.write_text(f'theme = "lumen"\n[[panels]]\n{beside}', encoding="utf-8")
@@ -1311,6 +1312,20 @@ def test_the_pages_of_a_panel_beside_the_first_are_read_and_written(tmp_path):
         assert request(port, "POST", "/api/pages", {**change, "panel": 5})[0] == 404
         assert request(port, "GET", "/api/pages?panel=3")[0] == 404
         assert load_config(path).theme == "lumen"  # the first panel's is as it was
+        # a theme chosen for it by name stays, whatever panel 1 shows; following is asked for
+        normal = {"panel": 2, "page": "normal"}
+        status, body = request(port, "POST", "/api/pages", {**normal, "theme": "arena-companion"})
+        panel = load_config(path).panels[0]
+        assert status == 200 and panel.theme == "arena-companion" and panel.follow is False
+        assert not body["pages"][0]["follows"] and not body["pages"][1]["follows"]
+        status, body = request(port, "POST", "/api/pages", {**normal, "follow": True})
+        panel = load_config(path).panels[0]
+        assert status == 200 and panel.theme == "arena-companion" and panel.follow is True
+        assert body["pages"][0]["follows"]
+        request(port, "POST", "/api/pages", {**normal, "theme": "nimbus"})
+        request(port, "POST", "/api/pages", {**normal, "follow": True})  # Lumen's, beside Lumen
+        assert load_config(path).panels[0].theme == "lumen-companion"
+        assert request(port, "POST", "/api/pages", {**normal, "theme": ""})[0] == 400
     finally:
         srv.shutdown()
         srv.server_close()

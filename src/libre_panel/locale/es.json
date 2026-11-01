@@ -2997,7 +2997,12 @@
     "When the PC starts, until Libre Panel shows its themes: {motion}.": "Al arrancar el PC, hasta que Libre Panel muestra sus temas: {motion}.",
     "The panel's own screens, in the look you choose and made for its size: the logo it shows when it is switched on, and the clip it plays when the PC starts, until Libre Panel shows its themes.": "Las pantallas propias del panel, con el aspecto que elijas y hechas para su tamaño: el logo que muestra al encenderse y el clip que reproduce al arrancar el PC, hasta que Libre Panel muestra sus temas.",
     "Card opacity": "Opacidad de las tarjetas",
-    "How much of the background the cards of every screen cover. Libre Panel's own themes let a little of it through; 100 % covers it all. What is on a card stays as it is.": "Cuánto del fondo cubren las tarjetas de cada pantalla. Los temas propios de Libre Panel dejan ver un poco; 100 % lo cubre del todo. Lo que hay en una tarjeta queda igual."
+    "How much of the background the cards of every screen cover. Libre Panel's own themes let a little of it through; 100 % covers it all. What is on a card stays as it is.": "Cuánto del fondo cubren las tarjetas de cada pantalla. Los temas propios de Libre Panel dejan ver un poco; 100 % lo cubre del todo. Lo que hay en una tarjeta queda igual.",
+    "The companion of panel 1's theme (now {name})": "El acompañante del tema del panel 1 (ahora {name})",
+    "The companion of panel 1's theme changes with it: Arena Companion while panel 1 shows Arena. A theme chosen by name stays, whatever panel 1 shows.": "El acompañante del tema del panel 1 cambia con él: Arena Companion mientras el panel 1 muestra Arena. Un tema elegido por su nombre se queda, muestre lo que muestre el panel 1.",
+    "A companion's name ends in “-companion”: panel 1 then leaves out what it shows.": "El nombre de un acompañante termina en «-companion»: así el panel 1 omite lo que muestra.",
+    "Panel {number} takes the colours, fonts and module frames of panel 1's theme: what you change of them here shows on it once it has a look of its own.": "El panel {number} toma los colores, las fuentes y los marcos de los módulos del tema del panel 1: lo que cambies de ellos aquí se verá en él cuando tenga un aspecto propio.",
+    "A look of its own": "Un aspecto propio"
   },
   "fields": {
     "agent": "agente",

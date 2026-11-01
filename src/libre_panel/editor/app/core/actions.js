@@ -7,7 +7,7 @@ import { toast, toastError } from "../ui/toast.js";
 import { endpoints } from "./api.js";
 import { clone, commit, docSerial, markClean, openDoc, setSelection, touch, updateDoc } from "./doc.js";
 import { t } from "./i18n.js";
-import { isVersion, rootOf, versionFor } from "./orientation.js";
+import { isCompanion, isVersion, rootOf, versionFor } from "./orientation.js";
 import { store } from "./state.js";
 import { designPages, refreshBeside, setDesignPage, target } from "./target.js";
 
@@ -175,11 +175,18 @@ export async function saveAs() {
   // (and "lumen-mine-1920x720" with "lumen-mine", as "lumen-1920x720" with "lumen"; the pair
   // version "lumen-mine-pair-1920x720" too)
   const end = doc.builtin && doc.id && isVersion({ id: doc.id }, all) ? doc.id.slice(rootOf(doc.id).length) : "";
-  const first = end
-    ? slug(copy ? t("{name} (mine)", { name: themeName(doc.id.slice(0, -end.length)) }) : doc.theme.name)
-    : slug(copy || doc.theme.name) || "my-theme"; // (a folder that is taken gets a number: below)
-  let suggestion = first + end;
-  for (let n = 2; doc.builtin && taken.has(suggestion); n++) suggestion = `${first}-${n}${end}`;
+  // and a copy of a companion stays one: "lumen-mine-companion", as "lumen-companion" goes beside
+  // "lumen", so panel 1 still leaves out what it shows on the panel beside it
+  const beside = doc.builtin && doc.id && isCompanion(doc.id) ? "-companion" : "";
+  const made = beside ? rootOf(doc.id).slice(0, -beside.length) : null; // ("lumen")
+  const first = beside && copy
+    ? slug(t("{name} (mine)", { name: themeName(made) }))
+    : end
+      ? slug(copy ? t("{name} (mine)", { name: themeName(doc.id.slice(0, -end.length)) }) : doc.theme.name)
+      : slug(copy || doc.theme.name) || "my-theme"; // (a folder that is taken gets a number: below)
+  const stem = beside && first.endsWith(beside) ? first.slice(0, -beside.length) : first;
+  let suggestion = stem + beside + end;
+  for (let n = 2; doc.builtin && taken.has(suggestion); n++) suggestion = `${stem}-${n}${beside}${end}`;
   const id = await promptDialog({
     title: t("Save as…"),
     // why a person who only wanted it on the panel is asked for a name
@@ -191,7 +198,11 @@ export async function saveAs() {
     value: doc.builtin || !doc.id ? suggestion : doc.id,
     confirm: t("Save"),
     validate: (value) =>
-      THEME_NAME.test(value) && !value.includes("..") ? null : t("“{id}” cannot be the name of a folder: use a–z, 0–9, - _ and . (no spaces).", { id: value }),
+      !THEME_NAME.test(value) || value.includes("..")
+        ? t("“{id}” cannot be the name of a folder: use a–z, 0–9, - _ and . (no spaces).", { id: value })
+        : beside && !isCompanion(value)
+          ? t("A companion's name ends in “-companion”: panel 1 then leaves out what it shows.")
+          : null,
   });
   if (!id) return false;
   const mine = themes.some((theme) => theme.id === id && !theme.builtin);

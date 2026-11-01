@@ -349,6 +349,20 @@
   line-height: 1.45;
 }
 
+/* a panel beside the first in panel 1's look: what is changed here waits for a look of its own */
+.look-note {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
 /* a block's switch: the pointer on it tries on what it would do */
 .look-switch {
   display: inline-flex;

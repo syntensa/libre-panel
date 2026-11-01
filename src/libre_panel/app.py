@@ -67,11 +67,13 @@ from libre_panel.theme.model import (
     ThemeError,
     companion_for,
     find_theme,
+    follows_first,
     is_companion,
     load_theme,
     pair_version,
     switches_for,
     theme_for,
+    unpaired_version,
     with_accent,
     with_card_opacity,
     with_look,
@@ -410,7 +412,9 @@ def _theme_name(
     first panel shows (``first``: Arena Companion beside Arena)."""
     named = _named(config, host, default, rotation, mode, first)
     shown = theme_for(named, config.device.orientation, panel_size(config, reported))
-    return (pair_version(shown) or shown) if paired else shown
+    if paired:
+        return pair_version(shown) or shown
+    return unpaired_version(shown) or shown  # (a pair version put on it while one was)
 
 
 # what a service's theme is, as an occasion of [transitions] (others: "manual")
@@ -472,7 +476,7 @@ def _named(
         own = config.modes.get(mode)
         if own is not None and own.theme:
             return own.theme
-    if first and is_companion(config.theme):  # beside Encore, Encore's companion
+    if first and follows_first(config.follow, config.theme):  # beside Encore, Encore's companion
         follow = companion_for(first)
         if follow:
             return follow

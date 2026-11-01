@@ -2997,7 +2997,12 @@
     "When the PC starts, until Libre Panel shows its themes: {motion}.": "PC起動時から、Libre Panelがテーマを表示するまで：{motion}。",
     "The panel's own screens, in the look you choose and made for its size: the logo it shows when it is switched on, and the clip it plays when the PC starts, until Libre Panel shows its themes.": "パネル自身の画面です。選んだ外観で、パネルのサイズに合わせて作られています。電源を入れたときに表示されるロゴと、PC起動時からLibre Panelがテーマを表示するまで再生されるクリップです。",
     "Card opacity": "カードの不透明度",
-    "How much of the background the cards of every screen cover. Libre Panel's own themes let a little of it through; 100 % covers it all. What is on a card stays as it is.": "各画面のカードが背景をどれだけ覆うか。Libre Panel のテーマは少しだけ背景を透かします。100 % で完全に覆います。カードの上の内容はそのままです。"
+    "How much of the background the cards of every screen cover. Libre Panel's own themes let a little of it through; 100 % covers it all. What is on a card stays as it is.": "各画面のカードが背景をどれだけ覆うか。Libre Panel のテーマは少しだけ背景を透かします。100 % で完全に覆います。カードの上の内容はそのままです。",
+    "The companion of panel 1's theme (now {name})": "パネル1のテーマのコンパニオン（現在は{name}）",
+    "The companion of panel 1's theme changes with it: Arena Companion while panel 1 shows Arena. A theme chosen by name stays, whatever panel 1 shows.": "パネル1のテーマのコンパニオンは、パネル1に合わせて切り替わります。パネル1がArenaを表示している間はArena Companionです。名前で選んだテーマは、パネル1が何を表示していても変わりません。",
+    "A companion's name ends in “-companion”: panel 1 then leaves out what it shows.": "コンパニオンの名前は「-companion」で終わります。そうするとパネル1は、コンパニオンが表示する内容を省きます。",
+    "Panel {number} takes the colours, fonts and module frames of panel 1's theme: what you change of them here shows on it once it has a look of its own.": "パネル{number}は、パネル1のテーマの色、フォント、モジュールの枠を使います。ここで変更した内容は、独自の外観にしたときに反映されます。",
+    "A look of its own": "独自の外観"
   },
   "fields": {
     "agent": "エージェント",

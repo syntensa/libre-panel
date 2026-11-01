@@ -33,6 +33,7 @@ from urllib.parse import ParseResult, parse_qs, unquote, urlparse
 
 from libre_panel import __version__, agents, agents_cloud, i18n, modes, notify, sequence
 from libre_panel.config import (
+    ALARM_THEME,
     CONFIG_FILENAME,
     DEFAULT_CARDS,
     DEFAULT_SYMBOLS,
@@ -81,7 +82,9 @@ from libre_panel.theme.model import (
     TOAST_ANCHORS,
     WIDGET_SPECS,
     ThemeError,
+    companion_for,
     find_theme,
+    follows_first,
     is_companion,
     list_themes,
     load_theme,
@@ -90,6 +93,7 @@ from libre_panel.theme.model import (
     save_theme,
     switches_for,
     theme_for,
+    unpaired_version,
     valid_theme_name,
     version_base,
     with_accent,
@@ -1317,14 +1321,16 @@ class EditorHandler(BaseHTTPRequestHandler):
     def _beside_pages(self, config: Config, n: int) -> dict[str, Any]:
         """The pages of the panel beside the first at ``[[panels]]`` ``n``: its theme, and the
         theme it shows while the first panel is in a game, plays music or is at rest, and
-        during an alarm. A page without one (None) shows the companion of the first panel's
-        theme where its own is a companion (Arena Companion beside Arena), else its own."""
+        during an alarm. While it follows the first panel (``follows``: [[panels]] follow, else
+        when its theme is a companion), it shows the companion of the first panel's theme
+        (Arena Companion beside Arena), and so does a page without a theme (None); else its
+        own theme."""
         panel = config.panels[n]
         running = self._panel_state().get("more") or []
         now = next((item for item in running if item.get("index") == n), {})
-        follows = is_companion(panel.theme)
+        follows = follows_first(panel.follow, panel.theme)
         pages = [{"id": "normal", "theme": panel.theme or now.get("theme") or None,
-                  "beside": True, "companion": follows}]  # fmt: skip
+                  "beside": True, "companion": follows, "follows": follows}]  # fmt: skip
         for page, key in BESIDE_PAGES.items():
             if page == "normal":
                 continue
@@ -1367,6 +1373,8 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._error(f"the page {page} needs a theme and has no frame rate of its own")
         if page in ("normal", "report") and theme is None and on is None:
             return self._error(f"the page {page} needs a theme")
+        if page == "normal" and theme:  # (the pair version, put on it while a companion ran)
+            theme = unpaired_version(theme) or theme
         keys = {"normal": "theme", "report": f"services.{Memory.name}.report_theme"}
         key = keys.get(page, f"modes.{page}.theme")
         changes: list[tuple[str, str, Any]] = []
@@ -1395,15 +1403,22 @@ class EditorHandler(BaseHTTPRequestHandler):
     def _set_beside_page(self, payload: dict[str, Any], page: str) -> None:
         """``{"panel": 2, "page": "media", "theme": ...}``: the theme a page of a panel beside
         the first shows (an empty one: the companion of the first panel's theme, else its
-        own), written to its ``[[panels]]`` table."""
+        own), written to its ``[[panels]]`` table. The normal page's theme is the panel's own
+        from then on, whatever the first panel shows; ``{"page": "normal", "follow": true}``
+        has it show the companion of the first panel's theme again (Lumen Companion beside
+        Lumen, Arena Companion beside Arena)."""
         try:
             config = load_config(self.state.config_path)
         except ConfigError as exc:
             return self._error(str(exc), HTTPStatus.CONFLICT)
         number = _panel_number(str(payload.get("panel")), config)
         theme = payload.get("theme")
+        follow = payload.get("follow") is True and page == "normal"
         if number is None or number < 2:
             return self._error("no such panel", HTTPStatus.NOT_FOUND)
+        if follow and theme is None:  # (its theme kept where it is a companion)
+            own = config.panels[number - 2].theme
+            theme = own if is_companion(own) else companion_for(config.theme) or ALARM_THEME
         if (
             page not in BESIDE_PAGES
             or not isinstance(theme, str)
@@ -1411,7 +1426,7 @@ class EditorHandler(BaseHTTPRequestHandler):
         ):
             return self._error(
                 "a page of a panel beside the first: normal, game, media or alarm, with a theme "
-                "(none: the companion's, for all but normal)"
+                "(none: the companion's, for all but normal), or normal with follow: true"
             )
         try:
             if theme:
@@ -1419,7 +1434,10 @@ class EditorHandler(BaseHTTPRequestHandler):
             settings = app_settings.Settings(self.state.config_path, self.controls,
                                              self.state.restart)  # fmt: skip
             tables = settings.read()["config"]["panels"]
-            tables[number - 2] = {**tables[number - 2], BESIDE_PAGES[page]: theme}
+            table = {**tables[number - 2], BESIDE_PAGES[page]: theme}
+            if page == "normal":  # chosen: its own, or the companion of the first's again
+                table["follow"] = follow
+            tables[number - 2] = table
             settings.write({"set": {"panels": tables}})
         except ThemeError as exc:
             return self._error(str(exc))

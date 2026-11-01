@@ -9,6 +9,11 @@ import { targetStatus, targetTable } from "./target.js";
 
 export const VERTICAL = "-vertical";
 
+// a theme made to go beside another on a second panel, its versions too: Lumen Companion beside
+// Lumen (theme.model.is_companion); while one runs, panel 1 leaves out what it shows
+const COMPANION = /-companion(-vertical|-\d+x\d+)?$/;
+export const isCompanion = (id) => COMPANION.test(id || "");
+
 let asked = false;
 
 /** How the panel is mounted ("" until config.toml has been read): the panel the app is about

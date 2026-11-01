@@ -9,6 +9,7 @@ import { versionBase } from "../../core/orientation.js";
 import { requestRender } from "../../core/preview.js";
 import { loadSettings, saveSettings, useConfig } from "../../core/settings.js";
 import { store, useStore } from "../../core/state.js";
+import { targetTable, useTarget } from "../../core/target.js";
 import { VOLUME_LOOKS, chooseVolumeLook, showVolume, volumeNotice } from "../../core/volume.js";
 import { html, useEffect, useState } from "../../lib/preact.js";
 import { navigate } from "../../shell/views.js";
@@ -478,11 +479,29 @@ function Ridges() {
 
 // -- the panel ------------------------------------------------------------------------------------
 
+/** A panel beside the first in panel 1's look (Settings → Panels, "Look as panel 1's"): its
+ * colours, fonts and module frames are panel 1's there, so what is changed of them here does
+ * not show on it. It says so, with the way to a look of its own. */
+function SameLookNote() {
+  const number = useTarget();
+  const same = useStore((s) => targetTable(s)?.same_look === true);
+  if (number < 2 || !same) return null;
+  const own = () =>
+    saveSettings((config) => ({
+      panels: (config?.panels || []).map((panel, i) => (i === number - 2 ? { ...panel, same_look: false } : panel)),
+    }));
+  return html`<div class="look-note" data-same-look>
+    <span>${t("Panel {number} takes the colours, fonts and module frames of panel 1's theme: what you change of them here shows on it once it has a look of its own.", { number })}</span>
+    <button type="button" class="btn" onClick=${own}>${t("A look of its own")}</button>
+  </div>`;
+}
+
 export function LookPanel() {
   useStore((s) => [s.rev, s.lang, s.render.size[0], s.render.size[1]]); // the sections read the theme as it is now
   if (!currentTheme()) return null;
   return html`<aside class="look-side" aria-label=${t("Look")}>
     <p class="look-intro">${t("Rest the pointer on a choice to try it on the picture; a click keeps it.")}</p>
+    <${SameLookNote} />
     <${Colours} />
     <${Background} theme=${currentTheme()} />
     <${Switches} />

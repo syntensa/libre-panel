@@ -2997,7 +2997,12 @@
     "When the PC starts, until Libre Panel shows its themes: {motion}.": "PC 启动时，直到 Libre Panel 显示其主题：{motion}。",
     "The panel's own screens, in the look you choose and made for its size: the logo it shows when it is switched on, and the clip it plays when the PC starts, until Libre Panel shows its themes.": "面板自带的屏幕，采用你选择的外观并按其尺寸制作：通电时显示的 Logo，以及 PC 启动时播放的短片，直到 Libre Panel 显示其主题。",
     "Card opacity": "卡片不透明度",
-    "How much of the background the cards of every screen cover. Libre Panel's own themes let a little of it through; 100 % covers it all. What is on a card stays as it is.": "每个屏幕的卡片遮住背景的程度。Libre Panel 自带的主题会略微透出背景；100% 则完全遮住。卡片上的内容保持不变。"
+    "How much of the background the cards of every screen cover. Libre Panel's own themes let a little of it through; 100 % covers it all. What is on a card stays as it is.": "每个屏幕的卡片遮住背景的程度。Libre Panel 自带的主题会略微透出背景；100% 则完全遮住。卡片上的内容保持不变。",
+    "The companion of panel 1's theme (now {name})": "面板 1 主题的伴侣主题（当前为 {name}）",
+    "The companion of panel 1's theme changes with it: Arena Companion while panel 1 shows Arena. A theme chosen by name stays, whatever panel 1 shows.": "面板 1 主题的伴侣主题会随之切换：面板 1 显示 Arena 时为 Arena Companion。按名称选择的主题会保持不变，无论面板 1 显示什么。",
+    "A companion's name ends in “-companion”: panel 1 then leaves out what it shows.": "伴侣主题的名称以“-companion”结尾：这样面板 1 会省去它所显示的内容。",
+    "Panel {number} takes the colours, fonts and module frames of panel 1's theme: what you change of them here shows on it once it has a look of its own.": "面板 {number} 使用面板 1 主题的颜色、字体和模块边框：你在这里对它们的更改，要等它有了自己的外观后才会显示。",
+    "A look of its own": "自己的外观"
   },
   "fields": {
     "agent": "智能体",

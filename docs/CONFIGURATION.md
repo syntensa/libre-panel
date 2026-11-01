@@ -346,11 +346,17 @@ cover (the companion shows it large, with the weather and the sun and moon); Alm
 twice and stays as it is, beside the weather of the next hours and days, the sun and moon and
 your appointments. No value shows on both: a companion's cores leave out the processor's load
 (the first panel's ring shows it), and its weather card says that no weather is set up instead
-of showing the date while the weather is off. A companion
-follows the first panel's page: Arena's beside Arena while you play, Encore's while music
-plays, Almanac's at rest, unless its `game_theme`, `media_theme` (or a page in Design) names a
-theme of its own. A companion that is away a moment (a reconnect) keeps the pair for ten
-seconds.
+of showing the date while the weather is off. A panel set to *The companion of panel 1's
+theme* (`follow = true`, as *Add a panel* suggests it) follows the first panel's theme and
+page: Arena's beside Arena while you play, Encore's while music plays, Almanac's at rest,
+unless its `game_theme`, `media_theme` (or a page in Design) names a theme of its own. A theme
+chosen for it by name stays, whatever the first panel shows (`follow = false`: Arena Companion
+beside Lumen); a table without `follow` follows where its theme is a companion, as before 0.8.
+A companion changed in Design is saved as one of your own that is a companion still
+(`lumen-mine-companion`, its name ends in `-companion`), so the first panel goes on leaving out
+what it shows; a pair version put on the first panel from Design is that theme's, shown whole
+again without a companion beside it. A companion that is away a moment (a reconnect) keeps the
+pair for ten seconds.
 
 **Each panel at its own pace.** The app runs each panel beside the first in a process of its
 own, on the first panel's readings: two panels in the smooth mode do not wait for each other,
@@ -368,6 +374,8 @@ port = "COM6"                  # serial panels: which of two of the same kind it
                                # shows the companion of the first panel's theme then)
 # alarm_theme = "lumen-companion"  # while a sensor is at its crit limit ("": its own)
 # same_look = true             # its theme in the look of the one the first panel shows
+# follow = true                # the companion of the first panel's theme, whichever that
+                               # is; false: its own theme, whatever the first panel shows
 # video = { mode = "auto", local_clip = "..." }  # smooth motion on it too, its own clip
 # follow_brightness = true     # its brightness as the first panel's, at night and while
 # brightness_offset = 10       # you are away too, with this added (-50 to 50: some panels
@@ -387,7 +395,8 @@ panels* saves one picture of them where they stand, each with what it shows now,
 share.
 In *Design*, a module's menu has *Copy to panel 2* and *Move to panel 2*: the module goes on
 free cells of the theme that panel shows, and a theme that comes with Libre Panel gets a copy
-of your own first (`lumen-companion-own`), which the panel shows from then on.
+of your own first (`lumen-own-companion`, a companion still), which the panel shows from then
+on.
 
 Above them the panels stand in their real sizes (from each model's diagonal and pixels, the
 way it is mounted), with what each shows, beside a monitor to place them by (24″ to 34″, or
@@ -428,7 +437,8 @@ glides on both at once, and the same fan stands the same on panels that draw at 
 rate. With `same_look` a panel's theme takes the colours of the theme the first panel
 shows (its palette, by name), its background colour, its fonts and how it frames its modules
 (`style`, and the module frames switched on or off for it); what is where and the pictures
-stay its own, and a change saved in Design shows on both at once. A change in config.toml
+stay its own, and a change saved in Design shows on both at once; while it is on, *Look* says
+so for that panel, with *A look of its own* to switch it off. A change in config.toml
 reaches every panel, and a panel that is added, switched on or off, or taken out starts or
 ends while the others go on.
 
