@@ -21,7 +21,9 @@ ways after a while (``lhm_service.WAIT_SECONDS``), and takes over again when it 
 Either way every sensor is exposed under its raw id (``lhm:/amdcpu/0/temperature/2``) and
 the common ones also get friendly aliases such as ``cpu.temp``, ``gpu.load`` or ``mem.temp``
 (the hottest memory module), made by the same code. With several GPUs the dedicated one is
-used; ``gpu = "RTX 4070"`` picks one by name.
+used; ``gpu = "RTX 4070"`` picks one by name. A WireView Pro II on the graphics card's cable
+(the sensor service and the web server read it) gives ``gpu.cable.power``, its current, each
+pin's current and voltage, and ``gpu.cable.pin.max``.
 
 When the web server stops answering, its readings are kept for
 ``stale_seconds`` (5 by default) and then dropped, so the panel shows "--"
@@ -86,6 +88,18 @@ _GPU_ALIASES = {
     "gpu.mem.used": ("smalldata", ("GPU Memory Used",)),
     "gpu.fan": ("fan", ("GPU Fan", "GPU Fan 1")),
 }
+# A power monitor on the graphics card's 12V-2x6 cable, Thermal Grizzly's WireView Pro II
+# (LibreHardwareMonitor's /gpu-powermonitor/<port>): what flows through the cable, under keys
+# that stay when it is plugged into another port (its raw keys carry the port's name).
+# alias -> (sensor type, its name in LibreHardwareMonitor, the reading's label)
+_CABLE_ALIASES = {
+    "gpu.cable.power": ("power", "Total Power", "GPU cable power"),
+    "gpu.cable.current": ("current", "Total Current", "GPU cable current"),
+    **{f"gpu.cable.pin{n}.current": ("current", f"Pin {n} Current", f"Cable pin {n} current")
+       for n in range(1, 7)},
+    **{f"gpu.cable.pin{n}.voltage": ("voltage", f"Pin {n} Voltage", f"Cable pin {n} voltage")
+       for n in range(1, 7)},
+}  # fmt: skip
 
 
 def parse_value(text: Any) -> tuple[float | None, str]:
@@ -117,6 +131,8 @@ def _kind(hardware_id: str) -> str:
     head = hardware_id.strip("/").split("/", 1)[0].lower()
     if "cpu" in head:
         return "cpu"
+    if head == "gpu-powermonitor":  # on the graphics card's cable, not a graphics card
+        return "powermonitor"
     if head.startswith("gpu"):
         return "gpu"
     return head
@@ -266,6 +282,7 @@ def readings_from_sensors(
         out["gpu.name"] = Reading("gpu.name", tidy_gpu(gpus[0].name), "", "GPU")
     _temperatures_and_fans(list(devices.values()), out)
     modules = _memory_temperature(list(devices.values()), out)
+    pins = _cable(list(devices.values()), out)
     if sources is not None:
         for key, reading in out.items():
             origin = reading.origin or (key if key.startswith("lhm:") else "")
@@ -274,6 +291,8 @@ def readings_from_sensors(
             sources["cpu.freq"] = averaged
         if modules:  # whichever module is the hottest: all of them are read
             sources["mem.temp"] = modules
+        if pins:  # (the same for the pins)
+            sources["gpu.cable.pin.max"] = pins
     return out
 
 
@@ -302,6 +321,8 @@ def _temperatures_and_fans(devices: list[_Device], out: dict[str, Reading]) -> N
                 name = device.name
             elif device.kind in ("cpu", "gpu") and not label.lower().startswith(device.kind):
                 name = f"{device.kind.upper()} {label}"
+            elif device.kind == "powermonitor":  # "WireView Pro II Onboard Temperature In"
+                name = f"{device.name} {label}"
             else:
                 name = label
             out.setdefault(key, Reading(key, reading.value, reading.unit, name, reading.key))
@@ -329,6 +350,33 @@ def _memory_temperature(devices: list[_Device], out: dict[str, Reading]) -> tupl
         "mem.temp", hottest.value, hottest.unit or "°C", "Memory temperature", hottest.key
     )
     return tuple(reading.key[4:] for reading in found)
+
+
+def _cable(devices: list[_Device], out: dict[str, Reading]) -> tuple[str, ...]:
+    """``gpu.cable.*`` from the first power monitor on the graphics card's cable (the
+    WireView Pro II), and ``gpu.cable.pin.max``: the current of the pin that carries the most,
+    what a connector that is not seated well shows first. Returns the ids of the pins' current
+    sensors."""
+    monitor = next((d for d in devices if d.kind == "powermonitor"), None)
+    if monitor is None:
+        return ()
+    for alias, (sensor_type, name, label) in _CABLE_ALIASES.items():
+        src = monitor.sensors.get((sensor_type, name))
+        if src is not None:
+            out[alias] = Reading(alias, src.value, src.unit, label, src.key)
+    pins = [
+        reading
+        for n in range(1, 7)
+        if (reading := monitor.sensors.get(("current", f"Pin {n} Current"))) is not None
+        and isinstance(reading.value, float)
+    ]
+    if not pins:
+        return ()
+    most = max(pins, key=lambda reading: reading.value)
+    out["gpu.cable.pin.max"] = Reading(
+        "gpu.cable.pin.max", most.value, most.unit or "A", "Cable pin current (highest)", most.key
+    )
+    return tuple(reading.key[4:] for reading in pins)
 
 
 # This PC's own web server is asked directly: a system proxy would not reach it.

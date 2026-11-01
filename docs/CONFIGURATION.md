@@ -1958,8 +1958,8 @@ zip offers *Unlock all sensors* on Start and in *Settings → Sensors*, which se
 after one question of Windows. The service runs LibreHardwareMonitor with the rights its
 sensors need and reads every kind of hardware it knows: the processor (temperature, power,
 clock), the graphics cards, the mainboard's temperatures and fans, the memory modules'
-temperature, the drives' temperatures, fan controllers, pumps and power supplies where there
-are any. Libre Panel asks it for the readings over a local pipe, only for the parts a theme on
+temperature, the drives' temperatures, fan controllers, pumps, power supplies and a
+WireView Pro II on the graphics card's cable where there are any. Libre Panel asks it for the readings over a local pipe, only for the parts a theme on
 show reads, and itself runs without administrator rights. The same command sets it up from a
 terminal opened as administrator:
 

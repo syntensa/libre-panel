@@ -198,6 +198,79 @@ def test_lhm_memory_temperature_is_made_from_every_module_so_all_are_read():
     assert sources["cpu.temp"] == ("/amdcpu/0/temperature/2",)  # the others are as they were
 
 
+def wireview(port="COM5", pins=(8.2, 8.4, 9.9, 8.1, 8.3, 8.0)):
+    """Thermal Grizzly's WireView Pro II as LibreHardwareMonitor lists it (its power monitors,
+    WireViewPro2.cs): /gpu-powermonitor/<port>, on the graphics card's 12V-2x6 cable."""
+    at = f"/gpu-powermonitor/{port}"
+
+    def group(name, *sensors):
+        return {"Text": name, "Children": list(sensors)}
+
+    def sensor(kind, index, label, value, unit):
+        return {
+            "Text": label,
+            "Value": f"{value:.1f} {unit}".replace(".", ","),
+            "SensorId": f"{at}/{kind.lower()}/{index}",
+            "Type": kind,
+            "Children": [],
+        }
+
+    return {
+        "Text": "WireView Pro II",
+        "HardwareId": at,
+        "Children": [
+            group("Temperatures", sensor("Temperature", 0, "Onboard Temperature In", 38.5, "°C"),
+                  sensor("Temperature", 1, "Onboard Temperature Out", 41.0, "°C")),
+            group("Voltages", *(sensor("Voltage", 10 + n, f"Pin {n + 1} Voltage", 12.1, "V")
+                                for n in range(6))),
+            group("Currents", sensor("Current", 20, "Total Current", sum(pins), "A"),
+                  *(sensor("Current", 21 + n, f"Pin {n + 1} Current", value, "A")
+                    for n, value in enumerate(pins))),
+            group("Powers", sensor("Power", 30, "Total Power", 12.1 * sum(pins), "W")),
+            group("Fans", sensor("Fan", 40, "Fan", 1450, "RPM")),
+        ],
+    }  # fmt: skip
+
+
+def test_lhm_a_wireview_on_the_gpus_cable_is_no_gpu_and_gives_the_cables_readings():
+    """Discussion #38: LibreHardwareMonitor's id for it begins with "gpu", which made it a second
+    graphics card here: the real one's temperatures were renamed (temp.gpu1.*)."""
+    from libre_panel.sensors.librehardwaremonitor import readings_from_sensors, sensors_from_tree
+
+    plain = readings_from_tree(lhm_fixture())
+    tree = lhm_fixture()
+    tree["Children"][0]["Children"].insert(0, wireview())
+    out = readings_from_tree(tree)
+    for key in ("gpu.temp", "gpu.power", "gpu.load", "gpu.name"):
+        assert out[key] == plain[key]  # the graphics card's, as before
+    gpu_keys = {k for k in plain if k.startswith(("temp.gpu", "fan.gpu"))}
+    assert gpu_keys and gpu_keys <= set(out) and not any(k.startswith("temp.gpu1") for k in out)
+    power = out["gpu.cable.power"]
+    assert (power.value, power.unit, power.label) == (615.9, "W", "GPU cable power")
+    assert power.origin == "lhm:/gpu-powermonitor/COM5/power/30"
+    assert out["gpu.cable.current"].value == pytest.approx(50.9)
+    assert (out["gpu.cable.pin3.current"].value, out["gpu.cable.pin3.current"].unit) == (9.9, "A")
+    assert out["gpu.cable.pin6.voltage"].value == 12.1
+    most = out["gpu.cable.pin.max"]  # the pin that carries the most
+    assert (most.value, most.origin) == (9.9, "lhm:/gpu-powermonitor/COM5/current/23")
+    inside = out["temp.powermonitor.onboard_temperature_in"]
+    assert (inside.value, inside.label) == (38.5, "WireView Pro II Onboard Temperature In")
+    assert out["fan.powermonitor.fan"].value == 1450
+    # on another port: the same keys
+    moved = lhm_fixture()
+    moved["Children"][0]["Children"].append(wireview("COM9"))
+    assert readings_from_tree(moved)["gpu.cable.power"].origin.startswith(
+        "lhm:/gpu-powermonitor/COM9"
+    )
+    # whichever pin carries the most next time: all six are read
+    sources = {}
+    readings_from_sensors(sensors_from_tree(tree), None, sources)
+    assert sources["gpu.cable.pin.max"] == tuple(
+        f"/gpu-powermonitor/COM5/current/{21 + n}" for n in range(6)
+    )
+    assert "gpu.cable.power" not in plain  # without one: none
+
+
 def test_lhm_throughput_uses_raw_bytes():
     leaf = {
         "Text": "Download Speed",

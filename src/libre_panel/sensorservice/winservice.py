@@ -31,8 +31,11 @@ from libre_panel.sensorservice import SERVICE_NAME
 log = logging.getLogger(__name__)
 
 # Opened after the kinds that Libre Panel reads itself (lhm_inprocess.open_computer), one at a
-# time, so that a kind that cannot be read (a library missing) costs only itself.
-MORE_HARDWARE = ("IsStorageEnabled", "IsControllerEnabled", "IsPsuEnabled", "IsBatteryEnabled")
+# time, so that a kind that cannot be read (a library missing) costs only itself. Power
+# monitors: the WireView Pro II on the graphics card's cable, a COM port that
+# LibreHardwareMonitor opens for each reading only (its own program beside it still connects).
+MORE_HARDWARE = ("IsStorageEnabled", "IsControllerEnabled", "IsPsuEnabled", "IsBatteryEnabled",
+                 "IsPowerMonitorEnabled")  # fmt: skip
 RETRY_SECONDS = 5.0  # the pipe's name is taken: try again after this long
 LOG_BYTES = 1_000_000
 
@@ -40,7 +43,7 @@ LOG_BYTES = 1_000_000
 def open_everything(dll_dir: Path) -> Any:
     """LibreHardwareMonitor's ``Computer``, open on every kind of hardware it reads: CPU, GPU,
     memory, mainboard and network, then drives, controllers (fan controllers, pumps), power
-    supplies and batteries where there are any."""
+    supplies, batteries and power monitors where there are any."""
     from libre_panel.sensors.lhm_inprocess import open_computer
 
     computer = open_computer(dll_dir)

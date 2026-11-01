@@ -2,7 +2,24 @@
 
 ## Unreleased
 
+**New**
+- **Thermal Grizzly's WireView Pro II on the panel** (discussion #38). What flows through the
+  graphics card's 12V-2x6 cable, as the WireView between them measures it, can be shown:
+  `gpu.cable.power` and `gpu.cable.current`, each of the six pins' current and voltage
+  (`gpu.cable.pin1.current` ... `gpu.cable.pin6.voltage`), and `gpu.cable.pin.max`, the pin that
+  carries the most, which is the first to show a connector that is not seated well; its
+  temperatures and fan as `temp.powermonitor.<name>` and `fan.powermonitor.fan`. The keys stay
+  the same whichever USB port it is plugged into. The sensor service now reads
+  LibreHardwareMonitor's power monitors too (the WireView's port only for each reading, so
+  Thermal Grizzly's own app still connects beside it); LibreHardwareMonitor's web server gives
+  them as well.
+
 **Fixed**
+- **A WireView Pro II is no longer taken for a second graphics card.** LibreHardwareMonitor
+  names it `/gpu-powermonitor/<port>`, and Libre Panel took everything whose name begins with
+  "gpu" for a graphics card: read through LibreHardwareMonitor's web server, the WireView came
+  in as a second one, and the real card's temperatures and fans moved from `temp.gpu.*` to
+  `temp.gpu1.*`, where a theme no longer found them.
 - **Round frames with a ridge are lit all round, without steps.** A theme can make its rects'
   outlines ridges (`ridge` in its theme.json, as SPUR II's frames were), whose two facets catch
   the light or lie in its shade. Which way each point faces was worked out across rows and

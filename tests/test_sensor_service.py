@@ -757,6 +757,7 @@ def test_every_kind_of_hardware_is_opened_and_a_kind_that_fails_costs_only_itsel
     monkeypatch.setattr(lhm_inprocess, "open_computer", lambda folder: computer)
     assert winservice.open_everything("libs") is computer
     assert computer.IsControllerEnabled and computer.IsPsuEnabled and computer.IsBatteryEnabled
+    assert computer.IsPowerMonitorEnabled  # the WireView Pro II on the graphics card's cable
     said = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
     assert said == ["LibreHardwareMonitor cannot read Storage: DiskInfoToolkit is missing"]
 
