@@ -122,6 +122,8 @@ class DemoProvider(SensorProvider):
                 value = min(100.0, max(0.0, value))
             out[key] = Reading(key, value, unit, label)
         out["sys.uptime"] = Reading("sys.uptime", 3 * 86400 + 5 * 3600 + 42 * 60, "s", "Uptime")
+        # a round played for an hour and seven minutes, its seconds going on
+        out["game.time"] = Reading("game.time", 3600 + 7 * 60 + int(t) % 60, "s", "Played")
         out.update(demo_details(t, out))
         out.update(sky_readings(t, *DEMO_PLACE))
         out.update(demo_media(t))
@@ -181,6 +183,10 @@ def demo_details(t: float, waves: dict[str, Reading]) -> dict[str, Reading]:
     out["battery.state"] = Reading("battery.state", "On battery", "", "Battery")
     out["battery.left"] = Reading("battery.left", 2 * 3600 + 40 * 60, "s", "Battery time left")
     out["net.ip"] = Reading("net.ip", "192.168.1.20", "", "IP address")
+    from libre_panel.sensors.netlink import WLAN, Link
+    from libre_panel.sensors.psutil_provider import link_readings
+
+    out.update(link_readings(Link(WLAN, 866.7, 82.0)))  # (a good Wi-Fi)
     out["game.app"] = Reading("game.app", "Starfall", "", "Game")
     out["game.limiter"] = Reading("game.limiter", "gpu", "", "Limited by")
     out["audio.muted"] = Reading("audio.muted", 0, "", "Muted")

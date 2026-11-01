@@ -5,9 +5,11 @@ settings, or any program of a game installed through Steam, another launcher
 (services/launchers.py) or in a folder named in the settings whose window has
 been in front once (where Libre Panel cannot tell which window is in front,
 any program of such a game that runs). Once it finds one, it publishes the
-game's name (``game.name``) and its logo from Steam's cache (``game.logo``),
-and switches to the mode ``game`` (``[modes.game]``: its own frame rate and
-theme) with an entrance that shows the logo. A few seconds after the game ends
+game's name (``game.name``), its logo from Steam's cache (``game.logo``) and
+how long it has been played (``game.time``, in seconds, each second: since its
+program started, where that can be told), and switches to the mode ``game``
+(``[modes.game]``: its own frame rate and theme) with an entrance that shows the
+logo. A few seconds after the game ends
 it switches back, with the entrance for the end.
 
 The logo stays after the game, until the next one comes: the round report that
@@ -37,6 +39,7 @@ from libre_panel.services.steam import Library
 
 NAME = "game.name"
 LOGO = "game.logo"
+TIME = "game.time"
 MODE = "game"
 SAMPLE_WAIT_S = 1.0  # at most so long the switch waits for a sample that has the logo
 TICK_S = 0.2  # how often the worker looks at that deadline while it waits
@@ -215,6 +218,8 @@ class Game(Service):
         self.logo: Image.Image | None = None
         self.in_mode = False
         self.waiting: float | None = None  # since when the switch waits for a sample with the logo
+        self.since: float | None = None  # on ``clock``: since when the game has been played
+        self._played = -1  # the seconds ``game.time`` said last
         self._lock = threading.RLock()
         self._ended = threading.Event()
         self._thread: threading.Thread | None = None
@@ -242,10 +247,13 @@ class Game(Service):
         due = self.clock() + self.poll_s  # not at once: the panel is still starting
         while True:
             wait = TICK_S if self.waiting is not None else max(0.01, due - self.clock())
+            if self.since is not None:  # the time played goes on second by second
+                wait = min(wait, max(0.01, 1.0 - (self.clock() - self.since) % 1.0))
             if self._ended.wait(wait):
                 return
             try:
                 self.advance()
+                self.tick()
                 if self.clock() >= due:
                     due = self.clock() + self.poll_s
                     self.detect()
@@ -283,6 +291,10 @@ class Game(Service):
                 presentmon.set_target(program_of(found))
             return  # still the same game
         self.found, self.logo = found, self._logo_of(found)
+        running = self.machine.running_s(found.pid) if found.pid else None
+        self.since = now - (running if running is not None else 0.0)
+        self._played = -1
+        self.tick()
         self.host.log.info("game: %s", found.name)
         presentmon.set_target(program_of(found))  # its frames are the ones that count
         self.host.publish(NAME, found.name, "", "Game")
@@ -293,6 +305,16 @@ class Game(Service):
             self._enter()
         else:  # the first game screen should have the logo: wait for a sample that has it
             self.waiting = now
+
+    def tick(self) -> None:
+        """Say how long the game has been played (``game.time``), once a second."""
+        with self._lock:
+            if self.since is None or self._ended.is_set():
+                return
+            played = int(max(0.0, self.clock() - self.since))
+            if played != self._played:
+                self._played = played
+                self.host.publish(TIME, played, "s", t("Played"))
 
     def _logo_of(self, found: Found) -> Image.Image | None:
         if not (self.options["logo"] and found.appid):
@@ -329,8 +351,10 @@ class Game(Service):
                 self._announce(t("Game ended"))
         self.host.log.info("game over" if was_in_mode else "game gone before the mode began")
         self.waiting, self.in_mode, self.found, self.logo = None, False, None, None
+        self.since, self._played = None, -1
         presentmon.set_target(None)
         self.host.publish(NAME, None, "", "Game")
+        self.host.publish(TIME, None, "s", t("Played"))
         if not was_in_mode:  # a game that was played leaves its logo for the round report
             self.host.publish_image(LOGO, None)
 

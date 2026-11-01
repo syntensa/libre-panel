@@ -3015,7 +3015,9 @@
     "Put it on the panel": "Ponerlo en el panel",
     "As made": "Como se hizo",
     "Light colours": "Colores claros",
-    "Light colours suit a white PC: every screen keeps its own colours, worked out for a light ground. The pictures of the themes show them as the panel does.": "Los colores claros van bien con un PC blanco: cada pantalla conserva sus propios colores, calculados para un fondo claro. Las imágenes de los temas los muestran como el panel."
+    "Light colours suit a white PC: every screen keeps its own colours, worked out for a light ground. The pictures of the themes show them as the panel does.": "Los colores claros van bien con un PC blanco: cada pantalla conserva sus propios colores, calculados para un fondo claro. Las imágenes de los temas los muestran como el panel.",
+    "Wi-Fi": "Wi-Fi",
+    "LAN": "Ethernet"
   },
   "fields": {
     "agent": "agente",
@@ -3369,7 +3371,13 @@
     "wind": "Viento",
     "mic": "Micrófono",
     "mic_off": "Micrófono apagado",
-    "agent": "Agente de IA"
+    "agent": "Agente de IA",
+    "ethernet": "Cable de red",
+    "wifi": "Wi-Fi",
+    "wifi-1": "Wi-Fi débil",
+    "wifi-2": "Wi-Fi medio",
+    "link": "Conexión (cable/Wi-Fi)",
+    "uptime": "Tiempo encendido"
   },
   "days": [
     "lunes",

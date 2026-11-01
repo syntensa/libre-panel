@@ -36,7 +36,7 @@ from libre_panel import clock, i18n, timezones
 from libre_panel.config import DEFAULT_SYMBOLS, SYMBOL_PACKS
 from libre_panel.fonts import DEFAULT_FONT, builtin_font_path
 from libre_panel.fonts.fallback import cursive, truetype
-from libre_panel.icons import draw_icon, weather_icon_name
+from libre_panel.icons import draw_icon, link_icon, weather_icon_name
 from libre_panel.render import cover, fan, fan_looks, kept, lists, moving
 from libre_panel.render import finish as finishes
 from libre_panel.render.countdown import countdown_text
@@ -2892,6 +2892,9 @@ class Renderer:
     def _icon_name(self, widget: dict[str, Any], snapshot: Snapshot) -> str:
         """The icon to show: the widget's, or for ``weather`` the weather's now."""
         name = widget["icon"]
+        if name == "link":  # the network connection: a cable, or Wi-Fi as strong as it is
+            return link_icon(snapshot.value(widget.get("sensor") or "net.link.kind"),
+                             snapshot.value("net.wifi.signal"))  # fmt: skip
         if name == "weather":
             key = widget.get("sensor") or "weather.code"
             # day or night: the forecast says so for its hours (weather.hour.3.day),

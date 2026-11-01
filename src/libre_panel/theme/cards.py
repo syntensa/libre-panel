@@ -584,6 +584,7 @@ def build_net(b: _Build, src: M.Source) -> None:
     thin = max(1, round(1.5 * ref.g))
     b.add("rect", "rule", x=round(left), y=round(ref.y(37)), w=round(width + ref.s(6)), h=thin,
           color=M.mix(color, b.c("surface"), 0.55))  # fmt: skip
+    _link(b, ref, right, left + width + ref.s(24))
     for i, (key, name) in enumerate((("net.up", t("Up")), ("net.down", t("Down")))):
         baseline = (81, 125)[i]
         first = len(b.out)
@@ -618,6 +619,23 @@ def build_net(b: _Build, src: M.Source) -> None:
                   glow=round(0.35 * b.glow, 2), glow_radius=max(2, round(ref.g * 6)))  # fmt: skip
         b.add("rect", "axis", x=round(gx), y=round(mid), w=round(gw), h=max(1, round(ref.g)),
               color=b.c("line"))  # fmt: skip
+
+
+def _link(b: _Build, ref: _Ref, right: float, room_from: float) -> None:
+    """How the PC is connected, at the right of the title: by cable or Wi-Fi and how fast
+    (``net.link.text``: "Wi-Fi · 866 Mbit/s"), and its symbol: a cable's plug, or Wi-Fi's arcs
+    lit as strong as its signal is (the icon ``link``). Nothing where it cannot be told."""
+    size = ref.s(19)
+    icon = ref.s(24)
+    mid = ref.y(30) - CAP * ref.s(26) / 2  # (the middle of the title's capitals)
+    text_right = right - icon - ref.s(8)
+    if text_right - room_from < ref.s(60):
+        return
+    b.icon("link", "link", right - icon, mid - icon / 2, icon, b.c("text3"))
+    b.out[-1]["needs"] = "net.link.kind"
+    b.value("link-text", "net.link.text", "{value}", text_right, mid - CAP * size / 2, size,
+            color=b.c("text3"), align="right", width=text_right - room_from, font="text_font",
+            tabular=False, hide_if_missing=True, fallback="")  # fmt: skip
 
 
 # -- a slot: one card of several ---------------------------------------------------------------

@@ -312,6 +312,53 @@ def test_the_game_ends_a_few_seconds_after_its_program(desk):
     assert d.host.images()["game.logo"].size == (440, 120)  # ...its logo stays: the round report
 
 
+def test_the_time_played_counts_each_second_from_when_the_game_started(desk):
+    d = desk()
+    pid = d.play()
+    d.machine.ages[pid] = 90.4  # (it ran before the panel found it: the panel came later)
+    d.look()
+    played = d.host.published()["game.time"]
+    assert (played.value, played.unit) == (90, "s")
+    d.clock.now += 2.7
+    d.service.tick()
+    assert d.host.published()["game.time"].value == 93
+    d.machine.end(pid)
+    d.look(10)  # over
+    assert d.host.published()["game.time"].value is None
+    d.machine.start("game.exe", 101, game_path(d.root, "SpaceGame", "game.exe"))
+    d.machine.front = 101
+    d.look()  # a new round: from its start (not known here: from when it was found)
+    assert d.host.published()["game.time"].value == 0
+
+
+def test_the_worker_says_the_time_played_as_it_goes_on(desk):
+    import time
+
+    d = desk(poll_s=0.25)  # (the worker finds the game itself, on the real clock)
+    d.service.clock = time.monotonic
+    d.play()
+
+    def played():
+        found = d.host.published().get("game.time")
+        return found.value if found is not None else None
+
+    assert wait_for(lambda: played() is not None, timeout=5)
+    assert wait_for(lambda: played() >= 2, timeout=5)
+
+
+def test_another_program_of_the_same_game_goes_on_with_its_time(desk):
+    d = desk()
+    pid = d.play(exe="launcher.exe")
+    d.machine.ages[pid] = 30
+    d.look()
+    d.play(pid=200, exe="game-win64.exe")
+    d.machine.ages[200] = 5
+    d.look(4)
+    d.service.tick()  # (the worker's, each second)
+    assert d.service.found.pid == 200
+    assert d.host.published()["game.time"].value == 34  # the game's, not its new program's
+
+
 def test_without_the_entrance_a_message_says_so(desk):
     d = desk(entrance=False)
     pid = d.play()

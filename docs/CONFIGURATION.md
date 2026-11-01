@@ -1411,7 +1411,9 @@ theme = "slate"        # optional: another theme
   such a game is enough.
 - **The beginning.** The service shows the name (`game.name`) and the logo
   (`game.logo`, an image: `"src": "@game.logo"` in an image widget) to the
-  screens, then switches. The logo comes from Steam's picture cache, cut out
+  screens, then switches. While the game runs it says each second how long it
+  has been played (`game.time`, from when its program started: Arena shows it
+  beside the clock). The logo comes from Steam's picture cache, cut out
   and not scaled, or the game's header picture; a program that is not a Steam
   game shows its name in big letters. The switch waits for the next reading
   (at most a second) so that the first game screen already has the logo.

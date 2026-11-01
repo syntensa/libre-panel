@@ -78,6 +78,13 @@ class Machine:
         """Whether a program is recording right now (Windows; elsewhere False)."""
         return microphone_in_use_windows() if self.platform == "win32" else False
 
+    def running_s(self, pid: int) -> float | None:
+        """Seconds since the process ``pid`` started, None if it cannot be told."""
+        try:
+            return max(0.0, time.time() - psutil.Process(pid).create_time())
+        except (OSError, psutil.Error):
+            return None
+
     def uptime_s(self) -> float | None:
         """Seconds since the system started, None if it cannot be told."""
         try:

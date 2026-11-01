@@ -3,6 +3,20 @@
 ## Unreleased
 
 **New**
+- **Lumen says how the PC is connected, and how long it has been on.** The NET card names, at
+  the right of its title, what the PC reaches the internet by: a cable with its speed
+  ("LAN · 1 Gbit/s", a plug) or Wi-Fi with its speed and a symbol whose three arcs light as
+  strong as the signal is ("WLAN · 866 Mbit/s"). It is read every ten seconds while a theme
+  shows it, without rights and without starting anything but `iw` (Linux, where it is
+  installed, for the Wi-Fi's rate): the connection of the default route, on Windows the adapter
+  Windows sends to the internet by, the signal from the WLAN service. Under the seconds, at
+  the foot of the clock's digits, how long the PC has been on (⏻ 3d 5h), in every version of
+  Lumen. New readings `net.link`, `net.link.speed`, `net.link.text`, `net.wifi.signal`; new
+  icons `link` (it follows the connection), `uptime`, `ethernet`, `wifi`.
+- **Arena says how long the game has been played.** The game service says it each second
+  (`game.time`), counted from when the game's program started, also where the panel came
+  later; Arena shows it on the line of the clock ("PLAYED 1:07:32 · 22:13"), and on standing
+  panels, where that line has no room, as the last reading beside the frame rate.
 - **Light colours, for a white PC** (*Settings → Panel → Colours*, `light_colours`). Every
   screen on a light ground, each in its own colours: Lumen's teal, Arena's, Encore's cover,
   Almanac's calendar, the weather's clouds. Each colour is worked out anew by the job it does

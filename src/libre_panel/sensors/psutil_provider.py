@@ -16,6 +16,7 @@ from typing import Any
 
 import psutil
 
+from libre_panel.sensors import netlink
 from libre_panel.sensors.base import Reading, SensorProvider, wanted
 from libre_panel.sensors.hwmon import CHIP_NAMES as _CHIP_NAMES
 from libre_panel.sensors.hwmon import slug as _slug
@@ -78,6 +79,8 @@ class PsutilProvider(SensorProvider):
         self._partitions: list[tuple[str, str]] = []  # (mount point, name)
         self._partitions_at = 0.0
         self._ip, self._ip_at = "", -1e9
+        self._link: dict[str, Reading] = {}  # how the PC is connected (netlink), and when read
+        self._link_at = -1e9
         self._day: date | None = None
         self._day_start = None  # counters at midnight (or start)
         # what the ping connects to: a host:port, or a list of up to four (net.ping.2 ...)
@@ -225,6 +228,10 @@ class PsutilProvider(SensorProvider):
         ip = self._ip
         if ip:
             out["net.ip"] = Reading("net.ip", ip, "", "IP address")
+        if wanted("net.link") or wanted("net.wifi"):  # (only while a theme shows it)
+            if now - self._link_at >= LINK_EVERY_S:
+                self._link, self._link_at = link_readings(netlink.read()), now
+            out.update(self._link)
         net = self._last_net
         if net is None:
             return
@@ -409,6 +416,30 @@ class PsutilProvider(SensorProvider):
 
 
 _PREFIXES = {"proc": "proc.", "ping": "net.ping"}
+LINK_EVERY_S = 10.0  # how often the connection is looked at (net.link)
+
+
+def link_readings(link: netlink.Link | None) -> dict[str, Reading]:
+    """How the PC is connected, as readings: ``net.link`` ("LAN", "Wi-Fi"), ``net.link.kind``
+    ("lan", "wlan": the icon ``link`` follows it), ``net.link.speed`` (Mbit/s),
+    ``net.wifi.signal`` (%) and ``net.link.text`` ("Wi-Fi · 866 Mbit/s")."""
+    from libre_panel.i18n import t
+
+    if link is None:
+        return {}
+    said = t("Wi-Fi") if link.kind == netlink.WLAN else t("LAN")
+    out = {
+        "net.link": Reading("net.link", said, "", "Connection"),
+        "net.link.kind": Reading("net.link.kind", link.kind, "", "Connection kind"),
+    }
+    text = said
+    if link.speed:
+        out["net.link.speed"] = Reading("net.link.speed", link.speed, "Mbit/s", "Link speed")
+        text = f"{said} · {netlink.speed_text(link.speed)}"
+    out["net.link.text"] = Reading("net.link.text", text, "", "Connection")
+    if link.signal is not None:
+        out["net.wifi.signal"] = Reading("net.wifi.signal", link.signal, "%", "Wi-Fi signal")
+    return out
 
 
 def _local_ip() -> str:

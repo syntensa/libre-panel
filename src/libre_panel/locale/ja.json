@@ -3015,7 +3015,9 @@
     "Put it on the panel": "パネルに置く",
     "As made": "作成どおり",
     "Light colours": "明るい色",
-    "Light colours suit a white PC: every screen keeps its own colours, worked out for a light ground. The pictures of the themes show them as the panel does.": "明るい色は白い PC に合います。各画面は自分の色を保ったまま、明るい背景向けに計算し直されます。テーマの画像はパネルと同じように表示します。"
+    "Light colours suit a white PC: every screen keeps its own colours, worked out for a light ground. The pictures of the themes show them as the panel does.": "明るい色は白い PC に合います。各画面は自分の色を保ったまま、明るい背景向けに計算し直されます。テーマの画像はパネルと同じように表示します。",
+    "Wi-Fi": "Wi-Fi",
+    "LAN": "有線LAN"
   },
   "fields": {
     "agent": "エージェント",
@@ -3369,7 +3371,13 @@
     "wind": "風",
     "mic": "マイク",
     "mic_off": "マイクオフ",
-    "agent": "AIエージェント"
+    "agent": "AIエージェント",
+    "ethernet": "有線LAN",
+    "wifi": "Wi-Fi",
+    "wifi-1": "Wi-Fi（弱）",
+    "wifi-2": "Wi-Fi（中）",
+    "link": "接続（有線/Wi-Fi）",
+    "uptime": "稼働時間"
   },
   "days": [
     "月曜日",

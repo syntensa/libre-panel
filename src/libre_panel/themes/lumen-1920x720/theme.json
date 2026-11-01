@@ -139,6 +139,31 @@
       "glow_radius": 12
     },
     {
+      "type": "icon",
+      "id": "uptime-icon",
+      "x": 1098,
+      "y": 175,
+      "icon": "uptime",
+      "size": 18,
+      "color": "@text3",
+      "stroke": 1.8,
+      "needs": "sys.uptime"
+    },
+    {
+      "type": "metric",
+      "id": "uptime",
+      "x": 1121,
+      "y": 172,
+      "sensor": "sys.uptime",
+      "format": "{value:duration}",
+      "font": "builtin:Barlow-Medium",
+      "font_size": 18,
+      "color": "@text3",
+      "max_width": 53,
+      "tabular": false,
+      "hide_if_missing": true
+    },
+    {
       "type": "clock",
       "id": "date",
       "x": 853,

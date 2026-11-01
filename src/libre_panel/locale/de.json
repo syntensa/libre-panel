@@ -3015,7 +3015,9 @@
     "Put it on the panel": "Aufs Panel legen",
     "As made": "Wie gemacht",
     "Light colours": "Helle Farben",
-    "Light colours suit a white PC: every screen keeps its own colours, worked out for a light ground. The pictures of the themes show them as the panel does.": "Helle Farben passen zu einem weißen PC: Jeder Bildschirm behält seine eigenen Farben, für einen hellen Grund umgerechnet. Die Bilder der Themes zeigen sie so, wie das Panel sie zeigt."
+    "Light colours suit a white PC: every screen keeps its own colours, worked out for a light ground. The pictures of the themes show them as the panel does.": "Helle Farben passen zu einem weißen PC: Jeder Bildschirm behält seine eigenen Farben, für einen hellen Grund umgerechnet. Die Bilder der Themes zeigen sie so, wie das Panel sie zeigt.",
+    "Wi-Fi": "WLAN",
+    "LAN": "LAN"
   },
   "fields": {
     "agent": "Agent",
@@ -3369,7 +3371,13 @@
     "wind": "Wind",
     "mic": "Mikrofon",
     "mic_off": "Mikrofon aus",
-    "agent": "KI-Agent"
+    "agent": "KI-Agent",
+    "ethernet": "Netzwerkkabel",
+    "wifi": "WLAN",
+    "wifi-1": "WLAN schwach",
+    "wifi-2": "WLAN mittel",
+    "link": "Verbindung (LAN/WLAN)",
+    "uptime": "Laufzeit"
   },
   "days": [
     "Montag",

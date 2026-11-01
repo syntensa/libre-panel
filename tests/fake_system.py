@@ -19,6 +19,7 @@ class FakeMachine:
         self.front = 0
         self.microphone = False
         self.uptime = 100_000.0
+        self.ages = {}  # pid -> seconds since the process started (else: not known)
         self.looked = 0
         self.asked = Counter()  # how often each question was asked
 
@@ -44,6 +45,9 @@ class FakeMachine:
     def microphone_in_use(self):
         self.asked["microphone"] += 1
         return self.microphone
+
+    def running_s(self, pid):
+        return self.ages.get(pid)
 
     def uptime_s(self):
         self.asked["uptime"] += 1

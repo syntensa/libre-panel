@@ -3015,7 +3015,9 @@
     "Put it on the panel": "Поместить на панель",
     "As made": "Как задумано",
     "Light colours": "Светлые цвета",
-    "Light colours suit a white PC: every screen keeps its own colours, worked out for a light ground. The pictures of the themes show them as the panel does.": "Светлые цвета подходят к белому ПК: каждый экран сохраняет свои цвета, пересчитанные для светлого фона. Картинки тем показывают их так же, как панель."
+    "Light colours suit a white PC: every screen keeps its own colours, worked out for a light ground. The pictures of the themes show them as the panel does.": "Светлые цвета подходят к белому ПК: каждый экран сохраняет свои цвета, пересчитанные для светлого фона. Картинки тем показывают их так же, как панель.",
+    "Wi-Fi": "Wi-Fi",
+    "LAN": "Ethernet"
   },
   "fields": {
     "agent": "агент",
@@ -3369,7 +3371,13 @@
     "wind": "Ветер",
     "mic": "Микрофон",
     "mic_off": "Микрофон выключен",
-    "agent": "ИИ-агент"
+    "agent": "ИИ-агент",
+    "ethernet": "Сетевой кабель",
+    "wifi": "Wi-Fi",
+    "wifi-1": "Слабый Wi-Fi",
+    "wifi-2": "Средний Wi-Fi",
+    "link": "Подключение (кабель/Wi-Fi)",
+    "uptime": "Время работы"
   },
   "days": [
     "понедельник",

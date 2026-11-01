@@ -133,6 +133,31 @@
       "glow_radius": 8
     },
     {
+      "type": "icon",
+      "id": "uptime-icon",
+      "x": 364,
+      "y": 157,
+      "icon": "uptime",
+      "size": 15,
+      "color": "@text3",
+      "stroke": 1.5,
+      "needs": "sys.uptime"
+    },
+    {
+      "type": "metric",
+      "id": "uptime",
+      "x": 383,
+      "y": 155,
+      "sensor": "sys.uptime",
+      "format": "{value:duration}",
+      "font": "builtin:Barlow-Medium",
+      "font_size": 15,
+      "color": "@text3",
+      "max_width": 79,
+      "tabular": false,
+      "hide_if_missing": true
+    },
+    {
       "type": "gauge",
       "id": "cpu-ring",
       "x": 54,

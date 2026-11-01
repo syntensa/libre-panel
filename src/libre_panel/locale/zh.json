@@ -3015,7 +3015,9 @@
     "Put it on the panel": "放到面板上",
     "As made": "原样",
     "Light colours": "浅色",
-    "Light colours suit a white PC: every screen keeps its own colours, worked out for a light ground. The pictures of the themes show them as the panel does.": "浅色适合白色电脑：每个屏幕保留自己的颜色，并针对浅色背景重新计算。主题图片按面板的显示方式呈现。"
+    "Light colours suit a white PC: every screen keeps its own colours, worked out for a light ground. The pictures of the themes show them as the panel does.": "浅色适合白色电脑：每个屏幕保留自己的颜色，并针对浅色背景重新计算。主题图片按面板的显示方式呈现。",
+    "Wi-Fi": "Wi-Fi",
+    "LAN": "有线网络"
   },
   "fields": {
     "agent": "智能体",
@@ -3369,7 +3371,13 @@
     "wind": "风",
     "mic": "麦克风",
     "mic_off": "麦克风关闭",
-    "agent": "AI 助手"
+    "agent": "AI 助手",
+    "ethernet": "网线",
+    "wifi": "Wi-Fi",
+    "wifi-1": "Wi-Fi（弱）",
+    "wifi-2": "Wi-Fi（中）",
+    "link": "连接（有线/Wi-Fi）",
+    "uptime": "运行时间"
   },
   "days": [
     "星期一",

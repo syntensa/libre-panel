@@ -41,6 +41,12 @@ ICON_NAMES = (
     "list",
     "grid",
     "signal",
+    "ethernet",
+    "wifi",
+    "wifi-1",
+    "wifi-2",
+    "link",
+    "uptime",
     "sunrise",
     "sunset",
     "hourglass",
@@ -278,6 +284,55 @@ def _list(pen: _Pen) -> None:
 def _grid(pen: _Pen) -> None:
     for x, y in ((3, 3), (13.5, 3), (3, 13.5), (13.5, 13.5)):
         pen.rect(x, y, x + 7.5, y + 7.5, 1.5)
+
+
+def _ethernet(pen: _Pen) -> None:
+    """A network cable's plug, seen from the front."""
+    pen.line((5, 9), (8, 9), (8, 6), (16, 6), (16, 9), (19, 9), (19, 19), (5, 19), (5, 9))
+    for x in (9.5, 12, 14.5):
+        pen.line((x, 13), (x, 16))
+
+
+def _wifi_arcs(pen: _Pen, arcs: int) -> None:
+    """Wi-Fi: a dot and three arcs over it, ``arcs`` of them lit (the signal's strength), the
+    others faint."""
+    lit = pen.color
+    pen.circle(12, 19, 1.4, fill=True)
+    for i, r in enumerate((5.0, 9.5, 14.0)):
+        pen.color = lit if i < arcs else (*lit[:3], round((lit[3] if len(lit) > 3 else 255) * 0.28))
+        pen.arc(12, 20, r, 225, 315)
+    pen.color = lit
+
+
+def _wifi(pen: _Pen) -> None:
+    _wifi_arcs(pen, 3)
+
+
+def _wifi_1(pen: _Pen) -> None:
+    _wifi_arcs(pen, 1)
+
+
+def _wifi_2(pen: _Pen) -> None:
+    _wifi_arcs(pen, 2)
+
+
+def _uptime(pen: _Pen) -> None:
+    """Switched on, and since how long: the power symbol (a ring open at the top, a line into
+    it)."""
+    pen.arc(12, 13.5, 8, 300, 600)
+    pen.line((12, 3), (12, 11.5))
+
+
+def link_icon(kind: object, signal: object) -> str:
+    """The icon of the network connection (``link``): a cable's plug, or Wi-Fi with as many
+    arcs as its signal is strong (a third: one, two thirds: two, more: three)."""
+    if kind == "lan":
+        return "ethernet"
+    if kind != "wlan":
+        return "network"
+    if not isinstance(signal, int | float):
+        return "wifi"
+    return "wifi-1" if signal < 34 else "wifi-2" if signal < 67 else "wifi"
 
 
 def _signal(pen: _Pen) -> None:
@@ -530,6 +585,12 @@ _ICONS: dict[str, Callable[[_Pen], None]] = {
     "list": _list,
     "grid": _grid,
     "signal": _signal,
+    "ethernet": _ethernet,
+    "wifi": _wifi,
+    "wifi-1": _wifi_1,
+    "wifi-2": _wifi_2,
+    "link": _wifi,  # (the renderer picks the connection's: link_icon)
+    "uptime": _uptime,
     "sunrise": _sunrise,
     "sunset": _sunset,
     "hourglass": _hourglass,

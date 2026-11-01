@@ -1727,6 +1727,31 @@ def build_agenda(b: _Build, _src: Source) -> None:
     b.out[-1]["needs"] = "!calendar.events"
 
 
+def _played(b: _Build, right: float) -> float:
+    """How long the game has been played (the game service's ``game.time``: 1:07:32), its name
+    before it, on the line of the clock and as small, ending at ``right``; where the line has
+    room for it beside the game's name or logo. How much of the line it takes (0: none: then
+    it is one of the readings beside the number)."""
+    said = t("Played")
+    label = b.ts * 0.8
+    spacing = max(1, round(label * 0.14))
+    label_w = _width_per_size(b.style["text_font"], said.upper()) * label + spacing * len(said)
+    slot = _width_per_size(b.style["text_font"], "0:00:00") * b.ts * 1.05  # (a long round's)
+    taken = label_w + b.ts * 0.45 + slot + b.ts * 1.2
+    clock_w = _width_per_size(b.style["text_font"], "00:00") * b.ts * 1.05
+    if b.iw - b.ts * 3.1 - clock_w - taken < b.ts * 8:  # (the game's name, or logo, keeps room)
+        return 0.0
+    kept, b.needs = b.needs, "game.time"
+    x = right - slot
+    b.label("played-label", said, x - b.ts * 0.45, b.iy + b.ts * 0.15 + CAP * b.ts * 0.25, label,
+            align="right", width=label_w + b.ts)  # fmt: skip
+    b.value("played", "game.time", "{value:clock}", x, b.iy + b.ts * 0.15, b.ts * 1.05,
+            color=b.c("text2"), width=slot * 1.1, font="text_font", hide_if_missing=True,
+            smooth=False)  # fmt: skip
+    b.needs = kept
+    return taken
+
+
 def build_game(b: _Build, _src: Source) -> None:
     """Frames per second of the game being played (``[sensors.presentmon]``)."""
     b.card()
@@ -1735,9 +1760,12 @@ def build_game(b: _Build, _src: Source) -> None:
     # the time, small and dim in the corner: a glance between rounds, not a second screen
     # (where the card has room for it beside the game's name)
     clock_w = _width_per_size(b.style["text_font"], "00:00") * b.ts * 1.05
+    played = 0.0  # (how much of the line the time played takes)
     if b.iw >= b.ts * 14:
         b.clock("clock", "%H:%M", b.ix + b.iw, b.iy + b.ts * 0.15, b.ts * 1.05,
                 color=b.c("text3"), align="right", width=clock_w, font="text_font")  # fmt: skip
+        played = _played(b, b.ix + b.iw - clock_w - b.ts * 1.2)
+        clock_w += played
     else:
         clock_w = -b.ts  # the name has the whole line
     title = b.module["title"]
@@ -1790,6 +1818,8 @@ def build_game(b: _Build, _src: Source) -> None:
                 ("frametime", "game.frametime", "{value:.1f} ms", t("Frame time")),
                 ("limiter", "game.limiter", "", t("Limited by")),
                 ("peak", "game.frametime_peak", "{value:.0f} ms", t("Longest frame")))  # fmt: skip
+        if not played:  # (not on the clock's line: the last of the readings, where there is room)
+            rows += (("played", "game.time", "{value:clock}", t("Played")),)
         room_w = number_w * 0.36
         # The names are lettered with 14 % of their size between the letters; the widest
         # sets one size for all four, so none shrinks alone and none touches the next
@@ -1819,9 +1849,21 @@ def build_game(b: _Build, _src: Source) -> None:
             if end > y + number_h:
                 break
             if name != "limiter":
+                b.needs = "game.fps,game.time" if name == "played" else "game.fps"
                 b.label(f"{name}-label", text, at, line, label_size, width=width)
-                b.value(name, key, fmt, at, below, value_size, color=b.c("text2"), width=width,
-                        hide_if_missing=True)  # fmt: skip
+                b.value(
+                    name,
+                    key,
+                    fmt,
+                    at,
+                    below,
+                    value_size,
+                    color=b.c("text2"),
+                    width=width,
+                    hide_if_missing=True,
+                    **({"smooth": False} if name == "played" else {}),
+                )
+                b.needs = "game.fps"
                 continue
             b.needs = "game.fps,game.limiter"
             b.label(f"{name}-label", text, at, line, label_size, width=width)

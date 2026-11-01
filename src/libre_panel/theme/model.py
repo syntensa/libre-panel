@@ -307,7 +307,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         **_text_style(True),
     },
     "icon": {
-        "icon": ("icon", "cpu"),  # "weather" follows the current weather code
+        "icon": ("icon", "cpu"),  # "weather" follows the weather code, "link" the connection
         # icon "weather": the code it follows, e.g. weather.day.1.code (empty = now)
         "sensor": ("sensor", ""),
         "size": ("int", 32),

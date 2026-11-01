@@ -3015,7 +3015,9 @@
     "Put it on the panel": "Colocar no painel",
     "As made": "Como foi feito",
     "Light colours": "Cores claras",
-    "Light colours suit a white PC: every screen keeps its own colours, worked out for a light ground. The pictures of the themes show them as the panel does.": "Cores claras combinam com um PC branco: cada ecrã mantém as suas cores, recalculadas para um fundo claro. As imagens dos temas mostram-nas como o painel."
+    "Light colours suit a white PC: every screen keeps its own colours, worked out for a light ground. The pictures of the themes show them as the panel does.": "Cores claras combinam com um PC branco: cada ecrã mantém as suas cores, recalculadas para um fundo claro. As imagens dos temas mostram-nas como o painel.",
+    "Wi-Fi": "Wi-Fi",
+    "LAN": "Ethernet"
   },
   "fields": {
     "agent": "agente",
@@ -3369,7 +3371,13 @@
     "wind": "Vento",
     "mic": "Microfone",
     "mic_off": "Microfone desligado",
-    "agent": "Agente de IA"
+    "agent": "Agente de IA",
+    "ethernet": "Cabo de rede",
+    "wifi": "Wi-Fi",
+    "wifi-1": "Wi-Fi fraco",
+    "wifi-2": "Wi-Fi médio",
+    "link": "Conexão (cabo/Wi-Fi)",
+    "uptime": "Tempo ligado"
   },
   "days": [
     "segunda-feira",
