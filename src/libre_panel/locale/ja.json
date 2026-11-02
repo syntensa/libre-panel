@@ -2626,7 +2626,6 @@
     "Automatic picks {encoder}.": "自動の選択：{encoder}。",
     "{encoder} was passed over:": "{encoder}は見送られました：",
     "no picture came from it": "画像が出力されませんでした",
-    "30 looks smooth and is the default. 50 is smoother still and costs about two thirds more processor time (measured with two panels: 2.0 instead of 1.2 cores); 25 asks least. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "30 でも十分なめらかで、これが既定値です。50 はさらになめらかですが、プロセッサー時間が約 3 分の 2 増えます（パネル 2 枚で実測：1.2 コアに対して 2.0 コア）。25 が最も負荷が軽くなります。60 は実験的な設定です。プレーヤーが遅れないよう、パネルには 70 を伝えます。",
     "50 frames a second": "毎秒50フレーム",
     "Held back while Libre Panel runs as administrator": "Libre Panelが管理者として動作している間は使わないもの",
     "Libre Panel runs with administrator rights, and the video program named under Advanced lies in a folder that other programs may change: it is not started with those rights. Without administrator rights it is used again.": "Libre Panelは管理者権限で動作しており、「詳細設定」で指定したビデオプログラムは他のプログラムが変更できるフォルダーにあります。そのため、この権限では起動しません。管理者権限なしで動作すれば再び使われます。",
@@ -3026,7 +3025,11 @@
     "Night-time": "夜",
     "Sunrise {value}": "日の出 {value}",
     "Sunset {value}": "日の入り {value}",
-    "Day length {value:duration}": "昼の長さ {value:duration}"
+    "Day length {value:duration}": "昼の長さ {value:duration}",
+    "25 looks smooth and is the default: a graph moves a pixel a frame. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "25 でも十分なめらかで、これが既定値です。グラフは 1 フレームに 1 ピクセルずつ進みます。60 は実験的な設定です。プレーヤーが遅れないよう、パネルには 70 を伝えます。",
+    "{fps} frames a second take about {times} times the processor time of 25.": "毎秒 {fps} フレームは、25 の約 {times} 倍のプロセッサー時間がかかります。",
+    "{fps} frames a second take about {percent}% more processor time than 25.": "毎秒 {fps} フレームは、25 より約 {percent}% 多くプロセッサー時間がかかります。",
+    "{fps} frames a second take about {percent}% less processor time than 25, and move a little less smoothly.": "毎秒 {fps} フレームは、25 より約 {percent}% 少ないプロセッサー時間で済みますが、動きは少しなめらかさに欠けます。"
   },
   "fields": {
     "agent": "エージェント",

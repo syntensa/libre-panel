@@ -358,7 +358,7 @@ themes (Linux, #21).
 Waveshare's wiki also offers, for each monitor, a card image that makes it a plain USB display:
 it no longer shows the themes on its card, it shows what the PC sends, whole pictures over USB.
 Libre Panel then drives it as one of its own panels, with its own themes, the way up and the
-brightness set in Libre Panel, and a video stream of its pictures, 30 a second as a TURZX panel
+brightness set in Libre Panel, and a video stream of its pictures, 25 a second as a TURZX panel
 in video mode gets them (`device.model = "waveshare-2.8-udisp"`, or found by `auto`). The service above has nothing to
 do with it then. **Verified** on the 2.8" round one: its owner runs Libre Panel's themes on it
 with live readings at 60 frames a second on Linux, the picture upright and the backlight at full
@@ -375,9 +375,9 @@ since 0.7.5, through cold starts and sleep (#30, #33).
   black it asks so, shows the card once more as that, and where it shows, writes
   `[device] jpeg = "4:2:0"` to `config.toml`.
 - The stream runs at the frames a second of a TURZX panel in video mode, set in *Settings →
-  Panel → Frames per second* (`[video] fps`, 30 by default, up to 60), fewer where the display
+  Panel → Frames per second* (`[video] fps`, 25 by default, up to 60), fewer where the display
   says so or takes fewer: Libre Panel times the first pictures and drives it no faster. A JPEG
-  takes about a millisecond to make, so 60 costs little more than 30. The log says how many
+  takes about a millisecond to make, so 60 costs little more than 25. The log says how many
   it came to. A video in a theme plays as many frames a second, up to its own.
 - Each JPEG keeps as much of the picture's detail as *Settings → Panel → Picture quality* says
   (`[device] jpeg_quality`, 90 by default, 50 to 100): 95 is finer at about a third more bytes

@@ -1875,7 +1875,7 @@ answer too.
 | Setting | Default | |
 |---|---|---|
 | `mode` | `"auto"` | `"auto"`: on where proven (9.2"), with ffmpeg and `local_clip`; `"on"`, `"off"` |
-| `fps` | 30 | frames per second (1–60). 30 looks smooth on the panels; 50 is smoother still and costs about two thirds more processor time (measured with two panels: 2.0 instead of 1.2 cores of the processor); 60 is an experiment the panels do not keep up with |
+| `fps` | 25 | frames per second (1–60). 25 looks smooth on the panels, and a graph moves a pixel a frame. Beside 25, 30 takes about a tenth more of the processor, 50 about 60 % more and 60 about 80 % more, 20 about a tenth less (Libre Panel and ffmpeg's x264 together, Lumen on the 12.3", where something moves in every frame; a screen that rests between its readings takes less at any rate); *Settings → Panel* says so under the choice. 60 is an experiment the panels do not keep up with |
 | `device_fps` | 60 | the rate reported to the panel; must be at least `fps`. The panel's player never catches up once behind, so it gets a little more than it needs |
 | `crf` | 20 | quality, 0–51; lower is sharper and needs more bits (20 was measured on the 12.3" and the 9.2" at about 3–4 Mbit/s at 50 fps on a screen that moves; 25 was the first measurement's) |
 | `preset` | `"superfast"` | x264 speed preset |

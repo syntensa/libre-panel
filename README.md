@@ -98,7 +98,7 @@ Every clip shows Libre Panel itself, with demo values.
 TURZX USB panels have a video decoder, and Libre Panel feeds it up to 50 frames a second:
 numbers count to each new reading, rings and bars glide, graphs scroll a little on every frame
 and fans turn at their own speed. Values sit as light in milled grooves, and fine dust drifts in
-the depth behind. 30 frames a second is the default, smooth and far lighter on the PC; every
+the depth behind. 25 frames a second is the default, smooth and far lighter on the PC; every
 other panel gets still frames, sent where something changed.
 
 ### Cards that take turns

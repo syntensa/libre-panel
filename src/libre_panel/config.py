@@ -441,9 +441,10 @@ class VideoConfig:
 
     # "auto": on where it is proven (the 9.2"), ffmpeg is found and local_clip is set
     mode: str = "auto"  # "auto" | "off" | "on"
-    # 30 by default: smooth on the panels, and far less of the processor than 50 (measured with
-    # two panels: 1.2 cores at 30, 2.0 at 50)
-    fps: int = 30
+    # 25 by default: smooth on the panels, a graph's step of a pixel a frame (they scroll 25
+    # pixels a second), and less of the processor than 30 or 50 (the app's RATE_COSTS: what
+    # each rate takes beside 25, which the app says where another is chosen)
+    fps: int = 25
     # Reported to the panel. Its player shows pictures strictly at this rate and
     # never catches up, so it must be above ``fps`` (SPUR II: 60 for 50).
     device_fps: int = 60

@@ -2626,7 +2626,6 @@
     "Automatic picks {encoder}.": "Автоматический выбор: {encoder}.",
     "{encoder} was passed over:": "{encoder} пропущен:",
     "no picture came from it": "он не выдал ни одной картинки",
-    "30 looks smooth and is the default. 50 is smoother still and costs about two thirds more processor time (measured with two panels: 2.0 instead of 1.2 cores); 25 asks least. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "30 выглядит плавно и используется по умолчанию. 50 ещё плавнее, но требует примерно на две трети больше процессорного времени (измерено с двумя панелями: 2,0 ядра вместо 1,2); 25 нагружает меньше всего. 60 — эксперимент: панели сообщается 70, чтобы её проигрыватель не отставал.",
     "50 frames a second": "50 кадров в секунду",
     "Held back while Libre Panel runs as administrator": "Не используется, пока Libre Panel работает от имени администратора",
     "Libre Panel runs with administrator rights, and the video program named under Advanced lies in a folder that other programs may change: it is not started with those rights. Without administrator rights it is used again.": "Libre Panel работает с правами администратора, а видеопрограмма, указанная в разделе «Дополнительно», лежит в папке, которую могут изменить другие программы: с этими правами она не запускается. Без прав администратора она снова используется.",
@@ -3026,7 +3025,11 @@
     "Night-time": "Ночь",
     "Sunrise {value}": "Восход {value}",
     "Sunset {value}": "Закат {value}",
-    "Day length {value:duration}": "Долгота дня {value:duration}"
+    "Day length {value:duration}": "Долгота дня {value:duration}",
+    "25 looks smooth and is the default: a graph moves a pixel a frame. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "25 выглядит плавно и используется по умолчанию: график сдвигается на пиксель за кадр. 60 — эксперимент: панели сообщается 70, чтобы её проигрыватель не отставал.",
+    "{fps} frames a second take about {times} times the processor time of 25.": "{fps} кадров в секунду требуют примерно в {times} раза больше процессорного времени, чем 25.",
+    "{fps} frames a second take about {percent}% more processor time than 25.": "{fps} кадров в секунду требуют примерно на {percent}% больше процессорного времени, чем 25.",
+    "{fps} frames a second take about {percent}% less processor time than 25, and move a little less smoothly.": "{fps} кадров в секунду требуют примерно на {percent}% меньше процессорного времени, чем 25, и движутся чуть менее плавно."
   },
   "fields": {
     "agent": "агент",

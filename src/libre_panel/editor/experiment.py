@@ -32,7 +32,7 @@ MEASURED: dict[str, Any] = {
     "video.profile": "auto",
     "video.encoder": "auto",
     "video.keyframe_s": 10.0,
-    "video.fps": 30,
+    "video.fps": 25,
     "video.device_fps": 60,
 }
 HARDWARE_ENCODERS = {"amd": "h264_amf", "nvidia": "h264_nvenc", "intel": "h264_qsv"}

@@ -165,12 +165,12 @@ def test_raw_pixels_for_a_display_that_names_them_first(bus):
 
 def test_the_display_is_driven_as_a_panel_in_video_mode(bus):
     """Every frame at a steady pace (values glide, graphs scroll): the frames a second of a
-    TURZX panel in video mode, 30 unless set otherwise, fewer where the display says so."""
+    TURZX panel in video mode, 25 unless set otherwise, fewer where the display says so."""
     bus(FakeDisplay())
     screen = opened()
     assert not screen.streaming  # (not open yet)
     with screen:
-        assert screen.streaming and screen.stream_fps == 30
+        assert screen.streaming and screen.stream_fps == 25
     bus(FakeDisplay())
     with opened(fps=50) as screen:
         assert screen.stream_fps == 50
@@ -207,7 +207,7 @@ def test_the_stream_goes_no_faster_than_the_display_takes_pictures(bus):
     frames a second wanted, one that takes fewer a tenth fewer than it took."""
     fast = bus(Timed({udisp.JPEG: 1 / 90}))
     rate, fps = driven(fast, udisp.TRIAL + 5)
-    assert round(rate) == 90 and fps == 30
+    assert round(rate) == 90 and fps == 25
     slow = bus(Timed({udisp.JPEG: 1 / 20}))
     rate, fps = driven(slow, udisp.TRIAL + 5)
     assert round(rate) == 20 and fps == 18

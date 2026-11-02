@@ -122,6 +122,13 @@
   them as well.
 
 **Better**
+- **25 frames a second by default on video panels.** The video mode ran at 30. At 25 a graph,
+  which scrolls 25 pixels a second, moves exactly a pixel a frame, and the panel takes less
+  of the processor: on the 12.3" Lumen 86 % of a core instead of 96, Arena 85 instead of 97
+  (Libre Panel and ffmpeg's x264 together). A rate set in `config.toml` stays as it is.
+  *Settings → Panel → Frames per second* offers 20 too, and says under another choice how
+  much more or less of the processor it takes than 25 (30 about a tenth more, 50 about 60 %,
+  60 about 80 %, 20 a tenth less).
 - **A graphics card's encoder gets its frames converted where they changed.** Where the card
   does not convert the colours itself (the colour check found AMD's shifting them), ffmpeg
   turned every whole frame of the 12.3" a quarter and converted it on the processor, only to

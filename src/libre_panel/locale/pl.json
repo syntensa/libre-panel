@@ -2626,7 +2626,6 @@
     "Automatic picks {encoder}.": "Wybór automatyczny: {encoder}.",
     "{encoder} was passed over:": "Pominięto {encoder}:",
     "no picture came from it": "nie dał żadnego obrazu",
-    "30 looks smooth and is the default. 50 is smoother still and costs about two thirds more processor time (measured with two panels: 2.0 instead of 1.2 cores); 25 asks least. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "30 wygląda płynnie i jest wartością domyślną. 50 jest jeszcze płynniejsze i kosztuje o około dwie trzecie więcej czasu procesora (zmierzone z dwoma panelami: 2,0 zamiast 1,2 rdzenia); 25 obciąża najmniej. 60 to eksperyment: panel dostaje 70, żeby jego odtwarzacz był z przodu.",
     "50 frames a second": "50 klatek na sekundę",
     "Held back while Libre Panel runs as administrator": "Wstrzymane, dopóki Libre Panel działa jako administrator",
     "Libre Panel runs with administrator rights, and the video program named under Advanced lies in a folder that other programs may change: it is not started with those rights. Without administrator rights it is used again.": "Libre Panel działa z uprawnieniami administratora, a program wideo wskazany w „Zaawansowane” leży w folderze, który inne programy mogą zmienić: z tymi uprawnieniami nie jest uruchamiany. Bez uprawnień administratora jest znowu używany.",
@@ -3026,7 +3025,11 @@
     "Night-time": "Noc",
     "Sunrise {value}": "Wschód słońca {value}",
     "Sunset {value}": "Zachód słońca {value}",
-    "Day length {value:duration}": "Długość dnia {value:duration}"
+    "Day length {value:duration}": "Długość dnia {value:duration}",
+    "25 looks smooth and is the default: a graph moves a pixel a frame. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "25 wygląda płynnie i jest wartością domyślną: wykres przesuwa się o piksel na klatkę. 60 to eksperyment: panel dostaje 70, żeby jego odtwarzacz był z przodu.",
+    "{fps} frames a second take about {times} times the processor time of 25.": "{fps} klatek na sekundę kosztuje około {times} razy tyle czasu procesora co 25.",
+    "{fps} frames a second take about {percent}% more processor time than 25.": "{fps} klatek na sekundę kosztuje około {percent}% więcej czasu procesora niż 25.",
+    "{fps} frames a second take about {percent}% less processor time than 25, and move a little less smoothly.": "{fps} klatek na sekundę kosztuje około {percent}% mniej czasu procesora niż 25 i porusza się nieco mniej płynnie."
   },
   "fields": {
     "agent": "agent",

@@ -2626,7 +2626,6 @@
     "Automatic picks {encoder}.": "Automatisch gewählt: {encoder}.",
     "{encoder} was passed over:": "{encoder} wurde übergangen:",
     "no picture came from it": "es kam kein Bild von ihm",
-    "30 looks smooth and is the default. 50 is smoother still and costs about two thirds more processor time (measured with two panels: 2.0 instead of 1.2 cores); 25 asks least. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "30 sieht flüssig aus und ist der Standard. 50 ist noch flüssiger und kostet etwa zwei Drittel mehr Prozessorzeit (gemessen mit zwei Panels: 2,0 statt 1,2 Kerne); 25 braucht am wenigsten. 60 ist ein Experiment: Dem Panel werden 70 gemeldet, damit sein Player vorn bleibt.",
     "50 frames a second": "50 Bilder pro Sekunde",
     "Held back while Libre Panel runs as administrator": "Zurückgehalten, solange Libre Panel als Administrator läuft",
     "Libre Panel runs with administrator rights, and the video program named under Advanced lies in a folder that other programs may change: it is not started with those rights. Without administrator rights it is used again.": "Libre Panel läuft mit Administratorrechten, und das unter „Erweitert“ genannte Videoprogramm liegt in einem Ordner, den andere Programme ändern können: Mit diesen Rechten wird es nicht gestartet. Ohne Administratorrechte wird es wieder verwendet.",
@@ -3026,7 +3025,11 @@
     "Night-time": "Nacht",
     "Sunrise {value}": "Sonnenaufgang {value}",
     "Sunset {value}": "Sonnenuntergang {value}",
-    "Day length {value:duration}": "Tageslänge {value:duration}"
+    "Day length {value:duration}": "Tageslänge {value:duration}",
+    "25 looks smooth and is the default: a graph moves a pixel a frame. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "25 sieht flüssig aus und ist der Standard: Ein Verlauf rückt pro Bild um ein Pixel weiter. 60 ist ein Experiment: Dem Panel werden 70 gemeldet, damit sein Player vorn bleibt.",
+    "{fps} frames a second take about {times} times the processor time of 25.": "{fps} Bilder pro Sekunde brauchen etwa das {times}-Fache der Prozessorzeit von 25.",
+    "{fps} frames a second take about {percent}% more processor time than 25.": "{fps} Bilder pro Sekunde brauchen etwa {percent} % mehr Prozessorzeit als 25.",
+    "{fps} frames a second take about {percent}% less processor time than 25, and move a little less smoothly.": "{fps} Bilder pro Sekunde brauchen etwa {percent} % weniger Prozessorzeit als 25 und laufen etwas weniger flüssig."
   },
   "fields": {
     "agent": "Agent",

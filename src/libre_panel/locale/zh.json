@@ -2626,7 +2626,6 @@
     "Automatic picks {encoder}.": "自动选择：{encoder}。",
     "{encoder} was passed over:": "已跳过 {encoder}：",
     "no picture came from it": "它没有输出画面",
-    "30 looks smooth and is the default. 50 is smoother still and costs about two thirds more processor time (measured with two panels: 2.0 instead of 1.2 cores); 25 asks least. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "30 已经很流畅，也是默认值。50 更流畅，但大约多耗三分之二的处理器时间（两块面板实测：2.0 个核心对 1.2 个）；25 负担最小。60 是实验：向面板报告 70，让它的播放器保持领先。",
     "50 frames a second": "每秒 50 帧",
     "Held back while Libre Panel runs as administrator": "Libre Panel 以管理员身份运行时暂不使用的内容",
     "Libre Panel runs with administrator rights, and the video program named under Advanced lies in a folder that other programs may change: it is not started with those rights. Without administrator rights it is used again.": "Libre Panel 正以管理员权限运行，而“高级”中指定的视频程序位于其他程序可以修改的文件夹中：不会以这些权限启动它。不以管理员权限运行时会再次使用它。",
@@ -3026,7 +3025,11 @@
     "Night-time": "夜晚",
     "Sunrise {value}": "日出 {value}",
     "Sunset {value}": "日落 {value}",
-    "Day length {value:duration}": "白昼时长 {value:duration}"
+    "Day length {value:duration}": "白昼时长 {value:duration}",
+    "25 looks smooth and is the default: a graph moves a pixel a frame. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "25 已经很流畅，也是默认值：图表每帧前进一个像素。60 是实验：向面板报告 70，让它的播放器保持领先。",
+    "{fps} frames a second take about {times} times the processor time of 25.": "每秒 {fps} 帧大约需要 25 的 {times} 倍处理器时间。",
+    "{fps} frames a second take about {percent}% more processor time than 25.": "每秒 {fps} 帧比 25 多用约 {percent}% 的处理器时间。",
+    "{fps} frames a second take about {percent}% less processor time than 25, and move a little less smoothly.": "每秒 {fps} 帧比 25 少用约 {percent}% 的处理器时间，动起来略欠流畅。"
   },
   "fields": {
     "agent": "智能体",

@@ -10,7 +10,7 @@ import { endpoints } from "../../core/api.js";
 import { control, usePolled } from "../../core/console.js";
 import { statTiles } from "../../core/stats.js";
 import { versionBase } from "../../core/orientation.js";
-import { t } from "../../core/i18n.js";
+import { formatNumber, t } from "../../core/i18n.js";
 import {
   loadClipQuestion,
   loadPanelInfo,
@@ -209,13 +209,36 @@ function ClipRow({ value }) {
   <//>`;
 }
 
+// The rates offered, and what each takes of the processor beside the default's 25 (Libre Panel and
+// ffmpeg's x264 together, measured with Lumen on the 12.3", where something moves in every frame;
+// a screen that rests between its readings takes less at any rate)
+const RATE_STEPS = [20, 25, 30, 50, 60];
+const RATE_COSTS = { 20: 0.88, 30: 1.1, 50: 1.63, 60: 1.8 };
+
+/** A rate's cost beside 25: measured for the steps, in proportion to the frames for one of
+ * the person's own. */
+const costOf = (fps) => RATE_COSTS[fps] ?? fps / 25;
+
+/** A small note under the rate: how much more (or less) of the processor it takes than 25. */
+function RateCost({ fps }) {
+  if (!fps || fps === 25) return null;
+  const share = costOf(fps);
+  const percent = Math.round(Math.abs(share - 1) * 100);
+  if (share >= 1.95) {
+    return html`<p class="setting-note">${t("{fps} frames a second take about {times} times the processor time of 25.", { fps, times: formatNumber(share, 1) })}</p>`;
+  }
+  return html`<p class="setting-note">${share > 1
+    ? t("{fps} frames a second take about {percent}% more processor time than 25.", { fps, percent })
+    : t("{fps} frames a second take about {percent}% less processor time than 25, and move a little less smoothly.", { fps, percent })}</p>`;
+}
+
 function VideoCard() {
   const config = useConfig();
   const info = useStore((s) => s.panelInfo);
   if (!config || !info) return null;
   const { mode, fps, local_clip: clip } = config.video;
   const video = info.video;
-  const rates = [25, 30, 50, 60, ...(fps && ![25, 30, 50, 60].includes(fps) ? [fps] : [])].sort((a, b) => a - b);
+  const rates = [...RATE_STEPS, ...(fps && !RATE_STEPS.includes(fps) ? [fps] : [])].sort((a, b) => a - b);
   const applies = videoApplies(config, info);
   const streams = !applies && Boolean(video.streams); // (a udisp display: whole pictures, no video mode)
   const quality = config.device.jpeg_quality ?? 90;
@@ -240,14 +263,15 @@ function VideoCard() {
     ${applies || streams
       ? html`<${SettingRow} title=${t("Frames per second")} hint=${streams
           ? t("This display takes each picture whole, as a JPEG of a millisecond's work: 60 is the smoothest and costs little more. Libre Panel drives it no faster than it takes them.")
-          : t("30 looks smooth and is the default. 50 is smoother still and costs about two thirds more processor time (measured with two panels: 2.0 instead of 1.2 cores); 25 asks least. 60 is an experiment: the panel is told 70, so that its player stays ahead.")}>
+          : t("25 looks smooth and is the default: a graph moves a pixel a frame. 60 is an experiment: the panel is told 70, so that its player stays ahead.")}>
           <${Segmented}
             label=${t("Frames per second")}
             value=${fps}
             onChange=${(value) => change({ "video.fps": value, "video.device_fps": value >= 60 ? value + 10 : 60 })}
             options=${rates.map((rate) => ({ value: rate, label: String(rate) }))}
           />
-        <//>`
+        <//>
+        ${streams ? null : html`<${RateCost} fps=${fps} />`}`
       : null}
     ${streams
       ? html`<${SettingRow} title=${t("Picture quality")} hint=${t("How much of each picture's detail its JPEG keeps. 90 is the default; 95 keeps finer detail at about a third more bytes a picture, 100 the most at two to three times as many. Libre Panel drives the display no faster than it takes them: where it comes to fewer pictures a second, 90 is the smoother.")}>
@@ -275,7 +299,7 @@ function VideoCard() {
 
 // The video mode's defaults (config.py); the experiment's "Back to the defaults" writes them.
 const MEASURED = { "video.maxrate": "auto", "video.crf": 20, "video.preset": "superfast", "video.profile": "auto",
-                   "video.encoder": "auto", "video.keyframe_s": 10, "video.fps": 30, "video.device_fps": 60 };  // fmt: skip
+                   "video.encoder": "auto", "video.keyframe_s": 10, "video.fps": 25, "video.device_fps": 60 };  // fmt: skip
 const RATES = ["auto", "4M", "8M", "16M", "24M", "32M"];
 const QUALITIES = [16, 18, 20, 22, 25];
 const PRESETS = ["ultrafast", "superfast", "veryfast"];
