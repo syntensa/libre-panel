@@ -237,6 +237,30 @@ def test_where_much_changes_ffmpeg_converts_again_and_yuv_comes_back_when_calm(
     display.close()
 
 
+@needs_ffmpeg
+def test_fed_three_bytes_a_pixel_as_video_pixels_says_and_no_new_ffmpeg_for_it(
+    panel,  # noqa: F811
+    monkeypatch,
+    caplog,
+):
+    """video.pixels = "rgb" (the way of before): ffmpeg converts the calm frames itself, and no
+    new ffmpeg is started beside it with every frame for the YUV made here it never gets."""
+    switches = []
+    switch = TurzxVideoDisplay._switch
+    monkeypatch.setattr(
+        TurzxVideoDisplay, "_switch", lambda self: (switches.append(1), switch(self))
+    )
+    display = TurzxVideoDisplay(video_config(pixels="rgb"))
+    display.open()
+    with caplog.at_level("INFO", logger="libre_panel.devices.turzx_video"):
+        stream(display, moving_square(40))
+    assert display.encoder.settings.pixels == "rgb24"
+    assert display.counters.encoder == "libx264, rgb24"
+    assert switches == []
+    assert "YUV made here" not in caplog.text
+    display.close()
+
+
 def test_a_graph_whose_clock_went_back_is_drawn_not_miles_wide():
     """A clock that went back (a frame planned at an earlier time than the graph's newest
     point: another clock in a test, a warm-up's) drew the curve from a time long past: a

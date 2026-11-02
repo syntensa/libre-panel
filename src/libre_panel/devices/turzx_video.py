@@ -732,7 +732,8 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         if settings is None or getattr(encoder, "source", None) is not None:
             return
         fed_yuv = settings.pixels == YUV
-        wanted = self._makes_yuv(replace(settings, pixels="rgb0"), encoder.size, None)
+        fed = "rgb0" if fed_yuv else settings.pixels  # (what a new ffmpeg would be fed instead)
+        wanted = self._makes_yuv(replace(settings, pixels=fed), encoder.size, None)
         if fed_yuv != wanted and now >= self._switch_held:
             log.info(
                 "video: %s",
@@ -740,6 +741,10 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
                 else "much changes in every frame: ffmpeg converts the frames",
             )  # fmt: skip
             self._switch()
+            coming = getattr(self.encoder, "settings", None)
+            if coming is not None and (coming.pixels == YUV) != wanted:
+                # (the new ffmpeg is fed as the old one was: not again with every frame)
+                self._switch_held = now + self.SWITCH_HOLD_S
 
     def _pixels(self, name: str) -> str:
         """Who converts the frames' colours for the encoder ``name``: "card", "processor", or
