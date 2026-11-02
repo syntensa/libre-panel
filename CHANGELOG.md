@@ -163,7 +163,9 @@
   picture is the same: on the 12.3" Lumen's fans find their pictures 90 times in a hundred
   instead of 68, and the 8 MB of whole fan pictures are no longer kept. A theme's opaque
   background picture is kept once, in the frames' colours; the video writer finds the blocks
-  that changed four times as fast (two pixels at a time).
+  that changed four times as fast (two pixels at a time). The noise that dithers gradients
+  and glows is kept for the small pictures made again and again, within 2 MB: up to sixteen
+  pictures of it the size of the panel were kept, 5.5 MB each on the 12.3".
 - **Fans in a list turn without being drawn anew.** A fan's picture is laid from its ring and
   its rotor, each kept on its own, instead of kept as one picture for each position and each
   length of its ring: Arena's six fans made 600 to 1000 pictures every ten seconds (the

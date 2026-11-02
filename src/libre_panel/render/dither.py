@@ -39,13 +39,19 @@ def _tile() -> np.ndarray:
     return rng.random((TILE, TILE), np.float32) + rng.random((TILE, TILE), np.float32) - 1.0
 
 
-@lru_cache(maxsize=16)
 def noise(w: int, h: int, x: int = 0, y: int = 0) -> np.ndarray:
     """The noise (h, w), -1 to 1, for a picture whose top left is at (``x``, ``y``): the same
     numbers for the same place on the panel. Read only."""
-    tile = _tile()
-    reps = (-(-(h + y % TILE) // TILE), -(-(w + x % TILE) // TILE))
-    out = np.tile(tile, reps)[y % TILE : y % TILE + h, x % TILE : x % TILE + w]
+    return _noise(w, h, x % TILE, y % TILE)
+
+
+# the noise of the pictures made again and again (a glow, a ring's light) kept, by bytes: one
+# of the panel's size (a background, made once) is not, it was 5.5 MB on the 12.3" and sixteen
+# of them were kept, each with the tiles it was cut from
+@cached("dither.noise", 2 * MB)
+def _noise(w: int, h: int, dx: int, dy: int) -> np.ndarray:
+    reps = (-(-(h + dy) // TILE), -(-(w + dx) // TILE))
+    out = np.ascontiguousarray(np.tile(_tile(), reps)[dy : dy + h, dx : dx + w])
     out.setflags(write=False)
     return out
 
