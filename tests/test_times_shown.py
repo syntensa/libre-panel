@@ -9,12 +9,16 @@ import pytest
 from libre_panel.render.renderer import Renderer
 from libre_panel.theme.model import builtin_themes_dir, find_theme, load_theme
 
+
+def _lumen_with_seconds(path):
+    data = json.loads((path / "theme.json").read_text())
+    if min(data["display"]["width"], data["display"]["height"]) <= 80:
+        return False  # the 0.96": the time, its seconds and the CPU, no room for more
+    return any(w.get("id") == "seconds" for w in data["widgets"])
+
+
 LUMENS = sorted(
-    path.name
-    for path in builtin_themes_dir().glob("lumen*")
-    if any(
-        w.get("id") == "seconds" for w in json.loads((path / "theme.json").read_text())["widgets"]
-    )
+    path.name for path in builtin_themes_dir().glob("lumen*") if _lumen_with_seconds(path)
 )
 ARENAS = ["arena", "arena-1920x720", "arena-1280x720", "arena-pair", "arena-pair-1920x720",
           "arena-pair-1280x720", "arena-vertical", "arena-pair-vertical"]  # fmt: skip
