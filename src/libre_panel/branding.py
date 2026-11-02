@@ -14,8 +14,10 @@ import math
 
 from PIL import Image, ImageDraw, ImageFilter
 
-ACCENT = (46, 230, 214)  # the app's accent (#2ee6d6)
-TEXT = (232, 238, 244)
+from libre_panel.design import look_colour, rgb
+
+ACCENT = rgb(look_colour("libre", "accent"))  # the app's accent (#2ee6d6): the Libre look's
+TEXT = rgb(look_colour("libre", "text"))
 TRACK = (42, 52, 64)
 TEAL = ACCENT  # (the name the tray and older code use)
 

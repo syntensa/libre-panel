@@ -63,10 +63,12 @@ under its id, and themes in the 0.7 format, community themes among them, are rea
       round, on end), from which every size is laid out; a hand-made layout for a size stays
       possible and wins (the first step: a panel without a version of its own shows the
       version made for the nearest shape, laid out on its size)
-- [ ] One design system for the built-in themes: colours, type sizes, spacing, cards; cards
-      that let the background through a little, as they do since 0.8 (`card_opacity`,
-      measured per family: the dot grid shows through, the text loses at most 3 % of its
-      contrast)
+- [x] One design system for the built-in themes: colours, type sizes, spacing, cards
+      (`design.py`: the looks, which one each family wears and what it has of its own, the
+      modules' type and room from one measure each; `tools/design.py` writes it into the
+      themes, a test checks them); cards that let the background through a little, as they
+      do since 0.8 (`card_opacity`, measured per family: the dot grid shows through, the text
+      loses at most 3 % of its contrast)
 - [x] Lumen first, at all 28 sizes, measured against its hand-made layouts; then Arena,
       Encore, Almanac, Nimbus, Studio and the others: each family laid out for every size but
       the ZC-360's long strip (Lumen has one), looked at size by size; new versions where it
@@ -75,8 +77,9 @@ under its id, and themes in the 0.7 format, community themes among them, are rea
 - [x] A light variant of each family (for white builds): `light_colours`, every theme's
       colours worked out for a light ground by their job (OKLab), measured against the Paper
       look and for contrast over every built-in theme
-- [ ] The screens in the same design: Arena's game mode, the round report, alarms, cards,
-      the start screens
+- [x] The screens in the same design: Arena's game mode, the round report (in Arena's
+      colours and cards now, not the app's), alarms, cards, the start screens (the start
+      screens, the app's icon and the editor's building blocks from the design's Libre look)
 - [x] In the editor: a theme at every size side by side, one's own too (the theme's menu →
       *Every panel size*: each panel's picture, and whether it is made for it, laid out from
       the version for the nearest shape, or scaled into it)

@@ -610,11 +610,13 @@ export const looks = () => specs()?.modules?.looks || {};
 // the looks' names in the language (the specs carry them in English)
 const LOOK_NAMES = () => ({
   arctic: t("Arctic"),
+  libre: t("Libre"),
   neon: t("Neon"),
   graphite: t("Graphite"),
   paper: t("Paper"),
   sunset: t("Sunset"),
   mono: t("Mono"),
+  contrast: t("High Contrast"),
 });
 
 /** A look's name in the language: in Look, in the theme's settings, in Ctrl+K and its message. */

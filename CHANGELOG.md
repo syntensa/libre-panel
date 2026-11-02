@@ -3,6 +3,16 @@
 ## Unreleased
 
 **New**
+- **One design for Libre Panel's own screens.** The looks, and which one each family of
+  screens wears, are in one place now (`design.py`): Lumen, Encore, Almanac, Nimbus, Terra
+  and the small panels' screens in the app's own colours, Arena, Agents, Studio and SPUR's
+  screens in Arctic. A tool writes them into the themes and a test checks that every
+  built-in theme holds its family's. What it changed: the **round report**, which follows a
+  game on Arena, is in Arena's colours and cards now, not the app's; Arena's round version
+  wears Arena's colours; Libre Default, Column, Orbit, Slate and Pico the app's (a shade
+  apart before). The editor offers the app's look, **Libre**, and **High Contrast** for a new
+  theme, beside Arctic, Neon, Graphite, Paper, Sunset and Mono; its building blocks, the
+  start screens and the app's icon take their colours from the design.
 - **Every screen laid out for every panel.** Each of Libre Panel's own screens was looked at on
   all 28 sizes of the panels it drives, and where one was only scaled into the frame, or did
   not read, it got a version of its own: WeAct's 0.96" (160×80) a version of Lumen, Studio,

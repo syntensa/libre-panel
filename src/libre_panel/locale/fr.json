@@ -3029,7 +3029,9 @@
     "25 looks smooth and is the default: a graph moves a pixel a frame. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "25 est fluide et c'est la valeur par défaut : une courbe avance d'un pixel par image. 60 est une expérience : le panneau reçoit 70, pour que son lecteur garde de l'avance.",
     "{fps} frames a second take about {times} times the processor time of 25.": "{fps} images par seconde demandent environ {times} fois le temps processeur de 25.",
     "{fps} frames a second take about {percent}% more processor time than 25.": "{fps} images par seconde demandent environ {percent} % de temps processeur de plus que 25.",
-    "{fps} frames a second take about {percent}% less processor time than 25, and move a little less smoothly.": "{fps} images par seconde demandent environ {percent} % de temps processeur de moins que 25, et bougent un peu moins fluidement."
+    "{fps} frames a second take about {percent}% less processor time than 25, and move a little less smoothly.": "{fps} images par seconde demandent environ {percent} % de temps processeur de moins que 25, et bougent un peu moins fluidement.",
+    "Libre": "Libre",
+    "High Contrast": "Contraste élevé"
   },
   "fields": {
     "agent": "agent",

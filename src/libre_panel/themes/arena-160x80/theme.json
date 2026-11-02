@@ -32,8 +32,8 @@
   "background": {
     "color": "@bg",
     "gradient": [
-      "#0A1119",
-      "#060A0F"
+      "@bg",
+      "@bg2"
     ]
   },
   "refresh_ms": 1000,

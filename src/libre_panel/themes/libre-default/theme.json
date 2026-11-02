@@ -12,7 +12,7 @@
   },
   "palette": {
     "bg": "#0A0E13",
-    "bg2": "#0E141D",
+    "bg2": "#06090D",
     "card": "#111822",
     "card2": "#0C1219",
     "edge": "#1C2633",
@@ -25,10 +25,10 @@
     "violet_deep": "#5B3FB8",
     "green": "#34D399",
     "pink": "#F472B6",
-    "warn": "#FBBF24",
+    "warn": "#F5C46B",
     "crit": "#F87171",
-    "line": "#1C2633",
-    "track": "#1A2129",
+    "line": "#1F2A36",
+    "track": "#18212C",
     "text2": "#C9D3DE",
     "text3": "#93A1B2"
   },

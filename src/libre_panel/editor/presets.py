@@ -11,20 +11,9 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-TOKEN_DEFAULTS = {
-    "accent": "#22D3EE",
-    "accent_deep": "#0B6C85",
-    "text": "#F1F5F9",
-    "muted": "#8793A6",
-    "dim": "#4A5568",
-    "card": "#101722",
-    "card2": "#0B1018",
-    "edge": "#1B2534",
-    "good": "#34D399",
-    "up": "#F472B6",
-    "warn": "#FBBF24",
-    "crit": "#F87171",
-}
+from libre_panel.design import BLOCK_COLOURS
+
+TOKEN_DEFAULTS = dict(BLOCK_COLOURS)  # the Libre look's (libre_panel.design)
 TEMP_RULES = [{"above": 75, "color": "$warn"}, {"above": 88, "color": "$crit"}]
 
 

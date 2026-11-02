@@ -11,16 +11,16 @@
     "height": 80
   },
   "palette": {
-    "bg": "#05080D",
-    "bg2": "#0B111B",
-    "text": "#F1F5F9",
+    "bg": "#0A0E13",
+    "bg2": "#06090D",
+    "text": "#E8EEF4",
     "muted": "#8793A6",
-    "track": "#ffffff14",
-    "cpu": "#22D3EE",
+    "track": "#18212C",
+    "cpu": "#2EE6D6",
     "cpu_deep": "#0B6C85",
     "ram": "#C084FC",
     "ram_deep": "#6B2FB3",
-    "warn": "#FBBF24",
+    "warn": "#F5C46B",
     "crit": "#F87171"
   },
   "font": "builtin:Barlow-Medium",

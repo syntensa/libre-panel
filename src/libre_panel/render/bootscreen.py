@@ -35,6 +35,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from libre_panel import branding
+from libre_panel.design import look_colour, rgb
 from libre_panel.devices.models import PanelModel
 from libre_panel.fonts import builtin_font_path
 
@@ -43,11 +44,11 @@ CLIP_FPS = 30  # the panel's own rate after a cold start: 44 pictures are about 
 SEQUENCE = 11  # the pictures the panel's decoder takes per sequence
 QUIET = 64 / 1920  # of the long side, at both ends: the boot JPEG leaves it as it was
 
-BG = (10, 14, 19)
-BG2 = (6, 9, 13)
+BG = rgb(look_colour("libre", "bg"))  # the Libre look's (libre_panel.design)
+BG2 = rgb(look_colour("libre", "bg2"))
 DOTS = (22, 30, 40)
-TEXT = (232, 238, 244)
-ACCENT = (46, 230, 214)
+TEXT = rgb(look_colour("libre", "text"))
+ACCENT = rgb(look_colour("libre", "accent"))
 SS = 3  # supersampling of the shapes
 
 Canvas = np.ndarray  # a picture in floating point: rows x columns x 3, 0 to 255

@@ -30,7 +30,7 @@
   },
   "font": "builtin:Barlow-Medium",
   "background": {
-    "color": "#0A1119",
+    "color": "@bg",
     "image": null
   },
   "refresh_ms": 1000,

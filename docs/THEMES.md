@@ -779,14 +779,31 @@ light on rings, graphs and the clock; `card_opacity` (0.4–1, 1 when left
 out) is how much of the background the cards cover: the module cards'
 surface, and every rect filled with the palette's `@surface`, which is how a
 theme's own frames are cards; what is on them stays as it is. Libre Panel's
-own themes let a little of it through, just enough to be seen (Lumen, Almanac
-and Nimbus 0.7, Arena 0.8, Studio and Agents 0.85, Encore 0.9, whose cards lie
-over the cover; the contrast of the text against what is behind it falls by
-3 % at most); High Contrast, the round report and SPUR's screens cover it.
+own themes let a little of it through, just enough to be seen (Terra 0.6, Lumen,
+Almanac and Nimbus 0.7, Arena and the round report 0.8, Studio and Agents 0.85,
+Encore 0.9, whose cards lie over the cover; the contrast of the text against
+what is behind it falls by 3 % at most); High Contrast and SPUR's screens
+cover it.
 The person's `card_opacity` in config.toml (*Settings → Panel → Card
 opacity*) holds for every theme and goes before the theme's. The editor's
-looks (Arctic, Neon, Graphite, Paper, Sunset, Mono) set palette and style in
-one go.
+looks (Arctic, Libre, Neon, Graphite, Paper, Sunset, Mono, High Contrast) set
+palette and style in one go.
+
+**One design.** The looks are in `src/libre_panel/design.py`, and with them the
+look each family of built-in themes wears and what it has of its own: Lumen,
+Encore, Almanac, Nimbus, Terra (its accent the blue of the sea), Libre Default,
+Column, Orbit, Slate and Pico wear Libre, the app's own colours; Arena, the round
+report (it follows a game on Arena), Agents, Studio (its frames lighter, the disk
+green) and SPUR's screens wear Arctic; High Contrast wears its own; SPUR II keeps
+the colours SPUR II has. A built-in theme holds its colours and cards in its
+theme.json as every theme does, its background as `@bg` and `@bg2`;
+`python tools/design.py --write` writes the design into the themes, and a test
+checks that each holds its family's, so a colour changed in the design reaches
+every theme that wears it. The start screens, the app's icon, the editor's
+building blocks and a message's card on a theme without colours for it are in the
+Libre look. A module's type and room come from one measure each: its small labels
+are 7.5 % of its box's shorter side (9 to 22 px), every size of type in it a
+multiple of theirs, and its card's padding 10 % (6 to 26 px).
 
 ### Light colours
 

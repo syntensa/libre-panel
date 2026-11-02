@@ -11,31 +11,31 @@
     "height": 720
   },
   "palette": {
-    "bg": "#0A0E13",
-    "bg2": "#06090D",
-    "surface": "#0D1219",
-    "line": "#1F2A36",
-    "track": "#18212C",
-    "text": "#E8EEF4",
-    "text2": "#C9D3DE",
-    "text3": "#93A1B2",
+    "bg": "#0A1119",
+    "bg2": "#060A0F",
+    "surface": "#14202E",
+    "line": "#1F3147",
+    "track": "#162332",
+    "text": "#EEF6FF",
+    "text2": "#B8CAE0",
+    "text3": "#8CA0B8",
     "dim": "#5F6E80",
-    "accent": "#2EE6D6",
-    "cpu": "#2EE6D6",
-    "gpu": "#7F9CFF",
-    "mem": "#C792FF",
-    "disk": "#5FB6FF",
-    "net": "#34D399",
-    "warn": "#F5C46B",
-    "crit": "#F87171"
+    "accent": "#13E5D7",
+    "cpu": "#13E5D7",
+    "gpu": "#A3AEFF",
+    "mem": "#E0A8FF",
+    "disk": "#8FD3FF",
+    "net": "#7EE8A6",
+    "warn": "#FFCB6B",
+    "crit": "#FF7A85"
   },
   "font": "builtin:Barlow-Medium",
   "background": {
     "color": "@bg",
     "image": "assets/backdrop.png",
     "gradient": [
-      "#0A0E13",
-      "#06090D"
+      "@bg",
+      "@bg2"
     ]
   },
   "refresh_ms": 1000,
@@ -44,11 +44,12 @@
   },
   "style": {
     "card": "glass",
-    "radius": 14,
+    "radius": 18,
     "glow": 0.6,
-    "backdrop": "flat",
+    "backdrop": "gradient",
     "display_font": "builtin:Barlow-SemiBold",
-    "text_font": "builtin:Barlow-Medium"
+    "text_font": "builtin:Barlow-Medium",
+    "card_opacity": 0.8
   },
   "widgets": [
     {

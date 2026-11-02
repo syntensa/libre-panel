@@ -15,24 +15,26 @@ from typing import Any
 
 from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter, ImageFont
 
+from libre_panel.design import BLOCK_COLOURS, LOOKS
 from libre_panel.fonts import builtin_font_path
 from libre_panel.fonts.fallback import truetype
 
 RGB = tuple[int, int, int]
 
-# Palette names themes use for these roles (the first one a theme has wins),
-# and a fallback colour.
+# Palette names themes use for these roles (the first one a theme has wins), and the colour
+# where a theme has none of them: the Libre look's (libre_panel.design).
+_LIBRE = LOOKS["libre"]["palette"]
 ROLES: dict[str, tuple[tuple[str, ...], str]] = {
-    "card": (("card", "panel", "surface", "surf_1", "bg2"), "#101722"),
-    "ground": (("bg", "base"), "#0A1119"),  # the screen itself: a band is one of its sections
-    "text": (("text", "tx_1"), "#F1F5F9"),
-    "muted": (("text3", "tx_3", "muted", "dim"), "#8CA0B8"),
-    "track": (("track", "edge", "line", "rule_soft"), "#162332"),
-    "rule": (("rule", "line", "edge", "dim"), "#32475E"),
+    "card": (("card", "panel", "surface", "surf_1", "bg2"), BLOCK_COLOURS["card"]),
+    "ground": (("bg", "base"), _LIBRE["bg"]),  # the screen itself: a band is one of its sections
+    "text": (("text", "tx_1"), _LIBRE["text"]),
+    "muted": (("text3", "tx_3", "muted", "dim"), _LIBRE["text3"]),
+    "track": (("track", "edge", "line", "rule_soft"), _LIBRE["track"]),
+    "rule": (("rule", "line", "edge", "dim"), _LIBRE["line"]),
     "void": (("void",), "#000000"),
-    "info": (("accent", "primary", "cpu"), "#22D3EE"),
-    "warning": (("warn", "warning"), "#FBBF24"),
-    "error": (("crit", "error", "danger", "krit"), "#F87171"),
+    "info": (("accent", "primary", "cpu"), _LIBRE["accent"]),
+    "warning": (("warn", "warning"), _LIBRE["warn"]),
+    "error": (("crit", "error", "danger", "krit"), _LIBRE["crit"]),
 }
 WHITE: RGB = (234, 240, 248)
 

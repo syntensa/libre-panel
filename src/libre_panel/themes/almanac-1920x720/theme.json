@@ -34,8 +34,8 @@
     "color": "@bg",
     "image": "assets/backdrop.png",
     "gradient": [
-      "#0A0E13",
-      "#06090D"
+      "@bg",
+      "@bg2"
     ]
   },
   "refresh_ms": 1000,

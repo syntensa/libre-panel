@@ -3029,7 +3029,9 @@
     "25 looks smooth and is the default: a graph moves a pixel a frame. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "25 выглядит плавно и используется по умолчанию: график сдвигается на пиксель за кадр. 60 — эксперимент: панели сообщается 70, чтобы её проигрыватель не отставал.",
     "{fps} frames a second take about {times} times the processor time of 25.": "{fps} кадров в секунду требуют примерно в {times} раза больше процессорного времени, чем 25.",
     "{fps} frames a second take about {percent}% more processor time than 25.": "{fps} кадров в секунду требуют примерно на {percent}% больше процессорного времени, чем 25.",
-    "{fps} frames a second take about {percent}% less processor time than 25, and move a little less smoothly.": "{fps} кадров в секунду требуют примерно на {percent}% меньше процессорного времени, чем 25, и движутся чуть менее плавно."
+    "{fps} frames a second take about {percent}% less processor time than 25, and move a little less smoothly.": "{fps} кадров в секунду требуют примерно на {percent}% меньше процессорного времени, чем 25, и движутся чуть менее плавно.",
+    "Libre": "Libre",
+    "High Contrast": "Высокий контраст"
   },
   "fields": {
     "agent": "агент",

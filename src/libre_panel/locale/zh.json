@@ -3029,7 +3029,9 @@
     "25 looks smooth and is the default: a graph moves a pixel a frame. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "25 已经很流畅，也是默认值：图表每帧前进一个像素。60 是实验：向面板报告 70，让它的播放器保持领先。",
     "{fps} frames a second take about {times} times the processor time of 25.": "每秒 {fps} 帧大约需要 25 的 {times} 倍处理器时间。",
     "{fps} frames a second take about {percent}% more processor time than 25.": "每秒 {fps} 帧比 25 多用约 {percent}% 的处理器时间。",
-    "{fps} frames a second take about {percent}% less processor time than 25, and move a little less smoothly.": "每秒 {fps} 帧比 25 少用约 {percent}% 的处理器时间，动起来略欠流畅。"
+    "{fps} frames a second take about {percent}% less processor time than 25, and move a little less smoothly.": "每秒 {fps} 帧比 25 少用约 {percent}% 的处理器时间，动起来略欠流畅。",
+    "Libre": "Libre",
+    "High Contrast": "高对比度"
   },
   "fields": {
     "agent": "智能体",

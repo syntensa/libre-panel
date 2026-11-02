@@ -9,7 +9,8 @@ the processor's name, a 4x1 one a history graph as well.
 
 Colours, fonts and the card behind each module come from the theme's look:
 the palette roles in ``ROLES`` and the ``style`` section. A theme without
-them gets the "arctic" look of SPUR II. Labels are in the user's language.
+them gets the "arctic" look of SPUR II (libre_panel.design has the looks). Labels are in the user's
+language.
 """
 
 from __future__ import annotations
@@ -24,6 +25,14 @@ from typing import Any
 from PIL import ImageColor
 
 from libre_panel import timezones
+from libre_panel.design import (
+    DEFAULT_LOOK,
+    LOOKS,
+    MODULE_LABEL,
+    MODULE_PADDING,
+    MODULE_PADDING_BARE,
+    STYLE_DEFAULTS,
+)
 from libre_panel.devices.models import find_model
 from libre_panel.fonts import builtin_font_path
 from libre_panel.fonts.fallback import truetype
@@ -37,87 +46,8 @@ ROLES = (
     "accent", "cpu", "gpu", "mem", "disk", "net", "warn", "crit",
 )  # fmt: skip
 
-STYLE_DEFAULTS: dict[str, Any] = {
-    "card": "glass",  # glass | flat | outline | none
-    "radius": 18,  # corner radius of a card 200 px tall
-    "glow": 0.6,  # 0 = none, 1 = strong
-    "backdrop": "gradient",  # gradient | flat: the screen behind the modules
-    # how much of the background the cards cover (1: all; config.toml card_opacity for every
-    # theme): their surface, not what is on them
-    "display_font": "builtin:Barlow-SemiBold",  # numbers and the clock
-    "text_font": "builtin:Barlow-Medium",  # labels
-    "card_opacity": 1.0,
-}
 CARDS = ("glass", "flat", "outline", "none")
 BACKDROPS = ("gradient", "flat")
-
-LOOKS: dict[str, dict[str, Any]] = {
-    "arctic": {
-        "name": "Arctic",
-        "palette": {
-            "bg": "#0A1119", "bg2": "#060A0F", "surface": "#14202E", "line": "#1F3147",
-            "track": "#162332", "text": "#EEF6FF", "text2": "#B8CAE0", "text3": "#8CA0B8",
-            "accent": "#13E5D7", "cpu": "#13E5D7", "gpu": "#A3AEFF", "mem": "#E0A8FF",
-            "disk": "#8FD3FF", "net": "#7EE8A6", "warn": "#FFCB6B", "crit": "#FF7A85",
-        },
-        "style": {"card": "glass", "radius": 18, "glow": 0.6},
-    },
-    "neon": {
-        "name": "Neon",
-        "palette": {
-            "bg": "#07060F", "bg2": "#020107", "surface": "#110F26", "line": "#2D2760",
-            "track": "#1B1838", "text": "#F7F5FF", "text2": "#CBC4F5", "text3": "#9089C6",
-            "accent": "#FF4FD8", "cpu": "#00F0FF", "gpu": "#FF4FD8", "mem": "#B26BFF",
-            "disk": "#FFE45C", "net": "#4CFF9A", "warn": "#FFB020", "crit": "#FF3B5C",
-        },
-        "style": {"card": "outline", "radius": 14, "glow": 1.0},
-    },
-    "graphite": {
-        "name": "Graphite",
-        "palette": {
-            "bg": "#141516", "bg2": "#0C0D0E", "surface": "#1E2023", "line": "#2C2F33",
-            "track": "#2A2D31", "text": "#F2F2F2", "text2": "#C6C9CE", "text3": "#8D9298",
-            "accent": "#FF8A3D", "cpu": "#FF8A3D", "gpu": "#5EB1FF", "mem": "#C792EA",
-            "disk": "#9CCC65", "net": "#4DD0E1", "warn": "#FFC857", "crit": "#FF5C5C",
-        },
-        "style": {"card": "flat", "radius": 10, "glow": 0.15},
-    },
-    "paper": {
-        "name": "Paper",
-        "palette": {
-            "bg": "#E9EEF3", "bg2": "#DCE3EA", "surface": "#FFFFFF", "line": "#D3DBE3",
-            "track": "#E2E8EF", "text": "#15212C", "text2": "#3E4C5A", "text3": "#687887",
-            "accent": "#0B8C84", "cpu": "#0B8C84", "gpu": "#4B57C9", "mem": "#9B4FC4",
-            "disk": "#2F7FB8", "net": "#2E9E5B", "warn": "#C98200", "crit": "#D6434E",
-        },
-        "style": {"card": "flat", "radius": 16, "glow": 0.0},
-    },
-    "sunset": {
-        "name": "Sunset",
-        "palette": {
-            "bg": "#170D16", "bg2": "#0B0609", "surface": "#24151F", "line": "#3D2434",
-            "track": "#2F1B28", "text": "#FFF2EB", "text2": "#F2CBBA", "text3": "#B98F82",
-            "accent": "#FF7E5F", "cpu": "#FF7E5F", "gpu": "#FEB47B", "mem": "#EC6FAA",
-            "disk": "#FFD27A", "net": "#7FD8BE", "warn": "#FFC857", "crit": "#FF4E6A",
-        },
-        "style": {"card": "glass", "radius": 20, "glow": 0.5},
-    },
-    "mono": {
-        "name": "Mono",
-        "palette": {
-            "bg": "#000000", "bg2": "#000000", "surface": "#0B0B0B", "line": "#2A2A2A",
-            "track": "#1E1E1E", "text": "#FFFFFF", "text2": "#C2C2C2", "text3": "#7D7D7D",
-            "accent": "#FFFFFF", "cpu": "#FFFFFF", "gpu": "#FFFFFF", "mem": "#FFFFFF",
-            "disk": "#FFFFFF", "net": "#FFFFFF", "warn": "#FFC400", "crit": "#FF3D3D",
-        },
-        "style": {
-            "card": "outline", "radius": 4, "glow": 0.0, "backdrop": "flat",
-            "display_font": "builtin:JetBrainsMono-Bold",
-            "text_font": "builtin:JetBrainsMono-Medium",
-        },
-    },
-}  # fmt: skip
-DEFAULT_LOOK = "arctic"
 
 
 def look_theme_parts(look: str) -> tuple[dict[str, str], dict[str, Any]]:
@@ -339,10 +269,12 @@ class _Build:
             module["card"] == "auto" and module["module"] not in _CARDLESS
         )
         self.card_on = self.card_on and style["card"] != "none"
-        self.pad = round(_clamp(self.u * 0.1, 6, 26)) if self.card_on else round(self.u * 0.04)
+        padding = MODULE_PADDING if self.card_on else MODULE_PADDING_BARE
+        self.pad = round(_clamp(self.u * padding[0], padding[1], padding[2]))
         self.ix, self.iy = self.x + self.pad, self.y + self.pad
         self.iw, self.ih = self.w - 2 * self.pad, self.h - 2 * self.pad
-        self.ts = round(_clamp(self.u * 0.075, 9, 22))  # small labels
+        # small labels: every size of type in a module is a multiple of theirs
+        self.ts = round(_clamp(self.u * MODULE_LABEL[0], MODULE_LABEL[1], MODULE_LABEL[2]))
         self.glow = float(style["glow"])
         self.out: list[dict[str, Any]] = []
         self.needs = ""  # added to every widget (a source's fallback)
