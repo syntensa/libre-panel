@@ -1,6 +1,17 @@
 # Changelog
 
-## Unreleased
+## 0.8.0rc1 — 2026-11-02
+
+A release candidate of 0.8, to try before everyone has it: one design for every panel, and
+lighter. Libre Panel's own screens are laid out for each of the 28 panel sizes it drives, in one
+design, and your own themes can have a version for each size too. A video panel takes much
+less of the processor: on the 12.3", Lumen 86 % of a core at the new 25 frames a second instead
+of 115 % at 0.7.10's 30 (96 % at 30), Arena 85 instead of 120, Encore 23 instead of 76, Almanac
+11 instead of 70, the memory about as before (ffmpeg 20 MB less). Gradients and glows are
+drawn without bands, cards let the background through a little, and there is a new screen:
+Terra, the earth as it is now. What most wants trying on real panels: the video panel's rest
+(`[video] rest`), the 25 frames a second, and Libre Panel's screens on the panels that had none
+of their own.
 
 **New**
 - **One design for Libre Panel's own screens.** The looks, and which one each family of
