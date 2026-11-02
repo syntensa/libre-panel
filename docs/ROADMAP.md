@@ -124,10 +124,20 @@ and becomes the default only once it has proven itself on the panels; the old wa
 
 ### Stage 0: measure
 
-- [ ] Where a video panel's time goes, per theme and frame rate: drawing, the YUV, the pipe,
-      x264, USB; how much of each frame changes; each process's memory
-- [ ] x264 told which of its 16x16 blocks stayed the same (`X264_MBINFO_CONSTANT`; the ffmpeg
-      program cannot be told through its pipe): what it saves, and what it costs in bits
+- [x] Where a video panel's time goes (the 12.3" at 25 frames a second, Lumen): drawing 10 ms
+      a frame in the main thread and 7.5 in helper threads, the YUV 3, ffmpeg 12 (x264 7.5,
+      the rest the program itself: reading two megabytes a frame from the pipe, copying,
+      packing); 83 % of a core in all. A twentieth of the macroblocks change in a frame
+      (Lumen 4.6 %, Arena 5.8 %, Terra 4.8 %), so x264's cost is mostly work it does on
+      every frame whatever changed
+- [x] x264 told which of its 16x16 blocks stayed the same (`X264_MBINFO_CONSTANT`, which the
+      ffmpeg program cannot be told through its pipe), without the deblocking filter and the
+      search for motion finer than a pixel: Lumen 3.9 instead of 7.5 ms a frame, Arena 3.4
+      instead of 6.3, at the same bit rate and as sharp or sharper (PSNR, the edges, the
+      dither in the gradients measured from the decoded stream). The filter and the
+      sub-pixel search are off for drawn frames through ffmpeg already (a fifth less);
+      adaptive quantization stays (without it the dither goes, and the bands come back).
+      OpenH264's mode for screens is no better: as costly, and far blurrier at the rate
 
 ### Stage 1: the native output
 
