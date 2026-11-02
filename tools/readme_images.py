@@ -52,8 +52,8 @@ TX_1, TX_3, ACCENT = (238, 246, 255), (140, 160, 184), (19, 229, 215)
 
 # Each theme as the panel shows it: Libre Panel's own first, the bars before the small panels.
 THEMES = ("lumen", "lumen-companion", "studio", "encore", "nimbus", "almanac", "almanac-analog",
-          "arena", "agents", "contrast", "libre-default", "slate", "orbit", "column", "pico",
-          "spur-ii")  # fmt: skip
+          "terra", "arena", "agents", "contrast", "libre-default", "slate", "orbit", "column",
+          "pico", "spur-ii")  # fmt: skip
 # The pictures made of them, and the screenshots of the app (those need Playwright).
 COMPOSED = ("hero.png", "gallery.png", "social-preview.png", "studio-adapts.png", "vertical.png",
             "module-sizes.png", "weather-sizes.png", "looks.png", "module-layouts.png",
@@ -513,7 +513,8 @@ def looks() -> Image.Image:
     cell_h = cell_w // 4
     m = shadow_margin(border)
     width = 2 * margin + 2 * (cell_w + 2 * border) + gap
-    height = margin + 3 * (cell_h + 2 * border + caption) + 2 * gap // 2 + margin // 2
+    rows = -(-len(shots) // 2)  # two side by side, as many rows as it takes
+    height = margin + rows * (cell_h + 2 * border + caption) + (rows - 1) * gap // 2 + margin // 2
     img = background(width, height, glow=(0.5, 0.0)).convert("RGBA")
     draw = ImageDraw.Draw(img)
     for i, (name, frame) in enumerate(shots):

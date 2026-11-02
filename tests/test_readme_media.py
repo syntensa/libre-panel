@@ -245,7 +245,7 @@ def test_every_panel_recipe_runs_headless_and_makes_a_clip(panel, clip, short):
     assert list(panel.CLIPS) == [
         "video-mode", "card-ignition", "card-turns", "ai-card", "agents", "small-panel",
         "volume-band", "volume-looks", "theme-tube", "game-entrance", "close-up-rings",
-        "close-up-curves", "encore", "nimbus", "almanac", "music-page", "round-report",
+        "close-up-curves", "encore", "nimbus", "terra", "almanac", "music-page", "round-report",
         "screens-in-turn", "themes-tour", "where-it-started",
     ]  # fmt: skip
     widths = {}

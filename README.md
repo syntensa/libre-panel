@@ -234,7 +234,7 @@ facets, acrylic or flat.</td>
 
 ## Themes
 
-<p><img src="docs/media/themes-tour.gif" width="100%" alt="Libre Panel's own screens on a 9.2-inch bar, one after another through the tube: Lumen, Studio with its large clock, Encore with the cover large, Nimbus with the weather, Almanac with the month, Arena for games, and Lumen again"></p>
+<p><img src="docs/media/themes-tour.gif" width="100%" alt="Libre Panel's own screens on a 9.2-inch bar, one after another through the tube: Lumen, Studio with its large clock, Encore with the cover large, Nimbus with the weather, Almanac with the month, Terra with the earth turning, Arena for games, and Lumen again"></p>
 
 <p align="center"><img src="docs/images/gallery.png" width="100%" alt="Libre Panel's own themes on their panels: Lumen and Studio on 9.2-inch bars, then Slate (5 inch), Libre Default (3.5 inch), Orbit (round), Column (3.5 inch portrait) and Pico (0.96 inch)"></p>
 

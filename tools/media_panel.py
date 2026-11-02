@@ -1090,6 +1090,11 @@ CLIPS: dict[str, PanelClip] = {
         "Nimbus: the weather's symbols moving, the next days, the moon, a small clock rolling",
         ("nimbus",), 6.0, screen, poster=2.0, periodic=True, clock_runs=True,
     ),
+    "terra": PanelClip(
+        "Terra: the earth as it is now, turning, the line between day and night soft with dusk,"
+        " the time in four other places",
+        ("terra",), 8.0, screen, poster=3.0, clock_runs=True,
+    ),
     "almanac": PanelClip(
         "Almanac to Almanac Analog and back: rolling digits, then a second hand that glides",
         ("almanac", "almanac-analog"), 6.6, theme_tube, poster=2.6, clock_runs=True,
@@ -1099,7 +1104,7 @@ CLIPS: dict[str, PanelClip] = {
         ("lumen", "encore"), 9.0, music_page, poster=4.2, clock_runs=True,
     ),
     "round-report": PanelClip(
-        "after a game: the round report opens, in Libre Panel's look",
+        "after a game: the round report opens, in Arena's colours and cards",
         ("lumen", "round-report"), 6.0, round_report, poster=4.5, loop="cut",
     ),
     "screens-in-turn": PanelClip(
@@ -1109,7 +1114,8 @@ CLIPS: dict[str, PanelClip] = {
     ),
     "themes-tour": PanelClip(
         "Libre Panel's own screens on the bar, one after another through the tube",
-        ("lumen", "studio", "encore", "nimbus", "almanac", "arena"), 6 * TOUR_S, themes_tour,
+        ("lumen", "studio", "encore", "nimbus", "almanac", "terra", "arena"), 7 * TOUR_S,
+        themes_tour,
         poster=TOUR_S * 0.25, clock_runs=True,
     ),
     # SPUR II's classic screen, where Libre Panel started: the only clip of its own look

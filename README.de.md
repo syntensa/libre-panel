@@ -243,7 +243,7 @@ paar Buchstaben.</td>
 
 ## Themes
 
-<p><img src="docs/media/themes-tour.gif" width="100%" alt="Die eigenen Bildschirme von Libre Panel auf einer 9,2-Zoll-Leiste, einer nach dem anderen durch die Röhre: Lumen, Studio mit seiner großen Uhr, Encore mit dem Cover groß, Nimbus mit dem Wetter, Almanac mit dem Monat, Arena für Spiele, und wieder Lumen"></p>
+<p><img src="docs/media/themes-tour.gif" width="100%" alt="Die eigenen Bildschirme von Libre Panel auf einer 9,2-Zoll-Leiste, einer nach dem anderen durch die Röhre: Lumen, Studio mit seiner großen Uhr, Encore mit dem Cover groß, Nimbus mit dem Wetter, Almanac mit dem Monat, Terra mit der Erde, die sich dreht, Arena für Spiele, und wieder Lumen"></p>
 
 <p align="center"><img src="docs/images/gallery.png" width="100%" alt="Die eigenen Themes von Libre Panel auf ihren Panels: Lumen und Studio auf 9,2-Zoll-Leisten, darunter Slate (5 Zoll), Libre Default (3,5 Zoll), Orbit (rund), Column (3,5 Zoll hochkant) und Pico (0,96 Zoll)"></p>
 
