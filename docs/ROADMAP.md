@@ -100,6 +100,72 @@ under its id, and themes in the 0.7 format, community themes among them, are rea
 - [ ] Signed Windows downloads (SignPath, free for open source)
 - [ ] winget; PyPI (`release.yml` is ready for trusted publishing); Flatpak
 
+## Next: a native engine, smooth and light
+
+0.8 made the frames lighter piece by piece, and each fix found one more thing that cost too
+much in some frame. What makes a panel stutter, glitch and ask much of the PC lies under them:
+
+- the frames are drawn in Python on the processor, every one, and each panel beside the first
+  runs in a process of its own (the interpreter's lock): Lumen on the 12.3" at 25 frames a
+  second takes 86 % of a core in 0.8.0rc1, a 12.3" and a 9.2" about 500 MB on Windows;
+- the video goes through an ffmpeg program fed by a pipe, which is started anew for a change of
+  the bit rate or of who converts the frames: the glitches, and 0.8.0rc1's worst bug;
+- a frame is sent the moment it is done, so a slow one shows at once;
+- many settings meet many paths, in combinations no test covers.
+
+So Libre Panel is split into a brain and hands. The brain stays Python: the sensors, the
+services (game mode, weather, the AI agents, notices), the settings and the app; none of it is
+pressed for time. The hands are a small native engine, in Rust, one process for all panels: it
+draws, encodes and sends the frames, on time. Themes stay as they are (theme.json, community
+themes too).
+
+**The bar: nothing gets worse.** Each stage ships behind a switch, beside the way of today,
+and becomes the default only once it has proven itself on the panels; the old way goes last.
+
+### Stage 0: measure
+
+- [ ] Where a video panel's time goes, per theme and frame rate: drawing, the YUV, the pipe,
+      x264, USB; how much of each frame changes; each process's memory
+- [ ] x264 told which of its 16x16 blocks stayed the same (`X264_MBINFO_CONSTANT`; the ffmpeg
+      program cannot be told through its pipe): what it saves, and what it costs in bits
+
+### Stage 1: the native output
+
+- [ ] The engine takes each frame's YUV and what changed in it, and encodes it with libx264 (and
+      the cards' encoders) told which blocks stayed the same; the bit rate changes in the
+      running stream (`x264_encoder_reconfig`): no ffmpeg started anew, no handover
+- [ ] Frames drawn a few ahead and sent on a steady beat (a slow frame no longer shows); on
+      Windows the engine's thread under the multimedia scheduler (MMCSS), as players' are
+- [ ] The TURZX panels' USB protocol as the Python driver speaks it: nothing new is sent to a
+      panel
+- [ ] Built in CI for Windows and Linux and in the downloads, the ffmpeg path as the fallback
+
+### Stage 2: the native renderer
+
+- [ ] Layers instead of drawing anew: each element drawn once, and again only when what it
+      shows changes; what moves (rolling digits, hands, graphs, transitions) moves, turns and
+      fades the layers it has, and a glow goes with its layer
+- [ ] Element by element, each against today's renderer as the reference: the same picture, to
+      a level, with the same font engine (FreeType)
+
+### Stage 3: Python only the brain
+
+- [ ] The engine draws every panel; the Python renderer and the ffmpeg path go
+- [ ] Fewer settings: what `[video]` sets today the engine decides by measuring
+
+### Against bugs in the app
+
+- [ ] What the panel shows and what Design opens decided in one place (the server) and shown by
+      the app (0.8.0rc1's 3.5" in Design was the same question answered apart in JavaScript
+      and in Python)
+- [ ] Real configurations, without their secrets, as tests; hours of the app used at random
+      against panels in memory, looking for hangs
+- [ ] A PC with a panel that runs the tests every night (needs the maintainer)
+
+**Targets**, for stage 1's first version to show before the rest is built: Lumen on the 12.3"
+at 25 frames a second under 10 % of a core, about half the memory, no frame late in normal
+use, no glitch when the bit rate changes.
+
 ## Done
 
 - **0.7** — up to four panels at once, a companion screen beside the first; Claude Code and
