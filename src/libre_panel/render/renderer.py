@@ -831,6 +831,7 @@ class Renderer:
         # not chosen is as the theme has it
         self.switches: dict[str, bool] = {}
         self._analog_parts: dict[Any, Image.Image] = {}  # faces and second hands (_analog_part)
+        self._analog_halos: dict[Any, tuple[Image.Image | None, int]] = {}  # (_hand_effects)
         self._fonts: dict[tuple[str, int], ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
         self._digit_width: dict[int, float] = {}
         # the theme's pictures, fitted (one that could not be read: None)
@@ -2430,11 +2431,13 @@ class Renderer:
         hit = self._cache.get(widget["id"])
         if hit is not None and hit[0] == content:
             return hit[1]
-        layer = self._analog_part(widget, shown).copy()
+        face = self._analog_part(widget, shown)
+        layer = face.copy()
         hand, at_x, at_y = self._second_hand(widget, at)
         layer.alpha_composite(hand, (at_x, at_y))
         x, y = widget["x"], widget["y"]
-        piece = self._effects(widget, Piece(layer, x, y, [x, y, layer.width, layer.height]))
+        piece = Piece(layer, x, y, [x, y, layer.width, layer.height])
+        piece = self._hand_effects(widget, piece, (face, shown))
         if kind == "sweep" or at != moment.second:
             self.moving = True
         else:  # at rest for the rest of the second (made here: a hand must not step back)
@@ -2452,6 +2455,35 @@ class Renderer:
             while len(self._analog_parts) > 8:
                 self._analog_parts.pop(next(iter(self._analog_parts)))
         return found
+
+    def _hand_effects(
+        self, widget: dict[str, Any], piece: Piece, face: tuple[Image.Image, Any]
+    ) -> Piece:
+        """:meth:`_effects` for a face whose second hand moves (``piece``: the face with the hand
+        on it): on a face that is not see-through the hand adds nothing to the shape its shadow
+        and glow are of (it lies on the face), so those of ``face`` (its layer and its hands, as
+        :meth:`_analog_part` keeps them) are kept as long as it is. The glow of the whole face
+        made anew each frame the hand moved was most of a frame's work on Terra's 12.3" (four
+        faces, two milliseconds each, in the same frames). A see-through face's are made whole,
+        as before."""
+        solid = bool(widget["face"]) and self.color(widget["face"])[3] == 255
+        if not solid or (not widget.get("glow") and not widget.get("shadow")):
+            return self._effects(widget, piece)
+        opacity = widget.get("opacity", 1.0)
+        key = (widget["id"], json.dumps(widget, sort_keys=True, default=str), face[1])
+        kept = self._analog_halos.get(key)
+        if kept is None:
+            kept = self._analog_halos[key] = self._halo(widget, _scale_alpha(face[0], opacity))
+            while len(self._analog_halos) > 8:
+                self._analog_halos.pop(next(iter(self._analog_halos)))
+        halo, pad = kept
+        if halo is None:  # (no effects after all)
+            return self._effects(widget, piece)
+        out = halo.copy()
+        out.alpha_composite(_scale_alpha(piece.layer, opacity), (pad, pad))
+        done = replace(piece, layer=out, x=piece.x - pad, y=piece.y - pad,
+                       light=_dimmed(piece.light, opacity))  # fmt: skip
+        return _clip_sides(done) if widget.get("clip") else done
 
     def _second_hand(self, widget: dict[str, Any], at: float) -> tuple[Image.Image, int, int]:
         """The second hand at ``at`` seconds (a fraction too) with the dot in the middle, drawn
@@ -2550,10 +2582,14 @@ class Renderer:
         phase = round(phase % 1.0, 3)
         if self.pack(widget) == "classic":
             return self._cached(widget, phase, lambda: self._moon_classic(widget, phase))
+        from libre_panel.render import moon
+
         step = round(now * self.MOON_STEP) if self.animate else None
         if step is not None:
             self.moving = True
-        return self._cached(widget, (phase, step), lambda: self._moon_piece(widget, phase, step))
+        # (made, with its glow, only when the halo's strength changed: a few times in a breath)
+        level = moon.halo_level(phase, None if step is None else step / self.MOON_STEP)
+        return self._cached(widget, (phase, level), lambda: self._moon_piece(widget, phase, step))
 
     def _moon_classic(self, widget: dict[str, Any], phase: float) -> Piece:
         """The moon lit as at ``phase`` (0 new, 0.5 full): a disc, its lit side

@@ -346,6 +346,65 @@ def test_a_gliding_hand_costs_the_panel_little():
     assert sorted(took)[len(took) // 2] < 0.012  # the face is kept, the hand alone is drawn
 
 
+@pytest.mark.parametrize("ground", ["#101010", "#10101080"])
+def test_a_glowing_face_keeps_its_glow_while_the_hand_glides_and_looks_as_before(
+    ground, monkeypatch
+):
+    """The glow of a face that is not see-through is made once for the face (Terra's four
+    faces: most of a frame's work when made anew each frame); a see-through one's each frame,
+    as before. The frames are those of the whole face's glow, to a level."""
+    from libre_panel.render import renderer as module
+
+    made = []
+    soft = module._soft_light
+
+    def counted(base, *args, **kwargs):
+        made.append(base.size)
+        return soft(base, *args, **kwargs)
+
+    monkeypatch.setattr(module, "_soft_light", counted)
+
+    def frames(renderer):
+        renderer.widgets[0].update(face=ground, glow=0.4, glow_radius=6)
+        out = []
+        for ms in range(0, 420, 20):
+            frame = renderer.render(Snapshot(now=START + timedelta(milliseconds=ms)), ms / 1000)[0]
+            out.append(numpy.asarray(frame, int))
+        return out
+
+    kept = frames(face("glide"))
+    faces = [size for size in made if size[0] >= 240]
+    assert len(faces) == (1 if ground == "#101010" else len(made)) and len(made) > 0
+    whole = face("glide")
+    monkeypatch.setattr(
+        whole, "_hand_effects", lambda widget, piece, *_: whole._effects(widget, piece)
+    )
+    for mine, before in zip(kept, frames(whole), strict=True):
+        assert numpy.abs(mine - before).max() <= 1
+
+
+def test_a_breathing_moon_is_made_again_only_when_its_halo_changes(monkeypatch):
+    from libre_panel.render import moon
+
+    widget = {"type": "moon", "id": "moon", "x": 0, "y": 0, "size": 100, "glow": 0.3,
+              "glow_radius": 10, "color": "#ffffff", "color2": "#000000"}  # fmt: skip
+    renderer = Renderer(tiny(120, 120, [widget]), animate=True)
+    renderer.background_builds = False
+    made = []
+    piece = renderer._moon_piece
+    monkeypatch.setattr(renderer, "_moon_piece", lambda *a: (made.append(a), piece(*a))[1])
+    snapshot = Snapshot(readings={"moon.phase": Reading("moon.phase", 0.5)}, now=START)
+    frames = {}
+    for n in range(80):  # eight seconds: a breath and more, a step of the halo each tenth
+        frame = renderer.render(snapshot, n / 10)[0]
+        assert renderer.moving
+        frames.setdefault(moon.halo_level(0.5, n / 10), frame.tobytes())
+        assert frame.tobytes() == frames[moon.halo_level(0.5, n / 10)]
+    levels = [moon.halo_level(0.5, n / 10) for n in range(80)]
+    changes = 1 + sum(a != b for a, b in zip(levels, levels[1:], strict=False))
+    assert 2 < len(set(levels)) and len(made) == changes < 20
+
+
 def test_a_screens_parts_stay_in_json_as_written():
     for name in SCREENS:
         text = (builtin_themes_dir() / name / "theme.json").read_text("utf-8")

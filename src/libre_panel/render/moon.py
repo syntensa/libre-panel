@@ -255,11 +255,16 @@ def picture(size: int, phase: float, color: tuple[int, ...], night: tuple[int, .
             mirror: bool = False, t: float | None = None) -> Image.Image:  # fmt: skip
     """The moon with its halo; ``t`` (seconds) lets the halo breathe, slowly (None: still).
     The disc is made once per phase and kept, the halo in a few strengths."""
-    breath = 1.0 if t is None else 0.80 + 0.20 * (0.5 + 0.5 * math.sin(2 * math.pi * t / BREATH))
-    level = round(HALO_LEVELS * 0.40 * lit_share(phase) * breath)
-    out = _halo_kept(size, tuple(color[:3]), level).copy()
+    out = _halo_kept(size, tuple(color[:3]), halo_level(phase, t)).copy()
     out.alpha_composite(_disc_kept(size, round(phase, 3), tuple(color), night, mirror))
     return out
+
+
+def halo_level(phase: float, t: float | None = None) -> int:
+    """The halo's strength at ``t`` (as :func:`picture` takes it), in :data:`HALO_LEVELS`: the
+    picture stays the same while it does (a few levels in a breath)."""
+    breath = 1.0 if t is None else 0.80 + 0.20 * (0.5 + 0.5 * math.sin(2 * math.pi * t / BREATH))
+    return round(HALO_LEVELS * 0.40 * lit_share(phase) * breath)
 
 
 BREATH = 7.0  # seconds the halo takes to swell and settle
