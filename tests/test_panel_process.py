@@ -3,6 +3,8 @@ on the first panel's readings, says how it is doing and what it shows, its log l
 first's log, and it ends when told to; where a process cannot start, a thread runs it."""
 
 import logging
+import os
+import sys
 import threading
 import time
 
@@ -30,6 +32,25 @@ theme = "lumen-companion"
 """
 
 
+def written(home):
+    return (home / "second.png").exists()
+
+
+def held(caplog):
+    said = "second.png is not written: Libre Panel runs with the highest rights"
+    return any(said in record.getMessage() for record in caplog.records)
+
+
+def really_elevated():
+    """Whether this process runs with the highest rights (rights.elevated is the tests'
+    stand-in here, conftest's not_elevated)."""
+    if sys.platform == "win32":
+        from libre_panel.autostart import is_admin
+
+        return is_admin()
+    return os.geteuid() == 0
+
+
 def test_a_panel_beside_the_first_runs_in_a_process_of_its_own(tmp_path, monkeypatch, caplog):
     monkeypatch.setenv("LIBRE_PANEL_HOME", str(tmp_path))
     path = tmp_path / "config.toml"
@@ -48,8 +69,13 @@ def test_a_panel_beside_the_first_runs_in_a_process_of_its_own(tmp_path, monkeyp
         assert beside.theme == "lumen-companion" and beside.target
         assert wait_for(lambda: beside.shown is not None, timeout=10)  # its picture, for Live
         assert beside.shown.size[0] > 0
-        # (the picture is noted for Live before the panel's driver writes it)
-        assert wait_for(lambda: (tmp_path / "second.png").exists(), timeout=10)
+        # (the picture is noted for Live before the panel's driver writes it; with the highest
+        # rights only into a folder that nobody without them may change, which a user's temp
+        # folder is not. The panel's own process has the rights it has, not the tests' stand-in
+        # (conftest's not_elevated): GitHub's Windows runners run elevated)
+        assert wait_for(lambda: written(tmp_path) or held(caplog), timeout=10)
+        assert written(tmp_path) != held(caplog)
+        assert written(tmp_path) or really_elevated()
         said = [r for r in caplog.records if "in a process of its own" in r.getMessage()]
         assert said and said[0].threadName == "panel-2"  # its log lines, as its own
         # what its theme reads is wanted here too, where the sources are: Lumen shows no
