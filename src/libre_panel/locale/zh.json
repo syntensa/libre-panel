@@ -3031,7 +3031,11 @@
     "{fps} frames a second take about {percent}% more processor time than 25.": "每秒 {fps} 帧比 25 多用约 {percent}% 的处理器时间。",
     "{fps} frames a second take about {percent}% less processor time than 25, and move a little less smoothly.": "每秒 {fps} 帧比 25 少用约 {percent}% 的处理器时间，动起来略欠流畅。",
     "Libre": "Libre",
-    "High Contrast": "高对比度"
+    "High Contrast": "高对比度",
+    "Making…": "正在创建…",
+    "Make a version for this size": "为此尺寸创建一个版本",
+    "A version for {size}: yours to change. That size shows it from now on.": "{size} 的版本：归你修改。此尺寸从现在起显示它。",
+    "It has a version for this size already: {name}.": "此尺寸已有一个版本：{name}。"
   },
   "fields": {
     "agent": "智能体",

@@ -1,7 +1,7 @@
 // The theme's name in the header: unsaved marker, and the theme menu (open
 // another theme, new, save, save as, import, export).
 
-import { blankTheme, confirmDiscard, exportTheme, importTheme, openTheme, save, saveAs, startTheme } from "../core/actions.js";
+import { blankTheme, confirmDiscard, exportTheme, importTheme, openTheme, refreshThemes, save, saveAs, startTheme } from "../core/actions.js";
 import { endpoints } from "../core/api.js";
 import { clone, setSelection } from "../core/doc.js";
 import { t } from "../core/i18n.js";
@@ -12,6 +12,7 @@ import { html, useEffect, useMemo, useRef, useState } from "../lib/preact.js";
 import { openDialog } from "../ui/dialog.js";
 import { Icon } from "../ui/icons.js";
 import { Popover, arrowNavigation } from "../ui/layer.js";
+import { toast, toastError } from "../ui/toast.js";
 import { Kbd } from "../ui/controls.js";
 import { currentModel, panelName } from "./panel-popover.js";
 import { navigate } from "./views.js";
@@ -130,12 +131,28 @@ export function ThemeTitle() {
 /**
  * The theme as every panel Libre Panel drives shows it, side by side, tall to long: where it has
  * a version made for the size, where its version for the nearest shape is laid out on it (theme
- * .adapt.laid_out: Libre Panel's own), and where it is scaled into the panel with the
- * background round it. As saved: unsaved changes show once saved.
+ * .adapt.laid_out: Libre Panel's own, and one's own with versions for more than one size), and
+ * where it is scaled into the panel with the background round it. As saved: unsaved changes
+ * show once saved. Where it is not made for a size, *Make a version for this size* makes one
+ * as it shows there (yours, `<theme>-<w>x<h>`), which that size shows from then on, and opens it.
  */
-function Sizes({ id }) {
+function Sizes({ id, close }) {
   const [sizes, setSizes] = useState(null);
+  const [making, setMaking] = useState(null);
   const dirty = useStore((s) => s.dirty && s.doc?.id === id);
+  const makeVersion = async (entry) => {
+    setMaking(entry.size.join("x"));
+    try {
+      const made = await endpoints.makeVersion(id, entry.size);
+      await refreshThemes();
+      close();
+      toast(t("A version for {size}: yours to change. That size shows it from now on.", { size: entry.size.join(" × ") }));
+      await openTheme(made.id, { exact: true });
+    } catch (error) {
+      setMaking(null);
+      toastError(error);
+    }
+  };
   useEffect(() => {
     endpoints.themeSizes(id).then((data) => setSizes(data.sizes)).catch(() => setSizes([]));
   }, [id]);
@@ -158,6 +175,12 @@ function Sizes({ id }) {
             <strong>${entry.size[0]} × ${entry.size[1]}${entry.shape === "round" ? ` · ${t("round")}` : ""}</strong>
             <span class="muted">${entry.panels.slice(0, 2).join(", ")}${entry.panels.length > 2 ? " …" : ""}</span>
             <span class="theme-size-how">${how(entry)}</span>
+            ${entry.how === "made"
+              ? null
+              : html`<button type="button" class="btn btn-quiet theme-size-make" disabled=${making !== null}
+                  onClick=${() => makeVersion(entry)}>
+                  ${making === entry.size.join("x") ? t("Making…") : t("Make a version for this size")}
+                </button>`}
           </figcaption>
         </figure>`,
       )}
@@ -166,7 +189,7 @@ function Sizes({ id }) {
 }
 
 function sizesDialog(id) {
-  return openDialog(() => html`<${Sizes} id=${id} />`, { label: t("Every panel size"), wide: true });
+  return openDialog((close) => html`<${Sizes} id=${id} close=${close} />`, { label: t("Every panel size"), wide: true });
 }
 
 // -- a new theme: a starting layout and a look ---------------------------------

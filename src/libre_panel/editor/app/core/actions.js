@@ -87,10 +87,12 @@ export async function confirmDiscard() {
 }
 
 /** Open a saved theme for editing (after asking about unsaved changes). */
-export async function openTheme(id, { page, ask = true } = {}) {
+export async function openTheme(id, { page, ask = true, exact = false } = {}) {
   if (ask && !(await confirmDiscard())) return false;
   try {
-    const shown = versionFor(id); // the version the panel shows (Lumen Vertical on a bar on end)
+    // the version the panel shows (Lumen Vertical on a bar on end); ``exact``: ``id`` itself (a
+    // version just made for another panel's size)
+    const shown = exact ? id : versionFor(id);
     const data = await endpoints.theme(shown);
     openDoc({ theme: data.theme, id: shown, builtin: data.builtin });
     store.set({ page: page === undefined ? pageOf(id) : page });

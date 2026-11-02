@@ -5,7 +5,7 @@ shape scaled into the frame with bars round it."""
 import json
 
 from libre_panel.theme.adapt import laid_out, nearest_version, versions_of
-from libre_panel.theme.model import THEME_FORMAT, find_theme, load_theme, save_theme
+from libre_panel.theme.model import THEME_FORMAT, find_theme, load_theme, save_theme, theme_for
 
 
 def test_each_panel_gets_the_version_made_for_the_shape_nearest_its_own():
@@ -52,6 +52,20 @@ def test_anyone_elses_theme_stays_as_it_is(tmp_path):
     save_theme("my-lumen", data)
     mine = load_theme(find_theme("my-lumen"))
     assert laid_out(mine, (960, 320)) is mine  # (its frames scaled into the panel's, as before)
+
+
+def test_a_theme_of_ones_own_with_versions_for_more_sizes_is_laid_out_as_libre_panels_are():
+    """Versions for more than one size (Every panel size → Make a version for this size): the
+    format of Libre Panel's own themes, so each panel gets the one nearest its shape laid out."""
+    for name, source in (("mine", "lumen"), ("mine-1920x720", "lumen-1920x720")):
+        data = json.loads((find_theme(source) / "theme.json").read_text(encoding="utf-8"))
+        save_theme(name, {**data, "format": THEME_FORMAT}, source)
+    mine = load_theme(find_theme("mine"))
+    fitted = laid_out(mine, (960, 320))  # the 4.6": the 12.3"'s shape is nearest
+    assert (fitted.width, fitted.height) == (960, 320) and fitted.root.name == "mine-1920x720"
+    assert laid_out(mine, (1920, 440)).root.name == "mine"  # the 11.3": the bar's
+    assert theme_for("mine", "landscape", (1920, 720)) == "mine-1920x720"  # made for it: wins
+    assert laid_out(mine, (480, 480)) is mine  # no version near a square: scaled, as before
 
 
 def test_the_panels_loop_draws_it_on_the_panels_own_size(isolated_home):

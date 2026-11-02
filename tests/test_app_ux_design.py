@@ -573,3 +573,22 @@ def test_the_theme_on_every_panel_size_side_by_side(app_url, isolated_home):  # 
         expect(page.locator(".theme-size[data-size='1920x480']")).to_contain_text("made for it")
         page.keyboard.press("Escape")
         expect(sizes).to_have_count(0)
+
+
+def test_a_version_for_a_panel_size_is_made_from_every_panel_size(app_url, isolated_home):  # noqa: F811
+    """Every panel size → Make a version for this size: the theme as that panel shows it, kept
+    as a version of its own, which Design opens; a size it is made for offers none."""
+    choose_theme(isolated_home, "lumen")
+    with browser_page(app_url, "design") as page:
+        page.wait_for_function("window.libre.store.get().doc?.id?.startsWith('lumen')")
+        page.locator(".theme-name").click()
+        page.get_by_role("menuitem", name="Every panel size").click()
+        made = page.locator(".theme-size[data-size='1920x480']")
+        expect(made).to_contain_text("made for it")
+        expect(made.locator(".theme-size-make")).to_have_count(0)
+        page.locator(".theme-size[data-size='960x320'] .theme-size-make").click()
+        page.wait_for_function("window.libre.store.get().doc?.id === 'lumen-960x320'")
+        expect(page.locator(".theme-size")).to_have_count(0)
+        assert (isolated_home / "themes" / "lumen-960x320" / "theme.json").is_file()
+        doc = page.evaluate("window.libre.store.get().doc.theme.display")
+        assert (doc["width"], doc["height"]) == (960, 320)

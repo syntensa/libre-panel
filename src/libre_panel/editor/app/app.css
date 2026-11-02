@@ -2134,3 +2134,4 @@ textarea.input {
 .theme-size-how { color: var(--text-2); }
 .theme-size.made .theme-size-how { color: var(--accent); }
 .theme-size.scaled .theme-size-how { color: var(--dim); }
+.theme-size-make { align-self: flex-start; margin-top: 2px; font-size: 12px; }

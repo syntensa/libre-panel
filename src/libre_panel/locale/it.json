@@ -3031,7 +3031,11 @@
     "{fps} frames a second take about {percent}% more processor time than 25.": "{fps} immagini al secondo costano circa il {percent}% di tempo del processore in più di 25.",
     "{fps} frames a second take about {percent}% less processor time than 25, and move a little less smoothly.": "{fps} immagini al secondo costano circa il {percent}% di tempo del processore in meno di 25, e scorrono un po' meno fluide.",
     "Libre": "Libre",
-    "High Contrast": "Alto contrasto"
+    "High Contrast": "Alto contrasto",
+    "Making…": "Creazione…",
+    "Make a version for this size": "Crea una versione per questa dimensione",
+    "A version for {size}: yours to change. That size shows it from now on.": "Una versione per {size}: tua, da modificare. Quella dimensione la mostra da ora.",
+    "It has a version for this size already: {name}.": "Ha già una versione per questa dimensione: {name}."
   },
   "fields": {
     "agent": "agente",

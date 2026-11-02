@@ -18,7 +18,6 @@ from typing import Any
 
 from libre_panel.devices.models import get_model
 from libre_panel.theme.model import (
-    _SIZED,
     BLUR_MAX,
     THEME_FILENAME,
     VERTICAL,
@@ -26,6 +25,7 @@ from libre_panel.theme.model import (
     ThemeError,
     builtin_themes_dir,
     parse_theme,
+    version_stem,
 )
 from libre_panel.theme.modules import Grid, make_grid
 
@@ -248,9 +248,7 @@ def versions_of(folder: Path) -> dict[str, tuple[int, int]]:
     """The versions of the theme in ``folder`` beside it (itself among them), by name: those of
     the same stem, on end and for a size ("lumen", "lumen-vertical", "lumen-1920x720"), with
     the size each is made for."""
-    name = folder.name
-    sized = _SIZED.match(name)
-    stem = sized[1] if sized else name[: -len(VERTICAL)] if name.endswith(VERTICAL) else name
+    stem = version_stem(folder.name)
     found = {}
     for other in folder.parent.glob(f"{glob.escape(stem)}*"):
         tail = other.name[len(stem) :]
@@ -305,17 +303,20 @@ def _laid_out_data(theme_file: str, stamp: int, width: int, height: int, model: 
 
 def laid_out(theme: Theme, size: tuple[int, int] | None, model: str = "custom") -> Theme:
     """``theme`` for a panel whose frames are ``size``: as it is where it is made for that size
-    (or the size is not known), else, for one of Libre Panel's own, its version made for the
-    nearest shape laid out on ``size`` (the pictures of the folder it is made in; ``model``:
-    the panel's, whose bezel it keeps clear of); anyone else's as it is (its frames scaled
-    into the panel's, as before)."""
+    (or the size is not known), else its version made for the nearest shape laid out on
+    ``size`` (the pictures of the folder it is made in; ``model``: the panel's, whose bezel it
+    keeps clear of). So for Libre Panel's own themes and for a theme of one's own with
+    versions for more than one size (Every panel size → *Make a version for this size*); a
+    theme of one's own made for one size stays as it is (its frames scaled into the panel's,
+    as before)."""
     if size is None or (theme.width, theme.height) == tuple(size) or theme.root is None:
         return theme
     folder = Path(theme.root)
     try:
-        if folder.resolve().parent != builtin_themes_dir().resolve():
-            return theme
+        own = folder.resolve().parent != builtin_themes_dir().resolve()
     except OSError:
+        return theme
+    if own and len(versions_of(folder)) < 2:
         return theme
     name = nearest_version(folder, tuple(size))
     if name is None:

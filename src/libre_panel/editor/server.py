@@ -98,6 +98,7 @@ from libre_panel.theme.model import (
     unpaired_version,
     valid_theme_name,
     version_base,
+    version_stem,
     with_accent,
     with_card_opacity,
     with_light_colours,
@@ -1072,6 +1073,51 @@ class EditorHandler(BaseHTTPRequestHandler):
                 source = version
             out.append({**entry, "version": version, "how": how, "from": source})
         self._json({"theme": theme_id, "sizes": out})
+
+    def _make_version(self, theme_id: str) -> None:
+        """``POST /api/themes/{theme}/version`` with ``{"width", "height"}``: a version of the
+        theme made for that size (Every panel size → *Make a version for this size*), in the
+        person's themes folder as ``<theme>-<width>x<height>``, begun as the panels of that size
+        show the theme now: its version for the nearest shape laid out on it, or the theme
+        scaled into it. From then on that size shows it, it is the person's to change as any
+        theme of theirs, and a theme of theirs with versions for more than one size is laid out
+        on the other sizes from the one nearest in shape (theme.adapt.laid_out)."""
+        payload = self._read_json()
+        if payload is None:
+            return
+        try:
+            width, height = int(payload.get("width")), int(payload.get("height"))
+        except (TypeError, ValueError):
+            return self._error("width and height: whole numbers")
+        try:
+            find_theme(theme_id)
+        except ThemeError:
+            return self._error("not found", HTTPStatus.NOT_FOUND)
+        stem = version_stem(theme_id)
+        name = f"{stem}-{width}x{height}"
+        if not (16 <= width <= 4096 and 16 <= height <= 4096) or not valid_theme_name(name):
+            return self._error("display size must be between 16 and 4096 pixels")
+        try:
+            find_theme(name)
+        except ThemeError:
+            pass
+        else:
+            return self._error(t("It has a version for this size already: {name}.", name=name),
+                               HTTPStatus.CONFLICT)  # fmt: skip
+        way = "portrait" if height > width else "landscape"
+        try:
+            theme = load_theme(find_theme(theme_for(stem, way, (width, height))))
+            fitted = laid_out(theme, (width, height))
+            if (fitted.width, fitted.height) == (width, height) and fitted.root is not None:
+                data, source = fitted.to_dict(), Path(fitted.root).name
+            else:  # scaled into the panel, as it was shown
+                data = adapt_theme(theme.to_dict(), "custom", way, "scale", width, height)
+                source = Path(theme.root).name if theme.root is not None else None
+            data["name"] = f"{theme.name or stem} {width}×{height}"
+            folder = save_theme(name, data, source)
+        except (ThemeError, OSError, ValueError) as exc:
+            return self._error(str(exc))
+        self._json({"id": name, "path": str(folder)})
 
     def _kept_preview(self, key: tuple) -> bytes | None:
         with self.state.previews_lock:
@@ -3254,6 +3300,7 @@ ROUTES: tuple[Route, ...] = (
         lambda h, m, u: h._upload_asset(m["theme"], parse_qs(u.query)),
     ),
     Route("POST", "/api/themes/import", lambda h, m, u: h._import_theme(parse_qs(u.query))),
+    Route("POST", "/api/themes/{theme}/version", lambda h, m, u: h._make_version(m["theme"])),
     Route("POST", "/api/community/install", lambda h, m, u: h._community_install()),
     Route("POST", "/api/themes/{theme*}", lambda h, m, u: h._save(m["theme"])),
 )

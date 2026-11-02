@@ -1295,6 +1295,14 @@ def _installed(name: str) -> bool:
     return True
 
 
+def version_stem(name: str) -> str:
+    """The name the versions of ``name`` share, to which a size or "-vertical" is added:
+    "lumen" for "lumen-1920x720" and "lumen-vertical"; a pair version keeps its ending,
+    "lumen-pair" for "lumen-pair-1920x720"."""
+    sized = _SIZED.match(name)
+    return sized[1] if sized else name[: -len(VERTICAL)] if name.endswith(VERTICAL) else name
+
+
 def version_base(name: str) -> str | None:
     """The theme ``name`` is a version of ("lumen" for "lumen-vertical", "lumen-1920x720" and
     "lumen-pair"), as the name says; None for a theme that is no version."""
@@ -1465,10 +1473,7 @@ def theme_for(name: str, orientation: str, size: tuple[int, int] | None = None) 
         if _installed(sized[1]):  # a version for another size: the theme it is one of
             name = sized[1]
     if size is not None:
-        # (a pair version keeps its ending: "lumen-pair-1920x720" for "lumen-pair")
-        sized = _SIZED.match(name)
-        base = sized[1] if sized else name[: -len(VERTICAL)] if name.endswith(VERTICAL) else name
-        own = f"{base}-{size[0]}x{size[1]}"
+        own = f"{version_stem(name)}-{size[0]}x{size[1]}"
         if own != name and _installed(own):
             return own
         if own == name:

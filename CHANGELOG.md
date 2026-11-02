@@ -13,6 +13,13 @@
   apart before). The editor offers the app's look, **Libre**, and **High Contrast** for a new
   theme, beside Arctic, Neon, Graphite, Paper, Sunset and Mono; its building blocks, the
   start screens and the app's icon take their colours from the design.
+- **Your themes in a version for each panel size.** In Design, *Every panel size* (the
+  theme's menu) has *Make a version for this size* under each panel the theme is not made
+  for: a version of it for that size (`mine-960x320`), begun as the panel shows it now, which
+  the panel shows from then on and Design opens for you to change. A theme of your own with
+  versions for more than one size is laid out on every other panel from the version nearest
+  in shape, as Libre Panel's own are; one made for a single size is scaled into the panel,
+  as before.
 - **Every screen laid out for every panel.** Each of Libre Panel's own screens was looked at on
   all 28 sizes of the panels it drives, and where one was only scaled into the frame, or did
   not read, it got a version of its own: WeAct's 0.96" (160×80) a version of Lumen, Studio,

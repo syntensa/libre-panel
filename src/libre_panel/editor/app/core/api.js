@@ -126,6 +126,7 @@ export const endpoints = {
   previewUrl: (id, width = 480, size = null) =>
     withToken(`/api/themes/${enc(id)}/preview?w=${width}${size ? `&size=${size[0]}x${size[1]}` : ""}`),
   themeSizes: (id) => get(`/api/themes/${enc(id)}/sizes`),
+  makeVersion: (id, [width, height]) => post(`/api/themes/${enc(id)}/version`, { width, height }),
   fanLookUrl: (look, paint) => withToken(`/api/fan-look?look=${enc(look)}&paint=${enc(paint)}`),
   symbolsLookUrl: (pack) => withToken(`/api/symbols-look?pack=${enc(pack)}`),
   uploadAsset: (id, name, bytes) =>

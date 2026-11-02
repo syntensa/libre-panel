@@ -416,7 +416,19 @@ Encore, Nimbus, Almanac, Arena and Terra each have a version for the 12.3", the 
 the round 2.1" and 2.8", bars on end and WeAct's 0.96" (160×80: each family's one thing
 large, `lumen-160x80` and the others), so every panel Libre Panel drives shows them laid out
 for it, but the ZC-360's long strip (1920×180), which Lumen alone has a version for.
-A theme of your own is drawn as it is, scaled into the panel (adapt it in Design).
+
+**Versions: one theme, a layout for each shape.** This is the format of a theme that fits
+every panel, Libre Panel's own and yours alike. A theme's versions are folders beside it,
+named after it with the size each is made for (`mine-1920x720`, `mine-480x480`) or, for a
+bar on end, with `-vertical`. A panel shows the version made for its size; on a panel no
+version is made for, the version for the nearest shape (long bar, very long bar, 16:9, 3:2,
+square, round, on end) is laid out on its size; a version made by hand for a size always
+wins there. To make one, open *Every panel size* in Design (the theme's menu) and click
+*Make a version for this size* under a panel: the version begins as that panel shows the
+theme now (laid out from the nearest shape, or scaled into it), the panel shows it from then
+on, and Design opens it for you to change. A theme of your own with versions for more than
+one size is laid out like Libre Panel's own; one made for a single size is drawn as it is,
+scaled into the panel (adapt it in Design).
 
 A `config.toml` without a `theme` shows `lumen` on the 1920×480 bars and `libre-default` on
 every other panel ([the theme on the panel](CONFIGURATION.md#the-theme-on-the-panel)).

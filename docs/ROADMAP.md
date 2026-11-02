@@ -59,10 +59,12 @@ under its id, and themes in the 0.7 format, community themes among them, are rea
 
 ### 3. Themes that fit every panel
 
-- [ ] A theme format with layouts per shape (long bar, very long bar, 16:9, 3:2, square,
+- [x] A theme format with layouts per shape (long bar, very long bar, 16:9, 3:2, square,
       round, on end), from which every size is laid out; a hand-made layout for a size stays
-      possible and wins (the first step: a panel without a version of its own shows the
-      version made for the nearest shape, laid out on its size)
+      possible and wins: versions, folders named with the size each is made for; a panel
+      without a version of its own shows the version made for the nearest shape, laid out on
+      its size; one's own themes too, as soon as they have versions for more than one size
+      (Every panel size → *Make a version for this size*)
 - [x] One design system for the built-in themes: colours, type sizes, spacing, cards
       (`design.py`: the looks, which one each family wears and what it has of its own, the
       modules' type and room from one measure each; `tools/design.py` writes it into the
