@@ -69,6 +69,9 @@ def test_menu_layout_and_state(tray):
     assert wait_for(lambda: tray.app.panel.state()["state"] == "showing")
     menu = items(tray.build_menu())
     assert list(menu)[0].startswith("Libre Panel: showing on PNG file")
+    # (on Windows without LibreHardwareMonitor a line under it says what it needs, once the
+    # sensors have looked for it: before or after the menu is made)
+    listed = [text for text in list(menu)[1:] if "LibreHardwareMonitor" not in text]
     # what most people come for first, then the views and what is set once
     assert [
         "Open Libre Panel",
@@ -83,7 +86,7 @@ def test_menu_layout_and_state(tray):
         "Open settings folder",
         "Open log",
         "Quit Libre Panel",
-    ] == list(menu)[1:]
+    ] == listed
     assert menu["Open Libre Panel"].default  # also a click on the icon
     themes = items(menu["Theme"].submenu)  # by name; the panel is not known: all sizes
     assert {"Libre Default", "Orbit", "Slate", "Column", "Lumen"} <= set(themes)
