@@ -30,7 +30,7 @@
 | `meter` | How the main loop is doing: frame rate, drawing time, data rate, the video link and faults, made once a second from a ring of timings and the counters the drivers keep (`devices.base.Counters`). Nothing in it holds a lock. |
 | `service` | Background app: the main loop in a thread (pause/resume, restarts after a broken config is fixed), the editor server, and the controls shared by tray and editor. |
 | `tray` | Tray icon and menu (pystray); runs without an icon where there is no tray. |
-| `rights` | What a run with the highest rights holds back: plugin folders and programs that programs without those rights could change (`safe_place`, `which`). |
+| `rights` | What a run with the highest rights holds back: plugin folders, programs, LibreHardwareMonitor's libraries and the panel's picture file in places that programs without those rights could change (`safe_place`, `which`). |
 | `autostart` | Login start per system: Windows `Run` key (or, asked for, a Task Scheduler task with the highest rights), XDG autostart entry. |
 | `linux_setup`, `linux_rights` | `libre-panel system-setup --linux`, what needs an administrator on Linux: the panel's udev rule, the mainboard's Super I/O driver, `drivetemp` and, only if asked, the processor's energy counters. `linux_setup` works out a plan from facts about the computer (`plan`, no root needed) and applies it through a stand-in for the system (`apply`); `linux_rights` is how it is asked for (`pkexec` or `sudo`, the AppImage by its own file, a clean environment) and the background run the app starts (`/api/unlock`). |
 | `instance` | OS file lock so only one process drives the panel. |

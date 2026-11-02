@@ -157,3 +157,66 @@ def test_the_settings_say_what_a_run_with_the_highest_rights_holds_back(
     monkeypatch.setattr(rights, "elevated", lambda: False)
     loader.reset_registry()
     assert Settings._held_back(config) == {"plugins": [], "programs": []}
+
+
+def test_with_the_highest_rights_librehardwaremonitor_s_libraries_come_from_a_safe_place(
+    tmp_path, elevated
+):
+    """``dll_dir`` is in config.toml, in the user's own folder: a program without the rights
+    could name a folder of its own there, and its libraries would be loaded with them."""
+    from libre_panel.sensors import lhm_inprocess
+
+    for folder in ("user", "safe"):
+        (tmp_path / folder).mkdir()
+        (tmp_path / folder / f"{lhm_inprocess.LIBRARY}.dll").write_bytes(b"MZ")
+    assert lhm_inprocess.find_dll_dir(str(tmp_path / "user")) is None  # (nor the download's)
+    assert lhm_inprocess.find_dll_dir(str(tmp_path / "safe")) == tmp_path / "safe"
+
+
+def test_without_the_highest_rights_the_configured_libraries_are_loaded(tmp_path, monkeypatch):
+    from libre_panel.sensors import lhm_inprocess
+
+    monkeypatch.setattr(rights, "elevated", lambda: False)
+    (tmp_path / f"{lhm_inprocess.LIBRARY}.dll").write_bytes(b"MZ")
+    assert lhm_inprocess.find_dll_dir(str(tmp_path)) == tmp_path
+
+
+def test_with_the_highest_rights_the_panel_s_png_file_is_written_only_in_a_safe_place(
+    tmp_path, monkeypatch, elevated
+):
+    """The file config.toml names (or a link in the user's settings folder) could lead
+    anywhere: the frame would be written over it with the rights. Elsewhere it is kept, but
+    not written."""
+    from PIL import Image
+
+    from libre_panel.config import DeviceConfig
+    from libre_panel.devices.virtual import VirtualDisplay
+
+    frame = Image.new("RGB", (8, 4), "#123456")
+    shown = {}
+    for folder in ("user", "safe"):
+        (tmp_path / folder).mkdir()
+        target = tmp_path / folder / "new" / "frame.png"  # (a folder that is not there yet)
+        display = VirtualDisplay(DeviceConfig(driver="virtual", output=str(target)))
+        display.open()
+        display.show(frame)
+        assert display.frame.size == (8, 4)
+        shown[folder] = target.is_file()
+    assert shown == {"user": False, "safe": True}
+    monkeypatch.setattr(rights, "elevated", lambda: False)
+    monkeypatch.setattr(rights, "safe_place", lambda path: True)
+    target = tmp_path / "user" / "frame.png"
+    display = VirtualDisplay(DeviceConfig(driver="virtual", output=str(target)))
+    display.open()
+    display.show(frame)
+    assert target.is_file()  # without the rights: wherever it says
+
+
+def test_the_settings_name_the_libraries_held_back(tmp_path, elevated):
+    from libre_panel.editor.settings import Settings
+
+    config = Config()
+    config.sensors.options["librehardwaremonitor"] = {"dll_dir": str(tmp_path / "user")}
+    assert "[sensors.librehardwaremonitor] dll_dir" in Settings._held_back(config)["programs"]
+    config.sensors.options["librehardwaremonitor"] = {"dll_dir": str(tmp_path / "safe")}
+    assert Settings._held_back(config)["programs"] == []

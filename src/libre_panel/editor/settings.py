@@ -993,6 +993,9 @@ class Settings:
             for setting, path in named.items()
             if path and Path(path).expanduser().is_file() and not rights.safe_place(path)
         ]
+        libraries = config.sensors.options.get("librehardwaremonitor", {}).get("dll_dir")
+        if isinstance(libraries, str) and libraries and not rights.safe_place(libraries):
+            programs.append("[sensors.librehardwaremonitor] dll_dir")  # (its libraries)
         return {"plugins": list(registry().held_back), "programs": programs}
 
     def set_system(self, payload: Any) -> dict[str, Any]:

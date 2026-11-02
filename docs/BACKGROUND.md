@@ -375,15 +375,17 @@ administrator itself; otherwise the app shows the command to run in a terminal
 opened as one. It warns, as the command does, when Libre Panel lies in your user
 folder.
 
-**What Libre Panel trusts while it has the highest rights.** It reads `config.toml` and your
-plugins from the settings folder and starts or loads what they name with those rights: ffmpeg
-(`video.ffmpeg`), PresentMon (`[sensors.presentmon] path`), the libraries of LibreHardwareMonitor
-(`dll_dir`) and the plugins in `plugins\`. The programs the download carries itself (ffmpeg and
-PresentMon in its `tools` folder, used when the settings name none) lie where Libre Panel does:
-they are as safe as its installation. The settings folder is yours: `%APPDATA%\LibrePanel`
-can be written by you and by administrators, no other user, so no other user can make Libre Panel
-run anything. The programs and libraries it names are better where only administrators can write,
-under *Program Files*. Take care with a folder made directly under `C:\`, as `C:\LibrePanelData`
+**What Libre Panel trusts while it has the highest rights.** It reads `config.toml` from the
+settings folder, which is yours: `%APPDATA%\LibrePanel` can be written by you and by
+administrators, no other user, but by every program you run, also one without administrator
+rights. So what the settings name is used with those rights only from a folder that only
+administrators may change (*Program Files*, *Windows*, or the folder of the download itself):
+ffmpeg (`video.ffmpeg`), PresentMon (`[sensors.presentmon] path`), the libraries of
+LibreHardwareMonitor (`dll_dir`) and the plugins in `plugins\`; one named elsewhere is passed
+over (*Settings → System* says which), and the programs the download carries itself (ffmpeg and
+PresentMon in its `tools` folder) are used. The panel's picture file (`device.output`, written
+while no panel is there) is written only into such a folder: in your settings folder a link
+could lead it over a file of Windows. Take care with a folder made directly under `C:\`, as `C:\LibrePanelData`
 or `C:\Tools` would be: every user of the PC can change what is in it unless you take their
 rights away, and that would let another user run a program with administrator rights, whether it
 holds the settings, a program or a library. While Libre Panel runs with the highest rights the

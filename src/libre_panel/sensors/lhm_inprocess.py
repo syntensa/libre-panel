@@ -125,10 +125,20 @@ def needs_ring0(hardware_type: str, sensor_type: str) -> bool:
 
 def find_dll_dir(configured: str | None = None) -> Path | None:
     """The folder with LibreHardwareMonitorLib.dll: the ``dll_dir`` of the config, else the
-    one that comes with the Windows download."""
+    one that comes with the Windows download. With the highest rights a configured folder only
+    where nobody without them can change it (rights.py): config.toml is in the user's own
+    folder, which every program the user runs may write to, and the libraries of that folder
+    would be loaded with the rights."""
+    from libre_panel import rights
+
     candidates: list[Path] = []
     if configured:
-        candidates.append(Path(configured).expanduser())
+        folder = Path(configured).expanduser()
+        if rights.safe_place(folder):
+            candidates.append(folder)
+        else:
+            log.warning("dll_dir %s is not loaded: Libre Panel runs with the highest rights",
+                        folder)  # fmt: skip
     bundle = getattr(sys, "_MEIPASS", None)
     if bundle:
         candidates.append(Path(bundle) / BUNDLED_FOLDER)

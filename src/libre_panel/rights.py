@@ -5,9 +5,10 @@ administrator"), Libre Panel would hand them to whatever it loads or starts from
 programs without those rights can change. On Windows every program the same user runs may
 write to the user's profile, where config.toml and the plugin folders lie; one of them could
 name its own program as ``video.ffmpeg`` or put a plugin there, and get the rights at the
-next start. So, while it has them, Libre Panel loads no plugin folders from such a place and
-starts a program (ffmpeg, PresentMon, an AI agent's command line) only from a folder that only
-administrators may change:
+next start. So, while it has them, Libre Panel loads no plugin folders from such a place,
+starts a program (ffmpeg, PresentMon, an AI agent's command line) and loads LibreHardwareMonitor's
+libraries (``dll_dir``) only from a folder that only administrators may change, and writes the
+panel's picture file (``device.output``) only into one:
 
 - Windows: Program Files and Windows (as the registry of the machine names them), and the
   folder of the download itself: whoever may write there may replace Libre Panel anyway
