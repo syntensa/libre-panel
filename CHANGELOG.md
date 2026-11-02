@@ -35,6 +35,16 @@
   halo changed; they look the same. On the 12.3" at 50 frames a second a frame takes 5.2 ms
   in the middle instead of 9.5, and 9 in 700 frames are late instead of 46.
 
+**Lighter**
+- **x264 a fifth lighter on the screens Libre Panel draws, and sharper.** Their frames go into
+  x264 without its deblocking filter and without its search for motion finer than a pixel:
+  the filter is made for films and softened what is the picture's own (lettering, lines),
+  and a drawn screen moves by whole pixels. On the 12.3" at 25 frames a second ffmpeg takes
+  22 instead of 30 % of a core with Lumen and 20 instead of 27 with Arena, 10 MB less memory,
+  and the picture is closer to the frames (Lumen 50.9 instead of 49.9 dB, its edges 45.6
+  instead of 44.5, the dither in its gradients kept better). A video, the Player and the
+  screen as a monitor keep the filter.
+
 ## 0.8.0rc1 — 2026-11-02
 
 A release candidate of 0.8, to try before everyone has it: one design for every panel, and

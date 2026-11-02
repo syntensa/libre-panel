@@ -102,6 +102,20 @@ def test_ffmpeg_command_follows_the_measured_settings():
     assert "hflip,vflip" in " ".join(ffmpeg_command("ffmpeg", (480, 1920), 180, EncoderSettings()))
 
 
+def test_drawn_frames_go_without_the_deblocking_filter_and_a_video_with_it():
+    """The frames Libre Panel draws: no deblocking, motion to the pixel (sharper and lighter,
+    h264.DRAWN_X264); a video file and the screen keep x264's filter."""
+    from libre_panel.devices.h264 import DRAWN_X264, VideoSource, ffmpeg_file_command
+
+    drawn = " ".join(ffmpeg_command("ffmpeg", (1920, 720), 270, EncoderSettings()))
+    assert f"repeat-headers=1:{DRAWN_X264}" in drawn
+    video = ffmpeg_file_command("ffmpeg", VideoSource("clip.mp4"), (1920, 720), 270,
+                                EncoderSettings())  # fmt: skip
+    assert "no-deblock" not in " ".join(video) and "subme" not in " ".join(video)
+    amd = ffmpeg_command("ffmpeg", (1920, 720), 270, EncoderSettings(encoder="h264_amf"))
+    assert "no-deblock" not in " ".join(amd)  # (x264's own)
+
+
 def test_the_bit_rate_grows_with_the_pixels_and_the_frame_rate():
     from libre_panel.devices.h264 import bit_rate
 
@@ -2368,6 +2382,12 @@ def test_a_portrait_theme_comes_out_upside_down_as_before(panel, pixels):
 # -- a theme that is one video alone, straight from its file ([video] direct) ---------------------
 
 
+def drawn_apart(args):
+    """The encoder's arguments for drawn frames, as a video's or the screen's are: the same
+    but for x264's settings for drawn frames (h264.DRAWN_X264)."""
+    return [arg.replace(f":{h264.DRAWN_X264}", "") for arg in args]
+
+
 def clip(path, colour="red", size="320x240", seconds=2):
     subprocess.run([FFMPEG, "-v", "error", "-y", "-f", "lavfi", "-i",
                     f"color=c={colour}:size={size}:rate=30", "-t", str(seconds),
@@ -2378,7 +2398,8 @@ def clip(path, colour="red", size="320x240", seconds=2):
 def test_a_video_alone_is_encoded_from_its_file_as_frames_are():
     """ffmpeg reads the file round and round at its pace (times its speed), fits it as the
     picture widget does, turns it into the framebuffer and encodes it with the frames' own
-    settings: the panel gets the stream it was measured with."""
+    settings (with x264's deblocking filter: a video is no drawn frame, h264.DRAWN_X264): the
+    panel gets the stream it was measured with."""
     settings = EncoderSettings(fps=30, encoder="libx264", profile="high", maxrate="3M")
     source = h264.VideoSource("/videos/loop.mp4", "cover", 1.0, "#0a0e13")
     command = h264.ffmpeg_file_command("ffmpeg", source, (1920, 480), 270, settings)
@@ -2389,7 +2410,7 @@ def test_a_video_alone_is_encoded_from_its_file_as_frames_are():
         "scale=1920:480:force_original_aspect_ratio=increase,crop=1920:480,fps=30,transpose=1"
     )
     frames = ffmpeg_command("ffmpeg", (1920, 480), 270, settings)
-    assert command[command.index("-c:v") :] == frames[frames.index("-c:v") :]  # (the same)
+    assert command[command.index("-c:v") :] == drawn_apart(frames[frames.index("-c:v") :])
     faster = h264.ffmpeg_file_command(
         "ffmpeg", h264.VideoSource("/v.mp4", "contain", 2.0, "#0a0e13"), (1920, 480), 270,
         EncoderSettings(fps=30, encoder="libx264", profile="high", full=True),
@@ -2524,7 +2545,7 @@ def test_the_screen_is_encoded_as_frames_are():
         "pad=1920:720:(ow-iw)/2:(oh-ih)/2:color=#000000,fps=50"
     )
     frames = ffmpeg_command("ffmpeg", (1920, 720), None, settings)
-    assert command[command.index("-c:v") :] == frames[frames.index("-c:v") :]
+    assert command[command.index("-c:v") :] == drawn_apart(frames[frames.index("-c:v") :])
     assert h264.source_name(source) == "Display 2"
 
 

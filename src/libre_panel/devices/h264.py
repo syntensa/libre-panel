@@ -512,7 +512,7 @@ def ffmpeg_command(
     video_filter = ",".join(part for part in filters if part)
     if video_filter:
         command += ["-vf", video_filter]
-    command += codec_args(settings, keyint, maxrate)
+    command += codec_args(settings, keyint, maxrate, drawn=True)
     return command + [*stamp(settings.full), "-f", "h264", "-"]
 
 
@@ -660,10 +660,24 @@ def passes_through(settings: EncoderSettings) -> bool:
     return settings.card and settings.encoder in CARD_ENCODERS and settings.pixels == "rgb0"
 
 
-def codec_args(settings: EncoderSettings, keyint: int, maxrate: str) -> list[str]:
+# x264 for the frames Libre Panel draws (not for a video or the screen): without the deblocking
+# filter and the search for motion finer than a pixel. Measured on the 12.3" at 25 frames a
+# second, the same frames at the same bit rate: Lumen 7.6 instead of 6.0 ms a frame, Arena 6.3
+# instead of 4.9, Terra 7.5 instead of 5.8, and as sharp or sharper (the filter softens edges
+# that are the picture's own: lettering, lines; Lumen's light 50.9 instead of 49.9 dB from the
+# frames, its edges 45.6 instead of 44.5, the dither in its gradients kept better, 0.93 of it
+# instead of 0.86). Adaptive quantization stays: without it the dither goes, and the bands
+# come back.
+DRAWN_X264 = "no-deblock=1:subme=0"
+
+
+def codec_args(
+    settings: EncoderSettings, keyint: int, maxrate: str, drawn: bool = False
+) -> list[str]:
     """The encoder's part of the command: x264 as measured on the 9.2", or (an experiment)
     a hardware encoder with the nearest settings: no B-frames, a keyframe every ``keyint``
-    pictures, the rate capped at ``maxrate``; each makes one slice per picture by default."""
+    pictures, the rate capped at ``maxrate``; each makes one slice per picture by default.
+    ``drawn``: frames Libre Panel drew (:data:`DRAWN_X264`), not a video or the screen."""
     encoder, profile = settings.encoder, settings.profile
     if encoder == "libx264":
         return [
@@ -686,7 +700,7 @@ def codec_args(settings: EncoderSettings, keyint: int, maxrate: str) -> list[str
             "-x264-params",
             # zerolatency turns slice threads on; the panel needs one slice per picture
             f"sliced-threads=0:bframes=0:scenecut=0:keyint={keyint}:min-keyint={keyint}"
-            ":ipratio=2.0:repeat-headers=1",
+            ":ipratio=2.0:repeat-headers=1" + (f":{DRAWN_X264}" if drawn else ""),
             "-pix_fmt",
             "yuv420p",
             *colour_tags(settings.full),
