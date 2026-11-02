@@ -84,11 +84,20 @@ def test_module_cards_let_the_background_through_too():
 
 def test_libre_panels_own_themes_let_a_little_of_the_background_through():
     """Just enough to be seen, not so far that reading suffers (ROADMAP, 3.)."""
-    own = {"lumen-1920x720": 0.7, "almanac": 0.7, "nimbus": 0.7, "arena-1920x720": 0.8,
-           "studio": 0.85, "agents": 0.85, "encore-1920x720": 0.9}  # fmt: skip
+    own = {
+        "terra": 0.6,
+        "lumen-1920x720": 0.7,
+        "almanac": 0.7,
+        "nimbus": 0.7,
+        "arena-1920x720": 0.8,
+        "round-report": 0.8,
+        "studio": 0.85,
+        "agents": 0.85,
+        "encore-1920x720": 0.9,
+    }  # fmt: skip (the round report in Arena's design)
     for name, value in own.items():
         assert load_theme(find_theme(name)).style["card_opacity"] == value, name
-    for name in ("contrast", "round-report"):
+    for name in ("contrast", "spur-classic"):
         assert (load_theme(find_theme(name)).style or {}).get("card_opacity", 1.0) == 1.0, name
 
 

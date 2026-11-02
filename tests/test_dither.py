@@ -104,7 +104,8 @@ def test_libre_panels_own_backdrops_are_a_gradient_and_the_dots():
     """The editor's stage, as Lumen, Encore, Almanac and the round report wear it: the dark
     gradient is the theme's, the picture only its dots (it was the two, in whole levels)."""
     theme = load_theme(find_theme("lumen-1920x720"))
-    assert theme.background_gradient == ("#0A0E13", "#06090D")
+    assert theme.background_gradient == ("@bg", "@bg2")  # (the palette's, libre_panel.design)
+    assert (theme.palette["bg"], theme.palette["bg2"]) == ("#0A0E13", "#06090D")
     dots = Image.open(theme.root / "assets" / "backdrop.png")
     assert dots.mode == "RGBA" and dots.getchannel("A").getextrema() == (0, 255)
     alpha = np.asarray(dots.getchannel("A")) > 0

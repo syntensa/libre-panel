@@ -60,7 +60,9 @@ def test_a_screen_is_libre_panels_own_for_the_bars_and_draws_whole(name):
     theme, renderer, frame, boxes = drawn(data, builtin_themes_dir() / name)
     assert theme.warnings == [] and renderer.warnings == []
     assert (theme.width, theme.height) == (1920, 480) and theme.collection == ""
-    assert theme.palette["accent"] == "#2EE6D6" and theme.background_image == "assets/backdrop.png"
+    # the app's accent; the round report wears Arena's, as it follows a game on Arena
+    accent = "#13E5D7" if name == "round-report" else "#2EE6D6"
+    assert theme.palette["accent"] == accent and theme.background_image == "assets/backdrop.png"
     assert frame.size == (1920, 480) and boxes
     nothing = Renderer(load_theme(find_theme(name)))
     assert nothing.render(Snapshot(), 0.0)[0].size == (1920, 480) and nothing.warnings == []
