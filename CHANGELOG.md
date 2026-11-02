@@ -151,6 +151,12 @@
   Linux and 4 KB on Windows, for the 2 to 5.5 MB of each frame: ffmpeg woke for every few
   kilobytes, and the writer with it. It has a megabyte now (Linux: writing a frame 0.3
   instead of 0.8 ms of the processor; on Windows, where the steps were smaller, more).
+- **A fan by itself is laid from its parts too.** A fan widget (Lumen's, SPUR II's) is laid
+  from its ring and its rotor as a list's fans are, and the piece it showed stays while the
+  picture is the same: on the 12.3" Lumen's fans find their pictures 90 times in a hundred
+  instead of 68, and the 8 MB of whole fan pictures are no longer kept. A theme's opaque
+  background picture is kept once, in the frames' colours; the video writer finds the blocks
+  that changed four times as fast (two pixels at a time).
 - **Fans in a list turn without being drawn anew.** A fan's picture is laid from its ring and
   its rotor, each kept on its own, instead of kept as one picture for each position and each
   length of its ring: Arena's six fans made 600 to 1000 pictures every ten seconds (the

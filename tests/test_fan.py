@@ -265,10 +265,11 @@ def test_without_animation_a_fan_does_not_turn():
 
 def test_effects_and_the_same_picture_for_the_same_position():
     renderer = Renderer(theme(widget(glow=0.5, opacity=0.8)), animate=True)
-    renderer.render(snapshot(rpm=0.0), 1.0)
-    first = renderer._fans.copy()
-    renderer.render(snapshot(rpm=0.0), 1.02)
-    assert dict(renderer._fans) == first  # a fan that stands is one piece, kept
+    first = renderer.render(snapshot(rpm=0.0), 1.0)
+    piece = renderer._fan_shown["f"][1]
+    again = renderer.render(snapshot(rpm=0.0), 1.02)
+    assert renderer._fan_shown["f"][1] is piece  # a fan that stands is one piece, kept
+    assert first[0].tobytes() == again[0].tobytes()
 
 
 def test_the_demo_fan_readings_drive_the_preset_block():

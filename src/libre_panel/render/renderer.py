@@ -963,7 +963,7 @@ class Renderer:
         self.fan_choices = fan.Choices()
         # the look of the weather symbols and the moon the user chose (config.toml ``symbols``)
         self.symbols = DEFAULT_SYMBOLS
-        self._fans = Kept("renderer.fans", self.FAN_BYTES)  # fan pieces, by look
+        self._fan_shown: dict[str, tuple[Image.Image, Piece]] = {}  # a fan's, while it stands
         # the turning fans of a list of them as pieces over it (_list_turning): this frame's,
         # by list id; whether they lie on nothing of the list; each fan's piece and where
         self._over: dict[str, list[tuple[Piece, str]]] = {}
@@ -1418,7 +1418,7 @@ class Renderer:
         x0, y0, x1, y1 = region
         inside = []
         for wid, piece in pieces:
-            px0, py0, px1, py1 = self._extent(piece)
+            px0, py0, px1, py1 = piece.span or self._extent(piece)  # (worked out once a piece)
             if px0 < x1 and px1 > x0 and py0 < y1 and py1 > y0:
                 inside.append((wid, piece))  # outside the region: its pixels are unchanged
         below = next((i for i, (wid, _) in enumerate(inside) if wid in changed), len(inside))
@@ -1437,8 +1437,12 @@ class Renderer:
         else:
             done = 0
             part = Image.new("RGBA", (x1 - x0, y1 - y0), self.color(self.theme.background_color))
-            if self._background is not None:
-                part.alpha_composite(self._background.crop(region))
+            if self._background is not None:  # (in RGB: opaque, laid as it is)
+                under = self._background.crop(region)
+                if under.mode == "RGB":
+                    part.paste(under)
+                else:
+                    part.alpha_composite(under)
         for i, (wid, piece) in enumerate(inside[done:], done):
             if i == below and not (reused and done == below):
                 self._keep_underlay(region, [p for _, p in inside[:below]], part)
@@ -1456,14 +1460,19 @@ class Renderer:
         if self._grounds is None or self._grounds[0] != color:
             self._grounds = None  # (the one before goes first: it is the panel's size)
             background = self._background
-            if background is not None and background.getchannel("A").getextrema()[0] == 255:
+            opaque = background is not None and (
+                background.mode == "RGB" or background.getchannel("A").getextrema()[0] == 255
+            )
+            if opaque:
                 ground = background  # opaque, as a photo is: the colour does not show through
             else:
                 ground = Image.new("RGBA", (self.theme.width, self.theme.height), color)
                 if background is not None:
                     ground.alpha_composite(background)
-            if self._mode == "RGB":
+            if self._mode == "RGB" and ground.mode != "RGB":
                 ground = ground.convert("RGB")
+                if opaque:  # (the picture is its own ground: kept once, the panel's size)
+                    self._background = ground
             self._grounds = (color, ground)
         return self._grounds[1]
 
@@ -2689,9 +2698,6 @@ class Renderer:
 
     # -- fans --------------------------------------------------------------
 
-    # fan pieces kept: a fan that has turned once round costs a lookup (Lumen's on the 12.3"
-    # are some 20 kB each; 512 of them were kept, 9 MB, and found as often as in these)
-    FAN_BYTES = 8 * MB
     # the bars of lists kept: a core's bar that holds costs a lookup. Each is kept as the part
     # round the end of its fill (_Bar), a kilobyte or two; whole, a bar of Lumen Companion's on
     # the 9.2" was 32 kB, and a gliding list asked for a thousand of them
@@ -2715,16 +2721,18 @@ class Renderer:
         else:  # a preview or a picture: how it looks at this speed, standing
             rotor.settle(rpm, widget["max_rpm"])
         color = self.color(widget["color"])[:3]
-        key = (
-            self._keys[wid], look, paint, rotor.phase, rotor.blur, rotor.dim,
-            round(rotor.ring * 120),
-        )  # fmt: skip
-        piece = self._fans.get(key)
-        if piece is None:
-            image = fan.fan_image(color, w, h, rotor, widget["frame"], look, paint)
-            at = (x + (w - image.width) // 2, y + (h - image.height) // 2)
-            piece = self._fans.put(key, self._effects(widget, Piece(image, at[0], at[1],
-                                                                    [x, y, w, h])))  # fmt: skip
+        # laid from its ring and its rotor, each kept by itself, as a list's fans are: a fan
+        # turning while its ring changes is no new picture to keep at every position (four of
+        # Lumen's, the pictures of all of them kept, found 61 in a hundred: 8 MB, and 6 more)
+        parts = fan.fan_parts(color, w, h, rotor, widget["frame"], look, paint)
+        canvas = fan.geometry(w, h)[2]
+        image = self._laid_fan(wid, parts, canvas)
+        hit = self._fan_shown.get(wid)
+        if hit is not None and hit[0] is image:
+            return hit[1]  # (it stands: the same piece)
+        at = (x + (w - canvas) // 2, y + (h - canvas) // 2)
+        piece = self._effects(widget, Piece(image, at[0], at[1], [x, y, w, h]))
+        self._fan_shown[wid] = (image, piece)
         return piece
 
     # -- weather symbols ---------------------------------------------------
