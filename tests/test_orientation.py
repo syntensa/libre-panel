@@ -19,7 +19,7 @@ def test_config_toml_says_how_the_panel_is_mounted():
 def test_each_screen_of_the_bars_has_its_version_for_a_bar_on_end():
     ids = {item["id"] for item in list_themes()}
     names = ("lumen", "studio", "encore", "nimbus", "almanac", "almanac-analog", "arena",
-             "round-report")  # fmt: skip
+             "round-report", "terra")  # fmt: skip
     for name in names:
         assert theme_for(name, "portrait") == f"{name}-vertical"
         assert theme_for(f"{name}-vertical", "landscape") == name

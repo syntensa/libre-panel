@@ -3020,7 +3020,13 @@
     "LAN": "Ethernet",
     "Scroll on": "Плавно",
     "A step at each reading": "Шаг на измерение",
-    "A step at each reading: a graph glides a moment when a reading comes and rests until the next one, and the panel takes fewer frames, less of the processor. Arena's frame rate scrolls on.": "Шаг на измерение: график коротко сдвигается при каждом новом значении и стоит до следующего — панель получает меньше кадров, процессору меньше работы. Частота кадров в Arena по-прежнему прокручивается плавно."
+    "A step at each reading: a graph glides a moment when a reading comes and rests until the next one, and the panel takes fewer frames, less of the processor. Arena's frame rate scrolls on.": "Шаг на измерение: график коротко сдвигается при каждом новом значении и стоит до следующего — панель получает меньше кадров, процессору меньше работы. Частота кадров в Arena по-прежнему прокручивается плавно.",
+    "Earth": "Земля",
+    "Daytime": "День",
+    "Night-time": "Ночь",
+    "Sunrise {value}": "Восход {value}",
+    "Sunset {value}": "Закат {value}",
+    "Day length {value:duration}": "Долгота дня {value:duration}"
   },
   "fields": {
     "agent": "агент",
@@ -3173,7 +3179,11 @@
     "turn": "Минут на карточку",
     "transition": "Переход",
     "trace": "Точный ход",
-    "range_step": "Диапазон шагами"
+    "range_step": "Диапазон шагами",
+    "spin": "Секунд на оборот",
+    "clouds": "Облака",
+    "lights": "Огни городов",
+    "place": "Место отмечено"
   },
   "widgets": {
     "agent": "Знак ИИ",
@@ -3183,6 +3193,7 @@
     "clock": "Часы",
     "countdown": "Обратный отсчёт",
     "downloads": "Загрузки",
+    "earth": "Земля",
     "fan": "Вентилятор",
     "gauge": "Кольцо",
     "graph": "График",
@@ -3323,7 +3334,8 @@
     "rise": "сдвиг вверх",
     "wipe": "шторка",
     "cut": "сразу",
-    "random": "случайно"
+    "random": "случайно",
+    "earth": "земля"
   },
   "icons": {
     "battery": "Батарея",

@@ -3020,7 +3020,13 @@
     "LAN": "Ethernet",
     "Scroll on": "Contínuo",
     "A step at each reading": "Um passo por leitura",
-    "A step at each reading: a graph glides a moment when a reading comes and rests until the next one, and the panel takes fewer frames, less of the processor. Arena's frame rate scrolls on.": "Um passo por leitura: um gráfico desliza um instante quando chega uma leitura e fica parado até a seguinte; o painel recebe menos imagens e o processador trabalha menos. A taxa de quadros da Arena continua rolando."
+    "A step at each reading: a graph glides a moment when a reading comes and rests until the next one, and the panel takes fewer frames, less of the processor. Arena's frame rate scrolls on.": "Um passo por leitura: um gráfico desliza um instante quando chega uma leitura e fica parado até a seguinte; o painel recebe menos imagens e o processador trabalha menos. A taxa de quadros da Arena continua rolando.",
+    "Earth": "Terra",
+    "Daytime": "Dia",
+    "Night-time": "Noite",
+    "Sunrise {value}": "Nascer do sol {value}",
+    "Sunset {value}": "Pôr do sol {value}",
+    "Day length {value:duration}": "Duração do dia {value:duration}"
   },
   "fields": {
     "agent": "agente",
@@ -3173,7 +3179,11 @@
     "turn": "Minutos por cartão",
     "transition": "Transição",
     "trace": "Curso fino",
-    "range_step": "Intervalo por passos"
+    "range_step": "Intervalo por passos",
+    "spin": "Segundos por volta",
+    "clouds": "Nuvens",
+    "lights": "Luzes das cidades",
+    "place": "Local marcado"
   },
   "widgets": {
     "agent": "Sinal de IA",
@@ -3183,6 +3193,7 @@
     "clock": "Relógio",
     "countdown": "Contagem regressiva",
     "downloads": "Downloads",
+    "earth": "Terra",
     "fan": "Ventoinha",
     "gauge": "Anel",
     "graph": "Gráfico",
@@ -3323,7 +3334,8 @@
     "rise": "empurrar para cima",
     "wipe": "varrimento",
     "cut": "de imediato",
-    "random": "aleatório"
+    "random": "aleatório",
+    "earth": "terra"
   },
   "icons": {
     "battery": "Bateria",

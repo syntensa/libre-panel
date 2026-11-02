@@ -3020,7 +3020,13 @@
     "LAN": "Ethernet",
     "Scroll on": "En continu",
     "A step at each reading": "Un pas par mesure",
-    "A step at each reading: a graph glides a moment when a reading comes and rests until the next one, and the panel takes fewer frames, less of the processor. Arena's frame rate scrolls on.": "Un pas par mesure : un graphique glisse un instant à chaque mesure et reste immobile jusqu’à la suivante ; l’écran reçoit moins d’images et le processeur travaille moins. La fréquence d’images d’Arena défile toujours en continu."
+    "A step at each reading: a graph glides a moment when a reading comes and rests until the next one, and the panel takes fewer frames, less of the processor. Arena's frame rate scrolls on.": "Un pas par mesure : un graphique glisse un instant à chaque mesure et reste immobile jusqu’à la suivante ; l’écran reçoit moins d’images et le processeur travaille moins. La fréquence d’images d’Arena défile toujours en continu.",
+    "Earth": "Terre",
+    "Daytime": "Jour",
+    "Night-time": "Nuit",
+    "Sunrise {value}": "Lever du soleil {value}",
+    "Sunset {value}": "Coucher du soleil {value}",
+    "Day length {value:duration}": "Durée du jour {value:duration}"
   },
   "fields": {
     "agent": "agent",
@@ -3173,7 +3179,11 @@
     "turn": "Minutes par carte",
     "transition": "Transition",
     "trace": "Tracé fin",
-    "range_step": "Plage par paliers"
+    "range_step": "Plage par paliers",
+    "spin": "Secondes par tour",
+    "clouds": "Nuages",
+    "lights": "Lumières des villes",
+    "place": "Lieu marqué"
   },
   "widgets": {
     "agent": "Signe IA",
@@ -3183,6 +3193,7 @@
     "clock": "Horloge",
     "countdown": "Compte à rebours",
     "downloads": "Télé­charge­ments",
+    "earth": "Terre",
     "fan": "Ventilateur",
     "gauge": "Anneau",
     "graph": "Graphique",
@@ -3323,7 +3334,8 @@
     "rise": "pousser vers le haut",
     "wipe": "balayage",
     "cut": "immédiat",
-    "random": "au hasard"
+    "random": "au hasard",
+    "earth": "terre"
   },
   "icons": {
     "battery": "Batterie",

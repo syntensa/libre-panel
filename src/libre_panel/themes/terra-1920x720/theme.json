@@ -1,0 +1,152 @@
+{
+  "format": "libre-panel-theme/1",
+  "name": "Terra 12.3″",
+  "author": "Libre Panel contributors",
+  "license": "CC0-1.0",
+  "description": "Libre Panel's earth screen: the earth as it is now, turning slowly, lit by the sun where it stands, the cities' lights on its night side and your place marked, whether it is day or night there with the sunrise and sunset; the time in other places, the moon as it is lit tonight and the time. The globe is NASA's Blue Marble and Black Marble. Without a place it faces your time zone.",
+  "display": {
+    "model": "turing-12.3-usb",
+    "orientation": "landscape",
+    "width": 1920,
+    "height": 720
+  },
+  "palette": {
+    "bg": "#0A0E13",
+    "bg2": "#06090D",
+    "surface": "#0D1219",
+    "line": "#1F2A36",
+    "track": "#18212C",
+    "text": "#E8EEF4",
+    "text2": "#C9D3DE",
+    "text3": "#93A1B2",
+    "dim": "#5F6E80",
+    "accent": "#5FC8FF",
+    "cpu": "#2EE6D6",
+    "gpu": "#7F9CFF",
+    "mem": "#C792FF",
+    "disk": "#5FB6FF",
+    "net": "#34D399",
+    "warn": "#F5C46B",
+    "crit": "#F87171"
+  },
+  "font": "builtin:Barlow-Medium",
+  "background": {
+    "color": "@bg",
+    "image": "assets/backdrop.png",
+    "gradient": [
+      "#0A0E13",
+      "#06090D"
+    ]
+  },
+  "refresh_ms": 1000,
+  "animation": {
+    "smoothing_ms": 600
+  },
+  "grid": {
+    "columns": 48,
+    "rows": 72,
+    "gap": 1,
+    "margin": 16
+  },
+  "style": {
+    "card": "glass",
+    "radius": 14,
+    "glow": 0.6,
+    "backdrop": "flat",
+    "display_font": "builtin:Barlow-SemiBold",
+    "text_font": "builtin:Barlow-Medium",
+    "card_opacity": 0.6
+  },
+  "widgets": [
+    {
+      "type": "module",
+      "id": "earth",
+      "module": "earth",
+      "col": 0,
+      "row": 0,
+      "cols": 22,
+      "rows": 72,
+      "card": "off"
+    },
+    {
+      "type": "clock",
+      "id": "clock",
+      "x": 1214,
+      "y": 10,
+      "format": "%H:%M",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 120,
+      "color": "@text",
+      "digits": "roll",
+      "finish": "acrylic"
+    },
+    {
+      "type": "clock",
+      "id": "seconds",
+      "x": 1544,
+      "y": 33,
+      "format": "%S",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 43,
+      "color": "@accent",
+      "digits": "roll",
+      "glow": 0.6,
+      "glow_radius": 8
+    },
+    {
+      "type": "clock",
+      "id": "weekday",
+      "x": 1880,
+      "y": 39,
+      "format": "%A",
+      "font": "builtin:Barlow-Medium",
+      "font_size": 31,
+      "color": "@text2",
+      "uppercase": true,
+      "letter_spacing": 3,
+      "tabular": false,
+      "align": "right"
+    },
+    {
+      "type": "clock",
+      "id": "date",
+      "x": 1880,
+      "y": 90,
+      "format": "%d %B",
+      "font": "builtin:Barlow-Medium",
+      "font_size": 31,
+      "color": "@text3",
+      "uppercase": true,
+      "letter_spacing": 3,
+      "tabular": false,
+      "align": "right"
+    },
+    {
+      "type": "module",
+      "id": "world",
+      "module": "world",
+      "col": 22,
+      "row": 17,
+      "cols": 26,
+      "rows": 27
+    },
+    {
+      "type": "module",
+      "id": "moon",
+      "module": "moon",
+      "col": 22,
+      "row": 44,
+      "cols": 13,
+      "rows": 28
+    },
+    {
+      "type": "module",
+      "id": "month",
+      "module": "date",
+      "col": 35,
+      "row": 44,
+      "cols": 13,
+      "rows": 28
+    }
+  ]
+}

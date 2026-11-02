@@ -3020,7 +3020,13 @@
     "LAN": "Ethernet",
     "Scroll on": "Continuo",
     "A step at each reading": "Un paso por lectura",
-    "A step at each reading: a graph glides a moment when a reading comes and rests until the next one, and the panel takes fewer frames, less of the processor. Arena's frame rate scrolls on.": "Un paso por lectura: un gráfico se desliza un momento cuando llega una lectura y se queda quieto hasta la siguiente; el panel recibe menos imágenes y el procesador trabaja menos. La tasa de fotogramas de Arena sigue desplazándose de forma continua."
+    "A step at each reading: a graph glides a moment when a reading comes and rests until the next one, and the panel takes fewer frames, less of the processor. Arena's frame rate scrolls on.": "Un paso por lectura: un gráfico se desliza un momento cuando llega una lectura y se queda quieto hasta la siguiente; el panel recibe menos imágenes y el procesador trabaja menos. La tasa de fotogramas de Arena sigue desplazándose de forma continua.",
+    "Earth": "Tierra",
+    "Daytime": "Día",
+    "Night-time": "Noche",
+    "Sunrise {value}": "Amanecer {value}",
+    "Sunset {value}": "Atardecer {value}",
+    "Day length {value:duration}": "Duración del día {value:duration}"
   },
   "fields": {
     "agent": "agente",
@@ -3173,7 +3179,11 @@
     "turn": "Minutos por tarjeta",
     "transition": "Transición",
     "trace": "Curso fino",
-    "range_step": "Rango por pasos"
+    "range_step": "Rango por pasos",
+    "spin": "Segundos por vuelta",
+    "clouds": "Nubes",
+    "lights": "Luces de las ciudades",
+    "place": "Lugar marcado"
   },
   "widgets": {
     "agent": "Signo de IA",
@@ -3183,6 +3193,7 @@
     "clock": "Reloj",
     "countdown": "Cuenta atrás",
     "downloads": "Descargas",
+    "earth": "Tierra",
     "fan": "Ventilador",
     "gauge": "Anillo",
     "graph": "Gráfico",
@@ -3323,7 +3334,8 @@
     "rise": "empujar hacia arriba",
     "wipe": "barrido",
     "cut": "al instante",
-    "random": "al azar"
+    "random": "al azar",
+    "earth": "tierra"
   },
   "icons": {
     "battery": "Batería",

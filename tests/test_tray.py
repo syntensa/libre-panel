@@ -258,7 +258,7 @@ def test_the_theme_menu_offers_the_panel_s_themes_by_name(tray):
     themes = items(items(tray.build_menu())["Theme"].submenu)
     first = list(themes)[: list(themes).index("More themes")]
     assert first == ["Almanac", "Almanac Analog", "Arena", "Encore", "High Contrast", "Lumen",
-                     "Nimbus", "Studio"]  # fmt: skip
+                     "Nimbus", "Studio", "Terra"]  # fmt: skip
     more = items(themes["More themes"].submenu)
     assert {"Libre Default", "Column", "Slate", "Round report"} <= set(more)
     assert {"Lumen Companion", "Arena Companion"} <= set(more)  # for a second panel

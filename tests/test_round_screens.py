@@ -12,7 +12,7 @@ from test_libre_themes import data_of, drawn
 from libre_panel.sensors.demo import demo_snapshot
 from libre_panel.theme.model import builtin_themes_dir, theme_for
 
-ROUND = ["lumen", "encore", "nimbus", "almanac", "arena", "round-report"]
+ROUND = ["lumen", "encore", "nimbus", "almanac", "arena", "round-report", "terra"]
 WORDS = ("text", "metric", "clock", "weather")  # what is read: inside the circle, apart
 RADIUS, CENTRE = 240, (240, 240)
 ROOM = 4  # px a word keeps from the rim at least

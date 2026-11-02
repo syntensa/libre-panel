@@ -745,7 +745,7 @@ def test_a_collection_does_not_lead_a_first_start_or_the_quick_list(app_url, iso
         assert page.locator(".theme-collection").count() == 0  # nothing of a collection is offered
         # made for the 9.2" panel: Libre Panel's own, its default first, the others A to Z
         assert shown_themes(page) == ["lumen", "almanac", "almanac-analog", "arena", "encore",
-                                      "contrast", "nimbus", "studio"]  # fmt: skip
+                                      "contrast", "nimbus", "studio", "terra"]  # fmt: skip
         page.get_by_role("button", name="See all").click()
         expect(page.locator(".theme-collection")).to_have_count(2)  # closed, at the end
         assert page.locator(".theme-card[data-theme='spur-ii']").count() == 0
@@ -1975,7 +1975,7 @@ def test_a_first_start_asks_how_the_panel_is_mounted(app_url, isolated_home):
         lumen = page.locator(".theme-card[data-theme='lumen']")
         expect(lumen.locator("img")).to_have_attribute("src", re.compile(r"lumen-vertical"))
         expect(lumen.locator(".theme-card-note")).to_contain_text("480 × 1920")
-        assert cards[-1] == "studio"  # no version for a bar on end: last
+        assert cards[-1] == "terra"  # (each has a version for it: by name)
         lumen.locator(".theme-card-main").click()
         page.wait_for_function("window.libre.store.get().doc?.id === 'lumen-vertical'")
         page.locator(".tab", has_text="Start").click()

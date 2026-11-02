@@ -1677,8 +1677,9 @@ class MainLoop:
     def rest(self) -> float | None:
         """A streaming panel's rest: while nothing on it moves (no glide, no graph that
         scrolls, no message, transition or video), the seconds until the next frame is due:
-        the next reading, or the clock's next second (a clock may show it), at most half a
-        second (Almanac's 12.3": a frame in six to ten). None while something moves: a frame on
+        the next reading, the clock's next second (a clock may show it) or the next step of
+        what moves in steps (a turning globe), at most half a second (Almanac's 12.3": a frame
+        in six to ten). None while something moves: a frame on
         each tick of the frame clock, and with [video] rest off. The panel shows the last frame
         it got meanwhile."""
         if not self.config.device.video.rest:
@@ -1687,7 +1688,11 @@ class MainLoop:
                 or self.showing or self.playing or self.mirrored is not None):  # fmt: skip
             return None
         second = 1.0 - time.time() % 1.0 + REST_LATE_S  # (just after it begins)
-        return max(0.0, min(REST_S, self.next_sample - self.clock(), second))
+        now = self.clock()
+        until = min(REST_S, self.next_sample - now, second)
+        if self.renderer.due is not None:  # (a turning globe's next step)
+            until = min(until, self.renderer.due - now)
+        return max(0.0, until)
 
     def pause(self) -> float:
         """Seconds to wait before the next frame when the display is not streaming."""
@@ -1700,7 +1705,10 @@ class MainLoop:
         interval = 1 / _fps(config, host, self.display)
         if not (renderer.moving or blend is not None or toasts.active or self.showing
                 or self.playing or self.mirrored is not None):  # fmt: skip
-            interval = max(interval, min(0.5, next_sample - started))
+            longest = min(0.5, next_sample - started)
+            if renderer.due is not None:  # (a turning globe's next step)
+                longest = min(longest, renderer.due - started)
+            interval = max(interval, longest)
         return max(0.0, interval - (self.clock() - started))
 
     def _capture(self, source: mirror.Source, size: tuple[int, int]) -> Any:

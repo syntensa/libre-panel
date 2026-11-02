@@ -84,6 +84,7 @@ export const CARD_CHOICES = () => [
   { id: "outlook", name: t("The week's weather"), when: t("once the weather is set up") },
   { id: "moon", name: t("Moon"), when: t("always"), always: true },
   { id: "sun", name: t("Sun and moon"), when: t("always"), always: true },
+  { id: "earth", name: t("Earth"), when: t("always"), always: true },
   { id: "agenda", name: t("Agenda"), when: t("always: your appointments once a calendar is set up"), always: true },
   { id: "net", name: t("Network"), when: t("always"), always: true },
 ];

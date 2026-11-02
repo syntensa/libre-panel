@@ -3020,7 +3020,13 @@
     "LAN": "LAN",
     "Scroll on": "Fließend",
     "A step at each reading": "Schritt pro Messwert",
-    "A step at each reading: a graph glides a moment when a reading comes and rests until the next one, and the panel takes fewer frames, less of the processor. Arena's frame rate scrolls on.": "Schritt pro Messwert: Ein Verlauf gleitet kurz, wenn ein Messwert kommt, und ruht bis zum nächsten – das Panel bekommt weniger Bilder, der Prozessor hat weniger zu tun. Arenas Bildrate läuft weiter fließend."
+    "A step at each reading: a graph glides a moment when a reading comes and rests until the next one, and the panel takes fewer frames, less of the processor. Arena's frame rate scrolls on.": "Schritt pro Messwert: Ein Verlauf gleitet kurz, wenn ein Messwert kommt, und ruht bis zum nächsten – das Panel bekommt weniger Bilder, der Prozessor hat weniger zu tun. Arenas Bildrate läuft weiter fließend.",
+    "Earth": "Erde",
+    "Daytime": "Tag",
+    "Night-time": "Nacht",
+    "Sunrise {value}": "Sonnenaufgang {value}",
+    "Sunset {value}": "Sonnenuntergang {value}",
+    "Day length {value:duration}": "Tageslänge {value:duration}"
   },
   "fields": {
     "agent": "Agent",
@@ -3173,7 +3179,11 @@
     "turn": "Minuten je Karte",
     "transition": "Übergang",
     "trace": "Feiner Verlauf",
-    "range_step": "Bereich in Schritten"
+    "range_step": "Bereich in Schritten",
+    "spin": "Sekunden je Umdrehung",
+    "clouds": "Wolken",
+    "lights": "Lichter der Städte",
+    "place": "Ort markiert"
   },
   "widgets": {
     "agent": "Agenten­zeichen",
@@ -3183,6 +3193,7 @@
     "clock": "Uhr",
     "countdown": "Countdown",
     "downloads": "Download-Anzeige",
+    "earth": "Erde",
     "fan": "Lüfter",
     "gauge": "Ring",
     "graph": "Diagramm",
@@ -3323,7 +3334,8 @@
     "rise": "nach oben schieben",
     "wipe": "wischen",
     "cut": "sofort",
-    "random": "Zufall"
+    "random": "Zufall",
+    "earth": "Erde"
   },
   "icons": {
     "battery": "Akku",

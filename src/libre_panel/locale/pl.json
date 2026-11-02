@@ -3020,7 +3020,13 @@
     "LAN": "Ethernet",
     "Scroll on": "Płynnie",
     "A step at each reading": "Krok na odczyt",
-    "A step at each reading: a graph glides a moment when a reading comes and rests until the next one, and the panel takes fewer frames, less of the processor. Arena's frame rate scrolls on.": "Krok na odczyt: wykres przesuwa się na chwilę, gdy przychodzi odczyt, i stoi do następnego – panel dostaje mniej klatek, procesor ma mniej pracy. Liczba klatek w Arenie przewija się dalej płynnie."
+    "A step at each reading: a graph glides a moment when a reading comes and rests until the next one, and the panel takes fewer frames, less of the processor. Arena's frame rate scrolls on.": "Krok na odczyt: wykres przesuwa się na chwilę, gdy przychodzi odczyt, i stoi do następnego – panel dostaje mniej klatek, procesor ma mniej pracy. Liczba klatek w Arenie przewija się dalej płynnie.",
+    "Earth": "Ziemia",
+    "Daytime": "Dzień",
+    "Night-time": "Noc",
+    "Sunrise {value}": "Wschód słońca {value}",
+    "Sunset {value}": "Zachód słońca {value}",
+    "Day length {value:duration}": "Długość dnia {value:duration}"
   },
   "fields": {
     "agent": "agent",
@@ -3173,7 +3179,11 @@
     "turn": "Minuty na kartę",
     "transition": "Przejście",
     "trace": "Dokładny przebieg",
-    "range_step": "Zakres w krokach"
+    "range_step": "Zakres w krokach",
+    "spin": "Sekundy na obrót",
+    "clouds": "Chmury",
+    "lights": "Światła miast",
+    "place": "Miejsce zaznaczone"
   },
   "widgets": {
     "agent": "Znak AI",
@@ -3183,6 +3193,7 @@
     "clock": "Zegar",
     "countdown": "Odliczanie",
     "downloads": "Pobieranie",
+    "earth": "Ziemia",
     "fan": "Wentylator",
     "gauge": "Pierścień",
     "graph": "Wykres",
@@ -3323,7 +3334,8 @@
     "rise": "przesuń w górę",
     "wipe": "wymazanie",
     "cut": "od razu",
-    "random": "losowo"
+    "random": "losowo",
+    "earth": "ziemia"
   },
   "icons": {
     "battery": "Bateria",

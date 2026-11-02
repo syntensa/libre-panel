@@ -102,6 +102,18 @@ output in `tests/data/` comes from its test fixtures.
 
 **Open-Meteo** — weather data from <https://open-meteo.com>, CC BY 4.0.
 
+**NASA's Blue Marble and Black Marble** — the maps of the earth's globe
+(`src/libre_panel/assets/earth/`, made by `tools/earth_maps.py`): the land and the sea by
+day from Blue Marble Next Generation (August 2004, NASA Earth Observatory, Reto Stöckli), the
+earth at night from Black Marble 2016 (NASA Earth Observatory images by Joshua Stevens, using
+Suomi NPP VIIRS data from Miguel Román, NASA's Goddard Space Flight Center), the clouds and
+where the water is from Blue Marble (2002, NASA Goddard Space Flight Center). NASA's pictures
+are not protected by copyright in the United States; NASA asks to be named as their source
+(<https://www.nasa.gov/nasa-brand-center/images-and-media/>). They are reduced to 2048×1024
+px; nothing else is changed but the clouds made grey and the water a mask. The globe is drawn
+by Libre Panel's own code; the idea came from Earth3D (mitchcamza, MIT,
+<https://github.com/mitchcamza/Earth3D>), none of whose code, shaders or maps are used.
+
 **lian-li-linux** (MIT) — reference for Lian Li LCD protocols (not used yet).
 
 **Pillow**, **psutil**, **pyusb**, **pycryptodome**, **pyserial**,

@@ -1302,6 +1302,73 @@ def _moon(b: _Build, x: float, y: float, w: float, h: float, details: bool = Fal
         top += CAP * size + b.ts * 0.9
 
 
+EARTH_SPIN_S = 180  # seconds for a turn of a module's globe, where it moves
+
+
+def build_earth(b: _Build, _src: Source) -> None:
+    """The earth as it is now: a globe lit by the sun where it stands, the cities' lights on
+    its night side, your place marked; beside or under it whether it is day or night there,
+    the sunrise and sunset and how long the day is. It turns slowly where the panel moves
+    (``moving``), and faces your place where it does not. Without a place (``[weather]``
+    latitude and longitude) the globe faces your time zone and stands alone."""
+    b.card()
+    start = len(b.out)
+    b.needs = "sun.up"  # (the sun's readings: there is a place)
+    _earth(b, b.ix, b.iy, b.iw, b.ih, details=True)
+    lone = len(b.out)
+    b.needs = "!sun.up"
+    _earth(b, b.ix, b.iy, b.iw, b.ih, details=False)
+    for widget in b.out[lone:]:
+        widget["id"] = "only-" + widget["id"]
+    b.needs = ""
+    del start
+
+
+def _earth(b: _Build, x: float, y: float, w: float, h: float, details: bool) -> None:
+    lines: list[tuple[str, str, str, float, str]] = []
+    if details:
+        lines = [
+            ("rise", "sun.rise", t("Sunrise {value}"), 1.0, "text2"),
+            ("set", "sun.set", t("Sunset {value}"), 1.0, "text2"),
+            ("daylight", "sun.daylight", t("Day length {value:duration}"), 0.95, "text3"),
+        ]
+    head = b.ts * 1.6 if details else 0.0
+    block = head + sum(CAP * b.ts * scale + b.ts * 0.9 for *_rest, scale, _c in lines)
+    beside = details and w / max(1, h) >= 1.2 and w >= b.ts * 14
+    if not details:
+        size = min(w, h)
+        gx, gy = x + (w - size) / 2, y + (h - size) / 2
+    elif beside:  # the globe as large as the lines beside it leave room for
+        size = min(h, w - b.ts * 12, w * 0.7)
+        gx, gy = x, y + (h - size) / 2
+        tx, align, width = x + size + b.pad * 0.6, "left", w - size - b.pad * 0.6
+        top = y + (h - block) / 2
+    else:
+        size = min(w, h - block - b.ts)
+        gx, gy = x + (w - size) / 2, y + (h - size - block - b.ts) / 2
+        tx, align, width = x + w / 2, "center", w
+        top = gy + size + b.ts
+    if size < 16:
+        return
+    b.add("earth", "earth", x=round(gx), y=round(gy), size=round(size),
+          spin=EARTH_SPIN_S if b.module["moving"] else 0, color2=b.tint("accent"))  # fmt: skip
+    if not details:
+        return
+    big = b.ts * 1.6
+    words = (("day", t("Daytime"), "sun.up=1"), ("night", t("Night-time"), "sun.up=0"))
+    for name, word, need in words:
+        fields = b._text_fields(big, top, "display_font")
+        b.add("text", name, x=round(tx), text=word, color=b.c("text"), align=align,
+              max_width=round(width), tabular=False, needs=need, **fields)  # fmt: skip
+    top += CAP * big + b.ts * 1.0
+    for name, key, fmt, scale, role in lines:
+        size_ = b.ts * scale
+        b.value(name, key, fmt, tx, top, size_, color=b.c(role), align=align, width=width,
+                font="text_font", tabular=False, fallback="", fit="ellipsis",
+                hide_if_missing=True)  # fmt: skip
+        top += CAP * size_ + b.ts * 0.9
+
+
 def _face(b: _Build, name: str, x: float, y: float, d: float, zone: str = "") -> None:
     b.add(
         "analog", name, x=round(x), y=round(y), w=round(d), h=round(d), timezone=zone,
@@ -2607,6 +2674,7 @@ def kinds() -> dict[str, Kind]:
         "music": Kind(t("Music"), build_music, span=(2, 1)),
         "volume": Kind(t("Volume"), build_volume, span=(2, 1)),
         "moon": Kind(t("Moon"), build_moon),
+        "earth": Kind(t("Earth"), build_earth, span=(2, 1)),
         "outlook": Kind(t("Next days"), build_outlook, span=(3, 1), finish="lit"),
         "agenda": Kind(t("Agenda"), build_agenda, span=(2, 2)),
         "game": Kind(t("Game FPS"), build_game, span=(2, 1)),
@@ -2637,7 +2705,7 @@ MODULE_KINDS = (
     "temps", "cores", "drives", "processes", "netinfo", "battery", "values",
     "sun", "analog", "world", "countdown", "image", "music", "agenda", "game",
     "playback", "forecast", "download", "instrument", "cards", "netcard", "volume", "moon",
-    "outlook", "ping", "timer", "power", "mic", "ups", "huge", "ai",
+    "outlook", "ping", "timer", "power", "mic", "ups", "huge", "ai", "earth",
 )  # fmt: skip
 # Kinds that hold several cards and show one (render.slot); "netcard" is two: a download
 # while one runs, else the network

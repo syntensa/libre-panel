@@ -3020,7 +3020,13 @@
     "LAN": "有线网络",
     "Scroll on": "连续滚动",
     "A step at each reading": "每次读数走一步",
-    "A step at each reading: a graph glides a moment when a reading comes and rests until the next one, and the panel takes fewer frames, less of the processor. Arena's frame rate scrolls on.": "每次读数走一步：每当有新读数，图表滑动片刻，然后静止到下一次读数；面板收到的画面更少，处理器负担更低。Arena 的帧率曲线仍连续滚动。"
+    "A step at each reading: a graph glides a moment when a reading comes and rests until the next one, and the panel takes fewer frames, less of the processor. Arena's frame rate scrolls on.": "每次读数走一步：每当有新读数，图表滑动片刻，然后静止到下一次读数；面板收到的画面更少，处理器负担更低。Arena 的帧率曲线仍连续滚动。",
+    "Earth": "地球",
+    "Daytime": "白天",
+    "Night-time": "夜晚",
+    "Sunrise {value}": "日出 {value}",
+    "Sunset {value}": "日落 {value}",
+    "Day length {value:duration}": "白昼时长 {value:duration}"
   },
   "fields": {
     "agent": "智能体",
@@ -3173,7 +3179,11 @@
     "turn": "每张卡片分钟数",
     "transition": "过渡效果",
     "trace": "精细曲线",
-    "range_step": "范围步长"
+    "range_step": "范围步长",
+    "spin": "每圈秒数",
+    "clouds": "云层",
+    "lights": "城市灯光",
+    "place": "标记所在地"
   },
   "widgets": {
     "agent": "AI 标志",
@@ -3183,6 +3193,7 @@
     "clock": "时钟",
     "countdown": "倒计时",
     "downloads": "下载",
+    "earth": "地球",
     "fan": "风扇",
     "gauge": "圆环",
     "graph": "图表",
@@ -3323,7 +3334,8 @@
     "rise": "向上推出",
     "wipe": "擦除",
     "cut": "立即",
-    "random": "随机"
+    "random": "随机",
+    "earth": "地球"
   },
   "icons": {
     "battery": "电池",

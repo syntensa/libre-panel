@@ -3020,7 +3020,13 @@
     "LAN": "有線LAN",
     "Scroll on": "連続",
     "A step at each reading": "計測ごとに一歩",
-    "A step at each reading: a graph glides a moment when a reading comes and rests until the next one, and the panel takes fewer frames, less of the processor. Arena's frame rate scrolls on.": "計測ごとに一歩：計測値が届くとグラフが一瞬スライドし、次の値まで止まります。パネルに送る画像が減り、プロセッサーの負荷も下がります。Arena のフレームレートは連続でスクロールします。"
+    "A step at each reading: a graph glides a moment when a reading comes and rests until the next one, and the panel takes fewer frames, less of the processor. Arena's frame rate scrolls on.": "計測ごとに一歩：計測値が届くとグラフが一瞬スライドし、次の値まで止まります。パネルに送る画像が減り、プロセッサーの負荷も下がります。Arena のフレームレートは連続でスクロールします。",
+    "Earth": "地球",
+    "Daytime": "昼",
+    "Night-time": "夜",
+    "Sunrise {value}": "日の出 {value}",
+    "Sunset {value}": "日の入り {value}",
+    "Day length {value:duration}": "昼の長さ {value:duration}"
   },
   "fields": {
     "agent": "エージェント",
@@ -3173,7 +3179,11 @@
     "turn": "カードごとの分数",
     "transition": "切り替え効果",
     "trace": "細かな推移",
-    "range_step": "範囲の刻み"
+    "range_step": "範囲の刻み",
+    "spin": "1回転の秒数",
+    "clouds": "雲",
+    "lights": "街の明かり",
+    "place": "場所の印"
   },
   "widgets": {
     "agent": "AIマーク",
@@ -3183,6 +3193,7 @@
     "clock": "時計",
     "countdown": "カウントダウン",
     "downloads": "ダウンロード表示",
+    "earth": "地球",
     "fan": "ファン",
     "gauge": "リング",
     "graph": "グラフ",
@@ -3323,7 +3334,8 @@
     "rise": "上へ押し出す",
     "wipe": "ワイプ",
     "cut": "即時",
-    "random": "ランダム"
+    "random": "ランダム",
+    "earth": "地球"
   },
   "icons": {
     "battery": "バッテリー",

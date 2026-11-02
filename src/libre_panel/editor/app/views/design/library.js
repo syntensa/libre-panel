@@ -17,7 +17,7 @@ import { formatValue, sensorGroups, useReadings } from "./sensors.js";
 
 const MODULE_GROUPS = {
   system: ["ring", "stat", "graph", "bars", "network", "system", "temps", "cores", "drives", "processes", "netinfo", "ping", "power", "battery", "ups", "values", "ai"],
-  time: ["clock", "date", "analog", "world", "countdown", "timer", "sun", "moon", "weather", "outlook", "agenda"],
+  time: ["clock", "date", "analog", "world", "countdown", "timer", "sun", "moon", "earth", "weather", "outlook", "agenda"],
   media: ["music", "volume", "mic", "image", "text"],
   game: ["game"],
 };

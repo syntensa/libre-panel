@@ -245,6 +245,7 @@ facets, acrylic or flat.</td>
 | **Encore** | 8.8" and 9.2" bars | for music: the cover large, its colours behind the whole screen |
 | **Nimbus** | 8.8" and 9.2" bars | for the weather: now, the next hours and days, the moon |
 | **Almanac** | 8.8" and 9.2" bars | a clock with the month; **Almanac Analog** on a face |
+| **Terra** | 8.8" and 9.2" bars, 12.3" | the earth as it is now, turning: day and night, the cities' lights, your place |
 | **Arena** | 8.8" and 9.2" bars, 12.3" | for game mode: the frame rate large, CPU and GPU, every core |
 | **Agents** | 8.8" and 9.2" bars, 12.3" | what Claude Code and Codex do; **Agents Claude** for Claude Code alone |
 | **Libre Default** | 3.5", the default on every other panel | two lit rings, a history that scrolls, a card in the corner |

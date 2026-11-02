@@ -3020,7 +3020,13 @@
     "LAN": "Ethernet",
     "Scroll on": "Continuo",
     "A step at each reading": "Un passo per lettura",
-    "A step at each reading: a graph glides a moment when a reading comes and rests until the next one, and the panel takes fewer frames, less of the processor. Arena's frame rate scrolls on.": "Un passo per lettura: un grafico scorre un attimo quando arriva una lettura e resta fermo fino alla successiva; il pannello riceve meno immagini e il processore lavora meno. Il frame rate di Arena continua a scorrere."
+    "A step at each reading: a graph glides a moment when a reading comes and rests until the next one, and the panel takes fewer frames, less of the processor. Arena's frame rate scrolls on.": "Un passo per lettura: un grafico scorre un attimo quando arriva una lettura e resta fermo fino alla successiva; il pannello riceve meno immagini e il processore lavora meno. Il frame rate di Arena continua a scorrere.",
+    "Earth": "Terra",
+    "Daytime": "Giorno",
+    "Night-time": "Notte",
+    "Sunrise {value}": "Alba {value}",
+    "Sunset {value}": "Tramonto {value}",
+    "Day length {value:duration}": "Durata del giorno {value:duration}"
   },
   "fields": {
     "agent": "agente",
@@ -3173,7 +3179,11 @@
     "turn": "Minuti per scheda",
     "transition": "Transizione",
     "trace": "Andamento fine",
-    "range_step": "Intervallo a passi"
+    "range_step": "Intervallo a passi",
+    "spin": "Secondi per giro",
+    "clouds": "Nuvole",
+    "lights": "Luci delle città",
+    "place": "Luogo segnato"
   },
   "widgets": {
     "agent": "Segno IA",
@@ -3183,6 +3193,7 @@
     "clock": "Orologio",
     "countdown": "Conto alla rovescia",
     "downloads": "Download",
+    "earth": "Terra",
     "fan": "Ventola",
     "gauge": "Anello",
     "graph": "Grafico",
@@ -3323,7 +3334,8 @@
     "rise": "spingi in alto",
     "wipe": "tendina",
     "cut": "subito",
-    "random": "casuale"
+    "random": "casuale",
+    "earth": "terra"
   },
   "icons": {
     "battery": "Batteria",

@@ -136,6 +136,22 @@ class _Builder:
         self._jobs.put(None)
 
 
+@dataclass(eq=False)
+class _Globe:
+    """A globe on show (Renderer._draw_earth): what it is (``key``), the moment it is lit
+    for, the piece it showed last (and its step, for one that turns) and the lighting under
+    way in the helper thread."""
+
+    key: tuple[Any, ...]
+    turning: Any = None  # render.earth.Turning, for a globe that turns
+    lit: float | None = None
+    piece: Piece | None = None
+    step: int | None = None
+    shown: float | None = None  # the moment the piece of a turning globe is lit for
+    pending: tuple[float, Future] | None = None
+    offset: int = 0  # the steps a turning globe is ahead (it begins at your place)
+
+
 def changed_region(
     previous: Image.Image | None, current: Image.Image
 ) -> tuple[int, int, int, int] | None:
@@ -804,6 +820,9 @@ class Renderer:
         self.snapshot: Snapshot | None = None  # the readings it drew last (context.image)
         self.warnings: list[str] = []
         self.moving = False  # True while an animation has not settled yet
+        # when the next frame is due for what moves in steps (a turning globe), while nothing
+        # else moves: a panel may rest until then (MainLoop.rest); None: nothing such
+        self.due: float | None = None
         # a graph that scrolls steps a reading at a time, gliding, and rests between (config.toml
         # graph_steps; one with its own fine course, Arena's frame rate, scrolls on)
         self.graph_steps = False
@@ -924,6 +943,10 @@ class Renderer:
         # tens of milliseconds, and a ring's next picture waited behind it, so the ring
         # stood still for frames and then jumped (Arena on the 12.3")
         self._strip_builder: _Builder | None = None
+        # the globes (render/earth.py), and a thread of their own to light them: a big one
+        # takes a fifth of a second, which no ring or list should wait for
+        self._earths: dict[str, _Globe] = {}
+        self._earth_builder: _Builder | None = None
         self._pending: dict[str, tuple[Any, Future]] = {}
         # Plugins (docs/PLUGINS.md): a screen draws the frame under the widgets,
         # plugin widget types draw themselves.
@@ -1560,6 +1583,9 @@ class Renderer:
         if self._strip_builder is not None:
             self._strip_builder.close()
             self._strip_builder = None
+        if self._earth_builder is not None:
+            self._earth_builder.close()
+            self._earth_builder = None
         if self.screen is not None:
             try:
                 self.screen.close()
@@ -1783,6 +1809,7 @@ class Renderer:
             self._warm_slots(snapshot, now)
         theme = self.theme
         self.moving = False
+        self.due = None
         self.snapshot = snapshot
         self.light_edges, self.edge_owners = [], {}
         self.motion.begin(snapshot.readings, now, self._glide_s(), self._lead())
@@ -2558,6 +2585,85 @@ class Renderer:
         image = moon.picture(size, phase, self.color(widget["color"]), night, widget["mirror"], t)
         x, y = widget["x"], widget["y"]
         return Piece(image, x, y, [x, y, size, size])
+
+    # -- the earth ---------------------------------------------------------
+
+    def _due_at(self, at: float) -> None:
+        """Something wants a new frame at ``at`` (its next step), not before."""
+        self.due = at if self.due is None else min(self.due, at)
+
+    def _draw_earth(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
+        """The earth as it is now (render/earth.py): a globe that faces your place, made again
+        when its day has moved a pixel at its rim; or, with ``spin`` where the panel moves, one
+        that turns, a pixel at its middle a step, with a frame for each step only (the panel
+        may rest between). Each is lit in a thread of its own once it shows."""
+        from libre_panel.render import earth
+
+        wid, x, y = widget["id"], widget["x"], widget["y"]
+        size = max(8, widget["size"])
+        place = self.place
+        mark = place if widget["place"] else None
+        look = (self.color(widget["color"])[:3], self.color(widget["color2"])[:3],
+                widget["clouds"], widget["lights"])  # fmt: skip
+        every = earth.redraw_s(size)
+        # the moment it is lit for, on the wall clock (``now`` is the frame clock's)
+        moment = math.floor(snapshot.now.timestamp() / every) * every
+        held = self._earths.get(wid)
+        if widget["spin"] > 0 and self.animate:
+            lat = earth.turn_latitude(place)
+            key: tuple[Any, ...] = ("turn", size, lat, look)
+            if held is None or held.key != key:
+                turning = earth.Turning(size, lat, *look)
+                # it begins with your place in the middle (or your time zone's longitude)
+                begin = turning.step_at(earth.view_of(place)[1])
+                offset = begin - turning.step_of(now, widget["spin"])[0]
+                held = self._earths[wid] = _Globe(key, turning, offset=offset)
+            globe = held.turning
+            if held.lit != moment:
+                self._light_globe(held, moment, lambda: globe.lit(moment), globe.use)
+            step, due = globe.step_of(now, widget["spin"], held.offset)  # (the frame clock's)
+            self._due_at(due)
+            if held.piece is None or held.step != step or held.shown != globe.lit_at:
+                image = globe.frame(step, mark)
+                held.piece = self._effects(widget, Piece(image, x, y, [x, y, size, size]))
+                held.step, held.shown = step, globe.lit_at
+            return held.piece
+        centre = earth.view_of(place)
+        key = ("stand", size, centre, mark, look)
+        if held is None or held.key != key:
+            held = self._earths[wid] = _Globe(key)
+
+        def made(t: float, image: Image.Image) -> None:
+            held.piece = self._effects(widget, Piece(image, x, y, [x, y, size, size]))
+
+        if held.lit != moment:
+            self._light_globe(held, moment,
+                              lambda: earth.picture(size, moment, centre, mark, *look),
+                              made)  # fmt: skip
+        return held.piece
+
+    def _light_globe(self, held: _Globe, moment: float, job: Callable[[], Any],
+                     use: Callable[[float, Any], None]) -> None:  # fmt: skip
+        """Light ``held`` for ``moment``: here the first time (or where nothing is built
+        aside), else in the globes' thread while the one before stays on show."""
+        if held.lit is None or not self.background_builds:
+            use(moment, job())
+            held.lit = moment
+            return
+        if held.pending is None:
+            if self._earth_builder is None:
+                self._earth_builder = _Builder("render-earth", self._gate())
+            held.pending = (moment, self._earth_builder.submit(job))
+            return
+        for_moment, future = held.pending
+        if not future.done():
+            return
+        held.pending = None
+        held.lit = for_moment  # (failed or not: not asked again until the next moment)
+        try:
+            use(for_moment, future.result())
+        except Exception as exc:  # a broken globe must not blank the panel
+            self._warn(f"the earth: {exc}")
 
     # -- AI agents ---------------------------------------------------------
 

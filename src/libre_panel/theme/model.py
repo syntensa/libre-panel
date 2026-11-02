@@ -257,6 +257,19 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "mirror": ("bool", False),  # as seen south of the equator
         "pack": PACK_FIELD,
     },
+    # The earth as it is now (render/earth.py): lit by the sun where it stands, the cities'
+    # lights on its night side, the clouds, your place marked ([weather] latitude and
+    # longitude). It faces your place, or turns once in ``spin`` seconds (where the panel
+    # moves; the day and the night stay where they are on the earth at this moment).
+    "earth": {
+        "size": ("int", 160),
+        "spin": ("number", 0),
+        "clouds": ("bool", True),
+        "lights": ("bool", True),  # the cities' lights on the night side
+        "place": ("bool", True),  # your place marked
+        "color": ("color", "#6badff"),  # the air at its rim
+        "color2": ("color", "#ffd27a"),  # your place
+    },
     # The sign of an AI agent at work (render/agent.py): working, waiting for you, idle, off,
     # as its reading says (ai.claude.state, ai.codex.state).
     "agent": {
@@ -473,6 +486,7 @@ PRIMARY_FIELDS: dict[str, tuple[str, ...]] = {
     "analog": ("timezone", "hand", "color", "color2", "seconds"),
     "countdown": ("target", "part", "color", "font_size"),
     "moon": ("color", "color2", "mirror"),
+    "earth": ("spin", "clouds", "color", "color2"),
     "agent": ("sensor", "color", "color2"),
     "image": ("src", "fit", "slides", "seconds", "speed"),
     "weather": ("field", "format", "color", "font_size"),

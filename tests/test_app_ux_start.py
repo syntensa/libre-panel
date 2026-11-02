@@ -111,7 +111,8 @@ def test_the_cards_of_lumens_slot_are_chosen_on_start_for_every_version_of_it(
 
         assert order() == [
             "playback", "ai", "forecast", "date",  # chosen, then under "More cards"
-            "download", "analog", "clock", "world", "outlook", "moon", "sun", "agenda", "net",
+            "download", "analog", "clock", "world", "outlook", "moon", "sun", "earth", "agenda",
+            "net",
         ]  # fmt: skip
         expect(card.locator("[data-card='download']")).to_have_class(re.compile(r"\boff\b"))
         expect(card.locator("[data-card='download']")).to_be_hidden()
@@ -120,7 +121,7 @@ def test_the_cards_of_lumens_slot_are_chosen_on_start_for_every_version_of_it(
         card.get_by_role("switch", name="Show the card Music").click()
         waits_for(page, lambda: settings_config().cards == ["forecast", "ai", "date"])
         card.locator(".cards-choice-more > summary").click()
-        expect(card.locator(".cards-choice-more > summary")).to_have_text("More cards (10)")
+        expect(card.locator(".cards-choice-more > summary")).to_have_text("More cards (11)")
         card.get_by_role("switch", name="Show the card Download").click()
         waits_for(page, lambda: settings_config().cards == ["forecast", "ai", "date", "download"])
         expect(rows.first).to_have_attribute("data-card", "forecast")

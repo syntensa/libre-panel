@@ -3,6 +3,23 @@
 ## Unreleased
 
 **New**
+- **The earth as it is now: a globe, a module, a card and Terra, a screen around it.** A
+  globe lit by the sun where it stands this minute, the line between day and night soft with
+  dusk, the cities' lights on its night side, the clouds, the air bright at the rim of its day
+  side, and your place (`[weather]` latitude and longitude) marked in the theme's colour. It
+  turns once in three minutes where the panel moves, the night side with its lights coming
+  round, and begins with your place in the middle; where it does not move it faces your
+  place. The **earth module** puts beside or under it whether it is day or night at your
+  place, the sunrise, the sunset and the day's length, and is a card for the card slots too
+  (*Start → Cards*). **Terra** is the screen for it, on the 8.8" and 9.2" bars, the 12.3", on
+  end and round: the earth on the stars, the time in four other places on clock faces, the
+  time and the moon tonight. It is Libre Panel's own drawing (numpy, no graphics card), from
+  NASA's Blue Marble and Black Marble (1.1 MB of maps, read while a picture is made and let
+  go after it): a turning globe looks a lit map up once a pixel, a step a pixel at its
+  middle, 1 to 3 ms a step on a 12.3"; it makes a frame only for each step, and a video panel
+  rests between; a standing one is made again (in a thread of its own) when the day has moved
+  a pixel at its rim, every minute or so. The idea came from Earth3D (mitchcamza). New widget
+  `earth` (`spin`, `clouds`, `lights`, `place`), module and card `earth`.
 - **Graphs that take a step at each reading** (*Settings → Panel → Graphs*, `graph_steps`).
   A graph scrolls on, 25 pixels a second; set to *A step at each reading*, it glides to a new
   reading in a third of a second and then stands until the next one, showing what a
