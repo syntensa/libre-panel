@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased
+
+**Security**
+- **With the highest rights, nothing more from where any program may write.** Started with
+  them (the elevated start at login, or *Run as administrator*), Libre Panel reads
+  `config.toml` from your settings folder, which every program you run may change, also one
+  without those rights. ffmpeg, PresentMon, the AI agents' programs and the plugins were
+  already used only from places that only administrators may change; two things the settings
+  name were not held back. The libraries of LibreHardwareMonitor (`[sensors.librehardwaremonitor]
+  dll_dir`) are now loaded only from such a place, else the download's own are (*Settings →
+  System* names the folder among what is held back), and the panel's picture file
+  (`device.output`, written while no panel is there) is written only into such a folder (as
+  root on Linux: root's own settings folder), else the frames are kept as without a file.
+
+**Fixed**
+- **A video panel no longer hangs and glitches with `[video] pixels = "rgb"`** (new in 0.8.0rc1).
+  Where the frames change little, ffmpeg is fed YUV made in Libre Panel; with "rgb" (three
+  bytes a pixel, the way of before) it never is, but the check whether to switch to it asked
+  as if the frames went in as with "auto": so every frame started a new ffmpeg beside the
+  running one, the log filled with `video: the frames change little: YUV made here`, the
+  picture hung, glitched and stuttered (Arena and Terra above all) and the bit rate stepped
+  down. With "rgb" ffmpeg converts the frames again, as in 0.7; "auto" (the default) takes
+  less of the processor.
+- **Design and Look show the panel that is connected** where config.toml names a version of
+  a theme as the panel's theme (`theme = "lumen-pair-1920x720"`, as the app writes it for the
+  12.3" beside another panel): they opened the theme's first version, for another panel (the
+  3.5"), while the panel itself showed the right one.
+- **Terra smooth at 50 frames a second.** The glow of its four world clocks' faces was made
+  anew in every frame their second hands moved (two milliseconds each, all in the same
+  frames), and the moon with its glow ten times a second, although its picture changes only a
+  few times in a breath of its halo. A face's glow is kept now as long as the face (a
+  see-through face's is made each frame, as before), and the moon is made again only when its
+  halo changed; they look the same. On the 12.3" at 50 frames a second a frame takes 5.2 ms
+  in the middle instead of 9.5, and 9 in 700 frames are late instead of 46.
+
 ## 0.8.0rc1 — 2026-11-02
 
 A release candidate of 0.8, to try before everyone has it: one design for every panel, and
