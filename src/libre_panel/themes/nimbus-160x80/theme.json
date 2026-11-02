@@ -74,7 +74,8 @@
       "font_size": 13,
       "color": "@warn",
       "align": "right",
-      "needs": "weather.temperature"
+      "needs": "weather.temperature",
+      "smooth": true
     },
     {
       "type": "metric",
@@ -87,7 +88,8 @@
       "font_size": 13,
       "color": "@disk",
       "align": "right",
-      "needs": "weather.temperature"
+      "needs": "weather.temperature",
+      "smooth": true
     },
     {
       "type": "clock",

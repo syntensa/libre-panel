@@ -134,7 +134,8 @@
           "above": 88,
           "color": "@crit"
         }
-      ]
+      ],
+      "smooth": true
     }
   ]
 }
