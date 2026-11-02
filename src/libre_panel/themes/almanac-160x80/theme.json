@@ -1,0 +1,108 @@
+{
+  "format": "libre-panel-theme/1",
+  "name": "Almanac 0.96″",
+  "author": "Libre Panel contributors",
+  "license": "CC0-1.0",
+  "description": "Almanac for tiny panels (160x80, WeAct 0.96\"): the time large with its seconds, the weekday and the date, and a line that runs through the minute.",
+  "display": {
+    "model": "weact-0.96",
+    "orientation": "landscape",
+    "width": 160,
+    "height": 80
+  },
+  "palette": {
+    "bg": "#0A0E13",
+    "bg2": "#06090D",
+    "surface": "#0D1219",
+    "line": "#1F2A36",
+    "track": "#18212C",
+    "text": "#E8EEF4",
+    "text2": "#C9D3DE",
+    "text3": "#93A1B2",
+    "dim": "#5F6E80",
+    "accent": "#2EE6D6",
+    "cpu": "#2EE6D6",
+    "gpu": "#7F9CFF",
+    "mem": "#C792FF",
+    "disk": "#5FB6FF",
+    "net": "#34D399",
+    "warn": "#F5C46B",
+    "crit": "#F87171"
+  },
+  "font": "builtin:Barlow-Medium",
+  "background": {
+    "color": "@bg",
+    "gradient": [
+      "#0A0E13",
+      "#06090D"
+    ]
+  },
+  "refresh_ms": 1000,
+  "animation": {
+    "smoothing_ms": 600
+  },
+  "widgets": [
+    {
+      "type": "clock",
+      "id": "clock",
+      "x": 6,
+      "y": 4,
+      "format": "%H:%M",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 40,
+      "color": "@text",
+      "digits": "roll",
+      "finish": "acrylic"
+    },
+    {
+      "type": "clock",
+      "id": "seconds",
+      "x": 124,
+      "y": 10,
+      "format": "%S",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 16,
+      "color": "@accent",
+      "digits": "roll",
+      "glow": 0.6,
+      "glow_radius": 4
+    },
+    {
+      "type": "clock",
+      "id": "date",
+      "x": 8,
+      "y": 54,
+      "format": "%a %d %b",
+      "font": "builtin:Barlow-Medium",
+      "font_size": 12,
+      "color": "@text2",
+      "uppercase": true,
+      "letter_spacing": 1,
+      "tabular": false
+    },
+    {
+      "type": "rect",
+      "id": "seconds-groove",
+      "x": 6,
+      "y": 72,
+      "w": 148,
+      "h": 2,
+      "color": "@track"
+    },
+    {
+      "type": "bar",
+      "id": "seconds-run",
+      "x": 6,
+      "y": 72,
+      "w": 148,
+      "h": 2,
+      "sensor": "time.second",
+      "min": 0,
+      "max": 60,
+      "color": "@accent",
+      "background": null,
+      "radius": 0,
+      "smooth": false
+    }
+  ]
+}

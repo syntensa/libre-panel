@@ -1,0 +1,79 @@
+{
+  "format": "libre-panel-theme/1",
+  "name": "Terra 0.96″",
+  "author": "Libre Panel contributors",
+  "license": "CC0-1.0",
+  "description": "Terra for tiny panels (160x80, WeAct 0.96\"): the earth as it is now beside the time and the date.",
+  "display": {
+    "model": "weact-0.96",
+    "orientation": "landscape",
+    "width": 160,
+    "height": 80
+  },
+  "palette": {
+    "bg": "#0A0E13",
+    "bg2": "#06090D",
+    "surface": "#0D1219",
+    "line": "#1F2A36",
+    "track": "#18212C",
+    "text": "#E8EEF4",
+    "text2": "#C9D3DE",
+    "text3": "#93A1B2",
+    "dim": "#5F6E80",
+    "accent": "#5FC8FF",
+    "cpu": "#2EE6D6",
+    "gpu": "#7F9CFF",
+    "mem": "#C792FF",
+    "disk": "#5FB6FF",
+    "net": "#34D399",
+    "warn": "#F5C46B",
+    "crit": "#F87171"
+  },
+  "font": "builtin:Barlow-Medium",
+  "background": {
+    "color": "@bg",
+    "gradient": [
+      "#0A0E13",
+      "#06090D"
+    ]
+  },
+  "refresh_ms": 1000,
+  "animation": {
+    "smoothing_ms": 600
+  },
+  "widgets": [
+    {
+      "type": "earth",
+      "id": "earth",
+      "x": 2,
+      "y": 2,
+      "size": 76,
+      "spin": 0,
+      "color2": "@accent"
+    },
+    {
+      "type": "clock",
+      "id": "clock",
+      "x": 80,
+      "y": 16,
+      "format": "%H:%M",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 26,
+      "color": "@text",
+      "digits": "roll"
+    },
+    {
+      "type": "clock",
+      "id": "date",
+      "x": 82,
+      "y": 50,
+      "format": "%a %d",
+      "font": "builtin:Barlow-Medium",
+      "font_size": 12,
+      "color": "@text3",
+      "uppercase": true,
+      "letter_spacing": 1,
+      "tabular": false
+    }
+  ]
+}

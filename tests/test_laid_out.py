@@ -21,9 +21,18 @@ def test_each_panel_gets_the_version_made_for_the_shape_nearest_its_own():
         (320, 320): "lumen-480x480",  # NZXT's round screens: the 2.1"'s
         (320, 960): "lumen-vertical",  # the 4.6" on end
         (640, 180): "lumen-640x180",  # the ZC-360's screens: made for such alone
+        (640, 480): "lumen-1280x720",  # the TF3's 4:3 pump: not the round one, pulled oval
+        (400, 400): "lumen-480x480",  # a square panel: the round one's rings fit it
     }
     for size, name in near.items():
         assert nearest_version(lumen, size) == name, size
+
+
+def test_every_family_has_a_version_for_the_tiny_panels_the_12_3_and_the_5_2():
+    for family in ("lumen", "studio", "encore", "nimbus", "almanac", "arena", "terra"):
+        versions = versions_of(find_theme(family))
+        for size in ("160x80", "1920x720", "1280x720", "480x480"):
+            assert f"{family}-{size}" in versions, (family, size)
 
 
 def test_a_panel_without_its_own_version_shows_one_laid_out_on_its_size():

@@ -227,6 +227,7 @@ TINY_SIDE = 300  # a version made for a shorter side (the ZC-360's screens) is f
 # on it: a round screen on a bar, a bar on a square would be pulled apart (scaled into the
 # frame with bars round it, as before)
 SHAPE_MOST = math.log(1.5)
+ROUND_ON_RECT = 0.2  # what a square version's shape counts more on a panel that is not square
 
 
 def _shape_gap(a: tuple[int, int], b: tuple[int, int]) -> float:
@@ -275,14 +276,15 @@ def nearest_version(folder: Path, size: tuple[int, int]) -> str | None:
             if (tiny or min(s) >= TINY_SIDE) and _shape_gap(size, s) <= SHAPE_MOST}  # fmt: skip
     if not fits:
         return None
-    # the shape first; between two alike, the one made nearest to the size (a little)
-    return min(
-        fits,
-        key=lambda n: (
-            _shape_gap(size, fits[n]) + 0.15 * abs(math.log(min(size) / min(fits[n]))),
-            n,
-        ),
-    )
+
+    # the shape first; between two alike, the one made nearest to the size (a little); a
+    # square version (made for a round panel: its rings round the rim) only where the panel is
+    # square too (on the 4:3 pump's 640x480 it was pulled into an oval, the 16:9's fits it)
+    def gap(n: str) -> float:
+        round_on_rect = fits[n][0] == fits[n][1] and size[0] != size[1]
+        return _shape_gap(size, fits[n]) + (ROUND_ON_RECT if round_on_rect else 0.0)
+
+    return min(fits, key=lambda n: (gap(n) + 0.15 * abs(math.log(min(size) / min(fits[n]))), n))
 
 
 @functools.lru_cache(maxsize=32)

@@ -3,6 +3,15 @@
 ## Unreleased
 
 **New**
+- **Every screen laid out for every panel.** Each of Libre Panel's own screens was looked at on
+  all 28 sizes of the panels it drives, and where one was only scaled into the frame, or did
+  not read, it got a version of its own: WeAct's 0.96" (160×80) a version of Lumen, Studio,
+  Encore, Nimbus, Almanac, Arena and Terra with each one's one thing large (the time with the
+  CPU as a lit ring, the frame rate, the cover, the time with the line through the minute,
+  the sky and the temperature, the earth beside the time); Nimbus and Studio one for the 12.3"
+  and the 5.2" (and so the 5", 7" and 8"), Terra one for the 5.2", Studio a round one. A
+  version made for the round panels is laid out on square panels only: the 4:3 screen of
+  JONSBO's TF3 pump (640×480) now shows the 5.2"'s, not the round one pulled into an oval.
 - **The earth as it is now: a globe, a module, a card and Terra, a screen around it.** A
   globe lit by the sun where it stands this minute, the line between day and night soft with
   dusk, the cities' lights on its night side, the clouds, the air bright at the rim of its day

@@ -1,0 +1,152 @@
+{
+  "format": "libre-panel-theme/1",
+  "name": "Arena 0.96″",
+  "author": "Libre Panel contributors",
+  "license": "CC0-1.0",
+  "description": "Arena for tiny panels (160x80, WeAct 0.96\"): the game's frame rate large, the load of the CPU and the GPU beside it; without a game, the time.",
+  "display": {
+    "model": "weact-0.96",
+    "orientation": "landscape",
+    "width": 160,
+    "height": 80
+  },
+  "palette": {
+    "bg": "#0A1119",
+    "bg2": "#060A0F",
+    "surface": "#14202E",
+    "line": "#1F3147",
+    "track": "#162332",
+    "text": "#EEF6FF",
+    "text2": "#B8CAE0",
+    "text3": "#8CA0B8",
+    "accent": "#13E5D7",
+    "cpu": "#13E5D7",
+    "gpu": "#A3AEFF",
+    "mem": "#E0A8FF",
+    "disk": "#8FD3FF",
+    "net": "#7EE8A6",
+    "warn": "#FFCB6B",
+    "crit": "#FF7A85"
+  },
+  "font": "builtin:Barlow-Medium",
+  "background": {
+    "color": "@bg",
+    "gradient": [
+      "#0A1119",
+      "#060A0F"
+    ]
+  },
+  "refresh_ms": 1000,
+  "animation": {
+    "smoothing_ms": 600
+  },
+  "widgets": [
+    {
+      "type": "metric",
+      "id": "fps",
+      "x": 6,
+      "y": 4,
+      "sensor": "game.fps",
+      "format": "{value:.0f}",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 40,
+      "color": "@text",
+      "smooth": true,
+      "tabular": true,
+      "needs": "game.fps"
+    },
+    {
+      "type": "text",
+      "id": "fps-label",
+      "x": 8,
+      "y": 56,
+      "text": "FPS",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 12,
+      "color": "@accent",
+      "letter_spacing": 3,
+      "tabular": false,
+      "needs": "game.fps"
+    },
+    {
+      "type": "clock",
+      "id": "clock-idle",
+      "x": 6,
+      "y": 10,
+      "format": "%H:%M",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 34,
+      "color": "@text",
+      "digits": "roll",
+      "needs": "!game.fps"
+    },
+    {
+      "type": "clock",
+      "id": "date-idle",
+      "x": 8,
+      "y": 56,
+      "format": "%a %d",
+      "font": "builtin:Barlow-Medium",
+      "font_size": 12,
+      "color": "@text3",
+      "uppercase": true,
+      "letter_spacing": 1,
+      "tabular": false,
+      "needs": "!game.fps"
+    },
+    {
+      "type": "metric",
+      "id": "cpu",
+      "x": 154,
+      "y": 12,
+      "sensor": "cpu.load",
+      "format": "CPU {value:.0f}%",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 13,
+      "color": "@cpu",
+      "align": "right",
+      "smooth": true,
+      "tabular": true
+    },
+    {
+      "type": "bar",
+      "id": "cpu-bar",
+      "x": 104,
+      "y": 32,
+      "w": 50,
+      "h": 3,
+      "sensor": "cpu.load",
+      "color": "@cpu",
+      "background": "@track",
+      "radius": 1,
+      "smooth": true
+    },
+    {
+      "type": "metric",
+      "id": "gpu",
+      "x": 154,
+      "y": 44,
+      "sensor": "gpu.load",
+      "format": "GPU {value:.0f}%",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 13,
+      "color": "@gpu",
+      "align": "right",
+      "smooth": true,
+      "tabular": true
+    },
+    {
+      "type": "bar",
+      "id": "gpu-bar",
+      "x": 104,
+      "y": 64,
+      "w": 50,
+      "h": 3,
+      "sensor": "gpu.load",
+      "color": "@gpu",
+      "background": "@track",
+      "radius": 1,
+      "smooth": true
+    }
+  ]
+}

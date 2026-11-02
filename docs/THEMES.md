@@ -410,6 +410,12 @@ size (as *adapt* in the editor scales it): the 12.3"'s on the 4.6" (960×320) an
 2.1"'s on NZXT's round screens, the bar on end's on the 4.6" on end. Before, such a panel got
 the theme of another shape scaled into its frame, with bars round it. A version made for a
 size goes first; the ZC-360's small screens (640×180) have their own and lend them to none.
+A square version (made for the round panels, its rings round the rim) is laid out on square
+panels only: the 4:3 pump screen of JONSBO's TF3 (640×480) takes the 5.2"'s. Lumen, Studio,
+Encore, Nimbus, Almanac, Arena and Terra each have a version for the 12.3", the 5.2" (16:9),
+the round 2.1" and 2.8", bars on end and WeAct's 0.96" (160×80: each family's one thing
+large, `lumen-160x80` and the others), so every panel Libre Panel drives shows them laid out
+for it, but the ZC-360's long strip (1920×180), which Lumen alone has a version for.
 A theme of your own is drawn as it is, scaled into the panel (adapt it in Design).
 
 A `config.toml` without a `theme` shows `lumen` on the 1920×480 bars and `libre-default` on

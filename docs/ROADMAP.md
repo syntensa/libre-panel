@@ -67,8 +67,11 @@ under its id, and themes in the 0.7 format, community themes among them, are rea
       that let the background through a little, as they do since 0.8 (`card_opacity`,
       measured per family: the dot grid shows through, the text loses at most 3 % of its
       contrast)
-- [ ] Lumen first, at all 28 sizes, measured against its hand-made layouts; then Arena,
-      Encore, Almanac, Nimbus, Studio and the others
+- [x] Lumen first, at all 28 sizes, measured against its hand-made layouts; then Arena,
+      Encore, Almanac, Nimbus, Studio and the others: each family laid out for every size but
+      the ZC-360's long strip (Lumen has one), looked at size by size; new versions where it
+      was scaled or did not read (the 0.96", Nimbus, Studio and Terra on the 12.3" and the
+      5.2", Studio round), and a round version no longer pulled onto a 4:3 panel
 - [x] A light variant of each family (for white builds): `light_colours`, every theme's
       colours worked out for a light ground by their job (OKLab), measured against the Paper
       look and for contrast over every built-in theme

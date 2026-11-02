@@ -1,0 +1,140 @@
+{
+  "format": "libre-panel-theme/1",
+  "name": "Lumen 0.96″",
+  "author": "Libre Panel contributors",
+  "license": "CC0-1.0",
+  "description": "Lumen for tiny panels (160x80, WeAct 0.96\"): the time with its seconds, the date, and the processor's load as a lit ring with its temperature.",
+  "display": {
+    "model": "weact-0.96",
+    "orientation": "landscape",
+    "width": 160,
+    "height": 80
+  },
+  "palette": {
+    "bg": "#0A0E13",
+    "bg2": "#06090D",
+    "surface": "#0D1219",
+    "line": "#1F2A36",
+    "track": "#18212C",
+    "text": "#E8EEF4",
+    "text2": "#C9D3DE",
+    "text3": "#93A1B2",
+    "dim": "#5F6E80",
+    "accent": "#2EE6D6",
+    "cpu": "#2EE6D6",
+    "gpu": "#7F9CFF",
+    "mem": "#C792FF",
+    "disk": "#5FB6FF",
+    "net": "#34D399",
+    "warn": "#F5C46B",
+    "crit": "#F87171"
+  },
+  "font": "builtin:Barlow-Medium",
+  "background": {
+    "color": "@bg",
+    "gradient": [
+      "#0A0E13",
+      "#06090D"
+    ]
+  },
+  "refresh_ms": 1000,
+  "animation": {
+    "smoothing_ms": 600
+  },
+  "widgets": [
+    {
+      "type": "clock",
+      "id": "clock",
+      "x": 6,
+      "y": 6,
+      "format": "%H:%M",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 34,
+      "color": "@text",
+      "digits": "roll"
+    },
+    {
+      "type": "clock",
+      "id": "seconds",
+      "x": 6,
+      "y": 50,
+      "format": "%S",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 14,
+      "color": "@accent",
+      "digits": "roll",
+      "glow": 0.6,
+      "glow_radius": 4
+    },
+    {
+      "type": "clock",
+      "id": "date",
+      "x": 28,
+      "y": 52,
+      "format": "%a %d",
+      "font": "builtin:Barlow-Medium",
+      "font_size": 12,
+      "color": "@text3",
+      "uppercase": true,
+      "letter_spacing": 1,
+      "tabular": false
+    },
+    {
+      "type": "gauge",
+      "id": "cpu-ring",
+      "x": 104,
+      "y": 8,
+      "w": 52,
+      "h": 52,
+      "sensor": "cpu.load",
+      "min": 0,
+      "max": 100,
+      "start_angle": -90,
+      "end_angle": 270,
+      "thickness": 5,
+      "color": "@cpu",
+      "background": "@track",
+      "cap": "round",
+      "smooth": true,
+      "finish": "lit"
+    },
+    {
+      "type": "metric",
+      "id": "cpu-value",
+      "x": 130,
+      "y": 26,
+      "sensor": "cpu.load",
+      "format": "{value:.0f}",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 15,
+      "color": "@text",
+      "align": "center",
+      "smooth": true,
+      "tabular": true
+    },
+    {
+      "type": "metric",
+      "id": "cpu-temp",
+      "x": 130,
+      "y": 63,
+      "sensor": "cpu.temp",
+      "format": "{value:.0f}°C",
+      "font": "builtin:Barlow-Medium",
+      "font_size": 11,
+      "color": "@text3",
+      "align": "center",
+      "fallback": "",
+      "tabular": true,
+      "color_rules": [
+        {
+          "above": 75,
+          "color": "@warn"
+        },
+        {
+          "above": 88,
+          "color": "@crit"
+        }
+      ]
+    }
+  ]
+}

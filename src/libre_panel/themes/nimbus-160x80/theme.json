@@ -1,0 +1,121 @@
+{
+  "format": "libre-panel-theme/1",
+  "name": "Nimbus 0.96″",
+  "author": "Libre Panel contributors",
+  "license": "CC0-1.0",
+  "description": "Nimbus for tiny panels (160x80, WeAct 0.96\"): the sky now and the temperature, today's high and low; without a place for the weather, the time and the date.",
+  "display": {
+    "model": "weact-0.96",
+    "orientation": "landscape",
+    "width": 160,
+    "height": 80
+  },
+  "palette": {
+    "bg": "#0A0E13",
+    "bg2": "#06090D",
+    "surface": "#0D1219",
+    "line": "#1F2A36",
+    "track": "#18212C",
+    "text": "#E8EEF4",
+    "text2": "#C9D3DE",
+    "text3": "#93A1B2",
+    "dim": "#5F6E80",
+    "accent": "#2EE6D6",
+    "cpu": "#2EE6D6",
+    "gpu": "#7F9CFF",
+    "mem": "#C792FF",
+    "disk": "#5FB6FF",
+    "net": "#34D399",
+    "warn": "#F5C46B",
+    "crit": "#F87171"
+  },
+  "font": "builtin:Barlow-Medium",
+  "background": {
+    "color": "@bg",
+    "gradient": [
+      "#0A0E13",
+      "#06090D"
+    ]
+  },
+  "refresh_ms": 1000,
+  "animation": {
+    "smoothing_ms": 600
+  },
+  "widgets": [
+    {
+      "type": "symbol",
+      "id": "sky",
+      "x": 4,
+      "y": 6,
+      "size": 64,
+      "needs": "weather.temperature"
+    },
+    {
+      "type": "weather",
+      "id": "temperature",
+      "x": 154,
+      "y": 6,
+      "field": "temperature",
+      "format": "{value:.0f}°",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 34,
+      "color": "@text",
+      "align": "right",
+      "needs": "weather.temperature"
+    },
+    {
+      "type": "metric",
+      "id": "high-low",
+      "x": 154,
+      "y": 54,
+      "sensor": "weather.day.0.high",
+      "format": "{value:.0f}°",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 13,
+      "color": "@warn",
+      "align": "right",
+      "needs": "weather.temperature"
+    },
+    {
+      "type": "metric",
+      "id": "low",
+      "x": 116,
+      "y": 54,
+      "sensor": "weather.day.0.low",
+      "format": "{value:.0f}°",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 13,
+      "color": "@disk",
+      "align": "right",
+      "needs": "weather.temperature"
+    },
+    {
+      "type": "clock",
+      "id": "clock-off",
+      "x": 80,
+      "y": 8,
+      "format": "%H:%M",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 36,
+      "color": "@text",
+      "digits": "roll",
+      "align": "center",
+      "needs": "!weather.temperature"
+    },
+    {
+      "type": "clock",
+      "id": "date-off",
+      "x": 80,
+      "y": 56,
+      "format": "%a %d %b",
+      "font": "builtin:Barlow-Medium",
+      "font_size": 12,
+      "color": "@text3",
+      "align": "center",
+      "uppercase": true,
+      "letter_spacing": 1,
+      "tabular": false,
+      "needs": "!weather.temperature"
+    }
+  ]
+}
