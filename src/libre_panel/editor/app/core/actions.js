@@ -42,7 +42,15 @@ export async function refreshPages() {
 }
 
 /** The theme the panel shows normally (config.toml's), if known. */
-export const normalTheme = () => store.get().pages?.pages?.[0]?.theme ?? null;
+/** The theme of the panel's normal page, as the lists name it: config.toml may name one of its
+ * versions ("lumen-pair-1920x720", put there while a companion ran, or "lumen-1920x720"), which
+ * the lists show as the theme it is one of ("lumen"); opened, that shows in the version the panel
+ * shows (versionFor). */
+export const normalTheme = () => {
+  const id = store.get().pages?.pages?.[0]?.theme ?? null;
+  const listed = (name) => store.get().themes.some((theme) => theme.id === name);
+  return id && !listed(id) && listed(rootOf(id)) ? rootOf(id) : id;
+};
 
 /** A theme's name from the theme list (its id where it has none). */
 export const themeName = (id) =>

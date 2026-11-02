@@ -556,6 +556,17 @@ def test_while_its_companion_runs_design_edits_the_pair_version(app_url, isolate
         expect(page.locator(".dialog input")).to_have_value("lumen-mine-pair")
 
 
+def test_a_version_named_as_the_panel_s_theme_opens_as_its_theme(app_url, isolated_home):  # noqa: F811
+    """config.toml naming a version of a theme (``lumen-pair-1920x720``, as an app wrote it while
+    a companion ran beside the panel): Design opens Lumen, in the version the panel shows, not
+    the default theme (it opened Libre Default, a 3.5" theme, beside a 12.3" showing Lumen)."""
+    choose_theme(isolated_home, "lumen-pair-1920x720")
+    with browser_page(app_url, "design") as page:
+        page.wait_for_function("window.libre.store.get().doc?.id?.startsWith('lumen')")
+        assert js(page, "window.libre.store.get().doc.id") == "lumen"  # (no panel: as it is)
+        expect(page.locator(".panel-chip")).to_contain_text("9.2")
+
+
 def test_the_theme_on_every_panel_size_side_by_side(app_url, isolated_home):  # noqa: F811
     """The theme's menu → Every panel size: each panel's picture of the theme, and how it comes
     there (made for it, laid out from the version for the nearest shape, scaled into it)."""
