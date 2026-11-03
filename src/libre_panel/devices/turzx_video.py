@@ -60,7 +60,9 @@ from libre_panel import timing
 from libre_panel.devices import card_choice, h264, video_state
 from libre_panel.devices.base import Counters, DeviceError, FrameError
 from libre_panel.devices.h264 import (
+    BOXES,
     CARD_ENCODERS,
+    NATIVE,
     YUV,
     CaptureSource,
     Encoder,
@@ -70,10 +72,14 @@ from libre_panel.devices.h264 import (
     RateControl,
     VideoSource,
     auto_rate,
+    engine_command,
+    engine_frame,
+    engine_rate,
     feed_text,
     ffmpeg_capture_command,
     ffmpeg_command,
     ffmpeg_file_command,
+    find_engine,
     find_ffmpeg,
     mbit,
     passes_through,
@@ -182,6 +188,10 @@ def _frame_for(
     as the main loop says in ``frame.info["damage"]``, and written). Frames are not drawn on
     once shown."""
     pixels = (getattr(encoder, "settings", None) or settings).pixels
+    if pixels == BOXES:  # the engine: the boxes that may have changed, numbered
+        number = getattr(encoder, "numbered", 0)
+        encoder.numbered = number + 1
+        return engine_frame(frame, frame.info.get("damage"), number)
     made = getattr(encoder, "yuv", None)
     if pixels == YUV and made is not None:
         damage = frame.info.get("damage")  # (taken now: the loop may tag the frame again)
@@ -490,6 +500,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         self._feeds_failed: set[str] = set()
         self._feeds_asked: set[str] = set()  # the encoders video-state.json was asked about
         self._encoder_said = ""  # the encoder the log was told of
+        self._engine_missing_said = False  # (once: video.encoder "native" without the engine)
         self._ffmpeg: str | None = None
         self._pictures: queue.Queue[bytes] = queue.Queue(maxsize=2)
         self._sender: threading.Thread | None = None
@@ -608,13 +619,26 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         rotate = rotation_of(size)
         model_id = self.model.id if self.model else ""
         name = resolve_encoder(self.settings.encoder, self._ffmpeg, self._encoders_failed)
+        engine = ""
+        if name == NATIVE:  # Libre Panel's own engine, for the frames it draws (h264.NATIVE)
+            drawn = source is None and self.feed is None and self.range is None
+            engine = find_engine() if drawn else ""
+            if not engine and drawn and not self._engine_missing_said:
+                self._engine_missing_said = True
+                log.warning(
+                    'video: video.encoder is "native" but Libre Panel\'s engine '
+                    "(libre-panel-engine) is not here; x264 through ffmpeg encodes"
+                )
+            name = NATIVE if engine else "libx264"  # (a video, the screen, a check: ffmpeg)
         self._ask_refused(name)
         full = self._full()
         fed = source is None  # (frames that the card might convert)
         if fed and self.video.pixels == "auto" and self.feed is None and self.range is None:
             self._ask_the_card(name, full, size, rotate, model_id)  # (not for a check's A/B)
         settings = resolved(self.settings, model_id, name, self._pixels(name), full)
-        if self._makes_yuv(settings, size, source):
+        if engine:  # (it is fed the boxes that may have changed and makes the YUV itself)
+            settings = replace(settings, pixels=BOXES, card=False)
+        elif self._makes_yuv(settings, size, source):
             settings = replace(settings, pixels=YUV)
         said = f"{feed_text(settings)}, profile {settings.profile}"
         said += ", full range" if settings.full else ", limited range"
@@ -641,6 +665,8 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
                 fed["popen"] = functools.partial(Fed, source.feeder, source.fds)
         elif source is not None:
             command = ffmpeg_file_command(self._ffmpeg, source, size, rotate, settings)
+        elif engine:
+            command = engine_command(engine, size, rotate, settings)
         else:
             command = ffmpeg_command(self._ffmpeg, size, rotate, settings)
         self._streams += 1
@@ -808,6 +834,8 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         wanted = self._pixels(settings.encoder)
         if settings.full != self._full():
             return True
+        if settings.pixels == BOXES:  # (the engine converts as the processor does, always)
+            return self.feed is not None or self.range is not None
         fed = "rgb0" if settings.pixels == YUV else settings.pixels  # (YUV: _follow_the_frames)
         if settings.pixels == YUV and (self.feed is not None or self.range is not None):
             return True  # (a colour check compares the ways of converting: ffmpeg converts)
@@ -844,8 +872,21 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             )
         self._keep_rate(now)
         due = rate_text(control.rate) != encoder.maxrate and now >= self._switch_held
-        if due and self._leaving is None and encoder.alive:
+        if due and encoder.alive and getattr(encoder, "name", "") == NATIVE:
+            self._new_rate(encoder, control.rate)  # (into the running stream: no switch)
+        elif due and self._leaving is None and encoder.alive:
             self._switch()
+
+    def _new_rate(self, encoder: Encoder, rate: float) -> None:
+        """The engine's bit rate, changed in the stream it makes (h264.engine_rate): x264 goes
+        on with the new cap, no new encoder and no keyframe, nothing for the panel to wait for."""
+        try:
+            encoder.write(engine_rate(max(1, round(rate * 1000))))
+        except EncoderStopped:
+            return  # (the next frame starts it anew, at the new rate)
+        encoder.maxrate = rate_text(rate)
+        encoder.settings = replace(encoder.settings, maxrate=encoder.maxrate)
+        self.counters.bit_rate = rate
 
     def _switch(self) -> None:
         """A planned change of ffmpeg (a step of the bit rate) without a still picture: the

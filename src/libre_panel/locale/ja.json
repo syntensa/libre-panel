@@ -3035,7 +3035,8 @@
     "Making…": "作成中…",
     "Make a version for this size": "このサイズ用のバージョンを作る",
     "A version for {size}: yours to change. That size shows it from now on.": "{size} 用のバージョンです。自由に変更できます。このサイズでは今後これが表示されます。",
-    "It has a version for this size already: {name}.": "このサイズ用のバージョンはすでにあります: {name}。"
+    "It has a version for this size already: {name}.": "このサイズ用のバージョンはすでにあります: {name}。",
+    "Libre Panel's engine (experiment)": "Libre Panel のエンジン（実験的）"
   },
   "fields": {
     "agent": "エージェント",

@@ -3035,7 +3035,8 @@
     "Making…": "Создание…",
     "Make a version for this size": "Создать версию для этого размера",
     "A version for {size}: yours to change. That size shows it from now on.": "Версия для {size}: ваша, её можно менять. Этот размер теперь показывает её.",
-    "It has a version for this size already: {name}.": "Для этого размера уже есть версия: {name}."
+    "It has a version for this size already: {name}.": "Для этого размера уже есть версия: {name}.",
+    "Libre Panel's engine (experiment)": "Движок Libre Panel (эксперимент)"
   },
   "fields": {
     "agent": "агент",

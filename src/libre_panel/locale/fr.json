@@ -3035,7 +3035,8 @@
     "Making…": "Création…",
     "Make a version for this size": "Créer une version pour cette taille",
     "A version for {size}: yours to change. That size shows it from now on.": "Une version pour {size} : la vôtre, à modifier. Cette taille l'affiche désormais.",
-    "It has a version for this size already: {name}.": "Il existe déjà une version pour cette taille : {name}."
+    "It has a version for this size already: {name}.": "Il existe déjà une version pour cette taille : {name}.",
+    "Libre Panel's engine (experiment)": "Le moteur de Libre Panel (expérimental)"
   },
   "fields": {
     "agent": "agent",

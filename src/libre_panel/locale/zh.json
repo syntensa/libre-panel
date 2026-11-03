@@ -3035,7 +3035,8 @@
     "Making…": "正在创建…",
     "Make a version for this size": "为此尺寸创建一个版本",
     "A version for {size}: yours to change. That size shows it from now on.": "{size} 的版本：归你修改。此尺寸从现在起显示它。",
-    "It has a version for this size already: {name}.": "此尺寸已有一个版本：{name}。"
+    "It has a version for this size already: {name}.": "此尺寸已有一个版本：{name}。",
+    "Libre Panel's engine (experiment)": "Libre Panel 的引擎（实验性）"
   },
   "fields": {
     "agent": "智能体",

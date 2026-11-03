@@ -1,0 +1,19 @@
+[package]
+name = "libre-panel-engine"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.87"
+license = "GPL-3.0-or-later"
+description = "Libre Panel's native engine: the panels' video, made and sent on time"
+publish = false
+build = "build.rs"
+
+[[bin]]
+name = "libre-panel-engine"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"

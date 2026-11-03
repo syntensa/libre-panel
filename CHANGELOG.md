@@ -35,6 +35,18 @@
   halo changed; they look the same. On the 12.3" at 50 frames a second a frame takes 5.2 ms
   in the middle instead of 9.5, and 9 in 700 frames are late instead of 46.
 
+**New**
+- **Libre Panel's own engine, to try (`[video] encoder = "native"`, *Settings → Panel →
+  Encoder*).** The first part of the native engine (docs/ROADMAP.md): x264 inside a program of
+  Libre Panel's instead of ffmpeg's, for the frames Libre Panel draws. It is fed only the parts
+  of each frame that may have changed, makes the panel's YUV where they did (byte for byte as
+  before), tells x264 which of its blocks stayed the same, and takes a new bit rate in the
+  running stream: no second ffmpeg started beside the first, no handover, nothing for the panel
+  to wait for. On the 12.3" at 50 frames a second the encoder takes 24 % of a core instead of
+  35, the panel's loop 0.8 ms a frame instead of 2.6, and 33 MB instead of 82. A video from its
+  file and the screen as a monitor go through ffmpeg as before; without the engine's program
+  (`libre-panel-engine`) x264 through ffmpeg encodes.
+
 **Lighter**
 - **x264 a fifth lighter on the screens Libre Panel draws, and sharper.** Their frames go into
   x264 without its deblocking filter and without its search for motion finer than a pixel:

@@ -425,6 +425,7 @@ function ExperimentCard({ video }) {
         options=${[
           { value: "auto", label: t("auto") },
           { value: "libx264", label: t("x264 (processor)") },
+          { value: "native", label: t("Libre Panel's engine (experiment)") },
           { value: "h264_amf", label: t("AMD (h264_amf)") },
           { value: "h264_nvenc", label: t("NVIDIA (h264_nvenc)") },
           { value: "h264_qsv", label: t("Intel (h264_qsv)") },

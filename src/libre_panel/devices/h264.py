@@ -46,6 +46,7 @@ import collections
 import logging
 import os
 import queue
+import struct
 import subprocess
 import sys
 import threading
@@ -69,7 +70,7 @@ X264_PRESETS = ("ultrafast", "superfast", "veryfast", "faster", "fast", "medium"
 PROFILES = ("auto", "baseline", "main", "high")
 # "auto": the graphics card's encoder where it was measured to show and ffmpeg can start it
 # (AUTO_ENCODERS, in that order), else x264 on the processor. The others are an experiment.
-ENCODERS = ("auto", "libx264", "h264_nvenc", "h264_amf", "h264_qsv")
+ENCODERS = ("auto", "libx264", "native", "h264_nvenc", "h264_amf", "h264_qsv")
 HIGH_PROFILE_MODELS = frozenset({"turing-9.2-usb", "turing-12.3-usb"})
 AUTO_ENCODERS = ("h264_amf",)
 # Who turns the frames into YUV (config.toml video.pixels): "auto" the graphics card where the
@@ -317,6 +318,19 @@ def resolve_encoder(encoder: str, ffmpeg: str, failed: Collection[str] = ()) -> 
 # framebuffer (devices/yuv.py), for x264 fed by the processor: ffmpeg neither turns nor converts.
 YUV = "yuv420p"
 
+# Libre Panel's own engine (engine/ in the repository; docs/ROADMAP.md, "Next: a native
+# engine"): x264 inside a program of Libre Panel's, fed the parts of each frame that may have
+# changed. It makes the YUV where they did (byte for byte as yuv.py), tells x264 which of its
+# macroblocks stayed the same, and takes a new bit rate in the running stream, without a new
+# encoder (12.3" at 50 frames a second: the encoder 24 % of a core instead of ffmpeg's 35, the
+# main thread 0.8 ms a frame instead of 2.6, 33 MB instead of 82). video.encoder "native"; a
+# video from its file and the screen go through ffmpeg as before.
+NATIVE = "native"
+# The frames as the engine takes them: the boxes of each that may have changed (engine_frame).
+BOXES = "boxes"
+ENGINE = "libre-panel-engine"
+_ENGINE_MAGIC = b"LPE1"
+
 
 def resolve_feed(pixels: str) -> str:
     """The frames' pixel format in ffmpeg's terms for a way of converting them: "processor" and
@@ -467,6 +481,86 @@ def find_ffmpeg(configured: str = "") -> str:
             "with pip install it, or set video.ffmpeg in config.toml to the ffmpeg program"
         )
     )
+
+
+def find_engine() -> str:
+    """The engine's program (:data:`NATIVE`): the one LIBRE_PANEL_ENGINE names, the one a
+    download carries (its ``tools`` folder), PATH, or the one built in a checkout
+    (``engine/target/release``); "" without one. With the highest rights only one from a safe
+    place."""
+    exe = bundled.program_name(ENGINE)
+    named = os.environ.get("LIBRE_PANEL_ENGINE", "")
+    if named and Path(named).is_file():
+        if rights.safe_place(named):
+            return named
+        log.warning("LIBRE_PANEL_ENGINE %s is not started: Libre Panel runs with the highest "
+                    "rights", named)  # fmt: skip
+    own = bundled.find(exe)
+    if own:
+        return own
+    found = rights.which(ENGINE)
+    if found:
+        return found
+    built = Path(__file__).resolve().parents[3] / "engine" / "target" / "release" / exe
+    if built.is_file() and rights.safe_place(built):
+        return str(built)
+    return ""
+
+
+def engine_command(
+    engine: str, size: tuple[int, int], rotate: int | None, settings: EncoderSettings
+) -> list[str]:
+    """The engine encoding frames of ``size`` (the boxes of each that may have changed, on
+    stdin: :func:`engine_frame`) into the panel's framebuffer (``rotate``) as x264 through
+    ffmpeg would (:func:`ffmpeg_command`, for drawn frames), H.264 (Annex B) on stdout."""
+    keyint = max(1, round(settings.fps * settings.keyframe_s))
+    kbit = max(1, round(mbit(bit_rate(settings, size)) * 1000))
+    command = [
+        engine, "encode", "--size", f"{size[0]}x{size[1]}", "--turn", str(rotate or 0),
+        "--fps", str(settings.fps), "--crf", str(settings.crf), "--kbit", str(kbit),
+        "--keyint", str(keyint), "--preset", settings.preset, "--profile", settings.profile,
+        "--x264", DRAWN_X264,
+    ]  # fmt: skip
+    return command + (["--full"] if settings.full else [])
+
+
+def engine_frame(
+    frame: Any, damage: list[tuple[int, int, int, int]] | None, number: int
+) -> Callable[[Any], None]:
+    """``frame`` as the engine takes it, written by the encoder's writer thread: the boxes of
+    it that may have changed (the main loop's ``damage``; None: all of it), grown to whole
+    blocks as yuv.py compares them, each with its pixels, three bytes each."""
+    from libre_panel.devices.yuv import block_of
+
+    width, height = frame.size
+    block = block_of(frame.size) or 1
+    if damage is None:
+        boxes = [(0, 0, width, height)]
+    else:
+        boxes = []
+        for x0, y0, x1, y1 in damage:
+            x0, y0 = max(0, x0 - x0 % block), max(0, y0 - y0 % block)
+            x1, y1 = min(width, x1 + (-x1) % block), min(height, y1 + (-y1) % block)
+            if x1 > x0 and y1 > y0:
+                boxes.append((x0, y0, x1, y1))
+
+    def write(out: Any) -> None:
+        parts = [_ENGINE_MAGIC + bytes((1, 0, 0, 0))
+                 + struct.pack("<II", number & 0xFFFFFFFF, len(boxes))]  # fmt: skip
+        for box in boxes:
+            part = frame.crop(box)
+            parts += [struct.pack("<4H", *box),
+                      (part if part.mode == "RGB" else part.convert("RGB")).tobytes()]  # fmt: skip
+        view = memoryview(b"".join(parts))
+        while view:  # an unbuffered pipe may take less than asked
+            view = view[out.write(view) :]
+
+    return write
+
+
+def engine_rate(kbit: int) -> bytes:
+    """The engine's bit rate cap, in the running stream (kbit/s)."""
+    return _ENGINE_MAGIC + bytes((2, 0, 0, 0)) + struct.pack("<II", kbit, 0)
 
 
 def ffmpeg_command(
