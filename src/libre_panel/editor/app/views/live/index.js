@@ -269,8 +269,10 @@ function Service({ service, busy, onToggle, onRestart }) {
   const note = speaks ? `${word}${service.detail ? `: ${service.detail}` : ""}` : about;
   return html`<li class="live-service" data-service=${service.name}>
     <div class="live-row">
-      <span class="live-row-name">${name}</span>
-      <span class=${`live-row-note${speaks ? (trouble ? " bad" : " warn") : ""}`} title=${note}>${note}</span>
+      <span class="live-row-text">
+        <span class="live-row-name">${name}</span>
+        <span class=${`live-row-note${speaks ? (trouble ? " bad" : " warn") : ""}`}>${note}</span>
+      </span>
       ${service.restartable && service.enabled
         ? html`<button type="button" class="icon-btn" disabled=${busy} aria-label=${t("Restart {name}", { name })} title=${t("Restart {name}", { name })}
             onClick=${() => onRestart(service)}><${Icon} name="refresh" size=${14} /></button>`

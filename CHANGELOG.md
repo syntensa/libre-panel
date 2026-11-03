@@ -15,6 +15,14 @@
   root on Linux: root's own settings folder), else the frames are kept as without a file.
 
 **Fixed**
+- **Live names what Libre Panel does whole.** Its list of the services showed each name and
+  what it does side by side on one line, and cut off what did not fit: in German "Bericht
+  nach jede…" beside "Rundenbericht und Verlauf", "Waveshare-USB-Monitor (expe…". What it
+  does now stands under the name.
+- **Each module in Design's library shows its own icon until its picture comes** (the
+  pictures come once the panel's first frame is drawn): a clock, a calendar, a ring, a graph,
+  instead of the same one for all of them; the UPS module, in the library and among the
+  layers, showed none.
 - **A theme's own switches in Look say what they switch.** Look listed them as switches
   alone, their names only for a screen reader: Lumen's "Frames around every part" showed as
   a switch under "This theme's switches" and nothing beside it.

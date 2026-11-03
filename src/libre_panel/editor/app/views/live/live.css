@@ -318,6 +318,25 @@
   color: var(--warn);
 }
 
+/* a service: its name, and under it what it does or how it runs, both whole (side by side, a
+   long name or note was cut off: "Rundenbericht und Verlauf", "Waveshare-USB-Monitor") */
+.live-row-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.live-row-text .live-row-name,
+.live-row-text .live-row-note {
+  max-width: none;
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
 .live-row-note.bad {
   color: var(--danger-text);
 }

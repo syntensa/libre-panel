@@ -11,7 +11,7 @@ import { Chips } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
 import { dropItem, startLibraryDrag } from "./canvas.js";
 import { FirstSteps, useFirstSteps } from "./guide.js";
-import { TYPE_ICONS } from "./inspector.js";
+import { MODULE_ICONS, TYPE_ICONS } from "./inspector.js";
 import { addSensor, moduleKinds } from "./ops.js";
 import { formatValue, sensorGroups, useReadings } from "./sensors.js";
 
@@ -128,7 +128,7 @@ export function Library() {
       ${shownModules.length
         ? html`<div class="tile-grid" role="list" aria-label=${t("Modules")}>
             ${shownModules.map((m) => html`<${Tile} key=${m.kind} item=${{ kind: "module", module: m.kind, key: `module:${m.kind}` }}
-              picture=${shots.modules[m.kind]} icon="module" name=${m.name} />`)}
+              picture=${shots.modules[m.kind]} icon=${MODULE_ICONS[m.kind] || "module"} name=${m.name} />`)}
           </div>`
         : null}
       ${presets.length

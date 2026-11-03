@@ -1649,6 +1649,27 @@ def test_the_librarys_long_names_wrap_instead_of_being_cut(page):
     assert {"Lüfter mit Drehzahl", "Symbol mit Beschriftung", "Monats\u00adkalender"} <= wrapped
 
 
+def test_each_module_has_an_icon_of_its_own_for_its_tile_and_layer(page):
+    """Until the library's pictures come (without a panel's frame they never do), a tile is its
+    icon: every module showed the same one, the module's, and the UPS one none at all."""
+    found = js(
+        page,
+        """(async () => {
+          const { moduleKinds } = await import('/app/views/design/ops.js');
+          const { MODULE_ICONS } = await import('/app/views/design/inspector.js');
+          const { ICONS } = await import('/app/ui/icons.js');
+          return Object.keys(moduleKinds()).map((kind) => [kind, MODULE_ICONS[kind] || null,
+                                                           Boolean(ICONS[MODULE_ICONS[kind]])]);
+        })()""",
+    )
+    assert len(found) > 30
+    assert [kind for kind, icon, drawn in found if icon is None or not drawn] == []
+    icons = dict((kind, icon) for kind, icon, _ in found)
+    assert len({icons["clock"], icons["date"], icons["ring"], icons["huge"], icons["graph"]}) == 5
+    clock = page.locator('.tile[data-item="module:clock"]')  # (its picture, or its own icon)
+    expect(clock.locator("img, svg.icon:not(.tile-add svg)")).to_have_count(1)
+
+
 def test_a_long_german_name_breaks_at_its_soft_hyphen_in_the_small_tiles(page):
     """ "Wettersymbol" and "Monatskalender" are longer than a tile of the library's three columns
     and broke in the middle of a syllable ("Wettersymb-ol"); the catalog marks where a compound

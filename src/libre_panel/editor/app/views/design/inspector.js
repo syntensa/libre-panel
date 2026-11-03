@@ -102,8 +102,19 @@ export const MODULE_ICONS = {
   timer: "countdown",
   power: "power",
   mic: "volume",
-  ups: "battery",
+  ups: "power", // (there is no battery icon: it showed none)
   ai: "agent",
+  // (each its own: until the library's pictures come, a tile is its icon)
+  huge: "metric",
+  playback: "play",
+  forecast: "weather",
+  outlook: "weather",
+  download: "download",
+  instrument: "gauge",
+  cards: "pages",
+  netcard: "globe",
+  volume: "volume",
+  moon: "moon",
 };
 
 export const iconOf = (widget) => (isModule(widget) ? MODULE_ICONS[widget.module] || "module" : TYPE_ICONS[widget.type] || "plugin");

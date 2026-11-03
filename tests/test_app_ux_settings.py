@@ -1106,6 +1106,17 @@ def test_live_names_things_as_settings_does(app_url, isolated_home):  # noqa: F8
         expect(page.locator("[data-service=memory] .live-row-name")).to_have_text(
             "Round report and history"
         )
+        # each name and what it does whole, the one under the other (side by side, German's
+        # were cut off: "Rundenbericht und Verlauf", "Bericht nach jede…")
+        cut = page.locator(
+            ".live-service .live-row-name, .live-service .live-row-note"
+        ).evaluate_all(
+            "(spans) => spans.filter((el) => el.scrollWidth > el.clientWidth + 1).length"
+        )
+        assert cut == 0
+        name = page.locator("[data-service=memory] .live-row-name").bounding_box()
+        note = page.locator("[data-service=memory] .live-row-note").bounding_box()
+        assert note["y"] >= name["y"] + name["height"] - 1
 
 
 def test_a_late_read_of_the_settings_does_not_undo_a_click(app_url, isolated_home):  # noqa: F811
