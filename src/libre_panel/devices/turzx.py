@@ -240,6 +240,10 @@ class TurzxDisplay(Display):
         return self._impl.slack if self._impl else None
 
     @property
+    def takes_scenes(self) -> bool:
+        return bool(getattr(self._impl, "takes_scenes", False)) if self._impl else False
+
+    @property
     def restarted(self) -> bool:
         return bool(self._impl and self._impl.restarted)
 

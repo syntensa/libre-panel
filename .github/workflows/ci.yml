@@ -66,7 +66,8 @@ jobs:
     # package; on Windows MSYS2's, linked in), its own tests, and the app's tests of it
     # (tests/test_native_engine.py: the YUV byte for byte yuv.py's, a panel through it, a new
     # bit rate in the running stream; tests/test_engine_panel.py: the engine with a panel of its
-    # own, the simulated one behind a socket) with the engine it built, which they must find.
+    # own, the simulated one behind a socket; tests/test_scene.py: frames of layers the engine
+    # composes, pixel for pixel the renderer's) with the engine it built, which they must find.
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -162,7 +163,8 @@ jobs:
           # (the runner's rights stand in as an ordinary user's, as conftest's not_elevated does)
           python -c "from libre_panel import rights; rights.elevated = lambda: False
           from libre_panel.devices.h264 import find_engine; assert find_engine(), 'no engine'"
-          pytest -q -rs tests/test_native_engine.py tests/test_engine_panel.py tests/test_yuv.py
+          pytest -q -rs tests/test_native_engine.py tests/test_engine_panel.py tests/test_yuv.py \
+            tests/test_scene.py
 
   desktop:
     # The app in a real browser (every test that needs one: the others skip them), the tray

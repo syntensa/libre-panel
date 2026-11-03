@@ -84,6 +84,11 @@ impl Yuv {
         })
     }
 
+    /// The frame as it was put, three bytes a pixel, row by row (before it is turned).
+    pub fn rgb(&self) -> &[u8] {
+        &self.rgb
+    }
+
     /// The encoder's macroblocks across and down (the turned frame, in blocks of 16).
     pub fn macroblocks(&self) -> (usize, usize) {
         (self.turned.0.div_ceil(16), self.turned.1.div_ceil(16))

@@ -39,6 +39,7 @@ from libre_panel.fonts.fallback import cursive, truetype
 from libre_panel.icons import draw_icon, link_icon, weather_icon_name
 from libre_panel.render import cover, fan, fan_looks, kept, lists, moving
 from libre_panel.render import finish as finishes
+from libre_panel.render import scene as scenes
 from libre_panel.render.countdown import countdown_text
 from libre_panel.render.dust import Dust
 from libre_panel.render.formatting import FormatError, auto_format, safe_format
@@ -920,6 +921,7 @@ class Renderer:
         # None all of it or not known; a video panel converts those parts only (devices/yuv.py)
         self.damage: list[tuple[int, int, int, int]] | None = None
         self.rendered = 0  # the frames rendered (what the damage is counted against)
+        self.scenes = 0  # of them, frames handed out as their layers (render(scene=True))
         self._held: dict[str, bool] = {}  # the conditions of needs worked out in this frame ...
         self._held_for: tuple[Any, ...] = ()  # ... for these readings (and pictures)
         self._composed: list[tuple[int, int, int, int]] | None = None
@@ -1267,15 +1269,16 @@ class Renderer:
         else:
             canvas.alpha_composite(layer, (x0, y0))
 
+    @staticmethod
     def _composite(
-        self,
         canvas: Image.Image,
         piece: Piece,
         origin: tuple[int, int] = (0, 0),
         opaque: bool = False,
     ) -> None:
         """Draw ``piece`` onto ``canvas``, whose top left corner is ``origin`` on
-        the panel (``opaque``: see :meth:`_paste`)."""
+        the panel (``opaque``: see :meth:`_paste`). The same for a frame of layers that the
+        engine composes (render/scene.py)."""
         ox, oy = origin
         if piece.backdrop is not None and piece.box is not None:
             bx, by, bw, bh = piece.box
@@ -1295,12 +1298,12 @@ class Renderer:
                 )
                 canvas.paste(blurred, region[:2], mask)
         if piece.add:
-            self._add_light(canvas, piece.layer, piece.x - ox, piece.y - oy)
+            Renderer._add_light(canvas, piece.layer, piece.x - ox, piece.y - oy)
             return
-        self._paste(canvas, piece.layer, piece.x - ox, piece.y - oy, opaque)
+        Renderer._paste(canvas, piece.layer, piece.x - ox, piece.y - oy, opaque)
         if piece.light is not None:
             light = piece.light
-            self._add_light(canvas, light.layer, light.x - ox, light.y - oy)
+            Renderer._add_light(canvas, light.layer, light.x - ox, light.y - oy)
 
     @staticmethod
     def _add_light(canvas: Image.Image, layer: Image.Image, x: int, y: int) -> None:
@@ -1513,6 +1516,36 @@ class Renderer:
                 canvas.paste(self._compose_region(pieces, region, changed), region[:2])
         self._last = (pieces, canvas)
         return canvas
+
+    def _layered(self, pieces: list[tuple[str, Piece]], dust: bool) -> bool:
+        """Whether the engine can compose this frame of ``pieces`` as :meth:`_compose` does:
+        on the opaque ground of a frame in RGB, without a look or dust drawn over the frame
+        afterwards, of pieces it takes as they are (render/scene.py's ``layerable``)."""
+        return (
+            self.look is None
+            and not dust
+            and self.keep_static
+            and self._mode == "RGB"
+            and self._opaque
+            and all(scenes.layerable(piece) for _, piece in pieces)
+        )
+
+    def _scene_frame(self, pieces: list[tuple[str, Piece]]) -> scenes.SceneFrame:
+        """The frame of ``pieces`` for the engine to compose: what is composed here stays as
+        it was (the next frame composed here starts from the last one composed here), and the
+        next is a picture of its own; what changed is the engine's to work out."""
+        self.damage = None
+        self._handed = None
+        self._swept = False
+        self.scenes += 1
+        color = self.color(self.theme.background_color)
+        if self._background is None and color is not None:
+            ground: Any = tuple(color[:3])
+        else:
+            ground = self._ground()
+        return scenes.SceneFrame(
+            scenes.Scene((self.theme.width, self.theme.height), ground, tuple(pieces))
+        )
 
     def _as_rgb(self, canvas: Image.Image) -> Image.Image:
         """The frame of ``canvas``, in RGB: a new picture each time (the loop keeps frames and
@@ -1805,10 +1838,13 @@ class Renderer:
     # -- rendering ---------------------------------------------------------
 
     def render(
-        self, snapshot: Snapshot, now: float | None = None
+        self, snapshot: Snapshot, now: float | None = None, scene: bool = False
     ) -> tuple[Image.Image, dict[str, Box]]:
         """The frame at ``now`` (RGB) and the widgets' boxes. While nothing on it changed, the
-        frame is the one handed out before: callers draw on a copy of it, never on it."""
+        frame is the one handed out before: callers draw on a copy of it, never on it. With
+        ``scene`` (for an engine that composes frames itself), a frame whose pieces it composes
+        as this does is not composed here: it is a :class:`~libre_panel.render.scene.SceneFrame`,
+        whose pixels are made only when asked for."""
         now = clock() if now is None else now
         self.rendered += 1
         self.damage = None  # (unknown, until the frame is composed)
@@ -1914,6 +1950,8 @@ class Renderer:
             pieces.insert(0, ("\0screen", self._screen_piece(screen)))  # ids are never empty
         if self.look is not None:
             self.look.compose(pieces, snapshot, now)  # the grid beneath, the sun's gloss on top
+        if scene and self._layered(pieces, dust):
+            return self._scene_frame(pieces), boxes
         canvas = self._compose(pieces)
         # what changed since the frame before: the regions composed anew, where nothing but the
         # pieces changes the frame (dust moves all over it, a sweep of light over a part)

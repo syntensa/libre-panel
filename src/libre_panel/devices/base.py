@@ -150,6 +150,9 @@ class Display:
     # was drawn (the engine's), takes a late frame on time within that lead. None: a frame's
     # time, then a new beat (a burst would show late).
     slack: float | None = None
+    # Whether a frame may come as its layers (render/scene.py), composed by the display's engine
+    # itself (devices/engine.py): only then does the main loop hand out such frames.
+    takes_scenes = False
     # a slow link (the USB serial panels, pixels over a serial port): the main loop keeps the
     # motion calm and sends the parts that changed one by one (app.calm, changed_regions)
     slow = False

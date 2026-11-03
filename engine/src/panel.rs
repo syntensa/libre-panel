@@ -14,6 +14,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::link::{Link, TcpLink, UsbLink};
+use crate::scene::{How, Layer, Scene};
 use crate::transport::{Error, Transport};
 use crate::video::{Video, DEFAULT_BLOCK};
 use crate::wire::{self, Boxes, Op, Record, Request};
@@ -153,9 +154,10 @@ impl Pacer {
     }
 }
 
-/// The encoder of one stream, and the YUV it is fed.
+/// The encoder of one stream, the YUV it is fed and the layers its frames may be made of.
 struct Stream {
     frame: yuv::Yuv,
+    scene: Scene,
     encoder: x264::Encoder,
     mb: Vec<u8>,
     block: usize,
@@ -179,12 +181,14 @@ impl Stream {
         }
         let o = crate::parse(&rest)?;
         let frame = yuv::Yuv::new(o.size.0, o.size.1, o.turn, o.settings.full)?;
+        let scene = Scene::new(o.size.0, o.size.1, frame.block);
         let encoder = x264::Encoder::open(&o.settings)?;
         let (cols, rows) = frame.macroblocks();
         // two frames' time at the stream's rate: 40 ms at 50 a second, 80 at 25
         let lead = lead_ms.unwrap_or_else(|| (2000 / o.settings.fps.max(1)).clamp(30, 100));
         Ok(Stream {
             frame,
+            scene,
             encoder,
             mb: vec![0u8; cols * rows],
             block: if block == 0 {
@@ -412,6 +416,39 @@ fn hand_on(shared: &Shared, picture: Picture) {
     }
 }
 
+/// A frame's boxes into the stream's encoder, and its picture to the sender for its time
+/// (the engine's start and when the frame was read: Pacer::due).
+fn take_frame(
+    shared: &Shared,
+    s: &mut Stream,
+    pacer: &mut Pacer,
+    (origin, read): (Instant, Instant),
+    number: u32,
+    boxes: &Boxes,
+    planned: Option<f64>,
+) -> Result<(), String> {
+    let picture = s.encode(number, boxes)?;
+    let current = {
+        let mut state = shared.state();
+        state.frames += 1;
+        state.encode_s += read.elapsed().as_secs_f64();
+        state.stream
+    };
+    if !picture.is_empty() {
+        let due = pacer.due(planned, origin, read, s.lead);
+        hand_on(
+            shared,
+            Picture {
+                stream: current,
+                due,
+                data: picture,
+                block: s.block,
+            },
+        );
+    }
+    Ok(())
+}
+
 pub fn run(options: Options) -> Result<(), String> {
     fine_timer();
     let (link, place): (Box<dyn Link>, String) = match &options.link {
@@ -468,28 +505,76 @@ pub fn run(options: Options) -> Result<(), String> {
                 let Some(s) = stream.as_mut() else {
                     break Err("a frame before its stream".into());
                 };
-                let picture = match s.encode(number, &boxes) {
-                    Ok(picture) => picture,
+                s.scene.frame_between(); // (the next frame of layers: composed whole)
+                if let Err(e) = take_frame(
+                    &shared,
+                    s,
+                    &mut pacer,
+                    (origin, read),
+                    number,
+                    &boxes,
+                    planned,
+                ) {
+                    break Err(e);
+                }
+            }
+            Record::Scene {
+                number,
+                planned,
+                half,
+                order,
+            } => {
+                let read = Instant::now();
+                let Some(s) = stream.as_mut() else {
+                    break Err("a frame before its stream".into());
+                };
+                let boxes = match s.scene.frame(order, half) {
+                    Ok(boxes) => boxes,
                     Err(e) => break Err(e),
                 };
-                let current = {
-                    let mut state = shared.state();
-                    state.frames += 1;
-                    state.encode_s += read.elapsed().as_secs_f64();
-                    state.stream
+                if let Err(e) = take_frame(
+                    &shared,
+                    s,
+                    &mut pacer,
+                    (origin, read),
+                    number,
+                    &boxes,
+                    planned,
+                ) {
+                    break Err(e);
+                }
+            }
+            Record::Ground { colour, picture } => {
+                let Some(s) = stream.as_mut() else {
+                    break Err("a ground before its stream".into());
                 };
-                if !picture.is_empty() {
-                    let due = pacer.due(planned, origin, read, s.lead);
-                    let block = s.block;
-                    hand_on(
-                        &shared,
-                        Picture {
-                            stream: current,
-                            due,
-                            data: picture,
-                            block,
-                        },
-                    );
+                match colour {
+                    Some(rgb) => s.scene.ground_colour(rgb),
+                    None => {
+                        if let Err(e) = s.scene.ground_picture(picture) {
+                            break Err(e);
+                        }
+                    }
+                }
+            }
+            Record::Layer {
+                id,
+                x,
+                y,
+                w,
+                h,
+                how,
+                pixels,
+            } => {
+                let Some(s) = stream.as_mut() else {
+                    break Err("a layer before its stream".into());
+                };
+                let Some(how) = How::of(how) else {
+                    break Err(format!("layer {id} goes on in no way known ({how})"));
+                };
+                match Layer::new(x, y, w, h, how, pixels) {
+                    Ok(layer) => s.scene.layer(id, layer),
+                    Err(e) => break Err(e),
                 }
             }
             Record::Rate(kbit) => {

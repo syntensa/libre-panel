@@ -20,6 +20,15 @@
 //! kind 6, its end:    the pictures not yet sent are dropped, the encoder closed
 //! kind 8, a picture:  a the panel's block size, b its length: H.264 made elsewhere (ffmpeg's:
 //!                     a video from its file, the screen), sent as it is, at once
+//! a frame of layers (scene.rs), in a stream:
+//! kind 9, its ground: a 0 a colour (b 3: R, G, B) or 1 a picture of the stream's size (b its
+//!                     length: three bytes a pixel, row by row)
+//! kind 10, a layer:   a its number, b the length of what follows: x, y (i32), w, h and how it
+//!                     goes on (u32 each: 0 RGBA through its alpha, 1 RGB as it is, 2 RGB light
+//!                     added), then its pixels, row by row
+//! kind 11, a frame:   a its number, b how many layers; then the time it was drawn for (f64,
+//!                     as kind 7's; NaN for none), how it is turned (u32: 0, or 180 for half a
+//!                     turn), then the layers' numbers (u32 each), bottom first
 //! ```
 //!
 //! On its stdout, with a panel of its own (`panel`): the same head, then b bytes:
@@ -57,6 +66,25 @@ pub enum Record {
     Picture {
         block: u32,
         data: Vec<u8>,
+    },
+    Ground {
+        colour: Option<[u8; 3]>,
+        picture: Vec<u8>,
+    },
+    Layer {
+        id: u32,
+        x: i32,
+        y: i32,
+        w: usize,
+        h: usize,
+        how: u32,
+        pixels: Vec<u8>,
+    },
+    Scene {
+        number: u32,
+        planned: Option<f64>,
+        half: bool,
+        order: Vec<u32>,
     },
 }
 
@@ -129,6 +157,10 @@ const MOST_ARGS: usize = 512;
 const MOST_PAYLOAD: usize = 4 << 20;
 /// The largest picture of another encoder's taken (a keyframe of the 12.3" is under 1 MB).
 const MOST_PICTURE: usize = 16 << 20;
+/// The largest ground and layer taken (a 4K panel's ground is 25 MB, a layer its size 33 MB).
+const MOST_LAYER: usize = 64 << 20;
+/// The most layers a frame takes (Lumen's on the 12.3" are about a hundred).
+const MOST_LAYERS: usize = 1 << 16;
 
 fn boxes(input: &mut impl Read, count: u32) -> io::Result<Boxes> {
     let mut boxes = Vec::with_capacity(count.min(4096) as usize);
@@ -235,6 +267,72 @@ pub fn read(input: &mut impl Read) -> io::Result<Option<Record>> {
             whole(input, &mut data, "a picture cut short")?;
             Ok(Some(Record::Picture { block: a, data }))
         }
+        9 => {
+            let len = b as usize;
+            match a {
+                0 if len == 3 => {
+                    let mut rgb = [0u8; 3];
+                    whole(input, &mut rgb, "a ground cut short")?;
+                    Ok(Some(Record::Ground {
+                        colour: Some(rgb),
+                        picture: Vec::new(),
+                    }))
+                }
+                1 if len <= MOST_LAYER => {
+                    let mut picture = vec![0u8; len];
+                    whole(input, &mut picture, "a ground cut short")?;
+                    Ok(Some(Record::Ground {
+                        colour: None,
+                        picture,
+                    }))
+                }
+                _ => Err(invalid("a ground of no kind known")),
+            }
+        }
+        10 => {
+            let len = b as usize;
+            if !(20..=MOST_LAYER + 20).contains(&len) {
+                return Err(invalid("a layer too large"));
+            }
+            let mut geometry = [0u8; 20];
+            whole(input, &mut geometry, "a layer cut short")?;
+            let mut pixels = vec![0u8; len - 20];
+            whole(input, &mut pixels, "a layer cut short")?;
+            Ok(Some(Record::Layer {
+                id: a,
+                x: u32_at(&geometry, 0) as i32,
+                y: u32_at(&geometry, 4) as i32,
+                w: u32_at(&geometry, 8) as usize,
+                h: u32_at(&geometry, 12) as usize,
+                how: u32_at(&geometry, 16),
+                pixels,
+            }))
+        }
+        11 => {
+            let count = b as usize;
+            if count > MOST_LAYERS {
+                return Err(invalid("a frame of too many layers"));
+            }
+            let mut more = [0u8; 12];
+            whole(input, &mut more, "a frame cut short")?;
+            let planned = f64::from_le_bytes(more[..8].try_into().expect("eight bytes"));
+            let half = match u32_at(&more, 8) {
+                0 => false,
+                180 => true,
+                _ => return Err(invalid("a frame turned otherwise than 0 or 180")),
+            };
+            let mut ids = vec![0u8; count * 4];
+            whole(input, &mut ids, "a frame cut short")?;
+            Ok(Some(Record::Scene {
+                number: a,
+                planned: planned.is_finite().then_some(planned),
+                half,
+                order: ids
+                    .chunks_exact(4)
+                    .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+                    .collect(),
+            }))
+        }
         kind => Err(invalid(&format!("a record of kind {kind}"))),
     }
 }
@@ -317,11 +415,65 @@ mod tests {
     }
 
     #[test]
+    fn a_scene_its_ground_layers_and_frame() {
+        let mut input = head(9, 0, 3);
+        input.extend([1, 2, 3]);
+        let mut layer = head(10, 7, 20 + 4);
+        for v in [(-3i32) as u32, 5, 1, 1, 0] {
+            layer.extend(v.to_le_bytes());
+        }
+        layer.extend([9, 9, 9, 255]);
+        input.extend(layer);
+        input.extend(head(11, 12, 2));
+        input.extend(2.5f64.to_le_bytes());
+        input.extend(180u32.to_le_bytes());
+        input.extend(7u32.to_le_bytes());
+        input.extend(3u32.to_le_bytes());
+        let mut input = input.as_slice();
+        assert!(matches!(
+            read(&mut input).unwrap(),
+            Some(Record::Ground {
+                colour: Some([1, 2, 3]),
+                ..
+            })
+        ));
+        match read(&mut input).unwrap() {
+            Some(Record::Layer {
+                id,
+                x,
+                y,
+                w,
+                h,
+                how,
+                pixels,
+            }) => {
+                assert_eq!((id, x, y, w, h, how), (7, -3, 5, 1, 1, 0));
+                assert_eq!(pixels, vec![9, 9, 9, 255]);
+            }
+            _ => panic!("not the layer"),
+        }
+        match read(&mut input).unwrap() {
+            Some(Record::Scene {
+                number,
+                planned,
+                half,
+                order,
+            }) => {
+                assert_eq!((number, planned, half), (12, Some(2.5), true));
+                assert_eq!(order, vec![7, 3]);
+            }
+            _ => panic!("not the frame"),
+        }
+    }
+
+    #[test]
     fn a_record_cut_short_or_of_another_kind_is_an_error() {
         let mut cut = head(4, 1, 1);
         cut.extend([0u8; 5]);
         assert!(read(&mut cut.as_slice()).is_err());
-        assert!(read(&mut head(9, 0, 0).as_slice()).is_err());
+        assert!(read(&mut head(99, 0, 0).as_slice()).is_err());
+        assert!(read(&mut head(9, 2, 3).as_slice()).is_err()); // (a ground of no kind known)
+        assert!(read(&mut head(11, 0, 1 << 20).as_slice()).is_err());
         let mut long = head(4, 1, 1);
         for n in [0u32, 0, 10_000, 0] {
             long.extend(n.to_le_bytes());

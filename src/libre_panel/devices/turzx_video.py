@@ -66,6 +66,8 @@ from libre_panel.devices.engine import (
     EngineStream,
     EngineTransport,
     can_send,
+    engine_scene,
+    takes_scenes,
 )
 from libre_panel.devices.h264 import (
     BOXES,
@@ -115,6 +117,7 @@ from libre_panel.devices.turzx_usb import (
 )
 from libre_panel.devices.yuv import YuvFrame, block_of
 from libre_panel.i18n import t
+from libre_panel.render.scene import SceneFrame
 
 log = logging.getLogger(__name__)
 
@@ -201,6 +204,9 @@ def _frame_for(
     if pixels == BOXES:  # the engine: the boxes that may have changed, numbered
         number = getattr(encoder, "numbered", 0)
         encoder.numbered = number + 1
+        sender = getattr(encoder, "scenes", None)
+        if sender is not None and isinstance(frame, SceneFrame):  # its layers: the engine composes
+            return engine_scene(sender, frame, number, frame.info.get("planned"))
         # (and the time it was drawn for: an engine that has the panel sends it on its time)
         return engine_frame(frame, frame.info.get("damage"), number, frame.info.get("planned"))
     made = getattr(encoder, "yuv", None)
@@ -572,6 +578,24 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         goes on its time, so that the main loop catches up rather than skipping a beat."""
         return getattr(self.encoder, "lead", None) if self.link is not None else None
 
+    @property
+    def takes_scenes(self) -> bool:
+        """Whether a frame may come as its layers (render/scene.py): the engine composes it
+        (video.engine_layers), with no other encoder to feed meanwhile."""
+        encoder = self.encoder
+        return (
+            self._leaving is None
+            and encoder is not None
+            and getattr(encoder, "scenes", None) is not None
+            and encoder.alive
+            and self.feed is None
+            and self.range is None
+        )
+
+    def _as_scene(self, frame: Image.Image) -> bool:
+        """Whether ``frame`` goes to the encoder as its layers, its pixels not made here."""
+        return isinstance(frame, SceneFrame) and self.takes_scenes
+
     def _sending_engine(self) -> str:
         """The engine that is to have the panel and send it the pictures, each on its time
         (stage 1b): with video.encoder "native" and video.engine_sends; "" where Python sends
@@ -816,7 +840,11 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
 
         if engine and link is not None:  # (it encodes and sends: no process of its own)
             options = engine_options(size, rotate, settings)
-            encoder = EngineStream(link, size, options, block, engine_lead(settings.fps))
+            # frames of layers go to it as them, where it composes them (stage 2)
+            layers = getattr(self.video, "engine_layers", True) and takes_scenes(engine)
+            encoder = EngineStream(
+                link, size, options, block, engine_lead(settings.fps), scenes=layers
+            )
         else:
             encoder = Encoder(command, size, deliver, **fed)
         encoder.name, encoder.maxrate = settings.encoder, settings.maxrate
@@ -1118,7 +1146,8 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             if encoder is not None and encoder.size == frame.size:
                 self._stopped(encoder.reason())
             self._start_encoder(frame.size)
-        self._follow_the_frames(frame)
+        if not self._as_scene(frame):  # (a frame of layers says nothing of what changed)
+            self._follow_the_frames(frame)
         try:
             self._feed(frame)
         except EncoderStopped as exc:
@@ -1205,7 +1234,8 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         already has. During a switch the old ffmpeg, whose pictures the panel shows, is the
         one waited for; the new one gets the frame (as it takes it) only if it takes it at
         once (while it starts it takes none, and the panel must not wait for that)."""
-        frame.load()  # (here: the writer thread only reads it)
+        if not self._as_scene(frame):  # (its layers go: its pixels are not made)
+            frame.load()  # (here: the writer thread only reads it)
         encoder = self._leaving
         if encoder is None:
             encoder = self.encoder

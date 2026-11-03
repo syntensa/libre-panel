@@ -62,6 +62,19 @@
   longer costs a beat: the main loop draws the next ones for their own times and catches up
   within the lead, where it used to take a new beat (the animation jumped). Where the engine
   cannot open the panel, Libre Panel sends the pictures itself and the log says why.
+- **The engine also composes the frames, from the pieces Libre Panel draws** (where it sends
+  the pictures; `[video] engine_layers = false` leaves it to Libre Panel). Each piece of a
+  frame (a card, a value, a ring, a graph) goes to the engine once, and with every frame only
+  the order they lie in; the engine composes the frame anew where a piece came or went, pixel
+  for pixel as Libre Panel does (compared frame by frame with Libre Panel's own, in five
+  themes, upside down and with Libre Panel's frames between), and keeps what lies under the
+  pieces that change, block by block. On the 12.3" at 25 frames a second the app's main loop
+  takes half the time a frame (Lumen 6.1 ms instead of 10.9, Arena 5.0 instead of 9.8: more
+  room before a frame comes late), and the whole way to the panel, engine and all, a tenth
+  less (Lumen 25.1 ms of the processor a frame instead of 27.8, Arena 26.0 instead of 29.7, on
+  the test machine). Where a message, a transition, the alarm's edge or a colour check is
+  drawn over the frame, Libre Panel composes it as before; the app's picture of the panel is
+  composed only while it is on show.
 
 **Lighter**
 - **x264 a fifth lighter on the screens Libre Panel draws, and sharper.** Their frames go into

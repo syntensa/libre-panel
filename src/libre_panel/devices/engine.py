@@ -12,6 +12,10 @@ loop) stands between a frame and the panel. The records it takes and gives: engi
 
 :class:`EngineTransport` is a ``UsbTransport`` for the drivers, :class:`EngineStream` an
 encoder of drawn frames as :class:`~libre_panel.devices.h264.Encoder` is ffmpeg's.
+
+A frame the renderer hands out as its layers (render/scene.py, stage 2) goes to the engine as
+them: :class:`SceneSender` sends each piece's layers once, and then for every frame the order
+they lie in; the engine composes the frame where it changed (engine/src/scene.rs).
 """
 
 from __future__ import annotations
@@ -27,7 +31,9 @@ import subprocess
 import threading
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+from PIL import Image
 
 from libre_panel import winsession
 from libre_panel.devices.base import DeviceError, leave_place, take_place
@@ -41,6 +47,11 @@ from libre_panel.devices.h264 import (
     _widen,
 )
 from libre_panel.i18n import t
+from libre_panel.render import moving
+
+if TYPE_CHECKING:
+    from libre_panel.render.renderer import Piece
+    from libre_panel.render.scene import Scene, SceneFrame
 
 log = logging.getLogger(__name__)
 
@@ -50,6 +61,10 @@ READY, REPLY, COUNTS, FAILED, WAITING = 64, 65, 66, 67, 68
 # what it is asked: a command (kind 4) and how its reply is read
 OPS = {"command": 1, "ask": 2, "query": 3, "drain": 4, "push": 5}
 STREAM, END, PICTURE = 5, 6, 8
+# a frame of layers (scene.rs): its ground, a layer, the frame (their order)
+GROUND, LAYER, SCENE = 9, 10, 11
+# how a layer goes on: RGBA through its alpha, RGB as it is (a video's frame), RGB light added
+OVER, SOLID, ADD = 0, 1, 2
 # A reply may wait for the picture being sent (5 s a block at most, 1.5 s for room in the
 # panel's queue, the hang check's readings): this long beyond a command's own time.
 REPLY_SLACK_S = 10.0
@@ -64,22 +79,131 @@ class EngineFailed(DeviceError):
     """The engine could not open the panel that pyusb found (or did not start): pyusb may."""
 
 
-def can_send(engine: str) -> bool:
-    """Whether ``engine`` can have the panel (``libre-panel-engine panel``): an engine of
-    stage 1a encodes only. Asked once per program."""
-    if engine not in _CAN_SEND:
+def _can(engine: str) -> str:
+    """What ``engine`` says it can, after its x264 build (``version``: "panel", "scenes"); ""
+    for one that does not start. Asked once per program."""
+    if engine not in _CAN:
         try:
             done = subprocess.run(
                 [engine, "version"], capture_output=True, timeout=10, creationflags=NO_WINDOW
             )
             said = done.stdout.decode("utf-8", "replace")
-            _CAN_SEND[engine] = done.returncode == 0 and "panel" in said.split("(")[-1]
+            _CAN[engine] = said.split("(")[-1] if done.returncode == 0 else ""
         except (OSError, subprocess.SubprocessError):
-            _CAN_SEND[engine] = False
-    return _CAN_SEND[engine]
+            _CAN[engine] = ""
+    return _CAN[engine]
 
 
-_CAN_SEND: dict[str, bool] = {}
+_CAN: dict[str, str] = {}
+
+
+def can_send(engine: str) -> bool:
+    """Whether ``engine`` can have the panel (``libre-panel-engine panel``): an engine of
+    stage 1a encodes only."""
+    return "panel" in _can(engine)
+
+
+def takes_scenes(engine: str) -> bool:
+    """Whether ``engine`` composes frames of layers (stage 2: render/scene.py)."""
+    return "scenes" in _can(engine)
+
+
+def _layers_of(piece: Piece) -> list[tuple[Image.Image, int, int, int]]:
+    """The layers of ``piece`` as the engine lays them (picture, x, y, how), as
+    Renderer._composite lays them on the opaque frame."""
+    if piece.add:
+        return [(piece.layer, piece.x, piece.y, ADD)]
+    how = SOLID if moving.solid(piece.layer) else OVER
+    out = [(piece.layer, piece.x, piece.y, how)]
+    if piece.light is not None:
+        out.append((piece.light.layer, piece.light.x, piece.light.y, ADD))
+    return out
+
+
+class SceneSender:
+    """What one stream of the engine has of the frames' layers (engine/src/scene.rs): each
+    piece's layers, numbered and sent the first time the piece is in a frame, while it stays
+    in the frames (the engine forgets a layer that a frame leaves out, and so does this); the
+    ground, while it stays the same. Used by the stream's writer thread alone."""
+
+    def __init__(self) -> None:
+        self._ground: Any = None
+        self._pieces: dict[int, tuple[Piece, list[int]]] = {}
+        self._numbers = itertools.count(1)
+        self.layers = 0  # sent, and their bytes
+        self.bytes = 0
+
+    def _layer(self, parts: list[bytes], image: Image.Image, x: int, y: int, how: int) -> int:
+        number = next(self._numbers) & 0xFFFFFFFF
+        if how == OVER:
+            data = image.tobytes()  # (RGBA: layerable)
+        else:  # (as Pillow pastes it onto RGB, and adds it)
+            data = (image if image.mode == "RGB" else image.convert("RGB")).tobytes()
+        geometry = struct.pack("<iiIII", x, y, image.width, image.height, how)
+        parts += [_head(LAYER, number, len(geometry) + len(data)) + geometry, data]
+        self.layers += 1
+        self.bytes += len(data)
+        return number
+
+    def records(self, scene: Scene, number: int, planned: float | None) -> list[bytes]:
+        """The records of the frame of ``scene`` numbered ``number`` (drawn for ``planned``),
+        with the ground and layers the engine does not have yet."""
+        parts: list[bytes] = []
+        ground = scene.ground
+        if isinstance(ground, Image.Image):
+            if ground is not self._ground:  # (the renderer keeps its ground: the same picture)
+                data = (ground if ground.mode == "RGB" else ground.convert("RGB")).tobytes()
+                parts += [_head(GROUND, 1, len(data)), data]
+                self.bytes += len(data)
+        elif isinstance(self._ground, Image.Image) or ground != self._ground:
+            parts.append(_head(GROUND, 0, 3) + bytes(ground))
+        self._ground = ground
+        order: list[int] = []
+        now: dict[int, tuple[Piece, list[int]]] = {}
+        for _wid, piece in scene.pieces:
+            key = id(piece)
+            hit = now.get(key) or self._pieces.get(key)
+            if hit is None or hit[0] is not piece:
+                hit = (piece, [self._layer(parts, *layer) for layer in _layers_of(piece)])
+            now[key] = hit
+            order += hit[1]
+        self._pieces = now
+        when = float("nan") if planned is None else planned
+        parts.append(
+            _head(SCENE, number, len(order))
+            + struct.pack("<dI", when, 180 if scene.half else 0)
+            + struct.pack(f"<{len(order)}I", *order)
+        )
+        return parts
+
+
+def engine_scene(
+    sender: SceneSender, frame: SceneFrame, number: int, planned: float | None
+) -> Callable[[Any], None]:
+    """``frame`` as the engine takes it, as its layers (written by the stream's writer
+    thread, which alone uses ``sender``): its pixels are not made here."""
+    scene = frame.scene
+
+    def write(out: Any) -> None:
+        small: list[bytes] = []  # (heads go out with what follows; pixels as they are)
+        for part in sender.records(scene, number, planned):
+            if len(part) < 4096:
+                small.append(part)
+                continue
+            if small:
+                _write_all(out, b"".join(small))
+                small = []
+            _write_all(out, part)
+        if small:
+            _write_all(out, b"".join(small))
+
+    return write
+
+
+def _write_all(out: Any, data: bytes) -> None:
+    view = memoryview(data)
+    while view:  # an unbuffered pipe may take less than asked
+        view = view[out.write(view) :]
 
 
 def _head(kind: int, a: int = 0, b: int = 0) -> bytes:
@@ -446,9 +570,12 @@ class EngineStream:
 
     def __init__(
         self, link: EngineLink, size: tuple[int, int], options: list[str], block: int,
-        lead: float | None = None,
+        lead: float | None = None, scenes: bool = False,
     ) -> None:  # fmt: skip
         self.link, self.size = link, size
+        # with ``scenes``: frames of layers go to the engine as them (render/scene.py); the
+        # engine's stream has none of their layers yet, and nor has this
+        self.scenes = SceneSender() if scenes else None
         # how long after the time a frame was drawn for the engine sends its picture (seconds;
         # None: the engine's own choice, h264.engine_lead's)
         self.lead = lead

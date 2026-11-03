@@ -52,6 +52,7 @@ from libre_panel.render.light import role_color
 from libre_panel.render.motion import Motion
 from libre_panel.render.overlays import ToastLayer, handover, switch_policy, transition
 from libre_panel.render.renderer import Renderer, changed_region, changed_regions
+from libre_panel.render.scene import SceneFrame
 from libre_panel.sensors.base import (
     HubView,
     SensorHub,
@@ -167,8 +168,13 @@ def fit_frame(
 
 
 def turned(frame: Image.Image, rotate: int) -> Image.Image:
-    """The frame as it goes to the panel: upside down with ``rotate = 180``."""
-    return frame.transpose(Image.Transpose.ROTATE_180) if rotate == 180 else frame
+    """The frame as it goes to the panel: upside down with ``rotate = 180`` (a frame of layers
+    as one, its pixels still not made: render/scene.py)."""
+    if rotate != 180:
+        return frame
+    if isinstance(frame, SceneFrame):
+        return frame.turned()
+    return frame.transpose(Image.Transpose.ROTATE_180)
 
 
 def _on_panel(display: Display) -> bool:
@@ -1521,6 +1527,7 @@ class MainLoop:
                 mirrored = mirror.now(number)  # the panel as a monitor: instead of the theme
                 playing = player.now(number) if mirrored is None else None  # the app's Player
                 drawn = None  # the renderer's frame, of which it knows what changed (damage)
+                self.alarm.follow(_alarm(snapshot), now)
                 if mirrored is not None:
                     rate = DIRECT_PICTURE_FPS if self.mirror_direct else renderer.fps
                     frame = rendered = self.mirror.frame(mirrored, size, rate,
@@ -1528,7 +1535,16 @@ class MainLoop:
                 elif playing is not None:
                     frame = rendered = self.player.frame(playing, size, renderer.fps)
                 else:
-                    drawn, _ = renderer.render(snapshot, now)
+                    # as its layers, where the engine composes them and nothing is drawn over
+                    # the frame here (render/scene.py)
+                    layers = (
+                        streaming and getattr(display, "takes_scenes", False)
+                        and self._bare(renderer, blend, number, size, now)
+                    )  # fmt: skip
+                    if layers:
+                        drawn, _ = renderer.render(snapshot, now, scene=True)
+                    else:  # (as before: a renderer of a test or a plugin may take no more)
+                        drawn, _ = renderer.render(snapshot, now)
                     frame = rendered = fit_frame(drawn, size, background_of(renderer))
                 if self.playing and playing is None:  # (it ended: ffmpeg stops)
                     self.player.close()
@@ -1548,7 +1564,6 @@ class MainLoop:
                 bare = frame
                 frame = shown_frame = renderer.shown = toasts.draw(frame, now, hidden=hidden)
                 toasted, toast_box = frame, toasts.box
-                self.alarm.follow(_alarm(snapshot), now)
                 frame = self.alarm.draw(frame, now, renderer.theme.palette.get("crit"),
                                         still=not renderer.animate)  # fmt: skip
                 # the colour check's picture (Settings → Panel), its video made as its moment
@@ -1600,9 +1615,12 @@ class MainLoop:
                     if not direct:
                         # what changed since the frame before, for a panel that makes its
                         # video of those parts only (devices/yuv.py)
+                        # (a frame of layers: the engine knows what changed, and the next frame
+                        # composed here goes whole, as the panel's frame before was not its own)
                         out.info["damage"] = self._damage(
                             renderer, drawn is not None and rendered is drawn and bare is rendered
-                            and frame is toasted and (toasted is bare or toast_box is not None),
+                            and frame is toasted and (toasted is bare or toast_box is not None)
+                            and not isinstance(drawn, SceneFrame),
                             toast_box, turn, out.size,
                         )  # fmt: skip
                         # the time it was drawn for, for an engine that sends the panel each
@@ -1639,6 +1657,23 @@ class MainLoop:
             if self.clock() + self.pause() + half >= self.next_sample:
                 self._ahead.start(self.hub.snapshot)
         return out
+
+    def _bare(
+        self, renderer: Renderer, blend: Any, number: int, size: tuple[int, int], now: float
+    ) -> bool:
+        """Whether nothing is drawn over the renderer's frame here (a message, the alarm's edge,
+        a transition, a colour check, the panels' numbers) and it is the panel's size: a frame
+        the engine may compose from its layers (render/scene.py)."""
+        return (
+            blend is None
+            and self.toasts.current is None
+            and not self.alarm.showing(now)
+            and colour_show.now(number) is None
+            and transition_show.asked() is None
+            and self.showing is None
+            and not identify.showing()
+            and (renderer.theme.width, renderer.theme.height) == tuple(size)
+        )
 
     def _damage(
         self, renderer: Renderer, known: bool, toast: Box | None, turn: int, size: tuple[int, int]

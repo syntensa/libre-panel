@@ -164,6 +164,9 @@ and becomes the default only once it has proven itself on the panels; the old wa
 
 ### Stage 2: the native renderer
 
+- [x] The engine composes the frames from the layers Libre Panel draws, each sent to it once
+      (render/scene.py, engine/src/scene.rs): pixel for pixel the renderer's, what lies under
+      the layers that change kept block by block; the main loop half as busy on the 12.3"
 - [ ] Layers instead of drawing anew: each element drawn once, and again only when what it
       shows changes; what moves (rolling digits, hands, graphs, transitions) moves, turns and
       fades the layers it has, and a glow goes with its layer

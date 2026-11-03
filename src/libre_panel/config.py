@@ -476,6 +476,10 @@ class VideoConfig:
     # on its time (devices/engine.py), with nothing of Python's between a frame and the panel;
     # false: Libre Panel sends them as for the other encoders (the engine only encodes)
     engine_sends: bool = True
+    # With the engine sending (engine_sends): it also composes the frames from the layers Libre
+    # Panel draws, each sent to it once (render/scene.py: stage 2), where nothing else is drawn
+    # over the frame (a message, a transition); false: Libre Panel composes every frame
+    engine_layers: bool = True
     # A theme that is one video across the panel goes to it straight from its file: ffmpeg
     # reads and encodes it in one, instead of Libre Panel drawing its frames and ffmpeg
     # encoding those (less of the processor). Frames again as soon as anything else shows: a
