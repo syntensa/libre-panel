@@ -154,7 +154,10 @@ and becomes the default only once it has proven itself on the panels; the old wa
 - [x] A frame drawn too late costs no beat: the main loop catches up within the lead, each
       frame drawn for its own time (`Display.slack`), instead of taking a new beat
 - [x] On Windows the engine's sender under the multimedia scheduler (MMCSS, "Playback"), as
-      video players' threads are
+      video players' threads are; and the 1 ms timer kept where Windows 11 drops it (no window
+      of Libre Panel's seen), the last 17 ms before a picture slept on a high-resolution timer:
+      a log had 1808 of 3080 pictures late, woken on the 15.6 ms tick. The log says how many
+      went late, how many of those were made late, and the latest
 - [ ] Frames drawn a few ahead
 - [x] The TURZX panels' USB protocol as the Python driver speaks it, in the engine (nusb): the
       same packets, the same flow control and hang check, nothing new sent to a panel (the
@@ -166,7 +169,9 @@ and becomes the default only once it has proven itself on the panels; the old wa
 
 - [x] The engine composes the frames from the layers Libre Panel draws, each sent to it once
       (render/scene.py, engine/src/scene.rs): pixel for pixel the renderer's, what lies under
-      the layers that change kept block by block; the main loop half as busy on the 12.3"
+      the layers that change kept block by block; the main loop half as busy on the 12.3"; a
+      message in the built-in card or a look of the volume one more layer over the frame
+      (SceneFrame.over), not a frame composed here (a frame of the volume 6 ms instead of 17)
 - [ ] Layers instead of drawing anew: each element drawn once, and again only when what it
       shows changes; what moves (rolling digits, hands, graphs, transitions) moves, turns and
       fades the layers it has, and a glow goes with its layer
