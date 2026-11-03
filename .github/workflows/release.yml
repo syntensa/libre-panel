@@ -116,16 +116,13 @@ jobs:
         with:
           msystem: MINGW64
           update: false
-          install: mingw-w64-x86_64-gcc
-      - name: libx264 alone (MSYS2's package without what its x264.exe needs, ffmpeg and more)
-        # (the engine links the library only; the whole tree was a download that broke off)
-        if: runner.os == 'Windows'
-        shell: msys2 {0}
-        run: pacman -S --noconfirm --needed --nodeps --nodeps mingw-w64-x86_64-x264
+          # (x264's library alone: the package mingw-w64-x86_64-x264 is its program, which
+          # brings ffmpeg and a hundred more, a download that once broke off)
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-libx264
       - name: The version of MSYS2's libx264
         if: runner.os == 'Windows'
         shell: msys2 {0}
-        run: echo "X264_PACKAGE=$(pacman -Q mingw-w64-x86_64-x264)" >> "$(cygpath -u "$GITHUB_ENV")"
+        run: echo "X264_PACKAGE=$(pacman -Q mingw-w64-x86_64-libx264)" >> "$(cygpath -u "$GITHUB_ENV")"
       - name: libx264 (Linux)
         if: runner.os == 'Linux'
         run: |

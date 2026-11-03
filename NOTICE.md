@@ -227,7 +227,7 @@ SHA-256 and says where each one's source code is; the licence texts are in
   download, and links **libx264** into it (GPL-2.0-or-later, the x264 project), so
   that no library of x264's has to be carried beside it. The libx264 is the one of
   the system the download is built on: on Windows MSYS2's package
-  `mingw-w64-x86_64-x264`, on Linux Ubuntu's `libx264-dev`; `tools\SOURCES.txt`
+  `mingw-w64-x86_64-libx264`, on Linux Ubuntu's `libx264-dev`; `tools\SOURCES.txt`
   says which version, and so which commit of x264, and where the recipe of that
   package is. x264's licence text is `tools\licenses\x264-COPYING.txt`; x264's
   source: <https://code.videolan.org/videolan/x264>. The whole program is under the
