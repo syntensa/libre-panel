@@ -272,6 +272,18 @@ def full_range(video_range: str, model: PanelModel | None) -> bool:
     return video_range == "full"
 
 
+def lateness_said(counted: dict[str, Any]) -> str:
+    """What the engine's counts (``pictures``, ``late``) say of the pictures it sent on their
+    time, for the log; and why they went late, where the engine says (``came_late``: made after
+    their time, the frame or its encoding late, not the sender; ``late_most_ms``)."""
+    late = int(counted.get("late", 0))
+    said = f"video: the engine sent {int(counted.get('pictures', 0))} pictures, {late} of them late"
+    if late and "came_late" in counted:
+        made, most = int(counted.get("came_late", 0)), float(counted.get("late_most_ms", 0))
+        said += f" ({made} made after their time; the latest {most:.0f} ms past it)"
+    return said
+
+
 class DecoderHung(DeviceError):
     """The panel's decoder stopped taking pictures; reconnecting does not help."""
 
@@ -1347,5 +1359,4 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             log.info("video: %d blocks, %.1f MB, waited %d times, deepest queue %d",
                      sent[0], sent[1] / 1e6, sent[2], sent[3])  # fmt: skip
         if link is not None and counted.get("pictures"):
-            log.info("video: the engine sent %d pictures, %d of them late",
-                     int(counted.get("pictures", 0)), int(counted.get("late", 0)))  # fmt: skip
+            log.info("%s", lateness_said(counted))

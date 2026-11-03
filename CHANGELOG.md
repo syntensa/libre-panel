@@ -124,6 +124,10 @@
   screen as a monitor keep the filter.
 
 **Better**
+- **The log says why the engine's pictures went late.** Beside how many went late: how many of
+  them were made after their time (the frame, or its encoding, was late: not the sender) and
+  the latest, in milliseconds: `video: the engine sent 3080 pictures, 1808 of them late (12
+  made after their time; the latest 13 ms past it)`.
 - **Arena's frame-rate graph from 0 to 175 fps, as fine as the CPU's and GPU's.** Its top was
   its own, in steps of 30 fps: the curve moved, and was drawn anew, when the game's rate
   crossed a step; and on the 12.3" its line was 6 px thick with a glow to match, beside the

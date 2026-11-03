@@ -90,8 +90,21 @@ const SLEPT: Duration = Duration::from_millis(17);
 struct Picture {
     stream: u64,
     due: Option<Instant>,
+    /// When it was made (encoded): after its time, it came late, whatever the sender did.
+    ready: Instant,
     data: Vec<u8>,
     block: usize,
+}
+
+/// What the sender counted of the pictures on their time: sent, late (more than LATE past
+/// it), late as they came (made after their time: the frame, or its encoding, was late) and
+/// the most any was late.
+#[derive(Default)]
+struct Lateness {
+    sent: u64,
+    late: u64,
+    came_late: u64,
+    most: Duration,
 }
 
 #[derive(Default)]
@@ -350,7 +363,7 @@ fn next(shared: &Shared) -> Option<Job> {
     }
 }
 
-fn counts(video: &Video, state: &State, sent: u64, late: u64) -> String {
+fn counts(video: &Video, state: &State, paced: &Lateness) -> String {
     let c = &video.counts;
     let encode_ms = if state.frames > 0 {
         state.encode_s * 1000.0 / state.frames as f64
@@ -359,8 +372,20 @@ fn counts(video: &Video, state: &State, sent: u64, late: u64) -> String {
     };
     format!(
         "{{\"blocks\": {}, \"bytes\": {}, \"waits\": {}, \"slow_blocks\": {}, \"max_depth\": {}, \
-         \"pictures\": {sent}, \"late\": {late}, \"drops\": {}, \"frames\": {}, \"encode_ms\": {:.3}}}",
-        c.blocks, c.bytes, c.waits, c.slow_blocks, c.max_depth, state.drops, state.frames, encode_ms
+         \"pictures\": {}, \"late\": {}, \"came_late\": {}, \"late_most_ms\": {:.1}, \
+         \"drops\": {}, \"frames\": {}, \"encode_ms\": {:.3}}}",
+        c.blocks,
+        c.bytes,
+        c.waits,
+        c.slow_blocks,
+        c.max_depth,
+        paced.sent,
+        paced.late,
+        paced.came_late,
+        paced.most.as_secs_f64() * 1000.0,
+        state.drops,
+        state.frames,
+        encode_ms
     )
 }
 
@@ -368,7 +393,7 @@ fn sender(shared: Arc<Shared>, mut transport: Transport, hang_blocks: usize) {
     raise_priority();
     let mut video = Video::new(DEFAULT_BLOCK);
     video.hang_window = hang_blocks;
-    let (mut sent, mut late) = (0u64, 0u64);
+    let mut paced = Lateness::default();
     let mut told = Instant::now();
     while let Some(job) = next(&shared) {
         shared.wake.notify_all(); // (room for another picture)
@@ -385,12 +410,17 @@ fn sender(shared: Arc<Shared>, mut transport: Transport, hang_blocks: usize) {
                         continue;
                     }
                 }
-                if picture.due.is_some_and(|due| Instant::now() > due + LATE) {
-                    late += 1;
+                if let Some(due) = picture.due {
+                    let now = Instant::now();
+                    if now > due + LATE {
+                        paced.late += 1;
+                        paced.came_late += u64::from(picture.ready > due);
+                        paced.most = paced.most.max(now - due);
+                    }
                 }
                 video.block_size = picture.block;
                 match video.send(&mut transport, &picture.data) {
-                    Ok(()) => sent += 1,
+                    Ok(()) => paced.sent += 1,
                     Err(e) => {
                         // (a hung decoder: the depth its queue stood at, for Libre Panel's words)
                         let (kind, text) = match &e {
@@ -412,11 +442,11 @@ fn sender(shared: Arc<Shared>, mut transport: Transport, hang_blocks: usize) {
         }
         if told.elapsed() >= COUNTS_EVERY {
             told = Instant::now();
-            let text = counts(&video, &shared.state(), sent, late);
+            let text = counts(&video, &shared.state(), &paced);
             shared.say(wire::COUNTS, 0, &[text.as_bytes()]);
         }
     }
-    let text = counts(&video, &shared.state(), sent, late);
+    let text = counts(&video, &shared.state(), &paced);
     shared.say(wire::COUNTS, 0, &[text.as_bytes()]);
 }
 
@@ -472,6 +502,7 @@ fn take_frame(
             Picture {
                 stream: current,
                 due,
+                ready: Instant::now(),
                 data: picture,
                 block: s.block,
             },
@@ -682,6 +713,7 @@ pub fn run(options: Options) -> Result<(), String> {
                     Picture {
                         stream: current,
                         due: None,
+                        ready: Instant::now(),
                         data,
                         block,
                     },

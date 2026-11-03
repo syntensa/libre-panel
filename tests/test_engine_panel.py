@@ -258,6 +258,59 @@ def test_pictures_reach_the_panel_on_their_time_however_long_a_frame_took(engine
     assert transport.link.counts["late"] < len(frames) // 2
 
 
+def test_the_log_says_why_the_engines_pictures_went_late():
+    """At the end of a stream: how many went late, and of those how many were made after their
+    time (the frame or its encoding, not the sender), and the latest; an engine of before
+    counts no causes."""
+    from libre_panel.devices.turzx_video import lateness_said
+
+    on_time = {"pictures": 9286, "late": 0, "came_late": 0, "late_most_ms": 0.0}
+    assert lateness_said(on_time) == "video: the engine sent 9286 pictures, 0 of them late"
+    late = {"pictures": 3080, "late": 1808, "came_late": 12, "late_most_ms": 12.6}
+    assert lateness_said(late) == (
+        "video: the engine sent 3080 pictures, 1808 of them late (12 made after their time; "
+        "the latest 13 ms past it)"
+    )
+    assert lateness_said({"pictures": 3080, "late": 1808}) == (
+        "video: the engine sent 3080 pictures, 1808 of them late"
+    )
+
+
+@needs_ffmpeg
+def test_the_engine_says_which_late_pictures_came_late_and_how_late(engine):
+    """A picture past its time is late (counts' "late"); one made after its time came so
+    (``came_late``: the frame or its encoding was late, not the sender), and the latest is
+    told in milliseconds (``late_most_ms``): the log says why pictures went late."""
+    fake = FakePanel()
+    transport, sock = engine_on(engine, fake)
+    try:
+        transport.sync()
+        session = VideoSession(transport, (480, 1920), 60, 40, "clip")
+        session.start()
+        settings = h264.EncoderSettings(fps=50, encoder="native", pixels="boxes", profile="high")
+        options = h264.engine_options((1920, 480), 270, settings)
+        stream = EngineStream(transport.link, (1920, 480), options, session.block_size)
+        frames = moving_square(30)
+        start = time.perf_counter() + 0.05
+        for n, frame in enumerate(frames):
+            due = start + n / 50
+            while time.perf_counter() < due:
+                time.sleep(0.0005)
+            if n >= 20:  # the last ten drawn a fifth of a second late: past the lead
+                time.sleep(0.2)
+            stream.write(h264.engine_frame(frame, frame.info["damage"], n, due), timeout=2)
+        arrived(fake, len(frames))
+        stream.close()
+        session.stop(None)
+    finally:
+        transport.close()
+        sock.close()
+    counts = transport.link.counts
+    assert counts["late"] >= 10 and counts["came_late"] >= 10
+    assert counts["came_late"] <= counts["late"]
+    assert counts["late_most_ms"] >= 150
+
+
 @needs_ffmpeg
 def test_a_hung_decoder_found_by_the_engine_restarts_the_panel(wired, monkeypatch):
     """The engine finds it as VideoSession.check_hang does (slow blocks, a queue stuck high);
