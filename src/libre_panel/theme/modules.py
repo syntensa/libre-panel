@@ -390,13 +390,15 @@ class _Build:
 
     def graph(self, name: str, sensor: str, x: float, y: float, w: float, h: float,
               color: str, low: float | None = 0, high: float | None = 100,
-              scale: str = "linear", fill: bool = True) -> None:  # fmt: skip
-        w, h = max(8, round(w)), max(8, round(h))
+              scale: str = "linear", fill: bool = True, unit: float = 0) -> None:  # fmt: skip
+        """A graph, its line and glow as thick as the module is large (``unit``: as one of that
+        size's)."""
+        w, h, u = max(8, round(w)), max(8, round(h)), unit or self.u
         self.add(
             "graph", name, x=round(x), y=round(y), w=w, h=h, sensor=sensor, min=low, max=high,
             scale=scale, history=max(30, min(300, w // 3)), color=color, fill=fill,
-            fill_fade=True, smooth=True, line_width=max(1, round(self.u / 110)),
-            glow=round(0.35 * self.glow, 2), glow_radius=max(2, round(self.u / 40)),
+            fill_fade=True, smooth=True, line_width=max(1, round(u / 110)),
+            glow=round(0.35 * self.glow, 2), glow_radius=max(2, round(u / 40)),
         )  # fmt: skip
 
     def icon(self, name: str, icon: str, x: float, y: float, size: float, color: str) -> None:
@@ -1886,11 +1888,15 @@ def build_game(b: _Build, _src: Source) -> None:
         else:
             gx = x + number_w + b.pad
             gy, gw, gh = y, x + w - gx, h
-        # from 0, its top its own: a dip shows as deep as it was and moves no range
-        b.graph("history", "game.fps", gx, gy, gw, gh, color, 0, None)
-        # every frame's rate as measured (25 points a second, where the source has them), up
-        # to a top in steps of 30 fps that changes seldom
-        b.out[-1].update(clip=clip, trace="game.fps_trace", range_step=30)
+        # from 0 to the module's top (175 fps): a dip shows as deep as it was, and the curve
+        # stays where it is, drawn once (an own top moved it, and its strips were drawn anew,
+        # when the game's rate changed); with a top of 0 its own, in steps of 30 fps that
+        # change seldom. Its line and glow as the CPU's and GPU's graphs have them: as a card
+        # of twenty labels, so the big card's curve is not drawn heavier (6 px on the 12.3")
+        top = b.module["top"] if b.module["top"] > 0 else None
+        b.graph("history", "game.fps", gx, gy, gw, gh, color, 0, top, unit=min(b.u, 20 * b.ts))
+        # every frame's rate as measured (25 points a second, where the source has them)
+        b.out[-1].update(clip=clip, trace="game.fps_trace", range_step=0 if top else 30)
     icon = min(b.iw, b.ih) * 0.3
     # a game found, its frame rate not yet there: its logo where it has one (the logo of the
     # game before stays for the round report, so not without a game)

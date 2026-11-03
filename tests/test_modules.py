@@ -659,6 +659,36 @@ def test_the_weather_without_weather_says_so_where_it_is_not_to_show_the_date():
     assert not [w for w in none if w["type"] in ("clock", "calendar")]
 
 
+def test_the_games_graph_goes_up_to_the_modules_top_or_to_one_of_its_own():
+    """The frame rate's course from 0 to 175 fps, or to the top the module names; with a top
+    of 0 the range of before, its own in steps of 30 fps."""
+    for top, wanted in ((240, (240, 0)), (0, (None, 30))):
+        parts, _ = expand(theme({"module": "game", "cols": 5, "rows": 3, "top": top},
+                                model="turing-12.3-usb"))  # fmt: skip
+        graph = next(w for w in parts if w["type"] == "graph")
+        assert (graph["min"], graph["max"], graph["range_step"]) == (0, *wanted)
+
+
+def test_the_games_graph_is_drawn_as_finely_as_the_cpus_and_the_gpus():
+    """Arena's frame rate on the 12.3" drew its curve 6 px thick with a glow to match, the
+    CPU's and GPU's beside it 4 px: the big card's curve is drawn as theirs. Elsewhere it
+    stays as it was."""
+    from libre_panel.theme import find_theme, load_theme
+
+    def graphs(name):
+        parts, _ = expand(load_theme(find_theme(name)))
+        return {w["sensor"]: w for w in parts if w["type"] == "graph"}
+
+    pair = graphs("arena-pair-1920x720")
+    look = (pair["game.fps"]["line_width"], pair["game.fps"]["glow_radius"])
+    assert look == (pair["cpu.load"]["line_width"], pair["cpu.load"]["glow_radius"]) == (4, 11)
+    assert pair["gpu.load"]["line_width"] == 4
+    game = graphs("arena-1920x720")["game.fps"]
+    assert (game["line_width"], game["glow_radius"]) == (4, 11)
+    for name in ("arena", "arena-1280x720", "arena-vertical"):  # (their cards are not as big)
+        assert graphs(name)["game.fps"]["line_width"] == 4
+
+
 def test_the_night_over_the_suns_arc_needs_the_suns_times():
     """Without a place there are no sun times: the moon alone, no night symbol over it."""
     parts, _ = expand(theme({"module": "sun", "cols": 3, "rows": 2}, model="turing-12.3-usb"))
@@ -678,9 +708,9 @@ def test_the_games_graph_runs_from_one_edge_of_its_card_to_the_other(model, cols
     graph = next(w for w in parts if w["type"] == "graph")
     line = card["outline_width"]
     assert graph["x"] == card["x"] + line and graph["w"] == card["w"] - 2 * line
-    # from 0 (a dip moves no range), its top its own
-    assert graph["clip"] is True and graph["min"] == 0 and graph["max"] is None
-    # every frame's rate as measured where the source has it, up to a top in steps of 30 fps
-    assert (graph["trace"], graph["range_step"]) == ("game.fps_trace", 30)
+    # from 0 (a dip moves no range) to the module's top, its scale fixed
+    assert graph["clip"] is True and (graph["min"], graph["max"]) == (0, 175)
+    # every frame's rate as measured where the source has it
+    assert (graph["trace"], graph["range_step"]) == ("game.fps_trace", 0)
     bottom = graph["y"] + graph["h"]
     assert card["y"] + card["h"] - card["radius"] <= bottom <= card["y"] + card["h"] - line

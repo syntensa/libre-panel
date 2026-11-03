@@ -609,6 +609,11 @@ function ModuleInspector({ widget }) {
               <${Toggle} label=${t("Whole processor")} checked=${widget.total !== false} onChange=${change("total")} />
             <//>`
           : null}
+        ${widget.module === "game"
+          ? html`<${Field} label=${t("Graph up to")} hint=${t("the frame rate's course from 0 to this many frames a second, its scale fixed; 0: a top of its own, in steps of 30")}>
+              <${NumberField} label=${t("Graph up to")} value=${widget.top ?? 175} min=${0} max=${1000} step=${5} unit="fps" onChange=${change("top")} />
+            <//>`
+          : null}
         ${widget.module === "instrument"
           ? html`<${Field} label=${t("Course of the load")} hint=${t("the load of the last minute along the bottom of a tall card, under the rows")}>
               <${Toggle} label=${t("Course of the load")} checked=${Boolean(widget.history)} onChange=${change("history")} />

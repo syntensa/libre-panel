@@ -237,7 +237,7 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 | `calendar` | `w`, `h`, `font`, `font_size`, `color`, `color2`, `muted`, `first_day` | the month as a grid of days, today marked in `color2`; weekday names in `muted` and the language; `first_day` `monday` or `sunday` |
 | `list` | `w`, `h`, `items`, `style`, `columns`, `max_items`, `sort`, `format`, `detail`, `detail_format`, `min`, `max`, `scale`, `levels`, `font`, `font_size`, `label_font`, `uppercase`, `color`, `muted`, `color2`, `background`, `empty`, `color_rules` | readings found by name or pattern, as many as fit, see [Lists](#lists) |
 | `rect` | `w`, `h`, `color`, `color2`, `gradient`, `radius`, `outline`, `outline_width`, `backdrop_blur`, `ridge` | cards, frames, separators; `backdrop_blur` gives frosted glass, `ridge` a ridge (see [Look and finish](#look-and-finish)) |
-| `module` | `module`, `col`, `row`, `cols`, `rows`, `source`, `sensor`, `format`, `title`, `text`, `color`, `fallback`, `card`, `forecast`, `step`, `items`, `sort`, `threads`, `total`, `history`, `moving`, `hold`, `change`, `slide`, `order`, `turn`, `transition`, `time` | a building block on the grid, see [Modules](#modules) and [Cards](#cards) |
+| `module` | `module`, `col`, `row`, `cols`, `rows`, `source`, `sensor`, `format`, `title`, `text`, `color`, `fallback`, `card`, `forecast`, `step`, `items`, `sort`, `threads`, `total`, `history`, `top`, `moving`, `hold`, `change`, `slide`, `order`, `turn`, `transition`, `time` | a building block on the grid, see [Modules](#modules) and [Cards](#cards) |
 
 `scale` is `linear`, `sqrt` or `log`: the latter two keep small values visible
 on huge ranges such as network rates.
@@ -623,7 +623,7 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
 | `music` | what is playing: cover, title, artist, album, progress and times; "Nothing playing" otherwise | |
 | `volume` | the volume: a speaker, the level in percent and levels that rise as on a mixer; muted, the speaker crossed and the word; upright in a tall module. Read by the `audio` source | |
 | `agenda` | the next events of your calendars, the one going on marked; two columns when long | |
-| `game` | the frame rate of the game being played, its 1% lows and frame time; the history when long or big; "No game running" otherwise ([PresentMon](CONFIGURATION.md#more-sensor-sources), MangoHud on Linux) | |
+| `game` | the frame rate of the game being played, its 1% lows and frame time; the history when long or big; "No game running" otherwise ([PresentMon](CONFIGURATION.md#more-sensor-sources), MangoHud on Linux) | `top`: the history from 0 to this many frames a second, its scale fixed (175; 0: a top of its own, in steps of 30 fps) |
 | `ping` | how long the internet takes to answer (`net.ping`, the host of `[sensors.psutil] ping`), the share of tries without an answer and the host; the history when long or big | |
 | `timer` | the time left of the [timer](CONFIGURATION.md#timer) in a ring that fills as it runs, whether it is focus or break, and the rounds when long | |
 | `mic` | whether the microphone is muted: the crossed symbol and "Muted" in the critical colour while it is, calm while it is on, "No microphone" where there is none (`audio.mic.muted`) | |

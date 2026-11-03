@@ -430,6 +430,9 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "total": ("bool", True),
         # a ring instrument: the course of the load along the bottom of a tall card
         "history": ("bool", False),
+        # the game's frame rate: its course from 0 up to this many fps, its scale fixed (0: a
+        # top of its own, in steps of 30 fps)
+        "top": ("number", 175),
         "sort": ("enum:cpu|memory", "cpu"),  # processes: by processor time or memory
         "timezone": ("string", ""),  # analog clock: e.g. "Asia/Tokyo"
         "target": ("string", ""),  # countdown: "2026-12-24", "2026-12-24 18:00", "12-24"

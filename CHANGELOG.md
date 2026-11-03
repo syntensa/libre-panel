@@ -122,6 +122,13 @@
   instead of 44.5, the dither in its gradients kept better). A video, the Player and the
   screen as a monitor keep the filter.
 
+**Better**
+- **Arena's frame-rate graph from 0 to 175 fps, as fine as the CPU's and GPU's.** Its top was
+  its own, in steps of 30 fps: the curve moved, and was drawn anew, when the game's rate
+  crossed a step; and on the 12.3" its line was 6 px thick with a glow to match, beside the
+  CPU's and GPU's 4. Now its scale is fixed and its line is theirs; the module's *Graph up to*
+  (`top`) sets the top (0: one of its own, as before).
+
 ## 0.8.0rc1 — 2026-11-02
 
 A release candidate of 0.8, to try before everyone has it: one design for every panel, and
