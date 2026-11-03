@@ -15,6 +15,14 @@
   root on Linux: root's own settings folder), else the frames are kept as without a file.
 
 **Fixed**
+- **The engine's pictures leave on their time also with Libre Panel's window closed**
+  (Windows 11). Windows 11 forgets the 1 ms timer a program asks for while none of its windows
+  is seen, as with Libre Panel's window closed and the engine it starts, unless the program
+  asks to keep it; the engine's sender, which waits for each picture's time, then woke only
+  every 15.6 ms and sent many pictures a few milliseconds late (a log said 1808 of 3080):
+  small hitches in what moves. Libre Panel and the engine ask to keep it now, the engine also
+  not to be put on the slow cores at a low clock, and its sender sleeps the last 17 ms before
+  a picture on a timer that ends on time either way.
 - **The volume in one of its looks no longer sends the whole frame anew.** The looks did not
   say where on the panel they drew, so every frame while the volume showed in one (bar,
   levels, ring, large) went to a video panel whole, its YUV made whole and encoded whole;

@@ -82,8 +82,10 @@ const MOST_PICTURES: usize = 2;
 const COUNTS_EVERY: Duration = Duration::from_millis(250);
 /// A picture this much past its time counts as late.
 const LATE: Duration = Duration::from_millis(2);
-/// The last stretch of a wait is slept, not waited on the condition: precisely on time.
-const SLEPT: Duration = Duration::from_millis(3);
+/// The last stretch of a wait is slept, not waited on the condition: a sleep ends on time (a
+/// high-resolution timer), a wait on the condition on the system's next tick, which may come
+/// 15.6 ms apart (Windows, where the finer timer fine_timer asks for is not kept).
+const SLEPT: Duration = Duration::from_millis(17);
 
 struct Picture {
     stream: u64,
@@ -221,10 +223,38 @@ impl Stream {
 
 #[cfg(windows)]
 fn fine_timer() {
-    // a wait on a condition ends on the system's timer, every 15.6 ms unless asked for 1
-    // (since Windows 10 2004 for this process alone)
+    use std::ffi::c_void;
+    use windows_sys::Win32::System::Threading::{
+        GetCurrentProcess, ProcessPowerThrottling, SetProcessInformation,
+        PROCESS_POWER_THROTTLING_CURRENT_VERSION, PROCESS_POWER_THROTTLING_EXECUTION_SPEED,
+        PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION, PROCESS_POWER_THROTTLING_STATE,
+    };
+    // A wait on a condition ends on the system's timer, every 15.6 ms unless asked for 1 (since
+    // Windows 10 2004 for this process alone). Windows 11 forgets that ask while no window of
+    // the process, or of the one that started it, is seen (Libre Panel's window closed) unless
+    // the process wants it kept; and it may then run the process on the slower cores at a low
+    // clock (EcoQoS). The engine sends the pictures on their time: it asks out of both, of
+    // each on its own (Windows 10 knows only the second, and refuses a call with one it does
+    // not know).
     unsafe {
         windows_sys::Win32::Media::timeBeginPeriod(1);
+        for mechanism in [
+            PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION,
+            PROCESS_POWER_THROTTLING_EXECUTION_SPEED,
+        ] {
+            let state = PROCESS_POWER_THROTTLING_STATE {
+                Version: PROCESS_POWER_THROTTLING_CURRENT_VERSION,
+                ControlMask: mechanism,
+                StateMask: 0, // (the mechanism off)
+            };
+            // SAFETY: the state lives through the call, its size is given with it.
+            SetProcessInformation(
+                GetCurrentProcess(),
+                ProcessPowerThrottling,
+                (&state as *const PROCESS_POWER_THROTTLING_STATE).cast::<c_void>(),
+                std::mem::size_of::<PROCESS_POWER_THROTTLING_STATE>() as u32,
+            );
+        }
     }
 }
 

@@ -39,9 +39,11 @@ class Collector:
 
 
 class Kernel32:
-    def __init__(self, priority_class=timing.NORMAL_PRIORITY_CLASS):
+    def __init__(self, priority_class=timing.NORMAL_PRIORITY_CLASS, keeps=True):
         self.calls = []
         self.priority_class = priority_class
+        self.kept = []  # SetProcessInformation's: (process, class, version, chosen, on, size)
+        self.keeps = keeps  # (False: Windows 10, which has no such mechanism)
 
     def GetCurrentThread(self):  # noqa: N802
         return -2  # the pseudo handle
@@ -61,6 +63,11 @@ class Kernel32:
         self.priority_class = priority_class
         return 1
 
+    def SetProcessInformation(self, handle, kind, state, size):  # noqa: N802
+        state = state._obj  # (ctypes.byref)
+        self.kept.append((handle, kind, state.Version, state.ControlMask, state.StateMask, size))
+        return 1 if self.keeps else 0
+
 
 def test_windows_timer_at_one_millisecond_while_the_loop_runs():
     winmm = Winmm()
@@ -75,6 +82,30 @@ def test_windows_timer_at_one_millisecond_while_the_loop_runs():
     other.start()
     other.stop()
     assert elsewhere.calls == []
+
+
+def test_the_timer_is_kept_at_one_millisecond_with_the_window_closed_too():
+    """Windows 11 forgets the 1 ms timer of a process none of whose windows is seen (Libre
+    Panel with its window closed) unless the process asks to keep it: asked while the loop
+    runs, left to Windows after; nothing to undo where Windows refuses (before Windows 11),
+    nothing elsewhere."""
+    kernel32 = Kernel32()
+    guards = timing.Guards("win32", Winmm(), Collector(), kernel32)
+    guards.start()
+    assert kernel32.kept == [(-1, timing.PROCESS_POWER_THROTTLING, 1, 4, 0, 12)]  # chosen, off
+    guards.stop()
+    guards.stop()
+    assert kernel32.kept[1:] == [(-1, timing.PROCESS_POWER_THROTTLING, 1, 0, 0, 12)]  # Windows'
+    older = Kernel32(keeps=False)
+    guards = timing.Guards("win32", Winmm(), Collector(), older)
+    guards.start()
+    guards.stop()
+    assert len(older.kept) == 1
+    elsewhere = Kernel32()
+    guards = timing.Guards("linux", Winmm(), Collector(), elsewhere)
+    guards.start()
+    guards.stop()
+    assert elsewhere.kept == []
 
 
 def test_the_collector_leaves_out_what_lives_from_start_up(monkeypatch):
