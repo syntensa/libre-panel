@@ -227,8 +227,8 @@ function Choices({ data }) {
       <${Segmented} label=${t("How it fills the panel")} value=${chosen.fit}
         onChange=${(value) => choose("fit", "playerFit", value)}
         options=${[
+          { value: "contain", label: t("Whole") }, // (in the order Screen has them)
           { value: "cover", label: t("To the edges") },
-          { value: "contain", label: t("Whole") },
         ]} />
     </div>
     <div class="player-choice">

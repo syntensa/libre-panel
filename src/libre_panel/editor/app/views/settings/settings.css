@@ -512,6 +512,17 @@
   border-top: 1px solid var(--line);
 }
 
+/* whole cards folded away under one row (Panel's fine-tuning): one after the other, flat */
+.settings-disclosure-body > .settings-card {
+  border: none;
+  border-radius: 0;
+  background: none;
+}
+
+.settings-disclosure-body > .settings-card + .settings-card {
+  border-top: 1px solid var(--line);
+}
+
 .settings-disclosure-body > .settings-row:last-child {
   border-bottom: none;
 }

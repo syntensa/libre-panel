@@ -15,7 +15,7 @@ import { designPages, target, targetStatus, useTarget } from "../../core/target.
 import { html, useRef, useState } from "../../lib/preact.js";
 import { modeName, panelName, stateText } from "../../shell/panel-popover.js";
 import { navigate } from "../../shell/views.js";
-import { Segmented, Slider, Toggle } from "../../ui/controls.js";
+import { IconButton, Segmented, Slider, Toggle } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
 import { Popover } from "../../ui/layer.js";
 
@@ -249,6 +249,15 @@ export function PanelCard() {
   const shown = shownTheme(app, status);
   const summary = app.available ? panelSummary(app, model, shown, status) : null;
   const paused = status?.state === "paused";
+  // starting the panels anew is for one that hangs: said in words where the panel is not shown
+  // or paused, a quiet button beside the others where all is well (the tray and Ctrl+K have it too)
+  const trouble = !["showing", "paused"].includes(status?.state);
+  const restart = trouble
+    ? html`<button type="button" class="btn" title=${t("Opens the panels anew, for one that hangs.")} onClick=${() => appAction("restart")}>
+        <${Icon} name="refresh" size=${14} /> ${t("Restart panels")}
+      </button>`
+    : html`<${IconButton} icon="refresh" size=${15} class="panel-card-restart" label=${t("Restart panels")}
+        title=${t("Opens the panels anew, for one that hangs.")} onClick=${() => appAction("restart")} />`;
   return html`<section class="panel-card" aria-label=${t("Panel")}>
     <div class="panel-card-head">
       <span class=${`state-dot ${summary ? summary.state : "none"}`} aria-hidden="true"></span>
@@ -272,9 +281,7 @@ export function PanelCard() {
           <button type="button" class="btn" onClick=${() => appAction(paused ? "resume" : "pause")}>
             <${Icon} name=${paused ? "play" : "pause"} size=${14} /> ${paused ? t("Resume panels") : t("Pause panels")}
           </button>
-          <button type="button" class="btn" title=${t("Opens the panels anew, for one that hangs.")} onClick=${() => appAction("restart")}>
-            <${Icon} name="refresh" size=${14} /> ${t("Restart panels")}
-          </button>
+          ${restart}
           <span class="muted">${t("Brightness and mounting of this panel: Settings → Panel.")}</span>
           <span class="grow"></span>
           <button type="button" class="link-btn" onClick=${() => navigate("settings", "panel")}>${t("Panel settings")}</button>
@@ -285,9 +292,7 @@ export function PanelCard() {
           <button type="button" class="btn" onClick=${() => appAction(paused ? "resume" : "pause")}>
             <${Icon} name=${paused ? "play" : "pause"} size=${14} /> ${paused ? t("Resume panel") : t("Pause panel")}
           </button>
-          <button type="button" class="btn" title=${t("Opens the panels anew, for one that hangs.")} onClick=${() => appAction("restart")}>
-            <${Icon} name="refresh" size=${14} /> ${t("Restart panels")}
-          </button>
+          ${restart}
           <label class="panel-card-brightness">
             <${Icon} name="sun" size=${16} />
             <span>${t("Brightness")}</span>

@@ -121,7 +121,7 @@
 .panel-picture img {
   display: block;
   max-width: 100%;
-  max-height: min(36vh, 300px);
+  max-height: 100%; /* (the box's: a picture of other proportions is shown whole, not cut) */
   width: auto;
   height: auto;
 }

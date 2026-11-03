@@ -686,6 +686,32 @@ def test_a_udisp_display_has_its_frames_a_second_in_the_app(
         waits_for(page, lambda: settings_config().device.jpeg_quality == 100)
 
 
+def test_the_panel_s_fine_tuning_waits_folded_until_it_is_wanted(
+    app_url,  # noqa: F811
+    isolated_home,
+    monkeypatch,
+):
+    """Settings → Panel: the video experiment and the colour check are for trying things out and
+    finding faults, not for setting a panel up, so they wait under one row; it opens on a
+    click, and by itself where one of the experiment's settings is not the default."""
+    from test_editor_settings import lacking_ffmpeg, panel_on_the_bus
+
+    from libre_panel.config import set_config_value
+
+    panel_on_the_bus(monkeypatch, "turing-9.2-usb")
+    lacking_ffmpeg(monkeypatch, found=True)
+    with browser_page(app_url, "settings/panel") as page:
+        fold = page.locator("#panel-tinkering")
+        expect(fold).to_contain_text("Fine-tuning for experiments")
+        assert page.locator("#panel-video-experiment, #panel-colour-check").count() == 0
+        fold.locator(".settings-disclosure").click()
+        expect(page.locator("#panel-video-experiment")).to_be_visible()
+        expect(page.locator("#panel-colour-check")).to_be_visible()
+    set_config_value("video.crf", 18)  # tried: what was changed shows
+    with browser_page(app_url, "settings/panel") as page:
+        expect(page.locator("#panel-video-experiment")).to_be_visible()
+
+
 def test_the_video_experiment_writes_each_choice_at_once_and_leads_back(
     app_url,  # noqa: F811
     isolated_home,
@@ -699,7 +725,7 @@ def test_the_video_experiment_writes_each_choice_at_once_and_leads_back(
 
     panel_on_the_bus(monkeypatch, "turing-9.2-usb")
     lacking_ffmpeg(monkeypatch, found=True)
-    with browser_page(app_url, "settings/panel") as page:
+    with browser_page(app_url, "settings/panel/panel-video-experiment") as page:
         card = page.locator("#panel-video-experiment")
         expect(card).to_contain_text("Video experiment")
         back = card.get_by_role("button", name="Back to the defaults")
@@ -738,7 +764,7 @@ def test_the_video_experiment_switches_what_the_engine_does(
 
     panel_on_the_bus(monkeypatch, "turing-9.2-usb")
     lacking_ffmpeg(monkeypatch, found=True)
-    with browser_page(app_url, "settings/panel") as page:
+    with browser_page(app_url, "settings/panel/panel-video-experiment") as page:
         card = page.locator("#panel-video-experiment")
         sends = card.get_by_role("switch", name="The engine sends the pictures")
         composes = card.get_by_role("switch", name="The engine composes the frames")
@@ -775,7 +801,7 @@ def test_the_video_experiment_runs_every_step_by_itself_on_the_running_app(
     panel_on_the_bus(monkeypatch, "turing-9.2-usb")
     lacking_ffmpeg(monkeypatch, found=True)
     _app, url = background
-    with browser_page(url, "settings/panel") as page:
+    with browser_page(url, "settings/panel/panel-video-experiment") as page:
         card = page.locator("#panel-video-experiment")
         radio(page, "Quality", "20").click()
         waits_for(page, lambda: settings_config().device.video.crf == 20)
@@ -866,7 +892,7 @@ def test_the_colour_check_measures_each_encoder_and_says_who_converts(
     x264 the processor converts; the result copies as text; the picture on the panel and the
     range's comparison need the background app."""
     colour_check_on(monkeypatch)
-    with browser_page(app_url, "settings/panel") as page:
+    with browser_page(app_url, "settings/panel/panel-colour-check") as page:
         card = page.locator("#panel-colour-check")
         expect(card.locator("h2")).to_have_text("Check the colours")
         expect(card.get_by_role("button", name="Copy as text")).to_have_count(0)  # nothing yet
@@ -922,7 +948,7 @@ def test_the_card_converts_where_the_check_found_it_identical_and_the_processor_
     command = card_s()
     colour_check_on(monkeypatch, works=lambda ffmpeg, encoder: encoder == "h264_amf",
                     command=command)  # fmt: skip
-    with browser_page(app_url, "settings/panel") as page:
+    with browser_page(app_url, "settings/panel/panel-colour-check") as page:
         card = page.locator("#panel-colour-check")
         choice = card.locator(".colour-advice")
         expect(choice).to_have_attribute("data-why", "unchecked")
@@ -964,7 +990,7 @@ def test_the_colour_check_shows_its_picture_on_the_panel_and_the_range_s_answer_
     from libre_panel import colour_show
 
     colour_check_on(monkeypatch, controls=panels_running("h264_amf"))
-    with browser_page(app_url, "settings/panel") as page:
+    with browser_page(app_url, "settings/panel/panel-colour-check") as page:
         card = page.locator("#panel-colour-check")
         show = card.get_by_role("button", name="Show it on the panel")
         expect(show).to_be_enabled(timeout=10000)
@@ -1004,7 +1030,7 @@ def test_the_range_s_answer_for_a_panel_beside_the_first_is_its_own(
         '[[panels]]\nmodel = "turing-9.2-usb"\nvideo = { mode = "on" }\n', encoding="utf-8"
     )
     colour_check_on(monkeypatch, controls=panels_running("h264_amf", "libx264"))
-    with browser_page(app_url, "settings/panel") as page:
+    with browser_page(app_url, "settings/panel/panel-colour-check") as page:
         page.wait_for_function("(window.libre.store.get().settings?.config?.panels || []).length")
         page.evaluate("() => { const s = window.libre.store;"
                       " s.set({ prefs: { ...s.get().prefs, target: 2 } }); }")  # fmt: skip

@@ -15,6 +15,12 @@
   root on Linux: root's own settings folder), else the frames are kept as without a file.
 
 **Fixed**
+- **A theme's own switches in Look say what they switch.** Look listed them as switches
+  alone, their names only for a screen reader: Lumen's "Frames around every part" showed as
+  a switch under "This theme's switches" and nothing beside it.
+- **Start's picture of the panel is shown whole.** Before the panel's own picture came, the
+  theme's (dimmed, under the note why) was cut at the top and bottom where its proportions
+  were not the panel's.
 - **The engine's pictures leave on their time also with Libre Panel's window closed**
   (Windows 11). Windows 11 forgets the 1 ms timer a program asks for while none of its windows
   is seen, as with Libre Panel's window closed and the engine it starts, unless the program
@@ -141,8 +147,22 @@
   screen as a monitor keep the filter.
 
 **Better**
+- **Settings → Panel shows what sets a panel up, the rest folded away.** The video's
+  fine-tuning (the cap on the bit rate, x264's quality, speed and profile, the encoder, the
+  keyframes, the run through every step) and the check of the panel's colours are for
+  trying things out and finding faults: they wait under one row, "Fine-tuning for
+  experiments", which opens on a click, by itself where one of them is not the default, and
+  where a link leads to one (Start's question about black). Brightness and the rest come
+  right after smooth motion.
+- **"More panels" in Settings, beside "Panel"** (it was "Panels").
+- **Start switches each page in one place.** Game mode and the music page were switches in
+  the first steps and again in "What the panel shows when" right under them; the first
+  steps keep how the panel is mounted, the notices and the weather's place.
+- **"Restart panels" on Start is a quiet button while the panel shows,** in words where it
+  does not (waiting, starting, needing attention); the tray and Ctrl+K have it as before.
+- **"Whole" and "To the edges" in the same order** in Player and Screen.
 - **What the engine does is switched in the app.** With Libre Panel's engine as the encoder,
-  *Settings → Panel → Video experiment* has *The engine sends the pictures* and *The engine
+  *Settings → Panel → Fine-tuning for experiments* has *The engine sends the pictures* and *The engine
   composes the frames* (config.toml's `engine_sends` and `engine_layers`), to compare without
   editing the file; *Back to the defaults* turns both on again.
 - **The log says why the engine's pictures went late.** Beside how many went late: how many of

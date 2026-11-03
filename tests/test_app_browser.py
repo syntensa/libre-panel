@@ -2004,12 +2004,13 @@ def test_start_shows_the_pages_the_first_steps_and_the_way_to_the_start_screen(
         expect(card.locator("[data-page='normal']")).to_contain_text("Lumen")
         card.locator("[data-page='media']").get_by_role("switch").click()
         waits_for(page, lambda: getattr(settings_config().modes.get("media"), "on", False))
-        steps = page.locator(".first-steps")
-        expect(steps.locator("[data-step='media']")).to_have_class(re.compile(r"\bdone\b"))
-        steps.locator("[data-step='game']").get_by_role("switch").click()
-        waits_for(page, lambda: "game" in settings_config().services.enabled)
         game = card.locator("[data-page='game']").get_by_role("switch")
+        game.click()  # game mode on, with its screen
+        waits_for(page, lambda: "game" in settings_config().services.enabled)
         expect(game).to_have_attribute("aria-checked", "true")
+        steps = page.locator(".first-steps")
+        # (the pages are switched in their card, not once more in the first steps above it)
+        expect(steps.locator("[data-step='game'], [data-step='media']")).to_have_count(0)
         chosen = steps.locator("[data-step='mounted'] [role='radio'][aria-checked='true']")
         expect(chosen).to_have_count(0)  # nothing is marked until it is chosen
         steps.get_by_role("button", name="Hide").click()

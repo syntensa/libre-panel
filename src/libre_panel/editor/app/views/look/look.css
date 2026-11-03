@@ -293,6 +293,15 @@
   border-top: 1px solid var(--line);
 }
 
+/* a switch of the theme's own, its name beside it */
+.look-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+}
+
 .look-volume-head {
   display: flex;
   align-items: flex-start;

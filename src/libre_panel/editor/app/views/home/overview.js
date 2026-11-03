@@ -135,8 +135,10 @@ export function StepList({ steps }) {
 }
 
 /**
- * The first steps: how the panel is mounted, game mode, music's page, the notices and the
- * weather's place. Done ones are ticked; the card goes when all are done, or with "Hide".
+ * The first steps: how the panel is mounted, the notices and the weather's place. Done ones are
+ * ticked; the card goes when all are done, or with "Hide". Game mode and music's page are not
+ * among them: the card under them (PagesCard) switches every page, and the same switch twice on
+ * one screen only asks which one counts.
  */
 export function FirstSteps() {
   const config = useConfig();
@@ -148,13 +150,7 @@ export function FirstSteps() {
   }, []);
   if (hidden || !config || !pages?.pages) return null;
   const model = shownFor || knownModel(config);
-  const page = (id) => pages.pages.find((item) => item.id === id);
   const enabled = new Set(config.services?.enabled || []);
-  const on = (id, change = (value) => switchPage(id, value)) =>
-    html`<${Toggle} label=${pageName(id)} checked=${Boolean(page(id)?.on)} onChange=${change} />`;
-  const game = page("game");
-  const screen = game ? gameScreen(game, model) : null;
-  const music = page("media");
   const steps = [
     asksMounting(model) && {
       id: "mounted",
@@ -162,24 +158,6 @@ export function FirstSteps() {
       text: t("Upright, every screen shows in its version for a bar on end."),
       done: Boolean(config.device?.orientation),
       action: html`<${MountedChoice} />`,
-    },
-    game && {
-      id: "game",
-      title: t("Game mode"),
-      text: screen
-        ? t("When a game starts, the panel shows {theme} with the frame rate.", { theme: themeName(screen) })
-        : t("When a game starts, the panel opens its game screen with the frame rate."),
-      done: Boolean(game.on),
-      action: on("game", (value) => switchGameOn(game, model, value)),
-    },
-    music && {
-      id: "media",
-      title: t("Music page"),
-      text: music.theme
-        ? t("While music plays, {theme} takes over by itself.", { theme: themeName(music.theme) })
-        : t("While music plays, the panel shows what plays by itself."),
-      done: Boolean(music.on),
-      action: on("media"),
     },
     {
       id: "notices",

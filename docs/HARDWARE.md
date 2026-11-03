@@ -79,7 +79,7 @@ The video decoders of the 9.2" and the 12.3" show the video's values as full ran
 whatever the stream says: in limited range, as video usually is, black looked dark grey and the
 colours pale in video mode (with the processor's conversion and the graphics card's alike),
 while their stills were right. So Libre Panel makes their video in full range by itself
-(`[device] video_range = "auto"`); the other panels get limited range. *Settings → Panel → Check the colours → Is black
+(`[device] video_range = "auto"`); the other panels get limited range. *Settings → Panel → Fine-tuning for experiments → Check the colours → Is black
 too light on the panel? Compare* shows any panel both, and writes the one that looks right
 ([Video](CONFIGURATION.md#video)).
 
@@ -140,7 +140,7 @@ version for it: what plays, the time, CPU and GPU, a part on each screen.
 - On Linux, `libre-panel system-setup --linux` gives your user access to the screens as it does
   to the TURZX panels.
 
-**Each screen a panel of its own.** *Settings → Panels* turns the one picture into three panels
+**Each screen a panel of its own.** *Settings → More panels* turns the one picture into three panels
 with one click (*Each screen its own panel*), and back (*Back to one picture*): each screen then
 shows a theme of its own, the header's panel switch chooses the one that *Live* shows and
 *Design* edits, and screens 2 and 3 follow screen 1's brightness. They start with Lumen for
@@ -162,7 +162,7 @@ The TF3-360SC (an AIO) has four screens: the ZC-360's three under its fans (abov
 3.5" screen of 640×480 on the pump, a TURZX USB panel inside (`1cbe:0035`,
 `device.model = "jonsbo-tf3-pump"`, or found by `auto`) that Libre Panel drives like the other
 TURZX panels. Show something on both: the pump as the first panel and the fans as a panel
-beside it (*Settings → Panels*), or the other way round. Both are unverified; that the pump is
+beside it (*Settings → More panels*), or the other way round. Both are unverified; that the pump is
 a TURZX panel comes from the notes of the MIT-licensed
 [jonsbo-tf3-linux-driver](https://github.com/purplebrain23/jonsbo-tf3-linux-driver).
 

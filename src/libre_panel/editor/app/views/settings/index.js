@@ -39,7 +39,7 @@ registerSettingsSection({
 registerSettingsSection({
   id: "panels",
   order: 12,
-  title: () => t("Panels"),
+  title: () => t("More panels"), // (beside "Panel": not that one twice)
   text: () => t("More panels beside the first: what each shows, where they stand and which one is which."),
 });
 registerSettingsSection({

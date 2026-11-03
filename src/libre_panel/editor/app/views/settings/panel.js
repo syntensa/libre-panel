@@ -293,8 +293,28 @@ function VideoCard() {
       : null}
     <${MotionRow} motion=${config.device.motion} serial=${info.model?.connection === "serial"} />
   <//>
-  ${applies ? html`<${ExperimentCard} video=${config.video} />` : null}
-  ${applies ? html`<${ColourCard} />` : null}`;
+  ${applies ? html`<${Tinkering} video=${config.video} />` : null}`;
+}
+
+/**
+ * The video's encoder, bit rate and quality to try out, and the check of the panel's colours:
+ * for experiments and for finding faults, not for setting a panel up, so folded away under one
+ * row. Open where the address names one of them (Start's question about black leads to the
+ * colour check), and where a setting of the experiment is not the default: what was changed
+ * shows.
+ */
+function Tinkering({ video }) {
+  const measured = Object.entries(MEASURED).every(([key, value]) => video[key.slice(6)] === value);
+  return html`<${Disclosure}
+    id="panel-tinkering"
+    title=${t("Fine-tuning for experiments")}
+    hint=${t("The video's encoder, bit rate and quality to try out, and a check of the panel's colours.")}
+    holds=${["panel-video-experiment", "panel-colour-check"]}
+    initially=${!measured}
+  >
+    <${ExperimentCard} video=${video} />
+    <${ColourCard} />
+  <//>`;
 }
 
 // The video mode's defaults (config.py); the experiment's "Back to the defaults" writes them.

@@ -443,10 +443,13 @@ function Switches() {
     const changes = { [`switches.${name}`]: on, ...(own ? { [`switches.${base}.${name}`]: null } : {}) };
     if (await saveSettings(changes)) requestRender(0); // drawn as switched
   };
+  // (each with its name beside it: a switch says its name only to a screen reader)
   return html`<${Section} title=${t("This theme's switches")}>
     ${offered.map(
-      ([name, spec]) => html`<${Toggle} key=${name} label=${t(spec.label)} checked=${chosen(name) ?? spec.on !== false}
-        onChange=${(on) => turn(name, on)} />`,
+      ([name, spec]) => html`<div class="look-switch" key=${name}>
+        <span>${t(spec.label)}</span>
+        <${Toggle} label=${t(spec.label)} checked=${chosen(name) ?? spec.on !== false} onChange=${(on) => turn(name, on)} />
+      </div>`,
     )}
     <small class="field-hint">${t("They hold for every screen that has them.")}</small>
   <//>`;

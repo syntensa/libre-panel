@@ -116,15 +116,18 @@ const named = (id) => location.hash.replace(/^#\/?/, "").split("/")[2] === id;
 
 /**
  * A card that shows its rows only while it is open. It opens by itself when the address names
- * it (the overview's "Advanced" leads there), so what a link points at is never folded away.
+ * it or a card in it (`holds`: their ids; the overview's "Advanced" leads there, Start's colour
+ * check to a card in "Fine-tuning"), so what a link points at is never folded away; and from the
+ * start where `initially` (a setting there that is not the default: what was changed shows).
  */
-export function Disclosure({ id, title, hint, children }) {
-  const [open, setOpen] = useState(() => named(id));
+export function Disclosure({ id, title, hint, children, holds = [], initially = false }) {
+  const meant = () => [id, ...holds].some(named);
+  const [open, setOpen] = useState(() => initially || meant());
   useEffect(() => {
-    const follow = () => named(id) && setOpen(true);
+    const follow = () => meant() && setOpen(true);
     window.addEventListener("hashchange", follow);
     return () => window.removeEventListener("hashchange", follow);
-  }, [id]);
+  }, [id, holds.join(" ")]);
   return html`<section id=${id} class="settings-card">
     <button type="button" class="settings-disclosure" aria-expanded=${String(open)} aria-controls=${`${id}-body`} onClick=${() => setOpen(!open)}>
       <span class="settings-row-text">
