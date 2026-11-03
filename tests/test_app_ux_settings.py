@@ -726,6 +726,39 @@ def test_the_video_experiment_writes_each_choice_at_once_and_leads_back(
         expect(back).to_be_disabled()
 
 
+def test_the_video_experiment_switches_what_the_engine_does(
+    app_url,  # noqa: F811
+    isolated_home,
+    monkeypatch,
+):
+    """With Libre Panel's engine as the encoder: whether it sends the pictures and whether it
+    composes the frames too, each a switch (composing only while it sends), written on the
+    click; back to the defaults turns both on again. Other encoders show neither."""
+    from test_editor_settings import lacking_ffmpeg, panel_on_the_bus
+
+    panel_on_the_bus(monkeypatch, "turing-9.2-usb")
+    lacking_ffmpeg(monkeypatch, found=True)
+    with browser_page(app_url, "settings/panel") as page:
+        card = page.locator("#panel-video-experiment")
+        sends = card.get_by_role("switch", name="The engine sends the pictures")
+        composes = card.get_by_role("switch", name="The engine composes the frames")
+        expect(sends).to_have_count(0)  # (the encoder is auto)
+        page.get_by_label("Encoder", exact=True).select_option("native")
+        waits_for(page, lambda: settings_config().device.video.encoder == "native")
+        expect(sends).to_be_checked()
+        expect(composes).to_be_checked()
+        composes.click()
+        waits_for(page, lambda: settings_config().device.video.engine_layers is False)
+        expect(composes).not_to_be_checked()
+        sends.click()
+        waits_for(page, lambda: settings_config().device.video.engine_sends is False)
+        expect(composes).to_have_count(0)  # (composing needs the engine sending)
+        card.get_by_role("button", name="Back to the defaults").click()
+        waits_for(page, lambda: settings_config().device.video.encoder == "auto")
+        video = settings_config().device.video
+        assert (video.engine_sends, video.engine_layers) == (True, True)
+
+
 def test_the_video_experiment_runs_every_step_by_itself_on_the_running_app(
     background,  # noqa: F811
     monkeypatch,

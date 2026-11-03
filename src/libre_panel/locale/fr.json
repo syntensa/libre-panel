@@ -3039,6 +3039,10 @@
     "Make a version for this size": "Créer une version pour cette taille",
     "A version for {size}: yours to change. That size shows it from now on.": "Une version pour {size} : la vôtre, à modifier. Cette taille l'affiche désormais.",
     "It has a version for this size already: {name}.": "Il existe déjà une version pour cette taille : {name}.",
+    "The engine sends the pictures": "Le moteur envoie les images",
+    "On: Libre Panel's engine has the panel and sends it each picture on its time. Off: Libre Panel sends them, the engine only encodes.": "Activé : le moteur de Libre Panel prend le panneau et lui envoie chaque image à son heure. Désactivé : Libre Panel les envoie, le moteur ne fait qu’encoder.",
+    "The engine composes the frames": "Le moteur compose les images",
+    "On: it composes each frame from the layers Libre Panel draws, and makes the lit gauges' rings. Off: Libre Panel composes every frame, to compare.": "Activé : il compose chaque image à partir des calques que dessine Libre Panel et crée les anneaux des jauges lumineuses. Désactivé : Libre Panel compose chaque image, pour comparer.",
     "Libre Panel's engine (experiment)": "Le moteur de Libre Panel (expérimental)"
   },
   "fields": {

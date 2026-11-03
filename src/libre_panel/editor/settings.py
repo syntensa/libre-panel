@@ -460,6 +460,8 @@ class Settings:
                     "maxrate": video.maxrate,
                     "profile": video.profile,
                     "encoder": video.encoder,
+                    "engine_sends": video.engine_sends,
+                    "engine_layers": video.engine_layers,
                     "pixels": video.pixels,
                     "direct": video.direct,
                     "rest": video.rest,
@@ -1503,6 +1505,9 @@ RULES: dict[str, Any] = {
     "video.maxrate": lambda n, v, c: _rate(n, v),
     "video.profile": lambda n, v, c: _choice(n, v, PROFILES),
     "video.encoder": lambda n, v, c: _choice(n, v, ENCODERS),
+    # with the engine (encoder "native"): it has the panel, and it composes the frames too
+    "video.engine_sends": lambda n, v, c: _flag(n, v),
+    "video.engine_layers": lambda n, v, c: _flag(n, v),
     # how the frames reach ffmpeg (Settings → Panel → Check the colours writes it)
     "video.pixels": lambda n, v, c: _choice(n, v, PIXELS),
     "video.direct": lambda n, v, c: _flag(n, v),  # a video alone from its file (an experiment)

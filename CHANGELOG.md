@@ -128,6 +128,10 @@
   screen as a monitor keep the filter.
 
 **Better**
+- **What the engine does is switched in the app.** With Libre Panel's engine as the encoder,
+  *Settings → Panel → Video experiment* has *The engine sends the pictures* and *The engine
+  composes the frames* (config.toml's `engine_sends` and `engine_layers`), to compare without
+  editing the file; *Back to the defaults* turns both on again.
 - **The log says why the engine's pictures went late.** Beside how many went late: how many of
   them were made after their time (the frame, or its encoding, was late: not the sender) and
   the latest, in milliseconds: `video: the engine sent 3080 pictures, 1808 of them late (12

@@ -299,7 +299,8 @@ function VideoCard() {
 
 // The video mode's defaults (config.py); the experiment's "Back to the defaults" writes them.
 const MEASURED = { "video.maxrate": "auto", "video.crf": 20, "video.preset": "superfast", "video.profile": "auto",
-                   "video.encoder": "auto", "video.keyframe_s": 10, "video.fps": 25, "video.device_fps": 60 };  // fmt: skip
+                   "video.encoder": "auto", "video.keyframe_s": 10, "video.fps": 25, "video.device_fps": 60,
+                   "video.engine_sends": true, "video.engine_layers": true };  // fmt: skip
 const RATES = ["auto", "4M", "8M", "16M", "24M", "32M"];
 const QUALITIES = [16, 18, 20, 22, 25];
 const PRESETS = ["ultrafast", "superfast", "veryfast"];
@@ -432,6 +433,16 @@ function ExperimentCard({ video }) {
         ]}
       />
     <//>
+    ${video.encoder === "native"
+      ? html`<${SettingRow} title=${t("The engine sends the pictures")} hint=${t("On: Libre Panel's engine has the panel and sends it each picture on its time. Off: Libre Panel sends them, the engine only encodes.")}>
+          <${Toggle} label=${t("The engine sends the pictures")} checked=${video.engine_sends !== false} onChange=${(on) => change({ "video.engine_sends": on })} />
+        <//>
+        ${video.engine_sends !== false
+          ? html`<${SettingRow} title=${t("The engine composes the frames")} hint=${t("On: it composes each frame from the layers Libre Panel draws, and makes the lit gauges' rings. Off: Libre Panel composes every frame, to compare.")}>
+              <${Toggle} label=${t("The engine composes the frames")} checked=${video.engine_layers !== false} onChange=${(on) => change({ "video.engine_layers": on })} />
+            <//>`
+          : null}`
+      : null}
     ${row(t("Keyframe every"), t("Seconds between keyframes. 10 was measured; at a high bit rate a short spacing no longer makes flat areas pulse, and a glitch heals sooner."), "keyframe_s", KEYFRAMES, (value) => t("{n} s", { n: value }))}
     <${ExperimentRun} />
     <div class="live-tiles experiment-tiles" role="list" aria-label=${t("How the panel is doing")}>

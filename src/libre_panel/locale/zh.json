@@ -3039,6 +3039,10 @@
     "Make a version for this size": "为此尺寸创建一个版本",
     "A version for {size}: yours to change. That size shows it from now on.": "{size} 的版本：归你修改。此尺寸从现在起显示它。",
     "It has a version for this size already: {name}.": "此尺寸已有一个版本：{name}。",
+    "The engine sends the pictures": "由引擎发送画面",
+    "On: Libre Panel's engine has the panel and sends it each picture on its time. Off: Libre Panel sends them, the engine only encodes.": "开启：Libre Panel 的引擎接管面板，按时发送每一帧。关闭：由 Libre Panel 发送，引擎只负责编码。",
+    "The engine composes the frames": "由引擎合成画面",
+    "On: it composes each frame from the layers Libre Panel draws, and makes the lit gauges' rings. Off: Libre Panel composes every frame, to compare.": "开启：用 Libre Panel 绘制的图层合成每一帧，并生成发光仪表的圆环。关闭：由 Libre Panel 合成每一帧，便于对比。",
     "Libre Panel's engine (experiment)": "Libre Panel 的引擎（实验性）"
   },
   "fields": {
