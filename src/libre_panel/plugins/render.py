@@ -267,7 +267,11 @@ class ToastStyle:
     replaced at once (the same key again, or one it took over from) and that
     one's age then, or None: change the content in place instead of rolling
     in again. It runs at up to 50 fps: keep what does not change in ``self``.
-    ``self.anchor`` is the theme's toast position.
+    ``self.anchor`` is the theme's toast position. A style that lays its toast as one
+    picture through its alpha may also have ``layer(size, toast, age, previous)``, which
+    returns that picture (RGBA, with the alpha it is laid through) and where it goes,
+    ``(picture, x, y)``, or None while nothing shows: an engine that composes the frames
+    then lays it itself (render/scene.py; docs/PLUGINS.md).
 
     The instance stays across theme switches while the theme names the same
     style with the same options at the same size, so what it keeps per toast

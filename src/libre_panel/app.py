@@ -1664,12 +1664,13 @@ class MainLoop:
     def _bare(
         self, renderer: Renderer, blend: Any, number: int, size: tuple[int, int], now: float
     ) -> bool:
-        """Whether nothing is drawn over the renderer's frame here (a message, the alarm's edge,
-        a transition, a colour check, the panels' numbers) and it is the panel's size: a frame
-        the engine may compose from its layers (render/scene.py)."""
+        """Whether nothing is drawn over the renderer's frame here (the alarm's edge, a
+        transition, a colour check, the panels' numbers; a message only as one more layer, as
+        its style may lay it: ToastLayer.layered) and it is the panel's size: a frame the engine
+        may compose from its layers (render/scene.py)."""
         return (
             blend is None
-            and self.toasts.current is None
+            and self.toasts.layered
             and not self.alarm.showing(now)
             and colour_show.now(number) is None
             and transition_show.asked() is None

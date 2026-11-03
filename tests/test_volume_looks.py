@@ -1,11 +1,14 @@
 """The looks of the volume message: each draws the volume on every screen, where it belongs on
 the panel and clear of what its frame hides; the toast layer draws only the volume in it."""
 
+from dataclasses import replace
+
 import pytest
 from PIL import ImageChops
 
 from libre_panel.devices.models import find_model
 from libre_panel.plugins.host import Toast
+from libre_panel.plugins.render import RenderContext
 from libre_panel.render.overlays import ToastLayer
 from libre_panel.render.renderer import Renderer
 from libre_panel.render.volume_looks import VOLUME_LOOKS
@@ -93,3 +96,41 @@ def test_a_look_comes_and_goes_and_is_gone_after_its_lifetime():
         assert layer.current is None  # its time was up
     finally:
         layer.close()
+
+
+def turns():
+    """(number, muted, level) as the volume turns: steps up and down, each gliding in four
+    frames, a jump, muted, nothing, all."""
+    out, at = [], 40
+    for target in (43, 46, 49, 52, 49, 100, 0, 7, 64):
+        for k in range(1, 5):
+            out.append((str(target), False, (at + (target - at) * (1 - (1 - k / 4) ** 3)) / 100))
+        at = target
+    return out + [("Muted", True, 0.0), ("64", False, 0.64)]
+
+
+@pytest.mark.parametrize("look", sorted(VOLUME_LOOKS))
+@pytest.mark.parametrize(("model", "orientation"), [("turing-12.3-usb", "landscape"),
+                                                    ("turing-9.2-usb", "portrait")])  # fmt: skip
+def test_a_look_made_anew_where_it_changed_is_the_picture_made_whole(look, model, orientation):
+    """Each picture as the volume turns (made anew only where it changed since the one before)
+    pixel for pixel as a look that makes it whole, from nothing."""
+    theme = parse_theme(
+        {
+            "format": "libre-panel-theme/1",
+            "display": {"model": model, "orientation": orientation},
+            "background": {"color": "#000000"},
+            "widgets": [],
+        }
+    )
+    made = Renderer(theme, preview=True)
+    size = (theme.width, theme.height)
+    cls = VOLUME_LOOKS[look]
+    turning = cls(RenderContext(made, cls), {})
+    for text, muted, level in turns():
+        toast = volume(look, level, muted)
+        toast = replace(toast, text=text) if not muted else toast
+        whole = cls(RenderContext(made, cls), {}).picture(toast, level, size)
+        assert turning.picture(toast, level, size).tobytes() == whole.tobytes(), (text, level)
+    turning.forget()  # (the message went: what it kept goes too)
+    assert turning._drawn is turning._smalled is turning._base is None

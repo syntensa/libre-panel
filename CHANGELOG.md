@@ -15,6 +15,10 @@
   root on Linux: root's own settings folder), else the frames are kept as without a file.
 
 **Fixed**
+- **The volume in one of its looks no longer sends the whole frame anew.** The looks did not
+  say where on the panel they drew, so every frame while the volume showed in one (bar,
+  levels, ring, large) went to a video panel whole, its YUV made whole and encoded whole;
+  now only where the message lies, as with the card.
 - **A video panel no longer hangs and glitches with `[video] pixels = "rgb"`** (new in 0.8.0rc1).
   Where the frames change little, ffmpeg is fed YUV made in Libre Panel; with "rgb" (three
   bytes a pixel, the way of before) it never is, but the check whether to switch to it asked
@@ -72,9 +76,12 @@
   takes half the time a frame (Lumen 6.1 ms instead of 10.9, Arena 5.0 instead of 9.8: more
   room before a frame comes late), and the whole way to the panel, engine and all, a tenth
   less (Lumen 25.1 ms of the processor a frame instead of 27.8, Arena 26.0 instead of 29.7, on
-  the test machine). Where a message, a transition, the alarm's edge or a colour check is
-  drawn over the frame, Libre Panel composes it as before; the app's picture of the panel is
-  composed only while it is on show.
+  the test machine). A message in the built-in card or in one of the volume's looks goes to
+  it as one more piece, laid as Libre Panel draws it (the same pixels, compared as it comes,
+  shows and goes): turning the volume leaves the frames the engine's (on the 12.3" a frame
+  then takes 6 ms of the main loop instead of 17). Where a transition, the alarm's edge, a
+  colour check or a message of another style is drawn over the frame, Libre Panel composes it
+  as before; the app's picture of the panel is composed only while it is on show.
 - **And the engine makes the lit gauges' rings itself.** A ring of one colour goes to it once
   (its groove, and the groove with the whole sweep lit), and for each value only the share
   that is lit: the engine cuts the sweep at the tip and makes the light around the tip anew,
@@ -86,6 +93,15 @@
   (27.8 before the engine composed the frames), the app's helper thread 2.5 ms instead of 5.6.
 
 **Lighter**
+- **The volume's looks take a third to a fifth of the time as the volume turns.** The bar, the
+  levels, the ring and the large look drew their whole picture three times larger, its glow
+  over all of it, and made it small again, for every step of the bar's glide and every new
+  number: on the 12.3" 35 to 195 ms a picture, a frame of the main loop while the volume
+  turned 73 ms with the bar, 91 with the large look. They now draw what stays the same once
+  a message, the glow only where the bar can reach, and make the picture anew only where it
+  changed, with the same pixels (compared through a volume's turns on six panels): 14 ms a
+  frame with the bar, 23 with the large look, 16 with the levels (on the test machine). What
+  they keep for that goes when the message goes.
 - **x264 a fifth lighter on the screens Libre Panel draws, and sharper.** Their frames go into
   x264 without its deblocking filter and without its search for motion finer than a pixel:
   the filter is made for films and softened what is the picture's own (lettering, lines),

@@ -21,9 +21,12 @@ from libre_panel.devices import engine as engines
 from libre_panel.devices import h264
 from libre_panel.plugins import PluginHost
 from libre_panel.plugins.host import Toast
+from libre_panel.plugins.render import RenderContext, ToastStyle
 from libre_panel.render import moving
 from libre_panel.render import scene as scenes
+from libre_panel.render.overlays import ToastLayer
 from libre_panel.render.renderer import Piece
+from libre_panel.render.volume_looks import VOLUME_LOOKS
 from libre_panel.sensors.base import SensorHub
 from libre_panel.sensors.demo import DemoProvider
 
@@ -90,6 +93,37 @@ def test_upside_down_a_frame_of_layers_is_turned_too():
     assert display.checked == len(shown)
 
 
+def test_a_message_goes_as_one_more_layer_where_its_style_lays_it_as_a_picture():
+    display, clock, host = Layered(), Clock(1000.0), PluginHost()
+    loop = loop_with("lumen-1920x720", display, clock, host)
+    try:
+        run(loop, clock, 4)
+        host.notify(Toast("Hello", seconds=1.0))  # (the theme's style: the built-in card)
+        run(loop, clock, 10)
+        shown = display.frames[-10:]
+        assert all(isinstance(f, scenes.SceneFrame) for f in shown)  # (none composed here)
+        assert all(f.scene.pieces[-1][0] == "\0toast" for f in shown[1:])
+        whole = [f.scene.pieces[-1][1] for f in shown[-3:]]  # (shown whole: the same piece)
+        assert whole[0] is whole[1] is whole[2]
+        run(loop, clock, 60)  # (the message goes)
+        assert all(name != "\0toast" for name, _ in display.frames[-1].scene.pieces)
+        assert display.checked >= 70
+    finally:
+        loop.close()
+        host.close()
+
+
+class Drawn(ToastStyle):
+    """A style of a plugin that draws on the frame itself (it has no ``layer``)."""
+
+    name = "drawn"
+
+    def draw(self, frame, toast, age, previous=None):
+        out = frame.copy()
+        ImageDraw.Draw(out).rectangle((40, 40, 300, 120), fill=(200, 30, 30))
+        return out
+
+
 def test_where_a_message_is_drawn_over_the_frame_it_is_composed_here_and_sent_whole():
     display, clock, host = Layered(), Clock(1000.0), PluginHost()
     loop = loop_with("lumen-1920x720", display, clock, host)
@@ -97,6 +131,7 @@ def test_where_a_message_is_drawn_over_the_frame_it_is_composed_here_and_sent_wh
         run(loop, clock, 4)
         assert isinstance(display.frames[-1], scenes.SceneFrame)
         assert not display.frames[-1].composed  # (nobody asked for its pixels)
+        loop.toasts.style = Drawn(RenderContext(loop.renderer, Drawn), {})
         host.notify(Toast("Hello", seconds=1.0))
         run(loop, clock, 10)
         plain = [f for f in display.frames[-10:] if not isinstance(f, scenes.SceneFrame)]
@@ -106,6 +141,35 @@ def test_where_a_message_is_drawn_over_the_frame_it_is_composed_here_and_sent_wh
     finally:
         loop.close()
         host.close()
+
+
+@pytest.mark.parametrize("look", ["", *sorted(VOLUME_LOOKS)])  # (""): the theme's card
+def test_a_message_laid_over_a_frame_of_layers_shows_as_its_style_draws_it(look):
+    display, clock = Layered(), Clock(1000.0)
+    loop = loop_with("lumen-1920x720", display, clock)
+    try:
+        run(loop, clock, 4)
+        frame = display.frames[-1]
+        assert isinstance(frame, scenes.SceneFrame)
+        toasts = ToastLayer(loop.renderer)
+        payload = {"label": "Volume", "progress": 0.42, "muted": False}
+        if look:
+            payload["look"] = look
+        toasts.add([Toast("42", kind="volume", payload=payload)])
+        toasts.advance(0.0)
+        assert toasts.layered
+        toast = toasts.current[0]
+        going = toast.seconds + toasts.style_of(toast).leave_s / 2
+        for age in (0.05, 1.0, going):  # coming, whole, going
+            laid = toasts.draw(frame, age)
+            assert isinstance(laid, scenes.SceneFrame) and not frame.composed
+            assert laid.scene.pieces[-1][0] == "\0toast" and toasts.box is not None
+            drawn = toasts.draw(scenes.compose(frame.scene), age)
+            assert toasts.box is not None  # (where it drew: a frame made anew there alone)
+            assert scenes.compose(laid.scene).tobytes() == drawn.tobytes(), (look, age)
+        toasts.close()
+    finally:
+        loop.close()
 
 
 def test_without_an_engine_that_composes_them_frames_are_composed_here():
@@ -263,25 +327,33 @@ class Fed(Layered):
 
 
 @pytest.mark.parametrize(
-    ("theme", "half", "rings"),
-    [("lumen-1920x720", False, False), ("arena-1920x720", True, False),
-     ("lumen-1920x720", False, True)],
+    ("theme", "half", "rings", "toast"),
+    [("lumen-1920x720", False, False, False), ("arena-1920x720", True, False, False),
+     ("lumen-1920x720", False, True, False), ("arena-1920x720", True, False, True)],
 )  # fmt: skip
 def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
-    engine, tmp_path, theme, half, rings
+    engine, tmp_path, theme, half, rings, toast
 ):
-    """Pixel for pixel; where the engine makes the rings too, to a level, at few pixels."""
+    """Pixel for pixel, a message over it too (one more layer, as it comes, shows and goes);
+    where the engine makes the rings too, to a level, at few pixels."""
     if rings and not engines.makes_rings(engine):
         pytest.skip("needs libre-panel-engine that makes rings (cargo build --release)")
-    clock = Clock(1000.0)
+    clock, host = Clock(1000.0), PluginHost()
     display = Fed(engine, (1920, 720), tmp_path / "frames.rgb", half, rings)
-    loop = loop_with(theme, display, clock)
+    loop = loop_with(theme, display, clock, host)
     try:
-        run(loop, clock, 30)
+        run(loop, clock, 4)
+        if toast:  # (it comes, it shows, it goes: 0.5 s and the card's 0.25)
+            host.notify(Toast("Volume 42", icon="volume", seconds=0.5))
+        run(loop, clock, 26)
     finally:
         loop.close()
+        host.close()
         display.proc.stdin.close()
         display.proc.wait(30)
+    if toast:
+        tops = [f.scene.pieces[-1][0] for f in display.frames if isinstance(f, scenes.SceneFrame)]
+        assert tops.count("\0toast") >= 15  # (its frames went as their layers too)
     made = (tmp_path / "frames.rgb").read_bytes()
     size = 1920 * 720 * 3
     assert display.n >= 25 and len(made) == size * display.n

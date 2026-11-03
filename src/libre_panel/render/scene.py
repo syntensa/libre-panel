@@ -119,3 +119,13 @@ class SceneFrame(Lazy):
         out = SceneFrame(replace(self.scene, half=not self.scene.half))
         out.info = dict(self.info)
         return out
+
+    def over(self, wid: str, piece: Piece) -> SceneFrame:
+        """The frame with ``piece`` laid over all of it (a message: overlays.ToastLayer), its
+        pixels not made either. Not for a frame turned already: what lies over it is laid
+        before it turns, as it is drawn here (app.turned)."""
+        if self.scene.half:
+            raise ValueError("a piece goes over a frame before it turns")
+        out = SceneFrame(replace(self.scene, pieces=(*self.scene.pieces, (wid, piece))))
+        out.info = dict(self.info)
+        return out

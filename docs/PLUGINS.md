@@ -769,6 +769,20 @@ Two more methods let a style decide its timing:
   `seconds` holds, asked before anything else sees it (default: the
   theme's hold time), e.g. a hold time from the style's own design.
 
+And one that lets Libre Panel's engine lay the toast itself:
+
+- `layer(size, toast, age, previous)`, optional: a style that lays its
+  toast over the frame as one picture through that picture's alpha (as
+  the built-in card and the volume's looks do: `out.paste(picture.convert(
+  frame.mode), (x, y), alpha)`) returns that picture, its alpha the one it
+  lays it through, and where it goes: `(picture, x, y)` (RGBA), or None
+  while nothing shows. Where the engine composes the frames (`[video]
+  engine_layers`), it lays the toast as one more piece then, and the
+  frames stay the engine's while the toast shows; for a style without
+  `layer`, Libre Panel composes the frame for `draw` to draw on, as before.
+  Return the same picture while it does not change: the engine gets it
+  once.
+
 The style instance stays across theme switches while the theme names the
 same style with the same options at the same size, so what it keeps per
 toast goes on (a band does not roll in again on the next screen);

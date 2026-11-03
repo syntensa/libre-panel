@@ -23,8 +23,9 @@ from libre_panel.plugins.render import RenderContext, ToastStyle, Transition
 from libre_panel.render.band import BandStyle
 from libre_panel.render.handovers import HANDOVERS
 from libre_panel.render.light import accent_color, ellipsize, role_value
+from libre_panel.render.scene import SceneFrame
 from libre_panel.render.transitions import Entrance, Tube
-from libre_panel.render.volume_looks import VOLUME_LOOKS
+from libre_panel.render.volume_looks import VOLUME_LOOKS, faded
 
 log = logging.getLogger(__name__)
 
@@ -93,6 +94,9 @@ class ToastLayer:
         self.settings: dict[str, Any] = {}
         self._size: tuple[int, int] | None = None
         self._failed: str | None = None  # the last failure logged (not 50 times a second)
+        # the last toast laid over a frame of layers: (its picture, x, y, its piece), so that
+        # the same picture in the same place is the same piece (the engine has it already)
+        self._piece: tuple[Image.Image, int, int, Any] | None = None
         self.set_renderer(renderer)
 
     def set_renderer(self, renderer: Any) -> None:
@@ -169,6 +173,19 @@ class ToastLayer:
         """True while a toast shows or waits: the frame keeps changing."""
         return self.current is not None or bool(self.queue) or bool(self.inbox)
 
+    @property
+    def layered(self) -> bool:
+        """Whether the frame may go as its layers with what shows of the toasts (render/scene.py,
+        for an engine that composes it): no toast shows, or the style of the one on show lays
+        it as one picture through its alpha (a style's ``layer``: the built-in card and the
+        volume's looks), one more layer then (:meth:`draw`)."""
+        if self.current is None:
+            return True
+        toast = self.current[0]
+        if toast.kind in self.suppressed:
+            return True  # (it goes on unseen)
+        return callable(getattr(self.style_of(toast), "layer", None))
+
     def set_aside(self) -> None:
         """A transition begins that the toast on show must not cover: it leaves
         now and comes again, from the start, once the transition is over."""
@@ -188,6 +205,9 @@ class ToastLayer:
         ``hold`` (a transition plays) no new toast starts."""
         if self.current is not None and now >= self.ends:
             self.current = None
+            self._piece = None
+            for look in self.looks.values():  # (what they kept to draw it quickly)
+                look.forget()
         arrived, self.inbox = self.inbox, []
         if hold or self.settings.get("queue", True):
             for toast in arrived:
@@ -289,6 +309,8 @@ class ToastLayer:
         style = self.style_of(toast)
         try:
             style.last_box = None
+            if isinstance(frame, SceneFrame) and callable(getattr(style, "layer", None)):
+                return self._over(frame, style.layer(frame.size, toast, now - began, previous))
             if style is self.style and not self._previous:
                 drawn = style.draw(frame, toast, now - began)
             else:
@@ -302,6 +324,21 @@ class ToastLayer:
                 self._failed = message
                 log.exception("toast style %r failed", getattr(style, "name", "?"))
             return frame
+
+    def _over(self, frame: SceneFrame, laid: tuple[Image.Image, int, int] | None) -> SceneFrame:
+        """``frame`` (of layers) with the toast laid over it as one more layer, ``laid`` by
+        its style (its picture, x, y; None: nothing shows): the engine lays it as this draws
+        it. The same picture in the same place is the piece of the frame before."""
+        if laid is None:
+            return frame
+        picture, x, y = laid
+        kept = self._piece
+        if kept is None or kept[0] is not picture or kept[1:3] != (x, y):
+            from libre_panel.render.renderer import Piece  # (the renderer is not light)
+
+            kept = self._piece = (picture, x, y, Piece(picture, x, y))
+        self.box = (x, y, x + picture.width, y + picture.height)
+        return frame.over("\0toast", kept[3])
 
     def apply(self, frame: Image.Image, now: float, hold: bool = False) -> Image.Image:
         """:meth:`advance`, then :meth:`draw`."""
@@ -344,18 +381,34 @@ class CardStyle(ToastStyle):
         self._card: tuple[Any, Any, Image.Image] | None = None  # toast, theme, its card
 
     def draw(self, frame: Image.Image, toast: Any, age: float, previous: Any = None) -> Image.Image:
-        leaving = (toast.seconds + self.leave_s - age) / self.leave_s
-        arriving = 1.0 if previous is not None else age / self.FADE_IN_S  # replaced in place
-        fade = max(0.0, min(1.0, arriving, leaving))
-        if self._card is None or self._card[0] is not toast or self._card[1] is not self.context:
-            self._card = (toast, self.context, self._draw(toast, frame.size))
-        card = self._card[2]
-        x, y = self._position(frame.size, card.size, 1.0 - fade)
+        card, fade, x, y = self._laid(frame.size, toast, age, previous)
         alpha = card.getchannel("A").point(lambda a: int(a * fade))
         out = frame.copy()
         out.paste(card.convert(frame.mode), (x, y), alpha)
         self.last_box = (x, y, x + card.width, y + card.height)  # (ToastLayer.box)
         return out
+
+    def layer(
+        self, size: tuple[int, int], toast: Any, age: float, previous: Any = None
+    ) -> tuple[Image.Image, int, int] | None:
+        """The toast as :meth:`draw` lays it over a frame of ``size``: one picture (RGBA) at
+        (x, y), laid through its alpha, for a frame the engine composes (ToastLayer.draw)."""
+        card, fade, x, y = self._laid(size, toast, age, previous)
+        self.last_box = (x, y, x + card.width, y + card.height)
+        return faded(card, fade), x, y
+
+    def _laid(
+        self, size: tuple[int, int], toast: Any, age: float, previous: Any
+    ) -> tuple[Image.Image, float, int, int]:
+        """The card, how far it shows (0 to 1) and where it goes, at ``age``."""
+        leaving = (toast.seconds + self.leave_s - age) / self.leave_s
+        arriving = 1.0 if previous is not None else age / self.FADE_IN_S  # replaced in place
+        fade = max(0.0, min(1.0, arriving, leaving))
+        if self._card is None or self._card[0] is not toast or self._card[1] is not self.context:
+            self._card = (toast, self.context, self._draw(toast, size))
+        card = self._card[2]
+        x, y = self._position(size, card.size, 1.0 - fade)
+        return card, fade, x, y
 
     def _role(self, role: str) -> str:
         return role_value(self.context.palette, role)
