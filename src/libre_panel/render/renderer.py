@@ -870,6 +870,9 @@ class Renderer:
         self._cache: dict[str, tuple[Any, Piece]] = {}
         # a gliding list's bars and its text, and the two as one (_joined)
         self._joins: dict[str, tuple[Piece, Piece, Piece]] = {}
+        # whether a list's text lies on none of its bars (by widget: the text's picture, the
+        # boxes its bars lie in, apart)
+        self._apart_texts: dict[str, tuple[Image.Image, tuple, bool]] = {}
         self._list_bars = Kept("renderer.list_bars", self.LIST_BAR_BYTES)
         self._list_bar_ends = Kept("renderer.list_bar_ends", self.LIST_BAR_END_BYTES)
         self._texts = Kept("renderer.texts", self.TEXT_BYTES)  # pieces by (id, text, colour)
@@ -3292,7 +3295,37 @@ class Renderer:
         text = self._cached(widget, texts, lambda: self._list_piece(widget, rows, "text"))
         levels = self._cached({**widget, "id": f"{wid}\0levels"}, tuple(rows),
                               lambda: self._list_piece(widget, rows, "levels"))  # fmt: skip
+        if self.keep_static and "_card" not in widget and self._text_apart(widget, levels, text):
+            self._over[wid] = [(text, "text")]  # (laid over the bars by the frame)
+            return levels
         return self._joined(wid, levels, text)
+
+    def _text_apart(self, widget: dict[str, Any], levels: Piece | None,
+                    text: Piece | None) -> bool:  # fmt: skip
+        """Whether a list's names and numbers lie on none of its bars (in no box a bar lies
+        in): then the bars laid on the frame and the text over them give the pixels the two
+        joined give (where one is transparent, the other is the join), and only the bars go
+        anew while they glide, the text staying as it is (Arena's temperatures and cores on the
+        12.3": the join was a fifth of the main loop). Not with effects (a halo reaches past
+        the bars) or where the two are not laid alike."""
+        if levels is None or text is None or text.layer.mode != "RGBA":
+            return False
+        if widget.get("glow") or widget.get("shadow") or widget.get("clip"):
+            return False
+        if widget.get("opacity", 1.0) < 0.999:
+            return False
+        if (levels.x, levels.y, levels.layer.size) != (text.x, text.y, text.layer.size):
+            return False
+        boxes = levels.layer.info.get("bars")
+        if boxes is None:
+            return False
+        hit = self._apart_texts.get(widget["id"])
+        if hit is not None and hit[0] is text.layer and hit[1] == boxes:
+            return hit[2]
+        alpha = text.layer.getchannel("A")
+        apart = all(alpha.crop(box).getbbox() is None for box in boxes)
+        self._apart_texts[widget["id"]] = (text.layer, boxes, apart)
+        return apart
 
     def _joined(self, wid: str, below: Piece | None, above: Piece | None) -> Piece | None:
         """Two pieces of a widget as one, ``above`` on ``below`` (kept while both stay)."""
@@ -3417,7 +3450,9 @@ class Renderer:
                 self._list_columns(None, levels, widget, rows)
             elif widget["style"] != "fans":
                 self._list_rows(None, levels, widget, rows)
-            return Piece(levels.image(), x - margin, y - margin, [x, y, w, h])
+            image = levels.image()
+            image.info["bars"] = tuple(levels.boxes)  # (where its bars lie: _text_apart)
+            return Piece(image, x - margin, y - margin, [x, y, w, h])
         layer = Image.new("RGBA", (w + 2 * margin, h + 2 * margin), (0, 0, 0, 0))
         inner = Image.new("RGBA", (w, h), (0, 0, 0, 0))
         texts = inner if part != "levels" else None
@@ -5023,6 +5058,7 @@ class _Levels:
 
         self.array = np.zeros((size[1], size[0], 4), np.uint8)
         self.origin, self.room = origin, room
+        self.boxes: list[tuple[int, int, int, int]] = []  # where bars lie (x0, y0, x1, y1)
 
     def put(self, pixels: Any, x: int, y: int) -> None:
         """``pixels`` (from :func:`_planes`) with their top left at (x, y) of the place."""
@@ -5044,7 +5080,15 @@ class _Levels:
             under[...] = part
 
     def put_bar(self, bar: _Bar, x: int, y: int) -> None:
-        """A kept bar: the pixels :meth:`_Bar.paste` gives."""
+        """A kept bar: the pixels :meth:`_Bar.paste` gives, and the box all of it lies in
+        (whatever its share: the same while it glides)."""
+        whole = bar.whole if bar.whole is not None else bar.ends[2]  # type: ignore[index]
+        h, w = whole.shape[:2]
+        x0, y0 = max(x, 0), max(y, 0)
+        x1, y1 = min(x + w, self.room[0]), min(y + h, self.room[1])
+        if x1 > x0 and y1 > y0:
+            ox, oy = self.origin
+            self.boxes.append((ox + x0, oy + y0, ox + x1, oy + y1))
         if bar.whole is not None:
             self.put(bar.whole, x, y)
             return

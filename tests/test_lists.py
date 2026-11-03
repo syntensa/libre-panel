@@ -193,6 +193,38 @@ def test_a_lists_fans_turn_over_its_names_and_numbers_as_pieces_of_their_own():
     assert [wid for wid, _ in crowded._last[0]] == ["list"]
 
 
+@pytest.mark.parametrize("style", ["bars", "columns"])
+def test_a_lists_gliding_bars_go_anew_under_its_names_and_numbers_kept(style):
+    """While the bars glide, the names and numbers stay the piece they are, laid over the bars
+    by the frame where they lie on none of them: a frame composes the bars again, not the text
+    joined on them. The frames are the ones a renderer that joins them draws."""
+    from PIL import ImageChops
+
+    theme = list_theme(items="cpu.core.*.load", style=style, font_size=16)
+    split, joined = Renderer(theme, animate=True), Renderer(theme, animate=True)
+    joined.keep_static = False
+    loads = {str(n): 10.0 * n for n in range(1, 7)}
+    texts, apart = [], 0
+    for k in range(12):
+        snap = cores(**(loads if k < 2 else {n: 100.0 - v for n, v in loads.items()}))
+        a, boxes = split.render(snap, now=100.0 + k / 25)
+        b, _ = joined.render(snap, now=100.0 + k / 25)
+        assert ImageChops.difference(a, b).getbbox() is None, k
+        assert boxes["list"] == [10, 10, 300, 180]
+        pieces = dict(split._last[0])
+        if "list\0text" in pieces:
+            apart += 1
+            texts.append(pieces["list\0text"])
+        assert [wid for wid, _ in joined._last[0]] == ["list"]
+    assert split.moving  # (gliding all along)
+    if style == "bars":  # (the names above their bars, the numbers beside them)
+        assert apart == 12 and all(text is texts[-1] for text in texts[2:])
+    crowded = Renderer(theme, animate=True)  # a text on a bar: joined, as before
+    crowded._text_apart = lambda widget, levels, text: False
+    crowded.render(cores(**loads), now=100.0)
+    assert [wid for wid, _ in crowded._last[0]] == ["list"]
+
+
 def test_a_pattern_is_matched_again_once_the_readings_are_others():
     """The keys a pattern matches are kept while the readings' keys stay the same: a reading
     that comes, or goes, shows at once."""

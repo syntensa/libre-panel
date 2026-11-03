@@ -144,6 +144,11 @@
   the same, neither gliding nor changing its colour, is the picture of the frame before,
   not formatted and looked up again: most of them between two readings (25 of Lumen's 35 a
   frame on the 12.3"). The main loop takes 5.6 instead of 6.5 ms a frame with Lumen.
+- **A list's gliding bars go anew without its names and numbers.** While the bars glided
+  (Arena's temperatures and cores), the list was joined anew for every frame, the bars and
+  the text laid on them, a fifth of Arena's main loop; where the text lies on none of the
+  bars, it now stays a piece of its own over them (as the turning fans of a list already
+  do), the same pixels, and only the bars go anew.
 - **While the engine composes the frames, Libre Panel keeps no frame of its own.** The last one
   it composed stayed, with the pieces it was made of, the whole time the engine composed (on
   the 12.3" 5.5 MB and some 3 more for each panel); one composed here again (a transition, a
