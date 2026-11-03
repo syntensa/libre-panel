@@ -507,29 +507,40 @@ def find_engine() -> str:
     return ""
 
 
+def engine_options(
+    size: tuple[int, int], rotate: int | None, settings: EncoderSettings
+) -> list[str]:
+    """How the engine encodes frames of ``size`` into the panel's framebuffer (``rotate``): as
+    x264 through ffmpeg would (:func:`ffmpeg_command`, for drawn frames)."""
+    keyint = max(1, round(settings.fps * settings.keyframe_s))
+    kbit = max(1, round(mbit(bit_rate(settings, size)) * 1000))
+    options = [
+        "--size", f"{size[0]}x{size[1]}", "--turn", str(rotate or 0),
+        "--fps", str(settings.fps), "--crf", str(settings.crf), "--kbit", str(kbit),
+        "--keyint", str(keyint), "--preset", settings.preset, "--profile", settings.profile,
+        "--x264", DRAWN_X264,
+    ]  # fmt: skip
+    return options + (["--full"] if settings.full else [])
+
+
 def engine_command(
     engine: str, size: tuple[int, int], rotate: int | None, settings: EncoderSettings
 ) -> list[str]:
     """The engine encoding frames of ``size`` (the boxes of each that may have changed, on
     stdin: :func:`engine_frame`) into the panel's framebuffer (``rotate``) as x264 through
     ffmpeg would (:func:`ffmpeg_command`, for drawn frames), H.264 (Annex B) on stdout."""
-    keyint = max(1, round(settings.fps * settings.keyframe_s))
-    kbit = max(1, round(mbit(bit_rate(settings, size)) * 1000))
-    command = [
-        engine, "encode", "--size", f"{size[0]}x{size[1]}", "--turn", str(rotate or 0),
-        "--fps", str(settings.fps), "--crf", str(settings.crf), "--kbit", str(kbit),
-        "--keyint", str(keyint), "--preset", settings.preset, "--profile", settings.profile,
-        "--x264", DRAWN_X264,
-    ]  # fmt: skip
-    return command + (["--full"] if settings.full else [])
+    return [engine, "encode", *engine_options(size, rotate, settings)]
 
 
 def engine_frame(
-    frame: Any, damage: list[tuple[int, int, int, int]] | None, number: int
-) -> Callable[[Any], None]:
+    frame: Any, damage: list[tuple[int, int, int, int]] | None, number: int,
+    planned: float | None = None,
+) -> Callable[[Any], None]:  # fmt: skip
     """``frame`` as the engine takes it, written by the encoder's writer thread: the boxes of
     it that may have changed (the main loop's ``damage``; None: all of it), grown to whole
-    blocks as yuv.py compares them, each with its pixels, three bytes each."""
+    blocks as yuv.py compares them, each with its pixels, three bytes each; with ``planned``
+    the time it was drawn for on the main loop's clock, for an engine that sends the panel
+    its pictures each on its time (devices/engine.py)."""
     from libre_panel.devices.yuv import block_of
 
     width, height = frame.size
@@ -544,9 +555,13 @@ def engine_frame(
             if x1 > x0 and y1 > y0:
                 boxes.append((x0, y0, x1, y1))
 
+    head = _ENGINE_MAGIC + bytes((1 if planned is None else 7, 0, 0, 0))
+    head += struct.pack("<II", number & 0xFFFFFFFF, len(boxes))
+    if planned is not None:
+        head += struct.pack("<d", planned)
+
     def write(out: Any) -> None:
-        parts = [_ENGINE_MAGIC + bytes((1, 0, 0, 0))
-                 + struct.pack("<II", number & 0xFFFFFFFF, len(boxes))]  # fmt: skip
+        parts = [head]
         for box in boxes:
             part = frame.crop(box)
             parts += [struct.pack("<4H", *box),

@@ -116,7 +116,12 @@ jobs:
         with:
           msystem: MINGW64
           update: false
-          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-x264
+          install: mingw-w64-x86_64-gcc
+      - name: libx264 alone (MSYS2's package without what its x264.exe needs, ffmpeg and more)
+        # (the engine links the library only; the whole tree was a download that broke off)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: pacman -S --noconfirm --needed --nodeps --nodeps mingw-w64-x86_64-x264
       - name: The version of MSYS2's libx264
         if: runner.os == 'Windows'
         shell: msys2 {0}
@@ -141,13 +146,15 @@ jobs:
             cargo build --release --target x86_64-pc-windows-gnu
             built="target/x86_64-pc-windows-gnu/release/libre-panel-engine.exe"
             recipe="MSYS2's recipe of the package: https://github.com/msys2/MINGW-packages/tree/master/mingw-w64-x264"
+            target="--cargo-target x86_64-pc-windows-gnu"
           else
             X264_STATIC=1 cargo build --release
             built="target/release/libre-panel-engine"
             recipe="Ubuntu's source package: https://launchpad.net/ubuntu/+source/x264 (apt-get source x264)"
+            target=""
           fi
           cd ..
-          python packaging/add_engine.py packaging/bundled-tools "engine/$built" \
+          python packaging/add_engine.py packaging/bundled-tools "engine/$built" $target \
             --x264 "from $X264_PACKAGE" \
             --x264-source "x264: https://code.videolan.org/videolan/x264 (the commit its version names)" \
             --x264-source "$recipe"

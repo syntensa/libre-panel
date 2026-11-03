@@ -1,0 +1,351 @@
+"""Libre Panel's engine with a panel of its own (devices/engine.py, engine/src/panel.rs; stage 1b
+of the engine): the simulated panel of fake_panel.py, behind a socket (panel_socket.py), gets
+from the engine what it gets from the Python driver, packet for packet; a video panel's
+pictures come from the engine, each on its time; a hung decoder, a link that fails and an
+engine that cannot open the panel are dealt with as with the Python driver."""
+
+import itertools
+import statistics
+import struct
+import subprocess
+import time
+
+import pytest
+from fake_panel import FakePanel, transport_for
+from panel_socket import PanelSocket
+from PIL import Image, ImageChops, ImageStat
+from test_video import (  # noqa: F401
+    NEVER,
+    decode,
+    hang_quickly,
+    needs_ffmpeg,
+    panel,
+    settle,
+    video_config,
+)
+from test_yuv import moving_square
+
+from libre_panel.devices import h264, turzx_usb, turzx_video
+from libre_panel.devices.base import DeviceError
+from libre_panel.devices.engine import (
+    EngineFailed,
+    EngineLink,
+    EngineStream,
+    EngineTransport,
+    can_send,
+)
+from libre_panel.devices.turzx_usb import brightness_arg, decode_packet, transparent_layer
+from libre_panel.devices.turzx_video import (
+    PanelRestarting,
+    TurzxVideoDisplay,
+    VideoSession,
+)
+
+
+@pytest.fixture
+def engine():
+    """The engine's program, as the app finds it, if it can have a panel; else a skip."""
+    found = h264.find_engine()
+    if not found or not can_send(found):
+        pytest.skip("needs libre-panel-engine with its panel mode (cargo build --release)")
+    return found
+
+
+class Wire:
+    """What a panel was sent: each packet's plain text without its clock, with its payload;
+    and when each video block came."""
+
+    def __init__(self, fake):
+        self.sent, self.blocks_at = [], []
+        write = fake.write
+
+        def recorded(data, timeout):
+            data = bytes(data)
+            plain = decode_packet(data[:512])
+            self.sent.append((plain[:4] + plain[8:], data[512:]))
+            if plain[0] == 121:
+                self.blocks_at.append(time.perf_counter())
+            return write(data, timeout)
+
+        fake.write = recorded
+
+
+def engine_on(engine, fake, *extra):
+    """The engine with the simulated panel ``fake`` (behind a socket), as the app starts it."""
+    sock = PanelSocket(fake)
+    link = EngineLink([engine, "panel", "--pid", f"{fake.pid:04x}", "--link", sock.link, *extra])
+    return EngineTransport(link, fake.pid), sock
+
+
+def arrived(fake, count, timeout=15.0):
+    end = time.monotonic() + timeout
+    while fake.commands.count(121) < count and time.monotonic() < end:
+        time.sleep(0.01)
+    assert fake.commands.count(121) >= count
+
+
+def test_the_engine_sends_the_panel_what_the_python_driver_sends(engine):
+    """The commands of a video's start, a brightness, pictures with their flow control and the
+    stop: the same packets (but their clock) and the same payloads, in the same order."""
+    pictures = [b"\x00\x00\x00\x01\x65" + bytes(range(n, n + 40)) for n in range(5)]
+
+    def run(transport, send):
+        transport.sync()
+        session = VideoSession(transport, (480, 1920), 60, 40, "usr/data/clip.h264")
+        session.start()
+        transport.command(14, bytes([brightness_arg(70)]))
+        send(session, transport)
+        session.stop(transparent_layer((480, 1920)))
+
+    python = FakePanel()
+    by_python = Wire(python)
+    run(transport_for(python), lambda session, _t: [session.send(p) for p in pictures])
+
+    engines = FakePanel()
+    by_engine = Wire(engines)
+    transport, sock = engine_on(engine, engines)
+    try:
+
+        def through_engine(session, t):
+            for picture in pictures:
+                t.link.picture(picture, session.block_size)
+            arrived(engines, len(pictures))
+
+        run(transport, through_engine)
+    finally:
+        transport.close()
+        sock.close()
+    assert sock.errors == []
+    assert [plain[0] for plain, _ in by_engine.sent] == [plain[0] for plain, _ in by_python.sent]
+    assert by_engine.sent == by_python.sent
+    assert transport.link.proc.returncode == 0
+
+
+def test_a_query_answered_late_is_skipped_by_the_engine_as_by_python(engine):
+    fake = FakePanel()
+    transport, sock = engine_on(engine, fake)
+    try:
+        transport.sync()
+        session = VideoSession(transport, (480, 1920), 60, 40, "clip")
+        session.start()
+        fake.late_status = 1  # the next 122 is answered only after the next command
+        assert transport.query(122) is None
+        assert transport.command(14, bytes([10]))[0] == 14  # (its late answer passed over)
+        assert transport.query(122)[0] == 122
+    finally:
+        transport.close()
+        sock.close()
+
+
+@pytest.fixture
+def wired(engine, monkeypatch):
+    """The simulated panel for a display whose engine has it; pyusb never opens it."""
+    fake = FakePanel()
+    sock = PanelSocket(fake)
+    fake.engine_args = []
+
+    def open_by_engine(path, pid=None, beside=(), skip=0, popen=subprocess.Popen):
+        if not fake.present:
+            raise DeviceError("no Turing/TURZX USB panel found")
+        command = [path, "panel", "--pid", f"{fake.pid:04x}", "--link", sock.link]
+        return EngineTransport(EngineLink(command + fake.engine_args), fake.pid)
+
+    def no_pyusb(*args, **kwargs):
+        raise AssertionError("pyusb opened the panel the engine is to have")
+
+    monkeypatch.setattr(EngineTransport, "open", staticmethod(open_by_engine))
+    monkeypatch.setattr(turzx_usb.UsbTransport, "open", staticmethod(no_pyusb))
+    monkeypatch.setattr(turzx_usb.UsbTransport, "present", staticmethod(lambda pid: fake.present))
+    monkeypatch.setattr(turzx_video, "RESTART", turzx_video._Restart())
+    monkeypatch.setattr(turzx_video, "RATES", {})
+    fake.socket = sock
+    yield fake
+    sock.close()
+
+
+def planned(frames, fps=50):
+    """``frames`` with the times the main loop drew them for, from now on."""
+    start = time.perf_counter()
+    for n, frame in enumerate(frames):
+        frame.info["planned"] = start + n / fps
+    return frames
+
+
+def shown_in_time(display, frames, fps=50):
+    for frame in frames:
+        wait = frame.info["planned"] - time.perf_counter()
+        if wait > 0:
+            time.sleep(wait)
+        display.show(frame)
+
+
+@needs_ffmpeg
+def test_the_engine_has_the_video_panel_and_sends_it_the_pictures(wired):
+    display = TurzxVideoDisplay(video_config(encoder="native"))
+    display.open()
+    assert display.link is not None and display._sender is None  # (no sender of Python's)
+    frames = planned(moving_square(40))
+    shown_in_time(display, frames)
+    assert isinstance(display.encoder, EngineStream)
+    assert display.counters.encoder == "native, boxes"
+    display.set_brightness(70)  # (on the way, between the pictures)
+    settle(wired, timeout=15, at_least=30)
+    display.close()
+    assert wired.socket.errors == []
+    assert wired.commands[:8] == [10, 110, 111, 112, 14, 102, 15, 17]
+    assert wired.commands[-3:] == [123, 15, 102]  # the stop, and the last frame as a PNG
+    assert wired.brightness[-1] == brightness_arg(70)
+    assert not NEVER & set(wired.commands)
+    assert display.counters.blocks >= 30 and display.counters.bytes > 0
+    for source, shown in zip(frames, decode(wired.stream()), strict=False):
+        native = source.transpose(Image.Transpose.ROTATE_270)
+        assert max(ImageStat.Stat(ImageChops.difference(native, shown)).mean) < 6
+
+
+@needs_ffmpeg
+def test_pictures_reach_the_panel_on_their_time_however_long_a_frame_took(engine):
+    """Frames drawn in 0 to 15 ms (as a busy theme's are) reach the engine unevenly; the engine
+    sends each a fixed lead after the time it was drawn for: evenly."""
+    import random
+
+    fake = FakePanel()
+    wire = Wire(fake)
+    transport, sock = engine_on(engine, fake)
+    rng = random.Random(3)
+    handed = []
+    try:
+        transport.sync()
+        session = VideoSession(transport, (480, 1920), 60, 40, "clip")
+        session.start()
+        settings = h264.EncoderSettings(fps=50, encoder="native", pixels="boxes", profile="high")
+        options = h264.engine_options((1920, 480), 270, settings)
+        stream = EngineStream(transport.link, (1920, 480), options, session.block_size)
+        frames = moving_square(100)
+        start = time.perf_counter() + 0.05
+        for n, frame in enumerate(frames):
+            due = start + n / 50
+            while time.perf_counter() < due:
+                time.sleep(0.0005)
+            time.sleep(rng.uniform(0, 0.015))  # the drawing
+            handed.append(time.perf_counter())
+            stream.write(h264.engine_frame(frame, frame.info["damage"], n, due), timeout=2)
+        arrived(fake, len(frames))
+        stream.close()
+        session.stop(None)
+    finally:
+        transport.close()
+        sock.close()
+
+    def spread(times):  # (between the quartiles: a hiccup of the test machine does not count)
+        gaps = [b - a for a, b in zip(times, times[1:], strict=False)]
+        q = statistics.quantiles(gaps, n=4)
+        return (q[2] - q[0]) * 1000, statistics.median(gaps) * 1000
+
+    came, _ = spread(handed)
+    went, gap = spread(wire.blocks_at[2:])  # (from the third: the engine has its clock then)
+    assert came > 4  # (the frames came unevenly)
+    assert went < 2.5 and went < came / 3, (went, came)
+    assert 18 < gap < 22
+    assert transport.link.counts["late"] <= 5
+
+
+@needs_ffmpeg
+def test_a_hung_decoder_found_by_the_engine_restarts_the_panel(wired, monkeypatch):
+    """The engine finds it as VideoSession.check_hang does (slow blocks, a queue stuck high);
+    Libre Panel restarts the panel as SPUR II does (11), through the engine still."""
+    hang_quickly(monkeypatch)
+    wired.engine_args = ["--hang-blocks", "4"]
+    display = TurzxVideoDisplay(video_config(encoder="native"))
+    display.open()
+    wired.block_delay = 0.25  # (a hung decoder takes each block slowly)
+    wired.hung_depths = itertools.repeat(24)
+    with pytest.raises(PanelRestarting):
+        for frame in planned(moving_square(200), fps=25):
+            display.show(frame)
+            time.sleep(0.04)
+    display.close()
+    assert wired.commands.count(11) == 1 and wired.restarts == 1
+    assert 123 not in wired.commands  # nothing more is sent to a hung decoder
+    assert display.counters.panel_restarts == 1
+
+
+@needs_ffmpeg
+def test_a_failing_link_reconnects_through_a_new_engine(wired):
+    display = TurzxVideoDisplay(video_config(encoder="native"))
+    display.open()
+    first = display.link
+    shown_in_time(display, planned(moving_square(10)))
+    settle(wired, timeout=10, at_least=5)
+    wired.fail_next_writes = 1  # one write the panel does not take: the engine says so
+    deadline = time.monotonic() + 15
+    while display.link is first and time.monotonic() < deadline:
+        for frame in planned(moving_square(5)):
+            display.show(frame)
+            time.sleep(0.02)
+    assert display.link is not first and display.link.alive  # a new engine, the panel opened
+    assert display.counters.usb_errors == 1
+    assert wired.commands.count(110) == 2  # a full start
+    assert not first.alive
+    display.close()
+
+
+@needs_ffmpeg
+def test_an_engine_that_ends_unasked_is_a_link_that_failed(wired):
+    """A crash of the engine's: the next frame reconnects (a new engine), as after a USB error."""
+    display = TurzxVideoDisplay(video_config(encoder="native"))
+    display.open()
+    first = display.link
+    shown_in_time(display, planned(moving_square(10)))
+    first.proc.kill()
+    deadline = time.monotonic() + 15
+    while display.link is first and time.monotonic() < deadline:
+        for frame in planned(moving_square(5)):
+            display.show(frame)
+            time.sleep(0.02)
+    assert display.link is not first and display.link.alive
+    assert display.counters.usb_errors == 1
+    assert wired.commands.count(110) == 2
+    display.close()
+
+
+def test_an_engine_that_cannot_open_the_panel_leaves_it_to_pyusb(
+    panel,  # noqa: F811
+    monkeypatch,
+    caplog,
+    engine,
+):
+    def busy(*args, **kwargs):
+        raise EngineFailed("cannot open the panel: device or resource busy")
+
+    monkeypatch.setattr(EngineTransport, "open", staticmethod(busy))
+    monkeypatch.setattr(turzx_video, "ENGINE_SAID", set())
+    with caplog.at_level("WARNING"):
+        for _ in range(2):
+            display = TurzxVideoDisplay(video_config(encoder="native"))
+            display.open()
+            assert display.link is None and isinstance(display.transport, turzx_usb.UsbTransport)
+            display.close()
+    said = [r for r in caplog.records if "could not open the panel" in r.getMessage()]
+    assert len(said) == 1  # (once for the same reason)
+    assert panel.commands[:2] == [10, 110]
+
+
+def test_the_engine_says_where_it_is_and_ends_when_its_input_does(engine):
+    fake = FakePanel()
+    transport, sock = engine_on(engine, fake)
+    try:
+        assert transport.link.place.startswith("test link 127.0.0.1:")
+        assert transport.drain() == 0
+    finally:
+        transport.close()
+        sock.close()
+    assert transport.link.proc.returncode == 0 and not transport.link.alive
+
+
+def test_records_for_the_engine_are_its_own():
+    """The command record as engine/src/wire.rs reads it."""
+    from libre_panel.devices import engine as engine_module
+
+    head = engine_module._head(4, 7, 1 | 121 << 8 | 1 << 16)
+    assert head[:5] == b"LPE1\x04" and struct.unpack("<II", head[8:]) == (7, 1 | 121 << 8 | 65536)
+    assert engine_module.OPS == {"command": 1, "ask": 2, "query": 3, "drain": 4, "push": 5}

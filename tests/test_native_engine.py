@@ -1,7 +1,8 @@
 """Libre Panel's own engine (engine/, h264.NATIVE): x264 in a program of Libre Panel's, fed the
 boxes of each frame that may have changed. Its command and its records; and, where it is built,
 the YUV it makes (byte for byte yuv.py's), a video panel through it, and a new bit rate in the
-running stream (no second encoder)."""
+running stream (no second encoder). Here Libre Panel sends the pictures (video.engine_sends
+false); the engine with the panel of its own is test_engine_panel.py's."""
 
 import random
 import struct
@@ -147,7 +148,7 @@ def test_the_engine_makes_the_yuv_yuv_py_makes(engine, tmp_path, size, rotate, f
 
 @needs_ffmpeg
 def test_a_video_panel_is_fed_through_the_engine(engine, panel):  # noqa: F811
-    display = TurzxVideoDisplay(video_config(encoder="native"))
+    display = TurzxVideoDisplay(video_config(encoder="native", engine_sends=False))
     display.open()
     frames = moving_square(40)
     stream(display, frames)
@@ -164,7 +165,7 @@ def test_a_video_panel_is_fed_through_the_engine(engine, panel):  # noqa: F811
 def test_a_new_bit_rate_goes_into_the_engine_s_running_stream(engine, panel):  # noqa: F811
     """No second encoder beside the first, no handover, no keyframe to wait for: the same
     engine goes on with the new cap."""
-    display = TurzxVideoDisplay(video_config(encoder="native"))
+    display = TurzxVideoDisplay(video_config(encoder="native", engine_sends=False))
     display.open()
     frames = moving_square(60)
     stream(display, frames[:20])
@@ -188,7 +189,7 @@ def test_without_the_engine_x264_through_ffmpeg_encodes(panel, monkeypatch, capl
     from libre_panel.devices import turzx_video
 
     monkeypatch.setattr(turzx_video, "find_engine", lambda: "")
-    display = TurzxVideoDisplay(video_config(encoder="native"))
+    display = TurzxVideoDisplay(video_config(encoder="native", engine_sends=False))
     display.open()
     with caplog.at_level("WARNING"):
         stream(display, moving_square(10))

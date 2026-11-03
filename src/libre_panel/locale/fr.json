@@ -830,6 +830,7 @@
     "backdrop": "arrière-plan",
     "cannot open {port}: {error}": "impossible d'ouvrir {port} : {error}",
     "cannot start ffmpeg: {error}": "impossible de lancer ffmpeg : {error}",
+    "cannot start Libre Panel's engine: {error}": "impossible de lancer le moteur de Libre Panel : {error}",
     "cannot write {path}: {error}": "impossible d'écrire {path} : {error}",
     "card (built in)": "carte (fournie)",
     "cards": "cartes",

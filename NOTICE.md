@@ -232,6 +232,9 @@ SHA-256 and says where each one's source code is; the licence texts are in
   package is. x264's licence text is `tools\licenses\x264-COPYING.txt`; x264's
   source: <https://code.videolan.org/videolan/x264>. The whole program is under the
   GNU General Public License, version 3 or later (x264's "or later" allows it).
+  It is built from Rust crates of others too (`nusb` for USB, `des` and `cbc` for the
+  panels' command packets, and what they need; MIT or Apache-2.0, and the like): their
+  names, versions and licence texts are `tools\licenses\libre-panel-engine-crates.txt`.
   `packaging/add_engine.py` puts it into the tools and says it in SOURCES.txt.
 - **PresentMon (MIT).** Its licence text, with the copyright line, is
   `tools\licenses\PresentMon-LICENSE.txt`; the notices of the third-party parts in

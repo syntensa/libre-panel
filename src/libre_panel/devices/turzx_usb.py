@@ -569,7 +569,7 @@ class TurzxUsbDisplay(Display):
     def open(self) -> None:
         self._layer_clear = False
         pid = self.model.usb_ids[0][1] if self.model and self.model.usb_ids else None
-        self.transport = UsbTransport.open(pid, getattr(self.config, "beside", ()))
+        self.transport = self._open_transport(pid, getattr(self.config, "beside", ()))
         self.model = self.model or USB_PIDS.get(self.transport.pid)
         try:
             reply = self.transport.sync()
@@ -582,6 +582,10 @@ class TurzxUsbDisplay(Display):
             self.model.label if self.model else f"PID {self.transport.pid:04x}",
             f" (firmware {self.firmware})" if self.firmware else "",
         )
+
+    def _open_transport(self, pid: int | None, beside: tuple[str, ...]) -> Any:
+        """The panel's link: pyusb's here (the video mode may have its engine open it)."""
+        return UsbTransport.open(pid, beside)
 
     def describe(self) -> str:
         return self.model.label if self.model else t("TURZX USB panel")

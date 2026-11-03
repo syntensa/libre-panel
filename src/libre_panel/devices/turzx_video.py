@@ -59,6 +59,14 @@ from PIL import Image
 from libre_panel import timing
 from libre_panel.devices import card_choice, h264, video_state
 from libre_panel.devices.base import Counters, DeviceError, FrameError
+from libre_panel.devices.engine import (
+    EngineFailed,
+    EngineHung,
+    EngineLink,
+    EngineStream,
+    EngineTransport,
+    can_send,
+)
 from libre_panel.devices.h264 import (
     BOXES,
     CARD_ENCODERS,
@@ -74,6 +82,7 @@ from libre_panel.devices.h264 import (
     auto_rate,
     engine_command,
     engine_frame,
+    engine_options,
     engine_rate,
     feed_text,
     ffmpeg_capture_command,
@@ -191,7 +200,8 @@ def _frame_for(
     if pixels == BOXES:  # the engine: the boxes that may have changed, numbered
         number = getattr(encoder, "numbered", 0)
         encoder.numbered = number + 1
-        return engine_frame(frame, frame.info.get("damage"), number)
+        # (and the time it was drawn for: an engine that has the panel sends it on its time)
+        return engine_frame(frame, frame.info.get("damage"), number, frame.info.get("planned"))
     made = getattr(encoder, "yuv", None)
     if pixels == YUV and made is not None:
         damage = frame.info.get("damage")  # (taken now: the loop may tag the frame again)
@@ -323,6 +333,9 @@ RESTART = _Restart()
 # again, and two panels of one model (each on a link of its own) climb each for itself. The
 # next run starts where this one got to (video_state).
 RATES: dict[tuple[str, str, tuple[int, int]], RateControl] = {}
+
+# Why the engine could not open a panel, as the log was told (once each a run).
+ENGINE_SAID: set[str] = set()
 
 
 class VideoSession:
@@ -501,6 +514,10 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         self._feeds_asked: set[str] = set()  # the encoders video-state.json was asked about
         self._encoder_said = ""  # the encoder the log was told of
         self._engine_missing_said = False  # (once: video.encoder "native" without the engine)
+        # The engine, while it has the panel (devices/engine.py, video.engine_sends): it sends
+        # the commands and the pictures; what it counted so far is in the counters
+        self.link: EngineLink | None = None
+        self._engine_counted: dict[str, int] = {}
         self._ffmpeg: str | None = None
         self._pictures: queue.Queue[bytes] = queue.Queue(maxsize=2)
         self._sender: threading.Thread | None = None
@@ -548,6 +565,89 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
     def describe(self) -> str:
         return t("{panel}, video {fps} fps", panel=super().describe(), fps=self.stream_fps)
 
+    def _sending_engine(self) -> str:
+        """The engine that is to have the panel and send it the pictures, each on its time
+        (stage 1b): with video.encoder "native" and video.engine_sends; "" where Python sends
+        them (an engine of stage 1a encodes only)."""
+        if self.settings.encoder != NATIVE or not getattr(self.video, "engine_sends", True):
+            return ""
+        engine = find_engine()
+        return engine if engine and can_send(engine) else ""
+
+    def _open_transport(self, pid: int | None, beside: tuple[str, ...]) -> Any:
+        """The panel's link: the engine's where it sends the pictures (:meth:`_sending_engine`),
+        else pyusb's, as for every other encoder. An engine that cannot open the panel pyusb
+        found leaves it to pyusb and says why, once."""
+        self.link = None
+        engine = self._sending_engine()
+        if engine:
+            try:
+                transport = EngineTransport.open(engine, pid, beside)
+            except EngineFailed as exc:
+                if str(exc) not in ENGINE_SAID:  # (once a run: a display is made anew often)
+                    ENGINE_SAID.add(str(exc))
+                    log.warning(
+                        "video: Libre Panel's engine could not open the panel (%s); "
+                        "Libre Panel sends the pictures itself",
+                        exc,
+                    )
+            else:
+                link = self.link = transport.link
+                self._engine_counted = {}
+                # (bound to this link: what an earlier engine says late is not this one's)
+                link.on_failed = functools.partial(self._engine_failed, link)
+                link.on_counts = functools.partial(self._engine_counts, link)
+                log.info("video: the engine has the panel (%s) and sends it the pictures, "
+                         "each on its time", self.link.place)  # fmt: skip
+                return transport
+        return super()._open_transport(pid, beside)
+
+    def _engine_failed(self, link: EngineLink, error: DeviceError) -> None:
+        """The engine's video path stopped (said in its reader thread): as the sender's error
+        would be, the next frame reconnects, or restarts a hung panel."""
+        if link is not self.link or self._error is not None:
+            return  # (an engine of before, or the failure is known already)
+        if isinstance(error, EngineHung):
+            depth = str(error)
+            self._error = DecoderHung(
+                t(
+                    "the panel's video decoder hangs (queue stuck at {depth}). "
+                    "Unplug the panel and plug it in again.",
+                    depth=int(depth) if depth.isdigit() else depth,
+                )
+            )
+            return
+        self._error = error
+        self.counters.usb_errors += 1
+
+    def _engine_lost(self) -> bool:
+        """Whether the engine that has the panel ended unasked (it crashed, or was ended from
+        outside): then that is the error the next frame heals, a new engine, as for a link that
+        failed. Asked by each frame: its reader may say so only a moment later."""
+        link = self.link
+        if link is None or link.alive:
+            return False
+        if self._error is None:
+            self._error = link.failed or DeviceError(
+                f"Libre Panel's engine stopped ({link.reason()})"
+            )
+            if not isinstance(self._error, DecoderHung):
+                self.counters.usb_errors += 1
+        return True
+
+    def _engine_counts(self, link: EngineLink, counts: dict[str, float]) -> None:
+        """What the engine counted, added to the run's counters (the bit rate "auto" judges
+        its waits, blocks and slow blocks, RateControl.judge)."""
+        if link is not self.link:
+            return  # (the last counts of an engine of before)
+        for name in ("blocks", "bytes", "waits", "slow_blocks", "drops"):
+            value = int(counts.get(name, 0))
+            before = self._engine_counted.get(name, 0)
+            if value > before:
+                setattr(self.counters, name, getattr(self.counters, name) + value - before)
+                self._engine_counted[name] = value
+        self.counters.max_depth = max(self.counters.max_depth, int(counts.get("max_depth", 0)))
+
     def _start_video(self) -> None:
         native = (self.model.native_width, self.model.native_height) if self.model else (480, 1920)
         self.session = VideoSession(
@@ -561,6 +661,9 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         self.session.start()
         self._error = None
         self._stop_sender = threading.Event()
+        if self.link is not None:
+            self._sender = None  # (the engine sends the pictures)
+            return
         self._sender = threading.Thread(
             target=self._send_loop,
             args=(self.session, self._stop_sender),
@@ -672,6 +775,8 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         self._streams += 1
         generation = self._streams
         raised = False
+        link = self.link
+        block = self.session.block_size if self.session is not None else DEFAULT_BLOCK
 
         def deliver(picture: bytes) -> None:
             nonlocal raised
@@ -683,6 +788,16 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
                     if generation == self._coming:  # (not given up meanwhile)
                         self._quiet, self._generation = self._generation, generation
                         self._coming = 0
+            if link is not None:  # the engine has the panel: it sends ffmpeg's pictures too
+                if generation == self._generation and self._error is None:
+                    try:
+                        link.picture(picture, block)
+                        return
+                    except (OSError, ValueError):
+                        pass  # (the engine is gone: its reader says so)
+                if generation != self._quiet:
+                    self.counters.drops += 1
+                return
             while generation == self._generation and self._error is None:
                 try:
                     self._pictures.put((generation, picture), timeout=0.2)
@@ -692,7 +807,10 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             if generation != self._quiet:  # what a switch leaves behind is no loss: the other shows
                 self.counters.drops += 1  # the stream was replaced, or the panel failed meanwhile
 
-        encoder = Encoder(command, size, deliver, **fed)
+        if engine and link is not None:  # (it encodes and sends: no process of its own)
+            encoder = EngineStream(link, size, engine_options(size, rotate, settings), block)
+        else:
+            encoder = Encoder(command, size, deliver, **fed)
         encoder.name, encoder.maxrate = settings.encoder, settings.maxrate
         encoder.settings = settings  # (what it is fed: _feed gives each its own)
         # (fed YUV: the YUV it is fed, made where the frames change; its first frame whole)
@@ -850,6 +968,11 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
                     encoder.close()
             self.encoder = self._leaving = None
             self._discard_pictures()  # the new stream starts with a keyframe
+            if self.link is not None and self.link.alive:  # (the engine's, of ffmpeg's too)
+                try:
+                    self.link.end()
+                except (OSError, ValueError):
+                    pass
 
     def _follow_the_panel(self) -> None:
         """``maxrate`` "auto": a step down while the panel takes less than it is sent, a step
@@ -960,6 +1083,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
     def show(self, frame: Image.Image, region: tuple[int, int, int, int] | None = None) -> None:
         if self.transport is None or self.session is None:
             raise DeviceError("panel not open")
+        self._engine_lost()
         if isinstance(self._error, DecoderHung):
             self._restart_panel(self._error)  # a new connection does not help
         if self._error is not None:
@@ -990,7 +1114,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         try:
             self._feed(frame)
         except EncoderStopped as exc:
-            if self._error is not None:
+            if self._error is not None or self._engine_lost():
                 return  # the panel failed meanwhile; the next frame reconnects
             self._stopped(str(exc))
             self._start_encoder(frame.size)
@@ -1005,6 +1129,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             raise DeviceError("panel not open")
         if self.feed is not None or self.range is not None or source in self._sources_failed:
             return False
+        self._engine_lost()
         if isinstance(self._error, DecoderHung):
             self._restart_panel(self._error)  # a new connection does not help
         if self._error is not None:
@@ -1092,7 +1217,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             except EncoderStopped:
                 if not encoder.alive or self._error is not None:
                     raise
-                if self._pictures.full():
+                if self._pictures.full() or getattr(encoder, "waiting", False):
                     idle = 0.0
                     continue
                 idle += 0.25
@@ -1129,6 +1254,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             pass
         self.session, self._error = None, None
         super().close()
+        self.link = None
         raise PanelRestarting(t("the panel restarts to clear its hung video decoder"))
 
     def _heal(self, exc: Exception) -> None:
@@ -1136,7 +1262,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         log.warning("panel stopped answering (%s); reconnecting", exc)
         self._stop_video()
         super().close()
-        self.session = None
+        self.session, self.link = None, None
         super().open()
         self._start_video()
 
@@ -1152,13 +1278,21 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
                 self.session.stop(last)
             except DeviceError as exc:
                 log.debug("stopping the video: %s", exc)
-        if self.session is not None and self.session.blocks:
-            log.info(
-                "video: %d blocks, %.1f MB, waited %d times, deepest queue %d",
-                self.session.blocks,
-                self.session.bytes / 1e6,
-                self.session.waits,
-                self.session.max_depth,
-            )
+        session, link = self.session, self.link
         self.session = None
-        super().close()
+        super().close()  # (the engine ends: its last counts are in)
+        self.link = None
+        if link is not None:
+            counted = link.counts
+            sent = (int(counted.get("blocks", 0)), int(counted.get("bytes", 0)),
+                    int(counted.get("waits", 0)), int(counted.get("max_depth", 0)))  # fmt: skip
+        elif session is not None:
+            sent = (session.blocks, session.bytes, session.waits, session.max_depth)
+        else:
+            sent = (0, 0, 0, 0)
+        if sent[0]:
+            log.info("video: %d blocks, %.1f MB, waited %d times, deepest queue %d",
+                     sent[0], sent[1] / 1e6, sent[2], sent[3])  # fmt: skip
+        if link is not None and counted.get("pictures"):
+            log.info("video: the engine sent %d pictures, %d of them late",
+                     int(counted.get("pictures", 0)), int(counted.get("late", 0)))  # fmt: skip

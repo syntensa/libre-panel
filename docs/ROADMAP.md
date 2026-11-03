@@ -141,14 +141,23 @@ and becomes the default only once it has proven itself on the panels; the old wa
 
 ### Stage 1: the native output
 
-- [ ] The engine takes each frame's YUV and what changed in it, and encodes it with libx264 (and
-      the cards' encoders) told which blocks stayed the same; the bit rate changes in the
-      running stream (`x264_encoder_reconfig`): no ffmpeg started anew, no handover
-- [ ] Frames drawn a few ahead and sent on a steady beat (a slow frame no longer shows); on
-      Windows the engine's thread under the multimedia scheduler (MMCSS), as players' are
-- [ ] The TURZX panels' USB protocol as the Python driver speaks it: nothing new is sent to a
-      panel
-- [ ] Built in CI for Windows and Linux and in the downloads, the ffmpeg path as the fallback
+- [x] The engine takes what changed in each frame, makes the YUV there (byte for byte as
+      before) and encodes it with libx264 told which blocks stayed the same; the bit rate
+      changes in the running stream (`x264_encoder_reconfig`): no ffmpeg started anew, no
+      handover (`[video] encoder = "native"`: on the 12.3" at 50 frames a second the encoder
+      24 % of a core instead of 35, 33 MB instead of 82)
+- [ ] The same for the cards' encoders
+- [x] Pictures sent on a steady beat: the engine has the panel and sends each picture a fixed
+      lead (two frames) after the time its frame was drawn for, from a thread of its own above
+      the others in priority (`[video] engine_sends`). Frames that came with up to 15 ms of
+      jitter went to the panel 20 ms apart within half a millisecond, against six without
+- [ ] Frames drawn a few ahead; on Windows the engine's thread under the multimedia scheduler
+      (MMCSS), as players' are
+- [x] The TURZX panels' USB protocol as the Python driver speaks it, in the engine (nusb): the
+      same packets, the same flow control and hang check, nothing new sent to a panel (the
+      tests compare them packet for packet); where the engine cannot open the panel, Python
+      sends as before
+- [x] Built in CI for Windows and Linux and in the downloads, the ffmpeg path as the fallback
 
 ### Stage 2: the native renderer
 

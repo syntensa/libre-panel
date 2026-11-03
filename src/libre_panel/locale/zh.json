@@ -830,6 +830,7 @@
     "backdrop": "背景",
     "cannot open {port}: {error}": "无法打开 {port}：{error}",
     "cannot start ffmpeg: {error}": "无法启动 ffmpeg：{error}",
+    "cannot start Libre Panel's engine: {error}": "无法启动 Libre Panel 的引擎：{error}",
     "cannot write {path}: {error}": "无法写入 {path}：{error}",
     "card (built in)": "卡片（内置）",
     "cards": "卡片",

@@ -830,6 +830,7 @@
     "backdrop": "背面",
     "cannot open {port}: {error}": "{port}を開けません：{error}",
     "cannot start ffmpeg: {error}": "ffmpegを起動できません：{error}",
+    "cannot start Libre Panel's engine: {error}": "Libre Panel のエンジンを起動できません：{error}",
     "cannot write {path}: {error}": "{path}に書き込めません：{error}",
     "card (built in)": "カード（内蔵）",
     "cards": "カード",

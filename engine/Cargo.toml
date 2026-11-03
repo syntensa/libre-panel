@@ -8,6 +8,26 @@ description = "Libre Panel's native engine: the panels' video, made and sent on 
 publish = false
 build = "build.rs"
 
+[dependencies]
+# The TURZX panels' command packets are DES-CBC (devices/turzx_usb.py)
+des = { version = "0.8", default-features = false }
+cbc = { version = "0.1", default-features = false }
+# USB without libusb: usbfs on Linux, WinUSB on Windows (the panels come up as WinUSB devices)
+nusb = "0.2.9"
+
+[target.'cfg(unix)'.dependencies]
+# the local time of day each command packet carries (localtime_r)
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+# the local time of day (GetLocalTime), the sender's priority and a 1 ms timer
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Media",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+] }
+
 [[bin]]
 name = "libre-panel-engine"
 path = "src/main.rs"

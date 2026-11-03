@@ -5,9 +5,17 @@
 //! for byte as devices/yuv.py), encodes it with libx264 told which macroblocks stayed the same,
 //! and writes the H.264 (Annex B) to its stdout, a picture for each frame as it is made. A new
 //! bit rate goes into the running stream: no new encoder, no keyframe.
+//!
+//! `libre-panel-engine panel ...` does the same with a TURZX panel of its own (panel.rs): it
+//! sends Libre Panel's commands and its own pictures to the panel, each picture on its time.
 
+mod link;
+mod panel;
 #[rustfmt::skip]
 mod tables;
+mod transport;
+mod turzx;
+mod video;
 mod wire;
 mod x264;
 mod yuv;
@@ -18,17 +26,19 @@ use std::time::Instant;
 
 const USAGE: &str = "usage: libre-panel-engine encode --size WxH --turn 0|180|270 --fps N --crf N \
 --kbit N --keyint N [--preset P] [--profile P] [--full] [--x264 name=value:...] [--dump-yuv PATH] \
-[--stats]\n       libre-panel-engine version";
+[--stats]\n       libre-panel-engine panel --pid HEX [--ports N.N...] [--lead-ms N]\n       \
+libre-panel-engine version";
 
-struct Options {
-    size: (usize, usize),
-    turn: yuv::Turn,
-    settings: x264::Settings,
+pub(crate) struct Options {
+    pub(crate) size: (usize, usize),
+    pub(crate) turn: yuv::Turn,
+    pub(crate) settings: x264::Settings,
     dump: Option<String>,
     stats: bool,
 }
 
-fn parse(args: &[String]) -> Result<Options, String> {
+/// The options of `encode`, also those a panel's stream is opened with (panel.rs).
+pub(crate) fn parse(args: &[String]) -> Result<Options, String> {
     let mut size = None;
     let mut turn = yuv::Turn::None;
     let (mut fps, mut crf, mut kbit, mut keyint) = (25u32, 20f32, 2000u32, 250u32);
@@ -142,7 +152,13 @@ fn encode(options: Options) -> Result<(), String> {
             None => break,
             Some(wire::Record::Rate(kbit)) => encoder.rate(kbit)?,
             Some(wire::Record::Keyframe) => encoder.keyframe(),
-            Some(wire::Record::Frame { number, boxes }) => {
+            Some(
+                wire::Record::Command(_)
+                | wire::Record::Stream { .. }
+                | wire::Record::End
+                | wire::Record::Picture { .. },
+            ) => return Err("a panel's record, but no panel here (see `panel`)".into()),
+            Some(wire::Record::Frame { number, boxes, .. }) => {
                 let began = Instant::now();
                 for (x0, y0, x1, y1, pixels) in &boxes {
                     frame.put(*x0, *y0, *x1, *y1, pixels)?;
@@ -192,14 +208,22 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         Some("version") => {
+            // (Libre Panel reads "panel" there: this one can have a panel, stage 1b)
             println!(
-                "libre-panel-engine {} (x264 build {})",
+                "libre-panel-engine {} (x264 build {}; panel)",
                 env!("CARGO_PKG_VERSION"),
                 x264::build()
             );
             ExitCode::SUCCESS
         }
         Some("encode") => match parse(&args[1..]).and_then(encode) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("libre-panel-engine: {e}");
+                ExitCode::FAILURE
+            }
+        },
+        Some("panel") => match panel::parse(&args[1..]).and_then(panel::run) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 eprintln!("libre-panel-engine: {e}");

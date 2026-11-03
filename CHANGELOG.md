@@ -46,6 +46,17 @@
   35, the panel's loop 0.8 ms a frame instead of 2.6, and 33 MB instead of 82. A video from its
   file and the screen as a monitor go through ffmpeg as before; without the engine's program
   (`libre-panel-engine`) x264 through ffmpeg encodes.
+- **The engine also sends the panel its pictures, each on its time** (with `encoder =
+  "native"`; `[video] engine_sends = false` leaves it to Libre Panel as before). Libre Panel
+  gives it the frames with the time each was drawn for, and the video's commands (its start
+  and stop, the brightness); the engine has the panel (through `nusb`, no libusb) and sends
+  them exactly as Libre Panel does, the same packets, flow control and hang check, from a
+  thread of its own above the others in priority, each picture a fixed lead after its frame
+  was drawn (two frames' time). A frame that takes longer to draw no longer shakes the pace:
+  frames that came up to 15 ms apart from their beat went to the panel 20 ms apart within
+  half a millisecond, against six before. Nothing of Python's stands between a frame and the
+  panel any more (its lock, its collector, a busy main loop). Where the engine cannot open the
+  panel, Libre Panel sends the pictures itself and the log says why.
 
 **Lighter**
 - **x264 a fifth lighter on the screens Libre Panel draws, and sharper.** Their frames go into

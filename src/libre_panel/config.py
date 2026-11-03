@@ -472,6 +472,10 @@ class VideoConfig:
     # (AMD's, NVIDIA's and Intel's encoders; the colour check measured AMD's shifting the
     # colours when left to itself)
     pixels: str = "auto"  # "auto" | "rgb" | "card"
+    # With encoder "native": Libre Panel's engine has the panel and sends it the pictures, each
+    # on its time (devices/engine.py), with nothing of Python's between a frame and the panel;
+    # false: Libre Panel sends them as for the other encoders (the engine only encodes)
+    engine_sends: bool = True
     # A theme that is one video across the panel goes to it straight from its file: ffmpeg
     # reads and encodes it in one, instead of Libre Panel drawing its frames and ffmpeg
     # encoding those (less of the processor). Frames again as soon as anything else shows: a

@@ -1595,6 +1595,9 @@ class MainLoop:
                             and frame is toasted and (toasted is bare or toast_box is not None),
                             toast_box, turn, out.size,
                         )  # fmt: skip
+                        # the time it was drawn for, for an engine that sends the panel each
+                        # picture on its time (devices/engine.py)
+                        out.info["planned"] = now
                         link.show(out, None, started)
                     previous = None
                 elif display.slow:  # the parts that changed, each on its own

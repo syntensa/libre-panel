@@ -830,6 +830,7 @@
     "backdrop": "подложка",
     "cannot open {port}: {error}": "не удаётся открыть {port}: {error}",
     "cannot start ffmpeg: {error}": "не удаётся запустить ffmpeg: {error}",
+    "cannot start Libre Panel's engine: {error}": "не удаётся запустить движок Libre Panel: {error}",
     "cannot write {path}: {error}": "не удаётся записать {path}: {error}",
     "card (built in)": "карточка (встроенная)",
     "cards": "карточки",

@@ -295,6 +295,31 @@ def test_the_engine_goes_in_said_in_sources_and_checked_as_the_others(tmp_path):
         add_engine.add(tools, built, "0.164", ["x264"])
 
 
+@pytest.mark.skipif(shutil.which("cargo") is None, reason="needs cargo")
+def test_the_crates_in_the_engine_go_with_their_licences(tmp_path):
+    """What cargo builds into the engine for the target (not what only its tests or its build
+    need), each crate with its licence files' text; into ``licenses`` with the engine."""
+    add_engine = load_add_engine()
+    for target, own in (("x86_64-pc-windows-gnu", "windows-sys"),
+                        ("x86_64-unknown-linux-gnu", "rustix")):  # fmt: skip
+        text = add_engine.crate_notices(target=target)
+        names = [line.split()[0] for line in text.splitlines()
+                 if line and line[0].isalpha() and line.split()[-1][:1].isdigit()]  # fmt: skip
+        assert {"nusb", "des", "cbc", own} <= set(names)
+        assert "libre-panel-engine" not in names  # (its own licence is the program's)
+        assert "Permission is hereby granted" in text  # (MIT's words, from the crates' files)
+    windows = add_engine.crate_notices(target="x86_64-pc-windows-gnu")
+    assert "\nrustix " not in windows and "\nlibc " not in windows  # (Linux's own, not there)
+    tools = tmp_path / "tools"
+    (tools / "licenses").mkdir(parents=True)
+    (tools / "SOURCES.txt").write_text("x\n\nSHA-256 of the files in this folder:\n")
+    built = tmp_path / "libre-panel-engine"
+    built.write_bytes(b"\x7fELF engine")
+    add_engine.add(tools, built, "0.164", ["x264"], windows)
+    assert (tools / "licenses" / add_engine.CRATES).read_text() == windows
+    assert f"licenses/{add_engine.CRATES}" in (tools / "SOURCES.txt").read_text()
+
+
 def test_an_engine_that_does_not_encode_the_stream_fails(tmp_path):
     def run(command, **options):
         if command[1:] == ["version"]:

@@ -65,7 +65,8 @@ jobs:
     # Libre Panel's own engine (engine/, Rust; docs/ROADMAP.md): built against libx264 (Ubuntu's
     # package; on Windows MSYS2's, linked in), its own tests, and the app's tests of it
     # (tests/test_native_engine.py: the YUV byte for byte yuv.py's, a panel through it, a new
-    # bit rate in the running stream) with the engine it built, which they must find.
+    # bit rate in the running stream; tests/test_engine_panel.py: the engine with a panel of its
+    # own, the simulated one behind a socket) with the engine it built, which they must find.
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -87,7 +88,12 @@ jobs:
         with:
           msystem: MINGW64
           update: false
-          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-x264
+          install: mingw-w64-x86_64-gcc
+      - name: libx264 alone (MSYS2's package without what its x264.exe needs, ffmpeg and more)
+        # (the engine links the library only; the whole tree was a download that broke off)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: pacman -S --noconfirm --needed --nodeps --nodeps mingw-w64-x86_64-x264
       - name: Build and test the engine
         shell: bash
         run: |
@@ -137,8 +143,11 @@ jobs:
         # against SOURCES.txt and runs the engine.
         shell: bash
         run: |
-          python packaging/add_engine.py "$RUNNER_TEMP/tools" "$LIBRE_PANEL_ENGINE" \
+          target=""
+          if [ "$RUNNER_OS" = "Windows" ]; then target="--cargo-target x86_64-pc-windows-gnu"; fi
+          python packaging/add_engine.py "$RUNNER_TEMP/tools" "$LIBRE_PANEL_ENGINE" $target \
             --x264 "from $X264_PACKAGE" --x264-source "x264: https://code.videolan.org/videolan/x264"
+          grep -q "^nusb " "$RUNNER_TEMP/tools/licenses/libre-panel-engine-crates.txt"
           python - "$RUNNER_TEMP/tools" <<'CHECK'
           import sys
           from pathlib import Path
@@ -156,7 +165,7 @@ jobs:
           # (the runner's rights stand in as an ordinary user's, as conftest's not_elevated does)
           python -c "from libre_panel import rights; rights.elevated = lambda: False
           from libre_panel.devices.h264 import find_engine; assert find_engine(), 'no engine'"
-          pytest -q -rs tests/test_native_engine.py tests/test_yuv.py
+          pytest -q -rs tests/test_native_engine.py tests/test_engine_panel.py tests/test_yuv.py
 
   desktop:
     # The app in a real browser (every test that needs one: the others skip them), the tray
