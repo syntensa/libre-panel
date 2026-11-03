@@ -1592,7 +1592,7 @@ def test_a_game_is_played_and_its_report_comes_up_on_the_panel(monkeypatch, isol
     class Paced(Script):
         """Frames take a moment each: the samples come in time, however fast the machine is."""
 
-        def wait(self, fps, stop):
+        def wait(self, fps, stop, slack=None):
             time.sleep(0.002)
             return super().wait(fps, stop)
 

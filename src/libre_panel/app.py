@@ -581,11 +581,14 @@ class _Pacer:
     def reset(self) -> None:
         self.fps = 0
 
-    def wait(self, fps: int, stop: threading.Event) -> float:
+    def wait(self, fps: int, stop: threading.Event, slack: float | None = None) -> float:
         """Wait until the next frame is due; returns the time it is planned for.
 
         Drawn at its planned time, a frame that starts a little late does not
-        bend an animation (SPUR II: 20 ms steps, not 41 and then 13).
+        bend an animation (SPUR II: 20 ms steps, not 41 and then 13). With
+        ``slack`` (the display's: Display.slack) the loop may fall that far
+        behind and catch up, each frame on its beat still: the display sends
+        each picture on its time, a late one too within its lead.
         """
         now = self.clock()
         if fps != self.fps:
@@ -598,17 +601,19 @@ class _Pacer:
                 stop.wait(due - now)
             else:
                 self.sleep(due - now)  # precise also on Windows (high-resolution timer)
-        elif now - due > 1 / fps:
+        elif now - due > max(1 / fps, slack or 0.0):
             self.anchor = (now, self.frames)
             self.reanchored += 1
             return now
         return due
 
-    def rest(self, seconds: float, fps: int, stop: threading.Event) -> float:
+    def rest(
+        self, seconds: float, fps: int, stop: threading.Event, slack: float | None = None
+    ) -> float:
         """A panel at rest (MainLoop.rest) for up to ``seconds``: the frames meanwhile left
         out, the next one due on the same clock (what moves again goes on in its steps)."""
         self.frames += max(0, math.floor(seconds * fps) - 1)
-        return self.wait(fps, stop)
+        return self.wait(fps, stop, slack)
 
 
 def _blend(
@@ -1266,6 +1271,11 @@ class MainLoop:
     def fps(self) -> int:
         """The rate frames are planned at now (a mode's, the display's, config.fps)."""
         return _fps(self.config, self.host, self.display)
+
+    @property
+    def slack(self) -> float | None:
+        """How far behind its beat the loop may fall and catch up (Display.slack)."""
+        return self.display.slack if self.link.connected else None
 
     def judge(self, toast: Toast) -> Delivery:
         """Whether a message would show now: the panel has to be connected, and neither
@@ -2131,9 +2141,9 @@ def run(
             if loop.streaming:  # a steady clock; while nothing moves, no frame until one is due
                 rest = loop.rest()
                 if rest is None:
-                    planned = pacer.wait(loop.fps, stop)
+                    planned = pacer.wait(loop.fps, stop, loop.slack)
                 else:
-                    planned = pacer.rest(rest, loop.fps, stop)
+                    planned = pacer.rest(rest, loop.fps, stop, loop.slack)
                 continue
             planned = None
             pacer.reset()

@@ -88,6 +88,10 @@ class AutoDisplay(Display):
         return bool(self._impl and self._impl.streaming)
 
     @property
+    def slack(self) -> float | None:
+        return self._impl.slack if self._impl else None
+
+    @property
     def restarted(self) -> bool:
         return bool(self._impl and self._impl.restarted)
 

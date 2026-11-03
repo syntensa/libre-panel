@@ -70,7 +70,7 @@ class Script:
     def reset(self):
         pass
 
-    def wait(self, fps, stop):
+    def wait(self, fps, stop, slack=None):
         self.n += 1
         if self.n >= self.length:
             stop.set()
@@ -78,7 +78,7 @@ class Script:
             action()
         return self.base + self.n * STEP
 
-    def rest(self, seconds, fps, stop):
+    def rest(self, seconds, fps, stop, slack=None):
         return self.wait(fps, stop)  # (the frames are counted: one at every step)
 
 

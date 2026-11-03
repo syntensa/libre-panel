@@ -145,6 +145,11 @@ class Display:
     # changed or not; others get only frames that changed, at the configured fps.
     streaming = False
     stream_fps = 0
+    # How far behind its beat the main loop may fall and still draw each frame for its planned
+    # time, catching up: a display that sends each picture on its time, a lead after its frame
+    # was drawn (the engine's), takes a late frame on time within that lead. None: a frame's
+    # time, then a new beat (a burst would show late).
+    slack: float | None = None
     # a slow link (the USB serial panels, pixels over a serial port): the main loop keeps the
     # motion calm and sends the parts that changed one by one (app.calm, changed_regions)
     slow = False

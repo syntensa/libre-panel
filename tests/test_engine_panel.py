@@ -8,6 +8,7 @@ import itertools
 import statistics
 import struct
 import subprocess
+import threading
 import time
 
 import pytest
@@ -328,6 +329,41 @@ def test_an_engine_that_cannot_open_the_panel_leaves_it_to_pyusb(
     said = [r for r in caplog.records if "could not open the panel" in r.getMessage()]
     assert len(said) == 1  # (once for the same reason)
     assert panel.commands[:2] == [10, 110]
+
+
+def test_the_loop_catches_up_within_the_engine_s_lead_instead_of_skipping_a_beat():
+    """A frame that took 30 ms at 50 a second: without slack the loop takes a new beat (the
+    animation jumps); with the engine's lead (40 ms) it draws the next frames for their own
+    times, quickly, and is on its beat again. Beyond the lead it takes a new beat, as before."""
+    from test_video import Clock2
+
+    from libre_panel import app
+
+    for slack, reanchored in ((None, 1), (h264.engine_lead(50), 0)):
+        clock = Clock2()
+        pacer = app._Pacer(clock=clock, sleep=clock.sleep)
+        stop = threading.Event()
+        planned = [pacer.wait(50, stop, slack)]
+        clock.now += 0.050  # (a frame drawn in 50 ms: 30 more than its own)
+        for _ in range(4):
+            planned.append(pacer.wait(50, stop, slack))
+            clock.now += 0.004
+        assert pacer.reanchored == reanchored
+        if not reanchored:  # each frame for its own beat
+            steps = [round(b - a, 9) for a, b in zip(planned, planned[1:], strict=False)]
+            assert steps == [0.02] * 4
+    clock.now += 0.2  # far beyond the lead: a new beat
+    assert pacer.wait(50, stop, h264.engine_lead(50)) == clock.now and pacer.reanchored == 1
+
+
+@needs_ffmpeg
+def test_the_display_s_slack_is_the_engine_s_lead_while_it_sends(wired):
+    display = TurzxVideoDisplay(video_config(encoder="native", fps=25))
+    display.open()
+    shown_in_time(display, planned(moving_square(3), fps=25))
+    assert display.slack == pytest.approx(0.08) == display.encoder.lead
+    display.close()
+    assert display.slack is None
 
 
 def test_the_engine_says_where_it_is_and_ends_when_its_input_does(engine):

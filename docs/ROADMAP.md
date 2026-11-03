@@ -151,8 +151,11 @@ and becomes the default only once it has proven itself on the panels; the old wa
       lead (two frames) after the time its frame was drawn for, from a thread of its own above
       the others in priority (`[video] engine_sends`). Frames that came with up to 15 ms of
       jitter went to the panel 20 ms apart within half a millisecond, against six without
-- [ ] Frames drawn a few ahead; on Windows the engine's thread under the multimedia scheduler
-      (MMCSS), as players' are
+- [x] A frame drawn too late costs no beat: the main loop catches up within the lead, each
+      frame drawn for its own time (`Display.slack`), instead of taking a new beat
+- [x] On Windows the engine's sender under the multimedia scheduler (MMCSS, "Playback"), as
+      video players' threads are
+- [ ] Frames drawn a few ahead
 - [x] The TURZX panels' USB protocol as the Python driver speaks it, in the engine (nusb): the
       same packets, the same flow control and hang check, nothing new sent to a panel (the
       tests compare them packet for packet); where the engine cannot open the panel, Python

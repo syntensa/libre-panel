@@ -523,6 +523,14 @@ def engine_options(
     return options + (["--full"] if settings.full else [])
 
 
+def engine_lead(fps: int) -> float:
+    """How long after the time a frame was drawn for an engine that has the panel sends its
+    picture (devices/engine.py): two frames' time (40 ms at 50 a second, 80 at 25), between 30
+    and 100 ms. A frame that took longer to draw or to encode than its own time is on time still;
+    the main loop may fall this far behind and catch up (Display.slack)."""
+    return min(0.1, max(0.03, 2 / max(1, fps)))
+
+
 def engine_command(
     engine: str, size: tuple[int, int], rotate: int | None, settings: EncoderSettings
 ) -> list[str]:

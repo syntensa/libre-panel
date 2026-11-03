@@ -55,8 +55,10 @@
   was drawn (two frames' time). A frame that takes longer to draw no longer shakes the pace:
   frames that came up to 15 ms apart from their beat went to the panel 20 ms apart within
   half a millisecond, against six before. Nothing of Python's stands between a frame and the
-  panel any more (its lock, its collector, a busy main loop). Where the engine cannot open the
-  panel, Libre Panel sends the pictures itself and the log says why.
+  panel any more (its lock, its collector, a busy main loop). And a frame that took too long no
+  longer costs a beat: the main loop draws the next ones for their own times and catches up
+  within the lead, where it used to take a new beat (the animation jumped). Where the engine
+  cannot open the panel, Libre Panel sends the pictures itself and the log says why.
 
 **Lighter**
 - **x264 a fifth lighter on the screens Libre Panel draws, and sharper.** Their frames go into

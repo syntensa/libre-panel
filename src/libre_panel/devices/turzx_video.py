@@ -82,6 +82,7 @@ from libre_panel.devices.h264 import (
     auto_rate,
     engine_command,
     engine_frame,
+    engine_lead,
     engine_options,
     engine_rate,
     feed_text,
@@ -565,6 +566,12 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
     def describe(self) -> str:
         return t("{panel}, video {fps} fps", panel=super().describe(), fps=self.stream_fps)
 
+    @property
+    def slack(self) -> float | None:
+        """While the engine sends the pictures: its lead, within which a frame drawn late still
+        goes on its time, so that the main loop catches up rather than skipping a beat."""
+        return getattr(self.encoder, "lead", None) if self.link is not None else None
+
     def _sending_engine(self) -> str:
         """The engine that is to have the panel and send it the pictures, each on its time
         (stage 1b): with video.encoder "native" and video.engine_sends; "" where Python sends
@@ -808,7 +815,8 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
                 self.counters.drops += 1  # the stream was replaced, or the panel failed meanwhile
 
         if engine and link is not None:  # (it encodes and sends: no process of its own)
-            encoder = EngineStream(link, size, engine_options(size, rotate, settings), block)
+            options = engine_options(size, rotate, settings)
+            encoder = EngineStream(link, size, options, block, engine_lead(settings.fps))
         else:
             encoder = Encoder(command, size, deliver, **fed)
         encoder.name, encoder.maxrate = settings.encoder, settings.maxrate

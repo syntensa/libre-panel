@@ -20,6 +20,7 @@ import collections
 import itertools
 import json
 import logging
+import os
 import queue
 import struct
 import subprocess
@@ -30,7 +31,15 @@ from typing import Any
 
 from libre_panel import winsession
 from libre_panel.devices.base import DeviceError, leave_place, take_place
-from libre_panel.devices.h264 import ABOVE_NORMAL, NATIVE, NO_WINDOW, EncoderStopped
+from libre_panel.devices.h264 import (
+    ABOVE_NORMAL,
+    NATIVE,
+    NO_WINDOW,
+    EncoderStopped,
+    _close_pipe,
+    _wide_pipe,
+    _widen,
+)
 from libre_panel.i18n import t
 
 log = logging.getLogger(__name__)
@@ -103,17 +112,26 @@ class EngineLink:
         self._closing = False  # (an end asked for, not one to report)
         if winsession.ending():  # Windows refuses a new program now, with a box that names it
             raise DeviceError("Windows is ending the session: no engine now")
+        # its stdin as wide as ffmpeg's (h264.Encoder: Windows gives a pipe 4 KB of room)
+        wide = _wide_pipe() if popen is subprocess.Popen else None
         try:
             self.proc = popen(
                 command,
-                stdin=subprocess.PIPE,
+                stdin=subprocess.PIPE if wide is None else wide[0],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 bufsize=0,
                 creationflags=NO_WINDOW | ABOVE_NORMAL,
             )
         except OSError as exc:
+            if wide is not None:
+                _close_pipe(wide)
             raise DeviceError(t("cannot start Libre Panel's engine: {error}", error=exc)) from exc
+        if wide is not None:  # (the engine has its end: this process keeps the one it writes to)
+            os.close(wide[0])
+            self.proc.stdin = wide[1]
+        else:
+            _widen(self.proc.stdin)
         self._threads = [
             threading.Thread(target=self._read_loop, name="engine-reader", daemon=True),
             threading.Thread(target=self._error_loop, name="engine-errors", daemon=True),
@@ -426,8 +444,16 @@ class EngineStream:
     is with ffmpeg. A writer thread packs each frame into the pipe, so the render loop waits
     for a full pipe at most ``write``'s timeout; a full pipe is the panel setting the pace."""
 
-    def __init__(self, link: EngineLink, size: tuple[int, int], options: list[str], block: int):
+    def __init__(
+        self, link: EngineLink, size: tuple[int, int], options: list[str], block: int,
+        lead: float | None = None,
+    ) -> None:  # fmt: skip
         self.link, self.size = link, size
+        # how long after the time a frame was drawn for the engine sends its picture (seconds;
+        # None: the engine's own choice, h264.engine_lead's)
+        self.lead = lead
+        if lead is not None:
+            options = [*options, "--lead-ms", str(max(1, round(lead * 1000)))]
         self.name = NATIVE
         self.maxrate = ""
         self.settings: Any = None

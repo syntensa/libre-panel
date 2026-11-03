@@ -163,8 +163,21 @@ struct Stream {
 }
 
 impl Stream {
+    /// A stream's encoder with `options` (those of `encode`, and `--lead-ms` for its lead,
+    /// which Libre Panel decides: devices/h264.py's engine_lead; else `lead_ms`, the panel's).
     fn open(options: &[String], block: u32, lead_ms: Option<u32>) -> Result<Stream, String> {
-        let o = crate::parse(options)?;
+        let mut lead_ms = lead_ms;
+        let mut rest = Vec::with_capacity(options.len());
+        let mut given = options.iter();
+        while let Some(option) = given.next() {
+            if option == "--lead-ms" {
+                let value = given.next().ok_or("--lead-ms wants a value")?;
+                lead_ms = Some(value.parse().map_err(|_| "--lead-ms")?);
+            } else {
+                rest.push(option.clone());
+            }
+        }
+        let o = crate::parse(&rest)?;
         let frame = yuv::Yuv::new(o.size.0, o.size.1, o.turn, o.settings.full)?;
         let encoder = x264::Encoder::open(&o.settings)?;
         let (cols, rows) = frame.macroblocks();
@@ -216,11 +229,21 @@ fn fine_timer() {}
 #[cfg(windows)]
 fn raise_priority() {
     use windows_sys::Win32::System::Threading::{
-        GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_HIGHEST,
+        AvSetMmThreadCharacteristicsW, GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_HIGHEST,
     };
-    // (above the frames' threads: a busy PC must not starve the panel, SPUR II)
-    unsafe {
-        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+    // A busy PC must not starve the panel (SPUR II): the sender under the multimedia scheduler
+    // as video players' threads are ("Playback": above every thread of normal programs, a
+    // game's too, while the scheduler keeps a share of the processor for them), else at the
+    // highest priority of its process. It sleeps between the pictures; a send takes a
+    // millisecond or two.
+    let task: Vec<u16> = "Playback\0".encode_utf16().collect();
+    let mut index = 0u32;
+    // SAFETY: a NUL-terminated name and an index to fill; the handle stays the thread's.
+    let scheduled = unsafe { !AvSetMmThreadCharacteristicsW(task.as_ptr(), &mut index).is_null() };
+    if !scheduled {
+        unsafe {
+            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+        }
     }
 }
 
