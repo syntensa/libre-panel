@@ -124,6 +124,30 @@ def test_a_hardware_name_is_added_to_a_config_that_has_no_such_section(isolated_
     assert load_config().device.brightness == 40
 
 
+def test_every_setting_of_the_video_is_read_from_the_file():
+    """``engine_sends`` and ``engine_layers`` were documented but never read: ``engine_layers =
+    false`` in ``[video]`` left the engine composing the frames. Each of [video]'s settings,
+    given another value than its default, comes out with it."""
+    import dataclasses
+
+    from libre_panel.config import VideoConfig
+
+    others = {"mode": "on", "fps": 30, "device_fps": 70, "crf": 23, "preset": "fast",
+              "keyframe_s": 5.0, "maxrate": "3M", "profile": "main", "encoder": "native",
+              "pixels": "rgb", "engine_sends": False, "engine_layers": False, "direct": True,
+              "rest": False, "ffmpeg": "ffmpeg.exe", "local_clip": "a.h264",
+              "clip_asked": True}  # fmt: skip
+    defaults = VideoConfig()
+    assert set(others) == {f.name for f in dataclasses.fields(VideoConfig)}
+    video = parse_config({"video": others}).device.video
+    for name, value in others.items():
+        assert value != getattr(defaults, name), name
+        assert getattr(video, name) == value, name
+    for name in ("engine_sends", "engine_layers"):
+        with pytest.raises(ConfigError, match=f"video.{name}"):
+            parse_config({"video": {name: "no"}})
+
+
 def test_the_standby_clip_is_asked_for_until_it_is_answered(isolated_home):
     """``clip_asked`` is a note of the app's (it asked, and was answered either way), not a
     setting of the panel: it is false until the app writes it, and the template only mentions it."""

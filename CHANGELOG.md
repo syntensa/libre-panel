@@ -23,6 +23,9 @@
   small hitches in what moves. Libre Panel and the engine ask to keep it now, the engine also
   not to be put on the slow cores at a low clock, and its sender sleeps the last 17 ms before
   a picture on a timer that ends on time either way.
+- **`engine_layers = false` and `engine_sends = false` in `[video]` take effect.** Both were
+  described, but never read from config.toml: the engine composed the frames and sent the
+  pictures whatever they said.
 - **The volume in one of its looks no longer sends the whole frame anew.** The looks did not
   say where on the panel they drew, so every frame while the volume showed in one (bar,
   levels, ring, large) went to a video panel whole, its YUV made whole and encoded whole;

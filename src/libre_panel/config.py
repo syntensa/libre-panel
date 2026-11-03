@@ -1319,6 +1319,10 @@ def _parse_video(v: dict[str, Any]) -> VideoConfig:
     video.encoder = _expect(v.get("encoder", video.encoder), str, "video.encoder")
     if video.encoder not in ENCODERS:
         raise ConfigError(f"video.encoder: must be one of {', '.join(ENCODERS)}")
+    video.engine_sends = _expect(v.get("engine_sends", video.engine_sends), bool,
+                                 "video.engine_sends")  # fmt: skip
+    video.engine_layers = _expect(v.get("engine_layers", video.engine_layers), bool,
+                                  "video.engine_layers")  # fmt: skip
     video.direct = _expect(v.get("direct", video.direct), bool, "video.direct")
     video.rest = _expect(v.get("rest", video.rest), bool, "video.rest")
     video.pixels = _expect(v.get("pixels", video.pixels), str, "video.pixels")
