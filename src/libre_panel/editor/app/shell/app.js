@@ -3,7 +3,7 @@
 
 import { t } from "../core/i18n.js";
 import { useStore } from "../core/state.js";
-import { html, useEffect, useErrorBoundary } from "../lib/preact.js";
+import { html, useEffect, useErrorBoundary, useRef } from "../lib/preact.js";
 import { Dialogs } from "../ui/dialog.js";
 import { Icon } from "../ui/icons.js";
 import { CommandPalette } from "../ui/palette.js";
@@ -26,11 +26,20 @@ function Failure({ message }) {
 
 /**
  * A view that throws while it is drawn (a plugin's odd data, a bug) would leave the page blank:
- * it says so instead, and the other views stay reachable. Another address, `at`, is another try.
+ * it says so instead, and the other views stay reachable. Another address, `at`, is another try,
+ * but not the address it threw at: Preact runs an effect still waiting from the view's first
+ * drawing before it draws what it caught, and a try there would draw the view in the middle of
+ * that, where no boundary catches it, leaving this one stuck and the page blank for good.
  */
 function Boundary({ children, at }) {
-  const [error, reset] = useErrorBoundary((caught) => console.warn("a view could not be drawn:", caught));
-  useEffect(() => reset(), [at]);
+  const caughtAt = useRef(null);
+  const [error, reset] = useErrorBoundary((caught) => {
+    caughtAt.current = at;
+    console.warn("a view could not be drawn:", caught);
+  });
+  useEffect(() => {
+    if (caughtAt.current !== at) reset();
+  }, [at]);
   if (!error) return children;
   return html`<div class="view-message error" role="alert">
     <${Icon} name="warning" size=${22} />

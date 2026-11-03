@@ -2580,15 +2580,10 @@ def test_a_view_that_cannot_be_drawn_says_so_and_the_others_stay_reachable(app_u
     with browser_page(app_url, "home") as page:
         page.goto(f"{app_url}#/plugin/anything")
         page.wait_for_selector(".plugin-view")
-        # (the app asks for the plugins' pages without waiting: their answer, coming after the
-        # broken list, would mend it before it is drawn)
+        # (the plugins' pages the app asks for at its start are in: no answer comes after the
+        # broken list to change it)
         page.wait_for_function("(window.libre.store.get().plugins || []).length > 0")
-        # (broken until the view says so: a list that came later would mend it first)
-        page.wait_for_function(
-            "() => { window.libre.store.set({ plugins: null });"
-            " return !!document.querySelector('.view-message.error'); }",
-            polling=100,
-        )
+        js(page, "window.libre.store.set({ plugins: null })")
         alert = page.locator(".view-message.error")
         expect(alert).to_contain_text("This view could not be drawn")
         assert page.locator(".topbar").is_visible()
@@ -2602,6 +2597,26 @@ def test_a_view_that_cannot_be_drawn_says_so_and_the_others_stay_reachable(app_u
         expect(alert).to_be_visible()
         page.get_by_role("link", name="Live").click()  # another view is drawn, as it should be
         page.wait_for_selector(".view .live")
+        assert alert.count() == 0
+
+
+def test_a_view_that_throws_as_it_is_first_drawn_says_so_too(app_url):
+    """A view that threw before its first frame was out went past the view's place: the place
+    tried the view again while it drew what it had caught, which no place catches, and from then
+    on it caught nothing: the view's place stayed blank (the CI saw it now and then, as a race)."""
+    with browser_page(app_url, "home") as page:
+        page.wait_for_function("(window.libre.store.get().plugins || []).length > 0")
+        # the view is opened with the list broken: it throws as it is first drawn
+        js(page, "window.libre.store.set({ plugins: null }); location.hash = '#/plugin/anything'")
+        alert = page.locator(".view-message.error")
+        expect(alert).to_contain_text("This view could not be drawn")
+        page.wait_for_timeout(300)  # (and it stays said, past the view's first frame)
+        expect(alert).to_be_visible()
+        js(page, "window.libre.store.set({ plugins: [] })")  # what was wrong is mended
+        js(page, "location.hash = '#/plugin/another'")  # another address is another try
+        expect(page.locator(".plugin-view .view-message")).to_have_text(
+            "This plugin page is not installed."
+        )
         assert alert.count() == 0
 
 

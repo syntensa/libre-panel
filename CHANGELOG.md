@@ -30,6 +30,10 @@
   say where on the panel they drew, so every frame while the volume showed in one (bar,
   levels, ring, large) went to a video panel whole, its YUV made whole and encoded whole;
   now only where the message lies, as with the card.
+- **A view of the app that fails as it opens says so.** One that threw before its first frame
+  was out (a plugin's page with odd data, say) left its place blank for good instead of saying
+  *This view could not be drawn* with the way to try again: its place tried it again while it
+  drew what it had caught, where nothing catches.
 - **A video panel no longer hangs and glitches with `[video] pixels = "rgb"`** (new in 0.8.0rc1).
   Where the frames change little, ffmpeg is fed YUV made in Libre Panel; with "rgb" (three
   bytes a pixel, the way of before) it never is, but the check whether to switch to it asked
