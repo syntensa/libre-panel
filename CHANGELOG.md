@@ -23,6 +23,13 @@
   small hitches in what moves. Libre Panel and the engine ask to keep it now, the engine also
   not to be put on the slow cores at a low clock, and its sender sleeps the last 17 ms before
   a picture on a timer that ends on time either way.
+- **The bit rate "auto" no longer drops to its floor in seconds with the engine.** A step down
+  came as soon as the sender had waited five times more for room in the panel's queue; the
+  switch to a new ffmpeg had taken a while by itself, but the engine changes the rate with
+  the next picture, while the panel's queue still holds pictures made at the rate before. So
+  the waits went on and each step brought the next: a log went from 32M to 2M in five
+  seconds. After a step, and as a panel's video begins, the rate now waits three seconds
+  for the queue to settle.
 - **`engine_layers = false` and `engine_sends = false` in `[video]` take effect.** Both were
   described, but never read from config.toml: the engine composed the frames and sent the
   pictures whatever they said.

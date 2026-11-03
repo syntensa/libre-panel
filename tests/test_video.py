@@ -132,21 +132,26 @@ def test_the_bit_rate_grows_with_the_pixels_and_the_frame_rate():
 
 def test_auto_rate_follows_the_panel_s_queue():
     """ "auto" steps down while the sender keeps waiting for room in the panel's queue, up
-    again after a calm minute, and holds a failed step off: ten minutes, then twenty."""
+    again after a calm minute, and holds a failed step off: ten minutes, then twenty. As it
+    begins and after each step it lets the panel's queue settle first (SETTLE_S)."""
     control, c = RateControl(2.0), Counters()
     assert control.judge(c, 0.0) is None  # the first window begins
-    assert all(control.judge(c, float(second)) is None for second in range(1, 60))
-    assert control.judge(c, 60.0) == 3.0  # a calm minute: a step up
-    c.waits += RateControl.TROUBLE_WAITS  # within the window: the panel's decoder lags
-    assert control.judge(c, 61.0) == 2.0  # back down, and 3.0 is held off
-    assert all(control.judge(c, float(second)) is None for second in range(62, 661))
+    c.waits += 2 * RateControl.TROUBLE_WAITS  # as it begins: what the panel had from before
+    assert all(control.judge(c, float(second)) is None for second in range(1, 63))
+    assert control.judge(c, 63.0) == 3.0  # settled, then a calm minute: a step up
+    c.waits += RateControl.TROUBLE_WAITS  # right after it: the queue made at the rate before
+    assert control.judge(c, 64.0) is None and control.judge(c, 66.0) is None  # (it settles)
+    c.waits += RateControl.TROUBLE_WAITS  # settled, within the window: the decoder lags
+    assert control.judge(c, 67.0) == 2.0  # back down, and 3.0 is held off
+    assert all(control.judge(c, float(second)) is None for second in range(68, 670))
     assert control.rate == 2.0  # a calm while, but 3.0 failed lately
-    assert control.judge(c, 661.0) == 3.0  # ten minutes later it is tried again
+    assert control.judge(c, 670.0) == 3.0  # ten minutes later it is tried again
+    assert control.judge(c, 673.0) is None  # (settled: a window begins)
     c.blocks += 100
     c.slow_blocks += RateControl.TROUBLE_SLOW  # a quarter of the blocks slow: a busy PC
-    assert control.judge(c, 662.0) is None
+    assert control.judge(c, 674.0) is None
     c.slow_blocks += RateControl.TROUBLE_SLOW  # half of them: the panel's link lags
-    assert control.judge(c, 664.0) == 2.0
+    assert control.judge(c, 676.0) == 2.0
     assert control.judge(c, 1000.0) is None  # now held off for twenty minutes
     assert control.judge(c, 1900.0) == 3.0
     assert control.changes == 5
@@ -158,8 +163,23 @@ def test_auto_rate_follows_the_panel_s_queue():
 
     floor = RateControl(3.0)  # the start is the floor: below it the frames are the trouble
     assert floor.steps[0] == 3.0 and floor.judge(calm, 0.0) is None
+    assert floor.judge(calm, 3.0) is None  # (settled: a window begins)
     calm.waits += 9
-    assert floor.judge(calm, 1.0) is None and floor.rate == 3.0 and floor.floored
+    assert floor.judge(calm, 4.0) is None and floor.rate == 3.0 and floor.floored
+
+
+def test_auto_rate_gives_a_step_the_time_to_change_the_queue():
+    """The engine's new rate is there with the next picture, while the panel's queue still
+    holds pictures made at the one before: a log stepped from 32M to 2M in five seconds on
+    waits that each step had had no time to change. Now one step, then the queue settles."""
+    control, c = RateControl(2.0, 32.0), Counters()
+    seen = []
+    for frame in range(5 * 25):  # five seconds at 25 frames a second, a wait every other one
+        c.waits += frame % 2
+        rate = control.judge(c, frame / 25)
+        if rate is not None:
+            seen.append(rate)
+    assert seen == [24.0]
 
     odd = RateControl(2.4)  # a start between the steps is a step of its own
     assert odd.steps == [2.4, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0, 24.0, 32.0]

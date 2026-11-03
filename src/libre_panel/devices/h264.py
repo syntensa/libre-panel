@@ -369,8 +369,15 @@ class RateControl:
     lately: a failed step is held off for :attr:`HOLD_S`, twice as long each time it fails
     again. :meth:`judge` is called with the run's counters as often as wanted (every
     frame); it answers with the new rate when one is due, else ``None``. The driver switches
-    to a new ffmpeg at the new rate. ``remembered``, the rate an earlier run got to
-    (video-state.json), is where a new run starts: the step at or below it.
+    to a new ffmpeg at the new rate, or the engine goes on at it in the stream it makes.
+    ``remembered``, the rate an earlier run got to (video-state.json), is where a new run
+    starts: the step at or below it.
+
+    After a step, and as a run begins, nothing is judged for :attr:`SETTLE_S`, and a window
+    begins after it: the panel's queue still holds pictures made at the rate before. The
+    switch to a new ffmpeg took that long by itself; the engine's new rate is there with the
+    next picture, and a log stepped from 32M to 2M in five seconds on waits that a step had
+    had no time to change.
     """
 
     WINDOW_S = 10.0
@@ -378,6 +385,7 @@ class RateControl:
     TROUBLE_SLOW = 25
     CALM_S = 60.0
     HOLD_S = 600.0
+    SETTLE_S = 3.0
 
     def __init__(self, start: float, remembered: float = 0.0) -> None:
         self.steps = [step for step in sorted({*RATE_STEPS, start}) if step >= start]
@@ -385,7 +393,7 @@ class RateControl:
         self.changes = 0
         self.floored = False  # trouble at the start rate: the frames, not the bits
         self._base: tuple[int, int, int] | None = None  # the counts when the window began
-        self._window = self._calm = 0.0
+        self._window = self._calm = self._settled = 0.0
         self._held: dict[float, float] = {}  # step -> until when it is not tried
         self._failed: dict[float, int] = {}  # step -> how often it failed
 
@@ -393,6 +401,10 @@ class RateControl:
         counts = (counters.waits, counters.blocks, counters.slow_blocks)
         if self._base is None:
             self._base, self._window, self._calm = counts, now, now
+            self._settled = now + self.SETTLE_S
+            return None
+        if now < self._settled or self._window < self._settled:
+            self._base, self._window = counts, now  # (settling: the window begins after)
             return None
         waits, blocks, slow = (new - old for new, old in zip(counts, self._base, strict=True))
         trouble = waits >= self.TROUBLE_WAITS or (slow >= self.TROUBLE_SLOW and 2 * slow >= blocks)
@@ -425,6 +437,7 @@ class RateControl:
             return None
         self.rate = rate
         self.changes += 1
+        self._settled = self._window + self.SETTLE_S  # (the window began now)
         return rate
 
 
