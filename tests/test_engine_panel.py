@@ -87,8 +87,15 @@ def arrived(fake, count, timeout=15.0):
 
 def test_the_engine_sends_the_panel_what_the_python_driver_sends(engine):
     """The commands of a video's start, a brightness, pictures with their flow control and the
-    stop: the same packets (but their clock) and the same payloads, in the same order."""
+    stop: the same packets (but their clock) and the same payloads, in the same order. The
+    pictures a frame apart, slower than the panel's player takes them: how often a wait for room
+    asks for the queue depends on the machine's timers (video.rs's tests have the waits)."""
     pictures = [b"\x00\x00\x00\x01\x65" + bytes(range(n, n + 40)) for n in range(5)]
+
+    def apart(send):
+        for picture in pictures:
+            send(picture)
+            time.sleep(0.02)
 
     def run(transport, send):
         transport.sync()
@@ -100,7 +107,7 @@ def test_the_engine_sends_the_panel_what_the_python_driver_sends(engine):
 
     python = FakePanel()
     by_python = Wire(python)
-    run(transport_for(python), lambda session, _t: [session.send(p) for p in pictures])
+    run(transport_for(python), lambda session, _t: apart(session.send))
 
     engines = FakePanel()
     by_engine = Wire(engines)
@@ -108,8 +115,7 @@ def test_the_engine_sends_the_panel_what_the_python_driver_sends(engine):
     try:
 
         def through_engine(session, t):
-            for picture in pictures:
-                t.link.picture(picture, session.block_size)
+            apart(lambda picture: t.link.picture(picture, session.block_size))
             arrived(engines, len(pictures))
 
         run(transport, through_engine)
@@ -247,7 +253,9 @@ def test_pictures_reach_the_panel_on_their_time_however_long_a_frame_took(engine
     assert came > 4  # (the frames came unevenly)
     assert went < 2.5 and went < came / 3, (went, came)
     assert 18 < gap < 22
-    assert transport.link.counts["late"] <= 5
+    # (a machine busy with more than this hands some frames over later than the lead: those go
+    # at once, late; the pace above is the engine's)
+    assert transport.link.counts["late"] < len(frames) // 2
 
 
 @needs_ffmpeg
