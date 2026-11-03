@@ -1537,11 +1537,13 @@ class Renderer:
         )
 
     def _scene_frame(self, pieces: list[tuple[str, Piece]]) -> scenes.SceneFrame:
-        """The frame of ``pieces`` for the engine to compose: what is composed here stays as
-        it was (the next frame composed here starts from the last one composed here), and the
-        next is a picture of its own; what changed is the engine's to work out."""
+        """The frame of ``pieces`` for the engine to compose: what changed is the engine's to
+        work out. The frame composed here last goes, with the pieces it was made of (on the
+        12.3" 5.5 MB and some more, kept the whole time the engine composed): one composed
+        here again (a transition, a message drawn here) is composed whole, once."""
         self.damage = None
         self._handed = None
+        self._last = None
         self._swept = False
         self.scenes += 1
         color = self.color(self.theme.background_color)

@@ -104,6 +104,10 @@
   (27.8 before the engine composed the frames), the app's helper thread 2.5 ms instead of 5.6.
 
 **Lighter**
+- **While the engine composes the frames, Libre Panel keeps no frame of its own.** The last one
+  it composed stayed, with the pieces it was made of, the whole time the engine composed (on
+  the 12.3" 5.5 MB and some 3 more for each panel); one composed here again (a transition, a
+  message drawn here) is composed whole, once.
 - **The volume's looks take a third to a fifth of the time as the volume turns.** The bar, the
   levels, the ring and the large look drew their whole picture three times larger, its glow
   over all of it, and made it small again, for every step of the bar's glide and every new
