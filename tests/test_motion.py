@@ -157,6 +157,87 @@ def test_gliding_numbers_draw_each_text_once():
     assert len(drawn) == len(set(drawn)) <= 31  # 0..30, each once
 
 
+def held(values):
+    """Snapshots as the app's main loop has them: a new reading only where a value changed."""
+    readings = {}
+
+    def at(**now):
+        for key, value in now.items():
+            if key not in readings or readings[key].value != value:
+                readings[key] = Reading(key, value)
+        return Snapshot(readings=dict(readings))
+
+    return at
+
+
+def test_a_number_whose_reading_stays_is_not_drawn_again():
+    renderer = Renderer(theme(metric(smooth=True), metric("raw", y=70)), animate=True)
+    renderer.fps = 50
+    formatted = []
+    real = renderer._format
+    renderer._format = lambda widget, reading: (
+        formatted.append(widget["id"]) or real(widget, reading)
+    )
+    at = held({})
+    renderer.render(at(v=0.0), 0.0)
+    for k in range(1, 60):  # a jump to 100: it glides there and settles
+        renderer.render(at(v=100.0), k / 50)
+    assert shown_text(renderer, "m") == "100" and not renderer.moving
+    piece, formatted[:] = renderer._still["m"][0], []
+    for k in range(60, 160):  # the same reading two seconds long: drawn no more
+        renderer.render(at(v=100.0), k / 50)
+    assert formatted == [] and renderer._still["m"][0] is piece and not renderer.moving
+    renderer.render(at(v=0.0), 160 / 50)  # a new reading glides from where it stood
+    assert "m" in formatted and "raw" in formatted and renderer.moving
+    assert int(shown_text(renderer, "m")) > 90 and shown_text(renderer, "raw") == "0"
+
+
+def test_numbers_drawn_again_or_not_show_the_same():
+    """A number kept while its reading stays shows what drawing it with every frame shows: its
+    glide on its way (also one that passes its value, a new reading coming as it went fast
+    towards it), its colour fading, the volume's muting."""
+    widgets = (metric(smooth=True, color="#00ff00", color_rules=rules()),
+               metric("vol", y=70, sensor="audio.volume"))  # fmt: skip
+    kept, anew = (Renderer(theme(*widgets), animate=True) for _ in range(2))
+    kept.fps = anew.fps = 50
+    formatted = {kept: 0, anew: 0}
+    for renderer in (kept, anew):
+        real = renderer._format
+
+        def counted(widget, reading, real=real, renderer=renderer):
+            formatted[renderer] += 1
+            return real(widget, reading)
+
+        renderer._format = counted
+    at = held({})
+    # 0 to 100; on the way, fast, 88 comes: the number passes it and comes back
+    values = [0.0] * 5 + [100.0] * 15 + [88.0] * 45 + [85.0] * 40 + [20.0] * 30
+    seen = []
+    for k, value in enumerate(values):
+        muted = 1 if 70 <= k < 90 else 0
+        kept.render(at(v=value, **{"audio.volume": 40, "audio.muted": muted}), k / 50)
+        anew.render(snap(v=value, **{"audio.volume": 40, "audio.muted": muted}), k / 50)
+        for wid in ("m", "vol"):
+            assert kept._cache[wid][0] == anew._cache[wid][0], (k, wid)
+        seen.append(kept._cache["m"][0])
+    assert max(int(text) for text, _ in seen[20:40]) > 88 and seen[64][0] == "88"
+    colours = {colour.lower() for _, colour in seen}
+    assert colours > {"#00ff00", "#ffff00"} and len(colours) > 4  # and the fades between them
+    assert formatted[kept] < formatted[anew] / 2  # between the readings: drawn no more
+
+
+def test_a_glide_that_passes_its_value_says_so():
+    motion = Motion()
+    for k in range(11):  # from 0 to 100, a frame every 20 ms
+        motion.glide("v", 0.0 if k == 0 else 100.0, k / 50, 0.4, 0.02)
+    assert not motion.passes("v", 0.2)  # from where it stood: only nearer
+    value, speed = motion.glide("v", 100.0, 0.2, 0.4, 0.02)
+    assert 60 < value < 70 and speed > 200
+    motion.glide("v", 72.0, 0.22, 0.4, 0.02)  # close ahead of it as it goes fast: passes it
+    assert motion.passes("v", 0.205) and not motion.passes("v", 0.3)  # (then only nearer)
+    assert not motion.passes("unknown", 0.0)
+
+
 def rules():
     return [{"above": 80, "color": "#ffff00"}, {"above": 90, "color": "#ff0000"}]
 

@@ -15,6 +15,7 @@ import re
 import shutil
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
+from functools import cache
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
@@ -652,7 +653,11 @@ class Theme:
         return data
 
 
+@cache
 def builtin_themes_dir() -> Path:
+    """The themes that come with Libre Panel. Found once: where they lie does not change while
+    it runs, and resolving the path on disk, which the main loop's theme lookup asked for with
+    every frame, took a tenth of its time (more on Windows)."""
     return Path(__file__).resolve().parent.parent / "themes"
 
 

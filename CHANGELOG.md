@@ -121,6 +121,14 @@
   (27.8 before the engine composed the frames), the app's helper thread 2.5 ms instead of 5.6.
 
 **Lighter**
+- **The main loop no longer resolves the themes' folder on disk with every frame, and draws
+  no number again that did not change.** Which version of the theme the panel shows (for
+  its size, its pair) was looked up twice a frame, the folder of the themes that come with
+  Libre Panel resolved on disk each time: a tenth of the main loop's time with every theme
+  (more on Windows), now once a frame, that folder once. And a number whose reading stayed
+  the same, neither gliding nor changing its colour, is the picture of the frame before,
+  not formatted and looked up again: most of them between two readings (25 of Lumen's 35 a
+  frame on the 12.3"). The main loop takes 5.6 instead of 6.5 ms a frame with Lumen.
 - **While the engine composes the frames, Libre Panel keeps no frame of its own.** The last one
   it composed stayed, with the pieces it was made of, the whole time the engine composed (on
   the 12.3" 5.5 MB and some 3 more for each panel); one composed here again (a transition, a

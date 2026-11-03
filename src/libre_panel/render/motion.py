@@ -266,6 +266,18 @@ class Motion:
         spring.target = course[known - 1] if known else spring.target
         self.fed[key] = (text, newest)
 
+    def passes(self, key: str, t: float) -> bool:
+        """Whether the glide of ``key`` passes its target after ``t``, to come back to it from the
+        other side (a new reading that came while it went fast towards it); a glide that does
+        not only comes nearer its target until its next reading."""
+        spring = self.springs.get(key)
+        piece = spring.piece(t) if spring is not None else None
+        if piece is None or piece[2] is None or piece[5] <= 0:
+            return False
+        _, start, _target, error, speed, omega = piece
+        curve = speed + omega * error  # (the error is (error + curve * dt) * exp(-omega * dt))
+        return curve != 0 and -error / curve > t - start
+
     def value(self, key: str, t: float) -> float | None:
         """The gliding value of ``key`` at ``t`` (None if it was not drawn then)."""
         spring = self.springs.get(key)

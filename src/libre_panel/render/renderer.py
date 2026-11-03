@@ -957,6 +957,9 @@ class Renderer:
         self._earths: dict[str, _Globe] = {}
         self._earth_builder: _Builder | None = None
         self._pending: dict[str, tuple[Any, Future]] = {}
+        # by metric: the piece it drew the frame before, for the reading and muting it drew (as long
+        # as they hold, drawing it again would draw the same: _metric)
+        self._still: dict[str, tuple[Piece | None, Any, Any]] = {}
         # Plugins (docs/PLUGINS.md): a screen draws the frame under the widgets,
         # plugin widget types draw themselves.
         self.fps = 0  # the panel's frame rate, for screens (set by the main loop)
@@ -1903,7 +1906,10 @@ class Renderer:
                 if how == "frozen":  # a card rolling up: what it showed before
                     piece = slot.leave(widget["id"])
                 else:
-                    piece = draw(widget, snapshot, now)
+                    if widget["type"] == "metric":
+                        piece = self._metric(draw, widget, snapshot, now)
+                    else:
+                        piece = draw(widget, snapshot, now)
                     if how == "live":
                         piece = slot.live(widget["id"], piece)
             except Exception as exc:  # one broken widget must not blank the panel
@@ -2265,6 +2271,50 @@ class Renderer:
         if widget.get("uppercase"):
             text = text.upper()
         return self._text_widget(widget, text, widget["color"])
+
+    def _metric(
+        self, draw: Callable[..., Piece | None], widget: dict[str, Any], snapshot: Snapshot,
+        now: float,
+    ) -> Piece | None:  # fmt: skip
+        """A metric as ``draw`` draws it (with its finish), or the piece it drew the frame before
+        where drawing it again would draw the same, as for most of a frame's metrics between two
+        readings: its reading the same object (a new reading is another; the volume's muting
+        too), and then neither its number gliding nor its colour fading, nor its glide to pass
+        its value (a number on the way it did not show) or a new text of it being made in the
+        helper thread. Its glide and colour are told it was drawn now, as drawing it would."""
+        wid, readings = widget["id"], snapshot.readings
+        reading = readings.get(widget["sensor"])
+        muted = readings.get(MUTED) if widget["sensor"] == VOLUME else None
+        moving, self.moving = self.moving, False
+        try:
+            held = self._still.get(wid)
+            if held is not None and held[1] is reading and held[2] is muted:
+                if self._settled(widget, reading, now) and not self.moving:
+                    return held[0]
+            piece = draw(widget, snapshot, now)
+            if self.moving or wid in self._pending or not self._settled(widget, reading, now):
+                self._still.pop(wid, None)
+            else:
+                self._still[wid] = (piece, reading, muted)
+            return piece
+        finally:
+            self.moving = moving or self.moving
+
+    def _settled(self, widget: dict[str, Any], reading: Any, now: float) -> bool:
+        """Whether a metric's number glides no more (or towards its value only), its glide and
+        colour told it was drawn now (with its reading's value, as :meth:`_draw_metric` does)."""
+        value = None if reading is None else _number(reading.value)
+        glide = self._glide_s(widget)
+        if widget.get("smooth") and glide > 0:
+            spring = self._spring(widget)
+            if spring in self.motion.fed:  # (a fine course: its number goes on along it)
+                return False
+            self.motion.glide(spring, value, now, glide, self._lead())
+            if self.motion.passes(spring, now):
+                return False
+        if widget.get("color_rules"):
+            self._rule_step(widget, value, now)
+        return True
 
     def _draw_metric(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
         reading = snapshot.readings.get(widget["sensor"])

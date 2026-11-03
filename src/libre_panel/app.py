@@ -1132,21 +1132,12 @@ class MainLoop:
 
     def _warmed(
         self, config: Config, host: Any, shown: str, refused: str | None, watcher: _Watcher,
-        now: float,
+        now: float, wanted: str,
     ) -> bool:  # fmt: skip
-        """Whether a switch coming up may happen now. The theme it brings is
-        warmed up in a thread of its own first (:class:`_Warmup`) while this
-        one goes on; nothing to switch to, or a theme that fails, goes ahead."""
+        """Whether a switch coming up may happen now (to ``wanted``, the theme the step found
+        due). The theme it brings is warmed up in a thread of its own first (:class:`_Warmup`)
+        while this one goes on; nothing to switch to, or a theme that fails, goes ahead."""
         pending = watcher.pending()
-        wanted = _theme_name(
-            config,
-            host,
-            self.default,
-            self.rotation,
-            self.reported,
-            self._mode(),
-            **self._pairing(),
-        )
         if not pending and wanted in (shown, refused) and self._dress(config) == self.dressed:
             return True
         try:
@@ -1376,7 +1367,9 @@ class MainLoop:
             playing = blend
             policy = switch_policy(blend[0], wanted, mode, began_in) if blend else None
             may_switch = policy in (None, "follow", "restart")
-            may_switch = may_switch and self._warmed(config, host, shown, refused, watcher, now)
+            may_switch = may_switch and self._warmed(
+                config, host, shown, refused, watcher, now, wanted
+            )
             changed = watcher.changed() if may_switch else False
             # the first panel's look, or where the panels stand under a picture across them
             relook = may_switch and self._dress(config) != self.dressed
