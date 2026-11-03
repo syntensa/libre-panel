@@ -2202,7 +2202,6 @@
     "When Libre Panel quits, Windows shutting down too, the panel shows black and its light goes off; it lights up again when Libre Panel starts. Off: it keeps the last picture.": "Libre Panelを終了すると（Windowsのシャットダウン時も）、パネルは黒を表示してライトが消え、Libre Panelの起動時に再び点灯します。オフの場合：最後の画像を表示したままにします。",
     "the panel's light off when it quits": "終了時にパネルのライトを消す",
     "dark off black quit close exit shutdown sleep screen off backlight": "消灯 オフ 黒 終了 閉じる シャットダウン スリープ 画面オフ バックライト",
-    "Light mode": "軽量モード",
     "While the app's window is closed, Libre Panel lets go of what only the app needs, such as its pictures of the themes, and takes less memory. The panel goes on as it is; the app takes a moment longer to open.": "アプリのウィンドウを閉じている間、Libre Panelはアプリだけが必要とするもの（テーマの画像など）を解放し、使用メモリを減らします。パネルは通常どおり動作し、アプリを開くときに少し時間がかかります。",
     "less memory while the app is closed": "アプリを閉じている間はメモリ使用量を削減",
     "memory ram light lean small resources background usage": "メモリ ram 軽量 小さい リソース バックグラウンド 使用量",
@@ -3039,7 +3038,8 @@
     "On: it composes each frame from the layers Libre Panel draws, and makes the lit gauges' rings. Off: Libre Panel composes every frame, to compare.": "オン: Libre Panel が描くレイヤーから各フレームを合成し、発光ゲージのリングも作ります。オフ: 比較用に Libre Panel がすべてのフレームを合成します。",
     "Libre Panel's engine (experiment)": "Libre Panel のエンジン（実験的）",
     "Fine-tuning for experiments": "実験用の詳細設定",
-    "The video's encoder, bit rate and quality to try out, and a check of the panel's colours.": "試すための動画のエンコーダー、ビットレート、画質と、パネルの色の確認。"
+    "The video's encoder, bit rate and quality to try out, and a check of the panel's colours.": "試すための動画のエンコーダー、ビットレート、画質と、パネルの色の確認。",
+    "Save memory with the window closed": "ウィンドウを閉じている間はメモリを節約"
   },
   "fields": {
     "agent": "エージェント",

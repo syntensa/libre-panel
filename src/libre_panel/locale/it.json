@@ -2202,7 +2202,6 @@
     "When Libre Panel quits, Windows shutting down too, the panel shows black and its light goes off; it lights up again when Libre Panel starts. Off: it keeps the last picture.": "Quando Libre Panel si chiude, anche allo spegnimento di Windows, il pannello mostra il nero e la sua luce si spegne; si riaccende all'avvio di Libre Panel. Disattivato: conserva l'ultima immagine.",
     "the panel's light off when it quits": "luce del pannello spenta alla chiusura",
     "dark off black quit close exit shutdown sleep screen off backlight": "scuro spento nero esci chiudi arresto sospensione schermo spento retroilluminazione",
-    "Light mode": "Modalità leggera",
     "While the app's window is closed, Libre Panel lets go of what only the app needs, such as its pictures of the themes, and takes less memory. The panel goes on as it is; the app takes a moment longer to open.": "Finché la finestra dell'app è chiusa, Libre Panel rilascia ciò che serve solo all'app, come le sue immagini dei temi, e occupa meno memoria. Il pannello continua come prima; l'app impiega un momento in più ad aprirsi.",
     "less memory while the app is closed": "meno memoria mentre l'app è chiusa",
     "memory ram light lean small resources background usage": "memoria ram leggero snello piccolo risorse background utilizzo",
@@ -3039,7 +3038,8 @@
     "On: it composes each frame from the layers Libre Panel draws, and makes the lit gauges' rings. Off: Libre Panel composes every frame, to compare.": "Attivo: compone ogni immagine dai livelli che disegna Libre Panel e crea gli anelli degli indicatori luminosi. Disattivato: Libre Panel compone ogni immagine, per confronto.",
     "Libre Panel's engine (experiment)": "Il motore di Libre Panel (sperimentale)",
     "Fine-tuning for experiments": "Regolazioni fini per esperimenti",
-    "The video's encoder, bit rate and quality to try out, and a check of the panel's colours.": "Encoder, bitrate e qualità del video da provare, e un controllo dei colori del pannello."
+    "The video's encoder, bit rate and quality to try out, and a check of the panel's colours.": "Encoder, bitrate e qualità del video da provare, e un controllo dei colori del pannello.",
+    "Save memory with the window closed": "Risparmia memoria a finestra chiusa"
   },
   "fields": {
     "agent": "agente",

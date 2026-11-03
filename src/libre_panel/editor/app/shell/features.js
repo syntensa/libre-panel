@@ -298,7 +298,7 @@ export function registerFeatureCommands() {
     },
     {
       id: "settings.light",
-      title: () => t("Light mode"),
+      title: () => t("Save memory with the window closed"),
       hint: () => t("less memory while the app is closed"),
       keywords: () => t("memory ram light lean small resources background usage"),
       group: settings,

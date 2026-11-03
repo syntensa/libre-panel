@@ -2201,7 +2201,6 @@
     "When Libre Panel quits, Windows shutting down too, the panel shows black and its light goes off; it lights up again when Libre Panel starts. Off: it keeps the last picture.": "Quand Libre Panel se ferme, y compris à l'arrêt de Windows, le panneau affiche du noir et son éclairage s'éteint ; il se rallume au prochain démarrage de Libre Panel. Désactivé : il garde la dernière image.",
     "the panel's light off when it quits": "éclairage du panneau éteint à la fermeture",
     "dark off black quit close exit shutdown sleep screen off backlight": "sombre éteint noir quitter fermer arrêt veille écran éteint rétroéclairage",
-    "Light mode": "Mode léger",
     "While the app's window is closed, Libre Panel lets go of what only the app needs, such as its pictures of the themes, and takes less memory. The panel goes on as it is; the app takes a moment longer to open.": "Tant que la fenêtre de l'application est fermée, Libre Panel libère ce dont seule l'application a besoin, comme ses images des thèmes, et occupe moins de mémoire. Le panneau continue comme avant ; l'application met un instant de plus à s'ouvrir.",
     "less memory while the app is closed": "moins de mémoire tant que l'application est fermée",
     "memory ram light lean small resources background usage": "mémoire ram léger sobre petit ressources arrière-plan utilisation",
@@ -3039,7 +3038,8 @@
     "On: it composes each frame from the layers Libre Panel draws, and makes the lit gauges' rings. Off: Libre Panel composes every frame, to compare.": "Activé : il compose chaque image à partir des calques que dessine Libre Panel et crée les anneaux des jauges lumineuses. Désactivé : Libre Panel compose chaque image, pour comparer.",
     "Libre Panel's engine (experiment)": "Le moteur de Libre Panel (expérimental)",
     "Fine-tuning for experiments": "Réglages fins pour expérimenter",
-    "The video's encoder, bit rate and quality to try out, and a check of the panel's colours.": "L'encodeur, le débit et la qualité de la vidéo à essayer, et une vérification des couleurs du panneau."
+    "The video's encoder, bit rate and quality to try out, and a check of the panel's colours.": "L'encodeur, le débit et la qualité de la vidéo à essayer, et une vérification des couleurs du panneau.",
+    "Save memory with the window closed": "Économiser la mémoire fenêtre fermée"
   },
   "fields": {
     "agent": "agent",

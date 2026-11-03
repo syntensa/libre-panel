@@ -207,7 +207,7 @@ administrator rights, a backup is not restored from the app.
 ## Light mode
 
 ```toml
-light_mode = false             # Settings → Start and system → Light mode; on unless set (0.8)
+light_mode = false             # Settings → Start and system → Save memory with the window closed; on unless set (0.8)
 ```
 
 While the app's window is closed (or hidden) for a minute, Libre Panel lets go of what only

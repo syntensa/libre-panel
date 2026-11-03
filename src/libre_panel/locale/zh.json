@@ -2201,7 +2201,6 @@
     "When Libre Panel quits, Windows shutting down too, the panel shows black and its light goes off; it lights up again when Libre Panel starts. Off: it keeps the last picture.": "当 Libre Panel 退出（包括 Windows 关机）时，面板显示黑色并关闭背光；Libre Panel 启动时会重新亮起。关闭：保留最后一幅画面。",
     "the panel's light off when it quits": "退出时关闭面板背光",
     "dark off black quit close exit shutdown sleep screen off backlight": "变暗 关闭 黑色 退出 关机 睡眠 熄屏 背光",
-    "Light mode": "轻量模式",
     "While the app's window is closed, Libre Panel lets go of what only the app needs, such as its pictures of the themes, and takes less memory. The panel goes on as it is; the app takes a moment longer to open.": "当应用窗口关闭时，Libre Panel 会释放只有应用需要的内容（例如主题图片），以占用更少内存。面板照常运行；应用打开会稍慢一些。",
     "less memory while the app is closed": "应用关闭时占用更少内存",
     "memory ram light lean small resources background usage": "内存 ram 轻量 精简 小 资源 后台 占用",
@@ -3039,7 +3038,8 @@
     "On: it composes each frame from the layers Libre Panel draws, and makes the lit gauges' rings. Off: Libre Panel composes every frame, to compare.": "开启：用 Libre Panel 绘制的图层合成每一帧，并生成发光仪表的圆环。关闭：由 Libre Panel 合成每一帧，便于对比。",
     "Libre Panel's engine (experiment)": "Libre Panel 的引擎（实验性）",
     "Fine-tuning for experiments": "实验用微调",
-    "The video's encoder, bit rate and quality to try out, and a check of the panel's colours.": "可试用的视频编码器、码率和画质，以及面板颜色检查。"
+    "The video's encoder, bit rate and quality to try out, and a check of the panel's colours.": "可试用的视频编码器、码率和画质，以及面板颜色检查。",
+    "Save memory with the window closed": "窗口关闭时节省内存"
   },
   "fields": {
     "agent": "智能体",

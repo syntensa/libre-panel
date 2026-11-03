@@ -101,7 +101,8 @@ async function startWithRights(info, on) {
   if (sure) await saveSystem({ elevated: true });
 }
 
-/** Light mode (light.py): less memory while the app is closed, a moment longer to open it. */
+/** Light mode (light.py): less memory while the app is closed, a moment longer to open it. Named
+ * for what it does: "Light mode" read as a light colour scheme. */
 function LightRow() {
   const config = useConfig();
   useEffect(() => {
@@ -110,10 +111,10 @@ function LightRow() {
   if (!config) return null;
   return html`<${SettingRow}
     class="light-row"
-    title=${t("Light mode")}
+    title=${t("Save memory with the window closed")}
     hint=${t("While the app's window is closed, Libre Panel lets go of what only the app needs, such as its pictures of the themes, and takes less memory. The panel goes on as it is; the app takes a moment longer to open.")}
   >
-    <${Toggle} label=${t("Light mode")} checked=${Boolean(config.light_mode)} onChange=${(on) => saveSettings({ light_mode: on })} />
+    <${Toggle} label=${t("Save memory with the window closed")} checked=${Boolean(config.light_mode)} onChange=${(on) => saveSettings({ light_mode: on })} />
   <//>`;
 }
 

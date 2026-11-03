@@ -178,6 +178,9 @@
   where a link leads to one (Start's question about black). Brightness and the rest come
   right after smooth motion.
 - **"More panels" in Settings, beside "Panel"** (it was "Panels").
+- **"Light mode" is called what it does: *Save memory with the window closed*** (*Settings →
+  Start and system*; `light_mode` in config.toml as before). The name read as a light
+  colour scheme, in German too ("Light-Modus").
 - **Start switches each page in one place.** Game mode and the music page were switches in
   the first steps and again in "What the panel shows when" right under them; the first
   steps keep how the panel is mounted, the notices and the weather's place.
