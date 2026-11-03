@@ -169,6 +169,10 @@
   them were made after their time (the frame, or its encoding, was late: not the sender) and
   the latest, in milliseconds: `video: the engine sent 3080 pictures, 1808 of them late (12
   made after their time; the latest 13 ms past it)`.
+- **The log also says where the engine's time for a frame goes:** composing it from its
+  pieces, its YUV and x264 (`video: the engine took 7.4 ms a frame: 1.7 composing it, 1.1 its
+  YUV, 4.6 x264`), to see what a card's encoder would take off (on the 12.3", x264 is two
+  thirds and more of it).
 - **Arena's frame-rate graph from 0 to 175 fps, as fine as the CPU's and GPU's.** Its top was
   its own, in steps of 30 fps: the curve moved, and was drawn anew, when the game's rate
   crossed a step; and on the 12.3" its line was 6 px thick with a glow to match, beside the

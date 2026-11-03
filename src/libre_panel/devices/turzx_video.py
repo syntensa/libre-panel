@@ -284,6 +284,18 @@ def lateness_said(counted: dict[str, Any]) -> str:
     return said
 
 
+def encoding_said(counted: dict[str, Any]) -> str | None:
+    """What the engine's counts say of the time a frame took it, for the log: composing it from
+    its layers, its YUV and x264 (``compose_ms``, ``yuv_ms``, ``x264_ms``: of ``encode_ms``,
+    each an average a frame); None where the engine does not count them."""
+    if "x264_ms" not in counted or not counted.get("frames"):
+        return None
+    parts = (float(counted.get(k, 0)) for k in ("encode_ms", "compose_ms", "yuv_ms", "x264_ms"))
+    whole, compose, yuv, x264 = parts
+    return (f"video: the engine took {whole:.1f} ms a frame: {compose:.1f} composing it, "
+            f"{yuv:.1f} its YUV, {x264:.1f} x264")  # fmt: skip
+
+
 class DecoderHung(DeviceError):
     """The panel's decoder stopped taking pictures; reconnecting does not help."""
 
@@ -1360,3 +1372,6 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
                      sent[0], sent[1] / 1e6, sent[2], sent[3])  # fmt: skip
         if link is not None and counted.get("pictures"):
             log.info("%s", lateness_said(counted))
+            took = encoding_said(counted)
+            if took:
+                log.info("%s", took)

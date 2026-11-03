@@ -370,6 +370,21 @@ def test_an_engine_that_ends_unasked_is_a_link_that_failed(wired):
     display.close()
 
 
+def test_the_log_says_where_the_engines_time_for_a_frame_goes():
+    """The engine counts what each frame took it: composing it from its layers, its YUV and
+    x264 (an average a frame), and the log says so as a run ends; an older engine, without
+    them, gets no such line."""
+    from libre_panel.devices.turzx_video import encoding_said
+
+    counted = {"frames": 868, "encode_ms": 7.401, "compose_ms": 1.715, "yuv_ms": 1.072,
+               "x264_ms": 4.613}  # fmt: skip
+    assert encoding_said(counted) == (
+        "video: the engine took 7.4 ms a frame: 1.7 composing it, 1.1 its YUV, 4.6 x264"
+    )
+    assert encoding_said({"frames": 868, "encode_ms": 7.4}) is None
+    assert encoding_said({**counted, "frames": 0}) is None
+
+
 def test_an_engine_that_cannot_open_the_panel_leaves_it_to_pyusb(
     panel,  # noqa: F811
     monkeypatch,

@@ -117,6 +117,10 @@ struct State {
     drops: u64,
     frames: u64,
     encode_s: f64,
+    /// Of `encode_s`: composing the frame from its layers, its YUV, and x264.
+    compose_s: f64,
+    yuv_s: f64,
+    x264_s: f64,
 }
 
 struct Shared {
@@ -216,12 +220,16 @@ impl Stream {
         })
     }
 
-    fn encode(&mut self, number: u32, boxes: &Boxes) -> Result<Vec<u8>, String> {
+    /// The frame's picture, and the seconds its YUV and x264 took.
+    fn encode(&mut self, number: u32, boxes: &Boxes) -> Result<(Vec<u8>, f64, f64), String> {
+        let began = Instant::now();
         for (x0, y0, x1, y1, pixels) in boxes {
             self.frame.put(*x0, *y0, *x1, *y1, pixels)?;
         }
         self.frame.finish(&mut self.mb);
+        let yuv = began.elapsed().as_secs_f64();
         let stride = self.frame.turned.0;
+        let encoding = Instant::now();
         let (picture, _key) = self.encoder.encode(
             &mut self.frame.y,
             &mut self.frame.u,
@@ -230,7 +238,7 @@ impl Stream {
             &mut self.mb,
             i64::from(number),
         )?;
-        Ok(picture.to_vec())
+        Ok((picture.to_vec(), yuv, encoding.elapsed().as_secs_f64()))
     }
 }
 
@@ -365,15 +373,18 @@ fn next(shared: &Shared) -> Option<Job> {
 
 fn counts(video: &Video, state: &State, paced: &Lateness) -> String {
     let c = &video.counts;
-    let encode_ms = if state.frames > 0 {
-        state.encode_s * 1000.0 / state.frames as f64
-    } else {
-        0.0
+    let per_frame = |seconds: f64| {
+        if state.frames > 0 {
+            seconds * 1000.0 / state.frames as f64
+        } else {
+            0.0
+        }
     };
     format!(
         "{{\"blocks\": {}, \"bytes\": {}, \"waits\": {}, \"slow_blocks\": {}, \"max_depth\": {}, \
          \"pictures\": {}, \"late\": {}, \"came_late\": {}, \"late_most_ms\": {:.1}, \
-         \"drops\": {}, \"frames\": {}, \"encode_ms\": {:.3}}}",
+         \"drops\": {}, \"frames\": {}, \"encode_ms\": {:.3}, \"compose_ms\": {:.3}, \
+         \"yuv_ms\": {:.3}, \"x264_ms\": {:.3}}}",
         c.blocks,
         c.bytes,
         c.waits,
@@ -385,7 +396,10 @@ fn counts(video: &Video, state: &State, paced: &Lateness) -> String {
         paced.most.as_secs_f64() * 1000.0,
         state.drops,
         state.frames,
-        encode_ms
+        per_frame(state.encode_s),
+        per_frame(state.compose_s),
+        per_frame(state.yuv_s),
+        per_frame(state.x264_s),
     )
 }
 
@@ -488,11 +502,15 @@ fn take_frame(
     boxes: &Boxes,
     planned: Option<f64>,
 ) -> Result<(), String> {
-    let picture = s.encode(number, boxes)?;
+    let composed = read.elapsed().as_secs_f64(); // (a frame of layers: composed since it was read)
+    let (picture, yuv, x264) = s.encode(number, boxes)?;
     let current = {
         let mut state = shared.state();
         state.frames += 1;
         state.encode_s += read.elapsed().as_secs_f64();
+        state.compose_s += composed;
+        state.yuv_s += yuv;
+        state.x264_s += x264;
         state.stream
     };
     if !picture.is_empty() {
