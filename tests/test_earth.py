@@ -129,8 +129,8 @@ def test_a_turning_globe_shows_what_a_standing_one_shows_from_there():
 
 
 def reference_air(size, view, sun, color):
-    """The air over a globe as it was worked out whole each time (before what stays of it a
-    size was kept): render/earth.py's _air gives these pixels, bit for bit."""
+    """The air over a globe as it was laid into its picture a row of four by its columns:
+    render/earth.py's _air gives these pixels, bit for bit."""
     right, up, toward = view
     r = size * earth.SHARE / 2
     idx = earth._air_pixels(size)
@@ -156,11 +156,11 @@ def reference_air(size, view, sun, color):
 
 
 @pytest.mark.parametrize("size", [64, 101, 333, 600])
-def test_the_air_worked_out_from_what_stays_of_it_a_size_is_the_same(size):
-    """A turning globe lays its air anew every two degrees (8 ms on Terra's 12.3" globe): only
-    the light on each pixel is worked out for the view and the sun, where the pixels lie and
-    what they weigh once a size (3 ms). The same pixels, bit for bit, and each air a picture
-    of its own."""
+def test_the_air_laid_in_a_number_a_pixel_is_the_same(size):
+    """A turning globe lays its air anew every two degrees (8 ms on Terra's 12.3" globe, half
+    of that laying the pixels into the picture by their columns): each pixel one number, its
+    colour and its alpha, laid in at once (5 ms), nothing more kept. The same pixels, bit for
+    bit, and each air a picture of its own."""
     rng = np.random.default_rng(size)
     made = []
     for _ in range(6):
@@ -173,7 +173,6 @@ def test_the_air_worked_out_from_what_stays_of_it_a_size_is_the_same(size):
         assert np.array_equal(np.asarray(air), want)
         made.append((air, want))
     assert all(np.array_equal(np.asarray(air), want) for air, want in made)  # (none shared)
-    assert earth._air_geometry(size) is earth._air_geometry(size)
 
 
 # -- in the renderer ----------------------------------------------------------------------

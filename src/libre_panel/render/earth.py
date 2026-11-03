@@ -166,85 +166,34 @@ def _air(
     color: tuple[int, int, int],
 ) -> Image.Image:
     """The air over a globe ``size`` px (RGBA): bright at the rim of the day side, inside the
-    disc and as a glow around it, none on the night side. Only the light on each of its pixels
-    is worked out for the view and the sun; where they lie, and what they weigh, once a size
-    (:func:`_air_geometry`), the same numbers in the same order."""
+    disc and as a glow around it, none on the night side."""
     right, up, toward = view
-    g = _air_geometry(size)
+    r = size * SHARE / 2
+    idx = _air_pixels(size)
+    ys, xs = np.divmod(idx, size)
+    x = (xs.astype(np.float32) + (0.5 - size / 2)) * (1 / r)
+    y = ((size / 2 - 0.5) - ys.astype(np.float32)) * (1 / r)
+    rho = np.sqrt(x * x + y * y)
+    z = np.sqrt(np.clip(1 - rho * rho, 0, 1))
     sx, sy, sz = (float(np.dot(axis, sun)) for axis in (right, up, toward))  # the sun, seen
+    inner = rho < 1
     # inside: the light on the ground there; outside: on the rim beside it
-    mu = np.empty(len(g.idx), np.float32)
-    mu[g.inner] = g.x_in * sx + g.y_in * sy + g.z_in * sz
-    mu[g.outer] = (g.x_out * sx + g.y_out * sy) / g.rho_out
-    alpha = np.zeros(len(g.idx), np.float32)
-    alpha[g.inner] = g.fres_in * _smooth(-0.35, 0.55, mu[g.inner]) * g.edge_in
-    glow = np.clip(g.halo_glow * _smooth(-0.30, 0.45, mu[g.glow]) * 0.85, 0, 1) * g.rest_glow
-    alpha[g.glow] += glow
-    out = g.colored(color)
-    out[g.idx, 3] = np.clip(alpha * 255 + 0.5, 0, 255).astype(np.uint8)
-    return Image.fromarray(out.reshape(size, size, 4), "RGBA")
-
-
-class _AirGeometry:
-    """What of a globe's air stays whatever the view and the sun (:func:`_air`): its pixels
-    (:func:`_air_pixels`), which lie inside the disc (``inner``: the light on the ground there
-    counts, ``fres``) and which in the glow at its rim (``glow``: where the disc's own edge
-    leaves room for the glow, ``halo``), and where each lies."""
-
-    def __init__(self, size: int) -> None:
-        r = size * SHARE / 2
-        self.idx = idx = _air_pixels(size)
-        ys, xs = np.divmod(idx, size)
-        x = (xs.astype(np.float32) + (0.5 - size / 2)) * (1 / r)
-        y = ((size / 2 - 0.5) - ys.astype(np.float32)) * (1 / r)
-        rho = np.sqrt(x * x + y * y)
-        z = np.sqrt(np.clip(1 - rho * rho, 0, 1))
-        inner = rho < 1
-        fres = np.where(inner, (1 - z) ** 2.5, 0.0)
-        width = 0.05
-        halo = np.exp(-np.clip(rho - 1, 0, None) * (1 / (width * 0.30)))
-        halo *= np.clip((1 + width * 2.2 - rho) * (1 / (width * 0.6)), 0, 1)
-        edge = np.clip((1.0 - rho) * r + 0.5, 0, 1)  # the disc's own edge, smooth
-        # (outside the disc the light on the ground weighs nothing, and where the edge is
-        # whole the glow nothing: those terms are naught there, their sum the other one)
-        self.inner = np.flatnonzero(inner)
-        self.outer = np.flatnonzero(~inner)
-        self.x_in, self.y_in, self.z_in = x[inner], y[inner], z[inner]
-        self.x_out, self.y_out = x[~inner], y[~inner]
-        self.rho_out = np.maximum(rho[~inner], 1e-6)
-        self.fres_in = 0.75 * fres[inner]
-        self.edge_in = edge[inner]
-        rest = 1 - edge
-        glow = (rest > 0) & (halo > 0)
-        self.glow = np.flatnonzero(glow)
-        self.halo_glow, self.rest_glow = halo[glow], rest[glow]
-        self.size = size
-        self._colored: dict[tuple[int, int, int], np.ndarray] = {}
-
-    def colored(self, color: tuple[int, int, int]) -> np.ndarray:
-        """A new picture of the air (size x size x 4, flat) in ``color``, all of it clear."""
-        made = self._colored.get(color)
-        if made is None:
-            made = np.zeros((self.size * self.size, 4), np.uint8)
-            made[self.idx, :3] = np.minimum(255, np.array(color, np.float32) * 1.13).astype(
-                np.uint8
-            )
-            if len(self._colored) > 4:
-                self._colored.clear()
-            self._colored[color] = made
-        return made.copy()
-
-
-_AIR_GEOMETRY: dict[int, _AirGeometry] = {}
-
-
-def _air_geometry(size: int) -> _AirGeometry:
-    got = _AIR_GEOMETRY.get(size)
-    if got is None:
-        if len(_AIR_GEOMETRY) > 8:
-            _AIR_GEOMETRY.clear()
-        got = _AIR_GEOMETRY[size] = _AirGeometry(size)
-    return got
+    across = x * sx + y * sy
+    mu = np.where(inner, across + z * sz, across / np.maximum(rho, 1e-6))
+    fres = np.where(inner, (1 - z) ** 2.5, 0.0)
+    width = 0.05
+    halo = np.exp(-np.clip(rho - 1, 0, None) * (1 / (width * 0.30)))
+    halo *= np.clip((1 + width * 2.2 - rho) * (1 / (width * 0.6)), 0, 1)
+    edge = np.clip((1.0 - rho) * r + 0.5, 0, 1)  # the disc's own edge, smooth
+    alpha = 0.75 * fres * _smooth(-0.35, 0.55, mu) * edge
+    alpha += np.clip(halo * _smooth(-0.30, 0.45, mu) * 0.85, 0, 1) * (1 - edge)
+    # each pixel of the air one number, its colour and its alpha (RGBA in memory): laid in at
+    # once, where a row of four laid in by its columns took half of all this
+    rgb = np.minimum(255, np.array(color, np.float32) * 1.13).astype(np.uint32)
+    lit = np.clip(alpha * 255 + 0.5, 0, 255).astype(np.uint8).astype(np.uint32) << 24
+    out = np.zeros(size * size, "<u4")
+    out[idx] = lit | int(rgb[0] | rgb[1] << 8 | rgb[2] << 16)
+    return Image.fromarray(out.view(np.uint8).reshape(size, size, 4), "RGBA")
 
 
 _AIR_PIXELS: dict[int, np.ndarray] = {}

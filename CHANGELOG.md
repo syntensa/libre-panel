@@ -169,11 +169,10 @@
   eight times a frame (4 % of Arena's main loop); its end shows at once as its output ends,
   and the system is asked at most ten times a second. A widget's conditions (`needs`) are
   read once a text, not with every frame.
-- **A turning globe lays its air at a third of the cost.** Every two degrees of its turn
-  (Terra's globe on the 12.3" about once a second and a half) the air over it was worked out
-  whole, 8 ms of the main loop; only the light on each of its pixels changes with the turn
-  and the sun, and that alone is worked out now, where the pixels lie and what they weigh
-  once a size: 3 ms, the same pixels.
+- **A turning globe lays its air faster.** Every two degrees of its turn (Terra's globe on the
+  12.3" about once a second and a half) the air over it was laid into its picture four values
+  a pixel, column by column: almost half of the 8.5 ms of the main loop it took. Each pixel
+  goes in as one number now: 6 ms, the same pixels, and nothing more kept for it.
 - **A list's gliding bars go anew without its names and numbers.** While the bars glided
   (Arena's temperatures and cores), the list was joined anew for every frame, the bars and
   the text laid on them, a fifth of Arena's main loop; where the text lies on none of the
