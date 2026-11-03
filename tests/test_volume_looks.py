@@ -134,3 +134,4 @@ def test_a_look_made_anew_where_it_changed_is_the_picture_made_whole(look, model
         assert turning.picture(toast, level, size).tobytes() == whole.tobytes(), (text, level)
     turning.forget()  # (the message went: what it kept goes too)
     assert turning._drawn is turning._smalled is turning._base is None
+    assert getattr(turning, "_ring", None) is None

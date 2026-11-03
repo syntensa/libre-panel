@@ -551,20 +551,20 @@ class RingLook(VolumeLook):
         "ja": "リング",
     }
 
+    def __init__(self, context: Any, options: dict[str, Any]) -> None:
+        super().__init__(context, options)
+        # (the ring drawn large without its number: :meth:`ringed`)
+        self._ring: tuple[Any, Image.Image, Image.Image, Image.Image] | None = None
+
+    def forget(self) -> None:
+        super().forget()
+        self._ring = None
+
     def picture(self, toast: Any, level: float, size: tuple[int, int]) -> Image.Image:
         u, c = self.unit(size) * SS, self.colors(toast)
         d = round(min(170 * u, min(size) * SS * 0.8))
-        card = Image.new("RGBA", (d, d), (0, 0, 0, 0))
+        card = self.ringed(d, level, c, 6 * u).copy()
         draw = ImageDraw.Draw(card)
-        edge = (255, 255, 255, 30)
-        draw.ellipse([0, 0, d - 1, d - 1], fill=(*c["card"], 238), outline=edge, width=SS)
-        pad, width = round(d * 0.11), max(SS, round(d * 0.07))
-        box = [pad, pad, d - 1 - pad, d - 1 - pad]
-        draw.arc(box, 135, 405, fill=c["track"], width=width)  # three quarters, open at the bottom
-        if level > 0.0:
-            arc = Image.new("RGBA", card.size, (0, 0, 0, 0))
-            ImageDraw.Draw(arc).arc(box, 135, 135 + 270 * level, fill=c["accent"], width=width)
-            card.alpha_composite(self.glow(arc, 6 * u))
         text = self.number(toast)
         font = face(NUMBER_FACE, round(d * (0.3 if len(text) <= 3 else 0.16)))
         draw.text((d // 2, round(d * 0.47)), text, font=font, fill=c["text"], anchor="mm")
@@ -572,6 +572,49 @@ class RingLook(VolumeLook):
         speaker = self.speaker(toast, icon, c["muted"])
         card.alpha_composite(speaker, ((d - icon) // 2, round(d * 0.66)))
         return self.made_small(card)
+
+    def ringed(self, d: int, level: float, c: dict[str, RGB], glow: float) -> Image.Image:
+        """The ring ``d`` wide, drawn large, without its number: the card, the groove and the
+        sweep lit to ``level`` with its glow (kept, not to draw on). The glow over the whole
+        card took two thirds of a picture's time; it is made anew only around where the
+        sweep changed since the ring before, from the sweep within its reach (Pillow's three
+        passes of a box blur): the same pixels as made whole."""
+        pad, width = round(d * 0.11), max(SS, round(d * 0.07))
+        box = [pad, pad, d - 1 - pad, d - 1 - pad]
+        sweep = Image.new("RGBA", (d, d), (0, 0, 0, 0))
+        if level > 0.0:
+            ImageDraw.Draw(sweep).arc(box, 135, 135 + 270 * level, fill=c["accent"], width=width)
+        key = (d, glow, tuple(c.values()))
+        last = self._ring
+        if last is None or last[0] != key:
+            card = Image.new("RGBA", (d, d), (0, 0, 0, 0))
+            draw = ImageDraw.Draw(card)
+            edge = (255, 255, 255, 30)
+            draw.ellipse([0, 0, d - 1, d - 1], fill=(*c["card"], 238), outline=edge, width=SS)
+            draw.arc(box, 135, 405, fill=c["track"], width=width)  # three quarters, open below
+            lit = card.copy()
+            if level > 0.0:
+                lit.alpha_composite(self.glow(sweep, glow))
+            self._ring = (key, card, sweep, lit)
+            return lit
+        _, card, before, lit = last
+        changed = ImageChops.difference(sweep, before).getbbox(alpha_only=False)
+        if changed is not None:
+            reach = self.reach(glow)
+            x0, y0 = max(0, changed[0] - reach), max(0, changed[1] - reach)
+            x1, y1 = min(d, changed[2] + reach), min(d, changed[3] + reach)
+            gx0, gy0, gx1, gy1 = (
+                max(0, x0 - reach),
+                max(0, y0 - reach),
+                min(d, x1 + reach),
+                min(d, y1 + reach),
+            )
+            part = card.crop((x0, y0, x1, y1))
+            soft = self.glow(sweep.crop((gx0, gy0, gx1, gy1)), glow)
+            part.alpha_composite(soft.crop((x0 - gx0, y0 - gy0, x1 - gx0, y1 - gy0)))
+            lit.paste(part, (x0, y0))
+        self._ring = (key, card, sweep, lit)
+        return lit
 
 
 class BigLook(VolumeLook):
