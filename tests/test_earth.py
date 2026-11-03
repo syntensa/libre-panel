@@ -128,6 +128,54 @@ def test_a_turning_globe_shows_what_a_standing_one_shows_from_there():
         earth.Turning(64, 0.0).frame(0, None)  # (lit first)
 
 
+def reference_air(size, view, sun, color):
+    """The air over a globe as it was worked out whole each time (before what stays of it a
+    size was kept): render/earth.py's _air gives these pixels, bit for bit."""
+    right, up, toward = view
+    r = size * earth.SHARE / 2
+    idx = earth._air_pixels(size)
+    ys, xs = np.divmod(idx, size)
+    x = (xs.astype(np.float32) + (0.5 - size / 2)) * (1 / r)
+    y = ((size / 2 - 0.5) - ys.astype(np.float32)) * (1 / r)
+    rho = np.sqrt(x * x + y * y)
+    z = np.sqrt(np.clip(1 - rho * rho, 0, 1))
+    sx, sy, sz = (float(np.dot(axis, sun)) for axis in (right, up, toward))
+    inner = rho < 1
+    mu = np.where(inner, x * sx + y * sy + z * sz, (x * sx + y * sy) / np.maximum(rho, 1e-6))
+    fres = np.where(inner, (1 - z) ** 2.5, 0.0)
+    width = 0.05
+    halo = np.exp(-np.clip(rho - 1, 0, None) * (1 / (width * 0.30)))
+    halo *= np.clip((1 + width * 2.2 - rho) * (1 / (width * 0.6)), 0, 1)
+    edge = np.clip((1.0 - rho) * r + 0.5, 0, 1)
+    alpha = 0.75 * fres * earth._smooth(-0.35, 0.55, mu) * edge
+    alpha += np.clip(halo * earth._smooth(-0.30, 0.45, mu) * 0.85, 0, 1) * (1 - edge)
+    out = np.zeros((size * size, 4), np.uint8)
+    out[idx, :3] = np.minimum(255, np.array(color, np.float32) * 1.13).astype(np.uint8)
+    out[idx, 3] = np.clip(alpha * 255 + 0.5, 0, 255).astype(np.uint8)
+    return out.reshape(size, size, 4)
+
+
+@pytest.mark.parametrize("size", [64, 101, 333, 600])
+def test_the_air_worked_out_from_what_stays_of_it_a_size_is_the_same(size):
+    """A turning globe lays its air anew every two degrees (8 ms on Terra's 12.3" globe): only
+    the light on each pixel is worked out for the view and the sun, where the pixels lie and
+    what they weigh once a size (3 ms). The same pixels, bit for bit, and each air a picture
+    of its own."""
+    rng = np.random.default_rng(size)
+    made = []
+    for _ in range(6):
+        view = earth._basis(rng.uniform(-60, 60), rng.uniform(-180, 180))
+        sun = rng.normal(size=3)
+        sun /= np.linalg.norm(sun)
+        color = tuple(int(c) for c in rng.integers(0, 256, 3))
+        air = earth._air(size, view, sun, color)
+        want = reference_air(size, view, sun, color)
+        assert np.array_equal(np.asarray(air), want)
+        made.append((air, want))
+    assert all(np.array_equal(np.asarray(air), want) for air, want in made)  # (none shared)
+    assert earth._air_geometry(size) is earth._air_geometry(size)
+
+
 # -- in the renderer ----------------------------------------------------------------------
 
 
