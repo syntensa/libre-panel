@@ -100,13 +100,17 @@ def test_a_look_comes_and_goes_and_is_gone_after_its_lifetime():
 
 def turns():
     """(number, muted, level) as the volume turns: steps up and down, each gliding in four
-    frames, a jump, muted, nothing, all."""
+    frames, a jump, muted, nothing, all; and muted as the level glides away (in the muted
+    colour: the large look's bar kept its colour where it did not move) and where it stays."""
     out, at = [], 40
     for target in (43, 46, 49, 52, 49, 100, 0, 7, 64):
         for k in range(1, 5):
             out.append((str(target), False, (at + (target - at) * (1 - (1 - k / 4) ** 3)) / 100))
         at = target
-    return out + [("Muted", True, 0.0), ("64", False, 0.64)]
+    return out + [
+        ("Muted", True, 0.0), ("64", False, 0.64), ("Muted", True, 0.4), ("Muted", True, 0.1),
+        ("Muted", True, 0.0), ("64", False, 0.64), ("Muted", True, 0.64), ("64", False, 0.64),
+    ]  # fmt: skip
 
 
 @pytest.mark.parametrize("look", sorted(VOLUME_LOOKS))

@@ -39,6 +39,20 @@ class _Drawn:
     card: Image.Image
     small: Image.Image
     fill: tuple[int, int, int, int] | None  # the bar's filled box on the card (None: empty)
+    tint: Any = None  # the colour it was filled in
+
+
+def made_smaller(picture: Image.Image, size: tuple[int, int]) -> Image.Image:
+    """``picture`` (RGBA) made ``size`` with LANCZOS as Pillow up to 12 makes it in one: its
+    colours premultiplied by their alpha, first across, then down. Pillow 13 goes down first
+    where that is quicker, by the picture's shape; a part of a picture made smaller alone
+    (:meth:`VolumeLook._smaller`) then came out a level apart from that part of the whole."""
+    out = picture.convert("RGBa")
+    if out.width != size[0]:
+        out = out.resize((size[0], out.height), Image.Resampling.LANCZOS)
+    if out.height != size[1]:
+        out = out.resize(size, Image.Resampling.LANCZOS)
+    return out.convert("RGBA")
 
 
 def faded(picture: Image.Image, shown: float) -> Image.Image:
@@ -237,10 +251,11 @@ class VolumeLook(ToastStyle):
             box = (span[0], y - thick // 2, end, y + thick // 2)
         last = self._drawn
         w, h = base.size
+        tint = colors["accent"]
         if last is None or last.card.size != base.size or w % SS or h % SS:
             card = base.copy()
             self.fill(card, span, y, thick, level, colors, glow)
-            self._drawn = _Drawn(key, base, card, self.small(card), box)
+            self._drawn = _Drawn(key, base, card, self.small(card), box, tint)
             return self._drawn.small
         regions = []
         if base is not last.base:  # (the number, or another colour: where the large ones differ)
@@ -248,9 +263,10 @@ class VolumeLook(ToastStyle):
             if changed is not None:
                 regions.append(changed)
         reach = self.reach(glow)
-        if box != last.fill:
+        if box != last.fill or (box is not None and tint != last.tint):
             ends = [b for b in (box, last.fill) if b is not None]
-            if len(ends) == 2 and ends[0][:2] == ends[1][:2] and ends[0][3] == ends[1][3]:
+            same = len(ends) == 2 and ends[0][:2] == ends[1][:2] and ends[0][3] == ends[1][3]
+            if same and tint == last.tint:
                 low, high = sorted((ends[0][2], ends[1][2]))  # (the same bar: its end moved)
                 moved = (max(ends[0][0], low - thick), ends[0][1], high + 1, ends[0][3] + 1)
             else:
@@ -287,7 +303,7 @@ class VolumeLook(ToastStyle):
                 part.alpha_composite(lit)
             card.paste(part, (x0, y0))
         small = self._smaller(card, last.small, parts)
-        self._drawn = _Drawn(key, base, card, small, box)
+        self._drawn = _Drawn(key, base, card, small, box, tint)
         return small
 
     @staticmethod
@@ -375,7 +391,7 @@ class VolumeLook(ToastStyle):
     @staticmethod
     def small(picture: Image.Image) -> Image.Image:
         w, h = picture.size
-        return picture.resize((max(1, w // SS), max(1, h // SS)), Image.Resampling.LANCZOS)
+        return made_smaller(picture, (max(1, w // SS), max(1, h // SS)))
 
     GRID = (8, 4)  # what changed, looked for in these many parts of the picture across and down
 
@@ -408,20 +424,23 @@ class VolumeLook(ToastStyle):
                  ) -> Image.Image:  # fmt: skip
         """``small`` (of the large picture before) made anew from ``card`` where its pixels come
         from ``regions`` of it (LANCZOS: three pixels of the large picture each way, a pixel
-        of the small one for three): a new picture, as the one before may still be on show."""
-        w, h = card.size
+        of the small one for three): each part made smaller with four pixels of the small
+        picture round it, in whole steps of :data:`SS`, so that its pixels are those of the
+        whole (:func:`made_smaller`); a new picture, as the one before may still be on show."""
         sw, sh = small.size
         out = small.copy()
         for x0, y0, x1, y1 in regions:
             ox0, oy0 = max(0, (x0 - 12) // SS), max(0, (y0 - 12) // SS)
             ox1, oy1 = min(sw, (x1 + 12) // SS + 1), min(sh, (y1 + 12) // SS + 1)
-            cx0, cy0 = max(0, ox0 * SS - 12), max(0, oy0 * SS - 12)
-            cx1, cy1 = min(w, ox1 * SS + 12), min(h, oy1 * SS + 12)
-            fresh = card.crop((cx0, cy0, cx1, cy1)).resize(
-                (ox1 - ox0, oy1 - oy0), Image.Resampling.LANCZOS,
-                box=(ox0 * SS - cx0, oy0 * SS - cy0, ox1 * SS - cx0, oy1 * SS - cy0),
-            )  # fmt: skip
-            out.paste(fresh, (ox0, oy0))
+            px0, py0, px1, py1 = (
+                max(0, ox0 - 4),
+                max(0, oy0 - 4),
+                min(sw, ox1 + 4),
+                min(sh, oy1 + 4),
+            )
+            part = card.crop((px0 * SS, py0 * SS, px1 * SS, py1 * SS))
+            fresh = made_smaller(part, (px1 - px0, py1 - py0))
+            out.paste(fresh.crop((ox0 - px0, oy0 - py0, ox1 - px0, oy1 - py0)), (ox0, oy0))
         return out
 
 
