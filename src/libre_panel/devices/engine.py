@@ -48,6 +48,7 @@ from libre_panel.devices.h264 import (
 )
 from libre_panel.i18n import t
 from libre_panel.render import moving
+from libre_panel.render.scene import View
 
 if TYPE_CHECKING:
     from libre_panel.render.renderer import Piece
@@ -62,8 +63,8 @@ READY, REPLY, COUNTS, FAILED, WAITING = 64, 65, 66, 67, 68
 OPS = {"command": 1, "ask": 2, "query": 3, "drain": 4, "push": 5}
 STREAM, END, PICTURE = 5, 6, 8
 # a frame of layers (scene.rs): its ground, a layer, the frame (their order); a lit ring and
-# a layer of it at a value (ring.rs)
-GROUND, LAYER, SCENE, RING, RING_LAYER = 9, 10, 11, 12, 13
+# a layer of it at a value (ring.rs); a picture layers are cut from and a layer cut from them
+GROUND, LAYER, SCENE, RING, RING_LAYER, SOURCE, VIEW = 9, 10, 11, 12, 13, 14, 15
 # how a layer goes on: RGBA through its alpha, RGB as it is (a video's frame), RGB light added
 OVER, SOLID, ADD = 0, 1, 2
 # A reply may wait for the picture being sent (5 s a block at most, 1.5 s for room in the
@@ -114,6 +115,12 @@ def makes_rings(engine: str) -> bool:
     return "rings" in _can(engine)
 
 
+def cuts_views(engine: str) -> bool:
+    """Whether ``engine`` cuts a layer from pictures it keeps (render/scene.py's View): a
+    scrolling graph's window from its strip."""
+    return "views" in _can(engine)
+
+
 def _layers_of(piece: Piece) -> list[tuple[Image.Image, int, int, int]]:
     """The layers of ``piece`` as the engine lays them (picture, x, y, how), as
     Renderer._composite lays them on the opaque frame."""
@@ -132,12 +139,14 @@ class SceneSender:
     in the frames (the engine forgets a layer that a frame leaves out, and so does this); the
     ground, while it stays the same. Used by the stream's writer thread alone."""
 
-    def __init__(self, rings: bool = False) -> None:
+    def __init__(self, rings: bool = False, views: bool = False) -> None:
         self.rings = rings  # the engine makes a lit gauge's ring (render/lit.py's Ring)
+        self.views = views  # ... and cuts a layer from pictures it keeps (render/scene.py's View)
         self._ground: Any = None
-        # each piece's layers (and the ring they are of): what the engine has
-        self._pieces: dict[int, tuple[Piece, list[int], Any]] = {}
+        # each piece's layers (and the ring, or the pictures, they are of): what the engine has
+        self._pieces: dict[int, tuple[Piece, list[int], Any, tuple[int, ...]]] = {}
         self._rings: dict[Any, tuple[Image.Image, Image.Image, int]] = {}
+        self._sources: dict[int, tuple[Image.Image, int]] = {}  # by id: the picture, its number
         self._numbers = itertools.count(1)
         self.layers = 0  # sent, and their bytes
         self.bytes = 0
@@ -158,8 +167,9 @@ class SceneSender:
         """The layer of a ring the engine makes (and the ring, sent once while its frames have
         it), or ([], None) for a piece that goes as its pixels."""
         ring = piece.native
-        if (not self.rings or ring is None or ring.layer is not piece.layer or piece.add
-                or piece.light is not None):  # fmt: skip
+        if (not self.rings or ring is None or isinstance(ring, View)
+                or ring.layer is not piece.layer
+                or piece.add or piece.light is not None):  # fmt: skip
             return [], None
         key = (id(ring.groove), id(ring.lit), ring.shape)
         hit = now.get(key) or self._rings.get(key)
@@ -179,6 +189,36 @@ class SceneSender:
         self.layers += 1
         return [layer], key
 
+    def _view(
+        self, parts: list[bytes], piece: Piece, now: dict[int, tuple[Image.Image, int]]
+    ) -> tuple[list[int], tuple[int, ...]]:
+        """The layer the engine cuts from pictures it keeps (and those, sent once while its frames
+        have them), or ([], ()) for a piece that goes as its pixels."""
+        view = piece.native
+        if (not self.views or not isinstance(view, View) or view.layer is not piece.layer
+                or piece.add or piece.light is not None
+                or any(part[0].mode != "RGBA" for part in view.parts)):  # fmt: skip
+            return [], ()
+        keys, cuts = [], []
+        for image, sx, sy, dx, dy, w, h in view.parts:
+            key = id(image)
+            hit = now.get(key) or self._sources.get(key)
+            if hit is None or hit[0] is not image:
+                number = next(self._numbers) & 0xFFFFFFFF
+                data = image.tobytes()
+                size = struct.pack("<II", image.width, image.height)
+                parts += [_head(SOURCE, number, len(size) + len(data)) + size, data]
+                self.bytes += len(data)
+                hit = (image, number)
+            now[key] = hit
+            keys.append(key)
+            cuts.append(struct.pack("<IiiiiII", hit[1], sx, sy, dx, dy, w, h))
+        layer = next(self._numbers) & 0xFFFFFFFF
+        head = struct.pack("<iiIII", piece.x, piece.y, *piece.layer.size, len(cuts))
+        parts.append(_head(VIEW, layer, len(head) + 28 * len(cuts)) + head + b"".join(cuts))
+        self.layers += 1
+        return [layer], tuple(keys)
+
     def records(self, scene: Scene, number: int, planned: float | None) -> list[bytes]:
         """The records of the frame of ``scene`` numbered ``number`` (drawn for ``planned``),
         with the ground and layers the engine does not have yet."""
@@ -193,23 +233,33 @@ class SceneSender:
             parts.append(_head(GROUND, 0, 3) + bytes(ground))
         self._ground = ground
         order: list[int] = []
-        now: dict[int, tuple[Piece, list[int], Any]] = {}
-        rings: dict[Any, Any] = {}  # (the rings these frames' layers are of: the engine keeps them)
+        now: dict[int, tuple[Piece, list[int], Any, tuple[int, ...]]] = {}
+        # (the rings and pictures this frame's layers are of: the engine keeps them)
+        rings: dict[Any, Any] = {}
+        sources: dict[int, tuple[Image.Image, int]] = {}
         for _wid, piece in scene.pieces:
             key = id(piece)
             hit = now.get(key) or self._pieces.get(key)
             if hit is None or hit[0] is not piece:
                 ids, ring = self._ring(parts, piece, rings)
+                cut: tuple[int, ...] = ()
+                if not ids:
+                    ids, cut = self._view(parts, piece, sources)
                 if not ids:
                     ids = [self._layer(parts, *layer) for layer in _layers_of(piece)]
-                hit = (piece, ids, ring)
-            elif hit[2] is not None:  # (a ring layer the engine has: its ring stays too)
-                kept = rings.get(hit[2]) or self._rings.get(hit[2])
-                if kept is not None:
-                    rings[hit[2]] = kept
+                hit = (piece, ids, ring, cut)
+            else:  # (a layer the engine has: what it is made of stays too)
+                if hit[2] is not None:
+                    kept = rings.get(hit[2]) or self._rings.get(hit[2])
+                    if kept is not None:
+                        rings[hit[2]] = kept
+                for source in hit[3]:
+                    held = sources.get(source) or self._sources.get(source)
+                    if held is not None:
+                        sources[source] = held
             now[key] = hit
             order += hit[1]
-        self._pieces, self._rings = now, rings
+        self._pieces, self._rings, self._sources = now, rings, sources
         when = float("nan") if planned is None else planned
         parts.append(
             _head(SCENE, number, len(order))
@@ -613,12 +663,13 @@ class EngineStream:
     def __init__(
         self, link: EngineLink, size: tuple[int, int], options: list[str], block: int,
         lead: float | None = None, scenes: bool = False, rings: bool = False,
+        views: bool = False,
     ) -> None:  # fmt: skip
         self.link, self.size = link, size
         # with ``scenes``: frames of layers go to the engine as them (render/scene.py); the
         # engine's stream has none of their layers yet, and nor has this; with ``rings`` the
-        # engine makes a lit gauge's ring itself
-        self.scenes = SceneSender(rings) if scenes else None
+        # engine makes a lit gauge's ring itself, with ``views`` it cuts a graph's window
+        self.scenes = SceneSender(rings, views) if scenes else None
         # how long after the time a frame was drawn for the engine sends its picture (seconds;
         # None: the engine's own choice, h264.engine_lead's)
         self.lead = lead

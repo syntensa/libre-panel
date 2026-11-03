@@ -206,6 +206,19 @@ fn encode(options: Options) -> Result<(), String> {
                 groove,
                 lit,
             }) => scene.ring_base(id, ring::Base::new(side, &geometry, groove, lit)?),
+            Some(wire::Record::Source { id, w, h, pixels }) => scene.source(id, w, h, pixels)?,
+            Some(wire::Record::View {
+                id,
+                x,
+                y,
+                w,
+                h,
+                parts,
+            }) => {
+                let began = Instant::now();
+                scene.view(id, (x, y, w, h), &parts)?;
+                spent_layers += began.elapsed().as_secs_f64();
+            }
             Some(wire::Record::Ring {
                 id,
                 ring,
@@ -295,9 +308,10 @@ fn main() -> ExitCode {
         Some("version") => {
             // (Libre Panel reads what it can there: "panel", a panel of its own (stage 1b);
             // "scenes", frames of layers it composes (stage 2, scene.rs); "rings", a lit gauge's
-            // ring it makes for each value (ring.rs))
+            // ring it makes for each value (ring.rs); "views", layers it cuts from sources it
+            // keeps, a graph's window from its strip (scene.rs's view))
             println!(
-                "libre-panel-engine {} (x264 build {}; panel, scenes, rings)",
+                "libre-panel-engine {} (x264 build {}; panel, scenes, rings, views)",
                 env!("CARGO_PKG_VERSION"),
                 x264::build()
             );

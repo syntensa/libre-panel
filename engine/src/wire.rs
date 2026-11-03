@@ -35,6 +35,15 @@
 //!                     the groove with the whole sweep lit (RGBA each, the canvas): ring.rs
 //! kind 13, a layer of a ring: a its number, b 24: the ring's number, x, y (u32, i32, i32),
 //!                     nothing (u32), the share of its sweep lit (f64)
+//! kind 14, a source:  a its number, b the length of what follows: w, h (u32 each), then its
+//!                     pixels (RGBA), row by row: what layers of kind 15 are cut from (a
+//!                     graph's strip), kept while a layer of the frame before is cut from it
+//! kind 15, a layer cut from sources: a its number, b the length of what follows: x, y (i32),
+//!                     w, h and how many parts (u32 each), then each part: its source (u32),
+//!                     where it begins in the source and in the layer (x, y: i32 each), w, h
+//!                     (u32 each); RGBA through its alpha, transparent where no part lies,
+//!                     each part pasted over those before it with nothing where it lies off
+//!                     its source (as Pillow crops and pastes): scene.rs's `view`
 //! ```
 //!
 //! On its stdout, with a panel of its own (`panel`): the same head, then b bytes:
@@ -105,6 +114,20 @@ pub enum Record {
         x: i32,
         y: i32,
         frac: f64,
+    },
+    Source {
+        id: u32,
+        w: usize,
+        h: usize,
+        pixels: Vec<u8>,
+    },
+    View {
+        id: u32,
+        x: i32,
+        y: i32,
+        w: usize,
+        h: usize,
+        parts: Vec<crate::scene::Part>,
     },
 }
 
@@ -181,6 +204,8 @@ const MOST_PICTURE: usize = 16 << 20;
 const MOST_LAYER: usize = 64 << 20;
 /// The most layers a frame takes (Lumen's on the 12.3" are about a hundred).
 const MOST_LAYERS: usize = 1 << 16;
+/// The most parts a layer is cut from (a graph's window: three).
+const MOST_PARTS: usize = 64;
 
 fn boxes(input: &mut impl Read, count: u32) -> io::Result<Boxes> {
     let mut boxes = Vec::with_capacity(count.min(4096) as usize);
@@ -404,6 +429,57 @@ pub fn read(input: &mut impl Read) -> io::Result<Option<Record>> {
                 frac,
             }))
         }
+        14 => {
+            let len = b as usize;
+            if !(8..=MOST_LAYER + 8).contains(&len) {
+                return Err(invalid("a source too large"));
+            }
+            let mut size = [0u8; 8];
+            whole(input, &mut size, "a source cut short")?;
+            let (w, h) = (u32_at(&size, 0) as usize, u32_at(&size, 4) as usize);
+            if w.checked_mul(h).and_then(|n| n.checked_mul(4)) != Some(len - 8) {
+                return Err(invalid("a source's pixels are not of its size"));
+            }
+            let mut pixels = vec![0u8; len - 8];
+            whole(input, &mut pixels, "a source cut short")?;
+            Ok(Some(Record::Source {
+                id: a,
+                w,
+                h,
+                pixels,
+            }))
+        }
+        15 => {
+            let len = b as usize;
+            if len < 20 || !(len - 20).is_multiple_of(28) || (len - 20) / 28 > MOST_PARTS {
+                return Err(invalid("a layer cut from sources of another length"));
+            }
+            let mut data = vec![0u8; len];
+            whole(input, &mut data, "a layer cut from sources cut short")?;
+            if u32_at(&data, 16) as usize != (len - 20) / 28 {
+                return Err(invalid("a layer cut from sources of another length"));
+            }
+            let parts = data[20..]
+                .chunks_exact(28)
+                .map(|p| crate::scene::Part {
+                    source: u32_at(p, 0),
+                    sx: u32_at(p, 4) as i32,
+                    sy: u32_at(p, 8) as i32,
+                    dx: u32_at(p, 12) as i32,
+                    dy: u32_at(p, 16) as i32,
+                    w: u32_at(p, 20) as usize,
+                    h: u32_at(p, 24) as usize,
+                })
+                .collect();
+            Ok(Some(Record::View {
+                id: a,
+                x: u32_at(&data, 0) as i32,
+                y: u32_at(&data, 4) as i32,
+                w: u32_at(&data, 8) as usize,
+                h: u32_at(&data, 12) as usize,
+                parts,
+            }))
+        }
         kind => Err(invalid(&format!("a record of kind {kind}"))),
     }
 }
@@ -535,6 +611,54 @@ mod tests {
             }
             _ => panic!("not the frame"),
         }
+    }
+
+    #[test]
+    fn a_source_and_a_layer_cut_from_it() {
+        let mut input = head(14, 4, 8 + 2 * 4);
+        input.extend(2u32.to_le_bytes());
+        input.extend(1u32.to_le_bytes());
+        input.extend([1, 2, 3, 4, 5, 6, 7, 8]);
+        input.extend(head(15, 9, 20 + 28));
+        for v in [(-1i32) as u32, 2, 3, 1, 1, 4, 1, 0, (-1i32) as u32, 0, 2, 1] {
+            input.extend(v.to_le_bytes());
+        }
+        let mut input = input.as_slice();
+        match read(&mut input).unwrap() {
+            Some(Record::Source { id, w, h, pixels }) => {
+                assert_eq!((id, w, h), (4, 2, 1));
+                assert_eq!(pixels, vec![1, 2, 3, 4, 5, 6, 7, 8]);
+            }
+            _ => panic!("not the source"),
+        }
+        match read(&mut input).unwrap() {
+            Some(Record::View {
+                id,
+                x,
+                y,
+                w,
+                h,
+                parts,
+            }) => {
+                assert_eq!((id, x, y, w, h), (9, -1, 2, 3, 1));
+                let p = &parts[0];
+                assert_eq!(
+                    (p.source, p.sx, p.sy, p.dx, p.dy, p.w, p.h),
+                    (4, 1, 0, -1, 0, 2, 1)
+                );
+            }
+            _ => panic!("not the layer"),
+        }
+        let mut wrong = head(14, 4, 8 + 3);
+        wrong.extend(1u32.to_le_bytes());
+        wrong.extend(1u32.to_le_bytes());
+        wrong.extend([0u8; 3]);
+        assert!(read(&mut wrong.as_slice()).is_err()); // (not of its size)
+        let mut counted = head(15, 9, 20 + 28);
+        for v in [0u32, 0, 1, 1, 2, 0, 0, 0, 0, 0, 1, 1] {
+            counted.extend(v.to_le_bytes());
+        }
+        assert!(read(&mut counted.as_slice()).is_err()); // (two parts said, one there)
     }
 
     #[test]

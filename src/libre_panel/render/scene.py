@@ -105,6 +105,46 @@ class Lazy(Image.Image):
         return super().load()
 
 
+Cut = tuple[Image.Image, int, int, int, int, int, int]  # (picture, x, y in it, x, y, w, h)
+
+
+@dataclass(frozen=True, eq=False)
+class View:
+    """How an engine cuts a piece's picture ``layer`` from pictures it keeps (engine/src/scene.rs's
+    view): ``parts`` (picture, x and y in it, x and y in the piece's, w, h), each pasted in turn
+    on a transparent picture of the piece's size, nothing where it lies off its picture (as
+    Pillow crops and pastes). A scrolling graph's window is cut so from its strip, every frame
+    anew; the strip goes to the engine once."""
+
+    layer: Image.Image
+    parts: tuple[Cut, ...]
+
+
+def viewed(size: tuple[int, int], parts: list[Cut] | tuple[Cut, ...]) -> View:
+    """The :class:`View` of a picture of ``size`` cut from ``parts``, its ``layer`` made here
+    only when something asks for its pixels (a frame composed here)."""
+    parts = tuple(parts)
+
+    def make() -> Image.Image:
+        out = Image.new("RGBA", size, (0, 0, 0, 0))
+        for image, sx, sy, dx, dy, w, h in parts:
+            out.paste(image.crop((sx, sy, sx + w, sy + h)), (dx, dy))
+        return out
+
+    return View(Lazy(size, "RGBA", make), parts)
+
+
+def cut_columns(view: View, left: int, right: int) -> View:
+    """``view`` cut to its columns from ``left`` up to ``right`` (a graph without its glow
+    beside its box: Renderer's _clip_sides), its pixels not made either."""
+    parts = []
+    for image, sx, sy, dx, dy, w, h in view.parts:
+        a, b = max(dx, left), min(dx + w, right)
+        if b > a:
+            parts.append((image, sx + a - dx, sy, a - left, dy, b - a, h))
+    return viewed((right - left, view.layer.height), parts)
+
+
 class SceneFrame(Lazy):
     """The frame of a :class:`Scene` as a picture (RGB): its pixels are composed the first time
     anything asks for them (:func:`compose`). ``scene`` is its own: a copy, one drawn on, is not

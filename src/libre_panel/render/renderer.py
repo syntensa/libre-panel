@@ -928,6 +928,9 @@ class Renderer:
         # the display's engine makes a lit gauge's ring itself (render/lit.py's Ring): its
         # pieces are made here only where a frame is composed here
         self.native_rings = False
+        # ... and cuts a scrolling graph's window from its strip, which it keeps (scene.View):
+        # the window's pixels are made here only where a frame is composed here
+        self.native_views = False
         self._held: dict[str, bool] = {}  # the conditions of needs worked out in this frame ...
         self._held_for: tuple[Any, ...] = ()  # ... for these readings (and pictures)
         self._composed: list[tuple[int, int, int, int]] | None = None
@@ -4450,7 +4453,17 @@ class Renderer:
                 self._patch(widget, layer, strip, history, valid, at)
             return layer
 
-        if not patch or not part:
+        view = None
+        if self.native_views and not patch and now_range is None:  # cut by the engine
+            k = phase * strip.parts + part
+            cuts = [(strip.phases[k], offset, 0, 0, 0, w + 2 * pad, h + 2 * pad)]
+            if strip.halo is not None:  # beside the window only the glow, as window() cuts
+                cuts += [
+                    (strip.halo, offset + x0, 0, x0, 0, pad, h + 2 * pad) for x0 in (0, w + pad)
+                ]
+            view = scenes.viewed((w + 2 * pad, h + 2 * pad), cuts)
+            layer = view.layer
+        elif not patch or not part:
             layer = window(phase * strip.parts + part, offset, left)
         else:  # the end drawn again: on both steps, and blended as the strip's parts are
             ahead = (phase + 1) % s
@@ -4461,7 +4474,7 @@ class Renderer:
         if now_range is not None:  # its own range glides: on its way in every frame
             layer = self._restretch(widget, layer, pad, strip.bounds, now_range)
         x, y = widget["x"], widget["y"]
-        piece = Piece(layer, x - pad, y - pad, [x, y, w, h])
+        piece = Piece(layer, x - pad, y - pad, [x, y, w, h], native=view)
         if widget.get("clip"):
             piece = _clip_sides(piece)
         self._cache[wid] = (None if patch else content, piece)
@@ -5084,14 +5097,19 @@ class _Strip:
 
 
 def _clip_sides(piece: Piece) -> Piece:
-    """``piece`` without what lies left and right of its box (its glow there)."""
+    """``piece`` without what lies left and right of its box (its glow there); one an engine
+    cuts (scene.View) cut so too, its pixels not made here."""
     x, _, w, _ = piece.box or (piece.x, 0, piece.layer.width, 0)
     left = max(0, x - piece.x)
     right = min(piece.layer.width, x + w - piece.x)
     if left == 0 and right == piece.layer.width:
         return piece
+    view = piece.native
+    if isinstance(view, scenes.View) and view.layer is piece.layer:
+        view = scenes.cut_columns(view, left, right)
+        return replace(piece, layer=view.layer, x=piece.x + left, native=view)
     layer = piece.layer.crop((left, 0, right, piece.layer.height))
-    return replace(piece, layer=layer, x=piece.x + left)
+    return replace(piece, layer=layer, x=piece.x + left, native=None)
 
 
 class _Range:

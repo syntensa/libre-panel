@@ -43,6 +43,28 @@ impl How {
 
 /// The largest layer taken: twice the largest panel each way.
 pub const MOST_SIDE: usize = 8192;
+/// The longest source taken (a graph's strip reaches past its window: as wide as two layers).
+pub const MOST_SOURCE: usize = 2 * MOST_SIDE;
+
+/// A part of a layer cut from a source (wire.rs's kind 15): `w` x `h` pixels from (`sx`, `sy`)
+/// in the source to (`dx`, `dy`) in the layer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Part {
+    pub source: u32,
+    pub sx: i32,
+    pub sy: i32,
+    pub dx: i32,
+    pub dy: i32,
+    pub w: usize,
+    pub h: usize,
+}
+
+/// A picture layers are cut from (RGBA, row by row): a graph's strip.
+struct Source {
+    w: usize,
+    h: usize,
+    pixels: Vec<u8>,
+}
 
 #[derive(Clone)]
 pub struct Layer {
@@ -56,6 +78,8 @@ pub struct Layer {
     part: (usize, usize, usize, usize),
     /// The ring it is a picture of (ring.rs), which stays while it does.
     ring: Option<u32>,
+    /// The sources it was cut from, which stay while it does.
+    sources: Vec<u32>,
 }
 
 impl Layer {
@@ -86,6 +110,7 @@ impl Layer {
             pixels,
             part,
             ring: None,
+            sources: Vec::new(),
         })
     }
 
@@ -166,6 +191,8 @@ pub struct Scene {
     under: Vec<Option<Under>>,
     /// The rings whose pictures the engine makes for each value (ring.rs).
     rings: HashMap<u32, ring::Base>,
+    /// The pictures layers are cut from (a graph's strip, its window cut for each frame).
+    sources: HashMap<u32, Source>,
 }
 
 pub type Rect = (usize, usize, usize, usize);
@@ -187,6 +214,7 @@ impl Scene {
             whole: true,
             under: (0..cols * rows).map(|_| None).collect(),
             rings: HashMap::new(),
+            sources: HashMap::new(),
         }
     }
 
@@ -233,6 +261,71 @@ impl Scene {
         let side = base.side();
         let mut layer = Layer::new(x, y, side, side, How::Over, base.picture(frac))?;
         layer.ring = Some(ring);
+        self.layer(id, layer);
+        Ok(())
+    }
+
+    /// A picture to cut layers from (RGBA, `w` x `h`), for the frames to come.
+    pub fn source(&mut self, id: u32, w: usize, h: usize, pixels: Vec<u8>) -> Result<(), String> {
+        if w == 0 || h == 0 || w > MOST_SOURCE || h > MOST_SOURCE || pixels.len() != w * h * 4 {
+            return Err(format!("a source of {w}x{h} and {} bytes", pixels.len()));
+        }
+        self.sources.insert(id, Source { w, h, pixels });
+        Ok(())
+    }
+
+    /// Layer `id` at (x, y), `w` x `h` RGBA through its alpha, cut from sources: transparent
+    /// where no part lies, each part pasted over those before it, nothing where it lies off its
+    /// source (as Pillow crops a picture, also beyond its edges, and pastes the crop).
+    pub fn view(
+        &mut self,
+        id: u32,
+        (x, y, w, h): (i32, i32, usize, usize),
+        parts: &[Part],
+    ) -> Result<(), String> {
+        if w == 0 || h == 0 || w > MOST_SIDE || h > MOST_SIDE {
+            return Err(format!("a layer of {w}x{h}"));
+        }
+        let mut pixels = vec![0u8; w * h * 4];
+        let mut sources = Vec::with_capacity(parts.len());
+        for part in parts {
+            let source = self.sources.get(&part.source).ok_or_else(|| {
+                format!(
+                    "layer {id} cut from source {}, which never came",
+                    part.source
+                )
+            })?;
+            let (sx, sy) = (i64::from(part.sx), i64::from(part.sy));
+            let (dx, dy) = (i64::from(part.dx), i64::from(part.dy));
+            // the part where it lies on the layer, and of that where it lies on its source
+            // (u, v from the part's corner)
+            let (u0, v0) = ((-dx).max(0), (-dy).max(0));
+            let u1 = (part.w as i64).min(w as i64 - dx);
+            let v1 = (part.h as i64).min(h as i64 - dy);
+            if u1 <= u0 || v1 <= v0 {
+                continue;
+            }
+            let (s0, s1) = (u0.max(-sx), u1.min(source.w as i64 - sx));
+            for v in v0..v1 {
+                let row = ((dy + v) as usize * w + (dx + u0) as usize) * 4;
+                let line = &mut pixels[row..row + (u1 - u0) as usize * 4];
+                let sv = sy + v;
+                if !(0..source.h as i64).contains(&sv) || s1 <= s0 {
+                    line.fill(0);
+                    continue;
+                }
+                let (left, on) = ((s0 - u0) as usize * 4, (s1 - s0) as usize * 4);
+                line[..left].fill(0);
+                let from = (sv as usize * source.w + (sx + s0) as usize) * 4;
+                line[left..left + on].copy_from_slice(&source.pixels[from..from + on]);
+                line[left + on..].fill(0);
+            }
+            if !sources.contains(&part.source) {
+                sources.push(part.source);
+            }
+        }
+        let mut layer = Layer::new(x, y, w, h, How::Over, pixels)?;
+        layer.sources = sources;
         self.layer(id, layer);
         Ok(())
     }
@@ -299,6 +392,12 @@ impl Scene {
         self.layers.retain(|id, _| keep.contains(id));
         let rings: HashSet<u32> = self.layers.values().filter_map(|l| l.ring).collect();
         self.rings.retain(|id, _| rings.contains(id));
+        let sources: HashSet<u32> = self
+            .layers
+            .values()
+            .flat_map(|l| l.sources.clone())
+            .collect();
+        self.sources.retain(|id, _| sources.contains(id));
         Ok(boxes)
     }
 
@@ -597,6 +696,50 @@ mod tests {
                                              // the ones that stay in another order: all of it
         assert_eq!(s.frame(vec![3, 1], false).unwrap()[0].2, 64);
         assert!(s.frame(vec![3, 9], false).is_err());
+    }
+
+    #[test]
+    fn a_layer_cut_from_sources_is_the_crops_pasted_and_its_sources_stay_with_it() {
+        let mut s = Scene::new(8, 4, 2);
+        // a source of 4 x 2: pixel (x, y) is [x, y, 7, 255]
+        let strip: Vec<u8> = (0..2u8)
+            .flat_map(|y| (0..4u8).flat_map(move |x| [x, y, 7, 255]))
+            .collect();
+        s.source(5, 4, 2, strip).unwrap();
+        s.source(6, 1, 1, vec![1, 1, 1, 255]).unwrap();
+        let part = |source, sx, sy, dx, dy, w, h| Part {
+            source,
+            sx,
+            sy,
+            dx,
+            dy,
+            w,
+            h,
+        };
+        // a crop from x 2 (partly off the source, beyond its right edge), and over its first
+        // column one off the source above it: transparent there
+        let parts = [part(5, 2, 0, 0, 0, 3, 2), part(6, 0, -1, 0, 0, 1, 2)];
+        s.view(1, (1, 1, 3, 2), &parts).unwrap();
+        let layer = &s.layers[&1];
+        let px = |x: usize, y: usize| &layer.pixels[(y * 3 + x) * 4..(y * 3 + x) * 4 + 4];
+        assert_eq!(px(0, 0), &[0, 0, 0, 0]); // (the second part: off its source)
+        assert_eq!(px(0, 1), &[1, 1, 1, 255]);
+        assert_eq!(px(1, 0), &[3, 0, 7, 255]);
+        assert_eq!(px(1, 1), &[3, 1, 7, 255]);
+        assert_eq!(px(2, 0), &[0, 0, 0, 0]); // (the first: beyond its source)
+        assert_eq!(layer.sources, vec![5, 6]);
+        assert!(s
+            .view(2, (0, 0, 1, 1), &[part(9, 0, 0, 0, 0, 1, 1)])
+            .is_err());
+        s.frame(vec![1], false).unwrap();
+        assert_eq!(s.sources.len(), 2); // (kept with the layer cut from them)
+        s.layer(
+            3,
+            Layer::new(0, 0, 1, 1, How::Over, vec![0, 0, 0, 255]).unwrap(),
+        );
+        s.frame(vec![3], false).unwrap();
+        assert!(s.sources.is_empty()); // (gone with it)
+        assert!(s.source(7, 2, 2, vec![0; 4]).is_err());
     }
 
     #[test]

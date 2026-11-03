@@ -666,6 +666,29 @@ pub fn run(options: Options) -> Result<(), String> {
                     break Err(e);
                 }
             }
+            Record::Source { id, w, h, pixels } => {
+                let Some(s) = stream.as_mut() else {
+                    break Err("a source before its stream".into());
+                };
+                if let Err(e) = s.scene.source(id, w, h, pixels) {
+                    break Err(e);
+                }
+            }
+            Record::View {
+                id,
+                x,
+                y,
+                w,
+                h,
+                parts,
+            } => {
+                let Some(s) = stream.as_mut() else {
+                    break Err("a layer before its stream".into());
+                };
+                if let Err(e) = s.scene.view(id, (x, y, w, h), &parts) {
+                    break Err(e);
+                }
+            }
             Record::Layer {
                 id,
                 x,

@@ -286,6 +286,96 @@ def test_each_layer_goes_to_the_engine_once_while_it_is_in_the_frames():
     assert [k for k, *_ in fifth] == [engines.SCENE]
 
 
+def strip(w=40, h=6):
+    """A picture of ``w`` x ``h``, every pixel its own (x, y, x + y, alpha)."""
+    image = Image.new("RGBA", (w, h))
+    image.putdata([(x, y, x + y, 128 + x) for y in range(h) for x in range(w)])
+    return image
+
+
+def test_a_view_is_the_crops_pasted_and_cut_as_its_columns_are():
+    phase, halo = strip(), strip(30, 6).transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+    cuts = [(phase, 34, 0, 0, 0, 12, 6), (halo, 2, -1, 0, 0, 3, 6), (halo, 20, 0, 9, 0, 3, 6)]
+    view = scenes.viewed((12, 6), cuts)
+    assert not view.layer.composed
+    want = phase.crop((34, 0, 46, 6))  # (beyond the strip's right edge: nothing there)
+    want.paste(halo.crop((2, -1, 5, 5)), (0, 0))
+    want.paste(halo.crop((20, 0, 23, 6)), (9, 0))
+    assert view.layer.tobytes() == want.tobytes()
+    cut = scenes.cut_columns(scenes.viewed((12, 6), cuts), 3, 9)
+    assert cut.layer.size == (6, 6) and all(part[0] is phase for part in cut.parts)
+    assert cut.layer.tobytes() == want.crop((3, 0, 9, 6)).tobytes()
+
+
+def test_a_graph_s_window_is_cut_by_the_engine_from_its_strip_sent_once():
+    sender = engines.SceneSender(views=True)
+    phase = strip()
+    window = scenes.viewed((10, 6), [(phase, 5, 0, 0, 0, 10, 6)])
+    card = piece((9, 9, 9, 255), size=(20, 10))
+    first = heads(sender.records(scene_of(card, Piece(window.layer, 2, 3, native=window)), 0, None))
+    assert [k for k, *_ in first] == [engines.GROUND, engines.LAYER, engines.SOURCE, engines.VIEW,
+                                      engines.SCENE]  # fmt: skip
+    source, cut = first[2], first[3]
+    assert struct.unpack("<II", source[3][:8]) == (40, 6) and source[3][8:] == phase.tobytes()
+    assert struct.unpack("<iiIII", cut[3][:20]) == (2, 3, 10, 6, 1)
+    assert struct.unpack("<IiiiiII", cut[3][20:]) == (source[1], 5, 0, 0, 0, 10, 6)
+    assert not window.layer.composed  # (its pixels were not made here)
+    # the next window of the strip: the view alone; the same piece again: nothing new
+    later = scenes.viewed((10, 6), [(phase, 6, 0, 0, 0, 10, 6)])
+    moved = Piece(later.layer, 2, 3, native=later)
+    second = heads(sender.records(scene_of(card, moved), 1, None))
+    assert [k for k, *_ in second] == [engines.VIEW, engines.SCENE]
+    assert struct.unpack("<I", second[0][3][20:24])[0] == source[1]
+    assert [k for k, *_ in heads(sender.records(scene_of(card, moved), 2, None))] == [engines.SCENE]
+    # a frame without it: the engine lets the strip go, and so does this; then it comes anew
+    sender.records(scene_of(card), 3, None)
+    again = scenes.viewed((10, 6), [(phase, 7, 0, 0, 0, 10, 6)])
+    fourth = heads(sender.records(scene_of(Piece(again.layer, 0, 0, native=again)), 4, None))
+    assert [k for k, *_ in fourth] == [engines.SOURCE, engines.VIEW, engines.SCENE]
+    # an engine that does not cut views gets the window's pixels, made then
+    plain = engines.SceneSender()
+    other = scenes.viewed((10, 6), [(phase, 8, 0, 0, 0, 10, 6)])
+    fifth = heads(plain.records(scene_of(Piece(other.layer, 0, 0, native=other)), 0, None))
+    assert [k for k, *_ in fifth] == [engines.GROUND, engines.LAYER, engines.SCENE]
+    assert fifth[1][3][20:] == phase.crop((8, 0, 18, 6)).tobytes()
+
+
+def test_a_scrolling_graph_cut_by_the_engine_shows_what_it_showed():
+    """Its window's pixels, made only when asked for, the window's as cropped here before, its
+    sides cut away too where it is clipped; one drawn again at its end (a reading the strip
+    did not know) as its pixels."""
+    from test_motion import graph, theme, video
+
+    from libre_panel.render.renderer import Renderer
+
+    widgets = (graph(), graph("clipped", y=50, clip=True, glow=0.6))
+    cut, cropped = (video(Renderer(theme(*widgets, size=(200, 100))), fps=25) for _ in range(2))
+    cut.native_views = True
+    viewed = 0
+    for k in range(60):
+        snapshot, now = snap_at(k), 1000 + k / 25
+        frame, _ = cut.render(snapshot, now, scene=True)
+        assert isinstance(frame, scenes.SceneFrame)
+        for wid in ("g", "clipped"):
+            mine, theirs = cut._cache[wid][1], None
+            if isinstance(mine.native, scenes.View) and not mine.layer.composed:
+                viewed += 1  # (its pixels not made for the frame)
+        own, _ = cropped.render(snapshot, now)
+        assert scenes.compose(frame.scene).tobytes() == own.tobytes(), k
+        for wid in ("g", "clipped"):
+            mine, theirs = cut._cache[wid][1], cropped._cache[wid][1]
+            assert (mine.x, mine.y, mine.box) == (theirs.x, theirs.y, theirs.box)
+            assert mine.layer.tobytes() == theirs.layer.tobytes(), (k, wid)
+    assert viewed > 60  # (most windows: cut, their pixels made only here, for the test)
+
+
+def snap_at(k):
+    from libre_panel.sensors.base import Reading, Snapshot
+
+    value = 50 + 40 * ((k // 10) % 2)  # a new reading every 0.4 s
+    return Snapshot(readings={"v": Reading("v", float(value))})
+
+
 @pytest.fixture
 def engine():
     found = h264.find_engine()
@@ -299,7 +389,7 @@ class Fed(Layered):
     their layers, every seventh as the frame's own pixels (a message over it), all turned with
     ``half``; the renderer's own frame of each is kept to compare."""
 
-    def __init__(self, engine, size, out, half, rings=False):
+    def __init__(self, engine, size, out, half, rings=False, views=False):
         super().__init__()
         self.half, self.makes_rings = half, rings
         self.proc = subprocess.Popen(
@@ -307,7 +397,7 @@ class Fed(Layered):
              "--crf", "20", "--kbit", "4000", "--keyint", "250", "--dump-rgb", str(out)],
             stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
         )  # fmt: skip
-        self.sender, self.own, self.n = engines.SceneSender(rings), [], 0
+        self.sender, self.own, self.n = engines.SceneSender(rings, views), [], 0
 
     def show(self, frame, region=None):
         Stream.show(self, frame, region)
@@ -327,19 +417,23 @@ class Fed(Layered):
 
 
 @pytest.mark.parametrize(
-    ("theme", "half", "rings", "toast"),
-    [("lumen-1920x720", False, False, False), ("arena-1920x720", True, False, False),
-     ("lumen-1920x720", False, True, False), ("arena-1920x720", True, False, True)],
+    ("theme", "half", "rings", "toast", "views"),
+    [("lumen-1920x720", False, False, False, False), ("arena-1920x720", True, False, False, False),
+     ("lumen-1920x720", False, True, False, False), ("arena-1920x720", True, False, True, False),
+     ("lumen-1920x720", False, False, False, True), ("arena-1920x720", True, False, True, True)],
 )  # fmt: skip
 def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
-    engine, tmp_path, theme, half, rings, toast
+    engine, tmp_path, theme, half, rings, toast, views
 ):
-    """Pixel for pixel, a message over it too (one more layer, as it comes, shows and goes);
-    where the engine makes the rings too, to a level, at few pixels."""
+    """Pixel for pixel, a message over it too (one more layer, as it comes, shows and goes),
+    the graphs' windows cut by the engine from their strips too; where the engine makes the
+    rings too, to a level, at few pixels."""
     if rings and not engines.makes_rings(engine):
         pytest.skip("needs libre-panel-engine that makes rings (cargo build --release)")
+    if views and not engines.cuts_views(engine):
+        pytest.skip("needs libre-panel-engine that cuts views (cargo build --release)")
     clock, host = Clock(1000.0), PluginHost()
-    display = Fed(engine, (1920, 720), tmp_path / "frames.rgb", half, rings)
+    display = Fed(engine, (1920, 720), tmp_path / "frames.rgb", half, rings, views)
     loop = loop_with(theme, display, clock, host)
     try:
         run(loop, clock, 4)
@@ -367,6 +461,8 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
         assert diff.convert("L").point(lambda v: v > 0 and 255).histogram()[255] <= 200
     if rings:
         assert display.sender._rings and loop.renderer.native_rings  # (made by the engine)
+    if views:  # (the graphs' strips went to it, their windows cut there)
+        assert display.sender._sources and loop.renderer.native_views
 
 
 def test_a_video_panel_shows_frames_of_layers_the_engine_composed(engine, monkeypatch, caplog):

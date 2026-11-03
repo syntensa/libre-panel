@@ -119,6 +119,13 @@
   ring's picture where it composes the frame itself. On the 12.3" with Lumen at 25 frames a
   second the whole way to the panel takes 18.9 ms of the processor a frame instead of 23.7
   (27.8 before the engine composed the frames), the app's helper thread 2.5 ms instead of 5.6.
+- **And the engine cuts the scrolling graphs' windows itself.** A graph that scrolls showed a
+  window of its strip (its curve drawn ahead), cut out anew for every frame and sent to the
+  engine whole: on the 12.3" 21 MB a second for Arena's history, 35 for Lumen's two graphs.
+  Now the strip goes to the engine once (and again when a reading changes it: one to four
+  times a minute), and with each frame only where the window lies on it; the engine cuts it,
+  the same pixels. On the 12.3" at 25 frames a second Lumen takes 48.9 % of a core instead
+  of 54.3 (the main loop 4.9 ms a frame instead of 5.6), Arena 53.0 instead of 59.4.
 
 **Lighter**
 - **The main loop no longer resolves the themes' folder on disk with every frame, and draws

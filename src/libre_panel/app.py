@@ -1537,6 +1537,9 @@ class MainLoop:
                     # its rings too, where the engine makes them (render/lit.py's Ring): made
                     # here only for a frame composed here
                     renderer.native_rings = layers and getattr(display, "makes_rings", False)
+                    # and its graphs' windows cut from their strips (render/scene.py's View):
+                    # by the engine where it cuts them, else their pixels made in its writer
+                    renderer.native_views = layers
                     if layers:
                         drawn, _ = renderer.render(snapshot, now, scene=True)
                     else:  # (as before: a renderer of a test or a plugin may take no more)
