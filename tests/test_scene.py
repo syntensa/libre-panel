@@ -297,7 +297,7 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
         assert display.sender._rings and loop.renderer.native_rings  # (made by the engine)
 
 
-def test_a_video_panel_shows_frames_of_layers_the_engine_composed(engine, monkeypatch):
+def test_a_video_panel_shows_frames_of_layers_the_engine_composed(engine, monkeypatch, caplog):
     from fake_panel import FakePanel
     from panel_socket import PanelSocket
     from test_video import decode, settle, video_config
@@ -319,6 +319,7 @@ def test_a_video_panel_shows_frames_of_layers_the_engine_composed(engine, monkey
     monkeypatch.setattr(turzx_usb.UsbTransport, "present", staticmethod(lambda pid: True))
     monkeypatch.setattr(turzx_video, "RESTART", turzx_video._Restart())
     monkeypatch.setattr(turzx_video, "RATES", {})
+    caplog.set_level("INFO", logger="libre_panel.devices.turzx_video")
     display = TurzxVideoDisplay(video_config(encoder="native"))
     display.open()
     sources = []
@@ -338,6 +339,8 @@ def test_a_video_panel_shows_frames_of_layers_the_engine_composed(engine, monkey
         display.close()
         sock.close()
     assert sock.errors == []
+    said = [r.getMessage() for r in caplog.records if "from their layers" in r.getMessage()]
+    assert len(said) == 1 and ("rings" in said[0]) == engines.makes_rings(engine)
     shown = decode(fake.stream())
     assert len(shown) >= 25
     for source, picture in zip(sources, shown, strict=False):

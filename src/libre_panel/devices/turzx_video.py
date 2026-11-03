@@ -545,6 +545,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         self._rate_kept, self._rate_kept_at = 0.0, -1e9  # what video-state.json has, and when
         self._restarts: list[float] = []
         self._last_frame: Image.Image | None = None
+        self._layers_said = False  # (the log said that the engine composes the frames)
         # YUV made here where the frames change (devices/yuv.py), while they change little (None:
         # not known yet; frames that do not say what changed in them never): how much of a
         # frame changes, on average over the last ones, and since when it is calm
@@ -850,10 +851,15 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             options = engine_options(size, rotate, settings)
             # frames of layers go to it as them, where it composes them (stage 2)
             layers = getattr(self.video, "engine_layers", True) and takes_scenes(engine)
+            rings = layers and makes_rings(engine)
             encoder = EngineStream(
                 link, size, options, block, engine_lead(settings.fps), scenes=layers,
-                rings=layers and makes_rings(engine),
+                rings=rings,
             )  # fmt: skip
+            if layers and not self._layers_said:  # (once: a new stream starts as often)
+                self._layers_said = True
+                log.info("video: the engine composes the frames from their layers%s",
+                         ", and makes the lit gauges' rings" if rings else "")  # fmt: skip
         else:
             encoder = Encoder(command, size, deliver, **fed)
         encoder.name, encoder.maxrate = settings.encoder, settings.maxrate
