@@ -48,7 +48,7 @@ from libre_panel.devices.h264 import (
 )
 from libre_panel.i18n import t
 from libre_panel.render import moving
-from libre_panel.render.scene import View
+from libre_panel.render.scene import Globe, View
 
 if TYPE_CHECKING:
     from libre_panel.render.renderer import Piece
@@ -63,8 +63,10 @@ READY, REPLY, COUNTS, FAILED, WAITING = 64, 65, 66, 67, 68
 OPS = {"command": 1, "ask": 2, "query": 3, "drain": 4, "push": 5}
 STREAM, END, PICTURE = 5, 6, 8
 # a frame of layers (scene.rs): its ground, a layer, the frame (their order); a lit ring and
-# a layer of it at a value (ring.rs); a picture layers are cut from and a layer cut from them
+# a layer of it at a value (ring.rs); a picture layers are cut from and a layer cut from them;
+# a turning globe and a layer of it at a step of its turn (globe.rs)
 GROUND, LAYER, SCENE, RING, RING_LAYER, SOURCE, VIEW = 9, 10, 11, 12, 13, 14, 15
+GLOBE, GLOBE_LAYER = 16, 17
 # how a layer goes on: RGBA through its alpha, RGB as it is (a video's frame), RGB light added
 OVER, SOLID, ADD = 0, 1, 2
 # A reply may wait for the picture being sent (5 s a block at most, 1.5 s for room in the
@@ -121,6 +123,12 @@ def cuts_views(engine: str) -> bool:
     return "views" in _can(engine)
 
 
+def makes_globes(engine: str) -> bool:
+    """Whether ``engine`` makes a turning globe's picture for each step (render/scene.py's
+    Globe)."""
+    return "globes" in _can(engine)
+
+
 def _layers_of(piece: Piece) -> list[tuple[Image.Image, int, int, int]]:
     """The layers of ``piece`` as the engine lays them (picture, x, y, how), as
     Renderer._composite lays them on the opaque frame."""
@@ -139,14 +147,16 @@ class SceneSender:
     in the frames (the engine forgets a layer that a frame leaves out, and so does this); the
     ground, while it stays the same. Used by the stream's writer thread alone."""
 
-    def __init__(self, rings: bool = False, views: bool = False) -> None:
+    def __init__(self, rings: bool = False, views: bool = False, globes: bool = False) -> None:
         self.rings = rings  # the engine makes a lit gauge's ring (render/lit.py's Ring)
         self.views = views  # ... and cuts a layer from pictures it keeps (render/scene.py's View)
+        self.globes = globes  # ... and makes a turning globe's pictures (render/scene.py's Globe)
         self._ground: Any = None
         # each piece's layers (and the ring, or the pictures, they are of): what the engine has
-        self._pieces: dict[int, tuple[Piece, list[int], Any, tuple[int, ...]]] = {}
+        self._pieces: dict[int, tuple[Piece, list[int], Any, tuple[int, ...], int | None]] = {}
         self._rings: dict[Any, tuple[Image.Image, Image.Image, int]] = {}
         self._sources: dict[int, tuple[Image.Image, int]] = {}  # by id: the picture, its number
+        self._globes: dict[int, tuple[Any, int]] = {}  # by id: the turning globe, its number
         self._numbers = itertools.count(1)
         self.layers = 0  # sent, and their bytes
         self.bytes = 0
@@ -167,7 +177,7 @@ class SceneSender:
         """The layer of a ring the engine makes (and the ring, sent once while its frames have
         it), or ([], None) for a piece that goes as its pixels."""
         ring = piece.native
-        if (not self.rings or ring is None or isinstance(ring, View)
+        if (not self.rings or ring is None or isinstance(ring, (View, Globe))
                 or ring.layer is not piece.layer
                 or piece.add or piece.light is not None):  # fmt: skip
             return [], None
@@ -201,23 +211,78 @@ class SceneSender:
             return [], ()
         keys, cuts = [], []
         for image, sx, sy, dx, dy, w, h in view.parts:
-            key = id(image)
-            hit = now.get(key) or self._sources.get(key)
-            if hit is None or hit[0] is not image:
-                number = next(self._numbers) & 0xFFFFFFFF
-                data = image.tobytes()
-                size = struct.pack("<II", image.width, image.height)
-                parts += [_head(SOURCE, number, len(size) + len(data)) + size, data]
-                self.bytes += len(data)
-                hit = (image, number)
-            now[key] = hit
-            keys.append(key)
-            cuts.append(struct.pack("<IiiiiII", hit[1], sx, sy, dx, dy, w, h))
+            keys.append(id(image))
+            number = self._source(parts, image, now)
+            cuts.append(struct.pack("<IiiiiII", number, sx, sy, dx, dy, w, h))
         layer = next(self._numbers) & 0xFFFFFFFF
         head = struct.pack("<iiIII", piece.x, piece.y, *piece.layer.size, len(cuts))
         parts.append(_head(VIEW, layer, len(head) + 28 * len(cuts)) + head + b"".join(cuts))
         self.layers += 1
         return [layer], tuple(keys)
+
+    def _source(
+        self, parts: list[bytes], image: Image.Image, now: dict[int, tuple[Image.Image, int]]
+    ) -> int:
+        """The number of the picture the engine keeps for ``image`` (RGBA), sent the first time
+        and kept while the frames' layers are made of it."""
+        key = id(image)
+        hit = now.get(key) or self._sources.get(key)
+        if hit is None or hit[0] is not image:
+            number = next(self._numbers) & 0xFFFFFFFF
+            data = image.tobytes()
+            size = struct.pack("<II", image.width, image.height)
+            parts += [_head(SOURCE, number, len(size) + len(data)) + size, data]
+            self.bytes += len(data)
+            hit = (image, number)
+        now[key] = hit
+        return hit[1]
+
+    def _globe(
+        self, parts: list[bytes], piece: Piece, sources: dict[int, tuple[Image.Image, int]],
+        globes: dict[int, tuple[Any, int]],
+    ) -> tuple[list[int], tuple[int, ...], int | None]:  # fmt: skip
+        """The layer of a turning globe the engine makes (its tables, map and air sent once while
+        its frames have them), or ([], (), None) for a piece that goes as its pixels."""
+        made = piece.native
+        if (not self.globes or not isinstance(made, Globe) or made.layer is not piece.layer
+                or piece.add or piece.light is not None):  # fmt: skip
+            return [], (), None
+        pictures = [made.map, *([made.air] if made.air is not None else [])]
+        if made.mark is not None:
+            pictures.append(made.mark[0])
+        if any(picture.mode != "RGBA" for picture in pictures):
+            return [], (), None
+        turning = made.turning
+        key = id(turning)
+        hit = globes.get(key) or self._globes.get(key)
+        if hit is None or hit[0] is not turning:
+            number = next(self._numbers) & 0xFFFFFFFF
+            inside, col, rowbase, rim, alpha = turning.tables()
+            head = struct.pack("<IIII", turning.size, turning.width, len(inside) // 4,
+                               len(rim) // 4)  # fmt: skip
+            body = (head, inside, col, rowbase, rim, alpha)
+            parts += [_head(GLOBE, number, sum(map(len, body))) + head, *body[1:]]
+            self.bytes += sum(map(len, body))
+            hit = (turning, number)
+        globes[key] = hit
+        map_number = self._source(parts, made.map, sources)
+        keys = [id(made.map)]
+        air_number = 0
+        if made.air is not None:
+            air_number = self._source(parts, made.air, sources)
+            keys.append(id(made.air))
+        if made.mark is not None:
+            mark, (mx, my) = made.mark
+            pixels = mark.tobytes()
+            tail = struct.pack("<IIii", mark.width, mark.height, mx, my)
+        else:
+            pixels, tail = b"", struct.pack("<IIii", 0, 0, 0, 0)
+        layer = next(self._numbers) & 0xFFFFFFFF
+        head = struct.pack("<IIIIii", hit[1], map_number, air_number, made.step, piece.x,
+                           piece.y) + tail  # fmt: skip
+        parts.append(_head(GLOBE_LAYER, layer, len(head) + len(pixels)) + head + pixels)
+        self.layers += 1
+        return [layer], tuple(keys), key
 
     def records(self, scene: Scene, number: int, planned: float | None) -> list[bytes]:
         """The records of the frame of ``scene`` numbered ``number`` (drawn for ``planned``),
@@ -233,21 +298,25 @@ class SceneSender:
             parts.append(_head(GROUND, 0, 3) + bytes(ground))
         self._ground = ground
         order: list[int] = []
-        now: dict[int, tuple[Piece, list[int], Any, tuple[int, ...]]] = {}
-        # (the rings and pictures this frame's layers are of: the engine keeps them)
+        now: dict[int, tuple[Piece, list[int], Any, tuple[int, ...], int | None]] = {}
+        # (the rings, pictures and globes this frame's layers are of: the engine keeps them)
         rings: dict[Any, Any] = {}
         sources: dict[int, tuple[Image.Image, int]] = {}
+        globes: dict[int, tuple[Any, int]] = {}
         for _wid, piece in scene.pieces:
             key = id(piece)
             hit = now.get(key) or self._pieces.get(key)
             if hit is None or hit[0] is not piece:
                 ids, ring = self._ring(parts, piece, rings)
                 cut: tuple[int, ...] = ()
+                globe: int | None = None
                 if not ids:
                     ids, cut = self._view(parts, piece, sources)
                 if not ids:
+                    ids, cut, globe = self._globe(parts, piece, sources, globes)
+                if not ids:
                     ids = [self._layer(parts, *layer) for layer in _layers_of(piece)]
-                hit = (piece, ids, ring, cut)
+                hit = (piece, ids, ring, cut, globe)
             else:  # (a layer the engine has: what it is made of stays too)
                 if hit[2] is not None:
                     kept = rings.get(hit[2]) or self._rings.get(hit[2])
@@ -257,9 +326,14 @@ class SceneSender:
                     held = sources.get(source) or self._sources.get(source)
                     if held is not None:
                         sources[source] = held
+                if hit[4] is not None:
+                    tables = globes.get(hit[4]) or self._globes.get(hit[4])
+                    if tables is not None:
+                        globes[hit[4]] = tables
             now[key] = hit
             order += hit[1]
         self._pieces, self._rings, self._sources = now, rings, sources
+        self._globes = globes
         when = float("nan") if planned is None else planned
         parts.append(
             _head(SCENE, number, len(order))
@@ -663,13 +737,14 @@ class EngineStream:
     def __init__(
         self, link: EngineLink, size: tuple[int, int], options: list[str], block: int,
         lead: float | None = None, scenes: bool = False, rings: bool = False,
-        views: bool = False,
+        views: bool = False, globes: bool = False,
     ) -> None:  # fmt: skip
         self.link, self.size = link, size
         # with ``scenes``: frames of layers go to the engine as them (render/scene.py); the
         # engine's stream has none of their layers yet, and nor has this; with ``rings`` the
-        # engine makes a lit gauge's ring itself, with ``views`` it cuts a graph's window
-        self.scenes = SceneSender(rings, views) if scenes else None
+        # engine makes a lit gauge's ring itself, with ``views`` it cuts a graph's window, with
+        # ``globes`` it makes a turning globe's pictures
+        self.scenes = SceneSender(rings, views, globes) if scenes else None
         # how long after the time a frame was drawn for the engine sends its picture (seconds;
         # None: the engine's own choice, h264.engine_lead's)
         self.lead = lead

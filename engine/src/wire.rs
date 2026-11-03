@@ -44,6 +44,15 @@
 //!                     (u32 each); RGBA through its alpha, transparent where no part lies,
 //!                     each part pasted over those before it with nothing where it lies off
 //!                     its source (as Pillow crops and pastes): scene.rs's `view`
+//! kind 16, a globe:   a its number, b the length of what follows: its size, its map's width,
+//!                     how many pixels of its disc and of its rim (u32 each), then for each of
+//!                     the disc's its place (y * size + x), its map's column at step 0 and its
+//!                     row times the map's width, for each of the rim's its place, then their
+//!                     alpha (u32 each, the alphas u8): globe.rs
+//! kind 17, a layer of a globe: a its number, b the length of what follows: the globe's
+//!                     number, its map's source, its air's source (0: none), the step of its
+//!                     turn (u32 each), x, y (i32), its mark's w and h (u32, 0 for none) and
+//!                     where it lies on the globe (i32 each), then the mark's pixels (RGBA)
 //! ```
 //!
 //! On its stdout, with a panel of its own (`panel`): the same head, then b bytes:
@@ -128,6 +137,20 @@ pub enum Record {
         w: usize,
         h: usize,
         parts: Vec<crate::scene::Part>,
+    },
+    Globe {
+        id: u32,
+        tables: crate::globe::Tables,
+    },
+    GlobeLayer {
+        id: u32,
+        globe: u32,
+        map: u32,
+        air: u32,
+        step: u32,
+        x: i32,
+        y: i32,
+        mark: Option<(Vec<u8>, usize, usize, i32, i32)>,
     },
 }
 
@@ -480,6 +503,64 @@ pub fn read(input: &mut impl Read) -> io::Result<Option<Record>> {
                 parts,
             }))
         }
+        16 => {
+            let len = b as usize;
+            if !(16..=4 * MOST_LAYER + 16).contains(&len) {
+                return Err(invalid("a globe too large"));
+            }
+            let mut head = [0u8; 16];
+            whole(input, &mut head, "a globe cut short")?;
+            let (size, width) = (u32_at(&head, 0) as usize, u32_at(&head, 4) as usize);
+            let (disc, rim) = (u32_at(&head, 8) as usize, u32_at(&head, 12) as usize);
+            if Some(len - 16) != disc.checked_mul(12).and_then(|n| n.checked_add(rim * 5)) {
+                return Err(invalid("a globe's tables are not as long as it says"));
+            }
+            let mut data = vec![0u8; len - 16];
+            whole(input, &mut data, "a globe cut short")?;
+            let words = |from: usize, n: usize| -> Vec<u32> {
+                data[from..from + 4 * n]
+                    .chunks_exact(4)
+                    .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+                    .collect()
+            };
+            let inside = words(0, disc);
+            let col = words(4 * disc, disc);
+            let rowbase = words(8 * disc, disc);
+            let rim_at = words(12 * disc, rim);
+            let rim_alpha = data[12 * disc + 4 * rim..].to_vec();
+            let tables =
+                crate::globe::Tables::new(size, width, (inside, col, rowbase), (rim_at, rim_alpha))
+                    .map_err(|e| invalid(&e))?;
+            Ok(Some(Record::Globe { id: a, tables }))
+        }
+        17 => {
+            let len = b as usize;
+            if !(40..=MOST_LAYER + 40).contains(&len) {
+                return Err(invalid("a layer of a globe of another length"));
+            }
+            let mut head = [0u8; 40];
+            whole(input, &mut head, "a layer of a globe cut short")?;
+            let (mw, mh) = (u32_at(&head, 24) as usize, u32_at(&head, 28) as usize);
+            if mw.checked_mul(mh).and_then(|n| n.checked_mul(4)) != Some(len - 40) {
+                return Err(invalid("a globe's mark is not of its size"));
+            }
+            let mut pixels = vec![0u8; len - 40];
+            whole(input, &mut pixels, "a layer of a globe cut short")?;
+            let mark = (mw > 0 && mh > 0).then(|| {
+                let (mx, my) = (u32_at(&head, 32) as i32, u32_at(&head, 36) as i32);
+                (pixels, mw, mh, mx, my)
+            });
+            Ok(Some(Record::GlobeLayer {
+                id: a,
+                globe: u32_at(&head, 0),
+                map: u32_at(&head, 4),
+                air: u32_at(&head, 8),
+                step: u32_at(&head, 12),
+                x: u32_at(&head, 16) as i32,
+                y: u32_at(&head, 20) as i32,
+                mark,
+            }))
+        }
         kind => Err(invalid(&format!("a record of kind {kind}"))),
     }
 }
@@ -659,6 +740,51 @@ mod tests {
             counted.extend(v.to_le_bytes());
         }
         assert!(read(&mut counted.as_slice()).is_err()); // (two parts said, one there)
+    }
+
+    #[test]
+    fn a_globe_and_a_layer_of_it() {
+        let mut body = Vec::new();
+        for v in [2u32, 4, 2, 1] {
+            body.extend(v.to_le_bytes()); // size, width, disc, rim
+        }
+        for v in [0u32, 3, 1, 2, 4, 4, 3] {
+            body.extend(v.to_le_bytes()); // inside, col, rowbase, rim
+        }
+        body.push(77); // the rim's alpha
+        let mut input = head(16, 5, body.len() as u32);
+        input.extend(&body);
+        let mut layer = Vec::new();
+        for v in [5u32, 8, 0, 3, (-2i32) as u32, 7, 1, 1, 1, (-1i32) as u32] {
+            layer.extend(v.to_le_bytes());
+        }
+        layer.extend([1, 2, 3, 4]);
+        input.extend(head(17, 9, layer.len() as u32));
+        input.extend(&layer);
+        let mut input = input.as_slice();
+        match read(&mut input).unwrap() {
+            Some(Record::Globe { id, tables }) => assert_eq!((id, tables.size()), (5, 2)),
+            _ => panic!("not the globe"),
+        }
+        match read(&mut input).unwrap() {
+            Some(Record::GlobeLayer {
+                id,
+                globe,
+                map,
+                air,
+                step,
+                x,
+                y,
+                mark,
+            }) => {
+                assert_eq!((id, globe, map, air, step, x, y), (9, 5, 8, 0, 3, -2, 7));
+                assert_eq!(mark, Some((vec![1, 2, 3, 4], 1, 1, 1, -1)));
+            }
+            _ => panic!("not the layer"),
+        }
+        let mut short = head(16, 5, body.len() as u32 - 1);
+        short.extend(&body[..body.len() - 1]);
+        assert!(read(&mut short.as_slice()).is_err()); // (not as long as it says)
     }
 
     #[test]

@@ -8,6 +8,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::globe;
 use crate::ring;
 use crate::wire::Boxes;
 
@@ -80,6 +81,8 @@ pub struct Layer {
     ring: Option<u32>,
     /// The sources it was cut from, which stay while it does.
     sources: Vec<u32>,
+    /// The globe it is a picture of (globe.rs), which stays while it does.
+    globe: Option<u32>,
 }
 
 impl Layer {
@@ -111,6 +114,7 @@ impl Layer {
             part,
             ring: None,
             sources: Vec::new(),
+            globe: None,
         })
     }
 
@@ -191,8 +195,11 @@ pub struct Scene {
     under: Vec<Option<Under>>,
     /// The rings whose pictures the engine makes for each value (ring.rs).
     rings: HashMap<u32, ring::Base>,
-    /// The pictures layers are cut from (a graph's strip, its window cut for each frame).
+    /// The pictures layers are cut from (a graph's strip, its window cut for each frame; a
+    /// globe's map and its air).
     sources: HashMap<u32, Source>,
+    /// The globes whose pictures the engine makes for each step of their turn (globe.rs).
+    globes: HashMap<u32, globe::Tables>,
 }
 
 pub type Rect = (usize, usize, usize, usize);
@@ -215,6 +222,7 @@ impl Scene {
             under: (0..cols * rows).map(|_| None).collect(),
             rings: HashMap::new(),
             sources: HashMap::new(),
+            globes: HashMap::new(),
         }
     }
 
@@ -330,6 +338,48 @@ impl Scene {
         Ok(())
     }
 
+    /// A globe whose pictures are made here for each step of its turn (globe.rs).
+    pub fn globe(&mut self, id: u32, tables: globe::Tables) {
+        self.globes.insert(id, tables);
+    }
+
+    /// The picture of globe `globe` at `step` of its turn, as layer `id` at (x, y): its map and
+    /// air (sources; air 0 for none), its mark (pixels, w, h, where on the globe) over them.
+    pub fn globe_layer(
+        &mut self,
+        id: u32,
+        globe: u32,
+        (map, air, step): (u32, u32, u32),
+        (x, y): (i32, i32),
+        mark: Option<(Vec<u8>, usize, usize, i32, i32)>,
+    ) -> Result<(), String> {
+        let tables = self
+            .globes
+            .get(&globe)
+            .ok_or_else(|| format!("layer {id} of globe {globe}, which never came"))?;
+        let source = |n: u32| {
+            self.sources
+                .get(&n)
+                .ok_or_else(|| format!("layer {id} of a globe with source {n}, which never came"))
+        };
+        let map_pixels = &source(map)?.pixels;
+        let air_pixels = if air == 0 {
+            None
+        } else {
+            Some(source(air)?.pixels.as_slice())
+        };
+        let mark = mark
+            .as_ref()
+            .map(|(p, w, h, mx, my)| (p.as_slice(), *w, *h, i64::from(*mx), i64::from(*my)));
+        let side = tables.size();
+        let pixels = tables.picture(map_pixels, step as usize, air_pixels, mark)?;
+        let mut layer = Layer::new(x, y, side, side, How::Over, pixels)?;
+        layer.globe = Some(globe);
+        layer.sources = if air == 0 { vec![map] } else { vec![map, air] };
+        self.layer(id, layer);
+        Ok(())
+    }
+
     /// One of Libre Panel's own frames went to the panel: the next of the scene's is whole.
     pub fn frame_between(&mut self) {
         self.whole = true;
@@ -398,6 +448,8 @@ impl Scene {
             .flat_map(|l| l.sources.clone())
             .collect();
         self.sources.retain(|id, _| sources.contains(id));
+        let globes: HashSet<u32> = self.layers.values().filter_map(|l| l.globe).collect();
+        self.globes.retain(|id, _| globes.contains(id));
         Ok(boxes)
     }
 

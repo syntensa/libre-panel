@@ -1540,6 +1540,7 @@ class MainLoop:
                     # and its graphs' windows cut from their strips (render/scene.py's View):
                     # by the engine where it cuts them, else their pixels made in its writer
                     renderer.native_views = layers
+                    renderer.native_globes = layers  # (and its turning globes, likewise)
                     if layers:
                         drawn, _ = renderer.render(snapshot, now, scene=True)
                     else:  # (as before: a renderer of a test or a plugin may take no more)

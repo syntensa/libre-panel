@@ -134,6 +134,13 @@
   times a minute), and with each frame only where the window lies on it; the engine cuts it,
   the same pixels. On the 12.3" at 25 frames a second Lumen takes 48.9 % of a core instead
   of 54.3 (the main loop 4.9 ms a frame instead of 5.6), Arena 53.0 instead of 59.4.
+- **And the engine turns Terra's globe itself.** A globe that turns showed a new picture for
+  each step of its turn (eight to ten a second on the 12.3"), made by looking up each pixel
+  of its disc on its lit map, the air over it and your place's mark laid on: 4.9 ms of the
+  main loop each, sent to the engine whole (1.2 MB). Now the globe's tables go to the engine
+  once, its lit map once a light (every minute) and its air every two degrees, and with each
+  step only the step and the mark: the engine makes the same picture. Terra's main loop
+  takes 3.8 ms a frame instead of 5.1.
 
 **Lighter**
 - **The main loop no longer resolves the themes' folder on disk with every frame, and draws

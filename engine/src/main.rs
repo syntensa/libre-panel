@@ -12,6 +12,7 @@
 //! Either takes a frame also as the order of layers Libre Panel drew, each sent once: the
 //! engine composes it then (scene.rs), where it changed.
 
+mod globe;
 mod link;
 mod panel;
 mod ring;
@@ -207,6 +208,21 @@ fn encode(options: Options) -> Result<(), String> {
                 lit,
             }) => scene.ring_base(id, ring::Base::new(side, &geometry, groove, lit)?),
             Some(wire::Record::Source { id, w, h, pixels }) => scene.source(id, w, h, pixels)?,
+            Some(wire::Record::Globe { id, tables }) => scene.globe(id, tables),
+            Some(wire::Record::GlobeLayer {
+                id,
+                globe,
+                map,
+                air,
+                step,
+                x,
+                y,
+                mark,
+            }) => {
+                let began = Instant::now();
+                scene.globe_layer(id, globe, (map, air, step), (x, y), mark)?;
+                spent_layers += began.elapsed().as_secs_f64();
+            }
             Some(wire::Record::View {
                 id,
                 x,
@@ -309,9 +325,10 @@ fn main() -> ExitCode {
             // (Libre Panel reads what it can there: "panel", a panel of its own (stage 1b);
             // "scenes", frames of layers it composes (stage 2, scene.rs); "rings", a lit gauge's
             // ring it makes for each value (ring.rs); "views", layers it cuts from sources it
-            // keeps, a graph's window from its strip (scene.rs's view))
+            // keeps, a graph's window from its strip (scene.rs's view); "globes", a turning
+            // globe's picture it makes for each step (globe.rs))
             println!(
-                "libre-panel-engine {} (x264 build {}; panel, scenes, rings, views)",
+                "libre-panel-engine {} (x264 build {}; panel, scenes, rings, views, globes)",
                 env!("CARGO_PKG_VERSION"),
                 x264::build()
             );

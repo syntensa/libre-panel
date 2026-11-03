@@ -689,6 +689,32 @@ pub fn run(options: Options) -> Result<(), String> {
                     break Err(e);
                 }
             }
+            Record::Globe { id, tables } => {
+                let Some(s) = stream.as_mut() else {
+                    break Err("a globe before its stream".into());
+                };
+                s.scene.globe(id, tables);
+            }
+            Record::GlobeLayer {
+                id,
+                globe,
+                map,
+                air,
+                step,
+                x,
+                y,
+                mark,
+            } => {
+                let Some(s) = stream.as_mut() else {
+                    break Err("a layer before its stream".into());
+                };
+                if let Err(e) = s
+                    .scene
+                    .globe_layer(id, globe, (map, air, step), (x, y), mark)
+                {
+                    break Err(e);
+                }
+            }
             Record::Layer {
                 id,
                 x,

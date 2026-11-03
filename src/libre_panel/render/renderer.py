@@ -934,6 +934,8 @@ class Renderer:
         # ... and cuts a scrolling graph's window from its strip, which it keeps (scene.View):
         # the window's pixels are made here only where a frame is composed here
         self.native_views = False
+        # ... and makes a turning globe's picture for each step (scene.Globe), likewise
+        self.native_globes = False
         self._held: dict[str, bool] = {}  # the conditions of needs worked out in this frame ...
         self._held_for: tuple[Any, ...] = ()  # ... for these readings (and pictures)
         self._composed: list[tuple[int, int, int, int]] | None = None
@@ -2774,8 +2776,12 @@ class Renderer:
             step, due = globe.step_of(now, widget["spin"], held.offset)  # (the frame clock's)
             self._due_at(due)
             if held.piece is None or held.step != step or held.shown != globe.lit_at:
-                image = globe.frame(step, mark)
-                held.piece = self._effects(widget, Piece(image, x, y, [x, y, size, size]))
+                box = [x, y, size, size]
+                if self.native_globes and not self._has_effects(widget):  # made by the engine
+                    made = scenes.turned_globe(globe, step, mark)
+                    held.piece = Piece(made.layer, x, y, box, native=made)
+                else:
+                    held.piece = self._effects(widget, Piece(globe.frame(step, mark), x, y, box))
                 held.step, held.shown = step, globe.lit_at
             return held.piece
         centre = earth.view_of(place)
@@ -2791,6 +2797,12 @@ class Renderer:
                               lambda: earth.picture(size, moment, centre, mark, *look),
                               made)  # fmt: skip
         return held.piece
+
+    @staticmethod
+    def _has_effects(widget: dict[str, Any]) -> bool:
+        """Whether :meth:`_effects` changes a widget's picture (a halo, a fade, cut sides)."""
+        return bool(widget.get("glow") or widget.get("shadow") or widget.get("clip")
+                    or widget.get("opacity", 1.0) < 0.999)  # fmt: skip
 
     def _light_globe(self, held: _Globe, moment: float, job: Callable[[], Any],
                      use: Callable[[float, Any], None]) -> None:  # fmt: skip

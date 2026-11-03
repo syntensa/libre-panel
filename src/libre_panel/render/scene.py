@@ -145,6 +145,31 @@ def cut_columns(view: View, left: int, right: int) -> View:
     return viewed((right - left, view.layer.height), parts)
 
 
+@dataclass(frozen=True, eq=False)
+class Globe:
+    """How an engine makes a turning globe's picture ``layer`` itself (engine/src/globe.rs), as
+    render/earth.py's Turning.picture_of makes it: from ``turning``'s tables (where each pixel
+    of its disc lies on its map, sent once), its ``map`` (the lit map as a picture, sent once a
+    light), at ``step`` of its turn, with ``air`` over it (sent every two degrees) and ``mark``
+    (your place's: a small picture and where it lies) over that."""
+
+    layer: Image.Image
+    turning: Any
+    map: Image.Image
+    step: int
+    air: Image.Image | None
+    mark: tuple[Image.Image, tuple[int, int]] | None
+
+
+def turned_globe(turning: Any, step: int, place: tuple[float, float] | None) -> Globe:
+    """The :class:`Globe` of ``turning`` at ``step`` (its air and mark worked out here, as
+    Turning.frame works them out), its pixels made only when asked for, from what it holds."""
+    map_, air, mark = turning.map, turning.air_at(step), turning.mark_at(step, place)
+    size = (turning.size, turning.size)
+    layer = Lazy(size, "RGBA", lambda: turning.picture_of(map_, step, air, mark))
+    return Globe(layer, turning, turning.map_image, step, air, mark)
+
+
 class SceneFrame(Lazy):
     """The frame of a :class:`Scene` as a picture (RGB): its pixels are composed the first time
     anything asks for them (:func:`compose`). ``scene`` is its own: a copy, one drawn on, is not

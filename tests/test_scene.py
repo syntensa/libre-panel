@@ -376,6 +376,48 @@ def snap_at(k):
     return Snapshot(readings={"v": Reading("v", float(value))})
 
 
+def test_a_turning_globe_goes_to_the_engine_once_and_each_step_as_its_number():
+    """Its tables once, its map once a light and its air every two degrees (as sources), each
+    step a layer with its number and your place's mark; its pixels, made only when asked for,
+    are Turning.frame's."""
+    from libre_panel.render import earth
+
+    turning = earth.Turning(200, 20.0)
+    turning.light(1_700_000_000.0)
+    sender = engines.SceneSender(globes=True)
+    place = (52.5, 13.4)
+    first = scenes.turned_globe(turning, 3, place)
+    assert not first.layer.composed
+    one = heads(sender.records(scene_of(Piece(first.layer, 4, 5, native=first),
+                                        size=(220, 220)), 0, None))  # fmt: skip
+    assert [k for k, *_ in one] == [engines.GROUND, engines.GLOBE, engines.SOURCE,
+                                    engines.SOURCE, engines.GLOBE_LAYER, engines.SCENE]  # fmt: skip
+    tables, map_, air, layer = one[1], one[2], one[3], one[4]
+    size, width, disc, rim = struct.unpack("<IIII", tables[3][:16])
+    assert (size, width, disc) == (200, turning.width, len(turning.inside))
+    assert map_[3][8:] == turning.map_image.tobytes() and air[3][8:] == first.air.tobytes()
+    globe, map_n, air_n, step, x, y, mw, mh, mx, my = struct.unpack("<IIIIiiIIii",
+                                                                    layer[3][:40])  # fmt: skip
+    assert (globe, map_n, air_n, step, x, y) == (tables[1], map_[1], air[1], 3, 4, 5)
+    assert (mw, mh, (mx, my)) == (*first.mark[0].size, first.mark[1])
+    assert layer[3][40:] == first.mark[0].tobytes()
+    assert not first.layer.composed  # (its pixels were not made here)
+    # a later step with the same air (it is laid anew every two degrees): its layer alone
+    air_of = lambda step: round(turning.longitude(step) / turning.AIR_STEP)  # noqa: E731
+    step = next(n for n in range(4, 40) if air_of(n) == air_of(3))
+    later = scenes.turned_globe(turning, step, place)
+    two = heads(sender.records(scene_of(Piece(later.layer, 4, 5, native=later),
+                                        size=(220, 220)), 1, None))  # fmt: skip
+    assert [k for k, *_ in two] == [engines.GLOBE_LAYER, engines.SCENE]
+    assert struct.unpack("<III", two[0][3][:12]) == (tables[1], map_[1], air[1])
+    # its pixels where a frame is composed here: Turning.frame's
+    assert later.layer.tobytes() == turning.frame(step, place).tobytes()
+    # an engine that does not make globes gets the pixels
+    plain = heads(engines.SceneSender().records(
+        scene_of(Piece(later.layer, 4, 5, native=later), size=(220, 220)), 0, None))  # fmt: skip
+    assert [k for k, *_ in plain] == [engines.GROUND, engines.LAYER, engines.SCENE]
+
+
 @pytest.fixture
 def engine():
     found = h264.find_engine()
@@ -389,7 +431,7 @@ class Fed(Layered):
     their layers, every seventh as the frame's own pixels (a message over it), all turned with
     ``half``; the renderer's own frame of each is kept to compare."""
 
-    def __init__(self, engine, size, out, half, rings=False, views=False):
+    def __init__(self, engine, size, out, half, rings=False, views=False, globes=False):
         super().__init__()
         self.half, self.makes_rings = half, rings
         self.proc = subprocess.Popen(
@@ -397,7 +439,7 @@ class Fed(Layered):
              "--crf", "20", "--kbit", "4000", "--keyint", "250", "--dump-rgb", str(out)],
             stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
         )  # fmt: skip
-        self.sender, self.own, self.n = engines.SceneSender(rings, views), [], 0
+        self.sender, self.own, self.n = engines.SceneSender(rings, views, globes), [], 0
 
     def show(self, frame, region=None):
         Stream.show(self, frame, region)
@@ -420,7 +462,9 @@ class Fed(Layered):
     ("theme", "half", "rings", "toast", "views"),
     [("lumen-1920x720", False, False, False, False), ("arena-1920x720", True, False, False, False),
      ("lumen-1920x720", False, True, False, False), ("arena-1920x720", True, False, True, False),
-     ("lumen-1920x720", False, False, False, True), ("arena-1920x720", True, False, True, True)],
+     ("lumen-1920x720", False, False, False, True), ("arena-1920x720", True, False, True, True),
+     ("terra-1920x720", False, False, False, "globes"), ("terra-1920x720", True, False, True,
+                                                         "globes")],
 )  # fmt: skip
 def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
     engine, tmp_path, theme, half, rings, toast, views
@@ -432,8 +476,11 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
         pytest.skip("needs libre-panel-engine that makes rings (cargo build --release)")
     if views and not engines.cuts_views(engine):
         pytest.skip("needs libre-panel-engine that cuts views (cargo build --release)")
+    globes = views == "globes"  # (and the turning globes made by the engine, Terra's)
+    if globes and not engines.makes_globes(engine):
+        pytest.skip("needs libre-panel-engine that makes globes (cargo build --release)")
     clock, host = Clock(1000.0), PluginHost()
-    display = Fed(engine, (1920, 720), tmp_path / "frames.rgb", half, rings, views)
+    display = Fed(engine, (1920, 720), tmp_path / "frames.rgb", half, rings, bool(views), globes)
     loop = loop_with(theme, display, clock, host)
     try:
         run(loop, clock, 4)
@@ -463,6 +510,12 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
         assert display.sender._rings and loop.renderer.native_rings  # (made by the engine)
     if views:  # (the graphs' strips went to it, their windows cut there)
         assert display.sender._sources and loop.renderer.native_views
+    if globes:  # (the globe's tables, its map and air went to it, its steps made there)
+        assert display.sender._globes and loop.renderer.native_globes
+        steps = {f.scene.pieces[i][1].native.step for f in display.frames
+                 if isinstance(f, scenes.SceneFrame) for i in range(len(f.scene.pieces))
+                 if isinstance(f.scene.pieces[i][1].native, scenes.Globe)}  # fmt: skip
+        assert len(steps) >= 5  # (it turned)
 
 
 def test_a_video_panel_shows_frames_of_layers_the_engine_composed(engine, monkeypatch, caplog):

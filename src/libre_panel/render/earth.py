@@ -363,6 +363,8 @@ class Turning:
         self._air_key: tuple[int, float | None] | None = None
         self._air_layer: Image.Image | None = None
         self._sun: np.ndarray | None = None
+        self._map_image: Image.Image | None = None
+        self._tables: tuple[bytes, ...] | None = None
 
     def lit(self, t: float) -> tuple[np.ndarray, np.ndarray]:
         """The map lit as the earth is at ``t`` (uint32, RGBA a pixel) and the sun's
@@ -400,6 +402,66 @@ class Turning:
         self.map, self._sun = lit
         self.lit_at = t
         self._air_key = None
+        self._map_image = None
+
+    @property
+    def map_image(self) -> Image.Image:
+        """The lit map as a picture (RGBA, its width x half of it), the same while the light is:
+        what an engine that makes the globe's pictures gets (render/scene.py's Globe)."""
+        if self.map is None:
+            raise RuntimeError("light the map first")
+        if self._map_image is None:
+            h, w = self.map.shape
+            self._map_image = Image.frombuffer("RGBA", (w, h), self.map, "raw", "RGBA", 0, 1)
+        return self._map_image
+
+    def tables(self) -> tuple[bytes, ...]:
+        """Where each pixel of the disc finds itself on the map, for an engine (globe.rs): the
+        disc's pixels, their map's columns at step 0 and rows times the width, the rim's pixels
+        (u32 each) and their alpha (u8), as :meth:`picture_of` uses them."""
+        if self._tables is None:
+            alpha = (self.rim_alpha * 255 + 0.5).astype(np.uint8)
+            self._tables = tuple(
+                np.ascontiguousarray(a, "<u4").tobytes()
+                for a in (self.inside, self.col, self.rowbase, self.rim)
+            ) + (alpha.tobytes(),)
+        return self._tables
+
+    def air_at(self, step: int) -> Image.Image:
+        """The air over the globe seen from the longitude of ``step``: laid anew every
+        :attr:`AIR_STEP` degrees and with each light."""
+        if self._sun is None:
+            raise RuntimeError("light the map first")
+        key = (round(self.longitude(step) / self.AIR_STEP), self.lit_at)
+        if key != self._air_key or self._air_layer is None:
+            view = _basis(self.lat, self.longitude(step))
+            self._air_layer = _air(self.size, view, self._sun, self.air)
+            self._air_key = key
+        return self._air_layer
+
+    def mark_at(self, step: int, place: tuple[float, float] | None
+                ) -> tuple[Image.Image, tuple[int, int]] | None:  # fmt: skip
+        """Your place's mark seen from the longitude of ``step``, and where it lies."""
+        return _spot(self.size, _basis(self.lat, self.longitude(step)), place, self.mark)
+
+    def picture_of(self, map_: np.ndarray, step: int, air: Image.Image | None,
+                   mark: tuple[Image.Image, tuple[int, int]] | None) -> Image.Image:  # fmt: skip
+        """The globe at ``step`` from ``map_``: each pixel of the disc the map's at its place,
+        the rim's alpha its own, ``air`` over it and ``mark`` over that (changing nothing here:
+        any thread may make it)."""
+        idx = self.col + (self.width - step % self.width)  # (westwards: the ground goes east)
+        idx[idx >= self.width] -= self.width
+        idx += self.rowbase
+        out = np.zeros(self.size * self.size, np.uint32)
+        out[self.inside] = map_.take(idx)
+        rgba = out.view(np.uint8).reshape(self.size * self.size, 4)
+        rgba[self.rim, 3] = (self.rim_alpha * 255 + 0.5).astype(np.uint8)
+        image = Image.frombuffer("RGBA", (self.size, self.size), out, "raw", "RGBA", 0, 1)
+        if air is not None:
+            image = Image.alpha_composite(image, air)
+        if mark is not None:
+            image.alpha_composite(mark[0], dest=mark[1])
+        return image
 
     def light(self, t: float) -> None:
         """Light the map as the earth is at ``t``, here and now."""
@@ -425,21 +487,4 @@ class Turning:
         """The globe seen from the longitude of ``step`` (0 to its width)."""
         if self.map is None or self._sun is None:
             raise RuntimeError("light the map first")
-        idx = self.col + (self.width - step % self.width)  # (westwards: the ground goes east)
-        idx[idx >= self.width] -= self.width
-        idx += self.rowbase
-        out = np.zeros(self.size * self.size, np.uint32)
-        out[self.inside] = self.map.take(idx)
-        rgba = out.view(np.uint8).reshape(self.size * self.size, 4)
-        rgba[self.rim, 3] = (self.rim_alpha * 255 + 0.5).astype(np.uint8)
-        image = Image.frombuffer("RGBA", (self.size, self.size), out, "raw", "RGBA", 0, 1)
-        view = _basis(self.lat, self.longitude(step))
-        key = (round(self.longitude(step) / self.AIR_STEP), self.lit_at)
-        if key != self._air_key or self._air_layer is None:
-            self._air_layer = _air(self.size, view, self._sun, self.air)
-            self._air_key = key
-        image = Image.alpha_composite(image, self._air_layer)
-        spot = _spot(self.size, view, place, self.mark)
-        if spot is not None:
-            image.alpha_composite(spot[0], dest=spot[1])
-        return image
+        return self.picture_of(self.map, step, self.air_at(step), self.mark_at(step, place))
