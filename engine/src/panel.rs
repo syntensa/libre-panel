@@ -14,6 +14,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::link::{Link, TcpLink, UsbLink};
+use crate::ring;
 use crate::scene::{How, Layer, Scene};
 use crate::transport::{Error, Transport};
 use crate::video::{Video, DEFAULT_BLOCK};
@@ -555,6 +556,35 @@ pub fn run(options: Options) -> Result<(), String> {
                             break Err(e);
                         }
                     }
+                }
+            }
+            Record::RingBase {
+                id,
+                side,
+                geometry,
+                groove,
+                lit,
+            } => {
+                let Some(s) = stream.as_mut() else {
+                    break Err("a ring before its stream".into());
+                };
+                match ring::Base::new(side, &geometry, groove, lit) {
+                    Ok(base) => s.scene.ring_base(id, base),
+                    Err(e) => break Err(e),
+                }
+            }
+            Record::Ring {
+                id,
+                ring,
+                x,
+                y,
+                frac,
+            } => {
+                let Some(s) = stream.as_mut() else {
+                    break Err("a ring before its stream".into());
+                };
+                if let Err(e) = s.scene.ring(id, ring, x, y, frac) {
+                    break Err(e);
                 }
             }
             Record::Layer {

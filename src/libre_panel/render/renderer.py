@@ -88,6 +88,9 @@ class Piece:
     # what it can change on the canvas, worked out once (Renderer._extent): a frame
     # asks that of every piece for every region it composes
     span: tuple[int, int, int, int] | None = field(default=None, init=False, compare=False)
+    # how an engine makes the layer itself, where it does (lit.py's Ring): for ``layer`` alone
+    # (a piece with another layer, turned or faded, goes as its pixels)
+    native: Any = field(default=None, compare=False)
 
 
 @dataclass
@@ -922,6 +925,9 @@ class Renderer:
         self.damage: list[tuple[int, int, int, int]] | None = None
         self.rendered = 0  # the frames rendered (what the damage is counted against)
         self.scenes = 0  # of them, frames handed out as their layers (render(scene=True))
+        # the display's engine makes a lit gauge's ring itself (render/lit.py's Ring): its
+        # pieces are made here only where a frame is composed here
+        self.native_rings = False
         self._held: dict[str, bool] = {}  # the conditions of needs worked out in this frame ...
         self._held_for: tuple[Any, ...] = ()  # ... for these readings (and pictures)
         self._composed: list[tuple[int, int, int, int]] | None = None
@@ -1563,14 +1569,17 @@ class Renderer:
         return rgb
 
     def _cached(
-        self, widget: dict[str, Any], content: Any, build: Callable[[], Piece | None]
-    ) -> Piece | None:
-        """Reuse the finished layer while the widget and its content stay the same."""
+        self, widget: dict[str, Any], content: Any, build: Callable[[], Piece | None],
+        inline: bool = False,
+    ) -> Piece | None:  # fmt: skip
+        """Reuse the finished layer while the widget and its content stay the same; ``inline``:
+        a piece cheap to make (its pixels made later, if at all) is made here, not in the
+        helper thread."""
         wid = widget["id"]
         hit = self._cache.get(wid)
         if hit is not None and hit[0] == content:
             return hit[1]
-        if self.background_builds and hit is not None:
+        if self.background_builds and hit is not None and not inline:
             return self._cached_later(widget, content, build, hit)
 
         piece = build()

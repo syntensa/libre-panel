@@ -14,6 +14,7 @@
 
 mod link;
 mod panel;
+mod ring;
 mod scene;
 #[rustfmt::skip]
 mod tables;
@@ -198,6 +199,24 @@ fn encode(options: Options) -> Result<(), String> {
                 scene.layer(id, scene::Layer::new(x, y, w, h, how, pixels)?);
                 spent_layers += began.elapsed().as_secs_f64();
             }
+            Some(wire::Record::RingBase {
+                id,
+                side,
+                geometry,
+                groove,
+                lit,
+            }) => scene.ring_base(id, ring::Base::new(side, &geometry, groove, lit)?),
+            Some(wire::Record::Ring {
+                id,
+                ring,
+                x,
+                y,
+                frac,
+            }) => {
+                let began = Instant::now();
+                scene.ring(id, ring, x, y, frac)?;
+                spent_layers += began.elapsed().as_secs_f64();
+            }
             Some(record @ (wire::Record::Frame { .. } | wire::Record::Scene { .. })) => {
                 let began = Instant::now();
                 let (number, boxes) = match record {
@@ -275,9 +294,10 @@ fn main() -> ExitCode {
     match args.first().map(String::as_str) {
         Some("version") => {
             // (Libre Panel reads what it can there: "panel", a panel of its own (stage 1b);
-            // "scenes", frames of layers it composes (stage 2, scene.rs))
+            // "scenes", frames of layers it composes (stage 2, scene.rs); "rings", a lit gauge's
+            // ring it makes for each value (ring.rs))
             println!(
-                "libre-panel-engine {} (x264 build {}; panel, scenes)",
+                "libre-panel-engine {} (x264 build {}; panel, scenes, rings)",
                 env!("CARGO_PKG_VERSION"),
                 x264::build()
             );

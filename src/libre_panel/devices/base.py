@@ -153,6 +153,8 @@ class Display:
     # Whether a frame may come as its layers (render/scene.py), composed by the display's engine
     # itself (devices/engine.py): only then does the main loop hand out such frames.
     takes_scenes = False
+    # ... and whose engine makes a lit gauge's ring itself (render/lit.py's Ring)
+    makes_rings = False
     # a slow link (the USB serial panels, pixels over a serial port): the main loop keeps the
     # motion calm and sends the parts that changed one by one (app.calm, changed_regions)
     slow = False

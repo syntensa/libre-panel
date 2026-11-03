@@ -171,7 +171,9 @@ and becomes the default only once it has proven itself on the panels; the old wa
       shows changes; what moves (rolling digits, hands, graphs, transitions) moves, turns and
       fades the layers it has, and a glow goes with its layer
 - [ ] Element by element, each against today's renderer as the reference: the same picture, to
-      a level, with the same font engine (FreeType)
+      a level, with the same font engine (FreeType). First the lit gauge's ring
+      (engine/src/ring.rs): of 50 values and colours, 49 the same pixels, one a level apart at
+      two; the bars, the numbers, the graphs next
 
 ### Stage 3: Python only the brain
 

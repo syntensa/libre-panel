@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import math
 import threading
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from typing import Any
 
@@ -35,6 +35,7 @@ import numpy as np
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 from libre_panel.render import dither, facets, light3d
+from libre_panel.render import scene as scenes
 from libre_panel.render.finish import Finish, register
 from libre_panel.render.kept import MB, Kept, size_of
 from libre_panel.render.light import mix, role_color
@@ -557,15 +558,9 @@ def _light_ring(canvas: Image.Image, ground: tuple[tuple, Image.Image], widget: 
     cuts it at the arc's tip and lays the light around the tip on the groove anew, where the
     whole light of the arc was made and laid over the groove before (Arena's two rings on the
     12.3", a few milliseconds a frame while they glided)."""
-    key, groove = ground
+    groove = ground[1]
     fade = colour[3] / 255
-
-    def make() -> Image.Image:
-        lit = groove.copy()
-        lit.alpha_composite(_alpha_scaled(_ring_sweep(widget, colour, stroke, room, halo), fade))
-        return lit
-
-    lit = _PICTURES.make(("ring-lit", key, tuple(colour), stroke, halo), make)
+    lit = _ring_lit(ground, widget, colour, stroke, room, halo)
     sector, patches = _ring_parts(widget, frac, colour, stroke, room, halo)
     canvas.paste(lit, (0, 0), sector)  # (where the sector is clear, the groove stays)
     for left, top, patch in patches:
@@ -574,24 +569,87 @@ def _light_ring(canvas: Image.Image, ground: tuple[tuple, Image.Image], widget: 
         canvas.paste(tile, (left, top))
 
 
-def gauge_piece(renderer: Any, widget: dict[str, Any], frac: float, paint) -> Piece:
-    """The lit ring: its groove, and the value's arc of light on it."""
+def _ring_lit(ground: tuple[tuple, Image.Image], widget: dict[str, Any], colour: tuple[int, ...],
+              stroke: int, room: int, halo: float) -> Image.Image:  # fmt: skip
+    """The groove ``ground`` (:func:`_ring_ground`) with a ring's whole sweep lit in ``colour``
+    (RGBA) on it, kept by colour (callers must not change it)."""
+    key, groove = ground
+
+    def make() -> Image.Image:
+        lit = groove.copy()
+        sweep = _ring_sweep(widget, colour, stroke, room, halo)
+        lit.alpha_composite(_alpha_scaled(sweep, colour[3] / 255))
+        return lit
+
+    return _PICTURES.make(("ring-lit", key, tuple(colour), stroke, halo), make)
+
+
+@dataclass(frozen=True, eq=False)
+class Ring:
+    """How an engine makes a lit ring of one colour at a value itself (engine/src/ring.rs), as
+    :func:`_light_ring` makes it: of ``groove`` and ``lit`` (the groove with the whole sweep lit:
+    :func:`_ring_lit`), both the size of ``layer``, the piece's picture (which this is of: one
+    turned or faded has another), its pixels made here only if a frame is composed here."""
+
+    layer: Image.Image
+    groove: Image.Image
+    lit: Image.Image
+    frac: float
+    # the gauge's width and groove, its start and end (degrees), the core's stroke (px), the
+    # halo and the colour (RGBA)
+    shape: tuple[float, float, float, float, int, float, tuple[int, int, int, int]]
+
+
+def _native_ring(widget: dict[str, Any], stroke: int, room: int, halo: float) -> bool:
+    """Whether an engine makes the ring as :func:`_light_ring` does: round, its arc worked out
+    (_cover), the light around it not reaching its middle (where all of the sweep's edges
+    meet), drawn as it is (no shadow, glow, fade, cut sides or turn over it)."""
+    if not _round(widget) or widget.get("glow") or widget.get("shadow") or widget.get("clip"):
+        return False
+    if widget.get("rotate") or widget.get("opacity", 1.0) < 0.999:
+        return False
+    reach = math.ceil(stroke / 2 + 3 * halo) + 3
+    return (widget["w"] - widget["thickness"]) / 2 - reach > 2 and widget["w"] + 2 * room <= 4096
+
+
+def gauge_piece(renderer: Any, widget: dict[str, Any], frac: float, paint,
+                native: bool | None = None) -> Piece:  # fmt: skip
+    """The lit ring: its groove, and the value's arc of light on it. Where the panel's engine
+    makes rings itself (``native``; None: Renderer.native_rings now), a ring of one colour is
+    its :class:`Ring`, its picture made here only if asked for."""
+    native = renderer.native_rings if native is None else native
     x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
     unit = min(renderer.theme.width, renderer.theme.height) / 480
     room = math.ceil(3 * RING_HALO * unit)
     ground = _ring_ground(renderer, widget, room)
+    if frac <= 0:
+        return Piece(ground[1].copy(), x - room, y - room, [x, y, w, h])
+    a, b = paint
+    stroke = max(2, round(widget["thickness"] * RING_CORE))
+    halo = RING_HALO * unit
+    if b is None and renderer.keep_static:  # one colour: its lit sweep is kept
+        if native and _native_ring(widget, stroke, room, halo):
+
+            def picture() -> Image.Image:
+                canvas = ground[1].copy()
+                _light_ring(canvas, ground, widget, frac, a, stroke, room, halo)
+                return canvas
+
+            layer = scenes.Lazy(ground[1].size, "RGBA", picture)
+            lit = _ring_lit(ground, widget, a, stroke, room, halo)
+            shape = (float(w), float(widget["thickness"]), float(widget["start_angle"]),
+                     float(widget["end_angle"]), stroke, float(halo), tuple(a[:4]))  # fmt: skip
+            ring = Ring(layer, ground[1], lit, float(frac), shape)
+            return Piece(layer, x - room, y - room, [x, y, w, h], native=ring)
+        canvas = ground[1].copy()
+        _light_ring(canvas, ground, widget, frac, a, stroke, room, halo)
+        return Piece(canvas, x - room, y - room, [x, y, w, h])
     canvas = ground[1].copy()
-    if frac > 0:
-        a, b = paint
-        stroke = max(2, round(widget["thickness"] * RING_CORE))
-        if b is None and renderer.keep_static:  # one colour: its lit sweep is kept
-            _light_ring(canvas, ground, widget, frac, a, stroke, room, RING_HALO * unit)
-            return Piece(canvas, x - room, y - room, [x, y, w, h])
-        colour = a if b is None else mix(b[:3], a[:3], frac)  # a gradient: where the arc ends
-        image = _ring_light(widget, frac, colour, stroke, room, RING_HALO * unit)
-        if a[3] < 255:
-            image = _alpha_scaled(image, a[3] / 255)
-        canvas.alpha_composite(image)
+    colour = a if b is None else mix(b[:3], a[:3], frac)  # a gradient: where the arc ends
+    image = _ring_light(widget, frac, colour, stroke, room, halo)
+    if a[3] < 255:
+        image = _alpha_scaled(image, a[3] / 255)
+    canvas.alpha_composite(image)
     return Piece(canvas, x - room, y - room, [x, y, w, h])
 
 
@@ -607,9 +665,11 @@ class LitGauge(Finish):
         sweep = abs(widget["end_angle"] - widget["start_angle"])
         frac = _steps(frac, math.radians(sweep) * max(widget["w"], widget["h"]) / 2)
         paint = renderer._rule_paint(widget, value, now)
+        native = renderer.native_rings  # (its picture made later, if at all: here)
         return renderer._cached(
-            widget, ("lit", frac, paint), lambda: gauge_piece(renderer, widget, frac, paint)
-        )
+            widget, ("lit", frac, paint, native),
+            lambda: gauge_piece(renderer, widget, frac, paint, native), inline=native,
+        )  # fmt: skip
 
 
 # -- texts --------------------------------------------------------------------

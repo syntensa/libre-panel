@@ -96,6 +96,10 @@ class AutoDisplay(Display):
         return bool(getattr(self._impl, "takes_scenes", False)) if self._impl else False
 
     @property
+    def makes_rings(self) -> bool:
+        return bool(getattr(self._impl, "makes_rings", False)) if self._impl else False
+
+    @property
     def restarted(self) -> bool:
         return bool(self._impl and self._impl.restarted)
 

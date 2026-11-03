@@ -9,6 +9,7 @@ import struct
 import subprocess
 import threading
 import time
+from dataclasses import replace
 
 import pytest
 from PIL import Image, ImageChops, ImageDraw, ImageStat
@@ -171,12 +172,7 @@ def heads(parts):
     while data:
         assert data[:4] == b"LPE1"
         kind, a, b = data[4], *struct.unpack("<II", data[8:16])
-        if kind == engines.GROUND:
-            length = b
-        elif kind == engines.LAYER:
-            length = b
-        else:
-            length = 12 + 4 * b
+        length = 12 + 4 * b if kind == engines.SCENE else b  # (the others: b bytes follow)
         out.append((kind, a, b, data[16 : 16 + length]))
         data = data[16 + length :]
     return out
@@ -239,15 +235,15 @@ class Fed(Layered):
     their layers, every seventh as the frame's own pixels (a message over it), all turned with
     ``half``; the renderer's own frame of each is kept to compare."""
 
-    def __init__(self, engine, size, out, half):
+    def __init__(self, engine, size, out, half, rings=False):
         super().__init__()
-        self.half = half
+        self.half, self.makes_rings = half, rings
         self.proc = subprocess.Popen(
             [engine, "encode", "--size", f"{size[0]}x{size[1]}", "--turn", "0", "--fps", "25",
              "--crf", "20", "--kbit", "4000", "--keyint", "250", "--dump-rgb", str(out)],
             stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
         )  # fmt: skip
-        self.sender, self.own, self.n = engines.SceneSender(), [], 0
+        self.sender, self.own, self.n = engines.SceneSender(rings), [], 0
 
     def show(self, frame, region=None):
         Stream.show(self, frame, region)
@@ -266,10 +262,19 @@ class Fed(Layered):
         self.n += 1
 
 
-@pytest.mark.parametrize(("theme", "half"), [("lumen-1920x720", False), ("arena-1920x720", True)])
-def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(engine, tmp_path, theme, half):
+@pytest.mark.parametrize(
+    ("theme", "half", "rings"),
+    [("lumen-1920x720", False, False), ("arena-1920x720", True, False),
+     ("lumen-1920x720", False, True)],
+)  # fmt: skip
+def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
+    engine, tmp_path, theme, half, rings
+):
+    """Pixel for pixel; where the engine makes the rings too, to a level, at few pixels."""
+    if rings and not engines.makes_rings(engine):
+        pytest.skip("needs libre-panel-engine that makes rings (cargo build --release)")
     clock = Clock(1000.0)
-    display = Fed(engine, (1920, 720), tmp_path / "frames.rgb", half)
+    display = Fed(engine, (1920, 720), tmp_path / "frames.rgb", half, rings)
     loop = loop_with(theme, display, clock)
     try:
         run(loop, clock, 30)
@@ -281,7 +286,15 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(engine, tmp_
     size = 1920 * 720 * 3
     assert display.n >= 25 and len(made) == size * display.n
     for n, own in enumerate(display.own):
-        assert made[n * size : (n + 1) * size] == own, f"frame {n} is not the renderer's"
+        if not rings:
+            assert made[n * size : (n + 1) * size] == own, f"frame {n} is not the renderer's"
+            continue
+        got = Image.frombytes("RGB", (1920, 720), made[n * size : (n + 1) * size])
+        diff = ImageChops.difference(got, Image.frombytes("RGB", (1920, 720), own))
+        assert max(high for _, high in diff.getextrema()) <= 1, f"frame {n}"
+        assert diff.convert("L").point(lambda v: v > 0 and 255).histogram()[255] <= 200
+    if rings:
+        assert display.sender._rings and loop.renderer.native_rings  # (made by the engine)
 
 
 def test_a_video_panel_shows_frames_of_layers_the_engine_composed(engine, monkeypatch):
@@ -330,3 +343,147 @@ def test_a_video_panel_shows_frames_of_layers_the_engine_composed(engine, monkey
     for source, picture in zip(sources, shown, strict=False):
         native = source.transpose(Image.Transpose.ROTATE_270)
         assert max(ImageStat.Stat(ImageChops.difference(native, picture)).mean) < 6
+
+
+# -- a lit gauge's ring, made by the engine (render/lit.py's Ring, engine/src/ring.rs) ---------
+
+
+def lumen_ring():
+    """A ring of Lumen's on the 12.3" (its renderer, widget and colours), as it draws it."""
+    from libre_panel.render import lit
+
+    seen = {}
+    real = lit.gauge_piece
+
+    def capture(renderer, widget, frac, paint, native=None):
+        seen.setdefault("ring", (renderer, widget, paint))
+        return real(renderer, widget, frac, paint, native)
+
+    display, clock = Layered(), Clock(1000.0)
+    lit.gauge_piece = capture
+    try:
+        loop = loop_with("lumen-1920x720", display, clock)
+        try:
+            run(loop, clock, 3)
+        finally:
+            loop.close()
+    finally:
+        lit.gauge_piece = real
+    return seen["ring"]
+
+
+RINGS = [  # (what, the widget's changes, the colour: None for the theme's)
+    ("closed", {}, None),
+    ("faded", {}, (46, 230, 214, 150)),
+    ("open", {"start_angle": 135, "end_angle": 405}, None),
+    ("small", {"w": 120, "h": 120, "thickness": 8}, None),
+    ("open and faded", {"start_angle": -210, "end_angle": 30, "w": 140, "h": 140},
+     (250, 120, 30, 200)),
+]  # fmt: skip
+FRACS = (0.0005, 0.05, 0.2, 0.5, 0.77, 0.95, 0.9995, 1.0)
+
+
+def test_a_ring_the_engine_makes_is_made_here_only_when_asked_for_and_then_as_before():
+    from libre_panel.render import lit
+
+    renderer, widget, paint = lumen_ring()
+    for frac in (0.03, 0.6, 1.0):
+        renderer.native_rings = True
+        native = lit.gauge_piece(renderer, widget, frac, paint)
+        renderer.native_rings = False
+        plain = lit.gauge_piece(renderer, widget, frac, paint)
+        assert isinstance(native.native, lit.Ring) and native.native.frac == frac
+        assert not native.layer.composed and plain.native is None
+        assert (native.x, native.y, native.box) == (plain.x, plain.y, plain.box)
+        assert native.layer.tobytes() == plain.layer.tobytes()  # (made here: the same pixels)
+    gradient = lit.gauge_piece(renderer, widget, 0.5, (paint[0], (255, 0, 0, 255)))
+    renderer.native_rings = True
+    assert lit.gauge_piece(renderer, {**widget, "glow": 0.5}, 0.5, paint).native is None
+    assert lit.gauge_piece(renderer, widget, 0.5, (paint[0], (255, 0, 0, 255))).native is None
+    assert lit.gauge_piece(renderer, widget, 0.0, paint).native is None  # (the groove alone)
+    renderer.native_rings = False
+    assert gradient.native is None
+
+
+def test_a_ring_goes_to_the_engine_once_and_each_value_as_its_share_lit():
+    from libre_panel.render import lit
+
+    renderer, widget, paint = lumen_ring()
+    renderer.native_rings = True
+    try:
+        pieces = [lit.gauge_piece(renderer, widget, f, paint) for f in (0.2, 0.3)]
+    finally:
+        renderer.native_rings = False
+    sender = engines.SceneSender(rings=True)
+    first = heads(sender.records(scene_of(pieces[0], size=(1920, 720)), 0, None))
+    assert [k for k, *_ in first] == [engines.GROUND, engines.RING, engines.RING_LAYER,
+                                      engines.SCENE]  # fmt: skip
+    side = pieces[0].layer.width
+    assert first[1][2] == 56 + 2 * side * side * 4
+    ring = struct.unpack("<II5d4B", first[1][3][:52])
+    assert ring[:2] == (side, pieces[0].native.shape[4]) and ring[7:] == tuple(paint[0])
+    base, x, y, _, frac = struct.unpack("<IiiId", first[2][3])
+    assert (base, x, y, frac) == (first[1][1], pieces[0].x, pieces[0].y, 0.2)
+    second = heads(sender.records(scene_of(pieces[1], size=(1920, 720)), 1, None))
+    assert [k for k, *_ in second] == [engines.RING_LAYER, engines.SCENE]  # (the ring it has)
+    assert struct.unpack("<IiiId", second[0][3])[0] == base
+    # a piece whose picture is not the ring's any more (faded, turned) goes as its pixels
+    faded = replace(pieces[1], layer=pieces[1].layer.copy())
+    third = heads(sender.records(scene_of(faded, size=(1920, 720)), 2, None))
+    assert [k for k, *_ in third] == [engines.LAYER, engines.SCENE]
+    # an engine that makes no rings gets every ring as its pixels
+    plain = heads(engines.SceneSender().records(scene_of(pieces[0], size=(1920, 720)), 0, None))
+    assert [k for k, *_ in plain] == [engines.GROUND, engines.LAYER, engines.SCENE]
+
+
+@pytest.fixture
+def ring_engine(engine):
+    if not engines.makes_rings(engine):
+        pytest.skip("needs libre-panel-engine that makes rings (cargo build --release)")
+    return engine
+
+
+def test_the_engine_makes_a_lit_ring_as_the_renderer_does_to_a_level(ring_engine, tmp_path):
+    from libre_panel.render import lit
+
+    renderer, widget, paint = lumen_ring()
+    size, ground = (1920, 720), (40, 44, 52)
+    out = tmp_path / "rings.rgb"
+    proc = subprocess.Popen(
+        [ring_engine, "encode", "--size", "1920x720", "--turn", "0", "--fps", "25", "--crf",
+         "20", "--kbit", "4000", "--keyint", "250", "--dump-rgb", str(out)],
+        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+    )  # fmt: skip
+    sender, own = engines.SceneSender(rings=True), []
+    try:
+        n = 0
+        for _what, change, colour in RINGS:
+            ring = {**widget, **change}
+            colours = ((colour or paint[0]), None)
+            for frac in FRACS:
+                renderer.native_rings = True
+                native = lit.gauge_piece(renderer, ring, frac, colours)
+                renderer.native_rings = False
+                plain = lit.gauge_piece(renderer, ring, frac, colours)
+                assert native.native is not None
+                for part in sender.records(scene_of(native, size=size, ground=ground), n, None):
+                    proc.stdin.write(part)
+                frame = Image.new("RGB", size, ground)
+                frame.paste(plain.layer, (plain.x, plain.y), plain.layer)
+                own.append((plain, frame.tobytes()))
+                n += 1
+    finally:
+        renderer.native_rings = False
+        proc.stdin.close()
+        proc.wait(30)
+    made = out.read_bytes()
+    whole = size[0] * size[1] * 3
+    assert len(made) == whole * len(own)
+    for k, (plain, frame) in enumerate(own):
+        got = Image.frombytes("RGB", size, made[k * whole : (k + 1) * whole])
+        diff = ImageChops.difference(got, Image.frombytes("RGB", size, frame))
+        assert max(high for _, high in diff.getextrema()) <= 1  # (to a level)
+        # (and at few pixels: the light worked out in floating point as there)
+        assert sum(diff.convert("L").point(lambda v: v > 0 and 255).histogram()[1:]) <= 0.002 * (
+            plain.layer.width * plain.layer.height
+        )

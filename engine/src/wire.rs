@@ -29,6 +29,12 @@
 //! kind 11, a frame:   a its number, b how many layers; then the time it was drawn for (f64,
 //!                     as kind 7's; NaN for none), how it is turned (u32: 0, or 180 for half a
 //!                     turn), then the layers' numbers (u32 each), bottom first
+//! kind 12, a ring:    a its number, b the length of what follows: its canvas's side and the
+//!                     light's core (u32 each), the gauge's width and groove, its start and end
+//!                     (degrees) and the halo (f64 each), its colour (RGBA), then the groove and
+//!                     the groove with the whole sweep lit (RGBA each, the canvas): ring.rs
+//! kind 13, a layer of a ring: a its number, b 24: the ring's number, x, y (u32, i32, i32),
+//!                     nothing (u32), the share of its sweep lit (f64)
 //! ```
 //!
 //! On its stdout, with a panel of its own (`panel`): the same head, then b bytes:
@@ -85,6 +91,20 @@ pub enum Record {
         planned: Option<f64>,
         half: bool,
         order: Vec<u32>,
+    },
+    RingBase {
+        id: u32,
+        side: usize,
+        geometry: crate::ring::Geometry,
+        groove: Vec<u8>,
+        lit: Vec<u8>,
+    },
+    Ring {
+        id: u32,
+        ring: u32,
+        x: i32,
+        y: i32,
+        frac: f64,
     },
 }
 
@@ -331,6 +351,57 @@ pub fn read(input: &mut impl Read) -> io::Result<Option<Record>> {
                     .chunks_exact(4)
                     .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
                     .collect(),
+            }))
+        }
+        12 => {
+            let len = b as usize;
+            if !(56..=2 * MOST_LAYER + 56).contains(&len) {
+                return Err(invalid("a ring too large"));
+            }
+            let mut head = [0u8; 56];
+            whole(input, &mut head, "a ring cut short")?;
+            let f = |i: usize| f64::from_le_bytes(head[i..i + 8].try_into().expect("8 bytes"));
+            let side = u32_at(&head, 0) as usize;
+            let picture = side * side * 4;
+            if len != 56 + 2 * picture {
+                return Err(invalid("a ring's pictures are not of its canvas"));
+            }
+            let mut groove = vec![0u8; picture];
+            whole(input, &mut groove, "a ring cut short")?;
+            let mut lit = vec![0u8; picture];
+            whole(input, &mut lit, "a ring cut short")?;
+            Ok(Some(Record::RingBase {
+                id: a,
+                side,
+                geometry: crate::ring::Geometry {
+                    stroke: u32_at(&head, 4),
+                    w: f(8),
+                    thickness: f(16),
+                    start: f(24),
+                    end: f(32),
+                    halo: f(40),
+                    colour: [head[48], head[49], head[50], head[51]],
+                },
+                groove,
+                lit,
+            }))
+        }
+        13 => {
+            if b != 24 {
+                return Err(invalid("a layer of a ring of another length"));
+            }
+            let mut more = [0u8; 24];
+            whole(input, &mut more, "a layer of a ring cut short")?;
+            let frac = f64::from_le_bytes(more[16..24].try_into().expect("8 bytes"));
+            if !frac.is_finite() {
+                return Err(invalid("a ring lit by no share"));
+            }
+            Ok(Some(Record::Ring {
+                id: a,
+                ring: u32_at(&more, 0),
+                x: u32_at(&more, 4) as i32,
+                y: u32_at(&more, 8) as i32,
+                frac,
             }))
         }
         kind => Err(invalid(&format!("a record of kind {kind}"))),

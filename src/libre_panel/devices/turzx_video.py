@@ -67,6 +67,7 @@ from libre_panel.devices.engine import (
     EngineTransport,
     can_send,
     engine_scene,
+    makes_rings,
     takes_scenes,
 )
 from libre_panel.devices.h264 import (
@@ -592,6 +593,13 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             and self.range is None
         )
 
+    @property
+    def makes_rings(self) -> bool:
+        """Whether the engine that composes the frames also makes a lit gauge's ring itself
+        for each value (render/lit.py's Ring): the renderer leaves their pictures to it."""
+        sender = getattr(self.encoder, "scenes", None)
+        return self.takes_scenes and bool(getattr(sender, "rings", False))
+
     def _as_scene(self, frame: Image.Image) -> bool:
         """Whether ``frame`` goes to the encoder as its layers, its pixels not made here."""
         return isinstance(frame, SceneFrame) and self.takes_scenes
@@ -843,8 +851,9 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             # frames of layers go to it as them, where it composes them (stage 2)
             layers = getattr(self.video, "engine_layers", True) and takes_scenes(engine)
             encoder = EngineStream(
-                link, size, options, block, engine_lead(settings.fps), scenes=layers
-            )
+                link, size, options, block, engine_lead(settings.fps), scenes=layers,
+                rings=layers and makes_rings(engine),
+            )  # fmt: skip
         else:
             encoder = Encoder(command, size, deliver, **fed)
         encoder.name, encoder.maxrate = settings.encoder, settings.maxrate

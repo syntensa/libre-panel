@@ -69,15 +69,15 @@ def compose(scene: Scene) -> Image.Image:
     return canvas
 
 
-class SceneFrame(Image.Image):
-    """The frame of a :class:`Scene` as a picture (RGB): its pixels are composed the first time
-    anything asks for them (:func:`compose`), from any thread, once. Copies of it are pictures
-    like any other (``scene`` is its own: one drawn on is not the scene's frame)."""
+class Lazy(Image.Image):
+    """A picture of ``size`` in ``mode`` whose pixels are made the first time anything asks for
+    them (``make``, a picture of that size and mode), from any thread, once. Copies of it are
+    pictures like any other."""
 
-    def __init__(self, scene: Scene) -> None:
+    def __init__(self, size: tuple[int, int], mode: str, make: Any) -> None:
         super().__init__()
-        self._mode, self._size = "RGB", scene.size
-        self.scene = scene
+        self._mode, self._size = mode, size
+        self._make = make
         self._making = threading.Lock()
 
     @property  # type: ignore[override]
@@ -99,8 +99,20 @@ class SceneFrame(Image.Image):
         if self._im is None:
             with self._making:
                 if self._im is None:
-                    self._im = compose(self.scene).im
+                    made = self._make()
+                    self._make = None  # (what it was made of may go)
+                    self._im = made.im
         return super().load()
+
+
+class SceneFrame(Lazy):
+    """The frame of a :class:`Scene` as a picture (RGB): its pixels are composed the first time
+    anything asks for them (:func:`compose`). ``scene`` is its own: a copy, one drawn on, is not
+    the scene's frame."""
+
+    def __init__(self, scene: Scene) -> None:
+        super().__init__(scene.size, "RGB", lambda: compose(scene))
+        self.scene = scene
 
     def turned(self) -> SceneFrame:
         """The frame turned half a turn (app.turned), its pixels not made either."""

@@ -75,6 +75,15 @@
   the test machine). Where a message, a transition, the alarm's edge or a colour check is
   drawn over the frame, Libre Panel composes it as before; the app's picture of the panel is
   composed only while it is on show.
+- **And the engine makes the lit gauges' rings itself.** A ring of one colour goes to it once
+  (its groove, and the groove with the whole sweep lit), and for each value only the share
+  that is lit: the engine cuts the sweep at the tip and makes the light around the tip anew,
+  worked out as Libre Panel works it out (in 49 of 50 values and colours tested the same
+  pixels, else one level apart at two pixels). Where Libre Panel used to make a gliding ring
+  in a millisecond and more, the engine takes a third of one; Libre Panel only makes a
+  ring's picture where it composes the frame itself. On the 12.3" with Lumen at 25 frames a
+  second the whole way to the panel takes 18.9 ms of the processor a frame instead of 23.7
+  (27.8 before the engine composed the frames), the app's helper thread 2.5 ms instead of 5.6.
 
 **Lighter**
 - **x264 a fifth lighter on the screens Libre Panel draws, and sharper.** Their frames go into

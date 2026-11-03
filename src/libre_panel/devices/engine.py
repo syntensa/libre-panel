@@ -61,8 +61,9 @@ READY, REPLY, COUNTS, FAILED, WAITING = 64, 65, 66, 67, 68
 # what it is asked: a command (kind 4) and how its reply is read
 OPS = {"command": 1, "ask": 2, "query": 3, "drain": 4, "push": 5}
 STREAM, END, PICTURE = 5, 6, 8
-# a frame of layers (scene.rs): its ground, a layer, the frame (their order)
-GROUND, LAYER, SCENE = 9, 10, 11
+# a frame of layers (scene.rs): its ground, a layer, the frame (their order); a lit ring and
+# a layer of it at a value (ring.rs)
+GROUND, LAYER, SCENE, RING, RING_LAYER = 9, 10, 11, 12, 13
 # how a layer goes on: RGBA through its alpha, RGB as it is (a video's frame), RGB light added
 OVER, SOLID, ADD = 0, 1, 2
 # A reply may wait for the picture being sent (5 s a block at most, 1.5 s for room in the
@@ -108,6 +109,11 @@ def takes_scenes(engine: str) -> bool:
     return "scenes" in _can(engine)
 
 
+def makes_rings(engine: str) -> bool:
+    """Whether ``engine`` makes a lit gauge's ring itself for each value (render/lit.py's Ring)."""
+    return "rings" in _can(engine)
+
+
 def _layers_of(piece: Piece) -> list[tuple[Image.Image, int, int, int]]:
     """The layers of ``piece`` as the engine lays them (picture, x, y, how), as
     Renderer._composite lays them on the opaque frame."""
@@ -126,9 +132,12 @@ class SceneSender:
     in the frames (the engine forgets a layer that a frame leaves out, and so does this); the
     ground, while it stays the same. Used by the stream's writer thread alone."""
 
-    def __init__(self) -> None:
+    def __init__(self, rings: bool = False) -> None:
+        self.rings = rings  # the engine makes a lit gauge's ring (render/lit.py's Ring)
         self._ground: Any = None
-        self._pieces: dict[int, tuple[Piece, list[int]]] = {}
+        # each piece's layers (and the ring they are of): what the engine has
+        self._pieces: dict[int, tuple[Piece, list[int], Any]] = {}
+        self._rings: dict[Any, tuple[Image.Image, Image.Image, int]] = {}
         self._numbers = itertools.count(1)
         self.layers = 0  # sent, and their bytes
         self.bytes = 0
@@ -145,6 +154,31 @@ class SceneSender:
         self.bytes += len(data)
         return number
 
+    def _ring(self, parts: list[bytes], piece: Piece, now: dict[Any, Any]) -> tuple[list[int], Any]:
+        """The layer of a ring the engine makes (and the ring, sent once while its frames have
+        it), or ([], None) for a piece that goes as its pixels."""
+        ring = piece.native
+        if (not self.rings or ring is None or ring.layer is not piece.layer or piece.add
+                or piece.light is not None):  # fmt: skip
+            return [], None
+        key = (id(ring.groove), id(ring.lit), ring.shape)
+        hit = now.get(key) or self._rings.get(key)
+        if hit is None or hit[0] is not ring.groove or hit[1] is not ring.lit:
+            number = next(self._numbers) & 0xFFFFFFFF
+            w, thickness, start, end, stroke, halo, colour = ring.shape
+            groove, lit = ring.groove.tobytes(), ring.lit.tobytes()
+            head = struct.pack("<II5d4B4x", ring.groove.width, stroke, w, thickness, start, end,
+                               halo, *colour)  # fmt: skip
+            parts += [_head(RING, number, len(head) + 2 * len(groove)) + head, groove, lit]
+            self.bytes += 2 * len(groove)
+            hit = (ring.groove, ring.lit, number)
+        now[key] = hit
+        layer = next(self._numbers) & 0xFFFFFFFF
+        parts.append(_head(RING_LAYER, layer, 24)
+                     + struct.pack("<IiiId", hit[2], piece.x, piece.y, 0, ring.frac))  # fmt: skip
+        self.layers += 1
+        return [layer], key
+
     def records(self, scene: Scene, number: int, planned: float | None) -> list[bytes]:
         """The records of the frame of ``scene`` numbered ``number`` (drawn for ``planned``),
         with the ground and layers the engine does not have yet."""
@@ -159,15 +193,23 @@ class SceneSender:
             parts.append(_head(GROUND, 0, 3) + bytes(ground))
         self._ground = ground
         order: list[int] = []
-        now: dict[int, tuple[Piece, list[int]]] = {}
+        now: dict[int, tuple[Piece, list[int], Any]] = {}
+        rings: dict[Any, Any] = {}  # (the rings these frames' layers are of: the engine keeps them)
         for _wid, piece in scene.pieces:
             key = id(piece)
             hit = now.get(key) or self._pieces.get(key)
             if hit is None or hit[0] is not piece:
-                hit = (piece, [self._layer(parts, *layer) for layer in _layers_of(piece)])
+                ids, ring = self._ring(parts, piece, rings)
+                if not ids:
+                    ids = [self._layer(parts, *layer) for layer in _layers_of(piece)]
+                hit = (piece, ids, ring)
+            elif hit[2] is not None:  # (a ring layer the engine has: its ring stays too)
+                kept = rings.get(hit[2]) or self._rings.get(hit[2])
+                if kept is not None:
+                    rings[hit[2]] = kept
             now[key] = hit
             order += hit[1]
-        self._pieces = now
+        self._pieces, self._rings = now, rings
         when = float("nan") if planned is None else planned
         parts.append(
             _head(SCENE, number, len(order))
@@ -570,12 +612,13 @@ class EngineStream:
 
     def __init__(
         self, link: EngineLink, size: tuple[int, int], options: list[str], block: int,
-        lead: float | None = None, scenes: bool = False,
+        lead: float | None = None, scenes: bool = False, rings: bool = False,
     ) -> None:  # fmt: skip
         self.link, self.size = link, size
         # with ``scenes``: frames of layers go to the engine as them (render/scene.py); the
-        # engine's stream has none of their layers yet, and nor has this
-        self.scenes = SceneSender() if scenes else None
+        # engine's stream has none of their layers yet, and nor has this; with ``rings`` the
+        # engine makes a lit gauge's ring itself
+        self.scenes = SceneSender(rings) if scenes else None
         # how long after the time a frame was drawn for the engine sends its picture (seconds;
         # None: the engine's own choice, h264.engine_lead's)
         self.lead = lead

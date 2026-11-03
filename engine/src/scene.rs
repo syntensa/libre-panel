@@ -8,6 +8,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::ring;
 use crate::wire::Boxes;
 
 /// How a layer goes onto what lies under it.
@@ -53,6 +54,8 @@ pub struct Layer {
     /// The part of the layer that changes what lies under it (x0, y0, x1, y1 in the layer):
     /// where its alpha is not 0 (Over), its light not black (Add); all of it (Solid).
     part: (usize, usize, usize, usize),
+    /// The ring it is a picture of (ring.rs), which stays while it does.
+    ring: Option<u32>,
 }
 
 impl Layer {
@@ -82,6 +85,7 @@ impl Layer {
             how,
             pixels,
             part,
+            ring: None,
         })
     }
 
@@ -160,6 +164,8 @@ pub struct Scene {
     /// Libre Panel's own frames came between.
     whole: bool,
     under: Vec<Option<Under>>,
+    /// The rings whose pictures the engine makes for each value (ring.rs).
+    rings: HashMap<u32, ring::Base>,
 }
 
 pub type Rect = (usize, usize, usize, usize);
@@ -180,6 +186,7 @@ impl Scene {
             half: false,
             whole: true,
             under: (0..cols * rows).map(|_| None).collect(),
+            rings: HashMap::new(),
         }
     }
 
@@ -210,6 +217,24 @@ impl Scene {
             self.whole = true;
             self.forget_unders();
         }
+    }
+
+    /// A ring whose pictures are made here for its values (ring.rs), for the frames to come.
+    pub fn ring_base(&mut self, id: u32, base: ring::Base) {
+        self.rings.insert(id, base);
+    }
+
+    /// The picture of ring `ring` at `frac` of its sweep, as layer `id` at (x, y).
+    pub fn ring(&mut self, id: u32, ring: u32, x: i32, y: i32, frac: f64) -> Result<(), String> {
+        let base = self
+            .rings
+            .get_mut(&ring)
+            .ok_or_else(|| format!("layer {id} of ring {ring}, which never came"))?;
+        let side = base.side();
+        let mut layer = Layer::new(x, y, side, side, How::Over, base.picture(frac))?;
+        layer.ring = Some(ring);
+        self.layer(id, layer);
+        Ok(())
     }
 
     /// One of Libre Panel's own frames went to the panel: the next of the scene's is whole.
@@ -272,6 +297,8 @@ impl Scene {
         }
         let keep: HashSet<u32> = self.order.iter().copied().collect();
         self.layers.retain(|id, _| keep.contains(id));
+        let rings: HashSet<u32> = self.layers.values().filter_map(|l| l.ring).collect();
+        self.rings.retain(|id, _| rings.contains(id));
         Ok(boxes)
     }
 

@@ -1541,6 +1541,9 @@ class MainLoop:
                         streaming and getattr(display, "takes_scenes", False)
                         and self._bare(renderer, blend, number, size, now)
                     )  # fmt: skip
+                    # its rings too, where the engine makes them (render/lit.py's Ring): made
+                    # here only for a frame composed here
+                    renderer.native_rings = layers and getattr(display, "makes_rings", False)
                     if layers:
                         drawn, _ = renderer.render(snapshot, now, scene=True)
                     else:  # (as before: a renderer of a test or a plugin may take no more)
