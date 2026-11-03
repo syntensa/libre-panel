@@ -240,10 +240,15 @@ def test_a_step_of_the_loop_that_hangs_writes_where_every_thread_stands(tmp_path
 
     log = tmp_path / "libre-panel.log"
     log.write_text("2026-10-15 15:51:20,953 INFO libre_panel.service.game: game over\n", "utf-8")
-    watch = _HangWatch(tmp_path / HANG_FILENAME, seconds=0.3)
+    path = tmp_path / HANG_FILENAME
+    watch = _HangWatch(path, seconds=0.3)
 
     def a_step_that_hangs():
-        time.sleep(0.8)
+        # it stands still until the hang is written: on a busy machine the watch's thread may
+        # come late (a Windows runner's came after the 0.8 s this slept once), so at most 10 s
+        until = time.monotonic() + 10
+        while time.monotonic() < until and "Timeout" not in path.read_text("utf-8"):
+            time.sleep(0.05)
 
     try:
         watch.arm()
@@ -256,7 +261,7 @@ def test_a_step_of_the_loop_that_hangs_writes_where_every_thread_stands(tmp_path
         time.sleep(watch.seconds * 2)
     finally:
         watch.close()
-    hang = (tmp_path / HANG_FILENAME).read_text("utf-8")
+    hang = path.read_text("utf-8")
     assert hang.startswith("-- libre-panel ") and hang.count("Timeout") == 1
     assert "a_step_that_hangs" in hang
     assert "the panel loop stood still" in caplog.text
