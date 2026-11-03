@@ -12,8 +12,14 @@
 //! Either takes a frame also as the order of layers Libre Panel drew, each sent once: the
 //! engine composes it then (scene.rs), where it changed.
 
+mod encoder;
 mod globe;
+// (the card's pictures as the panels take them: mf.rs's, on Windows; its tests everywhere)
+#[cfg_attr(not(windows), allow(dead_code))]
+mod h264;
 mod link;
+#[cfg(windows)]
+mod mf;
 mod panel;
 mod ring;
 mod scene;
@@ -31,14 +37,16 @@ use std::process::ExitCode;
 use std::time::Instant;
 
 const USAGE: &str = "usage: libre-panel-engine encode --size WxH --turn 0|180|270 --fps N --crf N \
---kbit N --keyint N [--preset P] [--profile P] [--full] [--x264 name=value:...] [--dump-yuv PATH] [--dump-rgb PATH] \
-[--stats]\n       libre-panel-engine panel --pid HEX [--ports N.N...] [--lead-ms N]\n       \
+--kbit N --keyint N [--preset P] [--profile P] [--full] [--x264 name=value:...] [--encoder x264|card] \
+[--dump-yuv PATH] [--dump-rgb PATH] [--stats]\n       libre-panel-engine panel --pid HEX [--ports N.N...] [--lead-ms N]\n       \
 libre-panel-engine version";
 
 pub(crate) struct Options {
     pub(crate) size: (usize, usize),
     pub(crate) turn: yuv::Turn,
     pub(crate) settings: x264::Settings,
+    /// The graphics card's encoder (mf.rs, Windows) where it opens, else x264 (encoder.rs).
+    pub(crate) card: bool,
     dump: Option<String>,
     /// Each frame's RGB as the YUV was made of it, whole (the tests': a frame of layers is
     /// composed as Libre Panel composes it).
@@ -54,6 +62,7 @@ pub(crate) fn parse(args: &[String]) -> Result<Options, String> {
     let (mut preset, mut profile) = ("superfast".to_string(), "high".to_string());
     let (mut full, mut extra, mut dump, mut stats) = (false, String::new(), None, false);
     let mut dump_rgb = None;
+    let mut card = false;
     let mut i = 0;
     let value = |i: usize| {
         args.get(i + 1)
@@ -104,6 +113,14 @@ pub(crate) fn parse(args: &[String]) -> Result<Options, String> {
                 extra = value(i)?;
                 i += 1;
             }
+            "--encoder" => {
+                card = match value(i)?.as_str() {
+                    "x264" => false,
+                    "card" => true,
+                    _ => return Err("--encoder is x264 or card".into()),
+                };
+                i += 1;
+            }
             "--dump-rgb" => {
                 dump_rgb = Some(value(i)?);
                 i += 1;
@@ -140,6 +157,7 @@ pub(crate) fn parse(args: &[String]) -> Result<Options, String> {
         size,
         turn,
         settings,
+        card,
         dump,
         dump_rgb,
         stats,
@@ -150,7 +168,7 @@ fn encode(options: Options) -> Result<(), String> {
     let (width, height) = options.size;
     let mut frame = yuv::Yuv::new(width, height, options.turn, options.settings.full)?;
     let mut scene = scene::Scene::new(width, height, frame.block);
-    let mut encoder = x264::Encoder::open(&options.settings)?;
+    let mut encoder = encoder::Encoder::open(&options.settings, options.card)?;
     let (mb_cols, mb_rows) = frame.macroblocks();
     let mut mb = vec![0u8; mb_cols * mb_rows];
     let mut input = BufReader::with_capacity(1 << 20, io::stdin().lock());
@@ -280,7 +298,7 @@ fn encode(options: Options) -> Result<(), String> {
                     out.write_all(frame.rgb()).map_err(|e| e.to_string())?;
                 }
                 let stride = frame.turned.0;
-                let (picture, _key) = encoder.encode(
+                let picture = encoder.encode(
                     &mut frame.y,
                     &mut frame.u,
                     &mut frame.v,
@@ -326,9 +344,10 @@ fn main() -> ExitCode {
             // "scenes", frames of layers it composes (stage 2, scene.rs); "rings", a lit gauge's
             // ring it makes for each value (ring.rs); "views", layers it cuts from sources it
             // keeps, a graph's window from its strip (scene.rs's view); "globes", a turning
-            // globe's picture it makes for each step (globe.rs))
+            // globe's picture it makes for each step (globe.rs); "cards", --encoder card: the
+            // graphics card's encoder where it opens, else x264 (encoder.rs))
             println!(
-                "libre-panel-engine {} (x264 build {}; panel, scenes, rings, views, globes)",
+                "libre-panel-engine {} (x264 build {}; panel, scenes, rings, views, globes, cards)",
                 env!("CARGO_PKG_VERSION"),
                 x264::build()
             );

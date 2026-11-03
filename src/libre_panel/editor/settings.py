@@ -46,7 +46,7 @@ from libre_panel.config import (
     place_at,
     user_themes_dir,
 )
-from libre_panel.devices.h264 import ENCODERS, PIXELS, PROFILES, X264_PRESETS
+from libre_panel.devices.h264 import ENCODERS, ENGINE_ENCODERS, PIXELS, PROFILES, X264_PRESETS
 from libre_panel.editor import access
 from libre_panel.i18n import t
 from libre_panel.theme.modules import CARD_ORDERS, CARD_TRANSITIONS
@@ -462,6 +462,7 @@ class Settings:
                     "encoder": video.encoder,
                     "engine_sends": video.engine_sends,
                     "engine_layers": video.engine_layers,
+                    "engine_encoder": video.engine_encoder,
                     "pixels": video.pixels,
                     "direct": video.direct,
                     "rest": video.rest,
@@ -1508,6 +1509,7 @@ RULES: dict[str, Any] = {
     # with the engine (encoder "native"): it has the panel, and it composes the frames too
     "video.engine_sends": lambda n, v, c: _flag(n, v),
     "video.engine_layers": lambda n, v, c: _flag(n, v),
+    "video.engine_encoder": lambda n, v, c: _choice(n, v, ENGINE_ENCODERS),
     # how the frames reach ffmpeg (Settings → Panel → Check the colours writes it)
     "video.pixels": lambda n, v, c: _choice(n, v, PIXELS),
     "video.direct": lambda n, v, c: _flag(n, v),  # a video alone from its file (an experiment)

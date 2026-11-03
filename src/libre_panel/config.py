@@ -481,6 +481,11 @@ class VideoConfig:
     # over the frame (a transition, the alarm's edge; a message in the built-in card or a look
     # of the volume is one more layer); false: Libre Panel composes every frame
     engine_layers: bool = True
+    # With encoder "native": the engine's own encoder. "x264" on the processor; "card" the
+    # graphics card's (AMD's, NVIDIA's or Intel's, through Windows' Media Foundation: Windows
+    # only), the processor then only making the frames' YUV; where the card's cannot start or
+    # stops, x264 encodes and the log says why. An experiment
+    engine_encoder: str = "x264"  # "x264" | "card"
     # A theme that is one video across the panel goes to it straight from its file: ffmpeg
     # reads and encodes it in one, instead of Libre Panel drawing its frames and ffmpeg
     # encoding those (less of the processor). Frames again as soon as anything else shows: a
@@ -1295,7 +1300,7 @@ _MAXRATE = re.compile(r"^(auto|[0-9]+(\.[0-9]+)?[kKM]?)$")
 
 
 def _parse_video(v: dict[str, Any]) -> VideoConfig:
-    from libre_panel.devices.h264 import ENCODERS, PIXELS, PROFILES, X264_PRESETS
+    from libre_panel.devices.h264 import ENCODERS, ENGINE_ENCODERS, PIXELS, PROFILES, X264_PRESETS
 
     video = VideoConfig()
     video.mode = _expect(v.get("mode", video.mode), str, "video.mode")
@@ -1323,6 +1328,10 @@ def _parse_video(v: dict[str, Any]) -> VideoConfig:
                                  "video.engine_sends")  # fmt: skip
     video.engine_layers = _expect(v.get("engine_layers", video.engine_layers), bool,
                                   "video.engine_layers")  # fmt: skip
+    video.engine_encoder = _expect(v.get("engine_encoder", video.engine_encoder), str,
+                                   "video.engine_encoder")  # fmt: skip
+    if video.engine_encoder not in ENGINE_ENCODERS:
+        raise ConfigError(f"video.engine_encoder: must be one of {', '.join(ENGINE_ENCODERS)}")
     video.direct = _expect(v.get("direct", video.direct), bool, "video.direct")
     video.rest = _expect(v.get("rest", video.rest), bool, "video.rest")
     video.pixels = _expect(v.get("pixels", video.pixels), str, "video.pixels")

@@ -71,6 +71,9 @@ PROFILES = ("auto", "baseline", "main", "high")
 # "auto": the graphics card's encoder where it was measured to show and ffmpeg can start it
 # (AUTO_ENCODERS, in that order), else x264 on the processor. The others are an experiment.
 ENCODERS = ("auto", "libx264", "native", "h264_nvenc", "h264_amf", "h264_qsv")
+# The encoder inside the engine (video.encoder "native"): x264 on the processor, or the graphics
+# card's own through Windows' Media Foundation (engine/src/mf.rs), x264 where that cannot start.
+ENGINE_ENCODERS = ("x264", "card")
 HIGH_PROFILE_MODELS = frozenset({"turing-9.2-usb", "turing-12.3-usb"})
 AUTO_ENCODERS = ("h264_amf",)
 # Who turns the frames into YUV (config.toml video.pixels): "auto" the graphics card where the
@@ -174,6 +177,8 @@ class EncoderSettings:
     card: bool = False
     # full-range YUV (0-255), for a panel whose decoder shows every stream so (video_range)
     full: bool = False
+    # the engine's own encoder (ENGINE_ENCODERS), for encoder NATIVE
+    engine_encoder: str = "x264"
 
 
 # The bit rate measured on the 9.2": 2 Mbit/s for its 1920x480 pixels at 50 frames a second.
@@ -329,6 +334,8 @@ NATIVE = "native"
 # The frames as the engine takes them: the boxes of each that may have changed (engine_frame).
 BOXES = "boxes"
 ENGINE = "libre-panel-engine"
+# How a line of the engine's for the log starts that is a note, no error (which encoder it runs)
+ENGINE_NOTE = "libre-panel-engine (note): "
 _ENGINE_MAGIC = b"LPE1"
 
 
@@ -533,6 +540,8 @@ def engine_options(
         "--keyint", str(keyint), "--preset", settings.preset, "--profile", settings.profile,
         "--x264", DRAWN_X264,
     ]  # fmt: skip
+    if settings.engine_encoder == "card":  # (the graphics card's: x264 where it cannot start)
+        options += ["--encoder", "card"]
     return options + (["--full"] if settings.full else [])
 
 
@@ -1101,7 +1110,9 @@ class Encoder:
         try:
             for line in self.proc.stderr:
                 text = line.decode("utf-8", "replace").strip()
-                if text:
+                if text.startswith(ENGINE_NOTE):  # (the engine encoding: which encoder it runs)
+                    log.info("engine: %s", text.removeprefix(ENGINE_NOTE))
+                elif text:
                     self.errors.append(text)
                     log.warning("ffmpeg: %s", text)
         except (OSError, ValueError):

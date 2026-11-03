@@ -39,6 +39,7 @@ from libre_panel import winsession
 from libre_panel.devices.base import DeviceError, leave_place, take_place
 from libre_panel.devices.h264 import (
     ABOVE_NORMAL,
+    ENGINE_NOTE,
     NATIVE,
     NO_WINDOW,
     EncoderStopped,
@@ -127,6 +128,12 @@ def makes_globes(engine: str) -> bool:
     """Whether ``engine`` makes a turning globe's picture for each step (render/scene.py's
     Globe)."""
     return "globes" in _can(engine)
+
+
+def encodes_on_cards(engine: str) -> bool:
+    """Whether ``engine`` takes ``--encoder card`` (video.engine_encoder: the graphics card's
+    encoder where it opens, else x264); one of before does not start with it."""
+    return "cards" in _can(engine)
 
 
 def _layers_of(piece: Piece) -> list[tuple[Image.Image, int, int, int]]:
@@ -510,7 +517,9 @@ class EngineLink:
         try:
             for line in self.proc.stderr:
                 text = line.decode("utf-8", "replace").strip()
-                if text:
+                if text.startswith(ENGINE_NOTE):  # (no error: which encoder it runs, and why)
+                    log.info("engine: %s", text.removeprefix(ENGINE_NOTE))
+                elif text:
                     self.errors.append(text)
                     log.warning("engine: %s", text.removeprefix("libre-panel-engine: "))
         except (OSError, ValueError):

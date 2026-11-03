@@ -50,6 +50,10 @@ def test_the_engine_encodes_drawn_frames_as_x264_through_ffmpeg_would():
     full = h264.engine_command("engine", (1920, 480), 270, settings)
     assert full[-1] == "--full" and "--kbit 2000" in " ".join(full)
     assert "native" in h264.ENCODERS
+    assert "--encoder" not in command  # (x264, the engine's own default)
+    settings = h264.EncoderSettings(fps=50, encoder=h264.NATIVE, engine_encoder="card")
+    card = h264.engine_command("engine", (1920, 480), 270, settings)
+    assert card[card.index("--encoder") + 1] == "card"
 
 
 def test_a_frame_goes_to_the_engine_as_its_changed_boxes_grown_to_blocks():
@@ -198,3 +202,59 @@ def test_without_the_engine_x264_through_ffmpeg_encodes(panel, monkeypatch, capl
     said = [r for r in caplog.records if "Libre Panel's engine" in r.getMessage()]
     assert len(said) == 1  # (once)
     display.close()
+
+
+@needs_ffmpeg
+def test_the_cards_encoder_where_it_cannot_start_leaves_the_stream_to_x264(
+    engine,
+    panel,  # noqa: F811
+    caplog,
+):
+    """video.engine_encoder "card": the engine encodes with the graphics card's own encoder
+    where it opens (Windows' Media Foundation, engine/src/mf.rs); where it cannot (no such
+    encoder here, or not Windows), x264 encodes the same stream. The log says which, as a
+    note of the engine's (no error, nothing that would count as why it stopped)."""
+    config = video_config(encoder="native", engine_sends=False, engine_encoder="card")
+    display = TurzxVideoDisplay(config)
+    with caplog.at_level("INFO", logger="libre_panel.devices.h264"):
+        display.open()
+        frames = moving_square(30)
+        stream(display, frames)
+        command = display.encoder.command
+        assert command[command.index("--encoder") + 1] == "card"
+        settle(panel, timeout=15, at_least=20)
+        errors = list(display.encoder.errors)
+        display.close()
+    notes = [r for r in caplog.records if r.getMessage().startswith("engine: ")]
+    assert notes and {r.levelname for r in notes} == {"INFO"}
+    said = notes[0].getMessage()
+    assert "x264" in said or "(the graphics card's)" in said, said
+    assert errors == []
+    for source, shown in zip(frames, decode(panel.stream()), strict=False):
+        native = source.transpose(Image.Transpose.ROTATE_270)
+        assert max(ImageStat.Stat(ImageChops.difference(native, shown)).mean) < 6
+
+
+@needs_ffmpeg
+def test_an_engine_of_before_is_not_asked_for_the_cards_encoder(
+    engine,
+    panel,  # noqa: F811
+    monkeypatch,
+    caplog,
+):
+    """An engine that does not say "cards" when asked its version (one built before) would not
+    start with --encoder: it is not given it, x264 in it encodes, and the log says so once."""
+    from libre_panel.devices import engine as engines
+
+    said = "x264 build 164; panel, scenes, rings, views, globes)"
+    monkeypatch.setitem(engines._CAN, engine, said)
+    config = video_config(encoder="native", engine_sends=False, engine_encoder="card")
+    display = TurzxVideoDisplay(config)
+    with caplog.at_level("INFO", logger="libre_panel.devices.turzx_video"):
+        display.open()
+        stream(display, moving_square(10))
+        assert "--encoder" not in display.encoder.command
+        settle(panel, timeout=15, at_least=5)
+        display.close()
+    told = [r for r in caplog.records if "no graphics card's encoder" in r.getMessage()]
+    assert len(told) == 1

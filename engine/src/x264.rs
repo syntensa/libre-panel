@@ -40,6 +40,7 @@ extern "C" {
     fn lp_x264_build() -> c_int;
 }
 
+#[derive(Clone)]
 pub struct Settings {
     pub width: usize,
     pub height: usize,

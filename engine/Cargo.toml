@@ -27,6 +27,15 @@ windows-sys = { version = "0.61", features = [
     "Win32_System_SystemInformation",
     "Win32_System_Threading",
 ] }
+# the graphics card's H.264 encoder through Media Foundation (mf.rs): its COM interfaces
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Media_MediaFoundation",
+    "Win32_System_Com",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Ole",
+    "Win32_System_Variant",
+] }
 
 [[bin]]
 name = "libre-panel-engine"

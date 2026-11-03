@@ -785,6 +785,37 @@ def test_the_video_experiment_switches_what_the_engine_does(
         assert (video.engine_sends, video.engine_layers) == (True, True)
 
 
+def test_the_video_experiment_chooses_the_engines_own_encoder(
+    app_url,  # noqa: F811
+    isolated_home,
+    monkeypatch,
+):
+    """With Libre Panel's engine as the encoder: x264 or the graphics card's encoder (Windows'
+    Media Foundation), written on the click. Off Windows the choice shows only while the
+    card's is set (from the file), to set x264 back; back to the defaults is x264 again."""
+    from test_editor_settings import lacking_ffmpeg, panel_on_the_bus
+
+    from libre_panel.config import set_config_value
+
+    panel_on_the_bus(monkeypatch, "turing-9.2-usb")
+    lacking_ffmpeg(monkeypatch, found=True)
+    set_config_value("video.encoder", "native")
+    set_config_value("video.engine_encoder", "card")
+    with browser_page(app_url, "settings/panel/panel-video-experiment") as page:
+        group = page.locator("[role='radiogroup'][aria-label=\"The engine's encoder\"]")
+        card = group.locator("[role='radio']", has_text="Graphics card (experiment)")
+        x264 = group.locator("[role='radio']", has_text="x264 (processor)")
+        expect(card).to_have_attribute("aria-checked", "true")
+        x264.click()
+        waits_for(page, lambda: settings_config().device.video.engine_encoder == "x264")
+        expect(group).to_have_count(0)  # (not Windows: x264 is all there is here)
+    set_config_value("video.engine_encoder", "card")
+    with browser_page(app_url, "settings/panel/panel-video-experiment") as page:
+        page.get_by_role("button", name="Back to the defaults").click()
+        waits_for(page, lambda: settings_config().device.video.engine_encoder == "x264")
+        assert settings_config().device.video.encoder == "auto"
+
+
 def test_the_video_experiment_runs_every_step_by_itself_on_the_running_app(
     background,  # noqa: F811
     monkeypatch,

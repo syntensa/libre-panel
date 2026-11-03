@@ -320,12 +320,12 @@ function Tinkering({ video }) {
 // The video mode's defaults (config.py); the experiment's "Back to the defaults" writes them.
 const MEASURED = { "video.maxrate": "auto", "video.crf": 20, "video.preset": "superfast", "video.profile": "auto",
                    "video.encoder": "auto", "video.keyframe_s": 10, "video.fps": 25, "video.device_fps": 60,
-                   "video.engine_sends": true, "video.engine_layers": true };  // fmt: skip
+                   "video.engine_sends": true, "video.engine_layers": true, "video.engine_encoder": "x264" };  // fmt: skip
 const RATES = ["auto", "4M", "8M", "16M", "24M", "32M"];
 const QUALITIES = [16, 18, 20, 22, 25];
 const PRESETS = ["ultrafast", "superfast", "veryfast"];
 const KEYFRAMES = [2, 5, 10];
-const EXPERIMENT_LINE = /video|ffmpeg|firmware|decoder/i;
+const EXPERIMENT_LINE = /video|ffmpeg|engine|firmware|decoder/i; // (engine: which encoder it runs)
 
 /** The experiment's settings as they are, with a value of the person's own kept in the choices. */
 const withOwn = (choices, own) => (choices.includes(own) ? choices : [...choices, own]);
@@ -415,6 +415,7 @@ function ExperimentRun() {
  * that a try and its outcome are on one page.
  */
 function ExperimentCard({ video }) {
+  const catalog = useCatalog();
   const panel = usePolled(control.panel, 1000);
   const log = usePolled(() => control.log(200), 3000);
   const stats = panel.data?.panel?.stats;
@@ -453,6 +454,9 @@ function ExperimentCard({ video }) {
         ]}
       />
     <//>
+    ${video.encoder === "native" && (catalog?.platform === "win32" || video.engine_encoder === "card")
+      ? row(t("The engine's encoder"), t("x264 on the processor, or the graphics card's own encoder (AMD's, NVIDIA's or Intel's, through Windows' Media Foundation): the processor then only makes the frames' colours. Where the card's cannot start, x264 encodes, and the log says why."), "engine_encoder", ["x264", "card"], (value) => (value === "card" ? t("Graphics card (experiment)") : t("x264 (processor)")))
+      : null}
     ${video.encoder === "native"
       ? html`<${SettingRow} title=${t("The engine sends the pictures")} hint=${t("On: Libre Panel's engine has the panel and sends it each picture on its time. Off: Libre Panel sends them, the engine only encodes.")}>
           <${Toggle} label=${t("The engine sends the pictures")} checked=${video.engine_sends !== false} onChange=${(on) => change({ "video.engine_sends": on })} />

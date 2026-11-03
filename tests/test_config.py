@@ -134,7 +134,8 @@ def test_every_setting_of_the_video_is_read_from_the_file():
 
     others = {"mode": "on", "fps": 30, "device_fps": 70, "crf": 23, "preset": "fast",
               "keyframe_s": 5.0, "maxrate": "3M", "profile": "main", "encoder": "native",
-              "pixels": "rgb", "engine_sends": False, "engine_layers": False, "direct": True,
+              "pixels": "rgb", "engine_sends": False, "engine_layers": False,
+              "engine_encoder": "card", "direct": True,
               "rest": False, "ffmpeg": "ffmpeg.exe", "local_clip": "a.h264",
               "clip_asked": True}  # fmt: skip
     defaults = VideoConfig()
@@ -146,6 +147,9 @@ def test_every_setting_of_the_video_is_read_from_the_file():
     for name in ("engine_sends", "engine_layers"):
         with pytest.raises(ConfigError, match=f"video.{name}"):
             parse_config({"video": {name: "no"}})
+    for bad in ("amf", 1):
+        with pytest.raises(ConfigError, match="video.engine_encoder"):
+            parse_config({"video": {"engine_encoder": bad}})
 
 
 def test_the_standby_clip_is_asked_for_until_it_is_answered(isolated_home):

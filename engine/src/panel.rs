@@ -19,7 +19,7 @@ use crate::scene::{How, Layer, Scene};
 use crate::transport::{Error, Transport};
 use crate::video::{Video, DEFAULT_BLOCK};
 use crate::wire::{self, Boxes, Op, Record, Request};
-use crate::{x264, yuv};
+use crate::{encoder, yuv};
 
 const USAGE: &str = "libre-panel-engine panel --pid HEX [--ports N.N...] [--bus N] [--address N] \
 [--lead-ms N] [--link tcp:HOST:PORT]";
@@ -117,10 +117,12 @@ struct State {
     drops: u64,
     frames: u64,
     encode_s: f64,
-    /// Of `encode_s`: composing the frame from its layers, its YUV, and x264.
+    /// Of `encode_s`: composing the frame from its layers, its YUV, and the encoder (x264's,
+    /// or the graphics card's: `card`).
     compose_s: f64,
     yuv_s: f64,
     x264_s: f64,
+    card: bool,
 }
 
 struct Shared {
@@ -178,7 +180,7 @@ impl Pacer {
 struct Stream {
     frame: yuv::Yuv,
     scene: Scene,
-    encoder: x264::Encoder,
+    encoder: encoder::Encoder,
     mb: Vec<u8>,
     block: usize,
     lead: Duration,
@@ -202,7 +204,7 @@ impl Stream {
         let o = crate::parse(&rest)?;
         let frame = yuv::Yuv::new(o.size.0, o.size.1, o.turn, o.settings.full)?;
         let scene = Scene::new(o.size.0, o.size.1, frame.block);
-        let encoder = x264::Encoder::open(&o.settings)?;
+        let encoder = encoder::Encoder::open(&o.settings, o.card)?;
         let (cols, rows) = frame.macroblocks();
         // two frames' time at the stream's rate: 40 ms at 50 a second, 80 at 25
         let lead = lead_ms.unwrap_or_else(|| (2000 / o.settings.fps.max(1)).clamp(30, 100));
@@ -220,7 +222,7 @@ impl Stream {
         })
     }
 
-    /// The frame's picture, and the seconds its YUV and x264 took.
+    /// The frame's picture, and the seconds its YUV and its encoding took.
     fn encode(&mut self, number: u32, boxes: &Boxes) -> Result<(Vec<u8>, f64, f64), String> {
         let began = Instant::now();
         for (x0, y0, x1, y1, pixels) in boxes {
@@ -230,7 +232,7 @@ impl Stream {
         let yuv = began.elapsed().as_secs_f64();
         let stride = self.frame.turned.0;
         let encoding = Instant::now();
-        let (picture, _key) = self.encoder.encode(
+        let picture = self.encoder.encode(
             &mut self.frame.y,
             &mut self.frame.u,
             &mut self.frame.v,
@@ -384,7 +386,7 @@ fn counts(video: &Video, state: &State, paced: &Lateness) -> String {
         "{{\"blocks\": {}, \"bytes\": {}, \"waits\": {}, \"slow_blocks\": {}, \"max_depth\": {}, \
          \"pictures\": {}, \"late\": {}, \"came_late\": {}, \"late_most_ms\": {:.1}, \
          \"drops\": {}, \"frames\": {}, \"encode_ms\": {:.3}, \"compose_ms\": {:.3}, \
-         \"yuv_ms\": {:.3}, \"x264_ms\": {:.3}}}",
+         \"yuv_ms\": {:.3}, \"x264_ms\": {:.3}, \"card\": {}}}",
         c.blocks,
         c.bytes,
         c.waits,
@@ -400,6 +402,7 @@ fn counts(video: &Video, state: &State, paced: &Lateness) -> String {
         per_frame(state.compose_s),
         per_frame(state.yuv_s),
         per_frame(state.x264_s),
+        u8::from(state.card),
     )
 }
 
@@ -511,6 +514,7 @@ fn take_frame(
         state.compose_s += composed;
         state.yuv_s += yuv;
         state.x264_s += x264;
+        state.card = s.encoder.on_card();
         state.stream
     };
     if !picture.is_empty() {

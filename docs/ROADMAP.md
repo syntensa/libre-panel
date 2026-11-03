@@ -146,7 +146,10 @@ and becomes the default only once it has proven itself on the panels; the old wa
       changes in the running stream (`x264_encoder_reconfig`): no ffmpeg started anew, no
       handover (`[video] encoder = "native"`: on the 12.3" at 50 frames a second the encoder
       24 % of a core instead of 35, 33 MB instead of 82)
-- [ ] The same for the cards' encoders
+- [ ] The same for the cards' encoders: the engine hands the frame to the card's own encoder
+      (Media Foundation's: AMD's, NVIDIA's, Intel's, on Windows), says the colours in every
+      SPS and the SPS and PPS before every keyframe, x264 where it cannot start
+      (`[video] engine_encoder = "card"`); to be measured on the panels
 - [x] Pictures sent on a steady beat: the engine has the panel and sends each picture a fixed
       lead (two frames) after the time its frame was drawn for, from a thread of its own above
       the others in priority (`[video] engine_sends`). Frames that came with up to 15 ms of

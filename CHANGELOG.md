@@ -141,6 +141,20 @@
   once, its lit map once a light (every minute) and its air every two degrees, and with each
   step only the step and the mark: the engine makes the same picture. Terra's main loop
   takes 3.8 ms a frame instead of 5.1.
+- **The engine can let the graphics card encode, to try (Windows; `[video] engine_encoder =
+  "card"`, *Settings → Panel → Video experiment*: *The engine's encoder*).** With the engine
+  as the encoder, the card's own H.264 encoder (AMD's, NVIDIA's or Intel's: the one Windows
+  lists first, through Media Foundation) takes the frames instead of x264 on the processor,
+  which took 4.8 to 7 ms of it a frame on the 12.3". The engine still makes the panel's YUV
+  where the frame changed and hands the card the frame; the card encodes it, with the bit rate
+  changed in the running stream (a card that takes no new rate while it runs is opened anew
+  with it) and a keyframe where one is asked for, and the engine says the colours in every
+  picture as Libre Panel makes them (BT.601 in the panel's range: AMD's encoder left to itself
+  said limited values were full range, and the picture came out washed out) and puts the SPS
+  and PPS before every keyframe, as the panels take them. Where the card's encoder cannot
+  start (no such card, a Windows without Media Foundation such as an N edition without its
+  Media Feature Pack) or stops, x264 encodes, and the log says which one runs and why
+  (`engine: the stream's encoder: ...`).
 
 **Lighter**
 - **The main loop no longer resolves the themes' folder on disk with every frame, and draws

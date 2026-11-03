@@ -67,6 +67,7 @@ from libre_panel.devices.engine import (
     EngineTransport,
     can_send,
     cuts_views,
+    encodes_on_cards,
     engine_scene,
     makes_globes,
     makes_rings,
@@ -245,6 +246,7 @@ def video_settings(video: Any) -> EncoderSettings:
         maxrate=video.maxrate,
         profile=video.profile,
         encoder=video.encoder,
+        engine_encoder=getattr(video, "engine_encoder", "x264"),
     )
 
 
@@ -288,14 +290,16 @@ def lateness_said(counted: dict[str, Any]) -> str:
 
 def encoding_said(counted: dict[str, Any]) -> str | None:
     """What the engine's counts say of the time a frame took it, for the log: composing it from
-    its layers, its YUV and x264 (``compose_ms``, ``yuv_ms``, ``x264_ms``: of ``encode_ms``,
-    each an average a frame); None where the engine does not count them."""
+    its layers, its YUV and its encoding (``compose_ms``, ``yuv_ms``, ``x264_ms``: of
+    ``encode_ms``, each an average a frame), by x264 or the graphics card (``card``: the card's
+    time is mostly waited, not the processor's); None where the engine does not count them."""
     if "x264_ms" not in counted or not counted.get("frames"):
         return None
     parts = (float(counted.get(k, 0)) for k in ("encode_ms", "compose_ms", "yuv_ms", "x264_ms"))
     whole, compose, yuv, x264 = parts
+    encoder = "the graphics card's encoder" if counted.get("card") else "x264"
     return (f"video: the engine took {whole:.1f} ms a frame: {compose:.1f} composing it, "
-            f"{yuv:.1f} its YUV, {x264:.1f} x264")  # fmt: skip
+            f"{yuv:.1f} its YUV, {x264:.1f} {encoder}")  # fmt: skip
 
 
 class DecoderHung(DeviceError):
@@ -548,6 +552,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         self._feeds_asked: set[str] = set()  # the encoders video-state.json was asked about
         self._encoder_said = ""  # the encoder the log was told of
         self._engine_missing_said = False  # (once: video.encoder "native" without the engine)
+        self._cards_missing_said = False  # (once: engine_encoder "card", an engine without it)
         # The engine, while it has the panel (devices/engine.py, video.engine_sends): it sends
         # the commands and the pictures; what it counted so far is in the counters
         self.link: EngineLink | None = None
@@ -807,9 +812,17 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         settings = resolved(self.settings, model_id, name, self._pixels(name), full)
         if engine:  # (it is fed the boxes that may have changed and makes the YUV itself)
             settings = replace(settings, pixels=BOXES, card=False)
+            if settings.engine_encoder == "card" and not encodes_on_cards(engine):
+                settings = replace(settings, engine_encoder="x264")
+                if not self._cards_missing_said:
+                    self._cards_missing_said = True
+                    log.info("video: this engine has no graphics card's encoder (one of "
+                             "before); x264 in the engine encodes")  # fmt: skip
         elif self._makes_yuv(settings, size, source):
             settings = replace(settings, pixels=YUV)
         said = f"{feed_text(settings)}, profile {settings.profile}"
+        if engine and settings.engine_encoder == "card":
+            said += ", the graphics card's encoder where it opens"
         said += ", full range" if settings.full else ", limited range"
         if source is not None:
             said += f", straight from {source_name(source)}"
