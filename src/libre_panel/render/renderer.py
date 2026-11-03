@@ -730,8 +730,10 @@ def need_key(need: str) -> str:
 
 
 @lru_cache(maxsize=1024)
+@lru_cache(maxsize=1024)
 def _needs_of(needs: str) -> tuple[str, ...]:
-    """The conditions of a ``needs``, one by one."""
+    """The conditions of a ``needs``, one by one (worked out once a text: every widget asks for
+    its own with every frame)."""
     return tuple(need for need in (part.strip() for part in needs.split(",")) if need)
 
 

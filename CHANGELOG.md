@@ -151,6 +151,10 @@
   the same, neither gliding nor changing its colour, is the picture of the frame before,
   not formatted and looked up again: most of them between two readings (25 of Lumen's 35 a
   frame on the 12.3"). The main loop takes 5.6 instead of 6.5 ms a frame with Lumen.
+- **Fewer system calls a frame.** Whether the engine still runs was asked of the system some
+  eight times a frame (4 % of Arena's main loop); its end shows at once as its output ends,
+  and the system is asked at most ten times a second. A widget's conditions (`needs`) are
+  read once a text, not with every frame.
 - **A list's gliding bars go anew without its names and numbers.** While the bars glided
   (Arena's temperatures and cores), the list was joined anew for every frame, the bars and
   the text laid on them, a fifth of Arena's main loop; where the text lies on none of the

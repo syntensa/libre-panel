@@ -399,6 +399,7 @@ class EngineLink:
         self._ask_lock = threading.Lock()  # a command and its reply as one (UsbTransport's lock)
         self._ready = threading.Event()
         self._ended = threading.Event()
+        self._poll_at = 0.0  # (when alive asks the system again)
         self._closing = False  # (an end asked for, not one to report)
         if winsession.ending():  # Windows refuses a new program now, with a box that names it
             raise DeviceError("Windows is ending the session: no engine now")
@@ -515,9 +516,20 @@ class EngineLink:
         except (OSError, ValueError):
             pass
 
+    # how often :attr:`alive` asks the system whether the engine's process still runs: an end
+    # is seen at once anyway, its output ending (the reader sets _ended), and the frames asked
+    # for it some eight times each, a system call each time (4 % of Arena's main loop)
+    POLL_S = 0.1
+
     @property
     def alive(self) -> bool:
-        return not self._ended.is_set() and self.proc.poll() is None
+        if self._ended.is_set() or self.proc.returncode is not None:
+            return False
+        now = time.monotonic()
+        if now < self._poll_at:
+            return True
+        self._poll_at = now + self.POLL_S
+        return self.proc.poll() is None
 
     def reason(self) -> str:
         """Why the engine stopped, as far as it said."""
