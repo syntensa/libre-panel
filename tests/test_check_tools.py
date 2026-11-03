@@ -244,3 +244,77 @@ def test_the_ffmpeg_of_this_system_passes_when_it_has_libx264(capsys):
         pytest.skip("this ffmpeg has no libx264")
     check_tools.check_ffmpeg(Path(FFMPEG))
     assert "encodes 8 frames" in capsys.readouterr().out
+
+
+# -- Libre Panel's own engine (packaging/add_engine.py puts it in) ----------------------------
+
+
+def load_add_engine():
+    spec = importlib.util.spec_from_file_location(
+        "add_engine", ROOT / "packaging" / "add_engine.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_engine_goes_in_said_in_sources_and_checked_as_the_others(tmp_path):
+    add_engine = load_add_engine()
+    tools = tmp_path / "bundled-tools"
+    (tools / "licenses").mkdir(parents=True)
+    ffmpeg = b"\x7fELF ffmpeg"
+    (tools / "ffmpeg").write_bytes(ffmpeg)
+    (tools / "SOURCES.txt").write_text(
+        "Programs that come with Libre Panel, in this folder (see also NOTICE.md).\n\nffmpeg\n"
+        "  FFmpeg ...\n\nSHA-256 of the files in this folder:\n"
+        f"{hashlib.sha256(ffmpeg).hexdigest()}  ffmpeg\n"
+    )
+    built = tmp_path / "target" / "libre-panel-engine"
+    built.parent.mkdir()
+    program = b"\x7fELF engine"
+    built.write_bytes(program)
+    line = add_engine.add(
+        tools, built, "0.164.3108", ["x264: https://code.videolan.org/videolan/x264"]
+    )
+    assert line == f"{hashlib.sha256(program).hexdigest()}  libre-panel-engine"
+    text = (tools / "SOURCES.txt").read_text()
+    assert text.index("libre-panel-engine\n  Libre Panel's own engine") < text.index(
+        "SHA-256 of the"
+    )
+    assert "libx264 0.164.3108 linked in" in text and "code.videolan.org/videolan/x264" in text
+    assert (
+        (tools / "licenses" / "x264-COPYING.txt")
+        .read_text()
+        .startswith(
+            "                    GNU GENERAL PUBLIC LICENSE\n                       Version 2"
+        )
+    )
+    assert check_tools.check_files(tools) == ["ffmpeg", "libre-panel-engine"]  # (both checked)
+    with pytest.raises(add_engine.AddError):  # a Windows program is no Linux one
+        built.write_bytes(b"MZ engine")
+        add_engine.add(tools, built, "0.164", ["x264"])
+
+
+def test_an_engine_that_does_not_encode_the_stream_fails(tmp_path):
+    def run(command, **options):
+        if command[1:] == ["version"]:
+            return subprocess.CompletedProcess(
+                command, 0, "libre-panel-engine 0.1.0 (x264 build 164)\n", ""
+            )
+        assert options["input"].startswith(b"LPE1"), "the engine's records should be fed in"
+        return subprocess.CompletedProcess(command, 0, stream(3), b"")
+
+    with pytest.raises(check_tools.CheckError, match="3 pictures of 8 frames"):
+        check_tools.check_engine(tmp_path / "libre-panel-engine", run)
+
+
+def test_the_engine_of_this_checkout_passes_when_it_is_built(capsys):
+    from libre_panel import rights
+    from libre_panel.devices.h264 import find_engine
+
+    engine = find_engine()
+    if not engine or not rights.safe_place(engine):
+        pytest.skip("needs libre-panel-engine (cargo build --release in engine/)")
+    check_tools.check_engine(Path(engine))
+    out = capsys.readouterr().out
+    assert "x264 build" in out and "encodes 8 frames" in out

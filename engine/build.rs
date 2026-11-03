@@ -59,8 +59,10 @@ fn main() {
     };
     println!("cargo:rustc-link-lib={kind}=x264");
     if kind == "static" && !windows_gnu && !target.contains("apple") {
-        println!("cargo:rustc-link-lib=dylib=m");
-        println!("cargo:rustc-link-lib=dylib=pthread");
+        for library in ["m", "pthread", "dl"] {
+            // (x264.pc's Libs.private)
+            println!("cargo:rustc-link-lib=dylib={library}");
+        }
     }
     println!("cargo:rerun-if-changed=src/x264_shim.c");
     println!("cargo:rerun-if-env-changed=X264_DIR");

@@ -142,6 +142,7 @@ def test_the_repository_carries_the_licence_texts_that_ship_with_the_programs():
         "PawnIO-NOTICE.txt",
         "PresentMon-LICENSE.txt",
         "PresentMon-THIRD_PARTY.txt",
+        "x264-COPYING.txt",  # (for Libre Panel's engine, which has x264 in it: add_engine.py)
     ]
     read = lambda name: (fetch_tools.LICENSES / name).read_text("utf-8")  # noqa: E731
     assert "GNU GENERAL PUBLIC LICENSE\n                       Version 2, June 1991" in read(
@@ -152,6 +153,8 @@ def test_the_repository_carries_the_licence_texts_that_ship_with_the_programs():
     assert read(names[2]).startswith("Copyright (C) 2017-2024 Intel Corporation")
     assert "Permission is hereby granted, free of charge" in read(names[2])
     assert "Notice from NVAPI interface" in read(names[3])
+    assert read(names[4]).lstrip().startswith("GNU GENERAL PUBLIC LICENSE\n")
+    assert "Version 2, June 1991" in read(names[4])
     for name in names:  # nobody's address is kept here
         assert "@" not in read(name), name
 

@@ -124,6 +124,32 @@ jobs:
           else
             echo "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
           fi
+      - name: The version of MSYS2's libx264
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: echo "X264_PACKAGE=$(pacman -Q mingw-w64-x86_64-x264)" >> "$(cygpath -u "$GITHUB_ENV")"
+      - name: The version of Ubuntu's libx264
+        if: runner.os == 'Linux'
+        run: echo "X264_PACKAGE=libx264-dev $(dpkg-query -W -f='${Version}' libx264-dev)" >> "$GITHUB_ENV"
+      - name: Into the tools, as the release puts it there
+        # The release's own steps (release.yml): packaging/add_engine.py puts the engine next to
+        # the ffmpeg fetched above and says it in SOURCES.txt; check_tools.py checks the files
+        # against SOURCES.txt and runs the engine.
+        shell: bash
+        run: |
+          python packaging/add_engine.py "$RUNNER_TEMP/tools" "$LIBRE_PANEL_ENGINE" \
+            --x264 "from $X264_PACKAGE" --x264-source "x264: https://code.videolan.org/videolan/x264"
+          python - "$RUNNER_TEMP/tools" <<'CHECK'
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, "packaging")
+          import check_tools
+          tools = Path(sys.argv[1])
+          names = check_tools.check_files(tools)
+          engine = next(name for name in names if name.startswith("libre-panel-engine"))
+          check_tools.check_engine(tools / engine)
+          CHECK
+          cat "$RUNNER_TEMP/tools/SOURCES.txt"
       - name: The app's tests of the engine
         shell: bash
         run: |

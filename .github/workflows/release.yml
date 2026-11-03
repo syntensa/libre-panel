@@ -109,6 +109,48 @@ jobs:
         # as "tools". Windows: ffmpeg, PresentMon and PawnIO's installer; Linux: ffmpeg.
         shell: bash
         run: python packaging/fetch_tools.py
+      - name: MinGW and libx264 (MSYS2, Windows)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        id: msys2
+        with:
+          msystem: MINGW64
+          update: false
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-x264
+      - name: The version of MSYS2's libx264
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: echo "X264_PACKAGE=$(pacman -Q mingw-w64-x86_64-x264)" >> "$(cygpath -u "$GITHUB_ENV")"
+      - name: libx264 (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends libx264-dev
+          echo "X264_PACKAGE=libx264-dev $(dpkg-query -W -f='${Version}' libx264-dev)" >> "$GITHUB_ENV"
+      - name: Libre Panel's engine
+        # Built from engine/ with libx264 linked in (no library of x264's to carry beside it),
+        # put next to ffmpeg in the tools and said in SOURCES.txt with the x264 it carries and
+        # where that one's source is (packaging/add_engine.py); check_tools.py runs it below.
+        shell: bash
+        run: |
+          cd engine
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            mingw="$(cygpath -u '${{ steps.msys2.outputs.msys2-location }}')/mingw64"
+            export PATH="$mingw/bin:$PATH" CC=gcc AR=ar X264_DIR="$(cygpath -m "$mingw")" X264_STATIC=1
+            export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=gcc RUSTFLAGS="-C target-feature=+crt-static"
+            rustup target add x86_64-pc-windows-gnu
+            cargo build --release --target x86_64-pc-windows-gnu
+            built="target/x86_64-pc-windows-gnu/release/libre-panel-engine.exe"
+            recipe="MSYS2's recipe of the package: https://github.com/msys2/MINGW-packages/tree/master/mingw-w64-x264"
+          else
+            X264_STATIC=1 cargo build --release
+            built="target/release/libre-panel-engine"
+            recipe="Ubuntu's source package: https://launchpad.net/ubuntu/+source/x264 (apt-get source x264)"
+          fi
+          cd ..
+          python packaging/add_engine.py packaging/bundled-tools "engine/$built" \
+            --x264 "from $X264_PACKAGE" \
+            --x264-source "x264: https://code.videolan.org/videolan/x264 (the commit its version names)" \
+            --x264-source "$recipe"
       - name: Build
         run: pyinstaller --noconfirm --clean packaging/pyinstaller/libre-panel.spec
       - name: Smoke test (render)

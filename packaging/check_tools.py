@@ -14,6 +14,9 @@ PROGRAM_FOLDER is the one with ``libre-panel`` in it; its ``tools`` folder is ch
   * ffmpeg lists libx264 among its encoders, and encodes pictures the way the video mode asks
     (the command is the app's own, libre_panel.devices.h264), to a stream that the video mode
     cuts into as many pictures, with the parameter sets it needs;
+  * Libre Panel's own engine, where the build put it in (packaging/add_engine.py), says its
+    version and the x264 it carries, and encodes frames as the video mode feeds it, to a stream
+    of as many pictures;
   * PresentMon (Windows) starts and says its version;
   * PawnIO's installer (Windows) is there. It is not run: it installs a driver.
 
@@ -117,6 +120,47 @@ def check_ffmpeg(ffmpeg: Path, run: Runner = run) -> None:
     print(f"ok: {ffmpeg.name} encodes {FRAMES} frames to {len(done.stdout)} bytes of H.264")
 
 
+def check_engine(engine: Path, run: Runner = run) -> None:
+    """The engine says its version and encodes frames as the video mode feeds it."""
+    import io
+
+    from PIL import Image
+
+    from libre_panel.devices.h264 import (
+        NATIVE,
+        EncoderSettings,
+        PictureSplitter,
+        engine_command,
+        engine_frame,
+        nal_units,
+    )
+
+    said = run([str(engine), "version"], text=True)
+    if said.returncode != 0 or "x264 build" not in said.stdout:
+        raise CheckError(f"{engine} said no version: exit code {said.returncode} {said.stderr}")
+    print(f"ok: {said.stdout.strip()}")
+    settings = EncoderSettings(fps=25, keyframe_s=1, encoder=NATIVE)
+    command = engine_command(str(engine), SIZE, 270, settings)
+    fed = io.BytesIO()
+    picture = Image.frombytes("RGB", SIZE, bytes(range(256)) * (SIZE[0] * SIZE[1] * 3 // 256))
+    for n in range(FRAMES):
+        frame = picture.rotate(n * 3)  # (a picture of some detail that moves)
+        engine_frame(frame, None if n == 0 else [(0, 0, *SIZE)], n)(fed)
+    done = run(command, input=fed.getvalue())
+    if done.returncode != 0 or not done.stdout:
+        error = done.stderr.decode("utf-8", "replace").strip()
+        raise CheckError(f"{engine} did not encode: exit code {done.returncode} {error}")
+    splitter = PictureSplitter()
+    pictures = splitter.feed(done.stdout) + splitter.flush()
+    kinds = [kind for _, kind in nal_units(done.stdout)]
+    if len(pictures) != FRAMES or splitter.multi_slice or not {5, 7, 8} <= set(kinds):
+        raise CheckError(
+            f"{engine} encoded {len(pictures)} pictures of {FRAMES} frames (NAL units "
+            f"{sorted(set(kinds))}, several slices: {splitter.multi_slice})"
+        )
+    print(f"ok: {engine.name} encodes {FRAMES} frames to {len(done.stdout)} bytes of H.264")
+
+
 def check_presentmon(presentmon: Path, run: Runner = run) -> None:
     """PresentMon starts and says its version (its help ends with exit code 1, by design)."""
     done = run([str(presentmon), "--help"], text=True, errors="replace")
@@ -131,7 +175,7 @@ def check_discovery(program: Path, tools: Path, names: list[str]) -> None:
     """The app, started from this build, looks for its programs in this folder first."""
     from libre_panel.bundled import pawnio_installer
     from libre_panel.devices.base import DeviceError
-    from libre_panel.devices.h264 import find_ffmpeg
+    from libre_panel.devices.h264 import find_engine, find_ffmpeg
     from libre_panel.sensors.presentmon import find_presentmon
 
     executables = ("LibrePanel.exe", "libre-panel.exe", "libre-panel")
@@ -143,6 +187,8 @@ def check_discovery(program: Path, tools: Path, names: list[str]) -> None:
         "ffmpeg.exe": find_ffmpeg,
         "PresentMon.exe": find_presentmon,
         "PawnIO_setup.exe": pawnio_installer,
+        "libre-panel-engine": find_engine,
+        "libre-panel-engine.exe": find_engine,
     }
     with (
         mock.patch.object(sys, "frozen", True, create=True),
@@ -173,6 +219,8 @@ def check(program: Path, run: Runner = run) -> None:
     for name in names:
         if name in ("ffmpeg", "ffmpeg.exe"):
             check_ffmpeg(tools / name, run)
+        elif name in ("libre-panel-engine", "libre-panel-engine.exe"):
+            check_engine(tools / name, run)
         elif name == "PresentMon.exe":
             check_presentmon(tools / name, run)
 

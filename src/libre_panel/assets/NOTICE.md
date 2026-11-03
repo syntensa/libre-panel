@@ -181,7 +181,7 @@ in `_internal\lhm\licenses`, the same list with each file's SHA-256 in
   packages that LibreHardwareMonitorLib's package lists, which the .NET Framework
   build does not use (the .NET Framework has its own System.Management).
 
-## Downloads: ffmpeg, PresentMon and PawnIO's installer
+## Downloads: ffmpeg, Libre Panel's engine, PresentMon and PawnIO's installer
 
 The downloads carry the programs that Libre Panel's features run, in the folder
 `tools` next to the program, so that nothing else has to be installed: **ffmpeg**
@@ -222,6 +222,17 @@ SHA-256 and says where each one's source code is; the licence texts are in
 
   If one of these addresses stops working, ask for the source in an issue of this
   project.
+- **Libre Panel's own engine (`libre-panel-engine`, GPL-3.0-or-later)** is not fetched:
+  the build makes it from `engine/` in this repository, at the same commit as the
+  download, and links **libx264** into it (GPL-2.0-or-later, the x264 project), so
+  that no library of x264's has to be carried beside it. The libx264 is the one of
+  the system the download is built on: on Windows MSYS2's package
+  `mingw-w64-x86_64-x264`, on Linux Ubuntu's `libx264-dev`; `tools\SOURCES.txt`
+  says which version, and so which commit of x264, and where the recipe of that
+  package is. x264's licence text is `tools\licenses\x264-COPYING.txt`; x264's
+  source: <https://code.videolan.org/videolan/x264>. The whole program is under the
+  GNU General Public License, version 3 or later (x264's "or later" allows it).
+  `packaging/add_engine.py` puts it into the tools and says it in SOURCES.txt.
 - **PresentMon (MIT).** Its licence text, with the copyright line, is
   `tools\licenses\PresentMon-LICENSE.txt`; the notices of the third-party parts in
   its source (AMD, NVIDIA, Google, Microsoft) are `PresentMon-THIRD_PARTY.txt`.
