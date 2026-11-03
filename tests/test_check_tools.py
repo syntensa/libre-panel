@@ -316,8 +316,8 @@ def test_the_crates_in_the_engine_go_with_their_licences(tmp_path):
     built = tmp_path / "libre-panel-engine"
     built.write_bytes(b"\x7fELF engine")
     add_engine.add(tools, built, "0.164", ["x264"], windows)
-    assert (tools / "licenses" / add_engine.CRATES).read_text() == windows
-    assert f"licenses/{add_engine.CRATES}" in (tools / "SOURCES.txt").read_text()
+    assert (tools / "licenses" / add_engine.CRATES).read_text("utf-8") == windows
+    assert f"licenses/{add_engine.CRATES}" in (tools / "SOURCES.txt").read_text("utf-8")
 
 
 def test_an_engine_that_does_not_encode_the_stream_fails(tmp_path):

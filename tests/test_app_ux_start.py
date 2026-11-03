@@ -644,15 +644,23 @@ def test_the_community_themes_follow_the_chosen_panel_and_one_of_yours_is_shared
         waits_for(page, lambda: settings_config().theme == "aurora")
         # one of yours, shared: its name, who made it and what it shows, then the file and the form
         mine = page.locator(".theme-card[data-theme='aurora']")
+        # The dialog gives its first field the focus on its first frame. A click into another one
+        # before that frame keeps the focus there: what is typed goes where it was clicked (that
+        # frame came late on a busy machine, and the maker was typed into the name: CI, twice).
+        # Held back here, deterministically.
+        page.evaluate("""() => { const frame = window.requestAnimationFrame;
+            window.requestAnimationFrame = (done) => frame(() => setTimeout(done, 400));
+            setTimeout(() => { window.requestAnimationFrame = frame; }, 1000); }""")
         mine.get_by_role("button", name="Share “Aurora” with everyone…").click()
         dialog = page.locator(".dialog")
+        dialog.get_by_label("Made by").click()
+        page.wait_for_timeout(700)  # (the dialog's first frame has come)
+        page.keyboard.type("Northern")
         save = dialog.get_by_role("button", name="Save the theme")
         expect(save).to_be_disabled()  # what it shows, and that it may be shared, first
-        dialog.get_by_label("Made by").fill("Northern")
         dialog.get_by_label("What it shows").fill("Lights over the time.")
         dialog.get_by_role("checkbox").check()
-        # (each field holds what was written in it: where the form below lacks one, it was lost
-        # here or afterwards; two of three CI runs lost the maker, none on this machine)
+        # (each field holds what was written in it)
         expect(dialog.get_by_label("Name")).to_have_value("Aurora")
         expect(dialog.get_by_label("Made by")).to_have_value("Northern")
         expect(dialog.get_by_label("What it shows")).to_have_value("Lights over the time.")

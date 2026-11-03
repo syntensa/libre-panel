@@ -87,6 +87,9 @@ function DialogBox({ dialog, top }) {
     // (without scrolling: a dialog taller than the window, as the help on a small one, is read
     // from its top even where the focus is on its last button)
     const frame = requestAnimationFrame(() => {
+      // (unless the focus went into the dialog meanwhile: a click into one of its fields before
+      // this frame, and what is typed there stays there, not in the first field)
+      if (box.current?.contains(document.activeElement)) return;
       const target = box.current?.querySelector("[autofocus]") || box.current?.querySelector(FOCUSABLE);
       target?.focus({ preventScroll: true });
     });

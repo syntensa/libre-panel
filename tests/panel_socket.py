@@ -54,6 +54,12 @@ class PanelSocket:
         return bytes(data)
 
     def _talk(self, conn: socket.socket) -> None:
+        try:
+            self._answer(conn)
+        except OSError:  # the engine is gone (a test ended it): the connection ends with it
+            pass
+
+    def _answer(self, conn: socket.socket) -> None:
         with conn:
             conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             while True:

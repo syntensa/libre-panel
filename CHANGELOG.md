@@ -23,6 +23,9 @@
   picture hung, glitched and stuttered (Arena and Terra above all) and the bit rate stepped
   down. With "rgb" ffmpeg converts the frames again, as in 0.7; "auto" (the default) takes
   less of the processor.
+- **A dialog keeps the cursor where you clicked.** It put it into its first field a moment after
+  it opened; a click into another field before that moment lost it again, and what you typed
+  went into the first one (the maker of a shared theme into its name, now and then).
 - **Design and Look show the panel that is connected** where config.toml names a version of
   a theme as the panel's theme (`theme = "lumen-pair-1920x720"`, as the app writes it for the
   12.3" beside another panel): they opened the theme's first version, for another panel (the
