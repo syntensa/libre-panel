@@ -61,6 +61,77 @@ jobs:
           libre-panel preview libre-default -o libre-default.png
           libre-panel preview spur-ii -o spur-ii.png
 
+  engine:
+    # Libre Panel's own engine (engine/, Rust; docs/ROADMAP.md): built against libx264 (Ubuntu's
+    # package; on Windows MSYS2's, linked in), its own tests, and the app's tests of it
+    # (tests/test_native_engine.py: the YUV byte for byte yuv.py's, a panel through it, a new
+    # bit rate in the running stream) with the engine it built, which they must find.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: libx264 (Ubuntu)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libx264-dev
+      - name: MinGW and libx264 (MSYS2, Windows)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        id: msys2
+        with:
+          msystem: MINGW64
+          update: false
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-x264
+      - name: Build and test the engine
+        shell: bash
+        run: |
+          rustup component add rustfmt clippy
+          cd engine
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            mingw="$(cygpath -u '${{ steps.msys2.outputs.msys2-location }}')/mingw64"
+            export PATH="$mingw/bin:$PATH" CC=gcc AR=ar X264_DIR="$(cygpath -m "$mingw")" X264_STATIC=1
+            export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=gcc RUSTFLAGS="-C target-feature=+crt-static"
+            rustup target add x86_64-pc-windows-gnu
+            target="--target x86_64-pc-windows-gnu"
+            built="target/x86_64-pc-windows-gnu/release/libre-panel-engine.exe"
+          else
+            target=""
+            built="target/release/libre-panel-engine"
+          fi
+          cargo fmt --check
+          cargo clippy --release $target -- -D warnings
+          cargo test --release $target
+          cargo build --release $target
+          "./$built" version
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            echo "LIBRE_PANEL_ENGINE=$(cygpath -w "$PWD/$built")" >> "$GITHUB_ENV"
+          else
+            echo "LIBRE_PANEL_ENGINE=$PWD/$built" >> "$GITHUB_ENV"
+          fi
+      - run: pip install -e ".[dev,usb]"
+      - name: ffmpeg (decodes what the engine made)
+        shell: bash
+        run: |
+          python packaging/fetch_tools.py "$RUNNER_TEMP/tools"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cygpath -w "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
+          else
+            echo "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
+          fi
+      - name: The app's tests of the engine
+        shell: bash
+        run: |
+          # (the runner's rights stand in as an ordinary user's, as conftest's not_elevated does)
+          python -c "from libre_panel import rights; rights.elevated = lambda: False
+          from libre_panel.devices.h264 import find_engine; assert find_engine(), 'no engine'"
+          pytest -q -rs tests/test_native_engine.py tests/test_yuv.py
+
   desktop:
     # The app in a real browser (every test that needs one: the others skip them), the tray
     # icon on a real X11 tray, and keyboard shortcuts pressed on an X server.
