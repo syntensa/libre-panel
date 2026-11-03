@@ -1474,24 +1474,32 @@ def test_main_loop_sends_every_frame_at_the_stream_rate(monkeypatch, tmp_path):
     config.device.video.rest = False  # (the frame clock: also the frames that show nothing new)
     stop = threading.Event()
     thread = threading.Thread(target=app.run, args=(config,), kwargs={"stop": stop})
+    ticks = []
+
+    def tick() -> None:  # the machine's timer while the loop runs, as busy as it is then
+        while not stop.is_set():
+            time.sleep(0.018)
+            ticks.append(time.perf_counter())
+
+    timer = threading.Thread(target=tick, daemon=True)
     thread.start()
+    timer.start()
     end = time.monotonic() + 60  # frames enough to tell a rate from, however long they take
     while (not displays or len(displays[0].shown) < 60) and time.monotonic() < end:
         time.sleep(0.05)
     stop.set()
     thread.join(10)
+    timer.join(2)
     shown = displays[0].shown
     assert all(region is None for _, region in shown)  # whole frames, changed or not
     rate = (len(shown) - 1) / (shown[-1][0] - shown[0][0])
     # The display's 50 fps, not config.fps = 5, as far as this machine's timer allows
-    # (virtual runners coalesce short sleeps).
-    started = time.perf_counter()
-    for _ in range(10):
-        time.sleep(0.018)
-    timer_rate = min(50, 10 / (time.perf_counter() - started))
-    # Well above config.fps, as close to the timer as a busy machine manages (a
-    # loaded runner drew 20 fps with a timer good for 26).
-    assert max(2 * config.fps, 0.6 * timer_rate) < rate < 55, (rate, timer_rate)
+    # (virtual runners coalesce short sleeps), timed while the loop ran: a timer timed after
+    # it, on a runner idle by then, said 50 to a loop that had drawn 28.4 a second.
+    timer_rate = min(50, (len(ticks) - 1) / (ticks[-1] - ticks[0])) if len(ticks) > 1 else 50
+    # Well above config.fps, half the timer's rate or more (a loaded runner drew 20 fps with a
+    # timer good for 26, another 28.4 with one good for 50)
+    assert max(4 * config.fps, 0.5 * timer_rate) < rate < 55, (rate, timer_rate)
     assert renderers[0].background_builds
 
 
