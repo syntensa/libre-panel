@@ -139,3 +139,36 @@ def test_a_look_made_anew_where_it_changed_is_the_picture_made_whole(look, model
     turning.forget()  # (the message went: what it kept goes too)
     assert turning._drawn is turning._smalled is turning._base is None
     assert getattr(turning, "_ring", None) is None
+
+
+def test_the_large_look_finds_what_a_new_number_changed_without_comparing_its_pictures(
+    monkeypatch,
+):
+    """Its card and groove are the same for every number: two of its pictures differ only
+    where the speaker and the number went, so it does not look for that by comparing them
+    whole, drawn large (ten megabytes each on the 12.3"; a sixth of its time)."""
+    import libre_panel.render.volume_looks as looks
+
+    theme = parse_theme(
+        {
+            "format": "libre-panel-theme/1",
+            "display": {"model": "turing-12.3-usb", "orientation": "landscape"},
+            "background": {"color": "#000000"},
+            "widgets": [],
+        }
+    )
+    made = Renderer(theme, preview=True)
+    size = (theme.width, theme.height)
+    cls = VOLUME_LOOKS["big"]
+    turning = cls(RenderContext(made, cls), {})
+    turning.picture(volume("big", 0.40), 0.40, size)
+    compared = []
+    real = looks.ImageChops.difference
+    monkeypatch.setattr(
+        looks.ImageChops, "difference", lambda a, b: compared.append(a.size) or real(a, b)
+    )
+    for share in (0.41, 0.47, 0.5, 0.39, 1.0, 0.07):
+        toast = volume("big", share)
+        whole = cls(RenderContext(made, cls), {}).picture(toast, share, size)
+        assert turning.picture(toast, share, size).tobytes() == whole.tobytes(), share
+    assert compared == []

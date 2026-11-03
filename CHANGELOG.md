@@ -119,9 +119,11 @@
   turned 73 ms with the bar, 91 with the large look. They now draw what stays the same once
   a message, the glow only where the bar or the ring's sweep changed and can reach, and make
   the picture anew only where it changed, with the same pixels (compared through a volume's
-  turns on six panels): 14 ms a frame with the bar, 23 with the large look, 16 with the
-  levels, 19 with the ring instead of 33 (on the test machine). What they keep for that goes
-  when the message goes.
+  turns on six panels): 13 ms a frame with the bar, 16 with the large look, 16 with the
+  levels, 19 with the ring instead of 33 (on the test machine). The large look finds what a
+  new number changed from where it drew it, no longer by comparing its large pictures, and
+  the bar's glow is worked out only as far as it reaches. What they keep for that goes when
+  the message goes.
 - **x264 a fifth lighter on the screens Libre Panel draws, and sharper.** Their frames go into
   x264 without its deblocking filter and without its search for motion finer than a pixel:
   the filter is made for films and softened what is the picture's own (lettering, lines),

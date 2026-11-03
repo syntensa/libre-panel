@@ -40,6 +40,7 @@ class _Drawn:
     small: Image.Image
     fill: tuple[int, int, int, int] | None  # the bar's filled box on the card (None: empty)
     tint: Any = None  # the colour it was filled in
+    drawn: Any = None  # where its base was drawn (VolumeLook._base_of)
 
 
 def made_smaller(picture: Image.Image, size: tuple[int, int]) -> Image.Image:
@@ -82,8 +83,8 @@ class VolumeLook(ToastStyle):
         self._to = 0.0
         self._since = 0.0
         self._made: tuple[Any, Image.Image] | None = None  # (what it shows, its picture)
-        # (what it shows but the level, and that drawn large: :meth:`base`)
-        self._base: tuple[Any, Image.Image] | None = None
+        # (what it shows but the level, that drawn large, and where: :meth:`_base_of`)
+        self._base: tuple[Any, Image.Image, Any] | None = None
         self._drawn: _Drawn | None = None  # (its picture as made last: :meth:`barred`)
         self._smalled: tuple[Image.Image, Image.Image] | None = None  # (:meth:`made_small`)
 
@@ -222,17 +223,21 @@ class VolumeLook(ToastStyle):
         return self._base_of(toast, size, make)[1].copy()
 
     def _base_of(
-        self, toast: Any, size: tuple[int, int], make: Callable[[], Image.Image]
-    ) -> tuple[Any, Image.Image]:
-        """(its key, what the picture shows but the level drawn large): kept, not to draw on."""
+        self, toast: Any, size: tuple[int, int], make: Callable[[], Any]
+    ) -> tuple[Any, Image.Image, Any]:
+        """(its key, what the picture shows but the level drawn large, and what ``make`` said
+        of where it drew: None, or (what stands for the card it drew on first, the box it drew
+        the rest in), which it may give with the picture): kept, not to draw on."""
         key = (self.number(toast), self.muted(toast), size, id(self.context),
                tuple(self.colors(toast).values()))  # fmt: skip
         if self._base is None or self._base[0] != key:
-            self._base = (key, make())
+            made = make()
+            picture, drawn = made if isinstance(made, tuple) else (made, None)
+            self._base = (key, picture, drawn)
         return self._base
 
     def barred(
-        self, toast: Any, size: tuple[int, int], make: Callable[[], Image.Image],
+        self, toast: Any, size: tuple[int, int], make: Callable[[], Any],
         bar: tuple[tuple[int, int], int, int], level: float, glow: float,
     ) -> Image.Image:  # fmt: skip
         """The picture of a look whose level is a bar: what else it shows drawn large
@@ -241,8 +246,13 @@ class VolumeLook(ToastStyle):
         changed since the picture before (the end of the bar as it glides, the number), where
         the picture drawn large is whole steps of :data:`SS` wide and high: Pillow makes each
         pixel of the small picture from the large one's around it alone, the glow each pixel
-        from the bar within its reach, so the pixels are those of a picture made whole."""
-        key, base = self._base_of(toast, size, make)
+        from the bar within its reach, so the pixels are those of a picture made whole.
+
+        ``make`` may give with the picture where it drew (:meth:`_base_of`): what stands for
+        the card it drew first, the same for every number (its size and colours, the groove),
+        and the box it drew the rest in. Two drawn on the same card differ only in their boxes,
+        so the large pictures are not compared then (some milliseconds on a large panel)."""
+        key, base, drawn = self._base_of(toast, size, make)
         span, y, thick = bar
         colors = self.colors(toast)
         box = None
@@ -255,13 +265,17 @@ class VolumeLook(ToastStyle):
         if last is None or last.card.size != base.size or w % SS or h % SS:
             card = base.copy()
             self.fill(card, span, y, thick, level, colors, glow)
-            self._drawn = _Drawn(key, base, card, self.small(card), box, tint)
+            self._drawn = _Drawn(key, base, card, self.small(card), box, tint, drawn)
             return self._drawn.small
         regions = []
         if base is not last.base:  # (the number, or another colour: where the large ones differ)
-            changed = ImageChops.difference(base, last.base).getbbox(alpha_only=False)
-            if changed is not None:
-                regions.append(changed)
+            if drawn is not None and last.drawn is not None and drawn[0] == last.drawn[0]:
+                (ax0, ay0, ax1, ay1), (bx0, by0, bx1, by1) = drawn[1], last.drawn[1]
+                regions.append((min(ax0, bx0), min(ay0, by0), max(ax1, bx1), max(ay1, by1)))
+            else:
+                changed = ImageChops.difference(base, last.base).getbbox(alpha_only=False)
+                if changed is not None:
+                    regions.append(changed)
         reach = self.reach(glow)
         if box != last.fill or (box is not None and tint != last.tint):
             ends = [b for b in (box, last.fill) if b is not None]
@@ -289,21 +303,23 @@ class VolumeLook(ToastStyle):
             parts.append((x0, y0, x1, y1))
         for x0, y0, x1, y1 in parts:
             part = base.crop((x0, y0, x1, y1))
-            near = box is not None and (
-                box[0] - reach < x1 and box[2] + reach > x0
-                and box[1] - reach < y1 and box[3] + reach > y0
-            )  # fmt: skip
-            if near:  # the bar's glow there: worked out from the bar within its reach
-                gx0, gy0 = max(0, x0 - reach), max(0, y0 - reach)
-                gx1, gy1 = min(w, x1 + reach), min(h, y1 + reach)
-                layer = Image.new("RGBA", (gx1 - gx0, gy1 - gy0), (0, 0, 0, 0))
-                at = [box[0] - gx0, box[1] - gy0, box[2] - gx0, box[3] - gy0]
-                ImageDraw.Draw(layer).rounded_rectangle(at, thick // 2, fill=colors["accent"])
-                lit = self.glow(layer, glow).crop((x0 - gx0, y0 - gy0, x1 - gx0, y1 - gy0))
-                part.alpha_composite(lit)
+            if box is not None:  # the bar's glow, where it reaches into the part
+                rx0, ry0 = box[0] - reach, box[1] - reach  # (how far it reaches)
+                rx1, ry1 = box[2] + 1 + reach, box[3] + 1 + reach
+                lx0, ly0, lx1, ly1 = max(x0, rx0), max(y0, ry0), min(x1, rx1), min(y1, ry1)
+                if lx0 < lx1 and ly0 < ly1:  # worked out from the bar within its reach
+                    # (beyond its reach the glow is none at every pass of the blur: Pillow's
+                    # blur, taking an edge for what lies beyond, takes none for none there)
+                    gx0, gy0 = max(0, lx0 - reach, rx0), max(0, ly0 - reach, ry0)
+                    gx1, gy1 = min(w, lx1 + reach, rx1), min(h, ly1 + reach, ry1)
+                    layer = Image.new("RGBA", (gx1 - gx0, gy1 - gy0), (0, 0, 0, 0))
+                    at = [box[0] - gx0, box[1] - gy0, box[2] - gx0, box[3] - gy0]
+                    ImageDraw.Draw(layer).rounded_rectangle(at, thick // 2, fill=colors["accent"])
+                    lit = self.glow(layer, glow).crop((lx0 - gx0, ly0 - gy0, lx1 - gx0, ly1 - gy0))
+                    part.alpha_composite(lit, (lx0 - x0, ly0 - y0))  # (beyond: none, as whole)
             card.paste(part, (x0, y0))
         small = self._smaller(card, last.small, parts)
-        self._drawn = _Drawn(key, base, card, small, box, tint)
+        self._drawn = _Drawn(key, base, card, small, box, tint, drawn)
         return small
 
     @staticmethod
@@ -666,8 +682,9 @@ class BigLook(VolumeLook):
         h = round(min(236 * u, size[1] * SS * 0.8))
         span, y, thick = (round(w * 0.1), round(w * 0.9)), round(h * 0.78), max(SS, round(12 * u))
 
-        def base() -> Image.Image:
-            card = self.panel(w, h, c, round(28 * u))
+        def base() -> tuple[Image.Image, Any]:
+            radius = round(28 * u)
+            card = self.panel(w, h, c, radius)
             text = self.number(toast)
             font = face(NUMBER_FACE, round(h * (0.46 if len(text) <= 3 else 0.24)))
             icon = round(h * 0.26)
@@ -675,11 +692,19 @@ class BigLook(VolumeLook):
             gap = round(18 * u)
             left = (w - icon - gap - text_w) // 2
             mid = round(h * 0.42)
-            card.alpha_composite(self.speaker(toast, icon, c["accent"]), (left, mid - icon // 2))
-            ImageDraw.Draw(card).text((left + icon + gap, mid), text, font=font, fill=c["text"],
-                                      anchor="lm")  # fmt: skip
+            speaker = self.speaker(toast, icon, c["accent"])
+            top = mid - icon // 2
+            card.alpha_composite(speaker, (left, top))
+            draw = ImageDraw.Draw(card)
+            at = (left + icon + gap, mid)
+            draw.text(at, text, font=font, fill=c["text"], anchor="lm")
             self.groove(card, span, y, thick, c)
-            return card
+            x0, y0, x1, y1 = draw.textbbox(at, text, font=font, anchor="lm")
+            box = (min(left, x0), min(top, y0), max(left + speaker.width, x1),
+                   max(top + speaker.height, y1))  # fmt: skip
+            # (the card with its groove is the same for every number: the speaker and the
+            # number went in the box)
+            return card, ((w, h, radius, c["card"], c["track"], span, y, thick), box)
 
         return self.barred(toast, size, base, (span, y, thick), level, 8 * u)
 
