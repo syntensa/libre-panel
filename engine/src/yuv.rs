@@ -169,36 +169,41 @@ impl Yuv {
     fn convert(&mut self, r: usize, c: usize) -> (usize, usize) {
         let n = self.block;
         let half = n / 2;
+        let full = self.full;
         let mut light = [0u8; 256];
         let mut blue = [0i32; 256];
         let mut red = [0i32; 256];
+        let line = self.width * 3;
+        let first = (r * n * self.width + c * n) * 3;
         for i in 0..n {
-            let at = ((r * n + i) * self.width + c * n) * 3;
-            for j in 0..n {
-                let (pr, pg, pb) = (
-                    self.rgb[at + j * 3] as usize,
-                    self.rgb[at + j * 3 + 1] as usize,
-                    self.rgb[at + j * 3 + 2] as usize,
-                );
-                let y = (Y_R[pr] + Y_G[pg] + Y_B[pb]) >> 6;
-                let cb = (((CB_R[pr] + CB_G[pg] + CB_B[pb]) >> 6) + 128) & 255;
-                let cr = (((CR_R[pr] + CR_G[pg] + CR_B[pb]) >> 6) + 128) & 255;
-                let y = (y & 255) as u8;
-                light[i * n + j] = if self.full { y } else { LIMITED_Y[y as usize] };
-                blue[i * n + j] = cb;
-                red[i * n + j] = cr;
+            let row = &self.rgb[first + i * line..first + i * line + n * 3];
+            let out = i * n..i * n + n;
+            let (l, b) = (&mut light[out.clone()], &mut blue[out.clone()]);
+            for (((px, l), b), rd) in row.chunks_exact(3).zip(l).zip(b).zip(&mut red[out]) {
+                let (pr, pg, pb) = (px[0] as usize, px[1] as usize, px[2] as usize);
+                let y = (((Y_R[pr] + Y_G[pg] + Y_B[pb]) >> 6) & 255) as usize;
+                *l = if full { y as u8 } else { LIMITED_Y[y] };
+                *b = (((CB_R[pr] + CB_G[pg] + CB_B[pb]) >> 6) + 128) & 255;
+                *rd = (((CR_R[pr] + CR_G[pg] + CR_B[pb]) >> 6) + 128) & 255;
             }
         }
         let mut cb = [0u8; 64];
         let mut cr = [0u8; 64];
         for i in 0..half {
+            let (top, low) = (2 * i * n, (2 * i + 1) * n);
+            let (b0, b1) = (&blue[top..top + n], &blue[low..low + n]);
+            let (r0, r1) = (&red[top..top + n], &red[low..low + n]);
+            let (ob, or) = (
+                &mut cb[i * half..i * half + half],
+                &mut cr[i * half..i * half + half],
+            );
             for j in 0..half {
-                let k = (2 * i) * n + 2 * j;
-                let sum_b = blue[k] + blue[k + 1] + blue[k + n] + blue[k + n + 1];
-                let sum_r = red[k] + red[k + 1] + red[k + n] + red[k + n + 1];
+                let k = 2 * j;
+                let sum_b = b0[k] + b0[k + 1] + b1[k] + b1[k + 1];
+                let sum_r = r0[k] + r0[k + 1] + r1[k] + r1[k + 1];
                 let (b, r) = (((sum_b + 2) >> 2) as usize, ((sum_r + 2) >> 2) as usize);
-                cb[i * half + j] = if self.full { b as u8 } else { LIMITED_C[b] };
-                cr[i * half + j] = if self.full { r as u8 } else { LIMITED_C[r] };
+                ob[j] = if full { b as u8 } else { LIMITED_C[b] };
+                or[j] = if full { r as u8 } else { LIMITED_C[r] };
             }
         }
         let (tr, tc) = match self.turn {
@@ -241,14 +246,23 @@ fn lay(
     block: &[u8],
     turn: Turn,
 ) {
+    let block = &block[..n * n];
     for a in 0..n {
         let row = &mut plane[(top + a) * stride + left..(top + a) * stride + left + n];
-        for (b, out) in row.iter_mut().enumerate() {
-            *out = match turn {
-                Turn::None => block[a * n + b],
-                Turn::Half => block[(n - 1 - a) * n + (n - 1 - b)],
-                Turn::Quarter => block[(n - 1 - b) * n + a],
-            };
+        match turn {
+            Turn::None => row.copy_from_slice(&block[a * n..a * n + n]),
+            Turn::Half => {
+                let from = &block[(n - 1 - a) * n..(n - a) * n];
+                for (out, value) in row.iter_mut().zip(from.iter().rev()) {
+                    *out = *value;
+                }
+            }
+            Turn::Quarter => {
+                // (column a of the block, from its last row up)
+                for (b, out) in row.iter_mut().enumerate() {
+                    *out = block[(n - 1 - b) * n + a];
+                }
+            }
         }
     }
 }
