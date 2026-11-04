@@ -272,6 +272,28 @@ def test_effects_and_the_same_picture_for_the_same_position():
     assert first[0].tobytes() == again[0].tobytes()
 
 
+def test_a_fan_laid_from_its_ring_shows_what_both_laid_on_a_clear_picture_show():
+    """Its ring is taken as it is, the rotor laid over it: the same pixels wherever anything
+    shows, and so on a frame of any colour (what is clear keeps the ring's colour there)."""
+    renderer = Renderer(theme(widget(w=50, h=50)), animate=True)
+    rotor = run(Rotor("f"), 1500.0, 0.5)
+    canvas = fan.geometry(50, 50)[2]
+    for frame in ("ring", "square", "none"):
+        parts = fan.fan_parts(CYAN, 50, 50, rotor, frame)
+        laid = renderer._laid_fan(f"f-{frame}", parts, canvas)
+        clear = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))
+        for image, at in parts:
+            clear.alpha_composite(image, (at, at))
+        a, b = np.asarray(laid), np.asarray(clear)
+        shows = b[..., 3] > 0
+        assert (a[..., 3] == b[..., 3]).all() and (a[shows] == b[shows]).all(), frame
+        for ground in ((0, 0, 0), (255, 255, 255), (10, 17, 25)):
+            on = [Image.new("RGB", (canvas, canvas), ground) for _ in range(2)]
+            on[0].paste(laid, (0, 0), laid)
+            on[1].paste(clear, (0, 0), clear)
+            assert on[0].tobytes() == on[1].tobytes(), (frame, ground)
+
+
 def test_the_demo_fan_readings_drive_the_preset_block():
     from libre_panel.editor.presets import PRESETS, resolve_tokens
 

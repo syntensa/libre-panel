@@ -94,6 +94,27 @@ def test_a_roll_takes_as_long_as_the_theme_says():
     assert DIGITS_S == 0.42
 
 
+def test_a_roll_measures_its_letters_once_not_in_every_frame():
+    """The digits' band and each letter's advance come from the font the first time (the band
+    alone was a millisecond of each frame of the roll on the 12.3")."""
+    measured = clock(digits="roll", tabular=True)
+    expected = [frame(measured, step).tobytes() for step in range(1, 16)]
+    renderer = clock(digits="roll", tabular=True)
+    shown = [frame(renderer, 1).tobytes()]  # the roll begun: its letters made and measured
+    font = renderer.font("", 60)
+    asked = []
+    for name in ("getbbox", "getlength"):
+        measure = getattr(font, name)
+        setattr(font, name, lambda *a, _measure=measure, _name=name, **k: (
+            asked.append(_name), _measure(*a, **k))[1])  # fmt: skip
+    try:
+        shown += [frame(renderer, step).tobytes() for step in range(2, 16)]
+    finally:
+        del font.getbbox, font.getlength
+    assert asked == []
+    assert shown == expected  # the same pixels
+
+
 def test_a_lettered_clock_rolls_its_own_letters():
     """Faceted lettering rolls as it is, so nothing changes its look when the roll ends."""
     widget = {"type": "clock", "id": "c", "x": 10, "y": 10, "format": "%H:%M:%S",

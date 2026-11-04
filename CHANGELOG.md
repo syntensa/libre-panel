@@ -173,6 +173,15 @@
   (`engine: the stream's encoder: ...`).
 
 **Lighter**
+- **The main loop a ninth lighter with Lumen, the frames the same pixels.** The rolling
+  seconds measured the band their digits fill and the width of each letter anew in every
+  frame of their roll (a millisecond of each such frame on the 12.3"), and each new text of a
+  gliding number its letters: now once, for each font. A text's letters were each laid over
+  it through a picture of their own; one whose ink meets none laid before goes on as it is
+  now. A module's conditions were worked out for each of its parts in every frame, and a fan
+  was laid on a clear picture before its ring went on. A frame of the seconds' roll takes
+  2.4 instead of 4.0 ms, a gliding number's new text 0.13 instead of 0.41, and the main loop
+  8.3 instead of 9.4 ms of the processor a frame (Lumen on the 12.3", 25 a second).
 - **The engine's own work a frame an eighth less.** Played back from what Lumen on the 12.3"
   sent it, the engine looked at every pixel of a graph's window, cut anew with every frame
   it scrolls, for where it shows (it knows that now from its strip's rows, worked out once);

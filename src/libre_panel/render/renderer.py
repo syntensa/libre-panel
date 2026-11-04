@@ -103,6 +103,9 @@ class _Letters:
     box: Box
     glyphs: list[tuple[Image.Image, int, int] | None]  # each letter on the layer (None: a blank)
     font: Any
+    # where each letter's ink lies in its picture (None: it has none, a space; False: not known,
+    # a finish's own letter): see Renderer._laid
+    inks: list[Any] | None = None
 
 
 class _Builder:
@@ -732,7 +735,6 @@ def need_key(need: str) -> str:
 
 
 @lru_cache(maxsize=1024)
-@lru_cache(maxsize=1024)
 def _needs_of(needs: str) -> tuple[str, ...]:
     """The conditions of a ``needs``, one by one (worked out once a text: every widget asks for
     its own with every frame)."""
@@ -842,6 +844,10 @@ class Renderer:
         self._analog_halos: dict[Any, tuple[Image.Image | None, int]] = {}  # (_hand_effects)
         self._fonts: dict[tuple[str, int], ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
         self._digit_width: dict[int, float] = {}
+        # a letter's advance and the band digits fill, by font, measured once (_advance): a
+        # clock's rolling seconds measured them anew in every frame of the roll, a millisecond
+        self._advances: dict[tuple[Any, str], float] = {}
+        self._digit_bands: dict[Any, tuple[float, float, float, float]] = {}
         # the theme's pictures, fitted (one that could not be read: None)
         self._images = Kept("renderer.pictures", self.IMAGE_BYTES)
         # animated pictures' frames, finished (a still: None), and the videos playing
@@ -1937,6 +1943,7 @@ class Renderer:
         screen = self._screen_image(snapshot, now) if self.screen is not None else None
         for slot in self._slots.values():  # which card each slot shows, and how far a change is
             slot.begin(snapshot, now)
+        modules_gone: dict[str, bool] = {}  # a module left out (hidden, or its needs not met)
         for widget in self.widgets:
             if not widget.get("visible", True):
                 continue
@@ -1950,8 +1957,13 @@ class Renderer:
             # (what a card that rolls up shows is what it showed: its conditions held then)
             if how != "frozen" and self._missing(widget, snapshot):
                 continue
-            if module is not None and (not module["visible"] or self._missing(module, snapshot)):
-                continue
+            if module is not None:  # (worked out once a frame: each of its parts asks)
+                gone = modules_gone.get(module["id"])
+                if gone is None:
+                    gone = not module["visible"] or self._missing(module, snapshot)
+                    modules_gone[module["id"]] = gone
+                if gone:
+                    continue
             draw = (
                 self._drawers.get(widget["id"])
                 or getattr(self, f"_draw_{widget['type']}", None)
@@ -2135,16 +2147,22 @@ class Renderer:
     def _holds(self, need: str, snapshot: Snapshot) -> bool:
         """Whether a condition of ``needs`` holds (need_holds); one on a switch of the theme
         (``switch.frames``, ``!switch.frames``) as the person set it, else as the theme does."""
+        held_for = self._held_for  # (the conditions worked out for these readings and pictures)
+        same = (
+            len(held_for) == 3
+            and held_for[0] is snapshot
+            and held_for[1] is snapshot.readings
+            and held_for[2] is snapshot.images
+        )
+        if same:
+            held = self._held.get(need)
+            if held is not None:  # (Arena's frame asks for "game.fps" sixty times)
+                return held
         body = need.lstrip("!").strip()
         if not body.startswith(SWITCH):
-            of = (snapshot, snapshot.readings, snapshot.images)
-            if len(self._held_for) != 3 or any(
-                a is not b for a, b in zip(of, self._held_for, strict=True)
-            ):
-                self._held, self._held_for = {}, of  # (other readings: worked out anew)
-            held = self._held.get(need)
-            if held is None:  # (Arena's frame asks for "game.fps" sixty times)
-                held = self._held[need] = need_holds(need, snapshot)
+            if not same:  # (other readings: worked out anew)
+                self._held, self._held_for = {}, (snapshot, snapshot.readings, snapshot.images)
+            held = self._held[need] = need_holds(need, snapshot)
             return held
         name = body[len(SWITCH) :]
         on = self.switches.get(name, self.theme.switches.get(name, {}).get("on", False))
@@ -2178,6 +2196,27 @@ class Renderer:
             self._digit_width[key] = max(font.getlength(d) for d in _DIGITS)
         return self._digit_width[key]
 
+    def _advance(self, font: ImageFont.FreeTypeFont | ImageFont.ImageFont, ch: str) -> float:
+        """``font.getlength(ch)``, kept for a letter of ASCII: Pillow measures it with the font
+        itself, the same each time (another letter may be drawn with another font once the app's
+        language changes: fonts.fallback)."""
+        if not ch.isascii():
+            return font.getlength(ch)
+        key = (font, ch)
+        found = self._advances.get(key)
+        if found is None:
+            found = self._advances[key] = font.getlength(ch)
+        return found
+
+    def _digit_band(
+        self, font: ImageFont.FreeTypeFont | ImageFont.ImageFont
+    ) -> tuple[float, float, float, float]:
+        """The box the digits fill (``getbbox``, from the top left), kept."""
+        found = self._digit_bands.get(font)
+        if found is None:
+            found = self._digit_bands[font] = font.getbbox(_DIGITS, anchor="la")
+        return found
+
     def _fit(self, widget: dict[str, Any], text: str) -> tuple[str, int]:
         """The text and font size that keep within ``max_width``."""
         size = widget.get("font_size", 24)
@@ -2193,7 +2232,7 @@ class Renderer:
                 return font.getlength(candidate)
             cell = self._digit_cell(font) if tabular else 0
             advances = [
-                cell if tabular and ch in _DIGITS else font.getlength(ch) for ch in candidate
+                cell if tabular and ch in _DIGITS else self._advance(font, ch) for ch in candidate
             ]
             return sum(advances) + spacing * max(0, len(candidate) - 1)
 
@@ -2213,11 +2252,7 @@ class Renderer:
             widget = {**widget, "font_size": size}
         letters = self._letters(widget, text, color)
         if letters is not None:
-            layer = Image.new("RGBA", letters.size, (0, 0, 0, 0))
-            for placed in letters.glyphs:
-                if placed is not None:
-                    self._paste(layer, *placed)
-            return Piece(layer, letters.left, letters.y, box=letters.box)
+            return Piece(self._laid(letters), letters.left, letters.y, box=letters.box)
         font = self.font(widget.get("font", ""), size)
         x, y = widget["x"], widget["y"]
         anchor = _ANCHORS.get(widget.get("align", "left"), "la")
@@ -2250,7 +2285,7 @@ class Renderer:
         cell = self._digit_cell(font)
         advances = []
         for ch in text:
-            advance = cell if tabular and ch in _DIGITS else font.getlength(ch)
+            advance = cell if tabular and ch in _DIGITS else self._advance(font, ch)
             advances.append(advance + spacing)
         total = max(1.0, sum(advances) - spacing)
         ascent, descent = font.getmetrics()
@@ -2258,20 +2293,52 @@ class Renderer:
         margin = max(2, widget.get("font_size", 24) // 6)  # room for overhanging glyphs
         w, h = math.ceil(total) + 2 * margin, ascent + descent
         glyphs: list[tuple[Image.Image, int, int] | None] = []
+        inks: list[Any] = []
         pen = float(margin)
         for ch, advance in zip(text, advances, strict=True):
-            at = pen + (cell - font.getlength(ch)) / 2 if tabular and ch in _DIGITS else pen
+            at = pen + (cell - self._advance(font, ch)) / 2 if tabular and ch in _DIGITS else pen
             if lettered:  # the finish's letter: (image, left, top), or None for a blank
                 placed = finish.glyph(self, widget, font, ch, fill, at % 1.0)
                 glyphs.append(
                     None if placed is None else (placed[0], math.floor(at) + placed[1], placed[2])
                 )
+                inks.append(False)
             else:
-                glyph, gx = self._glyph(font, ch, fill, at, margin, h)
+                glyph, gx, ink = self._glyph(font, ch, fill, at, margin, h)
                 glyphs.append((glyph, gx, 0))
+                inks.append(ink)
             pen += advance
         left = math.floor(start) - margin
-        return _Letters((w, h), left, y, [left + margin, y, math.ceil(total), h], glyphs, font)
+        box = [left + margin, y, math.ceil(total), h]
+        return _Letters((w, h), left, y, box, glyphs, font, inks)
+
+    def _laid(self, letters: _Letters) -> Image.Image:
+        """``letters`` laid on a clear layer, one after the other, as :meth:`_paste` lays them.
+        The ink of a letter of the renderer's own that lies over no ink laid before goes on as
+        it is, the same pixels: laid over what is clear it is itself, and round its ink it is
+        clear (0, 0, 0, 0), as the layer is. A letter whose ink meets ink is laid over it, as is
+        a finish's letter. Each letter laid over in a picture of its own was most of the time a
+        text piece took."""
+        layer = Image.new("RGBA", letters.size, (0, 0, 0, 0))
+        w, h = letters.size
+        inked: list[tuple[int, int, int, int]] = []  # where there is ink on the layer
+        inks = letters.inks if letters.inks is not None else [False] * len(letters.glyphs)
+        for placed, ink in zip(letters.glyphs, inks, strict=True):
+            if placed is None or ink is None:  # (no letter, or one without ink)
+                continue
+            image, x, y = placed
+            if ink is False:  # (where a finish's letter has ink is not known: all of it)
+                self._paste(layer, image, x, y)
+                inked.append((x, y, x + image.width, y + image.height))
+                continue
+            a, b, c, d = x + ink[0], y + ink[1], x + ink[2], y + ink[3]  # its ink on the layer
+            inside = a >= 0 and b >= 0 and c <= w and d <= h
+            if inside and not any(p < c and a < r and q < d and b < t for p, q, r, t in inked):
+                layer.paste(image.crop(ink), (a, b))
+            else:
+                self._paste(layer, image, x, y)
+            inked.append((a, b, c, d))
+        return layer
 
     # glyph images kept: a gliding number changes a digit or two at a time (a digit of 60 px is
     # about 10 kB; Arena on the 12.3" keeps some 3 MB of them)
@@ -2279,18 +2346,21 @@ class Renderer:
 
     def _glyph(
         self, font: Any, ch: str, fill: RGBA, at: float, pad: int, h: int
-    ) -> tuple[Image.Image, int]:
+    ) -> tuple[Image.Image, int, tuple[int, int, int, int] | None]:
         """``ch`` drawn at ``at`` (its fraction of a pixel counts) on an image
-        ``pad`` px wider on each side, and where its left edge goes: kept, so
-        the next text with that character in that place costs no rendering."""
+        ``pad`` px wider on each side, where its left edge goes, and where its ink
+        lies in it (None: none): kept, so the next text with that character in that
+        place costs no rendering."""
         whole = math.floor(at)
         key = (id(font), ch, fill, round(at - whole, 4), pad, h)
-        image = self._glyphs.get(key)  # (the helper thread draws texts too: it is thread-safe)
-        if image is not None:
-            return image, whole - pad
+        found = self._glyphs.get(key)  # (the helper thread draws texts too: it is thread-safe)
+        if found is not None:
+            return found[0], whole - pad, found[1]
         image = Image.new("RGBA", (math.ceil(font.getlength(ch)) + 2 * pad + 1, h), (0, 0, 0, 0))
         ImageDraw.Draw(image).text((at - whole + pad, 0), ch, font=font, fill=fill, anchor="la")
-        return self._glyphs.put(key, image), whole - pad
+        ink = image.getbbox()  # (drawn on what is clear: round its ink it stays (0, 0, 0, 0))
+        self._glyphs.put(key, (image, ink))
+        return image, whole - pad, ink
 
     def _format(self, widget: dict[str, Any], reading: Any) -> tuple[str, float | None]:
         if reading is None or reading.value is None:
@@ -2500,7 +2570,7 @@ class Renderer:
         w, h = after.size
         # the band a digit lives in, with room above and below where the letters fade:
         # outside the resting digit, so it does not end its roll dimmed and then light up
-        _, top, _, bottom = after.font.getbbox(_DIGITS, anchor="la")
+        _, top, _, bottom = self._digit_band(after.font)
         top, bottom = math.floor(top), math.ceil(bottom)
         edge = max(6, (bottom - top) // 5)
         band_top, band_h = top - edge, bottom - top + 2 * edge
@@ -3585,7 +3655,7 @@ class Renderer:
         font = self.font(widget["font"], fs)
         cell = self._digit_cell(font)
         widest = max(
-            sum(cell if ch in _DIGITS else font.getlength(ch) for ch in row[2]) for row in rows
+            sum(cell if ch in _DIGITS else self._advance(font, ch) for ch in row[2]) for row in rows
         )
         value_w = min(widest + fs * 0.2, column_w * (0.5 if bars else 0.62))
         for i, (name, detail, text, frac, rule) in enumerate(rows):
@@ -3738,8 +3808,14 @@ class Renderer:
         if hit is not None and len(hit[0]) == len(images):
             if all(a is b for a, b in zip(hit[0], images, strict=True)):
                 return hit[1]
-        laid = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))
-        for image, at in parts:
+        first, at = parts[0]
+        # its ring as it is, the rotor over it (the ring's clear pixels keep their colour: what
+        # is clear shows nothing, laid on the frame here or by the engine)
+        if at == 0 and first.size == (canvas, canvas):
+            laid, rest = first.copy(), parts[1:]
+        else:
+            laid, rest = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0)), parts
+        for image, at in rest:
             laid.alpha_composite(image, (at, at))
         self._laid_fans[key] = (images, laid)
         return laid
