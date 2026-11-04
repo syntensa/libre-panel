@@ -24,7 +24,7 @@ keeps what applies to everyone and leaves out what only made sense there.
 | Messages: how long one stays, the hold time of one without its own, hidden or kept while a transition plays, a switch while one plays, a screen that shows a kind itself, several at once (T1 to T6) | `render/overlays.py` and the toast and transition parts of the [plugin API](PLUGINS.md); the scenarios run through the real main loop in `tests/test_toast_scenarios.py` |
 | The band: a glowing edge ignites, the band rolls down, the volume changes it in place | `render/band.py`, `"toast": {"style": "band"}` |
 | The tube (a line ignites and opens onto the new screen) and the entrance (the screen closes to a line, the game's logo lights up, "Game mode" types in) | `render/transitions.py`: the transitions `tube` and `entrance` |
-| The look: light on rings and bars, fan rotors baked once in Blender, the grid, the lettering of the wordmark | `render/lit.py`, `look.py`, `fan.py`, `facet.py`: a widget's `finish`, the theme's `look` (the panel's light and the depth dust went after 0.8.0rc2). The colours come from the theme. The weather symbols, lit bodies from Blender at first, are frosted glass after Meteocons' outlines since 0.8 (`render/symbols.py`, `weather_art.py`) |
+| The look: light on rings and bars, fan rotors baked once in Blender, the grid, the lettering of the wordmark | `render/lit.py`, `look.py`, `fan.py`, `facet.py`: a widget's `finish`, the theme's `look` (the panel's light and the depth dust went in 0.8.0). The colours come from the theme. The weather symbols, lit bodies from Blender at first, are frosted glass after Meteocons' outlines since 0.8 (`render/symbols.py`, `weather_art.py`) |
 | Messages for the volume, a new track, a sensor past a limit and a restarted panel | the `notices` service, `services/notices.py` |
 | Game mode: the game found from a list or Steam's library, its logo, the entrance, six seconds after the game ended | the `game` service, `services/game.py` (with `steam.py` and `machine.py`) |
 | Autopilot switching between screens | the `autopilot` service, `services/autopilot.py` |
@@ -32,7 +32,7 @@ keeps what applies to everyone and leaves out what only made sense there.
 | The memory of weeks and months (minutes, games, the cooling state) and the report after a game | the `memory` service, `services/memory.py`, `memory_store.py` and `round_report.py`, with the theme `round-report` |
 | Fan curves checked against what the PC did; the curves and fan names of FanControl; recording the cooling state | the `cooling` service, `services/cooling.py` and `fancontrol.py`, fed by the memory: FanControl's file is only read, device names come from the readings |
 | Downloads of Steam and the browsers | the `downloads` service, `services/downloads.py` |
-| Arctic base, teal signature `#13E5D7`, equal perceived brightness of the channel colors | the Arctic look in `design.py` (Arena, Studio, the round report); SPUR II's own screens were built in up to 0.8.0rc2 |
+| Arctic base, teal signature `#13E5D7`, equal perceived brightness of the channel colors | the Arctic look in `design.py` (Arena, Studio, the round report); SPUR II's own screens were built in up to 0.7.10 |
 | Theme (look) separate from device settings; brightness belongs to the device | `theme.json` vs. `config.toml` |
 | Live reload on save | the main loop reloads config and theme |
 | Local web editor with live preview from the real renderer | `libre-panel editor` |

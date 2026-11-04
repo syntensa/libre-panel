@@ -844,7 +844,7 @@ A block that is missing (or `false`) is off; `true` or `{}` turns it on with
 its defaults. Blocks this version does not know are kept with a warning, so
 a theme from a newer version loses nothing when the editor saves it. The
 panel light (`light`), the depth dust (`dust`) and the ridges of rects
-(`ridge`) went after 0.8.0rc2: a theme that has them loads without them,
+(`ridge`) went in 0.8.0: a theme that has them loads without them,
 and without a warning.
 
 **`grid`** lays thin lines every `spacing` px (2–400, default 8) from the top
