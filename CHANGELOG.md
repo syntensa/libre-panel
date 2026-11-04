@@ -173,6 +173,14 @@
   (`engine: the stream's encoder: ...`).
 
 **Lighter**
+- **The engine's own work a frame an eighth less.** Played back from what Lumen on the 12.3"
+  sent it, the engine looked at every pixel of a graph's window, cut anew with every frame
+  it scrolls, for where it shows (it knows that now from its strip's rows, worked out once);
+  blurred the light round a gliding ring's tip in buffers it made and zeroed for each pass
+  (it keeps them now); zeroed what it read before reading it; and made a changed block's YUV
+  pixel by pixel through indexes checked against the whole frame (now row by row). The
+  pictures the same, byte for byte: an eighth fewer instructions in all, x264's among them;
+  the engine 43 instead of 47 % of a core on the test machine, Lumen at 25 a second.
 - **A third less to the engine with every frame.** A layer went to the engine whole, also
   what of it is see-through, and of the light it adds what is black, though neither changes a
   pixel: a graph's newest part came in its graph's whole box (567 by 306 pixels on the 12.3",
