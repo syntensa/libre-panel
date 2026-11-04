@@ -84,7 +84,7 @@ def fewer_heaps(platform: str = sys.platform) -> bool:
         if "MALLOC_ARENA_MAX" in os.environ:
             return False
         return bool(libc.mallopt(-8, 2))  # M_ARENA_MAX
-    except (OSError, AttributeError):
+    except (OSError, AttributeError, TypeError):  # (TypeError: Windows' ctypes takes no None)
         return False
 
 

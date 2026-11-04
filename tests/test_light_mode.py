@@ -213,6 +213,12 @@ def test_large_blocks_are_the_system_s_own_on_linux_in_the_app_and_its_engine(mo
     light.fewer_heaps("linux")
     assert calls == [(-8, 2)]  # (its own choice of the blocks holds)
 
+    def windows_cdll(name):  # (as Windows' ctypes takes a library named None)
+        raise TypeError("argument of type 'NoneType' is not iterable")
+
+    monkeypatch.setattr(light.ctypes, "CDLL", windows_cdll)
+    assert light.fewer_heaps("linux") is False  # (asked as on Linux, where there is no glibc)
+
 
 def test_two_heaps_on_linux_as_the_app_starts(monkeypatch):
     """glibc's heaps per thread held a frame's memory each: two for all threads, set where the
