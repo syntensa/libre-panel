@@ -14,11 +14,11 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::link::{Link, TcpLink, UsbLink};
-use crate::ring;
 use crate::scene::{How, Layer, Scene};
 use crate::transport::{Error, Transport};
 use crate::video::{Video, DEFAULT_BLOCK};
 use crate::wire::{self, Boxes, Op, Record, Request};
+use crate::{bar, ring};
 use crate::{encoder, yuv};
 
 const USAGE: &str = "libre-panel-engine panel --pid HEX [--ports N.N...] [--bus N] [--address N] \
@@ -667,6 +667,36 @@ pub fn run(options: Options) -> Result<(), String> {
                     break Err("a ring before its stream".into());
                 };
                 if let Err(e) = s.scene.ring(id, ring, x, y, frac) {
+                    break Err(e);
+                }
+            }
+            Record::BarBase {
+                id,
+                geometry,
+                canvas,
+                pills,
+            } => {
+                let Some(s) = stream.as_mut() else {
+                    break Err("a bar before its stream".into());
+                };
+                match bar::Base::new(*geometry, canvas, *pills) {
+                    Ok(base) => s.scene.bar_base(id, base),
+                    Err(e) => break Err(e),
+                }
+            }
+            Record::Bar {
+                id,
+                bar,
+                x,
+                y,
+                light,
+                paint,
+                spans,
+            } => {
+                let Some(s) = stream.as_mut() else {
+                    break Err("a bar before its stream".into());
+                };
+                if let Err(e) = s.scene.bar((id, light), bar, (x, y), &paint, &spans) {
                     break Err(e);
                 }
             }

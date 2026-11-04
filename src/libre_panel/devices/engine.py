@@ -49,7 +49,7 @@ from libre_panel.devices.h264 import (
 )
 from libre_panel.i18n import t
 from libre_panel.render import moving
-from libre_panel.render.scene import Filled, Globe, Laid, View, growth
+from libre_panel.render.scene import Bar, BarBase, Filled, Globe, Laid, View, growth
 
 if TYPE_CHECKING:
     from libre_panel.render.renderer import Piece
@@ -66,9 +66,10 @@ STREAM, END, PICTURE = 5, 6, 8
 # a frame of layers (scene.rs): its ground, a layer, the frame (their order); a lit ring and
 # a layer of it at a value (ring.rs); a picture layers are cut from and a layer cut from them;
 # a turning globe and a layer of it at a step of its turn (globe.rs); a layer of one colour; a
-# layer laid from pictures it keeps (a fan's ring and rotor)
+# layer laid from pictures it keeps (a fan's ring and rotor); a picture grown from one it keeps;
+# a lit bar and a layer of it at a value, with its glow (bar.rs)
 GROUND, LAYER, SCENE, RING, RING_LAYER, SOURCE, VIEW = 9, 10, 11, 12, 13, 14, 15
-GLOBE, GLOBE_LAYER, FILL, LAID, GROWN = 16, 17, 18, 19, 20
+GLOBE, GLOBE_LAYER, FILL, LAID, GROWN, BAR, BAR_LAYER = 16, 17, 18, 19, 20, 21, 22
 # how a layer goes on: RGBA through its alpha, RGB as it is (a video's frame), RGB light added
 OVER, SOLID, ADD = 0, 1, 2
 # A reply may wait for the picture being sent (5 s a block at most, 1.5 s for room in the
@@ -149,6 +150,12 @@ def grows_sources(engine: str) -> bool:
     return "grown" in _can(engine)
 
 
+def makes_bars(engine: str) -> bool:
+    """Whether ``engine`` makes a lit bar's picture and glow itself for each value
+    (render/scene.py's Bar)."""
+    return "bars" in _can(engine)
+
+
 def encodes_on_cards(engine: str) -> bool:
     """Whether ``engine`` takes ``--encoder card`` (video.engine_encoder: the graphics card's
     encoder where it opens, else x264); one of before does not start with it."""
@@ -175,7 +182,7 @@ class SceneSender:
 
     def __init__(
         self, rings: bool = False, views: bool = False, globes: bool = False, fills: bool = False,
-        laid: bool = False, grown: bool = False,
+        laid: bool = False, grown: bool = False, bars: bool = False,
     ) -> None:  # fmt: skip
         self.rings = rings  # the engine makes a lit gauge's ring (render/lit.py's Ring)
         self.views = views  # ... and cuts a layer from pictures it keeps (render/scene.py's View)
@@ -183,6 +190,7 @@ class SceneSender:
         self.fills = fills  # ... and lays a layer of one colour (render/scene.py's Filled)
         self.laid = laid  # ... and lays a layer from pictures it keeps (render/scene.py's Laid)
         self.grown = grown  # ... and grows a picture from one it keeps (render/scene.py's grew)
+        self.bars = bars  # ... and makes a lit bar's picture and glow (render/scene.py's Bar)
         self._ground: Any = None
         # each piece's layers (and the ring, or the pictures, they are of): what the engine has
         self._pieces: dict[int, tuple[Piece, list[int], Any, tuple[int, ...], int | None]] = {}
@@ -225,7 +233,7 @@ class SceneSender:
         """The layer of a ring the engine makes (and the ring, sent once while its frames have
         it), or ([], None) for a piece that goes as its pixels."""
         ring = piece.native
-        if (not self.rings or ring is None or isinstance(ring, (View, Globe, Filled, Laid))
+        if (not self.rings or ring is None or isinstance(ring, (View, Globe, Filled, Laid, Bar))
                 or ring.layer is not piece.layer
                 or piece.add or piece.light is not None):  # fmt: skip
             return [], None
@@ -246,6 +254,35 @@ class SceneSender:
                      + struct.pack("<IiiId", hit[2], piece.x, piece.y, 0, ring.frac))  # fmt: skip
         self.layers += 1
         return [layer], key
+
+    def _bar(self, parts: list[bytes], piece: Piece, now: dict[Any, Any]) -> tuple[list[int], Any]:
+        """The layers of a lit bar the engine makes at a value, its picture's and its glow's
+        (and what it is made of, sent once while its frames have it), or ([], None) for a piece
+        that goes as its pixels."""
+        bar = piece.native
+        light = None if piece.light is None else piece.light.layer
+        if (not self.bars or not isinstance(bar, Bar) or bar.layer is not piece.layer
+                or piece.add or light is not bar.light):  # fmt: skip
+            return [], None
+        key = ("bar", id(bar.base))
+        hit = now.get(key) or self._rings.get(key)
+        if hit is None or hit[0] is not bar.base:
+            number = next(self._numbers) & 0xFFFFFFFF
+            data = _bar_parts(bar.base)
+            size = sum(len(part) for part in data)
+            parts += [_head(BAR, number, size), *data]
+            self.bytes += size
+            hit = (bar.base, None, number)
+        now[key] = hit
+        layer = next(self._numbers) & 0xFFFFFFFF
+        glow = 0 if bar.light is None else next(self._numbers) & 0xFFFFFFFF
+        colour, to = bar.paint
+        spans = b"".join(struct.pack("<dd", a, b) for a, b in bar.spans)
+        ends = (*colour[:4], *(to[:4] if to else (0, 0, 0, 0)), int(to is not None))
+        head = struct.pack("<IiiI4B4BII", hit[2], piece.x, piece.y, glow, *ends, len(bar.spans))
+        parts.append(_head(BAR_LAYER, layer, len(head) + len(spans)) + head + spans)
+        self.layers += 1 if bar.light is None else 2
+        return [layer] if bar.light is None else [layer, glow], key
 
     def _view(
         self, parts: list[bytes], piece: Piece, now: dict[int, tuple[Image.Image, int]]
@@ -434,6 +471,8 @@ class SceneSender:
             hit = now.get(key) or self._pieces.get(key)
             if hit is None or hit[0] is not piece:
                 ids, ring = self._ring(parts, piece, rings)
+                if not ids:
+                    ids, ring = self._bar(parts, piece, rings)
                 cut: tuple[int, ...] = ()
                 globe: int | None = None
                 if not ids:
@@ -472,6 +511,27 @@ class SceneSender:
             + struct.pack(f"<{len(order)}I", *order)
         )
         return parts
+
+
+def _bar_parts(base: BarBase) -> list[bytes]:
+    """What a lit bar is made of as the engine takes it (kind 21, after its record's head):
+    its shape and its glow's, then its groove on its canvas and its pill's parts."""
+    length, thick, pad, core, offset, upright, reverse, segments, halo = base.shape
+    side = base.left.shape[1]
+    if base.glow is None:
+        bx = by = ax = ay = aw = ah = scale = 0
+        radius = strength = rise = tail = 0.0
+        steps: tuple[tuple[float, float], ...] = ((0.0, 0.0),) * 7
+    else:
+        bx, by, ax, ay, aw, ah, scale, radius, strength, rise, tail, steps = base.glow
+    head = struct.pack(
+        "<IIIIiIIIIIIiiiiII4x5d7d7d", length, thick, pad, core, offset,
+        int(upright) | 2 * int(reverse), segments, side, side, len(base.short), scale, bx, by,
+        ax, ay, aw, ah, halo, radius, strength, rise, tail, *(level for level, _ in steps),
+        *(white for _, white in steps),
+    )  # fmt: skip
+    pills = [base.left.tobytes(), base.middle.tobytes(), base.right.tobytes()]
+    return [head, base.canvas.tobytes(), *pills, *(pill.tobytes() for pill in base.short)]
 
 
 def engine_scene(
@@ -886,15 +946,18 @@ class EngineStream:
         self, link: EngineLink, size: tuple[int, int], options: list[str], block: int,
         lead: float | None = None, scenes: bool = False, rings: bool = False,
         views: bool = False, globes: bool = False, fills: bool = False, laid: bool = False,
-        grown: bool = False,
+        grown: bool = False, bars: bool = False,
     ) -> None:  # fmt: skip
         self.link, self.size = link, size
         # with ``scenes``: frames of layers go to the engine as them (render/scene.py); the
         # engine's stream has none of their layers yet, and nor has this; with ``rings`` the
         # engine makes a lit gauge's ring itself, with ``views`` it cuts a graph's window, with
         # ``globes`` it makes a turning globe's pictures, with ``fills`` it lays a card's inside
-        # as its colour, with ``laid`` a fan from its ring and its rotor
-        self.scenes = SceneSender(rings, views, globes, fills, laid, grown) if scenes else None
+        # as its colour, with ``laid`` a fan from its ring and its rotor, with ``grown`` a graph's
+        # strip from the one before, with ``bars`` a lit bar's picture and glow
+        self.scenes = (
+            SceneSender(rings, views, globes, fills, laid, grown, bars) if scenes else None
+        )
         # how long after the time a frame was drawn for the engine sends its picture (seconds;
         # None: the engine's own choice, h264.engine_lead's)
         self.lead = lead

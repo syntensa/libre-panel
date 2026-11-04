@@ -12,6 +12,7 @@
 //! Either takes a frame also as the order of layers Libre Panel drew, each sent once: the
 //! engine composes it then (scene.rs), where it changed.
 
+mod bar;
 mod encoder;
 mod globe;
 // (the card's pictures as the panels take them: mf.rs's, on Windows; its tests everywhere)
@@ -225,6 +226,12 @@ fn encode(options: Options) -> Result<(), String> {
                 groove,
                 lit,
             }) => scene.ring_base(id, ring::Base::new(side, &geometry, groove, lit)?),
+            Some(wire::Record::BarBase {
+                id,
+                geometry,
+                canvas,
+                pills,
+            }) => scene.bar_base(id, bar::Base::new(*geometry, canvas, *pills)?),
             Some(wire::Record::Source { id, w, h, pixels }) => scene.source(id, w, h, pixels)?,
             Some(wire::Record::Grown {
                 id,
@@ -281,6 +288,19 @@ fn encode(options: Options) -> Result<(), String> {
             }) => {
                 let began = Instant::now();
                 scene.laid(id, (x, y, w, h), &parts, &kept)?;
+                spent_layers += began.elapsed().as_secs_f64();
+            }
+            Some(wire::Record::Bar {
+                id,
+                bar,
+                x,
+                y,
+                light,
+                paint,
+                spans,
+            }) => {
+                let began = Instant::now();
+                scene.bar((id, light), bar, (x, y), &paint, &spans)?;
                 spent_layers += began.elapsed().as_secs_f64();
             }
             Some(wire::Record::Ring {
@@ -378,9 +398,10 @@ fn main() -> ExitCode {
             // graphics card's encoder where it opens, else x264 (encoder.rs); "fills", layers
             // all in one colour, a card's inside (scene.rs's Layer::filled); "laid", layers it
             // lays from sources it keeps, a fan's ring and rotor (scene.rs's laid); "grown",
-            // sources it grows from those it keeps, a graph's strip (scene.rs's grown))
+            // sources it grows from those it keeps, a graph's strip (scene.rs's grown); "bars", a
+            // lit bar's picture and glow it makes for each value (bar.rs))
             println!(
-                "libre-panel-engine {} (x264 build {}; panel, scenes, rings, views, globes, cards, fills, laid, grown)",
+                "libre-panel-engine {} (x264 build {}; panel, scenes, rings, views, globes, cards, fills, laid, grown, bars)",
                 env!("CARGO_PKG_VERSION"),
                 x264::build()
             );

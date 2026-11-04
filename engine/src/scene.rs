@@ -8,6 +8,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::bar;
 use crate::globe;
 use crate::ring;
 use crate::wire::Boxes;
@@ -92,6 +93,8 @@ pub struct Layer {
     part: (usize, usize, usize, usize),
     /// The ring it is a picture of (ring.rs), which stays while it does.
     ring: Option<u32>,
+    /// The lit bar it is a picture or the glow of (bar.rs), which stays while it does.
+    bar: Option<u32>,
     /// The sources it was cut from, which stay while it does.
     sources: Vec<u32>,
     /// The globe it is a picture of (globe.rs), which stays while it does.
@@ -215,6 +218,7 @@ impl Layer {
             pixels,
             part,
             ring: None,
+            bar: None,
             sources: Vec::new(),
             globe: None,
             fill: None,
@@ -242,6 +246,7 @@ impl Layer {
             pixels,
             part,
             ring: None,
+            bar: None,
             sources: Vec::new(),
             globe: None,
             fill: None,
@@ -268,6 +273,7 @@ impl Layer {
                 (0, 0, w, h)
             },
             ring: None,
+            bar: None,
             sources: Vec::new(),
             globe: None,
             fill: Some(rgba),
@@ -357,6 +363,8 @@ pub struct Scene {
     sources: HashMap<u32, Source>,
     /// The globes whose pictures the engine makes for each step of their turn (globe.rs).
     globes: HashMap<u32, globe::Tables>,
+    /// The lit bars whose pictures and glows the engine makes for each value (bar.rs).
+    bars: HashMap<u32, bar::Base>,
 }
 
 pub type Rect = (usize, usize, usize, usize);
@@ -380,6 +388,7 @@ impl Scene {
             rings: HashMap::new(),
             sources: HashMap::new(),
             globes: HashMap::new(),
+            bars: HashMap::new(),
         }
     }
 
@@ -439,6 +448,44 @@ impl Scene {
         let mut layer = Layer::new(x, y, side, side, How::Over, base.picture(frac))?;
         layer.ring = Some(ring);
         self.layer(id, layer);
+        Ok(())
+    }
+
+    /// A lit bar whose pictures and glows are made here for its values (bar.rs), for the
+    /// frames to come.
+    pub fn bar_base(&mut self, id: u32, base: bar::Base) {
+        self.bars.insert(id, base);
+    }
+
+    /// The picture of lit bar `bar` with its lit `spans` in `paint`, as layer `id` at (x, y),
+    /// and its glow as layer `light` (0: none), light added over its area; a glow of nothing
+    /// (none lit, or none in its area) is a layer that lays nothing.
+    pub fn bar(
+        &mut self,
+        (id, light): (u32, u32),
+        bar: u32,
+        (x, y): (i32, i32),
+        paint: &bar::Paint,
+        spans: &[(f64, f64)],
+    ) -> Result<(), String> {
+        let base = self
+            .bars
+            .get_mut(&bar)
+            .ok_or_else(|| format!("layer {id} of bar {bar}, which never came"))?;
+        let (w, h) = base.size();
+        let picture = base.picture(spans, paint);
+        let glow = (light != 0).then(|| base.glow(spans, paint));
+        let mut layer = Layer::new(x, y, w, h, How::Over, picture)?;
+        layer.bar = Some(bar);
+        self.layer(id, layer);
+        if let Some(glow) = glow {
+            let mut layer = match glow {
+                Some(g) => Layer::new(g.x, g.y, g.w, g.h, How::Add, g.rgb)?,
+                None => Layer::new(x, y, 1, 1, How::Add, vec![0; 3])?,
+            };
+            layer.bar = Some(bar);
+            self.layer(light, layer);
+        }
         Ok(())
     }
 
@@ -574,6 +621,7 @@ impl Scene {
             pixels: Vec::new(),
             part,
             ring: None,
+            bar: None,
             sources,
             globe: None,
             fill: None,
@@ -773,6 +821,8 @@ impl Scene {
         self.sources.retain(|id, _| sources.contains(id));
         let globes: HashSet<u32> = self.layers.values().filter_map(|l| l.globe).collect();
         self.globes.retain(|id, _| globes.contains(id));
+        let bars: HashSet<u32> = self.layers.values().filter_map(|l| l.bar).collect();
+        self.bars.retain(|id, _| bars.contains(id));
         Ok(boxes)
     }
 

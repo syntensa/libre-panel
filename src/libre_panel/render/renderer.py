@@ -955,6 +955,8 @@ class Renderer:
         self.native_globes = False
         # ... and lays a fan from its ring and its rotor, which it keeps (scene.Laid), likewise
         self.native_laid = False
+        # ... and makes a lit bar's picture and glow for each value (scene.Bar), likewise
+        self.native_bars = False
         # ... and a card whose inside is one colour comes as its edges and that colour, which the
         # engine lays without pixels (render/scene.py's Filled; the fills property)
         self._fills = False

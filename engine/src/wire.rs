@@ -70,6 +70,21 @@
 //!                     columns the other's (a graph's strip grown from the one before), the
 //!                     other kept while a layer of the frame before is cut from it:
 //!                     scene.rs's `grown`
+//! kind 21, a lit bar: a its number, b the length of what follows: its length, thickness, room
+//!                     round it, its light's thickness (u32 each) and top (i32), how it lies
+//!                     (u32: 1 upright, + 2 filling from the far end), its segments, its pill's
+//!                     first and last columns kept and how many short pills (u32 each), its
+//!                     glow's scale (u32, 0: no glow), the bar's x, y and the glow area's x, y
+//!                     (i32 each), w, h (u32 each), nothing (u32), the halo, the glow's radius,
+//!                     strength, rise, tail (f64 each), its seven steps' shares and whites
+//!                     (f64 each); then the groove on its canvas (RGBA, lying), the pill's first
+//!                     columns, its middle column and its last columns, then the short pills,
+//!                     1, 2, ... long (a level a pixel each, row by row): bar.rs
+//! kind 22, a layer of a lit bar: a its number, b the length of what follows: the bar's number,
+//!                     x, y (u32, i32, i32), the number of its glow's layer (u32, 0: none),
+//!                     its colour and the colour its gradient runs to (RGBA each), whether it
+//!                     has one and how many spans are lit (u32 each), then each span: from, to
+//!                     along the bar (f64 each)
 //! ```
 //!
 //! On its stdout, with a panel of its own (`panel`): the same head, then b bytes:
@@ -185,6 +200,21 @@ pub enum Record {
         h: usize,
         rgba: [u8; 4],
     },
+    BarBase {
+        id: u32,
+        geometry: Box<crate::bar::Geometry>,
+        canvas: Vec<u8>,
+        pills: Box<crate::bar::Pills>,
+    },
+    Bar {
+        id: u32,
+        bar: u32,
+        x: i32,
+        y: i32,
+        light: u32,
+        paint: crate::bar::Paint,
+        spans: Vec<(f64, f64)>,
+    },
     GlobeLayer {
         id: u32,
         globe: u32,
@@ -289,6 +319,9 @@ const MOST_LAYERS: usize = 1 << 16;
 const MOST_PARTS: usize = 64;
 /// The most pictures a layer laid from them keeps unused (a turning rotor's positions).
 const MOST_KEPT: usize = 1024;
+/// The head of a lit bar (kind 21), and the most spans one lights (a segment each).
+const BAR_HEAD: usize = 224;
+const MOST_SPANS: usize = 4096;
 
 fn boxes(input: &mut impl Read, count: u32) -> io::Result<Boxes> {
     let mut boxes = Vec::with_capacity(count.min(4096) as usize);
@@ -678,6 +711,121 @@ pub fn read(input: &mut impl Read) -> io::Result<Option<Record>> {
                 shift: u32_at(&head, 12) as usize,
                 keep,
                 rest,
+            }))
+        }
+        21 => {
+            let len = b as usize;
+            if !(BAR_HEAD..=2 * MOST_LAYER).contains(&len) {
+                return Err(invalid("a bar too large"));
+            }
+            let mut head = [0u8; BAR_HEAD];
+            whole(input, &mut head, "a bar cut short")?;
+            let u = |i: usize| u32_at(&head, i) as usize;
+            let i = |at: usize| u32_at(&head, at) as i32;
+            let f = |i: usize| f64::from_le_bytes(head[i..i + 8].try_into().expect("8 bytes"));
+            let (length, thick, pad, core) = (u(0), u(4), u(8), u(12));
+            let (lw, rw, short) = (u(28), u(32), u(36));
+            let small = |v: usize| v <= 1 << 14;
+            if ![length, thick, pad, core, lw, rw, short]
+                .into_iter()
+                .all(small)
+            {
+                return Err(invalid("a bar too large"));
+            }
+            let high = core + 2 * pad;
+            let canvas = (length + 2 * pad) * (thick + 2 * pad) * 4;
+            let shorts: Vec<usize> = (1..=short).map(|s| high * (s + 2 * pad)).collect();
+            let want = BAR_HEAD as u64
+                + canvas as u64
+                + (high * (lw + 1 + rw)) as u64
+                + shorts.iter().map(|&n| n as u64).sum::<u64>();
+            if want != len as u64 {
+                return Err(invalid("a bar's pictures are not of its sizes"));
+            }
+            let scale = u(40);
+            let steps = |at: usize| std::array::from_fn(|k| f(at + 8 * k));
+            let glow = (scale > 0).then(|| crate::bar::Glow {
+                bar: (i(44), i(48)),
+                area: (i(52), i(56), u(60), u(64)),
+                scale,
+                radius: f(80),
+                strength: f(88),
+                head: f(96),
+                tail: f(104),
+                levels: steps(112),
+                whites: steps(168),
+            });
+            let geometry = crate::bar::Geometry {
+                length,
+                thick,
+                pad,
+                core,
+                offset: i64::from(i(16)),
+                upright: u(20) & 1 != 0,
+                reverse: u(20) & 2 != 0,
+                segments: u32_at(&head, 24),
+                halo: f(72),
+                glow,
+            };
+            let canvas = bytes(input, canvas, "a bar cut short")?;
+            let left = bytes(input, high * lw, "a bar cut short")?;
+            let middle = bytes(input, high, "a bar cut short")?;
+            let right = bytes(input, high * rw, "a bar cut short")?;
+            let short = shorts
+                .into_iter()
+                .map(|n| bytes(input, n, "a bar cut short"))
+                .collect::<io::Result<Vec<_>>>()?;
+            Ok(Some(Record::BarBase {
+                id: a,
+                geometry: Box::new(geometry),
+                canvas,
+                pills: Box::new(crate::bar::Pills {
+                    left,
+                    lw,
+                    middle,
+                    right,
+                    rw,
+                    short,
+                }),
+            }))
+        }
+        22 => {
+            let len = b as usize;
+            if len < 32 || !(len - 32).is_multiple_of(16) || (len - 32) / 16 > MOST_SPANS {
+                return Err(invalid("a layer of a bar of another length"));
+            }
+            let mut more = [0u8; 32];
+            whole(input, &mut more, "a layer of a bar cut short")?;
+            let n = u32_at(&more, 28) as usize;
+            if len != 32 + 16 * n {
+                return Err(invalid("a layer of a bar of another length"));
+            }
+            let data = bytes(input, 16 * n, "a layer of a bar cut short")?;
+            let spans: Vec<(f64, f64)> = data
+                .chunks_exact(16)
+                .map(|s| {
+                    let f = |i: usize| f64::from_le_bytes(s[i..i + 8].try_into().expect("8 bytes"));
+                    (f(0), f(8))
+                })
+                .collect();
+            if spans
+                .iter()
+                .any(|&(a, b)| !(a.is_finite() && b.is_finite() && a <= b && a > -1e6 && b < 1e6))
+            {
+                return Err(invalid("a bar lit by no span known"));
+            }
+            let rgba = |i: usize| [more[i], more[i + 1], more[i + 2], more[i + 3]];
+            Ok(Some(Record::Bar {
+                id: a,
+                bar: u32_at(&more, 0),
+                x: u32_at(&more, 4) as i32,
+                y: u32_at(&more, 8) as i32,
+                light: u32_at(&more, 12),
+                paint: crate::bar::Paint {
+                    colour: rgba(16),
+                    to: (u32_at(&more, 24) != 0).then(|| rgba(20)),
+                },
+                spans,
             }))
         }
         kind => Err(invalid(&format!("a record of kind {kind}"))),

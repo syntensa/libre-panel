@@ -316,6 +316,50 @@ def laid(
     return Laid(Lazy(size, "RGBA", make), parts, tuple(kept))
 
 
+@dataclass(frozen=True, eq=False)
+class BarBase:
+    """What a lit bar is made of at every value, where an engine makes its pictures itself
+    (engine/src/bar.rs): ``canvas``, its groove on its canvas (RGBA, lying); its pill
+    (render/lit.py's _pill, a level a pixel, as many rows as the light and its room are thick):
+    of a length beyond the ``short`` ones (1, 2, ... long) a reference's ``left`` columns, its
+    ``middle`` column between them as often as the length asks and its ``right`` columns;
+    ``shape`` and ``glow`` as bar.rs takes them (lit.py's _bar_base). Callers must not change
+    it."""
+
+    canvas: Image.Image
+    left: np.ndarray
+    middle: np.ndarray
+    right: np.ndarray
+    short: tuple[np.ndarray, ...]
+    # its length, thickness, room, its light's thickness and top on the canvas, whether it
+    # stands and fills from the far end, its segments and the light's halo (px)
+    shape: tuple[int, int, int, int, int, bool, bool, int, float]
+    # the bar's x, y, its glow area's x, y, w, h on the panel, the scale it is worked out at,
+    # its radius, strength, rise and tail, its steps' shares and whites; None: it has none
+    glow: tuple[Any, ...] | None = None
+
+    @property
+    def nbytes(self) -> int:
+        """What it holds (render/kept.py's size_of)."""
+        pills = self.left.nbytes + self.middle.nbytes + self.right.nbytes
+        pills += sum(p.nbytes for p in self.short)
+        return self.canvas.width * self.canvas.height * 4 + pills
+
+
+@dataclass(frozen=True, eq=False)
+class Bar:
+    """How an engine makes a lit bar's picture ``layer`` and its glow's ``light`` (None: it has
+    none) at a value itself (engine/src/bar.rs), as render/lit.py's bar_piece makes them: of
+    ``base``, its lit ``spans`` (from, to along it) in ``paint`` (its colour, and the one its
+    gradient runs to); their pixels made here only if a frame is composed here."""
+
+    layer: Image.Image
+    light: Image.Image | None
+    base: BarBase
+    spans: tuple[tuple[float, float], ...]
+    paint: tuple[tuple[int, ...], tuple[int, ...] | None]
+
+
 def turned_globe(turning: Any, step: int, place: tuple[float, float] | None) -> Globe:
     """The :class:`Globe` of ``turning`` at ``step`` (its air and mark worked out here, as
     Turning.frame works them out), its pixels made only when asked for, from what it holds."""

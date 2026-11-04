@@ -71,6 +71,7 @@ from libre_panel.devices.engine import (
     engine_scene,
     grows_sources,
     lays_laid,
+    makes_bars,
     makes_fills,
     makes_globes,
     makes_rings,
@@ -899,6 +900,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
                 rings=rings, views=layers and cuts_views(engine),
                 globes=layers and makes_globes(engine), fills=layers and makes_fills(engine),
                 laid=layers and lays_laid(engine), grown=layers and grows_sources(engine),
+                bars=layers and makes_bars(engine),
             )  # fmt: skip
             if layers and not self._layers_said:  # (once: a new stream starts as often)
                 self._layers_said = True

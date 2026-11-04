@@ -25,6 +25,11 @@
   root on Linux: root's own settings folder), else the frames are kept as without a file.
 
 **Fixed**
+- **A lit bar filling from its far end has its gradient the right way round.** The light of a
+  bar's lit part was kept by its length and where it begins, not by how its gradient runs
+  along the bar: a bar like another but filling from the other end, longer or in segments
+  took the other's light where the two were lit alike, its gradient the other's (in the tests,
+  up to 35 levels off). Each is lit in its own colours now.
 - **The tray icon on Linux shows every time, and goes with Quit** (the plain icon without
   PyGObject, as with the release download). pystray hands what Libre Panel changes on the
   icon (shown, picture, title, stop) to the icon's loop through the loop's own connection to
@@ -183,6 +188,15 @@
   (`engine: the stream's encoder: ...`).
 
 **Lighter**
+- **Lit bars made by the engine.** A lit bar's light and glow (Lumen's progress and AI usage,
+  Encore's progress) were made here for each value, 2 ms each time where the light of its
+  length was kept, 6 to 7 where it was not, and went to the engine as pictures, 90 to 130 KB
+  each time on the 12.3". Where the engine makes bars, what does not change with the value
+  goes to it once (the groove, the pill its light is made of, how its glow is worked out),
+  and each value as the part that is lit, some 60 bytes; the engine makes the light as here
+  (and keeps it by length, as here), its glow as Pillow works it out, to the bit. Lumen on
+  the 12.3" (25 a second), its progress bar gliding: the app 1.2 to 1.7 % of a core less, the
+  engine 0.7 % more (a value takes it a millisecond), and 0.45 MB a second less to it.
 - **A list's gliding bars cut by the engine: Arena's stream to it a third of what it was.**
   While a list's bars glide (Arena's temperatures, threads and fans), they were laid here as
   one picture of the whole list and went to the engine as it, up to 555 KB a frame on the

@@ -1558,6 +1558,7 @@ class MainLoop:
                     renderer.native_views = layers
                     renderer.native_globes = layers  # (and its turning globes, likewise)
                     renderer.native_laid = layers  # (and its fans, from their rings and rotors)
+                    renderer.native_bars = layers  # (and its lit bars and their glows)
                     if layers:
                         drawn, _ = renderer.render(snapshot, now, scene=True)
                     else:  # (as before: a renderer of a test or a plugin may take no more)

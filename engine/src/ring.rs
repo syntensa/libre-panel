@@ -9,9 +9,9 @@
 //! matrices, the same to a thousandth of a level): the same picture to a level.
 
 /// The core runs this far towards white (lit.py's LIGHT_WHITE) ...
-const LIGHT_WHITE: f32 = 0.75;
+pub(crate) const LIGHT_WHITE: f32 = 0.75;
 /// ... and the halo stands this strongly beside it (LIGHT_HALO).
-const LIGHT_HALO: f32 = 1.45;
+pub(crate) const LIGHT_HALO: f32 = 1.45;
 
 pub type Rect = (usize, usize, usize, usize);
 
@@ -276,7 +276,7 @@ fn remainder(a: f32, b: f32) -> f32 {
 }
 
 /// A light's level as numpy makes it of single precision: clipped after a half, cut to a byte.
-fn level(v: f32) -> u8 {
+pub(crate) fn level(v: f32) -> u8 {
     (v + 0.5).clamp(0.0, 255.0) as u8
 }
 
@@ -304,14 +304,14 @@ fn blur(a: &[f32], w: usize, h: usize, radius: f64) -> Vec<f32> {
 /// What a blur works in, kept from one to the next: its buffers grow to the largest picture
 /// blurred, and are not zeroed again (every number is written before it is read).
 #[derive(Default)]
-struct Scratch {
+pub(crate) struct Scratch {
     a: Vec<f32>,
     b: Vec<f32>,
     sums: Vec<f32>,
 }
 
 /// [`blur`] in `scratch`'s buffers: the blurred picture, `w` x `h`.
-fn blur_in<'a>(
+pub(crate) fn blur_in<'a>(
     a: &[f32],
     w: usize,
     h: usize,

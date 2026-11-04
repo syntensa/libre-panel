@@ -44,6 +44,11 @@ from libre_panel.render.renderer import Piece, _fraction, _number, _steps
 GLOW_TAIL = 0.55 * 0.34  # a bar's glow along its length, of its colour ...
 GLOW_WHITE = 0.65  # ... the head runs this far towards white
 GLOW_STEPS = 7  # steps of the rise: more do not show once blurred
+# each step of the rise: the share of the colour it lights, how far it runs towards white
+_RISE = tuple(
+    (GLOW_TAIL + (1 - GLOW_TAIL) * t**1.4, GLOW_WHITE * t**2)
+    for t in ((i + 1) / GLOW_STEPS for i in range(GLOW_STEPS))
+)
 HALO = 0.9  # a lit graph's halo at glow 1 ...
 LINE_WHITE = 0.45  # ... and how far its line runs towards white
 MIN_ICON = 16
@@ -213,13 +218,11 @@ def _glow_source(length: int, thick: int, spans, colours: np.ndarray, head_px: f
     if last - rise > first:  # the tail
         tail = columns[first : math.floor(last - rise) + 1]
         source[tail] = np.floor(c[tail] * GLOW_TAIL)
-    for i in range(GLOW_STEPS):  # the rise; a later step covers the column they share
+    for i, (level, white) in enumerate(_RISE):  # a later step covers the column they share
         a = math.floor(last - rise + rise * i / GLOW_STEPS)
         b = math.floor(last - rise + rise * (i + 1) / GLOW_STEPS)
-        t = (i + 1) / GLOW_STEPS
-        level = GLOW_TAIL + (1 - GLOW_TAIL) * t**1.4
         step = np.floor(c[a : b + 1] * level)
-        source[a : b + 1] = np.floor(step + (255 - step) * (GLOW_WHITE * t**2))
+        source[a : b + 1] = np.floor(step + (255 - step) * white)
     rows = slice(1, thick - 1) if thick > 2 else slice(0, thick)
     out[rows] = source[None]
     return out
@@ -230,7 +233,7 @@ def _glow_piece(renderer: Any, widget: dict[str, Any], frac: float, paint, lit,
     """SPUR II's bar glow as light to add over the bar: its source blurred
     over the widget's ``glow_area`` (else around the bar), worked out at a
     fraction of the size as SPUR II's glow zones are, nothing outside it."""
-    x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
+    x, y = widget["x"], widget["y"]
     length, thick, upright, reverse = _layout(widget)
     unit = min(renderer.theme.width, renderer.theme.height) / 480
     radius = max(1.0, float(widget.get("glow_radius", 10)))
@@ -240,19 +243,14 @@ def _glow_piece(renderer: Any, widget: dict[str, Any], frac: float, paint, lit,
         source = source.transpose(1, 0, 2)
     if not source.any():
         return None
-    area = widget.get("glow_area") or []
-    if len(area) == 4 and area[2] > 0 and area[3] > 0:
-        ax, ay, aw, ah = (int(v) for v in area)
-    else:
-        pad = math.ceil(2.5 * radius)
-        ax, ay, aw, ah = x - pad, y - pad, w + 2 * pad, h + 2 * pad
+    ax, ay, aw, ah = _glow_area(widget, radius)
     plane = np.zeros((ah, aw, 3), np.uint8)  # the source where it lies inside the area
     x0, y0 = max(x, ax), max(y, ay)
     x1, y1 = min(x + source.shape[1], ax + aw), min(y + source.shape[0], ay + ah)
     if x1 <= x0 or y1 <= y0:
         return None
     plane[y0 - ay : y1 - ay, x0 - ax : x1 - ax] = source[y0 - y : y1 - y, x0 - x : x1 - x]
-    scale = max(1, min(4, math.floor(radius / 3)))  # SPUR II: a quarter of the size
+    scale = _glow_scale(radius)
     small = Image.fromarray(plane, "RGB")
     if scale > 1:
         small = small.reduce(scale)
@@ -267,43 +265,170 @@ def _glow_piece(renderer: Any, widget: dict[str, Any], frac: float, paint, lit,
     return Piece(out, ax, ay)
 
 
-def bar_piece(renderer: Any, widget: dict[str, Any], frac: float, paint) -> Piece:
-    """The lit bar, lying: the groove, the light of each lit span over it
-    (a pill centred in the groove); its glow is light added over it."""
+def _glow_area(widget: dict[str, Any], radius: float) -> tuple[int, int, int, int]:
+    """Where a bar's glow is worked out (x, y, w, h on the panel): its ``glow_area``, else round
+    the bar as far as the glow reaches."""
+    area = widget.get("glow_area") or []
+    if len(area) == 4 and area[2] > 0 and area[3] > 0:
+        ax, ay, aw, ah = (int(v) for v in area)
+        return ax, ay, aw, ah
     x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
-    length, thick, upright, reverse = _layout(widget)
-    unit = min(renderer.theme.width, renderer.theme.height) / 480
-    lit, _cells = _spans(widget, length, frac, reverse)
-    pad = math.ceil(BAR_ROOM * unit)  # the halo's room around the light
+    pad = math.ceil(2.5 * radius)
+    return x - pad, y - pad, w + 2 * pad, h + 2 * pad
+
+
+def _glow_scale(radius: float) -> int:
+    """The fraction of its area's size a bar's glow is worked out at (SPUR II: a quarter)."""
+    return max(1, min(4, math.floor(radius / 3)))
+
+
+def _bar_core(widget: dict[str, Any], thick: int, upright: bool) -> tuple[int, int]:
+    """A bar's light: its thickness, and its top on the canvas below the room (whole pixels on
+    the panel, the light centred in the groove)."""
+    core = min(thick, max(BAR_CORE_MIN, round(thick * BAR_CORE)))
+    at = widget["y"] if not upright else widget["x"]
+    return core, round(at + (thick - core) / 2) - at
+
+
+def _bar_ground(renderer: Any, widget: dict[str, Any], length: int, thick: int,
+                pad: int) -> Image.Image:  # fmt: skip
+    """A bar's groove on its canvas, ``pad`` px of room round it, lying (a new picture)."""
     canvas = Image.new("RGBA", (length + 2 * pad, thick + 2 * pad), (0, 0, 0, 0))
     track = renderer.color(widget["background"])
     if track:
         canvas.paste(_groove(renderer, widget, length, thick, track), (pad, pad))
-    glow = None
+    return canvas
+
+
+def _bar_canvas(renderer: Any, widget: dict[str, Any], lit, paint, pad: int,
+                unit: float) -> Image.Image:  # fmt: skip
+    """The lit bar's picture: its groove, the light of each lit span over it (a pill centred
+    in the groove), turned where it stands."""
+    length, thick, upright, reverse = _layout(widget)
+    canvas = _bar_ground(renderer, widget, length, thick, pad)
     if lit:
         colours = _bar_colours(widget, length, paint, reverse)
         alpha = paint[0][3] / 255
-        core = min(thick, max(BAR_CORE_MIN, round(thick * BAR_CORE)))
-        offset = round((y if not upright else x) + (thick - core) / 2) - (y if not upright else x)
+        core, offset = _bar_core(widget, thick, upright)
         for a, b, _amount in lit:
             start = round(a)
             span = max(1, round(b - a))
             mask = _pill(span, core, pad)
             columns = np.clip(np.arange(start - pad, start + span + pad), 0, length - 1)
             c = (colours[columns] if np.ndim(colours) == 2 else colours) * 255
-            key = ("bar-light", span, core, pad, _key(paint[0]), _key(paint[1]),
-                   start if np.ndim(colours) == 2 else 0)  # fmt: skip
+            # (a gradient's colours: those of the columns it lies over, along the whole bar)
+            along = (start, length, reverse, widget["segments"]) if np.ndim(colours) == 2 else None
+            key = ("bar-light", span, core, pad, BAR_HALO * unit, _key(paint[0]), _key(paint[1]),
+                   along)  # fmt: skip
             rgba = _PICTURES.make(key, lambda m=mask, c=c: light(m, c, BAR_HALO * unit))
             image = Image.fromarray(rgba, "RGBA")
             if alpha < 0.999:
                 image = _alpha_scaled(image, alpha)
             canvas.alpha_composite(image, (start, offset))  # the pill's room is the pad
-        strength = widget.get("glow", 0.0)
-        if strength > 0:
-            glow = _glow_piece(renderer, widget, frac, paint, lit, min(1.0, strength))
     if upright:  # drawn lying: its start at the top, its light from the left
         canvas = canvas.transpose(Image.Transpose.TRANSPOSE)
-    return Piece(canvas, x - pad, y - pad, [x, y, w, h], light=glow)
+    return canvas
+
+
+# A pill keeps its first and last columns this far in from its room for every length (engine/
+# src/bar.rs): its cap's half disc and Lanczos's reach beyond it; the columns between are alike
+# (tests/test_lit_bars.py holds the pills of every length made of them to _pill's pixels).
+PILL_REACH = 4
+# the most a bar of an engine's is long or a glow's area wide (with its room, px), and the
+# most spans (segments) it lights
+NATIVE_SIDE = 8192
+NATIVE_SPANS = 4096
+
+
+def _levels(mask: np.ndarray) -> np.ndarray:
+    """A pill's coverage as the levels it was made of (it is them over 255, to the bit)."""
+    return np.round(mask * 255).astype(np.uint8)
+
+
+def _bar_base(renderer: Any, widget: dict[str, Any], shape: tuple, glow: tuple | None):
+    """What a lit bar is made of at every value (render/scene.py's BarBase), kept: its groove on
+    its canvas and its pill in parts, of ``shape`` (bar.rs's: length, thickness, room, light's
+    thickness and top, upright, from the far end, segments, halo); ``glow`` its glow's
+    (_glow_shape), or None."""
+    length, thick, pad, core = shape[:4]
+    key = ("bar-base", shape, renderer.color(widget["background"]), glow)
+
+    def make() -> scenes.BarBase:
+        side = pad + core + PILL_REACH  # (the pill of 2 core + 9: one middle column)
+        reference = _levels(_pill(2 * (side - pad) + 1, core, pad))
+        short = tuple(_levels(_pill(span, core, pad)) for span in range(1, 2 * (side - pad)))
+        return scenes.BarBase(
+            _bar_ground(renderer, widget, length, thick, pad),
+            np.ascontiguousarray(reference[:, :side]),
+            np.ascontiguousarray(reference[:, side]),
+            np.ascontiguousarray(reference[:, -side:]),
+            short, shape, glow,
+        )  # fmt: skip
+
+    return _PICTURES.make(key, make)
+
+
+def _glow_shape(widget: dict[str, Any], strength: float, unit: float) -> tuple:
+    """How a bar's glow is worked out, as bar.rs takes it: the bar's x, y, its area, the scale
+    it is worked out at, its radius, strength, rise and tail, and its steps (_RISE)."""
+    radius = max(1.0, float(widget.get("glow_radius", 10)))
+    ax, ay, aw, ah = _glow_area(widget, radius)
+    return (widget["x"], widget["y"], ax, ay, aw, ah, _glow_scale(radius), radius, strength,
+            GLOW_HEAD * unit, GLOW_TAIL, _RISE)  # fmt: skip
+
+
+def _native_bar(widget: dict[str, Any], length: int, thick: int, pad: int) -> bool:
+    """Whether an engine makes the bar as :func:`bar_piece` does: drawn as it is (no shadow,
+    fade, cut sides or turn over it), of a size and as many segments as it takes."""
+    if widget.get("shadow") or widget.get("clip") or widget.get("rotate"):
+        return False
+    if widget.get("opacity", 1.0) < 0.999 or widget["segments"] > NATIVE_SPANS:
+        return False
+    return max(length, thick) + 2 * pad <= NATIVE_SIDE
+
+
+def bar_piece(renderer: Any, widget: dict[str, Any], frac: float, paint,
+              native: bool | None = None) -> Piece:  # fmt: skip
+    """The lit bar, lying: the groove, the light of each lit span over it (a pill centred in
+    the groove); its glow is light added over it. Where the panel's engine makes bars itself
+    (``native``; None: Renderer.native_bars now), its :class:`scenes.Bar`: its picture and
+    glow made here only if asked for."""
+    native = renderer.native_bars if native is None else native
+    x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
+    length, thick, upright, reverse = _layout(widget)
+    unit = min(renderer.theme.width, renderer.theme.height) / 480
+    lit, _cells = _spans(widget, length, frac, reverse)
+    pad = math.ceil(BAR_ROOM * unit)  # the halo's room around the light
+    strength = widget.get("glow", 0.0)
+    if native and renderer.keep_static and _native_bar(widget, length, thick, pad):
+        glow = _glow_shape(widget, min(1.0, strength), unit) if strength > 0 else None
+        if glow is None or max(glow[4], glow[5]) <= NATIVE_SIDE:
+            shape = (length, thick, pad, *_bar_core(widget, thick, upright), upright, reverse,
+                     widget["segments"], BAR_HALO * unit)  # fmt: skip
+            base = _bar_base(renderer, widget, shape, glow)
+            size = (length + 2 * pad, thick + 2 * pad)
+
+            def picture() -> Image.Image:
+                return _bar_canvas(renderer, widget, lit, paint, pad, unit)
+
+            layer = scenes.Lazy(size[::-1] if upright else size, "RGBA", picture)
+            light = None
+            if lit and glow is not None:
+                ax, ay, aw, ah = glow[2:6]
+
+                def made() -> Image.Image:  # (a glow of nothing: black, which adds nothing)
+                    piece = _glow_piece(renderer, widget, frac, paint, lit, min(1.0, strength))
+                    return Image.new("RGBA", (aw, ah)) if piece is None else piece.layer
+
+                light = Piece(scenes.Lazy((aw, ah), "RGBA", made), ax, ay)
+            spans = tuple((a, b) for a, b, _amount in lit)
+            bar = scenes.Bar(layer, None if light is None else light.layer, base, spans, paint)
+            return Piece(layer, x - pad, y - pad, [x, y, w, h], light=light, native=bar)
+    canvas = _bar_canvas(renderer, widget, lit, paint, pad, unit)
+    glow_piece = None
+    if lit and strength > 0:
+        glow_piece = _glow_piece(renderer, widget, frac, paint, lit, min(1.0, strength))
+    return Piece(canvas, x - pad, y - pad, [x, y, w, h], light=glow_piece)
 
 
 class LitBar(Finish):
@@ -319,9 +444,11 @@ class LitBar(Finish):
         frac = _steps(frac, length)
         paint = renderer._rule_paint(widget, value, now)
         plain = {**widget, "glow": 0.0}  # its glow is drawn with it
+        native = renderer.native_bars  # (its pictures made later, if at all: here)
         return renderer._cached(
-            plain, ("lit", frac, paint), lambda: bar_piece(renderer, widget, frac, paint)
-        )
+            plain, ("lit", frac, paint, native),
+            lambda: bar_piece(renderer, widget, frac, paint, native), inline=native,
+        )  # fmt: skip
 
 
 # -- rings --------------------------------------------------------------------

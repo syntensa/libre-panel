@@ -682,7 +682,7 @@ class Fed(Layered):
     ``half``; the renderer's own frame of each is kept to compare."""
 
     def __init__(self, engine, size, out, half, rings=False, views=False, globes=False,
-                 fills=False, laid=False, grown=False):  # fmt: skip
+                 fills=False, laid=False, grown=False, bars=False):  # fmt: skip
         super().__init__()
         self.half, self.makes_rings = half, rings
         self.proc = subprocess.Popen(
@@ -690,7 +690,7 @@ class Fed(Layered):
              "--crf", "20", "--kbit", "4000", "--keyint", "250", "--dump-rgb", str(out)],
             stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
         )  # fmt: skip
-        self.sender = engines.SceneSender(rings, views, globes, fills, laid, grown)
+        self.sender = engines.SceneSender(rings, views, globes, fills, laid, grown, bars)
         self.own, self.n = [], 0
 
     def show(self, frame, region=None):
@@ -723,14 +723,16 @@ class Fed(Layered):
                                                        "laid"),
      ("arena-1920x720", False, False, False, "laid"), ("lumen-1920x720", False, False, False,
                                                        "grown"),
-     ("arena-1920x720", True, False, True, "grown")],
+     ("arena-1920x720", True, False, True, "grown"), ("lumen-1920x720", False, False, False,
+                                                       "bars"),
+     ("lumen-1920x720", True, False, True, "bars")],
 )  # fmt: skip
 def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
     engine, tmp_path, theme, half, rings, toast, views
 ):
     """Pixel for pixel, a message over it too (one more layer, as it comes, shows and goes),
     the graphs' windows cut by the engine from their strips too; where the engine makes the
-    rings too, to a level, at few pixels."""
+    rings or the lit bars too, to a level, at few pixels."""
     if rings and not engines.makes_rings(engine):
         pytest.skip("needs libre-panel-engine that makes rings (cargo build --release)")
     if views and not engines.cuts_views(engine):
@@ -747,9 +749,12 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
     grown = views == "grown"  # (and the graphs' strips grown by the engine from those before)
     if grown and not engines.grows_sources(engine):
         pytest.skip("needs libre-panel-engine that grows sources (cargo build --release)")
+    bars = views == "bars"  # (and the lit bars and their glows made by the engine, Lumen's)
+    if bars and not engines.makes_bars(engine):
+        pytest.skip("needs libre-panel-engine that makes bars (cargo build --release)")
     clock, host = Clock(1000.0), PluginHost()
     display = Fed(engine, (1920, 720), tmp_path / "frames.rgb", half, rings, bool(views), globes,
-                  fills, laid, grown)  # fmt: skip
+                  fills, laid, grown, bars)  # fmt: skip
     loop = loop_with(theme, display, clock, host)
     try:
         run(loop, clock, 4)
@@ -768,7 +773,7 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
     size = 1920 * 720 * 3
     assert display.n >= 25 and len(made) == size * display.n
     for n, own in enumerate(display.own):
-        if not rings:
+        if not rings and not bars:
             assert made[n * size : (n + 1) * size] == own, f"frame {n} is not the renderer's"
             continue
         got = Image.frombytes("RGB", (1920, 720), made[n * size : (n + 1) * size])
@@ -787,6 +792,11 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
         assert len(steps) >= 5  # (it turned)
     if fills:  # (the cards' insides went to it as their colour, their edges as their pixels)
         assert display.sender.filled >= 3 and loop.renderer.fills
+    if bars:  # (the lit bars went as their lit spans, made by the engine)
+        lit_bars = [p for f in display.frames if isinstance(f, scenes.SceneFrame)
+                    for _wid, p in f.scene.pieces if isinstance(p.native, scenes.Bar)]  # fmt: skip
+        assert len(lit_bars) >= 25 and loop.renderer.native_bars
+        assert any(key[0] == "bar" for key in display.sender._rings)
     if laid:  # (the fans went as their parts, laid by the engine, their pixels not made here)
         lain = [p for f in display.frames if isinstance(f, scenes.SceneFrame)
                 for _wid, p in f.scene.pieces if isinstance(p.native, scenes.Laid)]  # fmt: skip
