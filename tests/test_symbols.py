@@ -7,7 +7,7 @@ import pytest
 from fake_sensors import wait_for
 from PIL import Image, ImageChops
 
-from libre_panel.render import finish, light3d, symbols
+from libre_panel.render import finish, symbols
 from libre_panel.render.renderer import Renderer
 from libre_panel.sensors.base import Reading, Snapshot
 from libre_panel.theme.adapt import adapt_theme
@@ -85,7 +85,7 @@ def test_each_kind_has_the_layers_that_move(night):
         assert sky.disc is not None and sky.cloud is not None and (sky.rays is None) == night
         assert len(sky.stars) == (2 if night else 0)
     assert layers("overcast").back is not None and layers("overcast").cloud is not None
-    assert len(layers("fog").bars) == 4 and layers("fog").cloud is None
+    assert len(layers("fog").bars) == 4 and layers("fog").cloud is not None  # bands under it
     assert layers("drizzle").drop is not None and layers("rain").drop is not None
     assert layers("snow").flake is not None and layers("snow").drop is None
     storm = layers("storm")
@@ -172,7 +172,7 @@ def test_the_rays_turn_and_the_disc_stays():
     b = renderer.render(snap, 100.6)[0].crop((10, 10, 138, 138))
     assert not same(a, b)
     # inside the disc (around it the corona breathes)
-    middle = (a.width // 2 - 16, a.height // 2 - 16, a.width // 2 + 16, a.height // 2 + 16)
+    middle = (a.width // 2 - 12, a.height // 2 - 12, a.width // 2 + 12, a.height // 2 + 12)
     assert same(a.crop(middle), b.crop(middle))  # the disc does not turn
 
 
@@ -190,13 +190,16 @@ def test_rain_falls_and_the_bolt_flashes_now_and_then():
     assert drops(0.05) != drops(0.2)
     storm = symbols.layers_for("storm", False, k, "flat", COLOURS)[0]
 
-    def bolt(t):  # below the clouds only the bolt is
+    def bolt(t):  # below the clouds only the bolt is: how much light it gives
         a = np.asarray(symbols.compose(storm, "storm", False, t), np.float32)
-        return a[int(0.75 * k) :, :, 3].sum()
+        low = a[int(0.75 * k) :]
+        return (low[..., :3].mean(-1) * low[..., 3]).sum()
 
-    assert bolt(0.05) > 2 * bolt(1.0)  # a flash, then dim
-    assert bolt(0.18) > 2 * bolt(1.0)  # and a second one a moment later
+    assert bolt(0.05) > 1.25 * bolt(1.0)  # a flash, then it rests (and is still there)
+    assert bolt(0.18) > 1.25 * bolt(1.0)  # and a second one a moment later
     assert bolt(None) == pytest.approx(bolt(0.05), rel=0.01)  # standing: lit
+    resting = np.asarray(symbols.compose(storm, "storm", False, 1.0), np.float32)
+    assert resting[int(0.75 * k) :, :, 3].max() == 255  # resting, the bolt is whole
 
 
 def test_stars_twinkle_and_fog_sways():
@@ -342,28 +345,31 @@ def test_without_a_reading_it_is_a_cloud_and_can_hide():
 # -- lit, flat and in a theme ----------------------------------------------------------------
 
 
-def test_the_lit_finish_draws_the_symbols_from_blenders_bodies():
+def test_the_lit_finish_draws_the_symbols_as_frosted_glass():
     flat = picture(symbol(size=96), snapshot(3))[1]
     t = theme(symbol(size=96, finish="lit"))
     assert t.warnings == [] and finish.supports(t.widgets[0])
     lit = Renderer(t, animate=True).render(snapshot(3), 100.0)[0]
     assert not same(flat, lit)
 
-    # lit bodies are shaded: more different colours than the flat cloud
+    # lit glass is shaded: more different colours than the flat cloud
     def colours(image):
         return len(image.convert("RGB").getcolors(1 << 20) or [])
 
     assert colours(lit) > colours(flat)
 
 
-def test_without_the_light_layers_a_lit_symbol_is_drawn_flat(monkeypatch):
+def test_a_lit_symbol_needs_nothing_loaded_and_is_made_in_milliseconds():
+    """Lit symbols are drawn from their outlines (render.weather_art): no light layers to load
+    (Blender's weather bodies were ten megabytes), and a set is quick to make."""
+    import time
+
     symbols.forget()
-    monkeypatch.setattr(light3d.WEATHER_BODIES, "get", lambda: None)
-    layers, style = symbols.layers_for("rain", False, 64, "lit", COLOURS)
-    assert style == "flat" and layers.drop is not None
-    t = theme(symbol(finish="lit"))
-    image, _ = Renderer(t, animate=True).render(snapshot(63), 100.0)
-    assert image.getbbox() is not None
+    started = time.perf_counter()
+    layers, style = symbols.layers_for("partly", False, 196, "lit", COLOURS)
+    took = time.perf_counter() - started
+    assert style == "lit" and layers.lit and layers.through is not None
+    assert took < 0.5  # (some 20 ms; a slow machine may take longer)
 
 
 def test_a_finish_the_symbol_does_not_have_is_said_and_drawn_flat():

@@ -324,7 +324,7 @@ _ticked = [0.0]
 
 def on_idle(forget: Callable[[float], None]) -> None:
     """Have ``forget(now)`` called now and then (:func:`tick`): it lets go of what nothing asked
-    for for a while (the weather bodies, render/light3d.py)."""
+    for for a while."""
     _idle.append(forget)
 
 

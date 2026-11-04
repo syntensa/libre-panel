@@ -1,5 +1,5 @@
-"""The ``"lit"`` finish: SPUR II's light on bars, rings and graphs, and its
-weather symbols built of lit bodies.
+"""The ``"lit"`` finish: SPUR II's light on bars, rings and graphs, and the
+weather icons as lit weather symbols.
 
 - A bar's value is light (SPUR II since 2026-09-20): a pill with round ends
   in the middle of its groove, its core running towards white, a soft halo
@@ -14,8 +14,8 @@ weather symbols built of lit bodies.
   in a soft halo of its colour.
 - A text's glow is light: its colours blurred and added over it and around
   it, as SPUR II's headings glow.
-- A weather icon is built of lit bodies (render.light3d): a glowing sun with
-  rays, clouds, glass drops, a bolt.
+- A weather icon is its weather's symbol (render.symbols), lit and standing
+  still: clouds of frosted glass, a sun that glows, drops, a bolt.
 
 The grooves are the bars' and rings' ``background``, milled into the panel
 as the facet finish mills them (render.facets). A bar or ring too thin
@@ -34,11 +34,11 @@ from typing import Any
 import numpy as np
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
-from libre_panel.render import dither, facets, light3d
+from libre_panel.render import dither, facets, symbols
 from libre_panel.render import scene as scenes
 from libre_panel.render.finish import Finish, register
 from libre_panel.render.kept import MB, Kept, size_of
-from libre_panel.render.light import mix, role_color
+from libre_panel.render.light import mix
 from libre_panel.render.renderer import Piece, _fraction, _number, _steps
 
 GLOW_TAIL = 0.55 * 0.34  # a bar's glow along its length, of its colour ...
@@ -56,7 +56,7 @@ _PICTURES = Kept("lit.pictures", PICTURE_BYTES)
 
 
 def _unit(color: tuple[int, ...] | None) -> np.ndarray | None:
-    return None if color is None else light3d.unit_colour(color)
+    return None if color is None else np.asarray(color[:3], np.float32) / 255
 
 
 def _key(color: tuple[int, ...] | None) -> tuple[int, ...] | None:
@@ -817,99 +817,14 @@ def _solid(size: tuple[int, int], colour: tuple[int, ...]) -> Image.Image:
     return have if have.size == size else have.crop((0, 0, *size))
 
 
-# -- weather symbols ----------------------------------------------------------
+# -- weather icons -------------------------------------------------------------
 
-# Built from lit bodies, at the places of SPUR II's weather symbols (fractions
-# of the icon's size).
+# A weather icon is its weather's symbol (render.symbols), lit, standing still.
 SYMBOLS = ("sun", "moon", "partly", "cloud", "fog", "rain", "snow", "storm")
 WEATHER_ICONS = ("weather", *SYMBOLS)
-
-
-def _flat(size: int, draw_it) -> Image.Image:
-    """Something small drawn flat, four times larger and reduced."""
-    s = 4
-    image = Image.new("RGBA", (size * s, size * s), (0, 0, 0, 0))
-    draw_it(ImageDraw.Draw(image), s)
-    return image.reduce(s)
-
-
-def _star(cx: float, cy: float, r: float, color) -> Any:
-    def draw_it(draw: ImageDraw.ImageDraw, s: int) -> None:
-        x, y, q = cx * s, cy * s, r * s
-        draw.polygon([(x, y - q), (x + 0.28 * q, y - 0.28 * q), (x + q, y),
-                      (x + 0.28 * q, y + 0.28 * q), (x, y + q), (x - 0.28 * q, y + 0.28 * q),
-                      (x - q, y), (x - 0.28 * q, y - 0.28 * q)], fill=color)  # fmt: skip
-
-    return draw_it
-
-
-def _strip(x0: float, x1: float, y: float, thick: float, color) -> Any:
-    def draw_it(draw: ImageDraw.ImageDraw, s: int) -> None:
-        draw.rounded_rectangle([x0 * s, y * s, x1 * s, (y + thick) * s], radius=thick * s / 2,
-                               fill=color)  # fmt: skip
-
-    return draw_it
-
-
-def _flake(cx: float, cy: float, r: float, width: float, color) -> Any:
-    def draw_it(draw: ImageDraw.ImageDraw, s: int) -> None:
-        for turn in (0, math.pi / 3, 2 * math.pi / 3):
-            dx, dy = r * s * math.cos(turn), r * s * math.sin(turn)
-            draw.line([(cx * s - dx, cy * s - dy), (cx * s + dx, cy * s + dy)], fill=color,
-                      width=max(1, round(width * s)))  # fmt: skip
-
-    return draw_it
-
-
-def symbol(name: str, k: int, colours: dict[str, tuple[int, ...]]) -> Image.Image:
-    """Weather symbol ``name`` (an icon name of SYMBOLS) ``k`` px square, lit (an icon: from
-    the bodies at half size, which are plenty for it)."""
-    out = Image.new("RGBA", (k, k), (0, 0, 0, 0))
-    unit = {role: _unit(color) for role, color in colours.items()}
-
-    def put(name_: str, kind: str, role: str, cx: float, cy: float, width: float) -> None:
-        part = light3d.body(name_, kind, unit[role], (k, k), (cx * k, cy * k), width * k, False)
-        if part is not None:
-            out.alpha_composite(part)
-
-    def sun(cx: float, cy: float, r: float) -> None:
-        put("rays", "sun", "sun", cx, cy, 3.9 * r)
-        put("sphere", "sun", "sun", cx, cy, 2.2 * r)
-
-    def cloud(cx: float, cy: float, s: float, role: str) -> None:
-        put("cloud", "cloud", role, cx, cy, s * 1.12)  # the body's picture is a little wider
-
-    if name == "sun":
-        sun(0.5, 0.5, 0.21)
-    elif name == "moon":
-        cx = cy = 0.5 * k
-        disc = light3d.body("sphere", "moon", unit["moon"], (k, k), (cx, cy), 2.2 * 0.21 * k,
-                            False)  # fmt: skip
-        if disc is not None:
-            out.alpha_composite(light3d.crescent(disc, cx, cy, 0.21 * k))
-        for sx, sy, sr in ((0.18, 0.22, 0.032), (0.82, 0.24, 0.024), (0.76, 0.80, 0.028)):
-            out.alpha_composite(_flat(k, _star(sx * k, sy * k, max(1.0, sr * k), colours["moon"])))
-    elif name == "partly":
-        sun(0.36, 0.36, 0.16)
-        cloud(0.56, 0.58, 0.64, "cloud")
-    elif name == "fog":  # bands of mist, flat as SPUR II draws them
-        for i, (x0, x1) in enumerate(((0.18, 0.78), (0.26, 0.86), (0.14, 0.70), (0.30, 0.82))):
-            y = round(k * (0.34 + i * 0.12))
-            out.alpha_composite(_flat(k, _strip(x0 * k, x1 * k, y, 0.05 * k, colours["cloud"])))
-    else:  # cloud, rain, snow, storm
-        if name in ("cloud", "storm"):
-            cloud(0.40, 0.38, 0.52, "dark")
-        if name == "rain":
-            for i in range(4):
-                put("drop", "glass", "rain", 0.34 + i * 0.13 - 0.07 + 0.045, 0.70 + 0.10, 0.2)
-        elif name == "snow":
-            for i in range(3):
-                cx, cy = (0.36 + i * 0.16) * k, 0.80 * k
-                out.alpha_composite(_flat(k, _flake(cx, cy, 0.05 * k, 0.022 * k, colours["snow"])))
-        cloud(0.54, 0.46, 0.70, "dark" if name == "storm" else "cloud")
-        if name == "storm":
-            put("bolt", "bolt", "bolt", 0.54, 0.79, 0.4)
-    return out
+_KINDS = {"sun": ("clear", False), "moon": ("clear", True), "partly": ("partly", False),
+          "cloud": ("overcast", False), "fog": ("fog", False), "rain": ("rain", False),
+          "snow": ("snow", False), "storm": ("storm", False)}  # fmt: skip
 
 
 class LitIcon(Finish):
@@ -924,32 +839,30 @@ class LitIcon(Finish):
     def draw(self, renderer, widget, snapshot, now):
         name = renderer._icon_name(widget, snapshot)
         size = widget["size"]
-        if name not in SYMBOLS or size < MIN_ICON or not light3d.WEATHER_BODIES.available():
+        if name not in SYMBOLS or size < MIN_ICON:
             return renderer._draw_icon(widget, snapshot, now)
-        colours = self._colours(renderer, widget)
-        key = ("symbol", name, size, tuple(sorted(colours.items())))
+        colours, pack = symbols.colours(renderer, widget), renderer.pack(widget)
+        kind, night = _KINDS[name]
+        key = ("symbol", name, size, tuple(sorted(colours.items())), pack)
         x, y = widget["x"], widget["y"]
 
+        def make() -> Image.Image:
+            layers, _style = symbols.layers_for(kind, night, size, "lit", colours, pack)
+            return symbols.compose(layers, kind, night, None)
+
         def build() -> Piece:
-            return Piece(_PICTURES.make(key, lambda: symbol(name, size, colours)), x, y)
+            return Piece(_PICTURES.make(key, make), x, y)
 
-        return renderer._cached(widget, ("lit", name, colours["cloud"]), build)
-
-    @staticmethod
-    def _colours(renderer, widget) -> dict[str, tuple[int, ...]]:
-        """Clouds and the moon in the icon's colour; the sun, rain, snow and
-        bolts in the theme's colours for them."""
-        own = renderer.color(widget["color"]) or (255, 255, 255, 255)
-        theme = renderer.theme
-        dark = (*mix(own[:3], role_color(theme, "ground"), 0.55), own[3])
-        warm = (*role_color(theme, "warning"), 255)
-        return {
-            "cloud": own, "moon": own, "dark": dark, "sun": warm, "bolt": warm,
-            "rain": (*role_color(theme, "info"), 255), "snow": (*role_color(theme, "text"), 255),
-        }  # fmt: skip
+        return renderer._cached(widget, ("lit", name, colours["cloud"], pack), build)
 
     def prepare(self, renderer, widget):
-        light3d.WEATHER_BODIES.get()
+        """Every weather's layers at this size, so that a change of weather costs a frame no
+        more than any other (a set takes a few dozen milliseconds to make)."""
+        if widget["size"] < MIN_ICON:
+            return
+        colours, pack = symbols.colours(renderer, widget), renderer.pack(widget)
+        for kind, night in _KINDS.values():
+            symbols.layers_for(kind, night, widget["size"], "lit", colours, pack)
 
 
 for _finish in (LitBar(), LitGauge(), LitText(), LitGraph(), LitIcon()):

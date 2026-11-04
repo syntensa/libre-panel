@@ -596,8 +596,7 @@ Where the memory goes:
   caches: the letters, the numbers a value glides through, the fans at each of their positions,
   the bars of the lists, the lit rings' light, what lies under a graph that moves. Each cache
   holds as many megabytes as the themes need and no more, so a theme that runs for a day keeps
-  what it kept after a minute. The lit bodies of the weather symbols (ten megabytes) go a minute
-  after a symbol was made from them and are read again when the weather changes. Measured with
+  what it kept after a minute. Measured with
   a virtual panel in the video mode at 30 frames a second, Lumen's loop on the 12.3" takes some
   110 MB of private memory, Lumen Companion's on the 9.2" some 75, Arena's 93 and 78, Encore's
   84; some 40 of them are Python, numpy and Pillow, which every process of Libre Panel loads.

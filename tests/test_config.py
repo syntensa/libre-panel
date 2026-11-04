@@ -624,3 +624,18 @@ def test_a_portable_copy_keeps_its_settings_beside_the_program(tmp_path, monkeyp
     assert "mine" in (data / "config.toml").read_text(encoding="utf-8")
     monkeypatch.setenv("LIBRE_PANEL_HOME", str(tmp_path / "own"))
     assert config_module.config_dir() == tmp_path / "own"  # still first
+
+
+def test_a_cache_this_version_no_longer_keeps_goes_at_the_start():
+    """The weather symbols' lit bodies were ten megabytes in cache/light3d until 0.8.0rc1:
+    the start takes them away, and leaves the other caches."""
+    from libre_panel.config import config_dir, forget_gone_caches
+
+    gone = config_dir() / "cache" / "light3d"
+    gone.mkdir(parents=True)
+    (gone / "weather.npz").write_bytes(b"x" * 64)
+    kept = config_dir() / "cache" / "fonts"
+    kept.mkdir(parents=True)
+    forget_gone_caches()
+    assert not gone.exists() and kept.is_dir()
+    forget_gone_caches()  # (nothing there: nothing to do)

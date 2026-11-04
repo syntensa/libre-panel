@@ -1,19 +1,16 @@
-"""The look of a theme: finishes (render.finish, render.lit, render.light3d)
+"""The look of a theme: finishes (render.finish, render.lit)
 and the panel's look block (render.look: grid, panel light)."""
 
 import math
-import os
 import sys
-import time
 from datetime import UTC, datetime
 
 import numpy as np
 import pytest
 from PIL import Image, ImageChops
 
-from libre_panel.config import config_dir
 from libre_panel.render import finish as finishes
-from libre_panel.render import light3d, lit
+from libre_panel.render import lit
 from libre_panel.render.finish import Finish, register
 from libre_panel.render.light import sun_position
 from libre_panel.render.look import (
@@ -387,98 +384,31 @@ def test_a_lit_ring_is_a_thin_arc_of_light_on_the_middle_of_its_groove():
     assert tuple(pixels[80, 25]) == (0x16, 0x23, 0x32)  # nine o'clock: past its end, the groove
 
 
-def fake_layers(folder, stems):
-    folder.mkdir(parents=True)
-    for stem in stems:
-        for layer in light3d.LAYERS:
-            Image.new("RGBA", (8, 8), (128, 128, 128, 255)).save(folder / f"{stem}_{layer}.png")
+def test_a_warmed_up_renderer_makes_no_weather_symbols_in_its_first_frame(monkeypatch):
+    from libre_panel.render import symbols
 
+    made = []
+    real = symbols._made
 
-def test_layers_are_kept_as_npz_and_prepared_again_when_a_source_is_newer(tmp_path):
-    fake_layers(tmp_path / "probe", ("a", "b"))
-    builds = []
+    def make(*args):
+        made.append(args[0])
+        return real(*args)
 
-    def build(folder):
-        builds.append(folder)
-        return {"table": np.arange(len(builds) * 4, dtype=np.float32)}
-
-    part = light3d.Part("probe", ("a", "b"), build, tmp_path)
-    first = part.get()
-    assert builds == [tmp_path / "probe"]
-    assert part.cache == config_dir() / "cache" / "light3d" / "probe.npz" and part.cache.is_file()
-    again = light3d.Part("probe", ("a", "b"), build, tmp_path).get()  # the next start
-    assert len(builds) == 1 and np.array_equal(again["table"], first["table"])
-
-    source = tmp_path / "probe" / "b_gloss.png"
-    older = source.stat().st_mtime - 100  # the cache from before a source changed
-    os.utime(part.cache, (older, older))
-    rebuilt = light3d.Part("probe", ("a", "b"), build, tmp_path).get()
-    assert len(builds) == 2 and rebuilt["table"].size == 8
-    assert light3d.Part("probe", ("a", "b"), build, tmp_path).get()["table"].size == 8
-
-    stale = light3d.Part("probe", ("a", "b"), build, tmp_path)
-    stale.VERSION = light3d.Part.VERSION + 1  # an older format in the cache: prepared again
-    stale.get()
-    assert len(builds) == 3
-
-
-def test_layers_nothing_asked_for_go_and_come_back_from_the_cache(tmp_path):
-    """The weather bodies are ten megabytes, and a symbol is made from them once: once nothing
-    asked for them for a minute they go, and the next that asks reads them again (from the
-    cache, as drawn). Whether they can be had is known without reading them again."""
-    fake_layers(tmp_path / "probe", ("a",))
-    builds = []
-
-    def build(folder):
-        builds.append(folder)
-        return {"table": np.arange(4, dtype=np.float32)}
-
-    part = light3d.Part("probe", ("a",), build, tmp_path)
-    assert part.get() is not None and part.available()
-    used = time.monotonic()
-    assert not part.forget_idle(used + part.IDLE_S / 2)  # asked for a moment ago: kept
-    assert part.forget_idle(used + part.IDLE_S + 1) and part._data is None
-    assert part.available() and part._data is None  # (known: not read for that)
-    again = part.get()
-    assert np.array_equal(again["table"], np.arange(4)) and builds == [tmp_path / "probe"]
-    light3d._halved["probe"] = (again["table"], again["table"])
-    light3d.PARTS["probe"] = part
-    try:
-        light3d.forget_idle(time.monotonic() + part.IDLE_S + 1)
-        assert part._data is None and "probe" not in light3d._halved  # (made of them)
-    finally:
-        del light3d.PARTS["probe"]
-
-
-def test_missing_layers_draw_flat(tmp_path):
-    part = light3d.Part("gone", ("a",), lambda folder: {"x": np.zeros(1)}, tmp_path)
-    assert part.get() is None and part.loaded
-
-
-def test_a_warmed_up_renderer_loads_no_layers_in_its_first_frame(monkeypatch):
-    loads = []
-    real = light3d.Part._load
-
-    def load(self):
-        loads.append(self.name)
-        return real(self)
-
-    monkeypatch.setattr(light3d.Part, "_load", load)
-    for part in light3d.PARTS.values():
-        part.reset()
+    monkeypatch.setattr(symbols, "_made", make)
+    symbols.forget()
     lit._PICTURES.clear()
     renderer = Renderer(theme_of(lit_widgets(), look={"grid": {}, "light": {}}))
     assert renderer.prepares
     renderer.warm(None, 0.0)
-    assert loads == ["weather"]  # bars and rings are light worked out as they come
-    loads.clear()
+    assert "clear" in made  # every weather's, made before the first frame
+    made.clear()
     renderer.render(history(), 0.0)
-    assert loads == []
+    assert made == []
 
-    for part in light3d.PARTS.values():
-        part.reset()
+    symbols.forget()
+    lit._PICTURES.clear()
     Renderer(theme_of(lit_widgets())).render(history(), 0.0)  # not warmed up: in the frame
-    assert loads == ["weather"]
+    assert made == ["overcast"]  # (the weather it shows, only)
 
 
 # -- the look block ---------------------------------------------------------------------

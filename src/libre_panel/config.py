@@ -427,6 +427,19 @@ def user_themes_dir() -> Path:
     return config_dir() / "themes"
 
 
+# caches the versions before kept and this one does not: the weather symbols' lit bodies
+# (render/light3d.py, ten megabytes, until 0.8.0rc1)
+GONE_CACHES = ("light3d",)
+
+
+def forget_gone_caches() -> None:
+    """Remove what :data:`GONE_CACHES` names from the settings folder's ``cache``."""
+    for name in GONE_CACHES:
+        folder = config_dir() / "cache" / name
+        if folder.is_dir():
+            shutil.rmtree(folder, ignore_errors=True)
+
+
 LOG_FILENAME = "libre-panel.log"
 
 

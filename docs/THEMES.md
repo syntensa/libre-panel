@@ -523,18 +523,22 @@ code it does not know, or no reading at all, is a cloud.
   that gets one picture a second it stands, in its resting places.
 - `offset` shifts its motion by that many seconds: give the symbols of a row
   different ones, or six clouds drift in step.
-- `finish` `lit` draws the sun, moon, clouds, drops and bolt as lit bodies (from
-  Blender's renders, as the lit weather icon); the default draws them flat.
-  `facet` and `acrylic` are not there for a symbol.
-- `pack` is its look: `classic`, the first, as above, or `vivid`, sharper and with
-  more to it: the sun glows in a corona that breathes, a bolt lights its cloud
-  from within, snow falls as crystals that turn, fog drifts in soft bands, the lit
-  bodies keep every pixel Blender made, and the moon is the moon as it looks (its
-  seas and craters, the earthshine on its dark side). From 120 px it has more
-  still: the rays pulse, rain falls near and far and splashes where it lands, a
-  storm pours, and on a clear night a shooting star crosses now and then. `auto`
-  (the default) takes the look the user chose (*Settings → Weather and place*,
-  `symbols` in config.toml), else `vivid`. A `moon` widget takes the same.
+- Its shapes are [Meteocons'](https://meteocons.com/) (Bas Milius, MIT): a cloud
+  of one clean outline, a sun with eight round rays, a crescent moon. `finish`
+  `lit` makes them frosted glass lit from above: the fill lighter at the top, a
+  fine edge of light along the top of each outline, a sun that glows, a bolt that
+  flashes brighter. A cloud is milky glass: the sun or the moon behind it shows
+  through only as its glow, where the cloud is at that moment, and the cloud in
+  front shades the one behind it. The default draws them flat, each shape in its
+  colour. `facet` and `acrylic` are not there for a symbol.
+- `pack` is its look: `classic`, the first, as above, or `vivid`, with more to
+  it: the sun glows in a corona that breathes, a bolt lights its cloud from
+  within, snow falls as crystals that turn. From 120 px it has more still: the
+  rays pulse, rain falls near and far and splashes where it lands, crystals sink
+  near and far, a storm pours, fog has a fifth band, and on a clear night more
+  stars shine and a shooting star crosses now and then. `auto` (the default)
+  takes the look the user chose (*Settings → Weather and place*, `symbols` in
+  config.toml), else `vivid`. A `moon` widget takes the same.
 
 A symbol is made of layers drawn once for a kind of weather, a size and the
 colours, and kept; a frame only moves, turns and fades them over each other, and
@@ -667,7 +671,7 @@ too narrow for that, the older module of its kind takes over: the weather card i
 the weather module, the playback card the music module, the network card the
 network module. Cards are lit by themselves: a module's `finish` is `auto` (its
 kind's own: `lit` for a card, flat for the others), and the theme may name one.
-Values are light in their grooves, the weather symbols are lit bodies, and frames
+Values are light in their grooves, the weather symbols are frosted glass, and frames
 are flat thin lines in their colour: a card has no ridge, no bevel and no trough.
 
 - **`playback`** (3 × 2): the cover (`media.cover`; a note where there is none),
@@ -964,10 +968,11 @@ its colour, lying in a groove (the widget's `background`), its scale.
   light: at `0` only the light is left, so a copy of a word glows over the
   word itself, as SPUR II's wordmark does.
 - Weather icons (`icon` `weather` and the symbols `sun`, `moon`, `partly`,
-  `cloud`, `fog`, `rain`, `snow`, `storm`) are built of lit bodies, baked
-  from Blender renders and coloured: clouds and the moon in the icon's
-  `color`, the sun and bolts in the palette's `warn`, rain in `accent`, snow
-  in `text`; fog is bands of mist. Other icons stay line icons.
+  `cloud`, `fog`, `rain`, `snow`, `storm`) are the [weather
+  symbols](#weather-symbols) of their kind, lit and standing still: clouds and
+  the moon in the icon's `color`, the sun and bolts in the palette's `warn`,
+  rain in `accent`, snow in `text`; fog is a cloud over bands of mist. Other
+  icons stay line icons.
 - A `downloads` widget's progress is light in its groove, as a bar's.
 - A `module` hands its finish to its parts: a weather module with
   `"finish": "lit"` shows a lit symbol, a ring module a lit ring. The default for
@@ -977,9 +982,8 @@ its colour, lying in a groove (the widget's `background`), its scale.
 Where light does not read, a widget is drawn flat: bars and rings thinner
 than 2 px, icons under 16 px. A finish a type does not have (`lit` on a
 line icon) draws it flat, and the theme loader warns once per type. The weather
-symbols' layers are prepared before the first frame and kept in the config
-folder's `cache/light3d`; they are prepared again when the pictures they come
-from change.
+symbols' layers are made before the first frame, a few milliseconds each, and
+kept.
 
 ### Light edges for plugins
 

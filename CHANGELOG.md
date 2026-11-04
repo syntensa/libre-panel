@@ -204,6 +204,18 @@
   screen as a monitor keep the filter.
 
 **Better**
+- **The weather symbols drawn anew, as frosted glass.** Their clouds were round bodies
+  stacked into a cloud: plump. Their outlines are Meteocons' now (Bas Milius, MIT): a cloud
+  of one clean outline, a sun with eight round rays, a crescent moon, finished as frosted
+  glass lit from above, a fine edge of light along the top of each outline, a sun that glows.
+  A cloud in front of the sun is milky: the sun's glow shows through it where the cloud is at
+  that moment, never the sun's shape, and the cloud in front shades the one behind it. Fog is
+  a cloud over its veils, the bolt stays and flashes brighter, drops and crystals come out
+  from under their cloud; partly cloudy shows its sun. The lit weather icons are the same
+  symbols, standing still. Each kind is made in a few milliseconds (the moon of a cloudy
+  night took a third of a second), nothing is loaded for them (Blender's bodies were ten
+  megabytes while the weather showed, and as much in the cache, which goes at the start),
+  and the downloads are a megabyte smaller.
 - **Settings → Panel shows what sets a panel up, the rest folded away.** The video's
   fine-tuning (the cap on the bit rate, x264's quality, speed and profile, the encoder, the
   keyframes, the run through every step) and the check of the panel's colours are for

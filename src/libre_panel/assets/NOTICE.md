@@ -14,9 +14,27 @@ panel, found the zero-length-packet fix, the RGBA requirement, the 480×1920
 resolution and the video-mode init, and whose screens are the `spur-ii`,
 `spur-classic`, `spur-horizon`, `spur-header`, `spur-focus`, `spur-session`,
 `spur-cockpit`, `spur-studio` and `round-report` themes. Its light layers
-(`src/libre_panel/assets/light3d/`: fan rotors, weather symbols and the SPUR II
-letters, rendered once in Blender, without colour) are its author's work, given
-to Libre Panel under GPL-3.0-or-later.
+(`src/libre_panel/assets/light3d/`: fan rotors and the SPUR II letters, rendered
+once in Blender, without colour) are its author's work, given to Libre Panel under
+GPL-3.0-or-later.
+
+**Meteocons** — Copyright (c) 2020-present Bas Milius, MIT.
+<https://github.com/basmilius/meteocons>, <https://meteocons.com/>. The outlines of the
+weather symbols' cloud, the cloud behind it, the bolt and the moon's crescents are its
+"fill" icons' paths, and the sun, its rays and the drops keep its measures
+(`render/weather_art.py`); the frosted glass, the light through the clouds and the motion are
+Libre Panel's. Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal in the
+Software without restriction, including without limitation the rights to use, copy, modify,
+merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
+persons to whom the Software is furnished to do so, subject to the following conditions: The
+above copyright notice and this permission notice shall be included in all copies or
+substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
+THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 **jonsbo-zc360-linux-driver** — Copyright (c) 2026 Lucille Hon and the earlier
 work it builds on, MIT. <https://github.com/RimuruNava/jonsbo-zc360-linux-driver>.
