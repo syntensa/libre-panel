@@ -939,6 +939,40 @@ def test_between_two_strips_the_window_is_stretched_to_the_range_of_the_moment()
     assert numpy.abs(rows(drawn(first)) - rows(drawn(now))).max() > 2  # (it does move)
 
 
+def test_a_window_its_own_range_leaves_as_drawn_is_cut_by_the_engine():
+    """While a graph's own range glides, its window is stretched to the range of each frame,
+    made here; on a square root's scale (Lumen's network graphs) it stays as drawn, and goes
+    as any graph's window does, cut by the engine from the strip it has: the same pixels."""
+    from libre_panel.render import scene as scenes
+
+    def frames(scale, native):
+        renderer = Renderer(theme(own_range_graph(scale=scale), size=(200, 60)), animate=True)
+        renderer.continuous, renderer.fps, renderer.native_views = True, 25, native
+        renderer.new_sample(100.0, 1.0)
+        out, gliding = [], 0
+        history = [10.0 + 8 * k for k in range(11)]
+        for n in range(40):
+            if n % 25 == 0:  # (a reading a second, each far above the range before)
+                history = [*history[1:], history[-1] * 2]
+                renderer.new_sample(100.0 + n / 25, 1.0)
+            now = 100.0 + n / 25
+            frame, _ = renderer.render(reading(history[-1], history), now, scene=True)
+            piece = dict(frame.scene.pieces)["g"]
+            strip = renderer._strips["g"].ready
+            shown = renderer._range_now(renderer.widgets[0], now)
+            gliding += shown is not None and abs(shown[1] - strip.bounds[1]) > 0.01
+            out.append(piece)
+        return out, gliding
+
+    stretched, gliding = frames("linear", True)
+    assert gliding >= 10 and sum(p.native is None for p in stretched) >= 5  # (made here)
+    cut, gliding = frames("sqrt", True)
+    assert gliding >= 10 and all(isinstance(p.native, scenes.View) for p in cut)
+    made, _ = frames("sqrt", False)  # (made here, as before: the window of the strip)
+    assert [p.layer.tobytes() for p in cut] == [p.layer.tobytes() for p in made]
+    assert [(p.x, p.y) for p in cut] == [(p.x, p.y) for p in made]
+
+
 def test_while_its_range_glides_a_graph_asks_for_its_strips_more_often():
     renderer = Renderer(theme(own_range_graph(), size=(200, 60)), animate=True)
     renderer.continuous, renderer.fps = True, 50

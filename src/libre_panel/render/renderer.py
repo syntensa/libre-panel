@@ -4605,6 +4605,26 @@ class Renderer:
             lo, hi = min(lo, live), max(hi, live)
         return lo, hi
 
+    def _stretch(
+        self, widget: dict[str, Any], drawn: tuple[float, float], now_range: tuple[float, float]
+    ) -> tuple[float, float] | None:
+        """How a strip's window drawn in the range ``drawn`` is stretched upright to look as
+        in ``now_range`` (:meth:`_restretch`): a row of the drawn curve, r, is a * r + c now,
+        as (a, c); None where it stays as drawn (a curve on a scale other than linear, or hung
+        from the top, and a stretch under a third of a pixel)."""
+        if widget.get("scale", "linear") != "linear" or widget.get("direction") == "down":
+            return None
+        first, last = self._range_rows(widget, self.STRIP_SCALE)
+        first, length = first / self.STRIP_SCALE, (last - first) / self.STRIP_SCALE
+        span, span_now = drawn[1] - drawn[0], now_range[1] - now_range[0]
+        if span <= 0 or span_now <= 0:
+            return None
+        a = span / span_now
+        c = first + length - length * (drawn[1] - now_range[0]) / span_now - a * first
+        if max(abs(c), abs((a - 1) * (first + length) + c)) < 0.3:  # under a third of a pixel
+            return None
+        return a, c
+
     def _restretch(
         self, widget: dict[str, Any], layer: Image.Image, pad: int, drawn: tuple[float, float],
         now_range: tuple[float, float],
@@ -4613,17 +4633,10 @@ class Renderer:
         ``drawn``, as it looks in ``now_range``: stretched or squeezed upright, a few per cent
         at most (the strips follow the range ten times a second), so it glides on every
         frame. A curve on a scale other than linear, or hung from the top, stays as drawn."""
-        if widget.get("scale", "linear") != "linear" or widget.get("direction") == "down":
+        stretch = self._stretch(widget, drawn, now_range)
+        if stretch is None:
             return layer
-        first, last = self._range_rows(widget, self.STRIP_SCALE)
-        first, length = first / self.STRIP_SCALE, (last - first) / self.STRIP_SCALE
-        span, span_now = drawn[1] - drawn[0], now_range[1] - now_range[0]
-        if span <= 0 or span_now <= 0:
-            return layer
-        a = span / span_now  # a row of the drawn curve, r, is a * r + c now
-        c = first + length - length * (drawn[1] - now_range[0]) / span_now - a * first
-        if max(abs(c), abs((a - 1) * (first + length) + c)) < 0.3:  # under a third of a pixel
-            return layer
+        a, c = stretch
         # row y of the result shows row y / a + top of the layer: a resize of that band
         width, height = layer.size
         top = pad - (pad + c) / a
@@ -4757,7 +4770,10 @@ class Renderer:
             now_range = (round(now_range[0], 3), round(now_range[1], 3))
             if now_range == tuple(round(v, 3) for v in strip.bounds):
                 now_range = None
-        content = ("timeline", id(strip), offset, phase, part, now_range)
+        # (a window its own range leaves as drawn is the strip's window, cut as any: Lumen's
+        # network graphs, on a square root's scale, glide their range all the time)
+        stretch = None if now_range is None else self._stretch(widget, strip.bounds, now_range)
+        content = ("timeline", id(strip), offset, phase, part, stretch)
         hit = self._cache.get(wid)
         if not patch and hit is not None and hit[0] == content:
             return hit[1]
@@ -4774,7 +4790,7 @@ class Renderer:
             return layer
 
         view = None
-        if self.native_views and not patch and now_range is None:  # cut by the engine
+        if self.native_views and not patch and stretch is None:  # cut by the engine
             k = phase * strip.parts + part
             cuts = [(strip.phases[k], offset, 0, 0, 0, w + 2 * pad, h + 2 * pad)]
             if strip.halo is not None:  # beside the window only the glow, as window() cuts
@@ -4791,7 +4807,7 @@ class Renderer:
             layer = _between(
                 window(phase * strip.parts, offset, left), following, part, strip.parts
             )
-        if now_range is not None:  # its own range glides: on its way in every frame
+        if stretch is not None:  # its own range glides: on its way in every frame
             layer = self._restretch(widget, layer, pad, strip.bounds, now_range)
         x, y = widget["x"], widget["y"]
         piece = Piece(layer, x - pad, y - pad, [x, y, w, h], native=view)

@@ -201,6 +201,13 @@
   90, the engine 40 instead of 34. The engine composes the blocks that changed faster too
   (where each layer lies is worked out once a frame, not in each block): 2.6 ms of a frame
   of SPUR Focus instead of 3.9.
+- **Lumen's network graphs cut by the engine too: a third less to it.** A graph on its own
+  range (without `min` and `max`) has its window stretched to the range of each frame while
+  the range glides, and that window was made here in every frame and went to the engine as a
+  picture. Lumen's network graphs glide their range all the time, but on their square root's
+  scale the window is never stretched (only a linear curve is). Where the window stays as
+  drawn, the engine cuts it from the strip it has, as it cuts any graph's: the same pixels,
+  and on the 12.3" 180 KB a frame to the engine instead of 260.
 - **Lit bars made by the engine.** A lit bar's light and glow (Lumen's progress and AI usage,
   Encore's progress) were made here for each value, 2 ms each time where the light of its
   length was kept, 6 to 7 where it was not, and went to the engine as pictures, 90 to 130 KB
