@@ -171,10 +171,13 @@
   read once a text, not with every frame.
 - **16 MB less for the soft light of what glides.** A glow is blurred as a product with a matrix
   for each of its sides, kept to be used again; a lit bar gliding to a new length every frame
-  (a download's) asked for a new one each time, used once: fifty of them, 16 MB on the 12.3".
-  A side's matrix is made now when it is asked for a second time (once, the blur runs its
-  passes, as fast), and a glow with room round it takes one of a few rounded sizes: Lumen's
-  loop on the 12.3" keeps half a megabyte of them, the same pixels, as fast as before.
+  (a download's), and a track's progress a pixel longer every half second (again with every
+  track), asked for a new one each time: 16 MB of them on the 12.3" after a minute. Short
+  sides and a few rounded lengths have a matrix now, a glow with room round it takes the next
+  of them, and a long side of a length of its own is blurred by the passes (as fast for a
+  picture made once): Lumen's loop on the 12.3" keeps under 3 MB of them, the glows as they
+  were (Lumen's frames the same pixels; of Arena's 1.4 million, a hundred or so in the glow
+  of its big number a level apart), and a picture blurred again is blurred the same.
 - **A slot's frame in strips: 1.4 MB less for each of its colours.** The thin line round a
   slot of cards (Lumen's card on the 12.3") was a picture of the module's size for each of
   its colours, six of them kept, and one more made for every frame of a change of colour; it

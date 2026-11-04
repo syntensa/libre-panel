@@ -169,19 +169,30 @@ def test_a_glow_whose_box_grows_takes_a_few_matrices_and_blurs_as_before():
     assert {key[0] for key in dither._operator.kept._items} == {50, 60}
 
 
-def test_a_side_asked_for_once_keeps_no_matrix():
-    """A lit bar gliding to a new length every frame asks for each length once: blurred by the
-    passes, nothing kept for it (each was a matrix of a third of a megabyte); a side asked for
-    again has its matrix, and either way the blur is the same."""
+def test_a_long_side_of_a_length_of_its_own_keeps_no_matrix_and_blurs_alike_each_time():
+    """A lit bar gliding to each length in turn, and a track's progress bar again with every
+    track, ask for long sides of lengths of their own: blurred by the passes, nothing kept for
+    them (each was a matrix of a third of a megabyte, 16 MB a minute on); a short side, or one
+    of the steps, has its matrix. Which way a side goes is its length's alone: a picture blurred
+    again is blurred the same, whatever was blurred in between."""
     dither._operator.cache_clear()
     radius = 4.25
-    once = []
-    for w in range(200, 240):  # (no room round them: each its own length)
-        a = np.full((24, w), 50.0, np.float32)
-        once.append(dither.blur(a, radius))
-    lengths = {key[0] for key in dither._operator.kept._items}
-    assert not lengths & set(range(200, 240))  # (the bar's thickness, 24, is asked for again)
-    for w, blurred in zip(range(200, 240), once, strict=True):
+    tracks = []
+    for _ in range(2):  # (a track, and the next: each length again)
+        out = []
+        for w in range(200, 240):  # (no room round them: each its own length)
+            out.append(dither.blur(np.full((24, w), 50.0, np.float32), radius))
+        tracks.append(out)
+        lengths = {key[0] for key in dither._operator.kept._items}
+        assert lengths == {24, 224}  # (the bar's thickness, and the one length that is a step)
+    for a, b in zip(*tracks, strict=True):
+        assert np.array_equal(a, b)
+    for w, blurred in zip(range(200, 240), tracks[0], strict=True):
         a = np.full((24, w), 50.0, np.float32)
         want = dither._operator(24, radius).T @ a @ dither._operator(w, radius)
         assert np.abs(blurred - want).max() < 1e-2, w
+    dither._operator.cache_clear()  # a short side: its matrix made, kept, and the same blur
+    short = np.random.default_rng(3).random((40, 90), np.float32) * 255
+    made = dither.blur(short, radius)
+    assert np.array_equal(dither.blur(short, radius), made)
+    assert {key[0] for key in dither._operator.kept._items} == {40, 90}
