@@ -53,6 +53,16 @@
 //!                     number, its map's source, its air's source (0: none), the step of its
 //!                     turn (u32 each), x, y (i32), its mark's w and h (u32, 0 for none) and
 //!                     where it lies on the globe (i32 each), then the mark's pixels (RGBA)
+//! kind 18, a layer of one colour: a its number, b 20: x, y (i32), w, h (u32 each), its colour
+//!                     (RGBA): a card's inside, through its alpha (scene.rs's Layer::filled)
+//! kind 19, a layer laid from sources: a its number, b the length of what follows: x, y
+//!                     (i32), w, h, how many parts and how many sources it keeps (u32 each),
+//!                     then each part: its source (u32) and where its top left lies on the
+//!                     layer (x, y: i32 each), then the sources it keeps (u32 each); RGBA
+//!                     through its alpha, each part laid over those before it on a clear
+//!                     picture as Pillow's alpha_composite lays it, the kept sources staying
+//!                     while it does (a fan's ring and rotor, the rotor's other positions):
+//!                     scene.rs's `laid`
 //! ```
 //!
 //! On its stdout, with a panel of its own (`panel`): the same head, then b bytes:
@@ -141,6 +151,15 @@ pub enum Record {
     Globe {
         id: u32,
         tables: crate::globe::Tables,
+    },
+    Laid {
+        id: u32,
+        x: i32,
+        y: i32,
+        w: usize,
+        h: usize,
+        parts: Vec<crate::scene::Placed>,
+        kept: Vec<u32>,
     },
     Fill {
         id: u32,
@@ -252,6 +271,8 @@ const MOST_LAYER: usize = 64 << 20;
 const MOST_LAYERS: usize = 1 << 16;
 /// The most parts a layer is cut from (a graph's window: three).
 const MOST_PARTS: usize = 64;
+/// The most pictures a layer laid from them keeps unused (a turning rotor's positions).
+const MOST_KEPT: usize = 1024;
 
 fn boxes(input: &mut impl Read, count: u32) -> io::Result<Boxes> {
     let mut boxes = Vec::with_capacity(count.min(4096) as usize);
@@ -585,6 +606,38 @@ pub fn read(input: &mut impl Read) -> io::Result<Option<Record>> {
                 rgba: [more[16], more[17], more[18], more[19]],
             }))
         }
+        19 => {
+            let len = b as usize;
+            if !(24..=24 + 12 * MOST_PARTS + 4 * MOST_KEPT).contains(&len) {
+                return Err(invalid("a layer laid from sources of another length"));
+            }
+            let data = bytes(input, len, "a layer laid from sources cut short")?;
+            let (n, kept) = (u32_at(&data, 16) as usize, u32_at(&data, 20) as usize);
+            if n > MOST_PARTS || kept > MOST_KEPT || len != 24 + 12 * n + 4 * kept {
+                return Err(invalid("a layer laid from sources of another length"));
+            }
+            let parts = data[24..24 + 12 * n]
+                .chunks_exact(12)
+                .map(|p| crate::scene::Placed {
+                    source: u32_at(p, 0),
+                    dx: u32_at(p, 4) as i32,
+                    dy: u32_at(p, 8) as i32,
+                })
+                .collect();
+            let kept = data[24 + 12 * n..]
+                .chunks_exact(4)
+                .map(|k| u32_at(k, 0))
+                .collect();
+            Ok(Some(Record::Laid {
+                id: a,
+                x: u32_at(&data, 0) as i32,
+                y: u32_at(&data, 4) as i32,
+                w: u32_at(&data, 8) as usize,
+                h: u32_at(&data, 12) as usize,
+                parts,
+                kept,
+            }))
+        }
         kind => Err(invalid(&format!("a record of kind {kind}"))),
     }
 }
@@ -716,6 +769,39 @@ mod tests {
             }
             _ => panic!("not the frame"),
         }
+    }
+
+    #[test]
+    fn a_layer_laid_from_sources_with_those_it_keeps() {
+        let mut input = head(19, 3, 24 + 2 * 12 + 4);
+        for v in [5u32, (-2i32) as u32, 68, 68, 2, 1] {
+            input.extend(v.to_le_bytes());
+        }
+        for v in [7u32, 0, 0, 8, 14, (-1i32) as u32, 9] {
+            input.extend(v.to_le_bytes());
+        }
+        match read(&mut input.as_slice()).unwrap() {
+            Some(Record::Laid {
+                id,
+                x,
+                y,
+                w,
+                h,
+                parts,
+                kept,
+            }) => {
+                assert_eq!((id, x, y, w, h), (3, 5, -2, 68, 68));
+                let placed = |source, dx, dy| crate::scene::Placed { source, dx, dy };
+                assert_eq!(parts, vec![placed(7, 0, 0), placed(8, 14, -1)]);
+                assert_eq!(kept, vec![9]);
+            }
+            _ => panic!("not the layer"),
+        }
+        let mut counted = head(19, 3, 24 + 12);
+        for v in [0u32, 0, 1, 1, 2, 0, 7, 0, 0] {
+            counted.extend(v.to_le_bytes());
+        }
+        assert!(read(&mut counted.as_slice()).is_err()); // (two parts said, one there)
     }
 
     #[test]

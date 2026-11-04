@@ -294,6 +294,31 @@ def test_a_fan_laid_from_its_ring_shows_what_both_laid_on_a_clear_picture_show()
             assert on[0].tobytes() == on[1].tobytes(), (frame, ground)
 
 
+def test_a_fan_the_engine_lays_is_its_ring_and_rotor_its_pixels_those_laid_here():
+    """Where the engine lays the fan (scene.Laid), the piece is its ring and its rotor with the
+    rotor's latest positions, kept; its pixels, made only when asked for, are the fan's."""
+    from libre_panel.render import scene as scenes
+
+    native, plain = (Renderer(theme(widget(w=50, h=50)), animate=True) for _ in range(2))
+    native.native_laid = True
+    seen = set()
+    for n in range(30):
+        snap = snapshot(rpm=1500.0)
+        native.render(snap, 1.0 + n / 25)
+        plain.render(snap, 1.0 + n / 25)
+        mine, theirs = native._fan_shown["f"][1], plain._fan_shown["f"][1]
+        laid = mine.native
+        assert isinstance(laid, scenes.Laid) and laid.layer is mine.layer
+        assert [image for image, _x, _y in laid.parts] == list(plain._laid_fans["f"][0])
+        assert len(laid.kept) <= Renderer.KEPT_ROTORS and laid.parts[-1][0] in laid.kept
+        seen.add(id(laid.parts[-1][0]))
+        a, b = np.asarray(mine.layer), np.asarray(theirs.layer)
+        shows = b[..., 3] > 0
+        assert (a[..., 3] == b[..., 3]).all() and (a[shows] == b[shows]).all(), n
+        assert (mine.x, mine.y, mine.box) == (theirs.x, theirs.y, theirs.box)
+    assert len(seen) >= 5  # (it turned)
+
+
 def test_the_demo_fan_readings_drive_the_preset_block():
     from libre_panel.editor.presets import PRESETS, resolve_tokens
 

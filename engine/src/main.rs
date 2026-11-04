@@ -261,6 +261,19 @@ fn encode(options: Options) -> Result<(), String> {
                 scene.view(id, (x, y, w, h), &parts)?;
                 spent_layers += began.elapsed().as_secs_f64();
             }
+            Some(wire::Record::Laid {
+                id,
+                x,
+                y,
+                w,
+                h,
+                parts,
+                kept,
+            }) => {
+                let began = Instant::now();
+                scene.laid(id, (x, y, w, h), &parts, &kept)?;
+                spent_layers += began.elapsed().as_secs_f64();
+            }
             Some(wire::Record::Ring {
                 id,
                 ring,
@@ -354,9 +367,10 @@ fn main() -> ExitCode {
             // keeps, a graph's window from its strip (scene.rs's view); "globes", a turning
             // globe's picture it makes for each step (globe.rs); "cards", --encoder card: the
             // graphics card's encoder where it opens, else x264 (encoder.rs); "fills", layers
-            // all in one colour, a card's inside (scene.rs's Layer::filled))
+            // all in one colour, a card's inside (scene.rs's Layer::filled); "laid", layers it
+            // lays from sources it keeps, a fan's ring and rotor (scene.rs's laid))
             println!(
-                "libre-panel-engine {} (x264 build {}; panel, scenes, rings, views, globes, cards, fills)",
+                "libre-panel-engine {} (x264 build {}; panel, scenes, rings, views, globes, cards, fills, laid)",
                 env!("CARGO_PKG_VERSION"),
                 x264::build()
             );

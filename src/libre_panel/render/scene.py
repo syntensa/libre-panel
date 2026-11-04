@@ -251,6 +251,40 @@ def filled(image: Image.Image, inset: int) -> Filled | None:
                   parts)  # fmt: skip
 
 
+Placed = tuple[Image.Image, int, int]  # (picture, x, y where its top left lies)
+
+
+@dataclass(frozen=True, eq=False)
+class Laid:
+    """How an engine lays a piece's picture ``layer`` itself (engine/src/scene.rs's laid):
+    ``parts`` (picture, x, y), each laid over those before it on a clear picture of the layer's
+    size, as Pillow's alpha_composite lays it (a fan's ring, its rotor over it); ``kept``,
+    pictures the engine keeps with it besides, unused (the rotor's other positions: each goes to
+    the engine once, not with every frame that shows it). Its ``layer`` is made here only when
+    something asks for its pixels (a frame composed here)."""
+
+    layer: Image.Image
+    parts: tuple[Placed, ...]
+    kept: tuple[Image.Image, ...] = ()
+
+
+def laid(
+    size: tuple[int, int],
+    parts: list[Placed] | tuple[Placed, ...],
+    kept: tuple[Image.Image, ...] = (),
+) -> Laid:
+    """The :class:`Laid` of a picture of ``size`` laid from ``parts``, its pixels not made."""
+    parts = tuple(parts)
+
+    def make() -> Image.Image:
+        out = Image.new("RGBA", size, (0, 0, 0, 0))
+        for image, x, y in parts:
+            out.alpha_composite(image, (x, y))
+        return out
+
+    return Laid(Lazy(size, "RGBA", make), parts, tuple(kept))
+
+
 def turned_globe(turning: Any, step: int, place: tuple[float, float] | None) -> Globe:
     """The :class:`Globe` of ``turning`` at ``step`` (its air and mark worked out here, as
     Turning.frame works them out), its pixels made only when asked for, from what it holds."""

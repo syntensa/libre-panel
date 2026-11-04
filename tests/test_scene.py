@@ -487,6 +487,51 @@ def test_a_graph_s_window_is_cut_by_the_engine_from_its_strip_sent_once():
     assert fifth[1][3][20:] == phase.crop((8, 0, 18, 6)).tobytes()
 
 
+def test_a_laid_picture_is_its_parts_laid_over_each_other_its_pixels_made_when_asked():
+    ring, rotor = strip(12, 12), strip(4, 4).transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+    made = scenes.laid((12, 12), [(ring, 0, 0), (rotor, 4, 4), (rotor, 10, -1)])
+    assert not made.layer.composed and made.layer.size == (12, 12)
+    want = Image.new("RGBA", (12, 12), (0, 0, 0, 0))
+    for image, x, y in made.parts:
+        want.alpha_composite(image, (x, y))
+    assert made.layer.tobytes() == want.tobytes()
+
+
+def test_a_laid_fan_goes_to_the_engine_as_its_parts_each_sent_once_and_kept():
+    """Its ring and its rotor go once each, as pictures the engine keeps, and every frame the
+    layer laid from them; the rotor's other positions are kept with it too, so one it comes
+    back to goes no more. An engine that lays none gets the fan's pixels, made then."""
+    sender = engines.SceneSender(laid=True)
+    ring, positions = strip(12, 12), [strip(4, 4).rotate(90 * k) for k in range(3)]
+    card = piece((9, 9, 9, 255), size=(20, 10))
+
+    def fan(k, kept=()):
+        made = scenes.laid((12, 12), [(ring, 0, 0), (positions[k], 4, 4)], kept)
+        return Piece(made.layer, 2, 3, native=made), made
+
+    first, made = fan(0)
+    records = heads(sender.records(scene_of(card, first), 0, None))
+    assert [k for k, *_ in records] == [engines.GROUND, engines.LAYER, engines.SOURCE,
+                                        engines.SOURCE, engines.LAID, engines.SCENE]  # fmt: skip
+    laid = records[4][3]
+    assert struct.unpack("<iiIIII", laid[:24]) == (2, 3, 12, 12, 2, 0)
+    assert struct.unpack("<IiiIii", laid[24:]) == (records[2][1], 0, 0, records[3][1], 4, 4)
+    assert records[3][3][8:] == positions[0].tobytes()
+    assert not made.layer.composed  # (its pixels were not made here)
+    second, _ = fan(1, kept=(positions[0],))  # (the rotor on: the position before kept)
+    records = heads(sender.records(scene_of(card, second), 1, None))
+    assert [k for k, *_ in records] == [engines.SOURCE, engines.LAID, engines.SCENE]
+    assert struct.unpack("<6I", records[1][3][:24])[4:] == (2, 1)  # (two parts, one kept)
+    back, _ = fan(0, kept=(positions[1],))  # (back to the first position: kept, not sent)
+    records = heads(sender.records(scene_of(card, back), 2, None))
+    assert [k for k, *_ in records] == [engines.LAID, engines.SCENE]
+    plain = engines.SceneSender()
+    other, made = fan(2)
+    records = heads(plain.records(scene_of(other), 0, None))
+    assert [k for k, *_ in records] == [engines.GROUND, engines.LAYER, engines.SCENE]
+    assert made.layer.composed  # (made for an engine that lays none)
+
+
 def test_a_scrolling_graph_cut_by_the_engine_shows_what_it_showed():
     """Its window's pixels, made only when asked for, the window's as cropped here before, its
     sides cut away too where it is clipped; one drawn again at its end (a reading the strip
@@ -599,7 +644,7 @@ class Fed(Layered):
     ``half``; the renderer's own frame of each is kept to compare."""
 
     def __init__(self, engine, size, out, half, rings=False, views=False, globes=False,
-                 fills=False):  # fmt: skip
+                 fills=False, laid=False):  # fmt: skip
         super().__init__()
         self.half, self.makes_rings = half, rings
         self.proc = subprocess.Popen(
@@ -607,7 +652,7 @@ class Fed(Layered):
              "--crf", "20", "--kbit", "4000", "--keyint", "250", "--dump-rgb", str(out)],
             stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
         )  # fmt: skip
-        self.sender = engines.SceneSender(rings, views, globes, fills)
+        self.sender = engines.SceneSender(rings, views, globes, fills, laid)
         self.own, self.n = [], 0
 
     def show(self, frame, region=None):
@@ -635,7 +680,10 @@ class Fed(Layered):
      ("terra-1920x720", False, False, False, "globes"), ("terra-1920x720", True, False, True,
                                                          "globes"),
      ("lumen-1920x720", False, False, False, "fills"), ("almanac-1920x720", True, False, True,
-                                                        "fills")],
+                                                        "fills"),
+     ("lumen-1920x720", False, False, False, "laid"), ("lumen-1920x720", True, False, True,
+                                                       "laid"),
+     ("arena-1920x720", False, False, False, "laid")],
 )  # fmt: skip
 def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
     engine, tmp_path, theme, half, rings, toast, views
@@ -653,9 +701,12 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
     fills = views == "fills"  # (and the cards' insides laid by the engine as their colour)
     if fills and not engines.makes_fills(engine):
         pytest.skip("needs libre-panel-engine that lays fills (cargo build --release)")
+    laid = views == "laid"  # (and the fans laid by the engine from their rings and rotors)
+    if laid and not engines.lays_laid(engine):
+        pytest.skip("needs libre-panel-engine that lays layers (cargo build --release)")
     clock, host = Clock(1000.0), PluginHost()
     display = Fed(engine, (1920, 720), tmp_path / "frames.rgb", half, rings, bool(views), globes,
-                  fills)  # fmt: skip
+                  fills, laid)  # fmt: skip
     loop = loop_with(theme, display, clock, host)
     try:
         run(loop, clock, 4)
@@ -693,6 +744,11 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
         assert len(steps) >= 5  # (it turned)
     if fills:  # (the cards' insides went to it as their colour, their edges as their pixels)
         assert display.sender.filled >= 3 and loop.renderer.fills
+    if laid:  # (the fans went as their parts, laid by the engine, their pixels not made here)
+        lain = [p for f in display.frames if isinstance(f, scenes.SceneFrame)
+                for _wid, p in f.scene.pieces if isinstance(p.native, scenes.Laid)]  # fmt: skip
+        assert len(lain) >= 25 and loop.renderer.native_laid
+        assert display.sender.laid_layers >= 25  # (they went as LAID records)
 
 
 def test_a_video_panel_shows_frames_of_layers_the_engine_composed(engine, monkeypatch, caplog):

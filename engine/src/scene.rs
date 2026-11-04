@@ -60,6 +60,14 @@ pub struct Part {
     pub h: usize,
 }
 
+/// A picture laid on a layer (Scene::laid): source `source`, its top left at (dx, dy).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Placed {
+    pub source: u32,
+    pub dx: i32,
+    pub dy: i32,
+}
+
 /// A picture layers are cut from (RGBA, row by row): a graph's strip.
 struct Source {
     w: usize,
@@ -445,6 +453,84 @@ impl Scene {
         Ok(())
     }
 
+    /// Layer `id` at (x, y), `w` x `h` RGBA through its alpha, laid from sources: each one over
+    /// those before it on a clear picture, as Pillow's alpha_composite lays it (a fan's ring and
+    /// its rotor over it), nothing where it lies off the layer. The sources in `kept` stay with
+    /// the layer too, unused in it (a turning rotor's positions, each sent once).
+    pub fn laid(
+        &mut self,
+        id: u32,
+        (x, y, w, h): (i32, i32, usize, usize),
+        parts: &[Placed],
+        kept: &[u32],
+    ) -> Result<(), String> {
+        if w == 0 || h == 0 || w > MOST_SIDE || h > MOST_SIDE {
+            return Err(format!("a layer of {w}x{h}"));
+        }
+        let mut pixels = vec![0u8; w * h * 4];
+        let mut sources: Vec<u32> = Vec::with_capacity(parts.len() + kept.len());
+        let mut seen: HashSet<u32> = HashSet::with_capacity(parts.len() + kept.len());
+        let (mut px0, mut py0, mut px1, mut py1) = (w, h, 0, 0);
+        for (n, part) in parts.iter().enumerate() {
+            let source = self.sources.get(&part.source).ok_or_else(|| {
+                format!(
+                    "layer {id} laid from source {}, which never came",
+                    part.source
+                )
+            })?;
+            let (dx, dy) = (i64::from(part.dx), i64::from(part.dy));
+            // where it lies on the layer, from its own corner (u across, v down)
+            let (u0, v0) = ((-dx).max(0), (-dy).max(0));
+            let u1 = (source.w as i64).min(w as i64 - dx);
+            let v1 = (source.h as i64).min(h as i64 - dy);
+            for v in v0..v1.max(v0) {
+                // (where it is clear it leaves what lies under it as it is: its shown columns)
+                let (first, after) = source.shown[v as usize];
+                let (a, b) = ((first as i64).max(u0), (after as i64).min(u1));
+                if a >= b {
+                    continue;
+                }
+                let len = (b - a) as usize * 4;
+                let from = (v as usize * source.w + a as usize) * 4;
+                let to = ((dy + v) as usize * w + (dx + a) as usize) * 4;
+                let (out, src) = (&mut pixels[to..to + len], &source.pixels[from..from + len]);
+                if n == 0 {
+                    // on what is all clear: the part itself where anything of it shows (its
+                    // clear pixels keep their colour, which no frame shows)
+                    out.copy_from_slice(src);
+                } else {
+                    composite(out, src);
+                }
+                px0 = px0.min((dx + a) as usize);
+                px1 = px1.max((dx + b) as usize);
+                py0 = py0.min((dy + v) as usize);
+                py1 = py1.max((dy + v) as usize + 1);
+            }
+            if seen.insert(part.source) {
+                sources.push(part.source);
+            }
+        }
+        for &source in kept {
+            if !self.sources.contains_key(&source) {
+                return Err(format!(
+                    "layer {id} keeps source {source}, which never came"
+                ));
+            }
+            if seen.insert(source) {
+                sources.push(source);
+            }
+        }
+        let part = if px1 > px0 && py1 > py0 {
+            (px0, py0, px1, py1)
+        } else {
+            (0, 0, 0, 0)
+        };
+        let mut layer = Layer::cut(x, y, w, h, pixels, part)?;
+        layer.sources = sources;
+        self.layer(id, layer);
+        Ok(())
+    }
+
     /// A globe whose pictures are made here for each step of its turn (globe.rs).
     pub fn globe(&mut self, id: u32, tables: globe::Tables) {
         self.globes.insert(id, tables);
@@ -771,6 +857,19 @@ fn over(dst: &mut [u8], src: &[u8]) {
     }
 }
 
+/// RGBA pixels `src` laid over RGBA pixels `dst` (straight alpha) as Pillow's alpha_composite
+/// lays them, to the bit (ring.rs's alpha_composite): where `src` is clear, `dst` stays; where
+/// it is opaque, or `dst` clear, Pillow's sums give `src` itself.
+fn composite(dst: &mut [u8], src: &[u8]) {
+    for (d, s) in dst.chunks_exact_mut(4).zip(src.chunks_exact(4)) {
+        match (s[3], d[3]) {
+            (0, _) => {}
+            (255, _) | (_, 0) => d.copy_from_slice(s),
+            _ => ring::alpha_composite(d, &[s[0], s[1], s[2], s[3]]),
+        }
+    }
+}
+
 /// One colour (RGBA) pasted through its alpha onto RGB pixels, as `over` pastes a layer of it.
 fn over_colour(dst: &mut [u8], s: [u8; 4]) {
     let a = u32::from(s[3]);
@@ -925,6 +1024,304 @@ mod tests {
                                              // the ones that stay in another order: all of it
         assert_eq!(s.frame(vec![3, 1], false).unwrap()[0].2, 64);
         assert!(s.frame(vec![3, 9], false).is_err());
+    }
+
+    #[test]
+    fn a_picture_laid_over_another_is_pillow_s_alpha_composite_to_the_bit() {
+        // (source, under it, Pillow's Image.alpha_composite of the two)
+        let cases: [([u8; 4], [u8; 4], [u8; 4]); 89] = [
+            ([200, 30, 255, 0], [10, 240, 128, 0], [10, 240, 128, 0]),
+            ([200, 30, 255, 0], [10, 240, 128, 1], [10, 240, 128, 1]),
+            ([200, 30, 255, 0], [10, 240, 128, 2], [10, 240, 128, 2]),
+            ([200, 30, 255, 0], [10, 240, 128, 127], [10, 240, 128, 127]),
+            ([200, 30, 255, 0], [10, 240, 128, 128], [10, 240, 128, 128]),
+            ([200, 30, 255, 0], [10, 240, 128, 254], [10, 240, 128, 254]),
+            ([200, 30, 255, 0], [10, 240, 128, 255], [10, 240, 128, 255]),
+            ([200, 30, 255, 1], [10, 240, 128, 0], [200, 30, 255, 1]),
+            ([200, 30, 255, 1], [10, 240, 128, 1], [105, 135, 192, 2]),
+            ([200, 30, 255, 1], [10, 240, 128, 2], [73, 170, 170, 3]),
+            ([200, 30, 255, 1], [10, 240, 128, 127], [11, 238, 129, 128]),
+            ([200, 30, 255, 1], [10, 240, 128, 128], [11, 238, 129, 128]),
+            ([200, 30, 255, 1], [10, 240, 128, 254], [11, 239, 128, 254]),
+            ([200, 30, 255, 1], [10, 240, 128, 255], [11, 239, 128, 255]),
+            ([200, 30, 255, 2], [10, 240, 128, 0], [200, 30, 255, 2]),
+            ([200, 30, 255, 2], [10, 240, 128, 1], [137, 100, 213, 3]),
+            ([200, 30, 255, 2], [10, 240, 128, 2], [105, 135, 192, 4]),
+            ([200, 30, 255, 2], [10, 240, 128, 127], [13, 237, 130, 128]),
+            ([200, 30, 255, 2], [10, 240, 128, 128], [13, 237, 130, 129]),
+            ([200, 30, 255, 2], [10, 240, 128, 254], [11, 238, 129, 254]),
+            ([200, 30, 255, 2], [10, 240, 128, 255], [11, 238, 129, 255]),
+            ([200, 30, 255, 127], [10, 240, 128, 0], [200, 30, 255, 127]),
+            ([200, 30, 255, 127], [10, 240, 128, 1], [199, 31, 254, 128]),
+            ([200, 30, 255, 127], [10, 240, 128, 2], [199, 32, 254, 128]),
+            (
+                [200, 30, 255, 127],
+                [10, 240, 128, 127],
+                [136, 100, 213, 191],
+            ),
+            (
+                [200, 30, 255, 127],
+                [10, 240, 128, 128],
+                [136, 101, 212, 191],
+            ),
+            (
+                [200, 30, 255, 127],
+                [10, 240, 128, 254],
+                [105, 135, 191, 254],
+            ),
+            (
+                [200, 30, 255, 127],
+                [10, 240, 128, 255],
+                [105, 135, 191, 255],
+            ),
+            ([200, 30, 255, 128], [10, 240, 128, 0], [200, 30, 255, 128]),
+            ([200, 30, 255, 128], [10, 240, 128, 1], [199, 31, 255, 128]),
+            ([200, 30, 255, 128], [10, 240, 128, 2], [199, 32, 254, 129]),
+            (
+                [200, 30, 255, 128],
+                [10, 240, 128, 127],
+                [137, 99, 213, 191],
+            ),
+            (
+                [200, 30, 255, 128],
+                [10, 240, 128, 128],
+                [137, 100, 213, 192],
+            ),
+            (
+                [200, 30, 255, 128],
+                [10, 240, 128, 254],
+                [106, 134, 192, 255],
+            ),
+            (
+                [200, 30, 255, 128],
+                [10, 240, 128, 255],
+                [105, 135, 192, 255],
+            ),
+            ([200, 30, 255, 254], [10, 240, 128, 0], [200, 30, 255, 254]),
+            ([200, 30, 255, 254], [10, 240, 128, 1], [200, 30, 255, 254]),
+            ([200, 30, 255, 254], [10, 240, 128, 2], [200, 30, 255, 254]),
+            (
+                [200, 30, 255, 254],
+                [10, 240, 128, 127],
+                [200, 30, 255, 254],
+            ),
+            (
+                [200, 30, 255, 254],
+                [10, 240, 128, 128],
+                [200, 30, 255, 255],
+            ),
+            (
+                [200, 30, 255, 254],
+                [10, 240, 128, 254],
+                [199, 31, 255, 255],
+            ),
+            (
+                [200, 30, 255, 254],
+                [10, 240, 128, 255],
+                [199, 31, 255, 255],
+            ),
+            ([200, 30, 255, 255], [10, 240, 128, 0], [200, 30, 255, 255]),
+            ([200, 30, 255, 255], [10, 240, 128, 1], [200, 30, 255, 255]),
+            ([200, 30, 255, 255], [10, 240, 128, 2], [200, 30, 255, 255]),
+            (
+                [200, 30, 255, 255],
+                [10, 240, 128, 127],
+                [200, 30, 255, 255],
+            ),
+            (
+                [200, 30, 255, 255],
+                [10, 240, 128, 128],
+                [200, 30, 255, 255],
+            ),
+            (
+                [200, 30, 255, 255],
+                [10, 240, 128, 254],
+                [200, 30, 255, 255],
+            ),
+            (
+                [200, 30, 255, 255],
+                [10, 240, 128, 255],
+                [200, 30, 255, 255],
+            ),
+            ([165, 77, 202, 24], [37, 48, 187, 29], [98, 62, 194, 50]),
+            ([109, 19, 44, 222], [214, 35, 123, 46], [112, 19, 46, 228]),
+            ([217, 30, 63, 114], [31, 203, 25, 113], [151, 91, 50, 176]),
+            ([23, 68, 148, 214], [73, 60, 157, 92], [26, 67, 149, 229]),
+            ([52, 96, 190, 49], [32, 30, 105, 254], [36, 43, 121, 254]),
+            (
+                [218, 160, 238, 232],
+                [185, 153, 127, 92],
+                [217, 160, 234, 240],
+            ),
+            (
+                [124, 41, 153, 253],
+                [175, 229, 147, 37],
+                [124, 41, 153, 253],
+            ),
+            ([60, 214, 84, 175], [77, 250, 215, 20], [61, 215, 89, 181]),
+            ([39, 160, 174, 179], [254, 233, 35, 47], [55, 165, 164, 193]),
+            (
+                [138, 242, 33, 31],
+                [158, 228, 145, 197],
+                [155, 230, 128, 204],
+            ),
+            ([177, 11, 236, 181], [86, 59, 252, 30], [173, 13, 237, 190]),
+            (
+                [111, 147, 66, 126],
+                [203, 200, 254, 41],
+                [124, 154, 93, 147],
+            ),
+            (
+                [85, 229, 205, 142],
+                [70, 220, 142, 212],
+                [79, 225, 180, 236],
+            ),
+            ([183, 194, 118, 77], [42, 90, 77, 118], [110, 140, 97, 159]),
+            ([119, 6, 248, 93], [134, 144, 2, 74], [124, 52, 165, 140]),
+            (
+                [214, 189, 163, 64],
+                [27, 233, 200, 203],
+                [82, 220, 189, 216],
+            ),
+            ([204, 201, 53, 246], [205, 31, 97, 34], [204, 200, 53, 247]),
+            ([106, 225, 83, 56], [174, 26, 52, 0], [106, 225, 83, 56]),
+            ([77, 51, 186, 13], [36, 106, 192, 76], [42, 98, 191, 85]),
+            (
+                [129, 177, 186, 242],
+                [62, 59, 249, 238],
+                [126, 171, 189, 254],
+            ),
+            (
+                [245, 247, 159, 43],
+                [73, 52, 175, 135],
+                [121, 106, 171, 155],
+            ),
+            ([245, 82, 11, 105], [185, 75, 13, 152], [217, 79, 12, 194]),
+            (
+                [46, 133, 187, 85],
+                [182, 114, 168, 114],
+                [110, 124, 178, 161],
+            ),
+            (
+                [99, 122, 205, 116],
+                [102, 252, 182, 14],
+                [99, 130, 204, 124],
+            ),
+            (
+                [14, 143, 241, 132],
+                [99, 176, 228, 178],
+                [48, 156, 236, 218],
+            ),
+            (
+                [186, 41, 112, 52],
+                [116, 240, 100, 172],
+                [135, 185, 103, 189],
+            ),
+            ([104, 247, 0, 245], [176, 43, 61, 198], [106, 241, 2, 253]),
+            (
+                [102, 244, 91, 222],
+                [170, 44, 202, 237],
+                [110, 220, 104, 253],
+            ),
+            ([205, 43, 81, 87], [65, 14, 77, 238], [115, 24, 78, 244]),
+            ([74, 242, 179, 79], [67, 10, 7, 52], [72, 170, 125, 115]),
+            ([71, 222, 99, 108], [14, 128, 108, 149], [46, 180, 103, 194]),
+            (
+                [123, 166, 132, 214],
+                [67, 31, 181, 234],
+                [115, 146, 139, 252],
+            ),
+            ([215, 66, 77, 9], [225, 93, 2, 76], [224, 90, 10, 82]),
+            ([88, 72, 242, 61], [31, 166, 247, 54], [65, 110, 244, 102]),
+            ([29, 127, 97, 141], [21, 50, 231, 14], [29, 124, 103, 147]),
+            (
+                [32, 226, 166, 102],
+                [141, 231, 244, 126],
+                [78, 228, 199, 178],
+            ),
+            (
+                [132, 103, 229, 70],
+                [213, 62, 200, 226],
+                [189, 74, 209, 234],
+            ),
+            ([161, 37, 123, 219], [37, 108, 155, 62], [156, 40, 124, 228]),
+            ([79, 187, 73, 129], [70, 239, 112, 48], [78, 195, 79, 153]),
+            (
+                [203, 249, 83, 114],
+                [82, 220, 206, 173],
+                [148, 236, 139, 210],
+            ),
+        ];
+        for (src, dst, want) in cases {
+            let mut out = dst;
+            composite(&mut out, &src);
+            assert_eq!(out, want, "{src:?} over {dst:?}");
+        }
+    }
+
+    #[test]
+    fn over_what_is_clear_or_as_what_is_opaque_a_picture_laid_over_is_itself() {
+        for c in 0..=255u8 {
+            for a in 1..=255u8 {
+                let src = [c, 255 - c, c / 3, a];
+                let mut clear = [7, 99, 200, 0];
+                ring::alpha_composite(&mut clear, &src);
+                assert_eq!(clear, src, "{src:?} over what is clear");
+                let mut under = [a, c, 3, c];
+                ring::alpha_composite(&mut under, &[c, a, 9, 255]);
+                assert_eq!(under, [c, a, 9, 255], "{c}, {a} opaque");
+            }
+        }
+    }
+
+    #[test]
+    fn a_layer_laid_from_sources_is_each_laid_over_the_one_before_and_keeps_what_it_says() {
+        let mut s = Scene::new(8, 4, 2);
+        // a ring of 3 x 2, half see-through on its left, clear in its middle at the top
+        s.source(
+            5,
+            3,
+            2,
+            vec![
+                200, 10, 10, 128, 0, 0, 0, 0, 200, 10, 10, 255, 200, 10, 10, 128, 200, 10, 10, 64,
+                200, 10, 10, 255,
+            ],
+        )
+        .unwrap();
+        s.source(6, 1, 1, vec![10, 220, 30, 200]).unwrap(); // a rotor of one pixel
+        s.source(7, 1, 1, vec![1, 2, 3, 255]).unwrap(); // another position of it
+        let placed = |source, dx, dy| Placed { source, dx, dy };
+        let parts = [
+            placed(5, 0, 0),
+            placed(6, 1, 1),
+            placed(6, 2, 0),
+            placed(6, -1, 0),
+        ];
+        s.laid(1, (2, 1, 3, 2), &parts, &[7, 6]).unwrap();
+        let layer = &s.layers[&1];
+        let px = |x: usize, y: usize| &layer.pixels[(y * 3 + x) * 4..(y * 3 + x) * 4 + 4];
+        let over = |dst: [u8; 4], src: [u8; 4]| {
+            let mut out = dst;
+            composite(&mut out, &src);
+            out
+        };
+        assert_eq!(px(0, 0), &[200, 10, 10, 128]); // (on what is clear: itself)
+        assert_eq!(px(1, 0), &[0, 0, 0, 0]); // (clear, and nothing over it)
+        assert_eq!(px(2, 0), &over([200, 10, 10, 255], [10, 220, 30, 200]));
+        assert_eq!(px(1, 1), &over([200, 10, 10, 64], [10, 220, 30, 200]));
+        assert_eq!(px(2, 1), &[200, 10, 10, 255]);
+        assert_eq!(layer.part, bounds(&layer.pixels, 3, 2, 4, |p| p[3] != 0));
+        assert_eq!(layer.sources, vec![5, 6, 7]); // (the rotor's other position kept too)
+        assert!(s.laid(2, (0, 0, 1, 1), &[placed(9, 0, 0)], &[]).is_err());
+        assert!(s.laid(2, (0, 0, 1, 1), &[placed(5, 0, 0)], &[9]).is_err());
+        s.frame(vec![1], false).unwrap();
+        assert_eq!(s.sources.len(), 3); // (kept with the layer laid from them)
+        s.layer(
+            3,
+            Layer::new(0, 0, 1, 1, How::Over, vec![0, 0, 0, 255]).unwrap(),
+        );
+        s.frame(vec![3], false).unwrap();
+        assert!(s.sources.is_empty()); // (gone with it)
     }
 
     #[test]

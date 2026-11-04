@@ -1557,6 +1557,7 @@ class MainLoop:
                     # by the engine where it cuts them, else their pixels made in its writer
                     renderer.native_views = layers
                     renderer.native_globes = layers  # (and its turning globes, likewise)
+                    renderer.native_laid = layers  # (and its fans, from their rings and rotors)
                     if layers:
                         drawn, _ = renderer.render(snapshot, now, scene=True)
                     else:  # (as before: a renderer of a test or a plugin may take no more)

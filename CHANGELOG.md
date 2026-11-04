@@ -173,6 +173,14 @@
   (`engine: the stream's encoder: ...`).
 
 **Lighter**
+- **Fans laid by the engine: a fifth less to it with every frame of Lumen.** A fan turning
+  went to the engine as a new picture every frame, its ring and its rotor laid together here
+  (Lumen's four on the 12.3": some 50 KB a frame, a fifth of what the frames sent; Arena's
+  list of six likewise). The engine lays them itself now, as Pillow lays them, to the bit:
+  the ring and each position of the rotor go to it once, and it keeps the rotor's latest
+  positions, so a turn costs it a short record a frame. The main loop no longer lays them,
+  and an engine of before gets their pictures as it did. Lumen's frames from the engine the
+  same, byte for byte (played back, 150 frames), its stream 219 instead of 271 KB a frame.
 - **The main loop a ninth lighter with Lumen, the frames the same pixels.** The rolling
   seconds measured the band their digits fill and the width of each letter anew in every
   frame of their roll (a millisecond of each such frame on the 12.3"), and each new text of a

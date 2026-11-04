@@ -946,6 +946,8 @@ class Renderer:
         self.native_views = False
         # ... and makes a turning globe's picture for each step (scene.Globe), likewise
         self.native_globes = False
+        # ... and lays a fan from its ring and its rotor, which it keeps (scene.Laid), likewise
+        self.native_laid = False
         # ... and a card whose inside is one colour comes as its edges and that colour, which the
         # engine lays without pixels (render/scene.py's Filled; the fills property)
         self._fills = False
@@ -1003,7 +1005,10 @@ class Renderer:
         self._over: dict[str, list[tuple[Piece, str]]] = {}
         self._fans_clear: dict[str, tuple[Piece, tuple, bool]] = {}
         self._turning: dict[tuple[str, str], tuple[tuple, Image.Image, Piece]] = {}
-        self._laid_fans: dict[str, tuple[tuple, Image.Image]] = {}  # (a list's fans: _laid_fan)
+        # a fan's picture laid from its parts, and how the engine lays it (_laid_fan); the
+        # pictures of its rotor the engine keeps (_rotor_kept)
+        self._laid_fans: dict[str, tuple[tuple, Image.Image, Any]] = {}
+        self._rotor_pictures: dict[str, dict[int, Image.Image]] = {}
         # the pieces of turned widgets last frame, by id: the piece, its turn, the turned one
         self._turned: dict[str, tuple[Piece, Turn, Piece]] = {}
         self._downloads: dict[str, tuple[Any, Any]] = {}  # download widget id -> what it shows
@@ -3030,12 +3035,13 @@ class Renderer:
         # Lumen's, the pictures of all of them kept, found 61 in a hundred: 8 MB, and 6 more)
         parts = fan.fan_parts(color, w, h, rotor, widget["frame"], look, paint)
         canvas = fan.geometry(w, h)[2]
-        image = self._laid_fan(wid, parts, canvas)
+        image = self._laid_fan(wid, parts, canvas, self.native_laid)
         hit = self._fan_shown.get(wid)
         if hit is not None and hit[0] is image:
             return hit[1]  # (it stands: the same piece)
         at = (x + (w - canvas) // 2, y + (h - canvas) // 2)
-        piece = self._effects(widget, Piece(image, at[0], at[1], [x, y, w, h]))
+        laid = self._laid_fans[wid][2]  # (laid by the engine: scene.Laid)
+        piece = self._effects(widget, Piece(image, at[0], at[1], [x, y, w, h], native=laid))
         self._fan_shown[wid] = (image, piece)
         return piece
 
@@ -3773,7 +3779,7 @@ class Renderer:
         color = self.color(widget["color2"])[:3]
         frame = "ring" if widget["levels"] else "none"
         ox, oy = widget["x"] - piece.x, widget["y"] - piece.y
-        fans = []
+        fans, lays = [], []
         for (x0, y0), item in zip(self._list_fan_places(widget, len(items)), items, strict=True):
             key = f"{widget['id']}\0{item.key}"
             rotor = self._rotors.get(key)
@@ -3788,26 +3794,42 @@ class Renderer:
             else:
                 rotor.settle(item.number, max_rpm)
             parts = fan.fan_parts(color, size, size, rotor, frame, look, paint)
-            image = self._laid_fan(key, parts, fan.geometry(size, size)[2])
+            apart = self.keep_static and "_card" not in widget  # (it may go over the list)
+            canvas = fan.geometry(size, size)[2]
+            image = self._laid_fan(key, parts, canvas, apart and self.native_laid)
             x, y = ox + x0 + (size - image.width) / 2, oy + y0 + (size - image.height) / 2
             fans.append((image, round(x), round(y)))
+            lays.append(self._laid_fans[key][2])
         if self.keep_static and "_card" not in widget and self._fans_apart(widget, piece, fans):
-            self._over[widget["id"]] = self._fan_pieces(widget["id"], piece, fans)
+            self._over[widget["id"]] = self._fan_pieces(widget["id"], piece, fans, lays)
             return piece
         layer = piece.layer.copy()
         for image, x, y in fans:
             self._paste(layer, image, x, y)
         return replace(piece, layer=layer)
 
-    def _laid_fan(self, key: str, parts: list[tuple[Image.Image, int]], canvas: int) -> Image.Image:
-        """The picture of a list's fan, its ``parts`` laid one on the other (as
-        :func:`fan.fan_image` lays them): the one before while they are the same (a fan that
-        stands), else laid anew (a small picture, not kept beyond the frame)."""
+    # the pictures of a fan's rotor (and its ring) the engine keeps for it, the latest: a rotor
+    # turning steadily shows 48 of them, each sent to the engine once
+    KEPT_ROTORS = 64
+
+    def _laid_fan(
+        self, key: str, parts: list[tuple[Image.Image, int]], canvas: int, native: bool = False
+    ) -> Image.Image:
+        """The picture of a fan, its ``parts`` laid one on the other (as :func:`fan.fan_image`
+        lays them): the one before while they are the same (a fan that stands), else laid anew
+        (a small picture, not kept beyond the frame). ``native``: one the engine lays from its
+        parts (scene.Laid, kept in :attr:`_laid_fans` with it), its pixels made here only when
+        something asks for them."""
         images = tuple(image for image, _at in parts)
         hit = self._laid_fans.get(key)
-        if hit is not None and len(hit[0]) == len(images):
+        if hit is not None and len(hit[0]) == len(images) and (hit[2] is not None) == native:
             if all(a is b for a, b in zip(hit[0], images, strict=True)):
                 return hit[1]
+        if native:
+            placed = [(image, at, at) for image, at in parts]
+            made = scenes.laid((canvas, canvas), placed, self._rotor_kept(key, images))
+            self._laid_fans[key] = (images, made.layer, made)
+            return made.layer
         first, at = parts[0]
         # its ring as it is, the rotor over it (the ring's clear pixels keep their colour: what
         # is clear shows nothing, laid on the frame here or by the engine)
@@ -3817,8 +3839,19 @@ class Renderer:
             laid, rest = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0)), parts
         for image, at in rest:
             laid.alpha_composite(image, (at, at))
-        self._laid_fans[key] = (images, laid)
+        self._laid_fans[key] = (images, laid, None)
         return laid
+
+    def _rotor_kept(self, key: str, images: tuple[Image.Image, ...]) -> tuple[Image.Image, ...]:
+        """The latest :data:`KEPT_ROTORS` pictures fan ``key`` was laid from, ``images`` the
+        newest: the engine keeps them, so a position the rotor comes back to is not sent again."""
+        kept = self._rotor_pictures.setdefault(key, {})
+        for image in images:
+            kept.pop(id(image), None)  # (an old one: the newest again)
+            kept[id(image)] = image
+        while len(kept) > self.KEPT_ROTORS:
+            kept.pop(next(iter(kept)))
+        return tuple(kept.values())
 
     @staticmethod
     def _within(layer: Image.Image, image: Image.Image, x: int, y: int) -> tuple[int, ...] | None:
@@ -3845,9 +3878,12 @@ class Renderer:
         self._fans_clear[widget["id"]] = (piece, boxes, clear)
         return clear
 
-    def _fan_pieces(self, wid: str, piece: Piece, fans: list[tuple]) -> list[tuple[Piece, str]]:
+    def _fan_pieces(
+        self, wid: str, piece: Piece, fans: list[tuple], lays: list[Any] | None = None
+    ) -> list[tuple[Piece, str]]:
         """The fans of a list as pieces over it, each cut as it lies on the list: the same
-        piece while a fan shows the same picture in the same place (a fan that stands)."""
+        piece while a fan shows the same picture in the same place (a fan that stands). A fan
+        the engine lays (``lays``: its scene.Laid, else None) is cut as its parts are laid."""
         out = []
         for i, (image, x, y) in enumerate(fans):
             box = self._within(piece.layer, image, x, y)
@@ -3856,8 +3892,16 @@ class Renderer:
             name, place = f"fan{i}", (box, piece.x, piece.y)
             hit = self._turning.get((wid, name))
             if hit is None or hit[0] != place or hit[1] is not image:
-                part = image.crop((box[0] - x, box[1] - y, box[2] - x, box[3] - y))
-                fan_piece = Piece(part, piece.x + box[0], piece.y + box[1])
+                cx, cy = box[0] - x, box[1] - y  # (where the cut begins in the fan's picture)
+                laid = lays[i] if lays is not None else None
+                if laid is not None:  # its parts laid where they lie in the cut
+                    size = (box[2] - box[0], box[3] - box[1])
+                    parts = [(part, px - cx, py - cy) for part, px, py in laid.parts]
+                    cut = scenes.laid(size, parts, laid.kept)
+                    fan_piece = Piece(cut.layer, piece.x + box[0], piece.y + box[1], native=cut)
+                else:
+                    part = image.crop((cx, cy, box[2] - x, box[3] - y))
+                    fan_piece = Piece(part, piece.x + box[0], piece.y + box[1])
                 hit = self._turning[(wid, name)] = (place, image, fan_piece)
             out.append((hit[2], name))
         return out
