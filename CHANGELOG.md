@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.0rc3 — 2026-11-04
 
 **Removed**
 - **The panel light, the depth dust and SPUR II's screens.** Hardly anyone used them, and
