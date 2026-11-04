@@ -388,6 +388,59 @@ def test_an_engine_that_ends_unasked_is_a_link_that_failed(wired):
 
 
 @needs_ffmpeg
+def test_auto_takes_the_engine_the_download_carries_and_gives_it_the_panel(
+    wired, engine, monkeypatch
+):
+    """video.encoder "auto" (the default) with the download's engine: as "native" chosen,
+    the engine has the panel, encodes the frames drawn and sends the pictures."""
+    monkeypatch.setattr(turzx_video, "auto_engine", lambda: engine)
+    monkeypatch.setattr(turzx_video, "ENGINE_TROUBLE", turzx_video.EngineTrouble())
+    display = TurzxVideoDisplay(video_config())
+    display.open()
+    assert display.link is not None and display._sender is None
+    shown_in_time(display, planned(moving_square(30)))
+    assert isinstance(display.encoder, EngineStream)
+    assert display.counters.encoder == "native, boxes"
+    settle(wired, timeout=15, at_least=20)
+    display.close()
+    assert wired.socket.errors == []
+
+
+@needs_ffmpeg
+def test_an_engine_that_ends_unasked_too_often_gives_way_to_ffmpeg_under_auto(
+    wired, engine, monkeypatch, caplog
+):
+    """With "auto", an engine that ended unasked as often as EngineTrouble takes (here once)
+    is left out: the next connection is Libre Panel's own, pyusb has the panel and x264
+    through ffmpeg encodes, until Libre Panel starts again. The log says why, once."""
+    trouble = turzx_video.EngineTrouble()
+    trouble.TIMES = 1
+    monkeypatch.setattr(turzx_video, "ENGINE_TROUBLE", trouble)
+    monkeypatch.setattr(turzx_video, "auto_engine", lambda: engine)
+    display = TurzxVideoDisplay(video_config())
+    display.open()
+    first = display.link
+    assert first is not None
+    shown_in_time(display, planned(moving_square(10)))
+    pyusb = staticmethod(lambda pid=None, beside=(), skip=0: transport_for(wired))
+    monkeypatch.setattr(turzx_usb.UsbTransport, "open", pyusb)
+    with caplog.at_level("WARNING"):
+        first.proc.kill()
+        deadline = time.monotonic() + 15
+        while display.link is first and time.monotonic() < deadline:
+            for frame in planned(moving_square(5)):
+                display.show(frame)
+                time.sleep(0.02)
+    assert first.ended_unasked and trouble.left_out
+    assert display.link is None  # (Libre Panel has the panel again)
+    shown_in_time(display, planned(moving_square(20)))
+    assert display.encoder.name == "libx264"
+    said = [r for r in caplog.records if "stopped unasked" in r.getMessage()]
+    assert len(said) == 1
+    display.close()
+
+
+@needs_ffmpeg
 def test_the_engine_with_the_panel_says_which_encoder_runs_as_a_note(engine, caplog):
     """With video.engine_encoder "card" the engine that has the panel says which encoder runs
     (here x264: no graphics card's encoder, or not Windows) as a note: logged, and no error

@@ -785,6 +785,27 @@ def test_the_video_experiment_switches_what_the_engine_does(
         assert (video.engine_sends, video.engine_layers) == (True, True)
 
 
+def test_auto_shows_what_the_engine_does_where_the_download_carries_it(
+    app_url,  # noqa: F811
+    isolated_home,
+    monkeypatch,
+):
+    """Where the download carries Libre Panel's engine, "auto" (the default) encodes with it:
+    its switches show with "auto" as with "native"."""
+    from test_editor_settings import lacking_ffmpeg, panel_on_the_bus
+
+    from libre_panel.devices import h264
+
+    panel_on_the_bus(monkeypatch, "turing-9.2-usb")
+    lacking_ffmpeg(monkeypatch, found=True)
+    monkeypatch.setattr(h264, "auto_engine", lambda: "/the/download/libre-panel-engine")
+    with browser_page(app_url, "settings/panel/panel-video-experiment") as page:
+        card = page.locator("#panel-video-experiment")
+        expect(card.get_by_role("switch", name="The engine sends the pictures")).to_be_checked()
+        expect(card.get_by_role("switch", name="The engine composes the frames")).to_be_checked()
+        assert settings_config().device.video.encoder == "auto"
+
+
 def test_the_video_experiment_chooses_the_engines_own_encoder(
     app_url,  # noqa: F811
     isolated_home,

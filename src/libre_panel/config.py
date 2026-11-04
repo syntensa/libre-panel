@@ -473,11 +473,14 @@ class VideoConfig:
     # or a rate such as "1500k", "4M"
     maxrate: str = "auto"
     # The profile: "auto" is high on the 9.2" and the 12.3" (measured to show there; it
-    # compresses far better), baseline elsewhere. The encoder: "auto" is the graphics card's
-    # where it was measured to show and ffmpeg can start it (AMD's h264_amf), else x264 on the
-    # processor; h264_nvenc (NVIDIA) and h264_qsv (Intel) are an experiment to set by hand
+    # compresses far better), baseline elsewhere. The encoder: "auto" is Libre Panel's engine
+    # where the download carries it (h264.auto_engine: x264 inside it, the pictures sent on
+    # their time), else the graphics card's where it was measured to show and ffmpeg can start
+    # it (AMD's h264_amf), else x264 on the processor; "native" the engine always; h264_nvenc
+    # (NVIDIA) and h264_qsv (Intel) are an experiment to set by hand
     profile: str = "auto"  # "auto" | "baseline" | "main" | "high"
-    encoder: str = "auto"  # "auto" | "libx264" | "h264_nvenc" | "h264_amf" | "h264_qsv"
+    # "auto" | "native" | "libx264" | "h264_nvenc" | "h264_amf" | "h264_qsv"
+    encoder: str = "auto"
     # How the frames reach ffmpeg and who converts their colours: "auto" four bytes a pixel as
     # they are drawn (rgb0), converted on the graphics card where a colour check found the card
     # converting as the processor does (devices/card_choice.py), else by ffmpeg on the processor
@@ -485,16 +488,17 @@ class VideoConfig:
     # (AMD's, NVIDIA's and Intel's encoders; the colour check measured AMD's shifting the
     # colours when left to itself)
     pixels: str = "auto"  # "auto" | "rgb" | "card"
-    # With encoder "native": Libre Panel's engine has the panel and sends it the pictures, each
-    # on its time (devices/engine.py), with nothing of Python's between a frame and the panel;
-    # false: Libre Panel sends them as for the other encoders (the engine only encodes)
+    # Where the engine encodes ("auto" with the download's engine, or "native"): it has the
+    # panel and sends it the pictures, each on its time (devices/engine.py), with nothing of
+    # Python's between a frame and the panel; false: Libre Panel sends them as for the other
+    # encoders (the engine only encodes)
     engine_sends: bool = True
     # With the engine sending (engine_sends): it also composes the frames from the layers Libre
     # Panel draws, each sent to it once (render/scene.py: stage 2), where nothing else is drawn
     # over the frame (a transition, the alarm's edge; a message in the built-in card or a look
     # of the volume is one more layer); false: Libre Panel composes every frame
     engine_layers: bool = True
-    # With encoder "native": the engine's own encoder. "x264" on the processor; "card" the
+    # Where the engine encodes: its own encoder. "x264" on the processor; "card" the
     # graphics card's (AMD's, NVIDIA's or Intel's, through Windows' Media Foundation: Windows
     # only), the processor then only making the frames' YUV; where the card's cannot start or
     # stops, x264 encodes and the log says why. An experiment

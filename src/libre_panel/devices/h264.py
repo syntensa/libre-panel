@@ -68,8 +68,10 @@ X264_PRESETS = ("ultrafast", "superfast", "veryfast", "faster", "fast", "medium"
 # "auto": high where it was measured to show (HIGH_PROFILE_MODELS), baseline elsewhere; main
 # and high ask more of the panel's decoder, and compress better.
 PROFILES = ("auto", "baseline", "main", "high")
-# "auto": the graphics card's encoder where it was measured to show and ffmpeg can start it
-# (AUTO_ENCODERS, in that order), else x264 on the processor. The others are an experiment.
+# "auto": Libre Panel's engine (NATIVE) where the download carries it (auto_engine), for the
+# frames Libre Panel draws; else the graphics card's encoder where it was measured to show and
+# ffmpeg can start it (AUTO_ENCODERS, in that order), else x264 on the processor. NVIDIA's and
+# Intel's are an experiment.
 ENCODERS = ("auto", "libx264", "native", "h264_nvenc", "h264_amf", "h264_qsv")
 # The encoder inside the engine (video.encoder "native"): x264 on the processor, or the graphics
 # card's own through Windows' Media Foundation (engine/src/mf.rs), x264 where that cannot start.
@@ -308,11 +310,17 @@ def reason(said: str) -> str:
     return (telling or lines or [""])[-1]
 
 
-def resolve_encoder(encoder: str, ffmpeg: str, failed: Collection[str] = ()) -> str:
-    """The encoder to start: the one set, or with "auto" the first of AUTO_ENCODERS that
-    works here and did not fail before (``failed``), else libx264."""
+def resolve_encoder(
+    encoder: str, ffmpeg: str, failed: Collection[str] = (), engine: bool = False
+) -> str:
+    """The encoder to start: the one set, or with "auto" Libre Panel's engine where it may
+    encode these frames (``engine``: the download carries it and they are drawn, not a video
+    from its file or the screen) and did not fail before (``failed``), else the first of
+    AUTO_ENCODERS that works here and did not fail before, else libx264."""
     if encoder != "auto":
         return encoder
+    if engine and NATIVE not in failed:
+        return NATIVE
     for candidate in AUTO_ENCODERS:
         if candidate not in failed and encoder_works(ffmpeg, candidate):
             return candidate
@@ -525,6 +533,14 @@ def find_engine() -> str:
     if built.is_file() and rights.safe_place(built):
         return str(built)
     return ""
+
+
+def auto_engine() -> str:
+    """The engine video.encoder "auto" takes: the one the download carries (its ``tools``
+    folder), else none. One built in a checkout, on PATH or named by LIBRE_PANEL_ENGINE runs
+    where video.encoder is "native" (:func:`find_engine`): "auto" stays with what comes with
+    Libre Panel, and without the downloads (pip) x264 through ffmpeg encodes, as before."""
+    return bundled.find(bundled.program_name(ENGINE)) or ""
 
 
 def engine_options(

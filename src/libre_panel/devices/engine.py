@@ -581,6 +581,7 @@ class EngineLink:
         self.counts: dict[str, float] = {}
         self.waiting = False  # frames wait for the panel to take pictures (it sets the pace)
         self.failed: DeviceError | None = None  # the video path stopped
+        self.ended_unasked = False  # it ended without saying why (crashed, or ended from outside)
         self.on_failed: Callable[[DeviceError], None] | None = None
         self.on_counts: Callable[[dict[str, float]], None] | None = None
         self.errors: collections.deque[str] = collections.deque(maxlen=10)
@@ -672,6 +673,7 @@ class EngineLink:
         if self._closing or self.on_failed is None or self.failed is not None:
             return
         self._threads[1].join(1.0)  # (what it said on its way out)
+        self.ended_unasked = True
         self.failed = DeviceError(f"Libre Panel's engine stopped ({self.reason()})")
         self.on_failed(self.failed)
 

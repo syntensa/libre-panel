@@ -717,6 +717,17 @@ def test_the_card_says_what_auto_picks_and_why_a_card_s_encoder_was_passed_over(
     assert h264.reason("Conversion failed!\n") == "Conversion failed!" and h264.reason("") == ""
 
 
+def test_the_card_says_auto_picks_the_engine_where_the_download_carries_it(monkeypatch):
+    """With the download's engine "auto" encodes the frames drawn with it: that is what the
+    card says auto picks, and no card's encoder is asked about."""
+    monkeypatch.setattr(h264, "auto_engine", lambda: "/the/download/libre-panel-engine")
+    asked = []
+    runner = ColourCheck(None, works=lambda ffmpeg, encoder: asked.append(encoder) or True)
+    assert runner.auto(VideoConfig()) == {"set": "auto", "picked": h264.NATIVE, "passed": []}
+    assert runner.auto(VideoConfig(encoder="libx264"))["picked"] == "libx264"  # as set
+    assert asked == []
+
+
 def test_without_ffmpeg_the_check_says_why(isolated_home, monkeypatch):
     from libre_panel.devices.base import DeviceError
 

@@ -331,6 +331,9 @@ class ColourCheck:
         if video.encoder != "auto":
             found["picked"] = video.encoder
             return found
+        if h264.auto_engine():  # (the download's own engine encodes the frames drawn)
+            found["picked"] = h264.NATIVE
+            return found
         try:
             ffmpeg = h264.find_ffmpeg(video.ffmpeg)
         except DeviceError:

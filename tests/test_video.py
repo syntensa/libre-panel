@@ -206,9 +206,71 @@ def test_the_profile_and_the_encoder_of_auto_are_resolved_per_panel_and_pc(monke
     assert resolve_encoder("auto", "without") == "libx264"
     assert resolve_encoder("auto", "with-card", failed={"h264_amf"}) == "libx264"  # it stopped
     assert resolve_encoder("h264_nvenc", "without") == "h264_nvenc" and probed  # as set
+    # Libre Panel's engine first, where the download carries it (and the frames are drawn)
+    assert resolve_encoder("auto", "with-card", engine=True) == h264.NATIVE
+    assert resolve_encoder("auto", "with-card", failed={h264.NATIVE}, engine=True) == "h264_amf"
+    assert resolve_encoder("libx264", "with-card", engine=True) == "libx264"  # as set
     monkeypatch.setattr(h264, "_PROBED", {})
     assert encoder_works("/no/such/ffmpeg", "h264_amf") is False  # no ffmpeg: no
     assert h264._PROBED == {("/no/such/ffmpeg", "h264_amf"): False}  # asked once
+
+
+def test_auto_takes_only_the_engine_the_download_carries(monkeypatch, tmp_path):
+    """video.encoder "auto" takes Libre Panel's engine where it comes with the download (its
+    tools folder), not one built in a checkout, on PATH or named by LIBRE_PANEL_ENGINE: those
+    run where "native" is chosen. Without the downloads (pip) x264 through ffmpeg encodes."""
+    from libre_panel import bundled
+
+    built = tmp_path / bundled.program_name(h264.ENGINE)
+    built.write_bytes(b"")
+    monkeypatch.setenv("LIBRE_PANEL_ENGINE", str(built))
+    assert h264.find_engine() == str(built)  # ("native" takes it)
+    assert h264.auto_engine() == ""  # ("auto" does not: no download here)
+    monkeypatch.setattr(bundled, "tools_folders", lambda: [tmp_path])
+    assert h264.auto_engine() == str(built)  # the download's own
+
+
+def test_an_engine_that_keeps_stopping_unasked_is_left_out_of_auto(caplog):
+    """Three times within ten minutes that Libre Panel's engine ended unasked leave it out of
+    "auto" until Libre Panel starts again, said once in the log; times further apart do not."""
+    from libre_panel.devices.turzx_video import EngineTrouble
+
+    trouble = EngineTrouble()
+    trouble.note("crashed", now=0.0)
+    trouble.note("crashed", now=700.0)  # (the first is more than ten minutes before)
+    trouble.note("crashed", now=800.0)
+    assert not trouble.left_out
+    with caplog.at_level("WARNING"):
+        trouble.note("crashed", now=900.0)
+        trouble.note("crashed", now=950.0)
+    assert trouble.left_out
+    said = [r.getMessage() for r in caplog.records if "stopped unasked" in r.getMessage()]
+    assert len(said) == 1 and "x264 through ffmpeg encodes" in said[0]
+
+
+def test_auto_leaves_the_engine_out_after_it_stopped_too_often(monkeypatch):
+    """A display with "auto" takes the download's engine to encode and to send, until the
+    engine stopped unasked too often this run or before its first picture here; "native"
+    keeps it, as asked."""
+    from libre_panel.devices import turzx_video
+    from libre_panel.devices.turzx_video import EngineTrouble, TurzxVideoDisplay
+
+    monkeypatch.setattr(turzx_video, "auto_engine", lambda: "/the/download/libre-panel-engine")
+    monkeypatch.setattr(turzx_video, "can_send", lambda engine: True)
+    monkeypatch.setattr(turzx_video, "ENGINE_TROUBLE", EngineTrouble())
+    auto = TurzxVideoDisplay(video_config())
+    assert auto._auto_engine() == "/the/download/libre-panel-engine"
+    assert auto._sending_engine() == "/the/download/libre-panel-engine"
+    auto._encoders_failed.add(h264.NATIVE)  # (it stopped before its first picture here)
+    assert auto._auto_engine() == "" and auto._sending_engine() == ""
+    fresh = TurzxVideoDisplay(video_config())
+    turzx_video.ENGINE_TROUBLE.left_out = True
+    assert fresh._auto_engine() == "" and fresh._sending_engine() == ""
+    monkeypatch.setattr(turzx_video, "find_engine", lambda: "/my/own/libre-panel-engine")
+    chosen = TurzxVideoDisplay(video_config(encoder="native"))
+    assert chosen._sending_engine() == "/my/own/libre-panel-engine"  # (as asked)
+    other = TurzxVideoDisplay(video_config(encoder="libx264"))
+    assert other._auto_engine() == "" and other._sending_engine() == ""
 
 
 def test_a_new_run_starts_at_the_rate_the_last_one_got_to(isolated_home):

@@ -7,7 +7,7 @@
 import { normalTheme } from "../../core/actions.js";
 import { get, post } from "../../core/api.js";
 import { t } from "../../core/i18n.js";
-import { loadSettings, useConfig } from "../../core/settings.js";
+import { loadSettings, useCatalog, useConfig } from "../../core/settings.js";
 import { store, useStore } from "../../core/state.js";
 import { html, useEffect, useState } from "../../lib/preact.js";
 import { toastError } from "../../ui/toast.js";
@@ -97,10 +97,11 @@ function showTheme(id) {
   look();
 }
 
-/** The news of 0.8: Libre Panel's own engine (where the panel has the video mode), every panel
- * size, and Terra. */
+/** The news of 0.8: Libre Panel's own engine (where the panel has the video mode and the
+ * download carries it, or it was chosen), every panel size, and Terra. */
 export function WhatsNew() {
   const config = useConfig();
+  const catalog = useCatalog();
   const { model } = usePanelModel();
   const [looked, setLooked] = useState({});
   useEffect(() => {
@@ -108,13 +109,15 @@ export function WhatsNew() {
   }, []);
   if (!config) return null;
   const look = (id) => setLooked((now) => ({ ...now, [id]: true }));
+  const encoder = config.video?.encoder;
+  const engine = encoder === "native" || (encoder === "auto" && Boolean(catalog?.engine));
   const items = [
-    model?.video && config.video?.mode !== "off" && {
+    model?.video && config.video?.mode !== "off" && (engine || catalog?.engine) && {
       id: "engine",
       title: t("Libre Panel's own engine"),
-      text: t("It encodes the panel's video and sends each picture on its time: lighter on the PC. To try, as the panel's encoder."),
-      done: config.video?.encoder === "native",
-      action: html`<button type="button" class="btn" onClick=${() => navigate("settings", "panel/panel-video-experiment")}>${t("Try it")}</button>`,
+      text: t("It now encodes the panel's video and sends each picture on its time, lighter on the PC, unless you chose another encoder."),
+      done: engine,
+      action: html`<button type="button" class="btn" onClick=${() => navigate("settings", "panel/panel-video-experiment")}>${t("Show me")}</button>`,
     },
     {
       id: "sizes",

@@ -89,6 +89,7 @@ from libre_panel.devices.h264 import (
     Fed,
     RateControl,
     VideoSource,
+    auto_engine,
     auto_rate,
     engine_command,
     engine_frame,
@@ -380,6 +381,37 @@ RATES: dict[tuple[str, str, tuple[int, int]], RateControl] = {}
 ENGINE_SAID: set[str] = set()
 
 
+class EngineTrouble:
+    """Libre Panel's engine ending unasked (it crashed, or was ended from outside), counted for
+    this run: with video.encoder "auto", :attr:`TIMES` of them within :attr:`WITHIN_S` leave
+    the engine out until Libre Panel starts again. x264 through ffmpeg encodes then, Libre Panel
+    sends the pictures, and the log says why, once. "native" keeps the engine, as asked; a
+    failure the engine names itself (the panel's link, a hung decoder) is not counted."""
+
+    TIMES = 3
+    WITHIN_S = 600.0
+
+    def __init__(self) -> None:
+        self.times: list[float] = []
+        self.left_out = False
+
+    def note(self, reason: str, now: float | None = None) -> None:
+        now = time.monotonic() if now is None else now
+        self.times = [t0 for t0 in self.times if now - t0 < self.WITHIN_S] + [now]
+        if len(self.times) >= self.TIMES and not self.left_out:
+            self.left_out = True
+            log.warning(
+                "video: Libre Panel's engine stopped unasked %d times within %d minutes (the "
+                "last: %s); x264 through ffmpeg encodes until Libre Panel starts again",
+                len(self.times),
+                round(self.WITHIN_S / 60),
+                reason,
+            )
+
+
+ENGINE_TROUBLE = EngineTrouble()
+
+
 class VideoSession:
     """Start, picture blocks with flow control, and stop, on one open transport."""
 
@@ -640,13 +672,29 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         """Whether ``frame`` goes to the encoder as its layers, its pixels not made here."""
         return isinstance(frame, SceneFrame) and self.takes_scenes
 
+    def _auto_engine(self) -> str:
+        """The engine video.encoder "auto" takes: the one the download carries (h264.auto_engine),
+        unless it stopped before its first picture here or unasked too often this run
+        (:class:`EngineTrouble`); "" for every other encoder."""
+        if (
+            self.settings.encoder != "auto"
+            or NATIVE in self._encoders_failed
+            or ENGINE_TROUBLE.left_out
+        ):
+            return ""
+        return auto_engine()
+
     def _sending_engine(self) -> str:
         """The engine that is to have the panel and send it the pictures, each on its time
-        (stage 1b): with video.encoder "native" and video.engine_sends; "" where Python sends
-        them (an engine of stage 1a encodes only)."""
-        if self.settings.encoder != NATIVE or not getattr(self.video, "engine_sends", True):
+        (stage 1b): with video.encoder "native" (or "auto", where it takes the engine:
+        :meth:`_auto_engine`) and video.engine_sends; "" where Python sends them (an engine of
+        stage 1a encodes only)."""
+        if not getattr(self.video, "engine_sends", True):
             return ""
-        engine = find_engine()
+        if self.settings.encoder == NATIVE:
+            engine = find_engine()
+        else:
+            engine = self._auto_engine()
         return engine if engine and can_send(engine) else ""
 
     def _open_transport(self, pid: int | None, beside: tuple[str, ...]) -> Any:
@@ -682,6 +730,8 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         would be, the next frame reconnects, or restarts a hung panel."""
         if link is not self.link or self._error is not None:
             return  # (an engine of before, or the failure is known already)
+        if link.ended_unasked:  # (it crashed, or was ended from outside: not the panel)
+            ENGINE_TROUBLE.note(str(error))
         if isinstance(error, EngineHung):
             depth = str(error)
             self._error = DecoderHung(
@@ -703,6 +753,8 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         if link is None or link.alive:
             return False
         if self._error is None:
+            if link.failed is None or link.ended_unasked:  # (it said no why: not the panel)
+                ENGINE_TROUBLE.note(link.reason())
             self._error = link.failed or DeviceError(
                 f"Libre Panel's engine stopped ({link.reason()})"
             )
@@ -796,11 +848,14 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             self._stop_encoder()
         rotate = rotation_of(size)
         model_id = self.model.id if self.model else ""
-        name = resolve_encoder(self.settings.encoder, self._ffmpeg, self._encoders_failed)
+        drawn = source is None and self.feed is None and self.range is None
+        auto = self._auto_engine() if drawn else ""  # ("auto": the download's own engine)
+        name = resolve_encoder(
+            self.settings.encoder, self._ffmpeg, self._encoders_failed, engine=bool(auto)
+        )
         engine = ""
         if name == NATIVE:  # Libre Panel's own engine, for the frames it draws (h264.NATIVE)
-            drawn = source is None and self.feed is None and self.range is None
-            engine = find_engine() if drawn else ""
+            engine = (auto or find_engine()) if drawn else ""
             if not engine and drawn and not self._engine_missing_said:
                 self._engine_missing_said = True
                 log.warning(
@@ -1251,7 +1306,12 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
 
     def _stopped(self, reason: str) -> None:
         """ffmpeg stopped by itself: a restart, unless it stopped before its first picture
-        and the next start goes another way (:meth:`_gave_up`)."""
+        and the next start goes another way (:meth:`_gave_up`). The engine as a program of
+        its own that only encodes is counted as one that ended unasked (:class:`EngineTrouble`;
+        the engine that has the panel is counted by its link)."""
+        encoder = self._leaving or self.encoder
+        if getattr(encoder, "name", "") == NATIVE and not isinstance(encoder, EngineStream):
+            ENGINE_TROUBLE.note(reason)
         if not self._gave_up(reason):
             self._restarting(reason)
 

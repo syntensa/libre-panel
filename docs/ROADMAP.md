@@ -144,8 +144,10 @@ and becomes the default only once it has proven itself on the panels; the old wa
 - [x] The engine takes what changed in each frame, makes the YUV there (byte for byte as
       before) and encodes it with libx264 told which blocks stayed the same; the bit rate
       changes in the running stream (`x264_encoder_reconfig`): no ffmpeg started anew, no
-      handover (`[video] encoder = "native"`: on the 12.3" at 50 frames a second the encoder
-      24 % of a core instead of 35, 33 MB instead of 82)
+      handover (on the 12.3" at 50 frames a second the encoder 24 % of a core instead of 35,
+      33 MB instead of 82). The default since 0.8.0: `[video] encoder = "auto"` takes the
+      engine the download carries, and leaves it out after it ended unasked three times in
+      ten minutes; `"native"` takes it always
 - [ ] The same for the cards' encoders: the engine hands the frame to the card's own encoder
       (Media Foundation's: AMD's, NVIDIA's, Intel's, on Windows), says the colours in every
       SPS and the SPS and PPS before every keyframe, x264 where it cannot start

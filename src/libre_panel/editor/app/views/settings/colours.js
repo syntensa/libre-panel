@@ -25,6 +25,7 @@ const ENCODER_NAMES = () => ({
   h264_nvenc: t("NVIDIA (h264_nvenc)"),
   h264_qsv: t("Intel (h264_qsv)"),
   libx264: t("x264 (processor)"),
+  native: t("Libre Panel's engine"),
 });
 
 const PATCH_NAMES = () => ({

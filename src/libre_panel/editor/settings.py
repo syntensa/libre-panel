@@ -46,6 +46,7 @@ from libre_panel.config import (
     place_at,
     user_themes_dir,
 )
+from libre_panel.devices import h264
 from libre_panel.devices.h264 import ENCODERS, ENGINE_ENCODERS, PIXELS, PROFILES, X264_PRESETS
 from libre_panel.editor import access
 from libre_panel.i18n import t
@@ -563,6 +564,8 @@ class Settings:
             )
         return {
             "platform": sys.platform,
+            # whether video.encoder "auto" takes Libre Panel's engine: the download carries it
+            "engine": bool(h264.auto_engine()),
             "providers": [
                 {"name": name, "source": source, "builtin": source == BUILT_IN}
                 for name, source in available_providers().items()

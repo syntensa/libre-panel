@@ -421,6 +421,8 @@ function ExperimentCard({ video }) {
   const stats = panel.data?.panel?.stats;
   const lines = (log.data?.lines || []).filter((line) => EXPERIMENT_LINE.test(line)).slice(-8);
   const measured = Object.entries(MEASURED).every(([key, value]) => video[key.slice(6)] === value);
+  // the engine encodes: chosen, or "auto" where the download carries it (h264.auto_engine)
+  const engine = video.encoder === "native" || (video.encoder === "auto" && Boolean(catalog?.engine));
   const row = (title, hint, key, choices, label = String) => html`<${SettingRow} title=${title} hint=${hint}>
     <${Segmented}
       label=${title}
@@ -439,7 +441,7 @@ function ExperimentCard({ video }) {
     ${row(t("Quality"), t("x264's crf: lower is sharper and needs more bits. 20 is the default, 18 near lossless to the eye, 25 the first measurement's. (NVIDIA's encoder takes it too; AMD's and Intel's take their quality from the cap.)"), "crf", QUALITIES)}
     ${row(t("Encoder speed"), t("x264's preset: ultrafast asks the least of the processor, veryfast compresses best."), "preset", PRESETS)}
     ${row(t("Profile"), t("auto is high on the 9.2\" and the 12.3\" (measured to show there; it compresses far better) and baseline elsewhere; main and high ask more of the panel's decoder."), "profile", ["auto", "baseline", "main", "high"], (value) => (value === "auto" ? t("auto") : value))}
-    <${SettingRow} title=${t("Encoder")} hint=${t("auto is the graphics card's encoder where it was measured to show and ffmpeg can start it (AMD's), else x264 on the processor. NVIDIA's and Intel's are an experiment. An encoder that cannot start says why in the log.")}>
+    <${SettingRow} title=${t("Encoder")} hint=${t("auto is Libre Panel's engine where the download carries it: x264 inside it, each picture sent on its time. Else the graphics card's encoder where it was measured to show and ffmpeg can start it (AMD's), else x264 on the processor. NVIDIA's and Intel's are an experiment. An encoder that cannot start says why in the log.")}>
       <${Select}
         label=${t("Encoder")}
         value=${video.encoder}
@@ -447,17 +449,17 @@ function ExperimentCard({ video }) {
         options=${[
           { value: "auto", label: t("auto") },
           { value: "libx264", label: t("x264 (processor)") },
-          { value: "native", label: t("Libre Panel's engine (experiment)") },
+          { value: "native", label: t("Libre Panel's engine") },
           { value: "h264_amf", label: t("AMD (h264_amf)") },
           { value: "h264_nvenc", label: t("NVIDIA (h264_nvenc)") },
           { value: "h264_qsv", label: t("Intel (h264_qsv)") },
         ]}
       />
     <//>
-    ${video.encoder === "native" && (catalog?.platform === "win32" || video.engine_encoder === "card")
+    ${engine && (catalog?.platform === "win32" || video.engine_encoder === "card")
       ? row(t("The engine's encoder"), t("x264 on the processor, or the graphics card's own encoder (AMD's, NVIDIA's or Intel's, through Windows' Media Foundation): the processor then only makes the frames' colours. Where the card's cannot start, x264 encodes, and the log says why."), "engine_encoder", ["x264", "card"], (value) => (value === "card" ? t("Graphics card (experiment)") : t("x264 (processor)")))
       : null}
-    ${video.encoder === "native"
+    ${engine
       ? html`<${SettingRow} title=${t("The engine sends the pictures")} hint=${t("On: Libre Panel's engine has the panel and sends it each picture on its time. Off: Libre Panel sends them, the engine only encodes.")}>
           <${Toggle} label=${t("The engine sends the pictures")} checked=${video.engine_sends !== false} onChange=${(on) => change({ "video.engine_sends": on })} />
         <//>

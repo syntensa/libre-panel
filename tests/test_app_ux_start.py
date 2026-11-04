@@ -180,7 +180,11 @@ def test_the_cards_take_turns_each_for_its_minutes_and_change_as_chosen(
 def test_who_updated_is_told_what_is_new_once_and_each_thing_is_done_right_there(
     app_url,  # noqa: F811
     isolated_home,
+    monkeypatch,
 ):
+    from libre_panel.devices import h264
+
+    monkeypatch.setattr(h264, "auto_engine", lambda: "/the/download/libre-panel-engine")
     choose_theme(isolated_home, "lumen")
     updated(isolated_home)
     with browser_page(app_url, "home", routes={"**/api/app": a_panel_app()}, allow=PICTURE) as page:
@@ -207,8 +211,10 @@ def test_who_updated_is_told_what_is_new_once_and_each_thing_is_done_right_there
         expect(terra).to_have_class(re.compile(r"\bpointed\b"))
         expect(terra).to_be_in_viewport()
         page.goto(f"{app_url}#/home")
-        # the engine: to where the panel's encoder is chosen
-        card.locator("[data-step='engine']").get_by_role("button", name="Try it").click()
+        # the engine: the panel's encoder now ("auto" with the download's), shown where chosen
+        engine = card.locator("[data-step='engine']")
+        expect(engine).to_have_class(re.compile(r"\bdone\b"))
+        engine.get_by_role("button", name="Show me").click()
         page.wait_for_function("location.hash === '#/settings/panel/panel-video-experiment'")
         page.goto(f"{app_url}#/home")
         # closed: kept by the server, for the window and any browser alike
@@ -222,11 +228,29 @@ def test_who_updated_is_told_what_is_new_once_and_each_thing_is_done_right_there
         expect(page.locator(".first-steps")).to_have_count(0)
 
 
-def test_the_news_leave_the_engine_out_where_the_panel_has_no_video_mode(
+def test_the_news_leave_the_engine_out_where_the_download_carries_none(
     app_url,  # noqa: F811
     isolated_home,
 ):
-    """Libre Panel's engine drives the video mode: a 3.5" has none, so it is not offered."""
+    """Without the downloads (pip) "auto" encodes through ffmpeg: no engine to tell of."""
+    choose_theme(isolated_home, "lumen")
+    updated(isolated_home)
+    with browser_page(app_url, "home", routes={"**/api/app": a_panel_app()}, allow=PICTURE) as page:
+        rows = page.locator(".news-card .first-step")
+        expect(rows).to_have_count(2)
+        assert rows.evaluate_all("r => r.map((e) => e.dataset.step)") == ["sizes", "terra"]
+
+
+def test_the_news_leave_the_engine_out_where_the_panel_has_no_video_mode(
+    app_url,  # noqa: F811
+    isolated_home,
+    monkeypatch,
+):
+    """Libre Panel's engine drives the video mode: a 3.5" has none, so it is not told of,
+    though the download carries it."""
+    from libre_panel.devices import h264
+
+    monkeypatch.setattr(h264, "auto_engine", lambda: "/the/download/libre-panel-engine")
     choose_theme(isolated_home, "libre-default")
     updated(isolated_home)
     small = {"**/api/app": a_panel_app(target='Turing 3.5"')}
