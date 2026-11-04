@@ -361,6 +361,24 @@ def test_the_blend_covers_hides_and_adds_as_it_says():
     assert (array[..., 3] == 255).all()  # alpha is not touched
 
 
+def test_the_taps_laid_over_a_frame_are_the_dust_the_frame_gets():
+    """What the engine is handed (Dust.taps_at, the frame not touched) and laid as it lays it
+    (dust.laid_over, on the frame in RGB) is the dust :meth:`Dust.apply` lays, frame by frame."""
+    canvas = frame()
+    drawn, handed = Dust(SIZE, {}), Dust(SIZE, {})
+    for n in range(150):
+        now = 100.0 + n / 50
+        own = drawn.apply(canvas, now)
+        taps = handed.taps_at(canvas, now)
+        if taps is None:
+            assert own is canvas
+            continue
+        laid = dust_module.laid_over(canvas.convert("RGB"), taps)
+        assert laid.tobytes() == own.tobytes(), n
+    assert handed.taps is not None and canvas.tobytes() == frame().tobytes()
+    assert dust_module.shown_shares().dtype == np.float32 and len(dust_module.shown_shares()) == 256
+
+
 def test_the_grains_move_in_a_helper_thread_to_the_same_dust():
     """Whoever moves the grains, the dust is the same: here the helper runs the job at once."""
 

@@ -9,6 +9,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::bar;
+use crate::dust::{Dust, Tap};
 use crate::globe;
 use crate::ring;
 use crate::wire::Boxes;
@@ -104,6 +105,9 @@ pub struct Layer {
     fill: Option<[u8; 4]>,
     /// Cut from sources (Scene::view): no pixels kept, laid from theirs.
     cuts: Option<Box<Cuts>>,
+    /// The dust over the frame (dust.rs): no pixels kept, its taps laid on what lies under
+    /// them, in the blocks they lie in only.
+    dust: Option<Box<Dust>>,
 }
 
 /// How a layer cut from sources (Scene::view) is laid from their pixels, without pixels of
@@ -223,6 +227,7 @@ impl Layer {
             globe: None,
             fill: None,
             cuts: None,
+            dust: None,
         })
     }
 
@@ -251,6 +256,7 @@ impl Layer {
             globe: None,
             fill: None,
             cuts: None,
+            dust: None,
         })
     }
 
@@ -278,6 +284,7 @@ impl Layer {
             globe: None,
             fill: Some(rgba),
             cuts: None,
+            dust: None,
         })
     }
 
@@ -337,6 +344,15 @@ enum Ground {
 struct Under {
     below: Vec<u32>,
     pixels: Vec<u8>,
+}
+
+/// A layer of a frame as its blocks are composed (Scene::frame): its number, where it changes
+/// the frame, whether it is new in the frame, whether it is the dust.
+struct Lying {
+    id: u32,
+    cut: Option<Rect>,
+    fresh: bool,
+    dust: bool,
 }
 
 pub struct Scene {
@@ -429,6 +445,29 @@ impl Scene {
         rgba: [u8; 4],
     ) -> Result<(), String> {
         let layer = Layer::filled(x, y, w, h, rgba)?;
+        self.layer(id, layer);
+        Ok(())
+    }
+
+    /// The dust of `taps` over the frame (dust.rs), as layer `id`, for the frames to come:
+    /// `shown` says how much of a grain shows over a pixel of each brightness.
+    pub fn dust(&mut self, id: u32, shown: [f32; 256], taps: &[Tap]) -> Result<(), String> {
+        let dust = Dust::new(shown, taps, (self.width, self.height), self.block)?;
+        let layer = Layer {
+            x: 0,
+            y: 0,
+            w: self.width,
+            how: How::Over,
+            pixels: Vec::new(),
+            part: dust.part,
+            ring: None,
+            bar: None,
+            sources: Vec::new(),
+            globe: None,
+            fill: None,
+            cuts: None,
+            dust: Some(Box::new(dust)),
+        };
         self.layer(id, layer);
         Ok(())
     }
@@ -626,6 +665,7 @@ impl Scene {
             globe: None,
             fill: None,
             cuts: Some(Box::new(Cuts::of(parts, w, h))),
+            dust: None,
         };
         self.layer(id, layer);
         Ok(())
@@ -779,10 +819,24 @@ impl Scene {
         self.whole = false;
         let mut boxes = Vec::new();
         if let Some(marked) = marked {
-            // each row of blocks: the layers of the frame that reach into it
+            // the frame's layers as its blocks are composed (worked out once, not for each
+            // block), and for each row of blocks those that reach into it
+            let lying: Vec<Lying> = self
+                .order
+                .iter()
+                .map(|id| {
+                    let layer = &self.layers[id];
+                    Lying {
+                        id: *id,
+                        cut: self.cut(layer),
+                        fresh: fresh.contains(id),
+                        dust: layer.dust.is_some(),
+                    }
+                })
+                .collect();
             let mut reach: Vec<Vec<usize>> = vec![Vec::new(); self.rows];
-            for (k, id) in self.order.iter().enumerate() {
-                if let Some((_, y0, _, y1)) = self.cut(&self.layers[id]) {
+            for (k, l) in lying.iter().enumerate() {
+                if let Some((_, y0, _, y1)) = l.cut {
                     for row in reach
                         .iter_mut()
                         .take(y1.div_ceil(self.block))
@@ -797,7 +851,7 @@ impl Scene {
                 let (r0, r1) = (y0 / self.block, y1.div_ceil(self.block));
                 for (r, layers) in reach.iter().enumerate().take(r1).skip(r0) {
                     for c in x0 / self.block..x1.div_ceil(self.block) {
-                        self.compose_block(r, c, layers, &fresh, &mut pixels, (x0, y0, x1));
+                        self.compose_block(r, c, layers, &lying, &mut pixels, (x0, y0, x1));
                     }
                 }
                 if half {
@@ -854,6 +908,10 @@ impl Scene {
             .chain(order.iter().filter(|id| !old.contains(id)));
         for id in changed {
             // (a layer that went is still kept: it goes after this frame)
+            if let Some(dust) = self.layers.get(id).and_then(|l| l.dust.as_ref()) {
+                dust.blocks().for_each(|k| marked[k] = true); // (where its taps lie, alone)
+                continue;
+            }
             let Some((x0, y0, x1, y1)) = self.layers.get(id).and_then(|l| self.cut(l)) else {
                 continue;
             };
@@ -911,7 +969,7 @@ impl Scene {
         r: usize,
         c: usize,
         reach: &[usize],
-        fresh: &HashSet<u32>,
+        lying: &[Lying],
         out: &mut [u8],
         (bx0, by0, bx1): (usize, usize, usize),
     ) {
@@ -921,47 +979,54 @@ impl Scene {
             ((r + 1) * self.block).min(self.height),
         );
         let (w, h) = (x1 - x0, y1 - y0);
-        let over: Vec<u32> = reach
+        let index = r * self.cols + c;
+        let over: Vec<usize> = reach
             .iter()
-            .map(|&k| self.order[k])
-            .filter(|id| {
-                self.cut(&self.layers[id])
-                    .is_some_and(|(lx0, ly0, lx1, ly1)| {
+            .copied()
+            .filter(|&k| {
+                let l = &lying[k];
+                if l.dust {
+                    // (only where its taps lie)
+                    let dust = self.layers[&l.id].dust.as_ref();
+                    dust.is_some_and(|d| d.in_block(index))
+                } else {
+                    l.cut.is_some_and(|(lx0, ly0, lx1, ly1)| {
                         lx0 < x1 && lx1 > x0 && ly0 < y1 && ly1 > y0
                     })
+                }
             })
             .collect();
-        let index = r * self.cols + c;
+        let ids: Vec<u32> = over.iter().map(|&k| lying[k].id).collect();
         let start = match &self.under[index] {
-            Some(u) if u.pixels.len() == w * h * 3 && over.starts_with(&u.below) => u.below.len(),
+            Some(u) if u.pixels.len() == w * h * 3 && ids.starts_with(&u.below) => u.below.len(),
             _ => 0,
         };
         let mut pixels = match (&self.under[index], start) {
             (Some(u), s) if s > 0 => u.pixels.clone(),
             _ => self.ground_of((x0, y0, x1, y1)),
         };
-        // (below the first layer new in this frame: kept for the frames after)
+        // (below the first layer new in this frame, or the dust, which moves in most frames:
+        // kept for the frames after)
         let new_at = over
             .iter()
-            .position(|id| fresh.contains(id))
+            .position(|&k| lying[k].fresh || lying[k].dust)
             .unwrap_or(over.len());
-        for (k, id) in over.iter().enumerate().skip(start) {
-            if k == new_at && k > start {
+        for (j, &k) in over.iter().enumerate().skip(start) {
+            if j == new_at && j > start {
                 self.under[index] = Some(Under {
-                    below: over[..k].to_vec(),
+                    below: ids[..j].to_vec(),
                     pixels: pixels.clone(),
                 });
             }
-            lay(
-                &self.layers[id],
-                &self.sources,
-                &mut pixels,
-                (x0, y0, x1, y1),
-            );
+            let layer = &self.layers[&lying[k].id];
+            match &layer.dust {
+                Some(dust) => dust.lay(index, &mut pixels, (x0, y0, w)),
+                None => lay(layer, &self.sources, &mut pixels, (x0, y0, x1, y1)),
+            }
         }
         if new_at == over.len() && over.len() > start {
             self.under[index] = Some(Under {
-                below: over,
+                below: ids,
                 pixels: pixels.clone(),
             });
         }
@@ -2102,6 +2167,169 @@ mod tests {
             }
             let all = whole.frame(order.clone(), false).unwrap();
             assert_eq!(all.len(), 1);
+            assert!(
+                all[0].4 == canvas,
+                "frame {frame} differs from the same frame composed whole"
+            );
+        }
+    }
+
+    fn dusty(dice: &mut Dice, w: usize, h: usize) -> Vec<Tap> {
+        // some grains, a few taps each, some on the same pixel
+        let n = 1 + dice.roll(40) as usize;
+        (0..n)
+            .map(|_| {
+                let at = dice.roll((w * h) as u64) as u32;
+                let add = [0, 1, 2].map(|_| dice.roll(1960) as f32 / 10.0);
+                let cover = if dice.roll(2) == 0 {
+                    0.0
+                } else {
+                    dice.roll(100) as f32 / 260.0
+                };
+                Tap { at, add, cover }
+            })
+            .collect()
+    }
+
+    fn shown() -> [f32; 256] {
+        std::array::from_fn(|i| ((150.0f32 - i as f32) / 90.0f32).clamp(0.0, 1.0))
+    }
+
+    #[test]
+    fn dust_lies_where_its_taps_are_under_what_lies_over_it() {
+        let (w, h) = (64, 32);
+        let mut s = Scene::new(w, h, 16);
+        s.ground_colour([10, 20, 30]);
+        s.layer(
+            1,
+            Layer::new(0, 0, 32, 32, How::Over, rgba(32, 32, [90, 0, 0, 128])).unwrap(),
+        );
+        s.layer(
+            2,
+            Layer::new(40, 20, 4, 4, How::Solid, [200, 200, 200].repeat(16)).unwrap(),
+        );
+        let tap = |x: usize, y: usize| Tap {
+            at: (y * w + x) as u32,
+            add: [40.0, 40.0, 40.0],
+            cover: 0.0,
+        };
+        s.dust(10, shown(), &[tap(2, 2), tap(41, 21), tap(50, 5)])
+            .unwrap();
+        let first = s.frame(vec![1, 10, 2], false).unwrap();
+        assert_eq!(first.len(), 1); // (whole)
+        let pixel = |b: &(usize, usize, usize, usize, Vec<u8>), x: usize, y: usize| {
+            let at = ((y - b.1) * (b.2 - b.0) + (x - b.0)) * 3;
+            [b.4[at], b.4[at + 1], b.4[at + 2]]
+        };
+        let plain = pixel(&first[0], 5, 5);
+        assert_eq!(pixel(&first[0], 2, 2), plain.map(|v| v + 40)); // (dark: shown fully)
+        assert_eq!(pixel(&first[0], 41, 21), [200, 200, 200]); // (under the layer over it)
+        assert_eq!(pixel(&first[0], 50, 5), [50, 60, 70]);
+        // the next move: only the blocks of the taps that went and came
+        s.dust(11, shown(), &[tap(3, 3)]).unwrap();
+        let next = s.frame(vec![1, 11, 2], false).unwrap();
+        let rects: Vec<_> = next.iter().map(|b| (b.0, b.1, b.2, b.3)).collect();
+        assert_eq!(
+            rects,
+            vec![(0, 0, 16, 16), (48, 0, 64, 16), (32, 16, 48, 32)]
+        );
+        assert_eq!(pixel(&next[0], 2, 2), plain);
+        assert_eq!(pixel(&next[0], 3, 3), plain.map(|v| v + 40));
+        assert_eq!(pixel(&next[1], 50, 5), [10, 20, 30]);
+        // the same dust in the next frame: nothing anew; none at all: where it lay
+        assert!(s.frame(vec![1, 11, 2], false).unwrap().is_empty());
+        let gone = s.frame(vec![1, 2], false).unwrap();
+        assert_eq!(
+            gone.iter().map(|b| (b.0, b.1)).collect::<Vec<_>>(),
+            vec![(0, 0)]
+        );
+        assert!(s
+            .dust(
+                12,
+                shown(),
+                &[
+                    tap(0, 0),
+                    Tap {
+                        at: (w * h) as u32,
+                        ..tap(0, 0)
+                    }
+                ]
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn frames_with_dust_composed_where_they_changed_are_frames_composed_whole() {
+        let (w, h) = (96, 64);
+        let mut dice = Dice(11);
+        let mut kept = Scene::new(w, h, 16);
+        kept.ground_colour([12, 34, 56]);
+        let mut canvas = vec![0u8; w * h * 3];
+        let mut order: Vec<u32> = Vec::new();
+        let (mut next, mut dust) = (1u32, None);
+        let mut made: HashMap<u32, Layer> = HashMap::new();
+        let mut taps_of: HashMap<u32, Vec<Tap>> = HashMap::new();
+        for frame in 0..60 {
+            let mut now: Vec<u32> = Vec::new();
+            for id in &order {
+                if Some(*id) == dust {
+                    continue;
+                }
+                match dice.roll(6) {
+                    0 => {}
+                    1 => {
+                        let layer = dice.layer(w, h);
+                        made.insert(next, layer.clone());
+                        kept.layer(next, layer);
+                        now.push(next);
+                        next += 1;
+                    }
+                    _ => now.push(*id),
+                }
+            }
+            while now.len() < 10 {
+                let layer = dice.layer(w, h);
+                made.insert(next, layer.clone());
+                kept.layer(next, layer);
+                now.push(next);
+                next += 1;
+            }
+            // the dust: moved in most frames, the same in some, none in a few
+            match (dice.roll(5), dust) {
+                (0, Some(id)) => {
+                    let at = dice.roll(now.len() as u64 + 1) as usize;
+                    now.insert(at.min(now.len()), id);
+                }
+                (1, _) => dust = None,
+                _ => {
+                    let taps = dusty(&mut dice, w, h);
+                    kept.dust(next, shown(), &taps).unwrap();
+                    taps_of.insert(next, taps);
+                    let at = (dice.roll(now.len() as u64 + 1) as usize).min(now.len());
+                    now.insert(at, next);
+                    dust = Some(next);
+                    next += 1;
+                }
+            }
+            if dust.is_some_and(|id| !now.contains(&id)) {
+                dust = None;
+            }
+            order = now;
+            for (x0, y0, x1, y1, pixels) in kept.frame(order.clone(), false).unwrap() {
+                for y in y0..y1 {
+                    let row = &pixels[(y - y0) * (x1 - x0) * 3..(y - y0 + 1) * (x1 - x0) * 3];
+                    canvas[(y * w + x0) * 3..(y * w + x1) * 3].copy_from_slice(row);
+                }
+            }
+            let mut whole = Scene::new(w, h, 16);
+            whole.ground_colour([12, 34, 56]);
+            for id in &order {
+                match taps_of.get(id) {
+                    Some(taps) => whole.dust(*id, shown(), taps).unwrap(),
+                    None => whole.layer(*id, made[id].clone()),
+                }
+            }
+            let all = whole.frame(order.clone(), false).unwrap();
             assert!(
                 all[0].4 == canvas,
                 "frame {frame} differs from the same frame composed whole"

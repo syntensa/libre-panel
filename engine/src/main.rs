@@ -13,6 +13,7 @@
 //! engine composes it then (scene.rs), where it changed.
 
 mod bar;
+mod dust;
 mod encoder;
 mod globe;
 // (the card's pictures as the panels take them: mf.rs's, on Windows; its tests everywhere)
@@ -303,6 +304,11 @@ fn encode(options: Options) -> Result<(), String> {
                 scene.bar((id, light), bar, (x, y), &paint, &spans)?;
                 spent_layers += began.elapsed().as_secs_f64();
             }
+            Some(wire::Record::Dust { id, shown, taps }) => {
+                let began = Instant::now();
+                scene.dust(id, *shown, &taps)?;
+                spent_layers += began.elapsed().as_secs_f64();
+            }
             Some(wire::Record::Ring {
                 id,
                 ring,
@@ -401,7 +407,7 @@ fn main() -> ExitCode {
             // sources it grows from those it keeps, a graph's strip (scene.rs's grown); "bars", a
             // lit bar's picture and glow it makes for each value (bar.rs))
             println!(
-                "libre-panel-engine {} (x264 build {}; panel, scenes, rings, views, globes, cards, fills, laid, grown, bars)",
+                "libre-panel-engine {} (x264 build {}; panel, scenes, rings, views, globes, cards, fills, laid, grown, bars, dust)",
                 env!("CARGO_PKG_VERSION"),
                 x264::build()
             );

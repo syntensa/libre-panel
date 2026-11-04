@@ -72,6 +72,7 @@ from libre_panel.devices.engine import (
     grows_sources,
     lays_laid,
     makes_bars,
+    makes_dust,
     makes_fills,
     makes_globes,
     makes_rings,
@@ -636,6 +637,13 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         sender = getattr(self.encoder, "scenes", None)
         return self.takes_scenes and bool(getattr(sender, "rings", False))
 
+    @property
+    def makes_dust(self) -> bool:
+        """Whether the engine that composes the frames also lays the theme's dust over them
+        (render/scene.py's Dusting): a theme with dust goes to it as its layers too."""
+        sender = getattr(self.encoder, "scenes", None)
+        return self.takes_scenes and bool(getattr(sender, "dust", False))
+
     def _as_scene(self, frame: Image.Image) -> bool:
         """Whether ``frame`` goes to the encoder as its layers, its pixels not made here."""
         return isinstance(frame, SceneFrame) and self.takes_scenes
@@ -900,7 +908,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
                 rings=rings, views=layers and cuts_views(engine),
                 globes=layers and makes_globes(engine), fills=layers and makes_fills(engine),
                 laid=layers and lays_laid(engine), grown=layers and grows_sources(engine),
-                bars=layers and makes_bars(engine),
+                bars=layers and makes_bars(engine), dust=layers and makes_dust(engine),
             )  # fmt: skip
             if layers and not self._layers_said:  # (once: a new stream starts as often)
                 self._layers_said = True

@@ -188,6 +188,19 @@
   (`engine: the stream's encoder: ...`).
 
 **Lighter**
+- **SPUR's themes composed by the engine, their grid and their dust too: half the app's
+  load.** The SPUR themes have a grid beneath everything and dust falling into the depth over
+  all of it, and such frames were composed here, whole and in every frame (16 to 21 ms of the
+  main loop's time on the 9.2"), the dust laid over the whole frame, and went to the engine
+  as whole pictures, 2.8 MB each. The grid now goes to the engine as one more layer, and the
+  dust as what its grains cover at each move (some 25,000 pixels: where, what each brings,
+  how much of the pixel it covers), laid by the engine as it is laid here, to the bit, under
+  a message over it; the grains still move here. SPUR Focus on the 9.2" at 25 a second: the
+  app 45 % of a core instead of 97, the engine 46 instead of 34, and the dust moves 24 times
+  a second, as it is meant to, not 16 (the app did not keep up); SPUR Studio 43 % instead of
+  90, the engine 40 instead of 34. The engine composes the blocks that changed faster too
+  (where each layer lies is worked out once a frame, not in each block): 2.6 ms of a frame
+  of SPUR Focus instead of 3.9.
 - **Lit bars made by the engine.** A lit bar's light and glow (Lumen's progress and AI usage,
   Encore's progress) were made here for each value, 2 ms each time where the light of its
   length was kept, 6 to 7 where it was not, and went to the engine as pictures, 90 to 130 KB

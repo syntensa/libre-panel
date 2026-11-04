@@ -299,15 +299,29 @@ class Dust:
         ``shown`` is the frame the panel showed last (the stock is taken from it,
         else from ``canvas``), ``toast`` the toast on show and its age.
         """
+        taps = self.taps_at(canvas, now, shown, toast)
+        return canvas if taps is None else self._draw(canvas)
+
+    def taps_at(
+        self,
+        canvas: Image.Image,
+        now: float,
+        shown: Image.Image | None = None,
+        toast: tuple[Any, float] | None = None,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+        """What :meth:`apply` lays over ``canvas`` at ``now``, not laid: the taps (as
+        :attr:`taps`: the pixels, what they add, what they cover), None for none to lay. The
+        engine lays them where it composes the frame (render/scene.py's Dusting): ``canvas``
+        is asked for its pixels only where the stock is taken from it (no frame shown yet)."""
         if self.count <= 0 or canvas.size != (self.width, self.height):
-            return canvas
+            return None
         self._watch(
             now, shown if shown is not None and shown.size == canvas.size else canvas, toast
         )
         if self.sources is None:
-            return canvas
+            return None
         self._move(now)
-        return self._draw(canvas)
+        return self.taps
 
     # -- sources ----------------------------------------------------------------
 
@@ -599,28 +613,8 @@ class Dust:
         return out
 
     def _lay(self, array: np.ndarray) -> None:
-        """Lay the taps onto the frame ``array`` (RGBA): one gather, one blend, one scatter.
-
-        A tap blends towards what it brings by how much it covers: ``add`` is the colour a
-        disc brings (times its opacity), a fine grain only adds; an element in front lets
-        by ``show`` of either. Whole pixels at a time, as four float lanes: numpy is far
-        slower on the three of four bytes of a pixel, and the alpha lane does not change
-        (its ``add`` and ``cover`` are 0). There is nothing to clamp: ``add`` is at most
-        ``MAX_ADD`` and a pixel it shows on is at most ``HIDE[0]`` bright."""
         assert self.taps is not None
-        index, add, cover = self.taps
-        flat = array.view(np.uint32).reshape(-1)  # a pixel in one word: a gather, not row copies
-        pixels = flat[index]
-        rgb = pixels.view(np.uint8).reshape(-1, 4)  # the gathered copy, by channel
-        bright = np.maximum(rgb[:, 0], rgb[:, 1])
-        np.maximum(bright, rgb[:, 2], out=bright)
-        body = rgb.astype(np.float32)
-        lit = body * cover
-        np.subtract(add, lit, out=lit)
-        lit *= _SHOWN[bright][:, None]
-        lit += body
-        rgb[:] = lit.astype(np.uint8)
-        flat[index] = pixels
+        lay(array, self.taps)
 
     # -- areas ----------------------------------------------------------------
 
@@ -647,3 +641,47 @@ class Dust:
         x1, y1 = min(self.width, area["x"] + area["w"]), min(self.height, area["y"] + area["h"])
         if x1 > x0 and y1 > y0:
             mask[y0:y1, x0:x1] = value
+
+
+# -- laying ---------------------------------------------------------------------------
+
+
+def lay(array: np.ndarray, taps: tuple[np.ndarray, np.ndarray, np.ndarray]) -> None:
+    """Lay ``taps`` (Dust.taps) onto the frame ``array`` (RGBA): one gather, one blend, one
+    scatter.
+
+    A tap blends towards what it brings by how much it covers: ``add`` is the colour a
+    disc brings (times its opacity), a fine grain only adds; an element in front lets
+    by ``show`` of either. Whole pixels at a time, as four float lanes: numpy is far
+    slower on the three of four bytes of a pixel, and the alpha lane does not change
+    (its ``add`` and ``cover`` are 0). There is nothing to clamp: ``add`` is at most
+    ``MAX_ADD`` and a pixel it shows on is at most ``HIDE[0]`` bright. All the taps read the
+    pixels as they lay; where taps meet in a pixel, the last one is what it shows (the
+    engine lays them so too: engine/src/dust.rs)."""
+    index, add, cover = taps
+    flat = array.view(np.uint32).reshape(-1)  # a pixel in one word: a gather, not row copies
+    pixels = flat[index]
+    rgb = pixels.view(np.uint8).reshape(-1, 4)  # the gathered copy, by channel
+    bright = np.maximum(rgb[:, 0], rgb[:, 1])
+    np.maximum(bright, rgb[:, 2], out=bright)
+    body = rgb.astype(np.float32)
+    lit = body * cover
+    np.subtract(add, lit, out=lit)
+    lit *= _SHOWN[bright][:, None]
+    lit += body
+    rgb[:] = lit.astype(np.uint8)
+    flat[index] = pixels
+
+
+def laid_over(canvas: Image.Image, taps: tuple[np.ndarray, np.ndarray, np.ndarray]) -> Image.Image:
+    """``canvas`` (RGB) with ``taps`` laid over it, as a new picture (RGB): a frame of layers
+    composed here (render/scene.py's compose) as the engine lays its dust."""
+    array = np.array(canvas.convert("RGBA"))
+    lay(array, taps)
+    return Image.fromarray(array, "RGBA").convert("RGB")
+
+
+def shown_shares() -> np.ndarray:
+    """How much of a grain shows over a pixel of each brightness (256 shares, float32): what
+    the engine is told with each move's taps."""
+    return _SHOWN

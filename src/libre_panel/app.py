@@ -1559,6 +1559,8 @@ class MainLoop:
                     renderer.native_globes = layers  # (and its turning globes, likewise)
                     renderer.native_laid = layers  # (and its fans, from their rings and rotors)
                     renderer.native_bars = layers  # (and its lit bars and their glows)
+                    # and the theme's dust, where the engine lays it (render/scene.py's Dusting)
+                    renderer.native_dust = layers and getattr(display, "makes_dust", False)
                     if layers:
                         drawn, _ = renderer.render(snapshot, now, scene=True)
                     else:  # (as before: a renderer of a test or a plugin may take no more)

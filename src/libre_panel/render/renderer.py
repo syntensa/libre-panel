@@ -957,6 +957,9 @@ class Renderer:
         self.native_laid = False
         # ... and makes a lit bar's picture and glow for each value (scene.Bar), likewise
         self.native_bars = False
+        # ... and lays the theme's dust over the frame it composes (scene.Dusting): a theme
+        # with dust (SPUR's) goes as its layers too, its grains moved here
+        self.native_dust = False
         # ... and a card whose inside is one colour comes as its edges and that colour, which the
         # engine lays without pixels (render/scene.py's Filled; the fills property)
         self._fills = False
@@ -970,6 +973,7 @@ class Renderer:
         # moves every frame over a card): the same pieces need not be laid again.
         self._underlays = Kept("renderer.underlays", self.UNDERLAY_BYTES)
         self._grounds: tuple[RGBA | None, Image.Image] | None = None  # (_ground)
+        self._scene_ground: tuple[Image.Image, Image.Image] | None = None  # (_layers_ground)
         # Video panels take a frame every 20 ms. With background builds a
         # changed piece is built in a helper thread while frames keep going out
         # with the previous piece; the change shows a frame or two later.
@@ -1580,24 +1584,37 @@ class Renderer:
 
     def _layered(self, pieces: list[tuple[str, Piece]], dust: bool) -> bool:
         """Whether the engine can compose this frame of ``pieces`` as :meth:`_compose` does:
-        on the opaque ground of a frame in RGB, without a look or dust drawn over the frame
-        afterwards, of pieces it takes as they are (render/scene.py's ``layerable``)."""
+        on the opaque ground of the frame, without a look's sweep of light over the frame
+        afterwards (its grid is one more piece), of pieces it takes as they are
+        (render/scene.py's ``layerable``); with ``dust``, where it lays the dust too and the
+        dust's stock is taken from the frame the panel showed, as it is for a frame composed
+        here (the frame composed here, in RGBA for the dust, would give it another). A frame
+        with dust is composed here in RGBA, one without in RGB: the same colours (the paste
+        through a piece's alpha and light added each work on the channels alone), and the
+        engine's are those."""
+        theme = self.theme
         return (
-            self.look is None
-            and not dust
+            (self.look is None or self.look.light is None)
+            and (
+                not dust
+                or self.native_dust
+                and self.shown is not None
+                and self.shown.size == (theme.width, theme.height)
+            )
             and self.keep_static
-            and self._mode == "RGB"
             and self._opaque
             and all(scenes.layerable(piece) for _, piece in pieces)
         )
 
-    def _scene_frame(self, pieces: list[tuple[str, Piece]]) -> scenes.SceneFrame:
-        """The frame of ``pieces`` for the engine to compose: what changed is the engine's to
-        work out. The frame composed here last goes, with the pieces it was made of (on the
-        12.3" 5.5 MB and some more, kept the whole time the engine composed): one composed
-        here again (a transition, a message drawn here) is composed whole, once. What lay
-        under its pieces goes too: the frames composed here before the engine took them
-        (Lumen's eight at the start on the 12.3") left 7 MB of it, found by none after."""
+    def _scene_frame(
+        self, pieces: list[tuple[str, Piece]], dust: scenes.Dusting | None = None
+    ) -> scenes.SceneFrame:
+        """The frame of ``pieces`` for the engine to compose, ``dust`` over it: what changed is
+        the engine's to work out. The frame composed here last goes, with the pieces it was
+        made of (on the 12.3" 5.5 MB and some more, kept the whole time the engine composed):
+        one composed here again (a transition, a message drawn here) is composed whole, once.
+        What lay under its pieces goes too: the frames composed here before the engine took
+        them (Lumen's eight at the start on the 12.3") left 7 MB of it, found by none after."""
         self.damage = None
         self._handed = None
         self._last = None
@@ -1607,14 +1624,22 @@ class Renderer:
             self._forget_fills()
         self._swept = False
         self.scenes += 1
+        size = (self.theme.width, self.theme.height)
+        scene = scenes.Scene(size, self._layers_ground(), tuple(pieces), dust=dust)
+        return scenes.SceneFrame(scene)
+
+    def _layers_ground(self) -> tuple[int, int, int] | Image.Image:
+        """The ground of a frame of layers: the theme's colour, or its picture (RGB)."""
         color = self.color(self.theme.background_color)
         if self._background is None and color is not None:
-            ground: Any = tuple(color[:3])
-        else:
-            ground = self._ground()
-        return scenes.SceneFrame(
-            scenes.Scene((self.theme.width, self.theme.height), ground, tuple(pieces))
-        )
+            return (color[0], color[1], color[2])
+        ground = self._ground()
+        if ground.mode != "RGB":  # (frames composed here in RGBA, for the dust)
+            kept = self._scene_ground
+            if kept is None or kept[0] is not ground:
+                kept = self._scene_ground = (ground, ground.convert("RGB"))
+            ground = kept[1]
+        return ground
 
     # A card's pixels made here (render/scene.py's Filled: for a frame composed here, the app's
     # picture of the panel) go when nothing asked for them this long: the engine lays it without
@@ -2050,7 +2075,7 @@ class Renderer:
         if self.look is not None:
             self.look.compose(pieces, snapshot, now)  # the grid beneath, the sun's gloss on top
         if scene and self._layered(pieces, dust):
-            return self._scene_frame(pieces), boxes
+            return self._scene_frame(pieces, self._dust_over(pieces, now) if dust else None), boxes
         canvas = self._compose(pieces)
         # what changed since the frame before: the regions composed anew, where nothing but the
         # pieces changes the frame (dust moves all over it, a sweep of light over a part)
@@ -2129,15 +2154,28 @@ class Renderer:
         dust = (self.theme.look or {}).get("dust")
         return bool(dust and (self.continuous or self.preview))
 
-    def _dusted(self, canvas: Image.Image, now: float) -> Image.Image:
+    def _dust_of(self, size: tuple[int, int]) -> Dust:
         if self._dust is None:
             config = self.theme.look["dust"]  # type: ignore[index]
             colors = [self.color(c)[:3] for c in config["colors"]]  # type: ignore[index]
-            self._dust = Dust(canvas.size, config, colors)
+            self._dust = Dust(size, config, colors)
             self._dust_submit = _weakly(self._submit)  # (the dust is ours: no cycle back)
         # where a slow piece must not stall the video, the grains move in the helper thread too
         self._dust.submit = self._dust_submit if self.background_builds else None
-        return self._dust.apply(canvas, now, self.shown, self.toast)
+        return self._dust
+
+    def _dusted(self, canvas: Image.Image, now: float) -> Image.Image:
+        return self._dust_of(canvas.size).apply(canvas, now, self.shown, self.toast)
+
+    def _dust_over(self, pieces: list[tuple[str, Piece]], now: float) -> scenes.Dusting | None:
+        """The dust over the frame of ``pieces`` at ``now``, for the engine to lay: its grains
+        moved here as for a frame composed here (:meth:`_dusted`), None while there is none to
+        lay. (Its stock is taken from the frame shown: :meth:`_layered`.)"""
+        size = (self.theme.width, self.theme.height)
+        frame = scenes.Scene(size, self._layers_ground(), tuple(pieces))
+        canvas = scenes.Lazy(size, "RGB", lambda: scenes.compose(frame))  # (not asked for)
+        taps = self._dust_of(size).taps_at(canvas, now, self.shown, self.toast)
+        return None if taps is None else scenes.Dusting(len(pieces), taps)
 
     def _submit(self, job: Callable[[], Any]) -> Future:
         if self._builder is None:
