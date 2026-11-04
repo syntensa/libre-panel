@@ -661,76 +661,78 @@ def build_download(b: _Build, src: M.Source) -> None:
 
 
 def build_net(b: _Build, src: M.Source) -> None:
-    """UP and DOWN with the speed beside them, and the history of both: the upload above a
-    line, the download hanging below it. Where the module is small, it is the network module."""
+    """The network: how the PC is connected, the upload and the download with their speeds,
+    each by its arrow, and the history of both beside them, as the rows stand: the upload
+    above a line, the download hanging below it, each in its tone of the network's colour
+    with a dot at its newest end. No heading: what it shows is plain to see. Where the module
+    is small, it is the network module."""
     ref = _Ref(b, 596, 130, 540, floor=0.45, aspect=1.7)
     if not ref.ok:
         M.build_network(b, src)
         return
     b.card()
     color = b.tint("net")
-    left, right = ref.x(13), ref.right(16)
-    title = b.module["title"] or t("Net")
-    size = ref.s(26)
-    b.label("title", title, left, ref.cap(30, 26), size, color=color, width=ref.s(300))
-    width = M._width_per_size(b.style["text_font"], title.upper()) * size + max(
-        1, round(size * 0.14)
-    ) * len(title)
-    thin = max(1, round(1.5 * ref.g))
-    b.add("rect", "rule", x=round(left), y=round(ref.y(37)), w=round(width + ref.s(6)), h=thin,
-          color=M.mix(color, b.c("surface"), 0.55))  # fmt: skip
-    _link(b, ref, right, left + width + ref.s(24))
-    for i, (key, name) in enumerate((("net.up", t("Up")), ("net.down", t("Down")))):
-        baseline = (81, 125)[i]
+    up_tone = M.mix(color, b.c("text"), 0.62)  # the upload: the same green, paler
+    left, right = ref.x(20), ref.right(18)
+    _link(b, ref, left, ref.x(250))
+    chip, arrow = ref.s(32), ref.s(20)
+    value_right = ref.x(186)
+    for i, (key, name, icon, tone) in enumerate(
+        (("net.up", "up", "up", up_tone), ("net.down", "down", "down", color))
+    ):
+        baseline = (80, 118)[i]
         first = len(b.out)
-        b.label(name.lower(), name, left, ref.cap(baseline, 26), ref.s(26), width=ref.s(150))
-        b.value(
-            f"{name.lower()}-value",
-            key,
-            "{value:rate}",
-            ref.x(240),
-            ref.cap(baseline, 34),
-            ref.s(34),
-            align="right",
-            width=ref.s(150),
-        )
-        b.value(f"{name.lower()}-unit", key, "{value:rate_unit}", ref.x(246), ref.cap(baseline, 19),
-                ref.s(19), color=b.c("text3"), width=ref.s(80), font="text_font", tabular=False,
-                fallback="")  # fmt: skip
+        mid = ref.cap(baseline, 34) + CAP * ref.s(34) / 2
+        # its arrow on a disc of its tone, faint (each row says by its arrow what it is)
+        b.add("rect", f"{name}-chip", x=round(left), y=round(mid - chip / 2), w=chip, h=chip,
+              radius=chip // 2, color=M.mix(tone, b.c("surface"), 0.84))  # fmt: skip
+        _need(b.out[-1], key)
+        b.icon(f"{name}-icon", icon, left + (chip - arrow) / 2, mid - arrow / 2, arrow, tone)
+        _need(b.out[-1], key)
+        b.value(f"{name}-value", key, "{value:rate}", value_right, ref.cap(baseline, 34),
+                ref.s(34), align="right", width=value_right - left - chip - ref.s(8))  # fmt: skip
+        b.value(f"{name}-unit", key, "{value:rate_unit}", value_right + ref.s(7),
+                ref.cap(baseline, 18), ref.s(18), color=b.c("text3"), width=ref.s(70),
+                font="text_font", tabular=False, fallback="")  # fmt: skip
         for widget in b.out[first:]:
             widget["hide_if_missing"] = True
-    gx, gw = ref.x(392), right - ref.x(392)
+    gx = ref.x(268)
+    gw = right - gx
     if gw >= ref.s(40):
-        mid, half = ref.y(88), ref.s(38)
-        for name, key, down in (
-            ("up-history", "net.up", False),
-            ("down-history", "net.down", True),
+        top = ref.y(16)
+        bottom = ref.y(120)
+        mid = (top + bottom) / 2
+        half = (bottom - top) / 2
+        line = max(1.0, round(1.6 * ref.g, 1))
+        for name, key, down, tone in (
+            ("up-history", "net.up", False, up_tone),
+            ("down-history", "net.down", True, color),
         ):
             b.add("graph", name, x=round(gx), y=round(mid if down else mid - half), w=round(gw),
                   h=round(half), sensor=key, min=0, max=None, scale="sqrt",
-                  history=max(30, min(300, round(gw) // 2)), color=color, fill=True,
-                  fill_fade=True, smooth=True, line_width=max(1, round(2 * ref.g)),
+                  history=max(30, min(300, round(gw) // 2)), color=tone, fill=True,
+                  fill_fade=True, fill_alpha=0.28, smooth=True, line_width=line,
                   direction="down" if down else "up", inset=False,
-                  glow=round(0.35 * b.glow, 2), glow_radius=max(2, round(ref.g * 6)))  # fmt: skip
+                  end_dot=round(line * 1.7, 1), glow=round(0.3 * b.glow, 2),
+                  glow_radius=max(2, round(ref.g * 5)))  # fmt: skip
         b.add("rect", "axis", x=round(gx), y=round(mid), w=round(gw), h=max(1, round(ref.g)),
-              color=b.c("line"))  # fmt: skip
+              color=M.mix(b.c("line"), b.c("surface"), 0.7))  # fmt: skip
 
 
-def _link(b: _Build, ref: _Ref, right: float, room_from: float) -> None:
-    """How the PC is connected, at the right of the title: by cable or Wi-Fi and how fast
-    (``net.link.text``: "Wi-Fi · 866 Mbit/s"), and its symbol: a cable's plug, or Wi-Fi's arcs
-    lit as strong as its signal is (the icon ``link``). Nothing where it cannot be told."""
+def _link(b: _Build, ref: _Ref, x: float, right: float) -> None:
+    """How the PC is connected, at the top left from ``x`` (to ``right``): its symbol, a
+    cable's plug or Wi-Fi's arcs lit as strong as its signal is (the icon ``link``), and by
+    cable or Wi-Fi and how fast (``net.link.text``: "Wi-Fi · 866 Mbit/s"). Nothing where it
+    cannot be told."""
     size = ref.s(19)
     icon = ref.s(24)
-    mid = ref.y(30) - CAP * ref.s(26) / 2  # (the middle of the title's capitals)
-    text_right = right - icon - ref.s(8)
-    if text_right - room_from < ref.s(60):
-        return
-    b.icon("link", "link", right - icon, mid - icon / 2, icon, b.c("text3"))
+    mid = ref.y(30) - CAP * ref.s(26) / 2
+    b.icon("link", "link", x - ref.s(1), mid - icon / 2, icon, b.c("text3"))
     b.out[-1]["needs"] = "net.link.kind"
-    b.value("link-text", "net.link.text", "{value}", text_right, mid - CAP * size / 2, size,
-            color=b.c("text3"), align="right", width=text_right - room_from, font="text_font",
-            tabular=False, hide_if_missing=True, fallback="")  # fmt: skip
+    text_x = x + icon + ref.s(8)
+    b.value("link-text", "net.link.text", "{value}", text_x, mid - CAP * size / 2, size,
+            color=b.c("text3"), width=right - text_x, font="text_font", tabular=False,
+            hide_if_missing=True, fallback="")  # fmt: skip
 
 
 # -- a slot: one card of several ---------------------------------------------------------------

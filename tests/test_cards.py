@@ -635,6 +635,14 @@ def test_the_network_card_has_up_and_down_with_their_speeds_and_the_history_mirr
     assert up["direction"] == "up" and down["direction"] == "down" and not up["inset"]
     assert up["y"] + up["h"] <= down["y"] + 1 and up["scale"] == down["scale"] == "sqrt"
     assert parts["c1-axis"]["y"] == down["y"] or abs(parts["c1-axis"]["y"] - down["y"]) <= 1
+    # no heading; each row by its arrow, the upload above as its history is
+    assert not {"c1-title", "c1-rule"} & set(parts)
+    assert parts["c1-up-icon"]["icon"] == "up" and parts["c1-down-icon"]["icon"] == "down"
+    assert parts["c1-up-value"]["y"] < parts["c1-down-value"]["y"]
+    assert parts["c1-up-history"]["color"] != parts["c1-down-history"]["color"]  # two tones
+    assert parts["c1-down-icon"]["color"] == parts["c1-down-history"]["color"]
+    link, words = parts["c1-link"], parts["c1-link-text"]  # how it is connected, at the top left
+    assert link["x"] < words["x"] < up["x"] and words["y"] < parts["c1-up-value"]["y"]
 
 
 def test_a_small_network_card_is_the_network_module():

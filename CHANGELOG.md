@@ -204,6 +204,12 @@
   screen as a monitor keep the filter.
 
 **Better**
+- **Lumen's network card without its heading, finer.** "NET" over it and the words UP and
+  DOWN took the room and said what it shows. How the PC is connected (the symbol, "Wi-Fi ·
+  867 Mbit/s") stands at the top left now, the upload and the download each by its arrow on a
+  faint disc, and their history beside them is wider and taller: the upload above the line in
+  a paler green, the download below it in the network's green, each with a dot at its newest
+  end, and the rows in the order of the curves.
 - **Lumen's weather card without its heading, with the sun's way.** "Weather" over the
   temperature said what the card plainly shows: it is gone (a `title` of the theme's own
   still stands there), and the temperature is larger in its place. The sun is a picture now,

@@ -182,4 +182,4 @@ def test_the_net_card_says_how_the_pc_is_connected():
     icon = next(w for name, w in parts.items() if name.endswith("-link"))
     assert text["sensor"] == "net.link.text" and text["hide_if_missing"]
     assert icon["icon"] == "link" and "net.link.kind" in icon["needs"]
-    assert text["x"] < icon["x"]  # (the words, then the symbol at the card's edge)
+    assert icon["x"] < text["x"] and text["align"] == "left"  # at the top left: symbol, words

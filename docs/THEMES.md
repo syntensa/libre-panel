@@ -708,9 +708,13 @@ are flat thin lines in their colour: a card has no ridge, no bevel and no trough
   (`fan.cpu`; default `gpu.fan`), `color` sets its colour.
 - **`download`** (2 × 1): the [download widget](#downloads) in a card, with the
   `net` colour.
-- **`netcard`** (2 × 1): a slot of the download card and **`net`**, the network
-  as the Studio's NET section has it: UP and DOWN with the rate beside them and the
-  history of both, the upload above a line, the download hanging below it.
+- **`netcard`** (2 × 1): a slot of the download card and **`net`**, the network:
+  how the PC is connected at the top left (its symbol, a cable's plug or Wi-Fi's
+  arcs as strong as its signal, and `net.link.text`), the upload and the download
+  with their rates, each by its arrow on a faint disc of its tone, and beside them
+  the history of both as the rows stand, the upload above a line in a paler tone of
+  the `net` colour, the download hanging below it in the colour itself, each with a
+  dot at its newest end. It has no heading: what it shows is plain to see.
 
 **Slots.** `cards` holds the cards its `items` name, one per line (`playback`,
 `forecast`, `download`, `instrument`, `net`, ... any module kind but a slot), and
