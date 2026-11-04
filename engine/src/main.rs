@@ -226,6 +226,15 @@ fn encode(options: Options) -> Result<(), String> {
                 lit,
             }) => scene.ring_base(id, ring::Base::new(side, &geometry, groove, lit)?),
             Some(wire::Record::Source { id, w, h, pixels }) => scene.source(id, w, h, pixels)?,
+            Some(wire::Record::Grown {
+                id,
+                w,
+                h,
+                from,
+                shift,
+                keep,
+                rest,
+            }) => scene.grown(id, (w, h), from, (shift, keep), &rest)?,
             Some(wire::Record::Globe { id, tables }) => scene.globe(id, tables),
             Some(wire::Record::Fill {
                 id,
@@ -368,9 +377,10 @@ fn main() -> ExitCode {
             // globe's picture it makes for each step (globe.rs); "cards", --encoder card: the
             // graphics card's encoder where it opens, else x264 (encoder.rs); "fills", layers
             // all in one colour, a card's inside (scene.rs's Layer::filled); "laid", layers it
-            // lays from sources it keeps, a fan's ring and rotor (scene.rs's laid))
+            // lays from sources it keeps, a fan's ring and rotor (scene.rs's laid); "grown",
+            // sources it grows from those it keeps, a graph's strip (scene.rs's grown))
             println!(
-                "libre-panel-engine {} (x264 build {}; panel, scenes, rings, views, globes, cards, fills, laid)",
+                "libre-panel-engine {} (x264 build {}; panel, scenes, rings, views, globes, cards, fills, laid, grown)",
                 env!("CARGO_PKG_VERSION"),
                 x264::build()
             );

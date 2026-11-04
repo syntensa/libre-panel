@@ -63,6 +63,13 @@
 //!                     picture as Pillow's alpha_composite lays it, the kept sources staying
 //!                     while it does (a fan's ring and rotor, the rotor's other positions):
 //!                     scene.rs's `laid`
+//! kind 20, a source grown from another: a its number, b the length of what follows: w, h,
+//!                     the other's number, the other's column its first columns begin at, and
+//!                     how many of them (u32 each), then the pixels of the rest of its columns
+//!                     (RGBA), row by row: a source of kind 14 as it would come, its first
+//!                     columns the other's (a graph's strip grown from the one before), the
+//!                     other kept while a layer of the frame before is cut from it:
+//!                     scene.rs's `grown`
 //! ```
 //!
 //! On its stdout, with a panel of its own (`panel`): the same head, then b bytes:
@@ -139,6 +146,15 @@ pub enum Record {
         w: usize,
         h: usize,
         pixels: Vec<u8>,
+    },
+    Grown {
+        id: u32,
+        w: usize,
+        h: usize,
+        from: u32,
+        shift: usize,
+        keep: usize,
+        rest: Vec<u8>,
     },
     View {
         id: u32,
@@ -638,6 +654,32 @@ pub fn read(input: &mut impl Read) -> io::Result<Option<Record>> {
                 kept,
             }))
         }
+        20 => {
+            let len = b as usize;
+            if !(20..=MOST_LAYER + 20).contains(&len) {
+                return Err(invalid("a grown source too large"));
+            }
+            let mut head = [0u8; 20];
+            whole(input, &mut head, "a grown source cut short")?;
+            let (w, h) = (u32_at(&head, 0) as usize, u32_at(&head, 4) as usize);
+            let keep = u32_at(&head, 16) as usize;
+            let rest = w
+                .checked_sub(keep)
+                .and_then(|n| n.checked_mul(h)?.checked_mul(4));
+            if rest != Some(len - 20) {
+                return Err(invalid("a grown source's pixels are not of its size"));
+            }
+            let rest = bytes(input, len - 20, "a grown source cut short")?;
+            Ok(Some(Record::Grown {
+                id: a,
+                w,
+                h,
+                from: u32_at(&head, 8),
+                shift: u32_at(&head, 12) as usize,
+                keep,
+                rest,
+            }))
+        }
         kind => Err(invalid(&format!("a record of kind {kind}"))),
     }
 }
@@ -802,6 +844,43 @@ mod tests {
             counted.extend(v.to_le_bytes());
         }
         assert!(read(&mut counted.as_slice()).is_err()); // (two parts said, one there)
+    }
+
+    #[test]
+    fn a_source_grown_from_another() {
+        // 3 x 2, its first column the other's from column 4, the rest (2 columns) after
+        let mut input = head(20, 6, 20 + 2 * 2 * 4);
+        for v in [3u32, 2, 5, 4, 1] {
+            input.extend(v.to_le_bytes());
+        }
+        input.extend(1..=16u8);
+        match read(&mut input.as_slice()).unwrap() {
+            Some(Record::Grown {
+                id,
+                w,
+                h,
+                from,
+                shift,
+                keep,
+                rest,
+            }) => {
+                assert_eq!((id, w, h, from, shift, keep), (6, 3, 2, 5, 4, 1));
+                assert_eq!(rest, (1..=16u8).collect::<Vec<_>>());
+            }
+            _ => panic!("not the source"),
+        }
+        for (keep, len) in [(4u32, 0usize), (1, 12), (0, 16)] {
+            // (more columns kept than it has; a rest of another length)
+            let mut wrong = head(20, 6, 20 + len as u32);
+            for v in [3u32, 2, 5, 4, keep] {
+                wrong.extend(v.to_le_bytes());
+            }
+            wrong.extend(std::iter::repeat_n(0u8, len));
+            assert!(
+                read(&mut wrong.as_slice()).is_err(),
+                "keep {keep}, {len} bytes"
+            );
+        }
     }
 
     #[test]

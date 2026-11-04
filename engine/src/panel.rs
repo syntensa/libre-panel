@@ -678,6 +678,22 @@ pub fn run(options: Options) -> Result<(), String> {
                     break Err(e);
                 }
             }
+            Record::Grown {
+                id,
+                w,
+                h,
+                from,
+                shift,
+                keep,
+                rest,
+            } => {
+                let Some(s) = stream.as_mut() else {
+                    break Err("a source before its stream".into());
+                };
+                if let Err(e) = s.scene.grown(id, (w, h), from, (shift, keep), &rest) {
+                    break Err(e);
+                }
+            }
             Record::View {
                 id,
                 x,

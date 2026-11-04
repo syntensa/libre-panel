@@ -4955,6 +4955,7 @@ class Renderer:
             out.paste(old.crop((shift, 0, shift + seam + pad, old.height)), (0, 0))
             cut = seam - begin + pad  # the tail's column of this one's column ``seam``
             out.paste(tail.crop((cut, 0, tail.width, tail.height)), (seam + pad, 0))
+            scenes.grew(out, old, shift, seam + pad)  # (an engine that keeps ``old`` grows it)
             return out
 
         strip.per_point, strip.every, strip.origin, strip.width = per_point, every, origin, width

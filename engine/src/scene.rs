@@ -469,6 +469,44 @@ impl Scene {
         Ok(())
     }
 
+    /// Source `id`, `w` x `h`, grown from source `from`: its first `keep` columns those of
+    /// `from` from column `shift` on, the rest `rest` (RGBA, row by row): a graph's strip grown
+    /// from the one before, which a layer of the frame before is cut from (render/renderer.py's
+    /// _grown_strip). The same source as one that came with all its pixels.
+    pub fn grown(
+        &mut self,
+        id: u32,
+        (w, h): (usize, usize),
+        from: u32,
+        (shift, keep): (usize, usize),
+        rest: &[u8],
+    ) -> Result<(), String> {
+        let base = self
+            .sources
+            .get(&from)
+            .ok_or_else(|| format!("source {id} grown from source {from}, which never came"))?;
+        if w == 0 || h == 0 || w > MOST_SOURCE || h > MOST_SOURCE || keep > w {
+            return Err(format!("a grown source of {w}x{h}"));
+        }
+        if base.h != h || shift.checked_add(keep).is_none_or(|end| end > base.w) {
+            return Err(format!(
+                "source {id} grown from {keep} columns of source {from} ({}x{}) at {shift}",
+                base.w, base.h
+            ));
+        }
+        if rest.len() != (w - keep) * h * 4 {
+            return Err(format!("a grown source's rest of {} bytes", rest.len()));
+        }
+        let (line, tail) = (base.w * 4, (w - keep) * 4);
+        let mut pixels = Vec::with_capacity(w * h * 4);
+        for y in 0..h {
+            let at = y * line + shift * 4;
+            pixels.extend_from_slice(&base.pixels[at..at + keep * 4]);
+            pixels.extend_from_slice(&rest[y * tail..(y + 1) * tail]);
+        }
+        self.source(id, w, h, pixels)
+    }
+
     /// Layer `id` at (x, y), `w` x `h` RGBA through its alpha, cut from sources: transparent
     /// where no part lies, each part pasted over those before it, nothing where it lies off its
     /// source (as Pillow crops a picture, also beyond its edges, and pastes the crop). It keeps
@@ -1657,6 +1695,67 @@ mod tests {
         s.frame(vec![3], false).unwrap();
         assert!(s.sources.is_empty()); // (gone with it)
         assert!(s.source(7, 2, 2, vec![0; 4]).is_err());
+    }
+
+    #[test]
+    fn a_source_grown_from_another_is_the_one_that_came_whole() {
+        // a strip, and the next grown from it: its first columns the strip's from a column on,
+        // the rest new (clear at the ends of rows too: where a row shows is worked out anew)
+        let mut seed = 0x0123_4567_89ab_cdefu64;
+        let mut picture = |w: usize, h: usize| -> Vec<u8> {
+            (0..w * h * 4)
+                .map(|i| {
+                    seed ^= seed << 13;
+                    seed ^= seed >> 7;
+                    seed ^= seed << 17;
+                    if i % 4 == 3 && (seed >> 8).is_multiple_of(3) {
+                        0
+                    } else {
+                        seed as u8
+                    }
+                })
+                .collect()
+        };
+        let (bw, h) = (40usize, 6usize);
+        let mut base = picture(bw, h);
+        for v in base.chunks_exact_mut(bw * 4).take(2) {
+            v.iter_mut().skip(3).step_by(4).for_each(|a| *a = 0); // (rows all clear)
+        }
+        for (w, shift, keep) in [
+            (45usize, 7usize, 30usize),
+            (12, 0, 12),
+            (10, 3, 0),
+            (40, 0, 40),
+        ] {
+            let rest = picture(w - keep, h);
+            let whole: Vec<u8> = (0..h)
+                .flat_map(|y| {
+                    let row = &base[(y * bw + shift) * 4..(y * bw + shift + keep) * 4];
+                    let tail = &rest[y * (w - keep) * 4..(y + 1) * (w - keep) * 4];
+                    row.iter().chain(tail).copied().collect::<Vec<u8>>()
+                })
+                .collect();
+            let mut s = Scene::new(64, 32, 16);
+            s.source(1, bw, h, base.clone()).unwrap();
+            s.grown(2, (w, h), 1, (shift, keep), &rest).unwrap();
+            s.source(3, w, h, whole).unwrap();
+            let (grown, sent) = (&s.sources[&2], &s.sources[&3]);
+            assert!(
+                grown.pixels == sent.pixels,
+                "{w} columns, {keep} kept from {shift}"
+            );
+            assert_eq!(grown.shown, sent.shown);
+            assert_eq!((grown.w, grown.h), (w, h));
+        }
+        let mut s = Scene::new(64, 32, 16);
+        s.source(1, bw, h, base.clone()).unwrap();
+        let rest = picture(5, h);
+        assert!(s.grown(2, (10, h), 9, (0, 5), &rest).is_err()); // (from one that never came)
+        assert!(s.grown(2, (10, h), 1, (36, 5), &rest).is_err()); // (beyond its columns)
+        assert!(s.grown(2, (10, h + 1), 1, (0, 5), &rest).is_err()); // (of another height)
+        assert!(s.grown(2, (11, h), 1, (0, 5), &rest).is_err()); // (a rest of another length)
+        assert!(s.grown(2, (4, h), 1, (0, 5), &rest).is_err()); // (more kept than it has)
+        assert!(!s.sources.contains_key(&2));
     }
 
     #[test]

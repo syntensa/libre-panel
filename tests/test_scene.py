@@ -487,6 +487,44 @@ def test_a_graph_s_window_is_cut_by_the_engine_from_its_strip_sent_once():
     assert fifth[1][3][20:] == phase.crop((8, 0, 18, 6)).tobytes()
 
 
+def test_a_strip_grown_from_one_the_engine_keeps_goes_as_its_new_columns():
+    """A graph's next strip, its first columns the one before's (Renderer._grown_strip), goes
+    to an engine that grows pictures as the rest of its columns, while the engine keeps the
+    one before (a layer of the frame before is cut from it); else as all of it."""
+    sender = engines.SceneSender(views=True, grown=True)
+    old = strip(40, 6)
+    new = Image.new("RGBA", (36, 6), (0, 0, 0, 0))
+    new.paste(old.crop((10, 0, 35, 6)), (0, 0))  # (its first 25 columns: the old one's from 10)
+    new.paste(strip(11, 6).transpose(Image.Transpose.FLIP_TOP_BOTTOM), (25, 0))
+    scenes.grew(new, old, 10, 25)
+
+    def window(picture, x):
+        cut = scenes.viewed((10, 6), [(picture, x, 0, 0, 0, 10, 6)])
+        return Piece(cut.layer, 2, 3, native=cut)
+
+    first = heads(sender.records(scene_of(window(old, 20)), 0, None))
+    assert [k for k, *_ in first] == [engines.GROUND, engines.SOURCE, engines.VIEW, engines.SCENE]
+    second = heads(sender.records(scene_of(window(new, 12)), 1, None))
+    assert [k for k, *_ in second] == [engines.GROWN, engines.VIEW, engines.SCENE]
+    kind, number, length, data = second[0]
+    assert struct.unpack("<5I", data[:20]) == (36, 6, first[1][1], 10, 25)
+    assert data[20:] == new.crop((25, 0, 36, 6)).tobytes() and length == 20 + 11 * 6 * 4
+    assert sender.grown_sources == 1 and struct.unpack("<I", second[1][3][20:24])[0] == number
+    # the one before gone from the engine (no layer of the frame before is cut from it), or
+    # gone here, or an engine that grows none: all of it
+    again = Image.new("RGBA", (36, 6), (0, 0, 0, 0))
+    scenes.grew(again, old, 10, 25)
+    sender.records(scene_of(window(new, 13)), 2, None)  # (the old one let go)
+    third = heads(sender.records(scene_of(window(again, 12)), 3, None))
+    assert [k for k, *_ in third] == [engines.SOURCE, engines.VIEW, engines.SCENE]
+    plain = engines.SceneSender(views=True)
+    plain.records(scene_of(window(old, 20)), 0, None)
+    assert heads(plain.records(scene_of(window(new, 12)), 1, None))[0][0] == engines.SOURCE
+    lost = Image.new("RGBA", (36, 6), (0, 0, 0, 0))
+    scenes.grew(lost, strip(40, 6), 10, 25)  # (its base gone at once: nothing holds it)
+    assert scenes.growth(lost) is None and scenes.growth(new)[1:] == (10, 25)
+
+
 def test_a_laid_picture_is_its_parts_laid_over_each_other_its_pixels_made_when_asked():
     ring, rotor = strip(12, 12), strip(4, 4).transpose(Image.Transpose.FLIP_LEFT_RIGHT)
     made = scenes.laid((12, 12), [(ring, 0, 0), (rotor, 4, 4), (rotor, 10, -1)])
@@ -644,7 +682,7 @@ class Fed(Layered):
     ``half``; the renderer's own frame of each is kept to compare."""
 
     def __init__(self, engine, size, out, half, rings=False, views=False, globes=False,
-                 fills=False, laid=False):  # fmt: skip
+                 fills=False, laid=False, grown=False):  # fmt: skip
         super().__init__()
         self.half, self.makes_rings = half, rings
         self.proc = subprocess.Popen(
@@ -652,7 +690,7 @@ class Fed(Layered):
              "--crf", "20", "--kbit", "4000", "--keyint", "250", "--dump-rgb", str(out)],
             stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
         )  # fmt: skip
-        self.sender = engines.SceneSender(rings, views, globes, fills, laid)
+        self.sender = engines.SceneSender(rings, views, globes, fills, laid, grown)
         self.own, self.n = [], 0
 
     def show(self, frame, region=None):
@@ -683,7 +721,9 @@ class Fed(Layered):
                                                         "fills"),
      ("lumen-1920x720", False, False, False, "laid"), ("lumen-1920x720", True, False, True,
                                                        "laid"),
-     ("arena-1920x720", False, False, False, "laid")],
+     ("arena-1920x720", False, False, False, "laid"), ("lumen-1920x720", False, False, False,
+                                                       "grown"),
+     ("arena-1920x720", True, False, True, "grown")],
 )  # fmt: skip
 def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
     engine, tmp_path, theme, half, rings, toast, views
@@ -701,12 +741,15 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
     fills = views == "fills"  # (and the cards' insides laid by the engine as their colour)
     if fills and not engines.makes_fills(engine):
         pytest.skip("needs libre-panel-engine that lays fills (cargo build --release)")
-    laid = views == "laid"  # (and the fans laid by the engine from their rings and rotors)
+    laid = views in ("laid", "grown")  # (and the fans and texts laid by the engine)
     if laid and not engines.lays_laid(engine):
         pytest.skip("needs libre-panel-engine that lays layers (cargo build --release)")
+    grown = views == "grown"  # (and the graphs' strips grown by the engine from those before)
+    if grown and not engines.grows_sources(engine):
+        pytest.skip("needs libre-panel-engine that grows sources (cargo build --release)")
     clock, host = Clock(1000.0), PluginHost()
     display = Fed(engine, (1920, 720), tmp_path / "frames.rgb", half, rings, bool(views), globes,
-                  fills, laid)  # fmt: skip
+                  fills, laid, grown)  # fmt: skip
     loop = loop_with(theme, display, clock, host)
     try:
         run(loop, clock, 4)
@@ -749,6 +792,49 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
                 for _wid, p in f.scene.pieces if isinstance(p.native, scenes.Laid)]  # fmt: skip
         assert len(lain) >= 25 and loop.renderer.native_laid
         assert display.sender.laid_layers >= 25  # (they went as LAID records)
+
+
+def test_the_engine_grows_a_strip_from_the_one_before_as_it_was_drawn(engine, tmp_path):
+    """Strips each grown from the one before (their first columns the old one's from a column
+    on, the rest new), their windows cut by the engine as they scroll: the frames are those
+    composed here, pixel for pixel, and each strip after the first went as its new columns."""
+    if not engines.grows_sources(engine):
+        pytest.skip("needs libre-panel-engine that grows sources (cargo build --release)")
+    out = tmp_path / "frames.rgb"
+    proc = subprocess.Popen(
+        [engine, "encode", "--size", "64x32", "--turn", "0", "--fps", "25", "--crf", "20",
+         "--kbit", "4000", "--keyint", "250", "--dump-rgb", str(out)],
+        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+    )  # fmt: skip
+    sender, numbers = engines.SceneSender(views=True, grown=True), iter(range(1, 1 << 30))
+
+    def noise(w, h):  # (pixels of every kind, see-through ones among them)
+        seed = next(numbers)
+        return Image.frombytes("RGBA", (w, h), bytes((seed * 7919 + i * i * 31) % 251 for i in
+                                                     range(w * h * 4)))  # fmt: skip
+
+    strip, own = noise(80, 20), []
+    card = piece((9, 9, 9, 255), size=(64, 32))
+    for n in range(8):
+        if n:  # (grown from the one before, as Renderer._grown_strip makes it)
+            shift, keep = 3 + n % 2, 60 - n
+            grown = Image.new("RGBA", (80, 20), (0, 0, 0, 0))
+            grown.paste(strip.crop((shift, 0, shift + keep, 20)), (0, 0))
+            grown.paste(noise(80 - keep, 20), (keep, 0))
+            scenes.grew(grown, strip, shift, keep)
+            strip = grown
+        cut = scenes.viewed((40, 20), [(strip, 5 + n, 0, 0, 0, 40, 20)])
+        scene = scene_of(card, Piece(cut.layer, 10, 6, native=cut), size=(64, 32))
+        for part in sender.records(scene, n, None):
+            proc.stdin.write(part)
+        own.append(scenes.compose(scene).tobytes())
+    proc.stdin.close()
+    assert proc.wait(30) == 0
+    made, size = out.read_bytes(), 64 * 32 * 3
+    assert len(made) == size * 8
+    for n, frame in enumerate(own):
+        assert made[n * size : (n + 1) * size] == frame, f"frame {n} is not the renderer's"
+    assert sender.grown_sources == 7
 
 
 def test_a_video_panel_shows_frames_of_layers_the_engine_composed(engine, monkeypatch, caplog):

@@ -173,6 +173,12 @@
   (`engine: the stream's encoder: ...`).
 
 **Lighter**
+- **A graph's next strip grown by the engine from the one before.** A strip made of the one
+  before (its first columns the old one's, the rest drawn anew: about a tenth of it each
+  second) went to the engine whole, some 760 KB each time on the 12.3". The engine grows it
+  from the one it keeps now, and only the rest of its columns goes to it, the same pixels.
+  Arena on the 12.3" (its graphs' ranges stand): 27 KB less to the engine a frame; where a
+  graph's range moves, its strip is drawn and sent whole, as before.
 - **Texts of letters laid by the engine: a tenth less of the app's processor with Lumen.** A
   text laid letter by letter (equal-width digits, letter spacing, a finish's letters: Lumen's
   gliding numbers and its clocks) was laid here and went to the engine as a picture, anew

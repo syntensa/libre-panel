@@ -49,7 +49,7 @@ from libre_panel.devices.h264 import (
 )
 from libre_panel.i18n import t
 from libre_panel.render import moving
-from libre_panel.render.scene import Filled, Globe, Laid, View
+from libre_panel.render.scene import Filled, Globe, Laid, View, growth
 
 if TYPE_CHECKING:
     from libre_panel.render.renderer import Piece
@@ -68,7 +68,7 @@ STREAM, END, PICTURE = 5, 6, 8
 # a turning globe and a layer of it at a step of its turn (globe.rs); a layer of one colour; a
 # layer laid from pictures it keeps (a fan's ring and rotor)
 GROUND, LAYER, SCENE, RING, RING_LAYER, SOURCE, VIEW = 9, 10, 11, 12, 13, 14, 15
-GLOBE, GLOBE_LAYER, FILL, LAID = 16, 17, 18, 19
+GLOBE, GLOBE_LAYER, FILL, LAID, GROWN = 16, 17, 18, 19, 20
 # how a layer goes on: RGBA through its alpha, RGB as it is (a video's frame), RGB light added
 OVER, SOLID, ADD = 0, 1, 2
 # A reply may wait for the picture being sent (5 s a block at most, 1.5 s for room in the
@@ -143,6 +143,12 @@ def lays_laid(engine: str) -> bool:
     return "laid" in _can(engine)
 
 
+def grows_sources(engine: str) -> bool:
+    """Whether ``engine`` grows a picture from one it keeps (render/scene.py's grew: a graph's
+    strip from the one before)."""
+    return "grown" in _can(engine)
+
+
 def encodes_on_cards(engine: str) -> bool:
     """Whether ``engine`` takes ``--encoder card`` (video.engine_encoder: the graphics card's
     encoder where it opens, else x264); one of before does not start with it."""
@@ -169,13 +175,14 @@ class SceneSender:
 
     def __init__(
         self, rings: bool = False, views: bool = False, globes: bool = False, fills: bool = False,
-        laid: bool = False,
+        laid: bool = False, grown: bool = False,
     ) -> None:  # fmt: skip
         self.rings = rings  # the engine makes a lit gauge's ring (render/lit.py's Ring)
         self.views = views  # ... and cuts a layer from pictures it keeps (render/scene.py's View)
         self.globes = globes  # ... and makes a turning globe's pictures (render/scene.py's Globe)
         self.fills = fills  # ... and lays a layer of one colour (render/scene.py's Filled)
         self.laid = laid  # ... and lays a layer from pictures it keeps (render/scene.py's Laid)
+        self.grown = grown  # ... and grows a picture from one it keeps (render/scene.py's grew)
         self._ground: Any = None
         # each piece's layers (and the ring, or the pictures, they are of): what the engine has
         self._pieces: dict[int, tuple[Piece, list[int], Any, tuple[int, ...], int | None]] = {}
@@ -187,6 +194,7 @@ class SceneSender:
         self.bytes = 0
         self.filled = 0  # (of them, layers of one colour)
         self.laid_layers = 0  # (... and layers laid from pictures the engine keeps)
+        self.grown_sources = 0  # pictures grown from one the engine keeps
 
     def _layer(
         self, parts: list[bytes], image: Image.Image, x: int, y: int, how: int
@@ -293,18 +301,46 @@ class SceneSender:
         self, parts: list[bytes], image: Image.Image, now: dict[int, tuple[Image.Image, int]]
     ) -> int:
         """The number of the picture the engine keeps for ``image`` (RGBA), sent the first time
-        and kept while the frames' layers are made of it."""
+        and kept while the frames' layers are made of it. One grown from a picture the engine
+        keeps (render/scene.py's grew: a graph's strip) goes as the rest of its columns."""
         key = id(image)
         hit = now.get(key) or self._sources.get(key)
         if hit is None or hit[0] is not image:
             number = next(self._numbers) & 0xFFFFFFFF
-            data = image.tobytes()
-            size = struct.pack("<II", image.width, image.height)
-            parts += [_head(SOURCE, number, len(size) + len(data)) + size, data]
+            grown = self._grown_from(image, now)
+            if grown is not None:
+                base, shift, keep = grown
+                data = image.crop((keep, 0, image.width, image.height)).tobytes()
+                head = struct.pack("<IIIII", image.width, image.height, base, shift, keep)
+                parts += [_head(GROWN, number, len(head) + len(data)) + head, data]
+                self.grown_sources += 1
+            else:
+                data = image.tobytes()
+                size = struct.pack("<II", image.width, image.height)
+                parts += [_head(SOURCE, number, len(size) + len(data)) + size, data]
             self.bytes += len(data)
             hit = (image, number)
         now[key] = hit
         return hit[1]
+
+    def _grown_from(
+        self, image: Image.Image, now: dict[int, tuple[Image.Image, int]]
+    ) -> tuple[int, int, int] | None:
+        """Where the engine grows ``image`` from (the number of the picture it keeps, the
+        column there its first columns begin at, how many), or None: it takes all of it."""
+        grown = growth(image) if self.grown else None
+        if grown is None:
+            return None
+        base, shift, keep = grown
+        # (kept by the engine: sent for this frame, or of a layer of the frame before)
+        held = now.get(id(base)) or self._sources.get(id(base))
+        if held is None or held[0] is not base or base.mode != "RGBA":
+            return None
+        if base.height != image.height or not 0 <= keep <= image.width:
+            return None
+        if shift < 0 or shift + keep > base.width:
+            return None
+        return held[1], shift, keep
 
     def _globe(
         self, parts: list[bytes], piece: Piece, sources: dict[int, tuple[Image.Image, int]],
@@ -850,6 +886,7 @@ class EngineStream:
         self, link: EngineLink, size: tuple[int, int], options: list[str], block: int,
         lead: float | None = None, scenes: bool = False, rings: bool = False,
         views: bool = False, globes: bool = False, fills: bool = False, laid: bool = False,
+        grown: bool = False,
     ) -> None:  # fmt: skip
         self.link, self.size = link, size
         # with ``scenes``: frames of layers go to the engine as them (render/scene.py); the
@@ -857,7 +894,7 @@ class EngineStream:
         # engine makes a lit gauge's ring itself, with ``views`` it cuts a graph's window, with
         # ``globes`` it makes a turning globe's pictures, with ``fills`` it lays a card's inside
         # as its colour, with ``laid`` a fan from its ring and its rotor
-        self.scenes = SceneSender(rings, views, globes, fills, laid) if scenes else None
+        self.scenes = SceneSender(rings, views, globes, fills, laid, grown) if scenes else None
         # how long after the time a frame was drawn for the engine sends its picture (seconds;
         # None: the engine's own choice, h264.engine_lead's)
         self.lead = lead

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import threading
 import time
+import weakref
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
@@ -173,6 +174,28 @@ def viewed(size: tuple[int, int], parts: list[Cut] | tuple[Cut, ...]) -> View:
         return out
 
     return View(Lazy(size, "RGBA", make), parts)
+
+
+# (a picture's attribute, set where it is made: Pillow's pictures are not keys of a dict)
+_GROWN = "_libre_panel_grown"
+
+
+def grew(image: Image.Image, base: Image.Image, shift: int, keep: int) -> None:
+    """Note that ``image``'s first ``keep`` columns are ``base``'s from column ``shift`` on (a
+    graph's strip grown from the one before: Renderer._grown_strip): an engine that keeps
+    ``base`` grows ``image`` from it and the rest of its columns (engine/src/scene.rs's grown),
+    instead of taking all of it. ``base`` is not kept alive by it."""
+    setattr(image, _GROWN, (weakref.ref(base), shift, keep))
+
+
+def growth(image: Image.Image) -> tuple[Image.Image, int, int] | None:
+    """What :func:`grew` noted of ``image``: the picture it grew from, the column its first
+    columns begin at there, how many; None for one not grown, or whose base is gone."""
+    noted = getattr(image, _GROWN, None)
+    if noted is None:
+        return None
+    base = noted[0]()
+    return None if base is None else (base, noted[1], noted[2])
 
 
 def cut_columns(view: View, left: int, right: int) -> View:
