@@ -37,6 +37,8 @@ pub struct Base {
     sweep: Vec<u32>,
     /// The light at the start of a closed ring, the same for every value whose tip is apart.
     start_patch: Option<(Rect, Vec<u8>)>,
+    /// What its blur works in, from one picture to the next.
+    scratch: Scratch,
 }
 
 /// A ring's geometry and colour, as lit.py has them.
@@ -98,6 +100,7 @@ impl Base {
             angle,
             sweep,
             start_patch: None,
+            scratch: Scratch::default(),
         })
     }
 
@@ -129,6 +132,7 @@ impl Base {
         let radius = (self.w - self.thickness) / 2.0;
         let reach = (self.stroke / 2.0 + 3.0 * self.halo).ceil() + 3.0;
         let tip_window = self.window(tip, reach);
+        let mut scratch = std::mem::take(&mut self.scratch);
         let mut patches = Vec::new();
         if gap * std::f64::consts::PI / 180.0 * radius < 2.0 * reach + 2.0 {
             // closed: the sweep's light has no start; its start the same at every value but
@@ -138,15 +142,19 @@ impl Base {
             let apart = t.2 <= outer.0 || outer.2 <= t.0 || t.3 <= outer.1 || outer.3 <= t.1;
             if apart {
                 if self.start_patch.is_none() {
-                    let patch = self.patch(frac, inner, outer);
+                    let patch = self.patch(frac, inner, outer, &mut scratch);
                     self.start_patch = Some((inner, patch));
                 }
                 patches.push(self.start_patch.clone().expect("made above"));
             } else {
-                patches.push((inner, self.patch(frac, inner, outer)));
+                patches.push((inner, self.patch(frac, inner, outer, &mut scratch)));
             }
         }
-        patches.push((tip_window.0, self.patch(frac, tip_window.0, tip_window.1)));
+        patches.push((
+            tip_window.0,
+            self.patch(frac, tip_window.0, tip_window.1, &mut scratch),
+        ));
+        self.scratch = scratch;
         for ((x0, y0, x1, y1), patch) in patches {
             let w = x1 - x0;
             for y in y0..y1 {
@@ -199,12 +207,12 @@ impl Base {
 
     /// The light of the arc of `frac` in the `inner` box, worked out from its coverage in
     /// `outer` (lit.py's patch(): light(_cover(...), colour, halo, box)): RGBA, row by row.
-    fn patch(&self, frac: f64, inner: Rect, outer: Rect) -> Vec<u8> {
+    fn patch(&self, frac: f64, inner: Rect, outer: Rect, scratch: &mut Scratch) -> Vec<u8> {
         let (ox0, oy0, ox1, oy1) = outer;
         let (ow, oh) = (ox1 - ox0, oy1 - oy0);
         let mask = self.cover(frac, outer);
         let cut: Vec<f32> = mask.iter().map(|m| (m * 255.0) as u8 as f32).collect();
-        let mut soft = blur(&cut, ow, oh, self.halo);
+        let soft = blur_in(&cut, ow, oh, self.halo, scratch);
         let scale = (1.0f64 / 255.0) as f32;
         soft.iter_mut().for_each(|v| *v *= scale);
         let (x0, y0, x1, y1) = inner;
@@ -287,40 +295,93 @@ fn box_radius(radius: f64) -> (usize, f64) {
 /// three down the columns, the edges held. Each pass runs down the lines a row at a time, all
 /// lines at once (the rows' passes on the picture turned): every line summed in the same order
 /// as dither._rows sums it, the same numbers.
+#[cfg(test)]
 fn blur(a: &[f32], w: usize, h: usize, radius: f64) -> Vec<f32> {
+    let mut scratch = Scratch::default();
+    blur_in(a, w, h, radius, &mut scratch).to_vec()
+}
+
+/// What a blur works in, kept from one to the next: its buffers grow to the largest picture
+/// blurred, and are not zeroed again (every number is written before it is read).
+#[derive(Default)]
+struct Scratch {
+    a: Vec<f32>,
+    b: Vec<f32>,
+    sums: Vec<f32>,
+}
+
+/// [`blur`] in `scratch`'s buffers: the blurred picture, `w` x `h`.
+fn blur_in<'a>(
+    a: &[f32],
+    w: usize,
+    h: usize,
+    radius: f64,
+    scratch: &'a mut Scratch,
+) -> &'a mut [f32] {
     let (side, frac) = box_radius(radius);
-    let mut t = transpose(a, w, h); // (h x w: its rows are the picture's columns ...)
+    let Scratch {
+        a: one,
+        b: other,
+        sums,
+    } = scratch;
+    transpose_into(a, w, h, one); // (h x w: its rows are the picture's columns ...)
     for _ in 0..3 {
-        t = down(&t, h, w, side, frac); // (... so these are the passes along its rows)
+        down_into(one, h, w, side, frac, sums, other); // (... so these are the passes along its rows)
+        std::mem::swap(one, other);
     }
-    let mut out = transpose(&t, h, w);
+    transpose_into(one, h, w, other);
+    std::mem::swap(one, other);
     for _ in 0..3 {
-        out = down(&out, w, h, side, frac);
+        down_into(one, w, h, side, frac, sums, other);
+        std::mem::swap(one, other);
     }
+    &mut one[..w * h]
+}
+
+#[cfg(test)]
+fn transpose(a: &[f32], w: usize, h: usize) -> Vec<f32> {
+    let mut out = Vec::new();
+    transpose_into(a, w, h, &mut out);
     out
 }
 
-fn transpose(a: &[f32], w: usize, h: usize) -> Vec<f32> {
-    let mut out = vec![0.0; w * h];
+fn transpose_into(a: &[f32], w: usize, h: usize, out: &mut Vec<f32>) {
+    out.resize(w * h, 0.0);
     for y in 0..h {
         for x in 0..w {
             out[x * h + y] = a[y * w + x];
         }
     }
-    out
 }
 
 /// One pass down each column of `a` (`w` wide, `h` high), as dither._rows makes one along a
 /// row: the mean over `side` pixels each way and `frac` of the next, from running sums in
 /// single precision, the ends held.
+#[cfg(test)]
 fn down(a: &[f32], w: usize, h: usize, side: usize, frac: f64) -> Vec<f32> {
+    let (mut sums, mut out) = (Vec::new(), Vec::new());
+    down_into(a, w, h, side, frac, &mut sums, &mut out);
+    out
+}
+
+/// [`down`] into `out` (`w` x `h`), its running sums in `c`.
+fn down_into(
+    a: &[f32],
+    w: usize,
+    h: usize,
+    side: usize,
+    frac: f64,
+    c: &mut Vec<f32>,
+    out: &mut Vec<f32>,
+) {
     let n = h + 2 * side + 2; // the column with its ends held, as p in dither._rows
     let at = |k: usize| {
         let y = k.saturating_sub(side + 1).min(h - 1);
         &a[y * w..(y + 1) * w]
     };
     // c[k]: the sum of the first k of the held column (c[0] = 0), row by row
-    let mut c = vec![0f32; (n + 1) * w];
+    c.resize((n + 1) * w, 0.0);
+    c[..w].fill(0.0);
     for k in 0..n {
         let (before, after) = c.split_at_mut((k + 1) * w);
         let (row, sum) = (&before[k * w..], &mut after[..w]);
@@ -330,7 +391,7 @@ fn down(a: &[f32], w: usize, h: usize, side: usize, frac: f64) -> Vec<f32> {
     }
     let frac32 = frac as f32;
     let scale = (1.0 / (2.0 * side as f64 + 1.0 + 2.0 * frac)) as f32;
-    let mut out = vec![0f32; w * h];
+    out.resize(w * h, 0.0);
     for i in 0..h {
         let (hi, lo) = (&c[(2 * side + 2 + i) * w..][..w], &c[(1 + i) * w..][..w]);
         let (left, right) = (at(i), at(2 * side + 2 + i));
@@ -343,7 +404,6 @@ fn down(a: &[f32], w: usize, h: usize, side: usize, frac: f64) -> Vec<f32> {
             row[x] = v * scale;
         }
     }
-    out
 }
 
 /// One pass along each row of `a` (dither._rows), line by line: what [`down`] does to the
@@ -441,8 +501,9 @@ mod tests {
         }
         let blurred = t.elapsed().as_secs_f64() / n as f64 * 1000.0;
         let t = std::time::Instant::now();
+        let mut scratch = Scratch::default();
         for _ in 0..n {
-            std::hint::black_box(base.patch(0.4, inner, outer));
+            std::hint::black_box(base.patch(0.4, inner, outer, &mut scratch));
         }
         let patch = t.elapsed().as_secs_f64() / n as f64 * 1000.0;
         let t = std::time::Instant::now();
