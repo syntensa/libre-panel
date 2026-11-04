@@ -178,11 +178,24 @@ class SceneSender:
         self.bytes = 0
         self.filled = 0  # (of them, layers of one colour)
 
-    def _layer(self, parts: list[bytes], image: Image.Image, x: int, y: int, how: int) -> int:
+    def _layer(
+        self, parts: list[bytes], image: Image.Image, x: int, y: int, how: int
+    ) -> int | None:
+        """The layer of ``image`` at x, y, numbered, as much of it as shows: where it lies over
+        the frame through its alpha, not its see-through margin; where it adds light, not the
+        black round it (neither changes a pixel). None for one that shows nothing."""
+        if how == ADD and image.mode != "RGB":
+            image = image.convert("RGB")  # (as Pillow pastes it onto RGB, and adds it)
+        if how != SOLID:
+            box = (image.getchannel("A") if how == OVER else image).getbbox()
+            if box is None:
+                return None
+            if box != (0, 0, image.width, image.height):
+                image, x, y = image.crop(box), x + box[0], y + box[1]
         number = next(self._numbers) & 0xFFFFFFFF
         if how == OVER:
             data = image.tobytes()  # (RGBA: layerable)
-        else:  # (as Pillow pastes it onto RGB, and adds it)
+        else:
             data = (image if image.mode == "RGB" else image.convert("RGB")).tobytes()
         geometry = struct.pack("<iiIII", x, y, image.width, image.height, how)
         parts += [_head(LAYER, number, len(geometry) + len(data)) + geometry, data]
@@ -317,7 +330,9 @@ class SceneSender:
         self.filled += 1
         ids = [number]
         for image, dx, dy in made.parts:
-            ids.append(self._layer(parts, image, piece.x + dx, piece.y + dy, OVER))
+            part = self._layer(parts, image, piece.x + dx, piece.y + dy, OVER)
+            if part is not None:
+                ids.append(part)
         return ids
 
     def records(self, scene: Scene, number: int, planned: float | None) -> list[bytes]:
@@ -353,7 +368,8 @@ class SceneSender:
                 if not ids:
                     ids = self._fill(parts, piece)
                 if not ids:
-                    ids = [self._layer(parts, *layer) for layer in _layers_of(piece)]
+                    made = (self._layer(parts, *layer) for layer in _layers_of(piece))
+                    ids = [number for number in made if number is not None]
                 hit = (piece, ids, ring, cut, globe)
             else:  # (a layer the engine has: what it is made of stays too)
                 if hit[2] is not None:

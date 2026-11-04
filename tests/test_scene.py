@@ -286,6 +286,42 @@ def test_each_layer_goes_to_the_engine_once_while_it_is_in_the_frames():
     assert [k for k, *_ in fifth] == [engines.SCENE]
 
 
+def test_a_layer_goes_to_the_engine_without_what_of_it_shows_nothing():
+    """What of a layer is see-through, or of the light it adds black, changes no pixel (Pillow
+    leaves the frame as it is there, and so does the engine): the engine gets the rest, at
+    the place it lies, and nothing of a layer that shows nothing. A graph's newest part came
+    in its graph's whole box: Lumen's 12.3" sends a third of the bytes less so."""
+    sender = engines.SceneSender()
+    head = Image.new("RGBA", (40, 30), (0, 0, 0, 0))
+    head.paste((90, 200, 255, 255), (30, 6, 38, 26))
+    head.putpixel((12, 3), (255, 255, 255, 1))  # (a breath of alpha shows: it stays)
+    nothing = Image.new("RGBA", (16, 16), (255, 255, 255, 0))  # (its colour, but see-through)
+    light = Image.new("RGB", (20, 20))
+    light.paste((7, 0, 0), (4, 5, 9, 11))
+    lit = piece((40, 50, 60, 255), 1, 1, size=(6, 6), light=Piece(light, -3, -2))
+    added = Image.new("RGBA", (10, 10), (0, 0, 0, 255))  # (light it adds: its alpha goes)
+    added.putpixel((9, 0), (0, 0, 3, 0))
+    scene = scene_of(Piece(head, 100, 50), Piece(nothing, 5, 5), lit,
+                     Piece(added, 20, 30, add=True), size=(320, 160))  # fmt: skip
+    records = heads(sender.records(scene, 0, None))
+    layers = [
+        (*struct.unpack("<iiIII", data[:20]), data[20:])
+        for kind, _, _, data in records
+        if kind == engines.LAYER
+    ]
+    assert layers == [
+        (112, 53, 26, 23, engines.OVER, head.crop((12, 3, 38, 26)).tobytes()),
+        (1, 1, 6, 6, engines.OVER, lit.layer.tobytes()),
+        (1, 3, 5, 6, engines.ADD, light.crop((4, 5, 9, 11)).tobytes()),
+        (29, 30, 1, 1, engines.ADD, bytes([0, 0, 3])),
+    ]
+    frame = records[-1]
+    assert frame[0] == engines.SCENE and frame[2] == 4  # (the see-through piece: no layer)
+    # the piece that shows nothing is in the frame still: next time the frame alone
+    again = heads(sender.records(scene, 1, None))
+    assert [k for k, *_ in again] == [engines.SCENE] and again[0][2] == 4
+
+
 def test_a_card_whose_inside_is_one_colour_goes_as_its_edges_and_that_colour():
     """Where the engine lays a layer of one colour, a card whose inside is one colour is made as
     the strips along its edges and that colour: its pixels made here only when asked for, and

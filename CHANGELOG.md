@@ -173,6 +173,12 @@
   (`engine: the stream's encoder: ...`).
 
 **Lighter**
+- **A third less to the engine with every frame.** A layer went to the engine whole, also
+  what of it is see-through, and of the light it adds what is black, though neither changes a
+  pixel: a graph's newest part came in its graph's whole box (567 by 306 pixels on the 12.3",
+  for a part some 25 wide), the end of a download's little graph in a box the module wide.
+  Now only what shows goes, and nothing of a layer that shows nothing: Lumen on the 12.3"
+  339 instead of 501 KB a frame, the frames the same pixels.
 - **The main loop no longer resolves the themes' folder on disk with every frame, and draws
   no number again that did not change.** Which version of the theme the panel shows (for
   its size, its pair) was looked up twice a frame, the folder of the themes that come with
