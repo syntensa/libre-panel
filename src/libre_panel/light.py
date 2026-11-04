@@ -48,17 +48,40 @@ def empty_caches() -> None:
             cached.cache_clear()
 
 
+# a block this large or larger is the system's own (mapped), and goes back to it as it is freed
+MAPPED_FROM = 1 << 20
+
+
+def mapped_blocks(platform: str = sys.platform) -> dict[str, str]:
+    """What a program Libre Panel starts (its engine) is given in its environment for blocks of
+    :data:`MAPPED_FROM` and more, as :func:`fewer_heaps` sets them here (Linux): nothing where
+    the environment says otherwise."""
+    if not platform.startswith("linux") or "GLIBC_TUNABLES" in os.environ:
+        return {}
+    return {"GLIBC_TUNABLES": f"glibc.malloc.mmap_threshold={MAPPED_FROM}"}
+
+
 def fewer_heaps(platform: str = sys.platform) -> bool:
     """Linux (glibc): two heaps for all threads instead of up to eight per core, set when the
     app starts (before its threads; whether it was set). Each thread that frees a frame's
     pictures kept their memory in a heap of its own, for its next ones: some 50 MB more of the
     system's memory held, and a frame no faster (measured on the 12.3", rather a little faster:
-    8.6 instead of 9.1 ms). ``MALLOC_ARENA_MAX`` set in the environment holds."""
-    if not platform.startswith("linux") or "MALLOC_ARENA_MAX" in os.environ:
+    8.6 instead of 9.1 ms). ``MALLOC_ARENA_MAX`` set in the environment holds.
+
+    And a block of :data:`MAPPED_FROM` or more (a card's picture, a cover) is the system's own
+    from then on, and goes back to it as it is freed: glibc took such blocks from the heap once
+    one of them was freed, and the pictures freed in the middle of it stayed with the program
+    (Lumen on the 12.3": its main process 113 MB instead of 120 to 125 after the first change of
+    track). ``MALLOC_MMAP_THRESHOLD_`` or ``GLIBC_TUNABLES`` set in the environment hold."""
+    if not platform.startswith("linux"):
         return False
     try:
         libc = ctypes.CDLL(None)
         if not hasattr(libc, "gnu_get_libc_version"):  # (musl has heaps of its own)
+            return False
+        if not {"MALLOC_MMAP_THRESHOLD_", "GLIBC_TUNABLES"} & set(os.environ):
+            libc.mallopt(-3, MAPPED_FROM)  # M_MMAP_THRESHOLD (fixed: no longer raised)
+        if "MALLOC_ARENA_MAX" in os.environ:
             return False
         return bool(libc.mallopt(-8, 2))  # M_ARENA_MAX
     except (OSError, AttributeError):

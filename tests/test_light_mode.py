@@ -187,6 +187,33 @@ def test_the_app_lets_go_of_its_pictures_of_the_themes_and_of_the_communitys(iso
         service.stop()
 
 
+def test_large_blocks_are_the_system_s_own_on_linux_in_the_app_and_its_engine(monkeypatch):
+    """A block of a megabyte and more is mapped (glibc's M_MMAP_THRESHOLD, fixed), in the app as
+    it starts and in the engine it starts (GLIBC_TUNABLES); what the environment says holds."""
+    calls = []
+
+    class Libc:
+        gnu_get_libc_version = object()
+
+        def mallopt(self, param, value):
+            calls.append((param, value))
+            return 1
+
+    monkeypatch.setattr(light.ctypes, "CDLL", lambda name: Libc())
+    for key in ("MALLOC_ARENA_MAX", "MALLOC_MMAP_THRESHOLD_", "GLIBC_TUNABLES"):
+        monkeypatch.delenv(key, raising=False)
+    assert light.fewer_heaps("linux") is True
+    assert calls == [(-3, light.MAPPED_FROM), (-8, 2)]
+    want = {"GLIBC_TUNABLES": f"glibc.malloc.mmap_threshold={light.MAPPED_FROM}"}
+    assert light.mapped_blocks("linux") == want and light.mapped_blocks("win32") == {}
+    calls.clear()
+    assert light.fewer_heaps("win32") is False and not calls
+    monkeypatch.setenv("GLIBC_TUNABLES", "glibc.malloc.arena_max=1")
+    assert light.mapped_blocks("linux") == {}
+    light.fewer_heaps("linux")
+    assert calls == [(-8, 2)]  # (its own choice of the blocks holds)
+
+
 def test_two_heaps_on_linux_as_the_app_starts(monkeypatch):
     """glibc's heaps per thread held a frame's memory each: two for all threads, set where the
     app starts (light.fewer_heaps), not as a side effect of importing Libre Panel."""

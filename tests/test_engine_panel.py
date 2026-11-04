@@ -8,6 +8,7 @@ import itertools
 import statistics
 import struct
 import subprocess
+import sys
 import threading
 import time
 
@@ -26,6 +27,7 @@ from test_video import (  # noqa: F401
 )
 from test_yuv import moving_square
 
+from libre_panel import light
 from libre_panel.devices import h264, turzx_usb, turzx_video
 from libre_panel.devices.base import DeviceError
 from libre_panel.devices.engine import (
@@ -126,6 +128,21 @@ def test_the_engine_sends_the_panel_what_the_python_driver_sends(engine):
     assert [plain[0] for plain, _ in by_engine.sent] == [plain[0] for plain, _ in by_python.sent]
     assert by_engine.sent == by_python.sent
     assert transport.link.proc.returncode == 0
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="glibc's (Linux)")
+def test_the_engine_starts_with_its_large_blocks_mapped_as_the_app_has_them(engine, monkeypatch):
+    """Started by the app, the engine is told (GLIBC_TUNABLES) to take its blocks of a megabyte
+    and more from the system, as the app's own process does (light.fewer_heaps)."""
+    monkeypatch.delenv("GLIBC_TUNABLES", raising=False)
+    transport, sock = engine_on(engine, FakePanel())
+    try:
+        with open(f"/proc/{transport.link.proc.pid}/environ", "rb") as f:
+            told = f.read().split(b"\0")
+    finally:
+        transport.close()
+        sock.close()
+    assert f"GLIBC_TUNABLES=glibc.malloc.mmap_threshold={light.MAPPED_FROM}".encode() in told
 
 
 def test_a_query_answered_late_is_skipped_by_the_engine_as_by_python(engine):

@@ -187,6 +187,13 @@
   picture made once): Lumen's loop on the 12.3" keeps under 3 MB of them, the glows as they
   were (Lumen's frames the same pixels; of Arena's 1.4 million, a hundred or so in the glow
   of its big number a level apart), and a picture blurred again is blurred the same.
+- **On Linux, large blocks go back to the system as they are freed.** glibc took a block of a
+  megabyte and more from its heap once such a block had been freed, and the pictures freed in
+  the middle of the heap stayed with the program: Lumen's main process on the 12.3" grew from
+  110 to 120 or 125 MB at the first change of track, and stayed there. Such blocks are the
+  system's own now, in the app and in its engine (113 MB; the engine 52 instead of 53.5), at
+  no cost a frame that shows (52 to 55 % of a core either way). `MALLOC_MMAP_THRESHOLD_` or
+  `GLIBC_TUNABLES` set in the environment hold.
 - **A slot's frame in strips: 1.4 MB less for each of its colours.** The thin line round a
   slot of cards (Lumen's card on the 12.3") was a picture of the module's size for each of
   its colours, six of them kept, and one more made for every frame of a change of colour; it

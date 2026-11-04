@@ -35,7 +35,7 @@ from typing import TYPE_CHECKING, Any
 
 from PIL import Image
 
-from libre_panel import winsession
+from libre_panel import light, winsession
 from libre_panel.devices.base import DeviceError, leave_place, take_place
 from libre_panel.devices.h264 import (
     ABOVE_NORMAL,
@@ -443,6 +443,8 @@ class EngineLink:
             raise DeviceError("Windows is ending the session: no engine now")
         # its stdin as wide as ffmpeg's (h264.Encoder: Windows gives a pipe 4 KB of room)
         wide = _wide_pipe() if popen is subprocess.Popen else None
+        # (on Linux its large blocks the system's own, as this process has them: light.py)
+        mapped = light.mapped_blocks()
         try:
             self.proc = popen(
                 command,
@@ -451,6 +453,7 @@ class EngineLink:
                 stderr=subprocess.PIPE,
                 bufsize=0,
                 creationflags=NO_WINDOW | ABOVE_NORMAL,
+                **({"env": {**os.environ, **mapped}} if mapped else {}),
             )
         except OSError as exc:
             if wide is not None:
