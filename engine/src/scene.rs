@@ -65,6 +65,9 @@ struct Source {
     w: usize,
     h: usize,
     pixels: Vec<u8>,
+    /// Of each row: the first column whose alpha is not 0 and the one after the last (0, 0
+    /// for none), worked out once: where a layer cut from it shows, without looking again.
+    shown: Vec<(usize, usize)>,
 }
 
 #[derive(Clone)]
@@ -75,7 +78,9 @@ pub struct Layer {
     how: How,
     pixels: Vec<u8>,
     /// The part of the layer that changes what lies under it (x0, y0, x1, y1 in the layer):
-    /// where its alpha is not 0 (Over), its light not black (Add); all of it (Solid).
+    /// where its alpha is not 0 (Over), its light not black (Add); all of it (Solid). Of a
+    /// layer cut from sources, the box round where its parts show (Scene::view): it may hold a
+    /// see-through pixel more (where a part lies over another), none less.
     part: (usize, usize, usize, usize),
     /// The ring it is a picture of (ring.rs), which stays while it does.
     ring: Option<u32>,
@@ -113,6 +118,32 @@ impl Layer {
             y: i64::from(y),
             w,
             how,
+            pixels,
+            part,
+            ring: None,
+            sources: Vec::new(),
+            globe: None,
+            fill: None,
+        })
+    }
+
+    /// A layer through its alpha whose `part` is known (cut from sources: Scene::view).
+    fn cut(
+        x: i32,
+        y: i32,
+        w: usize,
+        h: usize,
+        pixels: Vec<u8>,
+        part: (usize, usize, usize, usize),
+    ) -> Result<Layer, String> {
+        if w == 0 || h == 0 || w > MOST_SIDE || h > MOST_SIDE || pixels.len() != w * h * 4 {
+            return Err(format!("a layer of {w}x{h} and {} bytes", pixels.len()));
+        }
+        Ok(Layer {
+            x: i64::from(x),
+            y: i64::from(y),
+            w,
+            how: How::Over,
             pixels,
             part,
             ring: None,
@@ -319,7 +350,25 @@ impl Scene {
         if w == 0 || h == 0 || w > MOST_SOURCE || h > MOST_SOURCE || pixels.len() != w * h * 4 {
             return Err(format!("a source of {w}x{h} and {} bytes", pixels.len()));
         }
-        self.sources.insert(id, Source { w, h, pixels });
+        let shown = pixels
+            .chunks_exact(w * 4)
+            .map(|row| {
+                let alpha = |x: &usize| row[x * 4 + 3] != 0;
+                match (0..w).find(alpha) {
+                    Some(first) => (first, (first..w).rfind(alpha).map_or(first + 1, |x| x + 1)),
+                    None => (0, 0),
+                }
+            })
+            .collect();
+        self.sources.insert(
+            id,
+            Source {
+                w,
+                h,
+                pixels,
+                shown,
+            },
+        );
         Ok(())
     }
 
@@ -337,6 +386,7 @@ impl Scene {
         }
         let mut pixels = vec![0u8; w * h * 4];
         let mut sources = Vec::with_capacity(parts.len());
+        let (mut px0, mut py0, mut px1, mut py1) = (w, h, 0, 0);
         for part in parts {
             let source = self.sources.get(&part.source).ok_or_else(|| {
                 format!(
@@ -368,12 +418,28 @@ impl Scene {
                 let from = (sv as usize * source.w + (sx + s0) as usize) * 4;
                 line[left..left + on].copy_from_slice(&source.pixels[from..from + on]);
                 line[left + on..].fill(0);
+                // where it shows on this row of the layer: the source's shown columns in it
+                let (first, after) = source.shown[sv as usize];
+                let a = (first as i64 - sx).max(s0);
+                let b = (after as i64 - sx).min(s1);
+                if a < b {
+                    let row = (dy + v) as usize;
+                    px0 = px0.min((dx + a) as usize);
+                    px1 = px1.max((dx + b) as usize);
+                    py0 = py0.min(row);
+                    py1 = py1.max(row + 1);
+                }
             }
             if !sources.contains(&part.source) {
                 sources.push(part.source);
             }
         }
-        let mut layer = Layer::new(x, y, w, h, How::Over, pixels)?;
+        let part = if px1 > px0 && py1 > py0 {
+            (px0, py0, px1, py1)
+        } else {
+            (0, 0, 0, 0)
+        };
+        let mut layer = Layer::cut(x, y, w, h, pixels, part)?;
         layer.sources = sources;
         self.layer(id, layer);
         Ok(())
@@ -890,6 +956,8 @@ mod tests {
         assert_eq!(px(1, 0), &[3, 0, 7, 255]);
         assert_eq!(px(1, 1), &[3, 1, 7, 255]);
         assert_eq!(px(2, 0), &[0, 0, 0, 0]); // (the first: beyond its source)
+                                             // where it shows, worked out from the sources' rows: as a look at its pixels finds it
+        assert_eq!(layer.part, bounds(&layer.pixels, 3, 2, 4, |p| p[3] != 0));
         assert_eq!(layer.sources, vec![5, 6]);
         assert!(s
             .view(2, (0, 0, 1, 1), &[part(9, 0, 0, 0, 0, 1, 1)])
@@ -903,6 +971,54 @@ mod tests {
         s.frame(vec![3], false).unwrap();
         assert!(s.sources.is_empty()); // (gone with it)
         assert!(s.source(7, 2, 2, vec![0; 4]).is_err());
+    }
+
+    #[test]
+    fn where_a_layer_cut_from_sources_shows_is_known_from_its_sources_rows() {
+        let mut s = Scene::new(64, 32, 16);
+        // a strip of 20 x 6 shown in columns 3..9 and 12..15 of rows 1..5 (a gap between)
+        let mut strip = vec![0u8; 20 * 6 * 4];
+        for y in 1..5 {
+            for x in (3..9).chain(12..15) {
+                strip[(y * 20 + x) * 4..(y * 20 + x) * 4 + 4].copy_from_slice(&[9, 8, 7, 200]);
+            }
+        }
+        s.source(1, 20, 6, strip).unwrap();
+        let part = |sx, sy, dx, dy, w, h| Part {
+            source: 1,
+            sx,
+            sy,
+            dx,
+            dy,
+            w,
+            h,
+        };
+        let scanned = |s: &Scene, id: u32| {
+            let l = &s.layers[&id];
+            let h = l.pixels.len() / (l.w * 4);
+            bounds(&l.pixels, l.w, h, 4, |p| p[3] != 0)
+        };
+        // parts side by side, partly off the strip: what a look at the pixels finds, exactly
+        for (id, parts) in [
+            (2, vec![part(0, 0, 0, 0, 10, 6), part(10, 0, 10, 0, 10, 6)]),
+            (3, vec![part(5, -2, 0, 0, 12, 8), part(-4, 3, 12, 0, 8, 8)]),
+        ] {
+            s.view(id, (0, 0, 20, 8), &parts).unwrap();
+            assert_eq!(s.layers[&id].part, scanned(&s, id), "layer {id}");
+        }
+        // where a part lies over another, or cuts a row of its strip between what shows in
+        // it: a box round all that shows (a see-through pixel more in it changes none)
+        let round = |a: Rect, b: Rect| {
+            b == (0, 0, 0, 0) || (a.0 <= b.0 && a.1 <= b.1 && a.2 >= b.2 && a.3 >= b.3)
+        };
+        s.view(4, (0, 0, 20, 8), &[part(10, 0, 0, 0, 2, 6)])
+            .unwrap(); // (the gap alone)
+        assert_eq!(scanned(&s, 4), (0, 0, 0, 0));
+        assert_eq!(s.layers[&4].part, (0, 1, 2, 5)); // (its rows show, beyond it)
+        let over = [part(0, 0, 0, 0, 20, 6), part(0, 10, 0, 0, 6, 6)];
+        s.view(5, (0, 0, 20, 6), &over).unwrap();
+        assert_eq!(scanned(&s, 5), (6, 1, 15, 5)); // (columns 3..6 laid over: see-through)
+        assert!(round(s.layers[&5].part, scanned(&s, 5)));
     }
 
     #[test]
