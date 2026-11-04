@@ -340,6 +340,63 @@ def test_a_filled_piece_goes_to_the_engine_as_its_colour_and_the_strips_round_it
     assert whole[1][3][20:] == card.tobytes()  # (an engine that lays none: its pixels, made)
 
 
+def test_a_filled_card_s_pixels_go_again_when_nothing_asked_for_them_a_while(monkeypatch):
+    """Made here (a frame composed here, the app's picture of the panel), a card's pixels stay
+    while they are asked for, and go once nothing asked for them for FILLS_IDLE_S: the engine
+    lays it without them. Asked for again, they are made again, the same."""
+    from test_motion import video
+
+    from libre_panel.render import renderer as renderers
+    from libre_panel.sensors.demo import demo_snapshot
+    from libre_panel.theme.model import find_theme, load_theme
+
+    clock = [1000.0]
+    monkeypatch.setattr(scenes.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(renderers.time, "monotonic", lambda: clock[0])
+    renderer = video(renderers.Renderer(load_theme(find_theme("lumen-1920x720")), dither=True),
+                     fps=25)  # fmt: skip
+    renderer.fills = True
+    now = 1_700_000_000.0
+    snap = demo_snapshot(fixed_time=now)
+    frame, _ = renderer.render(snap, now, scene=True)
+    card = dict(frame.scene.pieces)["frame-mid"].layer
+    assert isinstance(card, scenes.Again) and not card.composed
+    frame.tobytes()  # (the app's picture of the panel: its cards made here)
+    pixels = card.tobytes()
+    assert card.composed
+    for k in range(1, 9):  # (frames the engine composes, 5 s apart, then 30: looked at)
+        clock[0] += 5.0 if k < 6 else 30.0
+        frame, _ = renderer.render(snap, now + k / 25, scene=True)
+        assert card.composed == (k < 6), k  # (kept 25 s after the last ask, gone after 55)
+    assert card.tobytes() == pixels and card.composed  # (asked again: made again, the same)
+    assert card.forget() == card.width * card.height * 4 and card.forget() == 0
+
+
+def test_a_picture_that_goes_and_comes_again_is_the_same_whoever_asks():
+    """Its pixels go while other threads ask for them: each gets them whole, the same."""
+    image = Image.new("RGBA", (64, 48))
+    image.putdata([(x, y, x ^ y, 200) for y in range(48) for x in range(64)])
+    made = []
+    again = scenes.Again(image.size, "RGBA", lambda: made.append(1) or image.copy())
+    want, bad, stop = image.tobytes(), [], threading.Event()
+
+    def ask():
+        while not stop.is_set():
+            if again.tobytes() != want or again.copy().tobytes() != want:
+                bad.append(1)
+
+    threads = [threading.Thread(target=ask) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for _ in range(300):
+        again.forget()
+        time.sleep(0.0005)
+    stop.set()
+    for t in threads:
+        t.join()
+    assert not bad and len(made) > 10
+
+
 def strip(w=40, h=6):
     """A picture of ``w`` x ``h``, every pixel its own (x, y, x + y, alpha)."""
     image = Image.new("RGBA", (w, h))

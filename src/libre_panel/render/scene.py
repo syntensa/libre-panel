@@ -12,6 +12,7 @@ from it), composed then as the renderer composes them (:func:`compose`).
 from __future__ import annotations
 
 import threading
+import time
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
@@ -106,6 +107,45 @@ class Lazy(Image.Image):
         return super().load()
 
 
+class Again(Lazy):
+    """A :class:`Lazy` whose pixels may go again (:meth:`forget`), made anew (the same) when
+    something asks for them once more; ``used``: when that was last (monotonic seconds). A card
+    an engine lays without its pixels keeps them only while frames composed here, or the app's
+    picture of the panel, ask for them (render/scene.py's Filled)."""
+
+    def __init__(self, size: tuple[int, int], mode: str, make: Any) -> None:
+        super().__init__(size, mode, make)
+        self._again = make
+        self.used = 0.0
+
+    @property  # type: ignore[override]
+    def im(self) -> Any:
+        im = self._im
+        while im is None:  # (made, or made again where it went meanwhile)
+            self.load()
+            im = self._im
+        self.used = time.monotonic()
+        return im
+
+    @im.setter
+    def im(self, im: Any) -> None:
+        self._im = im
+
+    def load(self) -> Any:
+        with self._making:  # (its pixels stay while Pillow looks at them here)
+            if self._im is None:
+                self._im = self._again().im
+            return Image.Image.load(self)
+
+    def forget(self) -> int:
+        """Its pixels go, where they were made: the bytes they took (0: none were made)."""
+        with self._making:
+            if self._im is None:
+                return 0
+            self._im = None
+        return self.width * self.height * len(self.mode)
+
+
 Cut = tuple[Image.Image, int, int, int, int, int, int]  # (picture, x, y in it, x, y, w, h)
 
 
@@ -169,7 +209,8 @@ class Filled:
     ``parts`` (picture, x and y in the piece) round it as their pixels: together all of the
     piece, none over another, so laid in turn they are the piece. Its ``layer`` is made here
     only when something asks for its pixels (a frame composed here), the inside filled and the
-    parts pasted: the piece's pixels."""
+    parts pasted: the piece's pixels, which go again when nothing asked for them a while
+    (:class:`Again`, Renderer._forget_fills)."""
 
     layer: Image.Image
     fill: tuple[int, int, int, int, tuple[int, int, int, int]]
@@ -206,7 +247,7 @@ def filled(image: Image.Image, inset: int) -> Filled | None:
             out.paste(part, (x, y))
         return out
 
-    return Filled(Lazy((w, h), "RGBA", make), (inset, inset, w - 2 * inset, h - 2 * inset, rgba),
+    return Filled(Again((w, h), "RGBA", make), (inset, inset, w - 2 * inset, h - 2 * inset, rgba),
                   parts)  # fmt: skip
 
 

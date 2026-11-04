@@ -147,8 +147,9 @@
   Almanac's, twice over. Such a card goes to the engine now as the strips along its edges
   (its corners and its outline, as their pixels) and the colour of its inside, which the
   engine lays without pixels: the same pixels on the panel. Libre Panel makes the card's
-  picture only for a frame it composes itself. Lumen on the 12.3": the pictures Libre Panel
-  keeps 27.5 MB instead of 35, the engine 53 MB instead of 58.
+  picture only for a frame it composes itself (a transition, the app's picture of the panel)
+  and lets it go again half a minute after the last of them. Lumen on the 12.3": the pictures
+  Libre Panel keeps 27.5 MB instead of 35, the engine 53 MB instead of 58.
 - **The engine can let the graphics card encode, to try (Windows; `[video] engine_encoder =
   "card"`, *Settings → Panel → Video experiment*: *The engine's encoder*).** With the engine
   as the encoder, the card's own H.264 encoder (AMD's, NVIDIA's or Intel's: the one Windows

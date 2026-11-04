@@ -943,6 +943,7 @@ class Renderer:
         # ... and a card whose inside is one colour comes as its edges and that colour, which the
         # engine lays without pixels (render/scene.py's Filled; the fills property)
         self._fills = False
+        self._fills_looked = 0.0  # when _forget_fills last looked (monotonic seconds)
         self._held: dict[str, bool] = {}  # the conditions of needs worked out in this frame ...
         self._held_for: tuple[Any, ...] = ()  # ... for these readings (and pictures)
         self._composed: list[tuple[int, int, int, int]] | None = None
@@ -1582,6 +1583,8 @@ class Renderer:
         self._last = None
         if self._underlays.size:
             self._underlays.clear()
+        if self._fills:
+            self._forget_fills()
         self._swept = False
         self.scenes += 1
         color = self.color(self.theme.background_color)
@@ -1592,6 +1595,24 @@ class Renderer:
         return scenes.SceneFrame(
             scenes.Scene((self.theme.width, self.theme.height), ground, tuple(pieces))
         )
+
+    # A card's pixels made here (render/scene.py's Filled: for a frame composed here, the app's
+    # picture of the panel) go when nothing asked for them this long: the engine lays it without
+    FILLS_IDLE_S = 30.0
+
+    def _forget_fills(self) -> None:
+        """The pixels of the cards the engine lays as their colour that were made here and not
+        asked for since :data:`FILLS_IDLE_S` (looked at every few seconds, in frames the
+        engine composes): after the app's window was open, Lumen's 5 MB on the 12.3"."""
+        now = time.monotonic()
+        if now - self._fills_looked < 5.0:
+            return
+        self._fills_looked = now
+        for hit in list(self._cache.values()):
+            layer = None if hit[1] is None else hit[1].layer
+            if isinstance(layer, scenes.Again) and layer.composed:
+                if now - layer.used > self.FILLS_IDLE_S:
+                    layer.forget()
 
     def _as_rgb(self, canvas: Image.Image) -> Image.Image:
         """The frame of ``canvas``, in RGB: a new picture each time (the loop keeps frames and
