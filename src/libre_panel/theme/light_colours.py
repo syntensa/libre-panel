@@ -98,7 +98,7 @@ def body_colour(colour: Any) -> str:
 # a widget's fields (and a look block's) that hold colours
 COLOUR_KEYS = frozenset(
     {"color", "color2", "colors", "background", "done", "face", "grid_color", "mark_color",
-     "marks", "muted", "outline", "tick_color"}
+     "marks", "muted", "night", "outline", "tick_color"}
 )  # fmt: skip
 
 

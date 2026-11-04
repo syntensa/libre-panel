@@ -661,4 +661,6 @@ def test_studio_reads_only_what_the_demo_has():
         key for key in _reads(renderer.widgets)
         if snapshot.value(key) is None and key not in snapshot.images
     }  # fmt: skip
+    if snapshot.value("sun.up") == 0:  # (the demo's moment is a night: the day has no progress)
+        absent.discard("sun.progress")
     assert absent == set()  # (the demo has the player's icon, drawn, and a download that runs)

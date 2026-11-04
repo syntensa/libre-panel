@@ -3045,6 +3045,7 @@
     "Save memory with the window closed": "ウィンドウを閉じている間はメモリを節約"
   },
   "fields": {
+    "night": "夜",
     "agent": "エージェント",
     "align": "配置",
     "alpha": "線の不透明度",
@@ -3221,6 +3222,7 @@
     "module": "モジュール",
     "moon": "月の満ち欠け",
     "rect": "ボックス",
+    "sunpath": "太陽の軌道",
     "symbol": "天気アイコン",
     "text": "テキスト",
     "weather": "天気"

@@ -3045,6 +3045,7 @@
     "Save memory with the window closed": "窗口关闭时节省内存"
   },
   "fields": {
+    "night": "夜晚",
     "agent": "智能体",
     "align": "对齐",
     "alpha": "线条不透明度",
@@ -3221,6 +3222,7 @@
     "module": "模块",
     "moon": "月相",
     "rect": "表面",
+    "sunpath": "太阳轨迹",
     "symbol": "天气图标",
     "text": "文本",
     "weather": "天气"

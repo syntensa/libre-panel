@@ -3045,6 +3045,7 @@
     "Save memory with the window closed": "Ahorrar memoria con la ventana cerrada"
   },
   "fields": {
+    "night": "noche",
     "agent": "agente",
     "align": "Alineación",
     "alpha": "Opacidad de las líneas",
@@ -3221,6 +3222,7 @@
     "module": "Bloque",
     "moon": "Fase lunar",
     "rect": "Superficie",
+    "sunpath": "Arco del sol",
     "symbol": "Símbolo del tiempo",
     "text": "Texto",
     "weather": "Tiempo"

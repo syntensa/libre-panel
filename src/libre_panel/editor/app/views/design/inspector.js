@@ -62,6 +62,7 @@ export const TYPE_ICONS = {
   countdown: "countdown",
   moon: "moon",
   earth: "globe",
+  sunpath: "sun",
   agent: "agent",
   image: "image",
   weather: "weather",

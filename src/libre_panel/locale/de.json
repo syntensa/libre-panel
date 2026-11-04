@@ -3045,6 +3045,7 @@
     "Save memory with the window closed": "Speicher sparen bei geschlossenem Fenster"
   },
   "fields": {
+    "night": "Nacht",
     "agent": "Agent",
     "align": "Ausrichtung",
     "alpha": "Linien-Deckkraft",
@@ -3221,6 +3222,7 @@
     "module": "Baustein",
     "moon": "Mondphase",
     "rect": "Fläche",
+    "sunpath": "Sonnen­bogen",
     "symbol": "Wetter­symbol",
     "text": "Text",
     "weather": "Wetter"

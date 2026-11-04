@@ -32,6 +32,7 @@ const WIDGET_NAMES = {
   countdown: "Countdown",
   moon: "Moon phase",
   earth: "Earth",
+  sunpath: "Sun's path",
   agent: "AI sign",
   fan: "Fan",
   image: "Picture",

@@ -3045,6 +3045,7 @@
     "Save memory with the window closed": "Oszczędzaj pamięć przy zamkniętym oknie"
   },
   "fields": {
+    "night": "noc",
     "agent": "agent",
     "align": "Wyrównanie",
     "alpha": "Krycie linii",
@@ -3221,6 +3222,7 @@
     "module": "Blok",
     "moon": "Faza księżyca",
     "rect": "Prostokąt",
+    "sunpath": "Łuk słońca",
     "symbol": "Symbol pogody",
     "text": "Tekst",
     "weather": "Pogoda"

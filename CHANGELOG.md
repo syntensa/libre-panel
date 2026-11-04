@@ -204,6 +204,14 @@
   screen as a monitor keep the filter.
 
 **Better**
+- **Lumen's weather card without its heading, with the sun's way.** "Weather" over the
+  temperature said what the card plainly shows: it is gone (a `title` of the theme's own
+  still stands there), and the temperature is larger in its place. The sun is a picture now,
+  not a line of text: an arc over the horizon from sunrise to sunset, the day gone in its
+  light, the rest dotted, the sun glowing where it stands; by night the arc lies dim under the
+  moon's crescent. On the 12.3" it stands beside the rain's line with both times, on the bar
+  under the symbol with the time that comes next. The arc is the new widget `sunpath`, for
+  any theme.
 - **The weather symbols drawn anew, as frosted glass.** Their clouds were round bodies
   stacked into a cloud: plump. Their outlines are Meteocons' now (Bas Milius, MIT): a cloud
   of one clean outline, a sun with eight round rays, a crescent moon, finished as frosted

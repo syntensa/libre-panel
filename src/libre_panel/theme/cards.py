@@ -106,31 +106,44 @@ def build_forecast(b: _Build, src: M.Source) -> None:
     width = min(right - left, ref.s(400))  # the column of text: a wider card has more hours
     b.add("symbol", "symbol", x=round(ref.x(30)), y=round(ref.y(12)), size=ref.s(196),
           sensor="weather.code", color=clouds, moving=b.module["moving"])  # fmt: skip
-    b.label("kicker", b.module["title"] or t("Weather"), left, ref.cap(36, 21), ref.s(21),
-            width=width)  # fmt: skip
+    # What the card shows is plain to see: no heading over it, unless the theme gives it a
+    # title of its own; without one the temperature is larger and stands where it stood.
+    titled = bool(b.module["title"])
+    if titled:
+        b.label("kicker", b.module["title"], left, ref.cap(36, 21), ref.s(21), width=width)
+    temp_base, temp_size = (126, 104) if titled else (108, 112)
+    high_base, low_base = (84, 122) if titled else (66, 104)
+    desc_base, detail_base = (164, 194) if titled else (146, 178)
 
     # the temperature, and beside it today's range: as wide as two digits and the degree sign
     # (a wider number gets smaller to fit, it never runs into them)
-    size = ref.s(104)
+    size = ref.s(temp_size)
     at = left - ref.s(4)
     digits = M._width_per_size(b.style["display_font"], "00°") * size
     range_x = at + digits + ref.s(24)
     b.add("weather", "temp", field="temperature", format="{value:.0f}°",
-          **M._temp_fields(b, at, ref.cap(126, 104), size, range_x - ref.s(12) - at))  # fmt: skip
+          **M._temp_fields(b, at, ref.cap(temp_base, temp_size), size,
+                           range_x - ref.s(12) - at))  # fmt: skip
     arrow = ref.s(22)
+    # beside the range, where the column has room for it (the bar's card), the sun's way today
+    tall = head < b.h
+    values_x = range_x + arrow + ref.s(6)
+    range_end = values_x + M._width_per_size(b.style["display_font"], "-00°") * ref.s(26)
+    corner = (range_end + ref.s(28), left + width)
+    corner_ok = not tall and corner[1] - corner[0] >= ref.s(110)
     for name, key, baseline, role, icon in (
-        ("high", "weather.day.0.high", 84, "text2", "up"),
-        ("low", "weather.day.0.low", 122, "text3", "down"),
+        ("high", "weather.day.0.high", high_base, "text2", "up"),
+        ("low", "weather.day.0.low", low_base, "text3", "down"),
     ):
         top = ref.cap(baseline, 26)
         b.icon(f"{name}-icon", icon, range_x, top + CAP * ref.s(26) / 2 - arrow / 2, arrow,
                b.c(role))  # fmt: skip
         _need(b.out[-1], key)
-        b.value(name, key, "{value:.0f}°", range_x + arrow + ref.s(6), top, ref.s(26),
-                color=b.c(role), width=max(8, left + width - range_x - arrow - ref.s(6)),
-                hide_if_missing=True)  # fmt: skip
+        reach = (range_end if corner_ok else left + width) - values_x
+        b.value(name, key, "{value:.0f}°", values_x, top, ref.s(26), color=b.c(role),
+                width=max(8, reach), hide_if_missing=True)  # fmt: skip
 
-    M._weather_desc(b, left, ref.cap(164, 30), width, ref.s(30))
+    M._weather_desc(b, left, ref.cap(desc_base, 30), width, ref.s(30))
     small = ref.s(20)
     details = (("weather.apparent_temperature", t("Feels like {value:.0f}°"), 0, 148),
                ("weather.wind_speed", t("Wind {value:.0f} {unit}"), 148, 144),
@@ -142,26 +155,28 @@ def build_forecast(b: _Build, src: M.Source) -> None:
             break
         # (places and rooms in the reference's px, not ``s``: its smallest size would move the
         # first one right of the text column it belongs to)
-        b.value(f"detail{i}", key, fmt, left + at * ref.g * squeeze, ref.cap(194, 20), small,
+        b.value(f"detail{i}", key, fmt, left + at * ref.g * squeeze, ref.cap(detail_base, 20),
+                small,
                 color=b.c("text3"), width=max(8, room * ref.g * squeeze - gap), font="text_font",
                 tabular=False, fallback="", hide_if_missing=True)  # fmt: skip
 
-    # the rain of the next two hours (blue when it starts or stops soon), and the sun; in a
-    # tall card across it, under the symbol (its column of text is narrow for both)
-    line = ref.cap(222, 20)
-    at, room = (ref.x(30), right - ref.x(30)) if head < b.h else (left, width)
+    # the rain of the next two hours (blue when it starts or stops soon), and the sun's way
+    # today; in a tall card across it, under the symbol (its column of text is narrow for both)
+    # (the bar's card has it beside the range above; where neither has room, it is in words)
+    line = ref.cap(226, 20)
+    at, room = (ref.x(30), right - ref.x(30)) if tall else (left, width)
+    share = 0.42 if tall else (1.0 if corner_ok else 0.55)
     for name, need, role in (("rain", "weather.rain.minutes", "gpu"),
                              ("dry", "!weather.rain.minutes", "text3")):  # fmt: skip
         b.value(name, "weather.rain.text", "{value}", at, line, small, color=b.c(role),
-                width=room * 0.55, font="text_font", tabular=False, fallback="",
+                width=room * share, font="text_font", tabular=False, fallback="",
                 fit="ellipsis", needs=need)  # fmt: skip
-    for name, key, text, up in (
-        ("sun-set", "sun.set", t("Sun until {value}"), 1),
-        ("sun-rise", "sun.next_rise", t("Sun from {value}"), 0),
-    ):
-        b.value(name, key, text, at + room, line, small, color=b.c("text3"), align="right",
-                width=room * 0.42, font="text_font", tabular=False, fallback="",
-                fit="ellipsis", needs=f"sun.up={up}")  # fmt: skip
+    if tall:
+        _sun_way(b, ref, at + room * 0.44, line, room * 0.56, small, 200 if titled else 184)
+    elif corner_ok:
+        _sun_corner(b, ref, *corner, 62 if titled else 38, ref.s(18))
+    else:
+        _sun_way(b, ref, at + room * 0.58, line, room * 0.42, small, 196, both=False)
 
     # the next hours across the card (a tall one has room to set them off the line above)
     drop = ref.s(18) if head < b.h else 0
@@ -206,6 +221,86 @@ def build_forecast(b: _Build, src: M.Source) -> None:
             _need(widget, "weather.temperature")  # (without weather: the calendar sheet)
             b.out.append(widget)
     b.needs = ""
+
+
+def _sun_corner(b: _Build, ref: _Ref, x0: float, x1: float, top: float, small: int) -> None:
+    """The sun's way today from ``x0`` to ``x1`` (px), its arc from ``top`` (the reference's
+    px) and sunrise's and sunset's times under its ends: beside today's range, where the bar's
+    card has room once it has no heading."""
+    w = x1 - x0
+    arc_y, arc_h = ref.y(top), ref.s(30)
+    warm = b.c("warn")
+    b.add("sunpath", "sun-way", x=round(x0), y=round(arc_y), w=round(w), h=arc_h,
+          sensor="sun.progress", thickness=max(1.5, round(ref.g * 2.6, 1)), color=warm,
+          color2=b.deep(warm), background=b.c("line"), night=b.c("text2"),
+          needs="sun.up")  # fmt: skip
+    line = arc_y + arc_h + ref.s(9)  # (the capitals of the times)
+    for name, key, at, align in (("sun-rise", "sun.rise", x0, "left"),
+                                 ("sun-set", "sun.set", x1, "right")):  # fmt: skip
+        b.value(
+            name,
+            key,
+            "{value}",
+            at,
+            line,
+            small,
+            color=b.c("text3"),
+            align=align,
+            width=w / 2,
+            font="text_font",
+            tabular=True,
+            fallback="",
+            needs="sun.rise",
+        )
+
+
+def _sun_way(b: _Build, ref: _Ref, x: float, line: float, room: float, small: int,
+             top: float, both: bool = True) -> None:  # fmt: skip
+    """The sun's way today across ``room`` px from ``x``: the arc from sunrise to sunset with
+    the sun where it stands, sunrise's time at its left end and sunset's at its right, on the
+    level of a line of text whose capitals start at ``line``; the arc from ``top`` (in the
+    reference's px) down to that level. Not ``both``: only the time that comes next, sunset's
+    by day and sunrise's by night, for a longer arc in the room. Where the arc would be too
+    short, a line of text says when the sun sets or rises."""
+    label = M._width_per_size(b.style["text_font"], "00:00") * small
+    gap = ref.s(10)
+    horizon = line + CAP * small / 2  # the middle of the times' capitals
+    arc_w = min(room - (2 if both else 1) * (label + gap), ref.s(260))
+    if arc_w < ref.s(56):  # too short to read: the time in words, as before
+        for name, key, text, up in (
+            ("sun-set", "sun.set", t("Sun until {value}"), 1),
+            ("sun-rise", "sun.next_rise", t("Sun from {value}"), 0),
+        ):
+            b.value(name, key, text, x + room, line, small, color=b.c("text3"), align="right",
+                    width=room * 0.84, font="text_font", tabular=False, fallback="",
+                    fit="ellipsis", needs=f"sun.up={up}")  # fmt: skip
+        return
+    end = x + room  # (the times and the arc keep to the right)
+    arc_y = ref.y(top)
+    warm = b.c("warn")
+
+    def way(name: str, arc_x: float, needs: str) -> None:
+        b.add("sunpath", name, x=round(arc_x), y=round(arc_y), w=round(arc_w),
+              h=max(8, round(horizon - arc_y + 2)), sensor="sun.progress",
+              thickness=max(1.5, round(ref.g * 2.6, 1)), color=warm, color2=b.deep(warm),
+              background=b.c("line"), night=b.c("text2"), needs=needs)  # fmt: skip
+
+    def time(name: str, key: str, at: float, align: str, needs: str) -> None:
+        b.value(name, key, "{value}", at, line, small, color=b.c("text3"), align=align,
+                width=label + gap, font="text_font", tabular=True, fallback="",
+                needs=needs)  # fmt: skip
+
+    if both:
+        arc_x = end - label - gap - arc_w
+        way("sun-way", arc_x, "sun.up")
+        time("sun-rise", "sun.rise", arc_x - gap, "right", "sun.rise")
+        time("sun-set", "sun.set", end - label, "left", "sun.rise")
+        return
+    # by day the arc, then sunset's time; by night sunrise's time, then the arc
+    way("sun-way", end - label - gap - arc_w, "sun.up=1")
+    time("sun-set", "sun.set", end - label, "left", "sun.rise,sun.up=1")
+    way("sun-way-night", end - arc_w, "sun.up=0")
+    time("sun-rise", "sun.next_rise", end - arc_w - gap, "right", "sun.rise,sun.up=0")
 
 
 # -- the playback card ------------------------------------------------------------------------

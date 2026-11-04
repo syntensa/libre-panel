@@ -271,6 +271,21 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "color": ("color", "#6badff"),  # the air at its rim
         "color2": ("color", "#ffd27a"),  # your place
     },
+    # The sun's way over the sky today (render/sunpath.py): an arc over the horizon from sunrise
+    # to sunset, the day gone in the sun's light, the rest dotted, the sun where it stands; by
+    # night the arc lies dim under the moon's crescent. Its sensor is how much of the day has
+    # gone (``sun.progress``, none by night); without the sun's times ([weather] latitude and
+    # longitude) it is not drawn.
+    "sunpath": {
+        "w": ("int", 160),
+        "h": ("int", 44),
+        "sensor": ("sensor", "sun.progress"),
+        "thickness": ("number", 2),
+        "color": ("color", "#f5c46b"),  # the sun, and the day gone
+        "color2": ("color?", None),  # where the day began (empty: the colour, deeper)
+        "background": ("color", "#2a3644"),  # the horizon and the day to come
+        "night": ("color", "#c9d3de"),  # the moon by night
+    },
     # The sign of an AI agent at work (render/agent.py): working, waiting for you, idle, off,
     # as its reading says (ai.claude.state, ai.codex.state).
     "agent": {
@@ -492,6 +507,7 @@ PRIMARY_FIELDS: dict[str, tuple[str, ...]] = {
     "moon": ("color", "color2", "mirror"),
     "earth": ("spin", "clouds", "color", "color2"),
     "agent": ("sensor", "color", "color2"),
+    "sunpath": ("color", "color2", "background", "night"),
     "image": ("src", "fit", "slides", "seconds", "speed"),
     "weather": ("field", "format", "color", "font_size"),
     "icon": ("icon", "finish", "color", "sensor"),

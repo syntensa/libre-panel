@@ -2851,6 +2851,39 @@ class Renderer:
 
         return self._cached(widget, (state, at, colors, size), build)
 
+    def _draw_sunpath(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
+        """The sun's way over the sky today (render/sunpath.py): the day gone and the sun where
+        it stands (``sun.progress``); by night the moon over the way, and under the midnight
+        sun the sun at its height. Nothing where the sun's times are not known."""
+        from libre_panel.render import sunpath
+
+        at = sunpath.step(snapshot.value(widget["sensor"]))
+        up = snapshot.value("sun.up")
+        if at is None and up is None:
+            return None  # (no place: no sun's times)
+        if at is None and _number(up) == 1:  # the midnight sun: up all day
+            at = sunpath.STEPS // 2
+        w, h = max(8, widget["w"]), max(6, widget["h"])
+        colour = self.color(widget["color"]) or (245, 196, 107, 255)
+        deep = self.color(widget["color2"]) or (
+            *(round(c * 0.62 + d * 0.38) for c, d in zip(colour[:3], (60, 24, 8), strict=True)),
+            255,
+        )
+        track = self.color(widget["background"]) or (42, 54, 68, 255)
+        moon = self.color(widget["night"]) or (201, 211, 222, 255)
+        thick = max(1.0, float(widget["thickness"]))
+        x, y = widget["x"], widget["y"]
+
+        def build() -> Piece:
+            image = sunpath.ground(w, h, thick, track)
+            if at is None:
+                image.alpha_composite(sunpath.night(w, h, thick, moon))
+            else:
+                image.alpha_composite(sunpath.day(w, h, thick, at / sunpath.STEPS, colour, deep))
+            return Piece(image, x, y, [x, y, w, h])
+
+        return self._cached(widget, (at, colour, deep, track, moon, w, h, thick), build)
+
     # -- fans --------------------------------------------------------------
 
     # the bars of lists kept: a core's bar that holds costs a lookup. Each is kept as the part

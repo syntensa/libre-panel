@@ -233,8 +233,9 @@ WEATHER_STEP_DEFAULT = WIDGET_SPECS["module"]["step"][1]
 
 def test_the_weather_card_shows_the_weather_and_the_next_hours():
     names, _, _ = drawn("forecast")
-    assert {"symbol", "kicker", "temp", "high", "low", "desc", "h0-time", "h0-symbol", "h0-temp",
+    assert {"symbol", "temp", "high", "low", "desc", "h0-time", "h0-symbol", "h0-temp",
             "h0-rain", "h4-time"} <= names  # fmt: skip
+    assert "kicker" not in names  # what it shows is plain to see: no heading over it
     assert not {"day", "calendar"} & names  # (the calendar sheet is for where there is no weather)
     parts = widgets_of("forecast")
     assert parts["symbol"]["type"] == "symbol" and parts["symbol"]["sensor"] == "weather.code"
@@ -278,7 +279,7 @@ def test_a_small_weather_card_is_the_weather_module():
         names, _, _ = drawn("forecast", cols=size[0], rows=size[1])
         assert "temp" in names and "symbol" not in names and "h0-time" not in names, size
     big, small = widgets_of("forecast", 3, 2), widgets_of("forecast", 2, 1)
-    assert "kicker" in big and "kicker" not in small
+    assert "h0-time" in big and "h0-time" not in small
 
 
 def tall_weather(cols):
@@ -296,19 +297,31 @@ def tall_weather(cols):
     return {w["id"].split("/", 1)[1]: w for w in renderer.widgets if w.get("_module") == "m"}
 
 
+def test_the_weather_card_keeps_a_title_of_its_own_over_the_temperature():
+    plain, titled = widgets_of("forecast"), widgets_of("forecast", title="Garden")
+    assert "kicker" not in plain and titled["kicker"]["text"].lower() == "garden"
+    assert plain["temp"]["font_size"] > titled["temp"]["font_size"]  # (it takes the room)
+    assert plain["temp"]["y"] < titled["temp"]["y"]
+
+
 def test_a_tall_weather_card_has_the_card_on_top_and_the_next_days_under_it():
     parts = tall_weather(28)
-    assert {"kicker", "symbol", "temp", "h0-time", "days-d0-name", "days-d3-symbol"} <= set(parts)
+    assert {"symbol", "temp", "h0-time", "days-d0-name", "days-d3-symbol"} <= set(parts)
     hours = max(w["y"] + w.get("h", 0) for k, w in parts.items() if re.fullmatch(r"h\d+-rain", k))
     days = [w for k, w in parts.items() if k.startswith("days-")]
     assert min(w["y"] for w in days) > hours  # under the hours, within the card
     assert max(w["y"] + w.get("h", w.get("size", 0)) for w in days) <= 20 + 680
     assert all("weather.temperature" in w["needs"] for w in days)  # else the calendar sheet
     assert not any(k.startswith("days-idle") for k in parts)
-    rain, sun = parts["rain"], parts["sun-rise"]  # across the card: room for both
-    assert rain["x"] < parts["temp"]["x"] and rain["max_width"] + sun["max_width"] > 400
+    # across the card the rain's line, and beside it the sun's way with both its times
+    rain, way = parts["rain"], parts["sun-way"]
+    assert rain["x"] < parts["temp"]["x"] and way["type"] == "sunpath"
+    assert way["x"] >= rain["x"] + rain["max_width"] and way["w"] > 120
+    rise, sunset = parts["sun-rise"], parts["sun-set"]
+    assert rise["x"] <= way["x"] and sunset["x"] >= way["x"] + way["w"]
+    assert rise["sensor"] == "sun.rise" and sunset["sensor"] == "sun.set"
     narrow = tall_weather(22)  # a narrow column (as on a portrait panel): the weather module
-    assert "kicker" not in narrow and not any(k.startswith("days-") for k in narrow)
+    assert "sun-way" not in narrow and not any(k.startswith("days-") for k in narrow)
 
 
 def test_the_symbols_of_the_weather_card_move_with_the_planned_time():
@@ -343,10 +356,15 @@ def test_the_weather_card_says_what_it_has_and_leaves_out_what_it_has_not():
 
 
 def test_the_sun_is_told_by_day_and_by_night_and_a_card_without_weather_is_a_calendar():
-    by_day, _, _ = drawn("forecast", snapshot_with(sun__up=1))
-    by_night, _, _ = drawn("forecast", snapshot_with(sun__up=0))
-    assert "sun-set" in by_day and "sun-rise" not in by_day
-    assert "sun-rise" in by_night and "sun-set" not in by_night
+    by_day, day, _ = drawn("forecast", snapshot_with(sun__up=1, sun__progress=0.4))
+    by_night, night, _ = drawn("forecast", snapshot_with(sun__up=0))
+    # (the bar's card: the sun's way under the symbol, with the time that comes next)
+    assert {"sun-way", "sun-set"} <= by_day and not {"sun-rise", "sun-way-night"} & by_day
+    assert {"sun-way-night", "sun-rise"} <= by_night and not {"sun-set", "sun-way"} & by_night
+    parts = widgets_of("forecast")
+    assert parts["sun-rise"]["sensor"] == "sun.next_rise" and differs(day, night)
+    unknown, _, _ = drawn("forecast", snapshot_with(drop=("sun",)))
+    assert not any(n.startswith("sun-") for n in unknown)  # no place: no sun
     none, _, _ = drawn("forecast", snapshot_with(drop=("weather", "sun")))
     assert {"day", "weekday", "month"} <= none and "temp" not in none and "symbol" not in none
 
