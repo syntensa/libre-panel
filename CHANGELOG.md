@@ -173,6 +173,13 @@
   (`engine: the stream's encoder: ...`).
 
 **Lighter**
+- **Texts of letters laid by the engine: a tenth less of the app's processor with Lumen.** A
+  text laid letter by letter (equal-width digits, letter spacing, a finish's letters: Lumen's
+  gliding numbers and its clocks) was laid here and went to the engine as a picture, anew
+  with every new text. Where the engine lays pictures, it goes as its letters and where they
+  lie, each letter's picture once, and the engine lays them as Pillow lays them, to the bit.
+  Lumen on the 12.3" (25 a second): the app 36 to 37 instead of 40 to 41 % of a core, the
+  engine the same.
 - **The rolling seconds a third lighter, and in their own colour as they roll.** A letter
   rolling a part of a pixel at a time was moved with its colours, which left its faintest
   pixels in what the rounding of so little made of them (of Lumen's #2EE6D6, (0, 170, 170)

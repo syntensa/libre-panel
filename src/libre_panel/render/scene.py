@@ -258,7 +258,8 @@ Placed = tuple[Image.Image, int, int]  # (picture, x, y where its top left lies)
 class Laid:
     """How an engine lays a piece's picture ``layer`` itself (engine/src/scene.rs's laid):
     ``parts`` (picture, x, y), each laid over those before it on a clear picture of the layer's
-    size, as Pillow's alpha_composite lays it (a fan's ring, its rotor over it); ``kept``,
+    size, as Pillow's alpha_composite lays it, nothing where one hangs off it (a fan's ring, its
+    rotor over it; a text's letters, one after the other); ``kept``,
     pictures the engine keeps with it besides, unused (the rotor's other positions: each goes to
     the engine once, not with every frame that shows it). Its ``layer`` is made here only when
     something asks for its pixels (a frame composed here)."""
@@ -279,7 +280,14 @@ def laid(
     def make() -> Image.Image:
         out = Image.new("RGBA", size, (0, 0, 0, 0))
         for image, x, y in parts:
-            out.alpha_composite(image, (x, y))
+            # (cut to the picture where it hangs off it, as Renderer._paste lays a letter)
+            x0, y0 = max(x, 0), max(y, 0)
+            x1, y1 = min(x + image.width, size[0]), min(y + image.height, size[1])
+            if x1 <= x0 or y1 <= y0:
+                continue
+            if (x0, y0, x1, y1) != (x, y, x + image.width, y + image.height):
+                image = image.crop((x0 - x, y0 - y, x1 - x, y1 - y))
+            out.alpha_composite(image, (x0, y0))
         return out
 
     return Laid(Lazy(size, "RGBA", make), parts, tuple(kept))

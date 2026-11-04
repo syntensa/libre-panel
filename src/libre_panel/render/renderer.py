@@ -2264,6 +2264,10 @@ class Renderer:
             widget = {**widget, "font_size": size}
         letters = self._letters(widget, text, color)
         if letters is not None:
+            parts = [placed for placed in letters.glyphs if placed is not None]
+            if self.native_laid and parts:  # laid by the engine from the letters it keeps
+                made = scenes.laid(letters.size, parts)
+                return Piece(made.layer, letters.left, letters.y, box=letters.box, native=made)
             return Piece(self._laid(letters), letters.left, letters.y, box=letters.box)
         font = self.font(widget.get("font", ""), size)
         x, y = widget["x"], widget["y"]
