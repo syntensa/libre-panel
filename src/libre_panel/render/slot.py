@@ -41,6 +41,7 @@ from collections import OrderedDict
 from dataclasses import replace
 from typing import Any
 
+import numpy as np
 from PIL import Image, ImageChops, ImageDraw
 
 from libre_panel.render import cover, light
@@ -208,8 +209,11 @@ class Slot:
         self._from: tuple[int, int, int] | None = None
         self._to: tuple[int, int, int] | None = None
         self._at = 0.0
-        self._frames: OrderedDict[tuple[int, int, int], Piece] = OrderedDict()
-        self._mask: Image.Image | None = None
+        # the frame by colour: the colours a change starts from and goes to (a colour on its
+        # way between them is drawn for its frame alone: _passing)
+        self._frames: OrderedDict[tuple[int, int, int], list[Piece]] = OrderedDict()
+        self._passing: tuple[tuple[int, int, int], list[Piece]] | None = None
+        self._strips: list[tuple[int, int, Image.Image]] | None = None  # (_cut)
         self.width = self._line_width(module)
 
     # -- which card ----------------------------------------------------------------------------
@@ -519,22 +523,62 @@ class Slot:
         if u < 1.0:
             self.renderer.moving = True
 
-    def _frame(self, colour: tuple[int, int, int]) -> Piece:
-        """The frame, a thin flat line round the module in ``colour``: drawn once per colour."""
-        piece = self._frames.get(colour)
-        if piece is not None:
+    def _frame(self, colour: tuple[int, int, int]) -> list[Piece]:
+        """The frame, a thin flat line round the module in ``colour``: drawn once per colour,
+        kept for the colours a change starts from and goes to (one on its way between them is
+        drawn for its frame). In strips along the module's edges, as :meth:`_cut` cuts it."""
+        kept = self._frames.get(colour)
+        if kept is not None:
             self._frames.move_to_end(colour)
-            return piece
+            return kept
+        if self._passing is not None and self._passing[0] == colour:
+            return self._passing[1]
         x, y, w, h = self.box
-        if self._mask is None:
-            self._mask = self._outline(w, h)
-        layer = Image.new("RGBA", (w, h), (*colour, 255))
-        layer.putalpha(self._mask)
-        piece = Piece(layer, x, y, [x, y, w, h])
-        self._frames[colour] = piece
-        while len(self._frames) > 6:
-            self._frames.popitem(last=False)
-        return piece
+        if self._strips is None:
+            self._strips = self._cut(self._outline(w, h))
+        pieces = []
+        for sx, sy, mask in self._strips:
+            layer = Image.new("RGBA", mask.size, (*colour, 255))
+            layer.putalpha(mask)
+            pieces.append(Piece(layer, x + sx, y + sy, [x, y, w, h]))
+        if colour in (self._from, self._to):
+            self._frames[colour] = pieces
+            while len(self._frames) > 6:
+                self._frames.popitem(last=False)
+        else:
+            self._passing = (colour, pieces)
+        return pieces
+
+    def _cut(self, mask: Image.Image) -> list[tuple[int, int, Image.Image]]:
+        """The frame's mask cut in strips along the module's edges that hold all of its line,
+        its corners with it: what lies between them is transparent, so the frame laid strip by
+        strip is the frame (Lumen's on the 12.3" 0.2 MB a colour instead of 1.5, and a change
+        of its colour changes only the strips' pixels). Whole where the module is turned (a
+        turn moves each piece by itself) or the mask is no such frame."""
+        w, h = mask.size
+        angle = float(self.module.get("rotate") or 0) % 360
+        a = np.asarray(mask)
+        lit = np.flatnonzero(a[h // 2])  # the middle row: the sides' lines
+        if angle or w < 8 or h < 8 or not len(lit) or a[:, w // 2].max() == 0:
+            return [(0, 0, mask)]
+        left, right = lit[lit < w // 2], lit[lit >= w // 2]
+        side = 1 + max(int(left.max()) + 1 if len(left) else 0,
+                       w - int(right.min()) if len(right) else 0)  # fmt: skip
+        if 4 * side >= w:
+            return [(0, 0, mask)]
+        inner = a[:, side : w - side].any(axis=1)  # rows with something between the sides
+        upper, lower = np.flatnonzero(inner[: h // 2]), np.flatnonzero(inner[h // 2 :])
+        top = int(upper.max()) + 1 if len(upper) else 0
+        bottom = h // 2 + int(lower.min()) if len(lower) else h
+        if 2 * (top + h - bottom) >= h:
+            return [(0, 0, mask)]
+        strips = [
+            (0, 0, mask.crop((0, 0, w, top))),
+            (0, bottom, mask.crop((0, bottom, w, h))),
+            (0, top, mask.crop((0, top, side, bottom))),
+            (w - side, top, mask.crop((w - side, top, w, bottom))),
+        ]
+        return [(x, y, m) for x, y, m in strips if m.width and m.height and m.getbbox()]
 
     def _outline(self, w: int, h: int) -> Image.Image:
         style = {**M.STYLE_DEFAULTS, **(self.renderer.theme.style or {})}
@@ -582,7 +626,8 @@ class Slot:
                 if moved is not None:
                     extra.append((f"{part}\0old", moved))
         if self.width and self._colour is not None:
-            extra.append((f"{prefix}\0frame", self._frame(self._colour)))
+            for i, strip in enumerate(self._frame(self._colour)):
+                extra.append((f"{prefix}\0frame{i or ''}", strip))
         line = self._ignition()
         if line is not None:
             extra.append((f"{prefix}\0line", line))

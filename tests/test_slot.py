@@ -756,9 +756,19 @@ def replace_light(piece, light):
 
 
 def frame_colour(renderer):
-    piece = dict(renderer._last[0])["m/\0frame"]
+    piece = dict(renderer._last[0])["m/\0frame"]  # (the strip along the top edge)
     x, y, w, h = piece.box
     return tuple(piece.layer.getpixel((w // 2, 0))[:3])
+
+
+def frame_of(renderer, mid="m"):
+    """The frame over its module's box, laid strip by strip as the frame is (RGBA)."""
+    x, y, w, h = renderer.module_boxes[mid]
+    out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    for wid, piece in renderer._last[0]:
+        if wid.startswith(f"{mid}/\0frame"):
+            out.alpha_composite(piece.layer, (piece.x - x, piece.y - y))
+    return out
 
 
 def test_the_frame_takes_the_colour_of_the_card_on_show():
@@ -831,17 +841,16 @@ def test_the_frame_is_a_flat_thin_line_and_follows_the_style():
     renderer = Renderer(theme_of(), animate=False)
     renderer.render(demo(), 0.0)
     box = renderer._slots["m"]
-    piece = dict(renderer._last[0])["m/\0frame"]
-    alpha = np.asarray(piece.layer.getchannel("A"))
+    frame = frame_of(renderer)
+    alpha = np.asarray(frame.getchannel("A"))
     h, w = alpha.shape
-    assert (piece.x, piece.y, w, h) == tuple(renderer.module_boxes["m"])
     unit = min(w, h, min(renderer.theme.width, renderer.theme.height) / 2)
     assert box.width == max(1, round(unit / 160))  # as thick as a module card's outline
     column = alpha[:, w // 2]
     assert int((column > 127).sum()) == 2 * box.width  # one line at the top, one at the bottom
     assert column[: box.width].min() >= 200 and column[box.width + 2 : -box.width - 2].max() <= 3
     assert int(alpha[60:-60, 60:-60].max()) <= 3  # nothing inside: no fill, no bevel, no trough
-    colours = {tuple(px[:3]) for px in np.asarray(piece.layer).reshape(-1, 4) if px[3] > 250}
+    colours = {tuple(px[:3]) for px in np.asarray(frame).reshape(-1, 4) if px[3] > 250}
     assert len(colours) == 1  # one flat colour
     flat = Renderer(
         parse_theme({
@@ -852,7 +861,53 @@ def test_the_frame_is_a_flat_thin_line_and_follows_the_style():
         animate=False,
     )  # fmt: skip
     flat.render(demo(), 0.0)
-    assert "m/\0frame" not in [wid for wid, _ in flat._last[0]]  # no outline in this style
+    assert not [wid for wid, _ in flat._last[0] if "\0frame" in wid]  # no outline in this style
+
+
+@pytest.mark.parametrize("rotate", [0, 90, 30])
+def test_the_frame_in_strips_along_the_edges_is_the_frame(rotate):
+    """Its strips hold all of its line, the corners with it, and nothing lies between them:
+    laid strip by strip it is the frame drawn whole, in a part of the bytes; a turned module
+    keeps its frame whole (each piece turns by itself)."""
+    renderer = Renderer(theme_of(rotate=rotate), animate=False)
+    renderer.render(demo(), 0.0)
+    box = renderer._slots["m"]
+    x, y, w, h = box.box
+    whole = Image.new("RGBA", (w, h), (*box._colour, 255))
+    whole.putalpha(box._outline(w, h))
+    strips = [p for wid, p in renderer._last[0] if wid.startswith("m/\0frame")]
+    if rotate:  # (the piece on the panel is turned)
+        assert len(strips) == 1
+        assert [(sx, sy, m.size) for sx, sy, m in box._strips] == [(0, 0, (w, h))]
+        return
+    assert len(strips) == 4
+    alone = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    alone.alpha_composite(whole)  # (laid as the strips are: what is transparent is nothing)
+    assert frame_of(renderer).tobytes() == alone.tobytes()
+    assert sum(p.layer.width * p.layer.height for p in strips) * 8 < w * h
+    canvas = Image.new("RGB", (w, h), (20, 30, 40))
+    laid = canvas.copy()
+    canvas.paste(whole, (0, 0), whole)
+    for p in strips:  # (as a frame of the panel lays them: the same pixels)
+        laid.paste(p.layer, (p.x - x, p.y - y), p.layer)
+    assert laid.tobytes() == canvas.tobytes()
+
+
+def test_a_frame_on_its_way_to_a_colour_is_not_kept():
+    """A change of colour draws the frame for each colour on its way (each frame of the
+    change), and keeps the frames of the colours it starts from and goes to."""
+    renderer = Renderer(theme_of(), animate=True)
+    box = renderer._slots["m"]
+    renderer.render(demo(), 0.0)
+    start = box._colour
+    weather = demo(media=False)
+    for k in range(12):
+        renderer.render(weather, 1.0 + k * slot.FADE / 10)
+    assert box._colour == box._to != start
+    assert set(box._frames) == {start, box._to}
+    again = [p for wid, p in renderer._last[0] if wid.startswith("m/\0frame")]
+    renderer.render(weather, 3.0)
+    assert [p for wid, p in renderer._last[0] if wid.startswith("m/\0frame")] == again
 
 
 # -- cutting a piece to rows -----------------------------------------------------------------

@@ -175,6 +175,11 @@
   A side's matrix is made now when it is asked for a second time (once, the blur runs its
   passes, as fast), and a glow with room round it takes one of a few rounded sizes: Lumen's
   loop on the 12.3" keeps half a megabyte of them, the same pixels, as fast as before.
+- **A slot's frame in strips: 1.4 MB less for each of its colours.** The thin line round a
+  slot of cards (Lumen's card on the 12.3") was a picture of the module's size for each of
+  its colours, six of them kept, and one more made for every frame of a change of colour; it
+  is four strips along the edges now, the same pixels, 94 kB a colour instead of 1.5 MB, and
+  only the colours a change starts from and goes to are kept.
 - **11 MB less once the engine composes the frames.** A panel's first few frames are composed
   here before the engine takes them (Lumen's eight on the 12.3"), and what lay under their
   changing pieces stayed kept for the frames to come: 7 MB that no frame looked at again
