@@ -80,8 +80,7 @@
       "radius": 0,
       "outline": null,
       "outline_width": 1,
-      "backdrop_blur": 0,
-      "ridge": ""
+      "backdrop_blur": 0
     },
     {
       "type": "rect",
@@ -108,8 +107,7 @@
       "radius": 14,
       "outline": "@line",
       "outline_width": 2,
-      "backdrop_blur": 0,
-      "ridge": ""
+      "backdrop_blur": 0
     },
     {
       "type": "rect",
@@ -136,8 +134,7 @@
       "radius": 14,
       "outline": "@line",
       "outline_width": 2,
-      "backdrop_blur": 0,
-      "ridge": ""
+      "backdrop_blur": 0
     },
     {
       "type": "clock",
@@ -228,8 +225,7 @@
       "radius": 2,
       "outline": null,
       "outline_width": 1,
-      "backdrop_blur": 0,
-      "ridge": ""
+      "backdrop_blur": 0
     },
     {
       "type": "clock",
@@ -1246,8 +1242,7 @@
       "radius": 0,
       "outline": null,
       "outline_width": 1,
-      "backdrop_blur": 0,
-      "ridge": ""
+      "backdrop_blur": 0
     },
     {
       "type": "metric",

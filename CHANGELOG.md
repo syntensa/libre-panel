@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+**Removed**
+- **The panel light, the depth dust and SPUR II's screens.** Hardly anyone used them, and
+  every frame and every test paid for them. The panel light (`look.light`: the sun's gloss on
+  ridged frames and its sweeps on the hour, on a new track and after a transition), the depth
+  dust (`look.dust`), the ridges of rects (`ridge`) and SPUR II's nine screens (`spur-ii`,
+  `spur-classic`, `spur-horizon`, `spur-header`, `spur-focus`, `spur-session`,
+  `spur-cockpit`, `spur-studio` and `spur-round-report`) are gone: from the app (*Look* has
+  the grid, the finishes and the notices), from the engine and from the downloads. A theme of
+  your own that has them loads as before, without them and without a warning; where
+  `config.toml` or a page names one of those screens, the panel shows its own theme, and Start
+  and the tray say which one is missing. The grid, the lit, facet and acrylic finishes and
+  Libre Panel's own screens are as they were, and a collection a theme names is shown by its
+  name alone. For plugins, `RenderContext.light`, `RenderContext.light_edge()`,
+  `WidgetType.edges()` and `libre_panel.render.look.LightEdge` went with the light.
+
 ## 0.8.0rc2 — 2026-11-04
 
 **Security**

@@ -44,8 +44,6 @@ def designed(name: str, data: dict[str, Any]) -> tuple[dict[str, Any], list[str]
     if found is None:
         return data, [f"{name}: of no family in design.FAMILIES"]
     family_name, family = found
-    if family.look is None:
-        return data, []
     out = json.loads(json.dumps(data))
     changes: list[str] = []
     palette = out.get("palette") or {}

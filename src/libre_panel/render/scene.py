@@ -30,25 +30,13 @@ if TYPE_CHECKING:
 class Scene:
     """A frame of ``size``: ``ground``, the theme's colour (RGB) or its picture (RGB, the frame's
     size), with ``pieces`` (widget id, piece) laid on it in turn; ``half``: turned half a turn,
-    as for a panel mounted upside down (app.turned); ``dust``: the dust over it. Its pieces
-    are never changed: the renderer hands out new ones."""
+    as for a panel mounted upside down (app.turned). Its pieces are never changed: the
+    renderer hands out new ones."""
 
     size: tuple[int, int]
     ground: tuple[int, int, int] | Image.Image
     pieces: tuple[tuple[str, Piece], ...]
     half: bool = False
-    dust: Dusting | None = None  # the theme's dust over its first pieces (render/dust.py)
-
-
-@dataclass(frozen=True, eq=False)
-class Dusting:
-    """The dust over a frame of layers (render/dust.py, a theme's look.dust): ``taps``, what
-    its grains cover at the time of the frame (Dust.taps: the pixels, what they add, what
-    they cover), laid over the scene's first ``at`` pieces; those after (a message) lie over
-    it, as they are drawn over the dusted frame here."""
-
-    at: int
-    taps: tuple[np.ndarray, np.ndarray, np.ndarray]
 
 
 def layerable(piece: Piece) -> bool:
@@ -69,9 +57,7 @@ def layerable(piece: Piece) -> bool:
 
 def compose(scene: Scene) -> Image.Image:
     """The frame of ``scene`` (RGB), as the renderer composes it: its ground with each piece
-    laid on it in turn (Renderer._composite onto the opaque frame), its dust over the pieces it
-    lies over (Renderer._dusted)."""
-    from libre_panel.render import dust as dusts
+    laid on it in turn (Renderer._composite onto the opaque frame)."""
     from libre_panel.render.renderer import Renderer
 
     ground = scene.ground
@@ -79,13 +65,8 @@ def compose(scene: Scene) -> Image.Image:
         canvas = ground.copy()
     else:
         canvas = Image.new("RGB", scene.size, ground)
-    dust = scene.dust
-    for k, (_wid, piece) in enumerate(scene.pieces):
-        if dust is not None and k == dust.at:
-            canvas = dusts.laid_over(canvas, dust.taps)
+    for _wid, piece in scene.pieces:
         Renderer._composite(canvas, piece, (0, 0), True)
-    if dust is not None and dust.at >= len(scene.pieces):
-        canvas = dusts.laid_over(canvas, dust.taps)
     if scene.half:
         canvas = canvas.transpose(Image.Transpose.ROTATE_180)
     return canvas

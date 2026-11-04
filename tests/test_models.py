@@ -77,7 +77,7 @@ def test_every_built_in_theme_adapts_to_every_panel_either_way_round(name):
             assert theme.warnings == [], (model.id, orientation)
 
 
-@pytest.mark.parametrize("name", ["lumen", "studio", "libre-default", "spur-studio"])
+@pytest.mark.parametrize("name", ["lumen", "studio", "libre-default", "arena"])
 def test_the_modules_of_an_adapted_theme_stay_in_the_frame_on_every_panel(name):
     """Their grid is pixels too: it came along with its margin and gap and 48 x 48 cells, and
     on the 0.96" the modules ran far past the frame."""
@@ -258,4 +258,4 @@ def test_built_in_layouts_keep_clear_of_hidden_strips():
                 )
                 assert inside, f"{entry['id']}: {widget['id']} draws at {box}, visible {visible}"
             checked += 1
-    assert checked > 10  # spur-ii on the 9.2"
+    assert checked > 10  # (the 9.2" screens)

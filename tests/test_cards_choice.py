@@ -82,7 +82,7 @@ def test_libre_panels_own_slots_take_the_persons_cards_and_one_of_its_own_keeps_
             w for w in with_cards(theme, ["ai", "date"]).widgets if w.get("module") == "cards"
         )
         assert slot_items(slot) == [("ai", ""), ("date", "")], name
-    for name in ("studio", "libre-default", "spur-studio"):  # (their date steps aside for one)
+    for name in ("studio", "libre-default"):  # (their date steps aside for one)
         own = load_theme(builtin_themes_dir() / name)
         assert not follows_cards(own) and with_cards(own, ["ai"]) is own
 

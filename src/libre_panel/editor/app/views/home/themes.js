@@ -1,8 +1,7 @@
 // The themes Start shows: the theme list (/api/themes) in the order that helps most, and the
 // cards and rows they come in. Nothing here names a theme: what is installed is what shows. A
-// theme that names a `collection` (a set that belongs together, such as the screens of the
-// project Libre Panel grew out of) is kept apart: Libre Panel's own themes and yours come first,
-// each collection waits closed at the end.
+// theme that names a `collection` (a set that belongs together) is kept apart: Libre Panel's own
+// themes and yours come first, each collection waits closed at the end.
 
 import { endpoints } from "../../core/api.js";
 import { t } from "../../core/i18n.js";
@@ -175,7 +174,7 @@ function Collection({ name, items, alone, asked, ...more }) {
     if (asked) section.current?.scrollIntoView({ block: "start" });
   }, []);
   const body = `collection-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-  const title = t("{collection} · Legacy", { collection: name });
+  const title = name;
   return html`<section class="theme-collection" ref=${section}>
     <button type="button" class="theme-collection-toggle" aria-expanded=${String(open)} aria-controls=${open ? body : undefined} onClick=${() => setOpen(!open)}>
       <${Icon} name=${open ? "chevron-down" : "chevron-right"} size=${16} />
@@ -186,7 +185,6 @@ function Collection({ name, items, alone, asked, ...more }) {
             ? html`<span class="theme-card-badge"><${Icon} name="check" size=${12} strokeWidth=${3} /> ${t("On the panel")}</span>`
             : null}
         </span>
-        <span class="theme-collection-note">${t("The screens of the project Libre Panel grew out of")}</span>
       </span>
       <span class="theme-collection-count">${items.length}</span>
     </button>

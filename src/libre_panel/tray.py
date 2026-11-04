@@ -116,8 +116,7 @@ def theme_choices(
     """The themes the tray offers for the panel, as (id, name), by name, in three parts, as Start
     shows them: those made for ``model`` (all where it is not known); the others ("More
     themes": other panels, ``report``, the round report's, and those to go beside another on a
-    second panel); and each collection's (the
-    screens Libre Panel grew out of), apart. A theme's version for a panel on end
+    second panel); and each collection's, apart. A theme's version for a panel on end
     ("lumen-vertical") is not listed: it is chosen as its theme."""
     themes = list_themes()
     ids = {theme["id"] for theme in themes}

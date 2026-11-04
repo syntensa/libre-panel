@@ -173,7 +173,7 @@ const GROUPS = () => [
     short: t("Scale"),
     keys: ["min", "max", "scale", "start_angle", "end_angle", "thickness", "cap", "ticks", "tick_color", "direction", "segments", "segment_gap", "line_width", "history", "seconds", "per_frame", "inset", "grid", "grid_color", "fill_fade", "fill_alpha", "columns", "max_items", "levels"],
   },
-  { id: "effects", title: t("Glow and shadow"), short: t("Glow"), keys: [...(store.get().specs?.effect_fields || []), "glow_area", "ridge"] },
+  { id: "effects", title: t("Glow and shadow"), short: t("Glow"), keys: [...(store.get().specs?.effect_fields || []), "glow_area"] },
   { id: "advanced", title: t("Advanced"), short: t("Advanced"), keys: ["id", "visible", "locked", "hide_if_missing", "needs"] },
 ];
 
@@ -841,7 +841,7 @@ function LookTiles({ theme }) {
       )}
     </div>
     <small class="field-hint">${t("The colours of the whole theme in one click.")}</small>
-    <${ToLook} text=${t("Finish, glow, panel light and notices: in Look")} />`;
+    <${ToLook} text=${t("Finish, glow, grid and notices: in Look")} />`;
 }
 
 /** The way to Look, where the theme's look is set in full. */
@@ -858,7 +858,7 @@ function PluginOptions({ options, values, onChange }) {
 
 /** What a theme has that is changed now and then: its modules' grid and style, its colours by
  * name, its notices, its timing, a plugin's screen and what is said about it. The look itself
- * (colour world, finish, light, grid background, dust) is Look's, a click away. */
+ * (colour world, finish, grid background) is Look's, a click away. */
 function ThemeDetails({ theme, onBack }) {
   const specs = store.get().specs;
   const grid = useStore((s) => s.render.grid);
@@ -881,7 +881,7 @@ function ThemeDetails({ theme, onBack }) {
     <${DetailsHead} title=${t("Theme")} onBack=${onBack} />
     <div class="inspector-body">
       <div class="inspector-aside">
-        <span>${t("The colour world, the finish, the panel light, the grid background and the depth dust are set in Look.")}</span>
+        <span>${t("The colour world, the finish and the grid background are set in Look.")}</span>
         <${ToLook} text=${t("Open Look")} />
       </div>
       ${hasModules

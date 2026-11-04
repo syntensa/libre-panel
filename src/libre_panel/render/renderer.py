@@ -41,7 +41,6 @@ from libre_panel.render import cover, fan, fan_looks, kept, lists, moving
 from libre_panel.render import finish as finishes
 from libre_panel.render import scene as scenes
 from libre_panel.render.countdown import countdown_text
-from libre_panel.render.dust import Dust
 from libre_panel.render.formatting import FormatError, auto_format, safe_format
 from libre_panel.render.kept import MB, Kept, cached, size_of
 from libre_panel.render.motion import MAX_POINTS, RATE, History, Motion, Spring, grid
@@ -83,7 +82,7 @@ class Piece:
     box: Box | None = None  # hit box for the editor; defaults to the layer bounds
     backdrop: Image.Image | None = None  # "L" mask: blur the canvas beneath first
     backdrop_radius: int = 0
-    add: bool = False  # light: added onto what lies beneath (the panel light's gloss)
+    add: bool = False  # light: added onto what lies beneath (the card slot's line of light)
     light: Piece | None = None  # light added onto the panel after the layer: a glow
     # what it can change on the canvas, worked out once (Renderer._extent): a frame
     # asks that of every piece for every region it composes
@@ -230,19 +229,6 @@ def _drawing(finish: Any, renderer: Renderer) -> Callable[..., Any]:
         return finish.draw(ref(), widget, snapshot, now)
 
     return draw
-
-
-def _weakly(method: Callable[..., Any]) -> Callable[..., Any]:
-    """A bound method that does not keep its object alive (for what the renderer hands out)."""
-    ref = weakref.WeakMethod(method)
-
-    def call(*args: Any) -> Any:
-        found = ref()
-        if found is None:
-            raise RuntimeError("the renderer is gone")
-        return found(*args)
-
-    return call
 
 
 def _number(value: Any) -> float | None:
@@ -899,13 +885,10 @@ class Renderer:
         self.widgets, self.module_boxes = expand_modules(theme)
         # Finishes other than flat, and the panel's look (render.finish,
         # render.look); a theme with neither pays nothing for them.
-        self.light_edges: list[Any] = []  # this frame's, for the panel light (add_light_edge)
-        self.edge_owners: dict[int, str] = {}  # edge id -> the piece that drew it this frame
-        self._drawing = ""  # the widget being drawn ("\0screen": the screen)
-        self.place: tuple[float, float] | None = None  # where the sun is seen from (the loop)
+        self.place: tuple[float, float] | None = None  # your place, for the earth (the loop)
         self._finishes = finishes.attach(self)  # widget id -> finish
         self.look: Any = None
-        if theme.look:
+        if theme.look.get("grid"):
             from libre_panel.render.look import Look
 
             self.look = Look(self)
@@ -922,9 +905,8 @@ class Renderer:
         self._opaque = (self.color(theme.background_color) or (0, 0, 0, 0))[3] == 255
         # and such frames are composed in RGB (Pillow keeps it in four bytes a pixel too, and
         # pastes RGBA into it as it pastes into RGBA): the frame the panel gets is then a copy
-        # of it, not a conversion (a millisecond and a half less on the 12.3"); the dust lays
-        # its grains on RGBA
-        self._mode = "RGB" if self._opaque and not (theme.look or {}).get("dust") else "RGBA"
+        # of it, not a conversion (a millisecond and a half less on the 12.3")
+        self._mode = "RGB" if self._opaque else "RGBA"
         # Incremental compositing: the last frame and the pieces it was made of.
         # Only regions whose pieces changed are composed again, so a mostly
         # static screen costs little at 50 fps. The result is pixel-identical.
@@ -957,9 +939,6 @@ class Renderer:
         self.native_laid = False
         # ... and makes a lit bar's picture and glow for each value (scene.Bar), likewise
         self.native_bars = False
-        # ... and lays the theme's dust over the frame it composes (scene.Dusting): a theme
-        # with dust (SPUR's) goes as its layers too, its grains moved here
-        self.native_dust = False
         # ... and a card whose inside is one colour comes as its edges and that colour, which the
         # engine lays without pixels (render/scene.py's Filled; the fills property)
         self._fills = False
@@ -967,13 +946,11 @@ class Renderer:
         self._held: dict[str, bool] = {}  # the conditions of needs worked out in this frame ...
         self._held_for: tuple[Any, ...] = ()  # ... for these readings (and pictures)
         self._composed: list[tuple[int, int, int, int]] | None = None
-        self._swept = False  # a sweep of light ran over the frame before (look.light)
         self._finite = _Finite()  # (the readings it found drawable the frame before)
         # Per region, what lies under the first piece that changes (a graph that
         # moves every frame over a card): the same pieces need not be laid again.
         self._underlays = Kept("renderer.underlays", self.UNDERLAY_BYTES)
         self._grounds: tuple[RGBA | None, Image.Image] | None = None  # (_ground)
-        self._scene_ground: tuple[Image.Image, Image.Image] | None = None  # (_layers_ground)
         # Video panels take a frame every 20 ms. With background builds a
         # changed piece is built in a helper thread while frames keep going out
         # with the previous piece; the change shows a frame or two later.
@@ -1004,8 +981,6 @@ class Renderer:
         self._breathe: Callable[[], None] | None = None  # between widgets (warming up)
         self._plugin_types: dict[str, Any] = {}
         self._screen_last: tuple[Any, Piece] | None = None
-        self._dust: Dust | None = None  # the theme's look.dust, once it is drawn (render/dust.py)
-        self._dust_submit: Callable[..., Any] | None = None  # its way to the helper thread
         self._dots: dict[tuple[Any, ...], tuple[Image.Image, int]] = {}  # end dots, by look
         self._rotors: dict[str, fan.Rotor] = {}  # fan widget id -> how it turns (render/fan.py)
         # what the user chose for the fans: their look and colours (config.toml [hardware])
@@ -1582,39 +1557,24 @@ class Renderer:
         self._last = (pieces, canvas)
         return canvas
 
-    def _layered(self, pieces: list[tuple[str, Piece]], dust: bool) -> bool:
+    def _layered(self, pieces: list[tuple[str, Piece]]) -> bool:
         """Whether the engine can compose this frame of ``pieces`` as :meth:`_compose` does:
-        on the opaque ground of the frame, without a look's sweep of light over the frame
-        afterwards (its grid is one more piece), of pieces it takes as they are
-        (render/scene.py's ``layerable``); with ``dust``, where it lays the dust too and the
-        dust's stock is taken from the frame the panel showed, as it is for a frame composed
-        here (the frame composed here, in RGBA for the dust, would give it another). A frame
-        with dust is composed here in RGBA, one without in RGB: the same colours (the paste
-        through a piece's alpha and light added each work on the channels alone), and the
-        engine's are those."""
-        theme = self.theme
+        on the opaque ground of a frame in RGB (a look's grid is one more piece), of pieces
+        it takes as they are (render/scene.py's ``layerable``)."""
         return (
-            (self.look is None or self.look.light is None)
-            and (
-                not dust
-                or self.native_dust
-                and self.shown is not None
-                and self.shown.size == (theme.width, theme.height)
-            )
-            and self.keep_static
+            self.keep_static
+            and self._mode == "RGB"
             and self._opaque
             and all(scenes.layerable(piece) for _, piece in pieces)
         )
 
-    def _scene_frame(
-        self, pieces: list[tuple[str, Piece]], dust: scenes.Dusting | None = None
-    ) -> scenes.SceneFrame:
-        """The frame of ``pieces`` for the engine to compose, ``dust`` over it: what changed is
-        the engine's to work out. The frame composed here last goes, with the pieces it was
-        made of (on the 12.3" 5.5 MB and some more, kept the whole time the engine composed):
-        one composed here again (a transition, a message drawn here) is composed whole, once.
-        What lay under its pieces goes too: the frames composed here before the engine took
-        them (Lumen's eight at the start on the 12.3") left 7 MB of it, found by none after."""
+    def _scene_frame(self, pieces: list[tuple[str, Piece]]) -> scenes.SceneFrame:
+        """The frame of ``pieces`` for the engine to compose: what changed is the engine's to
+        work out. The frame composed here last goes, with the pieces it was made of (on the
+        12.3" 5.5 MB and some more, kept the whole time the engine composed): one composed
+        here again (a transition, a message drawn here) is composed whole, once. What lay
+        under its pieces goes too: the frames composed here before the engine took them
+        (Lumen's eight at the start on the 12.3") left 7 MB of it, found by none after."""
         self.damage = None
         self._handed = None
         self._last = None
@@ -1622,24 +1582,15 @@ class Renderer:
             self._underlays.clear()
         if self._fills:
             self._forget_fills()
-        self._swept = False
         self.scenes += 1
-        size = (self.theme.width, self.theme.height)
-        scene = scenes.Scene(size, self._layers_ground(), tuple(pieces), dust=dust)
-        return scenes.SceneFrame(scene)
-
-    def _layers_ground(self) -> tuple[int, int, int] | Image.Image:
-        """The ground of a frame of layers: the theme's colour, or its picture (RGB)."""
         color = self.color(self.theme.background_color)
         if self._background is None and color is not None:
-            return (color[0], color[1], color[2])
-        ground = self._ground()
-        if ground.mode != "RGB":  # (frames composed here in RGBA, for the dust)
-            kept = self._scene_ground
-            if kept is None or kept[0] is not ground:
-                kept = self._scene_ground = (ground, ground.convert("RGB"))
-            ground = kept[1]
-        return ground
+            ground: Any = tuple(color[:3])
+        else:
+            ground = self._ground()
+        return scenes.SceneFrame(
+            scenes.Scene((self.theme.width, self.theme.height), ground, tuple(pieces))
+        )
 
     # A card's pixels made here (render/scene.py's Filled: for a frame composed here, the app's
     # picture of the panel) go when nothing asked for them this long: the engine lays it without
@@ -1814,28 +1765,7 @@ class Renderer:
             image, (x, y) = result if isinstance(result, tuple) else (result, at)
             return Piece(image if image.mode == "RGBA" else image.convert("RGBA"), int(x), int(y))
 
-        piece = self._cached(widget, ("plugin", kind.key(widget, snapshot, now)), build)
-        edges = getattr(kind, "edges", None)  # where the panel light glints (WidgetType.edges)
-        if edges is not None and self.look is not None and self.look.light is not None:
-            for edge in edges(widget, ctx, snapshot, now) or ():
-                self.add_light_edge(edge)
-        return piece
-
-    # -- the look ----------------------------------------------------------
-
-    def add_light_edge(self, edge: Any) -> None:
-        """Let the panel light (theme ``look.light``) glint on ``edge`` (a
-        render.look.LightEdge) in this frame. Call it on every frame, on the
-        render thread (while drawing a widget, not in a build that may run in
-        the helper thread), with the same object while nothing changes."""
-        self.light_edges.append(edge)
-        self.edge_owners[id(edge)] = self._drawing  # its gloss lies on that piece
-
-    def transition_ended(self, kind: Any, now: float) -> None:
-        """A transition between themes ended at ``now`` (the main loop says so):
-        after a tube or an entrance, the panel light sweeps across."""
-        if self.look is not None:
-            self.look.transition_ended(kind, now)
+        return self._cached(widget, ("plugin", kind.key(widget, snapshot, now)), build)
 
     @property
     def prepares(self) -> bool:
@@ -1972,13 +1902,11 @@ class Renderer:
         self.moving = False
         self.due = None
         self.snapshot = snapshot
-        self.light_edges, self.edge_owners = [], {}
         self.motion.begin(snapshot.readings, now, self._glide_s(), self._lead())
         self._video_drawn = None
         boxes: dict[str, Box] = {}
         pieces: list[tuple[str, Piece]] = []
         turns: dict[str, Turn] = {}  # the turned widgets' and modules' ("<id>/")
-        self._drawing = "\0screen"
         screen = self._screen_image(snapshot, now) if self.screen is not None else None
         for slot in self._slots.values():  # which card each slot shows, and how far a change is
             slot.begin(snapshot, now)
@@ -2008,7 +1936,6 @@ class Renderer:
                 or getattr(self, f"_draw_{widget['type']}", None)
                 or self._draw_plugin
             )
-            self._drawing = widget["id"]
             try:
                 if how == "frozen":  # a card rolling up: what it showed before
                     piece = slot.leave(widget["id"])
@@ -2063,41 +1990,29 @@ class Renderer:
         if self._strips:
             self._forget_strips(now)
         kept.tick()  # (what nothing used for a while goes: the weather bodies)
-        dust = self._dust_on()
-        self.full_video = self._whole_video(pieces, turns, screen, dust)
+        self.full_video = self._whole_video(pieces, turns, screen)
         if screen is not None:
-            alone = not pieces and self.look is None and not dust
+            alone = not pieces and self.look is None
             if alone and screen.mode == "RGB" and screen.size == (theme.width, theme.height):
                 # an opaque screen alone is the frame: nothing to compose
                 self._last = None
                 return screen, boxes
             pieces.insert(0, ("\0screen", self._screen_piece(screen)))  # ids are never empty
         if self.look is not None:
-            self.look.compose(pieces, snapshot, now)  # the grid beneath, the sun's gloss on top
-        if scene and self._layered(pieces, dust):
-            return self._scene_frame(pieces, self._dust_over(pieces, now) if dust else None), boxes
+            self.look.compose(pieces)  # the grid beneath
+        if scene and self._layered(pieces):
+            return self._scene_frame(pieces), boxes
         canvas = self._compose(pieces)
-        # what changed since the frame before: the regions composed anew, where nothing but the
-        # pieces changes the frame (dust moves all over it, a sweep of light over a part)
-        sweeping = (
-            self.look is not None
-            and getattr(self.look, "light", None) is not None
-            and bool(self.look.light.running(now))
-        )
-        if not dust and not sweeping and not self._swept:
-            self.damage = self._composed
-        self._swept = sweeping
-        dusted = self._dusted(canvas, now) if dust else canvas  # RGB once there is dust on it
+        # what changed since the frame before: the regions composed anew
+        self.damage = self._composed
         # (the composed frame stays for the next: the panel gets a picture of its own, the one
-        # before again while nothing changed; a look's light sweeps over the frame in place)
-        if dusted is not canvas:
-            frame, self._handed = dusted, None
-        elif self._unchanged and self._handed is not None and self.look is None:
+        # before again while nothing changed)
+        if self._unchanged and self._handed is not None:
             frame = self._handed
         else:
             frame = self._as_rgb(canvas)
-            self._handed = frame if self.look is None and self.keep_static else None
-        return (frame if self.look is None else self.look.finish(frame, now)), boxes
+            self._handed = frame if self.keep_static else None
+        return frame, boxes
 
     # -- turned widgets ----------------------------------------------------
 
@@ -2144,43 +2059,6 @@ class Renderer:
         for key, turn in turns.items():
             if key.endswith("/") and key[:-1] in boxes:  # a module: around all of it
                 boxes[key[:-1]] = _turned_box(self.module_boxes[key[:-1]], turn)
-
-    # -- dust --------------------------------------------------------------
-
-    def _dust_on(self) -> bool:
-        """Whether the theme's dust is drawn: on a video panel (where every frame
-        goes out) and in previews. On the PNG path it would change the whole frame at
-        every update, and the link sends what changed."""
-        dust = (self.theme.look or {}).get("dust")
-        return bool(dust and (self.continuous or self.preview))
-
-    def _dust_of(self, size: tuple[int, int]) -> Dust:
-        if self._dust is None:
-            config = self.theme.look["dust"]  # type: ignore[index]
-            colors = [self.color(c)[:3] for c in config["colors"]]  # type: ignore[index]
-            self._dust = Dust(size, config, colors)
-            self._dust_submit = _weakly(self._submit)  # (the dust is ours: no cycle back)
-        # where a slow piece must not stall the video, the grains move in the helper thread too
-        self._dust.submit = self._dust_submit if self.background_builds else None
-        return self._dust
-
-    def _dusted(self, canvas: Image.Image, now: float) -> Image.Image:
-        return self._dust_of(canvas.size).apply(canvas, now, self.shown, self.toast)
-
-    def _dust_over(self, pieces: list[tuple[str, Piece]], now: float) -> scenes.Dusting | None:
-        """The dust over the frame of ``pieces`` at ``now``, for the engine to lay: its grains
-        moved here as for a frame composed here (:meth:`_dusted`), None while there is none to
-        lay. (Its stock is taken from the frame shown: :meth:`_layered`.)"""
-        size = (self.theme.width, self.theme.height)
-        frame = scenes.Scene(size, self._layers_ground(), tuple(pieces))
-        canvas = scenes.Lazy(size, "RGB", lambda: scenes.compose(frame))  # (not asked for)
-        taps = self._dust_of(size).taps_at(canvas, now, self.shown, self.toast)
-        return None if taps is None else scenes.Dusting(len(pieces), taps)
-
-    def _submit(self, job: Callable[[], Any]) -> Future:
-        if self._builder is None:
-            self._builder = _Builder(gate=self._gate())
-        return self._builder.submit(job)
 
     def _gate(self) -> Callable[[], None]:
         """What the helper threads run before each job: :attr:`between_frames`, while the
@@ -3266,14 +3144,13 @@ class Renderer:
         pieces: list[tuple[str, Piece]],
         turns: dict[str, Any],
         screen: Image.Image | None,
-        dust: bool,
     ) -> tuple[str, str, float] | None:
         """The video of this frame, ``(path, fit, speed)``, where the frame is that video alone:
-        drawn edge to edge across the theme and nothing else with it (a look, dust, a screen's
+        drawn edge to edge across the theme and nothing else with it (a look, a screen's
         picture, a turn, a rounded or blurred corner, an effect, a picture behind one that is
         contained); None otherwise. [video] direct has the panel take it from its file then."""
         drawn = self._video_drawn
-        if drawn is None or screen is not None or self.look is not None or dust or turns:
+        if drawn is None or screen is not None or self.look is not None or turns:
             return None
         wid, path, widget, box = drawn
         whole = (0, 0, self.theme.width, self.theme.height)
@@ -4079,7 +3956,7 @@ class Renderer:
         return self._cached(widget, None, lambda: self._rect_piece(widget))
 
     def _rect_piece(self, widget: dict[str, Any]) -> Piece:
-        """A rect as it is drawn flat (the panel light's frames start from it)."""
+        """A rect as it is drawn."""
         x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
         s = SUPERSAMPLE
         card = self._card(widget, x, y, w, h)

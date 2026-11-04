@@ -1,7 +1,7 @@
 // Look's side panel: the colours of the theme, how its shapes are drawn (finish and glow), the
-// panel light, the depth (grid and dust) and the notices, each said in a line. Every change is
-// one undo step through core/doc.js, and the preview follows; a choice the pointer rests on is
-// tried on first (stage.js, peekAt).
+// grid background and the notices, each said in a line. Every change is one undo step through
+// core/doc.js, and the preview follows; a choice the pointer rests on is tried on first
+// (stage.js, peekAt).
 
 import { clone, edit, isModule, setSelection, theme as currentTheme, widgets } from "../../core/doc.js";
 import { fieldLabel, formatNumber, t } from "../../core/i18n.js";
@@ -13,10 +13,9 @@ import { targetTable, useTarget } from "../../core/target.js";
 import { VOLUME_LOOKS, chooseVolumeLook, showVolume, volumeNotice } from "../../core/volume.js";
 import { html, useEffect, useState } from "../../lib/preact.js";
 import { navigate } from "../../shell/views.js";
-import { Field, IconButton, NumberField, Section, Segmented, Select, Slider, TextField, Toggle } from "../../ui/controls.js";
+import { Field, NumberField, Section, Segmented, Slider, Toggle } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
-import { toast } from "../../ui/toast.js";
-import { COLOR, ColorSwatches } from "../design/color.js";
+import { ColorSwatches } from "../design/color.js";
 import { FINISH_NAMES, FinishPicture, finishesFor } from "../design/fields.js";
 import { Background, PaletteEditor } from "../design/inspector.js";
 import { inspectorState } from "../design/inspector-state.js";
@@ -31,8 +30,6 @@ const specs = () => store.get().specs;
 /** The range a look field accepts (the server's LOOK_RANGES). */
 const range = (block, key) => specs()?.look_ranges?.[block]?.[key] ?? [0, 1];
 const percent = (value) => `${formatNumber(Math.round(value * 100))} %`;
-const seconds = (value) => `${formatNumber(value, 1, { fixed: true })} s`;
-const decimal = (value) => formatNumber(value, 1, { fixed: true });
 
 // -- the colours ---------------------------------------------------------------------------------
 
@@ -219,45 +216,6 @@ function OptionalColour({ block, settings, name, text }) {
   <//>`;
 }
 
-const TRIGGERS = () => [
-  ["on_start", t("Start"), t("when the panel starts")],
-  ["on_hour", t("Full hour"), t("on the full hour")],
-  ["on_track", t("New track"), t("when a new track plays")],
-  ["on_transition", t("Transition"), t("when a tube or entrance transition ends")],
-];
-
-function SunPath() {
-  return html`<svg class="sun-path" width="40" height="22" viewBox="0 0 40 22" aria-hidden="true">
-    <path d="M2 20 A18 18 0 0 1 38 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.5" />
-    <circle cx="27" cy="5.5" r="3.5" fill="#F5C46B" />
-  </svg>`;
-}
-
-function Light() {
-  return html`<${BlockSection} block="light" title=${t("Panel light")}
-    about=${t("One light over the whole panel: it glints on edges and sweeps across now and then.")}
-    render=${(settings) => html`
-      <div class="look-sun">
-        <${SunPath} />
-        <span class="look-sun-text">
-          <strong>${label("sun")}</strong>
-          <small>${t("from the weather place; off: noon")}</small>
-        </span>
-        <${Toggle} label=${label("sun")} checked=${settings.sun} onChange=${setBlock("light", "sun")} />
-      </div>
-      <${BlockSlider} block="light" settings=${settings} name="strength" step=${0.05} format=${percent} />
-      <div class="look-triggers" role="group" aria-label=${t("Sweep of light at")}>
-        <span class="muted">${t("Sweep of light at")}</span>
-        ${TRIGGERS().map(
-          ([key, text, title]) => html`<button type="button" key=${key} class="look-chip" aria-pressed=${String(Boolean(settings[key]))} title=${title}
-            onClick=${() => setBlock("light", key)(!settings[key])}>${text}</button>`,
-        )}
-      </div>
-      <${BlockSlider} block="light" settings=${settings} name="sweep_seconds" step=${0.1} format=${seconds} />
-      <${OptionalColour} block="light" settings=${settings} name="color" text=${t("Tint of the sweeps")} />
-    `} />`;
-}
-
 function Grid() {
   return html`<${BlockSection} block="grid" title=${t("Grid background")}
     about=${t("Fine lines behind everything, as on graph paper.")}
@@ -273,78 +231,6 @@ function Grid() {
         <${OptionalColour} block="grid" settings=${settings} name="color" />
         <${OptionalColour} block="grid" settings=${settings} name="major_color" />
         <small class="field-hint">${t("empty: the palette's grid colour, else a breath away from the background")}</small>
-      </details>
-    `} />`;
-}
-
-/** The dust's colours: #rrggbb or @name, separated by commas. */
-function DustColours({ dust }) {
-  const limit = specs().look_limits?.dust?.colors ?? 8;
-  const names = Object.keys(currentTheme().palette || {});
-  const usable = (value) => COLOR.test(value) || (value.startsWith("@") && names.includes(value.slice(1)));
-  return html`<${Field} label=${t("dust colours")}
-    hint=${t("empty: each grain takes the colour of the element it falls from; else #rrggbb or @name, separated by commas")}>
-    <${TextField} label=${t("dust colours")} live=${false} mono value=${(dust.colors || []).join(", ")} placeholder=${t("each from its element")}
-      onChange=${(text) => {
-        const list = text.split(",").map((colour) => colour.trim()).filter(Boolean);
-        const bad = list.find((colour) => !usable(colour));
-        if (bad || list.length > limit) return toast(t("Not a usable colour list: {text}", { text: bad || text }), { kind: "warn" });
-        return setBlock("dust", "colors")(list);
-      }} />
-  <//>`;
-}
-
-/** Rectangles where there is dust, or none. */
-function DustAreas({ dust }) {
-  const limit = specs().look_limits?.dust?.areas ?? 64;
-  const areas = dust.areas || [];
-  const set = (next) => setBlock("dust", "areas")(next);
-  const change = (index, patch) => set(areas.map((area, i) => (i === index ? { ...area, ...patch } : area)));
-  return html`<div class="field">
-    <span class="field-label">${t("dust areas")}</span>
-    ${areas.map(
-      (area, index) => html`<div class="dust-area" key=${index}>
-        <div class="quad">
-          ${["x", "y", "w", "h"].map(
-            (key) => html`<${Field} key=${key} label=${label(key)}>
-              <${NumberField} label=${`${t("dust areas")}: ${label(key)}`} value=${area[key]} min=${key === "w" || key === "h" ? 1 : undefined} unit="px"
-                onChange=${(value) => change(index, { [key]: value ?? (key === "w" || key === "h" ? 1 : 0) })} />
-            <//>`,
-          )}
-        </div>
-        <div class="control-row">
-          <${Select} label=${t("dust areas")} value=${area.dust === false ? "no" : "yes"}
-            options=${[{ value: "yes", label: t("dust here") }, { value: "no", label: t("no dust here") }]}
-            onChange=${(value) => change(index, { dust: value === "yes" })} />
-          <${IconButton} icon="close" size=${14} label=${t("Remove area")} onClick=${() => set(areas.filter((_, i) => i !== index))} />
-        </div>
-      </div>`,
-    )}
-    ${areas.length < limit
-      ? html`<button type="button" class="btn btn-quiet" onClick=${() => {
-          const [width, height] = store.get().render.size;
-          set([...areas, { x: 0, y: 0, w: Math.round(width / 2), h: height, dust: false }]);
-        }}><${Icon} name="plus" size=${14} /> ${t("+ area")}</button>`
-      : null}
-    <small class="field-hint">${t('rectangles; with a "dust here" area there is dust only inside, else everywhere but in a "no dust" area')}</small>
-  </div>`;
-}
-
-function Dust() {
-  return html`<${BlockSection} block="dust" title=${t("Depth dust")}
-    about=${t("Fine grains drift from the elements into the depth. The panel shows them with smooth motion only; the preview here always does.")}
-    render=${(settings) => html`
-      <${BlockSlider} block="dust" settings=${settings} name="strength" step=${0.1} format=${decimal} />
-      <details class="look-more">
-        <summary>${t("Grains and areas")}</summary>
-        <div class="quad">
-          <${BlockNumber} block="dust" settings=${settings} name="count" step=${100} />
-          <${BlockNumber} block="dust" settings=${settings} name="rate" />
-          <${BlockNumber} block="dust" settings=${settings} name="depth" step=${0.1} digits=${1} />
-        </div>
-        <small class="field-hint">${t("on a 1920 × 480 panel; other sizes scale with their area")}</small>
-        <${DustColours} dust=${settings} />
-        <${DustAreas} dust=${settings} />
       </details>
     `} />`;
 }
@@ -466,20 +352,6 @@ function Cards() {
   <//>`;
 }
 
-// -- ridge frames: not offered, but a theme that has them can drop them -----------------------------
-
-function Ridges() {
-  const rects = widgets().filter((widget) => widget.type === "rect" && widget.ridge);
-  if (!rects.length) return null;
-  return html`<details class="look-more look-advanced">
-    <summary>${t("Advanced")}</summary>
-    <p class="look-about">${t("{count} frames are drawn as ridges: raised edges the light catches.", { count: rects.length })}</p>
-    <button type="button" class="btn" onClick=${() => edit("look:ridges", () => rects.forEach((widget) => (widget.ridge = "")))}>
-      ${t("Make the frames flat")}
-    </button>
-  </details>`;
-}
-
 // -- the panel ------------------------------------------------------------------------------------
 
 /** A panel beside the first in panel 1's look (Settings → Panels, "Look as panel 1's"): its
@@ -510,11 +382,8 @@ export function LookPanel() {
     <${Switches} />
     <${Cards} />
     <${Finish} />
-    <${Light} />
     <${Grid} />
-    <${Dust} />
     <${Notices} />
-    <${Ridges} />
     <button type="button" class="link-btn look-all" onClick=${() => {
       setSelection([]);
       inspectorState.set({ page: "details" });

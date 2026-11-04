@@ -27,9 +27,7 @@ def minimal(**display):
 @pytest.mark.parametrize(
     "name",
     [
-        "lumen", "libre-default", "spur-ii", "spur-classic", "spur-horizon", "spur-header",
-        "spur-focus", "spur-session", "spur-cockpit", "round-report", "spur-round-report",
-        "spur-studio", "studio",
+        "lumen", "libre-default", "round-report", "studio", "arena", "terra", "contrast",
         "orbit", "slate", "column", "pico", "encore", "nimbus", "almanac", "almanac-analog",
     ],
 )  # fmt: skip
@@ -41,7 +39,7 @@ def test_builtin_themes_are_valid(name):
 
 def test_builtin_theme_list():
     ids = {t["id"] for t in list_themes()}
-    assert {"libre-default", "spur-ii"} <= ids
+    assert {"libre-default", "lumen"} <= ids
 
 
 @pytest.mark.parametrize(
@@ -173,20 +171,18 @@ def test_builtin_theme_files_are_plain_json():
         json.loads(file.read_text(encoding="utf-8"))
 
 
-def test_a_collection_groups_themes_and_the_spur_screens_are_one():
-    """SPUR II's screens are kept as a legacy set: galleries show Libre Panel's own first."""
+def test_a_collection_groups_themes_and_the_built_in_ones_are_in_none():
+    """A theme may name a set it belongs to (galleries keep it apart); Libre Panel's own are in
+    none."""
     from libre_panel.theme.model import builtin_themes_dir
 
     data = minimal()
     assert "collection" not in parse_theme(data).to_dict()
-    data["collection"] = "SPUR II"
-    assert parse_theme(data).to_dict()["collection"] == "SPUR II"
+    data["collection"] = "Desk Set"
+    assert parse_theme(data).to_dict()["collection"] == "Desk Set"
     tagged = {
         folder.name
         for folder in builtin_themes_dir().iterdir()
-        if (folder / "theme.json").is_file() and load_theme(folder).collection == "SPUR II"
+        if (folder / "theme.json").is_file() and load_theme(folder).collection
     }
-    assert tagged == {f"spur-{n}" for n in (
-        "ii", "classic", "horizon", "header", "focus", "session", "cockpit", "studio",
-        "round-report",
-    )}  # fmt: skip
+    assert tagged == set()

@@ -33,7 +33,6 @@ import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-import numpy as np
 from PIL import Image
 
 from libre_panel import light, winsession
@@ -49,9 +48,8 @@ from libre_panel.devices.h264 import (
     _widen,
 )
 from libre_panel.i18n import t
-from libre_panel.render import dust as dusts
 from libre_panel.render import moving
-from libre_panel.render.scene import Bar, BarBase, Dusting, Filled, Globe, Laid, View, growth
+from libre_panel.render.scene import Bar, BarBase, Filled, Globe, Laid, View, growth
 
 if TYPE_CHECKING:
     from libre_panel.render.renderer import Piece
@@ -69,10 +67,9 @@ STREAM, END, PICTURE = 5, 6, 8
 # a layer of it at a value (ring.rs); a picture layers are cut from and a layer cut from them;
 # a turning globe and a layer of it at a step of its turn (globe.rs); a layer of one colour; a
 # layer laid from pictures it keeps (a fan's ring and rotor); a picture grown from one it keeps;
-# a lit bar and a layer of it at a value, with its glow (bar.rs); the dust over the frame
-# (dust.rs)
+# a lit bar and a layer of it at a value, with its glow (bar.rs)
 GROUND, LAYER, SCENE, RING, RING_LAYER, SOURCE, VIEW = 9, 10, 11, 12, 13, 14, 15
-GLOBE, GLOBE_LAYER, FILL, LAID, GROWN, BAR, BAR_LAYER, DUST = 16, 17, 18, 19, 20, 21, 22, 23
+GLOBE, GLOBE_LAYER, FILL, LAID, GROWN, BAR, BAR_LAYER = 16, 17, 18, 19, 20, 21, 22
 # how a layer goes on: RGBA through its alpha, RGB as it is (a video's frame), RGB light added
 OVER, SOLID, ADD = 0, 1, 2
 # A reply may wait for the picture being sent (5 s a block at most, 1.5 s for room in the
@@ -159,12 +156,6 @@ def makes_bars(engine: str) -> bool:
     return "bars" in _can(engine)
 
 
-def makes_dust(engine: str) -> bool:
-    """Whether ``engine`` lays the theme's dust over the frame it composes (render/scene.py's
-    Dusting)."""
-    return "dust" in _can(engine)
-
-
 def encodes_on_cards(engine: str) -> bool:
     """Whether ``engine`` takes ``--encoder card`` (video.engine_encoder: the graphics card's
     encoder where it opens, else x264); one of before does not start with it."""
@@ -191,7 +182,7 @@ class SceneSender:
 
     def __init__(
         self, rings: bool = False, views: bool = False, globes: bool = False, fills: bool = False,
-        laid: bool = False, grown: bool = False, bars: bool = False, dust: bool = False,
+        laid: bool = False, grown: bool = False, bars: bool = False,
     ) -> None:  # fmt: skip
         self.rings = rings  # the engine makes a lit gauge's ring (render/lit.py's Ring)
         self.views = views  # ... and cuts a layer from pictures it keeps (render/scene.py's View)
@@ -200,8 +191,6 @@ class SceneSender:
         self.laid = laid  # ... and lays a layer from pictures it keeps (render/scene.py's Laid)
         self.grown = grown  # ... and grows a picture from one it keeps (render/scene.py's grew)
         self.bars = bars  # ... and makes a lit bar's picture and glow (render/scene.py's Bar)
-        self.dust = dust  # ... and lays the dust over the frame (render/scene.py's Dusting)
-        self._dust: tuple[Any, int] | None = None  # the taps the engine has, their number
         self._ground: Any = None
         # each piece's layers (and the ring, or the pictures, they are of): what the engine has
         self._pieces: dict[int, tuple[Piece, list[int], Any, tuple[int, ...], int | None]] = {}
@@ -294,19 +283,6 @@ class SceneSender:
         parts.append(_head(BAR_LAYER, layer, len(head) + len(spans)) + head + spans)
         self.layers += 1 if bar.light is None else 2
         return [layer] if bar.light is None else [layer, glow], key
-
-    def _dusting(self, parts: list[bytes], dust: Dusting) -> int:
-        """The number of the layer of ``dust`` (sent the first time a frame has its taps: the
-        grains moved since), where it lies in the frame's order."""
-        if self._dust is None or self._dust[0] is not dust.taps:
-            number = next(self._numbers) & 0xFFFFFFFF
-            data = _dust_parts(dust.taps)
-            size = sum(len(part) for part in data)
-            parts += [_head(DUST, number, size), *data]
-            self.bytes += size
-            self.layers += 1
-            self._dust = (dust.taps, number)
-        return self._dust[1]
 
     def _view(
         self, parts: list[bytes], piece: Piece, now: dict[int, tuple[Image.Image, int]]
@@ -490,12 +466,7 @@ class SceneSender:
         rings: dict[Any, Any] = {}
         sources: dict[int, tuple[Image.Image, int]] = {}
         globes: dict[int, tuple[Any, int]] = {}
-        dust = scene.dust if self.dust else None
-        if dust is None:
-            self._dust = None  # (the engine forgets it with a frame without it)
-        for k, (_wid, piece) in enumerate(scene.pieces):
-            if dust is not None and k == dust.at:
-                order.append(self._dusting(parts, dust))
+        for _wid, piece in scene.pieces:
             key = id(piece)
             hit = now.get(key) or self._pieces.get(key)
             if hit is None or hit[0] is not piece:
@@ -531,8 +502,6 @@ class SceneSender:
                         globes[hit[4]] = tables
             now[key] = hit
             order += hit[1]
-        if dust is not None and dust.at >= len(scene.pieces):
-            order.append(self._dusting(parts, dust))
         self._pieces, self._rings, self._sources = now, rings, sources
         self._globes = globes
         when = float("nan") if planned is None else planned
@@ -542,20 +511,6 @@ class SceneSender:
             + struct.pack(f"<{len(order)}I", *order)
         )
         return parts
-
-
-def _dust_parts(taps: tuple[Any, Any, Any]) -> list[bytes]:
-    """What the dust of ``taps`` (render/dust.py's Dust.taps) is as the engine takes it (kind
-    23, after its record's head): how many, the shares shown over each brightness, then the
-    taps' places, what each brings and how much of its pixel each covers."""
-    index, add, cover = taps
-    head = struct.pack("<II", len(index), 0) + dusts.shown_shares().astype("<f4").tobytes()
-    return [
-        head,
-        index.astype("<u4").tobytes(),
-        np.ascontiguousarray(add[:, :3], dtype="<f4").tobytes(),
-        np.ascontiguousarray(cover[:, 0], dtype="<f4").tobytes(),
-    ]
 
 
 def _bar_parts(base: BarBase) -> list[bytes]:
@@ -991,7 +946,7 @@ class EngineStream:
         self, link: EngineLink, size: tuple[int, int], options: list[str], block: int,
         lead: float | None = None, scenes: bool = False, rings: bool = False,
         views: bool = False, globes: bool = False, fills: bool = False, laid: bool = False,
-        grown: bool = False, bars: bool = False, dust: bool = False,
+        grown: bool = False, bars: bool = False,
     ) -> None:  # fmt: skip
         self.link, self.size = link, size
         # with ``scenes``: frames of layers go to the engine as them (render/scene.py); the
@@ -999,10 +954,9 @@ class EngineStream:
         # engine makes a lit gauge's ring itself, with ``views`` it cuts a graph's window, with
         # ``globes`` it makes a turning globe's pictures, with ``fills`` it lays a card's inside
         # as its colour, with ``laid`` a fan from its ring and its rotor, with ``grown`` a graph's
-        # strip from the one before, with ``bars`` a lit bar's picture and glow, with ``dust``
-        # it lays the theme's dust
+        # strip from the one before, with ``bars`` a lit bar's picture and glow
         self.scenes = (
-            SceneSender(rings, views, globes, fills, laid, grown, bars, dust) if scenes else None
+            SceneSender(rings, views, globes, fills, laid, grown, bars) if scenes else None
         )
         # how long after the time a frame was drawn for the engine sends its picture (seconds;
         # None: the engine's own choice, h264.engine_lead's)

@@ -1694,7 +1694,7 @@ fps_levels = [60, 90, 120, 144, 165]   # the frame-rate ranges of the report's c
   far, once a second: `session.time`, `session.fps`, the share of the time at each
   frame rate (`session.level.<n>`) and the highest values since it began
   (`session.cpu_temp_max` ...; the list is in [Plugins](PLUGINS.md#the-round-under-way)).
-  The built-in theme `spur-session` shows them, in a game screen.
+  A screen of one's own for a game can show them.
 - **The report.** When a round that lasted `report_minutes` and had frame rates
   ends, the report is built from the file: this round against the mean of the
   last `report_compare` rounds of the same program that were long enough too
@@ -1708,8 +1708,8 @@ fps_levels = [60, 90, 120, 144, 165]   # the frame-rate ranges of the report's c
   temperature over the round, and the highest values with the PC's power where the
   [power service](#power-use) runs; the game's logo (the one the [`game` service](#game-mode)
   keeps, `@game.logo`) is beside its name. A round recorded before these were counted shows
-  the means of the seconds' lows instead, and a dash for the temperature. `spur-round-report`
-  is SPUR II's report screen. Copy one in the editor to change it, choose another on the round
+  the means of the seconds' lows instead, and a dash for the temperature. Copy it in the
+  editor to change it, choose another on the round
   report's page in *Design → Pages*, or let a screen of a plugin draw the data
   ([Plugins](PLUGINS.md#the-round-report)).
 - **Cost.** One sample a second, whatever the theme's `refresh_ms`. While the

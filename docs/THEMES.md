@@ -41,8 +41,7 @@ short). Every theme moves to any other panel from the panel button at the top of
 | **Companions** | a panel beside the first, 9.2" either way up and 12.3" | Lumen Companion (every core, the temperatures with the fans, the drives, the processes), Arena Companion, Encore Companion and Almanac Companion: what the first panel's screen leaves out, while it leaves out what they show ([more panels at once](CONFIGURATION.md#more-panels-at-once)) |
 | **High Contrast** | every size from 2.1" to 12.3", upright too | white on black in very large digits, to read from across the room: the temperatures of the processor and the graphics card, orange when warm and red when hot, and the time |
 
-Also built in: the eight screens of SPUR II as a legacy collection, and the round report
-([Libre Panel's screens](#libre-panels-screens), [the SPUR II screens](#the-spur-ii-screens)).
+Also built in: the round report after a game ([Libre Panel's screens](#libre-panels-screens)).
 
 ## theme.json
 
@@ -115,9 +114,9 @@ Also built in: the eight screens of SPUR II as a legacy collection, and the roun
   `"per_frame": true` (older themes) means a point a pixel apart, `w / 25`
   seconds. Without video mode a graph shows `history` readings. While its
   sensor has no value, a graph in video mode moves on with a gap.
-- Optional: `"collection"` names a set the theme belongs to, and galleries
-  group by it (`"SPUR II"`: the screens of the project Libre Panel grew out
-  of, kept as a legacy set). Leave it out for a theme of your own.
+- Optional: `"collection"` names a set the theme belongs to (themes made to
+  go together), and galleries keep the set apart, at their end. Leave it out
+  for a theme on its own.
 - Widgets are drawn in list order: later ones are on top.
 - Unknown fields are ignored with a warning, so newer themes still load.
 - Optional: `"toast"` sets how messages from services show (in the app: *Look →
@@ -148,8 +147,7 @@ Also built in: the eight screens of SPUR II as a legacy collection, and the roun
   with a dot in the name (`"myplugin.ring"`) also come from plugins. A theme
   that needs a plugin you do not have still loads; those parts are not drawn.
   See [Plugins](PLUGINS.md).
-- Optional: `"look"` lays SPUR II's grid over the background, lights the
-  panel with one light and lets fine dust fall into the depth; a widget's
+- Optional: `"look"` lays SPUR II's grid over the background; a widget's
   `finish` draws it lit or faceted. See [Look and finish](#look-and-finish).
 
 ## Widgets
@@ -237,7 +235,7 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 | `downloads` | `state`, `w`, `h`, `font`, `label_font`, `color`, `muted`, `color2`, `done`, `background`, `empty` | a download as the Studio's inset shows it: name, progress, rate, time left and the speed of the last minutes; it reads the state of the `downloads` service, see [Downloads](#downloads) |
 | `calendar` | `w`, `h`, `font`, `font_size`, `color`, `color2`, `muted`, `first_day` | the month as a grid of days, today marked in `color2`; weekday names in `muted` and the language; `first_day` `monday` or `sunday` |
 | `list` | `w`, `h`, `items`, `style`, `columns`, `max_items`, `sort`, `format`, `detail`, `detail_format`, `min`, `max`, `scale`, `levels`, `font`, `font_size`, `label_font`, `uppercase`, `color`, `muted`, `color2`, `background`, `empty`, `color_rules` | readings found by name or pattern, as many as fit, see [Lists](#lists) |
-| `rect` | `w`, `h`, `color`, `color2`, `gradient`, `radius`, `outline`, `outline_width`, `backdrop_blur`, `ridge` | cards, frames, separators; `backdrop_blur` gives frosted glass, `ridge` a ridge (see [Look and finish](#look-and-finish)) |
+| `rect` | `w`, `h`, `color`, `color2`, `gradient`, `radius`, `outline`, `outline_width`, `backdrop_blur` | cards, frames, separators; `backdrop_blur` gives frosted glass |
 | `module` | `module`, `col`, `row`, `cols`, `rows`, `source`, `sensor`, `format`, `title`, `text`, `color`, `fallback`, `card`, `forecast`, `step`, `items`, `sort`, `threads`, `total`, `history`, `top`, `moving`, `hold`, `change`, `slide`, `order`, `turn`, `transition`, `time` | a building block on the grid, see [Modules](#modules) and [Cards](#cards) |
 
 `scale` is `linear`, `sqrt` or `log`: the latter two keep small values visible
@@ -391,7 +389,7 @@ light. Each is plain JSON; none names a piece of hardware.
 | `almanac-analog` | 8.8" / 9.2" bar | Almanac with a clock face whose second hand glides to each second, the time and the date beside it |
 | `terra` | 8.8" / 9.2" bar | the earth: the [earth module](#modules) on the stars (the globe as it is now, turning once in three minutes where the panel moves, with whether it is day or night at your place, the sunrise, the sunset and the day's length beside it), the time in four other places on clock faces, the time with its seconds and the date, and the moon as it is lit tonight. Without a place the globe faces your time zone and stands alone. `terra-1920x720` (12.3"), `terra-vertical` and `terra-480x480` (round: the globe over the time) |
 | `arena` | 8.8" / 9.2" bar | for game mode, made of [modules](#modules): the game's frame rate large with its 1% low, frame time and its course, the CPU and the GPU as instruments, every core's load and the temperatures; the first screen game mode's page offers |
-| `round-report` | 8.8" / 9.2" bar | what the `memory` service shows after a game (`report_theme`), in four cards: the round (the game's name, with its logo where the `game` service kept one, when and how long it was, the average frame rate large against the average of the earlier rounds, and what all its frames came to: the 1% and 0.1% lows, the mean and the longest frame time, each against the earlier rounds), the share of the round at each frame rate with a tick where the earlier rounds' average stands and who held the rate down as one bar (the GPU's share from the left and the CPU's from the right, the frame cap's between them), the CPU's and the GPU's temperature over the round as two curves on one scale, and the highest temperatures, power (the PC's last, with the power service) and video memory against their average. A round recorded before its frames were counted shows the means of the seconds' 1% lows and frame times, and a dash for the temperature. It reads the `report.*` readings ([Plugins](PLUGINS.md#the-round-report)), so its headings follow the language of the panel; a first round says so and shows no comparison. SPUR II's report is `spur-round-report` |
+| `round-report` | 8.8" / 9.2" bar | what the `memory` service shows after a game (`report_theme`), in four cards: the round (the game's name, with its logo where the `game` service kept one, when and how long it was, the average frame rate large against the average of the earlier rounds, and what all its frames came to: the 1% and 0.1% lows, the mean and the longest frame time, each against the earlier rounds), the share of the round at each frame rate with a tick where the earlier rounds' average stands and who held the rate down as one bar (the GPU's share from the left and the CPU's from the right, the frame cap's between them), the CPU's and the GPU's temperature over the round as two curves on one scale, and the highest temperatures, power (the PC's last, with the power service) and video memory against their average. A round recorded before its frames were counted shows the means of the seconds' 1% lows and frame times, and a dash for the temperature. It reads the `report.*` readings ([Plugins](PLUGINS.md#the-round-report)), so its headings follow the language of the panel; a first round says so and shows no comparison |
 | `lumen-companion` | 8.8" / 9.2" bar | for a [second panel](CONFIGURATION.md#more-panels-at-once) beside Lumen, what Lumen does not show: every core of the processor, the temperatures with the fans turning, the drives and the processes that take the most; the app offers it for a panel added beside Lumen |
 | `arena-companion` | 8.8" / 9.2" bar | for a second panel beside Arena while a game runs: the temperatures large with the fans turning, every core and what takes the most besides the game; a panel added gets it for the game's page (`game_theme`) |
 | `libre-default` | 3.5" | two lit rings, the CPU's temperature, the disk and the network, a history that scrolls past at SPUR II's pace, and a small slot in the corner: what plays, the weather or the day |
@@ -478,33 +476,6 @@ A few things they do that a theme of your own can do too:
 On a smaller panel (*adapt* in the editor) the modules lay themselves out for
 their new size, and the other widgets, and the room their texts may take,
 scale with the panel.
-
-### The SPUR II screens
-
-The screens of SPUR II are built-in themes for the 8.8" and 9.2" bars (1920 × 480)
-that show the look above in full; each is plain JSON like any other theme, and
-none names a piece of hardware (the names of the processor, the graphics card and
-the memory come from `cpu.name`, `gpu.name` and `mem.name`). Their frames are flat
-bands in the colour of what they frame.
-
-| Theme | Shows |
-|---|---|
-| `spur-classic` | two load charts, RAM and network in staggered boxes, CPU and GPU sections; for the desk |
-| `spur-horizon` | the CPU's load growing up from a midline and the GPU's down from it, 70 seconds side by side (a point a pixel, 25 a second, a mark every 10 s, a dot at each curve's end), tiles below for values, network and music; for the desk |
-| `spur-cockpit` | the CPU's and GPU's load as two equal charts with the RAM as a ring beside them, and CPU, GPU, memory and network in four columns of equal width (SPUR II's building blocks on its 40 px grid); for the desk |
-| `spur-header` | for a game: the classic frame with the frame rate and the 1% low in the header beside the game's logo (its name where there is none; SPUR II moves the frame rate over for a long name, a theme cannot: a name wider than 72 px is cut with …, a wider logo is made smaller), load charts, who holds the frame rate down and a chart of the longest frame of each moment; needs the `game` service and PresentMon |
-| `spur-focus` | for a game: the frame rate large (150 px) with its course over 35 s beside it, the CPU's and GPU's load as small charts, then FRAMES, CPU, GPU and system with bars; the game's logo or name above the number; needs the `game` service and PresentMon |
-| `spur-session` | for a game: the game added up as SPUR II's Session screen does: the time played, the average frame rate large (with the frame rate now, the 1% low, who holds it down, and the last ten minutes of the rate under them), the share of the time at each frame rate, and the highest temperatures, power and video memory since it began beside what they are now; the totals are the `session.*` readings of the `memory` service (see [Plugins](PLUGINS.md#the-round-under-way)), the rest needs the `game` service and PresentMon; in the header the game's logo or name has the room SPUR II gives a short name (a name wider than 62 px is cut with …, a wider logo made smaller), as in `spur-header` |
-| `spur-studio` | SPUR II's Studio screen, for the desk, made of the [cards](#cards) on one grid: a large clock with the seconds and the date, the network (a download while one runs) and the volume on the left, the playback card in the middle (the weather card when nothing plays, with the line of light between them), and rings for the CPU, GPU and RAM (the RAM's readings: free, temperature, speed); it needs `media` for the playback card, the weather for the forecast, and shows the volume with the `audio` source |
-| `spur-round-report` | SPUR II's round report (`report_theme = "spur-round-report"`): the round's average frame rate with its distance from the average of the earlier rounds, the 1% and 0.1% lows, the frame time and the longest frame, who held the rate down as a bar in the colours of the GPU and CPU (and the frame limit's), the share of the round at each frame rate with a tick across each bar where the earlier rounds' average stands and the CPU's and the GPU's temperature over the round under it, the game's logo at the top right beside its name (`@game.logo`, which the `game` service keeps after the game; its name alone where there is none), and the highest temperatures and power (the PC's too, with the power service) against their average; it reads the `report.*` readings ([Plugins](PLUGINS.md#the-round-report)), so its title, heading hints and note follow the language of the panel, and a first round says so and shows no comparison; needs the `memory` service and PresentMon |
-
-The fans in the header need their sensors (`fan.lpc.fan_1` ... , `gpu.fan`) and show
-only the ones that report; the volume needs the `audio` source, what plays the
-`media` source, the screens for a game the `game` service and PresentMon
-(see [Configuration](CONFIGURATION.md#game-mode)). Where a screen for a game
-shows its logo (`@game.logo`, from the `game` service) and the game has none, its
-name stands there: `game.name`, or the program PresentMon counts (`game.app`)
-where the service has no name.
 
 ### Weather symbols
 
@@ -665,7 +636,7 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
 
 ### Cards
 
-The cards of SPUR II's Studio screen are modules (the theme `spur-studio` is made of them). A card is laid out in the numbers
+The cards of SPUR II's Studio screen are modules (Lumen's card slot and Studio show them). A card is laid out in the numbers
 of the card it comes from (376 px tall on the 1920 × 480 bar) and scaled with its
 module, so it looks as that card does at its size. Where the module is too small or
 too narrow for that, the older module of its kind takes over: the weather card is
@@ -673,14 +644,14 @@ the weather module, the playback card the music module, the network card the
 network module. Cards are lit by themselves: a module's `finish` is `auto` (its
 kind's own: `lit` for a card, flat for the others), and the theme may name one.
 Values are light in their grooves, the weather symbols are frosted glass, and frames
-are flat thin lines in their colour: a card has no ridge, no bevel and no trough.
+are flat thin lines in their colour: a card has no bevel and no trough.
 
 - **`playback`** (3 × 2): the cover (`media.cover`; a note where there is none),
   a sign and a word for the state (*Now playing* or *Paused*), the title and the
   artist, the app that plays it with its icon (`media.app_icon`) and name, the
   progress (`media.progress`) with the time played and the length, or with `time`
   `remaining` the time left, counting down with a minus (`-2:24`, from
-  `media.remaining`; SPUR Studio does so). Without a track: a note and "Nothing playing". The state's sign and
+  `media.remaining`). Without a track: a note and "Nothing playing". The state's sign and
   the progress are in the colour the cover carries (`@cover`), as in the Studio;
   `color` sets one.
 - **`forecast`** (3 × 2): a moving symbol ([Weather symbols](#weather-symbols)),
@@ -761,7 +732,7 @@ under way is finished before the next begins.
 | `random` | one of `light`, `fade`, `slide`, `rise` and `wipe`, another each time |
 
 **A new track** on the playback card that stays on show does not roll: with `slide` (seconds;
-0, none, by default, SPUR Studio sets 0.55) the content of the card moves out to the left and
+0, none, by default) the content of the card moves out to the left and
 the new track's moves in from the right, a gap between them (48 px on a panel 480 px tall,
 scaled with it) that closes as it arrives, as SPUR II's Studio does it: one movement for a new
 track, none while a track plays. What moves out is what the card showed last; the frame stays
@@ -808,8 +779,7 @@ theme's own frames are cards; what is on them stays as it is. Libre Panel's
 own themes let a little of it through, just enough to be seen (Terra 0.6, Lumen,
 Almanac and Nimbus 0.7, Arena and the round report 0.8, Studio and Agents 0.85,
 Encore 0.9, whose cards lie over the cover; the contrast of the text against
-what is behind it falls by 3 % at most); High Contrast and SPUR's screens
-cover it.
+what is behind it falls by 3 % at most); High Contrast covers it.
 The person's `card_opacity` in config.toml (*Settings → Panel → Card
 opacity*) holds for every theme and goes before the theme's. The editor's
 looks (Arctic, Libre, Neon, Graphite, Paper, Sunset, Mono, High Contrast) set
@@ -819,9 +789,8 @@ palette and style in one go.
 look each family of built-in themes wears and what it has of its own: Lumen,
 Encore, Almanac, Nimbus, Terra (its accent the blue of the sea), Libre Default,
 Column, Orbit, Slate and Pico wear Libre, the app's own colours; Arena, the round
-report (it follows a game on Arena), Agents, Studio (its frames lighter, the disk
-green) and SPUR's screens wear Arctic; High Contrast wears its own; SPUR II keeps
-the colours SPUR II has. A built-in theme holds its colours and cards in its
+report (it follows a game on Arena), Agents and Studio (its frames lighter, the disk
+green) wear Arctic; High Contrast wears its own. A built-in theme holds its colours and cards in its
 theme.json as every theme does, its background as `@bg` and `@bg2`;
 `python tools/design.py --write` writes the design into the themes, and a test
 checks that each holds its family's, so a colour changed in the design reaches
@@ -862,22 +831,21 @@ module's parts where the module is in the list.
 
 The look of SPUR II in two parts: the theme's `look` block for the whole
 panel, and a widget's `finish` for its shape. A theme with neither costs
-nothing extra. The built-in *SPUR Classic* (1920 × 480) shows both, with the
-grid and the dust; its frames are flat lines, so it has no panel light (the
-light needs ridges or a plugin's edges to glint on). The app's
-*Look* view sets them: the blocks below, and the finish and glow of each kind of
-element.
+nothing extra. The app's *Look* view sets them: the grid, and the finish and
+glow of each kind of element.
 
 ```json
 "look": {
-  "grid": { "spacing": 8, "major": 5 },
-  "light": { "strength": 1.0, "sweep_seconds": 1.6 }
+  "grid": { "spacing": 8, "major": 5 }
 }
 ```
 
 A block that is missing (or `false`) is off; `true` or `{}` turns it on with
 its defaults. Blocks this version does not know are kept with a warning, so
-a theme from a newer version loses nothing when the editor saves it.
+a theme from a newer version loses nothing when the editor saves it. The
+panel light (`light`), the depth dust (`dust`) and the ridges of rects
+(`ridge`) went after 0.8.0rc2: a theme that has them loads without them,
+and without a warning.
 
 **`grid`** lays thin lines every `spacing` px (2–400, default 8) from the top
 left, every `major`-th one stronger (0: none; default 5). They lie over the
@@ -885,69 +853,6 @@ backdrop (full-panel `rect`s at the start of the widget list) and under every
 other widget, and are drawn once. `color` and `major_color` default to the
 palette's `grid` and `grid_major`, else to a breath away from the background
 colour (the strong lines twice as far); `alpha` (0–1) dims both.
-
-**`light`** is one light for the whole panel. It falls only on *light
-edges*: points with a direction that widgets give it. Ridges (below) catch
-it; plugins can give their own (see below).
-
-- The sun stands where it stands for the place in `config.toml` (`[weather]`
-  latitude and longitude; without a place, or with `"sun": false`, at noon):
-  from the left in the morning, steep at noon, from the right in the
-  evening, warm near the horizon, a cool weak light at night. A straight
-  frame does not shine along its whole length but where the reflection
-  fits. Its gloss is worked out again when the sun has moved a step (about
-  a minute) and is kept in the frame's background in between.
-- A sweep of light runs across the panel in `sweep_seconds` (0.3–10, default
-  1.6): when the panel starts (`on_start`), on the full hour (`on_hour`), when
-  a new track plays (`on_track`: `media.title` changes) and when a `tube` or
-  `entrance` transition ends (`on_transition`); all on by default. `color`
-  tints it (default: the palette's accent). A new theme does not count as a
-  start, and the editor's previews show no sweeps.
-- `strength` (0–2, default 1) scales both.
-
-**Ridges.** A `rect` with a `ridge` name is drawn as a ridge, as SPUR II's
-frames: every point of it tilts towards its nearest edge, so it has two
-facets, one towards the guide light (top left), which lightens and glows a
-little, one away from it in shade. Rects with the same name are one ridge,
-so bands that meet join at a mitre (a frame of five bands is one frame). An
-outlined rect gives its outline, a filled one its fill. A ridge is a light
-edge for `look.light`. Without a name a rect stays flat, with or without a
-look.
-
-**`dust`** lets fine dust fall from the lit things on the panel into the
-depth behind the glass, as on SPUR II: letters, rails, rings and bars give
-off grains of their own colour, which shrink and fade on their way to a
-vanishing point a little above the middle, and a few near ones are soft
-discs. The theme does not say where the sources are. The dust reads the
-frame the panel showed, takes every bright pixel for a source (a new stock
-every 4 seconds, and again when a message begins and once it has rolled in)
-and so follows any layout.
-
-```json
-"look": { "dust": { "count": 1800, "rate": 25, "depth": 1, "strength": 1.5,
-                    "colors": ["@accent"],
-                    "areas": [{ "x": 0, "y": 0, "w": 480, "h": 120, "dust": false }] } }
-```
-
-- `count` (1800, 0–8000) is the number of grains on a 1920 × 480 panel; other
-  sizes get as many as their area asks for.
-- `rate` (25, 1–60) is how often the grains move in a second, `depth` (1, 0–3)
-  how far they fall towards the vanishing point (0: they hang where they are),
-  `strength` (1, 0–3) how bright they are.
-- `colors`: up to 8 colours (`#rrggbb` or `@name`); empty, each grain takes
-  the colour of the thing it comes from.
-- `areas`: up to 64 rectangles `{x, y, w, h, dust}` in panel pixels (they move
-  with the layout when a theme is adapted to another panel). With an area that
-  says `"dust": true` there is dust only inside it, otherwise everywhere;
-  `"dust": false` areas are cut out either way.
-- A bright element hides the dust over it, as if the dust lay behind it. A dark
-  card does not: dust shows over it, so keep dust out of it with an area.
-- It is drawn on a panel driven frame by frame (video mode) and in the editor's
-  preview. A panel that is sent the changed regions as pictures would get the
-  whole frame at every update, so there is none.
-- It costs a millisecond or two a frame at 1920 × 480 (the grains move in the
-  helper thread, a frame lays them in one pass); `tools/motion_bench.py --dust`
-  measures it on your machine.
 
 **`finish`** is `flat` (the default: the widget as it always looked), `lit`,
 `facet` or `acrylic`. A widget keeps its place and size in any finish. `facet`
@@ -994,50 +899,6 @@ than 2 px, icons under 16 px. A finish a type does not have (`lit` on a
 line icon) draws it flat, and the theme loader warns once per type. The weather
 symbols' layers are made before the first frame, a few milliseconds each, and
 kept.
-
-### Light edges for plugins
-
-The panel light glints on `LightEdge`s (`libre_panel.render.look`):
-`LightEdge(normals, coverage, x, y, strength=1.0)` with `normals` (h, w, 3:
-x to the right, y down, z towards the viewer; `(0, 0, 1)` faces the viewer
-and shines least) and `coverage` (h, w; 0–1 or 0–255) whose top left lies at
-(`x`, `y`) on the panel. `LightEdge.ridge(mask, x, y)` makes every line of a
-mask a ridge, as a `ridge` rect is.
-
-- A plugin widget type returns its edges from `edges(widget, ctx, snapshot,
-  now)`; a screen calls `context.light_edge(edge)` in `render`.
-  `context.light` says whether the theme has a panel light at all.
-- A finish (code, subclass of `libre_panel.render.finish.Finish`, made
-  available with `register`) calls `renderer.add_light_edge(edge)` while it
-  draws.
-- Give the edges on every frame that shows them, on the render thread, and
-  keep the same objects while nothing about them changes: their gloss is
-  worked out again only when the light moves. The gloss lies right on the
-  piece that gave the edge, under what is drawn after it.
-
-```python
-import numpy as np
-
-from libre_panel.plugins import WidgetType
-from libre_panel.render.look import LightEdge
-
-
-class Plate(WidgetType):
-    type = "myplugin.plate"
-    api = 1
-    spec = {"w": ("int", 200), "h": ("int", 60)}
-    kept = {}
-
-    def draw(self, widget, ctx, snapshot, now): ...
-
-    def edges(self, widget, ctx, snapshot, now):
-        key = (widget["x"], widget["y"], widget["w"], widget["h"])
-        if key not in self.kept:  # a rail along the top and along the bottom
-            mask = np.zeros((widget["h"], widget["w"]))
-            mask[:3] = mask[-3:] = 1
-            self.kept[key] = LightEdge.ridge(mask, widget["x"], widget["y"])
-        return [self.kept[key]]
-```
 
 ## Format strings
 

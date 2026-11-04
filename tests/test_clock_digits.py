@@ -175,12 +175,12 @@ def test_a_lettered_clock_rolls_its_own_letters():
     assert rolling.warnings == []
 
 
-def test_studio_runs_through_the_minute_under_its_clock_on_the_frames_time():
+def test_a_run_through_the_minute_under_a_clock_moves_on_the_frames_time():
     snapshot = Snapshot(now=START + timedelta(seconds=30.5))
     assert snapshot.value("time.second") == 30.5  # a reading of the frame's own time
-    data = json.loads((builtin_themes_dir() / "spur-studio" / "theme.json").read_text("utf-8"))
-    run = next(w for w in data["widgets"] if w["id"] == "seconds-run")
-    assert (run["sensor"], run["min"], run["max"], run["smooth"]) == ("time.second", 0, 60, False)
+    run = {"type": "bar", "id": "seconds-run", "w": 568, "h": 4, "sensor": "time.second",
+           "min": 0, "max": 60, "background": None, "radius": 0, "smooth": False,
+           "end_dot": 5.5}  # fmt: skip
     widgets = [{**run, "color": "#00ffff", "x": 0, "y": 10}]
     theme = parse_theme({"format": "libre-panel-theme/1", "display": {"width": 600, "height": 30},
                          "background": {"color": "#000000"}, "widgets": widgets})  # fmt: skip
@@ -201,11 +201,9 @@ def test_studio_runs_through_the_minute_under_its_clock_on_the_frames_time():
 
 @pytest.mark.parametrize(
     "name",
-    ["spur-classic", "spur-cockpit", "spur-focus", "spur-header", "spur-horizon",
-     "spur-session", "spur-studio", "spur-ii", "spur-round-report", "studio", "lumen", "encore",
-     "nimbus", "almanac", "almanac-analog"],
+    ["studio", "lumen", "encore", "nimbus", "almanac", "almanac-analog"],
 )  # fmt: skip
-def test_the_spur_screens_and_lumen_roll_their_clocks(name):
+def test_the_screens_roll_their_clocks(name):
     data = json.loads((builtin_themes_dir() / name / "theme.json").read_text("utf-8"))
     clocks = [w for w in data["widgets"] if w["type"] == "clock" and "%" in w["format"]]
     timed = [w for w in clocks if any(f"%{c}" in w["format"] for c in "HMS")]

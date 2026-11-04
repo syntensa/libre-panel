@@ -109,8 +109,8 @@ export function PageTabs() {
   </div>`;
 }
 
-// The round report's screens are for the report alone; the others for any page.
-const REPORTS = ["round-report", "spur-round-report"];
+// The round report's screen is for the report alone; the others for any page.
+const REPORTS = ["round-report"];
 
 /** The panel the pages are for: the one connected, else the one the normal theme is made for. */
 function pagesModel(themes) {

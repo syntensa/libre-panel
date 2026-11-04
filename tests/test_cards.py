@@ -212,17 +212,15 @@ def test_a_card_draws_with_and_without_its_readings(kind, size):
 
 
 @pytest.mark.parametrize("kind", CARDS)
-def test_no_card_has_a_ridge_a_bevel_or_a_trough_on_its_frame(kind):
-    """Frames are flat thin lines in their colour: a card's rects carry no ridge name and
-    its outline is one thin line (the lit grooves of bars and rings are values, not frames)."""
+def test_no_card_has_a_bevel_or_a_trough_on_its_frame(kind):
+    """Frames are flat thin lines in their colour: a card's outline is one thin line (the lit
+    grooves of bars and rings are values, not frames)."""
     for size in ((3, 2), (2, 1), (1, 2)):
         for widget in widgets_of(kind, *size).values():
-            assert not widget.get("ridge"), widget["id"]
             assert widget.get("finish", "flat") != "facet" and widget.get("finish") != "acrylic"
             if widget["type"] == "rect":
                 assert widget["outline_width"] <= 3 and not widget.get("glow"), widget["id"]
     renderer = Renderer(card_theme(kind), animate=True)
-    assert not any(w["type"] == "rect" and w.get("ridge") for w in renderer.widgets)
     assert renderer.theme.look in (None, {}) or "frames" not in (renderer.theme.look or {})
 
 
@@ -534,7 +532,6 @@ def test_the_ring_instrument_is_a_ring_of_light_with_its_number_inside_and_its_r
     assert ring["y"] < number["y"] < ring["y"] + ring["h"]  # inside the ring
     assert [parts[f"r{i}"]["sensor"] for i in range(3)] == ["cpu.temp", "cpu.power", "cpu.freq"]
     assert parts["r0"]["color_rules"]  # the temperature goes warm and hot
-    assert not any(w.get("ridge") for w in parts.values())
 
 
 @pytest.mark.parametrize("source", ["cpu", "gpu", "mem", "disk"])
@@ -666,7 +663,6 @@ def test_a_fan_instrument_is_a_fan_with_its_name_and_its_speed():
     assert parts["title"]["x"] > fan["x"] + fan["w"]  # wide: the name and the speed beside it
     tall = widgets_of("instrument", 1, 2, source="fan")
     assert tall["title"]["y"] > tall["fan"]["y"] + tall["fan"]["h"]  # tall: under it
-    assert not any(w.get("ridge") for w in parts.values())
 
 
 def test_a_fan_instrument_can_name_its_fan_and_its_colour():

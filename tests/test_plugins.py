@@ -688,7 +688,7 @@ def test_toasts_show_one_after_the_other():
     from libre_panel.render.renderer import Renderer
     from libre_panel.theme.model import find_theme, load_theme
 
-    theme = load_theme(find_theme("spur-ii"))  # the 9.2": 18 px hidden at the top
+    theme = load_theme(find_theme("lumen"))  # the 9.2": 18 px hidden at the top
     layer = ToastLayer(Renderer(theme))
     frame = Image.new("RGB", (1920, 480), "black")
     layer.add([Toast("first", "gpu", "info", 1.0), Toast("second", None, "error", 1.0)])

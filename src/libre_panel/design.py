@@ -159,28 +159,25 @@ BLOCK_COLOURS = {
 @dataclass(frozen=True)
 class Family:
     """The look a family of built-in themes wears, the colours it has of its own over the
-    look's, and its cards over the look's. ``look`` None: the family keeps colours and cards
-    of its own (and is not checked)."""
+    look's, and its cards over the look's."""
 
-    look: str | None
+    look: str
     colours: dict[str, str] = field(default_factory=dict)
     cards: dict[str, Any] = field(default_factory=dict)
     why: str = ""
 
     def palette(self) -> dict[str, str]:
-        assert self.look is not None
         return {**LOOKS[self.look]["palette"], **self.colours}
 
     def style(self) -> dict[str, Any]:
         """The cards in full, as a theme of the family is drawn with them."""
-        assert self.look is not None
         return {**STYLE_DEFAULTS, **LOOKS[self.look]["style"], **self.cards}
 
 
-_SPUR_STUDIO = {"line": "#32475E", "disk": "#7EE8A6"}  # Studio's frames and its green disk
+_STUDIO = {"line": "#32475E", "disk": "#7EE8A6"}  # Studio's frames and its green disk
 
 # Each built-in theme belongs to the family its name begins with (the longest that fits):
-# "lumen-1920x720" to "lumen", "spur-studio" to "spur-studio" before "spur".
+# "lumen-1920x720" to "lumen", "almanac-analog" to "almanac".
 FAMILIES: dict[str, Family] = {
     "lumen": Family("libre", cards={"card_opacity": 0.7}),
     "almanac": Family("libre", cards={"card_opacity": 0.7}),
@@ -197,22 +194,7 @@ FAMILIES: dict[str, Family] = {
         "arctic", cards={"card_opacity": 0.8}, why="it follows a game on Arena: in its design"
     ),
     "agents": Family("arctic", cards={"card_opacity": 0.85}),
-    "studio": Family(
-        "arctic", _SPUR_STUDIO, {"radius": 12, "backdrop": "flat", "card_opacity": 0.85}
-    ),
-    "spur": Family("arctic"),
-    "spur-studio": Family(
-        "arctic",
-        _SPUR_STUDIO,
-        {
-            "card": "outline",
-            "radius": 0,
-            "backdrop": "flat",
-            "display_font": "builtin:LiberationSans-Bold",
-            "text_font": "builtin:LiberationSans-Regular",
-        },
-    ),  # fmt: skip
-    "spur-ii": Family(None, why="SPUR II's own screen, in the colours SPUR II has"),
+    "studio": Family("arctic", _STUDIO, {"radius": 12, "backdrop": "flat", "card_opacity": 0.85}),
     "contrast": Family("contrast"),
 }
 

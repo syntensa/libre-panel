@@ -16,7 +16,7 @@ from test_slot import demo
 
 from libre_panel import i18n
 from libre_panel.icons import ICON_NAMES, draw_icon
-from libre_panel.render.renderer import Renderer, _blurred
+from libre_panel.render.renderer import Renderer, _blurred, need_key
 from libre_panel.sensors.base import Reading, Snapshot
 from libre_panel.theme.adapt import adapt_theme
 from libre_panel.theme.model import builtin_themes_dir, find_theme, load_theme, parse_theme
@@ -28,6 +28,25 @@ SCREENS = ["encore", "nimbus", "almanac", "almanac-analog", "round-report"]
 def renderers_let_go():
     yield
     gc.collect()  # a renderer tells the sensors what it reads until it is collected
+
+
+def keys_read(theme):
+    """The readings a theme asks for, by widgets and by their needs."""
+    keys = {w["sensor"] for w in theme.widgets if w.get("sensor")}
+    for widget in theme.widgets:
+        for need in (widget.get("needs") or "").split(","):
+            need = need.strip().lstrip("!").strip()
+            if need and not need.startswith("@"):  # (a picture is no reading)
+                keys.add(need_key(need))
+    return keys
+
+
+def shown_ids(theme, readings=None, images=None):
+    """The ids of the widgets of ``theme`` that are drawn for these readings (and pictures)."""
+    found = {k: Reading(k, v) for k, v in (readings or {}).items()}
+    snapshot = Snapshot(readings=found, images=images or {})
+    renderer = Renderer(theme)  # (one for all the widgets: a renderer for each took seconds)
+    return {w["id"] for w in theme.widgets if not renderer._missing(w, snapshot)}
 
 
 @pytest.fixture
@@ -419,14 +438,10 @@ def test_a_screens_parts_stay_in_json_as_written():
 
 def report_ids(readings, images=None):
     """The widgets of the round report that are drawn for these readings (and pictures)."""
-    from test_spur_themes import shown_ids
-
     return shown_ids(load_theme(find_theme("round-report")), readings, images or {})
 
 
 def test_the_round_report_reads_only_what_the_memory_service_publishes():
-    from test_spur_themes import keys_read
-
     from libre_panel.sensors.demo import demo_report
 
     theme = load_theme(find_theme("round-report"))
@@ -504,7 +519,7 @@ def test_the_round_report_shows_who_held_the_rate_down_in_one_bar():
 
 
 REPORTS = ["round-report", "round-report-1920x720", "round-report-1280x720",
-           "round-report-vertical", "spur-round-report"]  # fmt: skip
+           "round-report-vertical"]  # fmt: skip
 NEW_PARTS = ("low", "frame", "longest", "course-", "power-", "vram_used-rule")
 
 
@@ -580,11 +595,9 @@ def test_the_round_report_draws_the_temperature_over_the_round_and_the_pcs_power
 @pytest.mark.parametrize("name", REPORTS)
 @pytest.mark.parametrize("round_", ["demo", "older"])
 def test_every_round_report_draws_whole_and_its_new_parts_run_into_nothing(name, round_):
-    """Each size's round report (and SPUR II's) with the demo's round and with an older one: no
+    """Each size's round report with the demo's round and with an older one: no
     warning, the frame figures and the temperature drawn, and nothing that was added runs into
     anything but the card it stands on (the two courses lie on each other)."""
-    from test_spur_themes import keys_read
-
     from libre_panel.sensors.demo import demo_report
 
     data = data_of(name)
@@ -671,6 +684,6 @@ def test_a_screen_that_shows_the_volume_or_what_plays_gets_no_band_of_it():
     def kinds(name):
         return shown_by(Renderer(load_theme(find_theme(name)), preview=True))
 
-    assert kinds("spur-studio") == {"volume", "music"} and kinds("encore") == {"volume", "music"}
+    assert kinds("encore") == {"volume", "music"}
     assert kinds("lumen") == {"music", "agent"}  # (its cards show what plays and AI activity)
     assert kinds("studio") == {"music"} and kinds("almanac") == frozenset()

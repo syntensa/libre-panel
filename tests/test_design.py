@@ -49,8 +49,7 @@ def test_every_built_in_theme_belongs_to_a_family_and_every_family_has_themes():
     assert [n for n in names if family_of(n) is None] == []
     worn = {family_of(n)[0] for n in names}
     assert set(FAMILIES) == worn
-    assert family_of("spur-studio")[0] == "spur-studio"  # the longest name that fits
-    assert family_of("spur-cockpit")[0] == "spur"
+    assert family_of("round-report-1920x720")[0] == "round-report"  # (a name with a dash)
     assert family_of("lumen-1920x720")[0] == "lumen"
     assert family_of("lumenous") is None
 
@@ -92,7 +91,6 @@ def test_the_tool_writes_a_look_into_a_theme_and_leaves_the_theme_s_own_colours(
     assert out["style"]["backdrop"] == "gradient"
     assert data["palette"]["bg"] == "#000000"  # (a copy)
     assert len(changes) == 2 + 4 + 5  # background, palette, cards
-    assert tool.designed("spur-ii", data) == (data, [])  # its own colours, as SPUR II has them
     _, changes = tool.designed("tilt", {"palette": {}})
     assert changes == ["tilt: of no family in design.FAMILIES"]
 

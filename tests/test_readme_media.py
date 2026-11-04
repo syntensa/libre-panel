@@ -246,7 +246,7 @@ def test_every_panel_recipe_runs_headless_and_makes_a_clip(panel, clip, short):
         "video-mode", "card-ignition", "card-turns", "ai-card", "agents", "small-panel",
         "volume-band", "volume-looks", "theme-tube", "game-entrance", "close-up-rings",
         "close-up-curves", "encore", "nimbus", "terra", "almanac", "music-page", "round-report",
-        "screens-in-turn", "themes-tour", "where-it-started",
+        "screens-in-turn", "themes-tour",
     ]  # fmt: skip
     widths = {}
     for name, recipe in panel.CLIPS.items():
@@ -951,7 +951,7 @@ def test_the_list_says_what_there_is_and_what_each_shows(cli, capsys):
     shown = capsys.readouterr().out
     for name in ("video-mode", "volume-band", "volume-looks", "theme-tube", "game-entrance",
                  "card-ignition",
-                 "small-panel", "close-up-rings", "close-up-curves", "where-it-started",
+                 "small-panel", "close-up-rings", "close-up-curves",
                  "app-look", "app-drag-module", "app-ring-style", "app-command-palette",
                  "app-hardware-names", "encore", "nimbus", "almanac", "music-page",
                  "round-report", "screens-in-turn", "start-screen", "card-turns",

@@ -1,6 +1,6 @@
 // Look (#/look): the theme's look and finish. The colours, how rings, bars and lettering are
-// drawn (finish and glow), the panel light, the grid and the dust behind the panel, and how
-// notices look; the preview follows every change. Built on the shell: see ../../README.md.
+// drawn (finish and glow), the grid behind the panel, and how notices look; the preview follows
+// every change. Built on the shell: see ../../README.md.
 
 import { registerCommands } from "../../core/commands.js";
 import { edit, theme as currentTheme, widgets } from "../../core/doc.js";
@@ -49,15 +49,6 @@ function finishAll(finish) {
 
 registerCommands([
   {
-    id: "look.light",
-    title: () => (on("light") ? t("Panel light: off") : t("Panel light: on")),
-    group,
-    icon: "sun",
-    when: hasDoc,
-    rank: 62,
-    run: () => toggleBlock("light", !on("light")),
-  },
-  {
     id: "look.grid",
     title: () => (on("grid") ? t("Grid background: off") : t("Grid background: on")),
     group,
@@ -65,15 +56,6 @@ registerCommands([
     when: hasDoc,
     rank: 62,
     run: () => toggleBlock("grid", !on("grid")),
-  },
-  {
-    id: "look.dust",
-    title: () => (on("dust") ? t("Depth dust: off") : t("Depth dust: on")),
-    group,
-    icon: "sensor",
-    when: hasDoc,
-    rank: 62,
-    run: () => toggleBlock("dust", !on("dust")),
   },
   ...["lit", "facet", "acrylic", "flat"].map((finish) => ({
     id: `look.finish.${finish}`,

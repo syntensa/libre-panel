@@ -53,7 +53,7 @@ TX_1, TX_3, ACCENT = (238, 246, 255), (140, 160, 184), (19, 229, 215)
 # Each theme as the panel shows it: Libre Panel's own first, the bars before the small panels.
 THEMES = ("lumen", "lumen-companion", "studio", "encore", "nimbus", "almanac", "almanac-analog",
           "terra", "arena", "agents", "contrast", "libre-default", "slate", "orbit", "column",
-          "pico", "spur-ii")  # fmt: skip
+          "pico")  # fmt: skip
 # The pictures made of them, and the screenshots of the app (those need Playwright).
 COMPOSED = ("hero.png", "gallery.png", "social-preview.png", "studio-adapts.png", "vertical.png",
             "module-sizes.png", "weather-sizes.png", "looks.png", "module-layouts.png",
@@ -799,6 +799,8 @@ def editor_shots(out: Path) -> None:
             page.wait_for_timeout(500)
             page.screenshot(path=str(out / "editor-drag.png"))
             page.mouse.up()
+            for close in page.locator(".toast .toast-close").all():  # ("Removed ...": not after)
+                close.click()
             # the command palette finds everything by a few letters: blocks, settings, themes
             page.evaluate("window.libre.doc.setSelection([])")
             page.keyboard.press("Control+k")

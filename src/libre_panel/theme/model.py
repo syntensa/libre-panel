@@ -106,9 +106,6 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "outline": ("color?", None),
         "outline_width": ("int", 1),
         "backdrop_blur": ("int", 0),
-        # A ridge with two lit facets, as SPUR II's frames (render.look); rects
-        # with the same name are one ridge, so bands that meet join at mitres
-        "ridge": ("string", ""),
     },
     "text": {
         "text": ("text", "Label"),
@@ -529,41 +526,16 @@ LOOK_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "major_color": ("color?", None),
         "alpha": ("number", 1.0),
     },
-    # One light for the panel: the sun at the place in config.toml (else noon)
-    # glints on light edges (rects with a ``ridge``, plugins' edges), and
-    # sweeps of light run across at moments
-    "light": {
-        "strength": ("number", 1.0),
-        "sun": ("bool", True),
-        "color": ("color?", None),  # the sweeps' tint; empty: the accent
-        "sweep_seconds": ("number", 1.6),
-        "on_start": ("bool", True),
-        "on_hour": ("bool", True),
-        "on_track": ("bool", True),
-        "on_transition": ("bool", True),
-    },
-    # Fine dust falling from the elements into the depth behind the panel (render.dust).
-    # Besides these, ``colors`` (empty: each grain takes the colour of its source) and
-    # ``areas`` (rectangles with dust or without) are lists: LOOK_LISTS.
-    "dust": {
-        "count": ("int", 1800),  # grains on a 1920 x 480 panel; other sizes scale with their area
-        "rate": ("number", 25),  # how often the grains move, per second
-        "depth": ("number", 1.0),  # how far they fall towards the vanishing point (0: not at all)
-        "strength": ("number", 1.0),  # how bright they are
-    },
 }
 LOOK_RANGES: dict[tuple[str, str], tuple[float, float]] = {
     ("grid", "spacing"): (2, 400),
     ("grid", "major"): (0, 50),
     ("grid", "alpha"): (0, 1),
-    ("light", "strength"): (0, 2),
-    ("light", "sweep_seconds"): (0.3, 10),
-    ("dust", "count"): (0, 8000),
-    ("dust", "rate"): (1, 60),
-    ("dust", "depth"): (0, 3),
-    ("dust", "strength"): (0, 3),
 }
-DUST_MAX_COLORS, DUST_MAX_AREAS = 8, 64
+# What themes said of things that are gone (after 0.8.0rc2: the panel light, the depth dust and
+# the ridges of rects): dropped without a word, so a theme from before loads as it did
+GONE_LOOK = frozenset({"light", "dust"})
+GONE_FIELDS: dict[str, frozenset[str]] = {"rect": frozenset({"ridge"})}
 
 _PALETTE_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 
@@ -577,8 +549,8 @@ class Theme:
     author: str = ""
     license: str = ""
     description: str = ""
-    # A set the theme belongs to, for galleries ("SPUR II": the screens Libre Panel
-    # grew out of); "" = Libre Panel's own or the user's.
+    # A set the theme belongs to, kept apart in galleries; "" = Libre Panel's own or the
+    # user's.
     collection: str = ""
     background_color: str = "#000000"
     background_image: str | None = None
@@ -598,7 +570,7 @@ class Theme:
     # corners, glow, fonts); None = not set in the theme.
     grid: dict[str, int] | None = None
     style: dict[str, Any] | None = None
-    # The panel's look by block ("grid", "light", ...; render.look); {} = none.
+    # The panel's look by block ("grid"; render.look); {} = none.
     look: dict[str, Any] = field(default_factory=dict)
     # What the person may switch on or off in this theme: {"frames": {"label": "...", "on":
     # true}}; widgets that need ``switch.frames`` (or ``!switch.frames``) show by it
@@ -863,7 +835,7 @@ def normalize_widget(
         widget["id"] = f"{wtype}-{index + 1}"
     if plugin is not None:
         _check_paths(plugin.spec, widget, where, root)
-    unknown = sorted(set(raw) - set(spec) - {"type"})
+    unknown = sorted(set(raw) - set(spec) - {"type"} - GONE_FIELDS.get(wtype, frozenset()))
     warnings = [f"{where}: ignoring unknown field {k!r}" for k in unknown]
     return widget, warnings
 
@@ -1011,45 +983,11 @@ def _parse_style(raw: Any, root: Path | None) -> dict[str, Any] | None:
     return style
 
 
-def _dust_colors(raw: Any, palette: dict[str, str], where: str) -> list[str]:
-    """``look.dust.colors``: up to :data:`DUST_MAX_COLORS` colours; none, each grain takes
-    the colour of the element it falls from."""
-    if raw is None:
-        return []
-    if not isinstance(raw, list) or len(raw) > DUST_MAX_COLORS:
-        raise ThemeError(f"{where}: expected a list of at most {DUST_MAX_COLORS} colours")
-    return [_check_color(color, f"{where}[{i}]", False, palette) for i, color in enumerate(raw)]
-
-
-def _dust_areas(raw: Any, palette: dict[str, str], where: str) -> list[dict[str, Any]]:
-    """``look.dust.areas``: rectangles ``{"x", "y", "w", "h", "dust": true|false}``: dust
-    only where an area says so, or everywhere but where one says not."""
-    if raw is None:
-        return []
-    if not isinstance(raw, list) or len(raw) > DUST_MAX_AREAS:
-        raise ThemeError(f"{where}: expected a list of at most {DUST_MAX_AREAS} areas")
-    areas = []
-    for i, area in enumerate(raw):
-        here = f"{where}[{i}]"
-        if not isinstance(area, dict):
-            raise ThemeError(f"{here}: expected an object with x, y, w, h")
-        checked = {k: _coerce("int", area.get(k, 0), f"{here}.{k}") for k in ("x", "y", "w", "h")}
-        if checked["w"] < 1 or checked["h"] < 1:
-            raise ThemeError(f"{here}: w and h must be at least 1")
-        checked["dust"] = _coerce("bool", area.get("dust", True), f"{here}.dust")
-        areas.append(checked)
-    return areas
-
-
-# The fields of look blocks that are lists, not single values: block -> field -> parser
-LOOK_LISTS: dict[str, dict[str, Any]] = {"dust": {"colors": _dust_colors, "areas": _dust_areas}}
-
-
 def _parse_look(raw: Any, palette: dict[str, str], warnings: list[str]) -> dict[str, Any]:
-    """``"look": {"grid": {...}, "light": {...}}``: the panel's look, block by
-    block. A missing block (or ``false``) is off, ``true`` or ``{}`` is on with
-    the defaults. Blocks this version does not know are kept as they are,
-    so saving loses nothing."""
+    """``"look": {"grid": {...}}``: the panel's look, block by block. A missing
+    block (or ``false``) is off, ``true`` or ``{}`` is on with the defaults.
+    Blocks this version does not know are kept as they are, so saving loses
+    nothing; those of things that are gone (GONE_LOOK) are dropped."""
     if raw is None:
         return {}
     if not isinstance(raw, dict):
@@ -1057,6 +995,8 @@ def _parse_look(raw: Any, palette: dict[str, str], warnings: list[str]) -> dict[
     look: dict[str, Any] = {}
     for name, given in raw.items():
         spec = LOOK_SPECS.get(name)
+        if name in GONE_LOOK:
+            continue
         if spec is None:
             warnings.append(f"look: ignoring unknown block {name!r}")
             look[name] = deepcopy(given)
@@ -1074,12 +1014,8 @@ def _parse_look(raw: Any, palette: dict[str, str], warnings: list[str]) -> dict[
             if low is not None and not low <= value <= high:
                 raise ThemeError(f"look.{name}.{key}: must be between {low} and {high}")
             block[key] = value
-        lists = LOOK_LISTS.get(name, {})
-        for key, parse in lists.items():
-            block[key] = parse(given.get(key), palette, f"look.{name}.{key}")
         warnings.extend(
-            f"look.{name}: ignoring unknown field {k!r}"
-            for k in sorted(set(given) - set(spec) - set(lists))
+            f"look.{name}: ignoring unknown field {k!r}" for k in sorted(set(given) - set(spec))
         )
         look[name] = block
     return look

@@ -490,9 +490,7 @@ export function registerFeatureCommands() {
     "settings.system": () => t("autostart start with windows login administrator language window update new version"),
     "settings.about": () => t("about version licence help report folders"),
     "settings.hardware-names": () => t("hardware processor cpu graphics card gpu memory ram name rename fan names"),
-    "look.light": () => t("glow light shine lighting"),
     "look.grid": () => t("grid background lines pattern"),
-    "look.dust": () => t("dust particles depth stars"),
   };
   for (const [id, keywords] of Object.entries(more)) describeCommand(id, { keywords });
   for (const finish of ["lit", "facet", "acrylic", "flat"]) {

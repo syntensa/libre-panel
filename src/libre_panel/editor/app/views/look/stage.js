@@ -24,7 +24,7 @@ const peek = createStore({ png: null });
 let peeking = 0;
 
 /**
- * Try a choice on before it is made (a colour world, a finish, the panel light, a notice
+ * Try a choice on before it is made (a colour world, a finish, the grid, a notice
  * style): `change(theme)` changes a copy, which the server draws, and `notice` shows a test
  * notice on it: its kind, or `{kind, look}` for the volume in one of its looks. null goes
  * back to the theme as it is; so does every change of the theme (a click that made the

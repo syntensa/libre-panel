@@ -97,9 +97,9 @@ Every clip shows Libre Panel itself, with demo values.
 
 TURZX USB panels have a video decoder, and Libre Panel feeds it up to 50 frames a second:
 numbers count to each new reading, rings and bars glide, graphs scroll a little on every frame
-and fans turn at their own speed. Values sit as light in milled grooves, and fine dust drifts in
-the depth behind. 25 frames a second is the default, smooth and far lighter on the PC; every
-other panel gets still frames, sent where something changed.
+and fans turn at their own speed. Values sit as light in milled grooves. 25 frames a second is
+the default, smooth and far lighter on the PC; every other panel gets still frames, sent where
+something changed.
 
 ### Cards that take turns
 
@@ -258,8 +258,7 @@ facets, acrylic or flat.</td>
 
 Every theme moves to any other panel and lays itself out for it. Themes are plain JSON with
 their pictures and fonts and cannot run code ([every built-in theme](docs/THEMES.md#every-built-in-theme),
-[the theme format](docs/THEMES.md)). The eight screens of SPUR II are built in too, as a legacy
-collection ([where it started](#where-it-started)).
+[the theme format](docs/THEMES.md)).
 
 ### Community themes
 
@@ -616,13 +615,10 @@ file ([how](docs/CONFIGURATION.md#language)); code, drivers and plugins start at
 
 ## Where it started
 
-<a href="docs/media/where-it-started.gif"><img src="docs/media/where-it-started.png" width="38%" align="right" alt="SPUR II's classic screen in video mode: the SPUR II wordmark, the fans and the clock above, CPU and GPU load charts, and CPU, RAM, GPU and network sections with values as light"></a>
-
 Libre Panel grew out of SPUR II, a private dashboard for one 9.2" panel on one PC, which proved
 the panel's USB protocol and its video mode on real hardware. Its ideas (light in milled
 grooves, the cards, the band, the tube) are now Libre Panel's own, for every panel and every
-PC, and its eight screens ship as the legacy collection *SPUR II*, at the end of *Start → All*
-([what came from it](docs/SPUR2_MIGRATION.md)).
+PC ([what came from it](docs/SPUR2_MIGRATION.md)).
 
 ## License and notices
 

@@ -651,6 +651,7 @@ def test_a_theme_comes_on_warmed_up(monkeypatch):
     current one goes on; its first frame on the panel builds no cards."""
     import threading
 
+    from libre_panel import app as apps
     from libre_panel.plugins import PluginHost
 
     built = []
@@ -661,14 +662,17 @@ def test_a_theme_comes_on_warmed_up(monkeypatch):
         return real(self, *args)
 
     monkeypatch.setattr(Renderer, "_card", card)
+    # (the loop's clock runs ten times as fast as the warm-up's: the switch waits for it here,
+    # not the 2 s of that clock, which a theme of cards may not be done in on a busy machine)
+    monkeypatch.setattr(apps._Warmup, "LIMIT_S", 600.0)
     clock, host = Clock(1000.0), PluginHost()
     loop = loop_for("pico", clock, host)
     here = threading.current_thread().name
     try:
         loop.step(clock.now)
         built.clear()
-        host.request_theme("spur-ii", by="test", transition="cut")
-        assert steps(loop, clock, lambda: loop.status.theme == "spur-ii")
+        host.request_theme("studio", by="test", transition="cut")
+        assert steps(loop, clock, lambda: loop.status.theme == "studio", limit=3000)
         assert loop.display.frames[-1].size == (1920, 480)
         assert built and here not in built  # the cards were drawn in the warm-up
     finally:
@@ -739,43 +743,6 @@ def changes(frames, name):
     """Which frames differ from the one before in box ``name``."""
     crops = [frame[name].tobytes() for frame in frames]
     return [n for n in range(1, len(crops)) if crops[n] != crops[n - 1]]
-
-
-def curve_profile(region):
-    """Per column, the row of its brightest pixel: the curve's line."""
-    region = region.convert("L")
-    data, (w, h) = region.load(), region.size
-    rows = []
-    for x in range(w):
-        column = [data[x, y] for y in range(h)]
-        rows.append(column.index(max(column)))
-    return rows
-
-
-def moved(before, after, most=60):
-    """How many pixels to the left the curve moved between two profiles."""
-    span = len(after) - most
-    return min(range(most), key=lambda s: sum(abs(before[x + s] - after[x]) for x in range(span)))
-
-
-def test_spur_ii_moves_on_every_frame_in_video_mode(monkeypatch):
-    """The built-in SPUR II in video mode: its graphs change on (nearly) every
-    frame and move 25 px a second, and its numbers change between readings."""
-    boxes = {
-        "cpu": (43, 150, 945, 276),
-        "gpu": (1003, 150, 1877, 276),
-        "number": (820, 85, 925, 145),
-    }
-    frames, every = video_frames("spur-ii", 4, monkeypatch, boxes)
-    for graph in ("cpu", "gpu"):
-        # nearly every frame: at 0.49 px a frame, a frame now and then lands
-        # on the same half pixel as the one before
-        late = [n for n in changes(frames, graph) if n > 50]
-        assert len(late) >= 0.9 * (len(frames) - 51), (graph, len(late))
-    speed = moved(curve_profile(frames[100]["cpu"]), curve_profile(frames[150]["cpu"]))
-    assert speed >= 20, speed  # in a second
-    between = [n for n in changes(frames, "number") if n % every]  # the CPU load
-    assert len(between) >= 8, (between, every)  # it glides: also between readings
 
 
 def test_studio_glides_between_readings_in_video_mode(monkeypatch):

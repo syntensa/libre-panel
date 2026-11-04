@@ -190,7 +190,7 @@ jobs:
           }
       - name: Smoke test (render)
         shell: bash
-        run: '"$CLI" preview spur-ii -o smoke.png'
+        run: '"$CLI" preview lumen -o smoke.png'
       - name: Smoke test (ffmpeg and PresentMon in the program folder)
         # Every file is the one that was fetched; ffmpeg lists libx264 and encodes the video
         # mode's stream; PresentMon starts; the app, started from this folder, finds them there

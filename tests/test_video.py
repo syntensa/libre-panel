@@ -1269,7 +1269,7 @@ def test_a_restart_waits_for_the_panel_to_go_come_back_and_settle():
 @needs_ffmpeg
 def test_main_loop_in_video_mode(panel, monkeypatch):
     device = video_config()
-    config = Config(theme="spur-ii", device=device, sensors=SensorsConfig(providers=["demo"]))
+    config = Config(theme="studio", device=device, sensors=SensorsConfig(providers=["demo"]))
     stop = threading.Event()
     status = app.RunStatus()
     options = {"stop": stop, "status": status}

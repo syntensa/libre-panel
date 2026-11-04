@@ -25,40 +25,17 @@ from libre_panel.plugins.render import RenderContext, ToastStyle
 from libre_panel.render import moving
 from libre_panel.render import scene as scenes
 from libre_panel.render.overlays import ToastLayer
-from libre_panel.render.renderer import Piece, Renderer
+from libre_panel.render.renderer import Piece
 from libre_panel.render.volume_looks import VOLUME_LOOKS
 from libre_panel.sensors.base import SensorHub
 from libre_panel.sensors.demo import DemoProvider
 
 
-def own_frame(renderer, scene):
-    """The renderer's own frame of ``scene``'s pieces (RGB), as it composes one here: with the
-    scene's dust, composed in RGBA under it and dusted with its taps as Renderer._dusted
-    dusts it (Dust._draw), what lies after it composed over the dust; turned with ``half``."""
-    dust, pieces = scene.dust, list(scene.pieces)
-    if dust is None:
-        own = renderer._as_rgb(renderer._compose(pieces))
-    else:
-        grains = renderer._dust
-        kept, grains.taps = grains.taps, dust.taps
-        try:
-            own = grains._draw(renderer._compose(pieces[: dust.at]))
-        finally:
-            grains.taps = kept
-        for _wid, piece in pieces[dust.at :]:
-            Renderer._composite(own, piece, (0, 0), True)
-    if scene.half:
-        own = own.transpose(Image.Transpose.ROTATE_180)
-    return own
-
-
 class Layered(Stream):
-    """A streaming display whose engine composes frames of layers (and lays a theme's dust):
-    each frame it gets is kept, and a frame of layers is checked against the renderer's own
-    composition of its pieces."""
+    """A streaming display whose engine composes frames of layers: each frame it gets is kept,
+    and a frame of layers is checked against the renderer's own composition of its pieces."""
 
     takes_scenes = True
-    makes_dust = True
 
     def __init__(self):
         super().__init__()
@@ -68,7 +45,10 @@ class Layered(Stream):
     def show(self, frame, region=None):
         super().show(frame, region)
         if isinstance(frame, scenes.SceneFrame) and self.loop is not None:
-            own = own_frame(self.loop.renderer, frame.scene)
+            renderer = self.loop.renderer
+            own = renderer._as_rgb(renderer._compose(list(frame.scene.pieces)))
+            if frame.scene.half:
+                own = own.transpose(Image.Transpose.ROTATE_180)
             assert scenes.compose(frame.scene).tobytes() == own.tobytes(), "not the same pixels"
             self.checked += 1
 
@@ -89,10 +69,8 @@ def run(loop, clock, frames, step=0.04):
 
 
 @pytest.mark.parametrize(
-    "theme",
-    ["lumen-1920x720", "arena-1920x720", "almanac", "terra", "contrast", "spur-focus",
-     "spur-studio"],
-)  # fmt: skip
+    "theme", ["lumen-1920x720", "arena-1920x720", "almanac", "terra", "contrast"]
+)
 def test_a_frame_of_layers_is_the_renderer_s_own_frame_pixel_for_pixel(theme):
     display, clock = Layered(), Clock(1000.0)
     loop = loop_with(theme, display, clock)
@@ -308,88 +286,26 @@ def test_each_layer_goes_to_the_engine_once_while_it_is_in_the_frames():
     assert [k for k, *_ in fifth] == [engines.SCENE]
 
 
-def test_the_dust_goes_to_the_engine_once_a_move_under_what_lies_over_it():
-    """A theme's dust is one layer in the frame's order, where it lies (a message over it):
-    its taps go once, as the grains moved, the frames between with the number alone; a frame
-    without it and the engine forgets it."""
-    import numpy as np
-
-    from libre_panel.render import dust as dusts
-
-    sender = engines.SceneSender(dust=True)
-    card, top = piece((9, 9, 9, 255), size=(20, 10)), piece((200, 0, 0, 255), 3, 2)
-    index = np.array([0, 33, 33, 70], np.int64)
-    add = np.zeros((4, 4), np.float32)
-    add[:, :3] = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12.5]]
-    cover = np.zeros((4, 4), np.float32)
-    cover[:, :3] = np.array([0, 0.25, 0, 0.375], np.float32)[:, None]
-    taps = (index, add, cover)
-
-    def dusted(taps, at=1):
-        scene = scene_of(card, top)
-        return replace(scene, dust=scenes.Dusting(at, taps))
-
-    first = heads(sender.records(dusted(taps), 0, None))
-    assert [k for k, *_ in first] == [engines.GROUND, engines.LAYER, engines.DUST,
-                                      engines.LAYER, engines.SCENE]  # fmt: skip
-    _kind, number, length, body = first[2]
-    assert length == 8 + 1024 + 20 * 4
-    assert struct.unpack("<II", body[:8]) == (4, 0)
-    assert body[8:1032] == dusts.shown_shares().astype("<f4").tobytes()
-    assert struct.unpack("<4I", body[1032:1048]) == (0, 33, 33, 70)
-    assert struct.unpack("<12f", body[1048:1096]) == (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12.5)
-    assert struct.unpack("<4f", body[1096:]) == (0, 0.25, 0, 0.375)
-    order = struct.unpack(f"<{first[-1][2]}I", first[-1][3][12:])
-    assert order == (first[1][1], number, first[3][1])  # (under the piece over it)
-    # the grains as they were: the frame alone; moved: their taps again, a number of their own
-    assert [k for k, *_ in heads(sender.records(dusted(taps), 1, None))] == [engines.SCENE]
-    moved = (index[:2], add[:2], cover[:2])
-    again = heads(sender.records(dusted(moved, at=2), 2, None))
-    assert [k for k, *_ in again] == [engines.DUST, engines.SCENE]
-    assert struct.unpack(f"<{again[-1][2]}I", again[-1][3][12:])[-1] == again[0][1] != number
-    # a frame without it: the next with the same taps sends them again (the engine forgot them)
-    assert [k for k, *_ in heads(sender.records(scene_of(card, top), 3, None))] == [engines.SCENE]
-    fifth = heads(sender.records(dusted(moved), 4, None))
-    assert [k for k, *_ in fifth] == [engines.DUST, engines.SCENE]
-    # an engine that lays no dust gets none
-    plain = heads(engines.SceneSender().records(dusted(taps), 0, None))
-    assert engines.DUST not in [k for k, *_ in plain]
-
-
-def test_a_look_s_grid_goes_as_a_layer_its_dust_where_the_engine_lays_it():
-    """A theme's grid is one more piece of a frame of layers, and its dust goes with it where
-    the engine lays it, from the second frame on (the first frame's stock comes from the frame
-    composed here); a look's sweeps of light go over the frame here."""
+def test_a_look_s_grid_goes_as_a_layer_over_the_backdrop():
+    """A theme's grid is one more piece of a frame of layers, the frame the renderer's own."""
     from test_motion import video
 
+    from libre_panel.render.renderer import Renderer
     from libre_panel.sensors.demo import demo_snapshot
     from libre_panel.theme.model import THEME_FORMAT, parse_theme
 
-    def themed(look):
-        widget = {"type": "text", "id": "t", "x": 10, "y": 10, "text": "SPUR", "font_size": 40,
-                  "color": "#e8f6ff"}  # fmt: skip
-        return parse_theme({"format": THEME_FORMAT, "display": {"width": 320, "height": 120},
-                            "background": {"color": "#0a1119"}, "look": look,
-                            "widgets": [widget]})  # fmt: skip
-
-    snap = demo_snapshot(fixed_time=1_700_000_000)
-    grid = video(Renderer(themed({"grid": True}), dither=True), fps=25)
-    frame, _ = grid.render(snap, 1000.0, scene=True)
-    assert isinstance(frame, scenes.SceneFrame) and "\0grid" in dict(frame.scene.pieces)
-    assert frame.scene.dust is None
-    lit = video(Renderer(themed({"grid": True, "light": True}), dither=True), fps=25)
-    assert not isinstance(lit.render(snap, 1000.0, scene=True)[0], scenes.SceneFrame)
-    for lays in (False, True):
-        dusty = video(Renderer(themed({"grid": True, "dust": True}), dither=True), fps=25)
-        dusty.native_dust = lays
-        first, _ = dusty.render(snap, 1000.0, scene=True)
-        assert not isinstance(first, scenes.SceneFrame)
-        dusty.shown = first
-        frame, _ = dusty.render(snap, 1000.04, scene=True)
-        assert isinstance(frame, scenes.SceneFrame) == lays
-        if lays:
-            assert frame.scene.dust is not None and frame.scene.dust.at == len(frame.scene.pieces)
-            assert frame.scene.dust.taps is dusty._dust.taps
+    widget = {"type": "text", "id": "t", "x": 10, "y": 10, "text": "GRID", "font_size": 40,
+              "color": "#e8f6ff"}  # fmt: skip
+    theme = parse_theme({"format": THEME_FORMAT, "display": {"width": 320, "height": 120},
+                         "background": {"color": "#0a1119"}, "look": {"grid": True},
+                         "widgets": [widget]})  # fmt: skip
+    renderer = video(Renderer(theme, dither=True), fps=25)
+    frame, _ = renderer.render(demo_snapshot(fixed_time=1_700_000_000), 1000.0, scene=True)
+    assert isinstance(frame, scenes.SceneFrame)
+    names = [name for name, _ in frame.scene.pieces]
+    assert "\0grid" in names and names.index("\0grid") < names.index("t")  # (under the text)
+    own = renderer._as_rgb(renderer._compose(list(frame.scene.pieces)))
+    assert scenes.compose(frame.scene).tobytes() == own.tobytes()
 
 
 def test_a_layer_goes_to_the_engine_without_what_of_it_shows_nothing():
@@ -788,24 +704,25 @@ class Fed(Layered):
     ``half``; the renderer's own frame of each is kept to compare."""
 
     def __init__(self, engine, size, out, half, rings=False, views=False, globes=False,
-                 fills=False, laid=False, grown=False, bars=False, dust=False):  # fmt: skip
+                 fills=False, laid=False, grown=False, bars=False):  # fmt: skip
         super().__init__()
-        self.half, self.makes_rings, self.makes_dust = half, rings, dust
+        self.half, self.makes_rings = half, rings
         self.proc = subprocess.Popen(
             [engine, "encode", "--size", f"{size[0]}x{size[1]}", "--turn", "0", "--fps", "25",
              "--crf", "20", "--kbit", "4000", "--keyint", "250", "--dump-rgb", str(out)],
             stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
         )  # fmt: skip
-        self.sender = engines.SceneSender(rings, views, globes, fills, laid, grown, bars, dust)
+        self.sender = engines.SceneSender(rings, views, globes, fills, laid, grown, bars)
         self.own, self.n = [], 0
 
     def show(self, frame, region=None):
         Stream.show(self, frame, region)
         if not isinstance(frame, scenes.SceneFrame):
             return
+        renderer = self.loop.renderer
+        own = renderer._as_rgb(renderer._compose(list(frame.scene.pieces)))
         if self.half:
-            frame = frame.turned()
-        own = own_frame(self.loop.renderer, frame.scene)
+            own, frame = own.transpose(Image.Transpose.ROTATE_180), frame.turned()
         if self.n % 7 == 3:
             h264.engine_frame(own, None, self.n)(self.proc.stdin)
         else:
@@ -830,16 +747,14 @@ class Fed(Layered):
                                                        "grown"),
      ("arena-1920x720", True, False, True, "grown"), ("lumen-1920x720", False, False, False,
                                                        "bars"),
-     ("lumen-1920x720", True, False, True, "bars"), ("spur-focus", False, False, True, "dust"),
-     ("spur-studio", True, False, False, "dust")],
+     ("lumen-1920x720", True, False, True, "bars")],
 )  # fmt: skip
 def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
-    engine, tmp_path, monkeypatch, theme, half, rings, toast, views
+    engine, tmp_path, theme, half, rings, toast, views
 ):
     """Pixel for pixel, a message over it too (one more layer, as it comes, shows and goes),
-    the graphs' windows cut by the engine from their strips too, a theme's grid and dust too
-    (SPUR's, the message over the dust); where the engine makes the rings or the lit bars too,
-    to a level, at few pixels."""
+    the graphs' windows cut by the engine from their strips too; where the engine makes the
+    rings or the lit bars too, to a level, at few pixels."""
     if rings and not engines.makes_rings(engine):
         pytest.skip("needs libre-panel-engine that makes rings (cargo build --release)")
     if views and not engines.cuts_views(engine):
@@ -859,19 +774,9 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
     bars = views == "bars"  # (and the lit bars and their glows made by the engine, Lumen's)
     if bars and not engines.makes_bars(engine):
         pytest.skip("needs libre-panel-engine that makes bars (cargo build --release)")
-    dust = views == "dust"  # (and a theme's dust laid by the engine, SPUR's on the 9.2")
-    if dust and not engines.makes_dust(engine):
-        pytest.skip("needs libre-panel-engine that lays dust (cargo build --release)")
-    if dust:  # (its grains moved in each frame: in the helper thread they wait for a gap
-        # between frames, which these frames, drawn one after the other, rarely leave)
-        from libre_panel.render.dust import Dust
-
-        monkeypatch.setattr(Dust, "submit", property(lambda self: None, lambda self, v: None),
-                            raising=False)  # fmt: skip
     clock, host = Clock(1000.0), PluginHost()
-    size = (1920, 480) if theme.startswith("spur") else (1920, 720)
-    display = Fed(engine, size, tmp_path / "frames.rgb", half, rings, bool(views), globes,
-                  fills, laid, grown, bars, dust)  # fmt: skip
+    display = Fed(engine, (1920, 720), tmp_path / "frames.rgb", half, rings, bool(views), globes,
+                  fills, laid, grown, bars)  # fmt: skip
     loop = loop_with(theme, display, clock, host)
     try:
         run(loop, clock, 4)
@@ -887,14 +792,14 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
         tops = [f.scene.pieces[-1][0] for f in display.frames if isinstance(f, scenes.SceneFrame)]
         assert tops.count("\0toast") >= 15  # (its frames went as their layers too)
     made = (tmp_path / "frames.rgb").read_bytes()
-    one = size[0] * size[1] * 3
-    assert display.n >= 25 and len(made) == one * display.n
+    size = 1920 * 720 * 3
+    assert display.n >= 25 and len(made) == size * display.n
     for n, own in enumerate(display.own):
         if not rings and not bars:
-            assert made[n * one : (n + 1) * one] == own, f"frame {n} is not the renderer's"
+            assert made[n * size : (n + 1) * size] == own, f"frame {n} is not the renderer's"
             continue
-        got = Image.frombytes("RGB", size, made[n * one : (n + 1) * one])
-        diff = ImageChops.difference(got, Image.frombytes("RGB", size, own))
+        got = Image.frombytes("RGB", (1920, 720), made[n * size : (n + 1) * size])
+        diff = ImageChops.difference(got, Image.frombytes("RGB", (1920, 720), own))
         assert max(high for _, high in diff.getextrema()) <= 1, f"frame {n}"
         assert diff.convert("L").point(lambda v: v > 0 and 255).histogram()[255] <= 200
     if rings:
@@ -914,12 +819,6 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
                     for _wid, p in f.scene.pieces if isinstance(p.native, scenes.Bar)]  # fmt: skip
         assert len(lit_bars) >= 25 and loop.renderer.native_bars
         assert any(key[0] == "bar" for key in display.sender._rings)
-    if dust:  # (the grid went as a layer, the dust as its taps, moved in most frames)
-        dusted = [f.scene for f in display.frames
-                  if isinstance(f, scenes.SceneFrame) and f.scene.dust is not None]  # fmt: skip
-        assert len(dusted) >= 25 and loop.renderer.native_dust
-        assert all(any(wid == "\0grid" for wid, _ in scene.pieces) for scene in dusted)
-        assert len({id(scene.dust.taps) for scene in dusted}) >= 20  # (moved in each frame)
     if laid:  # (the fans went as their parts, laid by the engine, their pixels not made here)
         lain = [p for f in display.frames if isinstance(f, scenes.SceneFrame)
                 for _wid, p in f.scene.pieces if isinstance(p.native, scenes.Laid)]  # fmt: skip

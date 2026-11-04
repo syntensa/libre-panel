@@ -108,7 +108,7 @@ def main(command):
         home = Path(folder)
         frame = home / "frame.png"
         (home / "config.toml").write_text(
-            f'theme = "spur-ii"\n\n[device]\ndriver = "virtual"\noutput = "{frame.as_posix()}"\n'
+            f'theme = "lumen"\n\n[device]\ndriver = "virtual"\noutput = "{frame.as_posix()}"\n'
             '\n[video]\nmode = "on"\nlocal_clip = "smoke.h264"\n'
             '\n[services]\nenabled = ["smoke", "notices"]\n\n[services.notices]\nmusic = false\n',
             encoding="utf-8",

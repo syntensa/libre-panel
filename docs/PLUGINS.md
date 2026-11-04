@@ -369,8 +369,8 @@ played).
 ### The round under way
 
 While a game is played the `memory` service also publishes what the round has come to so
-far, once a second, as readings (a screen made of the usual widgets, such as the built-in
-`spur-session`, shows them; they are gone when the game's name goes):
+far, once a second, as readings (a screen made of the usual widgets shows them; they are
+gone when the game's name goes):
 
 | Key | Value |
 |---|---|

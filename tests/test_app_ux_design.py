@@ -132,7 +132,7 @@ def test_a_block_is_added_with_a_click_and_taken_back_from_the_message(app_url):
 
 def test_the_themes_settings_keep_to_the_theme_and_lead_to_look(app_url, isolated_home):  # noqa: F811
     """With nothing selected the inspector showed a 48 × 48 grid of numbers to a newcomer, and
-    its fine-tuning had Look's panel light and grid background a second time. The colour world
+    its fine-tuning had Look's grid background a second time. The colour world
     stays as the quick choice, with the way to Look; the grid and the rest are under
     Fine-tuning, and "messages" are notices, as everywhere else."""
     choose_theme(isolated_home, "lumen")
@@ -145,13 +145,13 @@ def test_the_themes_settings_keep_to_the_theme_and_lead_to_look(app_url, isolate
         details = inspector.locator(".section-title").all_text_contents()
         assert details[:2] == ["Grid of the modules", "Module style"]
         assert "Notices" in details and "Messages" not in details
-        assert "Panel light" not in details and "Grid background" not in details
+        assert "Grid background" not in details
         inspector.get_by_role("button", name="Open Look").click()
         page.wait_for_selector(".look-side")
         page.go_back()  # the fine-tuning is where it was left
         page.locator(".inspector").get_by_role("button", name="Back").click()
         page.locator(".inspector").get_by_role(
-            "button", name="Finish, glow, panel light and notices: in Look"
+            "button", name="Finish, glow, grid and notices: in Look"
         ).click()
         page.wait_for_selector(".look-side")
 
@@ -278,7 +278,7 @@ def test_look_says_what_each_part_does_and_tries_a_choice_on(app_url, isolated_h
         expect(side.locator(".look-intro")).to_contain_text("try it on")
         text = side.inner_text()
         assert "SPUR II" not in text and "sent pictures" not in text
-        for name in ("Finish and glow", "Panel light", "Grid background", "Depth dust", "Notices"):
+        for name in ("Finish and glow", "Grid background", "Notices"):
             part = side.locator(".section").filter(
                 has=page.locator(".section-title", has_text=name)
             )

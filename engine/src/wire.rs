@@ -85,12 +85,6 @@
 //!                     its colour and the colour its gradient runs to (RGBA each), whether it
 //!                     has one and how many spans are lit (u32 each), then each span: from, to
 //!                     along the bar (f64 each)
-//! kind 23, dust:      a its number (a layer's), b the length of what follows: how many taps
-//!                     (u32), nothing (u32), how much of a grain shows over a pixel of each
-//!                     brightness (256 f32, by its brightest channel), then the taps' places
-//!                     (y * the frame's width + x: u32 each), what each brings to the pixel
-//!                     (R, G, B: f32 each) and how much of it each covers (f32 each), laid over
-//!                     the layers under it in the frame as render/dust.py lays them: dust.rs
 //! ```
 //!
 //! On its stdout, with a panel of its own (`panel`): the same head, then b bytes:
@@ -221,11 +215,6 @@ pub enum Record {
         paint: crate::bar::Paint,
         spans: Vec<(f64, f64)>,
     },
-    Dust {
-        id: u32,
-        shown: Box<[f32; 256]>,
-        taps: Vec<crate::dust::Tap>,
-    },
     GlobeLayer {
         id: u32,
         globe: u32,
@@ -333,8 +322,6 @@ const MOST_KEPT: usize = 1024;
 /// The head of a lit bar (kind 21), and the most spans one lights (a segment each).
 const BAR_HEAD: usize = 224;
 const MOST_SPANS: usize = 4096;
-/// The head of dust (kind 23): how many taps, nothing, and the 256 shares shown.
-const DUST_HEAD: usize = 8 + 4 * 256;
 
 fn boxes(input: &mut impl Read, count: u32) -> io::Result<Boxes> {
     let mut boxes = Vec::with_capacity(count.min(4096) as usize);
@@ -839,37 +826,6 @@ pub fn read(input: &mut impl Read) -> io::Result<Option<Record>> {
                     to: (u32_at(&more, 24) != 0).then(|| rgba(20)),
                 },
                 spans,
-            }))
-        }
-        23 => {
-            let len = b as usize;
-            let most = DUST_HEAD + 20 * crate::dust::MOST_TAPS;
-            if len < DUST_HEAD || len > most || !(len - DUST_HEAD).is_multiple_of(20) {
-                return Err(invalid("dust of another length"));
-            }
-            let data = bytes(input, len, "dust cut short")?;
-            let n = u32_at(&data, 0) as usize;
-            if len != DUST_HEAD + 20 * n {
-                return Err(invalid("dust of another length"));
-            }
-            let f = |b: &[u8]| f32::from_le_bytes([b[0], b[1], b[2], b[3]]);
-            let shown: [f32; 256] = std::array::from_fn(|k| f(&data[8 + 4 * k..]));
-            let (places, rest) = data[DUST_HEAD..].split_at(4 * n);
-            let (adds, covers) = rest.split_at(12 * n);
-            let taps = places
-                .chunks_exact(4)
-                .zip(adds.chunks_exact(12))
-                .zip(covers.chunks_exact(4))
-                .map(|((p, a), c)| crate::dust::Tap {
-                    at: u32::from_le_bytes([p[0], p[1], p[2], p[3]]),
-                    add: [f(&a[0..4]), f(&a[4..8]), f(&a[8..12])],
-                    cover: f(c),
-                })
-                .collect();
-            Ok(Some(Record::Dust {
-                id: a,
-                shown: Box::new(shown),
-                taps,
             }))
         }
         kind => Err(invalid(&format!("a record of kind {kind}"))),

@@ -305,8 +305,7 @@ function QuickThemes() {
       ${sets.map(
         ({ name, count }) => html`<a key=${name} class="quick-collection" href=${`#/home/themes/${encodeURIComponent(name)}`}>
           <span class="quick-collection-text">
-            <strong>${t("{collection} · Legacy", { collection: name })}</strong>
-            <span class="muted">${t("The screens of the project Libre Panel grew out of")}</span>
+            <strong>${name}</strong>
           </span>
           <span class="theme-collection-count">${count}</span>
           <${Icon} name="chevron-right" size=${16} />

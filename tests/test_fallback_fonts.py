@@ -727,7 +727,7 @@ def plain_truetype(font, size=10, index=0, **options):
     return ImageFont.truetype(str(font), size, index, **options)
 
 
-@pytest.mark.parametrize("name", ["lumen", "studio", "libre-default", "spur-classic"])
+@pytest.mark.parametrize("name", ["lumen", "studio", "libre-default", "almanac"])
 def test_a_theme_with_latin_text_is_drawn_exactly_as_with_pillows_own_faces(name, monkeypatch):
     """The whole renderer, with its caches and its glyph by glyph layouts: the frame of a
     built-in theme, with its time, numbers, names and cards, is the same picture whether the

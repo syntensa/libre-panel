@@ -13,7 +13,7 @@ import { ColorSwatches, resolveColor } from "./color.js";
 import { SensorButton } from "./sensors.js";
 
 export const FORMAT_HINT = "{value:.0f}{unit} · {value:.1f} · {value:bytes}/s · {value:duration} · {label}";
-const STEPS = { opacity: 0.05, glow: 0.05, stroke: 0.1, alpha: 0.05, strength: 0.05, sweep_seconds: 0.1, speed: 0.25 };
+const STEPS = { opacity: 0.05, glow: 0.05, stroke: 0.1, alpha: 0.05, speed: 0.25 };
 const UNIT_RANGE = new Set(["opacity", "glow", "alpha"]);
 const PX = new Set(["x", "y", "w", "h", "size", "font_size", "radius", "thickness", "line_width", "glow_radius", "shadow_offset", "shadow_blur", "outline_width", "letter_spacing", "max_width", "segment_gap", "backdrop_blur"]);
 
@@ -44,7 +44,6 @@ export function hintFor(widget, key, kind) {
   }
   if (key === "max_rpm") return t("the speed at which the ring is full; the rotor turns the faster the closer it gets");
   if (key === "glow_area") return t("x, y, w, h on the panel: with the lit finish the glow stays inside (a bar's worked out as SPUR II's glow zones); empty: all around");
-  if (key === "ridge") return t("a name makes the rect a ridge that catches the light; rects with the same name are one ridge");
   if (key === "inset") return t("the line stays a line's width inside the box; off: the range spans the box, as SPUR II's charts");
   if (key === "direction" && widget?.type === "graph") return t("down: the curve hangs from the top and is filled from there, below an upward one it mirrors it");
   if (key === "rotate") {

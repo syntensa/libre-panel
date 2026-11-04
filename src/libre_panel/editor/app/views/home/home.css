@@ -785,7 +785,6 @@
   font-size: 15px;
 }
 
-.theme-collection-note,
 .community-lead {
   font-size: 13px;
 }
@@ -831,10 +830,6 @@
 .quick-collection strong {
   font-size: 14px;
   font-weight: 600;
-}
-
-.quick-collection .muted {
-  font-size: 12px;
 }
 
 .theme-card {

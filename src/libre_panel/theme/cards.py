@@ -9,7 +9,7 @@ module): the cards adapt to any panel, as every module does.
 
 Cards are lit by themselves (their ``finish`` is ``auto``): values are light in their
 grooves and the weather symbols are lit bodies, unless the theme says otherwise. Frames are
-flat thin lines in their colour, never ridges.
+flat thin lines in their colour.
 """
 
 from __future__ import annotations

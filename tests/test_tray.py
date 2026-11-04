@@ -65,7 +65,19 @@ def items(menu):
     return {item.text: item for item in menu if item is not pystray.Menu.SEPARATOR}
 
 
-def test_menu_layout_and_state(tray):
+def a_theme_in_a_set(home):
+    """A theme of one's own that names a collection (as a set of themes made to go together
+    may): Libre Panel's own name none."""
+    folder = home / "themes" / "desk"
+    folder.mkdir(parents=True)
+    data = {"format": "libre-panel-theme/1", "name": "Desk", "collection": "Desk Set",
+            "display": {"model": "turing-9.2-usb", "orientation": "landscape"},
+            "widgets": [{"type": "text", "id": "t", "text": "Desk"}]}  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+
+
+def test_menu_layout_and_state(tray, isolated_home):
+    a_theme_in_a_set(isolated_home)
     assert wait_for(lambda: tray.app.panel.state()["state"] == "showing")
     menu = items(tray.build_menu())
     assert list(menu)[0].startswith("Libre Panel: showing on PNG file")
@@ -91,7 +103,7 @@ def test_menu_layout_and_state(tray):
     themes = items(menu["Theme"].submenu)  # by name; the panel is not known: all sizes
     assert {"Libre Default", "Orbit", "Slate", "Column", "Lumen"} <= set(themes)
     assert themes["Libre Default"].checked and not themes["Slate"].checked
-    assert "SPUR II" in items(themes["SPUR II"].submenu)  # a collection keeps to itself
+    assert "Desk" in items(themes["Desk Set"].submenu) and "Desk" not in themes  # (apart)
     assert "Lumen Vertical" not in themes  # chosen as Lumen
     brightness = items(menu["Brightness"].submenu)
     assert list(brightness) == ["Off", "10 %", "25 %", "50 %", "75 %", "100 %"]
@@ -251,12 +263,13 @@ def test_texts():
     assert headline({"state": "showing", "target": "P", "mode": "game"}).endswith("P (In game)")
 
 
-def test_the_theme_menu_offers_the_panel_s_themes_by_name(tray):
+def test_the_theme_menu_offers_the_panel_s_themes_by_name(tray, isolated_home):
     """On a 9.2" bar the themes made for it come first, by name; those for other panels and the
-    round report's wait in "More themes", the screens Libre Panel grew out of in their own; a
-    theme chosen on a bar on end is checked by its name, not by its version's."""
+    round report's wait in "More themes", a collection in its own; a theme chosen on a bar on
+    end is checked by its name, not by its version's."""
     from libre_panel.config import set_config_value
 
+    a_theme_in_a_set(isolated_home)
     set_config_value("device.model", "turing-9.2-usb")
     themes = items(items(tray.build_menu())["Theme"].submenu)
     first = list(themes)[: list(themes).index("More themes")]
@@ -266,7 +279,7 @@ def test_the_theme_menu_offers_the_panel_s_themes_by_name(tray):
     assert {"Libre Default", "Column", "Slate", "Round report"} <= set(more)
     assert {"Lumen Companion", "Arena Companion"} <= set(more)  # for a second panel
     assert {"Agents", "Agents Claude"} <= set(more)  # for those who set up AI activity
-    assert "Lumen" not in more and "SPUR II" in items(themes["SPUR II"].submenu)
+    assert "Lumen" not in more and "Desk" in items(themes["Desk Set"].submenu)
     assert more["Libre Default"].checked  # config.toml names it: checked where it is
     themes["Lumen"](tray.icon)
     assert wait_for(lambda: load_config().theme == "lumen")

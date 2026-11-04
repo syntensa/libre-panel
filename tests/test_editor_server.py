@@ -299,7 +299,7 @@ def test_specs_carry_the_panel_look_and_the_finishes(server):
 
     _, specs = request(server, "GET", "/api/specs")
     assert specs["look"]["grid"]["spacing"] == ["int", 8]
-    assert specs["look"]["light"]["sweep_seconds"] == ["number", 1.6]
+    assert set(specs["look"]) == {"grid"}  # (the panel light and the dust went after 0.8.0rc2)
     for kind in ("bar", "gauge", "graph", "icon", "text", "metric"):
         assert specs["widgets"][kind]["finish"] == list(FINISH_FIELD)
     # a module's finish may also be "auto", the default: its kind's own (a card is lit)
@@ -316,7 +316,7 @@ def test_specs_carry_the_ranges_of_the_look(server):
 
     _, specs = request(server, "GET", "/api/specs")
     ranges = specs["look_ranges"]
-    assert ranges["light"]["sweep_seconds"] == [0.3, 10] and ranges["dust"]["rate"] == [1, 60]
+    assert ranges["grid"]["spacing"] == [2, 400] and ranges["grid"]["alpha"] == [0, 1]
     assert {(block, key) for block, keys in ranges.items() for key in keys} == set(LOOK_RANGES)
     for block, keys in ranges.items():
         assert set(keys) <= set(specs["look"][block]), block
@@ -476,7 +476,7 @@ def test_pages_of_the_panel(server, isolated_home):
     assert pages["game"] == {
         "id": "game", "mode": "game", "theme": None, "fps": None,
         "on": False, "service": "game",  # (the game service is off)
-        "suggested": ["arena", "spur-session", "spur-focus", "spur-header"],
+        "suggested": ["arena"],
     }  # fmt: skip
     assert pages["report"]["theme"] == "round-report" and pages["report"]["on"] is False
     # the pages Libre Panel switches to itself: off until switched on, each with its screen
@@ -636,7 +636,7 @@ def test_theme_pictures_and_files(server, isolated_home):
 
     from PIL import Image
 
-    status, body = request(server, "GET", "/api/themes/spur-ii/preview?w=320")
+    status, body = request(server, "GET", "/api/themes/lumen/preview?w=320")
     assert status == 200 and Image.open(BytesIO(body)).size[0] == 320
     assert request(server, "GET", "/api/themes/nope/preview")[0] == 404
     request(server, "POST", "/api/themes/mine", {"theme": theme_dict(), "source": "libre-default"})
@@ -766,8 +766,8 @@ def test_a_theme_opens_while_the_pictures_of_the_gallery_are_being_drawn(drawing
     join = drawing.ask(widths)
     drawing.wait_for(lambda: drawing.running == slots and drawing.asked == len(widths))
     # every turn is taken and the others wait: the theme is there all the same
-    status, data = request(drawing.port, "GET", "/api/themes/spur-ii")
-    assert status == 200 and data["id"] == "spur-ii" and data["theme"]["widgets"]
+    status, data = request(drawing.port, "GET", "/api/themes/lumen")
+    assert status == 200 and data["id"] == "lumen" and data["theme"]["widgets"]
     assert request(drawing.port, "GET", "/api/themes")[0] == 200
     assert drawing.running == slots and not drawing.gate.is_set()  # (still drawing)
     drawing.gate.set()
@@ -803,12 +803,16 @@ def test_the_theme_list_names_each_theme(server, isolated_home):
     """Lists and galleries show a theme's name and panel, from the list itself."""
     (isolated_home / "themes" / "broken").mkdir(parents=True)
     (isolated_home / "themes" / "broken" / "theme.json").write_text("{not json")
+    (isolated_home / "themes" / "desk").mkdir(parents=True)
+    (isolated_home / "themes" / "desk" / "theme.json").write_text(
+        json.dumps({"name": "Desk", "collection": "Desk Set"})
+    )
     _, themes = request(server, "GET", "/api/themes")
     found = {item["id"]: item for item in themes}
-    classic = found["spur-classic"]
-    assert classic["name"] == "SPUR Classic" and classic["builtin"]
-    assert classic["size"] == [1920, 480] and classic["model"]
-    assert classic["collection"] == "SPUR II" and found["studio"]["collection"] == ""
+    lumen = found["lumen"]
+    assert lumen["name"] == "Lumen" and lumen["builtin"]
+    assert lumen["size"] == [1920, 480] and lumen["model"] == "turing-9.2-usb"
+    assert lumen["collection"] == "" and found["desk"]["collection"] == "Desk Set"
     assert found["broken"]["name"] == "broken" and found["broken"]["size"] is None
 
 

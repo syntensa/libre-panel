@@ -1,11 +1,11 @@
 """Compare a theme with a reference picture of the same screen, region by region.
 
-    python tools/compare_reference.py REFERENCE.png [--theme spur-classic] [--values values.json]
+    python tools/compare_reference.py REFERENCE.png [--theme lumen] [--values values.json]
         [--time "2026-09-28 14:29:59"] [--place LAT,LON] [--layout basic|raqm] [--out DIR]
         [--tolerance 12] [--region NAME=x0,y0,x1,y1 ...] [--zoom 3]
 
 The theme is drawn once, as the panel would show it, at ``--time`` with the
-readings in ``--values`` and the sun over ``--place`` (else at noon). Into
+readings in ``--values`` and ``--place`` as the panel's place (the earth's). Into
 ``--out`` (a new temporary folder if not given) go ``NAME-side.png``, the
 reference above the render, ``NAME-diff.png``, their difference made four
 times brighter, and for every region a crop of both enlarged ``--zoom``
@@ -100,10 +100,10 @@ def stacked(*images: Image.Image, gap: int = 6) -> Image.Image:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("reference", type=Path)
-    parser.add_argument("--theme", default="spur-classic", help="a theme name or folder")
+    parser.add_argument("--theme", default="lumen", help="a theme name or folder")
     parser.add_argument("--values", type=Path, help="readings and histories (JSON)")
     parser.add_argument("--time", default="2026-09-28 14:29:59", help="the panel's time of day")
-    parser.add_argument("--place", help="LAT,LON the sun is seen from (default: noon)")
+    parser.add_argument("--place", help="LAT,LON of the panel's place, for the earth globe")
     parser.add_argument("--layout", choices=("basic", "raqm"), default="basic",
                         help="text layout: basic as on Windows (default), or raqm")  # fmt: skip
     parser.add_argument("--out", type=Path, help="where the pictures go")

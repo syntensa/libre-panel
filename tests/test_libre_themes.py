@@ -75,8 +75,6 @@ def test_an_own_screen_draws_whole_with_the_demo(name):
     snapshot = demo_snapshot(fixed_time=1_700_000_000)
     shown = {w["id"] for w in theme.widgets if w["visible"] and not renderer._missing(w, snapshot)}
     assert set(boxes) == shown
-    # flat frames: no ridges, nothing the panel light would glint on
-    assert not any(w.get("ridge") for w in theme.widgets) and renderer.light_edges == []
     text = json.dumps(data)
     for brand in ("Ryzen", "Radeon", "GeForce", "Intel", "Crucial", "Kingston"):
         assert brand not in text  # the names of the hardware come from the sensors
@@ -190,7 +188,7 @@ def test_lumen_is_libre_panels_own_and_made_for_the_bars_hidden_strip():
     theme, by = lumen()
     assert theme.model == "turing-9.2-usb" and (theme.width, theme.height) == (1920, 480)
     assert theme.background_image == "assets/backdrop.png"  # the editor's stage: a dot grid
-    assert theme.palette["accent"] == "#2EE6D6" and theme.look == {}  # no grid, no dust
+    assert theme.palette["accent"] == "#2EE6D6" and theme.look == {}  # no grid
     assert by["clock"]["finish"] == "acrylic" and by["seconds"]["color"] == "@accent"
     assert all(w["y"] >= 0 for w in theme.widgets)  # (the strip test draws them: test_models)
 

@@ -187,9 +187,7 @@ and becomes the default only once it has proven itself on the panels; the old wa
       position sent once, laid as Pillow lays it, to the bit), a text of letters laid from its
       letters (each sent once), a list's gliding bars cut from the bar empty, full and the
       part round its tip, a lit bar at each value (its pill's light to a level, its glow as
-      Pillow works it out, to the bit), and a theme's grid and dust (SPUR's: the grains moved
-      here, what they cover laid by the engine as numpy lays it, to the bit); a text's glow
-      next
+      Pillow works it out, to the bit), and a theme's grid; a text's glow next
 
 ### Stage 3: Python only the brain
 

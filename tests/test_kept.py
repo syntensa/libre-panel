@@ -136,8 +136,6 @@ BEFORE = {
                        "fan.images": 0.801, "lit.pictures": 0.993},
     "encore-1920x720": {"renderer.texts": 0.981, "renderer.glyphs": 0.902,
                         "renderer.underlays": 0.894, "lit.pictures": 0.642},
-    "spur-horizon": {"renderer.texts": 0.917, "renderer.glyphs": 0.974,
-                     "renderer.underlays": 0.946, "fan.images": 0.673},
 }  # fmt: skip
 
 

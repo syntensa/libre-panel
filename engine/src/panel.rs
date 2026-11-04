@@ -700,14 +700,6 @@ pub fn run(options: Options) -> Result<(), String> {
                     break Err(e);
                 }
             }
-            Record::Dust { id, shown, taps } => {
-                let Some(s) = stream.as_mut() else {
-                    break Err("dust before its stream".into());
-                };
-                if let Err(e) = s.scene.dust(id, *shown, &taps) {
-                    break Err(e);
-                }
-            }
             Record::Source { id, w, h, pixels } => {
                 let Some(s) = stream.as_mut() else {
                     break Err("a source before its stream".into());

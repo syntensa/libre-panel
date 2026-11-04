@@ -175,7 +175,7 @@ def test_a_broken_sensor_source_does_not_stop_the_panel(tmp_path, caplog):
 
 def test_cli_preview_and_models(tmp_path, capsys):
     out = tmp_path / "p.png"
-    assert main(["preview", "spur-ii", "-o", str(out)]) == 0
+    assert main(["preview", "lumen", "-o", str(out)]) == 0
     assert out.exists()
     assert main(["models"]) == 0
     assert "turing-9.2-usb" in capsys.readouterr().out
@@ -208,12 +208,12 @@ def test_set_active_theme_keeps_comments(isolated_home):
     from libre_panel.config import load_config, set_active_theme, write_default_config
 
     path = write_default_config()
-    set_active_theme("spur-ii")
+    set_active_theme("lumen")
     text = path.read_text()
-    assert 'theme = "spur-ii"' in text and "# Libre Panel configuration" in text
-    assert load_config(path).theme == "spur-ii"
+    assert 'theme = "lumen"' in text and "# Libre Panel configuration" in text
+    assert load_config(path).theme == "lumen"
     assert [line for line in text.splitlines() if line.startswith("theme =")] == [
-        'theme = "spur-ii"'
+        'theme = "lumen"'
     ]  # one, under the note that explains it
 
 
@@ -254,7 +254,7 @@ def test_running_panel_picks_up_theme_changes(tmp_path, isolated_home):
             time.sleep(0.05)
         assert size_of(out) == (480, 320)
         time.sleep(0.05)  # make sure the next write gets a new mtime
-        set_active_theme("spur-ii")
+        set_active_theme("lumen")
         while time.time() < deadline and size_of(out) != (1920, 480):
             time.sleep(0.05)
         assert size_of(out) == (1920, 480)
@@ -294,11 +294,11 @@ def test_a_theme_that_is_gone_leaves_the_panel_lit_with_its_own(tmp_path, isolat
         assert status.missing_theme == "gone-theme"
         assert status.theme == status.default_theme == "libre-default"
         time.sleep(0.05)  # make sure the next write gets a new mtime
-        set_active_theme("spur-ii")
+        set_active_theme("lumen")
         while time.time() < deadline and size_of(out) != (1920, 480):
             time.sleep(0.05)
         assert size_of(out) == (1920, 480)
-        assert status.missing_theme == "" and status.theme == "spur-ii"
+        assert status.missing_theme == "" and status.theme == "lumen"
     finally:
         stop.set()
         thread.join(5)

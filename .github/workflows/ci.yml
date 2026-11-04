@@ -59,7 +59,7 @@ jobs:
       - name: Render the built-in themes
         run: |
           libre-panel preview libre-default -o libre-default.png
-          libre-panel preview spur-ii -o spur-ii.png
+          libre-panel preview lumen -o lumen.png
 
   engine:
     # Libre Panel's own engine (engine/, Rust; docs/ROADMAP.md): built against libx264 (Ubuntu's

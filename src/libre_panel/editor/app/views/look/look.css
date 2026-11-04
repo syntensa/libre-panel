@@ -139,65 +139,6 @@
   color: var(--text-2);
 }
 
-.look-sun {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--surface);
-}
-
-.look-sun .sun-path {
-  flex-shrink: 0;
-  color: var(--dim);
-}
-
-.look-sun-text {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.look-sun-text small {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.look-triggers {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-
-.look-triggers > .muted {
-  margin-right: 4px;
-  font-size: 13px;
-}
-
-.look-chip {
-  padding: 5px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--line-3);
-  background: transparent;
-  color: var(--text-2);
-  font-size: 12px;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
-}
-
-.look-chip:hover {
-  border-color: var(--line-5);
-}
-
-.look-chip[aria-pressed="true"] {
-  border-color: transparent;
-  background: rgba(46, 230, 214, 0.14);
-  color: var(--accent-hi);
-  font-weight: 600;
-}
-
 /* a part of a block that stays folded until it is wanted */
 .look-more {
   display: flex;
@@ -239,15 +180,6 @@
 
 .look-more > summary:hover {
   color: var(--accent-hi);
-}
-
-.dust-area {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  border-radius: 10px;
-  background: var(--surface);
 }
 
 .look-notices {

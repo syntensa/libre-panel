@@ -187,8 +187,8 @@ def _on_panel(display: Display) -> bool:
 
 
 def _place(config: Config) -> tuple[float, float] | None:
-    """Where the panel light's sun is seen from: the weather's place in
-    config.toml when it is set (the light stands at noon without)."""
+    """Where the panel is: the weather's place in config.toml when it is set (for the
+    night's brightness and the earth globe), else None."""
     latitude, longitude = config.weather.latitude, config.weather.longitude
     return None if latitude is None or longitude is None else (latitude, longitude)
 
@@ -1559,8 +1559,6 @@ class MainLoop:
                     renderer.native_globes = layers  # (and its turning globes, likewise)
                     renderer.native_laid = layers  # (and its fans, from their rings and rotors)
                     renderer.native_bars = layers  # (and its lit bars and their glows)
-                    # and the theme's dust, where the engine lays it (render/scene.py's Dusting)
-                    renderer.native_dust = layers and getattr(display, "makes_dust", False)
                     if layers:
                         drawn, _ = renderer.render(snapshot, now, scene=True)
                     else:  # (as before: a renderer of a test or a plugin may take no more)
@@ -1574,10 +1572,7 @@ class MainLoop:
                     self.mirror_direct = False
                 self.mirrored = mirrored
                 if blend is not None:
-                    playing_kind = blend[0]
                     frame, blend = _blend(blend, frame, now)
-                    if blend is None:  # it ended: the panel light may sweep (look.light)
-                        renderer.transition_ended(playing_kind, now)
                 last_frame = frame
                 # decided after _blend: the frame a hiding transition ends shows the toast
                 hidden = blend is not None and getattr(blend[0], "toasts", "wait") == "hide"

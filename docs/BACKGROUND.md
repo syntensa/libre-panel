@@ -75,7 +75,7 @@ download's folder checks it. Installed with pip:
 | hint line | only on Windows, only while temperatures and power show "--": the one thing to do about it, e.g. "CPU temperature and power need administrator rights: run Libre Panel as administrator." The tooltip of the icon says it too |
 | **Open Libre Panel** | the app's window on *Start*; also a click on the icon |
 | **Smooth motion: confirm the clip name…** | only until it is answered: on a panel the video mode is proven on (the 9.2"), with ffmpeg found and no `local_clip` yet, *Start* asks for the name of the panel's standby clip, and this line opens it there |
-| **Theme** | switch the theme on the panel: the themes made for it by name, the others under *More themes*, a collection (SPUR II) in its own |
+| **Theme** | switch the theme on the panel: the themes made for it by name, the others under *More themes*, a collection a theme names in its own |
 | **Brightness** | Off, 10–100 %; written to `config.toml` |
 | **Pause panel** | stops sending frames and releases the USB device, e.g. for the vendor app |
 | **Restart panels** | for a panel that hangs: lets every panel go and opens them anew, as at Libre Panel's start, without quitting it (also on *Start*, in the panel's menu in the header and in the command palette) |

@@ -18,9 +18,7 @@ BUILTIN = sorted(p.parent.name for p in builtin_themes_dir().glob("*/theme.json"
 
 
 def test_all_themes_are_covered():
-    assert {"libre-default", "spur-ii", "studio", "orbit", "slate", "column", "pico"} <= set(
-        BUILTIN
-    )
+    assert {"libre-default", "lumen", "studio", "orbit", "slate", "column", "pico"} <= set(BUILTIN)
 
 
 @pytest.mark.parametrize("name", BUILTIN)
@@ -517,7 +515,7 @@ def test_a_weather_code_that_is_no_number_is_a_cloud_not_a_missing_icon():
 
 def lived(name, frames=4):
     """A renderer of a built-in theme as the main loop drives it in video mode (the helper
-    threads, the dust), a few frames in, and the threads that build for it."""
+    threads), a few frames in, and the threads that build for it."""
     renderer = Renderer(load_theme(find_theme(name)), animate=True)
     renderer.continuous = renderer.background_builds = True
     renderer.fps = 25
@@ -530,7 +528,7 @@ def lived(name, frames=4):
 @pytest.mark.parametrize("name", BUILTIN)
 def test_a_renderer_the_loop_lets_go_of_is_freed_with_its_last_reference(name):
     """What replaces a renderer (a switch of themes) closes it and lets go: nothing may still
-    refer back to it (a slot, the look, a finish's drawing, the dust's helper), or it lives on
+    refer back to it (a slot, the look, a finish's drawing, a helper thread), or it lives on
     until the collector runs, which the main loop's guards put off for hours."""
     import gc
     import weakref
@@ -549,7 +547,7 @@ def test_a_renderer_the_loop_lets_go_of_is_freed_with_its_last_reference(name):
         gc.enable()
 
 
-@pytest.mark.parametrize("name", ["lumen", "studio", "spur-classic"])
+@pytest.mark.parametrize("name", ["lumen", "studio", "arena"])
 def test_a_renderer_frozen_at_the_first_frame_is_freed_when_it_is_let_go_of(name):
     """timing.Guards freezes what lives at the first frame (the collector leaves it alone
     for good): the first theme's renderer, closed at the first switch, must go by reference

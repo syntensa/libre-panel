@@ -182,9 +182,10 @@ def own_themes(page):
 
 
 def a_set(theme_id):
-    """The collection a theme is in, for the tests: SPUR II's screens (as the built-in themes
-    of v0.5 name it) and one made-up set; Libre Panel's own themes are in none."""
-    return "SPUR II" if theme_id.startswith("spur-") else "Old Set" if theme_id == "pico" else ""
+    """The collection a theme is in, for the tests: two made-up sets of built-in themes (as a
+    theme of one's own may name one; Libre Panel's own are in none)."""
+    weather = theme_id in ("nimbus", "terra")
+    return "Weather Set" if weather else "Old Set" if theme_id == "pico" else ""
 
 
 def with_collections(collection=a_set):
@@ -696,25 +697,20 @@ def test_a_running_panel_switches_by_itself_and_the_trays_line_goes(isolated_hom
 
 def test_a_collection_waits_closed_at_the_end_of_the_gallery(app_url, isolated_home):
     """Libre Panel's own themes and yours come first; each collection the themes name is a
-    group of its own (A to Z) that opens on a click or a key. Nothing names SPUR: a second
-    collection is a group as well."""
+    group of its own (A to Z) that opens on a click or a key."""
     choose_theme(isolated_home)
     with browser_page(
         app_url, "home/themes", routes={"**/api/themes": with_collections()}, allow=PICTURE
     ) as page:
         page.wait_for_selector(".start.gallery .theme-card")
         ids = [i["id"] for i in js(page, "window.libre.store.get().themes")]
-        spur = sorted(i for i in ids if i.startswith("spur-"))
-        loose = [i for i in ids if i != "pico" and i not in spur]
+        weather = sorted(i for i in ids if a_set(i) == "Weather Set")
+        loose = [i for i in ids if not a_set(i)]
         assert sorted(shown_themes(page)) == sorted(loose)  # the collections' cards are not there
         groups = page.locator(".theme-collection")
-        assert groups.locator(".theme-collection-title strong").all_inner_texts() == [
-            "Old Set · Legacy",
-            "SPUR II · Legacy",
-        ]
-        assert groups.locator(".theme-collection-count").all_inner_texts() == ["1", str(len(spur))]
-        note = "The screens of the project Libre Panel grew out of"
-        expect(groups.first.locator(".theme-collection-note")).to_have_text(note)
+        titles = groups.locator(".theme-collection-title strong").all_inner_texts()
+        assert titles == ["Old Set", "Weather Set"]
+        assert groups.locator(".theme-collection-count").all_inner_texts() == ["1", "2"]
         # the groups follow the grid in the page
         assert page.locator(".theme-gallery > :last-child").evaluate(
             "e => e.matches('.theme-collection')"
@@ -726,16 +722,16 @@ def test_a_collection_waits_closed_at_the_end_of_the_gallery(app_url, isolated_h
         expect(toggle).to_have_attribute("aria-expanded", "true")
         body = groups.nth(1).locator(".theme-collection-body")
         cards = body.locator(".theme-card").evaluate_all("c => c.map((e) => e.dataset.theme)")
-        assert sorted(cards) == spur
+        assert sorted(cards) == weather
         assert toggle.get_attribute("aria-controls") == body.get_attribute("id")
         page.keyboard.press("Space")  # and closes it again
         expect(toggle).to_have_attribute("aria-expanded", "false")
-        expect(page.locator(".theme-card[data-theme='spur-ii']")).to_have_count(0)
+        expect(page.locator(".theme-card[data-theme='nimbus']")).to_have_count(0)
         # a card of a collection is chosen like any other
         toggle.click()
-        page.locator(".theme-card[data-theme='spur-ii'] .theme-card-main").click()
-        page.wait_for_function("window.libre.store.get().pages.pages[0].theme === 'spur-ii'")
-        expect(page.locator(".theme-card.current")).to_have_attribute("data-theme", "spur-ii")
+        page.locator(".theme-card[data-theme='nimbus'] .theme-card-main").click()
+        page.wait_for_function("window.libre.store.get().pages.pages[0].theme === 'nimbus'")
+        expect(page.locator(".theme-card.current")).to_have_attribute("data-theme", "nimbus")
 
 
 def test_a_collection_does_not_lead_a_first_start_or_the_quick_list(app_url, isolated_home):
@@ -745,10 +741,10 @@ def test_a_collection_does_not_lead_a_first_start_or_the_quick_list(app_url, iso
         assert page.locator(".theme-collection").count() == 0  # nothing of a collection is offered
         # made for the 9.2" panel: Libre Panel's own, its default first, the others A to Z
         assert shown_themes(page) == ["lumen", "almanac", "almanac-analog", "arena", "encore",
-                                      "contrast", "nimbus", "studio", "terra"]  # fmt: skip
+                                      "contrast", "studio"]  # fmt: skip
         page.get_by_role("button", name="See all").click()
         expect(page.locator(".theme-collection")).to_have_count(2)  # closed, at the end
-        assert page.locator(".theme-card[data-theme='spur-ii']").count() == 0
+        assert page.locator(".theme-card[data-theme='nimbus']").count() == 0
         page.get_by_role("button", name="Show fewer").click()
         expect(page.locator(".theme-collection")).to_have_count(0)
     choose_theme(isolated_home, "libre-default")
@@ -758,20 +754,22 @@ def test_a_collection_does_not_lead_a_first_start_or_the_quick_list(app_url, iso
         assert "lumen" in ids and not [i for i in ids if a_set(i)]
         link = page.locator(".quick-collection")  # one line for the collection made for this panel
         expect(link).to_have_count(1)
-        expect(link).to_contain_text("SPUR II · Legacy")
+        expect(link).to_contain_text("Weather Set")
         link.click()  # the way into its group
         page.wait_for_selector(".start.gallery")
         expect(page.locator(".theme-collection-toggle[aria-expanded='true']")).to_have_count(1)
         expect(page.locator(".theme-collection-body .theme-card").first).to_be_visible()
     # what is on the panel is shown first, whichever group it is in
-    choose_theme(isolated_home, "spur-classic")
+    choose_theme(isolated_home, "terra")
     with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
         page.wait_for_selector(".quick-theme")
         ids = page.locator(".quick-theme").evaluate_all("rows => rows.map((r) => r.dataset.theme)")
-        assert ids[0] == "spur-classic" and not [i for i in ids[1:] if a_set(i)]
+        assert ids[0] == "terra" and not [i for i in ids[1:] if a_set(i)]
         page.goto(f"{app_url}#/home/themes")
         page.wait_for_selector(".theme-collection")
-        badge = page.locator(".theme-collection", has_text="SPUR II").locator(".theme-card-badge")
+        badge = page.locator(".theme-collection", has_text="Weather Set").locator(
+            ".theme-card-badge"
+        )
         expect(badge).to_have_text("On the panel")  # the group says what is in it
 
 
@@ -985,56 +983,28 @@ def test_look_blocks_are_on_or_off_and_keep_their_limits(app_url):
     with browser_page(app_url, "look") as page:
         page.wait_for_selector(".look-side .finish-tile")
         assert js(page, "Object.keys(window.libre.doc.theme().look ?? {}).length") == 0
-        light = page.locator(".look-block", has_text="Panel light")
-        light.locator("[role='switch']").first.click()
-        settings = js(page, "window.libre.doc.theme().look.light")
-        assert settings["strength"] == 1 and settings["on_hour"] is True and settings["sun"] is True
-        light.locator(".look-chip", has_text="Full hour").click()
-        assert js(page, "window.libre.doc.theme().look.light.on_hour") is False
-        slider = light.locator(".look-slider input").nth(1)  # how long a sweep takes
-        assert (slider.get_attribute("min"), slider.get_attribute("max")) == ("0.3", "10")
-        set_range(slider, 4.5)
-        assert js(page, "window.libre.doc.theme().look.light.sweep_seconds") == 4.5
-        # the grid, the dust and its areas
-        page.locator(".look-block", has_text="Grid background").locator(
-            "[role='switch']"
-        ).first.click()
+        assert page.locator(".look-block").count() == 1  # the grid (light and dust are gone)
+        grid = page.locator(".look-block", has_text="Grid background")
+        grid.locator("[role='switch']").first.click()
         assert js(page, "window.libre.doc.theme().look.grid.spacing") == 8
-        dust = page.locator(".look-block", has_text="Depth dust")
-        dust.locator("[role='switch']").first.click()
-        dust.locator("summary").click()
-        dust.get_by_role("button", name="+ area").click()
-        area = js(page, "window.libre.doc.theme().look.dust.areas")
-        assert len(area) == 1 and area[0]["dust"] is False and area[0]["w"] > 0
-        dust.locator(".dust-area select").select_option("yes")
-        assert js(page, "window.libre.doc.theme().look.dust.areas[0].dust") is True
-        dust.locator("input[aria-label='dust colours']").fill("#ff8800, @accent")
-        dust.locator("input[aria-label='dust colours']").press("Enter")
-        assert js(page, "window.libre.doc.theme().look.dust.colors") == ["#ff8800", "@accent"]
-        # every block off again: the theme has no look at all
-        for name in ("Panel light", "Grid background", "Depth dust"):
-            block = page.locator(".look-block", has_text=name)
-            block.locator("[role='switch']").first.click()
+        slider = grid.locator(".look-slider input").first  # how strongly the lines show
+        assert (slider.get_attribute("min"), slider.get_attribute("max")) == ("0", "1")
+        set_range(slider, 0.5)
+        assert js(page, "window.libre.doc.theme().look.grid.alpha") == 0.5
+        # off again: the theme has no look at all
+        grid.locator("[role='switch']").first.click()
         assert js(page, "Object.keys(window.libre.doc.theme().look ?? {}).length") == 0
         # the server drew all of it: nothing it refused
         page.wait_for_function("window.libre.store.get().renderError === null")
 
 
-def test_look_notices_and_ridge_frames(app_url):
+def test_look_notices(app_url):
     with browser_page(app_url, "look") as page:
         page.wait_for_selector(".look-notices")
         page.locator(".look-notice", has_text="Band").click()
         assert js(page, "window.libre.doc.theme().toast.style") == "band"
         page.locator(".look-notice", has_text="Card").click()
         assert not js(page, "window.libre.doc.theme().toast.style")
-        # ridge frames are not offered; a theme that has some can drop them under Advanced
-        assert page.locator(".look-advanced").count() == 0
-        frame = "{type: 'rect', id: 'frame', x: 4, y: 4, w: 60, h: 40, ridge: 'main'}"
-        js(page, f"window.libre.doc.edit(null, (theme) => theme.widgets.push({frame}))")
-        page.locator(".look-advanced summary").click()
-        page.get_by_role("button", name="Make the frames flat").click()
-        assert js(page, "window.libre.doc.widgetById('frame').ridge") == ""
-        expect(page.locator(".look-advanced")).to_have_count(0)
 
 
 def test_look_has_the_background_picture_too(app_url):
@@ -1335,14 +1305,12 @@ def test_the_new_views_speak_german(app_url, isolated_home):
         page.goto(f"{app_url}#/home/themes")
         page.wait_for_selector(".theme-collection")
         group = page.locator(".theme-collection").last
-        assert group.locator("strong").inner_text() == "SPUR II · Klassiker"
-        german = "Die Screens des Projekts, aus dem Libre Panel entstand"
-        assert group.locator(".theme-collection-note").inner_text() == german
+        assert group.locator("strong").inner_text() == "Weather Set"  # (as the themes name it)
         page.goto(f"{app_url}#/look")
         page.wait_for_selector(".look-side")
         titles = page.locator(".look-side .section-title").all_text_contents()
-        assert titles[:2] == ["Farbwelt", "Hintergrund"] and "Panel-Licht" in titles
-        assert titles.index("Oberfläche und Leuchten") < titles.index("Panel-Licht")
+        assert titles[:2] == ["Farbwelt", "Hintergrund"] and "Rasterhintergrund" in titles
+        assert titles.index("Oberfläche und Leuchten") < titles.index("Rasterhintergrund")
         page.goto(f"{app_url}#/live")
         page.wait_for_selector(".live-side")
         assert page.locator(".live-side .section-title").all_text_contents() == [
@@ -1362,10 +1330,10 @@ def test_start_look_and_live_have_their_commands(app_url, isolated_home):
     with browser_page(app_url, "look") as page:
         page.wait_for_selector(".look-side")
         page.keyboard.press("Control+k")
-        page.locator(".palette input").fill("panel light")
-        expect(page.locator(".palette-item.active")).to_contain_text("Panel light: on")
+        page.locator(".palette input").fill("grid background")
+        expect(page.locator(".palette-item.active")).to_contain_text("Grid background: on")
         page.keyboard.press("Enter")
-        page.wait_for_function("window.libre.doc.theme().look?.light !== undefined")
+        page.wait_for_function("window.libre.doc.theme().look?.grid !== undefined")
         page.keyboard.press("Control+k")
         page.locator(".palette input").fill("finish for everything facet")
         page.keyboard.press("Enter")
@@ -1763,8 +1731,8 @@ def test_the_command_palette_finds_and_runs(page):
     page.keyboard.press("Control+k")
     palette.locator("input").fill("lüf")  # an umlaut, as typed in German
     assert palette.locator(".palette-item").count() > 0
-    palette.locator("input").fill("spur-classic")  # a theme by its id, shown by its name
-    assert "SPUR Classic" in palette.locator(".palette-item.active").inner_text()
+    palette.locator("input").fill("almanac-analog")  # a theme by its id, shown by its name
+    assert "Almanac Analog" in palette.locator(".palette-item.active").inner_text()
 
 
 def test_the_palette_gives_the_focus_back(page):
@@ -2061,8 +2029,7 @@ def test_a_page_lists_the_screens_in_groups(app_url, isolated_home):
             " [...g.querySelectorAll('option')].map((o) => o.textContent)])"
         )
         names = [name for name, _ in groups]
-        assert names == ["Made for this page", "Libre Panel", "Your themes", "SPUR II",
-                         "For other panels"]  # fmt: skip
+        assert names == ["Made for this page", "Libre Panel", "Your themes", "For other panels"]
         listed = dict(groups)
         assert listed["Made for this page"][0] == "Arena"  # Libre Panel's game screen first
         assert "Lumen (lumen)" in listed["Libre Panel"]
@@ -3087,7 +3054,7 @@ def test_a_time_modules_settings(page):
 
 
 def test_the_look_and_a_finish_are_saved_with_the_theme(app_url, isolated_home):
-    """The grid and the panel light set from their specs, a bar's finish; all of it in the file."""
+    """The grid set from its specs, a bar's finish; all of it in the file."""
     from libre_panel.theme.model import load_theme
 
     with browser_page(app_url, "look") as page:
@@ -3101,10 +3068,6 @@ def test_the_look_and_a_finish_are_saved_with_the_theme(app_url, isolated_home):
         assert js(page, "window.libre.doc.theme().look.grid") == {
             "spacing": 10, "major": 5, "color": None, "major_color": None, "alpha": 1,
         }  # fmt: skip
-        light = page.locator(".look-block", has_text="Panel light")
-        light.locator("[role='switch']").first.click()
-        light.locator(".look-chip", has_text="Full hour").click()
-        assert js(page, "window.libre.doc.theme().look.light.on_hour") is False
         bar = js(page, "window.libre.doc.widgets().find((w) => w.type === 'bar').id")
         page.locator(".look-scope button", has_text="Bars").click()
         page.locator(".finish-tile", has_text="Light").click()
@@ -3115,10 +3078,10 @@ def test_the_look_and_a_finish_are_saved_with_the_theme(app_url, isolated_home):
         dialog.locator("button[type='submit']").click()
         page.wait_for_function("!window.libre.store.get().dirty")
         saved = load_theme(isolated_home / "themes" / "my-test")
-        assert saved.look["grid"]["spacing"] == 10 and saved.look["light"]["on_hour"] is False
+        assert saved.look["grid"]["spacing"] == 10 and set(saved.look) == {"grid"}
         assert next(w for w in saved.widgets if w["id"] == bar)["finish"] == "lit"
         grid.locator("[role='switch']").first.click()  # switched off, the block is gone again
-        assert "grid" not in js(page, "window.libre.doc.theme().look")
+        assert js(page, "window.libre.doc.theme().look") is None  # (and the look with it)
 
 
 @pytest.fixture

@@ -1,35 +1,23 @@
 """The look of a theme: finishes (render.finish, render.lit)
-and the panel's look block (render.look: grid, panel light)."""
+and the panel's look block (render.look: the grid)."""
 
 import math
-import sys
 from datetime import UTC, datetime
 
 import numpy as np
 import pytest
-from PIL import Image, ImageChops
+from PIL import Image
 
 from libre_panel.render import finish as finishes
 from libre_panel.render import lit
 from libre_panel.render.finish import Finish, register
-from libre_panel.render.light import sun_position
-from libre_panel.render.look import (
-    LightEdge,
-    Sweeps,
-    grid_image,
-    outline,
-    ridge_normals,
-    rounded_ridge_normals,
-)
+from libre_panel.render.look import grid_image
 from libre_panel.render.renderer import Piece, Renderer, changed_region
 from libre_panel.sensors.base import Reading, Snapshot
-from libre_panel.sensors.demo import demo_snapshot
 from libre_panel.theme.model import (
     LOOK_SPECS,
     THEME_FORMAT,
     ThemeError,
-    builtin_themes_dir,
-    load_theme,
     parse_theme,
 )
 
@@ -267,26 +255,21 @@ def test_a_finish_a_type_does_not_have_is_drawn_flat_with_one_warning():
 
 def test_a_registered_finish_draws_its_types(monkeypatch):
     monkeypatch.setattr(finishes, "_REGISTERED", dict(finishes._REGISTERED))
-    edge = LightEdge.ridge(np.ones((4, 40)), 10, 60)
 
     class Stamp(Finish):
         name = "stamp"
         types = ("text",)
 
         def draw(self, renderer, widget, snapshot, now):
-            renderer.add_light_edge(edge)
             return Piece(Image.new("RGBA", (40, 20), (255, 0, 0, 255)), widget["x"], widget["y"])
 
     register(Stamp())
-    theme = theme_of(
-        [{"type": "text", "id": "t", "x": 10, "y": 10, "text": "CPU"}], look={"light": {}}
-    )
+    theme = theme_of([{"type": "text", "id": "t", "x": 10, "y": 10, "text": "CPU"}])
     theme.widgets[0]["finish"] = "stamp"  # names outside the theme format: plugins' code
     renderer = Renderer(theme)
     frame, boxes = renderer.render(snap(), 0.0)
     assert frame.getpixel((30, 20)) == (255, 0, 0)
     assert boxes["t"] == [10, 10, 40, 20]
-    assert renderer.light_edges == [edge] and renderer.edge_owners[id(edge)] == "t"
 
 
 def test_modules_hand_their_finish_to_their_parts():
@@ -397,7 +380,7 @@ def test_a_warmed_up_renderer_makes_no_weather_symbols_in_its_first_frame(monkey
     monkeypatch.setattr(symbols, "_made", make)
     symbols.forget()
     lit._PICTURES.clear()
-    renderer = Renderer(theme_of(lit_widgets(), look={"grid": {}, "light": {}}))
+    renderer = Renderer(theme_of(lit_widgets(), look={"grid": {}}))
     assert renderer.prepares
     renderer.warm(None, 0.0)
     assert "clear" in made  # every weather's, made before the first frame
@@ -415,12 +398,12 @@ def test_a_warmed_up_renderer_makes_no_weather_symbols_in_its_first_frame(monkey
 
 
 def test_look_blocks_are_off_unless_named_and_take_their_defaults():
+    defaults = {key: spec[1] for key, spec in LOOK_SPECS["grid"].items()}
     assert theme_of([]).look == {}
-    theme = theme_of([], look={"grid": True, "light": {"strength": 1.5}})
-    assert theme.look["grid"] == {key: spec[1] for key, spec in LOOK_SPECS["grid"].items()}
-    assert theme.look["light"]["strength"] == 1.5
-    assert theme.look["light"]["sweep_seconds"] == LOOK_SPECS["light"]["sweep_seconds"][1]
-    assert theme_of([], look={"grid": False, "light": None}).look == {}
+    assert theme_of([], look={"grid": True}).look["grid"] == defaults
+    theme = theme_of([], look={"grid": {"spacing": 12}})
+    assert theme.look["grid"] == {**defaults, "spacing": 12}
+    assert theme_of([], look={"grid": False}).look == {} == theme_of([], look={"grid": None}).look
     assert theme.warnings == []
 
 
@@ -436,14 +419,26 @@ def test_unknown_look_blocks_and_fields_warn_and_are_kept():
     assert again.look == theme.look
 
 
+def test_the_panel_light_the_dust_and_ridges_of_before_are_dropped_without_a_word():
+    """Gone after 0.8.0rc2 (hardly anyone used them, and every frame was checked for them): a
+    theme from before that has them loads as it did, without them and without a warning."""
+    frame = {"type": "rect", "id": "frame", "w": 100, "h": 60, "ridge": "frame"}
+    theme = theme_of(
+        [frame], look={"grid": True, "light": {"strength": 1.5}, "dust": {"count": 900}}
+    )
+    assert theme.warnings == [] and set(theme.look) == {"grid"}
+    saved = theme.to_dict()
+    assert set(saved["look"]) == {"grid"} and "ridge" not in saved["widgets"][0]
+    assert parse_theme(saved).warnings == []
+
+
 @pytest.mark.parametrize(
     ("look", "message"),
     [
         ({"grid": {"spacing": 1}}, "look.grid.spacing: must be between 2 and 400"),
         ({"grid": {"alpha": 1.5}}, "look.grid.alpha: must be between 0 and 1"),
-        ({"light": {"sweep_seconds": 0.1}}, "look.light.sweep_seconds: must be between"),
-        ({"light": {"strength": -1}}, "look.light.strength: must be between 0 and 2"),
-        ({"light": {"color": "@nowhere"}}, "look.light.color"),
+        ({"grid": {"major": 51}}, "look.grid.major: must be between 0 and 50"),
+        ({"grid": {"color": "@nowhere"}}, "look.grid.color"),
         ({"grid": "on"}, "look.grid must be an object"),
         ("grid", "look must be an object"),
     ],
@@ -476,299 +471,16 @@ def test_grid_colours_come_from_the_background_without_a_palette():
     assert line != ground and max(abs(a - b) for a, b in zip(line, ground, strict=True)) < 40
 
 
-# -- the panel light --------------------------------------------------------------------
-
-
-FRAME = {"type": "rect", "id": "frame", "x": 40, "y": 40, "w": 400, "h": 240, "color": None,
-         "outline": "#3A4A5C", "outline_width": 4, "ridge": "frame"}  # fmt: skip
-
-
-def test_ridges_are_mitred_and_flat_in_their_middle():
-    mask = np.zeros((9, 9))
-    mask[0:3, :] = 1  # a rail three points thick
-    normals = ridge_normals(mask)
-    assert normals[0, 4, 1] < 0 and normals[2, 4, 1] > 0  # up and down from the middle
-    assert tuple(normals[1, 4]) == (0.0, 0.0, 1.0)  # the middle faces the viewer
-    assert not normals[5:].any()
-
-
-def test_a_round_outline_is_a_ridge_all_round():
-    ring = rounded_ridge_normals(100, 100, 50, 10)  # a ring 10 px wide
-    out, inner = ring[16, 16], ring[20, 20]  # on the diagonal: its outer half, its inner one
-    assert out[0] == pytest.approx(out[1], abs=0.02) and out[0] < -0.45  # out, to the top left
-    assert inner[0] == pytest.approx(inner[1], abs=0.02) and inner[0] > 0.45  # in
-    # along the straight sides of a rect with round corners, as the runs make them
-    band = outline(200, 60, 10, 4) > 0
-    assert np.allclose(rounded_ridge_normals(200, 60, 10, 4)[:, 20:180][band[:, 20:180]],
-                       ridge_normals(band)[:, 20:180][band[:, 20:180]], atol=1e-5)  # fmt: skip
-
-
-def test_a_ring_with_a_ridge_name_is_lit_without_steps_round_it():
-    """Gold Time Vertical's rings (#36): a ridge worked out from runs across rows and columns
-    turned at the diagonals in steps of light and shade."""
-    ring = {"type": "rect", "id": "rim", "x": 40, "y": 40, "w": 176, "h": 176, "radius": 88,
-            "color": None, "outline": "#B8860B", "outline_width": 18, "ridge": "rim"}  # fmt: skip
-    frame, _ = Renderer(theme_of([ring])).render(snap(), 0.0)
-    a = np.asarray(frame.convert("L"), np.float32)
-    turn = np.linspace(0, 2 * np.pi, 720, endpoint=False)
-    for across in (84.0, 74.0):  # its outer half and its inner one
-        x, y = 128 + across * np.cos(turn), 128 + across * np.sin(turn)
-        round_it = a[np.round(y).astype(int), np.round(x).astype(int)]
-        assert np.abs(np.diff(round_it)).max() < 24, across
-    assert a[128 - 60, 128 - 60] > a[128 + 60, 128 + 60]  # its outer half lit at the top left
-
-
-def test_rects_with_a_ridge_name_are_ridges_whose_gloss_lies_on_them():
-    flat = {**FRAME, "id": "flat", "x": 60, "y": 60, "w": 360, "h": 200, "ridge": ""}
-    theme = theme_of([FRAME, flat], look={"light": {}})
-    renderer = Renderer(theme)
-    frame, _ = renderer.render(snap(), 0.0)
-    assert [renderer.edge_owners[id(edge)] for edge in renderer.light_edges] == ["frame"]
-    ids = [wid for wid, _ in renderer._last[0]]
-    assert ids[ids.index("frame") + 1].startswith("\0light")  # right on its frame
-    dark, _ = Renderer(theme_of([FRAME, flat])).render(snap(), 0.0)  # a ridge without the light
-    plain, _ = Renderer(theme_of([{**FRAME, "ridge": ""}, flat])).render(snap(), 0.0)
-    assert changed_region(dark, plain) is not None and changed_region(frame, dark) is not None
-    inner = (62, 62, 418, 258)  # the rect without a name stays flat, light or not
-    assert changed_region(frame.crop(inner), plain.crop(inner)) is None
-
-
-def test_rects_are_flat_unless_a_theme_asks_for_a_ridge():
-    rects = [{**FRAME, "ridge": ""}, {**FRAME, "id": "band", "y": 300, "h": 8, "ridge": "",
-                                      "color": "#3A4A5C", "outline": None}]  # fmt: skip
-    lit_theme = theme_of(rects, look={"light": {}})
-    renderer = Renderer(lit_theme)
-    frame, _ = renderer.render(snap(), 0.0)
-    assert renderer.light_edges == [] and renderer._finishes == {}
-    plain, _ = Renderer(theme_of(rects)).render(snap(), 0.0)
-    assert changed_region(frame, plain) is None
-
-
-def test_bands_of_one_ridge_meet_at_a_mitre():
-    band = {"type": "rect", "color": "#13E5D7B9", "ridge": "cpu-frame"}
-    top = {**band, "id": "top", "x": 40, "y": 40, "w": 200, "h": 5}
-    left = {**band, "id": "left", "x": 40, "y": 40, "w": 5, "h": 120}
-    renderer = Renderer(theme_of([top, left], look={"light": {}}))
-    frame, boxes = renderer.render(snap(), 0.0)
-    [edge] = renderer.light_edges  # one ridge: the first band draws it, glossed once
-    assert renderer.edge_owners[id(edge)] == "top"
-    assert boxes["left"] == [40, 40, 5, 120] and boxes["top"] == [40, 40, 200, 5]
-    pieces = dict(renderer._last[0])
-    assert pieces["left"].layer.size == (1, 1)  # it only keeps its place for the editor
-    apart = Renderer(theme_of([top, {**left, "ridge": "other"}], look={"light": {}}))
-    apart.render(snap(), 0.0)  # two names: two ridges
-    assert sorted(apart.edge_owners[id(edge)] for edge in apart.light_edges) == ["left", "top"]
-
-    one, _ = Renderer(theme_of([top, left])).render(snap(), 0.0)  # (without the sun's gloss)
-    two, _ = Renderer(theme_of([top, {**left, "ridge": "other"}])).render(snap(), 0.0)
-    one, two = np.asarray(one, np.int16), np.asarray(two, np.int16)
-    assert one[41, 120].sum() > one[43, 120].sum()  # the facet towards the light, and away
-    assert (one[38:48, 100:200] == two[38:48, 100:200]).all()  # along a band: the same
-    assert (one[40:45, 40:45] != two[40:45, 40:45]).any()  # where they meet: one ridge
-
-
-def test_a_ridges_glow_is_light_added_also_where_its_colour_is_full():
-    band = {"type": "rect", "id": "band", "x": 40, "y": 40, "w": 200, "h": 5,
-            "color": "#A3AEFFB9", "ridge": "frame"}  # fmt: skip
-    renderer = Renderer(theme_of([band]))
-    frame, _ = renderer.render(snap(), 0.0)
-    piece = dict(renderer._last[0])["band"]
-    assert piece.light is not None
-    under = Image.new("RGBA", frame.size, "#0A1119")
-    under.alpha_composite(piece.layer, (piece.x, piece.y))
-    lit = np.asarray(under.convert("RGB"), np.int16)
-    light = np.zeros_like(lit)
-    glow = np.asarray(piece.light.layer, np.int16)[..., :3]
-    light[piece.light.y : piece.light.y + glow.shape[0], piece.light.x :][:, : glow.shape[1]] = glow
-    assert np.array_equal(np.asarray(frame, np.int16), np.minimum(255, lit + light))
-    assert frame.getpixel((120, 41))[2] > lit[41, 120, 2]  # blue is full, and still lit up
-
-
-def test_the_sun_comes_from_where_it_stands():
-    theme = theme_of([FRAME], look={"light": {}})
-    renderer = Renderer(theme)
-    light = renderer.look.light
-    assert light.fixed(NOON.timestamp())[0][0][0] == 240  # no place: noon, in the middle
-    renderer.place = (0.0, 0.0)
-    morning = datetime(2024, 3, 20, 8, 0, tzinfo=UTC).timestamp()
-    evening = datetime(2024, 3, 20, 16, 0, tzinfo=UTC).timestamp()
-    night = datetime(2024, 3, 20, 0, 0, tzinfo=UTC).timestamp()
-    assert sun_position(morning, 0.0, 0.0)[0] < 180 < sun_position(evening, 0.0, 0.0)[0]
-    assert light.fixed(morning)[0][0][0] < 240 < light.fixed(evening)[0][0][0]
-    [(_position, colour, _strength, _kind)] = light.fixed(night)
-    assert colour[2] > colour[0]  # the night light is cool
-
-
-def test_sweeps_run_at_start_on_the_hour_on_a_new_track():
-    settings = {key: default for key, (_kind, default) in LOOK_SPECS["light"].items()}
-    sweeps = Sweeps()
-    at = datetime(2024, 5, 1, 9, 59, 58)
-    sweeps.watch(Snapshot(now=at), 100.0, settings)
-    assert sweeps.runs == [(100.0, 1.6)]  # the panel started
-    sweeps.watch(Snapshot(now=at), 101.0, settings)
-    sweeps.watch(Snapshot(now=at.replace(hour=10, minute=0, second=0)), 102.0, settings)
-    assert sweeps.runs == [(102.0, 1.6)]  # the full hour (the first one has run)
-    title = {"media.title": Reading("media.title", "A")}
-    playing = Snapshot(now=at.replace(hour=10), readings=title)
-    sweeps.watch(playing, 103.0, settings)
-    assert sweeps.runs == [(102.0, 1.6)]  # the first title known is not a new one
-    playing.readings["media.title"] = Reading("media.title", "B")
-    sweeps.watch(playing, 104.0, settings)
-    assert sweeps.runs[-1] == (104.0, 1.6)
-    assert sweeps.active(104.8) == [pytest.approx(0.5)]
-
-    quiet = Sweeps()
-    off = {**settings, "on_start": False, "on_hour": False, "on_track": False}
-    quiet.watch(Snapshot(now=at), 0.0, off)
-    quiet.watch(Snapshot(now=at.replace(hour=10, minute=0)), 1.0, off)
-    assert quiet.runs == []
-
-
-class Kind:
-    def __init__(self, name):
-        self.name = name
-
-
-def test_a_sweep_runs_on_the_frames_planned_time():
-    theme = theme_of([FRAME], look={"light": {}})
-    a, b = Renderer(theme), Renderer(theme)
-    for now in (0.0, 0.8):  # the start's sweep, half way at 0.8 s
-        frame_a, _ = a.render(snap(), now)
-        frame_b, _ = b.render(snap(), now)
-        assert changed_region(frame_a, frame_b) is None  # the same time, the same light
-    lit_frame = frame_a
-    assert a.moving  # the PNG path draws at full rate while it runs
-    after, _ = a.render(snap(), 2.0)
-    assert a.look.light.running(2.0) == [] and changed_region(lit_frame, after) is not None
-    still, _ = a.render(snap(), 3.0)
-    assert changed_region(after, still) is None
-
-    a.transition_ended(Kind("cut"), 4.0)
-    assert a.look.light.running(4.5) == []
-    a.transition_ended(Kind("tube"), 5.0)
-    assert len(a.look.light.running(5.5)) == 1
-    preview = Renderer(theme, preview=True)
-    preview.render(snap(), 0.0)
-    assert preview.look.light.running(0.5) == []  # previews have no sweeps
-
-
-def test_a_sweep_over_no_edge_does_not_keep_the_png_path_drawing_at_full_rate():
-    """A sweep only lights edges: with none on the frame it draws nothing, and the PNG path must
-    not run at full rate for it (the start's sweep, the hour's, a new track's, a tube's)."""
-    plain = {"type": "text", "id": "t", "x": 10, "y": 10, "text": "no edge here"}
-    renderer = Renderer(theme_of([plain], look={"light": {}}))
-    frame, _ = renderer.render(snap(), 0.0)  # the panel starts: a sweep begins
-    assert renderer.look.light.running(0.5) and renderer.light_edges == []
-    assert not renderer.moving
-    again, _ = renderer.render(snap(), 0.5)
-    assert changed_region(frame, again) is None  # (and the sweep drew nothing)
-    edged = Renderer(theme_of([FRAME], look={"light": {}}))
-    edged.render(snap(), 0.0)
-    assert edged.moving  # over a ridge it does
-
-
-def test_sweeps_carry_on_into_the_next_theme():
-    theme = theme_of([FRAME], look={"light": {}})
-    first = Renderer(theme)
-    first.render(snap(), 0.0)
-    second = Renderer(theme, motion=first.motion)
-    second.render(snap(), 0.5)
-    assert second.look.light.sweeps is first.look.light.sweeps
-    assert len(second.look.light.sweeps.runs) == 1  # a new theme is not a new start
-
-
-EDGY = """
-import numpy as np
-from PIL import Image
-
-from libre_panel.plugins import WidgetType
-from libre_panel.render.look import LightEdge
-
-
-class Edgy(WidgetType):
-    type = "demo.edgy"
-    api = 1
-    spec = {"w": ("int", 120), "h": ("int", 40)}
-    edge = None
-
-    def draw(self, widget, ctx, snapshot, now):
-        return Image.new("RGBA", (widget["w"], widget["h"]), (30, 30, 30, 255))
-
-    def edges(self, widget, ctx, snapshot, now):
-        if Edgy.edge is None:
-            mask = np.zeros((widget["h"], widget["w"]))
-            mask[:3, :] = 1
-            Edgy.edge = LightEdge.ridge(mask, widget["x"], widget["y"])
-        return [Edgy.edge] if ctx.light else []
-"""
-
-
-def test_plugin_widgets_give_the_light_their_edges(plugin_folder):
-    package = plugin_folder(EDGY, {"libre_panel.widgets": {"demo.edgy": "Edgy"}})
-    widget = {"type": "demo.edgy", "id": "edgy", "x": 100, "y": 100}
-    lit_theme = theme_of([widget], look={"light": {}})
-    renderer = Renderer(lit_theme)
-    renderer.render(snap(), 0.0)
-    edge = sys.modules[package].Edgy.edge
-    assert renderer.light_edges == [edge] and renderer.edge_owners[id(edge)] == "edgy"
-    dark = Renderer(theme_of([widget]))
-    dark.render(snap(), 0.0)
-    assert dark.light_edges == []
-
-
 # -- sizes ----------------------------------------------------------------------------
 
 
-BUILTIN = sorted(path.parent.name for path in builtin_themes_dir().glob("*/theme.json"))
-
-
-@pytest.mark.parametrize("name", BUILTIN)
-def test_a_built_in_theme_has_a_panel_light_only_where_it_has_edges_to_glint_on(name):
-    """The light falls on light edges (ridges, a plugin's): the frames of the built-in themes are
-    flat lines, so a light there would run its sweeps over nothing."""
-    theme = load_theme(builtin_themes_dir() / name)
-    renderer = Renderer(theme)
-    renderer.render(demo_snapshot(fixed_time=1_700_000_000), 0.0)
-    assert "light" not in theme.look or renderer.light_edges, name
-
-
-def test_spur_classic_is_spur_iis_classic_screen_on_the_bar():
-    theme = load_theme(builtin_themes_dir() / "spur-classic")
-    assert (theme.width, theme.height) == (1920, 480) and theme.warnings == []
-    assert set(theme.look) == {"grid", "dust"}  # (no panel light: its frames are flat)
-    renderer = Renderer(theme)
-    found = demo_snapshot(fixed_time=1_700_000_000)
-    frame, _ = renderer.render(found, 0.0)
-    assert renderer.warnings == [] and frame.size == (1920, 480)
-    assert {type(f).__name__ for f in renderer._finishes.values()} == {
-        "LitBar", "LitText", "FacetGraph", "FacetText", "AcrylicText"
-    }  # fmt: skip
-    assert sum(w["type"] == "fan" for w in theme.widgets) == 5
-    # its frames are flat bands, no ridges (the user's wish): nothing on them catches light
-    assert not any(w.get("ridge") for w in theme.widgets) and renderer.light_edges == []
-    shown = {w["sensor"] for w in theme.widgets if w["type"] in ("metric", "bar", "graph")}
-    assert {key for key in shown if found.value(key) is None} == set()  # the demo has them all
-
-
-def test_spur_classics_ram_heading_is_the_memorys_name_or_else_its_size():
-    theme = load_theme(builtin_themes_dir() / "spur-classic")
-    heading = next(w for w in theme.widgets if w["id"] == "mem-name")
-    assert (heading["sensor"], heading["format"]) == ("mem.name", "{value}")
-    frames = {}
-    for name in ("Kingston DDR5-5600 32 GB", "32 GB"):  # a found name, or the size alone
-        found = demo_snapshot(fixed_time=1_700_000_000)
-        found.readings["mem.name"] = Reading("mem.name", name, "", "Memory")
-        frames[name] = Renderer(theme).render(found, 0.0)[0].convert("RGB")
-    left, top = heading["x"], heading["y"]
-    box = (left, top, left + heading["max_width"], top + 2 * heading["font_size"])
-    changed = ImageChops.difference(*frames.values()).getbbox()
-    assert changed is not None and box[0] <= changed[0] and changed[2] <= box[2]  # only there
-    assert box[1] <= changed[1] and changed[3] <= box[3]
+FRAME = {"type": "rect", "id": "frame", "x": 40, "y": 40, "w": 400, "h": 240, "color": None,
+         "outline": "#3A4A5C", "outline_width": 4}  # fmt: skip
 
 
 @pytest.mark.parametrize("size", [(480, 320), (320, 480), (1920, 480)])
 def test_lit_widgets_and_the_look_at_panel_sizes(size):
-    theme = theme_of(lit_widgets() + [FRAME], look={"grid": {}, "light": {}}, size=size)
+    theme = theme_of(lit_widgets() + [FRAME], look={"grid": {}}, size=size)
     a, b = Renderer(theme), Renderer(theme)
     frame, _ = a.render(history(), 0.8)
     assert frame.size == size and a.warnings == []

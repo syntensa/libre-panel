@@ -73,8 +73,6 @@ from libre_panel.theme.adapt import adapt_theme, laid_out
 from libre_panel.theme.defaults import default_theme, panel_model
 from libre_panel.theme.model import (
     COMMON_FIELDS,
-    DUST_MAX_AREAS,
-    DUST_MAX_COLORS,
     EFFECT_FIELDS,
     FINISHES,
     LOOK_RANGES,
@@ -1360,8 +1358,6 @@ class EditorHandler(BaseHTTPRequestHandler):
             "default_font": DEFAULT_FONT,
             "icons": list(ICON_NAMES),
             "modules": module_info(),
-            # what the look blocks that are lists may hold, at most
-            "look_limits": {"dust": {"colors": DUST_MAX_COLORS, "areas": DUST_MAX_AREAS}},
             **presets,
         }
 

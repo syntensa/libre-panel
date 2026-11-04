@@ -98,9 +98,9 @@ Jeder Clip zeigt Libre Panel selbst, mit Demo-Werten.
 TURZX-USB-Panels haben einen Videodecoder, und Libre Panel füttert ihn mit bis zu 50 Bildern
 pro Sekunde: Zahlen zählen zum nächsten Messwert, Ringe und Balken gleiten, Verläufe scrollen
 mit jedem Bild ein Stück weiter, und Lüfter drehen mit ihrer echten Drehzahl. Werte liegen als
-Licht in gefrästen Rillen, und feiner Staub treibt in der Tiefe dahinter. Standard sind 30
-Bilder pro Sekunde, flüssig und für den PC deutlich leichter; alle anderen Panels bekommen
-Standbilder, gesendet nur dort, wo sich etwas ändert.
+Licht in gefrästen Rillen. Standard sind 25 Bilder pro Sekunde, flüssig und für den PC
+deutlich leichter; alle anderen Panels bekommen Standbilder, gesendet nur dort, wo sich etwas
+ändert.
 
 ### Karten im Wechsel
 
@@ -267,8 +267,7 @@ paar Buchstaben.</td>
 Jedes Theme passt auf jedes andere Panel und ordnet sich dafür neu an. Themes sind schlichtes
 JSON mit ihren Bildern und Schriften und können keinen Code ausführen
 ([alle eingebauten Themes](docs/THEMES.md#every-built-in-theme), [das Theme-Format](docs/THEMES.md),
-englisch). Die acht Bildschirme von SPUR II sind als Legacy-Sammlung ebenfalls eingebaut
-([wo alles begann](#wo-alles-begann)).
+englisch).
 
 ### Themes der Community
 
@@ -616,13 +615,10 @@ beginnen bei [CONTRIBUTING.md](CONTRIBUTING.md). Sicherheitslücken bitte über 
 
 ## Wo alles begann
 
-<a href="docs/media/where-it-started.gif"><img src="docs/media/where-it-started.png" width="38%" align="right" alt="Der klassische Bildschirm von SPUR II im Videomodus: der Schriftzug SPUR II, Lüfter und Uhr oben, Lastkurven von CPU und GPU und die Bereiche CPU, RAM, GPU und Netzwerk mit Werten als Licht"></a>
-
 Libre Panel ist aus SPUR II entstanden, einem privaten Dashboard für ein 9,2"-Panel an einem
 PC, das das USB-Protokoll des Panels und seinen Videomodus auf echter Hardware erprobt hat.
 Seine Ideen (Licht in gefrästen Rillen, die Karten, das Band, die Röhre) gehören jetzt Libre
-Panel, für jedes Panel und jeden PC, und seine acht Bildschirme sind als Legacy-Sammlung *SPUR
-II* dabei, am Ende von *Start → Alle* ([was daraus übernommen wurde](docs/SPUR2_MIGRATION.md)).
+Panel, für jedes Panel und jeden PC ([was daraus übernommen wurde](docs/SPUR2_MIGRATION.md)).
 
 ## Lizenz und Hinweise
 

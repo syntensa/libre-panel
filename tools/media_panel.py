@@ -601,7 +601,6 @@ def module(kind: str, col: int, row: int, cols: int = 1, rows: int = 1, **option
 def modules_theme(
     look: str,
     modules: list[dict],
-    dust: bool = False,
     refresh_ms: int = 500,
     model: str = "turing-9.2-usb",
 ) -> dict[str, Any]:
@@ -619,8 +618,6 @@ def modules_theme(
         "animation": {"smoothing_ms": 500},
         "widgets": [{"type": "module", "id": f"m{n}", **m} for n, m in enumerate(modules)],
     }
-    if dust:
-        data["look"] = {"dust": {"strength": 1.6}}
     return data
 
 
@@ -754,8 +751,7 @@ def work_burst(stage: Stage, at: float = 2.0) -> None:
 
 
 # Video mode: what is drawn on every frame. The history graphs scroll, the rings and numbers glide
-# to each new reading, the fans turn faster as they speed up, and the dust drifts (if the theme
-# has any).
+# to each new reading, and the fans turn faster as they speed up.
 def video_mode(stage: Stage, themes: tuple[str, ...]) -> None:
     stage.show(stage.theme(themes[0]))
     work_burst(stage)
@@ -1117,11 +1113,6 @@ CLIPS: dict[str, PanelClip] = {
         ("lumen", "studio", "encore", "nimbus", "almanac", "terra", "arena"), 7 * TOUR_S,
         themes_tour,
         poster=TOUR_S * 0.25, clock_runs=True,
-    ),
-    # SPUR II's classic screen, where Libre Panel started: the only clip of its own look
-    "where-it-started": PanelClip(
-        "SPUR II's classic screen in video mode, where it started: curves, fans, dust",
-        ("spur-classic",), 8.0, video_mode, poster=4.0,
     ),
 }  # fmt: skip
 

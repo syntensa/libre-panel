@@ -324,7 +324,7 @@ pre .c { color: var(--muted); }
 
 /* -- where it started ------------------------------------------------------------------------ */
 
-.origin { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 56px; align-items: center; }
+.origin { max-width: 820px; }
 .origin p { margin-top: 14px; }
 .origin h2 { font-size: clamp(26px, 3vw, 34px); margin-top: 10px; }
 
@@ -353,7 +353,7 @@ footer { padding: 52px 0 64px; border-top: 1px solid var(--line); background: va
 }
 @media (max-width: 900px) {
   section { padding: 72px 0; }
-  .feature, .fits, .origin { grid-template-columns: minmax(0, 1fr); gap: 26px; }
+  .feature, .fits { grid-template-columns: minmax(0, 1fr); gap: 26px; }
   .feature.flip .feature-copy { order: 0; }
   .feature + .feature, .fits { margin-top: 64px; }
   .feature-wide .feature-copy { grid-template-columns: minmax(0, 1fr); }

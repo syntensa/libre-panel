@@ -97,7 +97,7 @@ def test_libre_panels_own_themes_let_a_little_of_the_background_through():
     }  # fmt: skip (the round report in Arena's design)
     for name, value in own.items():
         assert load_theme(find_theme(name)).style["card_opacity"] == value, name
-    for name in ("contrast", "spur-classic"):
+    for name in ("contrast", "slate"):
         assert (load_theme(find_theme(name)).style or {}).get("card_opacity", 1.0) == 1.0, name
 
 

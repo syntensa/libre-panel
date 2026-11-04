@@ -225,7 +225,7 @@ the pictures (`--only tile-cards.png panels-at-once.png`).
 
 | Where | What it shows |
 |---|---|
-| README.md, README.de.md | `docs/media/hero.gif` on top (`hero-de.gif` in German; their posters `hero.png` and `hero-de.png` for those who ask for less motion), under it the website's download buttons `docs/images/button-windows.png` and `button-linux.png` (`button-windows-de.png` and `button-linux-de.png` in German) and the overview's icons `icon-*.svg`; a clip for each feature (`close-up-rings`, `card-turns`, `volume-looks`, `game-entrance`, `round-report`, `screens-in-turn`, `ai-card`, `more-panels`, `screen-monitor`, `player`, `start-screen`, `small-panel`) with `round-screens.png` and `vertical.png`; the app's `app-drag-module`, `app-look` and `app-command-palette`; `themes-tour.gif` over `gallery.png`, and `module-catalog.png`; `where-it-started.png` linking its GIF |
+| README.md, README.de.md | `docs/media/hero.gif` on top (`hero-de.gif` in German; their posters `hero.png` and `hero-de.png` for those who ask for less motion), under it the website's download buttons `docs/images/button-windows.png` and `button-linux.png` (`button-windows-de.png` and `button-linux-de.png` in German) and the overview's icons `icon-*.svg`; a clip for each feature (`close-up-rings`, `card-turns`, `volume-looks`, `game-entrance`, `round-report`, `screens-in-turn`, `ai-card`, `more-panels`, `screen-monitor`, `player`, `start-screen`, `small-panel`) with `round-screens.png` and `vertical.png`; the app's `app-drag-module`, `app-look` and `app-command-palette`; `themes-tour.gif` over `gallery.png`, and `module-catalog.png` |
 | site/, site/de/ | every clip of `docs/media` as WebM and MP4 with its poster (`*.png`), the GIF only where a browser has no script or no video; from `docs/images` the feature grid's `tile-*.png`, `panels-at-once`, the themes (`lumen`, `studio`, `libre-default`, `slate`, `orbit`, `column`, `pico`), `looks`, `studio-adapts`, `editor-new` and, for links shared elsewhere, `social-preview` |
 | CHANGELOG.md (the release notes) | `docs/media/video-mode.gif`, `card-ignition.gif`, `game-entrance.gif`, `app-drag-module.gif` and `app-look.gif` on the tag (raw.githubusercontent.com, so the tag must hold them), in the highlights at the top of the version's section |
 | The repository's social preview | `docs/images/social-preview.png`, uploaded by hand in *Settings → General → Social preview* |
@@ -256,8 +256,7 @@ Make them again for every release, so that they show the release's look and noth
 - A clip shows the theme its recipe names (Lumen on the bars, Libre Default on the small panel,
   Studio for the notice). When Libre Panel's own screens change, or to try another:
   `--theme video-mode=NAME`, a built-in theme or a folder with a theme in it; a clip that goes
-  from one theme to another takes two names (`--theme theme-tube=lumen,studio`). SPUR II's screen
-  is in one clip only, `where-it-started`.
+  from one theme to another takes two names (`--theme theme-tube=lumen,studio`).
 - `--only NAME ...` makes some of them, `--gif-only` the GIFs for a forum, `--bare` leaves the
   device frame out, `--draft` is half the size and half the frames to try a recipe, and
   `--keep-frames DIR` keeps the pictures a clip was made of.
