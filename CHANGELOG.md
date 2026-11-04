@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.0rc2 — 2026-11-04
 
 **Security**
 - **Windows downloads that say who made them, and where they were built.** Microsoft Defender
