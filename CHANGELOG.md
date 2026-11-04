@@ -15,6 +15,13 @@
   root on Linux: root's own settings folder), else the frames are kept as without a file.
 
 **Fixed**
+- **The tray icon on Linux shows every time, and goes with Quit** (the plain icon without
+  PyGObject, as with the release download). pystray hands what Libre Panel changes on the
+  icon (shown, picture, title, stop) to the icon's loop through the loop's own connection to
+  X, and python-xlib loses its way when two threads use one connection: now and then the
+  loop waited for ever, and the icon never showed (under Xvfb one start of Libre Panel in
+  25) or Quit went on without it. Those messages go through a connection of their own now:
+  0 in 150 starts.
 - **Live names what Libre Panel does whole.** Its list of the services showed each name and
   what it does side by side on one line, and cut off what did not fit: in German "Bericht
   nach jede…" beside "Rundenbericht und Verlauf", "Waveshare-USB-Monitor (expe…". What it

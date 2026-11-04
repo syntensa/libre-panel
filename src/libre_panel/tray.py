@@ -577,10 +577,10 @@ class Tray:
         if not type(self.icon).__module__.endswith("._xorg"):
             self.icon.run(setup=self._setup)
             return
-        # pystray's loop for an X11 tray now and then misses the wake-up its stop() sends and
-        # waits for an X event that never comes (one quit in a few): there the loop runs
-        # beside, and Quit goes on without it once it has had a moment to end.
+        # An X11 tray's loop runs beside: Quit goes on without it if it does not end in a
+        # moment, and the panel goes on if the icon went (its tray did).
         loop = threading.Thread(target=self._run_icon, name="tray", daemon=True)
+        _messages_apart(self.icon, loop)
         loop.start()
         while not self.app.quit_requested.wait(0.5):  # (a timeout keeps Ctrl+C working)
             if not loop.is_alive():  # the icon went (its tray did): the panel goes on
@@ -592,6 +592,66 @@ class Tray:
             self.icon.run(setup=self._setup)
         except Exception:  # the icon is a convenience; the panel must keep running
             log.exception("tray icon failed; Libre Panel keeps running without one")
+
+
+def _messages_apart(
+    icon: Any, loop: threading.Thread, connect: Callable[[], Any] | None = None
+) -> bool:
+    """An X11 icon's messages from other threads go through an X connection of their own.
+
+    pystray hands what another thread changes (shown, picture, title, stop) to the icon's loop
+    as a message sent through the loop's own connection, and python-xlib (0.33) loses track of
+    who sends on a connection two threads use: now and then the loop waits for ever for the
+    answer to a request nobody sends, and the icon never shows or never goes (under Xvfb one
+    start of Libre Panel in 25; one in eight of an icon given a picture and a title at once).
+    Here the loop's connection is the loop's alone. ``loop`` is the thread that runs the icon.
+    False where this pystray is built otherwise: it is left as it is."""
+    try:
+        import Xlib.display
+        import Xlib.X
+        from Xlib.protocol import event
+
+        loop_display, send = icon._display, icon._send_message
+    except (ImportError, AttributeError):
+        return False
+    connect = connect or Xlib.display.Display
+    lock = threading.Lock()
+    opened: list[Any] = []  # the messages' connection, opened with the first of them
+
+    class LoopDisplay:
+        """The loop's connection, flushed by the loop alone: the others send through theirs."""
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(loop_display, name)
+
+        def flush(self) -> None:
+            if threading.current_thread() is loop:
+                loop_display.flush()
+
+    def send_message(window: Any, client_type: int, *data: int) -> None:
+        if threading.current_thread() is loop:
+            send(window, client_type, *data)
+            return
+        words = (Xlib.X.CurrentTime, *data, 0, 0, 0, 0)[:5]
+        with lock:
+            if not opened:
+                opened.append(connect())
+            opened[0].send_event(
+                window,
+                event.ClientMessage(
+                    type=Xlib.X.ClientMessage,
+                    client_type=client_type,
+                    window=window.id,
+                    data=(32, words),
+                ),
+                event_mask=Xlib.X.NoEventMask,
+            )
+            opened[0].flush()
+
+    icon._send_message = send_message
+    icon._display = LoopDisplay()
+    icon._thread = loop  # (pystray sets it as its loop begins: after the setup may already ask)
+    return True
 
 
 def _quit_on_signals(app: BackgroundApp) -> None:

@@ -350,7 +350,7 @@ def test_second_start_points_to_the_running_editor(isolated_home, capsys):
             app.shutdown()
 
 
-@pytest.mark.skipif(
+x11_tray = pytest.mark.skipif(
     not (
         sys.platform.startswith("linux")
         and shutil.which("xvfb-run")
@@ -358,6 +358,9 @@ def test_second_start_points_to_the_running_editor(isolated_home, capsys):
     ),
     reason="needs Xvfb and stalonetray (a system tray for X11)",
 )
+
+
+@x11_tray
 def test_real_tray_icon_on_x11(isolated_home):
     """The whole program: tray icon on a real X11 tray, controlled over the editor API."""
     write_config(isolated_home)
@@ -409,6 +412,149 @@ def test_real_tray_icon_on_x11(isolated_home):
     output = proc.stdout.read().decode(errors="replace")
     assert "Traceback" not in output, output
     assert running_instance() is None
+
+
+def test_an_x11_icon_s_messages_from_other_threads_go_apart():
+    """What another thread changes reaches the X11 icon's loop through a connection of its own:
+    python-xlib loses track of who sends on one that two threads use, and the loop then waits
+    for ever (the icon never showed, or never went). The loop's own work stays on the loop's."""
+    pytest.importorskip("Xlib")
+    import Xlib.X
+
+    from libre_panel.tray import _messages_apart
+
+    class LoopDisplay:
+        def __init__(self):
+            self.flushed = []
+
+        def flush(self):
+            self.flushed.append(threading.current_thread().name)
+
+        def screen(self):
+            return "the screen"
+
+    class Icon:  # pystray's X11 icon, as far as the messages go
+        def __init__(self):
+            self._display = LoopDisplay()
+            self.sent = []
+
+        def _send_message(self, window, client_type, l0=0, l1=0, l2=0, l3=0):
+            self.sent.append((window, client_type, l0, l1, l2, l3))
+
+    class Connection:
+        def __init__(self):
+            self.events, self.flushes = [], 0
+
+        def send_event(self, window, event, event_mask=0):
+            self.events.append((window, event, event_mask))
+
+        def flush(self):
+            self.flushes += 1
+
+    opened = []
+
+    def connect():
+        opened.append(Connection())
+        return opened[-1]
+
+    window = type("Window", (), {"id": 0x2A00001})()
+    icon = Icon()
+    loop_display = icon._display
+    on_loop = threading.Event()
+
+    def loop_work():  # what the loop sends and flushes itself: the dock request, say
+        icon._send_message(window, 7, 0, 0x2A00001)
+        icon._display.flush()
+        on_loop.set()
+
+    loop = threading.Thread(target=loop_work, name="tray-loop")
+    assert _messages_apart(icon, loop, connect)
+    assert icon._thread is loop  # (before pystray's loop sets it: the setup may ask first)
+    assert opened == []  # opened with the first message, not before
+    for client_type in (5, 6):  # e.g. "show" and "stop", from the setup thread and Quit's
+        icon._send_message(window, client_type)
+        icon._display.flush()
+    assert len(opened) == 1
+    connection = opened[0]
+    assert [
+        (w, e.type, e.client_type, e.window, e.data, mask) for w, e, mask in connection.events
+    ] == [
+        (window, Xlib.X.ClientMessage, 5, 0x2A00001, (32, (Xlib.X.CurrentTime, 0, 0, 0, 0)), 0),
+        (window, Xlib.X.ClientMessage, 6, 0x2A00001, (32, (Xlib.X.CurrentTime, 0, 0, 0, 0)), 0),
+    ]
+    assert connection.flushes == 2
+    assert loop_display.flushed == [] and icon.sent == []  # the loop's connection: untouched
+    loop.start()
+    assert on_loop.wait(5)
+    loop.join(5)
+    assert icon.sent == [(window, 7, 0, 0x2A00001, 0, 0)]  # on the loop: through the loop's own
+    assert loop_display.flushed == ["tray-loop"]
+    assert len(connection.events) == 2 and len(opened) == 1
+    assert icon._display.screen() == "the screen"  # all else is the loop's connection
+    # a pystray built otherwise is left as it is
+    other = type("Icon", (), {})()
+    assert not _messages_apart(other, loop, connect)
+    assert vars(other) == {}
+
+
+@x11_tray
+def test_an_x11_icon_shows_and_goes_every_time(tmp_path):
+    """Sixty X11 icons in turn, each shown, given a picture and a title from the setup thread
+    and stopped from another: before their messages went apart, about one in ten never showed
+    or never went (and so did the app's icon now and then, the tray test in CI once)."""
+    script = tmp_path / "icons.py"
+    script.write_text(
+        """
+import os, sys, threading
+from PIL import Image
+import pystray
+from libre_panel.tray import _messages_apart
+
+runs = int(sys.argv[1])
+pictures = [Image.new("RGBA", (64, 64), c) for c in ((40, 120, 220, 255), (220, 120, 40, 255))]
+for i in range(runs):
+    shown = threading.Event()
+
+    def setup(icon):
+        icon.visible = True
+        for k in range(3):  # what the tray's refresh does, from this thread
+            icon.icon = pictures[k % 2]
+            icon.title = f"run {i}, {k}"
+        shown.set()
+
+    icon = pystray.Icon("test", pictures[0], "test")
+    loop = threading.Thread(target=icon.run, kwargs={"setup": setup}, daemon=True)
+    assert _messages_apart(icon, loop)
+    loop.start()
+    if not shown.wait(10):
+        print(f"run {i}: no icon after 10 s", flush=True)
+        os._exit(1)
+    stop = threading.Thread(target=icon.stop, daemon=True)
+    stop.start()
+    stop.join(10)
+    loop.join(10)
+    if stop.is_alive() or loop.is_alive():
+        print(f"run {i}: the icon did not go after 10 s", flush=True)
+        os._exit(1)
+print(f"{runs} icons shown and gone", flush=True)
+os._exit(0)
+""",
+        encoding="utf-8",
+    )
+    env = {k: v for k, v in os.environ.items() if k != "PYSTRAY_BACKEND"}
+    shell = (
+        "stalonetray --geometry 4x1 -i 32 >/dev/null 2>&1 & TRAY=$!; sleep 1; "
+        f"{sys.executable} {script} 60; CODE=$?; kill $TRAY; exit $CODE"
+    )
+    proc = subprocess.run(
+        ["xvfb-run", "-a", "bash", "-c", shell],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "60 icons shown and gone" in proc.stdout
 
 
 def test_cli_quit_stops_the_background_app(isolated_home, capsys):
@@ -503,9 +649,9 @@ def test_quit_always_ends_the_process():
 
 
 def test_quit_goes_on_where_an_x11_tray_s_loop_does_not_end(isolated_home):
-    """pystray's loop for an X11 tray now and then misses the wake-up its stop() sends and
-    waits for an X event that never comes: Quit must not wait for it (the release's smoke test
-    saw the app end only through its last-resort exit, one quit in a few)."""
+    """An X11 tray's loop that does not end: Quit must not wait for it (the release's smoke
+    test saw the app end only through its last-resort exit, one quit in a few, before the
+    icon's messages went apart: python-xlib had lost its way on the loop's connection)."""
     import types
 
     write_config(isolated_home)
