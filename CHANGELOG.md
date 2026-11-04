@@ -187,6 +187,12 @@
   picture made once): Lumen's loop on the 12.3" keeps under 3 MB of them, the glows as they
   were (Lumen's frames the same pixels; of Arena's 1.4 million, a hundred or so in the glow
   of its big number a level apart), and a picture blurred again is blurred the same.
+- **A theme drawn ahead and then not taken goes.** As the app starts, and before a switch,
+  the theme is drawn once ahead in a thread of its own; where that took longer than the two
+  seconds the first frame waits for it (Almanac on the 12.3": 3.7 s on the test machine), the
+  loop went ahead with a renderer of its own, and the one drawn ahead stayed, with all its
+  pictures, for as long as the theme showed: Almanac's main process 111 MB instead of 84. It
+  is closed now as its drawing ends.
 - **On Linux, large blocks go back to the system as they are freed.** glibc took a block of a
   megabyte and more from its heap once such a block had been freed, and the pictures freed in
   the middle of the heap stayed with the program: Lumen's main process on the 12.3" grew from
@@ -202,8 +208,8 @@
 - **11 MB less once the engine composes the frames.** A panel's first few frames are composed
   here before the engine takes them (Lumen's eight on the 12.3"), and what lay under their
   changing pieces stayed kept for the frames to come: 7 MB that no frame looked at again
-  while the engine composed. It goes with the engine's first frame; Lumen's main process on
-  the 12.3" holds 174 instead of 185 MB.
+  while the engine composed. It goes with the engine's first frame: 11 MB less in Lumen's
+  main process on the 12.3".
 - **A turning globe lays its air faster.** Every two degrees of its turn (Terra's globe on the
   12.3" about once a second and a half) the air over it was laid into its picture four values
   a pixel, column by column: almost half of the 8.5 ms of the main loop it took. Each pixel

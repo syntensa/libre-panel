@@ -661,6 +661,42 @@ def test_a_first_theme_that_is_not_drawn_in_time_is_left_to_the_first_frame(
         loop.close()
 
 
+def test_a_first_theme_drawn_too_late_is_closed_as_its_drawing_ends(isolated_home, monkeypatch):
+    """The renderer the loop went ahead without is closed as its drawing ends, not kept with
+    all its pictures (Almanac's on the 12.3", drawn ahead in 3.7 s: 20 MB for nothing)."""
+    import threading
+
+    from libre_panel.render.renderer import Renderer
+
+    write_ahead_theme(isolated_home)
+    stuck, real = threading.Event(), Renderer.warm
+    closed, real_close = [], Renderer.close
+
+    def warm(self, snapshot, now, pause=None, first=False):
+        if snapshot is not None:
+            stuck.wait(30)
+        return real(self, snapshot, now, pause, first)
+
+    def close(self):
+        closed.append(self)
+        return real_close(self)
+
+    monkeypatch.setattr(Renderer, "warm", warm)
+    monkeypatch.setattr(Renderer, "close", close)
+    monkeypatch.setattr(app_module._Warmup, "LIMIT_S", 0.05)
+    loop, _ = ahead_loop(StepClock(1000.0))
+    try:
+        assert loop.warmup.busy and loop.step(1000.0) is not None  # (its own renderer)
+        thread = loop.warmup.thread
+        stuck.set()
+        thread.join(30)
+        assert loop.warmup.result is None and len(closed) == 1
+        assert closed[0] is not loop.renderer
+    finally:
+        stuck.set()
+        loop.close()
+
+
 def test_the_first_frame_asks_again_when_the_first_readings_failed(isolated_home):
     from libre_panel.sensors.base import SensorHub
     from libre_panel.sensors.demo import DemoProvider

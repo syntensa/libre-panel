@@ -724,6 +724,7 @@ class _Warmup:
         self.started = 0.0
         self.thread: threading.Thread | None = None
         self.result: tuple[Renderer, Motion] | None = None
+        self._lock = threading.Lock()  # (the result and whom it is for: set there, taken here)
 
     @property
     def busy(self) -> bool:
@@ -739,26 +740,37 @@ class _Warmup:
 
         def work() -> None:
             try:
-                self.result = build()
+                made = build()
             except Exception:  # the switch builds it itself and reports what fails
                 log.exception("warming up the next theme failed")
+                return
+            with self._lock:
+                if self.key == key:
+                    self.result = made
+                    return
+            made[0].close()  # (wanted no more: the loop went ahead with a renderer of its own)
 
         self.thread = threading.Thread(target=work, name="theme-warmup", daemon=True)
         self.thread.start()
 
     def take(self, key: Any) -> tuple[Renderer, Motion] | None:
-        """The renderer warmed up for ``key``, once, if it is done."""
-        if self.key != key or self.busy or self.result is None:
-            return None
-        result, self.result, self.key = self.result, None, None
-        return result
+        """The renderer warmed up for ``key``, once, if it is done. One that is not (or that is
+        for another key) is not wanted any more: the loop goes ahead with a renderer of its own,
+        and the one being made is closed as it is done. It was kept, with all its pictures:
+        Almanac's on the 12.3", warmed up in 3.7 s where the first frame waits 2, 20 MB."""
+        with self._lock:
+            if self.key == key and self.result is not None:
+                result, self.result, self.key = self.result, None, None
+                return result
+        self.discard()
+        return None
 
     def discard(self) -> None:
-        """Close a warmed-up renderer nobody took."""
-        if self.result is not None and not self.busy:
-            self.result[0].close()
-            self.result = None
-        self.key = None
+        """Close a warmed-up renderer nobody took; one still being made, as it is done."""
+        with self._lock:
+            result, self.result, self.key = self.result, None, None
+        if result is not None:
+            result[0].close()
 
     def close(self) -> None:
         if self.thread is not None:
