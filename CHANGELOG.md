@@ -173,6 +173,14 @@
   (`engine: the stream's encoder: ...`).
 
 **Lighter**
+- **The rolling seconds a third lighter, and in their own colour as they roll.** A letter
+  rolling a part of a pixel at a time was moved with its colours, which left its faintest
+  pixels in what the rounding of so little made of them (of Lumen's #2EE6D6, (0, 170, 170)
+  among others): the text in motion was of many colours, and its glow was blurred from those
+  with every frame of the roll. Only a letter's opacity moves now; it and its glow keep the
+  text's colour, as when it stands. A frame of Lumen's rolling seconds takes 1.5 instead of
+  2.4 ms, the main loop half a millisecond less a frame; the look the same (the glow at most
+  three levels apart on Lumen's backdrop).
 - **The engine lays a frame four pixels at a time, graphs straight from their strips.** Where
   the processor has SSSE3 (Intel's since 2006, AMD's since 2011), the engine lays each layer
   over the frame four pixels in one go, as Pillow lays them, to the bit; on others one by

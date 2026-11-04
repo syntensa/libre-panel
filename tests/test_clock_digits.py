@@ -8,9 +8,9 @@ from datetime import datetime, timedelta
 
 import numpy
 import pytest
-from PIL import ImageChops
+from PIL import Image, ImageChops
 
-from libre_panel.render.renderer import DIGITS_S, Renderer
+from libre_panel.render.renderer import DIGITS_S, Renderer, _moved
 from libre_panel.sensors.base import Snapshot
 from libre_panel.theme.model import builtin_themes_dir, parse_theme
 
@@ -113,6 +113,45 @@ def test_a_roll_measures_its_letters_once_not_in_every_frame():
         del font.getbbox, font.getlength
     assert asked == []
     assert shown == expected  # the same pixels
+
+
+def test_a_letter_in_motion_keeps_its_colour_and_so_does_its_glow():
+    """A rolling letter moves a part of a pixel at a time: only its opacity moves, its colour
+    stays (moved with its colours, a faint pixel's colour was what the rounding left of it,
+    and its glow, blurred from those, of many colours): the rolling seconds and their glow
+    are all in the text's colour, as when they stand (Lumen's)."""
+    renderer = clock(digits="roll", tabular=True, color="#2EE6D6", glow=0.6, glow_radius=12)
+    widget = renderer.widgets[0]
+    frame(renderer, 1)  # (the new text's letters made: the roll begun)
+    colours, rolled = set(), 0
+    for step in range(2, 16):
+        renderer.moving = False
+        now = START + timedelta(seconds=0.02 * step)
+        piece = renderer._draw_clock(widget, Snapshot(now=now), 0.0)
+        rolled += renderer.moving
+        pixels = numpy.asarray(piece.layer)
+        colours |= {tuple(c) for c in pixels[pixels[..., 3] > 0][:, :3].tolist()}
+    assert rolled == 14
+    assert colours == {(46, 230, 214)}
+
+
+def test_a_letter_moved_a_part_of_a_pixel_is_as_opaque_as_it_was_and_all_in_its_colour():
+    renderer = clock()
+    colour = (46, 230, 214)
+    glyph, _x, _ink = renderer._glyph(renderer.font("", 60), "8", (*colour, 255), 0.0, 2, 80)
+    for dy in (0.3, 0.5, 2.71):
+        own, row = _moved(glyph, dy, colour)  # (the renderer's own letter: all in its colour)
+        with_colours, also = _moved(glyph, dy)  # (one whose colours are not known: a finish's)
+        shift = (1, 0, 0, 0, 1, -(dy % 1))
+        size = (glyph.width, glyph.height + 1)
+        before = glyph.transform(size, Image.Transform.AFFINE, shift, Image.Resampling.BILINEAR)
+        assert row == also == int(dy)
+        assert with_colours.tobytes() == before.tobytes()  # (as it was moved before)
+        assert own.getchannel("A").tobytes() == before.getchannel("A").tobytes()  # to the bit
+        lit = numpy.asarray(own)[..., 3] > 0
+        assert {tuple(c) for c in numpy.asarray(own)[lit][:, :3].tolist()} == {colour}
+        # moved with its colours, its faint pixels were of others (what rounding left of them)
+        assert len({tuple(c) for c in numpy.asarray(before)[lit][:, :3].tolist()}) > 10
 
 
 def test_a_lettered_clock_rolls_its_own_letters():

@@ -475,22 +475,29 @@ def _ramp(w: int, h: int, edge: int) -> Image.Image:
     return column.resize((w, h))
 
 
-def _moved(image: Image.Image, dy: float) -> tuple[Image.Image, int]:
+def _moved(
+    image: Image.Image, dy: float, colour: tuple[int, int, int] | None = None
+) -> tuple[Image.Image, int]:
     """``image`` moved down by ``dy`` pixels, a fraction too: the image and the whole row it
-    goes to (a fraction blends two rows, as a letter in motion is)."""
+    goes to (a fraction blends two rows, as a letter in motion is). A letter all in ``colour``
+    (the renderer's own) moves only its opacity, the same as it moved before, and stays all in
+    its colour: moved with its colours (weighed by their opacity, as Pillow moves them), a
+    faint pixel's colour was what the rounding of so little left of it (of #2EE6D6 at an
+    opacity of 3, (0, 170, 170)), and a glow round the letter was blurred from those."""
     row = math.floor(dy)
     part = dy - row
     if part < 1 / 64:
         return image, row
     if part > 63 / 64:
         return image, row + 1
-    moved = image.transform(
-        (image.width, image.height + 1),
-        Image.Transform.AFFINE,
-        (1, 0, 0, 0, 1, -part),
-        resample=Image.Resampling.BILINEAR,
-    )
-    return moved, row
+    size, shift = (image.width, image.height + 1), (1, 0, 0, 0, 1, -part)
+    bilinear = Image.Resampling.BILINEAR
+    if colour is not None:
+        opacity = image.getchannel("A").transform(size, Image.Transform.AFFINE, shift, bilinear)
+        moved = Image.new("RGBA", size, (*colour, 0))
+        moved.putalpha(opacity)
+        return moved, row
+    return image.transform(size, Image.Transform.AFFINE, shift, bilinear), row
 
 
 def _between(one: Image.Image, other: Image.Image, part: int, parts: int) -> Image.Image:
@@ -2582,7 +2589,13 @@ class Renderer:
         up, down = max(0, -band_top), max(0, band_top + band_h - h)
         layer = Image.new("RGBA", (w, h + up + down), (0, 0, 0, 0))
         travel = DIGITS_TRAVEL * band_h
-        for was, comes, one, other in zip(old, new, before.glyphs, after.glyphs, strict=True):
+        # (the renderer's own letters are all in their colour; a finish's are not: no ink known)
+        own_before = before.inks if before.inks is not None else [False] * len(before.glyphs)
+        own_after = after.inks if after.inks is not None else [False] * len(after.glyphs)
+        colour = self.color(color)[:3]
+        for was, comes, one, other, one_ink, other_ink in zip(
+            old, new, before.glyphs, after.glyphs, own_before, own_after, strict=True
+        ):
             if was == comes:
                 if other is not None:
                     self._paste(layer, other[0], other[1], other[2] + up)
@@ -2602,9 +2615,13 @@ class Renderer:
                 self._paste(layer, Image.blend(*pair, e).convert("RGBA"), x0, up)
                 continue
             band = Image.new("RGBA", (x1 - x0, band_h), (0, 0, 0, 0))
-            for glyph, dy in ((one, -e * travel), (other, (1 - e) * travel)):
+            for glyph, ink, dy in (
+                (one, one_ink, -e * travel),
+                (other, other_ink, (1 - e) * travel),
+            ):
                 if glyph is not None:
-                    image, row = _moved(glyph[0], glyph[2] - band_top + dy)
+                    own = colour if ink is not False else None
+                    image, row = _moved(glyph[0], glyph[2] - band_top + dy, own)
                     self._paste(band, image, glyph[1] - x0, row)
             band.putalpha(ImageChops.multiply(band.getchannel("A"), _ramp(x1 - x0, band_h, edge)))
             self._paste(layer, band, x0, band_top + up)
