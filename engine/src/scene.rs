@@ -839,8 +839,66 @@ fn lay(layer: &Layer, out: &mut [u8], (x0, y0, x1, y1): Rect) {
 }
 
 /// RGBA pixels pasted through their alpha onto RGB ones, as Pillow does (paste_mask_RGBA):
-/// each channel (out (255 - a) + in a + 128), divided by 255 the way Pillow rounds.
+/// each channel (out (255 - a) + in a + 128), divided by 255 the way Pillow rounds. Four at a
+/// time where the processor has SSSE3, the same bytes: in 16-bit lanes the sums fit (65,153
+/// at most, and 65,407 once the division adds its share), and a clear pixel gives what lay
+/// there and an opaque one itself, so no pixel needs a way of its own.
 fn over(dst: &mut [u8], src: &[u8]) {
+    #[cfg(target_arch = "x86_64")]
+    if std::arch::is_x86_feature_detected!("ssse3") {
+        // SAFETY: the processor has SSSE3 (just asked)
+        let done = unsafe { over_ssse3(dst, src) };
+        over_one_by_one(&mut dst[done * 3..], &src[done * 4..]);
+        return;
+    }
+    over_one_by_one(dst, src);
+}
+
+/// :func:`over`, four pixels at a time: how many it laid (a multiple of four; the rest, at the
+/// end, for the caller).
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "ssse3")]
+unsafe fn over_ssse3(dst: &mut [u8], src: &[u8]) -> usize {
+    use std::arch::x86_64::*;
+    let quads = (dst.len() / 3).min(src.len() / 4) / 4;
+    let to_rgbx = _mm_setr_epi8(0, 1, 2, -1, 3, 4, 5, -1, 6, 7, 8, -1, 9, 10, 11, -1);
+    let to_rgb = _mm_setr_epi8(0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14, -1, -1, -1, -1);
+    let zero = _mm_setzero_si128();
+    let (full, half) = (_mm_set1_epi16(255), _mm_set1_epi16(128));
+    let lay = |d: __m128i, s: __m128i| {
+        // (each pixel's alpha in its four lanes: the fourth, dropped, is the alpha's own sum)
+        let a = _mm_shufflehi_epi16::<0xFF>(_mm_shufflelo_epi16::<0xFF>(s));
+        let t = _mm_add_epi16(
+            _mm_add_epi16(
+                _mm_mullo_epi16(d, _mm_sub_epi16(full, a)),
+                _mm_mullo_epi16(s, a),
+            ),
+            half,
+        );
+        _mm_srli_epi16::<8>(_mm_add_epi16(t, _mm_srli_epi16::<8>(t)))
+    };
+    for q in 0..quads {
+        // SAFETY: q < quads: the four pixels' 16 bytes of `src` and 12 of `dst` are in them
+        let (s, at) = (src.as_ptr().add(q * 16), dst.as_mut_ptr().add(q * 12));
+        let s = _mm_loadu_si128(s.cast());
+        let d = _mm_unpacklo_epi64(
+            _mm_loadl_epi64(at.cast()),
+            _mm_cvtsi32_si128(at.add(8).cast::<i32>().read_unaligned()),
+        );
+        let d = _mm_shuffle_epi8(d, to_rgbx);
+        let low = lay(_mm_unpacklo_epi8(d, zero), _mm_unpacklo_epi8(s, zero));
+        let high = lay(_mm_unpackhi_epi8(d, zero), _mm_unpackhi_epi8(s, zero));
+        let out = _mm_shuffle_epi8(_mm_packus_epi16(low, high), to_rgb);
+        _mm_storel_epi64(at.cast(), out);
+        at.add(8)
+            .cast::<i32>()
+            .write_unaligned(_mm_cvtsi128_si32(_mm_srli_si128::<8>(out)));
+    }
+    quads * 4
+}
+
+/// :func:`over`, a pixel at a time.
+fn over_one_by_one(dst: &mut [u8], src: &[u8]) {
     for (d, s) in dst.chunks_exact_mut(3).zip(src.chunks_exact(4)) {
         let a = u32::from(s[3]);
         if a == 0 {
@@ -1256,6 +1314,57 @@ mod tests {
             let mut out = dst;
             composite(&mut out, &src);
             assert_eq!(out, want, "{src:?} over {dst:?}");
+        }
+    }
+
+    #[test]
+    fn four_pixels_at_a_time_are_laid_as_one_by_one() {
+        // every alpha over every level, each pixel with others of every kind beside it, in
+        // spans of every length up to 37 (the rest at the end laid one by one)
+        let mut seed = 0x2545_f491_4f6c_dd1du64;
+        let mut next = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        for a in 0..=255u8 {
+            for level in (0..=255u8).step_by(3) {
+                let n = (usize::from(a) + usize::from(level)) % 38;
+                let mut src: Vec<u8> = (0..n * 4).map(|_| next() as u8).collect();
+                let mut dst: Vec<u8> = (0..n * 3).map(|_| next() as u8).collect();
+                for (i, p) in src.chunks_exact_mut(4).enumerate() {
+                    p[3] = match i % 4 {
+                        0 => a,
+                        1 => 0,
+                        2 => 255,
+                        _ => p[3],
+                    };
+                    if i % 2 == 0 {
+                        p[0] = level;
+                    }
+                }
+                if let Some(d) = dst.get_mut(1) {
+                    *d = level;
+                }
+                let mut want = dst.clone();
+                over_one_by_one(&mut want, &src);
+                over(&mut dst, &src);
+                assert_eq!(dst, want, "alpha {a}, level {level}, {n} pixels");
+            }
+        }
+        // and every source level over every level under it, for every alpha
+        for a in 0..=255u8 {
+            let src: Vec<u8> = (0..=255u8)
+                .flat_map(|s| (0..=255u8).flat_map(move |d| [s, d, 255 - s, a]))
+                .collect();
+            let dst: Vec<u8> = (0..=255u8)
+                .flat_map(|s| (0..=255u8).flat_map(move |d| [d, s, 255 - d]))
+                .collect();
+            let (mut fast, mut slow) = (dst.clone(), dst);
+            over(&mut fast, &src);
+            over_one_by_one(&mut slow, &src);
+            assert!(fast == slow, "alpha {a}");
         }
     }
 

@@ -173,6 +173,11 @@
   (`engine: the stream's encoder: ...`).
 
 **Lighter**
+- **The engine lays a frame four pixels at a time.** Where the processor has SSSE3 (Intel's
+  since 2006, AMD's since 2011), the engine lays each layer over the frame four pixels in one
+  go, as Pillow lays them, to the bit; on others one by one, as before. A frame of Lumen on
+  the 12.3" is composed in 3.5 instead of 3.9 to 4.0 ms; played back, the engine's work a
+  twentieth less in all, the pictures the same, byte for byte.
 - **Fans laid by the engine: a fifth less to it with every frame of Lumen.** A fan turning
   went to the engine as a new picture every frame, its ring and its rotor laid together here
   (Lumen's four on the 12.3": some 50 KB a frame, a fifth of what the frames sent; Arena's
