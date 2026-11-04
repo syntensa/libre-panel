@@ -834,7 +834,7 @@ class Fed(Layered):
      ("spur-studio", True, False, False, "dust")],
 )  # fmt: skip
 def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
-    engine, tmp_path, theme, half, rings, toast, views
+    engine, tmp_path, monkeypatch, theme, half, rings, toast, views
 ):
     """Pixel for pixel, a message over it too (one more layer, as it comes, shows and goes),
     the graphs' windows cut by the engine from their strips too, a theme's grid and dust too
@@ -862,6 +862,12 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
     dust = views == "dust"  # (and a theme's dust laid by the engine, SPUR's on the 9.2")
     if dust and not engines.makes_dust(engine):
         pytest.skip("needs libre-panel-engine that lays dust (cargo build --release)")
+    if dust:  # (its grains moved in each frame: in the helper thread they wait for a gap
+        # between frames, which these frames, drawn one after the other, rarely leave)
+        from libre_panel.render.dust import Dust
+
+        monkeypatch.setattr(Dust, "submit", property(lambda self: None, lambda self, v: None),
+                            raising=False)  # fmt: skip
     clock, host = Clock(1000.0), PluginHost()
     size = (1920, 480) if theme.startswith("spur") else (1920, 720)
     display = Fed(engine, size, tmp_path / "frames.rgb", half, rings, bool(views), globes,
@@ -913,7 +919,7 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
                   if isinstance(f, scenes.SceneFrame) and f.scene.dust is not None]  # fmt: skip
         assert len(dusted) >= 25 and loop.renderer.native_dust
         assert all(any(wid == "\0grid" for wid, _ in scene.pieces) for scene in dusted)
-        assert len({id(scene.dust.taps) for scene in dusted}) >= 10
+        assert len({id(scene.dust.taps) for scene in dusted}) >= 20  # (moved in each frame)
     if laid:  # (the fans went as their parts, laid by the engine, their pixels not made here)
         lain = [p for f in display.frames if isinstance(f, scenes.SceneFrame)
                 for _wid, p in f.scene.pieces if isinstance(p.native, scenes.Laid)]  # fmt: skip
