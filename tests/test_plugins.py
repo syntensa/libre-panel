@@ -1285,7 +1285,10 @@ from libre_panel.plugins import Transition
 class Over(Transition):
     name = "demo.over"
     api = 1
-    duration = 1.2
+    # long: where the loop stalls as it begins (this file's first import, under Windows' virus
+    # scan in CI), the frames it missed are drawn at once, and a short one is over between two
+    # looks of the test at the last frame
+    duration = 10.0
     toasts = "over"
 
     def frame(self, old, new, t):
