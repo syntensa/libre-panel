@@ -184,3 +184,54 @@ def test_presentmon_is_a_box_of_the_setup_that_says_first_what_will_not_work_wit
     tester = read("packaging", "windows", "test_installer.py")
     assert 'TASKS = "autostart,presentmon,' in tester
     assert 'install(setup, TASKS.replace("presentmon,", ""))' in tester
+
+
+def test_the_windows_programs_say_who_made_them_and_start_with_a_loader_of_their_own():
+    """Defender's machine learning took 0.7.10's setup for a trojan (Trojan:Win32/Bearfoos.A!ml).
+    Every program of the Windows download says who made it (a version resource), starts with a
+    PyInstaller loader compiled on the runner, not the ready-made one that malware shares
+    (own_loader.py fails the build where it is that one), and every download gets GitHub's
+    signed attestation of where it was built, before the release is published."""
+    workflow = read(".github", "workflows", "release.yml")
+    install = workflow.index(
+        "PYINSTALLER_COMPILE_BOOTLOADER=1 pip install --no-binary pyinstaller pyinstaller"
+    )
+    check = workflow.index("python packaging/windows/own_loader.py shipped-pyinstaller/*.whl")
+    build = workflow.index("run: pyinstaller --noconfirm --clean packaging/pyinstaller")
+    resource = workflow.index('$info.CompanyName -ne "Libre Panel contributors"')
+    assert install < check < build < resource
+    spec = read("packaging", "pyinstaller", "libre-panel.spec")
+    assert spec.count("version=version_resource(") == 2  # (each program; the sensor service)
+    assert '("CompanyName", "Libre Panel contributors")' in spec
+    for name in ("libre-panel", "LibrePanel", "libre-panel-sensors"):
+        assert f'"{name}": "Libre Panel' in spec
+    release = workflow[workflow.index("  github-release:") : workflow.index("  pypi:")]
+    assert "id-token: write" in release and "attestations: write" in release
+    attest = release.index("uses: actions/attest@v4")
+    assert release.index("- name: SHA-256 sums") < attest < release.index("- name: Publish the")
+    for kind in ("exe", "zip", "AppImage", "tar.gz", "whl"):
+        assert f"artifacts/*.{kind}\n" in release
+
+
+def test_own_loader_fails_where_the_loader_is_the_one_pyinstaller_ships(tmp_path, monkeypatch):
+    import types
+    import zipfile
+
+    package = tmp_path / "PyInstaller"
+    loaders = package / "bootloader" / "Windows-64bit-intel"
+    loaders.mkdir(parents=True)
+    fake = types.ModuleType("PyInstaller")
+    fake.__file__ = str(package / "__init__.py")
+    monkeypatch.setitem(sys.modules, "PyInstaller", fake)
+    wheel = tmp_path / "pyinstaller-9.9-py3-none-win_amd64.whl"
+    with zipfile.ZipFile(wheel, "w") as shipped:
+        for name in ("run.exe", "runw.exe"):
+            shipped.writestr(f"PyInstaller/bootloader/Windows-64bit-intel/{name}", b"MZ ready-made")
+    own_loader = load("own_loader_wiring", PACKAGING / "windows" / "own_loader.py")
+    (loaders / "run.exe").write_bytes(b"MZ compiled here")
+    (loaders / "runw.exe").write_bytes(b"MZ compiled here, windowed")
+    assert own_loader.main(str(wheel)) == 0
+    (loaders / "runw.exe").write_bytes(b"MZ ready-made")  # (the shipped one)
+    assert own_loader.main(str(wheel)) == 1
+    (loaders / "run.exe").unlink()  # (none at all)
+    assert own_loader.main(str(wheel)) == 1

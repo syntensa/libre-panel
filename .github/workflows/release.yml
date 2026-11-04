@@ -78,7 +78,24 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - run: pip install ".[usb,serial,tray,media,mqtt,screen]" pyinstaller
+      - run: pip install ".[usb,serial,tray,media,mqtt,screen]"
+      - name: PyInstaller, on Windows its loader compiled here
+        # Every program of the Windows download starts with PyInstaller's loader. The one it
+        # ships ready-made is the same file in countless programs, malware among them, and
+        # antivirus programs that judge by likeness took Libre Panel's for a trojan
+        # (Defender's "Trojan:Win32/Bearfoos.A!ml", 0.7.10): compiled from PyInstaller's
+        # source by this runner's compiler, it is Libre Panel's own. own_loader.py checks that
+        # it is not the shipped one.
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then
+            PYINSTALLER_COMPILE_BOOTLOADER=1 pip install --no-binary pyinstaller pyinstaller
+            version=$(python -c "from importlib.metadata import version; print(version('pyinstaller'))")
+            pip download "pyinstaller==$version" --only-binary :all: --no-deps -d shipped-pyinstaller
+            python packaging/windows/own_loader.py shipped-pyinstaller/*.whl
+          else
+            pip install pyinstaller
+          fi
       - name: Version
         shell: bash
         run: |
@@ -157,6 +174,20 @@ jobs:
             --x264-source "$recipe"
       - name: Build
         run: pyinstaller --noconfirm --clean packaging/pyinstaller/libre-panel.spec
+      - name: The programs say who made them (Windows)
+        # Their version resource (the spec's version_resource): what Explorer and Windows
+        # Security show of a program, and what an antivirus program weighs; the setup has its
+        # own from libre-panel.iss.
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          foreach ($exe in "LibrePanel.exe", "libre-panel.exe", "sensors/libre-panel-sensors.exe") {
+            $info = (Get-Item "dist/libre-panel/$exe").VersionInfo
+            if ($info.CompanyName -ne "Libre Panel contributors" -or $info.ProductVersion -ne $env:VERSION) {
+              throw "$exe says nothing of itself: $($info | Format-List | Out-String)"
+            }
+            "{0}: {1}, {2}, {3}" -f $exe, $info.FileDescription, $info.CompanyName, $info.ProductVersion
+          }
       - name: Smoke test (render)
         shell: bash
         run: '"$CLI" preview spur-ii -o smoke.png'
@@ -256,6 +287,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write  # (GitHub's signature on where each file was built: the attestations)
+      attestations: write
     env:
       TAG: ${{ inputs.draft != '' && format('v{0}', inputs.draft) || github.ref_name }}
       DRAFT: ${{ inputs.draft }}
@@ -282,6 +315,18 @@ jobs:
           (cd artifacts && sha256sum -- *) > SHA256SUMS
           mv SHA256SUMS artifacts/
           cat artifacts/SHA256SUMS
+      - name: Where each file was built (attestations)
+        # GitHub signs for each file, in public (Sigstore), that this workflow built it from
+        # this commit of this repository: `gh attestation verify FILE --repo
+        # syntensa/libre-panel` checks a download against it (README's FAQ)
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            artifacts/*.exe
+            artifacts/*.zip
+            artifacts/*.AppImage
+            artifacts/*.tar.gz
+            artifacts/*.whl
       - name: Publish the release with all files
         env:
           GH_TOKEN: ${{ github.token }}

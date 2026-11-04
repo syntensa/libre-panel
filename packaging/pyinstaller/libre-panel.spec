@@ -4,8 +4,10 @@
 # LibrePanel.exe      Windows: the tray app without a console window
 # sensors\libre-panel-sensors.exe   Windows: the sensor service, a program of its own
 import importlib.util
+import re
 import shutil
 import sys
+from importlib.metadata import version
 from pathlib import Path
 
 from PyInstaller.utils.hooks import (
@@ -107,6 +109,47 @@ else:
 icon = str(ROOT / "packaging" / "icons" / "libre-panel.ico") if sys.platform == "win32" else None
 
 
+def version_resource(name, description):
+    """What a Windows program says of itself (its version resource: Explorer's Details, Windows
+    Security's alerts, the antivirus programs' judgement): who made it, what it is and which
+    version, as the setup says (packaging/windows/libre-panel.iss); None elsewhere. A program
+    that says nothing of itself looks like much else that does not, malware among it."""
+    if sys.platform != "win32":
+        return None
+    from PyInstaller.utils.win32 import versioninfo
+
+    text = version("libre-panel")
+    # four numbers, as the release's NUMERIC: a hotfix's (0.6.8.1) as it is, 0.7.0rc1 with a 0
+    found = re.findall(r"\d+", text)[: 4 if re.fullmatch(r"[\d.]+", text) else 3]
+    numbers = tuple(int(n) for n in (found + ["0"] * 4)[:4])
+    strings = [
+        ("CompanyName", "Libre Panel contributors"),
+        ("FileDescription", description),
+        ("FileVersion", text),
+        ("InternalName", name),
+        ("LegalCopyright", "Libre Panel contributors, GPL-3.0-or-later"),
+        ("OriginalFilename", f"{name}.exe"),
+        ("ProductName", "Libre Panel"),
+        ("ProductVersion", text),
+    ]
+    return versioninfo.VSVersionInfo(
+        ffi=versioninfo.FixedFileInfo(filevers=numbers, prodvers=numbers),
+        kids=[
+            versioninfo.StringFileInfo([versioninfo.StringTable(
+                "040904B0", [versioninfo.StringStruct(key, value) for key, value in strings]
+            )]),
+            versioninfo.VarFileInfo([versioninfo.VarStruct("Translation", [0x0409, 1200])]),
+        ],
+    )  # fmt: skip
+
+
+DESCRIPTIONS = {
+    "libre-panel": "Libre Panel (command line)",
+    "LibrePanel": "Libre Panel",
+    "libre-panel-sensors": "Libre Panel sensor service",
+}
+
+
 def program(script, name, console):
     analysis = Analysis(  # noqa: F821
         [str(HERE / script)], datas=datas, binaries=binaries, hiddenimports=hiddenimports
@@ -119,6 +162,7 @@ def program(script, name, console):
         name=name,
         console=console,
         icon=icon,
+        version=version_resource(name, DESCRIPTIONS[name]),
     )
     return [exe, analysis.binaries, analysis.datas]
 
@@ -180,6 +224,7 @@ if sys.platform == "win32":
         name="libre-panel-sensors",
         console=True,  # a service has no window; errors go to its log, not to a dialog
         icon=icon,
+        version=version_resource("libre-panel-sensors", DESCRIPTIONS["libre-panel-sensors"]),
     )
     COLLECT(service_exe, service.binaries, service.datas, name="libre-panel-sensors")  # noqa: F821
     # COLLECT builds into DISTPATH only: move it into the program's folder

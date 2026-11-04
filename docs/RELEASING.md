@@ -18,7 +18,9 @@ Libre Panel ships three ways; one git tag produces all of them.
    variable `PYPI_UPLOAD` = `true` (Settings → Secrets and variables →
    Actions → Variables). Without it, releases skip PyPI.
 3. **Code signing (Windows, recommended):** unsigned `.exe` files trigger
-   SmartScreen warnings. Free signing for open source is available through
+   SmartScreen warnings, and Defender's machine learning takes them for malware
+   more readily (0.7.10's setup was taken for `Trojan:Win32/Bearfoos.A!ml`).
+   Free signing for open source is available through
    [SignPath Foundation](https://signpath.org); add the signing step to the
    Windows job once approved.
 
@@ -44,7 +46,19 @@ that CHANGELOG.md has its section, runs the tests, builds the PyInstaller
 bundles and tests each download. Only when all of that passed, it publishes
 the GitHub Release with all files and `SHA256SUMS`, the SHA-256 of each (the
 app's *Update to* checks its download against it), its notes taken from the
-CHANGELOG section. Then the PyPI upload, after approval, if it is set up.
+CHANGELOG section, and GitHub's signed attestation for each file that this
+workflow built it from this commit (`gh attestation verify FILE --repo
+syntensa/libre-panel`). Then the PyPI upload, after approval, if it is set up.
+The Windows programs carry a version resource (who made them, which version)
+and start with a PyInstaller loader compiled on the runner, not the ready-made
+one that malware shares (`packaging/windows/own_loader.py` checks it): both
+make an antivirus program's guess less likely to take them for malware.
+
+After a release, submit its Windows setup and the programs of its portable zip
+to Microsoft as a software developer
+([submit a file](https://www.microsoft.com/en-us/wdsi/filesubmission),
+*Incorrectly detected as malware/malicious* where Defender already flags one):
+Microsoft looks at them, and Defender learns them before people download them.
 
 A version like `0.7.0rc1` (with a section `## 0.7.0rc1` in CHANGELOG.md) is a
 pre-release to try before everyone has it: it becomes a **draft**, which only

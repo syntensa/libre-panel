@@ -3,6 +3,16 @@
 ## Unreleased
 
 **Security**
+- **Windows downloads that say who made them, and where they were built.** Microsoft Defender
+  took 0.7.10's setup for a trojan (`Trojan:Win32/Bearfoos.A!ml`: a guess of its machine
+  learning, not a match with known malware; a false alarm) and removed a program of it. The
+  programs of the Windows download now say who made them and which version they are (their
+  version resource), and they start with a PyInstaller loader compiled for Libre Panel by the
+  release build, not the ready-made one that countless programs share, malware among them:
+  both are what such guesses weigh. Every file of a release comes with GitHub's signed
+  attestation of the workflow and the commit it was built from (`gh attestation verify FILE
+  --repo syntensa/libre-panel`), besides its SHA-256 in `SHA256SUMS`, and the README says how
+  to check a download that Defender flags.
 - **With the highest rights, nothing more from where any program may write.** Started with
   them (the elevated start at login, or *Run as administrator*), Libre Panel reads
   `config.toml` from your settings folder, which every program you run may change, also one

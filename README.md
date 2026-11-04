@@ -352,7 +352,8 @@ Windows and Linux.
 
 1. **Close the vendor app.** It keeps the panel to itself.
 2. **Start Libre Panel** with the panel plugged in. The Windows downloads are not code-signed
-   yet: SmartScreen asks once (*More info → Run anyway*). On Linux, *Start* offers to give your
+   yet: SmartScreen asks once (*More info → Run anyway*), and Microsoft Defender has taken one
+   for a trojan ([a false alarm, and how to be sure](#faq)). On Linux, *Start* offers to give your
    user access to the panel ([what it does](docs/CONFIGURATION.md#linux-sensors-and-panel-access)).
 3. **Pick a look.** *Start* asks "How should it look?" with the themes made for the panel it
    found: Lumen on the 8.8" and 9.2" bars, Libre Default on the others.
@@ -547,6 +548,30 @@ account in the Windows group "Performance Log Users", which the setup's third bo
 ([how](docs/CONFIGURATION.md#more-sensor-sources)). Where RivaTuner Statistics Server runs
 anyway, Libre Panel can take the frame rates from it instead. The cooling analysis reads
 FanControl's fan curves, if you use FanControl.
+</details>
+
+<details>
+<summary><b>Windows Defender says it is a trojan. Is it?</b></summary>
+<br>
+
+No, it is a false alarm. A detection whose name ends in `!ml`, as `Trojan:Win32/Bearfoos.A!ml`
+does, is a guess of Defender's machine learning, not a match with known malware, and such
+guesses hit new programs that are not signed and are built with PyInstaller, as Libre Panel's
+are. To be sure that your file is the one built here:
+
+- **Its SHA-256** is the one in `SHA256SUMS` on the release's page. In PowerShell:
+  `Get-FileHash .\libre-panel-0.8.0-windows-x64-setup.exe` (Linux: `sha256sum -c SHA256SUMS`).
+- **Where it was built:** from 0.8.0 on, GitHub signs for every download that this
+  repository's release workflow built it, and from which commit:
+  `gh attestation verify libre-panel-0.8.0-windows-x64-setup.exe --repo syntensa/libre-panel`.
+
+When it is, allow it in *Windows Security → Virus & threat protection → Protection history*
+(*Actions → Allow on device*), run the setup again, and report the file to Microsoft as a false
+alarm ([submit a file](https://www.microsoft.com/en-us/wdsi/filesubmission), *Incorrectly
+detected as malware/malicious*). When it is not, it is not from here: delete it, and download
+Libre Panel from its [releases](https://github.com/syntensa/libre-panel/releases) only. From
+0.8.0 on the programs also say who made them, and the loader they start with is compiled for
+Libre Panel alone, not the one many programs share; signing the downloads is planned.
 </details>
 
 <details>
