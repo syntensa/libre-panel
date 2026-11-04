@@ -8,6 +8,7 @@ import pytest
 from PIL import Image
 
 from libre_panel.render import renderer as R
+from libre_panel.render import scene as scenes
 from libre_panel.sensors.demo import demo_snapshot
 from libre_panel.theme.model import find_theme, load_theme
 
@@ -26,16 +27,23 @@ def laid_one_by_one(renderer, widget, rows):
     return layer
 
 
+@pytest.mark.parametrize("cut", [False, True])  # (cut by an engine from the bars' parts)
 @pytest.mark.parametrize("name", ["arena-1920x720", "arena"])
-def test_the_bars_laid_in_one_array_are_the_bars_laid_one_by_one(name, monkeypatch):
+def test_the_bars_laid_in_one_array_are_the_bars_laid_one_by_one(name, cut, monkeypatch):
     renderer = R.Renderer(load_theme(find_theme(name)), animate=True)
     renderer.continuous = renderer.dither = True
-    checked = []
+    renderer.native_views = cut
+    checked, views = [], 0
     piece = R.Renderer._list_piece
 
     def compared(self, widget, rows, part="all"):
+        nonlocal views
         got = piece(self, widget, rows, part)
         if part == "levels":
+            if isinstance(got.native, scenes.View):  # (its pixels not made: made now)
+                assert got.native.layer is got.layer and not got.layer.composed
+                assert got.layer.info["bars"]  # (where its bars lie: as for the picture)
+                views += 1
             want = laid_one_by_one(self, widget, rows)
             assert got.layer.size == want.size
             assert np.array_equal(np.asarray(got.layer), np.asarray(want)), widget["id"]
@@ -52,6 +60,7 @@ def test_the_bars_laid_in_one_array_are_the_bars_laid_one_by_one(name, monkeypat
             renderer.render(snap, now)
         assert {"columns", "bars"} <= set(checked) and len(checked) >= 40
         assert renderer.warnings == []
+        assert views >= 40 if cut else views == 0  # (all cut so: no bar lies on another)
     finally:
         renderer.close()
 

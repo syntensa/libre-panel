@@ -3617,7 +3617,9 @@ class Renderer:
 
         def ends() -> tuple:
             empty, full = (self._bar_piece(bar, f, paint, x, y, w, h).layer for f in (0.0, 1.0))
-            return empty, full, _planes(empty), _planes(full)  # (pictures, and their arrays)
+            planes = _planes(empty), _planes(full)
+            # (pictures, their arrays, and those as pictures: what an engine cuts, _Levels)
+            return empty, full, *planes, *(Image.fromarray(a, "RGBA") for a in planes)
 
         kept = _Bar.of(image, frac, direction, bar["radius"],
                        lambda: self._list_bar_ends.make(look, ends))  # fmt: skip
@@ -3635,11 +3637,16 @@ class Renderer:
         margin = max(2, widget["font_size"] // 3)  # room for glyphs that overhang
         x, y = widget["x"], widget["y"]
         if part == "levels" and rows and widget["style"] != "cells":  # (the bars of rows, columns)
-            levels = _Levels((w + 2 * margin, h + 2 * margin), (margin, margin), (w, h))
+            size = (w + 2 * margin, h + 2 * margin)
+            levels = _Levels(size, (margin, margin), (w, h), cut=self.native_views)
             if widget["style"] == "columns":
                 self._list_columns(None, levels, widget, rows)
             elif widget["style"] != "fans":
                 self._list_rows(None, levels, widget, rows)
+            if levels.cuts:  # cut by the engine from the bars' parts it keeps, each sent once
+                view = scenes.viewed(size, levels.cuts)
+                view.layer.info["bars"] = tuple(levels.boxes)  # (where its bars lie: _text_apart)
+                return Piece(view.layer, x - margin, y - margin, [x, y, w, h], native=view)
             image = levels.image()
             image.info["bars"] = tuple(levels.boxes)  # (where its bars lie: _text_apart)
             return Piece(image, x - margin, y - margin, [x, y, w, h])
@@ -5205,7 +5212,7 @@ class _Bar:
     own part is kept as an array (:func:`_planes`): laid in one array with the others while
     the bars glide (:class:`_Levels`), as a picture on a list's picture otherwise."""
 
-    __slots__ = ("cut", "ends", "middle", "vertical", "whole", "filled_first")
+    __slots__ = ("cut", "ends", "middle", "vertical", "whole", "filled_first", "pictures")
 
     MARGIN = 2  # pixels beyond the rounded end: where the reduction meets it, and a rounding
 
@@ -5216,6 +5223,7 @@ class _Bar:
         self.cut = (0, 0)
         self.vertical = False
         self.filled_first = False  # the full bar's part comes first (down, right)
+        self.pictures: dict[str, Image.Image] | None = None  # (of its arrays: picture())
 
     @classmethod
     def of(cls, image: Image.Image, frac: float, direction: str, radius: int,
@@ -5251,6 +5259,16 @@ class _Bar:
     @property
     def nbytes(self) -> int:
         return int((self.whole if self.whole is not None else self.middle).nbytes)
+
+    def picture(self, which: str) -> Image.Image:
+        """Its ``whole`` or ``middle`` array as a picture, made once: one an engine that cuts a
+        list's levels keeps (scene.View, :class:`_Levels`)."""
+        if self.pictures is None:
+            self.pictures = {}
+        found = self.pictures.get(which)
+        if found is None:
+            found = self.pictures[which] = Image.fromarray(getattr(self, which), "RGBA")
+        return found
 
     def paste(self, renderer: Renderer, layer: Image.Image, x: int, y: int) -> None:
         """Onto ``layer`` at ``x``, ``y``: the same pixels the whole bar gives there (a pixel
@@ -5292,15 +5310,23 @@ class _Levels:
     ``room`` its size: a bar is cut to it, as on a picture of that size."""
 
     def __init__(self, size: tuple[int, int], origin: tuple[int, int],
-                 room: tuple[int, int]) -> None:  # fmt: skip
+                 room: tuple[int, int], cut: bool = False) -> None:  # fmt: skip
         import numpy as np
 
         self.array = np.zeros((size[1], size[0], 4), np.uint8)
         self.origin, self.room = origin, room
         self.boxes: list[tuple[int, int, int, int]] = []  # where bars lie (x0, y0, x1, y1)
+        # with ``cut``: the parts as an engine cuts the levels from pictures it keeps (picture,
+        # x and y in it, x and y in the levels, w, h: scene.View), pasted where nothing lies
+        # yet; None where one lies on another (laid on it: not cut so)
+        self.cuts: list[tuple[Image.Image, int, int, int, int, int, int]] | None = (
+            [] if cut else None
+        )
 
-    def put(self, pixels: Any, x: int, y: int) -> None:
-        """``pixels`` (from :func:`_planes`) with their top left at (x, y) of the place."""
+    def put(self, pixels: Any, x: int, y: int, picture: Image.Image | None = None,
+            at: tuple[int, int] = (0, 0)) -> None:  # fmt: skip
+        """``pixels`` (from :func:`_planes`) with their top left at (x, y) of the place; they
+        are those of ``picture`` from ``at`` on (a picture an engine keeps: :attr:`cuts`)."""
         h, w = pixels.shape[:2]
         x0, y0 = max(x, 0), max(y, 0)
         x1, y1 = min(x + w, self.room[0]), min(y + h, self.room[1])
@@ -5315,8 +5341,15 @@ class _Levels:
             laid = Image.fromarray(np.ascontiguousarray(under), "RGBA")
             laid.alpha_composite(Image.fromarray(np.ascontiguousarray(part), "RGBA"))
             under[...] = np.asarray(laid)
+            self.cuts = None
         else:
             under[...] = part
+            if self.cuts is not None:
+                if picture is None:
+                    self.cuts = None
+                else:
+                    sx, sy = at[0] + x0 - x, at[1] + y0 - y
+                    self.cuts.append((picture, sx, sy, ox + x0, oy + y0, x1 - x0, y1 - y0))
 
     def put_bar(self, bar: _Bar, x: int, y: int) -> None:
         """A kept bar: the pixels :meth:`_Bar.paste` gives, and the box all of it lies in
@@ -5328,20 +5361,28 @@ class _Levels:
         if x1 > x0 and y1 > y0:
             ox, oy = self.origin
             self.boxes.append((ox + x0, oy + y0, ox + x1, oy + y1))
+        cutting = self.cuts is not None  # (the pictures of the parts, for an engine to cut)
         if bar.whole is not None:
-            self.put(bar.whole, x, y)
+            self.put(bar.whole, x, y, bar.picture("whole") if cutting else None)
             return
         empty, full = bar.ends[2], bar.ends[3]  # type: ignore[index]
         first, last = (full, empty) if bar.filled_first else (empty, full)
+        shown = bar.ends[4:6] if cutting else (None, None)  # type: ignore[index]
+        firsts, lasts = (shown[1], shown[0]) if bar.filled_first else shown
+        middle = bar.picture("middle") if cutting else None
         a, b = bar.cut
         length = first.shape[0] if bar.vertical else first.shape[1]
-        for plane, at in ((first[:a] if bar.vertical else first[:, :a], 0), (bar.middle, a),
-                          (last[b:] if bar.vertical else last[:, b:], b)):  # fmt: skip
+        parts = (  # (each: its pixels, where it lies along the bar, its picture, from where)
+            (first[:a] if bar.vertical else first[:, :a], 0, firsts, 0),
+            (bar.middle, a, middle, 0),
+            (last[b:] if bar.vertical else last[:, b:], b, lasts, b),
+        )
+        for plane, at, picture, start in parts:
             if plane.shape[0] and plane.shape[1] and at < length:
                 if bar.vertical:
-                    self.put(plane, x, y + at)
+                    self.put(plane, x, y + at, picture, (0, start))
                 else:
-                    self.put(plane, x + at, y)
+                    self.put(plane, x + at, y, picture, (start, 0))
 
     def image(self) -> Image.Image:
         return Image.fromarray(self.array, "RGBA")

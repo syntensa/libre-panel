@@ -173,6 +173,14 @@
   (`engine: the stream's encoder: ...`).
 
 **Lighter**
+- **A list's gliding bars cut by the engine: Arena's stream to it a third of what it was.**
+  While a list's bars glide (Arena's temperatures, threads and fans), they were laid here as
+  one picture of the whole list and went to the engine as it, up to 555 KB a frame on the
+  12.3". Each bar was already made of the bar empty, the bar full and the part round its
+  tip; where the engine cuts pictures, the bars go as those parts now, the empty and the
+  full bar once and each tip once, and the engine cuts them to the same pixels. Arena on the
+  12.3" (25 a second): 165 instead of 566 KB to the engine a frame, the app 41 to 42
+  instead of 43 to 45 % of a core.
 - **A graph's next strip grown by the engine from the one before.** A strip made of the one
   before (its first columns the old one's, the rest drawn anew: about a tenth of it each
   second) went to the engine whole, some 760 KB each time on the 12.3". The engine grows it
