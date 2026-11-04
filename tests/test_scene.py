@@ -376,6 +376,26 @@ def snap_at(k):
     return Snapshot(readings={"v": Reading("v", float(value))})
 
 
+def test_what_lay_under_the_pieces_composed_here_goes_once_the_engine_composes_them():
+    """The frames composed here before the engine takes them (a panel's first few) keep what
+    lies under their changing pieces: it goes with the first frame of layers (Lumen on the
+    12.3": 7 MB that no frame found after)."""
+    from test_motion import graph, theme, video
+
+    from libre_panel.render.renderer import Renderer
+
+    renderer = video(Renderer(theme(graph(), size=(200, 100))), fps=25)
+    for k in range(6):
+        frame, _ = renderer.render(snap_at(k), 1000 + k / 25)
+        assert not isinstance(frame, scenes.SceneFrame)
+    assert renderer._underlays.size > 0
+    frame, _ = renderer.render(snap_at(6), 1000 + 6 / 25, scene=True)
+    assert isinstance(frame, scenes.SceneFrame)
+    assert renderer._underlays.size == 0
+    own, _ = renderer.render(snap_at(7), 1000 + 7 / 25)  # (composed here again: as before)
+    assert not isinstance(own, scenes.SceneFrame) and own.size == (200, 100)
+
+
 def test_a_turning_globe_goes_to_the_engine_once_and_each_step_as_its_number():
     """Its tables once, its map once a light and its air every two degrees (as sources), each
     step a layer with its number and your place's mark; its pixels, made only when asked for,

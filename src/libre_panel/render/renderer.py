@@ -1555,10 +1555,14 @@ class Renderer:
         """The frame of ``pieces`` for the engine to compose: what changed is the engine's to
         work out. The frame composed here last goes, with the pieces it was made of (on the
         12.3" 5.5 MB and some more, kept the whole time the engine composed): one composed
-        here again (a transition, a message drawn here) is composed whole, once."""
+        here again (a transition, a message drawn here) is composed whole, once. What lay
+        under its pieces goes too: the frames composed here before the engine took them
+        (Lumen's eight at the start on the 12.3") left 7 MB of it, found by none after."""
         self.damage = None
         self._handed = None
         self._last = None
+        if self._underlays.size:
+            self._underlays.clear()
         self._swept = False
         self.scenes += 1
         color = self.color(self.theme.background_color)
