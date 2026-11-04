@@ -142,6 +142,19 @@ def wait_for(predicate, timeout=60.0):
 # -- the picture and the measurement -----------------------------------------------------------
 
 
+def test_the_check_s_picture_on_the_panel_is_one_of_its_own():
+    """The main loop marks the frame it shows (what changed, the time it is for); the check's
+    picture is drawn once and kept, and each showing gets its own: the one kept was marked so,
+    and the picture drawn anew no longer equal to it (this file after the video tests)."""
+    from libre_panel import colour_show
+
+    first = colour_show.picture((1920, 480), "A")
+    first.info["damage"], first.info["planned"] = [(0, 0, 16, 16)], 12.5
+    again = colour_show.picture((1920, 480), "A")
+    assert again is not first and again.info == {}
+    assert again == check_picture((1920, 480), "A")  # (the same pixels, and nothing more)
+
+
 def test_the_test_picture_has_every_patch_large_and_flat():
     for size in ((1920, 480), (480, 1920), (1920, 720), (480, 480), (1280, 720), (960, 320)):
         picture = check_picture(size)
@@ -912,11 +925,11 @@ def test_the_a_b_shows_the_picture_both_ways_and_then_the_theme_again(monkeypatc
     colour_show.begin(1, seconds=30)
     loop.step()
     assert panel.feeds[-1][:2] == ("card", None)
-    assert panel.shown[-1] is check_picture(theme.size, "A")
+    assert panel.shown[-1].tobytes() == check_picture(theme.size, "A").tobytes()
     now[0] += colour_show.SWITCH_S
     loop.step()
     assert panel.feeds[-1][:2] == ("processor", None)
-    assert panel.shown[-1] is check_picture(theme.size, "B")
+    assert panel.shown[-1].tobytes() == check_picture(theme.size, "B").tobytes()
     now[0] += colour_show.SWITCH_S
     loop.step()
     assert panel.feeds[-1][:2] == ("card", None)
@@ -926,11 +939,14 @@ def test_the_a_b_shows_the_picture_both_ways_and_then_the_theme_again(monkeypatc
     now[0] += colour_show.SWITCH_S
     loop.step()
     assert panel.feeds[-1][:2] == (None, "full")
-    assert panel.shown[-1] is check_picture(theme.size, "B")
+    assert panel.shown[-1].tobytes() == check_picture(theme.size, "B").tobytes()
     now[0] += 30  # over by its time
     loop.step()
     assert panel.feeds[-1][:2] == (None, None) and panel.shown[-1].size == theme.size
-    assert panel.shown[-1] is not check_picture(theme.size, "A")
+    assert panel.shown[-1].tobytes() not in (
+        check_picture(theme.size, "A").tobytes(),
+        check_picture(theme.size, "B").tobytes(),
+    )  # (the theme again)
     with pytest.raises(ValueError, match="kind"):
         colour_show.begin(1, kind="gamma")
     loop.close()
@@ -969,7 +985,7 @@ def test_a_display_of_a_plugin_without_a_feed_shows_the_picture_all_the_same(mon
     for kind in ("feed", "range"):
         colour_show.begin(1, seconds=30, kind=kind)
         loop.step()
-        assert display.frames[-1] is check_picture(display.frames[-1].size, "A")
+        assert display.frames[-1].tobytes() == check_picture(display.frames[-1].size, "A").tobytes()
     loop.close()
 
 

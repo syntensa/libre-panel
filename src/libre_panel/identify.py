@@ -33,9 +33,14 @@ def left() -> float:
     return max(0.0, _until - time.monotonic())
 
 
-@lru_cache(maxsize=8)
 def picture(number: int, size: tuple[int, int], colour: str = "#2EE6D6") -> Image.Image:
-    """The panel's number on black, as large as it fits, in ``colour``."""
+    """The panel's number on black, as large as it fits, in ``colour``: a picture of its own
+    (the main loop marks the frame it shows with what changed and when it is for)."""
+    return _numbered(number, size, colour).copy()
+
+
+@lru_cache(maxsize=8)
+def _numbered(number: int, size: tuple[int, int], colour: str) -> Image.Image:
     width, height = size
     image = Image.new("RGB", size, "black")
     draw = ImageDraw.Draw(image)

@@ -138,10 +138,12 @@ def adopt(told: dict[str, Any] | None) -> None:
 
 
 def picture(size: tuple[int, int], letter: str) -> Image.Image:
-    """The check's test picture at ``size`` with ``letter`` in its corner."""
+    """The check's test picture at ``size`` with ``letter`` in its corner: a picture of its own,
+    the drawn one kept (the main loop marks the frame it shows with what changed and when it is
+    for: the one kept was marked so, and compared unequal to itself drawn anew)."""
     from libre_panel.devices.colour_check import check_picture
 
-    return check_picture(size, letter)
+    return check_picture(size, letter).copy()
 
 
 def recover() -> dict[str, Any] | None:

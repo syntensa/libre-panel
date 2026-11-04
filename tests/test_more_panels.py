@@ -293,6 +293,10 @@ def test_each_panel_shows_its_number_for_a_moment(monkeypatch):
     picture = identify.picture(2, (480, 320), "#E0457B")
     assert picture.size == (480, 320) and picture.getbbox() is not None
     assert picture.getpixel((240, 160)) != (0, 0, 0) or picture.getcolors(256000)  # drawn
+    # drawn once, each showing its own: what the main loop marks on it does not stay
+    picture.info["damage"] = [(0, 0, 8, 8)]
+    again = identify.picture(2, (480, 320), "#E0457B")
+    assert again is not picture and again.info == {} and again.tobytes() == picture.tobytes()
     assert not identify.showing()
     identify.show(5)
     assert identify.showing()
