@@ -99,6 +99,92 @@ pub struct Layer {
     /// Its one colour (RGBA, through its alpha), where it is all that colour: no pixels kept
     /// (a card's inside, Layer::filled).
     fill: Option<[u8; 4]>,
+    /// Cut from sources (Scene::view): no pixels kept, laid from theirs.
+    cuts: Option<Box<Cuts>>,
+}
+
+/// How a layer cut from sources (Scene::view) is laid from their pixels, without pixels of
+/// its own: its parts, and for each band of its rows (down the layer) the spans of its columns
+/// and the part that shows in each, the last one pasted there (columns from, to, part).
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Cuts {
+    parts: Vec<Part>,
+    bands: Vec<Band>,
+}
+
+/// Of a layer cut from sources (Cuts): the columns of a row from, to, and the part in them.
+type Span = (usize, usize, usize);
+/// Its rows from, to, and the spans of each of them.
+type Band = (usize, usize, Vec<Span>);
+
+impl Cuts {
+    /// The cuts of a layer of `w` x `h` from `parts`, each pasted over those before it.
+    fn of(parts: &[Part], w: usize, h: usize) -> Cuts {
+        let lying: Vec<(usize, usize, usize, usize)> = parts
+            .iter()
+            .map(|p| {
+                let (dx, dy) = (i64::from(p.dx), i64::from(p.dy));
+                let x1 = (dx + p.w as i64).clamp(0, w as i64) as usize;
+                let y1 = (dy + p.h as i64).clamp(0, h as i64) as usize;
+                (
+                    dx.clamp(0, w as i64) as usize,
+                    dy.clamp(0, h as i64) as usize,
+                    x1,
+                    y1,
+                )
+            })
+            .collect();
+        let mut rows: Vec<usize> = lying
+            .iter()
+            .filter(|r| r.2 > r.0 && r.3 > r.1)
+            .flat_map(|r| [r.1, r.3])
+            .collect();
+        rows.sort_unstable();
+        rows.dedup();
+        let mut bands = Vec::new();
+        for band in rows.windows(2) {
+            let mut spans: Vec<Span> = Vec::new();
+            for (k, &(x0, y0, x1, y1)) in lying.iter().enumerate() {
+                if x1 > x0 && y0 <= band[0] && y1 >= band[1] {
+                    // pasted over the spans before it: those keep what it leaves of them
+                    let mut kept = Vec::with_capacity(spans.len() + 2);
+                    for &(a, b, j) in &spans {
+                        if b <= x0 || a >= x1 {
+                            kept.push((a, b, j));
+                            continue;
+                        }
+                        if a < x0 {
+                            kept.push((a, x0, j));
+                        }
+                        if b > x1 {
+                            kept.push((x1, b, j));
+                        }
+                    }
+                    kept.push((x0, x1, k));
+                    kept.sort_unstable();
+                    spans = kept;
+                }
+            }
+            if !spans.is_empty() {
+                bands.push((band[0], band[1], spans));
+            }
+        }
+        Cuts {
+            parts: parts.to_vec(),
+            bands,
+        }
+    }
+
+    /// From row `v` of the layer down: the row its spans end at, and those spans (where no
+    /// part lies, none, to the next band or past the last).
+    fn rows(&self, v: usize) -> (usize, &[Span]) {
+        let k = self.bands.partition_point(|band| band.1 <= v);
+        match self.bands.get(k) {
+            Some((v0, v1, spans)) if *v0 <= v => (*v1, spans),
+            Some((v0, _, _)) => (*v0, &[]),
+            None => (usize::MAX / 4, &[]),
+        }
+    }
 }
 
 impl Layer {
@@ -132,6 +218,7 @@ impl Layer {
             sources: Vec::new(),
             globe: None,
             fill: None,
+            cuts: None,
         })
     }
 
@@ -158,6 +245,7 @@ impl Layer {
             sources: Vec::new(),
             globe: None,
             fill: None,
+            cuts: None,
         })
     }
 
@@ -183,6 +271,7 @@ impl Layer {
             sources: Vec::new(),
             globe: None,
             fill: Some(rgba),
+            cuts: None,
         })
     }
 
@@ -382,7 +471,8 @@ impl Scene {
 
     /// Layer `id` at (x, y), `w` x `h` RGBA through its alpha, cut from sources: transparent
     /// where no part lies, each part pasted over those before it, nothing where it lies off its
-    /// source (as Pillow crops a picture, also beyond its edges, and pastes the crop).
+    /// source (as Pillow crops a picture, also beyond its edges, and pastes the crop). It keeps
+    /// no pixels: it is laid from the sources' (Cuts), which stay while it does.
     pub fn view(
         &mut self,
         id: u32,
@@ -392,7 +482,6 @@ impl Scene {
         if w == 0 || h == 0 || w > MOST_SIDE || h > MOST_SIDE {
             return Err(format!("a layer of {w}x{h}"));
         }
-        let mut pixels = vec![0u8; w * h * 4];
         let mut sources = Vec::with_capacity(parts.len());
         let (mut px0, mut py0, mut px1, mut py1) = (w, h, 0, 0);
         for part in parts {
@@ -414,18 +503,10 @@ impl Scene {
             }
             let (s0, s1) = (u0.max(-sx), u1.min(source.w as i64 - sx));
             for v in v0..v1 {
-                let row = ((dy + v) as usize * w + (dx + u0) as usize) * 4;
-                let line = &mut pixels[row..row + (u1 - u0) as usize * 4];
                 let sv = sy + v;
                 if !(0..source.h as i64).contains(&sv) || s1 <= s0 {
-                    line.fill(0);
                     continue;
                 }
-                let (left, on) = ((s0 - u0) as usize * 4, (s1 - s0) as usize * 4);
-                line[..left].fill(0);
-                let from = (sv as usize * source.w + (sx + s0) as usize) * 4;
-                line[left..left + on].copy_from_slice(&source.pixels[from..from + on]);
-                line[left + on..].fill(0);
                 // where it shows on this row of the layer: the source's shown columns in it
                 let (first, after) = source.shown[sv as usize];
                 let a = (first as i64 - sx).max(s0);
@@ -447,8 +528,19 @@ impl Scene {
         } else {
             (0, 0, 0, 0)
         };
-        let mut layer = Layer::cut(x, y, w, h, pixels, part)?;
-        layer.sources = sources;
+        let layer = Layer {
+            x: i64::from(x),
+            y: i64::from(y),
+            w,
+            how: How::Over,
+            pixels: Vec::new(),
+            part,
+            ring: None,
+            sources,
+            globe: None,
+            fill: None,
+            cuts: Some(Box::new(Cuts::of(parts, w, h))),
+        };
         self.layer(id, layer);
         Ok(())
     }
@@ -772,7 +864,12 @@ impl Scene {
                     pixels: pixels.clone(),
                 });
             }
-            lay(&self.layers[id], &mut pixels, (x0, y0, x1, y1));
+            lay(
+                &self.layers[id],
+                &self.sources,
+                &mut pixels,
+                (x0, y0, x1, y1),
+            );
         }
         if new_at == over.len() && over.len() > start {
             self.under[index] = Some(Under {
@@ -805,7 +902,7 @@ impl Scene {
 }
 
 /// `layer` laid on `out`, the pixels of the box (x0, y0)-(x1, y1) of the frame.
-fn lay(layer: &Layer, out: &mut [u8], (x0, y0, x1, y1): Rect) {
+fn lay(layer: &Layer, sources: &HashMap<u32, Source>, out: &mut [u8], (x0, y0, x1, y1): Rect) {
     let (px0, py0, px1, py1) = layer.part;
     // the part of the layer in the box, on the frame
     let lx0 = (layer.x + px0 as i64).max(x0 as i64);
@@ -822,6 +919,41 @@ fn lay(layer: &Layer, out: &mut [u8], (x0, y0, x1, y1): Rect) {
         for fy in ly0..ly1 {
             let dst_at = ((fy as usize - y0) * w + (lx0 as usize - x0)) * 3;
             over_colour(&mut out[dst_at..dst_at + span * 3], colour);
+        }
+        return;
+    }
+    if let Some(cuts) = &layer.cuts {
+        // band by band of the layer's rows in the box, span by span of each
+        let mut fy = ly0;
+        while fy < ly1 {
+            let (rows, spans) = cuts.rows((fy - layer.y) as usize);
+            let end = (layer.y + rows as i64).min(ly1);
+            for &(u0, u1, k) in spans {
+                // the span on the frame, in the box; of that, where its part lies on its source
+                let part = &cuts.parts[k];
+                let Some(source) = sources.get(&part.source) else {
+                    continue; // (kept while the layer is: Scene::frame)
+                };
+                let off = i64::from(part.sx) - i64::from(part.dx) - layer.x; // (frame to source)
+                let a = (layer.x + u0 as i64).max(lx0).max(-off);
+                let b = (layer.x + u1 as i64).min(lx1).min(source.w as i64 - off);
+                // its rows on its source (frame row to source row)
+                let down = i64::from(part.sy) - i64::from(part.dy) - layer.y;
+                let (r0, r1) = (fy.max(-down), end.min(source.h as i64 - down));
+                if a >= b || r0 >= r1 {
+                    continue;
+                }
+                let len = (b - a) as usize;
+                for ry in r0..r1 {
+                    let from = ((ry + down) as usize * source.w + (a + off) as usize) * 4;
+                    let at = ((ry as usize - y0) * w + (a as usize - x0)) * 3;
+                    over(
+                        &mut out[at..at + len * 3],
+                        &source.pixels[from..from + len * 4],
+                    );
+                }
+            }
+            fy = end;
         }
         return;
     }
@@ -974,6 +1106,52 @@ fn reverse(pixels: &mut [u8]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    impl Scene {
+        /// Layer `id`'s pixels, RGBA row by row (`h` rows): those it keeps, or of one cut from
+        /// sources, which keeps none, its parts pasted in turn on a clear picture, each crop
+        /// clear where it lies off its source (as Pillow crops and pastes).
+        fn picture_of(&self, id: u32, h: usize) -> Vec<u8> {
+            let layer = &self.layers[&id];
+            let Some(cuts) = &layer.cuts else {
+                return layer.pixels.clone();
+            };
+            let w = layer.w;
+            let mut out = vec![0u8; w * h * 4];
+            for p in &cuts.parts {
+                let source = &self.sources[&p.source];
+                for v in 0..p.h as i64 {
+                    let ly = i64::from(p.dy) + v;
+                    if !(0..h as i64).contains(&ly) {
+                        continue;
+                    }
+                    for u in 0..p.w as i64 {
+                        let lx = i64::from(p.dx) + u;
+                        if !(0..w as i64).contains(&lx) {
+                            continue;
+                        }
+                        let (sx, sy) = (i64::from(p.sx) + u, i64::from(p.sy) + v);
+                        let at = (ly as usize * w + lx as usize) * 4;
+                        let on = (0..source.w as i64).contains(&sx)
+                            && (0..source.h as i64).contains(&sy);
+                        let pixel = if on {
+                            let from = (sy as usize * source.w + sx as usize) * 4;
+                            [
+                                source.pixels[from],
+                                source.pixels[from + 1],
+                                source.pixels[from + 2],
+                                source.pixels[from + 3],
+                            ]
+                        } else {
+                            [0; 4]
+                        };
+                        out[at..at + 4].copy_from_slice(&pixel);
+                    }
+                }
+            }
+            out
+        }
+    }
 
     fn rgba(w: usize, h: usize, p: [u8; 4]) -> Vec<u8> {
         p.repeat(w * h)
@@ -1456,14 +1634,16 @@ mod tests {
         let parts = [part(5, 2, 0, 0, 0, 3, 2), part(6, 0, -1, 0, 0, 1, 2)];
         s.view(1, (1, 1, 3, 2), &parts).unwrap();
         let layer = &s.layers[&1];
-        let px = |x: usize, y: usize| &layer.pixels[(y * 3 + x) * 4..(y * 3 + x) * 4 + 4];
+        assert!(layer.pixels.is_empty()); // (none kept: laid from the sources')
+        let pixels = s.picture_of(1, 2);
+        let px = |x: usize, y: usize| &pixels[(y * 3 + x) * 4..(y * 3 + x) * 4 + 4];
         assert_eq!(px(0, 0), &[0, 0, 0, 0]); // (the second part: off its source)
         assert_eq!(px(0, 1), &[1, 1, 1, 255]);
         assert_eq!(px(1, 0), &[3, 0, 7, 255]);
         assert_eq!(px(1, 1), &[3, 1, 7, 255]);
         assert_eq!(px(2, 0), &[0, 0, 0, 0]); // (the first: beyond its source)
                                              // where it shows, worked out from the sources' rows: as a look at its pixels finds it
-        assert_eq!(layer.part, bounds(&layer.pixels, 3, 2, 4, |p| p[3] != 0));
+        assert_eq!(layer.part, bounds(&pixels, 3, 2, 4, |p| p[3] != 0));
         assert_eq!(layer.sources, vec![5, 6]);
         assert!(s
             .view(2, (0, 0, 1, 1), &[part(9, 0, 0, 0, 0, 1, 1)])
@@ -1477,6 +1657,137 @@ mod tests {
         s.frame(vec![3], false).unwrap();
         assert!(s.sources.is_empty()); // (gone with it)
         assert!(s.source(7, 2, 2, vec![0; 4]).is_err());
+    }
+
+    #[test]
+    fn frames_of_windows_laid_from_their_strips_are_those_of_the_windows_pixels() {
+        // a strip of pixels of every kind, and windows cut from it in many ways: laid from
+        // the strip's pixels, the frames are those of the windows' own pixels (as they were
+        // cut), between layers below and above, also turned half a turn and as they scroll
+        let mut seed = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = move || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        let (sw, sh) = (90usize, 40usize);
+        let mut picture = |w: usize, h: usize| -> Vec<u8> {
+            (0..w * h)
+                .flat_map(|_| {
+                    let r = next();
+                    let a = match (r >> 40) % 5 {
+                        0 => 0,
+                        1 => 255,
+                        _ => (r >> 24) as u8,
+                    };
+                    [r as u8, (r >> 8) as u8, (r >> 16) as u8, a]
+                })
+                .collect()
+        };
+        let strip = picture(sw, sh);
+        let (below, above) = (picture(64, 48), picture(20, 12));
+        let part = |sx, sy, dx, dy, w, h| Part {
+            source: 9,
+            sx,
+            sy,
+            dx,
+            dy,
+            w,
+            h,
+        };
+        type Window = ((i32, i32, usize, usize), Vec<Part>);
+        let windows: Vec<Window> = vec![
+            // all of it, and a graph's glow beside it
+            (
+                (5, 3, 40, 20),
+                vec![
+                    part(0, 0, 0, 0, 40, 20),
+                    part(80, 0, 0, 0, 4, 20),
+                    part(84, 0, 36, 0, 4, 20),
+                ],
+            ),
+            // partly off the frame, its part partly off the strip above and to the left
+            ((-7, -5, 40, 20), vec![part(-3, -2, 0, 0, 40, 20)]),
+            // off the strip to the right and below
+            ((40, 20, 30, 25), vec![part(70, 20, 0, 0, 30, 25)]),
+            // one over another, and where none lies
+            (
+                (10, 10, 30, 20),
+                vec![part(0, 0, 0, 0, 20, 20), part(30, 5, 10, 5, 20, 10)],
+            ),
+            // pasted over another where it lies off the strip, on every side of it: clear
+            (
+                (5, 25, 30, 20),
+                vec![
+                    part(0, 0, 0, 0, 30, 20),
+                    part(10, 35, 5, 10, 15, 10),
+                    part(84, 0, 20, 0, 15, 20),
+                    part(-4, -3, 2, 1, 6, 15),
+                ],
+            ),
+            // rows where none lies, above, between and below
+            (
+                (2, 8, 30, 20),
+                vec![part(5, 10, 0, 6, 30, 6), part(40, 2, 3, 15, 20, 3)],
+            ),
+            // parts beyond the window, and none
+            (
+                (3, 4, 16, 16),
+                vec![part(0, 0, 20, 0, 5, 5), part(0, 0, -9, 0, 5, 5)],
+            ),
+            ((3, 4, 16, 16), vec![]),
+        ];
+        for block in [16, 8] {
+            for (n, (place, parts)) in windows.iter().enumerate() {
+                let (x, y, w, h) = *place;
+                let mut cut = Scene::new(64, 48, block);
+                let mut own = Scene::new(64, 48, block);
+                // (the frames as shown: what each composed laid on what was there; where a
+                // window's box holds a see-through pixel more, a block more is composed)
+                let (mut shown_cut, mut shown_own) =
+                    (vec![0u8; 64 * 48 * 3], vec![0u8; 64 * 48 * 3]);
+                let show = |shown: &mut Vec<u8>, boxes: Boxes| {
+                    for (x0, y0, x1, y1, pixels) in boxes {
+                        for (row, line) in pixels.chunks_exact((x1 - x0) * 3).enumerate() {
+                            let at = ((y0 + row) * 64 + x0) * 3;
+                            shown[at..at + line.len()].copy_from_slice(line);
+                        }
+                        assert!(y1 <= 48);
+                    }
+                };
+                for s in [&mut cut, &mut own] {
+                    s.ground_colour([30, 60, 90]);
+                    s.layer(
+                        1,
+                        Layer::new(0, 0, 64, 48, How::Over, below.clone()).unwrap(),
+                    );
+                    s.layer(
+                        3,
+                        Layer::new(30, 30, 20, 12, How::Over, above.clone()).unwrap(),
+                    );
+                }
+                for (k, half) in [(0, false), (1, false), (2, true)] {
+                    if !cut.sources.contains_key(&9) {
+                        // (gone with the window before, where none of it lay on it)
+                        cut.source(9, sw, sh, strip.clone()).unwrap();
+                    }
+                    // (as it scrolls: a column on with each frame)
+                    let id = 10 + k as u32;
+                    let moved: Vec<Part> =
+                        parts.iter().map(|p| Part { sx: p.sx + k, ..*p }).collect();
+                    cut.view(id, (x, y, w, h), &moved).unwrap();
+                    let pixels = cut.picture_of(id, h);
+                    own.layer(id, Layer::new(x, y, w, h, How::Over, pixels).unwrap());
+                    show(&mut shown_cut, cut.frame(vec![1, id, 3], half).unwrap());
+                    show(&mut shown_own, own.frame(vec![1, id, 3], half).unwrap());
+                    assert!(
+                        shown_cut == shown_own,
+                        "window {n}, frame {k}, blocks of {block}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]
@@ -1500,9 +1811,9 @@ mod tests {
             h,
         };
         let scanned = |s: &Scene, id: u32| {
-            let l = &s.layers[&id];
-            let h = l.pixels.len() / (l.w * 4);
-            bounds(&l.pixels, l.w, h, 4, |p| p[3] != 0)
+            let w = s.layers[&id].w;
+            let h = if id == 5 { 6 } else { 8 };
+            bounds(&s.picture_of(id, h), w, h, 4, |p| p[3] != 0)
         };
         // parts side by side, partly off the strip: what a look at the pixels finds, exactly
         for (id, parts) in [
