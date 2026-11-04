@@ -217,6 +217,21 @@ fn whole(input: &mut impl Read, buf: &mut [u8], what: &str) -> io::Result<()> {
     }
 }
 
+/// `len` bytes of `input` in a vector of their own, read into it as they come (not zeroed
+/// first: a layer's pixels are most of what comes, and zeroing them cost as much again).
+fn bytes(input: &mut impl Read, len: usize, what: &str) -> io::Result<Vec<u8>> {
+    let mut out = Vec::with_capacity(len);
+    input.take(len as u64).read_to_end(&mut out)?;
+    if out.len() == len {
+        Ok(out)
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            what.to_string(),
+        ))
+    }
+}
+
 fn u16_at(b: &[u8], i: usize) -> usize {
     u16::from_le_bytes([b[i], b[i + 1]]) as usize
 }
@@ -252,8 +267,7 @@ fn boxes(input: &mut impl Read, count: u32) -> io::Result<Boxes> {
         if x1 <= x0 || y1 <= y0 {
             return Err(invalid("an empty box"));
         }
-        let mut pixels = vec![0u8; (x1 - x0) * (y1 - y0) * 3];
-        whole(input, &mut pixels, "a box cut short")?;
+        let pixels = bytes(input, (x1 - x0) * (y1 - y0) * 3, "a box cut short")?;
         boxes.push((x0, y0, x1, y1, pixels));
     }
     Ok(boxes)
@@ -303,10 +317,8 @@ pub fn read(input: &mut impl Read) -> io::Result<Option<Record>> {
                 5 => Op::Push,
                 _ => return Err(invalid("a command of no kind known")),
             };
-            let mut args = vec![0u8; args_len];
-            whole(input, &mut args, "a command cut short")?;
-            let mut payload = vec![0u8; payload_len];
-            whole(input, &mut payload, "a command cut short")?;
+            let args = bytes(input, args_len, "a command cut short")?;
+            let payload = bytes(input, payload_len, "a command cut short")?;
             Ok(Some(Record::Command(Request {
                 id: a,
                 op,
@@ -322,8 +334,7 @@ pub fn read(input: &mut impl Read) -> io::Result<Option<Record>> {
             if b as usize > 4096 {
                 return Err(invalid("a stream's options too long"));
             }
-            let mut text = vec![0u8; b as usize];
-            whole(input, &mut text, "a stream cut short")?;
+            let text = bytes(input, b as usize, "a stream cut short")?;
             let text = String::from_utf8(text).map_err(|_| invalid("a stream's options"))?;
             Ok(Some(Record::Stream {
                 block: a,
@@ -339,8 +350,7 @@ pub fn read(input: &mut impl Read) -> io::Result<Option<Record>> {
             if b as usize > MOST_PICTURE {
                 return Err(invalid("a picture too large"));
             }
-            let mut data = vec![0u8; b as usize];
-            whole(input, &mut data, "a picture cut short")?;
+            let data = bytes(input, b as usize, "a picture cut short")?;
             Ok(Some(Record::Picture { block: a, data }))
         }
         9 => {
@@ -355,8 +365,7 @@ pub fn read(input: &mut impl Read) -> io::Result<Option<Record>> {
                     }))
                 }
                 1 if len <= MOST_LAYER => {
-                    let mut picture = vec![0u8; len];
-                    whole(input, &mut picture, "a ground cut short")?;
+                    let picture = bytes(input, len, "a ground cut short")?;
                     Ok(Some(Record::Ground {
                         colour: None,
                         picture,
@@ -372,8 +381,7 @@ pub fn read(input: &mut impl Read) -> io::Result<Option<Record>> {
             }
             let mut geometry = [0u8; 20];
             whole(input, &mut geometry, "a layer cut short")?;
-            let mut pixels = vec![0u8; len - 20];
-            whole(input, &mut pixels, "a layer cut short")?;
+            let pixels = bytes(input, len - 20, "a layer cut short")?;
             Ok(Some(Record::Layer {
                 id: a,
                 x: u32_at(&geometry, 0) as i32,
@@ -397,8 +405,7 @@ pub fn read(input: &mut impl Read) -> io::Result<Option<Record>> {
                 180 => true,
                 _ => return Err(invalid("a frame turned otherwise than 0 or 180")),
             };
-            let mut ids = vec![0u8; count * 4];
-            whole(input, &mut ids, "a frame cut short")?;
+            let ids = bytes(input, count * 4, "a frame cut short")?;
             Ok(Some(Record::Scene {
                 number: a,
                 planned: planned.is_finite().then_some(planned),
@@ -422,10 +429,8 @@ pub fn read(input: &mut impl Read) -> io::Result<Option<Record>> {
             if len != 56 + 2 * picture {
                 return Err(invalid("a ring's pictures are not of its canvas"));
             }
-            let mut groove = vec![0u8; picture];
-            whole(input, &mut groove, "a ring cut short")?;
-            let mut lit = vec![0u8; picture];
-            whole(input, &mut lit, "a ring cut short")?;
+            let groove = bytes(input, picture, "a ring cut short")?;
+            let lit = bytes(input, picture, "a ring cut short")?;
             Ok(Some(Record::RingBase {
                 id: a,
                 side,
@@ -471,8 +476,7 @@ pub fn read(input: &mut impl Read) -> io::Result<Option<Record>> {
             if w.checked_mul(h).and_then(|n| n.checked_mul(4)) != Some(len - 8) {
                 return Err(invalid("a source's pixels are not of its size"));
             }
-            let mut pixels = vec![0u8; len - 8];
-            whole(input, &mut pixels, "a source cut short")?;
+            let pixels = bytes(input, len - 8, "a source cut short")?;
             Ok(Some(Record::Source {
                 id: a,
                 w,
@@ -485,8 +489,7 @@ pub fn read(input: &mut impl Read) -> io::Result<Option<Record>> {
             if len < 20 || !(len - 20).is_multiple_of(28) || (len - 20) / 28 > MOST_PARTS {
                 return Err(invalid("a layer cut from sources of another length"));
             }
-            let mut data = vec![0u8; len];
-            whole(input, &mut data, "a layer cut from sources cut short")?;
+            let data = bytes(input, len, "a layer cut from sources cut short")?;
             if u32_at(&data, 16) as usize != (len - 20) / 28 {
                 return Err(invalid("a layer cut from sources of another length"));
             }
@@ -523,8 +526,7 @@ pub fn read(input: &mut impl Read) -> io::Result<Option<Record>> {
             if Some(len - 16) != disc.checked_mul(12).and_then(|n| n.checked_add(rim * 5)) {
                 return Err(invalid("a globe's tables are not as long as it says"));
             }
-            let mut data = vec![0u8; len - 16];
-            whole(input, &mut data, "a globe cut short")?;
+            let data = bytes(input, len - 16, "a globe cut short")?;
             let words = |from: usize, n: usize| -> Vec<u32> {
                 data[from..from + 4 * n]
                     .chunks_exact(4)
@@ -552,8 +554,7 @@ pub fn read(input: &mut impl Read) -> io::Result<Option<Record>> {
             if mw.checked_mul(mh).and_then(|n| n.checked_mul(4)) != Some(len - 40) {
                 return Err(invalid("a globe's mark is not of its size"));
             }
-            let mut pixels = vec![0u8; len - 40];
-            whole(input, &mut pixels, "a layer of a globe cut short")?;
+            let pixels = bytes(input, len - 40, "a layer of a globe cut short")?;
             let mark = (mw > 0 && mh > 0).then(|| {
                 let (mx, my) = (u32_at(&head, 32) as i32, u32_at(&head, 36) as i32);
                 (pixels, mw, mh, mx, my)
