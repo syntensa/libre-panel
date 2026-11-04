@@ -848,6 +848,23 @@
   border-color: var(--line-5);
 }
 
+/* "Show me" of the news: a theme's card among all themes is marked for a moment */
+.theme-card.pointed {
+  animation: pointed-theme 1.6s ease-out;
+}
+
+@keyframes pointed-theme {
+  0%,
+  35% {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-softer);
+  }
+  100% {
+    border-color: var(--line-2);
+    box-shadow: none;
+  }
+}
+
 .theme-card.current {
   border-color: var(--accent);
 }

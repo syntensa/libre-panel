@@ -4,17 +4,20 @@
 // the server (/api/news, editor/news.py), not by this browser: the window and a browser are told
 // alike, and once.
 
+import { normalTheme } from "../../core/actions.js";
 import { get, post } from "../../core/api.js";
 import { t } from "../../core/i18n.js";
 import { loadSettings, useConfig } from "../../core/settings.js";
 import { store, useStore } from "../../core/state.js";
 import { html, useEffect, useState } from "../../lib/preact.js";
 import { toastError } from "../../ui/toast.js";
+import { sizesDialog } from "../../shell/theme-menu.js";
 import { navigate } from "../../shell/views.js";
 import { StepList } from "./overview.js";
+import { usePanelModel } from "./panel.js";
 
 /** The release these news are of. */
-export const RELEASE = "0.7";
+export const RELEASE = "0.8";
 
 const numbers = (version) => String(version).split(/[^0-9]+/).filter(Boolean).map(Number);
 
@@ -81,9 +84,24 @@ function pointAt(selector) {
   card.classList.add("pointed");
 }
 
-/** The news of 0.7: more panels at once, scenes on Start, and the new modules of Design. */
+/** A theme's card among all themes (Start → All themes), brought into view and marked once it
+ * is drawn: the list comes a moment after the view. */
+function showTheme(id) {
+  navigate("home", "themes");
+  const until = Date.now() + 3000;
+  const look = () => {
+    const card = document.querySelector(`.theme-card[data-theme="${id}"]`);
+    if (card) pointAt(`.theme-card[data-theme="${id}"]`);
+    else if (Date.now() < until) setTimeout(look, 50);
+  };
+  look();
+}
+
+/** The news of 0.8: Libre Panel's own engine (where the panel has the video mode), every panel
+ * size, and Terra. */
 export function WhatsNew() {
   const config = useConfig();
+  const { model } = usePanelModel();
   const [looked, setLooked] = useState({});
   useEffect(() => {
     if (!store.get().settings) loadSettings();
@@ -91,28 +109,28 @@ export function WhatsNew() {
   if (!config) return null;
   const look = (id) => setLooked((now) => ({ ...now, [id]: true }));
   const items = [
-    {
-      id: "panels",
-      title: t("More panels at once"),
-      text: t("Up to four panels, each with its own theme, placed where they stand."),
-      done: (config.panels || []).length > 0,
-      action: html`<button type="button" class="btn" onClick=${() => navigate("settings", "panels")}>${t("Add a panel")}</button>`,
+    model?.video && config.video?.mode !== "off" && {
+      id: "engine",
+      title: t("Libre Panel's own engine"),
+      text: t("It encodes the panel's video and sends each picture on its time: lighter on the PC. To try, as the panel's encoder."),
+      done: config.video?.encoder === "native",
+      action: html`<button type="button" class="btn" onClick=${() => navigate("settings", "panel/panel-video-experiment")}>${t("Try it")}</button>`,
     },
     {
-      id: "scenes",
-      title: t("Scenes"),
-      text: t("A theme for every panel at once, with one click: keep what they show now as a scene."),
-      done: Boolean(looked.scenes),
-      action: html`<button type="button" class="btn" onClick=${() => (pointAt(".scenes-card"), look("scenes"))}>${t("Show me")}</button>`,
+      id: "sizes",
+      title: t("Every panel size"),
+      text: t("Libre Panel's screens are laid out for every panel size, and your own themes can have a version for each."),
+      done: Boolean(looked.sizes),
+      action: html`<button type="button" class="btn" onClick=${() => (look("sizes"), normalTheme() ? sizesDialog(normalTheme()) : navigate("design"))}>${t("Show me")}</button>`,
     },
     {
-      id: "modules",
-      title: t("New modules"),
-      text: t("Ping, a timer and the power the PC draws, in the library of Design."),
-      done: Boolean(looked.modules),
-      action: html`<button type="button" class="btn" onClick=${() => (look("modules"), navigate("design"))}>${t("Open Design")}</button>`,
+      id: "terra",
+      title: t("Terra: the earth as it is now"),
+      text: t("A new screen: the globe lit where the sun stands this minute, the cities' lights at night, the clouds and your place."),
+      done: Boolean(looked.terra),
+      action: html`<button type="button" class="btn" onClick=${() => (look("terra"), showTheme("terra"))}>${t("Show me")}</button>`,
     },
-  ];
+  ].filter(Boolean);
   return html`<section class="news-card" aria-labelledby="news-card-title">
     <div class="first-steps-head">
       <h2 id="news-card-title">${t("What's new in {version}", { version: RELEASE })}</h2>

@@ -185,32 +185,55 @@ def test_who_updated_is_told_what_is_new_once_and_each_thing_is_done_right_there
     updated(isolated_home)
     with browser_page(app_url, "home", routes={"**/api/app": a_panel_app()}, allow=PICTURE) as page:
         card = page.locator(".news-card")
-        expect(card.locator("h2")).to_have_text("What's new in 0.7")
+        expect(card.locator("h2")).to_have_text("What's new in 0.8")
         expect(page.locator(".first-steps")).to_have_count(0)  # who updated knows the rest
         rows = card.locator(".first-step")
         assert rows.evaluate_all("r => r.map((e) => e.dataset.step)") == [
-            "panels",
-            "scenes",
-            "modules",
+            "engine",
+            "sizes",
+            "terra",
         ]
-        # scenes: the card on Start, shown and marked
-        card.locator("[data-step='scenes']").get_by_role("button", name="Show me").click()
-        expect(page.locator(".scenes-card")).to_have_class(re.compile(r"\bpointed\b"))
-        expect(page.locator(".scenes-card")).to_be_in_viewport()
-        expect(card.locator("[data-step='scenes']")).to_have_class(re.compile(r"\bdone\b"))
-        # more panels: to where one is added
-        card.get_by_role("button", name="Add a panel").click()
-        page.wait_for_function("location.hash === '#/settings/panels'")
+        # every panel size: the theme on the panel on each size, in a dialog right here
+        card.locator("[data-step='sizes']").get_by_role("button", name="Show me").click()
+        dialog = page.get_by_role("dialog", name="Every panel size")
+        expect(dialog.locator(".theme-size").first).to_be_visible()
+        expect(card.locator("[data-step='sizes']")).to_have_class(re.compile(r"\bdone\b"))
+        page.keyboard.press("Escape")
+        expect(dialog).to_have_count(0)
+        # Terra: its card among all themes, brought into view and marked
+        card.locator("[data-step='terra']").get_by_role("button", name="Show me").click()
+        page.wait_for_function("location.hash === '#/home/themes'")
+        terra = page.locator(".theme-card[data-theme='terra']")
+        expect(terra).to_have_class(re.compile(r"\bpointed\b"))
+        expect(terra).to_be_in_viewport()
+        page.goto(f"{app_url}#/home")
+        # the engine: to where the panel's encoder is chosen
+        card.locator("[data-step='engine']").get_by_role("button", name="Try it").click()
+        page.wait_for_function("location.hash === '#/settings/panel/panel-video-experiment'")
         page.goto(f"{app_url}#/home")
         # closed: kept by the server, for the window and any browser alike
         card.get_by_role("button", name="Got it").click()
         expect(card).to_have_count(0)
-        waits_for(page, lambda: news_file(isolated_home)["seen"] == "0.7")
+        waits_for(page, lambda: news_file(isolated_home)["seen"] == "0.8")
         page.reload()
         page.wait_for_selector(".pages-card")
-        page.wait_for_function("window.libre.store.get().news?.seen === '0.7'")
+        page.wait_for_function("window.libre.store.get().news?.seen === '0.8'")
         expect(page.locator(".news-card")).to_have_count(0)
         expect(page.locator(".first-steps")).to_have_count(0)
+
+
+def test_the_news_leave_the_engine_out_where_the_panel_has_no_video_mode(
+    app_url,  # noqa: F811
+    isolated_home,
+):
+    """Libre Panel's engine drives the video mode: a 3.5" has none, so it is not offered."""
+    choose_theme(isolated_home, "libre-default")
+    updated(isolated_home)
+    small = {"**/api/app": a_panel_app(target='Turing 3.5"')}
+    with browser_page(app_url, "home", routes=small, allow=PICTURE) as page:
+        rows = page.locator(".news-card .first-step")
+        expect(rows).to_have_count(2)
+        assert rows.evaluate_all("r => r.map((e) => e.dataset.step)") == ["sizes", "terra"]
 
 
 def test_who_began_with_this_version_gets_the_first_steps_and_no_news(

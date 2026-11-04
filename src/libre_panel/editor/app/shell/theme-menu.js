@@ -188,7 +188,7 @@ function Sizes({ id, close }) {
   </div>`;
 }
 
-function sizesDialog(id) {
+export function sizesDialog(id) {
   return openDialog((close) => html`<${Sizes} id=${id} close=${close} />`, { label: t("Every panel size"), wide: true });
 }
 
