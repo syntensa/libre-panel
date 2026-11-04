@@ -423,7 +423,10 @@ def _soft_light(
     lit = base.getchannel("A").getbbox()
     if lit is None:
         return Image.new("RGBA", base.size, (0, 0, 0, 0))
-    reach = math.ceil(3 * radius) + 2
+    half = max(base.size) > 320 and radius >= 4  # half size: 4x cheaper, the same look (as _blur)
+    # (at half size a few pixels more round it, nothing of the light in them: room enough that
+    # the blur's matrices serve a box that grows and shrinks, dither.blur)
+    reach = math.ceil(3 * radius) + (8 if half else 2)
     box = (max(0, lit[0] - reach), max(0, lit[1] - reach),
            min(base.width, lit[2] + reach), min(base.height, lit[3] + reach))  # fmt: skip
     part = base.crop(box)
@@ -436,7 +439,6 @@ def _soft_light(
     first = colour.flat[int(np.argmax(packed > 0xFFFFFF))]
     one = bool((np.where(packed > 0xFFFFFF, colour, first) == first).all())
     alpha = pixels[..., 3].astype(np.float32)
-    half = max(base.size) > 320 and radius >= 4  # half size: 4x cheaper, the same look (as _blur)
     if half:
         small = (max(1, size[0] // 2), max(1, size[1] // 2))
         alpha = np.asarray(Image.fromarray(alpha, "F").resize(small, Image.BILINEAR), np.float32)

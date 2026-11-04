@@ -169,6 +169,12 @@
   eight times a frame (4 % of Arena's main loop); its end shows at once as its output ends,
   and the system is asked at most ten times a second. A widget's conditions (`needs`) are
   read once a text, not with every frame.
+- **16 MB less for the soft light of what glides.** A glow is blurred as a product with a matrix
+  for each of its sides, kept to be used again; a lit bar gliding to a new length every frame
+  (a download's) asked for a new one each time, used once: fifty of them, 16 MB on the 12.3".
+  A side's matrix is made now when it is asked for a second time (once, the blur runs its
+  passes, as fast), and a glow with room round it takes one of a few rounded sizes: Lumen's
+  loop on the 12.3" keeps half a megabyte of them, the same pixels, as fast as before.
 - **A turning globe lays its air faster.** Every two degrees of its turn (Terra's globe on the
   12.3" about once a second and a half) the air over it was laid into its picture four values
   a pixel, column by column: almost half of the 8.5 ms of the main loop it took. Each pixel

@@ -142,3 +142,46 @@ def test_the_dither_is_for_the_panels_video_and_made_again_when_it_changes():
     renderer.dither = True
     after = np.asarray(renderer.render(Snapshot(readings={}))[0])
     assert len(np.unique(after[:, :, 2])) > len(np.unique(before[:, :, 2]))  # made again
+
+
+def test_a_glow_whose_box_grows_takes_a_few_matrices_and_blurs_as_before():
+    """A clock's rolling digits change the box of their glow a pixel at a time: each size was a
+    matrix of its own (fifty of them, 16 MB on the 12.3"). With room enough round what is blurred
+    the sides go up in steps, and the blur is what it was."""
+    dither._operator.cache_clear()
+    radius = 6.75
+    far = dither.reach(radius)
+    boxes, got = [], []
+    for w in range(260, 310):
+        a = np.zeros((120, w), np.float32)
+        a[far:-far, far:-far] = 200.0
+        boxes.append(a)
+        got.append(dither.blur(a, radius))
+    sizes = {key[0] for key in dither._operator.kept._items}
+    assert sizes == {128, 288, 320}  # (the steps the sides took; not fifty)
+    for a, blurred in zip(boxes, got, strict=True):  # (each as its own matrices blur it)
+        want = dither._operator(a.shape[0], radius).T @ a @ dither._operator(a.shape[1], radius)
+        assert np.abs(blurred - want).max() < 1e-3, a.shape
+    edge = np.full((50, 60), 9.0, np.float32)  # no room round it: its own size, as always
+    dither._operator.cache_clear()
+    dither.blur(edge, radius)
+    dither.blur(edge, radius)
+    assert {key[0] for key in dither._operator.kept._items} == {50, 60}
+
+
+def test_a_side_asked_for_once_keeps_no_matrix():
+    """A lit bar gliding to a new length every frame asks for each length once: blurred by the
+    passes, nothing kept for it (each was a matrix of a third of a megabyte); a side asked for
+    again has its matrix, and either way the blur is the same."""
+    dither._operator.cache_clear()
+    radius = 4.25
+    once = []
+    for w in range(200, 240):  # (no room round them: each its own length)
+        a = np.full((24, w), 50.0, np.float32)
+        once.append(dither.blur(a, radius))
+    lengths = {key[0] for key in dither._operator.kept._items}
+    assert not lengths & set(range(200, 240))  # (the bar's thickness, 24, is asked for again)
+    for w, blurred in zip(range(200, 240), once, strict=True):
+        a = np.full((24, w), 50.0, np.float32)
+        want = dither._operator(24, radius).T @ a @ dither._operator(w, radius)
+        assert np.abs(blurred - want).max() < 1e-2, w

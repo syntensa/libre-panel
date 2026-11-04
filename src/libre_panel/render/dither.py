@@ -20,6 +20,7 @@ pictures), and JPEG loses it.
 from __future__ import annotations
 
 import math
+import threading
 from functools import lru_cache
 
 import numpy as np
@@ -31,6 +32,10 @@ TILE = 128  # the noise's tile, laid side by side: no pattern shows at this size
 # glow's few hundred pixels in a tenth of the time the passes take (a clock's rolling seconds,
 # whose glow is made anew in every frame of the roll), and longer ones in half of it
 PRODUCT_MOST = 640
+# ... its sides rounded up to steps of this, where what is blurred has room enough round it that
+# a longer line changes nothing in it: one matrix serves a glow whose box grows and shrinks (a
+# clock's rolling digits made fifty of them a pixel apart, 16 MB on the 12.3")
+PRODUCT_STEP = 32
 
 
 @lru_cache(maxsize=1)
@@ -137,16 +142,51 @@ def _operator(n: int, radius: float) -> np.ndarray:
     return out
 
 
+def _stepped(n: int) -> int:
+    return min(PRODUCT_MOST, -(-n // PRODUCT_STEP) * PRODUCT_STEP)
+
+
+# the sides asked for so far (by radius), and how often: a side's matrix is made when it is asked
+# for the second time, so one asked for once (a lit bar gliding to a new length, every frame of
+# its glide: fifty of them, 16 MB) is blurred by the passes, and nothing is kept for it
+_ASKED_MOST = 4096
+_asked: dict[tuple[int, float], int] = {}
+_asked_lock = threading.Lock()
+
+
+def _again(n: int, radius: float) -> bool:
+    """Whether the matrix of a side of ``n`` serves: kept, or asked for once before."""
+    key = (n, radius)
+    if key in _operator.kept:  # (looked at, not counted)
+        return True
+    with _asked_lock:
+        before = _asked.get(key, 0)
+        if not before and len(_asked) >= _ASKED_MOST:
+            _asked.clear()
+        _asked[key] = before + 1
+    return before > 0
+
+
 def blur(a: np.ndarray, radius: float) -> np.ndarray:
     """A Gaussian blur of ``a`` (h, w) in floating point, as Pillow's GaussianBlur of ``radius``
     blurs whole levels: three box passes each way (as a product with their matrices, where
-    neither side is longer than :data:`PRODUCT_MOST`: the same to a thousandth of a level)."""
+    neither side is longer than :data:`PRODUCT_MOST` and both were asked for before: the same
+    to a thousandth of a level)."""
     out = np.ascontiguousarray(a, np.float32)
     if radius <= 0 or out.size == 0:
         return out.copy() if out is a else out
     h, w = out.shape
     if max(h, w) <= PRODUCT_MOST:
-        return _operator(h, radius).T @ out @ _operator(w, radius)
+        far = reach(radius)  # (nothing within this of an end: the line may go on beyond it)
+        rows = _stepped(h) if h > far and not out[h - far :].any() else h
+        cols = _stepped(w) if w > far and not out[:, w - far :].any() else w
+        if _again(rows, radius) & _again(cols, radius):  # (both counted)
+            if (rows, cols) == (h, w):
+                return _operator(h, radius).T @ out @ _operator(w, radius)
+            room = np.zeros((rows, cols), np.float32)
+            room[:h, :w] = out
+            blurred = _operator(rows, radius).T @ room @ _operator(cols, radius)
+            return np.ascontiguousarray(blurred[:h, :w])
     side, frac = _box_radius(radius)
     for _ in range(3):
         out = _rows(out, side, frac)
