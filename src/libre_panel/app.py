@@ -1498,6 +1498,10 @@ class MainLoop:
                 renderer.between_frames = self.between_frames if streaming else None
                 renderer.continuous = streaming  # graphs scroll, values glide on
                 renderer.dither = streaming  # soft light without bands (render.dither)
+                if streaming and getattr(display, "takes_scenes", False):
+                    # cards whose inside is one colour as their edges and the colour, which the
+                    # engine lays without pixels (render/scene.py's Filled): kept so after
+                    renderer.fills = True
                 renderer.graph_steps = config.graph_steps  # (graphs that rest: frames that rest)
                 # videos decoded as fast as the panel gets frames (a few a second where it takes
                 # a video from its file: below), else as moving.VIDEO_FPS says

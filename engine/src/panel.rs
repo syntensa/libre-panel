@@ -699,6 +699,21 @@ pub fn run(options: Options) -> Result<(), String> {
                 };
                 s.scene.globe(id, tables);
             }
+            Record::Fill {
+                id,
+                x,
+                y,
+                w,
+                h,
+                rgba,
+            } => {
+                let Some(s) = stream.as_mut() else {
+                    break Err("a layer before its stream".into());
+                };
+                if let Err(e) = s.scene.fill(id, (x, y, w, h), rgba) {
+                    break Err(e);
+                }
+            }
             Record::GlobeLayer {
                 id,
                 globe,

@@ -49,7 +49,7 @@ from libre_panel.devices.h264 import (
 )
 from libre_panel.i18n import t
 from libre_panel.render import moving
-from libre_panel.render.scene import Globe, View
+from libre_panel.render.scene import Filled, Globe, View
 
 if TYPE_CHECKING:
     from libre_panel.render.renderer import Piece
@@ -67,7 +67,7 @@ STREAM, END, PICTURE = 5, 6, 8
 # a layer of it at a value (ring.rs); a picture layers are cut from and a layer cut from them;
 # a turning globe and a layer of it at a step of its turn (globe.rs)
 GROUND, LAYER, SCENE, RING, RING_LAYER, SOURCE, VIEW = 9, 10, 11, 12, 13, 14, 15
-GLOBE, GLOBE_LAYER = 16, 17
+GLOBE, GLOBE_LAYER, FILL = 16, 17, 18
 # how a layer goes on: RGBA through its alpha, RGB as it is (a video's frame), RGB light added
 OVER, SOLID, ADD = 0, 1, 2
 # A reply may wait for the picture being sent (5 s a block at most, 1.5 s for room in the
@@ -130,6 +130,12 @@ def makes_globes(engine: str) -> bool:
     return "globes" in _can(engine)
 
 
+def makes_fills(engine: str) -> bool:
+    """Whether ``engine`` lays a layer all in one colour without its pixels (render/scene.py's
+    Filled: a card's inside)."""
+    return "fills" in _can(engine)
+
+
 def encodes_on_cards(engine: str) -> bool:
     """Whether ``engine`` takes ``--encoder card`` (video.engine_encoder: the graphics card's
     encoder where it opens, else x264); one of before does not start with it."""
@@ -154,10 +160,13 @@ class SceneSender:
     in the frames (the engine forgets a layer that a frame leaves out, and so does this); the
     ground, while it stays the same. Used by the stream's writer thread alone."""
 
-    def __init__(self, rings: bool = False, views: bool = False, globes: bool = False) -> None:
+    def __init__(
+        self, rings: bool = False, views: bool = False, globes: bool = False, fills: bool = False
+    ) -> None:
         self.rings = rings  # the engine makes a lit gauge's ring (render/lit.py's Ring)
         self.views = views  # ... and cuts a layer from pictures it keeps (render/scene.py's View)
         self.globes = globes  # ... and makes a turning globe's pictures (render/scene.py's Globe)
+        self.fills = fills  # ... and lays a layer of one colour (render/scene.py's Filled)
         self._ground: Any = None
         # each piece's layers (and the ring, or the pictures, they are of): what the engine has
         self._pieces: dict[int, tuple[Piece, list[int], Any, tuple[int, ...], int | None]] = {}
@@ -167,6 +176,7 @@ class SceneSender:
         self._numbers = itertools.count(1)
         self.layers = 0  # sent, and their bytes
         self.bytes = 0
+        self.filled = 0  # (of them, layers of one colour)
 
     def _layer(self, parts: list[bytes], image: Image.Image, x: int, y: int, how: int) -> int:
         number = next(self._numbers) & 0xFFFFFFFF
@@ -184,7 +194,7 @@ class SceneSender:
         """The layer of a ring the engine makes (and the ring, sent once while its frames have
         it), or ([], None) for a piece that goes as its pixels."""
         ring = piece.native
-        if (not self.rings or ring is None or isinstance(ring, (View, Globe))
+        if (not self.rings or ring is None or isinstance(ring, (View, Globe, Filled))
                 or ring.layer is not piece.layer
                 or piece.add or piece.light is not None):  # fmt: skip
             return [], None
@@ -291,6 +301,25 @@ class SceneSender:
         self.layers += 1
         return [layer], tuple(keys), key
 
+    def _fill(self, parts: list[bytes], piece: Piece) -> list[int]:
+        """The layers of a piece whose inside is one colour (render/scene.py's Filled): its inside
+        as that colour, what lies round it as its pixels; [] for a piece that goes as its
+        pixels. A card of Lumen's on the 12.3" 0.27 MB so instead of 1.7."""
+        made = piece.native
+        if (not self.fills or not isinstance(made, Filled) or made.layer is not piece.layer
+                or piece.add or piece.light is not None):  # fmt: skip
+            return []
+        x, y, w, h, colour = made.fill
+        number = next(self._numbers) & 0xFFFFFFFF
+        parts.append(_head(FILL, number, 20)
+                     + struct.pack("<iiII4B", piece.x + x, piece.y + y, w, h, *colour))  # fmt: skip
+        self.layers += 1
+        self.filled += 1
+        ids = [number]
+        for image, dx, dy in made.parts:
+            ids.append(self._layer(parts, image, piece.x + dx, piece.y + dy, OVER))
+        return ids
+
     def records(self, scene: Scene, number: int, planned: float | None) -> list[bytes]:
         """The records of the frame of ``scene`` numbered ``number`` (drawn for ``planned``),
         with the ground and layers the engine does not have yet."""
@@ -321,6 +350,8 @@ class SceneSender:
                     ids, cut = self._view(parts, piece, sources)
                 if not ids:
                     ids, cut, globe = self._globe(parts, piece, sources, globes)
+                if not ids:
+                    ids = self._fill(parts, piece)
                 if not ids:
                     ids = [self._layer(parts, *layer) for layer in _layers_of(piece)]
                 hit = (piece, ids, ring, cut, globe)
@@ -758,14 +789,15 @@ class EngineStream:
     def __init__(
         self, link: EngineLink, size: tuple[int, int], options: list[str], block: int,
         lead: float | None = None, scenes: bool = False, rings: bool = False,
-        views: bool = False, globes: bool = False,
+        views: bool = False, globes: bool = False, fills: bool = False,
     ) -> None:  # fmt: skip
         self.link, self.size = link, size
         # with ``scenes``: frames of layers go to the engine as them (render/scene.py); the
         # engine's stream has none of their layers yet, and nor has this; with ``rings`` the
         # engine makes a lit gauge's ring itself, with ``views`` it cuts a graph's window, with
-        # ``globes`` it makes a turning globe's pictures
-        self.scenes = SceneSender(rings, views, globes) if scenes else None
+        # ``globes`` it makes a turning globe's pictures, with ``fills`` it lays a card's inside
+        # as its colour
+        self.scenes = SceneSender(rings, views, globes, fills) if scenes else None
         # how long after the time a frame was drawn for the engine sends its picture (seconds;
         # None: the engine's own choice, h264.engine_lead's)
         self.lead = lead

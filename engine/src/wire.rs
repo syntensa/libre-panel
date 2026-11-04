@@ -142,6 +142,14 @@ pub enum Record {
         id: u32,
         tables: crate::globe::Tables,
     },
+    Fill {
+        id: u32,
+        x: i32,
+        y: i32,
+        w: usize,
+        h: usize,
+        rgba: [u8; 4],
+    },
     GlobeLayer {
         id: u32,
         globe: u32,
@@ -561,6 +569,21 @@ pub fn read(input: &mut impl Read) -> io::Result<Option<Record>> {
                 mark,
             }))
         }
+        18 => {
+            if b != 20 {
+                return Err(invalid("a layer of one colour of another length"));
+            }
+            let mut more = [0u8; 20];
+            whole(input, &mut more, "a layer of one colour cut short")?;
+            Ok(Some(Record::Fill {
+                id: a,
+                x: u32_at(&more, 0) as i32,
+                y: u32_at(&more, 4) as i32,
+                w: u32_at(&more, 8) as usize,
+                h: u32_at(&more, 12) as usize,
+                rgba: [more[16], more[17], more[18], more[19]],
+            }))
+        }
         kind => Err(invalid(&format!("a record of kind {kind}"))),
     }
 }
@@ -785,6 +808,38 @@ mod tests {
         let mut short = head(16, 5, body.len() as u32 - 1);
         short.extend(&body[..body.len() - 1]);
         assert!(read(&mut short.as_slice()).is_err()); // (not as long as it says)
+    }
+
+    #[test]
+    fn a_layer_of_one_colour() {
+        let mut input = head(18, 21, 20);
+        for n in [-7i32, 30] {
+            input.extend(n.to_le_bytes());
+        }
+        for n in [609u32, 626] {
+            input.extend(n.to_le_bytes());
+        }
+        input.extend([12, 18, 24, 178]);
+        match read(&mut input.as_slice()).unwrap() {
+            Some(Record::Fill {
+                id,
+                x,
+                y,
+                w,
+                h,
+                rgba,
+            }) => {
+                assert_eq!(
+                    (id, x, y, w, h, rgba),
+                    (21, -7, 30, 609, 626, [12, 18, 24, 178])
+                );
+            }
+            _ => panic!("not the layer"),
+        }
+        assert!(read(&mut head(18, 21, 19).as_slice()).is_err()); // (of another length)
+        let mut short = head(18, 21, 20);
+        short.extend([0u8; 12]);
+        assert!(read(&mut short.as_slice()).is_err());
     }
 
     #[test]

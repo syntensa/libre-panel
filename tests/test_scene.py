@@ -286,6 +286,60 @@ def test_each_layer_goes_to_the_engine_once_while_it_is_in_the_frames():
     assert [k for k, *_ in fifth] == [engines.SCENE]
 
 
+def test_a_card_whose_inside_is_one_colour_goes_as_its_edges_and_that_colour():
+    """Where the engine lays a layer of one colour, a card whose inside is one colour is made as
+    the strips along its edges and that colour: its pixels made here only when asked for, and
+    then the card's pixels; the frame of them the renderer's own; a third of the bytes kept at
+    most (of a module's card, a sixth)."""
+    from test_motion import video
+
+    from libre_panel.render.renderer import Renderer
+    from libre_panel.sensors.demo import demo_snapshot
+    from libre_panel.theme.model import find_theme, load_theme
+
+    theme = load_theme(find_theme("lumen-1920x720"))
+    now = 1_700_000_000.0
+    snap = demo_snapshot(fixed_time=now)
+    plain, cut = (video(Renderer(theme, dither=True), fps=25) for _ in range(2))
+    cut.fills = True
+    own, _ = plain.render(snap, now)
+    frame, _ = cut.render(snap, now, scene=True)
+    assert isinstance(frame, scenes.SceneFrame)
+    made = {wid: p for wid, p in frame.scene.pieces if isinstance(p.native, scenes.Filled)}
+    assert set(made) >= {"frame-mid", "frame-rings", "frame-net"}
+    assert all(not p.layer.composed for p in made.values())  # (for the engine: none made)
+    pieces = dict(plain._last[0])
+    for wid, p in made.items():
+        kept = sum(part.width * part.height for part, _, _ in p.native.parts)
+        assert kept * 3 < p.layer.width * p.layer.height, wid
+        assert p.layer.tobytes() == pieces[wid].layer.tobytes(), wid
+    assert scenes.compose(frame.scene).tobytes() == own.tobytes()
+    before = dict(plain._cache)
+    plain.fills = True  # (switched on: its rects made again, the rest kept as they are)
+    assert "frame-mid" not in plain._cache and len(plain._cache) > len(before) // 2
+    assert all(plain._cache[k] is v for k, v in before.items() if k in plain._cache)
+    gradient = Image.linear_gradient("L").resize((200, 200)).convert("RGBA")
+    assert scenes.filled(gradient, 20) is None  # (an inside of many colours: as its pixels)
+
+
+def test_a_filled_piece_goes_to_the_engine_as_its_colour_and_the_strips_round_it():
+    card = Image.new("RGBA", (200, 180), (12, 18, 24, 178))
+    card.paste((90, 100, 110, 255), (0, 0, 200, 3))  # (an outline along the top)
+    made = scenes.filled(card, 12)
+    assert made is not None and made.fill == (12, 12, 176, 156, (12, 18, 24, 178))
+    filled = Piece(made.layer, 5, 7, native=made)
+    first = heads(engines.SceneSender(fills=True).records(scene_of(filled, size=(240, 200)), 0,
+                                                          None))  # fmt: skip
+    kinds = [k for k, *_ in first]
+    assert kinds == [engines.GROUND, engines.FILL, *[engines.LAYER] * 4, engines.SCENE]
+    assert struct.unpack("<iiII4B", first[1][3]) == (17, 19, 176, 156, 12, 18, 24, 178)
+    sent = sum(b - 20 for k, _, b, _ in first if k == engines.LAYER)
+    assert sent == 4 * (2 * 200 * 12 + 2 * 12 * 156) and not made.layer.composed
+    whole = heads(engines.SceneSender().records(scene_of(filled, size=(240, 200)), 0, None))
+    assert [k for k, *_ in whole] == [engines.GROUND, engines.LAYER, engines.SCENE]
+    assert whole[1][3][20:] == card.tobytes()  # (an engine that lays none: its pixels, made)
+
+
 def strip(w=40, h=6):
     """A picture of ``w`` x ``h``, every pixel its own (x, y, x + y, alpha)."""
     image = Image.new("RGBA", (w, h))
@@ -451,7 +505,8 @@ class Fed(Layered):
     their layers, every seventh as the frame's own pixels (a message over it), all turned with
     ``half``; the renderer's own frame of each is kept to compare."""
 
-    def __init__(self, engine, size, out, half, rings=False, views=False, globes=False):
+    def __init__(self, engine, size, out, half, rings=False, views=False, globes=False,
+                 fills=False):  # fmt: skip
         super().__init__()
         self.half, self.makes_rings = half, rings
         self.proc = subprocess.Popen(
@@ -459,7 +514,8 @@ class Fed(Layered):
              "--crf", "20", "--kbit", "4000", "--keyint", "250", "--dump-rgb", str(out)],
             stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
         )  # fmt: skip
-        self.sender, self.own, self.n = engines.SceneSender(rings, views, globes), [], 0
+        self.sender = engines.SceneSender(rings, views, globes, fills)
+        self.own, self.n = [], 0
 
     def show(self, frame, region=None):
         Stream.show(self, frame, region)
@@ -484,7 +540,9 @@ class Fed(Layered):
      ("lumen-1920x720", False, True, False, False), ("arena-1920x720", True, False, True, False),
      ("lumen-1920x720", False, False, False, True), ("arena-1920x720", True, False, True, True),
      ("terra-1920x720", False, False, False, "globes"), ("terra-1920x720", True, False, True,
-                                                         "globes")],
+                                                         "globes"),
+     ("lumen-1920x720", False, False, False, "fills"), ("almanac-1920x720", True, False, True,
+                                                        "fills")],
 )  # fmt: skip
 def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
     engine, tmp_path, theme, half, rings, toast, views
@@ -499,8 +557,12 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
     globes = views == "globes"  # (and the turning globes made by the engine, Terra's)
     if globes and not engines.makes_globes(engine):
         pytest.skip("needs libre-panel-engine that makes globes (cargo build --release)")
+    fills = views == "fills"  # (and the cards' insides laid by the engine as their colour)
+    if fills and not engines.makes_fills(engine):
+        pytest.skip("needs libre-panel-engine that lays fills (cargo build --release)")
     clock, host = Clock(1000.0), PluginHost()
-    display = Fed(engine, (1920, 720), tmp_path / "frames.rgb", half, rings, bool(views), globes)
+    display = Fed(engine, (1920, 720), tmp_path / "frames.rgb", half, rings, bool(views), globes,
+                  fills)  # fmt: skip
     loop = loop_with(theme, display, clock, host)
     try:
         run(loop, clock, 4)
@@ -528,7 +590,7 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
         assert diff.convert("L").point(lambda v: v > 0 and 255).histogram()[255] <= 200
     if rings:
         assert display.sender._rings and loop.renderer.native_rings  # (made by the engine)
-    if views:  # (the graphs' strips went to it, their windows cut there)
+    if views and not fills:  # (the graphs' strips went to it, their windows cut there)
         assert display.sender._sources and loop.renderer.native_views
     if globes:  # (the globe's tables, its map and air went to it, its steps made there)
         assert display.sender._globes and loop.renderer.native_globes
@@ -536,6 +598,8 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
                  if isinstance(f, scenes.SceneFrame) for i in range(len(f.scene.pieces))
                  if isinstance(f.scene.pieces[i][1].native, scenes.Globe)}  # fmt: skip
         assert len(steps) >= 5  # (it turned)
+    if fills:  # (the cards' insides went to it as their colour, their edges as their pixels)
+        assert display.sender.filled >= 3 and loop.renderer.fills
 
 
 def test_a_video_panel_shows_frames_of_layers_the_engine_composed(engine, monkeypatch, caplog):

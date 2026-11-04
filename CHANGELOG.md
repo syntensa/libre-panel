@@ -141,6 +141,14 @@
   once, its lit map once a light (every minute) and its air every two degrees, and with each
   step only the step and the mark: the engine makes the same picture. Terra's main loop
   takes 3.8 ms a frame instead of 5.1.
+- **And the engine lays a card's inside as its colour.** A card whose inside is all one
+  colour (Lumen's frames round its parts, a slot's card, a cover's frame) was a picture of its
+  size, kept by Libre Panel and by the engine both: on the 12.3" 5.4 MB of Lumen's, 7 of
+  Almanac's, twice over. Such a card goes to the engine now as the strips along its edges
+  (its corners and its outline, as their pixels) and the colour of its inside, which the
+  engine lays without pixels: the same pixels on the panel. Libre Panel makes the card's
+  picture only for a frame it composes itself. Lumen on the 12.3": the pictures Libre Panel
+  keeps 27.5 MB instead of 35, the engine 53 MB instead of 58.
 - **The engine can let the graphics card encode, to try (Windows; `[video] engine_encoder =
   "card"`, *Settings → Panel → Video experiment*: *The engine's encoder*).** With the engine
   as the encoder, the card's own H.264 encoder (AMD's, NVIDIA's or Intel's: the one Windows

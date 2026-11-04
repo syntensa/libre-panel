@@ -181,7 +181,9 @@ and becomes the default only once it has proven itself on the panels; the old wa
 - [ ] Element by element, each against today's renderer as the reference: the same picture, to
       a level, with the same font engine (FreeType). First the lit gauge's ring
       (engine/src/ring.rs): of 50 values and colours, 49 the same pixels, one a level apart at
-      two; the bars, the numbers, the graphs next
+      two; since, the graphs' windows (cut from their strips), Terra's turning globe, and a
+      card's inside of one colour (laid without pixels, its edges as theirs); the bars and the
+      numbers next
 
 ### Stage 3: Python only the brain
 

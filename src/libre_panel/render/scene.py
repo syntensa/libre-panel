@@ -15,6 +15,7 @@ import threading
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
 from PIL import Image
 
 from libre_panel.render import moving
@@ -159,6 +160,54 @@ class Globe:
     step: int
     air: Image.Image | None
     mark: tuple[Image.Image, tuple[int, int]] | None
+
+
+@dataclass(frozen=True, eq=False)
+class Filled:
+    """How an engine lays a piece whose inside is all one colour (engine/src/scene.rs's
+    Layer::filled): ``fill`` (x, y, w, h in the piece, and its RGBA) as that colour alone, and
+    ``parts`` (picture, x and y in the piece) round it as their pixels: together all of the
+    piece, none over another, so laid in turn they are the piece. Its ``layer`` is made here
+    only when something asks for its pixels (a frame composed here), the inside filled and the
+    parts pasted: the piece's pixels."""
+
+    layer: Image.Image
+    fill: tuple[int, int, int, int, tuple[int, int, int, int]]
+    parts: tuple[tuple[Image.Image, int, int], ...]
+
+
+# a piece smaller than this (px) goes as its pixels: the parts round its inside would be most of it
+FILLED_LEAST = 160 * 160
+
+
+def filled(image: Image.Image, inset: int) -> Filled | None:
+    """``image`` (RGBA) as a :class:`Filled`, where all of it ``inset`` px in from its edges is
+    one colour (a card's inside, its corners and outline within the inset); else None. A
+    Lumen card on the 12.3" keeps a sixth of its bytes so (the strips along its edges)."""
+    w, h = image.size
+    if image.mode != "RGBA" or inset < 1 or min(w, h) < 2 * inset + 32 or w * h < FILLED_LEAST:
+        return None
+    a = np.asarray(image)
+    inside = a[inset : h - inset, inset : w - inset]
+    colour = inside[0, 0]
+    if not (inside == colour).all():
+        return None
+    rgba = (int(colour[0]), int(colour[1]), int(colour[2]), int(colour[3]))
+    parts = (
+        (image.crop((0, 0, w, inset)), 0, 0),
+        (image.crop((0, h - inset, w, h)), 0, h - inset),
+        (image.crop((0, inset, inset, h - inset)), 0, inset),
+        (image.crop((w - inset, inset, w, h - inset)), w - inset, inset),
+    )
+
+    def make() -> Image.Image:
+        out = Image.new("RGBA", (w, h), rgba)
+        for part, x, y in parts:
+            out.paste(part, (x, y))
+        return out
+
+    return Filled(Lazy((w, h), "RGBA", make), (inset, inset, w - 2 * inset, h - 2 * inset, rgba),
+                  parts)  # fmt: skip
 
 
 def turned_globe(turning: Any, step: int, place: tuple[float, float] | None) -> Globe:

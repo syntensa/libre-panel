@@ -83,6 +83,9 @@ pub struct Layer {
     sources: Vec<u32>,
     /// The globe it is a picture of (globe.rs), which stays while it does.
     globe: Option<u32>,
+    /// Its one colour (RGBA, through its alpha), where it is all that colour: no pixels kept
+    /// (a card's inside, Layer::filled).
+    fill: Option<[u8; 4]>,
 }
 
 impl Layer {
@@ -115,6 +118,32 @@ impl Layer {
             ring: None,
             sources: Vec::new(),
             globe: None,
+            fill: None,
+        })
+    }
+
+    /// A layer of `w` x `h` pixels all in the colour `rgba`, through its alpha: the inside of a
+    /// card, whose edges and corners come as layers of their pixels round it (render/scene.py's
+    /// Filled). It lies as a layer of its pixels would, and keeps none.
+    pub fn filled(x: i32, y: i32, w: usize, h: usize, rgba: [u8; 4]) -> Result<Layer, String> {
+        if w == 0 || h == 0 || w > MOST_SIDE || h > MOST_SIDE {
+            return Err(format!("a layer of {w}x{h}"));
+        }
+        Ok(Layer {
+            x: i64::from(x),
+            y: i64::from(y),
+            w,
+            how: How::Over,
+            pixels: Vec::new(),
+            part: if rgba[3] == 0 {
+                (0, 0, 0, 0)
+            } else {
+                (0, 0, w, h)
+            },
+            ring: None,
+            sources: Vec::new(),
+            globe: None,
+            fill: Some(rgba),
         })
     }
 
@@ -253,6 +282,18 @@ impl Scene {
             self.whole = true;
             self.forget_unders();
         }
+    }
+
+    /// A layer all in one colour (Layer::filled), for the frames to come.
+    pub fn fill(
+        &mut self,
+        id: u32,
+        (x, y, w, h): (i32, i32, usize, usize),
+        rgba: [u8; 4],
+    ) -> Result<(), String> {
+        let layer = Layer::filled(x, y, w, h, rgba)?;
+        self.layer(id, layer);
+        Ok(())
     }
 
     /// A ring whose pictures are made here for its values (ring.rs), for the frames to come.
@@ -625,6 +666,13 @@ fn lay(layer: &Layer, out: &mut [u8], (x0, y0, x1, y1): Rect) {
     let n = layer.how.channels();
     let span = (lx1 - lx0) as usize;
     let w = x1 - x0;
+    if let Some(colour) = layer.fill {
+        for fy in ly0..ly1 {
+            let dst_at = ((fy as usize - y0) * w + (lx0 as usize - x0)) * 3;
+            over_colour(&mut out[dst_at..dst_at + span * 3], colour);
+        }
+        return;
+    }
     for fy in ly0..ly1 {
         let src_at = (((fy - layer.y) as usize) * layer.w + (lx0 - layer.x) as usize) * n;
         let src = &layer.pixels[src_at..src_at + span * n];
@@ -652,6 +700,31 @@ fn over(dst: &mut [u8], src: &[u8]) {
         }
         for c in 0..3 {
             let t = u32::from(d[c]) * (255 - a) + u32::from(s[c]) * a + 128;
+            d[c] = (((t >> 8) + t) >> 8) as u8;
+        }
+    }
+}
+
+/// One colour (RGBA) pasted through its alpha onto RGB pixels, as `over` pastes a layer of it.
+fn over_colour(dst: &mut [u8], s: [u8; 4]) {
+    let a = u32::from(s[3]);
+    if a == 0 {
+        return;
+    }
+    if a == 255 {
+        for d in dst.chunks_exact_mut(3) {
+            d.copy_from_slice(&s[..3]);
+        }
+        return;
+    }
+    let lit = [
+        u32::from(s[0]) * a + 128,
+        u32::from(s[1]) * a + 128,
+        u32::from(s[2]) * a + 128,
+    ];
+    for d in dst.chunks_exact_mut(3) {
+        for c in 0..3 {
+            let t = u32::from(d[c]) * (255 - a) + lit[c];
             d[c] = (((t >> 8) + t) >> 8) as u8;
         }
     }
@@ -708,6 +781,44 @@ mod tests {
             add(&mut d, &[b; 3]);
             assert_eq!(d, [want; 3]);
         }
+    }
+
+    #[test]
+    fn a_layer_of_one_colour_lies_as_a_layer_of_its_pixels() {
+        // (over a ground and a layer under it, partly off the frame, across its blocks)
+        for colour in [
+            [12, 18, 24, 178],
+            [200, 10, 90, 255],
+            [5, 5, 5, 0],
+            [250, 240, 230, 1],
+        ] {
+            let (w, h) = (37, 23);
+            let mut frames = Vec::new();
+            for filled in [false, true] {
+                let mut s = Scene::new(48, 32, 8);
+                s.ground_colour([40, 50, 60]);
+                let under: Vec<u8> = (0..20 * 20 * 4).map(|i| (i * 37 % 251) as u8).collect();
+                s.layer(1, Layer::new(3, 2, 20, 20, How::Over, under).unwrap());
+                if filled {
+                    s.fill(2, (-4, 13, w, h), colour).unwrap();
+                } else {
+                    s.layer(
+                        2,
+                        Layer::new(-4, 13, w, h, How::Over, rgba(w, h, colour)).unwrap(),
+                    );
+                }
+                frames.push(s.frame(vec![1, 2], false).unwrap());
+                // (and in a frame after, from what lay under what came)
+                let top: Vec<u8> = (0..6 * 6 * 4).map(|i| (i * 11 % 256) as u8).collect();
+                s.layer(3, Layer::new(9, 15, 6, 6, How::Over, top).unwrap());
+                frames.push(s.frame(vec![1, 2, 3], false).unwrap());
+            }
+            assert!(
+                frames[0] == frames[2] && frames[1] == frames[3],
+                "{colour:?}"
+            );
+        }
+        assert!(Layer::filled(0, 0, 0, 4, [1, 2, 3, 4]).is_err());
     }
 
     #[test]

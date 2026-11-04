@@ -940,6 +940,9 @@ class Renderer:
         self.native_views = False
         # ... and makes a turning globe's picture for each step (scene.Globe), likewise
         self.native_globes = False
+        # ... and a card whose inside is one colour comes as its edges and that colour, which the
+        # engine lays without pixels (render/scene.py's Filled; the fills property)
+        self._fills = False
         self._held: dict[str, bool] = {}  # the conditions of needs worked out in this frame ...
         self._held_for: tuple[Any, ...] = ()  # ... for these readings (and pictures)
         self._composed: list[tuple[int, int, int, int]] | None = None
@@ -1103,6 +1106,22 @@ class Renderer:
         self._underlays.clear()
         self._grounds, self._last, self._handed = None, None, None
         self._background = self._load_background()
+
+    @property
+    def fills(self) -> bool:
+        """Whether a card whose inside is all one colour is made as its edges and that colour
+        (render/scene.py's Filled), for an engine that lays it so: its pixels are made here
+        only for a frame composed here. Changed, the cards are made again (the rects alone:
+        Lumen's nine of its 295 pieces)."""
+        return self._fills
+
+    @fills.setter
+    def fills(self, on: bool) -> None:
+        if on != self._fills:
+            self._fills = on
+            for widget in self.widgets:
+                if widget.get("type") == "rect":
+                    self._cache.pop(widget["id"], None)
 
     def _load_background(self) -> Image.Image | None:
         """The background picture at the theme's size. Read for it alone, not kept as read
@@ -3940,6 +3959,10 @@ class Renderer:
         if layer is None:
             layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
         backdrop = full if widget["backdrop_blur"] else None
+        if backdrop is None and self._fills:  # (its inside one colour: the engine lays it so)
+            made = scenes.filled(layer, max(c, ring))
+            if made is not None:
+                return Piece(made.layer, x, y, [x, y, w, h], native=made)
         return Piece(layer, x, y, [x, y, w, h], backdrop, widget["backdrop_blur"])
 
     def _draw_bar(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
