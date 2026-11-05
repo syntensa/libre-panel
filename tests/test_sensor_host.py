@@ -404,9 +404,23 @@ def test_as_a_windows_service_libre_panel_reads_through_it():
         sc("delete", SERVICE_NAME)
 
 
+def cpu_seconds(process: subprocess.Popen) -> float:
+    """The processor time a process has used so far, in the kernel and its own."""
+    from ctypes import wintypes as w
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.GetProcessTimes.argtypes = [w.HANDLE] + [ctypes.POINTER(w.FILETIME)] * 4
+    times = [w.FILETIME() for _ in range(4)]  # created, exited, kernel, user
+    if not kernel.GetProcessTimes(int(process._handle), *(ctypes.byref(t) for t in times)):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return sum(((t.dwHighDateTime << 32) | t.dwLowDateTime) / 1e7 for t in times[2:])
+
+
 def test_what_each_holds(tmp_path):
     """Each alone, by hand, asked for all its hardware once a second for half a minute (as
-    Libre Panel asks for what its themes read): what it holds then, as it says itself."""
+    Libre Panel asks for what its themes read): what it holds then, as it says itself, and
+    the processor time it took meanwhile."""
+    seconds = 30
 
     def held(command: list[str], out: Path):
         process = started(command, out)
@@ -418,26 +432,33 @@ def test_what_each_holds(tmp_path):
                 hardware = sorted({s.hardware_id for s in readings.sensors})[
                     : protocol.MAX_HARDWARE
                 ]
-                for _ in range(30):
+                before = cpu_seconds(process)
+                for _ in range(seconds):
                     readings = protocol.parse_readings(
                         link.request(protocol.read_request(hardware), 5)
                     )
                     time.sleep(1)
+                used = cpu_seconds(process) - before
             finally:
                 link.close()
         finally:
             ended(process, out)
         assert readings.memory is not None and readings.memory.private
-        return readings
+        return readings, used
 
     folder = str(Path(HOST).parent / "lhm")
-    ours = held([HOST, "--console"], tmp_path / "host.txt")
-    python = held([sys.executable, "-c", PYTHON_SERVICE, folder], tmp_path / "python.txt")
-    for name, readings in ((".NET program", ours), ("Python service", python)):
-        memory = readings.memory
+    ours, ours_cpu = held([HOST, "--console"], tmp_path / "host.txt")
+    python, python_cpu = held([sys.executable, "-c", PYTHON_SERVICE, folder], tmp_path / "py.txt")
+    for name, readings, used in (
+        (".NET program", ours, ours_cpu),
+        ("Python service", python, python_cpu),
+    ):
+        memory, last = readings.memory, readings.timing.last
+        took = sum(part.seconds for part in last.parts) * 1000 if last else 0.0
         print(
             f"{name}: {memory.private / MB:.1f} MB private working set, working set "
             f"{memory.working_set / MB:.1f} MB, .NET's heap {memory.managed / MB:.1f} MB, "
-            f"{len(readings.sensors)} sensors"
+            f"{len(readings.sensors)} sensors; {used / seconds * 100:.2f} % of a core, "
+            f"a round {took:.1f} ms"
         )
     assert ours.memory.private < python.memory.private
