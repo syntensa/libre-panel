@@ -784,8 +784,11 @@ function MorePanelsCard() {
     ? html`<a class="btn" href=${endpoints.panelsPhoto()} download data-panels-photo
         title=${t("One picture of all panels where they stand, each with what it shows now: to keep or to share")}>${t("Picture of all panels")}</a>`
     : null;
-  // the themes of this panel and another change places (theirs shown, where it has none)
+  // the themes of this panel and another change places (theirs shown, where it has none);
+  // panel 1's is asked for here where the app's start could not say it (yet), else the swap
+  // would do nothing
   const swap = async (n) => {
+    if (!store.get().pages) store.set({ pages: await endpoints.pages() });
     const first = normalTheme();
     const other = panels[n].theme || running.find((item) => item.index === n)?.theme;
     if (!first || !other) return;
@@ -896,7 +899,7 @@ function MorePanelsCard() {
         companion=${companion}
         onChange=${(changes) => edit(n, changes)}
         onRemove=${() => remove(n)}
-        onSwap=${() => swap(n).catch(() => {})}
+        onSwap=${() => swap(n).catch(toastError)}
       />`,
     )}
   <//>`;

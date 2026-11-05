@@ -82,6 +82,10 @@
   The sensor service says what it holds itself, .NET's heap with it: Windows lets no other
   process read its private memory without administrator rights.
 
+**Fixed**
+- *Settings → Panels*: *Swap with panel 1* did nothing where the app's start could not load the
+  panel's pages (or not yet). It now asks for them itself, and says why where it cannot.
+
 ## 0.8.0 — 2026-11-05
 
 Lighter on the PC, smoother on the panel, and made for every panel size.

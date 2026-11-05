@@ -88,7 +88,12 @@ def browser_page(url, view="design", strict_csp=False, size=(1440, 900), routes=
         page.goto(access.with_token(f"{url}#/{view}", token))
         page.wait_for_selector(".panel-canvas .preview" if view == "design" else ".view > *")
         page.wait_for_timeout(300)
-        yield page
+        try:
+            yield page
+        except BaseException:
+            if errors:  # what the page said goes with the failure (else it is lost with it)
+                print("the page's errors:", *errors, sep="\n  ")
+            raise
         assert errors == []
         browser.close()
 
@@ -4638,6 +4643,33 @@ def test_a_second_panel_is_added_given_a_theme_and_taken_out_again(app_url, isol
         second.get_by_role("button", name="Remove").click()
         waits_for(page, lambda: settings_config().panels == [])
         expect(card.locator("[data-more-panel]")).to_have_count(0)
+
+
+def test_a_swap_asks_for_panel_1_s_theme_where_the_start_could_not_say_it(app_url, isolated_home):
+    """Settings → Panels: the app's start could not load the panel's pages (or not yet), and
+    Swap with panel 1 still swaps: it asks for panel 1's theme itself, instead of doing
+    nothing (CI once saw the swap do nothing)."""
+    choose_theme(isolated_home)
+    with isolated_home.joinpath("config.toml").open("a", encoding="utf-8") as config:
+        config.write('\n[[panels]]\ntheme = "lumen"\n')
+    failed = []
+
+    def first_load_fails(route):
+        if route.request.method == "GET" and not failed:
+            failed.append(route.request.url)
+            return route.fulfill(status=500, body="{}")
+        return route.continue_()
+
+    with browser_page(app_url, "settings/panels", routes={"**/api/pages": first_load_fails},
+                      allow=("/api/pages",)) as page:  # fmt: skip
+        # the start's look at the pages failed: the app does not know panel 1's theme
+        page.wait_for_function("() => window.libre.store.get().pages === null")
+        page.unroute("**/api/pages")  # (from here on the server answers)
+        assert len(failed) == 1
+        second = page.locator("[data-more-panel='0']")
+        second.get_by_role("button", name="Swap with panel 1").click()
+        waits_for(page, lambda: settings_config().theme == "lumen")
+        assert settings_config().panels[0].theme == "libre-default"
 
 
 def test_the_panels_are_placed_where_they_stand_in_their_real_sizes(app_url, isolated_home,
