@@ -190,18 +190,20 @@ NOT_OBJECTS = [[1, 2], "hello", 7, None]
 NOT_JSON = [b"{", b"\xff\xfe", b"NaN", b'{"v": NaN}', b'{"v": 1} x', b'\xef\xbb\xbf{"v": 1}']
 
 
+@pytest.fixture(scope="class")
+def host(tmp_path_factory):
+    """The .NET program started by hand, for the tests of a class."""
+    out = tmp_path_factory.mktemp("host") / "console.txt"
+    process = started([HOST, "--console"], out)
+    try:
+        connect().close()
+        yield process
+    finally:
+        ended(process, out)
+
+
 class TestOnThePipe:
     """The .NET program started by hand, asked as Libre Panel asks it."""
-
-    @pytest.fixture(scope="class")
-    def host(self, tmp_path_factory):
-        out = tmp_path_factory.mktemp("host") / "console.txt"
-        process = started([HOST, "--console"], out)
-        try:
-            connect().close()
-            yield process
-        finally:
-            ended(process, out)
 
     def test_it_says_hello_with_the_apps_version(self, host):
         link = connect()

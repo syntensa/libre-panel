@@ -389,10 +389,18 @@ internal static class Numbers
     /// where the .NET Framework's "R" would not), with ".0" on a whole one, as repr.</summary>
     public static string Exact(double value)
     {
+        string text = Digits(value);
+        return text.IndexOf('E') < 0 && text.IndexOf('.') < 0 ? text + ".0" : text;
+    }
+
+    /// <summary>"R", or "G17" where the .NET Framework's "R" does not read back; with the sign
+    /// of a negative zero, which the .NET Framework leaves out.</summary>
+    static string Digits(double value)
+    {
         string text = value.ToString("R", Invariant);
         if (double.Parse(text, NumberStyles.Float, Invariant) != value)
             text = value.ToString("G17", Invariant);
-        return text.IndexOf('E') < 0 && text.IndexOf('.') < 0 ? text + ".0" : text;
+        return value == 0 && BitConverter.DoubleToInt64Bits(value) < 0 ? "-0" : text;
     }
 
     /// <summary>round(value, digits): to the nearest, half to even, of the value's own decimal
@@ -418,9 +426,7 @@ internal static class Numbers
             return "nan";
         if (double.IsInfinity(value))
             return value > 0 ? "inf" : "-inf";
-        string text = value.ToString("R", Invariant);
-        if (double.Parse(text, NumberStyles.Float, Invariant) != value)
-            text = value.ToString("G17", Invariant);
+        string text = Digits(value);
         bool negative = text.StartsWith("-", StringComparison.Ordinal);
         if (negative)
             text = text.Substring(1);
@@ -765,6 +771,8 @@ internal static class Json
             }
             string literal = s.Substring(start, i - start);
             double value = double.TryParse(literal, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed) ? parsed : double.NaN;
+            if (value == 0 && literal[0] == '-')
+                value = -Math.Abs(value);  // (the .NET Framework reads "-0.0" as 0.0)
             return new Number(literal, value, whole);
         }
     }

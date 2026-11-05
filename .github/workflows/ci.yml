@@ -188,10 +188,20 @@ jobs:
           dotnet --version
           version=$(python -c "import libre_panel; print(libre_panel.__version__)")
           numeric=$(python -c "import re, sys; v = sys.argv[1]; n = re.findall(r'\d+', v)[:4 if re.fullmatch(r'[\d.]+', v) else 3]; print('.'.join((n + ['0'] * 4)[:4]))" "$version")
-          dotnet build sensorhost -c Release -p:InformationalVersion="$version" -p:FileVersion="$numeric"
-          cat sensorhost/packages.lock.json
+          # (the .NET Framework's reference assemblies from NuGet as sensorhost/packages.lock.json pins them)
+          dotnet build sensorhost -c Release -p:RestoreLockedMode=true -p:InformationalVersion="$version" -p:FileVersion="$numeric"
           ls -la sensorhost/bin/Release sensorhost/bin/Release/lhm
           echo "LIBRE_PANEL_SENSOR_HOST=$(cygpath -w "$PWD/sensorhost/bin/Release/libre-panel-sensors.exe")" >> "$GITHUB_ENV"
+      - name: It says who made it
+        # its version resource, as the release checks the Python programs' (release.yml)
+        shell: pwsh
+        run: |
+          $info = (Get-Item "sensorhost/bin/Release/libre-panel-sensors.exe").VersionInfo
+          $version = python -c "import libre_panel; print(libre_panel.__version__)"
+          if ($info.CompanyName -ne "Libre Panel contributors" -or $info.ProductVersion -ne $version) {
+            throw "libre-panel-sensors.exe says nothing of itself: $($info | Format-List | Out-String)"
+          }
+          "{0}, {1}, {2}" -f $info.FileDescription, $info.CompanyName, $info.ProductVersion
       - name: Its look at the hardware
         shell: bash
         run: sensorhost/bin/Release/libre-panel-sensors.exe --check

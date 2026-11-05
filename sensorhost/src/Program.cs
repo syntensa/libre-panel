@@ -197,11 +197,7 @@ internal static class Libraries
         string? name = new AssemblyName(args.Name).Name;
         if (string.IsNullOrEmpty(name))
             return null;
-        foreach (Assembly loaded in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            if (string.Equals(loaded.GetName().Name, name, StringComparison.OrdinalIgnoreCase))
-                return loaded;
-        }
+        // (the very file once loaded is the same assembly again: LoadFrom knows its path)
         string path = PathOf(name!);
         return File.Exists(path) ? Assembly.LoadFrom(path) : null;
     }
