@@ -1,13 +1,14 @@
-"""Windows: what the process heap keeps after the app's pictures (the renderer's previews of
-several themes, as the app's window makes them) went, and what light mode's give-back returns.
-Prints, step by step: the private working set (USS, the Task Manager's Memory column), the
-commit (psutil's private), and the process heap's bytes in use and committed but free."""
+"""Windows: what the process holds after the app's pictures (the renderer's frames with changing
+readings, as the app's window draws them, and its pictures of several themes) went, and what
+light mode's give-back returns. Step by step: the private working set (Task Manager's Memory
+column), the working set, the commit (private bytes), and the process heap by HeapWalk:
+its committed regions, what is allocated in them, what is free there, what is uncommitted."""
 
+import ctypes
 import gc
 import sys
 import time
-
-import psutil
+from ctypes import wintypes
 
 from libre_panel import light
 from libre_panel.load_report import c_heap
@@ -17,79 +18,129 @@ from libre_panel.sensors.demo import demo_snapshot
 from libre_panel.theme.model import find_theme, load_theme
 
 MB = 1 << 20
-proc = psutil.Process()
+kernel32 = ctypes.WinDLL("kernel32")
+psapi = ctypes.WinDLL("psapi")
+
+
+class Counters(ctypes.Structure):
+    _fields_ = [
+        ("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD),
+        ("PeakWorkingSetSize", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t),
+        ("QuotaPeakPagedPoolUsage", ctypes.c_size_t), ("QuotaPagedPoolUsage", ctypes.c_size_t),
+        ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+        ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+        ("PagefileUsage", ctypes.c_size_t), ("PeakPagefileUsage", ctypes.c_size_t),
+        ("PrivateUsage", ctypes.c_size_t), ("PrivateWorkingSetSize", ctypes.c_size_t),
+        ("SharedCommitUsage", ctypes.c_ulonglong),
+    ]  # fmt: skip
+
+
+class Region(ctypes.Structure):
+    _fields_ = [("dwCommittedSize", wintypes.DWORD), ("dwUnCommittedSize", wintypes.DWORD),
+                ("lpFirstBlock", ctypes.c_void_p), ("lpLastBlock", ctypes.c_void_p)]  # fmt: skip
+
+
+class Block(ctypes.Structure):
+    _fields_ = [("hMem", wintypes.HANDLE), ("dwReserved", wintypes.DWORD * 3)]
+
+
+class Union(ctypes.Union):
+    _fields_ = [("Block", Block), ("Region", Region)]
+
+
+class Entry(ctypes.Structure):
+    _fields_ = [("lpData", ctypes.c_void_p), ("cbData", wintypes.DWORD),
+                ("cbOverhead", ctypes.c_ubyte), ("iRegionIndex", ctypes.c_ubyte),
+                ("wFlags", wintypes.WORD), ("u", Union)]  # fmt: skip
+
+
+kernel32.GetProcessHeap.restype = wintypes.HANDLE
+kernel32.HeapWalk.argtypes = [wintypes.HANDLE, ctypes.POINTER(Entry)]
+kernel32.HeapLock.argtypes = kernel32.HeapUnlock.argtypes = [wintypes.HANDLE]
+kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+psapi.GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.POINTER(Counters), wintypes.DWORD]
+REGION, UNCOMMITTED, BUSY = 0x0001, 0x0002, 0x0004
+
+
+def walk():
+    heap = kernel32.GetProcessHeap()
+    committed = uncommitted = busy = free = 0
+    entry = Entry()
+    kernel32.HeapLock(heap)
+    try:
+        while kernel32.HeapWalk(heap, ctypes.byref(entry)):
+            if entry.wFlags & REGION:
+                committed += entry.u.Region.dwCommittedSize
+                uncommitted += entry.u.Region.dwUnCommittedSize
+            elif entry.wFlags & UNCOMMITTED:
+                pass
+            elif entry.wFlags & BUSY:
+                busy += entry.cbData + entry.cbOverhead
+            else:
+                free += entry.cbData
+    finally:
+        kernel32.HeapUnlock(heap)
+    return committed, uncommitted, busy, free
 
 
 def line(step):
-    full = proc.memory_full_info()
-    heap = c_heap() or {"in_use": 0, "free": 0}
+    c = Counters()
+    c.cb = ctypes.sizeof(c)
+    psapi.GetProcessMemoryInfo(kernel32.GetCurrentProcess(), ctypes.byref(c), c.cb)
+    summary = c_heap() or {"in_use": 0, "free": 0}
+    committed, uncommitted, busy, free = walk()
     print(
-        f"{step:44} private {full.uss / MB:7.1f}  commit {getattr(full, 'private', 0) / MB:7.1f}  "
-        f"heap in use {heap['in_use'] / MB:7.1f}  free {heap['free'] / MB:7.1f} MB",
+        f"{step:40} privateWS {c.PrivateWorkingSetSize / MB:6.1f}  "
+        f"WS {c.WorkingSetSize / MB:6.1f}  "
+        f"commit {c.PrivateUsage / MB:6.1f} | heap walk: committed {committed / MB:6.1f}  busy "
+        f"{busy / MB:6.1f}  free {free / MB:6.1f}  uncommitted {uncommitted / MB:6.1f} | summary "
+        f"in use {summary['in_use'] / MB:6.1f} free {summary['free'] / MB:6.1f}",
         flush=True,
     )
 
 
 line("start")
-snapshot = demo_snapshot(fixed_time=1_700_000_000)
-panels = [
-    Renderer(load_theme(find_theme(name)), preview=True)
-    for name in ("lumen-1920x720", "lumen-companion")
-]
-for _ in range(5):
+panels = [Renderer(load_theme(find_theme(name)), preview=True)
+          for name in ("lumen-1920x720", "lumen-companion")]  # fmt: skip
+for k in range(120):  # the panels' frames with readings that change, the window open
+    snapshot = demo_snapshot(fixed_time=1_700_000_000 + k)
     for panel in panels:
         panel.render(snapshot)
-line("two panels drawn")
-themes = [
-    t
-    for t in (
-        "arena",
-        "almanac",
-        "encore",
-        "terra",
-        "contrast",
-        "lumen",
-        "arena-1920x720",
-        "almanac-1920x720",
-    )
-]
-for _round in range(3):  # the app's window: its pictures of every theme, again and again
-    for name in themes:
+line("120 frames of two panels, readings changing")
+for _ in range(2):  # the app's pictures of the themes (Start, Design)
+    for name in ("arena", "almanac", "encore", "terra", "contrast", "lumen", "arena-companion"):
         try:
             picture = Renderer(load_theme(find_theme(name)), preview=True)
         except Exception as exc:  # noqa: BLE001
             print("  (no", name, exc, ")")
             continue
-        picture.render(snapshot)
+        picture.render(demo_snapshot(fixed_time=1_700_000_000))
         picture.close()
-    for panel in panels:
-        panel.render(snapshot)
 line("the app's pictures of the themes made")
 light.mark()
-for panel in panels:
-    panel.render(snapshot)
+for k in range(5):
+    for panel in panels:
+        panel.render(demo_snapshot(fixed_time=1_700_000_200 + k))
 light.shed()
 light.empty_caches()
 gc.collect()
-line("the caches let go (light mode, before giving back)")
+line("the caches let go (before giving back)")
 started = time.perf_counter()
 light.windows_heaps()
-took = (time.perf_counter() - started) * 1000
-line(f"heaps given back ({took:.1f} ms)")
-light.give_back()  # (the heaps again, and the working set)
-line("working set trimmed too")
-for _ in range(50):
+line(f"heaps given back ({(time.perf_counter() - started) * 1000:.1f} ms)")
+kernel32.SetProcessWorkingSetSize(kernel32.GetCurrentProcess(), ctypes.c_size_t(-1),
+                                  ctypes.c_size_t(-1))  # fmt: skip
+line("working set trimmed")
+for k in range(60):
     for panel in panels:
-        panel.render(snapshot)
-line("50 frames of the two panels later")
-started = time.perf_counter()
+        panel.render(demo_snapshot(fixed_time=1_700_000_300 + k))
+line("60 more frames")
 light.tidy()
-took = (time.perf_counter() - started) * 1000
-line(f"tidy ({took:.1f} ms)")
+line("tidy")
 print(
     "python",
     sys.version.split()[0],
-    "pictures kept",
+    "kept",
     round(sum(r["bytes"] for r in kept.stats().values()) / MB, 1),
     "MB",
 )
