@@ -100,6 +100,9 @@ def line(step):
     )
 
 
+signature = ctypes.c_uint32.from_address(kernel32.GetProcessHeap() + 0x10).value
+kinds = {0xFFEEFFEE: "NT heap", 0xDDEEDDEE: "segment heap"}
+print("the process heap:", kinds.get(signature, hex(signature)))
 line("start")
 panels = [Renderer(load_theme(find_theme(name)), preview=True)
           for name in ("lumen-1920x720", "lumen-companion")]  # fmt: skip

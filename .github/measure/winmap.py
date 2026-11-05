@@ -198,6 +198,14 @@ def allocation_base(address: int) -> int:
     return mbi.AllocationBase or 0
 
 
+def heap_kind() -> str:
+    """Which heap the process heap is: Windows' NT heap ("nt", its signature 0xFFEEFFEE) or the
+    segment heap ("segment", 0xDDEEDDEE), by the signature both keep at their handle's 16th
+    byte."""
+    signature = ctypes.c_uint32.from_address(k32.GetProcessHeap() + 0x10).value
+    return {0xFFEEFFEE: "nt", 0xDDEEDDEE: "segment"}.get(signature, hex(signature))
+
+
 def census() -> dict:
     """What the process holds now, by owner (MB: committed, private in the working set)."""
     started = time.perf_counter()
@@ -263,6 +271,7 @@ def census() -> dict:
                    large_mb=mb(sum(size for _, size in heap["large"])))  # fmt: skip
         heap_rows.append(row)
     return {
+        "heap_kind": heap_kind(),
         "counters": before,
         "counters_after": after,
         "took_ms": round((time.perf_counter() - started) * 1000, 1),
