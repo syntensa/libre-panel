@@ -914,7 +914,8 @@ def card_s(extra=""):
             # output is told, as 8.x does, leaves the card's own conversion as it is)
             at = found.index("-color_range") + 1
             told = f"setparams=range={found[at]}:colorspace=smpte170m"
-            found[found.index("-vf") + 1] += f",{command.extra},{told}"
+            extra = command.extra.format(range=found[at])
+            found[found.index("-vf") + 1] += f",{extra},{told}"
         return found
 
     command.extra = extra
@@ -1015,7 +1016,8 @@ def test_the_card_converts_where_the_check_found_it_identical_and_the_processor_
             "The graphics card converts the colours: checked identical on"
         )
         expect(card.locator(".colour-now")).to_contain_text("it would start AMD (h264_amf)")
-        command.extra = "scale=out_color_matrix=bt709"  # (a new driver, say)
+        # (a new driver, say: BT.709's matrix, the range as it was, whatever ffmpeg's version)
+        command.extra = "scale=in_range={range}:out_range={range}:out_color_matrix=bt709"
         card.get_by_role("button", name="Check again").click()
         expect(amd).to_have_attribute("data-verdict", "matrix", timeout=30000)
         expect(choice).to_have_attribute("data-why", "differs")
