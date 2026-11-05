@@ -58,6 +58,7 @@ kernel32.GetProcessHeap.restype = wintypes.HANDLE
 kernel32.HeapWalk.argtypes = [wintypes.HANDLE, ctypes.POINTER(Entry)]
 kernel32.HeapLock.argtypes = kernel32.HeapUnlock.argtypes = [wintypes.HANDLE]
 kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+kernel32.SetProcessWorkingSetSize.argtypes = [wintypes.HANDLE, ctypes.c_size_t, ctypes.c_size_t]
 psapi.GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.POINTER(Counters), wintypes.DWORD]
 REGION, UNCOMMITTED, BUSY = 0x0001, 0x0002, 0x0004
 

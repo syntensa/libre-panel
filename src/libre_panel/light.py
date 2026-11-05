@@ -98,14 +98,28 @@ def give_back(platform: str = sys.platform) -> None:
     try:
         if platform == "win32":
             windows_heaps()
-            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
-            kernel32.SetProcessWorkingSetSize(
-                kernel32.GetCurrentProcess(), ctypes.c_size_t(-1), ctypes.c_size_t(-1)
-            )
+            empty_working_set()
         elif platform.startswith("linux"):
             ctypes.CDLL("libc.so.6").malloc_trim(0)
-    except (OSError, AttributeError) as exc:
+    except (OSError, AttributeError, ctypes.ArgumentError) as exc:
         log.debug("the memory stays with the program: %s", exc)
+
+
+def empty_working_set() -> None:
+    """Windows: the pages of the program leave its working set; those it touches come back as
+    it touches them. With a kernel32 of its own and its arguments declared: the shared one's
+    GetCurrentProcess may have been declared to give a HANDLE by other code (the sensor
+    service's own_memory), whose value an undeclared argument cannot take."""
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32")  # type: ignore[attr-defined]
+    kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+    kernel32.SetProcessWorkingSetSize.argtypes = [
+        wintypes.HANDLE, ctypes.c_size_t, ctypes.c_size_t,
+    ]  # fmt: skip
+    kernel32.SetProcessWorkingSetSize.restype = wintypes.BOOL
+    every = ctypes.c_size_t(-1).value  # (both -1: as many pages as can go)
+    kernel32.SetProcessWorkingSetSize(kernel32.GetCurrentProcess(), every, every)
 
 
 def tidy(platform: str = sys.platform) -> None:

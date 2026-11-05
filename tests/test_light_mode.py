@@ -150,13 +150,47 @@ def test_on_windows_the_heaps_give_their_free_memory_back_at_each_look(monkeypat
     light.give_back("win32")
     names = [name for name, _ in calls]
     assert names[:3] == ["HeapSetInformation", "GetProcessHeap", "HeapCompact"]
-    assert "SetProcessWorkingSetSize" in names[3:]
+    assert names[3:] == ["GetCurrentProcess", "SetProcessWorkingSetSize"]
+    every = 2**64 - 1  # (SIZE_T -1 both: as many pages as can go)
+    assert calls[4][1] == (-1, every, every)
+    trim = kernel32.SetProcessWorkingSetSize
+    assert len(trim.argtypes) == 3 and trim.argtypes[1] is light.ctypes.c_size_t
+
+    def refused(*args):  # (an argument ctypes cannot pass: the memory stays, no error)
+        raise light.ctypes.ArgumentError("argument 1: OverflowError: int too long to convert")
+
+    kernel32.SetProcessWorkingSetSize = refused
+    light.give_back("win32")
 
     def missing(name):  # (an older Windows, or no kernel32 to be had: nothing happens)
         raise OSError("not found")
 
     monkeypatch.setattr(light.ctypes, "WinDLL", missing, raising=False)
     light.tidy("win32")  # (no error)
+    light.give_back("win32")
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows' working set")
+def test_on_windows_the_release_empties_the_working_set_where_other_code_declared_kernel32():
+    """The release takes the program's pages out of its working set (Task Manager's Memory
+    column), also where other code declared the shared kernel32's GetCurrentProcess to give a
+    HANDLE (the sensor service's own_memory does), whose value an undeclared argument cannot
+    take: then it did nothing."""
+    from ctypes import wintypes
+
+    import psutil
+
+    held = bytearray(64 << 20)  # touched: 64 MB in the working set, and kept
+    shared = light.ctypes.windll.kernel32.GetCurrentProcess  # type: ignore[attr-defined]
+    shared.restype = wintypes.HANDLE
+    try:
+        before = psutil.Process().memory_full_info().uss
+        light.give_back("win32")
+        after = psutil.Process().memory_full_info().uss
+    finally:
+        shared.restype = light.ctypes.c_int  # (ctypes' own)
+    assert before - after >= 48 << 20, (before >> 20, after >> 20)
+    assert held[-1] == 0  # (and the memory is the program's still)
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows' own heaps")

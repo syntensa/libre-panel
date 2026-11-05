@@ -19,3 +19,36 @@ jobs:
       - name: The heap after the app's pictures, and given back
         shell: bash
         run: python .github/measure/measure_winheap.py
+  rig:
+    # the background app with two simulated panels through the engine, the window never opened:
+    # what its main process holds, by owner (.github/measure/rig_windows.py)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: MinGW and libx264 (MSYS2)
+        uses: msys2/setup-msys2@v2
+        id: msys2
+        with:
+          msystem: MINGW64
+          update: false
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-libx264
+      - name: Build the engine
+        shell: bash
+        run: |
+          cd engine
+          mingw="$(cygpath -u '${{ steps.msys2.outputs.msys2-location }}')/mingw64"
+          export PATH="$mingw/bin:$PATH" CC=gcc AR=ar X264_DIR="$(cygpath -m "$mingw")" X264_STATIC=1
+          export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=gcc RUSTFLAGS="-C target-feature=+crt-static"
+          rustup target add x86_64-pc-windows-gnu
+          cargo build --release --target x86_64-pc-windows-gnu
+          built="target/x86_64-pc-windows-gnu/release/libre-panel-engine.exe"
+          "./$built" version
+          echo "LIBRE_PANEL_ENGINE=$(cygpath -w "$PWD/$built")" >> "$GITHUB_ENV"
+      - run: pip install -e ".[dev,usb]"
+      - name: The app at login, 9 minutes
+        shell: bash
+        run: python .github/measure/rig_windows.py 9
