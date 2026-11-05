@@ -49,7 +49,13 @@ pub struct Yuv {
     pub y: Vec<u8>,
     pub u: Vec<u8>,
     pub v: Vec<u8>,
+    /// The frame as it was put, three bytes a pixel: kept only where asked for
+    /// ([`Yuv::keeping_rgb`], --dump-rgb). Else the planes are the frame, and each block is
+    /// known by a hash of its pixels as they were last put ([`block_hash`]): a 12.3" frame's
+    /// 5400 blocks in 43 KB instead of its pixels again in 4.1 MB, the boxes then of whole
+    /// blocks (as the scenes and Libre Panel's own frames make them).
     rgb: Vec<u8>,
+    hashes: Vec<u64>,
     rows: usize,
     cols: usize,
     changed: Vec<bool>,
@@ -57,7 +63,25 @@ pub struct Yuv {
 }
 
 impl Yuv {
+    /// A frame whose pixels are not kept, but its blocks' hashes (the boxes put: of whole
+    /// blocks).
     pub fn new(width: usize, height: usize, turn: Turn, full: bool) -> Result<Yuv, String> {
+        Yuv::make(width, height, turn, full, false)
+    }
+
+    /// A frame that keeps its pixels as they were put ([`Yuv::rgb`]: for --dump-rgb); its
+    /// boxes may be of any size.
+    pub fn keeping_rgb(width: usize, height: usize, turn: Turn, full: bool) -> Result<Yuv, String> {
+        Yuv::make(width, height, turn, full, true)
+    }
+
+    fn make(
+        width: usize,
+        height: usize,
+        turn: Turn,
+        full: bool,
+        keep: bool,
+    ) -> Result<Yuv, String> {
         let block = block_of(width, height)
             .ok_or_else(|| format!("no blocks of 8 or 16 pixels make {width}x{height}"))?;
         let turned = if turn == Turn::Quarter {
@@ -76,7 +100,17 @@ impl Yuv {
             y: vec![if full { 0 } else { 16 }; turned.0 * turned.1],
             u: vec![128; (turned.0 / 2) * (turned.1 / 2)],
             v: vec![128; (turned.0 / 2) * (turned.1 / 2)],
-            rgb: vec![0; width * height * 3],
+            rgb: if keep {
+                vec![0; width * height * 3]
+            } else {
+                Vec::new()
+            },
+            // (as the pixels kept start: black, which a block put black did not change from)
+            hashes: if keep {
+                Vec::new()
+            } else {
+                vec![block_hash(&vec![0; block * block * 3], 0, block * 3, block); rows * cols]
+            },
             rows,
             cols,
             changed: vec![false; rows * cols],
@@ -84,7 +118,8 @@ impl Yuv {
         })
     }
 
-    /// The frame as it was put, three bytes a pixel, row by row (before it is turned).
+    /// The frame as it was put, three bytes a pixel, row by row (before it is turned); empty
+    /// where it is not kept ([`Yuv::keeping_rgb`]).
     pub fn rgb(&self) -> &[u8] {
         &self.rgb
     }
@@ -96,7 +131,8 @@ impl Yuv {
 
     /// A part of the new frame that may have changed: the box (x0, y0)-(x1, y1) and its pixels,
     /// three bytes each, row by row. Where it differs from the frame before, its blocks are
-    /// marked for :meth:`finish`.
+    /// marked for :meth:`finish` (and, where the frame's pixels are not kept, made anew in the
+    /// planes now: the box must then be of whole blocks).
     pub fn put(
         &mut self,
         x0: usize,
@@ -113,6 +149,9 @@ impl Yuv {
             return Err("the box's pixels are not as many as it holds".into());
         }
         let block = self.block;
+        if self.rgb.is_empty() {
+            return self.put_blocks(x0, y0, x1, y1, pixels);
+        }
         for row in y0..y1 {
             let src = &pixels[(row - y0) * wide * 3..(row - y0 + 1) * wide * 3];
             let at = (row * self.width + x0) * 3;
@@ -134,8 +173,46 @@ impl Yuv {
         Ok(())
     }
 
-    /// Make the YUV anew in the blocks that changed and say which of the encoder's macroblocks
-    /// stayed the same (`mb`: CONSTANT, else 0). The number of blocks made anew.
+    /// The blocks of a box of whole blocks, the frame's pixels not kept: each whose pixels hash
+    /// otherwise than when it was last put (every one, for the first frame) is made anew in
+    /// the planes and marked.
+    fn put_blocks(
+        &mut self,
+        x0: usize,
+        y0: usize,
+        x1: usize,
+        y1: usize,
+        pixels: &[u8],
+    ) -> Result<(), String> {
+        let n = self.block;
+        let of_blocks = |v: usize| v.is_multiple_of(n);
+        if !(of_blocks(x0) && of_blocks(y0) && of_blocks(x1) && of_blocks(y1)) {
+            return Err(format!(
+                "the box {x0},{y0},{x1},{y1} is not of whole blocks of {n} (the frame's pixels \
+                 are not kept)"
+            ));
+        }
+        let line = (x1 - x0) * 3;
+        for r in y0 / n..y1 / n {
+            for c in x0 / n..x1 / n {
+                let first = (r * n - y0) * line + (c * n - x0) * 3;
+                let hash = block_hash(pixels, first, line, n);
+                let index = r * self.cols + c;
+                if !self.whole && self.hashes[index] == hash {
+                    continue;
+                }
+                self.hashes[index] = hash;
+                self.changed[index] = true;
+                let (light, cb, cr) = colours(pixels, first, line, n, self.full);
+                self.lay_block(r, c, &light, &cb, &cr);
+            }
+        }
+        Ok(())
+    }
+
+    /// Make the YUV anew in the blocks that changed (where the frame's pixels are kept: else
+    /// [`Yuv::put`] made them) and say which of the encoder's macroblocks stayed the same
+    /// (`mb`: CONSTANT, else 0). The number of blocks made anew.
     pub fn finish(&mut self, mb: &mut [u8]) -> usize {
         if self.whole {
             self.changed.iter_mut().for_each(|c| *c = true);
@@ -143,6 +220,7 @@ impl Yuv {
         }
         mb.iter_mut().for_each(|m| *m = CONSTANT);
         let (mb_cols, _) = self.macroblocks();
+        let kept = !self.rgb.is_empty();
         let mut count = 0;
         for r in 0..self.rows {
             for c in 0..self.cols {
@@ -152,7 +230,11 @@ impl Yuv {
                 }
                 self.changed[index] = false;
                 count += 1;
-                let (tr, tc) = self.convert(r, c);
+                let (tr, tc) = if kept {
+                    self.convert(r, c)
+                } else {
+                    self.turned_at(r, c)
+                };
                 let n = self.block;
                 for mr in (tr * n) / 16..=((tr + 1) * n - 1) / 16 {
                     for mc in (tc * n) / 16..=((tc + 1) * n - 1) / 16 {
@@ -164,63 +246,48 @@ impl Yuv {
         count
     }
 
-    /// Convert the block at (r, c) of the drawn frame and lay it, turned, into the planes:
-    /// where it lies once turned (block row and column).
+    /// Convert the block at (r, c) of the drawn frame, as kept, and lay it, turned, into the
+    /// planes: where it lies once turned (block row and column).
     fn convert(&mut self, r: usize, c: usize) -> (usize, usize) {
         let n = self.block;
-        let half = n / 2;
-        let full = self.full;
-        let mut light = [0u8; 256];
-        let mut blue = [0i32; 256];
-        let mut red = [0i32; 256];
         let line = self.width * 3;
         let first = (r * n * self.width + c * n) * 3;
-        for i in 0..n {
-            let row = &self.rgb[first + i * line..first + i * line + n * 3];
-            let out = i * n..i * n + n;
-            let (l, b) = (&mut light[out.clone()], &mut blue[out.clone()]);
-            for (((px, l), b), rd) in row.chunks_exact(3).zip(l).zip(b).zip(&mut red[out]) {
-                let (pr, pg, pb) = (px[0] as usize, px[1] as usize, px[2] as usize);
-                let y = (((Y_R[pr] + Y_G[pg] + Y_B[pb]) >> 6) & 255) as usize;
-                *l = if full { y as u8 } else { LIMITED_Y[y] };
-                *b = (((CB_R[pr] + CB_G[pg] + CB_B[pb]) >> 6) + 128) & 255;
-                *rd = (((CR_R[pr] + CR_G[pg] + CR_B[pb]) >> 6) + 128) & 255;
-            }
-        }
-        let mut cb = [0u8; 64];
-        let mut cr = [0u8; 64];
-        for i in 0..half {
-            let (top, low) = (2 * i * n, (2 * i + 1) * n);
-            let (b0, b1) = (&blue[top..top + n], &blue[low..low + n]);
-            let (r0, r1) = (&red[top..top + n], &red[low..low + n]);
-            let (ob, or) = (
-                &mut cb[i * half..i * half + half],
-                &mut cr[i * half..i * half + half],
-            );
-            for j in 0..half {
-                let k = 2 * j;
-                let sum_b = b0[k] + b0[k + 1] + b1[k] + b1[k + 1];
-                let sum_r = r0[k] + r0[k + 1] + r1[k] + r1[k + 1];
-                let (b, r) = (((sum_b + 2) >> 2) as usize, ((sum_r + 2) >> 2) as usize);
-                ob[j] = if full { b as u8 } else { LIMITED_C[b] };
-                or[j] = if full { r as u8 } else { LIMITED_C[r] };
-            }
-        }
-        let (tr, tc) = match self.turn {
+        let (light, cb, cr) = colours(&self.rgb, first, line, n, self.full);
+        self.lay_block(r, c, &light, &cb, &cr)
+    }
+
+    /// Where the block at (r, c) of the drawn frame lies once turned (block row and column).
+    fn turned_at(&self, r: usize, c: usize) -> (usize, usize) {
+        match self.turn {
             Turn::None => (r, c),
             Turn::Half => (self.rows - 1 - r, self.cols - 1 - c),
             Turn::Quarter => (c, self.rows - 1 - r),
-        };
+        }
+    }
+
+    /// The block (r, c)'s colours (its light, and its two by two pixels' blue and red) laid,
+    /// turned, into the planes; where it lies once turned.
+    fn lay_block(
+        &mut self,
+        r: usize,
+        c: usize,
+        light: &[u8; 256],
+        cb: &[u8; 64],
+        cr: &[u8; 64],
+    ) -> (usize, usize) {
+        let n = self.block;
+        let half = n / 2;
+        let (tr, tc) = self.turned_at(r, c);
         let turn = self.turn;
         let stride = self.turned.0;
-        lay(&mut self.y, stride, tr * n, tc * n, n, &light, turn);
+        lay(&mut self.y, stride, tr * n, tc * n, n, light, turn);
         lay(
             &mut self.u,
             stride / 2,
             tr * half,
             tc * half,
             half,
-            &cb,
+            cb,
             turn,
         );
         lay(
@@ -229,11 +296,79 @@ impl Yuv {
             tr * half,
             tc * half,
             half,
-            &cr,
+            cr,
             turn,
         );
         (tr, tc)
     }
+}
+
+/// A block's colours as Pillow's YCbCr makes them: its light, and the blue and red of each two
+/// by two of its pixels (their average), in the panel's range. `src` holds the pixels three
+/// bytes each, the block's first at `first`, its rows `line` bytes apart.
+fn colours(
+    src: &[u8],
+    first: usize,
+    line: usize,
+    n: usize,
+    full: bool,
+) -> ([u8; 256], [u8; 64], [u8; 64]) {
+    let half = n / 2;
+    let mut light = [0u8; 256];
+    let mut blue = [0i32; 256];
+    let mut red = [0i32; 256];
+    for i in 0..n {
+        let row = &src[first + i * line..first + i * line + n * 3];
+        let out = i * n..i * n + n;
+        let (l, b) = (&mut light[out.clone()], &mut blue[out.clone()]);
+        for (((px, l), b), rd) in row.chunks_exact(3).zip(l).zip(b).zip(&mut red[out]) {
+            let (pr, pg, pb) = (px[0] as usize, px[1] as usize, px[2] as usize);
+            let y = (((Y_R[pr] + Y_G[pg] + Y_B[pb]) >> 6) & 255) as usize;
+            *l = if full { y as u8 } else { LIMITED_Y[y] };
+            *b = (((CB_R[pr] + CB_G[pg] + CB_B[pb]) >> 6) + 128) & 255;
+            *rd = (((CR_R[pr] + CR_G[pg] + CR_B[pb]) >> 6) + 128) & 255;
+        }
+    }
+    let mut cb = [0u8; 64];
+    let mut cr = [0u8; 64];
+    for i in 0..half {
+        let (top, low) = (2 * i * n, (2 * i + 1) * n);
+        let (b0, b1) = (&blue[top..top + n], &blue[low..low + n]);
+        let (r0, r1) = (&red[top..top + n], &red[low..low + n]);
+        let (ob, or) = (
+            &mut cb[i * half..i * half + half],
+            &mut cr[i * half..i * half + half],
+        );
+        for j in 0..half {
+            let k = 2 * j;
+            let sum_b = b0[k] + b0[k + 1] + b1[k] + b1[k + 1];
+            let sum_r = r0[k] + r0[k + 1] + r1[k] + r1[k + 1];
+            let (b, r) = (((sum_b + 2) >> 2) as usize, ((sum_r + 2) >> 2) as usize);
+            ob[j] = if full { b as u8 } else { LIMITED_C[b] };
+            or[j] = if full { r as u8 } else { LIMITED_C[r] };
+        }
+    }
+    (light, cb, cr)
+}
+
+/// A hash of the n x n block of three-byte pixels at `first` in `src` (rows `line` bytes apart):
+/// eight bytes at a time, each step a bijection of the state, so that two blocks that differ
+/// in one place never hash alike (and others only by a chance of one in 2^64).
+fn block_hash(src: &[u8], first: usize, line: usize, n: usize) -> u64 {
+    const K: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut h: u64 = 0x243F_6A88_85A3_08D3;
+    for i in 0..n {
+        let row = &src[first + i * line..first + i * line + n * 3];
+        let mut words = row.chunks_exact(8);
+        for word in &mut words {
+            let w = u64::from_le_bytes(word.try_into().expect("eight bytes"));
+            h = (h ^ w).wrapping_mul(K).rotate_left(27);
+        }
+        for &b in words.remainder() {
+            h = (h ^ u64::from(b)).wrapping_mul(K).rotate_left(27);
+        }
+    }
+    h ^ (h >> 31)
 }
 
 /// The n x n `block` (row by row) into `plane` at (`top`, `left`), turned as `turn` says.
@@ -293,5 +428,105 @@ mod tests {
         yuv.put(0, 0, 32, 32, &white).unwrap();
         assert_eq!(yuv.finish(&mut mb), 0);
         assert!(mb.iter().all(|&m| m == CONSTANT));
+    }
+
+    /// A small generator of the same numbers every time (xorshift).
+    struct Numbers(u64);
+
+    impl Numbers {
+        fn next(&mut self) -> u64 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            self.0
+        }
+
+        fn below(&mut self, n: usize) -> usize {
+            (self.next() % n as u64) as usize
+        }
+    }
+
+    #[test]
+    fn the_planes_and_the_constant_macroblocks_are_the_same_with_the_pixels_kept_or_hashed() {
+        // boxes of whole blocks, some with what they held already (the same again, or in
+        // part), on frames of blocks of 16 and of 8, each way turned, in both ranges
+        for (width, height) in [(96usize, 64usize), (40, 24)] {
+            for turn in [Turn::None, Turn::Half, Turn::Quarter] {
+                for full in [false, true] {
+                    let mut kept = Yuv::keeping_rgb(width, height, turn, full).unwrap();
+                    let mut hashed = Yuv::new(width, height, turn, full).unwrap();
+                    assert!(hashed.rgb().is_empty() && kept.rgb().len() == width * height * 3);
+                    let n = kept.block;
+                    let (cols, rows) = kept.macroblocks();
+                    let (mut mb_kept, mut mb_hashed) =
+                        (vec![0u8; cols * rows], vec![0u8; cols * rows]);
+                    let mut numbers = Numbers(0x1234_5678_9ABC_DEF1 ^ width as u64);
+                    let mut frame = vec![0u8; width * height * 3];
+                    for step in 0..40 {
+                        let mut boxes = Vec::new();
+                        for _ in 0..1 + numbers.below(3) {
+                            let (bx, by) = (numbers.below(width / n), numbers.below(height / n));
+                            let bw = 1 + numbers.below(width / n - bx);
+                            let bh = 1 + numbers.below(height / n - by);
+                            let (x0, y0, x1, y1) = (bx * n, by * n, (bx + bw) * n, (by + bh) * n);
+                            if step % 3 != 0 {
+                                for y in y0..y1 {
+                                    for x in x0..x1 {
+                                        if numbers.below(4) == 0 {
+                                            let at = (y * width + x) * 3;
+                                            frame[at + numbers.below(3)] = numbers.next() as u8;
+                                        }
+                                    }
+                                }
+                            }
+                            let mut pixels = Vec::new();
+                            for y in y0..y1 {
+                                pixels.extend_from_slice(
+                                    &frame[(y * width + x0) * 3..(y * width + x1) * 3],
+                                );
+                            }
+                            boxes.push((x0, y0, x1, y1, pixels));
+                        }
+                        for (x0, y0, x1, y1, pixels) in &boxes {
+                            kept.put(*x0, *y0, *x1, *y1, pixels).unwrap();
+                            hashed.put(*x0, *y0, *x1, *y1, pixels).unwrap();
+                        }
+                        let made = kept.finish(&mut mb_kept);
+                        assert_eq!(
+                            hashed.finish(&mut mb_hashed),
+                            made,
+                            "{turn:?} {full} {step}"
+                        );
+                        assert_eq!(mb_hashed, mb_kept, "{turn:?} {full} {step}");
+                        assert!(hashed.y == kept.y && hashed.u == kept.u && hashed.v == kept.v);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_box_of_part_blocks_wants_the_pixels_kept() {
+        let mut hashed = Yuv::new(32, 32, Turn::None, false).unwrap();
+        let pixels = vec![7u8; 8 * 16 * 3];
+        let error = hashed.put(0, 0, 8, 16, &pixels).unwrap_err();
+        assert!(error.contains("not of whole blocks"), "{error}");
+        let mut kept = Yuv::keeping_rgb(32, 32, Turn::None, false).unwrap();
+        assert!(kept.put(0, 0, 8, 16, &pixels).is_ok());
+    }
+
+    #[test]
+    fn blocks_that_differ_in_one_place_never_hash_alike() {
+        let mut numbers = Numbers(0xC0FF_EE00_1234_5678);
+        let mut block = vec![0u8; 16 * 16 * 3];
+        for byte in block.iter_mut() {
+            *byte = numbers.next() as u8;
+        }
+        let first = block_hash(&block, 0, 16 * 3, 16);
+        for at in 0..block.len() {
+            let mut other = block.clone();
+            other[at] ^= 1 << numbers.below(8);
+            assert_ne!(block_hash(&other, 0, 16 * 3, 16), first, "byte {at}");
+        }
     }
 }

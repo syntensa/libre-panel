@@ -169,7 +169,12 @@ pub(crate) fn parse(args: &[String]) -> Result<Options, String> {
 
 fn encode(options: Options) -> Result<(), String> {
     let (width, height) = options.size;
-    let mut frame = yuv::Yuv::new(width, height, options.turn, options.settings.full)?;
+    let (turn, full) = (options.turn, options.settings.full);
+    let mut frame = if options.dump_rgb.is_some() {
+        yuv::Yuv::keeping_rgb(width, height, turn, full)?
+    } else {
+        yuv::Yuv::new(width, height, turn, full)?
+    };
     let mut scene = scene::Scene::new(width, height, frame.block);
     let mut encoder = encoder::Encoder::open(&options.settings, options.card)?;
     let (mb_cols, mb_rows) = frame.macroblocks();
