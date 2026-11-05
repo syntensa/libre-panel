@@ -57,7 +57,7 @@ config = (
     '[panels.video]\nmode = "on"\nlocal_clip = "usr/data/clip.h264"\n'
 )
 census_at = minutes * 60 - 200  # (the census takes 150 s and more)
-with tempfile.TemporaryDirectory() as folder:
+with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
     home = Path(folder)
     (home / "config.toml").write_text(config, encoding="utf-8")
     census = home / "census.json"
@@ -68,7 +68,13 @@ with tempfile.TemporaryDirectory() as folder:
     )  # fmt: skip
     command = [sys.executable, "-m", "libre_panel", "tray", "--background", "--no-icon",
                "--port", "0"]  # fmt: skip
-    app = App(home, command)
+    try:
+        app = App(home, command)
+    except SystemExit:
+        log = home / "logs" / "libre-panel.log"
+        if log.exists():
+            print("\n".join(log.read_text("utf-8", "replace").splitlines()[-60:]))
+        raise
     main = psutil.Process(app.proc.pid)
     print("panel 1:", app.get("api/app")["panel"].get("state"), flush=True)
     began = time.monotonic()

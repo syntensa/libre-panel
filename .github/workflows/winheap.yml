@@ -48,7 +48,12 @@ jobs:
           built="target/x86_64-pc-windows-gnu/release/libre-panel-engine.exe"
           "./$built" version
           echo "LIBRE_PANEL_ENGINE=$(cygpath -w "$PWD/$built")" >> "$GITHUB_ENV"
-      - run: pip install -e ".[dev,usb]"
+      - run: pip install -e ".[dev,usb,media]"
+      - name: ffmpeg (as the downloads carry it)
+        shell: bash
+        run: |
+          python packaging/fetch_tools.py "$RUNNER_TEMP/tools"
+          cygpath -w "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
       - name: The app at login, 9 minutes
         shell: bash
         run: python .github/measure/rig_windows.py 9

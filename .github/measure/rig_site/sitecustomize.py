@@ -24,6 +24,12 @@ if _links:
 
         EngineTransport.open = staticmethod(open_by_engine)
         turzx_usb.UsbTransport.present = staticmethod(lambda pid=None: True)
+        # (a runner's job has the highest rights; the app at login has not: the engine the
+        # job built is started, as tests/conftest.py has it)
+        from libre_panel import rights
+        from libre_panel.editor import access
+
+        access.elevated = rights.elevated = lambda: False
 
     _patch()
 
