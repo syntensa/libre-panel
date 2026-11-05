@@ -154,12 +154,11 @@ def video_command(ffmpeg: str, path: Path, w: int, h: int, fit: str, fps: int = 
 
 
 def _quiet() -> dict:
-    """No console for ffmpeg on Windows: no window, and no console host beside it (a video
-    plays for long; devices/h264.py's DETACHED)."""
+    """No console window for ffmpeg on Windows."""
     import sys
 
     if sys.platform == "win32":
-        return {"creationflags": subprocess.DETACHED_PROCESS}
+        return {"creationflags": subprocess.CREATE_NO_WINDOW}
     return {}
 
 
