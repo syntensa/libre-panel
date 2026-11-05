@@ -23,8 +23,9 @@
   minutes (more on a PC whose hardware gives hundreds); taking the readings, 2.5 ms instead
   of 7.2.
 - **Nothing kept after the app's window was open.** Its picture of the panel made Libre Panel
-  draw what the engine makes (the fans at every position they turned through, the texts); those
-  pictures now go half a minute after nothing asked for them, as the cards' do.
+  draw what the engine makes (the fans at every position they turned through, the texts, the
+  lit rings and bars, the graphs' windows, the globe); those pictures now go half a minute
+  after nothing asked for them, as the cards' do.
 - **Light mode from the start.** Started at login with its window never opened, Libre Panel
   now also lets go a minute after the start of what only its start needed, and gives that memory
   back (on Windows the pages of its working set it no longer touches).

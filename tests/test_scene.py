@@ -798,6 +798,44 @@ def test_what_the_engine_makes_or_lays_made_here_goes_again_when_nothing_asked_a
     assert laid.layer.tobytes() == want and made.composed  # (asked again: made again, the same)
 
 
+def test_the_rings_bars_windows_and_globes_made_here_go_again_too(monkeypatch):
+    """A lit ring's, a lit bar's and its glow's, a graph window's (Lumen's) and a turning
+    globe's pictures, made here for a frame composed here (the app's picture of the panel), go
+    once nothing asked for them a while, and come again the same."""
+    from test_motion import video
+
+    from libre_panel.render import earth, lit
+    from libre_panel.render import renderer as renderers
+    from libre_panel.sensors.demo import demo_snapshot
+    from libre_panel.theme.model import find_theme, load_theme
+
+    clock = [time.monotonic() + 1e6]
+    monkeypatch.setattr(scenes.time, "monotonic", lambda: clock[0])
+    renderer = video(renderers.Renderer(load_theme(find_theme("lumen-1920x720")), dither=True),
+                     fps=25)  # fmt: skip
+    renderer.native_rings = renderer.native_views = renderer.native_bars = True
+    renderer.native_laid = True
+    now = 1_700_000_000.0
+    snap = demo_snapshot(fixed_time=now)
+    for k in range(3):  # (the graphs' strips come with the frames after the first)
+        frame, _ = renderer.render(snap, now + k / 25, scene=True)
+    kinds = (lit.Ring, scenes.Bar, scenes.View)
+    natives = [p.native for _wid, p in frame.scene.pieces if isinstance(p.native, kinds)]
+    assert {type(native).__name__ for native in natives} == {"Ring", "Bar", "View"}
+    lights = [p.light.layer for _wid, p in frame.scene.pieces
+              if isinstance(p.native, scenes.Bar) and p.light is not None]  # fmt: skip
+    turning = earth.Turning(120, 20.0)
+    turning.light(now)
+    globe = scenes.turned_globe(turning, 3, (52.5, 13.4))
+    want = scenes.compose(frame.scene).tobytes(), globe.layer.tobytes()  # (their pixels, here)
+    layers = [native.layer for native in natives] + lights + [globe.layer]
+    assert all(isinstance(layer, scenes.Again) and layer.composed for layer in layers)
+    clock[0] += 31.0
+    scenes.forget_idle(30.0)
+    assert not any(layer.composed for layer in layers)
+    assert (scenes.compose(frame.scene).tobytes(), globe.layer.tobytes()) == want  # (the same)
+
+
 def _texts(*looks):
     """Text widgets "42°C" one below the other, each ``(id, its own keys)``."""
     return [{"type": "text", "id": wid, "x": 10, "y": 8 + 32 * k, "text": "42°C", "font_size": 20,

@@ -256,7 +256,7 @@ def viewed(size: tuple[int, int], parts: list[Cut] | tuple[Cut, ...]) -> View:
             out.paste(image.crop((sx, sy, sx + w, sy + h)), (dx, dy))
         return out
 
-    return View(Lazy(size, "RGBA", make), parts)
+    return View(Again(size, "RGBA", make), parts)  # (its pixels may go again)
 
 
 # (a picture's attribute, set where it is made: Pillow's pictures are not keys of a dict)
@@ -448,7 +448,7 @@ def turned_globe(turning: Any, step: int, place: tuple[float, float] | None) -> 
     Turning.frame works them out), its pixels made only when asked for, from what it holds."""
     map_, air, mark = turning.map, turning.air_at(step), turning.mark_at(step, place)
     size = (turning.size, turning.size)
-    layer = Lazy(size, "RGBA", lambda: turning.picture_of(map_, step, air, mark))
+    layer = Again(size, "RGBA", lambda: turning.picture_of(map_, step, air, mark))
     return Globe(layer, turning, turning.map_image, step, air, mark)
 
 

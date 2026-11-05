@@ -411,7 +411,7 @@ def bar_piece(renderer: Any, widget: dict[str, Any], frac: float, paint,
             def picture() -> Image.Image:
                 return _bar_canvas(renderer, widget, lit, paint, pad, unit)
 
-            layer = scenes.Lazy(size[::-1] if upright else size, "RGBA", picture)
+            layer = scenes.Again(size[::-1] if upright else size, "RGBA", picture)
             light = None
             if lit and glow is not None:
                 ax, ay, aw, ah = glow[2:6]
@@ -420,7 +420,7 @@ def bar_piece(renderer: Any, widget: dict[str, Any], frac: float, paint,
                     piece = _glow_piece(renderer, widget, frac, paint, lit, min(1.0, strength))
                     return Image.new("RGBA", (aw, ah)) if piece is None else piece.layer
 
-                light = Piece(scenes.Lazy((aw, ah), "RGBA", made), ax, ay)
+                light = Piece(scenes.Again((aw, ah), "RGBA", made), ax, ay)
             spans = tuple((a, b) for a, b, _amount in lit)
             bar = scenes.Bar(layer, None if light is None else light.layer, base, spans, paint)
             return Piece(layer, x - pad, y - pad, [x, y, w, h], light=light, native=bar)
@@ -762,7 +762,7 @@ def gauge_piece(renderer: Any, widget: dict[str, Any], frac: float, paint,
                 _light_ring(canvas, ground, widget, frac, a, stroke, room, halo)
                 return canvas
 
-            layer = scenes.Lazy(ground[1].size, "RGBA", picture)
+            layer = scenes.Again(ground[1].size, "RGBA", picture)
             lit = _ring_lit(ground, widget, a, stroke, room, halo)
             shape = (float(w), float(widget["thickness"]), float(widget["start_angle"]),
                      float(widget["end_angle"]), stroke, float(halo), tuple(a[:4]))  # fmt: skip
