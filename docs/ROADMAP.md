@@ -122,6 +122,25 @@ themes too).
 **The bar: nothing gets worse.** Each stage ships behind a switch, beside the way of today,
 and becomes the default only once it has proven itself on the panels; the old way goes last.
 
+### Half the memory
+
+A 12.3" and a 9.2" with Lumen and every service, the window closed: about 500 MB on Windows
+in 0.8.0. The goal is half of that.
+
+- [x] Panels beside the first in the app's process where the engine sends, no console hosts,
+      what the engine makes kept there alone (the fans, the texts' letters, the lit rings and
+      bars, the graphs' windows, the globe, the background), the readings' history as plain
+      numbers, a hash of each block instead of a second copy of the frame, the heap tidied
+      while the app is closed and the engine in small pages (Linux), a sensor service without
+      Python's web client: on Linux (both panels with Lumen, every service, the window closed,
+      each process's anonymous memory) 161 MB instead of 270
+- [ ] Measured on Windows: *Live → Diagnose → Load on this PC* says what the main process holds
+      and what the sensor service holds by its own word
+- [ ] The sensor service without Python: a small .NET program that hosts LibreHardwareMonitor
+      and answers on the same pipe
+- [ ] The graphics card's encoder where it is as good as x264 (x264's buffers: some 22 MB for
+      the 12.3" on Linux)
+
 ### Stage 0: measure
 
 - [x] Where a video panel's time goes (the 12.3" at 25 frames a second, Lumen): drawing 10 ms
