@@ -8,6 +8,7 @@ import logging
 import random
 import struct
 import threading
+import time
 
 import pytest
 from fake_lhm import (
@@ -384,6 +385,31 @@ def test_the_thread_reads_at_once_when_asked_and_closes_the_computer():
     finally:
         reader.close()
     assert computer.closed == 1
+
+
+def test_the_memory_not_used_goes_back_once_everything_was_read_and_now_and_then():
+    """Once LibreHardwareMonitor looked at all the hardware (the start), the memory it no
+    longer uses goes back to the system, and so every TRIM_SECONDS while it runs."""
+    computer, trims, clock = small_computer(), [], Clock()
+    reader = core.Reader(lambda: computer, poll_seconds=0.05, clock=clock,
+                         trim=lambda: trims.append(clock.now))  # fmt: skip
+    reader.start()
+    try:
+        assert wait_for(lambda: len(trims) == 1)
+        start = trims[0]
+        clock.now = start + core.TRIM_SECONDS - 1
+        time.sleep(0.2)
+        assert len(trims) == 1
+        clock.now = start + core.TRIM_SECONDS
+        assert wait_for(lambda: len(trims) == 2)
+    finally:
+        reader.close()
+    failing = core.Reader(lambda: computer, poll_seconds=0.05, trim=lambda: 1 / 0)
+    failing.start()  # (a trim that fails changes nothing: the readings go on)
+    try:
+        assert wait_for(lambda: failing.snapshot().state == "running")
+    finally:
+        failing.close()
 
 
 # -- the answers -----------------------------------------------------------------------------------

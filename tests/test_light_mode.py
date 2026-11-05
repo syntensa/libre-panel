@@ -95,11 +95,34 @@ def test_the_caches_keep_all_when_the_app_is_opened_again_before_they_let_go():
     assert state["unmarked"] == 1
 
 
-@pytest.mark.parametrize(("on", "last"), [(False, 1000.0), (True, None)])
-def test_nothing_goes_with_light_mode_off_or_before_the_app_was_ever_open(on, last):
+@pytest.mark.parametrize(("on", "last"), [(False, 1000.0), (False, None)])
+def test_nothing_goes_with_light_mode_off(on, last):
     w, state, clock = watch(on=on, last=last)
-    clock.now += 10 * light.IDLE_S
-    assert not w.look() and state["released"] == 0
+    for _ in range(5):
+        clock.now += 10 * light.IDLE_S
+        assert not w.look()
+    assert state["released"] == 0
+
+
+def test_an_app_never_opened_lets_go_a_minute_after_the_start_and_once():
+    """Libre Panel started at login, its window never opened: what only the start touched
+    goes as it goes for an app closed (the caches keep what the panel draws with), once."""
+    w, state, clock = watch(on=True, last=None)
+    clock.now = w.began + light.IDLE_S - 1
+    assert not w.look() and state["closed"] == 0
+    clock.now = w.began + light.IDLE_S
+    assert not w.look() and state["closed"] == 1 and state["marked"] == 1
+    clock.now += light.LOOK_S
+    assert w.look() and state["shed"] == 1 and state["released"] == 1
+    for _ in range(5):
+        clock.now += 600
+        assert not w.look()
+    assert state["released"] == 1 and state["closed"] == 1
+    state["last"] = clock.now  # (opened now: once closed again, it goes again)
+    clock.now += light.IDLE_S
+    w.look()
+    clock.now += light.LOOK_S
+    assert w.look() and state["released"] == 2
 
 
 def test_the_caches_let_go_of_what_only_the_apps_pictures_drew_with_and_keep_the_panels():

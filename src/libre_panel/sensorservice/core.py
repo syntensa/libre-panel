@@ -50,6 +50,7 @@ RATE = 4.0  # requests a second a connection may make, after
 BURST = 8  # this many at once
 IDLE_SECONDS = 30.0  # a client that asks nothing for this long is let go
 MESSAGE_SECONDS = 5.0  # a message that has begun must be through within this long
+TRIM_SECONDS = 600.0  # the memory not used since goes back to the system this often
 
 
 @dataclass(frozen=True)
@@ -80,8 +81,15 @@ class Reader:
         pawnio: Callable[[], str | None] | None = None,
         clock: Callable[[], float] = time.monotonic,
         timer: Callable[[], float] = time.perf_counter,
+        trim: Callable[[], None] | None = None,
     ) -> None:
         self.poll_seconds = max(0.05, poll_seconds)
+        # what gives the memory not used since back to the system (winservice's: .NET's and
+        # Python's collectors, then the working set): once everything was read the first time
+        # (LibreHardwareMonitor's look at all the hardware, the start's), then every
+        # TRIM_SECONDS; None: never
+        self._trim = trim
+        self._trimmed: float | None = None
         self.request_seconds = request_seconds
         self.refresh_seconds = refresh_seconds
         self._opener = opener
@@ -116,6 +124,7 @@ class Reader:
             with self._lock:
                 self._snapshot = Snapshot("failed", f"{type(exc).__name__}: {exc}")
         else:
+            self._trim_now()
             delay = self.poll_seconds
             while not self._stop.is_set():
                 self._wake.wait(delay)
@@ -127,6 +136,8 @@ class Reader:
                     self.refresh()
                 except Exception:  # noqa: BLE001 - one bad round must not end the service
                     log.warning("LibreHardwareMonitor could not be read", exc_info=True)
+                if self._trimmed is not None and started - self._trimmed >= TRIM_SECONDS:
+                    self._trim_now()
                 delay = max(0.05, self.poll_seconds - (self._clock() - started))
         finally:
             if computer is not None:
@@ -134,6 +145,15 @@ class Reader:
                     computer.Close()
                 except Exception:  # noqa: BLE001 - closing at the end changes nothing now
                     log.debug("LibreHardwareMonitor did not close cleanly", exc_info=True)
+
+    def _trim_now(self) -> None:
+        if self._trim is None:
+            return
+        self._trimmed = self._clock()
+        try:
+            self._trim()
+        except Exception:  # noqa: BLE001 - the memory stays: the readings go on
+            log.debug("the memory stays with the service", exc_info=True)
 
     def _begin(self, computer: Any) -> None:
         """Everything the computer has, read once in full (so that every sensor is known)."""

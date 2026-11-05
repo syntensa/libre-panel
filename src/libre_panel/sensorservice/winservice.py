@@ -63,7 +63,28 @@ def make_reader() -> Any:
     folder, why = lhm_inprocess.availability()
     if folder is None:
         return Reader(functools.partial(_unavailable, why), pawnio=lhm_inprocess.pawnio_version)
-    return Reader(functools.partial(open_everything, folder), pawnio=lhm_inprocess.pawnio_version)
+    return Reader(functools.partial(open_everything, folder), pawnio=lhm_inprocess.pawnio_version,
+                  trim=give_back)  # fmt: skip
+
+
+def give_back() -> None:
+    """The memory the service does not use back to the system: what .NET's collector and
+    Python's find unused, then the pages of the working set not touched since (the Task
+    Manager's Memory): LibreHardwareMonitor's look at all the hardware at the start, the
+    libraries loaded once."""
+    import gc
+
+    from libre_panel import light
+
+    try:
+        import System  # (pythonnet's: .NET, started with LibreHardwareMonitor)
+
+        System.GC.Collect()
+        System.GC.WaitForPendingFinalizers()
+    except Exception:  # noqa: BLE001, S110 - without .NET: Python's alone
+        pass
+    gc.collect()
+    light.give_back()
 
 
 def _unavailable(why: str) -> Any:

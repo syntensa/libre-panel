@@ -14,6 +14,12 @@
   itself, bit for bit as before; Libre Panel keeps no picture of them (Lumen's fans: 9 MB less).
 - **The background kept once.** Once the engine has a panel's background, Libre Panel lets go
   of its own copy (the 12.3": 5.5 MB, the 9.2": 3.7 MB) and makes it again when it needs it.
+- **Light mode from the start.** Started at login with its window never opened, Libre Panel
+  now also lets go a minute after the start of what only its start needed, and gives that memory
+  back (on Windows the pages of its working set it no longer touches).
+- **A lighter sensor service (Windows).** Once LibreHardwareMonitor has looked at all the
+  hardware, the service gives back what that took (.NET's and Python's unused memory, the pages
+  it no longer touches), and does so every ten minutes.
 
 ## 0.8.0 — 2026-11-05
 

@@ -3,7 +3,8 @@ is let go of while no page of it is open.
 
 The app's pictures of every theme (Start, Design) fill the renderer's caches with the letters,
 symbols and pieces of all of them: well over 100 MB. Once no page of the app has asked for
-anything for a minute (its window closed, or hidden), its own pictures go (of every theme, the
+anything for a minute (its window closed, or hidden, or never opened since Libre Panel started,
+as at login), its own pictures go (of every theme, the
 previews of the community's themes), and the caches note for a while what the panel draws with
 (render/kept.py: :func:`~libre_panel.render.kept.mark_all`); then they let go of the rest
 (:func:`~libre_panel.render.kept.shed_all`). So the panel keeps what it uses and draws on as it
@@ -136,7 +137,9 @@ class Watch:
     pictures (``closed``) and has the caches note what the panel uses (``mark``); a look later
     they let go of the rest (``shed``), and while ``light()`` says light mode is on the memory
     goes (``release``). Each once per time the app was open (``last_request()``: when a page of
-    it last asked something, monotonic seconds; None: never)."""
+    it last asked something, monotonic seconds; None: never), and once for an app never opened
+    since the watch began (Libre Panel started at login: what only its start touched went on
+    holding the memory, on Windows the pages of its start too)."""
 
     def __init__(
         self,
@@ -152,6 +155,7 @@ class Watch:
         self.light, self.last_request = light, last_request
         self.release, self.clock, self.closed = release, clock, closed
         self.mark, self.shed, self.unmark = mark, shed, unmark
+        self.began = clock()  # (an app never opened is closed since then)
         self.marking = False  # the caches note what is used (between closed and shed)
         self.released_for: Any = object()  # the request it released after (none yet)
         self.closed_for: Any = object()  # ... it let the app's pictures go after
@@ -163,7 +167,7 @@ class Watch:
         """One look: whether it released now (light mode)."""
         last = self.last_request()
         if last is None:
-            return False
+            last = self.began
         if self.clock() - last < IDLE_S:
             if self.marking:  # opened again before the caches let go: they keep all
                 self.marking = False
