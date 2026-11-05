@@ -13,7 +13,9 @@
 //! engine composes it then (scene.rs), where it changed.
 
 mod bar;
+mod draw;
 mod encoder;
+mod fan;
 mod globe;
 // (the card's pictures as the panels take them: mf.rs's, on Windows; its tests everywhere)
 #[cfg_attr(not(windows), allow(dead_code))]
@@ -290,6 +292,17 @@ fn encode(options: Options) -> Result<(), String> {
                 scene.laid(id, (x, y, w, h), &parts, &kept)?;
                 spent_layers += began.elapsed().as_secs_f64();
             }
+            Some(wire::Record::Rotor { id, rotor }) => scene.rotor(id, rotor),
+            Some(wire::Record::Blades { id, rotor, blades }) => {
+                let began = Instant::now();
+                scene.blades(id, rotor, &blades)?;
+                spent_layers += began.elapsed().as_secs_f64();
+            }
+            Some(wire::Record::FanRing { id, spec }) => {
+                let began = Instant::now();
+                scene.fan_ring(id, &spec)?;
+                spent_layers += began.elapsed().as_secs_f64();
+            }
             Some(wire::Record::Bar {
                 id,
                 bar,
@@ -399,9 +412,10 @@ fn main() -> ExitCode {
             // all in one colour, a card's inside (scene.rs's Layer::filled); "laid", layers it
             // lays from sources it keeps, a fan's ring and rotor (scene.rs's laid); "grown",
             // sources it grows from those it keeps, a graph's strip (scene.rs's grown); "bars", a
-            // lit bar's picture and glow it makes for each value (bar.rs))
+            // lit bar's picture and glow it makes for each value (bar.rs); "fans", a fan's rotor
+            // at each position and its ring it makes as sources (fan.rs))
             println!(
-                "libre-panel-engine {} (x264 build {}; panel, scenes, rings, views, globes, cards, fills, laid, grown, bars)",
+                "libre-panel-engine {} (x264 build {}; panel, scenes, rings, views, globes, cards, fills, laid, grown, bars, fans)",
                 env!("CARGO_PKG_VERSION"),
                 x264::build()
             );

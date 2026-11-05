@@ -1558,6 +1558,8 @@ class MainLoop:
                     renderer.native_views = layers
                     renderer.native_globes = layers  # (and its turning globes, likewise)
                     renderer.native_laid = layers  # (and its fans, from their rings and rotors)
+                    # ... those made by the engine, where it makes them (render/fan.py's recipes)
+                    renderer.native_fans = layers and getattr(display, "makes_fans", False)
                     renderer.native_bars = layers  # (and its lit bars and their glows)
                     if layers:
                         drawn, _ = renderer.render(snapshot, now, scene=True)

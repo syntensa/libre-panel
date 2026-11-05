@@ -739,6 +739,28 @@ pub fn run(options: Options) -> Result<(), String> {
                     break Err(e);
                 }
             }
+            Record::Rotor { id, rotor } => {
+                let Some(s) = stream.as_mut() else {
+                    break Err("a rotor before its stream".into());
+                };
+                s.scene.rotor(id, rotor);
+            }
+            Record::Blades { id, rotor, blades } => {
+                let Some(s) = stream.as_mut() else {
+                    break Err("a source before its stream".into());
+                };
+                if let Err(e) = s.scene.blades(id, rotor, &blades) {
+                    break Err(e);
+                }
+            }
+            Record::FanRing { id, spec } => {
+                let Some(s) = stream.as_mut() else {
+                    break Err("a source before its stream".into());
+                };
+                if let Err(e) = s.scene.fan_ring(id, &spec) {
+                    break Err(e);
+                }
+            }
             Record::Laid {
                 id,
                 x,

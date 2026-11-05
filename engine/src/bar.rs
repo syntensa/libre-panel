@@ -522,6 +522,48 @@ fn reduce(rgb: &[u8], w: usize, h: usize, s: usize) -> (Planes, usize, usize) {
     (out, ow, oh)
 }
 
+/// Pillow's reduce of a picture of one channel (`w` x `h`, an "L" picture) by `s` each way:
+/// each pixel the mean of its s x s (of what is left over at the last column and row), as
+/// [`reduce`] makes each channel; (its pixels, w, h).
+pub(crate) fn reduce_one(l: &[u8], w: usize, h: usize, s: usize) -> (Vec<u8>, usize, usize) {
+    let (ow, oh) = (w.div_ceil(s), h.div_ceil(s));
+    let mut out = vec![0u8; ow * oh];
+    let mut sums = vec![0u32; ow];
+    let multipliers: Vec<u32> = (0..=s * s).map(|n| division(n.max(1) as u32)).collect();
+    for y in 0..oh {
+        let rows = y * s..(y * s + s).min(h);
+        let high = rows.len();
+        sums.fill(0);
+        for line in rows.map(|yy| &l[yy * w..(yy + 1) * w]) {
+            for (sum, block) in sums.iter_mut().zip(line.chunks(s)) {
+                *sum += block.iter().map(|&v| u32::from(v)).sum::<u32>();
+            }
+        }
+        for (x, &sum) in sums.iter().enumerate() {
+            let n = (w - x * s).min(s) * high;
+            let (multiplier, amend) = (multipliers[n], n as u32 / 2);
+            out[y * ow + x] = ((sum + amend).wrapping_mul(multiplier) >> 24) as u8;
+        }
+    }
+    (out, ow, oh)
+}
+
+/// Pillow's GaussianBlur of `radius` of a picture of one channel (`w` x `h`), in place, as
+/// [`gaussian`] blurs each channel.
+pub(crate) fn gaussian_one(plane: &mut [u8], w: usize, h: usize, radius: f32) {
+    let r = pillow_radius(radius, 3);
+    if r == 0.0 || w == 0 || h == 0 {
+        return;
+    }
+    let (mut line, mut before, mut sums) = (Vec::new(), Vec::new(), Vec::new());
+    for _ in 0..3 {
+        box_pass(plane, w, h, r, &mut line);
+    }
+    for _ in 0..3 {
+        box_down(plane, w, h, r, (&mut before, &mut sums));
+    }
+}
+
 /// Pillow's box of each of `passes` passes that together blur as a Gaussian of `radius`
 /// (BoxBlur.c's _gaussian_blur_radius), in single precision as it works it out.
 fn pillow_radius(radius: f32, passes: i32) -> f32 {

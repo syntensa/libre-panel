@@ -108,6 +108,19 @@ class Lazy(Image.Image):
         return super().load()
 
 
+class Made(Lazy):
+    """A picture an engine makes itself of what it is made of, its ``recipe`` (render/fan.py's
+    BladesRecipe and RingRecipe: a fan's rotor at a position, its ring; engine/src/fan.rs): such
+    an engine is sent the recipe instead of the pixels (devices/engine.py's SceneSender), and the
+    pixels are made here only when something asks for them (a frame composed here, the app's
+    picture of the panel), as ``make`` makes them. So a picture of every position of a turning
+    rotor is kept neither here nor there."""
+
+    def __init__(self, size: tuple[int, int], mode: str, make: Any, recipe: Any) -> None:
+        super().__init__(size, mode, make)
+        self.recipe = recipe
+
+
 class Again(Lazy):
     """A :class:`Lazy` whose pixels may go again (:meth:`forget`), made anew (the same) when
     something asks for them once more; ``used``: when that was last (monotonic seconds). A card
@@ -233,7 +246,7 @@ class Filled:
     piece, none over another, so laid in turn they are the piece. Its ``layer`` is made here
     only when something asks for its pixels (a frame composed here), the inside filled and the
     parts pasted: the piece's pixels, which go again when nothing asked for them a while
-    (:class:`Again`, Renderer._forget_fills)."""
+    (:class:`Again`, Renderer._forget_laid)."""
 
     layer: Image.Image
     fill: tuple[int, int, int, int, tuple[int, int, int, int]]

@@ -10,6 +10,10 @@
   each such panel keeps a process of its own, as before.
 - **No console hosts (Windows).** The engine, ffmpeg and PresentMon start without a console:
   each had a hidden `conhost.exe` beside it, some 7 MB apiece.
+- **Fans drawn by the engine.** It makes a fan's rotor at each position, its blur and its ring
+  itself, bit for bit as before; Libre Panel keeps no picture of them (Lumen's fans: 9 MB less).
+- **The background kept once.** Once the engine has a panel's background, Libre Panel lets go
+  of its own copy (the 12.3": 5.5 MB, the 9.2": 3.7 MB) and makes it again when it needs it.
 
 ## 0.8.0 — 2026-11-05
 

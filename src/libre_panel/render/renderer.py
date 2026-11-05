@@ -937,12 +937,15 @@ class Renderer:
         self.native_globes = False
         # ... and lays a fan from its ring and its rotor, which it keeps (scene.Laid), likewise
         self.native_laid = False
+        # ... and makes those itself, its rotor at each position and its ring (scene.Made of
+        # fan.py's recipes): neither made nor kept here (where it lays them too)
+        self.native_fans = False
         # ... and makes a lit bar's picture and glow for each value (scene.Bar), likewise
         self.native_bars = False
         # ... and a card whose inside is one colour comes as its edges and that colour, which the
         # engine lays without pixels (render/scene.py's Filled; the fills property)
         self._fills = False
-        self._fills_looked = 0.0  # when _forget_fills last looked (monotonic seconds)
+        self._fills_looked = 0.0  # when _forget_laid last looked (monotonic seconds)
         self._held: dict[str, bool] = {}  # the conditions of needs worked out in this frame ...
         self._held_for: tuple[Any, ...] = ()  # ... for these readings (and pictures)
         self._composed: list[tuple[int, int, int, int]] | None = None
@@ -1503,22 +1506,42 @@ class Renderer:
         color = self.color(self.theme.background_color)
         if self._grounds is None or self._grounds[0] != color:
             self._grounds = None  # (the one before goes first: it is the panel's size)
-            background = self._background
-            opaque = background is not None and (
-                background.mode == "RGB" or background.getchannel("A").getextrema()[0] == 255
-            )
-            if opaque:
-                ground = background  # opaque, as a photo is: the colour does not show through
-            else:
-                ground = Image.new("RGBA", (self.theme.width, self.theme.height), color)
-                if background is not None:
-                    ground.alpha_composite(background)
-            if self._mode == "RGB" and ground.mode != "RGB":
-                ground = ground.convert("RGB")
-                if opaque:  # (the picture is its own ground: kept once, the panel's size)
-                    self._background = ground
+            ground, opaque = self._made_ground(color, self._background)
+            if self._mode == "RGB" and opaque:
+                # the picture is its own ground, kept once, the panel's size: its pixels go
+                # where nothing asked for them a while (the engine has them: _forget_laid) and
+                # are made again, the same, when something asks
+                me = weakref.ref(self)  # (no cycle: a renderer let go of goes at once)
+
+                def again_made(color: RGBA | None = color) -> Image.Image:
+                    renderer = me()
+                    if renderer is None:
+                        raise RuntimeError("the ground of a renderer that is gone")
+                    return renderer._made_ground(color, renderer._load_background())[0]
+
+                again = scenes.Again(ground.size, ground.mode, again_made)
+                again.im, again.used = ground.im, time.monotonic()
+                self._background = ground = again
             self._grounds = (color, ground)
         return self._grounds[1]
+
+    def _made_ground(
+        self, color: RGBA | None, background: Image.Image | None
+    ) -> tuple[Image.Image, bool]:
+        """The ground of :meth:`_ground` made of ``background`` (the theme's picture, or None),
+        in the frames' mode, and whether that picture was opaque (then the ground is it)."""
+        opaque = background is not None and (
+            background.mode == "RGB" or background.getchannel("A").getextrema()[0] == 255
+        )
+        if opaque:
+            ground = background  # opaque, as a photo is: the colour does not show through
+        else:
+            ground = Image.new("RGBA", (self.theme.width, self.theme.height), color)
+            if background is not None:
+                ground.alpha_composite(background)
+        if self._mode == "RGB" and ground.mode != "RGB":
+            ground = ground.convert("RGB")
+        return ground, bool(opaque)
 
     def _ground_of(self, region: tuple[int, int, int, int]) -> Image.Image:
         """The ground of ``region``: its colour alone where the theme has no background picture
@@ -1580,8 +1603,7 @@ class Renderer:
         self._last = None
         if self._underlays.size:
             self._underlays.clear()
-        if self._fills:
-            self._forget_fills()
+        self._forget_laid()
         self.scenes += 1
         color = self.color(self.theme.background_color)
         if self._background is None and color is not None:
@@ -1592,20 +1614,24 @@ class Renderer:
             scenes.Scene((self.theme.width, self.theme.height), ground, tuple(pieces))
         )
 
-    # A card's pixels made here (render/scene.py's Filled: for a frame composed here, the app's
-    # picture of the panel) go when nothing asked for them this long: the engine lays it without
+    # The pixels of what the engine lays without them (render/scene.py's Again: a card it lays
+    # as its colour, Filled; the ground, which it keeps) made here (for a frame composed here, the
+    # app's picture of the panel) go when nothing asked for them this long
     FILLS_IDLE_S = 30.0
 
-    def _forget_fills(self) -> None:
-        """The pixels of the cards the engine lays as their colour that were made here and not
-        asked for since :data:`FILLS_IDLE_S` (looked at every few seconds, in frames the
-        engine composes): after the app's window was open, Lumen's 5 MB on the 12.3"."""
+    def _forget_laid(self) -> None:
+        """The pixels of the cards the engine lays as their colour, and of the ground it keeps,
+        that were made here and not asked for since :data:`FILLS_IDLE_S` (looked at every few
+        seconds, in frames the engine composes): after the app's window was open, Lumen's 5 MB
+        of cards on the 12.3"; its ground, 5.5 MB there and 3.7 on the 9.2"."""
         now = time.monotonic()
         if now - self._fills_looked < 5.0:
             return
         self._fills_looked = now
-        for hit in list(self._cache.values()):
-            layer = None if hit[1] is None else hit[1].layer
+        layers = [None if hit[1] is None else hit[1].layer for hit in list(self._cache.values())]
+        if self._grounds is not None:
+            layers.append(self._grounds[1])
+        for layer in layers:
             if isinstance(layer, scenes.Again) and layer.composed:
                 if now - layer.used > self.FILLS_IDLE_S:
                     layer.forget()
@@ -1804,13 +1830,22 @@ class Renderer:
             self.look.prepare()
 
     def _fan_jobs(self) -> list[Callable[[], Any]]:
-        jobs = []
+        """The fans' rotors made ready: their layers, and the pictures of their positions where
+        they are drawn here (not where the engine makes them: :attr:`native_fans`, as it is when
+        the job runs)."""
+        jobs: list[Callable[[], Any]] = []
         for widget in self.widgets:
             if widget["type"] == "fan":
                 color = self.color(widget["color"])
                 if color is not None:
                     look, paint = self.fan_choices.for_widget(widget)
-                    jobs += fan.preload_jobs(color[:3], widget["w"], widget["h"], look, paint)
+                    k = fan.rotor_size(fan.geometry(widget["w"], widget["h"])[0])
+                    jobs.append(lambda k=k, look=look: fan.rotor_layers(k, look))
+                    jobs += [
+                        lambda job=job: None if self.native_fans else job()
+                        for job in fan.preload_jobs(color[:3], widget["w"], widget["h"], look,
+                                                    paint)
+                    ]  # fmt: skip
         return jobs
 
     def _prepare_later(
@@ -2971,8 +3006,12 @@ class Renderer:
         color = self.color(widget["color"])[:3]
         # laid from its ring and its rotor, each kept by itself, as a list's fans are: a fan
         # turning while its ring changes is no new picture to keep at every position (four of
-        # Lumen's, the pictures of all of them kept, found 61 in a hundred: 8 MB, and 6 more)
-        parts = fan.fan_parts(color, w, h, rotor, widget["frame"], look, paint)
+        # Lumen's, the pictures of all of them kept, found 61 in a hundred: 8 MB, and 6 more);
+        # made by the engine where it makes them, of what they are made of
+        made = self.native_fans and self.native_laid
+        parts = fan.made_parts(color, w, h, rotor, widget["frame"], look, paint) if made else None
+        if parts is None:
+            parts = fan.fan_parts(color, w, h, rotor, widget["frame"], look, paint)
         canvas = fan.geometry(w, h)[2]
         image = self._laid_fan(wid, parts, canvas, self.native_laid)
         hit = self._fan_shown.get(wid)
@@ -3738,8 +3777,11 @@ class Renderer:
                 self.moving = self.moving or rotor.turning
             else:
                 rotor.settle(item.number, max_rpm)
-            parts = fan.fan_parts(color, size, size, rotor, frame, look, paint)
             apart = self.keep_static and "_card" not in widget  # (it may go over the list)
+            made = apart and self.native_laid and self.native_fans  # (made by the engine)
+            parts = fan.made_parts(color, size, size, rotor, frame, look, paint) if made else None
+            if parts is None:
+                parts = fan.fan_parts(color, size, size, rotor, frame, look, paint)
             canvas = fan.geometry(size, size)[2]
             image = self._laid_fan(key, parts, canvas, apart and self.native_laid)
             x, y = ox + x0 + (size - image.width) / 2, oy + y0 + (size - image.height) / 2
@@ -3772,7 +3814,10 @@ class Renderer:
                 return hit[1]
         if native:
             placed = [(image, at, at) for image, at in parts]
-            made = scenes.laid((canvas, canvas), placed, self._rotor_kept(key, images))
+            # (pictures the engine makes itself it need not keep: they are made again)
+            made_there = all(isinstance(image, scenes.Made) for image in images)
+            kept = () if made_there else self._rotor_kept(key, images)
+            made = scenes.laid((canvas, canvas), placed, kept)
             self._laid_fans[key] = (images, made.layer, made)
             return made.layer
         first, at = parts[0]

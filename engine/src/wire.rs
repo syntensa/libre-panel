@@ -85,6 +85,23 @@
 //!                     its colour and the colour its gradient runs to (RGBA each), whether it
 //!                     has one and how many spans are lit (u32 each), then each span: from, to
 //!                     along the bar (f64 each)
+//! kind 23, a rotor:   a its number, b the length of what follows: its side, how many positions
+//!                     and how many layers each (u32 each), its shading (ambient, diffuse,
+//!                     flat, core, gloss: f32 each), then its layers (f32 each), position after
+//!                     position, layer after layer, row after row: a fan's rotor of a look at a
+//!                     size, kept while sources are made of it (fan.rs's Rotor)
+//! kind 24, a rotor's blades: a its number (a source's), b the length of what follows: the
+//!                     rotor's number and its position (u32 each), its colour and its second
+//!                     colour (RGB each), whether it is dimmed (u8), nothing (u8), how far it is
+//!                     blurred into its disc (f32), then, dimmed, the table its alpha goes
+//!                     through (256 bytes): a source the engine makes (fan.rs's Rotor::blades)
+//! kind 25, a fan's ring: a its number (a source's), b 1076: its canvas's side (u32), its
+//!                     colour (RGB), how far its arc goes (u8: 0 none, 1 all round, 2 from its
+//!                     start to its end), the ring's box on the canvas three times larger (x0,
+//!                     y0, x1, y1) and its width (i32 each), the arc's start and end, its halo,
+//!                     the groove's strength, how far its core goes towards white and how its
+//!                     halo stands beside it (f32 each), then the core of each of 256 levels of
+//!                     coverage (f32 each): a source the engine makes (fan.rs's ring)
 //! ```
 //!
 //! On its stdout, with a panel of its own (`panel`): the same head, then b bytes:
@@ -191,6 +208,19 @@ pub enum Record {
         h: usize,
         parts: Vec<crate::scene::Placed>,
         kept: Vec<u32>,
+    },
+    Rotor {
+        id: u32,
+        rotor: crate::fan::Rotor,
+    },
+    Blades {
+        id: u32,
+        rotor: u32,
+        blades: crate::fan::Blades,
+    },
+    FanRing {
+        id: u32,
+        spec: crate::fan::RingSpec,
     },
     Fill {
         id: u32,
@@ -319,6 +349,10 @@ const MOST_LAYERS: usize = 1 << 16;
 const MOST_PARTS: usize = 64;
 /// The most pictures a layer laid from them keeps unused (a turning rotor's positions).
 const MOST_KEPT: usize = 1024;
+/// The head of a rotor (kind 23) and of its blades (kind 24), and a fan's ring (kind 25).
+const ROTOR_HEAD: usize = 32;
+const BLADES_HEAD: usize = 20;
+const FAN_RING: usize = 52 + 256 * 4;
 /// The head of a lit bar (kind 21), and the most spans one lights (a segment each).
 const BAR_HEAD: usize = 224;
 const MOST_SPANS: usize = 4096;
@@ -826,6 +860,93 @@ pub fn read(input: &mut impl Read) -> io::Result<Option<Record>> {
                     to: (u32_at(&more, 24) != 0).then(|| rgba(20)),
                 },
                 spans,
+            }))
+        }
+        23 => {
+            let len = b as usize;
+            if !(ROTOR_HEAD..=MOST_LAYER + ROTOR_HEAD).contains(&len) {
+                return Err(invalid("a rotor too large"));
+            }
+            let mut head = [0u8; ROTOR_HEAD];
+            whole(input, &mut head, "a rotor cut short")?;
+            let u = |i: usize| u32_at(&head, i) as usize;
+            let f = |i: usize| f32::from_le_bytes(head[i..i + 4].try_into().expect("4 bytes"));
+            let (k, positions, layers) = (u(0), u(4), u(8));
+            let numbers = k.checked_mul(k).and_then(|n| {
+                n.checked_mul(positions)?
+                    .checked_mul(layers)?
+                    .checked_mul(4)
+            });
+            if numbers != Some(len - ROTOR_HEAD) {
+                return Err(invalid("a rotor's layers are not of its size"));
+            }
+            let planes = bytes(input, len - ROTOR_HEAD, "a rotor cut short")?
+                .chunks_exact(4)
+                .map(|v| f32::from_le_bytes([v[0], v[1], v[2], v[3]]))
+                .collect();
+            let shading = crate::fan::Shading {
+                ambient: f(12),
+                diffuse: f(16),
+                flat: f(20),
+                core: f(24),
+                gloss: f(28),
+            };
+            let rotor = crate::fan::Rotor::new(k, positions, layers, planes, shading)
+                .map_err(|e| invalid(&e))?;
+            Ok(Some(Record::Rotor { id: a, rotor }))
+        }
+        24 => {
+            let len = b as usize;
+            if len != BLADES_HEAD && len != BLADES_HEAD + 256 {
+                return Err(invalid("a rotor's blades of another length"));
+            }
+            let data = bytes(input, len, "a rotor's blades cut short")?;
+            let dimmed = data[14] != 0;
+            if dimmed != (len == BLADES_HEAD + 256) {
+                return Err(invalid("a rotor's blades of another length"));
+            }
+            Ok(Some(Record::Blades {
+                id: a,
+                rotor: u32_at(&data, 0),
+                blades: crate::fan::Blades {
+                    phase: u32_at(&data, 4) as usize,
+                    colour: [data[8], data[9], data[10]],
+                    second: [data[11], data[12], data[13]],
+                    blend: f32::from_le_bytes([data[16], data[17], data[18], data[19]]),
+                    dim: dimmed.then(|| data[BLADES_HEAD..].to_vec()),
+                },
+            }))
+        }
+        25 => {
+            if b as usize != FAN_RING {
+                return Err(invalid("a fan's ring of another length"));
+            }
+            let data = bytes(input, FAN_RING, "a fan's ring cut short")?;
+            let i = |at: usize| u32_at(&data, at) as i32;
+            let f = |at: usize| f32::from_le_bytes(data[at..at + 4].try_into().expect("4 bytes"));
+            let arc = match data[7] {
+                0 => crate::fan::Arc::None,
+                1 => crate::fan::Arc::Whole,
+                2 => crate::fan::Arc::Part(f(28), f(32)),
+                _ => return Err(invalid("a fan's ring with an arc of no kind known")),
+            };
+            Ok(Some(Record::FanRing {
+                id: a,
+                spec: crate::fan::RingSpec {
+                    canvas: u32_at(&data, 0) as usize,
+                    colour: [data[4], data[5], data[6]],
+                    bounds: (i(8), i(12), i(16), i(20)),
+                    width: i(24),
+                    arc,
+                    halo: f(36),
+                    groove: f(40),
+                    white: f(44),
+                    share: f(48),
+                    core: data[52..]
+                        .chunks_exact(4)
+                        .map(|v| f32::from_le_bytes([v[0], v[1], v[2], v[3]]))
+                        .collect(),
+                },
             }))
         }
         kind => Err(invalid(&format!("a record of kind {kind}"))),

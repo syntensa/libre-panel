@@ -9,6 +9,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::bar;
+use crate::fan;
 use crate::globe;
 use crate::ring;
 use crate::wire::Boxes;
@@ -78,6 +79,31 @@ struct Source {
     /// for none), worked out once: where a layer cut from it shows, without looking again.
     shown: Vec<(usize, usize)>,
 }
+
+impl Source {
+    fn new(w: usize, h: usize, pixels: Vec<u8>) -> Source {
+        let shown = pixels
+            .chunks_exact(w * 4)
+            .map(|row| {
+                let alpha = |x: &usize| row[x * 4 + 3] != 0;
+                match (0..w).find(alpha) {
+                    Some(first) => (first, (first..w).rfind(alpha).map_or(first + 1, |x| x + 1)),
+                    None => (0, 0),
+                }
+            })
+            .collect();
+        Source {
+            w,
+            h,
+            pixels,
+            shown,
+        }
+    }
+}
+
+/// The most rotors kept (fan.rs): those used last stay, the one used longest ago goes first
+/// (devices/engine.py's SceneSender keeps count the same way).
+pub const MOST_ROTORS: usize = 8;
 
 #[derive(Clone)]
 pub struct Layer {
@@ -373,6 +399,9 @@ pub struct Scene {
     globes: HashMap<u32, globe::Tables>,
     /// The lit bars whose pictures and glows the engine makes for each value (bar.rs).
     bars: HashMap<u32, bar::Base>,
+    /// The fans' rotors whose positions the engine makes (fan.rs), the one used last at the
+    /// end: kept for the stream, the [`MOST_ROTORS`] used last.
+    rotors: Vec<(u32, fan::Rotor)>,
 }
 
 pub type Rect = (usize, usize, usize, usize);
@@ -397,6 +426,7 @@ impl Scene {
             sources: HashMap::new(),
             globes: HashMap::new(),
             bars: HashMap::new(),
+            rotors: Vec::new(),
         }
     }
 
@@ -502,25 +532,42 @@ impl Scene {
         if w == 0 || h == 0 || w > MOST_SOURCE || h > MOST_SOURCE || pixels.len() != w * h * 4 {
             return Err(format!("a source of {w}x{h} and {} bytes", pixels.len()));
         }
-        let shown = pixels
-            .chunks_exact(w * 4)
-            .map(|row| {
-                let alpha = |x: &usize| row[x * 4 + 3] != 0;
-                match (0..w).find(alpha) {
-                    Some(first) => (first, (first..w).rfind(alpha).map_or(first + 1, |x| x + 1)),
-                    None => (0, 0),
-                }
-            })
-            .collect();
-        self.sources.insert(
-            id,
-            Source {
-                w,
-                h,
-                pixels,
-                shown,
-            },
-        );
+        self.sources.insert(id, Source::new(w, h, pixels));
+        Ok(())
+    }
+
+    /// A rotor whose positions sources are made of (fan.rs), for the stream: the
+    /// [`MOST_ROTORS`] used last are kept.
+    pub fn rotor(&mut self, id: u32, rotor: fan::Rotor) {
+        self.rotors.retain(|(kept, _)| *kept != id);
+        self.rotors.push((id, rotor));
+        if self.rotors.len() > MOST_ROTORS {
+            self.rotors.remove(0);
+        }
+    }
+
+    /// Source `id`: rotor `rotor` at a position in its colours, blurred and dimmed (fan.rs's
+    /// Rotor::blades), made here; the rotor is the one used last now.
+    pub fn blades(&mut self, id: u32, rotor: u32, blades: &fan::Blades) -> Result<(), String> {
+        let at = self
+            .rotors
+            .iter()
+            .position(|(kept, _)| *kept == rotor)
+            .ok_or_else(|| format!("blades {id} of rotor {rotor}, which is not kept"))?;
+        let used = self.rotors.remove(at);
+        self.rotors.push(used);
+        let made = &mut self.rotors.last_mut().expect("the rotor just used").1;
+        let k = made.side();
+        let pixels = made.blades(blades);
+        self.sources.insert(id, Source::new(k, k, pixels));
+        Ok(())
+    }
+
+    /// Source `id`: a fan's ring with its glowing arc (fan.rs's ring), made here.
+    pub fn fan_ring(&mut self, id: u32, spec: &fan::RingSpec) -> Result<(), String> {
+        let pixels = fan::ring(spec)?;
+        let side = spec.canvas;
+        self.sources.insert(id, Source::new(side, side, pixels));
         Ok(())
     }
 

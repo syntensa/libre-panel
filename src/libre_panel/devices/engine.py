@@ -33,6 +33,7 @@ import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
 from PIL import Image
 
 from libre_panel import light, winsession
@@ -51,7 +52,7 @@ from libre_panel.devices.h264 import (
     find_engine,
 )
 from libre_panel.i18n import t
-from libre_panel.render import moving
+from libre_panel.render import fan, moving
 from libre_panel.render.scene import Bar, BarBase, Filled, Globe, Laid, View, growth
 
 if TYPE_CHECKING:
@@ -73,6 +74,10 @@ STREAM, END, PICTURE = 5, 6, 8
 # a lit bar and a layer of it at a value, with its glow (bar.rs)
 GROUND, LAYER, SCENE, RING, RING_LAYER, SOURCE, VIEW = 9, 10, 11, 12, 13, 14, 15
 GLOBE, GLOBE_LAYER, FILL, LAID, GROWN, BAR, BAR_LAYER = 16, 17, 18, 19, 20, 21, 22
+# a fan's rotor of a look at a size, and the sources it makes of it: a position of the rotor
+# and the ring with its glowing arc (fan.rs)
+ROTOR, BLADES, FAN_RING = 23, 24, 25
+MOST_ROTORS = 8  # the rotors it keeps for a stream, those used last (scene.rs's MOST_ROTORS)
 # how a layer goes on: RGBA through its alpha, RGB as it is (a video's frame), RGB light added
 OVER, SOLID, ADD = 0, 1, 2
 # A reply may wait for the picture being sent (5 s a block at most, 1.5 s for room in the
@@ -177,6 +182,12 @@ def makes_bars(engine: str) -> bool:
     return "bars" in _can(engine)
 
 
+def makes_fans(engine: str) -> bool:
+    """Whether ``engine`` makes a fan's rotor at each position and its ring itself
+    (render/scene.py's Made, of render/fan.py's recipes)."""
+    return "fans" in _can(engine)
+
+
 def encodes_on_cards(engine: str) -> bool:
     """Whether ``engine`` takes ``--encoder card`` (video.engine_encoder: the graphics card's
     encoder where it opens, else x264); one of before does not start with it."""
@@ -203,7 +214,7 @@ class SceneSender:
 
     def __init__(
         self, rings: bool = False, views: bool = False, globes: bool = False, fills: bool = False,
-        laid: bool = False, grown: bool = False, bars: bool = False,
+        laid: bool = False, grown: bool = False, bars: bool = False, fans: bool = False,
     ) -> None:  # fmt: skip
         self.rings = rings  # the engine makes a lit gauge's ring (render/lit.py's Ring)
         self.views = views  # ... and cuts a layer from pictures it keeps (render/scene.py's View)
@@ -212,18 +223,25 @@ class SceneSender:
         self.laid = laid  # ... and lays a layer from pictures it keeps (render/scene.py's Laid)
         self.grown = grown  # ... and grows a picture from one it keeps (render/scene.py's grew)
         self.bars = bars  # ... and makes a lit bar's picture and glow (render/scene.py's Bar)
+        # ... and makes the pictures a fan is laid from: its rotor at a position, its ring
+        # (render/scene.py's Made of render/fan.py's recipes), of the rotors it keeps
+        self.fans = fans
         self._ground: Any = None
         # each piece's layers (and the ring, or the pictures, they are of): what the engine has
         self._pieces: dict[int, tuple[Piece, list[int], Any, tuple[int, ...], int | None]] = {}
         self._rings: dict[Any, tuple[Image.Image, Image.Image, int]] = {}
         self._sources: dict[int, tuple[Image.Image, int]] = {}  # by id: the picture, its number
         self._globes: dict[int, tuple[Any, int]] = {}  # by id: the turning globe, its number
+        # by look and size: the number of a rotor the engine keeps, the one used last at the end
+        # (as scene.rs keeps them: the MOST_ROTORS used last, for the stream)
+        self._rotors: collections.OrderedDict[tuple[str, int], int] = collections.OrderedDict()
         self._numbers = itertools.count(1)
         self.layers = 0  # sent, and their bytes
         self.bytes = 0
         self.filled = 0  # (of them, layers of one colour)
         self.laid_layers = 0  # (... and layers laid from pictures the engine keeps)
         self.grown_sources = 0  # pictures grown from one the engine keeps
+        self.made_sources = 0  # pictures the engine made of what they are made of (fans)
 
     def _layer(
         self, parts: list[bytes], image: Image.Image, x: int, y: int, how: int
@@ -366,20 +384,60 @@ class SceneSender:
         if hit is None or hit[0] is not image:
             number = next(self._numbers) & 0xFFFFFFFF
             grown = self._grown_from(image, now)
-            if grown is not None:
+            if self.fans and self._made(parts, image, number):
+                self.made_sources += 1  # (made by the engine of what it is made of)
+            elif grown is not None:
                 base, shift, keep = grown
                 data = image.crop((keep, 0, image.width, image.height)).tobytes()
                 head = struct.pack("<IIIII", image.width, image.height, base, shift, keep)
                 parts += [_head(GROWN, number, len(head) + len(data)) + head, data]
                 self.grown_sources += 1
+                self.bytes += len(data)
             else:
                 data = image.tobytes()
                 size = struct.pack("<II", image.width, image.height)
                 parts += [_head(SOURCE, number, len(size) + len(data)) + size, data]
-            self.bytes += len(data)
+                self.bytes += len(data)
             hit = (image, number)
         now[key] = hit
         return hit[1]
+
+    def _made(self, parts: list[bytes], image: Image.Image, number: int) -> bool:
+        """Source ``number``: ``image`` made by the engine of what it is made of, where it is a
+        picture it makes (render/scene.py's Made of render/fan.py's recipes: a fan's rotor at a
+        position, of the rotor sent first where the engine does not keep it; a fan's ring);
+        False for one that goes as its pixels."""
+        recipe = getattr(image, "recipe", None)
+        if isinstance(recipe, fan.BladesRecipe):
+            rotor = self._rotors.get(recipe.rotor)
+            if rotor is None:
+                rotor = next(self._numbers) & 0xFFFFFFFF
+                layers = fan.rotor_layers(recipe.k, recipe.look)
+                positions, n, k, _ = layers.shape
+                head = struct.pack("<III5f", k, positions, n, *fan.SHADING)
+                data = np.ascontiguousarray(layers, "<f4").tobytes()
+                parts += [_head(ROTOR, rotor, len(head) + len(data)) + head, data]
+                self.bytes += len(data)
+                self._rotors[recipe.rotor] = rotor
+                while len(self._rotors) > MOST_ROTORS:
+                    self._rotors.popitem(last=False)
+                # (the engine keeps them: here they go, made again only if drawn here)
+                fan.let_go_layers(recipe.k, recipe.look)
+            self._rotors.move_to_end(recipe.rotor)
+            dim = recipe.dim or b""
+            head = struct.pack("<II3B3BBxf", rotor, recipe.phase, *recipe.colour,
+                               *recipe.second, int(bool(dim)), recipe.blend)  # fmt: skip
+            parts.append(_head(BLADES, number, len(head) + len(dim)) + head + dim)
+            return True
+        if isinstance(recipe, fan.RingRecipe):
+            start, end = recipe.angles
+            body = struct.pack("<I3BB5i6f", recipe.canvas, *recipe.colour, recipe.arc,
+                               *recipe.bounds, recipe.width, start, end, recipe.halo,
+                               recipe.groove, recipe.white, recipe.share)  # fmt: skip
+            body += fan.CORE_LEVELS
+            parts.append(_head(FAN_RING, number, len(body)) + body)
+            return True
+        return False
 
     def _grown_from(
         self, image: Image.Image, now: dict[int, tuple[Image.Image, int]]
@@ -969,7 +1027,7 @@ class EngineStream:
         self, link: EngineLink, size: tuple[int, int], options: list[str], block: int,
         lead: float | None = None, scenes: bool = False, rings: bool = False,
         views: bool = False, globes: bool = False, fills: bool = False, laid: bool = False,
-        grown: bool = False, bars: bool = False,
+        grown: bool = False, bars: bool = False, fans: bool = False,
     ) -> None:  # fmt: skip
         self.link, self.size = link, size
         # with ``scenes``: frames of layers go to the engine as them (render/scene.py); the
@@ -977,9 +1035,10 @@ class EngineStream:
         # engine makes a lit gauge's ring itself, with ``views`` it cuts a graph's window, with
         # ``globes`` it makes a turning globe's pictures, with ``fills`` it lays a card's inside
         # as its colour, with ``laid`` a fan from its ring and its rotor, with ``grown`` a graph's
-        # strip from the one before, with ``bars`` a lit bar's picture and glow
+        # strip from the one before, with ``bars`` a lit bar's picture and glow, with ``fans`` a
+        # fan's rotor at each position and its ring
         self.scenes = (
-            SceneSender(rings, views, globes, fills, laid, grown, bars) if scenes else None
+            SceneSender(rings, views, globes, fills, laid, grown, bars, fans) if scenes else None
         )
         # how long after the time a frame was drawn for the engine sends its picture (seconds;
         # None: the engine's own choice, h264.engine_lead's)

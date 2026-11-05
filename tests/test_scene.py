@@ -592,6 +592,103 @@ def test_a_laid_fan_goes_to_the_engine_as_its_parts_each_sent_once_and_kept():
     assert made.layer.composed  # (made for an engine that lays none)
 
 
+class Turning:
+    """A rotor at a position, a blur, a light and a load (render/fan.py's Rotor, as fan_parts
+    reads it)."""
+
+    def __init__(self, phase=0, blur=0, dim=0, ring=0.0):
+        self.phase, self.blur, self.dim, self.ring = phase, blur, dim, ring
+
+
+FAN_STATES = [
+    (0, 0, 0, 0.0), (5, 3, 0, 0.5), (47, 8, 2, 1.0), (12, 0, 5, 119 / 120), (30, 5, 8, 1 / 120),
+]  # fmt: skip
+
+
+@pytest.mark.parametrize("look", ["noctua-g2", "libre"])
+def test_a_fan_the_engine_makes_is_its_recipes_its_pixels_made_here_as_before(look):
+    """Its ring and its rotor as pictures the engine makes itself: their pixels, made here only
+    when asked for, those of the fan's own pictures; the same pictures while the fan shows the
+    same; none for a square frame, which the engine does not make."""
+    from libre_panel.render import fan
+
+    for phase, blur, dim, ring in FAN_STATES:
+        state = Turning(phase, blur, dim, ring)
+        made = fan.made_parts((46, 230, 214), 50, 50, state, "ring", look)
+        assert all(isinstance(image, scenes.Made) for image, _ in made)
+        assert [type(image.recipe) for image, _ in made] == [fan.RingRecipe, fan.BladesRecipe]
+        plain = fan.fan_parts((46, 230, 214), 50, 50, state, "ring", look)
+        assert [at for _, at in made] == [at for _, at in plain]
+        for (image, _), (own, _) in zip(made, plain, strict=True):
+            assert image.size == own.size and image.tobytes() == own.tobytes()
+        again = fan.made_parts((46, 230, 214), 50, 50, state, "ring", look)
+        assert all(a is b for (a, _), (b, _) in zip(made, again, strict=True))
+    none = fan.made_parts((46, 230, 214), 50, 50, Turning(), "none", look)
+    assert [type(image.recipe) for image, _ in none] == [fan.BladesRecipe]
+    assert fan.made_parts((46, 230, 214), 50, 50, Turning(), "square", look) is None
+
+
+def test_a_made_fan_goes_to_the_engine_as_its_recipes_its_rotor_once_for_the_stream():
+    """Its rotor's layers go once (and go here, kept there), and each picture as what it is
+    made of (no pixels): a position, then the next, also after a frame without the fan; of
+    more rotors than the engine keeps, the one used longest ago goes again. An engine that
+    makes none gets the pictures' pixels."""
+    from libre_panel.render import fan, fan_looks
+
+    sender = engines.SceneSender(laid=True, fans=True)
+    card = piece((9, 9, 9, 255), size=(80, 80))
+
+    def fan_piece(phase, ring=0.5):  # (in a colour of its own: pictures no other test made)
+        parts = fan.made_parts((7, 99, 201), 40, 40, Turning(phase, ring=ring), "ring")
+        canvas = fan.geometry(40, 40)[2]
+        made = scenes.laid((canvas, canvas), [(image, at, at) for image, at in parts])
+        return Piece(made.layer, 2, 3, native=made), parts
+
+    first, parts = fan_piece(0)
+    k = fan.rotor_size(fan.geometry(40, 40)[0])
+    fan.rotor_layers(k)  # (made here: it goes once sent)
+    assert (fan_looks.DEFAULT, k) in fan._layers
+    records = heads(sender.records(scene_of(card, first, size=(80, 80)), 0, None))
+    assert (fan_looks.DEFAULT, k) not in fan._layers
+    kinds = [k for k, *_ in records]
+    assert kinds == [engines.GROUND, engines.LAYER, engines.FAN_RING, engines.ROTOR,
+                     engines.BLADES, engines.LAID, engines.SCENE]  # fmt: skip
+    ring, rotor, blades = records[2], records[3], records[4]
+    assert rotor[2] == 32 + fan.POSITIONS * 5 * k * k * 4
+    assert struct.unpack("<III", rotor[3][:12]) == (k, fan.POSITIONS, 5)
+    assert struct.unpack("<II", blades[3][:8]) == (rotor[1], 0) and blades[2] == 20
+    assert ring[2] == 1076 and ring[3][52:] == fan.CORE_LEVELS
+    laid = records[5][3]
+    assert struct.unpack("<6I", laid[:24])[4:] == (2, 0)  # (two parts, none kept besides)
+    assert all(not image.composed for image, _ in parts)  # (no pixels made here)
+    second, _ = fan_piece(1)  # (on a position: its blades, of the rotor the engine keeps)
+    assert [k for k, *_ in heads(sender.records(scene_of(card, second, size=(80, 80)), 1,
+                                                None))] == [engines.BLADES, engines.LAID,
+                                                            engines.SCENE]  # fmt: skip
+    sender.records(scene_of(card, size=(80, 80)), 2, None)  # (a frame without it)
+    third, _ = fan_piece(2)
+    kinds = [k for k, *_ in heads(sender.records(scene_of(card, third, size=(80, 80)), 3, None))]
+    assert kinds == [engines.FAN_RING, engines.BLADES, engines.LAID, engines.SCENE]
+
+    def rotor_of(size, n):
+        parts = fan.made_parts((7, 99, 201), size, size, Turning(0), "none")
+        made = scenes.laid(parts[0][0].size, [(image, 0, 0) for image, _ in parts])
+        return [k for k, *_ in heads(sender.records(scene_of(Piece(made.layer, 0, 0,
+                                                                   native=made),
+                                                             size=(80, 80)), n, None))]  # fmt: skip
+
+    sizes = [12 + 2 * i for i in range(engines.MOST_ROTORS)]  # (eight more rotors)
+    for n, size in enumerate(sizes):
+        assert engines.ROTOR in rotor_of(size, 10 + n)
+    assert engines.ROTOR in rotor_of(40, 30)  # (the first: used longest ago, gone)
+    assert engines.ROTOR not in rotor_of(sizes[-1], 31)  # (one used lately: kept)
+    plain = engines.SceneSender(laid=True)
+    other, parts = fan_piece(3)
+    kinds = [k for k, *_ in heads(plain.records(scene_of(other, size=(80, 80)), 0, None))]
+    assert kinds == [engines.GROUND, engines.SOURCE, engines.SOURCE, engines.LAID, engines.SCENE]
+    assert all(image.composed for image, _ in parts)  # (their pixels, made for it)
+
+
 def test_a_scrolling_graph_cut_by_the_engine_shows_what_it_showed():
     """Its window's pixels, made only when asked for, the window's as cropped here before, its
     sides cut away too where it is clipped; one drawn again at its end (a reading the strip
@@ -704,15 +801,15 @@ class Fed(Layered):
     ``half``; the renderer's own frame of each is kept to compare."""
 
     def __init__(self, engine, size, out, half, rings=False, views=False, globes=False,
-                 fills=False, laid=False, grown=False, bars=False):  # fmt: skip
+                 fills=False, laid=False, grown=False, bars=False, fans=False):  # fmt: skip
         super().__init__()
-        self.half, self.makes_rings = half, rings
+        self.half, self.makes_rings, self.makes_fans = half, rings, fans
         self.proc = subprocess.Popen(
             [engine, "encode", "--size", f"{size[0]}x{size[1]}", "--turn", "0", "--fps", "25",
              "--crf", "20", "--kbit", "4000", "--keyint", "250", "--dump-rgb", str(out)],
             stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
         )  # fmt: skip
-        self.sender = engines.SceneSender(rings, views, globes, fills, laid, grown, bars)
+        self.sender = engines.SceneSender(rings, views, globes, fills, laid, grown, bars, fans)
         self.own, self.n = [], 0
 
     def show(self, frame, region=None):
@@ -747,7 +844,9 @@ class Fed(Layered):
                                                        "grown"),
      ("arena-1920x720", True, False, True, "grown"), ("lumen-1920x720", False, False, False,
                                                        "bars"),
-     ("lumen-1920x720", True, False, True, "bars")],
+     ("lumen-1920x720", True, False, True, "bars"), ("lumen-1920x720", False, False, False,
+                                                      "fans"),
+     ("arena-1920x720", True, False, True, "fans")],
 )  # fmt: skip
 def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
     engine, tmp_path, theme, half, rings, toast, views
@@ -765,7 +864,7 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
     fills = views == "fills"  # (and the cards' insides laid by the engine as their colour)
     if fills and not engines.makes_fills(engine):
         pytest.skip("needs libre-panel-engine that lays fills (cargo build --release)")
-    laid = views in ("laid", "grown")  # (and the fans and texts laid by the engine)
+    laid = views in ("laid", "grown", "fans")  # (and the fans and texts laid by the engine)
     if laid and not engines.lays_laid(engine):
         pytest.skip("needs libre-panel-engine that lays layers (cargo build --release)")
     grown = views == "grown"  # (and the graphs' strips grown by the engine from those before)
@@ -774,9 +873,12 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
     bars = views == "bars"  # (and the lit bars and their glows made by the engine, Lumen's)
     if bars and not engines.makes_bars(engine):
         pytest.skip("needs libre-panel-engine that makes bars (cargo build --release)")
+    fans = views == "fans"  # (and the fans' rotors and rings made by the engine)
+    if fans and not engines.makes_fans(engine):
+        pytest.skip("needs libre-panel-engine that makes fans (cargo build --release)")
     clock, host = Clock(1000.0), PluginHost()
     display = Fed(engine, (1920, 720), tmp_path / "frames.rgb", half, rings, bool(views), globes,
-                  fills, laid, grown, bars)  # fmt: skip
+                  fills, laid, grown, bars, fans)  # fmt: skip
     loop = loop_with(theme, display, clock, host)
     try:
         run(loop, clock, 4)
@@ -824,6 +926,60 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
                 for _wid, p in f.scene.pieces if isinstance(p.native, scenes.Laid)]  # fmt: skip
         assert len(lain) >= 25 and loop.renderer.native_laid
         assert display.sender.laid_layers >= 25  # (they went as LAID records)
+    if fans:  # (their rotors and rings made by the engine, of their recipes)
+        assert loop.renderer.native_fans and display.sender.made_sources >= 25
+        assert display.sender._rotors  # (the rotors it keeps)
+
+
+def test_the_engine_makes_fans_as_the_renderer_does_to_the_bit(engine, tmp_path):
+    """Every look at three sizes in three colours, at positions round the turn, blurred,
+    dimmed and with their rings at their lengths (none, some, all but one step, all round):
+    each fan the engine makes of its recipes is the fan's own picture, over black and over
+    white (so its alpha too)."""
+    from libre_panel.render import fan, fan_looks
+
+    if not engines.makes_fans(engine):
+        pytest.skip("needs libre-panel-engine that makes fans (cargo build --release)")
+    size, out = (1920, 720), tmp_path / "fans.rgb"
+    proc = subprocess.Popen(
+        [engine, "encode", "--size", "1920x720", "--turn", "0", "--fps", "25", "--crf", "20",
+         "--kbit", "4000", "--keyint", "250", "--dump-rgb", str(out)],
+        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+    )  # fmt: skip
+    sender, own = engines.SceneSender(laid=True, fans=True), []
+    cases = [
+        (look, side, colour, phase, *state)
+        for look in fan_looks.LOOKS for side in (40, 50, 31)
+        for colour in ((46, 230, 214), (255, 120, 40), (250, 250, 250))
+        for phase in range(0, fan.POSITIONS, 9)
+        for state in ((0, 0, 0.0), (3, 0, 0.5), (8, 2, 1.0), (0, 5, 119 / 120), (5, 8, 1 / 120))
+    ]  # fmt: skip
+    try:
+        n = 0
+        for start in range(0, len(cases), 200):
+            pieces = []
+            for i, case in enumerate(cases[start : start + 200]):
+                look, side, colour, phase, blur, dim, ring = case
+                state = Turning(phase, blur, dim, ring)
+                parts = fan.made_parts(colour, side, side, state, "ring", look)
+                canvas = fan.geometry(side, side)[2]
+                made = scenes.laid((canvas, canvas), [(image, at, at) for image, at in parts])
+                x, y = (i % 20) * 95, (i // 20) * 70
+                pieces.append((f"f{i}", Piece(made.layer, x, y, native=made)))
+            for ground in ((0, 0, 0), (255, 255, 255)):
+                scene = scenes.Scene(size, ground, tuple(pieces))
+                for part in sender.records(scene, n, None):
+                    proc.stdin.write(part)
+                own.append(scenes.compose(scene).tobytes())
+                n += 1
+    finally:
+        proc.stdin.close()
+        proc.wait(60)
+    made = out.read_bytes()
+    whole = size[0] * size[1] * 3
+    assert len(made) == whole * len(own) and sender.made_sources >= len(cases)
+    for k, frame in enumerate(own):
+        assert made[k * whole : (k + 1) * whole] == frame, f"frame {k} is not the renderer's"
 
 
 def test_the_engine_grows_a_strip_from_the_one_before_as_it_was_drawn(engine, tmp_path):

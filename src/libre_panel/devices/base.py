@@ -155,6 +155,8 @@ class Display:
     takes_scenes = False
     # ... and whose engine makes a lit gauge's ring itself (render/lit.py's Ring)
     makes_rings = False
+    # ... and a fan's rotor at each position and its ring (render/fan.py's recipes)
+    makes_fans = False
     # a slow link (the USB serial panels, pixels over a serial port): the main loop keeps the
     # motion calm and sends the parts that changed one by one (app.calm, changed_regions)
     slow = False

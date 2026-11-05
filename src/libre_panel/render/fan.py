@@ -30,6 +30,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 from libre_panel.render import fan_looks
 from libre_panel.render.kept import MB, Kept
+from libre_panel.render.scene import Made
 
 ASSETS = Path(__file__).resolve().parent.parent / "assets" / "light3d" / "fan"
 
@@ -50,6 +51,8 @@ SHADES = 8  # steps of dimming and of blur that are kept apart
 # how the grey layers make a colour: the colour times (ambient + diffuse * shape),
 # darker at the blade's edges by the core layer, the gloss added white
 AMBIENT, DIFFUSE, CORE, GLOSS = 0.35, 0.65, 0.30, 0.55
+# ... as an engine takes them (engine/src/fan.rs's Shading): 1 - CORE worked out as here
+SHADING = (AMBIENT, DIFFUSE, 1 - CORE, CORE, GLOSS)
 CORE_FLOOR = 0.596  # the core layer's darkest grey
 
 # what the fan shows
@@ -322,6 +325,12 @@ def rotor_layers(size: int, look: str = fan_looks.DEFAULT) -> np.ndarray:
                 )
             _keep_layers(_layers, key, layers)
     return layers
+
+
+def let_go_layers(size: int, look: str = fan_looks.DEFAULT) -> None:
+    """The layers of a rotor no longer kept here: an engine that makes the rotor's positions
+    keeps them (made again here when something drawn here asks for them)."""
+    _layers.pop((fan_looks.look(look).name, size), None)
 
 
 Colours = tuple[tuple[int, int, int], tuple[int, int, int]]  # the main one, the second
@@ -619,4 +628,117 @@ def fan_parts(
     main, second = colours(look, paint, color)
     blades = blades_image(main, k, rotor.phase, rotor.blur, rotor.dim, look, second)
     parts.append((blades, (canvas - k) // 2))
+    return parts
+
+
+# -- the pictures an engine makes itself -----------------------------------------------------
+
+
+@dataclass(frozen=True)
+class BladesRecipe:
+    """What an engine makes a rotor's picture of (engine/src/fan.rs's Rotor::blades), as
+    :func:`blades_image` makes it: the rotor of ``look`` at ``k`` px (its layers, rotor_layers,
+    sent to it once), at ``phase``, in ``colour`` and ``second``, blurred into its disc by
+    ``blend`` (Image.blend's alpha, 0 for none) and its alpha put through ``dim`` (Image.point's
+    table, none where it is not dimmed)."""
+
+    look: str
+    k: int
+    phase: int
+    colour: tuple[int, int, int]
+    second: tuple[int, int, int]
+    blend: float
+    dim: bytes
+
+    @property
+    def rotor(self) -> tuple[str, int]:
+        """The rotor it is made of: its look and size."""
+        return (self.look, self.k)
+
+
+@dataclass(frozen=True)
+class RingRecipe:
+    """What an engine makes a fan's ring of (engine/src/fan.rs's ring), as :func:`ring_image`
+    makes it: on its ``canvas``, in ``colour``, the groove all round and its arc (``arc``: 0
+    none, 1 all round, 2 from one of its ``angles`` to the other, as Pillow's arc takes them):
+    a ring ``width`` wide in ``bounds`` (Pillow's box, in whole pixels, three times larger),
+    blurred into its halo by ``halo``."""
+
+    canvas: int
+    colour: tuple[int, int, int]
+    arc: int
+    bounds: tuple[int, int, int, int]
+    width: int
+    angles: tuple[float, float]
+    halo: float
+    groove: float = GROOVE
+    white: float = GLOW_WHITE
+    share: float = GLOW_SHARE
+
+
+# the core of each level of the arc's coverage, as _glow works it out (single precision, the
+# levels a 255th each): what an engine's ring takes them from
+CORE_LEVELS = ((np.arange(256, dtype=np.float32) / 255) ** 0.7).astype("<f4").tobytes()
+
+
+def ring_recipe(color: tuple[int, int, int], size: int, steps: int, canvas: int) -> RingRecipe:
+    """The :class:`RingRecipe` of :func:`ring_image` (_ring_mask's box and width as Pillow takes
+    them)."""
+    scale = size / FAN_SIZE
+    centre, stroke = RING_CENTRE * scale, max(1.5, RING_STROKE * scale)
+    u = 3
+    g = canvas * u
+    r = (centre + stroke / 2) * u
+    bounds = tuple(int(v) for v in (g / 2 - r, g / 2 - r, g / 2 + r, g / 2 + r))
+    width = max(1, round(stroke * u))
+    share = steps / RING_STEPS
+    arc = 0 if steps <= 0 else 1 if share >= 0.995 else 2
+    angles = (-90.0, -90 + 360 * share) if arc == 2 else (0.0, 0.0)
+    return RingRecipe(canvas, color, arc, bounds, width, angles, RING_HALO * scale)  # type: ignore[arg-type]
+
+
+# The pictures of fans an engine makes itself (scene.Made), by what they show: so a fan that
+# stands is the same picture (and the same piece) from frame to frame. Each holds its recipe, its
+# pixels only where something asked for them here.
+MADE_BYTES = 512  # what one is counted as
+_made = Kept("fan.made", 512 * MADE_BYTES)
+
+
+def _made_picture(
+    key: tuple[Any, ...], size: int, recipe: Any, make: Callable[[], Image.Image]
+) -> Made:
+    found = _made.get(key)
+    if found is None:
+        found = _made.put(key, Made((size, size), "RGBA", make, recipe), size=MADE_BYTES)
+    return found
+
+
+def made_parts(
+    color: tuple[int, int, int], w: int, h: int, rotor: Rotor, frame: str = "ring",
+    look: str = fan_looks.DEFAULT, paint: str = "theme",
+) -> list[tuple[Image.Image, int]] | None:  # fmt: skip
+    """:func:`fan_parts` as pictures an engine makes itself (scene.Made: their recipes, the
+    pixels made here only when something asks for them, the same as fan_parts'), or None for a
+    fan whose frame is not one it makes (a square one)."""
+    if frame not in ("ring", "none"):
+        return None
+    size, _, canvas = geometry(w, h)
+    k = rotor_size(size)
+    parts: list[tuple[Image.Image, int]] = []
+    if frame == "ring":
+        steps = round(rotor.ring * RING_STEPS)
+        parts.append((_made_picture(
+            ("ring", color, size, steps, canvas), canvas, ring_recipe(color, size, steps, canvas),
+            lambda: ring_image(color, size, steps, canvas),
+        ), 0))  # fmt: skip
+    main, second = colours(look, paint, color)
+    phase, blur, dim = rotor.phase % POSITIONS, rotor.blur, rotor.dim
+    recipe = BladesRecipe(
+        fan_looks.look(look).name, k, phase, main, second, BLUR * blur / SHADES if blur else 0.0,
+        bytes(_DIMMED[dim]) if dim else b"",
+    )  # fmt: skip
+    parts.append((_made_picture(
+        ("blades", look, main, second, k, phase, blur, dim), k, recipe,
+        lambda: blades_image(main, k, phase, blur, dim, look, second),
+    ), (canvas - k) // 2))  # fmt: skip
     return parts
