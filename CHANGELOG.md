@@ -17,6 +17,11 @@
 - **Texts as their outlines.** Where the engine fills them in their colour, Libre Panel keeps a
   text, a value, a clock's digits as their outline, a quarter of the picture, also those made
   before the first frame (Lumen: its 115 texts and values). Their pixels are the same to the bit.
+- **A lighter history of the readings.** The last ten minutes of every reading (what the
+  graphs draw from) are kept as plain numbers, a quarter of what they took, and a frame no
+  longer copies them all: Lumen's 300 readings on two panels, 3.2 MB instead of 9.7 after ten
+  minutes (more on a PC whose hardware gives hundreds); taking the readings, 2.5 ms instead
+  of 7.2.
 - **Nothing kept after the app's window was open.** Its picture of the panel made Libre Panel
   draw what the engine makes (the fans at every position they turned through, the texts); those
   pictures now go half a minute after nothing asked for them, as the cards' do.

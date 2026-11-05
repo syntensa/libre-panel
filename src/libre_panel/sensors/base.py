@@ -8,14 +8,18 @@ import math
 import re
 import threading
 import time
-from collections import deque
+from array import array
+from collections.abc import Iterator, MutableMapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
 log = logging.getLogger(__name__)
 
-HISTORY_LENGTH = 600
+HISTORY_LENGTH = 600  # the numbers a sensor's history holds (a graph's ten minutes)
+# ... and how many more each keeps: a snapshot's history stays as it was while fewer than these
+# came since (a frame drawn from the snapshot before meanwhile, in another thread)
+HISTORY_SLACK = 64
 
 
 def as_float(value: int | float) -> float:
@@ -95,7 +99,7 @@ class Reading:
 @dataclass
 class Snapshot:
     readings: dict[str, Reading] = field(default_factory=dict)
-    history: dict[str, list[float]] = field(default_factory=dict)
+    history: MutableMapping[str, list[float]] = field(default_factory=dict)
     now: datetime = field(default_factory=datetime.now)
     images: dict[str, Any] = field(default_factory=dict)  # published by services
 
@@ -231,7 +235,7 @@ class SensorHub:
         self.providers = providers
         # puts the names readings go by into them (the fans': sensors.fan_names.FanNames)
         self.names = names
-        self._history: dict[str, deque[float]] = {}
+        self._history: dict[str, Series] = {}
         self._owners: dict[str, SensorProvider] = {}  # which provider a key came from
         self._fresh_images: set[str] = set()  # the pictures fresh_images last handed back
         # more panels at once read the sources through it (HubView), each loop in its thread:
@@ -390,13 +394,93 @@ class SensorHub:
                 log.exception("closing sensor provider %s failed", provider.name)
 
 
-def remember(history: dict[str, deque[float]], readings: dict[str, Reading]) -> dict[str, list]:
+class Series:
+    """A sensor's numbers, newest last, in a ring of eight bytes each: a float and its place in
+    a deque took 32, and every snapshot copied every sensor's (Lumen's 300 on two panels, after
+    ten minutes: 9.7 MB). The last :data:`HISTORY_LENGTH` of the first ``total`` stay
+    (:meth:`last`) while fewer than :data:`HISTORY_SLACK` came since."""
+
+    __slots__ = ("_ring", "total")
+    SIZE = HISTORY_LENGTH + HISTORY_SLACK
+
+    def __init__(self) -> None:
+        self._ring = array("d")
+        self.total = 0  # the numbers it was given
+
+    def append(self, value: float) -> None:
+        ring = self._ring
+        if len(ring) < self.SIZE:
+            ring.append(value)
+        else:
+            ring[self.total % self.SIZE] = value
+        self.total += 1
+
+    def last(self, total: int) -> list[float]:
+        """The last :data:`HISTORY_LENGTH` of its first ``total`` numbers: those it still
+        holds (a ring holds the last :attr:`SIZE`)."""
+        size, ring = self.SIZE, self._ring
+        start = max(total - HISTORY_LENGTH, self.total - size, 0)
+        if start >= total:
+            return []
+        first, n = start % size, total - start
+        part = ring[first : first + n]
+        if len(part) < n:  # (round the end of the ring)
+            part += ring[: n - len(part)]
+        gone = self.total - size - start  # (overwritten while it was taken: those go too)
+        return part[gone:].tolist() if gone > 0 else part.tolist()
+
+
+class HistoryView(MutableMapping[str, list[float]]):
+    """A snapshot's history: each sensor's last :data:`HISTORY_LENGTH` numbers as they were
+    when it was taken, a list made the first time something asks for it (a graph: most are
+    never asked for), kept; one set here (the editor's, a test's) stands instead."""
+
+    __slots__ = ("_at", "_lists")
+
+    def __init__(self, at: dict[str, tuple[Series, int]]) -> None:
+        self._at = at
+        self._lists: dict[str, list[float]] = {}
+
+    def __getitem__(self, key: str) -> list[float]:
+        found = self._lists.get(key)
+        if found is None:
+            series, total = self._at[key]
+            found = self._lists[key] = series.last(total)
+        return found
+
+    def __setitem__(self, key: str, values: list[float]) -> None:
+        self._lists[key] = values
+
+    def __delitem__(self, key: str) -> None:
+        if key not in self:
+            raise KeyError(key)
+        self._at.pop(key, None)
+        self._lists.pop(key, None)
+
+    def __contains__(self, key: object) -> bool:
+        return key in self._at or key in self._lists
+
+    def __iter__(self) -> Iterator[str]:
+        yield from self._at
+        yield from (key for key in self._lists if key not in self._at)
+
+    def __len__(self) -> int:
+        return len(self._at) + sum(1 for key in self._lists if key not in self._at)
+
+    def __repr__(self) -> str:
+        return f"HistoryView({dict(self)!r})"
+
+
+def remember(history: dict[str, Series], readings: dict[str, Reading]) -> HistoryView:
     """The numbers among ``readings`` added to ``history``, and the history as a snapshot
-    carries it."""
+    carries it (as it is now: :class:`HistoryView`)."""
     for key, reading in readings.items():
         if isinstance(reading.value, (int, float)) and not isinstance(reading.value, bool):
-            history.setdefault(key, deque(maxlen=HISTORY_LENGTH)).append(float(reading.value))
-    return {k: list(v) for k, v in history.items()}
+            series = history.get(key)
+            if series is None:
+                series = history[key] = Series()
+            series.append(float(reading.value))
+    return HistoryView({key: (series, series.total) for key, series in history.items()})
 
 
 class HubView:
@@ -410,7 +494,7 @@ class HubView:
 
     def __init__(self, hub: SensorHub) -> None:
         self.hub = hub
-        self._history: dict[str, deque[float]] = {}
+        self._history: dict[str, Series] = {}
         self._fresh_images: set[str] = set()
 
     @property

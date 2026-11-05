@@ -57,6 +57,60 @@ def test_every_frame_providers_follow_between_snapshots():
     assert hub.snapshot().history["cpu.load"] == [5.0, 7.0]
 
 
+def test_a_history_is_each_sensors_last_numbers_as_a_snapshot_saw_them():
+    """The last HISTORY_LENGTH numbers of each sensor, as a deque of them was at the snapshot:
+    also a snapshot drawn from while up to HISTORY_SLACK more came; one older still keeps the
+    newest of its own, none it did not see."""
+    import random
+    from array import array
+    from collections import deque
+
+    from libre_panel.sensors.base import HISTORY_LENGTH, HISTORY_SLACK, Series
+
+    random.seed(3)
+    series, seen, taken = Series(), [], []
+    for k in range(3 * Series.SIZE):
+        seen.append(random.random())
+        series.append(seen[-1])
+        taken.append(series.total)
+        for total in taken[-(HISTORY_SLACK + 20) :: 7]:
+            want = list(deque(seen[:total], maxlen=HISTORY_LENGTH))
+            got = series.last(total)
+            if series.total - total < HISTORY_SLACK:
+                assert got == want, (k, total)
+            else:  # (overwritten since: its oldest go, the rest are its own)
+                assert got == want[len(want) - len(got) :], (k, total)
+    assert isinstance(series._ring, array) and len(series._ring) == Series.SIZE
+    assert Series().last(0) == []
+
+
+def test_a_snapshots_history_is_read_as_a_dict_its_lists_made_when_asked():
+    from libre_panel.sensors.base import HistoryView
+
+    values = {"cpu.temp": 60.0, "gpu.temp": 50.0, "name": "Ryzen"}  # (a text has no history)
+    source = Fixed(values)
+    hub = SensorHub([source])
+    first = hub.snapshot()
+    values["cpu.temp"] = 61.0
+    second = hub.snapshot()
+    history = second.history
+    assert isinstance(history, HistoryView) and not history._lists  # (nothing asked yet)
+    assert sorted(history) == ["cpu.temp", "gpu.temp"] and len(history) == 2
+    assert "cpu.temp" in history and "name" not in history and "gone" not in history
+    assert history["cpu.temp"] == [60.0, 61.0] and history.get("name", []) == []
+    assert history["cpu.temp"] is history["cpu.temp"]  # (made once)
+    assert list(history._lists) == ["cpu.temp"]  # (only what was asked for)
+    assert first.history["cpu.temp"] == [60.0]  # (each snapshot's as it was)
+    history["cpu.load"] = [5.0, 7.0]  # (the editor's, a test's: set here, it stands)
+    history.update({"gpu.temp": [1.0]})
+    assert history["cpu.load"] == [5.0, 7.0] and history["gpu.temp"] == [1.0]
+    assert dict(history) == {"cpu.temp": [60.0, 61.0], "gpu.temp": [1.0], "cpu.load": [5.0, 7.0]}
+    del history["cpu.load"]
+    assert "cpu.load" not in history and len(history) == 2
+    with pytest.raises(KeyError):
+        del history["cpu.load"]
+
+
 def test_psutil_provider_reads_basics():
     provider = PsutilProvider()
     provider.read()
