@@ -23,7 +23,10 @@ are the only questions:
                seconds], ...]}, "full": {...}}
 
   A service older than the times leaves them out, and a client older than them does not look
-  at them: the protocol stays 1 both ways.
+  at them: the protocol stays 1 both ways. So with what the service holds, as it says itself
+  (bytes, or null where it does not know)::
+
+    "memory": {"private": 88080384, "working_set": 120586240, "managed": 23068672}
 
 Everything that comes in is checked here before anything else looks at it, on both sides: a
 length out of bounds ends the connection, anything else that is not as above is answered with
@@ -40,7 +43,13 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
 
-from libre_panel.sensors.librehardwaremonitor import LhmSensor, PartTime, RoundTime, Timing
+from libre_panel.sensors.librehardwaremonitor import (
+    LhmSensor,
+    PartTime,
+    RoundTime,
+    ServiceMemory,
+    Timing,
+)
 
 PROTOCOL = 1
 HEADER = struct.Struct("<I")  # the length of the message that follows
@@ -50,6 +59,7 @@ MAX_HARDWARE = 64  # pieces of hardware one request may name
 MAX_SENSORS = 10_000  # sensors one answer may carry
 MAX_TEXT = 300  # characters of a name, a label, a version or an error
 MAX_TIMED = 256  # parts one round's times may name
+MAX_BYTES = 1 << 48  # what the service says it holds is less than this
 STATES = ("starting", "running", "failed")
 # A hardware id as LibreHardwareMonitor makes them: "/amdcpu/0", "/nic/%7B…%7D"; printable
 # ASCII without spaces, so nothing else gets through to the service's set of wishes
@@ -178,6 +188,7 @@ def read_answer(
     pawnio: str | None,
     error: str = "",
     timing: Timing | None = None,
+    memory: ServiceMemory | None = None,
 ) -> dict[str, Any]:
     rows = [
         [s.sensor_id, s.hardware_id, s.hardware_name, s.sensor_type, s.label, s.value, s.unit]
@@ -196,6 +207,9 @@ def read_answer(
     }
     if timing is not None:
         answer["timing"] = {"last": _round_answer(timing.last), "full": _round_answer(timing.full)}
+    if memory is not None:
+        answer["memory"] = {"private": memory.private, "working_set": memory.working_set,
+                            "managed": memory.managed}  # fmt: skip
     return answer
 
 
@@ -218,6 +232,7 @@ class Readings:
     pawnio: str | None
     sensors: tuple[LhmSensor, ...]
     timing: Timing | None = None  # None: the service does not say (one older than this)
+    memory: ServiceMemory | None = None  # what it holds; None: it does not say (an older one)
 
 
 def _text(value: Any, what: str, empty: bool = True) -> str:
@@ -310,6 +325,27 @@ def parse_timing(value: Any) -> Timing | None:
     return Timing(_round(value.get("last")), _round(value.get("full")))
 
 
+def _bytes(value: Any, what: str) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value < MAX_BYTES:
+        raise ProtocolError(f"{what} is a number of bytes or null")
+    return value
+
+
+def parse_memory(value: Any) -> ServiceMemory | None:
+    """What the service holds; None where it does not say (an older service)."""
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ProtocolError("memory is an object")
+    return ServiceMemory(
+        _bytes(value.get("private"), "private"),
+        _bytes(value.get("working_set"), "working_set"),
+        _bytes(value.get("managed"), "managed"),
+    )
+
+
 def parse_readings(message: dict[str, Any]) -> Readings:
     """The answer to ``read``, checked whole: one thing wrong in it and none of it is taken."""
     message = _checked(message)
@@ -334,4 +370,5 @@ def parse_readings(message: dict[str, Any]) -> Readings:
         pawnio,
         tuple(_sensor(row) for row in rows),
         parse_timing(message.get("timing")),
+        parse_memory(message.get("memory")),
     )

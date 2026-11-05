@@ -87,6 +87,45 @@ def give_back() -> None:
     light.give_back()
 
 
+def own_memory() -> Any:
+    """What this service holds: its private working set, as the Task Manager's Memory column
+    shows it (Windows 10 1809 and later say it; None before), its working set and .NET's heap
+    (None before .NET runs). Windows only."""
+    from ctypes import wintypes
+
+    from libre_panel.sensors.librehardwaremonitor import ServiceMemory
+
+    class Counters(ctypes.Structure):  # PROCESS_MEMORY_COUNTERS_EX2
+        _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD)] + [
+            (name, ctypes.c_size_t) for name in (
+                "PeakWorkingSetSize", "WorkingSetSize", "QuotaPeakPagedPoolUsage",
+                "QuotaPagedPoolUsage", "QuotaPeakNonPagedPoolUsage", "QuotaNonPagedPoolUsage",
+                "PagefileUsage", "PeakPagefileUsage", "PrivateUsage", "PrivateWorkingSetSize")
+        ] + [("SharedCommitUsage", ctypes.c_uint64)]  # fmt: skip
+
+    kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+    kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+    info = kernel32.K32GetProcessMemoryInfo
+    info.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD]
+    counters = Counters(cb=ctypes.sizeof(Counters))
+    private = working_set = None
+    if info(kernel32.GetCurrentProcess(), ctypes.byref(counters), counters.cb):
+        private = int(counters.PrivateWorkingSetSize) or None  # (0: not filled in)
+        working_set = int(counters.WorkingSetSize)
+    else:  # (an older Windows: the counters without the private working set)
+        size = Counters.PrivateWorkingSetSize.offset
+        if info(kernel32.GetCurrentProcess(), ctypes.byref(counters), size):
+            working_set = int(counters.WorkingSetSize)
+    managed = None
+    system = sys.modules.get("System")  # (pythonnet's .NET, once LibreHardwareMonitor runs)
+    if system is not None:
+        try:
+            managed = int(system.GC.GetTotalMemory(False))
+        except Exception:  # noqa: BLE001 - a .NET exception: not said
+            managed = None
+    return ServiceMemory(private, working_set, managed)
+
+
 def _unavailable(why: str) -> Any:
     from libre_panel.sensors.lhm_inprocess import LhmUnavailable
 
@@ -111,7 +150,7 @@ def run(
         server_factory = PipeServer
     reader = reader_factory()
     reader.start()
-    server = server_factory(Handler(reader))
+    server = server_factory(Handler(reader, memory=own_memory if sys.platform == "win32" else None))
     running = False
     try:
         while not stop.is_set():

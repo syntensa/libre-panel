@@ -37,6 +37,13 @@
   cycle kept them until Python's collector came round, which could be long after. A replaced
   theme stops asking for its readings at once too (the processes are no longer counted for it).
 
+**Diagnose**
+- **Where the memory is.** *Live → Diagnose → Load on this PC* (and its text) also says what
+  the main process holds: its pictures and those the caches keep, the readings' history, the C
+  heap in use and free, its objects, modules and threads (on Windows also what it committed).
+  The sensor service says what it holds itself, .NET's heap with it: Windows lets no other
+  process read its private memory without administrator rights.
+
 ## 0.8.0 — 2026-11-05
 
 Lighter on the PC, smoother on the panel, and made for every panel size.

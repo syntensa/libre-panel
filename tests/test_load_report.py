@@ -12,10 +12,17 @@ from fake_sensors import wait_for
 
 from libre_panel import load_report
 from libre_panel.load_report import LoadSampler, ServiceFound, find_service, role_of
-from libre_panel.sensors.librehardwaremonitor import LhmStatus, PartTime, RoundTime, Timing
+from libre_panel.sensors.librehardwaremonitor import (
+    LhmStatus,
+    PartTime,
+    RoundTime,
+    ServiceMemory,
+    Timing,
+)
 
 Times = namedtuple("Times", "user system")
 Memory = namedtuple("Memory", "rss")
+WindowsMemory = namedtuple("WindowsMemory", "rss private")
 FullMemory = namedtuple("FullMemory", "rss uss")
 MB = 1024**2
 
@@ -53,6 +60,8 @@ class FakeProcess:
 
     def memory_info(self):
         self._alive()
+        if getattr(self, "commit", None) is not None:  # (Windows': its commit charge too)
+            return WindowsMemory(self.rss, self.commit)
         return Memory(self.rss)
 
     def memory_full_info(self):
@@ -394,10 +403,17 @@ def test_the_rounds_slowest_first_and_an_older_service_that_does_not_say():
     assert load_report.sensors_report(None) is None
 
 
+HELD = {"pictures": 11 * MB, "pictures_n": 576, "kept": 9 * MB, "history": 3 * MB,
+        "heap": {"in_use": 40 * MB, "free": 33 * MB}, "objects": 61_234, "blocks": 412_000,
+        "modules": 564, "packages": [("numpy", 95), ("libre_panel", 90), ("PIL", 33)],
+        "threads": 26, "ms": 7.6}  # fmt: skip
+
+
 def test_the_text_is_for_an_issue():
     machine = Machine()
     machine.lhm = LhmStatus("service", timing=Timing(RoundTime((CPU,))), version="0.7.1")
-    sampler = machine.sampler()
+    machine.me.commit = 180 * MB
+    sampler = machine.sampler(held=lambda: dict(HELD))
     sampler.sample()
     machine.run(2.0, me=0.5, panel2=0.2, ffmpeg2=0.4, threads={102: 0.3})
     text = sampler.sample()["text"]
@@ -430,6 +446,14 @@ def test_the_text_is_for_an_issue():
         in lines
     )
     assert "  last round: 6.1 ms (Cpu 6.1)" in lines
+    assert (
+        "the main process holds: pictures 11 MB (576), of them the caches' 9 MB, readings' "
+        "history 3 MB, C heap 40 MB in use, 33 MB free, committed 180 MB" in lines
+    )
+    assert (
+        "  objects 61k, Python's small blocks 412k, modules 564 (numpy 95, libre_panel 90, "
+        "PIL 33), threads 26; counted in 8 ms" in lines
+    )
     assert lines[-1].startswith("this measurement took")
     assert "8-Core Processor" not in text and "/amdcpu" not in text  # types, no names or ids
     assert text.endswith("\n")
@@ -507,3 +531,138 @@ def test_the_pages_get_the_status_of_libre_hardware_monitor_with_its_version_wit
     said = _status_of(SimpleNamespace(status=lambda: status))
     assert said == {"mode": "service", "elevated": True, "ring0": True, "pawnio": "2.0.1",
                     "error": "", "service": "", "version": "0.7.1"}  # fmt: skip
+
+
+# -- what the main process holds -----------------------------------------------------------------
+
+
+def test_what_the_main_process_holds_is_counted_every_half_minute_and_reported():
+    machine = Machine()
+    counted = []
+
+    def held():
+        counted.append(machine.clock.now)
+        return dict(HELD, ms=float(len(counted)))
+
+    sampler = machine.sampler(held=held, platform="linux")
+    assert sampler.sample() is None
+    steps = round(load_report.INSIDE_S / 2.0)
+    for _ in range(steps - 1):
+        machine.run(2.0, me=0.1)
+        report = sampler.sample()
+    assert counted == [1000.0]  # the first sample's count stands for INSIDE_S
+    assert report["inside"]["ms"] == 1.0 and "commit" not in report["inside"]
+    machine.run(2.0, me=0.1)
+    report = sampler.sample()
+    assert counted == [1000.0, 1000.0 + load_report.INSIDE_S] and report["inside"]["ms"] == 2.0
+    assert "the main process holds: pictures 11 MB (576)" in report["text"]
+
+
+def test_what_cannot_be_counted_is_left_out_and_the_report_goes_on():
+    machine = Machine()
+
+    def held():
+        raise RuntimeError("no")
+
+    sampler = machine.sampler(held=held)
+    sampler.sample()
+    machine.run(2.0, me=0.1)
+    report = sampler.sample()
+    assert report["inside"] is None
+    assert "the main process holds" not in report["text"]
+    assert report["text"].splitlines()[-1].startswith("this measurement took")
+
+
+def test_inside_counts_each_picture_once_the_history_and_what_the_caches_keep():
+    import gc
+    import sys
+
+    from PIL import Image
+
+    from libre_panel.render import kept
+    from libre_panel.sensors.base import Series
+
+    gc.collect()
+    before = load_report.inside(heap=lambda: None)
+    rgb, gray = Image.new("RGB", (100, 50)), Image.new("L", (64, 64))
+    twin = Image.Image()  # (one that shares its pixels with another: they are counted once)
+    twin._im, twin._size, twin._mode = rgb._im, rgb.size, rgb.mode
+    unread = Image.Image()  # (one not loaded yet: it holds no pixels)
+    import weakref
+
+    class Gone:
+        pass
+
+    gone = Gone()
+    dead = weakref.proxy(gone)  # (a weak proxy whose object went: no __class__ to ask)
+    del gone
+    gc.collect()
+    ring = Series()
+    for _ in range(Series.SIZE + 10):
+        ring.append(1.0)
+    cache = kept.Kept("test.inside", 1 << 20)
+    cache.put("a", Image.new("RGBA", (10, 10)))
+    held = load_report.inside(heap=lambda: {"in_use": 1, "free": 2})
+    assert held["pictures"] - before["pictures"] == 100 * 50 * 4 + 64 * 64 + 10 * 10 * 4
+    assert held["pictures_n"] - before["pictures_n"] == 3
+    assert held["history"] - before["history"] == Series.SIZE * 8
+    assert held["kept"] - before["kept"] == 10 * 10 * 4 + 128  # (as kept.size_of counts)
+    assert held["heap"] == {"in_use": 1, "free": 2}
+    assert held["objects"] > 1000 and held["blocks"] > 0 and held["threads"] >= 1
+    assert held["modules"] == len(sys.modules)
+    counts = [n for _, n in held["packages"]]
+    assert len(counts) == 4 and counts == sorted(counts, reverse=True)
+    assert "libre_panel" in dict(held["packages"])
+    del twin, unread, ring, gray, dead
+
+
+@pytest.mark.skipif(not __import__("sys").platform.startswith(("linux", "win32")),
+                    reason="glibc's or Windows' heap")  # fmt: skip
+def test_the_c_heap_says_its_bytes_in_use_and_free_where_it_can():
+    heap = load_report.c_heap()
+    if heap is None:  # (a C library without mallinfo2: musl, an old glibc)
+        assert __import__("sys").platform.startswith("linux")
+        return
+    assert heap["in_use"] > 0 and heap["free"] >= 0
+    assert load_report.c_heap(platform="darwin") is None
+
+
+def test_the_sensor_service_s_private_memory_as_it_says_itself_where_windows_refuses_it():
+    machine = Machine()  # (the service's private memory may not be read: uss None)
+    held = ServiceMemory(private=70 * MB, working_set=80 * MB, managed=22 * MB)
+    machine.lhm = LhmStatus("service", timing=Timing(RoundTime((CPU,))), version="0.8.1",
+                            memory=held)  # fmt: skip
+    sampler = machine.sampler()
+    sampler.sample()
+    machine.run(2.0, me=0.1)
+    report = sampler.sample()
+    row = rows(report)[("service", None, "")]
+    assert row["private"] == 70 * MB and row["private_by"] == "itself"
+    assert report["total"]["private"] == sum(r["private"] or 0 for r in report["processes"])
+    assert report["sensors"]["memory"] == {"private": 70 * MB, "working_set": 80 * MB,
+                                           "managed": 22 * MB}  # fmt: skip
+    lines = report["text"].splitlines()
+    service = next(line for line in lines if line.startswith("sensor service"))
+    assert service.split()[-4:] == ["70", "MB", "80", "MB"]
+    assert ("(the sensor service: the process the Service Control Manager names; its private "
+            "memory as it says itself)") in lines  # fmt: skip
+    assert ("  the service holds: private 70 MB, working set 80 MB, .NET's heap 22 MB "
+            "(as it says)") in lines  # fmt: skip
+    machine.service.uss = 75 * MB  # (read where Windows lets it: as read)
+    for _ in range(4):
+        machine.run(2.0, me=0.1)
+        report = sampler.sample()
+    row = rows(report)[("service", None, "")]
+    assert row["private"] == 75 * MB and "private_by" not in row
+
+
+def test_an_older_service_says_nothing_of_what_it_holds():
+    machine = Machine()
+    machine.lhm = LhmStatus("service", timing=Timing(RoundTime((CPU,))), version="0.8.0")
+    sampler = machine.sampler()
+    sampler.sample()
+    machine.run(2.0, me=0.1)
+    report = sampler.sample()
+    assert rows(report)[("service", None, "")]["private"] is None
+    assert report["sensors"]["memory"] is None
+    assert "the service holds" not in report["text"]

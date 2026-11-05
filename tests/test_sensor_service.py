@@ -7,6 +7,7 @@ import json
 import logging
 import random
 import struct
+import sys
 import threading
 import time
 
@@ -21,7 +22,13 @@ from fake_lhm import (
 from fake_sensors import wait_for
 
 from libre_panel import __version__
-from libre_panel.sensors.librehardwaremonitor import LhmSensor, PartTime, RoundTime, Timing
+from libre_panel.sensors.librehardwaremonitor import (
+    LhmSensor,
+    PartTime,
+    RoundTime,
+    ServiceMemory,
+    Timing,
+)
 from libre_panel.sensorservice import core, protocol, winapi, winpipe, winservice
 from libre_panel.sensorservice.protocol import ProtocolError, ServiceError
 
@@ -518,6 +525,62 @@ def test_an_older_service_says_nothing_of_its_rounds_and_its_answer_is_taken_as_
 def test_times_with_anything_wrong_in_them_are_not_taken(timing):
     with pytest.raises(ProtocolError):
         protocol.parse_readings(good_answer(timing=timing))
+
+
+# -- what the service holds (Live -> Diagnose -> Load) -------------------------------------------
+
+
+def test_what_the_service_holds_goes_through_the_protocol_and_an_older_one_says_nothing():
+    held = ServiceMemory(private=88 << 20, working_set=120 << 20, managed=None)
+    answer = protocol.read_answer([SENSOR], state="running", age=0.1, ring0=None, pawnio=None,
+                                  memory=held)  # fmt: skip
+    sent = json.loads(protocol.encode(answer, protocol.MAX_ANSWER)[4:])
+    assert sent["memory"] == {"private": 88 << 20, "working_set": 120 << 20, "managed": None}
+    assert protocol.parse_readings(sent).memory == held
+    older = good_answer()
+    assert "memory" not in older and protocol.parse_readings(older).memory is None
+    assert {key: value for key, value in answer.items() if key != "memory"} == older
+
+
+@pytest.mark.parametrize(
+    "memory",
+    ["much", {"private": -1}, {"private": "1"}, {"working_set": True}, {"managed": 1.5},
+     {"private": protocol.MAX_BYTES}],
+)  # fmt: skip
+def test_what_the_service_holds_with_anything_wrong_in_it_is_not_taken(memory):
+    with pytest.raises(ProtocolError):
+        protocol.parse_readings(good_answer(memory=memory))
+
+
+def test_the_handler_asks_what_the_service_holds_every_few_seconds_and_goes_on_without():
+    reader, _, clock = begun()
+    asked = []
+
+    def memory():
+        asked.append(clock.now)
+        if len(asked) == 2:
+            raise OSError("no")
+        return ServiceMemory(private=len(asked))
+
+    handler = core.Handler(reader, clock=clock, memory=memory)
+    first = protocol.parse_readings(handler.answer(protocol.read_request()))
+    clock.now += core.MEMORY_SECONDS / 2
+    again = protocol.parse_readings(handler.answer(protocol.read_request()))
+    assert first.memory == again.memory == ServiceMemory(private=1) and len(asked) == 1
+    clock.now += core.MEMORY_SECONDS
+    failed = protocol.parse_readings(handler.answer(protocol.read_request()))
+    assert failed.memory is None and len(asked) == 2  # (not said: the answer goes on)
+    clock.now += core.MEMORY_SECONDS
+    assert handler.memory() == ServiceMemory(private=3)
+    plain = protocol.parse_readings(core.Handler(reader).answer(protocol.read_request()))
+    assert plain.memory is None
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the service's own counters: Windows")
+def test_the_service_says_its_private_working_set_and_working_set():
+    held = winservice.own_memory()
+    assert held.working_set and held.working_set > 1 << 20
+    assert held.private is None or 0 < held.private <= held.working_set
 
 
 def test_the_reader_times_each_part_of_each_round():

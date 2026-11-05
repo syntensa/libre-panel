@@ -433,6 +433,18 @@ class Timing:
         return Timing(done, done if done.full else self.full)
 
 
+@dataclass(frozen=True)
+class ServiceMemory:
+    """What the sensor service holds, as it says itself (it runs with the system's rights,
+    so Windows does not let a user's process read its private memory): that private memory,
+    as the Task Manager's Memory column shows it, its working set and .NET's heap (where
+    LibreHardwareMonitor's objects are); None where it does not know."""
+
+    private: int | None = None
+    working_set: int | None = None
+    managed: int | None = None
+
+
 def time_round(
     nodes: Iterable[Any],
     update: Callable[[Any], None],
@@ -470,6 +482,8 @@ class LhmStatus:
     timing: Timing | None = field(default=None, compare=False, metadata={"page": False})
     # the sensor service's version, once it said hello (Settings -> Sensors says it)
     version: str = field(default="", compare=False)
+    # what the sensor service holds, as it says itself (the load); None: it does not say
+    memory: ServiceMemory | None = field(default=None, compare=False, metadata={"page": False})
 
 
 # What sets up the sensor service, which reads the CPU with the rights it needs (and PawnIO).

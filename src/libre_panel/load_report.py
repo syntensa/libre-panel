@@ -33,6 +33,11 @@ threads are not looked at: from outside their names are not known, and asking co
   The report says which.
 - **What LibreHardwareMonitor's rounds take**, piece by piece: the status of the source that
   reads it (the service's answers, or the source inside Libre Panel).
+- **What the main process holds**, as far as it can tell from within (:func:`inside`): its
+  pictures, those of them the renderer's caches keep, the readings' history, the C heap's bytes
+  in use and free, its objects, modules and threads; on Windows also what it has committed. So
+  a report from another PC says where the main process's memory is. Counted every
+  ``INSIDE_S``: it walks the objects, some milliseconds.
 - **Only while asked.** The thread samples only while somebody asked within ``IDLE_S`` (the
   card asks every two seconds while it is on screen), then ends. A request never waits for a
   sample: it gets the last one. A sample costs a few milliseconds of psutil; the report says
@@ -42,12 +47,14 @@ threads are not looked at: from outside their names are not known, and asking co
 from __future__ import annotations
 
 import contextlib
+import ctypes
+import gc
 import logging
 import re
 import sys
 import threading
 import time
-from collections import deque
+from collections import Counter, deque
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
@@ -65,6 +72,7 @@ WINDOW_LOOK_S = 10.0  # the window's process (window.json) is looked for this of
 TREE_S = 6.0
 TEXT_THREADS = 10  # threads named in the text; the rest go with "other"
 PRIVATE_S = 6.0  # each process's private memory is measured this often (it costs: see above)
+INSIDE_S = 30.0  # what the main process holds is counted this often (it walks its objects)
 # Python's own names for a thread nobody named: "Thread-12 (process_request_thread)", "Dummy-3"
 _UNNAMED = re.compile(r"(?:Thread|Dummy)-\d+(?: \(.*\))?")
 OTHER = "other"
@@ -203,6 +211,99 @@ class _Sample:
     threads: dict[int, float]  # thread id -> seconds of processor time so far
 
 
+def _pixel_bytes(mode: str) -> int:
+    """The bytes a pixel takes in Pillow's memory: RGB in four, as RGBA."""
+    return 1 if mode in ("1", "L", "P") else 2 if mode.startswith("I;16") else 4
+
+
+def c_heap(platform: str | None = None) -> dict[str, int] | None:
+    """The C heap's bytes in use and free: glibc's (all its heaps, and the blocks it mapped
+    apart), on Windows the process heap's (allocated, and committed but free). None where it
+    cannot be asked."""
+    platform = platform or sys.platform
+    try:
+        if platform == "win32":
+            from ctypes import wintypes
+
+            class Summary(ctypes.Structure):
+                _fields_ = [("cb", wintypes.DWORD), ("allocated", ctypes.c_size_t),
+                            ("committed", ctypes.c_size_t), ("reserved", ctypes.c_size_t),
+                            ("max_reserve", ctypes.c_size_t)]  # fmt: skip
+
+            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+            kernel32.GetProcessHeap.restype = wintypes.HANDLE
+            kernel32.HeapSummary.argtypes = [wintypes.HANDLE, wintypes.DWORD,
+                                             ctypes.POINTER(Summary)]  # fmt: skip
+            summary = Summary(cb=ctypes.sizeof(Summary))
+            if not kernel32.HeapSummary(kernel32.GetProcessHeap(), 0, ctypes.byref(summary)):
+                return None
+            used = int(summary.allocated)
+            return {"in_use": used, "free": max(0, int(summary.committed) - used)}
+        if platform.startswith("linux"):
+
+            class MallInfo2(ctypes.Structure):
+                _fields_ = [(name, ctypes.c_size_t) for name in (
+                    "arena", "ordblks", "smblks", "hblks", "hblkhd", "usmblks", "fsmblks",
+                    "uordblks", "fordblks", "keepcost")]  # fmt: skip
+
+            mallinfo2 = getattr(ctypes.CDLL(None), "mallinfo2", None)  # (glibc 2.33 and later)
+            if mallinfo2 is None:
+                return None
+            mallinfo2.restype = MallInfo2
+            info = mallinfo2()
+            return {"in_use": int(info.uordblks + info.hblkhd), "free": int(info.fordblks)}
+    except (OSError, AttributeError, TypeError, ValueError):
+        log.debug("the C heap could not be asked", exc_info=True)
+    return None
+
+
+def inside(platform: str | None = None, heap: Callable[[], dict[str, int] | None] | None = None
+           ) -> dict[str, Any]:  # fmt: skip
+    """What this process holds, as far as it can tell from within: the pictures alive (Pillow's,
+    each once), the bytes of them the renderer's caches keep (render/kept.py), the readings'
+    history (sensors/base.py's rings), the C heap's bytes in use and free (:func:`c_heap`), the
+    objects the collector follows, Python's small blocks, the modules (and the packages with
+    the most) and the threads. Only what is imported already is looked at; nothing is
+    imported for it."""
+    started = time.perf_counter()
+    image = getattr(sys.modules.get("PIL.Image"), "Image", None)
+    series = getattr(sys.modules.get("libre_panel.sensors.base"), "Series", None)
+    pictures = count = history = 0
+    seen: set[int] = set()
+    objects = gc.get_objects()
+    total = len(objects)
+    for obj in objects:  # (by the type itself: a dead weak proxy says no __class__)
+        if image is not None and issubclass(type(obj), image):
+            core = vars(obj).get("_im")
+            if core is not None and id(core) not in seen:
+                seen.add(id(core))
+                width, height = obj.size
+                pictures += width * height * _pixel_bytes(obj.mode)
+                count += 1
+        elif series is not None and type(obj) is series:
+            history += obj._ring.buffer_info()[1] * obj._ring.itemsize
+    del objects
+    kept = sys.modules.get("libre_panel.render.kept")
+    try:
+        caches = sum(row["bytes"] for row in kept.stats().values()) if kept else None
+    except Exception:  # noqa: BLE001 - the report goes on without it
+        caches = None
+    packages = Counter(name.partition(".")[0] for name in list(sys.modules))
+    return {
+        "pictures": pictures,
+        "pictures_n": count,
+        "kept": caches,
+        "history": history,
+        "heap": (heap or (lambda: c_heap(platform)))(),
+        "objects": total,
+        "blocks": sys.getallocatedblocks(),
+        "modules": sum(packages.values()),
+        "packages": packages.most_common(4),
+        "threads": threading.active_count(),
+        "ms": round((time.perf_counter() - started) * 1000, 1),
+    }
+
+
 def _times(proc: Any) -> tuple[float, int]:
     """(processor seconds, memory) of a process, in one go where psutil can."""
     with getattr(proc, "oneshot", contextlib.nullcontext)():
@@ -226,10 +327,12 @@ def _round_report(done: Any) -> dict[str, Any] | None:
 def sensors_report(status: Any) -> dict[str, Any] | None:
     """What LibreHardwareMonitor's rounds take, from the status of the source that reads it
     (None: it is not read). ``reported`` False: the source does not say (a sensor service older
-    than the times, or the web server, whose rounds are its own program's)."""
+    than the times, or the web server, whose rounds are its own program's). ``memory``: what
+    the sensor service holds, as it says itself (None: it does not say)."""
     if status is None:
         return None
     timing = status.timing
+    memory = getattr(status, "memory", None)
     return {
         "mode": status.mode,
         "version": status.version,
@@ -237,7 +340,11 @@ def sensors_report(status: Any) -> dict[str, Any] | None:
         "reported": timing is not None,
         "last": _round_report(timing.last) if timing is not None else None,
         "full": _round_report(timing.full) if timing is not None else None,
-    }
+        "memory": None
+        if memory is None
+        else {"private": memory.private, "working_set": memory.working_set,
+              "managed": memory.managed},
+    }  # fmt: skip
 
 
 class LoadSampler:
@@ -245,7 +352,8 @@ class LoadSampler:
     somebody asks (:meth:`report`). Every way to the system is a parameter, for the tests:
     ``me`` this process, ``process(pid)`` another, ``panels()`` the panels' processes,
     ``window()`` the window's, ``service()`` where the sensor service is, ``lhm()`` the status
-    of LibreHardwareMonitor's source and ``names()`` the names of this process's threads."""
+    of LibreHardwareMonitor's source, ``names()`` the names of this process's threads and
+    ``held()`` what this process holds (:func:`inside`)."""
 
     def __init__(
         self,
@@ -258,6 +366,7 @@ class LoadSampler:
         service: Callable[[], ServiceFound | None] = find_service,
         lhm: Callable[[], Any] = lambda: None,
         names: Callable[[], dict[int, str]] = thread_names,
+        held: Callable[[], dict[str, Any]] | None = None,
         clock: Callable[[], float] = time.monotonic,
         wall: Callable[[], float] = time.time,
         timer: Callable[[], float] = time.perf_counter,
@@ -273,6 +382,9 @@ class LoadSampler:
         self._clock, self._wall, self._timer = clock, wall, timer
         self.window_s, self.idle_s = window_s, idle_s
         self.platform = platform or sys.platform
+        self._held = held or (lambda: inside(self.platform))
+        self._inside: dict[str, Any] | None = None  # what this process held when counted last
+        self._inside_at: float | None = None
         self._roles: dict[tuple[int, float], tuple[str, int | None, str]] = {}
         self._before: _Sample | None = None
         self._service_proc: Any = None
@@ -360,6 +472,7 @@ class LoadSampler:
         self._private_of(measured, now)
         threads = self._thread_times()
         self._costs.append(self._timer() - started)
+        self._inside_now(now)
         sample = _Sample(now, wall, {m.key: m.cpu for m in measured}, threads)
         before, self._before = self._before, sample
         if before is None or not 0 < now - before.at <= self.idle_s:
@@ -399,6 +512,22 @@ class LoadSampler:
                 self._service_proc = None
                 log.debug("the sensor service's process could not be measured", exc_info=True)
         return out
+
+    def _inside_now(self, now: float) -> None:
+        """What this process holds: counted anew every ``INSIDE_S`` (on Windows with what it
+        has committed), in between the last count; None where it cannot be counted."""
+        if self._inside_at is not None and 0 <= now - self._inside_at < INSIDE_S:
+            return
+        self._inside_at = now
+        try:
+            held = dict(self._held())
+            if self.platform == "win32":  # (psutil's "private" there: the commit charge)
+                with contextlib.suppress(psutil.Error, AttributeError, TypeError, ValueError):
+                    held["commit"] = int(self._me.memory_info().private)
+            self._inside = held
+        except Exception:  # noqa: BLE001 - the report goes on without it
+            log.debug("what the main process holds could not be counted", exc_info=True)
+            self._inside = None
 
     def _children(self, now: float, window: int | None) -> list[Any]:
         """The processes under this one, and the window's with its own where another start
@@ -530,7 +659,12 @@ class LoadSampler:
             if share is not None:
                 row["cpu_core"] = (row["cpu_core"] or 0.0) + share
         processes = sorted(rows.values(), key=lambda r: (_ORDER.get(r["role"], 9), r["panel"] or 0))
+        sensors = self._sensors()
+        said = (sensors or {}).get("memory") or {}
         for row in processes:
+            if row["role"] == "service" and row["private"] is None and said.get("private"):
+                row["private"] = said["private"]  # (Windows does not let it be read: it says)
+                row["private_by"] = "itself"
             row["label"] = label_of(row["role"], row["panel"], row["name"], self.platform)
             if row["role"] == "service" and self._service_found is not None:
                 row["found_by"] = self._service_found.how
@@ -551,7 +685,8 @@ class LoadSampler:
             "service": None
             if service is None
             else {"state": service.state, "found_by": service.how},
-            "sensors": self._sensors(),
+            "sensors": sensors,
+            "inside": self._inside,
         }
         report["text"] = report_text(report)
         return report
@@ -632,12 +767,44 @@ def sensors_text(sensors: dict[str, Any] | None) -> list[str]:
     if not sensors["reported"]:
         return [f"{head} not reported by this service version"]
     lines = [head]
+    memory = sensors.get("memory")
+    if memory is not None:
+        lines.append(
+            f"  the service holds: private {_mb(memory['private'])}, working set "
+            f"{_mb(memory['working_set'])}, .NET's heap {_mb(memory['managed'])} (as it says)"
+        )
     if sensors["last"] is not None:
         lines.append(f"  last round: {_parts(sensors['last'])}")
     full = sensors["full"]
     if full is not None and not (sensors["last"] or {}).get("full"):
         lines.append(f"  all hardware: {_parts(full)}")
     return lines if len(lines) > 1 else [f"{head} none yet"]
+
+
+def _count(value: int) -> str:
+    return f"{value / 1000:.0f}k" if value >= 10_000 else str(value)
+
+
+def inside_text(held: dict[str, Any] | None) -> list[str]:
+    """What the main process holds, in two lines (none: it was not counted)."""
+    if held is None:
+        return []
+    said = [f"pictures {_mb(held['pictures'])} ({held['pictures_n']})"]
+    if held.get("kept") is not None:
+        said.append(f"of them the caches' {_mb(held['kept'])}")
+    said.append(f"readings' history {_mb(held['history'])}")
+    heap = held.get("heap")
+    if heap is not None:
+        said.append(f"C heap {_mb(heap['in_use'])} in use, {_mb(heap['free'])} free")
+    if held.get("commit") is not None:
+        said.append(f"committed {_mb(held['commit'])}")
+    packages = ", ".join(f"{name} {n}" for name, n in held["packages"])
+    return [
+        "the main process holds: " + ", ".join(said),
+        f"  objects {_count(held['objects'])}, Python's small blocks {_count(held['blocks'])}, "
+        f"modules {held['modules']} ({packages}), threads {held['threads']}; "
+        f"counted in {held['ms']:.0f} ms",
+    ]
 
 
 def report_text(report: dict[str, Any]) -> str:
@@ -661,6 +828,8 @@ def report_text(report: dict[str, Any]) -> str:
     if service is not None:
         if any(p["role"] == "service" for p in report["processes"]):
             how = _FOUND.get(service["found_by"], service["found_by"])
+            if any(p.get("private_by") == "itself" for p in report["processes"]):
+                how += "; its private memory as it says itself"
             lines.append(f"(the sensor service: {how})")
         else:
             lines.append(f"sensor service: {service['state']}")
@@ -671,6 +840,7 @@ def report_text(report: dict[str, Any]) -> str:
         said = [f"{t['name']} {t['cpu_core']:.1f}" for t in named]
         said.append(f"{OTHER} {max(0.0, rest):.1f}")
         lines.append("threads of the main process, % of one core: " + ", ".join(said))
+    lines += inside_text(report.get("inside"))
     lines += sensors_text(report.get("sensors"))
     lines.append(f"this measurement took {report['sample_ms']:.1f} ms")
     return "\n".join(lines) + "\n"

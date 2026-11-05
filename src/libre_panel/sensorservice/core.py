@@ -24,7 +24,13 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from libre_panel import __version__
-from libre_panel.sensors.librehardwaremonitor import LhmSensor, RoundTime, Timing, time_round
+from libre_panel.sensors.librehardwaremonitor import (
+    LhmSensor,
+    RoundTime,
+    ServiceMemory,
+    Timing,
+    time_round,
+)
 from libre_panel.sensorservice.protocol import (
     HEADER,
     MAX_ANSWER,
@@ -51,6 +57,7 @@ BURST = 8  # this many at once
 IDLE_SECONDS = 30.0  # a client that asks nothing for this long is let go
 MESSAGE_SECONDS = 5.0  # a message that has begun must be through within this long
 TRIM_SECONDS = 600.0  # the memory not used since goes back to the system this often
+MEMORY_SECONDS = 5.0  # what the service holds is asked anew after this long (the answers say it)
 
 
 @dataclass(frozen=True)
@@ -256,17 +263,39 @@ class Reader:
 
 
 class Handler:
-    """The answer to each request, from what the reader read last."""
+    """The answer to each request, from what the reader read last; with what the service
+    holds (``memory()``, winservice's: asked every ``MEMORY_SECONDS``; None: not said)."""
 
     def __init__(
         self,
         reader: Reader,
         version: str = __version__,
         clock: Callable[[], float] = time.monotonic,
+        memory: Callable[[], ServiceMemory | None] | None = None,
     ) -> None:
         self.reader = reader
         self.version = version
         self._clock = clock
+        self._memory = memory
+        self._held: tuple[float, ServiceMemory | None] | None = None  # (when, what)
+        self._held_lock = threading.Lock()
+
+    def memory(self) -> ServiceMemory | None:
+        """What the service holds, as asked last (anew after ``MEMORY_SECONDS``)."""
+        if self._memory is None:
+            return None
+        now = self._clock()
+        with self._held_lock:
+            held = self._held
+            if held is not None and 0 <= now - held[0] < MEMORY_SECONDS:
+                return held[1]
+            try:
+                said = self._memory()
+            except Exception:  # noqa: BLE001 - the answer goes on without it
+                log.debug("what the service holds could not be asked", exc_info=True)
+                said = None
+            self._held = (now, said)
+            return said
 
     def answer(self, message: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -285,6 +314,7 @@ class Handler:
             pawnio=snap.pawnio,
             error=snap.error,
             timing=self.reader.timing(),
+            memory=self.memory(),
         )
 
 

@@ -117,14 +117,15 @@ def open_link() -> Link:
 
 def status_of(readings: Readings | None, why: str = "", version: str = "") -> LhmStatus:
     """The status of the source after an answer (or none, and why). ``timing`` is what the
-    service's rounds took, None where it does not say (a service older than that)."""
+    service's rounds took, ``memory`` what it holds; None where it does not say (a service
+    older than that)."""
     if readings is None:
         return LhmStatus("service", error=why, version=version)
     error = readings.error if readings.state == "failed" else ""
     # the service runs with the system's rights: what keeps the CPU's sensors away is PawnIO
     return LhmStatus(
         "service", True, readings.ring0, readings.pawnio, error,
-        timing=readings.timing, version=version,
+        timing=readings.timing, version=version, memory=readings.memory,
     )  # fmt: skip
 
 
