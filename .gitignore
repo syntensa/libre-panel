@@ -27,3 +27,7 @@ packaging/bundled-tools/
 
 # the native engine, built with cargo in engine/ (never committed)
 engine/target/
+
+# the sensor service's .NET program, built with dotnet in sensorhost/ (never committed)
+sensorhost/bin/
+sensorhost/obj/

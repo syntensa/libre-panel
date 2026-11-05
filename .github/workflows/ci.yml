@@ -166,6 +166,52 @@ jobs:
           pytest -q -rs tests/test_native_engine.py tests/test_engine_panel.py tests/test_yuv.py \
             tests/test_scene.py
 
+  sensor-host:
+    # The sensor service as a .NET program of its own (sensorhost/, C#; docs/ROADMAP.md): built
+    # against LibreHardwareMonitor's libraries as the release fetches them, its own look at the
+    # hardware (--check), and the app's tests of it (tests/test_sensor_host.py): on the real pipe,
+    # with Libre Panel's own client, the answers, sensors, rights and limits of the Python service
+    # it is to replace, as a Windows service too, and what each of the two holds.
+    timeout-minutes: 30
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev,lhm]"
+      - name: LibreHardwareMonitor's libraries
+        run: python packaging/windows/fetch_lhm.py
+      - name: Build the sensor service
+        shell: bash
+        run: |
+          dotnet --version
+          version=$(python -c "import libre_panel; print(libre_panel.__version__)")
+          numeric=$(python -c "import re, sys; v = sys.argv[1]; n = re.findall(r'\d+', v)[:4 if re.fullmatch(r'[\d.]+', v) else 3]; print('.'.join((n + ['0'] * 4)[:4]))" "$version")
+          # (the .NET Framework's reference assemblies from NuGet as sensorhost/packages.lock.json pins them)
+          dotnet build sensorhost -c Release -p:RestoreLockedMode=true -p:InformationalVersion="$version" -p:FileVersion="$numeric"
+          ls -la sensorhost/bin/Release sensorhost/bin/Release/lhm
+          echo "LIBRE_PANEL_SENSOR_HOST=$(cygpath -w "$PWD/sensorhost/bin/Release/libre-panel-sensors.exe")" >> "$GITHUB_ENV"
+      - name: It says who made it
+        # its version resource, as the release checks the Python programs' (release.yml)
+        shell: pwsh
+        run: |
+          $info = (Get-Item "sensorhost/bin/Release/libre-panel-sensors.exe").VersionInfo
+          $version = python -c "import libre_panel; print(libre_panel.__version__)"
+          if ($info.CompanyName -ne "Libre Panel contributors" -or $info.ProductVersion -ne $version) {
+            throw "libre-panel-sensors.exe says nothing of itself: $($info | Format-List | Out-String)"
+          }
+          "{0}, {1}, {2}" -f $info.FileDescription, $info.CompanyName, $info.ProductVersion
+      - name: Its look at the hardware
+        shell: bash
+        run: sensorhost/bin/Release/libre-panel-sensors.exe --check
+      - name: The app's tests of it
+        run: pytest -q -rsP tests/test_sensor_host.py
+      - name: Its log
+        if: always()
+        shell: bash
+        run: cat sensorhost/bin/Release/logs/service.log 2>/dev/null || true
+
   desktop:
     # The app in a real browser (every test that needs one: the others skip them), the tray
     # icon on a real X11 tray, and keyboard shortcuts pressed on an X server.

@@ -137,7 +137,11 @@ in 0.8.0. The goal is half of that.
 - [ ] Measured on Windows: *Live → Diagnose → Load on this PC* says what the main process holds
       and what the sensor service holds by its own word
 - [ ] The sensor service without Python: a small .NET program that hosts LibreHardwareMonitor
-      and answers on the same pipe
+      and answers on the same pipe (`sensorhost/`, built and tested on Windows CI: the same
+      answers, sensors, rights and limits as the Python service, as a Windows service too; on
+      CI's runners 9.1 to 10.4 MB of private memory instead of the Python service's 32.5 to
+      32.9, run from its source, and 0.42 % of a core instead of 0.73); into the downloads once
+      it is measured on a PC
 - [ ] The graphics card's encoder where it is as good as x264 (x264's buffers: some 22 MB for
       the 12.3" on Linux)
 
