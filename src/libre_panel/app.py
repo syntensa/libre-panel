@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import functools
 import logging
 import math
 import sys
@@ -861,7 +862,10 @@ class MainLoop:
         # that drives step() on a clock of its own reads them in the frame)
         self.ahead, self._ahead = False, _Ahead()
         self.idle = threading.Event()  # set between frames: the warm-up works then ...
-        self.between_frames = lambda: self.idle.wait(GAP_WAIT_S)  # ... and the helper threads
+        # ... and the helper threads (the event's own wait, not one through this loop: the loop
+        # and its renderer, which keeps this too, were a cycle, freed with all their pictures
+        # only at the collector's next full round, long after the loop ended)
+        self.between_frames = functools.partial(self.idle.wait, GAP_WAIT_S)
         i18n.set_language(config.language)
         # A config that names no theme shows its panel's own: worked out from the config (or
         # the USB bus) now, and again when the display says which panel it is (step).

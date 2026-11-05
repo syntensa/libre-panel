@@ -32,6 +32,10 @@
 - **A lighter sensor service (Windows).** Once LibreHardwareMonitor has looked at all the
   hardware, the service gives back what that took (.NET's and Python's unused memory, the pages
   it no longer touches), and does so every ten minutes.
+- **A panel's loop that ended goes at once.** When a panel's loop ends (it restarts, a panel
+  beside the first stops), its theme's renderer and all it drew are freed then and there; a
+  cycle kept them until Python's collector came round, which could be long after. A replaced
+  theme stops asking for its readings at once too (the processes are no longer counted for it).
 
 ## 0.8.0 — 2026-11-05
 

@@ -51,7 +51,22 @@ def really_elevated():
     return os.geteuid() == 0
 
 
+def wanting_processes():
+    """Who here wants the processes counted (sensors.base.want): their types, for a failure."""
+    import gc
+
+    from libre_panel.sensors import base as sensors
+
+    ids = {key for key, keys in sensors._WANTED.items() if any(k.startswith("proc") for k in keys)}
+    return sorted(type(o).__qualname__ for o in gc.get_objects() if id(o) in ids) or sorted(ids)
+
+
 def test_a_panel_beside_the_first_runs_in_a_process_of_its_own(tmp_path, monkeypatch, caplog):
+    from libre_panel.sensors import base as sensors
+
+    # what this run wants, apart from what tests before it may have left wanted (a renderer
+    # not closed, not freed yet: CI on Windows, Python 3.12)
+    monkeypatch.setattr(sensors, "_WANTED", {})
     monkeypatch.setenv("LIBRE_PANEL_HOME", str(tmp_path))
     path = tmp_path / "config.toml"
     path.write_text(CONFIG, encoding="utf-8")
@@ -93,7 +108,8 @@ def test_a_panel_beside_the_first_runs_in_a_process_of_its_own(tmp_path, monkeyp
         stop.set()
         loop.join(30)
     assert not loop.is_alive()
-    assert not wanted("proc.")  # (its process ended: nobody wants them any more)
+    # (its process ended, and the first panel's renderer closed: nobody wants them any more)
+    assert not wanted("proc."), wanting_processes()
     assert panel_pids() == {}
 
 

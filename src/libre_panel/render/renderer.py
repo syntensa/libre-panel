@@ -1714,7 +1714,11 @@ class Renderer:
     def close(self) -> None:
         """Stop the helper thread and the screen, and let go of the contexts of plugin widget types
         (a replaced renderer should call this; with the back references of its slots, look and
-        drawing weak, it is then freed with its last reference)."""
+        drawing weak, it is then freed with its last reference). What its theme reads is wanted
+        no more from then on, not only once it is freed: a source that works on demand (the
+        processes, a game's frame rates) stops at once."""
+        if not self.preview:
+            want(self, frozenset())
         if self._builder is not None:
             self._builder.close()
             self._builder = None

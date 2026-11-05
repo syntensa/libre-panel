@@ -276,6 +276,13 @@ def test_renderers_tell_providers_what_they_read():
     del renderer
     gc.collect()
     assert set(base._WANTED) == before
+    closed = Renderer(list_theme(items="proc.cpu.*.value"))
+    assert base._WANTED[id(closed)] >= {"proc.cpu.*.value"}
+    closed.close()  # (replaced: what it read is wanted no more, also while it is still here)
+    assert base._WANTED[id(closed)] == frozenset()
+    del closed
+    gc.collect()
+    assert set(base._WANTED) == before
     owner = type("Owner", (), {})()
     want(owner, {"net.*"})
     assert wanted("net.ping")  # a pattern takes the key in

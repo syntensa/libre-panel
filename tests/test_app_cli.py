@@ -524,6 +524,36 @@ def test_one_clock_for_the_loop_the_renderer_and_plugins():
         loop.close()
 
 
+def test_a_loop_that_ended_goes_at_once_with_its_renderer_and_its_pictures():
+    """A loop that ended (its panel restarted, a panel beside the first that stopped) is freed
+    as it is let go, with its renderer and all it drew: it was held in a cycle (its wait
+    between frames, which its renderer keeps too), freed only at the collector's next full
+    round, long after (CI: a theme's wanted readings outlived the loop)."""
+    import gc
+    import weakref
+
+    from libre_panel.sensors.base import SensorHub
+    from libre_panel.sensors.demo import DemoProvider
+
+    hub = SensorHub([DemoProvider({"fixed_time": 1_700_000_000})])
+    config = Config(theme="pico", sensors=SensorsConfig(providers=["demo"]))
+    clock = StepClock(1000.0)
+    loop = app_module.MainLoop(config, hub=hub, display=MemoryStream(), clock=clock)
+    try:
+        for _ in range(3):
+            loop.step(clock.now)
+            clock.now += 0.1
+    finally:
+        loop.close()
+    gone, renderer = weakref.ref(loop), weakref.ref(loop.renderer)
+    gc.disable()  # (freed by its last reference, not by the collector)
+    try:
+        del loop
+        assert gone() is None and renderer() is None
+    finally:
+        gc.enable()
+
+
 # -- the first theme is drawn before the first frame is due -------------------------------------
 
 
