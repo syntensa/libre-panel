@@ -162,6 +162,7 @@ def test_a_service_that_does_not_answer_is_given_up_after_a_while_and_taken_back
         service,
         poll_seconds=0.01,
         wait_seconds=0,
+        start_wait_seconds=0,
         on_failure=failed.append,
         on_ready=ready.append,
         clock=time.monotonic,
@@ -178,6 +179,30 @@ def test_a_service_that_does_not_answer_is_given_up_after_a_while_and_taken_back
     finally:
         source.close()
     assert failed == ["the sensor service is starting"]  # said once for the one silence
+
+
+def test_a_service_not_answered_yet_is_waited_for_longer_than_one_that_went_silent():
+    """Before its first answer the service is waited for START_WAIT_SECONDS (it starts a while
+    after Windows): what reads meanwhile is LibreHardwareMonitor inside Libre Panel, whose .NET
+    stays in the app's process for good. One that answered and then went silent is given up
+    after WAIT_SECONDS, as before."""
+    service = Service()
+    failed = []
+    source = source_for(service, on_failure=failed.append)
+    assert source.start_wait_seconds == lhm_service.START_WAIT_SECONDS > lhm_service.WAIT_SECONDS
+    start = service.clock.now  # (the source began: nothing answered since)
+    service.clock.now = start + lhm_service.WAIT_SECONDS + 1
+    source._lost("the sensor service is starting", since=start)
+    assert failed == []  # (not answered yet: it is coming)
+    service.clock.now = start + lhm_service.START_WAIT_SECONDS + 1
+    source._lost("the sensor service is starting", since=start)
+    assert failed == ["the sensor service is starting"]
+    answered = source_for(service, on_failure=failed.append)
+    answered.ask()  # (it answered once)
+    last = service.clock.now
+    service.clock.now = last + lhm_service.WAIT_SECONDS + 1
+    answered._lost("the sensor service is stopped", since=last)
+    assert failed == ["the sensor service is starting", "the sensor service is stopped"]
 
 
 def test_a_service_of_another_protocol_is_not_used():

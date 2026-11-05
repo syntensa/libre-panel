@@ -613,7 +613,14 @@ def test_inside_counts_each_picture_once_the_history_and_what_the_caches_keep():
     counts = [n for _, n in held["packages"]]
     assert len(counts) == 4 and counts == sorted(counts, reverse=True)
     assert "libre_panel" in dict(held["packages"])
+    assert held["dotnet"] is ("clr" in sys.modules)
     del twin, unread, ring, gray, dead
+
+
+def test_the_text_says_where_net_runs_in_the_main_process():
+    lines = load_report.inside_text(dict(HELD, dotnet=True))
+    assert lines[0].endswith(".NET in it (LibreHardwareMonitor read inside it)")
+    assert ".NET" not in load_report.inside_text(dict(HELD, dotnet=False))[0]
 
 
 @pytest.mark.skipif(not __import__("sys").platform.startswith(("linux", "win32")),

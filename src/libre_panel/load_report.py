@@ -263,8 +263,8 @@ def inside(platform: str | None = None, heap: Callable[[], dict[str, int] | None
     each once), the bytes of them the renderer's caches keep (render/kept.py), the readings'
     history (sensors/base.py's rings), the C heap's bytes in use and free (:func:`c_heap`), the
     objects the collector follows, Python's small blocks, the modules (and the packages with
-    the most) and the threads. Only what is imported already is looked at; nothing is
-    imported for it."""
+    the most), the threads, and whether .NET runs in it. Only what is imported already is
+    looked at; nothing is imported for it."""
     started = time.perf_counter()
     image = getattr(sys.modules.get("PIL.Image"), "Image", None)
     series = getattr(sys.modules.get("libre_panel.sensors.base"), "Series", None)
@@ -300,6 +300,9 @@ def inside(platform: str | None = None, heap: Callable[[], dict[str, int] | None
         "modules": sum(packages.values()),
         "packages": packages.most_common(4),
         "threads": threading.active_count(),
+        # .NET in this process (pythonnet: LibreHardwareMonitor was read inside it); once
+        # loaded it stays for as long as the process runs
+        "dotnet": "clr" in sys.modules,
         "ms": round((time.perf_counter() - started) * 1000, 1),
     }
 
@@ -798,6 +801,8 @@ def inside_text(held: dict[str, Any] | None) -> list[str]:
         said.append(f"C heap {_mb(heap['in_use'])} in use, {_mb(heap['free'])} free")
     if held.get("commit") is not None:
         said.append(f"committed {_mb(held['commit'])}")
+    if held.get("dotnet"):
+        said.append(".NET in it (LibreHardwareMonitor read inside it)")
     packages = ", ".join(f"{name} {n}" for name, n in held["packages"])
     return [
         "the main process holds: " + ", ".join(said),

@@ -36,6 +36,12 @@
   beside the first stops), its theme's renderer and all it drew are freed then and there; a
   cycle kept them until Python's collector came round, which could be long after. A replaced
   theme stops asking for its readings at once too (the processes are no longer counted for it).
+- **No .NET in the app while the sensor service starts (Windows).** The service starts a
+  while after Windows; before it first answers, Libre Panel now waits for it three minutes
+  instead of twenty seconds before it reads LibreHardwareMonitor itself. That other way loaded
+  .NET into the app's process, where it stayed for as long as the app ran (with
+  LibreHardwareMonitor: tens of megabytes), although the service answered a moment later.
+  *Diagnose → Load* says whether .NET runs in the main process.
 - **Leaner Python in the downloads.** The programs are built without Python's docstrings and
   asserts (as by `python -OO`): every process of Libre Panel's holds less code (its own modules
   alone: 2.6 MB less).

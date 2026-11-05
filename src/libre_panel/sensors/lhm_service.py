@@ -17,7 +17,11 @@ pipe instead of loading LibreHardwareMonitor itself, without those rights.
   is asked to start; it lets everyone signed in at this PC do that.
 - While it does not answer it is asked again with growing pauses; after ``WAIT_SECONDS``
   ``on_failure`` tells the provider, which reads LibreHardwareMonitor another way meanwhile,
-  and ``on_ready`` tells it when the service answers again.
+  and ``on_ready`` tells it when the service answers again. Before its first answer it is
+  waited for ``START_WAIT_SECONDS``: it starts a while after Windows (a delayed start, or
+  when Libre Panel asks), and the other way is LibreHardwareMonitor inside Libre Panel, whose
+  .NET stays in the app's process for good once loaded (with LibreHardwareMonitor tens of
+  megabytes, for as long as the app runs, although the service answered a moment later).
 """
 
 from __future__ import annotations
@@ -51,6 +55,7 @@ from libre_panel.sensorservice.protocol import (
 log = logging.getLogger(__name__)
 
 WAIT_SECONDS = 20.0  # without an answer for this long, the provider reads another way meanwhile
+START_WAIT_SECONDS = 180.0  # ... before the service's first answer since the app started
 REQUEST_SECONDS = 2.0  # one request and its answer
 RETRY_SECONDS = (1.0, 10.0)  # pauses between tries while it does not answer: doubling up to
 SERVICES_KEY = r"SYSTEM\CurrentControlSet\Services"
@@ -143,11 +148,14 @@ class ServiceSource:
         link: Callable[[], Link] = open_link,
         clock: Callable[[], float] = time.monotonic,
         wait_seconds: float = WAIT_SECONDS,
+        start_wait_seconds: float = START_WAIT_SECONDS,
     ) -> None:
         self.poll_seconds = max(0.1, poll_seconds)
         self.stale_seconds = max(stale_seconds, 3 * self.poll_seconds) if stale_seconds > 0 else 0
         self.gpu = gpu
         self.wait_seconds = wait_seconds
+        self.start_wait_seconds = max(wait_seconds, start_wait_seconds)
+        self._answered = False  # whether the service answered once since this source started
         self.version = ""  # the service's, once it said hello
         self._open = link
         self._on_ready = on_ready
@@ -201,11 +209,13 @@ class ServiceSource:
 
     def _lost(self, why: str, since: float) -> None:
         """No answer: the connection goes, the status says why, and once the service has
-        been silent for ``wait_seconds`` the provider is told."""
+        been silent for ``wait_seconds`` (``start_wait_seconds`` before its first answer) the
+        provider is told."""
         self._disconnect()
         with self._lock:
             self._status = LhmStatus("service", error=why, version=self.version)
-        if not self._failed and self._clock() - since >= self.wait_seconds:
+        wait = self.wait_seconds if self._answered else self.start_wait_seconds
+        if not self._failed and self._clock() - since >= wait:
             self._failed = True
             log.info("the sensor service does not answer: %s", why)
             self._call(self._on_failure, why)
@@ -247,6 +257,7 @@ class ServiceSource:
         request = read_request(self.needed(), self._everything)
         answer = parse_readings(self._link.request(request, REQUEST_SECONDS))
         self._everything = False
+        self._answered = True  # (also while LibreHardwareMonitor starts in it: it is there)
         if answer.state == "failed":
             raise Unavailable(f"LibreHardwareMonitor did not start in the service: {answer.error}")
         self._take(answer)
