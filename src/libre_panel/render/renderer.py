@@ -1904,8 +1904,11 @@ class Renderer:
             if snapshot is None:
                 return
             self.screen, self._breathe = None, pause
-            try:  # (not composed here where the engine composes the frames: render's scene)
-                self.render(snapshot, now, scene=self.native_laid)
+            try:
+                if self.native_laid:  # (not composed here where the engine composes the frames)
+                    self.render(snapshot, now, scene=True)
+                else:  # (as before: a renderer of a test or a plugin may take no more)
+                    self.render(snapshot, now)
             finally:
                 self.screen, self._breathe = screen, None
         finally:
