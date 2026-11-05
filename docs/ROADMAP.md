@@ -186,11 +186,13 @@ and becomes the default only once it has proven itself on the panels; the old wa
       two; since, the graphs' windows (cut from their strips, laid straight from them, a
       strip grown from the one before), Terra's turning globe, a card's inside of one colour
       (laid without pixels, its edges as theirs), a fan laid from its ring and its rotor (each
-      position sent once, laid as Pillow lays it, to the bit; since, made there of its rotor's
-      layers, sent once: its positions, blur and ring as fan.py makes them, to the bit), a text of letters laid from its
-      letters (each sent once), a list's gliding bars cut from the bar empty, full and the
-      part round its tip, a lit bar at each value (its pill's light to a level, its glow as
-      Pillow works it out, to the bit), and a theme's grid; a text's glow next
+      position sent once, laid as Pillow lays it, to the bit; since, made there of its
+      rotor's layers, sent once: its positions, blur and ring as fan.py makes them, to the
+      bit), a text of letters laid from its letters (each sent once), a text and a letter
+      filled there from their masks (a byte a pixel, Pillow's fill to the bit), a list's
+      gliding bars cut from the bar empty, full and the part round its tip, a lit bar at each
+      value (its pill's light to a level, its glow as Pillow works it out, to the bit), and a
+      theme's grid; a text's glow next
 
 ### Stage 3: Python only the brain
 

@@ -430,6 +430,36 @@ def test_a_filled_card_s_pixels_go_again_when_nothing_asked_for_them_a_while(mon
     assert card.forget() == card.width * card.height * 4 and card.forget() == 0
 
 
+def test_the_ground_s_pixels_go_once_the_engine_has_it_and_nothing_asked_for_them_a_while(
+    monkeypatch,
+):
+    """Lumen's ground (its picture, opaque: the panel's size), which the engine keeps: made here
+    for the first frames, its pixels go once nothing asked for them for FILLS_IDLE_S, and are
+    made again, the same, when something asks."""
+    from test_motion import video
+
+    from libre_panel.render import renderer as renderers
+    from libre_panel.sensors.demo import demo_snapshot
+    from libre_panel.theme.model import find_theme, load_theme
+
+    clock = [time.monotonic() + 1e6]
+    monkeypatch.setattr(scenes.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(renderers.time, "monotonic", lambda: clock[0])
+    renderer = video(renderers.Renderer(load_theme(find_theme("lumen-1920x720")), dither=True),
+                     fps=25)  # fmt: skip
+    now = 1_700_000_000.0
+    snap = demo_snapshot(fixed_time=now)
+    frame, _ = renderer.render(snap, now, scene=True)
+    ground = frame.scene.ground
+    assert isinstance(ground, scenes.Again) and ground.composed
+    pixels = ground.tobytes()
+    for k in range(1, 9):  # (frames the engine composes, 5 s apart, then 30: looked at)
+        clock[0] += 5.0 if k < 6 else 30.0
+        frame, _ = renderer.render(snap, now + k / 25, scene=True)
+        assert frame.scene.ground is ground and ground.composed == (k < 6), k
+    assert ground.tobytes() == pixels and ground.composed  # (asked again: made again, the same)
+
+
 def test_a_picture_that_goes_and_comes_again_is_the_same_whoever_asks():
     """Its pixels go while other threads ask for them: each gets them whole, the same."""
     image = Image.new("RGBA", (64, 48))
@@ -689,6 +719,132 @@ def test_a_made_fan_goes_to_the_engine_as_its_recipes_its_rotor_once_for_the_str
     assert all(image.composed for image, _ in parts)  # (their pixels, made for it)
 
 
+def test_a_text_s_mask_filled_with_its_colour_is_the_text_drawn_in_it():
+    """A text (or a letter) drawn in white on an "L" picture and filled with its colour is the
+    text drawn in its colour on a clear picture, also of an ink that is not opaque, its alpha
+    where its ink lies the same; its pixels made only when asked for."""
+    from PIL import ImageFont
+
+    from libre_panel.fonts import builtin_fonts
+
+    fonts = [ImageFont.truetype(str(path), size) for path in list(builtin_fonts().values())[:4]
+             for size in (11, 24, 61)]  # fmt: skip
+    for k, font in enumerate(fonts):
+        for text, at, ink in (("0123456789", (3.25, 2), (46, 230, 214, 255)),
+                              ("45°C Midnight", (7.7, 5.5), (232, 238, 244, 200)),
+                              ("12:34", (1.0, 0), (255, 120, 40, 12))):  # fmt: skip
+            size = (font.size * 9, font.size * 2)
+            own = Image.new("RGBA", size, (0, 0, 0, 0))
+            ImageDraw.Draw(own).text(at, text, font=font, fill=ink, anchor="la")
+            mask = Image.new("L", size, 0)
+            ImageDraw.Draw(mask).text(at, text, font=font, fill=255, anchor="la")
+            made = scenes.masked(mask, ink)
+            assert not made.composed and isinstance(made.recipe, scenes.MaskRecipe)
+            assert made.tobytes() == own.tobytes(), (k, text)
+            assert scenes.masked_alpha(mask, ink[3]).getbbox() == own.getbbox()
+
+
+def test_a_masked_text_goes_to_the_engine_as_its_mask_and_its_ink():
+    """Laid alone (a text): as a layer of its mask (a byte a pixel, cut to where it is not 0)
+    and its ink, no picture of it kept beside the layer; laid with others (a text's letters),
+    each a picture of its mask the engine keeps; to an engine that makes none, its pixels."""
+    mask = Image.new("L", (6, 4), 0)
+    mask.putpixel((2, 1), 255)
+    mask.putpixel((3, 2), 77)
+    made = scenes.masked(mask, (10, 20, 30, 255))
+    laid = scenes.laid((6, 4), [(made, 0, 0)])
+    sender = engines.SceneSender(laid=True, masks=True)
+    records = heads(sender.records(scene_of(Piece(laid.layer, 1, 2, native=laid)), 0, None))
+    assert [k for k, *_ in records] == [engines.GROUND, engines.MASKED_LAYER, engines.SCENE]
+    kind, number, length, body = records[1]
+    assert length == 20 + 4 and struct.unpack("<iiII4B", body[:20]) == (3, 3, 2, 2, 10, 20, 30,
+                                                                          255)  # fmt: skip
+    assert body[20:] == bytes([255, 0, 0, 77]) and not made.composed
+    assert sender.masked_layers == 1 and not sender._sources
+    letters = scenes.laid((12, 4), [(made, 0, 0), (made, 6, 0)])
+    records = heads(sender.records(scene_of(Piece(letters.layer, 1, 2, native=letters)), 1, None))
+    assert [k for k, *_ in records] == [engines.MASKED, engines.LAID, engines.SCENE]
+    kind, number, length, body = records[0]
+    assert length == 12 + 24 and struct.unpack("<II4B", body[:12]) == (6, 4, 10, 20, 30, 255)
+    assert body[12:] == mask.tobytes() and not made.composed
+    plain = engines.SceneSender(laid=True)
+    records = heads(plain.records(scene_of(Piece(laid.layer, 1, 2, native=laid)), 0, None))
+    assert [k for k, *_ in records] == [engines.GROUND, engines.SOURCE, engines.LAID,
+                                        engines.SCENE]  # fmt: skip
+    assert records[1][3][8:] == made.tobytes()
+
+
+def test_what_the_engine_makes_or_lays_made_here_goes_again_when_nothing_asked_a_while(
+    monkeypatch,
+):
+    """A text's picture of its mask, the layer laid of it (a fan's rotor and ring likewise: they
+    are Made too): made here (a frame composed here, the app's picture of the panel), their
+    pixels go once nothing asked for them a while (scene.forget_idle, Renderer._forget_laid),
+    made again when asked, the same."""
+    clock = [time.monotonic() + 1e6]
+    monkeypatch.setattr(scenes.time, "monotonic", lambda: clock[0])
+    mask = Image.new("L", (40, 12), 0)
+    ImageDraw.Draw(mask).text((1, 0), "42°C", fill=255)
+    made = scenes.masked(mask, (46, 230, 214, 255))
+    laid = scenes.laid((44, 14), [(made, 2, 1)])
+    want = laid.layer.tobytes()
+    assert made.composed and laid.layer.composed and issubclass(scenes.Made, scenes.Again)
+    clock[0] += 20.0
+    scenes.forget_idle(30.0)
+    assert made.composed and laid.layer.composed  # (asked for 20 s ago: kept)
+    clock[0] += 15.0
+    assert scenes.forget_idle(30.0) >= 40 * 12 * 4 + 44 * 14 * 4
+    assert not made.composed and not laid.layer.composed
+    assert laid.layer.tobytes() == want and made.composed  # (asked again: made again, the same)
+
+
+def _texts(*looks):
+    """Text widgets "42°C" one below the other, each ``(id, its own keys)``."""
+    return [{"type": "text", "id": wid, "x": 10, "y": 8 + 32 * k, "text": "42°C", "font_size": 20,
+             "color": "#2ee6d6", **own} for k, (wid, own) in enumerate(looks)]  # fmt: skip
+
+
+def test_a_text_with_a_glow_goes_as_its_pixels_and_one_without_as_its_mask():
+    """Where the engine fills texts of their masks: a text without a glow goes as its mask; one
+    with a glow, a shadow or see-through as its pixels, without what it was laid of (it would
+    only be kept besides them). The same pixels as drawn without the engine."""
+    from test_motion import theme, video
+
+    from libre_panel.render.renderer import Renderer
+    from libre_panel.sensors.base import Snapshot
+
+    widgets = _texts(("plain", {}), ("glow", {"glow": 0.8}), ("shadow", {"shadow": "#000000"}),
+                     ("faint", {"opacity": 0.5}))  # fmt: skip
+    renderer = video(Renderer(theme(*widgets, size=(200, 140))))
+    renderer.native_laid = renderer.native_masks = True
+    frame, _ = renderer.render(Snapshot(), 1000.0, scene=True)
+    pieces = dict(frame.scene.pieces)
+    native = pieces["plain"].native
+    assert isinstance(native, scenes.Laid) and native.layer is pieces["plain"].layer
+    assert isinstance(native.parts[0][0].recipe, scenes.MaskRecipe)
+    assert [pieces[wid].native for wid in ("glow", "shadow", "faint")] == [None] * 3
+    own, _ = video(Renderer(theme(*widgets, size=(200, 140)))).render(Snapshot(), 1000.0)
+    assert frame.tobytes() == own.tobytes()
+
+
+def test_the_warm_up_makes_the_texts_as_the_engine_takes_them_and_composes_nothing():
+    """Warmed up where the engine composes the frames: the frames after keep what it made (a text
+    as its mask), so it makes them so too, and composes no frame here."""
+    from test_motion import theme, video
+
+    from libre_panel.render.renderer import Renderer
+    from libre_panel.sensors.base import Snapshot
+
+    renderer = video(Renderer(theme(*_texts(("plain", {})), size=(200, 40))))
+    renderer.native_laid = renderer.native_masks = True
+    renderer.warm(Snapshot(), 1000.0)
+    frame, _ = renderer.render(Snapshot(), 1000.04, scene=True)
+    native = dict(frame.scene.pieces)["plain"].native
+    assert isinstance(native, scenes.Laid) and not native.layer.composed
+    assert isinstance(native.parts[0][0].recipe, scenes.MaskRecipe)
+    assert not native.parts[0][0].composed
+
+
 def test_a_scrolling_graph_cut_by_the_engine_shows_what_it_showed():
     """Its window's pixels, made only when asked for, the window's as cropped here before, its
     sides cut away too where it is clipped; one drawn again at its end (a reading the strip
@@ -801,15 +957,18 @@ class Fed(Layered):
     ``half``; the renderer's own frame of each is kept to compare."""
 
     def __init__(self, engine, size, out, half, rings=False, views=False, globes=False,
-                 fills=False, laid=False, grown=False, bars=False, fans=False):  # fmt: skip
+                 fills=False, laid=False, grown=False, bars=False, fans=False,
+                 masks=False):  # fmt: skip
         super().__init__()
         self.half, self.makes_rings, self.makes_fans = half, rings, fans
+        self.makes_masks = masks
         self.proc = subprocess.Popen(
             [engine, "encode", "--size", f"{size[0]}x{size[1]}", "--turn", "0", "--fps", "25",
              "--crf", "20", "--kbit", "4000", "--keyint", "250", "--dump-rgb", str(out)],
             stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
         )  # fmt: skip
-        self.sender = engines.SceneSender(rings, views, globes, fills, laid, grown, bars, fans)
+        self.sender = engines.SceneSender(rings, views, globes, fills, laid, grown, bars, fans,
+                                          masks)  # fmt: skip
         self.own, self.n = [], 0
 
     def show(self, frame, region=None):
@@ -846,7 +1005,10 @@ class Fed(Layered):
                                                        "bars"),
      ("lumen-1920x720", True, False, True, "bars"), ("lumen-1920x720", False, False, False,
                                                       "fans"),
-     ("arena-1920x720", True, False, True, "fans")],
+     ("arena-1920x720", True, False, True, "fans"), ("lumen-1920x720", False, False, False,
+                                                     "masks"),
+     ("arena-1920x720", True, False, True, "masks"), ("almanac-1920x720", False, False, True,
+                                                      "masks")],
 )  # fmt: skip
 def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
     engine, tmp_path, theme, half, rings, toast, views
@@ -864,7 +1026,7 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
     fills = views == "fills"  # (and the cards' insides laid by the engine as their colour)
     if fills and not engines.makes_fills(engine):
         pytest.skip("needs libre-panel-engine that lays fills (cargo build --release)")
-    laid = views in ("laid", "grown", "fans")  # (and the fans and texts laid by the engine)
+    laid = views in ("laid", "grown", "fans", "masks")  # (and the fans and texts it lays)
     if laid and not engines.lays_laid(engine):
         pytest.skip("needs libre-panel-engine that lays layers (cargo build --release)")
     grown = views == "grown"  # (and the graphs' strips grown by the engine from those before)
@@ -873,12 +1035,15 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
     bars = views == "bars"  # (and the lit bars and their glows made by the engine, Lumen's)
     if bars and not engines.makes_bars(engine):
         pytest.skip("needs libre-panel-engine that makes bars (cargo build --release)")
-    fans = views == "fans"  # (and the fans' rotors and rings made by the engine)
+    fans = views in ("fans", "masks")  # (and the fans' rotors and rings made by the engine)
     if fans and not engines.makes_fans(engine):
         pytest.skip("needs libre-panel-engine that makes fans (cargo build --release)")
+    masks = views == "masks"  # (and the texts and letters it fills from their masks)
+    if masks and not engines.makes_masks(engine):
+        pytest.skip("needs libre-panel-engine that makes masks (cargo build --release)")
     clock, host = Clock(1000.0), PluginHost()
     display = Fed(engine, (1920, 720), tmp_path / "frames.rgb", half, rings, bool(views), globes,
-                  fills, laid, grown, bars, fans)  # fmt: skip
+                  fills, laid, grown, bars, fans, masks)  # fmt: skip
     loop = loop_with(theme, display, clock, host)
     try:
         run(loop, clock, 4)
@@ -906,7 +1071,7 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
         assert diff.convert("L").point(lambda v: v > 0 and 255).histogram()[255] <= 200
     if rings:
         assert display.sender._rings and loop.renderer.native_rings  # (made by the engine)
-    if views and not fills:  # (the graphs' strips went to it, their windows cut there)
+    if views and not fills and not masks:  # (the graphs' strips went to it, cut there)
         assert display.sender._sources and loop.renderer.native_views
     if globes:  # (the globe's tables, its map and air went to it, its steps made there)
         assert display.sender._globes and loop.renderer.native_globes
@@ -921,14 +1086,29 @@ def test_the_engine_composes_a_frame_of_layers_as_the_renderer_does(
                     for _wid, p in f.scene.pieces if isinstance(p.native, scenes.Bar)]  # fmt: skip
         assert len(lit_bars) >= 25 and loop.renderer.native_bars
         assert any(key[0] == "bar" for key in display.sender._rings)
+    fanned = theme != "almanac-1920x720"  # (Almanac's has no fans: its texts are laid)
     if laid:  # (the fans went as their parts, laid by the engine, their pixels not made here)
         lain = [p for f in display.frames if isinstance(f, scenes.SceneFrame)
                 for _wid, p in f.scene.pieces if isinstance(p.native, scenes.Laid)]  # fmt: skip
         assert len(lain) >= 25 and loop.renderer.native_laid
-        assert display.sender.laid_layers >= 25  # (they went as LAID records)
-    if fans:  # (their rotors and rings made by the engine, of their recipes)
+        assert display.sender.laid_layers >= (25 if fanned else 3)  # (they went as LAID records)
+    if fans and fanned:  # (their rotors and rings made by the engine, of their recipes)
         assert loop.renderer.native_fans and display.sender.made_sources >= 25
         assert display.sender._rotors  # (the rotors it keeps)
+    if masks:  # (texts and letters as their masks, filled by the engine, those warmed up too)
+        filled = [image for f in display.frames if isinstance(f, scenes.SceneFrame)
+                  for _wid, p in f.scene.pieces if isinstance(p.native, scenes.Laid)
+                  for image, _x, _y in p.native.parts
+                  if isinstance(getattr(image, "recipe", None), scenes.MaskRecipe)]  # fmt: skip
+        assert loop.renderer.native_masks and len(filled) >= 10
+        assert display.sender.made_sources >= 3  # (the letters went as MASKED records)
+        if theme != "almanac-1920x720":  # (and the texts laid alone as MASKED_LAYER: its are not)
+            assert display.sender.masked_layers >= 5
+        first = next(f for f in display.frames if isinstance(f, scenes.SceneFrame))
+        warmed = [p for _wid, p in first.scene.pieces if isinstance(p.native, scenes.Laid)
+                  and any(isinstance(getattr(image, "recipe", None), scenes.MaskRecipe)
+                          for image, _x, _y in p.native.parts)]  # fmt: skip
+        assert len(warmed) >= (30 if theme == "lumen-1920x720" else 1)  # (warmed up so too)
 
 
 def test_the_engine_makes_fans_as_the_renderer_does_to_the_bit(engine, tmp_path):

@@ -761,6 +761,36 @@ pub fn run(options: Options) -> Result<(), String> {
                     break Err(e);
                 }
             }
+            Record::Masked {
+                id,
+                w,
+                h,
+                ink,
+                mask,
+            } => {
+                let Some(s) = stream.as_mut() else {
+                    break Err("a source before its stream".into());
+                };
+                if let Err(e) = s.scene.masked(id, (w, h), ink, &mask) {
+                    break Err(e);
+                }
+            }
+            Record::MaskedLayer {
+                id,
+                x,
+                y,
+                w,
+                h,
+                ink,
+                mask,
+            } => {
+                let Some(s) = stream.as_mut() else {
+                    break Err("a layer before its stream".into());
+                };
+                if let Err(e) = s.scene.masked_layer(id, (x, y, w, h), ink, &mask) {
+                    break Err(e);
+                }
+            }
             Record::Laid {
                 id,
                 x,

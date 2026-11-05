@@ -167,6 +167,28 @@ def fit_frame(
     return ImageOps.pad(frame, size, method=Image.Resampling.LANCZOS, color=background)
 
 
+def _takes_scenes(display: Display) -> bool:
+    """Whether the panel's engine composes frames of their layers (render/scene.py)."""
+    return bool(getattr(display, "takes_scenes", False))
+
+
+def _native(renderer: Renderer, display: Display, layers: bool) -> None:
+    """What ``renderer`` leaves to the panel's engine where it composes the frame of its
+    ``layers``: made here only for a frame composed here."""
+    # its rings too, where the engine makes them (render/lit.py's Ring)
+    renderer.native_rings = layers and getattr(display, "makes_rings", False)
+    # and its graphs' windows cut from their strips (render/scene.py's View): by the engine
+    # where it cuts them, else their pixels made in its writer
+    renderer.native_views = layers
+    renderer.native_globes = layers  # (and its turning globes, likewise)
+    renderer.native_laid = layers  # (and its fans, from their rings and rotors)
+    # ... those made by the engine, where it makes them (render/fan.py's recipes)
+    renderer.native_fans = layers and getattr(display, "makes_fans", False)
+    # ... and its texts and letters of their masks, where it makes them
+    renderer.native_masks = layers and getattr(display, "makes_masks", False)
+    renderer.native_bars = layers  # (and its lit bars and their glows)
+
+
 def turned(frame: Image.Image, rotate: int) -> Image.Image:
     """The frame as it goes to the panel: upside down with ``rotate = 180`` (a frame of layers
     as one, its pixels still not made: render/scene.py)."""
@@ -1214,6 +1236,9 @@ class MainLoop:
             renderer.beats = self.beats
             renderer.symbols = config.symbols  # and the symbols in their look
             renderer.switches = self._switched(theme, config, source)  # and as switched
+            # made as the panel's engine takes them, where it composes the frames: a text as its
+            # mask, a fan as its recipes (the frames drawn after go on so: the pieces are kept)
+            _native(renderer, self.display, continuous and _takes_scenes(self.display))
             # widget by widget between the panel's frames, not while one is drawn
             renderer.warm(snapshot, now, pause=lambda: self.idle.wait(0.1), first=first)
             return renderer, motion
@@ -1550,17 +1575,7 @@ class MainLoop:
                         streaming and getattr(display, "takes_scenes", False)
                         and self._bare(renderer, blend, number, size, now)
                     )  # fmt: skip
-                    # its rings too, where the engine makes them (render/lit.py's Ring): made
-                    # here only for a frame composed here
-                    renderer.native_rings = layers and getattr(display, "makes_rings", False)
-                    # and its graphs' windows cut from their strips (render/scene.py's View):
-                    # by the engine where it cuts them, else their pixels made in its writer
-                    renderer.native_views = layers
-                    renderer.native_globes = layers  # (and its turning globes, likewise)
-                    renderer.native_laid = layers  # (and its fans, from their rings and rotors)
-                    # ... those made by the engine, where it makes them (render/fan.py's recipes)
-                    renderer.native_fans = layers and getattr(display, "makes_fans", False)
-                    renderer.native_bars = layers  # (and its lit bars and their glows)
+                    _native(renderer, display, layers)
                     if layers:
                         drawn, _ = renderer.render(snapshot, now, scene=True)
                     else:  # (as before: a renderer of a test or a plugin may take no more)

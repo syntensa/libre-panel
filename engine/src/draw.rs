@@ -477,15 +477,19 @@ mod tests {
         )
     }
 
+    /// A case: its name, its box, its arc (none: the whole ellipse), its width and the
+    /// signature of Pillow's mask of it.
+    type Case = (
+        &'static str,
+        (i32, i32, i32, i32),
+        Option<(f32, f32)>,
+        i32,
+        (usize, usize, usize),
+    );
+
     #[test]
     fn ellipses_and_arcs_are_pillows_to_the_pixel() {
-        let cases: [(
-            &str,
-            (i32, i32, i32, i32),
-            Option<(f32, f32)>,
-            i32,
-            (usize, usize, usize),
-        ); 6] = [
+        let cases: [Case; 6] = [
             ("ellipse", (4, 4, 35, 35), None, 3, (264, 211068, 963669)),
             (
                 "half",

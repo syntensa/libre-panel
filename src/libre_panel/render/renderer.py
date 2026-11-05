@@ -940,6 +940,9 @@ class Renderer:
         # ... and makes those itself, its rotor at each position and its ring (scene.Made of
         # fan.py's recipes): neither made nor kept here (where it lays them too)
         self.native_fans = False
+        # ... and a text's or a letter's picture of its mask and ink (scene.MaskRecipe): kept
+        # here as the mask, a quarter of the picture (where it lays them too)
+        self.native_masks = False
         # ... and makes a lit bar's picture and glow for each value (scene.Bar), likewise
         self.native_bars = False
         # ... and a card whose inside is one colour comes as its edges and that colour, which the
@@ -1240,10 +1243,15 @@ class Renderer:
         box = piece.box or [piece.x, piece.y, piece.layer.width, piece.layer.height]
         light = _dimmed(piece.light, opacity)
         out, pad = self._halo(widget, layer)
+        if out is None and layer is piece.layer:
+            return replace(piece, box=box, light=light)
+        # (another layer: one laid by the engine goes as its pixels, what it was laid of goes)
+        native = None if isinstance(piece.native, scenes.Laid) else piece.native
         if out is None:
-            return replace(piece, layer=layer, box=box, light=light)
+            return replace(piece, layer=layer, box=box, light=light, native=native)
         out.alpha_composite(layer, (pad, pad))
-        done = replace(piece, layer=out, x=piece.x - pad, y=piece.y - pad, box=box, light=light)
+        done = replace(piece, layer=out, x=piece.x - pad, y=piece.y - pad, box=box, light=light,
+                       native=native)  # fmt: skip
         return _clip_sides(done) if widget.get("clip") else done
 
     def _halo(
@@ -1614,27 +1622,25 @@ class Renderer:
             scenes.Scene((self.theme.width, self.theme.height), ground, tuple(pieces))
         )
 
-    # The pixels of what the engine lays without them (render/scene.py's Again: a card it lays
-    # as its colour, Filled; the ground, which it keeps) made here (for a frame composed here, the
-    # app's picture of the panel) go when nothing asked for them this long
+    # The pixels of what the engine lays or makes without them (render/scene.py's Again: a card
+    # it lays as its colour, Filled; the ground, which it keeps; Made, Laid) made here (for a
+    # frame composed here, the app's picture of the panel) go when nothing asked for them this
+    # long
     FILLS_IDLE_S = 30.0
 
     def _forget_laid(self) -> None:
-        """The pixels of the cards the engine lays as their colour, and of the ground it keeps,
-        that were made here and not asked for since :data:`FILLS_IDLE_S` (looked at every few
-        seconds, in frames the engine composes): after the app's window was open, Lumen's 5 MB
-        of cards on the 12.3"; its ground, 5.5 MB there and 3.7 on the 9.2"."""
+        """The pixels made here (for a frame composed here, the app's picture of the panel) of
+        what the engine lays or makes without them (render/scene.py's Again: the cards it lays
+        as their colour, the ground it keeps, the fans' rotors and rings, the texts of their
+        masks, the layers laid of such) that nothing asked for since :data:`FILLS_IDLE_S`
+        (looked at every few seconds, in frames the engine composes): after the app's window
+        was open, Lumen's 5 MB of cards on the 12.3"; its ground, 5.5 MB there and 3.7 on the
+        9.2"; its fans' rotors, a picture of each position they turned through."""
         now = time.monotonic()
         if now - self._fills_looked < 5.0:
             return
         self._fills_looked = now
-        layers = [None if hit[1] is None else hit[1].layer for hit in list(self._cache.values())]
-        if self._grounds is not None:
-            layers.append(self._grounds[1])
-        for layer in layers:
-            if isinstance(layer, scenes.Again) and layer.composed:
-                if now - layer.used > self.FILLS_IDLE_S:
-                    layer.forget()
+        scenes.forget_idle(self.FILLS_IDLE_S, now)
 
     def _as_rgb(self, canvas: Image.Image) -> Image.Image:
         """The frame of ``canvas``, in RGB: a new picture each time (the loop keeps frames and
@@ -1898,8 +1904,8 @@ class Renderer:
             if snapshot is None:
                 return
             self.screen, self._breathe = None, pause
-            try:
-                self.render(snapshot, now)
+            try:  # (not composed here where the engine composes the frames: render's scene)
+                self.render(snapshot, now, scene=self.native_laid)
             finally:
                 self.screen, self._breathe = screen, None
         finally:
@@ -2211,7 +2217,11 @@ class Renderer:
             return text.rstrip() + "…", size
         return text, max(6, int(size * limit / measured))
 
-    def _text_piece(self, widget: dict[str, Any], text: str, color: str) -> Piece:
+    def _text_piece(
+        self, widget: dict[str, Any], text: str, color: str, laid: bool = True
+    ) -> Piece:
+        """The text as a piece; ``laid``: as the engine lays it where it does (a text pasted on
+        another picture here is not)."""
         text, size = self._fit(widget, text)
         if size != widget.get("font_size", 24):
             widget = {**widget, "font_size": size}
@@ -2229,8 +2239,20 @@ class Renderer:
         x0, y0, x1, y1 = measure.textbbox((x, y), text, font=font, anchor=anchor)
         x0, y0 = int(math.floor(x0)), int(math.floor(y0))
         w, h = max(1, math.ceil(x1) - x0 + 1), max(1, math.ceil(y1) - y0 + 1)
-        layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
         fill = self.color(color)
+        if (
+            laid
+            and self.native_masks
+            and self.native_laid
+            and fill is not None
+            and "\n" not in text
+        ):
+            # its mask, filled with its colour by the engine: the same pixels (scene.masked)
+            mask = Image.new("L", (w, h), 0)
+            ImageDraw.Draw(mask).text((x - x0, y - y0), text, font=font, anchor=anchor, fill=255)
+            made = scenes.laid_masked(mask, fill)
+            return Piece(made.layer, x0, y0, native=made)
+        layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
         ImageDraw.Draw(layer).text((x - x0, y - y0), text, font=font, anchor=anchor, fill=fill)
         return Piece(layer, x0, y0)
 
@@ -2325,9 +2347,16 @@ class Renderer:
         found = self._glyphs.get(key)  # (the helper thread draws texts too: it is thread-safe)
         if found is not None:
             return found[0], whole - pad, found[1]
-        image = Image.new("RGBA", (math.ceil(font.getlength(ch)) + 2 * pad + 1, h), (0, 0, 0, 0))
-        ImageDraw.Draw(image).text((at - whole + pad, 0), ch, font=font, fill=fill, anchor="la")
-        ink = image.getbbox()  # (drawn on what is clear: round its ink it stays (0, 0, 0, 0))
+        size = (math.ceil(font.getlength(ch)) + 2 * pad + 1, h)
+        if self.native_masks:  # (its mask: the engine fills it with the colour, scene.masked)
+            mask = Image.new("L", size, 0)
+            ImageDraw.Draw(mask).text((at - whole + pad, 0), ch, font=font, fill=255, anchor="la")
+            image: Image.Image = scenes.masked(mask, fill)
+            ink = scenes.masked_alpha(mask, fill[3]).getbbox()
+        else:
+            image = Image.new("RGBA", size, (0, 0, 0, 0))
+            ImageDraw.Draw(image).text((at - whole + pad, 0), ch, font=font, fill=fill, anchor="la")
+            ink = image.getbbox()  # (drawn on what is clear: round its ink it stays (0, 0, 0, 0))
         self._glyphs.put(key, (image, ink))
         return image, whole - pad, ink
 
@@ -3541,7 +3570,7 @@ class Renderer:
             "align": align, "max_width": max(0, round(width)), "fit": "ellipsis",
             "letter_spacing": max(1, round(size * 0.12)) if label else 0, "tabular": not label,
         }  # fmt: skip
-        piece = self._text_piece(part, text, color)
+        piece = self._text_piece(part, text, color, laid=False)
         self._paste(layer, piece.layer, piece.x, piece.y)
 
     def _list_bar(self, layer: Image.Image | None, widget: dict[str, Any], frac: float,

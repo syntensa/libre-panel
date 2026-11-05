@@ -14,6 +14,12 @@
   itself, bit for bit as before; Libre Panel keeps no picture of them (Lumen's fans: 9 MB less).
 - **The background kept once.** Once the engine has a panel's background, Libre Panel lets go
   of its own copy (the 12.3": 5.5 MB, the 9.2": 3.7 MB) and makes it again when it needs it.
+- **Texts as their outlines.** Where the engine fills them in their colour, Libre Panel keeps a
+  text, a value, a clock's digits as their outline, a quarter of the picture, also those made
+  before the first frame (Lumen: its 115 texts and values). Their pixels are the same to the bit.
+- **Nothing kept after the app's window was open.** Its picture of the panel made Libre Panel
+  draw what the engine makes (the fans at every position they turned through, the texts); those
+  pictures now go half a minute after nothing asked for them, as the cards' do.
 - **Light mode from the start.** Started at login with its window never opened, Libre Panel
   now also lets go a minute after the start of what only its start needed, and gives that memory
   back (on Windows the pages of its working set it no longer touches).

@@ -53,7 +53,7 @@ from libre_panel.devices.h264 import (
 )
 from libre_panel.i18n import t
 from libre_panel.render import fan, moving
-from libre_panel.render.scene import Bar, BarBase, Filled, Globe, Laid, View, growth
+from libre_panel.render.scene import Bar, BarBase, Filled, Globe, Laid, MaskRecipe, View, growth
 
 if TYPE_CHECKING:
     from libre_panel.render.renderer import Piece
@@ -77,6 +77,8 @@ GLOBE, GLOBE_LAYER, FILL, LAID, GROWN, BAR, BAR_LAYER = 16, 17, 18, 19, 20, 21, 
 # a fan's rotor of a look at a size, and the sources it makes of it: a position of the rotor
 # and the ring with its glowing arc (fan.rs)
 ROTOR, BLADES, FAN_RING = 23, 24, 25
+MASKED = 26  # a picture of a mask filled with an ink (a text, a letter: scene.rs's masked)
+MASKED_LAYER = 27  # a layer of a mask filled with an ink (a text laid alone: masked_layer)
 MOST_ROTORS = 8  # the rotors it keeps for a stream, those used last (scene.rs's MOST_ROTORS)
 # how a layer goes on: RGBA through its alpha, RGB as it is (a video's frame), RGB light added
 OVER, SOLID, ADD = 0, 1, 2
@@ -188,6 +190,12 @@ def makes_fans(engine: str) -> bool:
     return "fans" in _can(engine)
 
 
+def makes_masks(engine: str) -> bool:
+    """Whether ``engine`` makes a picture of a mask and an ink itself (render/scene.py's
+    MaskRecipe: a text, a letter)."""
+    return "masks" in _can(engine)
+
+
 def encodes_on_cards(engine: str) -> bool:
     """Whether ``engine`` takes ``--encoder card`` (video.engine_encoder: the graphics card's
     encoder where it opens, else x264); one of before does not start with it."""
@@ -215,6 +223,7 @@ class SceneSender:
     def __init__(
         self, rings: bool = False, views: bool = False, globes: bool = False, fills: bool = False,
         laid: bool = False, grown: bool = False, bars: bool = False, fans: bool = False,
+        masks: bool = False,
     ) -> None:  # fmt: skip
         self.rings = rings  # the engine makes a lit gauge's ring (render/lit.py's Ring)
         self.views = views  # ... and cuts a layer from pictures it keeps (render/scene.py's View)
@@ -226,6 +235,7 @@ class SceneSender:
         # ... and makes the pictures a fan is laid from: its rotor at a position, its ring
         # (render/scene.py's Made of render/fan.py's recipes), of the rotors it keeps
         self.fans = fans
+        self.masks = masks  # ... and makes a picture of its mask and ink (scene.py's MaskRecipe)
         self._ground: Any = None
         # each piece's layers (and the ring, or the pictures, they are of): what the engine has
         self._pieces: dict[int, tuple[Piece, list[int], Any, tuple[int, ...], int | None]] = {}
@@ -242,6 +252,7 @@ class SceneSender:
         self.laid_layers = 0  # (... and layers laid from pictures the engine keeps)
         self.grown_sources = 0  # pictures grown from one the engine keeps
         self.made_sources = 0  # pictures the engine made of what they are made of (fans)
+        self.masked_layers = 0  # (layers of a mask and an ink: texts)
 
     def _layer(
         self, parts: list[bytes], image: Image.Image, x: int, y: int, how: int
@@ -373,6 +384,37 @@ class SceneSender:
         self.laid_layers += 1
         return [layer], tuple(keys)
 
+    def _masked_layer(self, parts: list[bytes], piece: Piece) -> list[int]:
+        """The layer of a text the engine makes of its mask and its ink, where it is laid of
+        that alone (render/scene.py's masked, laid alone: the layer is its picture), its mask
+        cut to where it is not 0: no picture of it stays beside the layer there; [] for any
+        other piece."""
+        made = piece.native
+        if (not self.masks or not isinstance(made, Laid) or made.layer is not piece.layer
+                or piece.add or piece.light is not None or len(made.parts) != 1
+                or made.kept):  # fmt: skip
+            return []
+        image, dx, dy = made.parts[0]
+        recipe = getattr(image, "recipe", None)
+        if (not isinstance(recipe, MaskRecipe) or (dx, dy) != (0, 0)
+                or image.size != piece.layer.size or recipe.mask.mode != "L"
+                or len(recipe.ink) != 4):  # fmt: skip
+            return []
+        mask, x, y = recipe.mask, piece.x, piece.y
+        box = mask.getbbox()
+        if box is None:
+            return []  # (it shows nothing: it goes as nothing)
+        if box != (0, 0, mask.width, mask.height):
+            mask, x, y = mask.crop(box), x + box[0], y + box[1]
+        number = next(self._numbers) & 0xFFFFFFFF
+        data = mask.tobytes()
+        head = struct.pack("<iiII4B", x, y, mask.width, mask.height, *recipe.ink)
+        parts += [_head(MASKED_LAYER, number, len(head) + len(data)) + head, data]
+        self.layers += 1
+        self.masked_layers += 1
+        self.bytes += len(data)
+        return [number]
+
     def _source(
         self, parts: list[bytes], image: Image.Image, now: dict[int, tuple[Image.Image, int]]
     ) -> int:
@@ -384,7 +426,7 @@ class SceneSender:
         if hit is None or hit[0] is not image:
             number = next(self._numbers) & 0xFFFFFFFF
             grown = self._grown_from(image, now)
-            if self.fans and self._made(parts, image, number):
+            if (self.fans or self.masks) and self._made(parts, image, number):
                 self.made_sources += 1  # (made by the engine of what it is made of)
             elif grown is not None:
                 base, shift, keep = grown
@@ -408,6 +450,16 @@ class SceneSender:
         position, of the rotor sent first where the engine does not keep it; a fan's ring);
         False for one that goes as its pixels."""
         recipe = getattr(image, "recipe", None)
+        if isinstance(recipe, MaskRecipe):
+            if not self.masks or recipe.mask.mode != "L" or len(recipe.ink) != 4:
+                return False
+            mask = recipe.mask.tobytes()
+            head = struct.pack("<II4B", *recipe.mask.size, *recipe.ink)
+            parts += [_head(MASKED, number, len(head) + len(mask)) + head, mask]
+            self.bytes += len(mask)
+            return True
+        if not self.fans:
+            return False
         if isinstance(recipe, fan.BladesRecipe):
             rotor = self._rotors.get(recipe.rotor)
             if rotor is None:
@@ -556,6 +608,8 @@ class SceneSender:
                 globe: int | None = None
                 if not ids:
                     ids, cut = self._view(parts, piece, sources)
+                if not ids:
+                    ids = self._masked_layer(parts, piece)
                 if not ids:
                     ids, cut = self._laid(parts, piece, sources)
                 if not ids:
@@ -1027,7 +1081,7 @@ class EngineStream:
         self, link: EngineLink, size: tuple[int, int], options: list[str], block: int,
         lead: float | None = None, scenes: bool = False, rings: bool = False,
         views: bool = False, globes: bool = False, fills: bool = False, laid: bool = False,
-        grown: bool = False, bars: bool = False, fans: bool = False,
+        grown: bool = False, bars: bool = False, fans: bool = False, masks: bool = False,
     ) -> None:  # fmt: skip
         self.link, self.size = link, size
         # with ``scenes``: frames of layers go to the engine as them (render/scene.py); the
@@ -1036,10 +1090,11 @@ class EngineStream:
         # ``globes`` it makes a turning globe's pictures, with ``fills`` it lays a card's inside
         # as its colour, with ``laid`` a fan from its ring and its rotor, with ``grown`` a graph's
         # strip from the one before, with ``bars`` a lit bar's picture and glow, with ``fans`` a
-        # fan's rotor at each position and its ring
+        # fan's rotor at each position and its ring, with ``masks`` a text or a letter of its mask
         self.scenes = (
-            SceneSender(rings, views, globes, fills, laid, grown, bars, fans) if scenes else None
-        )
+            SceneSender(rings, views, globes, fills, laid, grown, bars, fans, masks)
+            if scenes else None
+        )  # fmt: skip
         # how long after the time a frame was drawn for the engine sends its picture (seconds;
         # None: the engine's own choice, h264.engine_lead's)
         self.lead = lead

@@ -252,6 +252,10 @@ class TurzxDisplay(Display):
         return bool(getattr(self._impl, "makes_fans", False)) if self._impl else False
 
     @property
+    def makes_masks(self) -> bool:
+        return bool(getattr(self._impl, "makes_masks", False)) if self._impl else False
+
+    @property
     def restarted(self) -> bool:
         return bool(self._impl and self._impl.restarted)
 

@@ -563,6 +563,49 @@ impl Scene {
         Ok(())
     }
 
+    /// Source `id`, `w` x `h`: a clear picture filled through `mask` (a byte a pixel) with
+    /// `ink` as Pillow fills it (Paste.c's fill_mask_L on a clear RGBA picture: where the mask is
+    /// not 0 the ink's colour, its alpha the ink's times the mask; ImageDraw.text so draws a text
+    /// or a letter), made here: its mask comes, a quarter of its pixels.
+    pub fn masked(
+        &mut self,
+        id: u32,
+        (w, h): (usize, usize),
+        ink: [u8; 4],
+        mask: &[u8],
+    ) -> Result<(), String> {
+        if w == 0 || h == 0 || w > MOST_SOURCE || h > MOST_SOURCE || mask.len() != w * h {
+            return Err(format!(
+                "a masked source of {w}x{h} and {} bytes",
+                mask.len()
+            ));
+        }
+        self.sources
+            .insert(id, Source::new(w, h, filled_through(mask, ink)));
+        Ok(())
+    }
+
+    /// Layer `id` at (x, y), `w` x `h` RGBA through its alpha: a clear picture filled through
+    /// `mask` with `ink`, as a masked source is (Scene::masked), made here: a text that is a
+    /// layer alone comes as its mask, and no source of it stays beside the layer.
+    pub fn masked_layer(
+        &mut self,
+        id: u32,
+        (x, y, w, h): (i32, i32, usize, usize),
+        ink: [u8; 4],
+        mask: &[u8],
+    ) -> Result<(), String> {
+        if mask.len() != w * h {
+            return Err(format!(
+                "a masked layer of {w}x{h} and {} bytes",
+                mask.len()
+            ));
+        }
+        let layer = Layer::new(x, y, w, h, How::Over, filled_through(mask, ink))?;
+        self.layer(id, layer);
+        Ok(())
+    }
+
     /// Source `id`: a fan's ring with its glowing arc (fan.rs's ring), made here.
     pub fn fan_ring(&mut self, id: u32, spec: &fan::RingSpec) -> Result<(), String> {
         let pixels = fan::ring(spec)?;
@@ -1055,6 +1098,20 @@ impl Scene {
             }
         }
     }
+}
+
+/// A clear RGBA picture filled through `mask` (a byte a pixel) with `ink` as Pillow fills it
+/// (Paste.c's fill_mask_L): where the mask is not 0 the ink's colour, its alpha the ink's times
+/// the mask (rounded as Pillow's DIV255 rounds), elsewhere all 0.
+fn filled_through(mask: &[u8], ink: [u8; 4]) -> Vec<u8> {
+    let mut pixels = vec![0u8; mask.len() * 4];
+    for (px, &m) in pixels.chunks_exact_mut(4).zip(mask) {
+        if m != 0 {
+            let v = u32::from(ink[3]) * u32::from(m) + 128;
+            px.copy_from_slice(&[ink[0], ink[1], ink[2], (((v >> 8) + v) >> 8) as u8]);
+        }
+    }
+    pixels
 }
 
 /// `layer` laid on `out`, the pixels of the box (x0, y0)-(x1, y1) of the frame.
@@ -1765,6 +1822,39 @@ mod tests {
         );
         s.frame(vec![3], false).unwrap();
         assert!(s.sources.is_empty()); // (gone with it)
+    }
+
+    #[test]
+    fn a_masked_layer_is_a_masked_source_laid_alone_and_keeps_no_source() {
+        let mut s = Scene::new(8, 4, 2);
+        // a mask of 4 x 2: clear, faint, half and full, a faint ink a 1 rounds to nothing
+        let mask = [0, 1, 128, 255, 0, 0, 77, 0];
+        for ink in [[46, 230, 214, 255], [232, 238, 244, 200], [255, 120, 40, 1]] {
+            s.masked(9, (4, 2), ink, &mask).unwrap();
+            s.masked_layer(1, (2, 1, 4, 2), ink, &mask).unwrap();
+            let layer = &s.layers[&1];
+            assert_eq!(layer.pixels, s.sources[&9].pixels);
+            assert_eq!(layer.part, bounds(&layer.pixels, 4, 2, 4, |p| p[3] != 0));
+            assert!(layer.sources.is_empty());
+            for (px, &m) in layer.pixels.chunks_exact(4).zip(&mask) {
+                // (Pillow: DIV255(ink's alpha * m), the ink's colour where the mask is not 0)
+                let a = (f64::from(ink[3]) * f64::from(m) / 255.0).round() as u8;
+                let want = if m == 0 {
+                    [0; 4]
+                } else {
+                    [ink[0], ink[1], ink[2], a]
+                };
+                assert_eq!(px, want);
+            }
+        }
+        assert!(s
+            .masked_layer(2, (0, 0, 4, 2), [1, 2, 3, 255], &mask[..7])
+            .is_err());
+        assert!(s
+            .masked_layer(2, (0, 0, 0, 2), [1, 2, 3, 255], &[])
+            .is_err());
+        s.frame(vec![1], false).unwrap();
+        assert!(s.sources.is_empty()); // (the masked source went: no layer is laid from it)
     }
 
     #[test]

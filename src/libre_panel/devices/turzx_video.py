@@ -75,6 +75,7 @@ from libre_panel.devices.engine import (
     makes_fans,
     makes_fills,
     makes_globes,
+    makes_masks,
     makes_rings,
     takes_scenes,
 )
@@ -670,6 +671,13 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         return self.takes_scenes and bool(getattr(sender, "rings", False))
 
     @property
+    def makes_masks(self) -> bool:
+        """Whether the engine that composes the frames also makes a picture of a mask and an ink
+        itself (render/scene.py's MaskRecipe): the renderer keeps texts and letters as masks."""
+        sender = getattr(self.encoder, "scenes", None)
+        return self.takes_scenes and bool(getattr(sender, "masks", False))
+
+    @property
     def makes_fans(self) -> bool:
         """Whether the engine that composes the frames also makes a fan's rotor at each position
         and its ring itself (render/fan.py's recipes): the renderer leaves their pictures to it."""
@@ -964,6 +972,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
                 globes=layers and makes_globes(engine), fills=layers and makes_fills(engine),
                 laid=layers and lays_laid(engine), grown=layers and grows_sources(engine),
                 bars=layers and makes_bars(engine), fans=layers and makes_fans(engine),
+                masks=layers and makes_masks(engine),
             )  # fmt: skip
             if layers and not self._layers_said:  # (once: a new stream starts as often)
                 self._layers_said = True

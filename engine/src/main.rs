@@ -303,6 +303,30 @@ fn encode(options: Options) -> Result<(), String> {
                 scene.fan_ring(id, &spec)?;
                 spent_layers += began.elapsed().as_secs_f64();
             }
+            Some(wire::Record::Masked {
+                id,
+                w,
+                h,
+                ink,
+                mask,
+            }) => {
+                let began = Instant::now();
+                scene.masked(id, (w, h), ink, &mask)?;
+                spent_layers += began.elapsed().as_secs_f64();
+            }
+            Some(wire::Record::MaskedLayer {
+                id,
+                x,
+                y,
+                w,
+                h,
+                ink,
+                mask,
+            }) => {
+                let began = Instant::now();
+                scene.masked_layer(id, (x, y, w, h), ink, &mask)?;
+                spent_layers += began.elapsed().as_secs_f64();
+            }
             Some(wire::Record::Bar {
                 id,
                 bar,
@@ -413,9 +437,10 @@ fn main() -> ExitCode {
             // lays from sources it keeps, a fan's ring and rotor (scene.rs's laid); "grown",
             // sources it grows from those it keeps, a graph's strip (scene.rs's grown); "bars", a
             // lit bar's picture and glow it makes for each value (bar.rs); "fans", a fan's rotor
-            // at each position and its ring it makes as sources (fan.rs))
+            // at each position and its ring it makes as sources (fan.rs); "masks", a source of a
+            // mask and an ink, a text or a letter (scene.rs's masked))
             println!(
-                "libre-panel-engine {} (x264 build {}; panel, scenes, rings, views, globes, cards, fills, laid, grown, bars, fans)",
+                "libre-panel-engine {} (x264 build {}; panel, scenes, rings, views, globes, cards, fills, laid, grown, bars, fans, masks)",
                 env!("CARGO_PKG_VERSION"),
                 x264::build()
             );

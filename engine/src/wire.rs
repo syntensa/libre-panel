@@ -102,6 +102,15 @@
 //!                     the groove's strength, how far its core goes towards white and how its
 //!                     halo stands beside it (f32 each), then the core of each of 256 levels of
 //!                     coverage (f32 each): a source the engine makes (fan.rs's ring)
+//! kind 26, a masked source: a its number (a source's), b the length of what follows: w, h (u32
+//!                     each), its ink (RGBA), then its mask (one byte a pixel, row by row): the
+//!                     source as Pillow fills a clear picture through the mask with the ink (a
+//!                     text, a letter: ImageDraw.text on a clear RGBA picture), scene.rs's
+//!                     `masked`
+//! kind 27, a masked layer: a its number (a layer's), b the length of what follows: x, y (i32
+//!                     each), w, h (u32 each), its ink (RGBA), then its mask (one byte a pixel,
+//!                     row by row): the layer through its alpha, its pixels a masked source's
+//!                     (a text laid alone), scene.rs's `masked_layer`
 //! ```
 //!
 //! On its stdout, with a panel of its own (`panel`): the same head, then b bytes:
@@ -221,6 +230,22 @@ pub enum Record {
     FanRing {
         id: u32,
         spec: crate::fan::RingSpec,
+    },
+    Masked {
+        id: u32,
+        w: usize,
+        h: usize,
+        ink: [u8; 4],
+        mask: Vec<u8>,
+    },
+    MaskedLayer {
+        id: u32,
+        x: i32,
+        y: i32,
+        w: usize,
+        h: usize,
+        ink: [u8; 4],
+        mask: Vec<u8>,
     },
     Fill {
         id: u32,
@@ -949,6 +974,48 @@ pub fn read(input: &mut impl Read) -> io::Result<Option<Record>> {
                 },
             }))
         }
+        26 => {
+            let len = b as usize;
+            if !(12..=MOST_LAYER / 4 + 12).contains(&len) {
+                return Err(invalid("a masked source too large"));
+            }
+            let mut head = [0u8; 12];
+            whole(input, &mut head, "a masked source cut short")?;
+            let (w, h) = (u32_at(&head, 0) as usize, u32_at(&head, 4) as usize);
+            if w.checked_mul(h) != Some(len - 12) {
+                return Err(invalid("a masked source's mask is not of its size"));
+            }
+            let mask = bytes(input, len - 12, "a masked source cut short")?;
+            Ok(Some(Record::Masked {
+                id: a,
+                w,
+                h,
+                ink: [head[8], head[9], head[10], head[11]],
+                mask,
+            }))
+        }
+        27 => {
+            let len = b as usize;
+            if !(20..=MOST_LAYER / 4 + 20).contains(&len) {
+                return Err(invalid("a masked layer too large"));
+            }
+            let mut head = [0u8; 20];
+            whole(input, &mut head, "a masked layer cut short")?;
+            let (w, h) = (u32_at(&head, 8) as usize, u32_at(&head, 12) as usize);
+            if w.checked_mul(h) != Some(len - 20) {
+                return Err(invalid("a masked layer's mask is not of its size"));
+            }
+            let mask = bytes(input, len - 20, "a masked layer cut short")?;
+            Ok(Some(Record::MaskedLayer {
+                id: a,
+                x: u32_at(&head, 0) as i32,
+                y: u32_at(&head, 4) as i32,
+                w,
+                h,
+                ink: [head[16], head[17], head[18], head[19]],
+                mask,
+            }))
+        }
         kind => Err(invalid(&format!("a record of kind {kind}"))),
     }
 }
@@ -1028,6 +1095,55 @@ mod tests {
         }
         assert!(matches!(read(&mut input).unwrap(), Some(Record::End)));
         assert!(read(&mut input).unwrap().is_none());
+    }
+
+    #[test]
+    fn a_masked_source_and_a_masked_layer_their_masks_of_their_size() {
+        let mut input = head(26, 4, 12 + 6);
+        for n in [3u32, 2] {
+            input.extend(n.to_le_bytes());
+        }
+        input.extend([10, 20, 30, 200, 0, 1, 2, 3, 4, 255]);
+        input.extend(head(27, 8, 20 + 6));
+        for n in [-5i32, 7] {
+            input.extend(n.to_le_bytes());
+        }
+        for n in [2u32, 3] {
+            input.extend(n.to_le_bytes());
+        }
+        input.extend([1, 2, 3, 4, 9, 8, 7, 6, 5, 4]);
+        let mut data = input.as_slice();
+        match read(&mut data).unwrap() {
+            Some(Record::Masked {
+                id,
+                w,
+                h,
+                ink,
+                mask,
+            }) => {
+                assert_eq!((id, w, h, ink), (4, 3, 2, [10, 20, 30, 200]));
+                assert_eq!(mask, vec![0, 1, 2, 3, 4, 255]);
+            }
+            _ => panic!("not the masked source"),
+        }
+        match read(&mut data).unwrap() {
+            Some(Record::MaskedLayer {
+                id,
+                x,
+                y,
+                w,
+                h,
+                ink,
+                mask,
+            }) => {
+                assert_eq!((id, x, y, w, h, ink), (8, -5, 7, 2, 3, [1, 2, 3, 4]));
+                assert_eq!(mask, vec![9, 8, 7, 6, 5, 4]);
+            }
+            _ => panic!("not the masked layer"),
+        }
+        let mut short = head(27, 8, 20 + 5); // (a mask not of its size)
+        short.extend([0u8; 25]);
+        assert!(read(&mut short.as_slice()).is_err());
     }
 
     #[test]

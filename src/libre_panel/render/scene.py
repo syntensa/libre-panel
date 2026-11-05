@@ -18,7 +18,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from libre_panel.render import moving
 
@@ -108,24 +108,19 @@ class Lazy(Image.Image):
         return super().load()
 
 
-class Made(Lazy):
-    """A picture an engine makes itself of what it is made of, its ``recipe`` (render/fan.py's
-    BladesRecipe and RingRecipe: a fan's rotor at a position, its ring; engine/src/fan.rs): such
-    an engine is sent the recipe instead of the pixels (devices/engine.py's SceneSender), and the
-    pixels are made here only when something asks for them (a frame composed here, the app's
-    picture of the panel), as ``make`` makes them. So a picture of every position of a turning
-    rotor is kept neither here nor there."""
-
-    def __init__(self, size: tuple[int, int], mode: str, make: Any, recipe: Any) -> None:
-        super().__init__(size, mode, make)
-        self.recipe = recipe
+# The pictures made here again (Again) whose pixels were made: forget_idle's (by id: a picture
+# is not hashable; one that goes leaves)
+_MADE_HERE: weakref.WeakValueDictionary[int, Again] = weakref.WeakValueDictionary()
+_MADE_HERE_LOCK = threading.Lock()
 
 
 class Again(Lazy):
-    """A :class:`Lazy` whose pixels may go again (:meth:`forget`), made anew (the same) when
-    something asks for them once more; ``used``: when that was last (monotonic seconds). A card
-    an engine lays without its pixels keeps them only while frames composed here, or the app's
-    picture of the panel, ask for them (render/scene.py's Filled)."""
+    """A :class:`Lazy` whose pixels may go again (:meth:`forget`, :func:`forget_idle`), made anew
+    (the same) when something asks for them once more; ``used``: when that was last (monotonic
+    seconds). What an engine lays or makes without its pixels (a card it lays as its colour,
+    Filled; the ground; a fan's rotor, a text of its mask: Made; a layer laid of such: Laid)
+    keeps them only while frames composed here, or the app's picture of the panel, ask for
+    them."""
 
     def __init__(self, size: tuple[int, int], mode: str, make: Any) -> None:
         super().__init__(size, mode, make)
@@ -144,20 +139,95 @@ class Again(Lazy):
     @im.setter
     def im(self, im: Any) -> None:
         self._im = im
+        if im is not None:  # (given its pixels: Renderer._ground)
+            self._made_here()
 
     def load(self) -> Any:
         with self._making:  # (its pixels stay while Pillow looks at them here)
             if self._im is None:
                 self._im = self._again().im
+                self.used = time.monotonic()
+                self._made_here()
             return Image.Image.load(self)
 
-    def forget(self) -> int:
-        """Its pixels go, where they were made: the bytes they took (0: none were made)."""
-        with self._making:
-            if self._im is None:
+    def _made_here(self) -> None:
+        """Its pixels were made here: :func:`forget_idle` looks at it from now on."""
+        with _MADE_HERE_LOCK:
+            _MADE_HERE[id(self)] = self
+
+    def forget(self, unused_since: float | None = None) -> int:
+        """Its pixels go, where they were made (``unused_since``: only where nothing asked for
+        them since then, monotonic seconds): the bytes they took (0: none went)."""
+        with self._making:  # (as they are made: forget_idle no longer looks at it till then)
+            if self._im is None or (unused_since is not None and self.used >= unused_since):
                 return 0
             self._im = None
+            with _MADE_HERE_LOCK:
+                _MADE_HERE.pop(id(self), None)
         return self.width * self.height * len(self.mode)
+
+
+def forget_idle(idle_s: float, now: float | None = None) -> int:
+    """The pixels made here of every :class:`Again` that nothing asked for these ``idle_s``
+    seconds go (made anew, the same, should something ask again); the bytes they took."""
+    now = time.monotonic() if now is None else now
+    with _MADE_HERE_LOCK:
+        made = list(_MADE_HERE.values())
+    return sum(picture.forget(unused_since=now - idle_s) for picture in made)
+
+
+class Made(Again):
+    """A picture an engine makes itself of what it is made of, its ``recipe`` (render/fan.py's
+    BladesRecipe and RingRecipe: a fan's rotor at a position, its ring; engine/src/fan.rs;
+    MaskRecipe: a text of its mask): such an engine is sent the recipe instead of the pixels
+    (devices/engine.py's SceneSender), and the pixels are made here only when something asks for
+    them (a frame composed here, the app's picture of the panel), as ``make`` makes them, and go
+    again when nothing asked for them a while (:func:`forget_idle`). So a picture of every
+    position of a turning rotor is kept neither here nor there."""
+
+    def __init__(self, size: tuple[int, int], mode: str, make: Any, recipe: Any) -> None:
+        super().__init__(size, mode, make)
+        self.recipe = recipe
+
+
+@dataclass(frozen=True, eq=False)
+class MaskRecipe:
+    """A picture as Pillow fills a clear one through ``mask`` ("L") with ``ink`` (RGBA): where
+    the mask is not 0 the ink's colour, its alpha the ink's times the mask (Paste.c's
+    fill_mask_L). ImageDraw.text so draws a text on a clear RGBA picture: the same pixels as the
+    text drawn on an "L" picture in white, so filled (engine/src/scene.rs's masked)."""
+
+    mask: Image.Image
+    ink: tuple[int, int, int, int]
+
+
+def masked(mask: Image.Image, ink: tuple[int, int, int, int]) -> Made:
+    """The picture ``mask`` filled with ``ink`` (:class:`MaskRecipe`), as an engine makes it of
+    its mask, a quarter of its pixels; its own pixels made here only when something asks."""
+
+    def make() -> Image.Image:
+        out = Image.new("RGBA", mask.size, (0, 0, 0, 0))
+        ImageDraw.Draw(out).bitmap((0, 0), mask, fill=ink)
+        return out
+
+    return Made(mask.size, "RGBA", make, MaskRecipe(mask, ink))
+
+
+def laid_masked(mask: Image.Image, ink: tuple[int, int, int, int]) -> Laid:
+    """The :class:`Laid` of a picture laid of ``mask`` filled with ``ink`` alone (a text): its
+    layer the masked picture itself, that laid on a clear picture where it shows (only the
+    colour of what is clear differs, which no frame shows), its pixels made once if at all."""
+    made = masked(mask, ink)
+    return Laid(made, ((made, 0, 0),))
+
+
+def masked_alpha(mask: Image.Image, alpha: int) -> Image.Image:
+    """The alpha of ``mask`` filled with an ink of ``alpha`` (:class:`MaskRecipe`): where its
+    ink lies (getbbox) without its pixels."""
+    if alpha == 255:
+        return mask
+    table = [0] + [(((v := alpha * m + 128) >> 8) + v) >> 8 for m in range(1, 256)]
+    return mask.point(table)
 
 
 Cut = tuple[Image.Image, int, int, int, int, int, int]  # (picture, x, y in it, x, y, w, h)
@@ -326,7 +396,7 @@ def laid(
             out.alpha_composite(image, (x0, y0))
         return out
 
-    return Laid(Lazy(size, "RGBA", make), parts, tuple(kept))
+    return Laid(Again(size, "RGBA", make), parts, tuple(kept))  # (its pixels may go again)
 
 
 @dataclass(frozen=True, eq=False)
