@@ -428,7 +428,26 @@ fn encode(options: Options) -> Result<(), String> {
     Ok(())
 }
 
+/// x264 asks the kernel for transparent huge pages for its big buffers (Linux: madvise), and a
+/// page of 2 MB counts whole once anything in it is touched: both panels' engines held some
+/// 10 MB more for it, a frame no faster (measured: 69 MB instead of 79, a frame the same time,
+/// as many pictures late). This process's memory comes in small pages, whatever is asked; where
+/// the kernel has no huge pages (or no such switch) nothing changes.
+#[cfg(target_os = "linux")]
+fn small_pages() {
+    let (on, unused): (libc::c_ulong, libc::c_ulong) = (1, 0);
+    // SAFETY: PR_SET_THP_DISABLE takes the flag and three unused arguments, each unsigned long;
+    // it touches nothing but the process's own setting (an old kernel answers EINVAL: ignored)
+    unsafe {
+        libc::prctl(libc::PR_SET_THP_DISABLE, on, unused, unused, unused);
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn small_pages() {}
+
 fn main() -> ExitCode {
+    small_pages();
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         Some("version") => {
@@ -469,5 +488,17 @@ fn main() -> ExitCode {
             eprintln!("{USAGE}");
             ExitCode::from(2)
         }
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod small_pages_tests {
+    #[test]
+    fn the_engine_asks_for_small_pages() {
+        super::small_pages();
+        let unused: libc::c_ulong = 0;
+        // SAFETY: PR_GET_THP_DISABLE reads the process's own setting (four unused arguments)
+        let got = unsafe { libc::prctl(libc::PR_GET_THP_DISABLE, unused, unused, unused, unused) };
+        assert_eq!(got, 1);
     }
 }

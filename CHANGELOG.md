@@ -41,6 +41,9 @@
   it kept the whole frame's pixels beside its YUV; it now keeps a hash of each block instead
   (the 12.3": 43 KB instead of 4.1 MB). Both panels' engines: 79 MB instead of 85, the frame's
   YUV in 0.7 ms instead of 0.9 on the 12.3"; the pictures are the same to the bit.
+- **The engine in small pages (Linux).** x264 asks the kernel for huge pages for its big
+  buffers, and a page of 2 MB counts whole once anything in it is touched: the engine now
+  keeps to small pages. Both panels' engines: 69 MB instead of 79, a frame as fast.
 - **A panel's loop that ended goes at once.** When a panel's loop ends (it restarts, a panel
   beside the first stops), its theme's renderer and all it drew are freed then and there; a
   cycle kept them until Python's collector came round, which could be long after. A replaced
