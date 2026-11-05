@@ -193,8 +193,10 @@ def test_a_request_is_given_up_after_a_second(monkeypatch):
         seen.append((request.full_url, timeout))
         raise OSError("refused")
 
-    monkeypatch.setattr(lhm.urllib.request, "urlopen", urlopen)
-    monkeypatch.setattr(lhm._DIRECT, "open", urlopen)  # this PC's own server: no proxy
+    import urllib.request
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(lhm._direct(), "open", urlopen)  # this PC's own server: no proxy
     with pytest.raises(OSError):
         lhm.fetch_tree("http://192.0.2.7:8085/data.json")
     provider = lhm.LibreHardwareMonitorProvider({"poll_seconds": 3600})

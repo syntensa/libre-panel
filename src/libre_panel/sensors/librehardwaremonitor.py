@@ -44,8 +44,6 @@ import re
 import sys
 import threading
 import time
-import urllib.parse
-import urllib.request
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
@@ -382,16 +380,27 @@ def _cable(devices: list[_Device], out: dict[str, Reading]) -> tuple[str, ...]:
     return tuple(reading.key[4:] for reading in pins)
 
 
-# This PC's own web server is asked directly: a system proxy would not reach it.
-_DIRECT = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 _LOOPBACK = {"localhost", "127.0.0.1", "::1"}
+
+
+@functools.cache
+def _direct() -> Any:
+    """The opener for this PC's own web server, asked directly: a system proxy would not reach
+    it. Made with the first request: urllib.request brings http, email and ssl along, which the
+    sensor service (it never asks a web server, but takes this module's readings) goes without."""
+    import urllib.request
+
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
 def fetch_tree(url: str, timeout: float = REQUEST_SECONDS) -> dict[str, Any]:
     """The web server's ``data.json``; raises OSError (or ValueError) if it does not answer."""
+    import urllib.parse
+    import urllib.request
+
     request = urllib.request.Request(url, headers={"User-Agent": f"libre-panel/{__version__}"})
     host = urllib.parse.urlsplit(url).hostname or ""
-    opener = _DIRECT.open if host in _LOOPBACK else urllib.request.urlopen
+    opener = _direct().open if host in _LOOPBACK else urllib.request.urlopen
     with opener(request, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
 

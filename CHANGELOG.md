@@ -37,6 +37,10 @@
 - **A lighter sensor service (Windows).** Once LibreHardwareMonitor has looked at all the
   hardware, the service gives back what that took (.NET's and Python's unused memory, the pages
   it no longer touches), and does so every ten minutes.
+- **The sensor service without a web client (Windows).** It took the readings' classes from
+  the module that also asks LibreHardwareMonitor's web server, and with it Python's web
+  client: http, email and ssl (OpenSSL). It goes without them now, its Python 3.9 MB lighter
+  (62 modules instead of 97; measured with the same modules on Linux).
 - **The engine keeps no second copy of the frame.** To tell which blocks of a frame changed
   it kept the whole frame's pixels beside its YUV; it now keeps a hash of each block instead
   (the 12.3": 43 KB instead of 4.1 MB). Both panels' engines: 79 MB instead of 85, the frame's

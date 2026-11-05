@@ -61,6 +61,26 @@ class Clock:
 # -- the protocol ----------------------------------------------------------------------------------
 
 
+def test_the_service_goes_without_the_web_servers_client():
+    """The sensor service takes the readings' classes from librehardwaremonitor.py, but never
+    asks a web server: urllib.request, and with it http, email and ssl (OpenSSL), stay out of
+    its process (some 3.5 MB of Python)."""
+    import subprocess
+
+    modules = ("urllib.request", "http.client", "email", "ssl")
+    code = (
+        "import sys\n"
+        "import libre_panel.sensorservice.core, libre_panel.sensorservice.protocol\n"
+        "import libre_panel.sensorservice.winservice, libre_panel.sensorservice.winpipe\n"
+        "import libre_panel.sensors.lhm_inprocess\n"
+        f"print(sorted(n for n in {modules!r} if n in sys.modules))\n"
+    )
+    done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
+                          timeout=120)  # fmt: skip
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.strip() == "[]"
+
+
 def test_a_message_goes_through_whole():
     message = {"v": 1, "op": "read", "hardware": [CPU], "all": False, "ü": "°C"}
     data = protocol.encode(message, protocol.MAX_REQUEST)
