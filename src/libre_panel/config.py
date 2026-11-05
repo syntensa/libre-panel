@@ -498,11 +498,13 @@ class VideoConfig:
     # over the frame (a transition, the alarm's edge; a message in the built-in card or a look
     # of the volume is one more layer); false: Libre Panel composes every frame
     engine_layers: bool = True
-    # Where the engine encodes: its own encoder. "x264" on the processor; "card" the
-    # graphics card's (AMD's, NVIDIA's or Intel's, through Windows' Media Foundation: Windows
-    # only), the processor then only making the frames' YUV; where the card's cannot start or
-    # stops, x264 encodes and the log says why. An experiment
-    engine_encoder: str = "x264"  # "x264" | "card"
+    # Where the engine encodes: its own encoder. "auto" the graphics card's where it is proven
+    # with the panels (AMD's: the engines' memory a quarter less, the pictures as x264's) and
+    # it opens, else x264 (Windows; elsewhere x264); "x264" on the processor; "card" the
+    # graphics card's whichever it is (AMD's, NVIDIA's or Intel's, through Windows' Media
+    # Foundation: Windows only), the processor then only making the frames' YUV. Where the
+    # card's cannot start or stops, x264 encodes and the log says why
+    engine_encoder: str = "auto"  # "auto" | "x264" | "card"
     # A theme that is one video across the panel goes to it straight from its file: ffmpeg
     # reads and encodes it in one, instead of Libre Panel drawing its frames and ffmpeg
     # encoding those (less of the processor). Frames again as soon as anything else shows: a

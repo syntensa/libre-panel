@@ -202,6 +202,13 @@ def encodes_on_cards(engine: str) -> bool:
     return "cards" in _can(engine)
 
 
+def encodes_on_proven_cards(engine: str) -> bool:
+    """Whether ``engine`` takes ``--encoder auto`` (video.engine_encoder "auto": the graphics
+    card's encoder where it is proven with the panels, AMD's, else x264); one of before does not
+    start with it."""
+    return "proven" in _can(engine)
+
+
 def _layers_of(piece: Piece) -> list[tuple[Image.Image, int, int, int]]:
     """The layers of ``piece`` as the engine lays them (picture, x, y, how), as
     Renderer._composite lays them on the opaque frame."""

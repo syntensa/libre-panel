@@ -40,7 +40,7 @@ use std::process::ExitCode;
 use std::time::Instant;
 
 const USAGE: &str = "usage: libre-panel-engine encode --size WxH --turn 0|180|270 --fps N --crf N \
---kbit N --keyint N [--preset P] [--profile P] [--full] [--x264 name=value:...] [--encoder x264|card] \
+--kbit N --keyint N [--preset P] [--profile P] [--full] [--x264 name=value:...] [--encoder x264|card|auto] \
 [--dump-yuv PATH] [--dump-rgb PATH] [--stats]\n       libre-panel-engine panel --pid HEX [--ports N.N...] [--lead-ms N]\n       \
 libre-panel-engine version";
 
@@ -48,8 +48,9 @@ pub(crate) struct Options {
     pub(crate) size: (usize, usize),
     pub(crate) turn: yuv::Turn,
     pub(crate) settings: x264::Settings,
-    /// The graphics card's encoder (mf.rs, Windows) where it opens, else x264 (encoder.rs).
-    pub(crate) card: bool,
+    /// x264, the graphics card's encoder (mf.rs, Windows) where it opens, or the card's where it
+    /// is proven with the panels (encoder.rs).
+    pub(crate) encoder: encoder::Wanted,
     dump: Option<String>,
     /// Each frame's RGB as the YUV was made of it, whole (the tests': a frame of layers is
     /// composed as Libre Panel composes it).
@@ -65,7 +66,7 @@ pub(crate) fn parse(args: &[String]) -> Result<Options, String> {
     let (mut preset, mut profile) = ("superfast".to_string(), "high".to_string());
     let (mut full, mut extra, mut dump, mut stats) = (false, String::new(), None, false);
     let mut dump_rgb = None;
-    let mut card = false;
+    let mut wanted = encoder::Wanted::X264;
     let mut i = 0;
     let value = |i: usize| {
         args.get(i + 1)
@@ -117,11 +118,8 @@ pub(crate) fn parse(args: &[String]) -> Result<Options, String> {
                 i += 1;
             }
             "--encoder" => {
-                card = match value(i)?.as_str() {
-                    "x264" => false,
-                    "card" => true,
-                    _ => return Err("--encoder is x264 or card".into()),
-                };
+                wanted =
+                    encoder::Wanted::parse(&value(i)?).ok_or("--encoder is x264, card or auto")?;
                 i += 1;
             }
             "--dump-rgb" => {
@@ -160,7 +158,7 @@ pub(crate) fn parse(args: &[String]) -> Result<Options, String> {
         size,
         turn,
         settings,
-        card,
+        encoder: wanted,
         dump,
         dump_rgb,
         stats,
@@ -176,7 +174,7 @@ fn encode(options: Options) -> Result<(), String> {
         yuv::Yuv::new(width, height, turn, full)?
     };
     let mut scene = scene::Scene::new(width, height, frame.block);
-    let mut encoder = encoder::Encoder::open(&options.settings, options.card)?;
+    let mut encoder = encoder::Encoder::open(&options.settings, options.encoder)?;
     let (mb_cols, mb_rows) = frame.macroblocks();
     let mut mb = vec![0u8; mb_cols * mb_rows];
     let mut input = BufReader::with_capacity(1 << 20, io::stdin().lock());
@@ -456,7 +454,8 @@ fn main() -> ExitCode {
             // ring it makes for each value (ring.rs); "views", layers it cuts from sources it
             // keeps, a graph's window from its strip (scene.rs's view); "globes", a turning
             // globe's picture it makes for each step (globe.rs); "cards", --encoder card: the
-            // graphics card's encoder where it opens, else x264 (encoder.rs); "fills", layers
+            // graphics card's encoder where it opens, else x264 (encoder.rs); "proven", --encoder
+            // auto: the card's where it is proven with the panels, else x264; "fills", layers
             // all in one colour, a card's inside (scene.rs's Layer::filled); "laid", layers it
             // lays from sources it keeps, a fan's ring and rotor (scene.rs's laid); "grown",
             // sources it grows from those it keeps, a graph's strip (scene.rs's grown); "bars", a
@@ -464,7 +463,7 @@ fn main() -> ExitCode {
             // at each position and its ring it makes as sources (fan.rs); "masks", a source of a
             // mask and an ink, a text or a letter (scene.rs's masked))
             println!(
-                "libre-panel-engine {} (x264 build {}; panel, scenes, rings, views, globes, cards, fills, laid, grown, bars, fans, masks)",
+                "libre-panel-engine {} (x264 build {}; panel, scenes, rings, views, globes, cards, proven, fills, laid, grown, bars, fans, masks)",
                 env!("CARGO_PKG_VERSION"),
                 x264::build()
             );

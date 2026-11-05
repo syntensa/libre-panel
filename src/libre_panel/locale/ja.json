@@ -2999,7 +2999,7 @@
     "The engine composes the frames": "エンジンが画像を合成",
     "On: it composes each frame from the layers Libre Panel draws, and makes the lit gauges' rings. Off: Libre Panel composes every frame, to compare.": "オン: Libre Panel が描くレイヤーから各フレームを合成し、発光ゲージのリングも作ります。オフ: 比較用に Libre Panel がすべてのフレームを合成します。",
     "The engine's encoder": "エンジンのエンコーダー",
-    "x264 on the processor, or the graphics card's own encoder (AMD's, NVIDIA's or Intel's, through Windows' Media Foundation): the processor then only makes the frames' colours. Where the card's cannot start, x264 encodes, and the log says why.": "プロセッサの x264、またはグラフィックカード自身のエンコーダー（AMD、NVIDIA、Intel のもの。Windows の Media Foundation 経由）。その場合プロセッサはフレームの色を作るだけです。カードのエンコーダーが起動できない場合は x264 がエンコードし、その理由がログに出ます。",
+    "auto: the graphics card's own encoder where it is proven with the panels (AMD's so far), else x264 on the processor. Or always x264, or always the graphics card's (AMD's, NVIDIA's or Intel's, through Windows' Media Foundation): the processor then only makes the frames' colours. Where the card's cannot start, x264 encodes, and the log says why.": "自動: パネルで実証済みのグラフィックカード自身のエンコーダー（現時点では AMD のもの）。それ以外はプロセッサの x264。または常に x264、あるいは常にグラフィックカードのもの（AMD、NVIDIA、Intel のもの。Windows の Media Foundation 経由）。その場合プロセッサはフレームの色を作るだけです。カードのエンコーダーが起動できない場合は x264 がエンコードし、その理由がログに出ます。",
     "Graphics card (experiment)": "グラフィックカード（実験）",
     "Libre Panel's engine": "Libre Panel のエンジン",
     "Fine-tuning for experiments": "実験用の詳細設定",

@@ -204,7 +204,7 @@ impl Stream {
         let o = crate::parse(&rest)?;
         let frame = yuv::Yuv::new(o.size.0, o.size.1, o.turn, o.settings.full)?;
         let scene = Scene::new(o.size.0, o.size.1, frame.block);
-        let encoder = encoder::Encoder::open(&o.settings, o.card)?;
+        let encoder = encoder::Encoder::open(&o.settings, o.encoder)?;
         let (cols, rows) = frame.macroblocks();
         // two frames' time at the stream's rate: 40 ms at 50 a second, 80 at 25
         let lead = lead_ms.unwrap_or_else(|| (2000 / o.settings.fps.max(1)).clamp(30, 100));
