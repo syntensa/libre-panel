@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.1rc1 — 2026-11-05
 
 **Lighter**
 - **No second Python process for a second panel.** Where Libre Panel's engine sends the
