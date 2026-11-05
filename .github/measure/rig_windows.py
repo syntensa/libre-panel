@@ -61,6 +61,10 @@ config = (
 census_at = minutes * 60 - 220  # (the census takes 150 s and more)
 OPEN_AT = 150  # s: the app's pages open
 VIEWS = ("home", "design", "look", "live", "settings/panel", "history", "diagnose")
+# (LP_RIG_STAY: seconds on the last of LP_RIG_VIEWS, "live": the panel's picture, one after the
+# other, as a person who leaves the window open on it)
+VIEWS = tuple(os.environ.get("LP_RIG_VIEWS", ",".join(VIEWS)).split(","))
+STAY_S = float(os.environ.get("LP_RIG_STAY", "20"))
 with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
     home = Path(folder)
     (home / "config.toml").write_text(config, encoding="utf-8")
@@ -124,8 +128,13 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
                     page.wait_for_selector(".view > *", timeout=30_000)
                 except Exception as exc:  # noqa: BLE001
                     print("  (the page", view, "did not show:", exc, ")")
-                page.wait_for_timeout(20_000)
-                sample(f"(the app open: {view})")
+                if view == VIEWS[-1] and STAY_S > 20:  # (a while there, looked at as it goes)
+                    for _ in range(int(STAY_S // 30)):
+                        page.wait_for_timeout(30_000)
+                        sample(f"(the app open: {view})")
+                else:
+                    page.wait_for_timeout(20_000)
+                    sample(f"(the app open: {view})")
             browser.close()
         sample("(the app closed)")
 
