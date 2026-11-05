@@ -150,7 +150,10 @@ Name: "pawnio"; Description: "{cm:PawnIO}"; GroupDescription: "{cm:SystemParts}"
 Name: "perflogusers"; Description: "{cm:PerfLogUsers}"; GroupDescription: "{cm:SystemParts}"; Check: IsAdminInstallMode
 
 [InstallDelete]
+; the sensor service's folder as an older version had it (Libre Panel's Python service), and its
+; libraries: an update brings them anew
 Type: filesandordirs; Name: "{app}\sensors\_internal"
+Type: filesandordirs; Name: "{app}\sensors\lhm"
 
 [Run]
 ; PawnIO first: the service looks for it when it starts

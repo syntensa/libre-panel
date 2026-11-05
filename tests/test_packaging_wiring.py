@@ -237,6 +237,29 @@ def test_own_loader_fails_where_the_loader_is_the_one_pyinstaller_ships(tmp_path
     assert own_loader.main(str(wheel)) == 1
 
 
+def test_the_release_builds_the_dotnet_sensor_service_and_the_spec_takes_it():
+    """The sensor service of the Windows downloads is the .NET program of sensorhost/, built after
+    LibreHardwareMonitor's libraries are fetched and before the programs, with the reference
+    assemblies pinned, as CI's job sensor-host builds and tests it; the spec takes its folder as
+    "sensors", and the setup clears its libraries before an update."""
+    workflow = read(".github", "workflows", "release.yml")
+    fetch = workflow.index("python packaging/windows/fetch_lhm.py")
+    host = workflow.index("dotnet build sensorhost -c Release -p:RestoreLockedMode=true")
+    build = workflow.index("run: pyinstaller --noconfirm --clean packaging/pyinstaller")
+    smoke = workflow.index("run: dist/libre-panel/sensors/libre-panel-sensors.exe --check")
+    assert fetch < host < build < smoke
+    assert '-p:InformationalVersion="$VERSION"' in workflow  # (its version: the release's)
+    ci = read(".github", "workflows", "ci.yml")
+    assert "dotnet build sensorhost -c Release -p:RestoreLockedMode=true" in ci
+    spec = read("packaging", "pyinstaller", "libre-panel.spec")
+    assert 'host = ROOT / "sensorhost" / "bin" / "Release"' in spec
+    assert 'copytree(host, target, ignore=shutil.ignore_patterns("logs"))' in spec
+    assert 'Name: "{app}\\sensors\\lhm"' in read("packaging", "windows", "libre-panel.iss")
+    project = read("sensorhost", "LibrePanel.Sensors.csproj")
+    assert "<AssemblyName>libre-panel-sensors</AssemblyName>" in project
+    assert "<Company>Libre Panel contributors</Company>" in project
+
+
 def test_the_programs_are_built_without_docstrings_and_their_help_does_not_need_one():
     """Python's code in the downloads is compiled as by ``python -OO`` (each process holds less
     of it): the command line's help then still says what Libre Panel is."""

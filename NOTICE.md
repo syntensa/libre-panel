@@ -144,7 +144,7 @@ download.
 
 The Windows downloads (setup and portable zip) carry LibreHardwareMonitor's .NET
 library and the libraries it needs in the folder `_internal\lhm` (and once more in
-`sensors\_internal\lhm`, for the sensor service), so that nothing else has to be
+`sensors\lhm`, for the sensor service), so that nothing else has to be
 installed to read the GPU, temperatures, power and fans. They are
 the files that NuGet publishes, unchanged, for the .NET Framework. They are not in
 this repository: `packaging/windows/fetch_lhm.py` fetches them when a download is

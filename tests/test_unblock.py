@@ -3,6 +3,7 @@ in a stream "<file>:Zone.Identifier"; here a file of that name stands in for it.
 
 import sys
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 from libre_panel import unblock
 from libre_panel.sensorservice import setup
@@ -47,6 +48,23 @@ def test_the_build_lets_dotnet_load_marked_libraries_too(tmp_path):
     for config in made:
         node = ET.parse(config).getroot().find("runtime/loadFromRemoteSources")
         assert node is not None and node.get("enabled") == "true"
+
+
+def test_a_program_with_a_config_of_its_own_keeps_it(tmp_path):
+    for program in unblock.PROGRAMS:
+        (tmp_path / program).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / program).touch()
+    own = tmp_path / "sensors" / "libre-panel-sensors.exe.config"
+    own.write_text("<configuration/>", encoding="utf-8")
+    made = unblock.write_netfx_configs(tmp_path)
+    assert own not in made and own.read_text(encoding="utf-8") == "<configuration/>"
+    assert len(made) == len(unblock.PROGRAMS) - 1
+
+
+def test_the_dotnet_sensor_service_lets_dotnet_load_marked_libraries_too():
+    config = Path(__file__).resolve().parent.parent / "sensorhost" / "App.config"
+    node = ET.parse(config).getroot().find("runtime/loadFromRemoteSources")
+    assert node is not None and node.get("enabled") == "true"
 
 
 def test_the_service_copied_to_program_files_loses_the_mark(tmp_path, monkeypatch):

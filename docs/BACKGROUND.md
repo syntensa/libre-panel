@@ -249,13 +249,15 @@ Sensors* shows it and removes it; the uninstaller removes it too. In the default
 `[sensors.librehardwaremonitor]` Libre Panel reads LibreHardwareMonitor through it wherever
 it is installed, and reads it inside Libre Panel meanwhile if it does not answer.
 
-**What runs as SYSTEM.** The service's program and nothing else: Python, pythonnet,
-LibreHardwareMonitor's .NET libraries (the files NuGet publishes, pinned by SHA-256 like the
-rest of the download) and Libre Panel's code that reads them and answers on the pipe. It is
-a program of its own, built without plugins, renderer, web server or window. It takes no
+**What runs as SYSTEM.** The service's program and nothing else: a small .NET Framework
+program of Libre Panel's own (`sensorhost/` in the source) and LibreHardwareMonitor's .NET
+libraries beside it in `sensors\lhm` (the files NuGet publishes, pinned by SHA-256 like the
+rest of the download). No Python and no pythonnet: LibreHardwareMonitor and the code that
+reads it and answers on the pipe, without plugins, renderer, web server or window. It takes no
 arguments and reads no settings, no `config.toml`, nothing of any user's folder: what it does
 is fixed in its program. It loads from its own folder only, and writes only its log, in
-`sensors\logs` next to its program.
+`sensors\logs` next to its program. (A build without .NET's tools makes Libre Panel's Python
+service instead, which does the same on the same pipe.)
 
 **It only reads.** It opens LibreHardwareMonitor on every kind of hardware it knows (CPU,
 graphics cards, memory, mainboard and its chips, drives, network, fan controllers and pumps,

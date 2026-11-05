@@ -37,6 +37,12 @@
 - **A lighter sensor service (Windows).** Once LibreHardwareMonitor has looked at all the
   hardware, the service gives back what that took (.NET's and Python's unused memory, the pages
   it no longer touches), and does so every ten minutes.
+- **The sensor service without Python (Windows).** It is a small .NET program of its own now
+  that hosts LibreHardwareMonitor and answers on the same pipe, with the same rights, the same
+  answers and the same sensors; Python and pythonnet are no longer in it, and its folder is
+  some megabytes instead of tens. On Windows CI's runners, asked for all their hardware once a
+  second: 10.3 MB of private memory instead of 32.9 (the Python service run from its source),
+  0.42 % of a core instead of 0.73.
 - **The sensor service without a web client (Windows).** It took the readings' classes from
   the module that also asks LibreHardwareMonitor's web server, and with it Python's web
   client: http, email and ssl (OpenSSL). It goes without them now, its Python 3.9 MB lighter

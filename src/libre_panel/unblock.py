@@ -43,12 +43,13 @@ PROGRAMS = ("libre-panel.exe", "LibrePanel.exe", "sensors/libre-panel-sensors.ex
 
 
 def write_netfx_configs(folder: Path) -> list[Path]:
-    """The ``.exe.config`` of each program of the build in ``folder`` (packaging); those made."""
+    """The ``.exe.config`` of each program of the build in ``folder`` (packaging) that has none
+    of its own (the .NET sensor service brings one: sensorhost/App.config); those made."""
     made = []
     for program in PROGRAMS:
         exe = folder / program
-        if exe.is_file():
-            config = exe.with_name(exe.name + ".config")
+        config = exe.with_name(exe.name + ".config")
+        if exe.is_file() and not config.exists():
             config.write_text(NETFX_CONFIG, encoding="utf-8")
             made.append(config)
     return made

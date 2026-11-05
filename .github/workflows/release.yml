@@ -119,6 +119,18 @@ jobs:
         run: |
           pip install ".[lhm,window]"
           python packaging/windows/fetch_lhm.py
+      - name: The sensor service (Windows)
+        # A .NET program of its own (sensorhost/: no Python, no pythonnet), built against the
+        # libraries just fetched, which go beside it into "lhm"; the spec puts the folder into
+        # the downloads as "sensors". The .NET Framework's reference assemblies come from NuGet,
+        # pinned in sensorhost/packages.lock.json. CI's job sensor-host tests it against the
+        # Python service.
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          dotnet --version
+          dotnet build sensorhost -c Release -p:RestoreLockedMode=true \
+            -p:InformationalVersion="$VERSION" -p:FileVersion="$NUMERIC"
       - name: ffmpeg, PresentMon and PawnIO's installer
         # From the pages of their projects, each file checked against the SHA-256 pinned in the
         # script, ffmpeg also against the licence it is passed on under (GPL, with libx264, not

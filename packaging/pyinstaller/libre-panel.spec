@@ -2,7 +2,8 @@
 #
 # libre-panel(.exe)   the command-line program (all commands)
 # LibrePanel.exe      Windows: the tray app without a console window
-# sensors\libre-panel-sensors.exe   Windows: the sensor service, a program of its own
+# sensors\libre-panel-sensors.exe   Windows: the sensor service, a program of its own (the .NET
+#                                   one of sensorhost/ where release.yml built it)
 import importlib.util
 import re
 import shutil
@@ -193,11 +194,21 @@ if (tools / "SOURCES.txt").is_file():
     program_folder = Path(DISTPATH) / "libre-panel"  # noqa: F821 - provided by PyInstaller
     shutil.copytree(tools, program_folder / TOOLS_FOLDER, dirs_exist_ok=True)
 
-if sys.platform == "win32":
-    # The sensor service (libre_panel/sensorservice) runs as LocalSystem, so it is a program of
-    # its own with only what it needs: Python, pythonnet and LibreHardwareMonitor's libraries,
-    # no plugins, no renderer, no GUI. It goes into the folder "sensors" of the program's
-    # folder, which libre-panel system-setup copies to Program Files for the portable zip.
+# The sensor service (Windows) runs as LocalSystem, so it is a program of its own with only what
+# it needs, in the folder "sensors" of the program's folder, which libre-panel system-setup
+# copies to Program Files for the portable zip. Where release.yml built it, it is the .NET
+# program of sensorhost/ (no Python, no pythonnet: a fraction of the memory) with
+# LibreHardwareMonitor's libraries beside it in "lhm"; else Libre Panel's Python one.
+host = ROOT / "sensorhost" / "bin" / "Release"
+host_built = sys.platform == "win32" and (host / "libre-panel-sensors.exe").is_file()
+if host_built:
+    target = Path(DISTPATH) / "libre-panel" / "sensors"  # noqa: F821
+    if target.exists():
+        shutil.rmtree(target)
+    shutil.copytree(host, target, ignore=shutil.ignore_patterns("logs"))
+if sys.platform == "win32" and not host_built:
+    # Libre Panel's own sensor service (libre_panel/sensorservice): Python, pythonnet and
+    # LibreHardwareMonitor's libraries, no plugins, no renderer, no GUI.
     service_datas, service_binaries = [], []
     service_hidden = ["libre_panel.sensorservice.winservice", "winreg"]
     for package in ("pythonnet", "clr_loader"):
@@ -243,8 +254,10 @@ if sys.platform == "win32":
         shutil.rmtree(target)
     shutil.move(str(built), str(target))
 
+if sys.platform == "win32":
     # .NET loads the programs' libraries also where Windows marked them as downloaded (a zip
-    # unpacked by Explorer) and the mark cannot be taken off (libre_panel.unblock)
+    # unpacked by Explorer) and the mark cannot be taken off (libre_panel.unblock); the .NET
+    # sensor service brings a config of its own that says so too
     from libre_panel.unblock import write_netfx_configs
 
     write_netfx_configs(Path(DISTPATH) / "libre-panel")  # noqa: F821
