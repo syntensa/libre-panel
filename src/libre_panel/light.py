@@ -12,7 +12,8 @@ did, and the app draws its pictures again when it asks. That happens light mode 
 
 Light mode also empties the caches that cannot tell what was used (symbols, the moon) and gives
 the memory back to the system; Windows also takes back the pages the panel does not touch (the
-"Memory" Task Manager shows), which come back as the panel touches them.
+"Memory" Task Manager shows), which come back as the panel touches them. On Linux the C heap's
+free pages go back again at each look while the app stays closed (:func:`tidy`).
 """
 
 from __future__ import annotations
@@ -104,6 +105,23 @@ def give_back(platform: str = sys.platform) -> None:
         log.debug("the memory stays with the program: %s", exc)
 
 
+def tidy(platform: str = sys.platform) -> None:
+    """The C heap's free pages back to the system (Linux, glibc), at each look while the app
+    is closed in light mode: a frame's work frees pictures and buffers between those that stay,
+    and glibc keeps those pages for the program. Lumen on the 12.3" and the 9.2": the main
+    process 90 MB instead of 100, each time some milliseconds, no picture later for it.
+    Elsewhere nothing (musl has no such call; Windows' heap is another, and its working set is
+    trimmed once, as the app is closed)."""
+    if not platform.startswith("linux"):
+        return
+    try:
+        libc = ctypes.CDLL(None)
+        if hasattr(libc, "gnu_get_libc_version"):
+            libc.malloc_trim(0)
+    except (OSError, AttributeError, TypeError) as exc:
+        log.debug("the heap stays as it is: %s", exc)
+
+
 def release(also: Callable[[], None] | None = None) -> None:
     """Let go of what only the app needs (``also``: the app's own, its pictures of the themes)."""
     empty_caches()
@@ -139,7 +157,9 @@ class Watch:
     goes (``release``). Each once per time the app was open (``last_request()``: when a page of
     it last asked something, monotonic seconds; None: never), and once for an app never opened
     since the watch began (Libre Panel started at login: what only its start touched went on
-    holding the memory, on Windows the pages of its start too)."""
+    holding the memory, on Windows the pages of its start too). After that each look, while
+    the app stays closed and light mode on, gives back what the panel's frames freed meanwhile
+    (``tidy``)."""
 
     def __init__(
         self,
@@ -151,10 +171,12 @@ class Watch:
         mark: Callable[[], None] = mark,
         shed: Callable[[], None] = shed,
         unmark: Callable[[], None] = unmark,
+        tidy: Callable[[], None] = tidy,
     ) -> None:
         self.light, self.last_request = light, last_request
         self.release, self.clock, self.closed = release, clock, closed
         self.mark, self.shed, self.unmark = mark, shed, unmark
+        self.tidy = tidy
         self.began = clock()  # (an app never opened is closed since then)
         self.marking = False  # the caches note what is used (between closed and shed)
         self.released_for: Any = object()  # the request it released after (none yet)
@@ -184,7 +206,10 @@ class Watch:
             self.shed_for = last
             self.marking = False
             self.shed()
-        if last == self.released_for or not self.light():
+        if not self.light():
+            return False
+        if last == self.released_for:  # released: what the panel's frames freed since goes too
+            self.tidy()
             return False
         self.released_for = last
         self.release()

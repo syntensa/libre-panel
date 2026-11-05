@@ -29,6 +29,11 @@
 - **Light mode from the start.** Started at login with its window never opened, Libre Panel
   now also lets go a minute after the start of what only its start needed, and gives that memory
   back (on Windows the pages of its working set it no longer touches).
+- **The heap tidied while the app is closed (Linux).** In light mode, with the window closed,
+  Libre Panel now gives the C heap's free pages back every fifteen seconds, not only once:
+  glibc keeps what a frame's work freed for the program otherwise. The 12.3" and the 9.2" with
+  Lumen: the main process 90 MB instead of 100, some milliseconds each time, and the pictures
+  as punctual.
 - **A lighter sensor service (Windows).** Once LibreHardwareMonitor has looked at all the
   hardware, the service gives back what that took (.NET's and Python's unused memory, the pages
   it no longer touches), and does so every ten minutes.

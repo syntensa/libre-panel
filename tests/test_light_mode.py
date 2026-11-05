@@ -24,7 +24,7 @@ class Clock:
 
 def watch(on=True, last=None):
     state = {"on": on, "last": last, "released": 0, "closed": 0, "marked": 0, "shed": 0,
-             "unmarked": 0}  # fmt: skip
+             "unmarked": 0, "tidied": 0}  # fmt: skip
 
     def count(name):
         return lambda: state.__setitem__(name, state[name] + 1)
@@ -39,6 +39,7 @@ def watch(on=True, last=None):
         mark=count("marked"),
         shed=count("shed"),
         unmark=count("unmarked"),
+        tidy=count("tidied"),
     )
     return w, state, clock
 
@@ -81,6 +82,60 @@ def test_the_memory_goes_a_minute_after_the_app_was_closed_and_once():
     w.look()
     clock.now += light.LOOK_S
     assert w.look() and state["released"] == 2  # ... and closed
+
+
+def test_the_heap_is_tidied_at_each_look_while_the_app_stays_closed_in_light_mode():
+    """After the memory went back (the release tidies itself), each look while the app stays
+    closed gives back what the panel's frames freed since; not while it is open, nor with light
+    mode off."""
+    w, state, clock = watch(last=1000.0)
+    clock.now = 1000 + light.IDLE_S
+    w.look()
+    clock.now += light.LOOK_S
+    assert w.look() and state["released"] == 1 and state["tidied"] == 0
+    for n in (1, 2, 3):
+        clock.now += light.LOOK_S
+        assert not w.look() and state["tidied"] == n
+    state["last"] = clock.now  # opened again: nothing while it is open
+    clock.now += light.LOOK_S
+    w.look()
+    assert state["tidied"] == 3
+    state["on"] = False  # light mode off, the app closed again: nothing either
+    clock.now += light.IDLE_S + 3 * light.LOOK_S
+    for _ in range(4):
+        clock.now += light.LOOK_S
+        w.look()
+    assert state["tidied"] == 3 and state["released"] == 1
+
+
+def test_the_tidy_is_glibc_s_trim_on_linux_and_nothing_elsewhere(monkeypatch):
+    calls = []
+
+    class Glibc:
+        gnu_get_libc_version = object()
+
+        def malloc_trim(self, pad):
+            calls.append(pad)
+            return 1
+
+    class Musl:  # (no glibc: no trim to ask for)
+        pass
+
+    monkeypatch.setattr(light.ctypes, "CDLL", lambda name: Glibc())
+    light.tidy("win32")
+    assert calls == []
+    light.tidy("linux")
+    assert calls == [0]
+    monkeypatch.setattr(light.ctypes, "CDLL", lambda name: Musl())
+    light.tidy("linux")
+    assert calls == [0]
+
+    def windows_cdll(name):  # (as Windows' ctypes takes a library named None)
+        raise TypeError("argument of type 'NoneType' is not iterable")
+
+    monkeypatch.setattr(light.ctypes, "CDLL", windows_cdll)
+    light.tidy("linux")  # (no error)
+    assert calls == [0]
 
 
 def test_the_caches_keep_all_when_the_app_is_opened_again_before_they_let_go():

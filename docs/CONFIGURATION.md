@@ -219,7 +219,9 @@ Windows also takes back the pages the panel does not touch, which is what Task M
 (they come back as the panel touches them). The app takes a moment longer to open again.
 
 On Linux Libre Panel keeps its memory in two heaps for all its threads, not up to eight per
-core (glibc's `MALLOC_ARENA_MAX`; set in the environment, yours holds).
+core (glibc's `MALLOC_ARENA_MAX`; set in the environment, yours holds). In light mode, while the
+window stays closed, it also gives the heaps' free pages back every fifteen seconds: glibc
+keeps what a frame's work freed for the program otherwise.
 
 ## New versions
 
