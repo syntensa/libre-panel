@@ -123,8 +123,9 @@ def ffmpeg_can(ffmpeg: str, name: str) -> bool:
 
 
 def _quiet() -> dict[str, Any]:
+    """No console for ffmpeg on Windows (devices/h264.py's DETACHED): it captures for long."""
     if sys.platform == "win32":
-        return {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0)}
+        return {"creationflags": getattr(subprocess, "DETACHED_PROCESS", 0)}
     return {}
 
 

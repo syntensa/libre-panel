@@ -39,6 +39,7 @@ from libre_panel import light, winsession
 from libre_panel.devices.base import DeviceError, leave_place, take_place
 from libre_panel.devices.h264 import (
     ABOVE_NORMAL,
+    DETACHED,
     ENGINE_NOTE,
     NATIVE,
     NO_WINDOW,
@@ -626,7 +627,7 @@ class EngineLink:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 bufsize=0,
-                creationflags=NO_WINDOW | ABOVE_NORMAL,
+                creationflags=DETACHED | ABOVE_NORMAL,
                 **({"env": {**os.environ, **mapped}} if mapped else {}),
             )
         except OSError as exc:

@@ -685,7 +685,8 @@ class PresentMonProvider(SensorProvider):
             process = self._popen(
                 command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                 encoding="utf-8", errors="replace", bufsize=1,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                # (no console host beside it: devices/h264.py's DETACHED)
+                creationflags=getattr(subprocess, "DETACHED_PROCESS", 0),
             )  # fmt: skip
         except OSError as exc:
             self._say(f"PresentMon could not start: {exc}")

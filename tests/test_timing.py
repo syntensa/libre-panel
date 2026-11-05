@@ -156,13 +156,32 @@ def test_the_panels_encoder_starts_above_normal_on_windows(monkeypatch):
         asked.update(options)
         raise OSError("no ffmpeg here")
 
-    monkeypatch.setattr(h264, "NO_WINDOW", 0x08000000)
+    monkeypatch.setattr(h264, "DETACHED", 0x8)
     monkeypatch.setattr(h264, "ABOVE_NORMAL", 0x8000)  # (as on Windows)
     try:
         h264.Encoder(["ffmpeg"], (16, 16), lambda picture: None, popen=popen)
     except h264.DeviceError:
         pass
-    assert asked["creationflags"] == 0x08000000 | 0x8000
+    # (no console, so no console host beside it either: CREATE_NO_WINDOW still had one)
+    assert asked["creationflags"] == 0x8 | 0x8000
+
+
+def test_the_engine_starts_without_a_console_above_normal_on_windows(monkeypatch):
+    from libre_panel.devices import engine
+
+    asked = {}
+
+    def popen(command, **options):
+        asked.update(options)
+        raise OSError("no engine here")
+
+    monkeypatch.setattr(engine, "DETACHED", 0x8)
+    monkeypatch.setattr(engine, "ABOVE_NORMAL", 0x8000)  # (as on Windows)
+    try:
+        engine.EngineLink(["libre-panel-engine", "panel"], popen=popen)
+    except engine.DeviceError:
+        pass
+    assert asked["creationflags"] == 0x8 | 0x8000
 
 
 def test_threads_that_feed_the_panel_go_above_normal_on_windows():

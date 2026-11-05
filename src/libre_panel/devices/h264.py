@@ -157,6 +157,10 @@ _OPENS_PICTURE = {6, 7, 8, 9, 14, 15, 16, 17, 18}
 # Windows: a console program started from a program without a console (the
 # tray app) gets a black window of its own unless told not to.
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+# ... and the programs that run beside Libre Panel for long (its engine, ffmpeg, PresentMon) no
+# console at all: one without a window still had a console host of its own (conhost.exe, some
+# 7 MB each, three of them in a load report of 0.7). They talk through pipes, never to a console.
+DETACHED = getattr(subprocess, "DETACHED_PROCESS", 0)
 # the panel's encoder above normal priority (Windows): with a game on every core it got its turn
 # too late, and so did the panel's frames (timing.py does the same for Libre Panel itself)
 ABOVE_NORMAL = getattr(subprocess, "ABOVE_NORMAL_PRIORITY_CLASS", 0)
@@ -1035,7 +1039,7 @@ class Encoder:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 bufsize=0,
-                creationflags=NO_WINDOW | ABOVE_NORMAL,
+                creationflags=DETACHED | ABOVE_NORMAL,
             )
         except OSError as exc:
             if wide is not None:
