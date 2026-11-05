@@ -434,6 +434,34 @@ class _Link:
         self.retry_at = now + delay
 
 
+class _Versions:
+    """The version of a theme a panel shows (:func:`theme_for`, :func:`pair_version`,
+    :func:`unpaired_version`: they look into the theme folders), looked up again after
+    :attr:`LOOK_S`: a panel's loop asks for it every frame, and each lookup asked the disk
+    (Lumen's version for the 12.3" beside its companion: some 0.2 ms a frame on Linux). A
+    version installed meanwhile is shown within :attr:`LOOK_S`."""
+
+    LOOK_S = 1.0
+    MOST = 64  # names kept at most (a theme in turn, a page, a mode: each one name)
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
+        self._clock = clock
+        self._known: dict[tuple[Any, ...], tuple[str, float]] = {}
+
+    def of(self, named: str, orientation: str, size: tuple[int, int] | None, paired: bool) -> str:
+        key = (named, orientation, size, paired)
+        now = self._clock()
+        hit = self._known.get(key)
+        if hit is not None and 0 <= now - hit[1] < self.LOOK_S:
+            return hit[0]
+        shown = theme_for(named, orientation, size)
+        name = (pair_version(shown) if paired else unpaired_version(shown)) or shown
+        if len(self._known) >= self.MOST:
+            self._known.clear()
+        self._known[key] = (name, now)
+        return name
+
+
 def _theme_name(
     config: Config,
     host: Any,
@@ -443,6 +471,7 @@ def _theme_name(
     mode: str | None = None,
     paired: bool = False,
     first: str | None = None,
+    versions: _Versions | None = None,
 ) -> str:
     """A theme a service shows, else the active mode's theme, else the step of the screens in
     turn that is due (``rotation`` follows them), else config.toml's; where that names none,
@@ -452,8 +481,11 @@ def _theme_name(
     its pair version, which leaves out what the companion shows (Lumen without the fans). A
     panel beside the first, without a host, has the first panel's ``mode``: the theme of its
     own for it ([[panels]] game_theme); a companion without one follows the theme the
-    first panel shows (``first``: Arena Companion beside Arena)."""
+    first panel shows (``first``: Arena Companion beside Arena). ``versions``: where the
+    version was looked up a moment ago (a panel's loop, every frame: :class:`_Versions`)."""
     named = _named(config, host, default, rotation, mode, first)
+    if versions is not None:
+        return versions.of(named, config.device.orientation, panel_size(config, reported), paired)
     shown = theme_for(named, config.device.orientation, panel_size(config, reported))
     if paired:
         return pair_version(shown) or shown
@@ -881,6 +913,7 @@ class MainLoop:
         )
         # the screens in turn, on the loop's clock
         self.rotation = Rotation(clock)
+        self._versions = _Versions()  # (each frame asks which version of the theme)
         self.pages = modes.PageSwitch(clock)  # music's page, the idle clock's
         shown = (
             _theme_name(
@@ -1399,8 +1432,9 @@ class MainLoop:
             if host is not None:
                 self._follow_pages(config, host, snapshot)
             wanted = _theme_name(
-                config, host, default, self.rotation, reported, self._mode(), **self._pairing()
-            )
+                config, host, default, self.rotation, reported, self._mode(),
+                **self._pairing(), versions=self._versions,
+            )  # fmt: skip
             status.sequence = _sequence_state(config, self.rotation)
             status.size = panel_size(config, reported)
             status.model = getattr(panel_model(config.device, reported), "id", "")

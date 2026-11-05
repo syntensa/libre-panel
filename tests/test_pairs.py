@@ -61,6 +61,34 @@ def test_the_first_panel_shows_the_pair_version_while_a_companion_runs():
     assert shown(nimbus, paired=True) == shown(nimbus)  # one without a pair version: as ever
 
 
+def test_a_panels_loop_looks_up_its_themes_version_once_a_second(monkeypatch):
+    """The loop asks every frame which version of the theme to show; the theme folders are
+    looked into once a second (a version installed meanwhile is shown a second later), and at
+    once for another name, mounting, size or pairing; the answer is the one asked directly."""
+    calls = []
+    real_theme_for = app.theme_for
+
+    def counted(*args):
+        calls.append(args)
+        return real_theme_for(*args)
+
+    monkeypatch.setattr(app, "theme_for", counted)
+    now = [100.0]
+    versions = app._Versions(clock=lambda: now[0])
+    config = parse_config({"theme": "lumen", "device": {"model": "turing-12.3-usb"}})
+    paired = app._theme_name(config, None, paired=True)
+    calls.clear()
+    for _ in range(25):  # a second's frames
+        assert app._theme_name(config, None, paired=True, versions=versions) == paired
+        now[0] += 0.03
+    assert len(calls) == 1 and paired == "lumen-pair-1920x720"
+    now[0] += versions.LOOK_S
+    app._theme_name(config, None, paired=True, versions=versions)
+    assert len(calls) == 2  # (looked again)
+    alone = app._theme_name(config, None, versions=versions)
+    assert alone == "lumen-1920x720" and len(calls) == 3  # (not paired: another answer)
+
+
 def test_a_companion_beside_the_first_panel_follows_its_page():
     config = parse_config({
         "theme": "lumen", "device": {"model": "turing-12.3-usb"},

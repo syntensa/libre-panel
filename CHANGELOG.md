@@ -62,6 +62,13 @@
   asserts (as by `python -OO`): every process of Libre Panel's holds less code (its own modules
   alone: 2.6 MB less).
 
+**Faster**
+- **The theme's version looked up once a second.** Each frame, a panel's loop asked the theme
+  folders which version of its theme to show (for its size, beside a companion); it now
+  looks again once a second (a version installed meanwhile is shown a second later). The
+  12.3" beside its companion: 1.7 µs a frame instead of 180, the 9.2" 1.2 instead of 62
+  (more on Windows, where each look into a folder costs more).
+
 **Diagnose**
 - **Where the memory is.** *Live → Diagnose → Load on this PC* (and its text) also says what
   the main process holds: its pictures and those the caches keep, the readings' history, the C
