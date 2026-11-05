@@ -1,4 +1,6 @@
-"""A panel beside the first in a process of its own (``[[panels]]``, in the background app).
+"""A panel beside the first in a process of its own (``[[panels]]``, in the background app),
+where Libre Panel sends the pictures itself; where its engine sends them, the panels share the
+app's process instead (app._MorePanels: a frame drawn late still goes on its time).
 
 Two loops in one process share its interpreter: a frame gives it up a hundred times (each
 picture pasted, each part composed) and waits each time for the other loop to give it back, so

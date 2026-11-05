@@ -1868,8 +1868,13 @@ class _MorePanels:
         self.hub, self.status, self.quitting = hub, status, quitting
         self.host = host  # the first panel's: the mode it is in (a game, music) for the others
         self.beats = beats  # and where its fans stand, for the same fan in step on every panel
-        # each in a process of its own (the background app: panel_process.py), else a thread
+        # each in a process of its own (the background app: panel_process.py) where Libre Panel
+        # sends the panels' pictures itself, else a thread: where the engine sends them a frame
+        # drawn late costs no beat (its lead), so the panels share this process and no second
+        # interpreter is started (on Linux the 12.3" and the 9.2" with Lumen 59 MB less, the
+        # pictures as punctual: :meth:`_apart_for`)
         self.apart = apart
+        self._apart_now: bool | None = None  # (what the config said last: a change restarts)
         self._runs: dict[int, Any] = {}  # a thread and its stop, or a PanelProcess
         self._seen: Config | None = None
         self._checked = 0.0
@@ -1882,14 +1887,30 @@ class _MorePanels:
         if config is self._seen:
             return
         self._seen = config
+        apart = self._apart_for(config)
+        if self._apart_now is not None and apart != self._apart_now and self._runs:
+            way = "in processes of their own" if apart else "in the app's own process"
+            log.info("the panels beside the first run %s now", way)
+            self._end(list(self._runs))  # (started again below, the other way)
+        self._apart_now = apart
         wanted = {n for n, panel in enumerate(config.panels) if panel.on}
         for n in sorted(set(self._runs) - wanted):
             self._end([n])
         for n in sorted(wanted - set(self._runs)):
             self._start(n, config)
 
+    def _apart_for(self, config: Config) -> bool:
+        """Whether the panels beside the first get a process each: in the background app
+        (:attr:`apart`), unless Libre Panel's engine sends the pictures (config.toml's
+        ``[video]``, which the panels share: devices/engine.py's ``sends_pictures``)."""
+        if not self.apart or config.path is None:
+            return False
+        from libre_panel.devices.engine import sends_pictures
+
+        return not sends_pictures(config.device.video)
+
     def _start(self, n: int, config: Config) -> None:
-        if self.apart and config.path is not None and n not in self._in_threads:
+        if n not in self._in_threads and self._apart_for(config):
             from libre_panel.panel_process import PanelProcess, RemoteStatus
 
             remote = RemoteStatus()

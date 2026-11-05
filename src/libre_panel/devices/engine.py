@@ -46,6 +46,8 @@ from libre_panel.devices.h264 import (
     _close_pipe,
     _wide_pipe,
     _widen,
+    auto_engine,
+    find_engine,
 )
 from libre_panel.i18n import t
 from libre_panel.render import moving
@@ -108,6 +110,24 @@ def can_send(engine: str) -> bool:
     """Whether ``engine`` can have the panel (``libre-panel-engine panel``): an engine of
     stage 1a encodes only."""
     return "panel" in _can(engine)
+
+
+def sends_pictures(video: Any) -> bool:
+    """Whether Libre Panel's engine has the video panels of these ``[video]`` settings and sends
+    them their pictures: encoder "native", or "auto" with the download's engine
+    (h264.auto_engine), and ``engine_sends``. Then a frame drawn late costs no beat (the
+    engine's lead), and the panels beside the first share the app's process
+    (app._MorePanels)."""
+    if not getattr(video, "engine_sends", True):
+        return False
+    encoder = getattr(video, "encoder", "auto")
+    if encoder == NATIVE:
+        engine = find_engine()
+    elif encoder == "auto":
+        engine = auto_engine()
+    else:
+        return False
+    return bool(engine) and can_send(engine)
 
 
 def takes_scenes(engine: str) -> bool:

@@ -600,9 +600,13 @@ Where the memory goes:
   a virtual panel in the video mode at 30 frames a second, Lumen's loop on the 12.3" takes some
   110 MB of private memory, Lumen Companion's on the 9.2" some 75, Arena's 93 and 78, Encore's
   84; some 40 of them are Python, numpy and Pillow, which every process of Libre Panel loads.
-- **A panel beside the first** is a process of its own that loads only what it draws with: no
-  app server, no sensor source (the first panel's process sends it the readings), no tray, no
-  window and no .NET. It takes what its loop takes.
+- **A panel beside the first** runs in the main process where Libre Panel's engine sends the
+  pictures (the default with the downloads): a frame drawn a little late still goes on its time
+  (the engine's lead), so the panels share one interpreter (the 12.3" and the 9.2" with Lumen on
+  Linux: 213 MB in all instead of 270). Where Libre Panel sends the pictures itself (x264 through
+  ffmpeg, an engine of before), each such panel is a process of its own that loads only what it
+  draws with: no app server, no sensor source (the first panel's process sends it the readings),
+  no tray, no window and no .NET. It takes what its loop takes.
 - **The main process** holds the first panel's loop, the sensors and the app's server. The
   pictures the app drew of every theme (Start) go a minute after its window was closed; with
   [light mode](CONFIGURATION.md#light-mode) the caches the app filled while it was open go too,

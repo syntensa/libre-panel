@@ -116,6 +116,72 @@ def test_a_panel_whose_process_cannot_start_runs_in_a_thread(tmp_path, monkeypat
         more.close()
 
 
+def test_panels_share_the_app_s_process_where_the_engine_sends_their_pictures(
+    tmp_path, monkeypatch, caplog
+):
+    """In the background app a panel beside the first gets a process of its own only where
+    Libre Panel sends the pictures itself: where the engine sends them (its lead takes a frame
+    drawn late), the panels share the app's process and no second interpreter is started. A
+    change of the encoder starts them again the other way."""
+    from libre_panel import panel_process
+    from libre_panel.devices import engine
+
+    started = []
+
+    class Started:  # (a PanelProcess that only says it was started)
+        heard = True
+
+        def __init__(self, n, *args):
+            started.append(n)
+
+        def alive(self):
+            return True
+
+        def stop(self):
+            pass
+
+        def join(self, seconds):
+            return True
+
+    monkeypatch.setattr(panel_process, "PanelProcess", Started)
+    monkeypatch.setenv("LIBRE_PANEL_HOME", str(tmp_path))
+    path = tmp_path / "config.toml"
+    path.write_text(CONFIG, encoding="utf-8")
+    sends = {"now": True}
+    monkeypatch.setattr(engine, "sends_pictures", lambda video: sends["now"])
+    more = app._MorePanels(None, app.RunStatus(), None, apart=True)
+    monkeypatch.setattr(more, "_main", lambda *args: args[2].wait(5))
+    try:
+        more.follow(load_config(path))
+        assert isinstance(more._runs[0], tuple) and started == []  # a thread of this process
+        sends["now"] = False  # (the encoder is x264 through ffmpeg now)
+        with caplog.at_level(logging.INFO, logger="libre_panel.app"):
+            more.follow(load_config(path))
+        assert started == [0] and not isinstance(more._runs[0], tuple)
+        assert any("processes of their own" in r.getMessage() for r in caplog.records)
+    finally:
+        more.close()
+
+
+def test_the_engine_sends_the_pictures_with_native_or_the_downloads_engine(monkeypatch):
+    """Which [video] settings have Libre Panel's engine send the pictures: "native" with an
+    engine, "auto" with the one the download carries, and engine_sends on."""
+    from libre_panel.config import VideoConfig
+    from libre_panel.devices import engine
+
+    monkeypatch.setattr(engine, "can_send", lambda path: True)
+    monkeypatch.setattr(engine, "find_engine", lambda: "/my/own/libre-panel-engine")
+    monkeypatch.setattr(engine, "auto_engine", lambda: "")
+    assert engine.sends_pictures(VideoConfig(encoder="native"))
+    assert not engine.sends_pictures(VideoConfig())  # ("auto" without the download's)
+    assert not engine.sends_pictures(VideoConfig(encoder="native", engine_sends=False))
+    assert not engine.sends_pictures(VideoConfig(encoder="libx264"))
+    monkeypatch.setattr(engine, "auto_engine", lambda: "/the/download/libre-panel-engine")
+    assert engine.sends_pictures(VideoConfig())
+    monkeypatch.setattr(engine, "can_send", lambda path: False)  # (an engine of stage 1a)
+    assert not engine.sends_pictures(VideoConfig())
+
+
 def test_the_beats_and_which_is_which_go_across():
     first, second = fan.Beats(), fan.Beats()
     beat = first.of("gpu.fan", 50, 7)

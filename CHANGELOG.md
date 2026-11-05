@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+**Lighter**
+- **No second Python process for a second panel.** Where Libre Panel's engine sends the
+  pictures (the default with the downloads), the panels beside the first share the app's
+  process: a frame drawn a little late still goes on its time. The 12.3" and the 9.2" with
+  Lumen on Linux: 213 MB in all instead of 270, the pictures as punctual. Without the engine
+  each such panel keeps a process of its own, as before.
+
 ## 0.8.0 — 2026-11-05
 
 Lighter on the PC, smoother on the panel, and made for every panel size.

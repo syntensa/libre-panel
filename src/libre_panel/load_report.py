@@ -2,8 +2,9 @@
 the same lines in the panel report.
 
 Libre Panel is several processes: this one (the first panel's loop, the sensors, the app's
-server, the tray, the shortcuts, the memory store, the weather), one for each further panel
-(panel_process.py), an ffmpeg for each panel in the video mode (devices/h264.py), PresentMon
+server, the tray, the shortcuts, the memory store, the weather; the further panels' loops too
+where the engine sends their pictures), one for each further panel otherwise (panel_process.py),
+an engine or an ffmpeg for each panel in the video mode (devices/engine.py, h264.py), PresentMon
 while a game's frame rate is read (sensors/presentmon.py), the window while it is open
 (window.py, with WebView2's processes on Windows) and, on Windows, the sensor service
 (sensorservice). :class:`LoadSampler` measures them with psutil: each one's processor time over
