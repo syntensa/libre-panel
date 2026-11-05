@@ -2,7 +2,9 @@
 simulated TURZX panels (the 12.3" with Lumen, the 9.2" with its companion) through Libre Panel's
 engine, the services on, the window never opened; every 15 s the private working set (Task
 Manager's Memory column) and the commit of its processes, and a breakdown of the main process
-(rig_site/sitecustomize.py, winmap.py).
+(rig_site/sitecustomize.py, winmap.py). As at the user's: first some minutes with the window
+never opened, then the app's pages open in a browser for a while (Start, Design, Look, Live,
+the settings, the history, the diagnosis), then closed; a breakdown some minutes after.
 
     python .github/measure/rig_windows.py MINUTES"""
 
@@ -56,7 +58,9 @@ config = (
     '[[panels]]\ndriver = "turzx"\nmodel = "turing-9.2-usb"\n'
     '[panels.video]\nmode = "on"\nlocal_clip = "usr/data/clip.h264"\n'
 )
-census_at = minutes * 60 - 200  # (the census takes 150 s and more)
+census_at = minutes * 60 - 220  # (the census takes 150 s and more)
+OPEN_AT = 150  # s: the app's pages open
+VIEWS = ("home", "design", "look", "live", "settings/panel", "history", "diagnose")
 with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
     home = Path(folder)
     (home / "config.toml").write_text(config, encoding="utf-8")
@@ -79,30 +83,60 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
     print("panel 1:", app.get("api/app")["panel"].get("state"), flush=True)
     began = time.monotonic()
     end = began + minutes * 60
-    rows = []
-    while time.monotonic() < end and app.proc.poll() is None:
-        time.sleep(15)
+
+    def sample(label=""):
         row = {}
+        threads = None
         for p in [main] + main.children(recursive=True):
             try:
                 name = p.name()
                 kind = "main" if p.pid == main.pid else "engine" if "engine" in name else name
                 info = p.memory_full_info()
+                if kind == "main":
+                    threads = p.num_threads()
                 row.setdefault(kind, []).append(
                     (round(info.uss / 2**20, 1), round(info.private / 2**20, 1))
                 )
             except psutil.Error:
                 pass
-        rows.append(row)
         print(
             f"{time.monotonic() - began:5.0f} s  "
             + "  ".join(
                 f"{k} " + " + ".join(f"{ws:.0f} ({commit:.0f})" for ws, commit in v)
                 for k, v in row.items()
             )
-            + "   MB private working set (commit)",
+            + f"   MB private working set (commit), threads {threads} {label}",
             flush=True,
         )
+
+    def open_pages():
+        """The app's pages in a browser, as its window shows them, each a while; then closed."""
+        from playwright.sync_api import sync_playwright
+
+        from libre_panel.editor import access
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={"width": 1440, "height": 900})
+            for view in VIEWS:
+                page.goto(access.with_token(f"{app.url}#/{view}", app.token))
+                try:
+                    page.wait_for_selector(".view > *", timeout=30_000)
+                except Exception as exc:  # noqa: BLE001
+                    print("  (the page", view, "did not show:", exc, ")")
+                page.wait_for_timeout(20_000)
+                sample(f"(the app open: {view})")
+            browser.close()
+        sample("(the app closed)")
+
+    opened = False
+    while time.monotonic() < end and app.proc.poll() is None:
+        time.sleep(15)
+        if not opened and time.monotonic() - began >= OPEN_AT:
+            opened = True
+            open_pages()
+            continue
+        sample()
         if census.exists() and time.monotonic() < end - 30:
             end = time.monotonic() + 30
     if census.exists():
@@ -116,5 +150,8 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
         for line in lines:
             if " WARNING " in line or " ERROR " in line or "light mode" in line:
                 print("  ", line[:220])
-    print("panel 1 at the end:", app.get("api/app")["panel"].get("state"), flush=True)
+    try:
+        print("panel 1 at the end:", app.get("api/app")["panel"].get("state"), flush=True)
+    except OSError as exc:
+        print("the app does not answer at the end:", exc)
     app.quit()

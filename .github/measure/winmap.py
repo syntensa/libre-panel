@@ -8,6 +8,7 @@ file, a thread's stack, Python's arenas (1 MiB each), or other memory allocated 
 
 import collections
 import ctypes
+import os
 import time
 from ctypes import wintypes
 
@@ -129,46 +130,57 @@ def page_states(regions) -> list[tuple[int, int]]:
     return out
 
 
+class Range(ctypes.Structure):
+    _fields_ = [("start", ctypes.c_uint64), ("end", ctypes.c_uint64)]
+
+
+class Totals(ctypes.Structure):
+    _fields_ = [(name, ctypes.c_uint64) for name in (
+        "busy", "free", "committed", "uncommitted", "blocks", "regions", "large")]  # fmt: skip
+
+
+ROOM, ROOM_LARGE = 4096, 16384
+
+
+def walker():
+    """heapwalk.dll's walk_heap (LP_RIG_HEAPWALK), which walks a heap in one call with its lock
+    held only there; None without it. (Walked from here step by step, the lock was held while
+    ctypes gave up the GIL between the steps: a thread with the GIL waited for the lock in
+    malloc, the walk for the GIL, and the app stood still.)"""
+    path = os.environ.get("LP_RIG_HEAPWALK")
+    if not path or not os.path.isfile(path):
+        return None
+    walk = ctypes.CDLL(path).walk_heap
+    walk.argtypes = [wintypes.HANDLE, ctypes.POINTER(Range), ctypes.c_int,
+                     ctypes.POINTER(Range), ctypes.c_int, ctypes.POINTER(Totals)]  # fmt: skip
+    walk.restype = ctypes.c_int
+    return walk
+
+
 def heaps() -> list[dict]:
-    """Each heap of the process: its regions (address ranges), its large blocks, what is busy
-    and free in it (HeapWalk), its summary."""
+    """Each heap of the process: its summary, and where heapwalk.dll is to be had its regions
+    (address ranges), its large blocks and what is busy and free in it."""
     n = k32.GetProcessHeaps(0, None)
     handles = (wintypes.HANDLE * (n + 16))()
     n = k32.GetProcessHeaps(len(handles), handles)
     own = k32.GetProcessHeap()
+    walk = walker()
     found = []
     for handle in handles[:n]:
-        ranges, large = [], []
-        busy = free = blocks = committed = uncommitted = 0
-        entry = Entry()
-        k32.HeapLock(handle)
-        try:
-            while k32.HeapWalk(handle, ctypes.byref(entry)):
-                flags = entry.wFlags
-                if flags & REGION:
-                    start = entry.lpData or 0
-                    ranges.append((start, start + entry.cbData))
-                    committed += entry.u.Region.dwCommittedSize
-                    uncommitted += entry.u.Region.dwUnCommittedSize
-                elif flags & UNCOMMITTED:
-                    continue
-                elif flags & BUSY:
-                    busy += entry.cbData + entry.cbOverhead
-                    blocks += 1
-                    if entry.cbData >= 256 * 1024:
-                        large.append((entry.lpData or 0, entry.cbData))
-                else:
-                    free += entry.cbData
-        finally:
-            k32.HeapUnlock(handle)
+        row = {"handle": handle, "process_heap": handle == own, "ranges": [], "large": []}
+        if walk is not None:
+            regions, large, totals = (Range * ROOM)(), (Range * ROOM_LARGE)(), Totals()
+            if walk(handle, regions, ROOM, large, ROOM_LARGE, ctypes.byref(totals)):
+                row["ranges"] = [(r.start, r.end) for r in regions[: min(totals.regions, ROOM)]]
+                row["large"] = [(r.start, r.end - r.start)
+                                for r in large[: min(totals.large, ROOM_LARGE)]]  # fmt: skip
+                row.update(busy=totals.busy, free=totals.free, blocks=totals.blocks,
+                           region_committed=totals.committed,
+                           region_uncommitted=totals.uncommitted)  # fmt: skip
         summary = Summary(cb=ctypes.sizeof(Summary))
         k32.HeapSummary(handle, 0, ctypes.byref(summary))
-        found.append({
-            "handle": handle, "process_heap": handle == own, "ranges": ranges, "large": large,
-            "busy": busy, "free": free, "blocks": blocks, "region_committed": committed,
-            "region_uncommitted": uncommitted, "summary_allocated": summary.allocated,
-            "summary_committed": summary.committed,
-        })  # fmt: skip
+        row.update(summary_allocated=summary.allocated, summary_committed=summary.committed)
+        found.append(row)
     return found
 
 
@@ -246,7 +258,7 @@ def census() -> dict:
         row = {k: mb(v) for k, v in heap.items() if k in (
             "busy", "free", "region_committed", "region_uncommitted", "summary_allocated",
             "summary_committed")}  # fmt: skip
-        row.update(process_heap=heap["process_heap"], blocks=heap["blocks"],
+        row.update(process_heap=heap["process_heap"], blocks=heap.get("blocks"),
                    regions=len(heap["ranges"]), large_blocks=len(heap["large"]),
                    large_mb=mb(sum(size for _, size in heap["large"])))  # fmt: skip
         heap_rows.append(row)

@@ -23,7 +23,7 @@ jobs:
     # the background app with two simulated panels through the engine, the window never opened:
     # what its main process holds, by owner (.github/measure/rig_windows.py)
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -48,12 +48,19 @@ jobs:
           built="target/x86_64-pc-windows-gnu/release/libre-panel-engine.exe"
           "./$built" version
           echo "LIBRE_PANEL_ENGINE=$(cygpath -w "$PWD/$built")" >> "$GITHUB_ENV"
-      - run: pip install -e ".[dev,usb,media]"
+      - run: pip install -e ".[dev,usb,media]" playwright
+      - name: A browser for the app's pages, and the heap walker
+        shell: bash
+        run: |
+          python -m playwright install chromium
+          mingw="$(cygpath -u '${{ steps.msys2.outputs.msys2-location }}')/mingw64"
+          "$mingw/bin/gcc" -shared -O2 -static-libgcc -o "$RUNNER_TEMP/heapwalk.dll" .github/measure/heapwalk.c
+          echo "LP_RIG_HEAPWALK=$(cygpath -w "$RUNNER_TEMP/heapwalk.dll")" >> "$GITHUB_ENV"
       - name: ffmpeg (as the downloads carry it)
         shell: bash
         run: |
           python packaging/fetch_tools.py "$RUNNER_TEMP/tools"
           cygpath -w "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
-      - name: The app at login, 9 minutes
+      - name: The app at login, its pages open a while and closed, 13 minutes
         shell: bash
-        run: python .github/measure/rig_windows.py 9
+        run: python .github/measure/rig_windows.py 13
