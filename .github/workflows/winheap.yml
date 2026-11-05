@@ -1,0 +1,21 @@
+name: Windows heap (measure)
+# A measurement on a feature branch only (not for main): what the process heap keeps after the
+# app's pictures went, and what light mode's give-back returns (.github/measure/measure_winheap.py).
+on:
+  push:
+    branches: [feature/winheap]
+permissions:
+  contents: read
+jobs:
+  measure:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - name: The heap after the app's pictures, and given back
+        shell: bash
+        run: python .github/measure/measure_winheap.py

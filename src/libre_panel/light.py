@@ -12,8 +12,9 @@ did, and the app draws its pictures again when it asks. That happens light mode 
 
 Light mode also empties the caches that cannot tell what was used (symbols, the moon) and gives
 the memory back to the system; Windows also takes back the pages the panel does not touch (the
-"Memory" Task Manager shows), which come back as the panel touches them. On Linux the C heap's
-free pages go back again at each look while the app stays closed (:func:`tidy`).
+"Memory" Task Manager shows), which come back as the panel touches them. The C heap's free
+pages (on Windows its heaps') go back again at each look while the app stays closed
+(:func:`tidy`).
 """
 
 from __future__ import annotations
@@ -91,10 +92,12 @@ def fewer_heaps(platform: str = sys.platform) -> bool:
 
 
 def give_back(platform: str = sys.platform) -> None:
-    """The memory no longer used back to the system: the C heap's free pages (Linux), and on
-    Windows the pages of the program that are not touched (its working set)."""
+    """The memory no longer used back to the system: the C heap's free pages (Linux; on Windows
+    its heaps', :func:`windows_heaps`), and on Windows then the pages of the program that are not
+    touched (its working set)."""
     try:
         if platform == "win32":
+            windows_heaps()
             kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
             kernel32.SetProcessWorkingSetSize(
                 kernel32.GetCurrentProcess(), ctypes.c_size_t(-1), ctypes.c_size_t(-1)
@@ -106,20 +109,58 @@ def give_back(platform: str = sys.platform) -> None:
 
 
 def tidy(platform: str = sys.platform) -> None:
-    """The C heap's free pages back to the system (Linux, glibc), at each look while the app
-    is closed in light mode: a frame's work frees pictures and buffers between those that stay,
-    and glibc keeps those pages for the program. Lumen on the 12.3" and the 9.2": the main
-    process 90 MB instead of 100, each time some milliseconds, no picture later for it.
-    Elsewhere nothing (musl has no such call; Windows' heap is another, and its working set is
-    trimmed once, as the app is closed)."""
-    if not platform.startswith("linux"):
-        return
+    """The C heap's free pages back to the system, at each look while the app is closed in
+    light mode: a frame's work frees pictures and buffers between those that stay, and the heap
+    keeps those pages for the program. Linux (glibc's trim): Lumen on the 12.3" and the 9.2",
+    the main process 90 MB instead of 100, each time some milliseconds, no picture later for it.
+    Windows: its heaps' free memory (:func:`windows_heaps`). Elsewhere nothing (musl has no
+    such call)."""
     try:
+        if platform == "win32":
+            windows_heaps()
+            return
+        if not platform.startswith("linux"):
+            return
         libc = ctypes.CDLL(None)
         if hasattr(libc, "gnu_get_libc_version"):
             libc.malloc_trim(0)
     except (OSError, AttributeError, TypeError) as exc:
         log.debug("the heap stays as it is: %s", exc)
+
+
+HEAP_OPTIMIZE_RESOURCES = 3  # HeapSetInformation's HeapOptimizeResources (Windows 8.1 and later)
+
+
+class _HeapOptimize(ctypes.Structure):
+    """HEAP_OPTIMIZE_RESOURCES_INFORMATION: version 1, no flags."""
+
+    _fields_ = [("version", ctypes.c_uint32), ("flags", ctypes.c_uint32)]
+
+
+def windows_heaps() -> None:
+    """Windows: the free memory of the process's heaps back to the system. First what the heaps'
+    low-fragmentation caches hold and what can be decommitted (HeapOptimizeResources, for all of
+    them), then the process heap's free blocks merged and the large ones decommitted
+    (HeapCompact). The process heap is the C heap of Python, Pillow and numpy (the UCRT's
+    malloc): the pictures and buffers made and freed between those that stay left its pages
+    committed to the program, the app's window's as well (Lumen on a 12.3" and a 9.2", with the
+    window open: 184 MB free in it, which stayed after the window closed). Safe beside the other
+    threads: both take the heaps' locks."""
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32")  # type: ignore[attr-defined]
+    kernel32.HeapSetInformation.argtypes = [
+        wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, ctypes.c_size_t,
+    ]  # fmt: skip
+    kernel32.HeapSetInformation.restype = wintypes.BOOL
+    kernel32.GetProcessHeap.restype = wintypes.HANDLE
+    kernel32.HeapCompact.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel32.HeapCompact.restype = ctypes.c_size_t
+    info = _HeapOptimize(1, 0)
+    kernel32.HeapSetInformation(
+        None, HEAP_OPTIMIZE_RESOURCES, ctypes.byref(info), ctypes.sizeof(info)
+    )
+    kernel32.HeapCompact(kernel32.GetProcessHeap(), 0)
 
 
 def release(also: Callable[[], None] | None = None) -> None:

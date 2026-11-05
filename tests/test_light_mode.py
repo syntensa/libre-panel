@@ -2,6 +2,7 @@
 minute (what the panel draws with stays), and the memory goes back while the setting is on; once
 per time the app was open."""
 
+import sys
 import threading
 
 import pytest
@@ -108,7 +109,80 @@ def test_the_heap_is_tidied_at_each_look_while_the_app_stays_closed_in_light_mod
     assert state["tidied"] == 3 and state["released"] == 1
 
 
-def test_the_tidy_is_glibc_s_trim_on_linux_and_nothing_elsewhere(monkeypatch):
+class Kernel32:
+    """Windows' kernel32 as light.py asks it, its calls noted."""
+
+    def __init__(self, calls):
+        self.calls = calls
+        outer = self
+
+        class Call:
+            def __init__(self, name):
+                self.name, self.argtypes, self.restype = name, None, None
+
+            def __call__(self, *args):
+                outer.calls.append((self.name, args))
+                return {"GetProcessHeap": 77, "GetCurrentProcess": -1}.get(self.name, 1)
+
+        for name in ("HeapSetInformation", "GetProcessHeap", "HeapCompact",
+                     "SetProcessWorkingSetSize", "GetCurrentProcess"):  # fmt: skip
+            setattr(self, name, Call(name))
+
+
+def test_on_windows_the_heaps_give_their_free_memory_back_at_each_look(monkeypatch):
+    """Windows: the tidy has all of the process's heaps let go of what their caches hold
+    (HeapOptimizeResources, version 1) and the process heap decommit its large free blocks
+    (HeapCompact); the release does that too, then trims the working set."""
+    calls = []
+    kernel32 = Kernel32(calls)
+    monkeypatch.setattr(light.ctypes, "WinDLL", lambda name: kernel32, raising=False)
+    monkeypatch.setattr(light.ctypes, "windll", type("W", (), {"kernel32": kernel32}),
+                        raising=False)  # fmt: skip
+    light.tidy("win32")
+    names = [name for name, _ in calls]
+    assert names == ["HeapSetInformation", "GetProcessHeap", "HeapCompact"]
+    heap, kind, info, size = calls[0][1]
+    assert heap is None and kind == light.HEAP_OPTIMIZE_RESOURCES == 3 and size == 8
+    optimize = info._obj  # (what ctypes.byref points at)
+    assert (optimize.version, optimize.flags) == (1, 0)
+    assert calls[2][1] == (77, 0)  # (the process heap)
+    calls.clear()
+    light.give_back("win32")
+    names = [name for name, _ in calls]
+    assert names[:3] == ["HeapSetInformation", "GetProcessHeap", "HeapCompact"]
+    assert "SetProcessWorkingSetSize" in names[3:]
+
+    def missing(name):  # (an older Windows, or no kernel32 to be had: nothing happens)
+        raise OSError("not found")
+
+    monkeypatch.setattr(light.ctypes, "WinDLL", missing, raising=False)
+    light.tidy("win32")  # (no error)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows' own heaps")
+def test_on_windows_the_free_memory_pictures_left_in_the_heap_goes_back():
+    """Pictures made and freed between those that stay, as a frame's work and the app's window
+    make them, leave the process heap's pages committed to the program; the tidy gives them
+    back (most of them: what stays between the pictures kept is the heap's)."""
+    from PIL import Image
+
+    from libre_panel.load_report import c_heap
+
+    made = [
+        Image.new("RGBA", (60 + (k * 37) % 240, 40 + (k * 53) % 160), (k % 256, 9, 9, 255))
+        for k in range(1500)
+    ]
+    kept = made[::5]  # (a fifth stays, among the others)
+    del made
+    held = c_heap("win32")
+    light.tidy("win32")
+    after = c_heap("win32")
+    assert held is not None and after is not None and len(kept) == 300
+    # the free memory the heap keeps committed: at most half of it stays, or little was left
+    assert after["free"] <= max(held["free"] / 2, 16 << 20), (held, after)
+
+
+def test_the_tidy_is_glibc_s_trim_on_linux_only(monkeypatch):
     calls = []
 
     class Glibc:
