@@ -16,14 +16,21 @@ from fake_sensors import show, wait_for
 
 from libre_panel import cli, doctor
 from libre_panel.pages import control
+from libre_panel.sensors import base, lhm_service
 from libre_panel.sensors import lhm_inprocess as inside
-from libre_panel.sensors import lhm_service
 from libre_panel.sensors import librehardwaremonitor as lhm
 from libre_panel.sensors.base import Reading, SensorHub
 from libre_panel.sensorservice import core, protocol
 
 REAL_REGISTRATION = lhm_service.registration  # (the tests' own machine is kept out: conftest)
 CPU, GPU = "/amdcpu/0", "/gpu-nvidia/0"
+
+
+@pytest.fixture(autouse=True)
+def _only_these_themes_on_show(monkeypatch):
+    """What the themes on show read is this module's own (fake_sensors.show): not what a
+    renderer another test let go of still reads until the collector takes it (base._WANTED)."""
+    monkeypatch.setattr(base, "_WANTED", {})
 
 
 class Clock:

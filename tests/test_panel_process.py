@@ -97,6 +97,28 @@ def test_a_panel_beside_the_first_runs_in_a_process_of_its_own(tmp_path, monkeyp
     assert panel_pids() == {}
 
 
+def test_what_a_panel_said_it_reads_is_not_wanted_once_its_process_ended(monkeypatch):
+    """A word of the panel's process still on its way when the process ended comes too late:
+    what its theme reads is no longer wanted here (join forgot it), also where that word is
+    heard after (it wanted the readings again, for as long as the app ran: CI, Windows)."""
+    import threading
+    import types
+
+    from libre_panel import panel_process
+    from libre_panel.sensors import base
+
+    monkeypatch.setattr(base, "_WANTED", {})
+    panel = types.SimpleNamespace(_wants_lock=threading.Lock(), _stop=threading.Event(),
+                                  _wanting=panel_process._Wanting())  # fmt: skip
+    panel_process.PanelProcess._wants(panel, ["proc.cpu.*.value"])
+    assert base.wanted("proc.")
+    with panel._wants_lock:  # (the process ended: as join lets them go)
+        panel._stop.set()
+        panel_process._forget(panel._wanting)
+    panel_process.PanelProcess._wants(panel, ["proc.cpu.*.value"])  # (heard after that)
+    assert not base.wanted("proc.")
+
+
 def test_a_panel_whose_process_cannot_start_runs_in_a_thread(tmp_path, monkeypatch):
     from libre_panel import panel_process
 

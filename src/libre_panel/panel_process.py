@@ -118,6 +118,7 @@ class PanelProcess:
         self._held: set[str] = set()  # the device places the process holds (as it said)
         self._marked: set[str] = set()  # those of them noted as taken here
         self._wanting = _Wanting()  # the readings its theme reads, wanted here in its name
+        self._wants_lock = threading.Lock()  # (they, and the process's end: one after the other)
         self._answers = _Answers(self._send, f"panel-{n + 2}-answer")
         status._ask = lambda: self._send(("shown?",))
         self.process = ctx.Process(target=child, args=(n, str(path), theirs, self._logs),
@@ -155,10 +156,11 @@ class PanelProcess:
             self.process.join(2.0)
         if not self.process.is_alive():
             _PIDS.pop(self.process.pid, None)
-        self._stop.set()
+        with self._wants_lock:  # (what it said it reads goes, and no later word brings it back)
+            self._stop.set()
+            _forget(self._wanting)
         self._answers.close()
         self._unmark()
-        _forget(self._wanting)
         try:
             self._conn.close()
         except OSError:
@@ -167,6 +169,16 @@ class PanelProcess:
         return ended
 
     # -- what goes across --
+
+    def _wants(self, keys: Any) -> None:
+        """What its theme reads: the sources here read it too, while its process is on. A word
+        of it still on its way when the process ended comes too late (``join`` forgot them):
+        heard after that, it wanted them again, for as long as this stayed (CI, Windows)."""
+        from libre_panel.sensors.base import want
+
+        with self._wants_lock:
+            if not self._stop.is_set():
+                want(self._wanting, frozenset(keys))
 
     def _send(self, message: tuple[Any, ...]) -> None:
         with self._lock:
@@ -224,9 +236,7 @@ class PanelProcess:
             elif kind == "shown":
                 self.status.took(message[1])
             elif kind == "wants":  # what its theme reads: the sources here read it too
-                from libre_panel.sensors.base import want
-
-                want(self._wanting, frozenset(message[1]))
+                self._wants(message[1])
             elif kind == "places":  # the device it holds: none of this process's takes it
                 self._held = set(message[1])
                 for place in self._held - self._marked:
