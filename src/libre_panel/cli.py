@@ -706,8 +706,12 @@ def _threads_on_signal() -> None:
         pass
 
 
+# what ``libre-panel --help`` says first (a text of its own: the downloads carry no docstrings)
+DESCRIPTION = "Libre Panel: your PC's readings on the USB panels in its case."
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="libre-panel", description=__doc__)
+    parser = argparse.ArgumentParser(prog="libre-panel", description=DESCRIPTION)
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--config", type=Path, default=None, help="path to config.toml")
     parser.add_argument("-v", "--verbose", action="store_true")

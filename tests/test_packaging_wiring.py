@@ -235,3 +235,15 @@ def test_own_loader_fails_where_the_loader_is_the_one_pyinstaller_ships(tmp_path
     assert own_loader.main(str(wheel)) == 1
     (loaders / "run.exe").unlink()  # (none at all)
     assert own_loader.main(str(wheel)) == 1
+
+
+def test_the_programs_are_built_without_docstrings_and_their_help_does_not_need_one():
+    """Python's code in the downloads is compiled as by ``python -OO`` (each process holds less
+    of it): the command line's help then still says what Libre Panel is."""
+    spec = read("packaging", "pyinstaller", "libre-panel.spec")
+    assert "OPTIMIZE = 2" in spec
+    assert spec.count("optimize=OPTIMIZE") == 2  # (the programs, and the sensor service)
+    from libre_panel import cli
+
+    parser = cli.build_parser()
+    assert parser.description == cli.DESCRIPTION and "Libre Panel" in parser.description

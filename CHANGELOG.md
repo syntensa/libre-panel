@@ -36,6 +36,9 @@
   beside the first stops), its theme's renderer and all it drew are freed then and there; a
   cycle kept them until Python's collector came round, which could be long after. A replaced
   theme stops asking for its readings at once too (the processes are no longer counted for it).
+- **Leaner Python in the downloads.** The programs are built without Python's docstrings and
+  asserts (as by `python -OO`): every process of Libre Panel's holds less code (its own modules
+  alone: 2.6 MB less).
 
 **Diagnose**
 - **Where the memory is.** *Live → Diagnose → Load on this PC* (and its text) also says what

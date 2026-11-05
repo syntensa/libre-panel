@@ -150,9 +150,17 @@ DESCRIPTIONS = {
 }
 
 
+# Python's code compiled without its docstrings and asserts (python -OO), and run so: each of
+# its processes holds less of it (Libre Panel's own modules alone: 2.6 MB). Nothing in them
+# reads a docstring (the command line's help has a text of its own); pycparser, which .NET's
+# loader uses, parses without one since its 3.0.
+OPTIMIZE = 2
+
+
 def program(script, name, console):
     analysis = Analysis(  # noqa: F821
-        [str(HERE / script)], datas=datas, binaries=binaries, hiddenimports=hiddenimports
+        [str(HERE / script)], datas=datas, binaries=binaries, hiddenimports=hiddenimports,
+        optimize=OPTIMIZE,
     )
     exe = EXE(  # noqa: F821
         PYZ(analysis.pure),  # noqa: F821
@@ -208,6 +216,7 @@ if sys.platform == "win32":
         datas=service_datas,
         binaries=service_binaries,
         hiddenimports=service_hidden,
+        optimize=OPTIMIZE,
         # what the service never imports (a function of a module it uses may, for Libre Panel)
         excludes=[
             "libre_panel.plugins", "libre_panel.render", "libre_panel.editor",
