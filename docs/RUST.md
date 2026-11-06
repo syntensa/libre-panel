@@ -145,10 +145,20 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       weather art, globes, start screens): widget by widget, with R4
 
 ### R2 text
-- [ ] FreeType glyphs as Pillow renders them (the same FreeType), sizes, font indexes
-- [ ] layout: basic, and shaped and reordered as libraqm does (HarfBuzz's shaping, bidi)
+- [x] FreeType glyphs as Pillow renders them (the same FreeType, loaded where the app runs):
+      sizes as Pillow asks them (its float times 64), font indexes and collections, TrueType,
+      OpenType, Type 1, bitmap fonts in colour (rust/text)
+- [x] the basic layout: FreeType's advances and Pillow's kerning (a 64th of the font's), its
+      boxes and anchors, getlength, getbbox, getmask2 in L, 1 and RGBA, the stroke (FreeType's
+      stroker, filled as ImageDraw has it), colour glyphs unpremultiplied
+- [x] Pillow's text drawing on top: ImageText's lines, anchors, alignment (justify too) and
+      spacing, textbbox, textlength, the stroke in its own ink, embedded colours
+- [ ] the layout shaped and reordered as libraqm 0.11 does it (HarfBuzz's shaping, FriBiDi's
+      order): Pillow's own on Linux, where FriBiDi is there (Windows' Pillow finds none and
+      lays out as above)
 - [ ] fonts/fallback: the fallback chains, emoji and symbols
-- [ ] Pillow's text drawing: anchors, stroke, textbbox, textlength, multiline
+- [ ] the comparisons on Windows: a FreeType 2.14.3 built as Pillow builds its own (zlib,
+      libpng, HarfBuzz and Brotli in it), for lp-check to load
 
 ### R3 theme
 - [ ] theme.json in every version, checks and messages, versions per shape, adapting

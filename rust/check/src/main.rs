@@ -650,7 +650,159 @@ fn run(case: &Value) -> Result<Value, String> {
                 json!({"image": value_of(&im)})
             }
         }
+        "font" => font_case(case),
         other => return Err(format!("no op {other}")),
+    })
+}
+
+fn text_error(e: lp_text::Error) -> Value {
+    json!({"error": e.message, "kind": format!("{:?}", e.kind)})
+}
+
+fn opt_str(v: &Value) -> Option<&str> {
+    v.as_str()
+}
+
+fn strings(v: &Value) -> Option<Vec<String>> {
+    v.as_array().map(|a| {
+        a.iter()
+            .map(|s| s.as_str().unwrap_or_default().to_string())
+            .collect()
+    })
+}
+
+fn image_answer(im: &Image, digest: bool) -> Value {
+    if digest {
+        let sum = Sha256::digest(im.as_bytes());
+        let hex: String = sum.iter().map(|b| format!("{b:02x}")).collect();
+        json!({"mode": im.mode().name(), "size": [im.width(), im.height()], "sha256": hex})
+    } else {
+        value_of(im)
+    }
+}
+
+/// One font and what is asked of it: {"font": {"path", "size", "index", "encoding",
+/// "layout"}, "calls": [{"fn": "getlength" | "getbbox" | "getmask2" | "draw" | "textbbox" |
+/// "textlength", ...}]}; each call's answer, or its error and the error's kind.
+fn font_case(case: &Value) -> Value {
+    let f = &case["font"];
+    let layout = match f["layout"].as_str() {
+        Some("basic") => Some(lp_text::Layout::Basic),
+        Some("raqm") => Some(lp_text::Layout::Raqm),
+        _ => None,
+    };
+    let opened = lp_text::Font::open(
+        f["path"].as_str().unwrap_or_default(),
+        f["size"].as_f64().unwrap_or(10.0),
+        f["index"].as_i64().unwrap_or(0),
+        f["encoding"].as_str().unwrap_or_default(),
+        layout,
+    );
+    let font = match opened {
+        Ok(font) => font,
+        Err(e) => return text_error(e),
+    };
+    let digest = case["digest"].as_bool().unwrap_or(false);
+    let calls = case["calls"].as_array().cloned().unwrap_or_default();
+    let results: Vec<Value> = calls
+        .iter()
+        .map(|c| font_call(&font, c, digest).unwrap_or_else(text_error))
+        .collect();
+    let (family, style) = font.getname();
+    json!({
+        "name": [family, style],
+        "metrics": font.getmetrics(),
+        "height": font.height(),
+        "ppem": font.ppem(),
+        "glyphs": font.glyphs(),
+        "results": results,
+    })
+}
+
+fn font_call(font: &lp_text::Font, c: &Value, digest: bool) -> Result<Value, lp_text::Error> {
+    use lp_text::text::{draw, Text};
+    let bad = |m: &str| lp_text::Error {
+        kind: lp_text::Kind::Value,
+        message: m.to_string(),
+    };
+    let text = c["text"].as_str().unwrap_or_default();
+    let mode = c["mode"].as_str().unwrap_or_default();
+    let direction = opt_str(&c["direction"]);
+    let features = strings(&c["features"]);
+    let features = features.as_deref();
+    let language = opt_str(&c["language"]);
+    let anchor = opt_str(&c["anchor"]);
+    let stroke = c["stroke_width"].as_f64().unwrap_or(0.0);
+    let xy = |v: &Value| (v[0].as_f64().unwrap_or(0.0), v[1].as_f64().unwrap_or(0.0));
+    Ok(match c["fn"].as_str().unwrap_or_default() {
+        "getlength" => {
+            json!({"length": font.getlength(text, mode, direction, features, language)?})
+        }
+        "getbbox" => {
+            let b = font.getbbox(text, mode, direction, features, language, stroke, anchor)?;
+            json!({"box": [b.0, b.1, b.2, b.3]})
+        }
+        "getmask2" => {
+            let (im, offset) = font.getmask2(
+                text,
+                mode,
+                direction,
+                features,
+                language,
+                stroke,
+                anchor,
+                c["ink"].as_i64().unwrap_or(0),
+                xy(&c["start"]),
+                c["stroke_filled"].as_bool().unwrap_or(false),
+            )?;
+            json!({"image": image_answer(&im, digest), "offset": [offset.0, offset.1]})
+        }
+        "draw" | "textbbox" | "textlength" => {
+            let mut image = match c["fn"].as_str() {
+                Some("draw") => Some(image_of(&c["image"]).map_err(|e| bad(&e))?),
+                _ => None,
+            };
+            let image_mode = match &image {
+                Some(im) => im.mode().name().to_string(),
+                None => c["image_mode"].as_str().unwrap_or("RGBA").to_string(),
+            };
+            let mut t = Text::new(text, font, &image_mode);
+            t.spacing = c["spacing"].as_f64().unwrap_or(4.0);
+            t.direction = direction;
+            t.features = features;
+            t.language = language;
+            if c["embedded_color"].as_bool().unwrap_or(false) {
+                t.embed_color()?;
+            }
+            t.stroke_width = stroke;
+            let align = c["align"].as_str().unwrap_or("left");
+            match (c["fn"].as_str(), image.as_mut()) {
+                (Some("draw"), Some(im)) => {
+                    let mode = im.mode();
+                    let ink_of = |v: &Value| -> Result<Option<[u8; 4]>, lp_text::Error> {
+                        if v.is_null() {
+                            return Ok(None);
+                        }
+                        let colour: Vec<u8> = ints(v)
+                            .map_err(|e| bad(&e))?
+                            .iter()
+                            .map(|&b| b as u8)
+                            .collect();
+                        mode.ink(&colour).map(Some).map_err(|e| bad(&e.0))
+                    };
+                    let ink = ink_of(&c["fill"])?.ok_or_else(|| bad("a fill"))?;
+                    let stroke_ink = ink_of(&c["stroke_fill"])?;
+                    draw(im, xy(&c["xy"]), &t, ink, stroke_ink, anchor, align)?;
+                    json!({"image": image_answer(im, digest)})
+                }
+                (Some("textbbox"), _) => {
+                    let b = t.get_bbox(xy(&c["xy"]), anchor, align)?;
+                    json!({"box": [b.0, b.1, b.2, b.3]})
+                }
+                _ => json!({"length": t.get_length()?}),
+            }
+        }
+        other => return Err(bad(&format!("no font call {other}"))),
     })
 }
 

@@ -1,0 +1,13 @@
+[package]
+name = "lp-text"
+description = "Letters as Pillow draws them: FreeType's faces, Pillow's layout and masks, ImageDraw's text"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+lp-pixels = { path = "../pixels" }
+# (FreeType, loaded where the app runs: ft.rs)
+libloading = "0.8"

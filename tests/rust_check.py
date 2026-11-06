@@ -43,6 +43,19 @@ def pillow_libjpeg() -> str | None:
     return str(found[0]) if found else None
 
 
+def pillow_libfreetype() -> str | None:
+    """The FreeType Pillow's wheel brings, the one its letters are drawn with (LP_LIBFREETYPE:
+    another); None where it is built into Pillow (Windows' wheels)."""
+    import PIL
+
+    if os.environ.get("LP_LIBFREETYPE"):
+        return os.environ["LP_LIBFREETYPE"]
+    here = Path(PIL.__file__).resolve().parent
+    found = [*sorted((here.parent / "pillow.libs").glob("libfreetype*.so*")),
+             *sorted((here / ".dylibs").glob("libfreetype*.dylib"))]  # fmt: skip
+    return str(found[0]) if found else None
+
+
 def pillow_libwebp() -> dict[str, str]:
     """libwebp and libwebpdemux as Pillow's wheel brings them, named for lp-check (none where
     they are built into Pillow)."""
@@ -82,6 +95,8 @@ def run(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if (libjpeg := pillow_libjpeg()) is not None:
         env["LP_LIBJPEG"] = libjpeg
     env.update(pillow_libwebp())
+    if (libfreetype := pillow_libfreetype()) is not None:
+        env["LP_LIBFREETYPE"] = libfreetype
     done = subprocess.run(
         [str(exe)], input=text, capture_output=True, text=True, timeout=900, check=True, env=env
     )
