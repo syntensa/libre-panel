@@ -15,6 +15,7 @@ mod blur;
 pub mod chops;
 mod composite;
 mod convert;
+mod draw;
 mod paste;
 mod point;
 mod reduce;

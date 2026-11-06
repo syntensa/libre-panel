@@ -354,3 +354,74 @@ def test_channel_operations_blend_and_composite_are_pillow_s():
             pairs.append(({"op": "offset", "image": image(im), "x": x, "y": y},
                           ImageChops.offset(im, x, y)))  # fmt: skip
     check(pairs)
+
+
+def _colour(rng: random.Random, bands: int) -> list[int]:
+    return [rng.randrange(256) for _ in range(bands)]
+
+
+def _points(rng: random.Random, w: int, h: int, n: int) -> list[tuple[float, float]]:
+    """Points on and beyond the picture, whole or not (C truncates them, -0.5 to 0)."""
+    out = []
+    for _ in range(n):
+        x, y = rng.uniform(-12, w + 12), rng.uniform(-12, h + 12)
+        if rng.random() < 0.4:
+            x, y = float(round(x)), float(round(y))
+        out.append((x, y))
+    if rng.random() < 0.3 and len(out) > 2:  # a horizontal run, a point twice
+        out[1] = (out[1][0], out[0][1])
+        out.insert(2, out[2])
+    return out
+
+
+def test_points_lines_polygons_rectangles_and_bitmaps_are_pillow_s():
+    from PIL import ImageDraw
+
+    rng = random.Random(14)
+    pairs = []
+    for mode in MODES:
+        bands = len(Image.new(mode, (1, 1)).getbands())
+        for _ in range(120):
+            im = noise(rng, mode, (rng.randint(1, 40), rng.randint(1, 40)))
+            out: Any = im.copy()
+            draw = ImageDraw.Draw(out).draw
+            commands = []
+            refused = False
+            for _ in range(rng.randint(1, 4)):
+                colour = _colour(rng, bands)
+                ink = draw.draw_ink(colour[0] if bands == 1 else tuple(colour))
+                kind = rng.choice(["points", "lines", "lines", "polygon", "polygon", "rectangle",
+                                   "bitmap"])  # fmt: skip
+                width = rng.choice([1, 1, 2, 3, 4, 7, 12])
+                fill = rng.random() < 0.6
+                c: dict[str, Any] = {"kind": kind, "ink": colour, "width": width, "fill": fill}
+                if kind == "points":
+                    xy = _points(rng, im.width, im.height, rng.randint(1, 8))
+                    draw.draw_points(xy, ink)
+                elif kind == "lines":
+                    xy = _points(rng, im.width, im.height, rng.randint(1, 6))
+                    draw.draw_lines(xy, ink, width)
+                elif kind == "polygon":
+                    xy = _points(rng, im.width, im.height, rng.randint(1, 8))
+                    try:
+                        draw.draw_polygon(xy, ink, int(fill), width)
+                    except TypeError:  # (one point: Pillow refuses it, so must lp-check)
+                        refused = True
+                elif kind == "rectangle":
+                    x0, y0 = rng.uniform(-10, im.width), rng.uniform(-10, im.height)
+                    xy = (x0, y0, x0 + rng.uniform(0, 25), y0 + rng.uniform(0, 25))
+                    draw.draw_rectangle(xy, ink, int(fill), width)
+                    c["xy"] = list(xy)
+                else:
+                    mask = noise(rng, "L", (rng.randint(1, 12), rng.randint(1, 12)))
+                    at = (rng.uniform(-8, im.width), rng.uniform(-8, im.height))
+                    draw.draw_bitmap(at, mask.im, ink)
+                    xy, c["bitmap"] = [at], image(mask)
+                if "xy" not in c:
+                    c["xy"] = [list(p) for p in xy]
+                commands.append(c)
+                if refused:
+                    out = ERROR
+                    break
+            pairs.append(({"op": "draw", "image": image(im), "commands": commands}, out))
+    check(pairs)

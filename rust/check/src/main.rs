@@ -72,6 +72,14 @@ fn float_value(im: &lp_pixels::FloatImage) -> Value {
     json!({"mode": "F", "size": [im.width, im.height], "data": STANDARD.encode(bytes)})
 }
 
+fn points(v: &Value) -> Result<Vec<(f64, f64)>, String> {
+    v.as_array()
+        .ok_or("points")?
+        .iter()
+        .map(|p| Ok((p[0].as_f64().ok_or("x")?, p[1].as_f64().ok_or("y")?)))
+        .collect()
+}
+
 fn mask_of(v: &Value) -> Result<Option<Image>, String> {
     if v.is_null() {
         Ok(None)
@@ -261,6 +269,30 @@ fn run(case: &Value) -> Result<Value, String> {
                 case["y"].as_i64().ok_or("y")?,
             );
             json!({"image": value_of(&im.offset(x, y))})
+        }
+        "draw" => {
+            let mut im = image_of(&case["image"])?;
+            for c in case["commands"].as_array().ok_or("commands")? {
+                let ink: Vec<u8> = ints(&c["ink"])?.iter().map(|&v| v as u8).collect();
+                let width = c["width"].as_i64().unwrap_or(1) as i32;
+                let fill = c["fill"].as_bool().unwrap_or(false);
+                match c["kind"].as_str().unwrap_or("") {
+                    "points" => im.draw_points(&points(&c["xy"])?, &ink),
+                    "lines" => im.draw_lines(&points(&c["xy"])?, &ink, width),
+                    "polygon" => im.draw_polygon(&points(&c["xy"])?, &ink, fill, width),
+                    "rectangle" => {
+                        let b = floats4(&c["xy"])?.ok_or("a box")?;
+                        im.draw_rectangle(b, &ink, fill, width)
+                    }
+                    "bitmap" => {
+                        let at = points(&c["xy"])?;
+                        im.draw_bitmap(at[0].0, at[0].1, &image_of(&c["bitmap"])?, &ink)
+                    }
+                    other => return Err(format!("no drawing {other}")),
+                }
+                .map_err(e)?;
+            }
+            json!({"image": value_of(&im)})
         }
         other => return Err(format!("no op {other}")),
     })
