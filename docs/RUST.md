@@ -91,7 +91,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       (with a mask), alpha_composite, convert, point, putalpha, split/merge/getchannel, getbbox
 - [x] reduce, resize (every filter, a box of floats, reducing_gap, the crop where the box is
       the size), in L, RGB, RGBA, RGBa and F
-- [ ] thumbnail, ImageOps.fit/pad/contain
+- [x] thumbnail (of a decoded picture; a JPEG's draft is the decoder's), ImageOps.fit, pad,
+      contain, cover, the EXIF orientation's turn; getextrema, linear and radial gradients
 - [x] GaussianBlur, BoxBlur
 - [x] ImageChops: multiply, screen, add, subtract, lighter, darker, difference, the modulos,
       offset; blend, composite

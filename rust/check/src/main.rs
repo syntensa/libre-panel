@@ -411,6 +411,53 @@ fn run(case: &Value) -> Result<Value, String> {
             .map_err(e)?;
             json!({"image": value_of(&out)})
         }
+        "thumbnail" | "contain" | "cover" | "pad" | "fit" => {
+            let im = image_of(&case["image"])?;
+            let size = case["size"].as_array().ok_or("a size")?;
+            let num = |v: &Value| v.as_f64().ok_or("a number");
+            let method = lp_pixels::Filter::from_number(case["method"].as_i64().unwrap_or(3))
+                .ok_or("a filter")?;
+            let whole = (num(&size[0])? as usize, num(&size[1])? as usize);
+            let centering = match case["centering"].as_array() {
+                Some(c) => (num(&c[0])?, num(&c[1])?),
+                None => (0.5, 0.5),
+            };
+            let out = match op {
+                "thumbnail" => {
+                    let gap = case["reducing_gap"].as_f64();
+                    im.thumbnail((num(&size[0])?, num(&size[1])?), method, gap)
+                }
+                "contain" => im.contain(whole, method),
+                "cover" => im.cover(whole, method),
+                "pad" => {
+                    let colour: Option<Vec<u8>> = if case["color"].is_null() {
+                        None
+                    } else {
+                        Some(ints(&case["color"])?.iter().map(|&v| v as u8).collect())
+                    };
+                    im.pad(whole, method, colour.as_deref(), centering)
+                }
+                _ => im.fit(
+                    whole,
+                    method,
+                    case["bleed"].as_f64().unwrap_or(0.0),
+                    centering,
+                ),
+            }
+            .map_err(e)?;
+            json!({"image": value_of(&out)})
+        }
+        "exif_transpose" => {
+            let im = image_of(&case["image"])?;
+            let orientation = case["orientation"].as_u64().unwrap_or(1) as u16;
+            json!({"image": value_of(&im.exif_transposed(orientation))})
+        }
+        "getextrema" => {
+            let extrema = image_of(&case["image"])?.getextrema();
+            json!({"extrema": extrema.map(|v| v.iter().map(|&(a, b)| vec![a, b]).collect::<Vec<_>>())})
+        }
+        "linear_gradient" => json!({"image": value_of(&Image::linear_gradient())}),
+        "radial_gradient" => json!({"image": value_of(&Image::radial_gradient())}),
         "draw" | "imagedraw" => {
             let own = op == "imagedraw";
             let commands = case["commands"].as_array().ok_or("commands")?;

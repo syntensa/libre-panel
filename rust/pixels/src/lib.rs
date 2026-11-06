@@ -19,6 +19,7 @@ mod draw;
 mod ellipse;
 mod geometry;
 mod imagedraw;
+mod ops;
 mod paste;
 mod point;
 mod reduce;

@@ -663,3 +663,57 @@ def test_transposes_transforms_and_rotations_are_pillow_s():
             colour = None if fill is None else fill[0] if bands == 1 else tuple(fill)
             pairs.append((case, im.rotate(angle, resample, expand, center, shift, colour)))
     check(pairs)
+
+
+def test_thumbnails_image_ops_extrema_and_gradients_are_pillow_s():
+    from PIL import ImageOps
+
+    rng = random.Random(18)
+    pairs: list[tuple[dict[str, Any], Any]] = []
+    methods = [1, 1, 3, 3, 2, 0, 4, 5]
+    for mode in MODES:
+        bands = len(Image.new(mode, (1, 1)).getbands())
+        for _ in range(60):
+            im = noise(rng, mode, (rng.randint(1, 70), rng.randint(1, 70)))
+            want_size = (rng.choice([rng.uniform(1, 90), float(rng.randint(1, 90))]),
+                         rng.choice([rng.uniform(1, 90), float(rng.randint(1, 90))]))  # fmt: skip
+            method, gap = rng.choice(methods), rng.choice([None, 2.0, 2.0, 3.0])
+            small = im.copy()
+            small.thumbnail(want_size, method, gap)
+            case = {"op": "thumbnail", "image": image(im), "size": list(want_size),
+                    "method": method, "reducing_gap": gap}  # fmt: skip
+            pairs.append((case, small))
+            room = (rng.randint(0, 60), rng.randint(0, 60))
+            method = rng.choice(methods)
+            centering = rng.choice([(0.5, 0.5), (0.0, 1.0), (rng.uniform(-0.5, 1.5),
+                                    rng.uniform(-0.5, 1.5))])  # fmt: skip
+            colour = _colour(rng, bands) if rng.random() < 0.6 else None
+            fill = None if colour is None else colour[0] if bands == 1 else tuple(colour)
+            bleed = rng.choice([0.0, 0.0, 0.1, 0.25, 0.6])
+            made = {
+                "contain": expect(lambda im=im, r=room, m=method: ImageOps.contain(im, r, m)),
+                "cover": expect(lambda im=im, r=room, m=method: ImageOps.cover(im, r, m)),
+                "pad": expect(lambda im=im, r=room, m=method, f=fill, c=centering:
+                              ImageOps.pad(im, r, m, f, c)),
+                "fit": expect(lambda im=im, r=room, m=method, b=bleed, c=centering:
+                              ImageOps.fit(im, r, m, b, c)),
+            }  # fmt: skip
+            for op, want in made.items():
+                case = {"op": op, "image": image(im), "size": list(room), "method": method,
+                        "centering": list(centering), "color": colour, "bleed": bleed}  # fmt: skip
+                pairs.append((case, want))
+        for orientation in range(10):
+            im = noise(rng, mode, size(rng))
+            turned = im.copy()
+            turned.getexif()[0x0112] = orientation
+            case = {"op": "exif_transpose", "image": image(im), "orientation": orientation}
+            pairs.append((case, ImageOps.exif_transpose(turned)))
+        for _ in range(10):
+            im = noise(rng, mode, size(rng))
+            want: Any = im.getextrema()
+            want = [want] if bands == 1 else list(want)
+            got = run([{"op": "getextrema", "image": image(im)}])[0]
+            assert got["extrema"] == [list(e) for e in want], (mode, im.size)
+    for name in ("linear_gradient", "radial_gradient"):
+        pairs.append(({"op": name}, getattr(Image, name)("L")))
+    check(pairs)
