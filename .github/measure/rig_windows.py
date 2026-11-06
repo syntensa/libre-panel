@@ -122,12 +122,20 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
         with sync_playwright() as p:
             browser = p.chromium.launch()
             page = browser.new_page(viewport={"width": 1440, "height": 900})
+            said = []  # (what the page said: why a view did not show)
+            page.on("console", lambda m: said.append(f"console {m.type}: {m.text}"[:240]))
+            page.on("pageerror", lambda e: said.append(f"pageerror: {e}"[:240]))
+            page.on("requestfailed", lambda r: said.append(f"failed: {r.url} {r.failure}"[:240]))
+            page.on("response", lambda r: said.append(f"{r.status} {r.url}"[:200])
+                    if r.status >= 400 else None)  # fmt: skip
             for view in VIEWS:
                 page.goto(access.with_token(f"{app.url}#/{view}", app.token))
                 try:
                     page.wait_for_selector(".view > *", timeout=30_000)
                 except Exception as exc:  # noqa: BLE001
-                    print("  (the page", view, "did not show:", exc, ")")
+                    print("  (the page", view, "did not show:", str(exc)[:80], ")")
+                    print("\n".join(f"    {line}" for line in said[-30:]), flush=True)
+                    said.clear()
                 if view == VIEWS[-1] and STAY_S > 20:  # (a while there, looked at as it goes)
                     for _ in range(int(STAY_S // 30)):
                         page.wait_for_timeout(30_000)

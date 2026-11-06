@@ -78,9 +78,7 @@ jobs:
           if-no-files-found: ignore
   webview2:
     # what the app's window holds (WebView2's processes), open on its pages, minimized and shown
-    # again; as it is, as before, and with flags to try (.github/measure/webview2_memory.py);
-    # not this time
-    if: false
+    # again; as it is and as before (.github/measure/webview2_memory.py)
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
@@ -91,13 +89,11 @@ jobs:
       - run: pip install -e ".[dev,window]"
       - name: The window open, minimized and shown again
         shell: bash
-        env:
-          LP_WV2_TRY: "--enable-features=NetworkServiceInProcess2;--enable-features=NetworkServiceInProcess"
         run: python .github/measure/webview2_memory.py
   rig:
     # the background app with two simulated panels through the engine, the window never opened:
-    # what its main process holds, by owner (.github/measure/rig_windows.py); not this time
-    if: false
+    # what its main process holds, by owner (.github/measure/rig_windows.py), and what the
+    # page said where a view of it did not show
     runs-on: windows-latest
     timeout-minutes: 75
     steps:
