@@ -50,7 +50,10 @@ all of it. It is the reference every Rust piece is checked against:
   that draws differently changes nothing unseen) on thousands of random cases by `lp-check`, a small program that runs operations it reads and writes their
   results; pytest compares them with Pillow's, byte for byte (tests/test_rust_*.py). numpy's
   arithmetic the same way where the renderer uses it (np.round rounds half to even, astype
-  truncates: the Rust code does what numpy does).
+  truncates: the Rust code does what numpy does). Where the Python app itself does not come to
+  the same numbers on every machine (numpy's matrix products go through BLAS, whose sums go in
+  the processor's own order), the Rust app comes as near as the Python app's own ways come to
+  each other, and the tests say how near (a stated part of a level).
 - **Frames.** Every built-in theme at every panel size with recorded readings and times: the
   Rust renderer's frames against the Python renderer's, to the bit, frame by frame, animations
   and transitions included.
@@ -134,7 +137,11 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
 - [ ] to decide: the app reads an animated WebP's durations before each frame is loaded,
       when Pillow has not set them yet, so it plays those at its usual pace (the Rust frames
       read them as the app does for now)
-- [ ] numpy's arithmetic where the renderer uses it (dither, gradients, light)
+- [x] render/dither.py's numpy: its noise (default_rng's float32s: SeedSequence and PCG64),
+      to_u8 and ramp_u8 to the byte, its blur to the bit where it takes its passes, and within
+      half a thousandth of a level where it multiplies by their matrices instead
+- [ ] numpy's arithmetic in the rest of render/ (lit, facets, fan, moon, sun path, symbols,
+      weather art, globes, start screens): widget by widget, with R4
 
 ### R2 text
 - [ ] FreeType glyphs as Pillow renders them (the same FreeType), sizes, font indexes

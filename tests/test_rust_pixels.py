@@ -799,3 +799,84 @@ def test_quantized_pictures_and_their_colours_are_pillow_s():
         else:
             mine = [(c, tuple(px) if len(px) > 1 else px[0]) for c, px in got["colors"]]
             assert mine == listed, label
+
+
+def _float32s(a: Any) -> str:
+    import numpy as np
+
+    return base64.b64encode(np.ascontiguousarray(a, np.float32).tobytes()).decode()
+
+
+def test_the_renderer_s_dither_its_levels_ramps_and_blur():
+    """render/dither.py's numpy: its noise (default_rng(0x11B7E)'s float32s: SeedSequence and
+    PCG64), to_u8 and ramp_u8 to the byte, and its blur to the bit where it takes its passes
+    (single precision's running sums); where it multiplies by their matrices through numpy's
+    BLAS (whose sums go in the processor's own order) within half a thousandth of a level."""
+    import numpy as np
+
+    from libre_panel.render import dither as d
+
+    rng = random.Random(91)
+    cases: list[dict[str, Any]] = []
+    wants: list[tuple[str, Any]] = []
+    cases.append({"op": "dither_noise", "w": 128, "h": 128, "x": 0, "y": 0})
+    wants.append(("floats", d._tile()))
+    for _ in range(12):
+        w, h = rng.randint(1, 300), rng.randint(1, 300)
+        x, y = rng.randint(-500, 2000), rng.randint(-500, 2000)
+        cases.append({"op": "dither_noise", "w": w, "h": h, "x": x, "y": y})
+        wants.append(("floats", d.noise(w, h, x, y)))
+    for _ in range(60):
+        w, h, c = rng.randint(1, 60), rng.randint(1, 40), rng.choice([1, 1, 3, 4])
+        values = np.array([rng.choice([0.0, 255.0, rng.uniform(-5, 260), rng.uniform(0, 3),
+                                       rng.randint(0, 255) + 0.5])
+                           for _ in range(w * h * c)], np.float32)  # fmt: skip
+        shaped = values.reshape(h, w, c) if c > 1 else values.reshape(h, w)
+        x, y, dither = rng.randint(-50, 900), rng.randint(-50, 900), rng.random() < 0.8
+        cases.append({"op": "to_u8", "values": _float32s(values), "w": w, "h": h, "c": c,
+                      "x": x, "y": y, "dither": dither})  # fmt: skip
+        wants.append(("bytes", d.to_u8(shaped, x, y, dither)))
+    for _ in range(40):
+        n, c = rng.randint(1, 200), rng.choice([3, 4])
+        line = np.array([[rng.uniform(0, 255) for _ in range(c)] for _ in range(n)], np.float32)
+        length = rng.choice([1, 127, 128, 129, rng.randint(1, 500)])
+        across, dither = rng.random() < 0.5, rng.random() < 0.8
+        cases.append({"op": "ramp_u8", "line": _float32s(line), "n": n, "c": c, "length": length,
+                      "across": across, "dither": dither})  # fmt: skip
+        wants.append(("bytes", d.ramp_u8(line, length, across, dither)))
+    products = 0
+    for k in range(40):
+        h, w = rng.randint(1, 700), rng.randint(1, 100)
+        if k % 2:
+            h, w = w, h
+        radius = rng.choice([0.0, 0.5, 1.0, 3.3, 6.0, 12.5, 30.0, rng.uniform(0.1, 40)])
+        a = np.zeros((h, w), np.float32)
+        if k % 3 == 0:  # bright and long: single precision's running sums at their worst
+            a[:] = 255.0 * (np.random.default_rng(k).random((h, w)) < 0.9)
+            far = min(d.reach(radius), h, w)
+            a[h - far :] = 0
+            a[:, w - far :] = 0
+        for _ in range(rng.randint(1, 5)):
+            y0, x0 = rng.randrange(h), rng.randrange(w)
+            a[y0 : y0 + rng.randint(1, 40), x0 : x0 + rng.randint(1, 40)] = rng.uniform(0, 255)
+        cases.append({"op": "blur_floats", "values": _float32s(a), "w": w, "h": h,
+                      "radius": radius})  # fmt: skip
+        far = d.reach(radius)
+        rows = d._stepped(h) if h > far and not a[h - far :].any() else h
+        cols = d._stepped(w) if w > far and not a[:, w - far :].any() else w
+        took = max(h, w) <= d.PRODUCT_MOST and d._served(rows) and d._served(cols)
+        products += took and radius > 0
+        wants.append(("products" if took and radius > 0 else "passes", d.blur(a, radius)))
+    assert products >= 8
+    answers = run(cases)
+    for case, (kind, want), got in zip(cases, wants, answers, strict=True):
+        assert "error" not in got, (case["op"], got.get("error"))
+        if kind == "bytes":
+            assert base64.b64decode(got["bytes"]) == np.asarray(want).tobytes(), case["op"]
+            continue
+        mine = np.frombuffer(base64.b64decode(got["floats"]), np.float32)
+        ours = np.asarray(want, np.float32).ravel()
+        if kind == "products":
+            assert np.abs(mine - ours).max() <= 5e-4, (case["w"], case["h"], case["radius"])
+        else:
+            assert np.array_equal(mine, ours), (case["op"], case.get("radius"))

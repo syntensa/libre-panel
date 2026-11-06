@@ -267,6 +267,54 @@ fn run(case: &Value) -> Result<Value, String> {
                 .map_err(e)?;
             json!({"image": value_of(&out)})
         }
+        "dither_noise" | "to_u8" | "ramp_u8" | "blur_floats" => {
+            // render/dither.py's: floats as little-endian float32s in base64
+            let floats = |key: &str| -> Result<Vec<f32>, String> {
+                let bytes = STANDARD
+                    .decode(case[key].as_str().unwrap_or(""))
+                    .map_err(|err| err.to_string())?;
+                Ok(bytes
+                    .chunks_exact(4)
+                    .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+                    .collect())
+            };
+            let n = |key: &str| case[key].as_i64().unwrap_or(0);
+            let flag = |key: &str| case[key].as_bool().unwrap_or(true);
+            let encode = |v: &[f32]| -> String {
+                STANDARD.encode(v.iter().flat_map(|f| f.to_le_bytes()).collect::<Vec<u8>>())
+            };
+            use lp_pixels::dither;
+            match op {
+                "dither_noise" => {
+                    let out = dither::noise(n("w") as usize, n("h") as usize, n("x"), n("y"));
+                    json!({ "floats": encode(&out) })
+                }
+                "to_u8" => {
+                    let (w, h, c) = (n("w") as usize, n("h") as usize, n("c").max(1) as usize);
+                    let out =
+                        dither::to_u8(&floats("values")?, w, h, c, n("x"), n("y"), flag("dither"));
+                    json!({ "bytes": STANDARD.encode(out) })
+                }
+                "ramp_u8" => {
+                    let (n_, c) = (n("n") as usize, n("c").max(1) as usize);
+                    let out = dither::ramp_u8(
+                        &floats("line")?,
+                        n_,
+                        c,
+                        n("length") as usize,
+                        flag("across"),
+                        flag("dither"),
+                    );
+                    json!({ "bytes": STANDARD.encode(out) })
+                }
+                _ => {
+                    let radius = case["radius"].as_f64().unwrap_or(0.0);
+                    let (w, h) = (n("w") as usize, n("h") as usize);
+                    let out = dither::blur(&floats("values")?, h, w, radius);
+                    json!({ "floats": encode(&out), "reach": dither::reach(radius) })
+                }
+            }
+        }
         "quantize" => {
             // im.quantize(colors, method=MEDIANCUT).convert("RGB"), and its palette
             let im = image_of(&case["image"])?;

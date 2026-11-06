@@ -15,6 +15,7 @@ mod blur;
 pub mod chops;
 mod composite;
 mod convert;
+pub mod dither;
 mod draw;
 mod ellipse;
 mod geometry;
