@@ -1239,8 +1239,8 @@ or delete there.
 
 ### AI activity
 
-What Claude Code and Codex do on this PC, and Claude Code in the cloud: working, waiting for
-you (a question, a permission), idle or not running; the tool at work, the model, and how much
+What Claude Code and Codex do on this PC: working, waiting for you (a question, a
+permission), idle or not running; the tool at work, the model, and how much
 of the plan's limits of five hours and of the week is used. The AI activity module shows it,
 with a sign of its own for each state (no maker's logo); where one of them does not run, the
 other alone. Lumen's card slot brings it in by itself while one works or waits for you, and two
@@ -1264,8 +1264,9 @@ program and does nothing when Libre Panel is not running. A copy of the file as 
 beside it (`settings.json.libre-panel.bak`, once: the first copy is yours); *Remove* takes out
 only Libre Panel's entries, those that call `/api/ai/`. The card says when each program last
 reported. These hooks bring the sessions on this PC (in a terminal, an editor or the desktop
-app); Claude Code's sessions in the cloud come by a relay, below. Where Libre Panel had to take
-another port (its own was taken when it started), the card says so and sets the hooks up again
+app); Claude Code's sessions in the cloud (claude.ai/code) cannot reach it, and a relay for
+them (0.7.4 to 0.8.1rc1) is no more: an old config.toml's `cloud` and `cloud_token` are let be
+and go from the file with the next setting written. Where Libre Panel had to take another port (its own was taken when it started), the card says so and sets the hooks up again
 with a click.
 
 ```toml
@@ -1276,8 +1277,6 @@ enabled = ["agents"]
 claude_usage = true   # ask Claude Code for the plan's usage every three minutes
 codex_usage = true    # ask Codex's app-server every minute
 task = true           # show what the session is called (ai.<agent>.task)
-cloud = ""            # the relay of the cloud sessions (set up in Settings)
-cloud_token = ""      # the relay's access token, for a topic not open to everyone
 notice = false        # a notice on the panel when a session begins to wait for you
 ```
 
@@ -1295,8 +1294,8 @@ limits (an API key).
 The readings, for `claude` and `codex`: `ai.<agent>.state` (`working`, `waiting`, `idle`,
 `off`), `.busy` (2 waiting for you, 1 working, 0 idle, -1 off: for colours and conditions),
 `.tool`, `.task` (the session's name, where it carries one, never the prompt; Claude Code may
-name a session after its first prompt, so with `task = false` it reads nothing), `.cloud` (1:
-the session that counts runs in the cloud), `.since` (seconds in the state), `.sessions`,
+name a session after its first prompt, so with `task = false` it reads nothing), `.since`
+(seconds in the state), `.sessions`,
 `.model`, `.context` (% of the context window), `.cost` ($ of the session, Claude Code's estimate), `.five_hour` and `.week` (% of the
 plan's limits used), each with `_reset` (seconds until the window begins anew; show it with
 `{value:duration}`) and `_age` (seconds since it was read), Claude Code's `.cost_today` (what
@@ -1304,7 +1303,7 @@ its sessions cost today by their status lines, an estimate: each session's cost 
 status line, from midnight on, added up; a session Libre Panel meets later counts in full) and
 Codex's `.tokens_today` and `.tokens_week`. The sessions one by one, as many as three, the one
 that counts first (waiting for you before working before idle, then the one that came to it
-last): `.s1.state` to `.s3.state`, with `.task`, `.since` and `.cloud`. A widget can show a part
+last): `.s1.state` to `.s3.state`, with `.task` and `.since`. A widget can show a part
 only in a state: `"needs": "ai.claude.state=waiting"`. The AI card of Claude Code alone lists
 its other sessions where it has room under the plan's limits (the 12.3"), and shows *Today $…*
 at the right of its name.
@@ -1313,47 +1312,6 @@ With `notice` on, a notice comes on the panel when a session begins to wait for 
 (a question, a permission): what the session is called where `task` is on, else *Waiting for
 you*. A theme that shows `ai.*` itself leaves it out, as one that shows what plays leaves out
 the notice of a new track.
-
-#### Claude Code in the cloud
-
-Claude Code's cloud sessions (claude.ai/code, `claude --cloud`) run on a machine of
-Anthropic's that cannot reach this PC. They come by a relay, an [ntfy](https://ntfy.sh) topic:
-*Claude Code in the cloud → Set up* on the same card makes a long random address on ntfy.sh
-and shows a setup script for the cloud environment, with what to do on claude.ai/code:
-
-1. Open the settings of the environment your sessions run in.
-2. Network access: *Limited* (*Custom* in older apps), with the default list kept and
-   `ntfy.sh` added.
-3. Recommended: a free account at [ntfy.sh](https://ntfy.sh/app), an access token from it
-   (*Account → Access tokens*), and that token as the environment's network secret (*API
-   credentials* in older apps) for `ntfy.sh`: header `Authorization`, `Bearer` before the
-   token. The cloud's sessions share a few addresses, and without an account ntfy.sh often
-   turns them away (HTTP 429); with one it counts what your account sends.
-4. Setup script: add the script (*Copy the script*).
-5. Start a session in it: it reports from then on, and the card says when it last did.
-
-The script writes a hook into the session's own Claude Code settings in the cloud
-(`~/.claude/libre-panel-cloud.py`, called on each event; your own hooks stay). The hook works
-out the session's state as Libre Panel does and posts it to the relay only when it changes,
-and every five minutes while it works: the event's name, a short name for the session (a hash
-of its id) and what the session is called where `task` is on. Never a prompt, a tool's input
-or a file. Libre Panel listens to the topic and shows such a session as Claude Code's, with
-*In the cloud* where the tool or the model stands (`ai.claude.cloud`). It takes from the
-topic nothing but such states: whoever knows the address could read along and post, so it is
-long and random, and *Remove* stops listening (take the script out of the environment too).
-
-When the relay is busy (HTTP 429, or a server error), the hook asks it again a few times
-within a minute; a refusal for good (a wrong token, HTTP 401) it does not repeat. What it
-sent, or why not, it notes in the session in `~/.claude/libre-panel-cloud.log` (its last
-hundred lines): no such file after a prompt means the setup script did not run, a line with
-`not sent` names the relay's answer.
-
-ntfy.sh passes some 250 messages a day for each sender, which is a few a prompt. For more, or
-for a relay of your own, put the address of a topic on your own ntfy server in `cloud` (the
-host has to be among the environment's allowed domains) and, for a topic that is not open to
-everyone, its token in `cloud_token`; the hook in the cloud sends with the token in
-`LIBRE_PANEL_RELAY_TOKEN` (an environment variable of the environment), or the environment
-adds it itself as a network secret for that host.
 
 ### Game mode
 

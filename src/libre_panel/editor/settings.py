@@ -23,6 +23,7 @@ from urllib.parse import urlencode
 from libre_panel import __version__, i18n
 from libre_panel.config import (
     ALARM_THEME,
+    GONE,
     JPEG_LAYOUTS,
     JPEG_QUALITY,
     MORE_PANELS,
@@ -252,6 +253,17 @@ def names_a_path(name: str) -> bool:
     if len(parts) == 3 and parts[0] in ("sensors", "services"):
         return any(word in parts[2].lower() for word in PATH_WORDS)
     return False
+
+
+def _without_gone(options: dict[str, Any]) -> dict[str, Any]:
+    """The services' options without those that are no more (config.GONE): an old relay's
+    address, a secret, does not go to the app either."""
+    return {
+        name: {key: value for key, value in table.items() if f"services.{name}.{key}" not in GONE}
+        if isinstance(table, dict)
+        else table
+        for name, table in options.items()
+    }
 
 
 def _plain(value: Any) -> Any:
@@ -490,7 +502,7 @@ class Settings:
                 },
                 "services": {
                     "enabled": list(config.services.enabled),
-                    "options": _plain(config.services.options),
+                    "options": _plain(_without_gone(config.services.options)),
                 },
                 "language": config.language,
                 "check_updates": config.check_updates,

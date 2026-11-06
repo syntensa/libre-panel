@@ -200,14 +200,6 @@ const OPTIONS = {
     label: () => t("Ask Codex for the plan's usage"),
     hint: () => t("Every minute while a theme shows it, from Codex's app-server, also without a terminal open."),
   },
-  "agents.cloud": {
-    label: () => t("Relay of the cloud sessions"),
-    hint: () => t("Set up with Claude Code in the cloud below; an ntfy server of your own takes its place here."),
-  },
-  "agents.cloud_token": {
-    label: () => t("Access token of the relay"),
-    hint: () => t("Only for a topic of the relay that is not open to everyone."),
-  },
   "agents.notice": {
     label: () => t("A notice when a session waits for you"),
     hint: () => t("On the panel, when Claude Code or Codex begins to wait for your answer; not while the theme shows AI activity itself."),

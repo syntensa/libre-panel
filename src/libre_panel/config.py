@@ -1714,6 +1714,10 @@ _EDITING = threading.Lock()
 # next write (a setting the app or the tray changes, a theme chosen).
 GONE = (
     "light_mode",  # 0.8 to 0.8.1rc1: light mode's switch, always on since
+    # 0.7.4 to 0.8.1rc1: the relay of Claude Code's cloud sessions and its access token (only
+    # the agents on this computer count since)
+    "services.agents.cloud",
+    "services.agents.cloud_token",
 )
 
 
