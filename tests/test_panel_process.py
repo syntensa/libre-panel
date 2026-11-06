@@ -82,9 +82,9 @@ def test_a_panel_beside_the_first_runs_in_a_process_of_its_own(tmp_path, monkeyp
         # (a process of its own takes a few seconds to start: it imports what it draws with)
         assert wait_for(lambda: beside.state == "showing", timeout=90)
         assert beside.theme == "lumen-companion" and beside.target
-        assert wait_for(lambda: beside.shown is not None, timeout=10)  # its picture, for Live
+        assert wait_for(lambda: beside.shown is not None, timeout=10)  # its picture, for Start
         assert beside.shown.size[0] > 0
-        # (the picture is noted for Live before the panel's driver writes it; with the highest
+        # (the picture is noted for Start before the panel's driver writes it; with the highest
         # rights only into a folder that nobody without them may change, which a user's temp
         # folder is not. The panel's own process has the rights it has, not the tests' stand-in
         # (conftest's not_elevated): GitHub's Windows runners run elevated)
@@ -96,7 +96,7 @@ def test_a_panel_beside_the_first_runs_in_a_process_of_its_own(tmp_path, monkeyp
         # what its theme reads is wanted here too, where the sources are: Lumen shows no
         # processes, its companion does, so the processes are counted for it
         assert wait_for(lambda: wanted("proc."), timeout=10)
-        # Live → Diagnose → Load calls its process "panel 2", and measures it
+        # Status → Diagnose → Load calls its process "panel 2", and measures it
         assert list(panel_pids().values()) == [2]
         sampler = LoadSampler(service=lambda: None, window=lambda: None)
         sampler.sample()

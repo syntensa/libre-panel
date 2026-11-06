@@ -472,7 +472,7 @@ def test_before_the_first_reading_it_says_it_starts():
     assert readings.state == "starting" and readings.age is None and readings.sensors == ()
 
 
-# -- what the rounds take (Live -> Diagnose -> Load) ----------------------------------------------
+# -- what the rounds take (Status -> Diagnose -> Load) --------------------------------------------
 
 
 class Ticks:
@@ -547,7 +547,7 @@ def test_times_with_anything_wrong_in_them_are_not_taken(timing):
         protocol.parse_readings(good_answer(timing=timing))
 
 
-# -- what the service holds (Live -> Diagnose -> Load) -------------------------------------------
+# -- what the service holds (Status -> Diagnose -> Load) -----------------------------------------
 
 
 def test_what_the_service_holds_goes_through_the_protocol_and_an_older_one_says_nothing():

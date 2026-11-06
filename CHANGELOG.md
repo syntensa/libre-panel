@@ -29,19 +29,36 @@
   next setting written.
 - **The window holds less while it is minimized (Windows).** WebView2 is asked to hold less
   while the app's window is minimized (its memory target low), and as before once it is shown
-  again; the page stays as it is. In Windows CI, the window and WebView2's processes after
-  Live: minimized 70 MB instead of 600, shown again 150 MB instead of 760.
-- **The live picture no longer piles up.** The panel's picture in the app (five a second on
-  Live and in the Player, one on Start) is drawn on a canvas and each one let go once the next
-  has come: in an image element the browser kept every picture it had decoded, and WebView2's
-  page grew some 6 MB a second on Live (in Chromium 100 to 398 MB in a minute, now 77 to 80 MB
-  the whole minute). The picture looks as before.
+  again; the page stays as it is. In Windows CI, the window and WebView2's processes after a
+  while on the panel's picture (five a second): minimized 70 MB instead of 600, shown again
+  150 MB instead of 760.
+- **The live picture no longer piles up.** The panel's picture in the app (once a second on
+  Start, five a second shown large and in the Player) is drawn on a canvas and each one let go
+  once the next has come: in an image element the browser kept every picture it had decoded,
+  and WebView2's page grew some 6 MB a second at five pictures a second (in Chromium 100 to
+  398 MB in a minute, now 77 to 80 MB the whole minute). The picture looks as before.
 - **The app's picture of the panel from the engine.** Where Libre Panel's engine composes the
-  panel's frames (the default with the downloads), the app's picture of the panel (Live, the
-  Player, Start) is the engine's own frame, whole, as the panel got it: the main process no
+  panel's frames (the default with the downloads), the app's picture of the panel (Start, shown
+  large, the Player) is the engine's own frame, whole, as the panel got it: the main process no
   longer composes it again from its layers. In Windows CI with both panels on Lumen, after ten
-  minutes on Live: the main process 61 to 70 MB instead of 95 to 106 (on Linux 117 MB instead of
-  133). The picture is the same, pixel for pixel.
+  minutes of the picture five a second: the main process 61 to 70 MB instead of 95 to 106 (on
+  Linux 117 MB instead of 133). The picture is the same, pixel for pixel.
+
+**Changes**
+- **One live picture: on Start.** Start and Live both showed the panel's picture, each with
+  pause and brightness. Start keeps it (once a second, with pause, brightness and upside down):
+  a click on it shows it large, five a second, until *Escape* or its cross closes it. *Live* is
+  *Status* now: how the panel runs, in a sentence and in numbers, the log, the sensors, the
+  services, *History* and *Diagnose*, without a picture or controls of its own; the header's
+  *Panel 1 | Panel 2* chooses the panel for both, and the line under the panel's name on Start
+  leads to Status. The tray and the notices lead there as they led to Live.
+- **The header fits.** With two panels, Design's and Look's header hid the theme's name at the
+  window's default size (1440 px), in German all but its first letters, and cut the search
+  field to its glass and a letter. What gives way now does in steps, as far as it must: the hint
+  of the search field's keys, the tabs closer together, the search field to its glass, the
+  unsaved mark to its dot, the panel chip to its name, the brand to its icon, *Panel 1 | Panel 2*
+  to its numbers, *Settings* to its gear. One panel or two, English or German, from 1280 px up:
+  the theme's name whole, nothing beyond the window, and at 1920 px all of it as before.
 
 **Removed**
 - **Claude Code in the cloud.** The relay for Claude Code's cloud sessions (an ntfy topic,
@@ -55,8 +72,8 @@
 - Three minutes after the app's window closed, the log says what each of Libre Panel's
   processes holds then (the main process, the engines, the sensor service, PresentMon) and what
   the main process holds in detail (its memory as the Task Manager shows it, the C heap in use
-  and free, the pictures): one line to read afterwards in *Live → Diagnose → Log*.
-- *Live → Diagnose → Load* names Libre Panel's engine among the processes (it said
+  and free, the pictures): one line to read afterwards in *Status → Diagnose → Log*.
+- *Status → Diagnose → Load* names Libre Panel's engine among the processes (it said
   `libre-panel-engine.exe`).
 
 **Fixed**

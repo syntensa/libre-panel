@@ -8,7 +8,7 @@ import { redo, undo } from "../core/doc.js";
 import { t } from "../core/i18n.js";
 import { firstStart, store, useStore } from "../core/state.js";
 import { bindKey, keyLabel } from "../core/shortcuts.js";
-import { html } from "../lib/preact.js";
+import { html, useLayoutEffect, useRef } from "../lib/preact.js";
 import { IconButton, Segmented } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
 import { dialogOpen } from "../ui/dialog.js";
@@ -16,6 +16,72 @@ import { openPalette, paletteOpen } from "../ui/palette.js";
 import { allViews, leaveSettings, navigate, settingsReturn, showsTheme, viewHint } from "./views.js";
 
 const titleOf = (view) => (typeof view.title === "function" ? view.title() : view.title);
+
+// What gives way where the header has too little room for all it shows, in this order, each after
+// the one before (app.css: data-fit): the search field's hint of its keys, the tabs closer
+// together, the search field to its glass, the unsaved mark to its dot, the panel chip to its
+// name, the brand to its icon, "Panel 1 | Panel 2" to the numbers, the way to the settings to its
+// gear. The window's width alone does not say when (a second panel adds its switch, German its
+// longer words, the theme its name), so each step is measured: the first with which nothing
+// reaches beyond the header, the theme's name is whole and the search field shows some of its
+// words (or none: its glass) is kept. The name gives way only after all of them.
+const GIVE_WAY = ["keys", "tabs", "search", "unsaved", "chip", "brand", "panels", "settings"];
+const SEARCH_WORDS = 60; // px of the search field's words, at least ("Search or…"): not a letter
+
+/** How much of its text an element's box hides, in pixels (0 where it shows all of it). */
+function hidden(element) {
+  if (!element) return 0;
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  return range.getBoundingClientRect().width - element.getBoundingClientRect().width;
+}
+
+function fits(bar) {
+  const end = bar.getBoundingClientRect().right - parseFloat(getComputedStyle(bar).paddingRight);
+  const last = bar.lastElementChild;
+  const words = bar.querySelector(".search-trigger.wide .search-trigger-text");
+  const wordsWidth = words?.getClientRects().length ? words.getBoundingClientRect().width : Infinity; // (none shown: its glass)
+  return (
+    (!last || last.getBoundingClientRect().right <= end + 0.5) &&
+    hidden(bar.querySelector(".theme-name span")) <= 0.1 &&
+    wordsWidth >= SEARCH_WORDS
+  );
+}
+
+/** The header's parts give way as far as they must: measured again whenever its width or what it
+ * shows changes (or a font arrives), before that is painted. From the steps it took last, so a
+ * window drawn wider or narrower is measured once or twice a frame, not once for every step. */
+function useGiveWay(ref) {
+  useLayoutEffect(() => {
+    const bar = ref.current;
+    if (!bar) return undefined;
+    let steps = 0;
+    const take = (n) => {
+      bar.dataset.fit = GIVE_WAY.slice(0, n).join(" ");
+    };
+    const fit = () => {
+      // fewer steps while all of it fits with them, then more while it does not
+      while (steps > 0) {
+        take(steps - 1);
+        if (!fits(bar)) break;
+        steps -= 1;
+      }
+      take(steps);
+      while (steps < GIVE_WAY.length && !fits(bar)) take(++steps);
+    };
+    fit();
+    const resized = new ResizeObserver(fit);
+    resized.observe(bar);
+    const changed = new MutationObserver(fit); // (its own data-fit is an attribute: not watched)
+    changed.observe(bar, { childList: true, subtree: true, characterData: true });
+    document.fonts?.addEventListener("loadingdone", fit);
+    return () => {
+      resized.disconnect();
+      changed.disconnect();
+      document.fonts?.removeEventListener("loadingdone", fit);
+    };
+  }, []);
+}
 
 // Escape leaves Settings for where the person was (a popover or a dialog in it takes Escape first)
 bindKey("escape", () => leaveSettings(), {
@@ -75,9 +141,9 @@ function SettingsButton({ active }) {
   </button>`;
 }
 
-/** "Panel 1 | Panel 2", while more panels are set up: the panel Live shows and Design and Look
- * edit (target.js). The theme the chosen panel shows opens: in Design and Look after asking
- * about unsaved changes, elsewhere where there are none. */
+/** "Panel 1 | Panel 2", while more panels are set up: the panel Start and Status show and
+ * Design and Look edit (target.js). The theme the chosen panel shows opens: in Design and Look
+ * after asking about unsaved changes, elsewhere where there are none. */
 function PanelSwitch() {
   const count = useStore((s) => 1 + (s.settings?.config?.panels?.length || 0));
   const number = useTarget();
@@ -90,9 +156,9 @@ function PanelSwitch() {
   };
   return html`<${Segmented}
     class="panel-switch"
-    label=${t("Which panel Live shows and Design edits")}
+    label=${t("Which panel Start and Status show and Design edits")}
     value=${number}
-    options=${Array.from({ length: count }, (_, i) => ({ value: i + 1, label: t("Panel {number}", { number: i + 1 }) }))}
+    options=${Array.from({ length: count }, (_, i) => ({ value: i + 1, label: t("Panel {number}", { number: i + 1 }), short: String(i + 1) }))}
     onChange=${choose}
   />`;
 }
@@ -103,7 +169,9 @@ export function Header({ view }) {
   const asking = useStore((s) => firstStart(s)) && route.view === "home" && !route.rest.startsWith("themes");
   const parts = view?.header || {};
   const tabs = allViews().filter((item) => item.tab);
-  return html`<header class=${`topbar${parts.lead ? " with-lead" : ""}`}>
+  const bar = useRef(null);
+  useGiveWay(bar);
+  return html`<header ref=${bar} class=${`topbar${parts.lead ? " with-lead" : ""}`}>
     <a class="brand" href="#/home" aria-label=${t("Libre Panel: start")}>
       <${Icon} name="logo" size=${22} />
       <span>Libre Panel</span>

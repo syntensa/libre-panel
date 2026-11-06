@@ -1,26 +1,25 @@
-// Live (#/live): what the panel shows now and how it runs; its switch leads to History
+// Status (#/live: the address it had as Live): how the panel runs; its switch leads to History
 // (#/live/history, ../history), what the memory kept of the last days, and to Diagnose
 // (#/live/diagnose, ../diagnose): the panel test, the log and what mends a problem. A calm line says it in words ("Runs
-// smoothly at 50 fps", or what keeps it from running); under it the picture on the panel, the
-// numbers as detail (frame rate against the target, data rate, drawing time, queue, faults) and
-// the end of the log; at the side smooth motion, the sensors, game mode and the other services
-// with their switches (named as Settings names them), and test notices. It uses the console API
+// smoothly at 50 fps", or what keeps it from running); under it the numbers as detail (frame
+// rate against the target, data rate, drawing time, queue, faults) and the end of the log; at
+// the side smooth motion, the sensors, game mode and the other services with their switches
+// (named as Settings names them), and test notices. The picture on the panel, its pause and its
+// brightness are on Start, the panel it is about is the header's choice. It uses the console API
 // (docs/ARCHITECTURE.md) and polls it while it is shown. Built on the shell: see ../../README.md.
 
-import { appAction } from "../../core/app.js";
 import { registerCommands, registerProvider } from "../../core/commands.js";
-import { LivePicture, control, useLivePicture, usePolled } from "../../core/console.js";
+import { control, usePolled } from "../../core/console.js";
 import { t } from "../../core/i18n.js";
 import { loadPanelInfo } from "../../core/settings.js";
 import { store, useStore } from "../../core/state.js";
 import { statTiles } from "../../core/stats.js";
 import { videoState } from "../../core/video.js";
-import { chooseTarget } from "../../core/target.js";
 import { html, useEffect, useRef, useState } from "../../lib/preact.js";
-import { openChosenPanelTheme, themeName } from "../../core/actions.js";
+import { themeName } from "../../core/actions.js";
 import { modeName, panelName, stateText } from "../../shell/panel-popover.js";
 import { navigate, registerView } from "../../shell/views.js";
-import { Segmented, Slider, Toggle } from "../../ui/controls.js";
+import { Toggle } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
 import { toast, toastError } from "../../ui/toast.js";
 import { DiagnoseView } from "../diagnose/index.js";
@@ -135,24 +134,7 @@ function RunState({ background, status }) {
   </div>`;
 }
 
-// -- the picture and the numbers ------------------------------------------------------------------
-
-function Picture({ state, background, panel = 1 }) {
-  const live = useLivePicture({ width: 960, every: 200, on: background && state === "showing", panel });
-  let note = null;
-  if (live.picture === null) {
-    note =
-      state === "paused"
-        ? t("The panel is paused: there is no picture.")
-        : state === "error"
-          ? t("The panel needs attention: there is no picture.")
-          : t("There is no picture yet.");
-  }
-  return html`<div class="live-picture">
-    ${live.picture ? html`<${LivePicture} picture=${live.picture} label=${t("The picture on the panel")} />` : null}
-    ${note ? html`<p class="live-picture-note">${note}</p>` : null}
-  </div>`;
-}
+// -- the numbers ----------------------------------------------------------------------------------
 
 /** A tile's note by its parts ("USB 0 · panel 0 · ffmpeg 0"): a narrow tile wraps between them. */
 const noteParts = (note) => note.split(" · ").flatMap((part, i) => [i ? " · " : "", html`<span class="live-tile-part">${part}</span>`]);
@@ -340,28 +322,12 @@ function Probes({ background }) {
     </p>`;
 }
 
-// -- the header: pause and brightness ---------------------------------------------------------------------
-
-function LiveActions() {
-  const app = useStore((s) => s.app);
-  if (!app.available || app.quit) return null;
-  const paused = app.panel?.state === "paused";
-  return html`<button type="button" class="btn live-pause" onClick=${() => appAction(paused ? "resume" : "pause")}>
-      <${Icon} name=${paused ? "play" : "pause"} size=${14} /> ${paused ? t("Resume panel") : t("Pause panel")}
-    </button>
-    <label class="live-brightness">
-      <span>${t("Brightness")}</span>
-      <${Slider} label=${t("Brightness")} value=${app.brightness ?? 0} step=${5} format=${(v) => `${v} %`}
-        onCommit=${(value) => appAction("brightness", value)} />
-    </label>`;
-}
-
 // -- the view -------------------------------------------------------------------------------------------------
 
-/** Now, History or Diagnose: the parts of Live. */
+/** Now, History or Diagnose: the parts of Status. */
 function Switch({ part = "" }) {
   const link = (to, label) => html`<a href=${to ? `#/live/${to}` : "#/live"} aria-current=${part === to ? "page" : undefined}>${label}</a>`;
-  return html`<nav class="live-switch" aria-label=${t("Live")}>
+  return html`<nav class="live-switch" aria-label=${t("Status")}>
     ${link("", t("Now"))}${link("history", t("History"))}${link("diagnose", t("Diagnose"))}
   </nav>`;
 }
@@ -381,15 +347,12 @@ function LiveNow() {
   const services = usePolled(control.services, 2000);
   const background = panel.data ? panel.data.background : app.available;
   const status = panel.data?.panel || (background ? app.panel : null);
-  const state = status?.state;
   const model = connectedModel({ available: background, panel: status }, models);
-  // with more panels: which one's picture (as Which is which? numbers them), and how it is doing
+  // with more panels: the one the header chose (target.js), as Which is which? numbers them, and
+  // how it is doing (the numbers are the first's: its loop drives the readings and the video)
   const more = status?.more || [];
-  // the header's choice (target.js), as chosen: Live has the panels the app says are running
   const chosen = useStore((s) => Number(s.prefs.target) || 1);
-  const choose = (n) => chooseTarget(n, () => openChosenPanelTheme()); // (Design and Look follow)
   const beside = more.find((item) => item.index + 2 === chosen) || null;
-  const number = beside ? chosen : 1;
   const besideLine = beside
     ? [
         beside.state === "showing" ? t("Shows {theme}", { theme: themeName(beside.theme) }) : stateText(beside.state),
@@ -406,27 +369,15 @@ function LiveNow() {
     <div class="live-main">
       <${Switch} />
       <div class="live-head">
-        <h2>${t("On the panel now")}</h2>
+        <h2>${t("How the panel runs")}</h2>
         ${background && line ? html`<span class="live-state">${line}</span>` : null}
       </div>
-      ${background && more.length
-        ? html`<${Segmented}
-            class="live-panels"
-            label=${t("Which panel's picture")}
-            value=${number}
-            options=${[1, ...more.map((item) => item.index + 2)].map((n) => ({ value: n, label: t("Panel {number}", { number: n }) }))}
-            onChange=${choose}
-          />`
-        : null}
       ${beside ? null : html`<${RunState} background=${background} status=${status} />`}
-      ${background
-        ? html`<${Picture} state=${beside ? beside.state : state} background=${background} panel=${number} />
-            ${beside // (the numbers are the first panel's: its loop drives the readings and the video)
-              ? null
-              : html`<section class="live-numbers" aria-label=${t("In numbers")}>
-                  <h3 class="section-title">${t("In numbers")}</h3>
-                  <${Tiles} stats=${status?.stats} />
-                </section>`}`
+      ${background && !beside
+        ? html`<section class="live-numbers" aria-label=${t("In numbers")}>
+            <h3 class="section-title">${t("In numbers")}</h3>
+            <${Tiles} stats=${status?.stats} />
+          </section>`
         : null}
       <h3 class="section-title live-log-title">${t("Log")}</h3>
       <${LogBox} />
@@ -450,12 +401,11 @@ function LiveNow() {
 }
 
 registerView({
-  id: "live",
-  title: () => t("Live"),
+  id: "live", // (its address since it was Live: the tray, the notices and old links lead here)
+  title: () => t("Status"),
   order: 40,
   icon: "pulse",
   component: LiveView,
-  header: { actions: LiveActions },
 });
 
 registerCommands([

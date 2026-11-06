@@ -146,7 +146,7 @@ function PanelChoice({ theme, models }) {
   `;
 }
 
-/** The tiles of Live the chip shows: the frame rate against its target, the data rate, the drawing time. */
+/** The tiles of Status the chip shows: the frame rate against its target, the data rate, the drawing time. */
 const NUMBERS = ["fps", "data", "draw"];
 
 /** How the running panel is doing, in the numbers the old editor's chip had (those that count). */
@@ -170,8 +170,8 @@ function Running({ app, onClose }) {
   return html`<div class="pop-section">
     <div class="pop-head">
       <div class="pop-title">${t("On the panel now")}</div>
-      <button type="button" class="link-btn" title=${t("Open the Live view")} onClick=${() => (onClose(), navigate("live"))}>
-        ${t("Live")} <${Icon} name="chevron-right" size=${13} strokeWidth=${2.4} />
+      <button type="button" class="link-btn" title=${t("Open Status: how the panel runs")} onClick=${() => (onClose(), navigate("live"))}>
+        ${t("Status")} <${Icon} name="chevron-right" size=${13} strokeWidth=${2.4} />
       </button>
     </div>
     <div class=${`run-state ${panel.state}`}>

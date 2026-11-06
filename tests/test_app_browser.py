@@ -112,13 +112,13 @@ def widget(page, id):
     return js(page, f"window.libre.doc.widgetById({id!r})")
 
 
-# -- Start, Look and Live -------------------------------------------------------------------------
+# -- Start, Look and Status -----------------------------------------------------------------------
 # A test waits for the effect of what it did (a setting in config.toml, the store, what the app
 # shows), never for "a toast exists": an earlier one may still be up.
 
 
 # The picture on the panel is 404 before its first frame and while the panel is paused, which
-# Start and Live show as such; Chromium logs that as an error, which these tests allow.
+# Start shows as such; Chromium logs that as an error, which these tests allow.
 PICTURE = ("&format=jpeg",)
 
 
@@ -804,6 +804,49 @@ def test_the_launcher_shows_and_controls_the_running_panel(background):
         assert wait_for(lambda: load_config().device.rotate == 180)
 
 
+def test_the_launchers_picture_shows_large_and_its_line_leads_to_status(background):
+    """A click on Start's picture shows it large, five a second, as wide as it shows; Escape and
+    the close button end it. The line of how the panel runs leads to Status, which has no
+    picture of its own."""
+    from urllib.parse import parse_qs, urlparse
+
+    app, url = background
+    asked = []
+    with browser_page(url, "home", allow=PICTURE) as page:
+        page.on("request", lambda r: asked.append(r.url) if "/control/live" in r.url else None)
+        page.wait_for_selector(".panel-picture canvas[role=img]")
+        opener = page.get_by_role("button", name="Show the picture large")
+        opener.click()
+        dialog = page.get_by_role("dialog", name="The picture on the panel")
+        expect(dialog.locator(".dialog-title")).to_have_text("Showing “Libre Default”")
+        expect(dialog.locator("canvas[role=img]")).to_have_attribute(
+            "aria-label", "The picture on the panel"
+        )
+        page.wait_for_function("document.querySelector('.picture-large canvas').width > 300")
+        before = len(asked)
+        page.wait_for_timeout(1500)
+        widths = [int(parse_qs(urlparse(u).query)["w"][0]) for u in asked[before:]]
+        large = [w for w in widths if w > 960]  # (Start's own goes on, once a second)
+        assert len(large) >= 4, widths  # five a second
+        assert set(large) == {1440 - 96}, large  # as wide as the window lets it show
+        page.keyboard.press("Escape")
+        expect(dialog).to_have_count(0)
+        opener.click()
+        dialog.get_by_role("button", name="Close").click()
+        expect(dialog).to_have_count(0)
+        page.wait_for_timeout(600)
+        after = len(asked)
+        page.wait_for_timeout(1500)
+        assert len(asked) - after <= 3  # (back to once a second)
+        # how it runs, in a line: it leads to Status
+        line = page.locator(".panel-card-line")
+        expect(line).to_contain_text("running for")
+        line.click()
+        page.wait_for_function("location.hash === '#/live'")
+        expect(page.locator(".live-head h2")).to_have_text("How the panel runs")
+        expect(page.locator(".view canvas")).to_have_count(0)
+
+
 def test_the_launcher_says_what_the_panel_could_not_read(app_url, isolated_home):
     hint = "CPU temperature and power need administrator rights."
     choose_theme(isolated_home)
@@ -1054,7 +1097,7 @@ def test_look_shows_a_test_notice_on_the_preview(app_url):
 
 
 def test_live_values_are_drawn_again_only_where_the_picture_is_shown(app_url, page):
-    """With live values on the preview is drawn every second; in Start, Live or Settings,
+    """With live values on the preview is drawn every second; in Start, Status or Settings,
     which do not show it, nothing asks the server for it (and in Look it goes on)."""
     renders = []
     page.on("request", lambda r: renders.append(r.url) if r.url.endswith("/api/render") else None)
@@ -1102,7 +1145,10 @@ def test_live_shows_the_panel_and_runs_its_services(background, isolated_home):
         expect(page.locator("[data-tile=fps] small")).to_have_text("target 5")
         expect(page.locator("[data-tile=faults] b")).to_have_text("0")
         expect(page.locator("[data-tile=queue] small")).to_have_text("video mode only")
-        page.wait_for_selector(".live-picture canvas[role=img]")  # the picture on the panel
+        # no picture of the panel here (it is Start's), nor its pause and brightness
+        expect(page.locator(".view canvas")).to_have_count(0)
+        expect(page.get_by_role("button", name="Pause panel")).to_have_count(0)
+        expect(page.locator(".topbar .slider")).to_have_count(0)
         # the sources the panel reads, and the services with their switches
         page.wait_for_selector("[data-source=psutil]")
         page.wait_for_selector("[data-service=notices]")
@@ -1124,28 +1170,25 @@ def test_live_shows_the_panel_and_runs_its_services(background, isolated_home):
         log = page.locator(".live-log")
         expect(log).to_contain_text("09:12:04  showing theme 'studio'")
         expect(log.locator(".warn")).to_have_text("09:14:31  a message to look at")
-        # pause and brightness are in the header
-        page.locator(".live-pause").click()
+        # pause and brightness: on Start, with the picture
+        page.goto(f"{url}#/home")
+        page.get_by_role("button", name="Pause panel").click()
         assert wait_for(lambda: app.panel.paused)
-        expect(page.locator(".live-picture-note")).to_contain_text("paused")
-        set_range(page.locator(".topbar .slider input"), 30)
+        expect(page.locator(".panel-picture-note")).to_contain_text("paused")
+        set_range(page.locator(".panel-card .slider input"), 30)
         assert wait_for(lambda: load_config().device.brightness == 30)
 
 
-def test_live_shows_the_picture_of_each_panel(app_url, isolated_home):
-    """With more panels Live chooses whose picture it shows; the numbers stay the first's."""
-    import io
+def test_status_tells_how_the_panel_the_header_chose_runs(app_url, isolated_home):
+    """With more panels Status is about the one the header chose (no switch of its own): the
+    first's numbers, a panel beside it in a line; no picture asked for (it is Start's)."""
     import json
-
-    from PIL import Image
 
     choose_theme(isolated_home)
     panel = {**app_answer()["panel"],
              "more": [{"index": 0, "state": "showing", "detail": "", "target": "", "theme":
                        "lumen-companion", "fps": 10.0, "model": "", "size": None}]}  # fmt: skip
     asked = []
-    buffer = io.BytesIO()
-    Image.new("RGB", (32, 8), "teal").save(buffer, "JPEG")
 
     def state(route, request):
         body = json.dumps({"background": True, "panel": panel})
@@ -1153,23 +1196,21 @@ def test_live_shows_the_picture_of_each_panel(app_url, isolated_home):
 
     def live(route, request):
         asked.append(request.url)
-        route.fulfill(status=200, content_type="image/jpeg", body=buffer.getvalue())
+        route.fulfill(status=404, content_type="application/json", body="{}")
 
     routes = {"**/api/plugins/control/panel": state, "**/api/plugins/control/live*": live}
     with browser_page(app_url, "live", routes=routes, allow=("control/live",)) as page:
-        choice = page.get_by_role("radiogroup", name="Which panel's picture")
-        expect(choice.get_by_role("radio")).to_have_text(["Panel 1", "Panel 2"])
-        page.wait_for_selector(".live-picture canvas[role=img]")
-        assert asked and "panel=" not in asked[-1]  # the first panel's
-        expect(page.locator(".live-numbers")).to_have_count(1)
-        choice.get_by_role("radio", name="Panel 2").click()
+        page.wait_for_selector(".live-numbers")
+        expect(page.locator(".live .live-panels, .live [role=radiogroup]")).to_have_count(0)
+        store = "window.libre.store"
+        choose = f"(n) => {store}.set({{ prefs: {{ ...{store}.get().prefs, target: n }} }})"
+        page.evaluate(f"({choose})(2)")  # (as the header's switch chooses it)
         expect(page.locator(".live-state")).to_contain_text("Shows Lumen Companion")
-        for _ in range(200):  # (the page's requests are answered only while Playwright waits)
-            if "panel=2" in asked[-1]:
-                break
-            page.wait_for_timeout(50)
-        assert "panel=2" in asked[-1]
         expect(page.locator(".live-numbers")).to_have_count(0)  # (the first panel's numbers)
+        page.evaluate(f"({choose})(1)")
+        page.wait_for_selector(".live-numbers")
+        page.wait_for_timeout(1200)
+    assert asked == []  # (Status asks for no picture)
 
 
 def test_the_overview_tells_how_each_panel_is_doing(app_url, isolated_home):
@@ -1248,7 +1289,7 @@ def test_live_without_the_panel_says_so_and_keeps_the_switches(app_url, isolated
         assert page.locator(".live-tile").count() == 0  # no numbers without the panel
         page.wait_for_selector(".live-chip")
         expect(page.locator(".live-chip").first).to_be_disabled()
-        assert page.locator(".live-pause").count() == 0  # nothing to pause
+        assert page.get_by_role("button", name="Pause panel").count() == 0  # (Start's, and none)
         page.wait_for_selector("[data-service=game]")
         page.locator("[data-service=game] [role=switch]").click()  # config.toml, as ever
         assert wait_for(lambda: "game" in load_config().services.enabled)
@@ -1285,16 +1326,16 @@ WATCH_BLOBS = """
 """
 
 
-def test_a_picture_that_arrives_after_live_was_left_is_not_kept(background):
+def test_a_picture_that_arrives_after_start_was_left_is_not_kept(background):
     """The picture's body was still on its way when the view went: the URL made for it then
     was never revoked (a picture of memory kept for every such visit)."""
     app, url = background
-    with browser_page(url, "home", allow=PICTURE) as page:
+    with browser_page(url, "settings/panel", allow=PICTURE) as page:
         page.add_init_script(WATCH_BLOBS)
         page.reload()
-        page.goto(f"{url}#/live")
+        page.goto(f"{url}#/home")
         page.wait_for_function("window.__bodies.length > 0")  # a picture is on its way
-        page.goto(f"{url}#/settings/panel")  # Live is gone
+        page.goto(f"{url}#/settings/panel")  # Start is gone
         page.wait_for_selector(".settings-main")
         js(page, "window.__bodies.forEach((letGo) => letGo())")
         page.wait_for_function("window.__let_go === window.__bodies.length")  # they came after all
@@ -1327,7 +1368,8 @@ def test_the_new_views_speak_german(app_url, isolated_home):
             "Spielmodus und mehr",
             "Hinweis testen",
         ]
-        assert page.locator(".live-head h2").inner_text() == "Jetzt auf dem Panel"
+        assert page.locator(".live-head h2").inner_text() == "Wie das Panel läuft"
+        assert page.locator(".tabs .tab[aria-current='page']").inner_text() == "Zustand"
 
 
 def test_start_look_and_live_have_their_commands(app_url, isolated_home):
@@ -1452,12 +1494,36 @@ def test_the_app_opens_without_breaking_its_rules(app_url):
 
 
 def header_overflow(page):
-    """The parts of the header that reach beyond the window (their classes)."""
+    """The parts of the header that reach beyond the window (their classes), once the header has
+    measured what of it gives way (in the frame after a change: header.js)."""
+    js(page, "new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))")
     return js(
         page,
         """(() => [...document.querySelectorAll('.topbar > *')]
           .filter((el) => el.getBoundingClientRect().right > innerWidth + 0.5)
           .map((el) => el.className))()""",
+    )
+
+
+def hidden_text(locator):
+    """How much of its text an element's box hides, in fractions of a pixel."""
+    return locator.evaluate(
+        """(el) => {
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          return range.getBoundingClientRect().width - el.getBoundingClientRect().width;
+        }"""
+    )
+
+
+def search_words(page):
+    """The width of the words the header's search field shows (0: none, its glass alone)."""
+    return js(
+        page,
+        """(() => {
+          const words = document.querySelector('.topbar .search-trigger-text');
+          return words && words.getClientRects().length ? words.getBoundingClientRect().width : 0;
+        })()""",
     )
 
 
@@ -1502,14 +1568,60 @@ def test_the_search_field_gives_way_before_the_name_of_the_theme(background, lan
         for size in ((1280, 800), (1366, 768), (1440, 900)):
             page.set_viewport_size({"width": size[0], "height": size[1]})
             assert header_overflow(page) == [], size
-            cut = name.evaluate(  # the text against its box, in fractions of a pixel
-                """(el) => {
-                  const range = document.createRange();
-                  range.selectNodeContents(el);
-                  return range.getBoundingClientRect().width - el.getBoundingClientRect().width;
-                }"""
-            )
-            assert cut < 0.1, (size, cut)
+            assert hidden_text(name) < 0.1, size
+            # its words ("Search or…"), or none: its glass alone, never a letter or two
+            assert search_words(page) == 0 or search_words(page) >= 60, size
+
+
+@pytest.mark.parametrize("language", ["en", "de"])
+def test_with_two_panels_the_header_gives_way_in_steps_and_the_name_stays_whole(
+    app_url, isolated_home, language
+):
+    """Two panels add "Panel 1 | Panel 2" to the header: Design's header hid the theme's name
+    at the window's default size (1440 px), in German almost all of it, and cut the search field
+    to its glass and a letter. What gives way does, in steps, as far as it must (the hint of
+    the search field's keys, the tabs closer together, the search field to its glass, the unsaved
+    mark to its dot, the chip to its name, the brand to its icon, the panel switch to its
+    numbers): the name stays whole down to 1280 px, nothing reaches beyond the window down to
+    1100, at 1920 nothing gives way, and what gave way keeps its name."""
+    from libre_panel import i18n
+
+    choose_theme(isolated_home)
+    with isolated_home.joinpath("config.toml").open("a", encoding="utf-8") as config:
+        config.write('\n[[panels]]\nmodel = "turing-9.2-usb"\n')
+    i18n.set_language(language)
+    with browser_page(app_url, "design", size=(1920, 1000)) as page:
+        switch = page.locator(".topbar .panel-switch")  # (its name in the language chosen)
+        expect(switch).to_be_visible()
+        js(page, "window.libre.doc.edit('n', (theme) => { theme.description = 'changed'; })")
+        name = page.locator(".theme-name span")
+        expect(name).to_have_text("Libre Default")
+        expect(page.locator(".unsaved")).to_be_visible()
+        bar = page.locator(".topbar")
+        assert header_overflow(page) == []
+        expect(bar).to_have_attribute("data-fit", "")  # all of it, with its words
+        steps = 0
+        for width in (1600, 1440, 1366, 1280):
+            page.set_viewport_size({"width": width, "height": 800})
+            assert header_overflow(page) == [], width
+            assert hidden_text(name) < 0.1, width
+            assert search_words(page) == 0 or search_words(page) >= 60, width
+            fit = bar.get_attribute("data-fit").split()
+            assert len(fit) >= steps, (width, fit)  # narrower, no less gives way
+            steps = len(fit)
+        assert "search" in fit  # (1280 px: the search field is its glass)
+        page.set_viewport_size({"width": 1100, "height": 700})
+        assert header_overflow(page) == []
+        assert page.locator(".unsaved").get_attribute("aria-label")
+        # the switch shows its numbers and is still "Panel 1 | Panel 2" to whoever asks
+        assert "panels" in bar.get_attribute("data-fit").split()
+        expect(switch.get_by_role("radio", name="Panel 2")).to_be_visible()
+        first = switch.get_by_role("radio", name="Panel 1")
+        expect(first).to_have_attribute("aria-checked", "true")
+        # wider again, all of it shows again
+        page.set_viewport_size({"width": 1920, "height": 1000})
+        assert header_overflow(page) == []
+        expect(bar).to_have_attribute("data-fit", "")
 
 
 def test_select_move_undo_redo(page):
@@ -1535,7 +1647,7 @@ def test_select_move_undo_redo(page):
 
 
 def test_undo_acts_where_the_theme_is_shown_and_not_behind_other_views(app_url, page):
-    """Ctrl+Z and Ctrl+Y change the theme of Design and Look; pressed in Settings, Live or Start
+    """Ctrl+Z and Ctrl+Y change the theme of Design and Look; pressed in Settings, Status or Start
     they must not undo what the person cannot see (the palette does not offer them there)."""
     js(page, "window.libre.doc.edit('n', (theme) => { theme.name = 'Changed'; })")
     name = "window.libre.doc.theme().name"
@@ -2105,7 +2217,7 @@ def test_the_running_panel_in_the_chip(isolated_home):
 
 def test_the_chip_has_the_panels_numbers_and_a_way_to_live(app_url):
     """The old editor's chip showed how the panel is doing: the frame rate against its target,
-    the data rate and the drawing time; its Control button is the Live view's now."""
+    the data rate and the drawing time; its Control button is the Status view's now."""
     routes = {"**/api/app": a_panel_app()}
     with browser_page(app_url, routes=routes, allow=PICTURE) as page:
         page.locator(".panel-chip").click()
@@ -2126,10 +2238,10 @@ def test_the_chip_has_the_panels_numbers_and_a_way_to_live(app_url):
         expect(draw).to_contain_text("9.8")
         expect(draw).to_contain_text("peak 21")
         expect(page.locator(".run-number.warn, .run-number.bad")).to_have_count(0)  # as it should
-        page.locator(".popover .pop-head .link-btn").click()  # Live
+        page.locator(".popover .pop-head .link-btn").click()  # Status
         page.wait_for_selector(".view .live")
         expect(page.locator(".popover")).to_have_count(0)
-    # a panel that cannot keep up is marked, as on Live
+    # a panel that cannot keep up is marked, as on Status
     with browser_page(app_url, routes={"**/api/app": a_panel_app(fps=20.0)}) as page:
         page.locator(".panel-chip").click()
         expect(page.locator("[data-number=fps]")).to_have_class("run-number bad")
@@ -2593,7 +2705,7 @@ def test_a_view_that_cannot_be_drawn_says_so_and_the_others_stay_reachable(app_u
         assert alert.count() == 0
         js(page, "window.libre.store.set({ plugins: null })")
         expect(alert).to_be_visible()
-        page.get_by_role("link", name="Live").click()  # another view is drawn, as it should be
+        page.get_by_role("link", name="Status").click()  # another view is drawn, as it should be
         page.wait_for_selector(".view .live")
         assert alert.count() == 0
 
@@ -3222,7 +3334,7 @@ STATS = """async (stats) => {
   return Object.fromEntries(rows.map((row) => [row.id, [row.value, row.level]]));
 }"""
 
-# ... and Live's tiles (the app's own core/stats.js)
+# ... and Status's tiles (the app's own core/stats.js)
 TILES = """async (stats) => {
   const { statTiles } = await import("/app/core/stats.js");
   return Object.fromEntries(statTiles(stats).map((tile) => [tile.id, [tile.value, tile.level]]));
@@ -3942,7 +4054,7 @@ def test_settings_about(app_url, isolated_home, monkeypatch):
         hrefs = [links.nth(i).get_attribute("href") for i in range(links.count())]
         assert "https://github.com/syntensa/libre-panel" in hrefs
         assert any("template=panel_support.yml" in href for href in hrefs)  # (filled in)
-        # what is connected the app lists itself; the panel test is in Live → Diagnose, and the
+        # what is connected the app lists itself; the panel test is in Status → Diagnose, and the
         # doctor runs in a terminal too
         playwright.expect(page.locator('[data-open="panel-test"]')).to_be_visible()
         page.locator(".report-terminal summary").click()

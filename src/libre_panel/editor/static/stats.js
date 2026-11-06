@@ -5,7 +5,7 @@
 //   describeStats(stats, t)  ->  [{ id, label, value, note, level }]   (level: "", "warn", "bad")
 //
 // `t` is the caller's translate function: the app's and the pages' catalogs differ in
-// where they live, not in what they say. (The app's Live view has its own: core/stats.js.)
+// where they live, not in what they say. (The app's Status view has its own: core/stats.js.)
 
 const num = (value, digits = 1) => Number(value).toFixed(digits).replace(/\.0+$/, "");
 

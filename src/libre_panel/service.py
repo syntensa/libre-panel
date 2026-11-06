@@ -267,7 +267,7 @@ class PanelService:
             state = status.state
         return {
             "state": state,
-            "testing": self._held,  # paused for the panel test (Live → Diagnose)
+            "testing": self._held,  # paused for the panel test (Status → Diagnose)
             "detail": self.error or (status.detail if state == "waiting" else ""),
             # what to do when temperatures and power show "--" (Windows), in the user's language
             "hint": self._hint() if state in ("showing", "waiting") else "",

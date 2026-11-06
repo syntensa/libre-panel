@@ -256,7 +256,7 @@ a:hover {
   flex: 1;
 }
 
-/* Panel 1 | Panel 2: the panel Live shows and Design edits (header.js) */
+/* Panel 1 | Panel 2: the panel Start and Status show and Design edits (header.js) */
 .topbar .panel-switch {
   flex: none;
   margin: 0 4px;
@@ -297,11 +297,6 @@ a:hover {
 @media (max-width: 1400px) {
   .tab {
     padding: 7px 6px;
-  }
-
-  /* the search field, giving way, keeps its glass rather than the hint of its keys */
-  .search-trigger.wide .kbd {
-    display: none;
   }
 }
 
@@ -391,7 +386,7 @@ a:hover {
 
 .search-trigger.wide {
   width: 260px;
-  min-width: 56px; /* its glass and a letter or two: the theme's name comes first */
+  min-width: 120px; /* its glass and its first words; with less room, its glass alone (data-fit) */
   gap: 10px;
   font-size: 14px;
 }
@@ -402,11 +397,12 @@ a:hover {
   text-overflow: ellipsis;
 }
 
-/* In a narrow window what can give way does, in this order: the search field, down to its
-   smallest; then the theme's name; the text of the panel chip goes at 1180 px. The tabs, the
-   undo buttons and "To the panel" stay. A flex item gives up room in proportion to its
-   factor, so the search field's is so much bigger than the name's that the name keeps its
-   width (a few pixels short turn "Meins" into "Me…") until the search field has nothing left. */
+/* In a narrow window the search field gives up room first, down to its smallest, then the panel
+   chip its detail; then the header gives way in steps (data-fit, below), and the theme's name
+   last. The tabs, the undo buttons and "To the panel" stay. A flex item gives up room in
+   proportion to its factor, so the search field's is so much bigger than the name's that the
+   name keeps its width (a few pixels short turn "Meins" into "Me…") until the search field has
+   nothing left. */
 .topbar > * {
   flex-shrink: 0;
 }
@@ -448,22 +444,56 @@ a:hover {
     padding: 0;
   }
 
-  .search-trigger:not(.wide) .kbd,
-  .unsaved-text {
+  .search-trigger:not(.wide) .kbd {
     display: none;
-  }
-
-  .unsaved {
-    padding: 8px;
   }
 }
 
-/* the window's smallest size (1100 px): the brand is its icon, the chip a dot and a name */
-@media (max-width: 1180px) {
-  .brand span,
-  .panel-chip-detail {
-    display: none;
-  }
+/* Where the header has too little room for all it shows, it gives way in steps, each after the
+   one before, as far as it must (measured: header.js, GIVE_WAY): the search field keeps its words
+   rather than the hint of its keys, the tabs come closer together, the search field is its glass,
+   the unsaved mark its dot, the panel chip a dot and a name, the brand its icon, "Panel 1 |
+   Panel 2" the numbers, the way to the settings its gear. What gives way keeps its name. */
+.topbar[data-fit~="keys"] > .search-trigger.wide .kbd {
+  display: none;
+}
+
+.topbar[data-fit~="tabs"] {
+  gap: 12px;
+}
+
+.topbar[data-fit~="tabs"] .tabs {
+  margin-left: 4px;
+}
+
+.topbar[data-fit~="tabs"] .tab {
+  padding: 7px 6px;
+}
+
+.topbar[data-fit~="search"] > .search-trigger.wide {
+  width: 34px;
+  min-width: 0;
+  flex-shrink: 0;
+  justify-content: center;
+  padding: 0;
+}
+
+.topbar[data-fit~="search"] > .search-trigger.wide .search-trigger-text,
+.topbar[data-fit~="search"] > .search-trigger.wide .kbd,
+.topbar[data-fit~="unsaved"] .unsaved-text,
+.topbar[data-fit~="chip"] .panel-chip-detail,
+.topbar[data-fit~="brand"] .brand span,
+.topbar[data-fit~="panels"] .panel-switch button > span,
+.topbar[data-fit~="settings"] .settings-btn-text {
+  display: none;
+}
+
+.topbar[data-fit~="unsaved"] .unsaved {
+  padding: 8px;
+}
+
+.topbar[data-fit~="panels"] .panel-switch button::after {
+  content: attr(data-short);
 }
 
 .search-trigger-text {
@@ -718,11 +748,6 @@ a:hover {
   }
 }
 
-@media (max-width: 1180px) {
-  .settings-btn-text {
-    display: none;
-  }
-}
 
 /* -- form controls ---------------------------------------------------------------------------- */
 

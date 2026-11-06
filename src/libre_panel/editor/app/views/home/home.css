@@ -146,6 +146,119 @@
   text-align: center;
 }
 
+/* the live picture: a click shows it large (a button of the box's look, a hint in its corner) */
+.panel-picture-open {
+  width: 100%;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: zoom-in;
+  transition: border-color 0.15s ease;
+}
+
+.panel-picture-open:hover {
+  border-color: var(--line-5);
+}
+
+.panel-picture-large {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: rgba(10, 14, 19, 0.72);
+  color: var(--text-2);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
+.panel-picture-open:hover .panel-picture-large,
+.panel-picture-open:focus-visible .panel-picture-large {
+  opacity: 1;
+}
+
+/* how it runs, in a line: it leads to Status */
+.panel-card-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.panel-card-line svg {
+  opacity: 0.55;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.panel-card-line:hover {
+  color: var(--text);
+}
+
+.panel-card-line:hover svg {
+  opacity: 1;
+  transform: translateX(1px);
+}
+
+/* the picture large (a dialog of its own: the picture as wide as the window lets it be) */
+.dialog.picture {
+  width: min(1600px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  padding: 18px 20px 20px;
+  gap: 14px;
+}
+
+.dialog-backdrop:has(.dialog.picture) {
+  align-items: center;
+  padding: 24px;
+}
+
+.picture-large-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.picture-large-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.picture-large-title .dialog-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picture-large-title p {
+  margin: 2px 0 0;
+  font-size: 14px;
+}
+
+.picture-large {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  border-radius: 10px;
+  background: var(--picture);
+  border: 1px solid var(--line-2);
+  overflow: hidden;
+}
+
+.picture-large canvas {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 170px);
+  width: auto;
+  height: auto;
+}
+
 /* no picture of the panel (yet): the theme's own, dimmed, with the note over it */
 .panel-picture.still img {
   opacity: 0.28;

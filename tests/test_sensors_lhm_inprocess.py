@@ -795,7 +795,7 @@ def test_a_fan_that_starts_later_is_found_by_the_next_survey(monkeypatch):
 
 
 def test_the_status_says_what_each_round_takes_part_by_part():
-    """Live → Diagnose → Load: each node's update is timed, the last round's and the last
+    """Status → Diagnose → Load: each node's update is timed, the last round's and the last
     survey's times are in the status (the same as the sensor service answers)."""
     now, ticks = [100.0], [0.0]
     computer = small_computer()

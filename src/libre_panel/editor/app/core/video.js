@@ -1,4 +1,4 @@
-// What smooth motion (the video mode) is doing, in words, for Settings and Live. The server works
+// What smooth motion (the video mode) is doing, in words, for Settings and Status. The server works
 // it out with the driver's own `video_mode()` (editor/settings.py, /api/panel): `video` here is
 // that answer, `{usb, on, gaps}`, and `mode` and `fps` are the settings it was worked out from.
 
@@ -14,7 +14,7 @@ const GAPS = {
 
 /**
  * `{tone, text}`: "ok" while it is on, "warn" while something is missing, else "off". `running`
- * (Live, where the panel is known) says whether the panel is driven in video mode now: where it
+ * (Status, where the panel is known) says whether the panel is driven in video mode now: where it
  * is not, "on" only means that it will be, once a panel it runs on is there.
  */
 export function videoState(video, mode, fps, running) {

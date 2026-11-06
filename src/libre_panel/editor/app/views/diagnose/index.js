@@ -1,4 +1,4 @@
-// Diagnose (#/live/diagnose), the third part of Live: finding out what keeps the panel from
+// Diagnose (#/live/diagnose), the third part of Status: finding out what keeps the panel from
 // working, and mending it. At the top what needs attention (Settings → Overview's list,
 // settings/health.js) with "Check and fix", which runs every fix marked safe there (they change
 // only Libre Panel's own state and ask for no rights), and "Restart the panel", which lets the

@@ -1,4 +1,4 @@
-"""The panel test in the app (Live → Diagnose): the checks of ``libre_panel.doctor``, run in a
+"""The panel test in the app (Status → Diagnose): the checks of ``libre_panel.doctor``, run in a
 thread of their own while the panel loop gives the panel to them (``PanelService.hold``), their
 questions answered with the app's buttons.
 

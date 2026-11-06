@@ -1,4 +1,4 @@
-"""Live → Diagnose in a browser: the switch to it, check and fix, the panel test answered with
+"""Status → Diagnose in a browser: the switch to it, check and fix, the panel test answered with
 buttons (its server answers are stood in for: no panel here) and the log."""
 
 import json

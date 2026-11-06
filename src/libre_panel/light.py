@@ -194,7 +194,7 @@ def say_held(processes: Callable[[], dict[str, Any] | None] | None = None) -> No
     alone) and what Windows has committed to it, each of its processes' (``processes()``:
     load_report's LoadSampler.memory_now; the engines, the sensor service, PresentMon), and
     what this one holds as the load report counts it (load_report.py's inside): what a person
-    can read later in Live → Diagnose → Log, with the window open again, in one line."""
+    can read later in Status → Diagnose → Log, with the window open again, in one line."""
     import psutil
 
     from libre_panel import load_report

@@ -144,7 +144,7 @@ def test_without_a_panel_the_test_says_so(panel):
 
 
 def test_the_report_says_what_libre_panel_cost_the_pc_before_the_test(panel):
-    """The lines of Live → Diagnose → Load go into the report and the form, as they were before
+    """The lines of Status → Diagnose → Load go into the report and the form, as they were before
     the test took the panel (while it runs, the panel's loop is not what it costs)."""
     panel.unplugged = True  # (the test ends at once)
     loop = Loop()

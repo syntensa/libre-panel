@@ -131,7 +131,7 @@ async function readFrameRates(running) {
  * `{label, run}` (a click that mends it) or `{label, go}` (the way to where it is done), or none
  * when the next step is in the text. `ready` is false until the panel's facts are known.
  * An action marked `safe` changes nothing but Libre Panel's own state and asks for no rights:
- * Live → Diagnose runs all of them with one click ("Check and fix").
+ * Status → Diagnose runs all of them with one click ("Check and fix").
  */
 export function healthOf(facts) {
   const { app, panelInfo: info, unlockInfo: unlock, settings, sourceStates, serviceStates, clipQuestion } = facts;

@@ -10,6 +10,8 @@ pytest.importorskip("playwright.sync_api")
 from playwright.sync_api import expect  # noqa: E402
 from test_app_browser import app_url, browser_page, choose_theme  # noqa: E402, F401
 
+PANEL_SWITCH = "Which panel Start and Status show and Design edits"
+
 
 def test_the_start_screen_asks_before_it_writes_and_shows_both_pictures(app_url, isolated_home):  # noqa: F811
     choose_theme(isolated_home, "lumen")
@@ -71,7 +73,7 @@ def test_the_start_screen_is_the_one_of_the_panel_chosen_at_the_top(app_url, iso
     with browser_page(app_url, "settings/panel", routes={"**/api/start-screen": answer}) as page:
         card = page.locator("#start-screen")
         expect(card.locator("select")).to_have_value("turing-12.3-usb")  # panel 1's
-        switch = page.get_by_role("radiogroup", name="Which panel Live shows and Design edits")
+        switch = page.get_by_role("radiogroup", name=PANEL_SWITCH)
         switch.get_by_role("radio", name="Panel 2").click()
         expect(card.locator("select")).to_have_value("turing-9.2-usb")  # panel 2's
         expect(card).to_contain_text("Start screen · Panel 2")

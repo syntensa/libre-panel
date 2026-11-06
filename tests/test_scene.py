@@ -1383,9 +1383,10 @@ def test_the_frame_shown_is_asked_of_the_panel_s_own_display_through_those_aroun
 
 
 def test_the_frame_shown_is_the_engine_s_own_whole_as_composed_here(engine, monkeypatch):
-    """The app's picture of the panel (Live, Start, the Player) from the engine, which composed
-    the frame: the same pixels as composed here, before it turns, its pixels not made here;
-    none while the panel shows one of Libre Panel's own frames, again with the next of layers."""
+    """The app's picture of the panel (Start, its large view, the Player) from the engine, which
+    composed the frame: the same pixels as composed here, before it turns, its pixels not made
+    here; none while the panel shows one of Libre Panel's own frames, again with the next of
+    layers."""
     from fake_panel import FakePanel
     from panel_socket import PanelSocket
     from test_video import video_config

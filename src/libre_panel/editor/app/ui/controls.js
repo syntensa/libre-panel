@@ -40,7 +40,8 @@ export function Toggle({ checked, onChange, label, disabled, id }) {
   </button>`;
 }
 
-/** One of a few choices side by side: options [{value, label, icon, title}]. */
+/** One of a few choices side by side: options [{value, label, icon, title, short}]; `short`: what
+ * the choice shows where its place gives way (the header's data-fit), the label still its name. */
 export function Segmented({ options, value, onChange, label, class: className = "", disabled }) {
   const move = (event) => {
     const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
@@ -62,6 +63,8 @@ export function Segmented({ options, value, onChange, label, class: className = 
         aria-checked=${String(option.value === value)}
         tabindex=${option.value === value || (!known && option === options[0]) ? 0 : -1}
         title=${option.title}
+        aria-label=${option.short ? option.label : undefined}
+        data-short=${option.short}
         disabled=${disabled}
         onClick=${() => onChange(option.value)}
       >

@@ -16,7 +16,7 @@ monitor (mirror.py), and the device places its own
 panels hold. The panel's process
 (:func:`child`) runs its loop on those (:func:`libre_panel.app.run` with its ``[[panels]]``
 table, which it reads and follows itself) and says back how it is doing
-(:class:`RemoteStatus`), the picture it shows when the app asks (Live, the picture of all
+(:class:`RemoteStatus`), the picture it shows when the app asks (Start, the picture of all
 panels), the device places it holds, and the readings its theme reads: the sources in the
 first panel's process do costly work (the processes, the ping, a sensor of LibreHardwareMonitor)
 only while a theme there wants it, so they are told of this one's too. Its log lines go to the
@@ -43,7 +43,7 @@ log = logging.getLogger(__name__)
 
 PUSH_S = 0.02  # the readings that follow on every frame go across this often
 STATUS_S = 0.25  # how the panel is doing comes back this often
-SHOWN_S = 0.2  # its picture, asked for (Live, the picture of all panels), at most this often
+SHOWN_S = 0.2  # its picture, asked for (Start, the picture of all panels), at most this often
 FIRST_PICTURE_S = 1.0  # how long the first read of it waits for it to come
 START_S = 30.0  # a process that says nothing for so long after its start is ended
 # what comes back of the panel's RunStatus (not its picture, the drivers' counters or a hub)
@@ -54,7 +54,7 @@ _PIDS: dict[int, int] = {}  # the panels' processes started here: process id -> 
 
 def panel_pids() -> dict[int, int]:
     """Each panel's process started here and not ended: its process id -> the panel's number
-    (2: the first beside [device]'s). What Live -> Diagnose -> Load calls them by."""
+    (2: the first beside [device]'s). What Status -> Diagnose -> Load calls them by."""
     return dict(_PIDS)
 
 

@@ -1,5 +1,5 @@
 // How the panel is doing: the numbers the main loop measures once a second (RunStatus.stats,
-// docs/BACKGROUND.md, "How the panel is doing") as the tiles of Live and the lines of the
+// docs/BACKGROUND.md, "How the panel is doing") as the tiles of Status and the lines of the
 // panel card. `null` is "nothing counts this": the data rate of a PNG file, the video link
 // outside video mode.
 

@@ -2,6 +2,7 @@
 //   if (await confirmDialog({ title, message, confirm: t("Delete"), danger: true })) …
 //   const name = await promptDialog({ title, text, label, value });   // null when cancelled
 //   const result = await openDialog((close) => html`…`, { label, wide: true });
+//   openDialog((close) => html`…`, { label, kind: "picture" });   // a dialog of a look of its own
 
 import { createStore, useSelector } from "../core/store.js";
 import { t } from "../core/i18n.js";
@@ -13,15 +14,16 @@ let next = 1;
 
 export const dialogOpen = () => dialogs.get().stack.length > 0;
 
-/** Show `content(close)` in a dialog; resolves with what close(value) is given (Escape: null). */
-export function openDialog(content, { label = "", wide = false } = {}) {
+/** Show `content(close)` in a dialog; resolves with what close(value) is given (Escape: null).
+ * `kind`: a class of the dialog's own, for a look of its own (Start's large picture). */
+export function openDialog(content, { label = "", wide = false, kind = "" } = {}) {
   return new Promise((resolve) => {
     const id = next++;
     const close = (value = null) => {
       dialogs.set((state) => ({ stack: state.stack.filter((d) => d.id !== id) }));
       resolve(value);
     };
-    dialogs.set((state) => ({ stack: [...state.stack, { id, content, close, label, wide }] }));
+    dialogs.set((state) => ({ stack: [...state.stack, { id, content, close, label, wide, kind }] }));
   });
 }
 
@@ -120,7 +122,7 @@ function DialogBox({ dialog, top }) {
   return html`<div class="dialog-backdrop" onPointerDown=${(event) => event.target === event.currentTarget && dialog.close(null)}>
     <div
       ref=${box}
-      class=${`dialog${dialog.wide ? " wide" : ""}`}
+      class=${`dialog${dialog.wide ? " wide" : ""}${dialog.kind ? ` ${dialog.kind}` : ""}`}
       role="dialog"
       aria-modal="true"
       aria-label=${dialog.label}

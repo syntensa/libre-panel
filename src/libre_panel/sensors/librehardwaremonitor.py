@@ -485,7 +485,7 @@ class LhmStatus:
     pawnio: str | None = None  # version of the installed PawnIO driver ("" unknown), None: none
     error: str = ""  # why it could not start, or does not answer (service, inprocess)
     service: str = ""  # why the installed sensor service is not what is read now
-    # What its rounds cost (Live -> Diagnose -> Load, /api/load); None: not reported, as by a
+    # What its rounds cost (Status -> Diagnose -> Load, /api/load); None: not reported, as by a
     # sensor service older than this, or the web server, whose rounds are its own program's.
     # This is not in the status the pages show (plugins/pages.py); the version is.
     timing: Timing | None = field(default=None, compare=False, metadata={"page": False})

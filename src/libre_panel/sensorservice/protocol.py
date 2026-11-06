@@ -16,7 +16,7 @@ are the only questions:
 
   ``age`` is how many seconds ago that was (null before the first time), ``state`` is
   ``starting``, ``running`` or ``failed`` (then ``error`` says why). The service adds what its
-  rounds cost (*Live → Diagnose → Load*): the last round, and the last that updated every
+  rounds cost (*Status → Diagnose → Load*): the last round, and the last that updated every
   piece (null before the first), each part with the seconds its update took::
 
     "timing": {"last": {"full": false, "parts": [[hardware id, hardware name, type,

@@ -423,10 +423,10 @@ class EditorState:
         self.updates = Updates(config_path)  # whether a newer version is out (updates.py)
         self.community = Community()  # the themes the community shares (community.py)
         self.install = Install()  # "Update to …": its download and putting it in place
-        self._doctor: Any = None  # the panel test of Live → Diagnose (doctor_session.py)
+        self._doctor: Any = None  # the panel test of Status → Diagnose (doctor_session.py)
         self._experiment: Any = None  # the video experiment's run (experiment.py)
         self._colours: Any = None  # the colour check and its A/B on a panel (colours.py)
-        self._load: Any = None  # what Libre Panel costs the PC, Live → Diagnose (load_report.py)
+        self._load: Any = None  # what Libre Panel costs the PC, Status → Diagnose (load_report.py)
 
     def experiment(self, controls: Any) -> Any:
         """The video experiment's run, made on first use: it writes the settings as the app
@@ -487,7 +487,7 @@ class EditorState:
 
     def load_sampler(self) -> Any:
         """What Libre Panel costs this PC (load_report.py), made on first use: it samples only
-        while Live → Diagnose → Load (or the panel report) asks."""
+        while Status → Diagnose → Load (or the panel report) asks."""
         with self._lock:
             if self._load is None:
                 from libre_panel.load_report import LoadSampler
@@ -2267,8 +2267,8 @@ class EditorHandler(BaseHTTPRequestHandler):
         self._send(200, buffer.getvalue(), "image/png", filename=name)
 
     def _round_picture(self) -> None:
-        """``POST /api/history/picture {"id": 1760000000123}``: the report of that round (Live →
-        History) as the panel shows it (the round report's page, in the version of its theme for
+        """``POST /api/history/picture {"id": 1760000000123}``: the report of that round (Status
+        → History) as the panel shows it (the round report's page, in the version of its theme for
         the panel), in a picture of the panel as *Picture of all panels* takes one, kept in the
         person's Pictures folder (in ``Libre Panel``), which then opens: ``{"file", "folder",
         "opened"}``. 404 for a round that is not kept or had no frame rates."""

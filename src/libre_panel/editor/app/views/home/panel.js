@@ -1,6 +1,7 @@
 // The panel on Start: which model it is (the one the background app sends frames to, or the
 // one the user picked to see themes for), the strip that says so on a first start, and the
-// card of the launcher with the picture on the panel, its state and its controls.
+// card of the launcher with the picture on the panel (the app's one live picture: a click shows
+// it large, five a second), its state (a click leads to Status, how it runs) and its controls.
 
 import { normalTheme, openTheme, themeName } from "../../core/actions.js";
 import { appAction } from "../../core/app.js";
@@ -16,6 +17,7 @@ import { html, useRef, useState } from "../../lib/preact.js";
 import { modeName, panelName, stateText } from "../../shell/panel-popover.js";
 import { navigate } from "../../shell/views.js";
 import { IconButton, Segmented, Slider, Toggle } from "../../ui/controls.js";
+import { openDialog } from "../../ui/dialog.js";
 import { Icon } from "../../ui/icons.js";
 import { Popover } from "../../ui/layer.js";
 
@@ -59,7 +61,7 @@ export function panelSummary(app, model, shown, status = app.panel) {
     error: t("Needs attention"),
     stopped: t("Stopped"),
   };
-  // in plain words: how smooth, for how long (the data rate and the rest are on Live)
+  // in plain words: how smooth, for how long (the data rate and the rest are on Status)
   const parts = [];
   if (stats.streaming) parts.push(t("Smooth motion"));
   if (typeof stats.fps === "number") parts.push(t("{n} frames per second", { n: formatNumber(stats.fps, 0) }));
@@ -166,35 +168,77 @@ export async function editShown() {
   navigate("design");
 }
 
+/** Why there is no picture of the panel, in its state (null: there is one, or it comes). */
+function noPicture(state) {
+  if (state === "paused") return t("The panel is paused: there is no picture.");
+  if (state === "error") return t("The panel needs attention: there is no picture.");
+  if (state === "waiting") return t("No panel yet: this is the theme it will show.");
+  return t("There is no picture yet.");
+}
+
 function Picture({ app, status, number, theme, size }) {
   const running = app.available && !app.quit;
   const state = status?.state;
   const live = useLivePicture({ width: 960, every: 1000, on: running && state === "showing", panel: number });
   const ratio = size ? `${size[0]} / ${size[1]}` : "4 / 1";
-  let note = null;
-  if (running && live.picture === null) {
-    note =
-      state === "paused"
-        ? t("The panel is paused: there is no picture.")
-        : state === "error"
-          ? t("The panel needs attention: there is no picture.")
-          : state === "waiting"
-            ? t("No panel yet: this is the theme it will show.")
-            : t("There is no picture yet.");
-  }
+  const note = running && live.picture === null ? noPicture(state) : null;
   // what the panel shows; until there is a picture of it (and without the app) the theme's own,
   // which the server draws, dimmed under the note that says why
   const own = theme ? endpoints.previewUrl(versionFor(theme), 960) : null;
   const picture = running ? live.picture : null;
   const upright = size && size[1] > size[0];
-  return html`<div class=${`panel-picture${upright ? " upright" : ""}${note ? " still" : ""}`} style=${{ aspectRatio: ratio }}>
-    ${picture
-      ? html`<${LivePicture} picture=${picture} label=${t("What the panel shows now")} />`
-      : own
-        ? html`<img src=${own} alt=${t("The theme on the panel")} />`
-        : null}
+  const box = `panel-picture${upright ? " upright" : ""}${note ? " still" : ""}`;
+  if (picture) {
+    // the picture on the panel, once a second; a click shows it large, five a second
+    return html`<button type="button" class=${`${box} panel-picture-open`} style=${{ aspectRatio: ratio }}
+      aria-label=${t("Show the picture large")} title=${t("Show the picture large")} onClick=${() => showLarge(number)}>
+      <${LivePicture} picture=${picture} label=${t("What the panel shows now")} />
+      <span class="panel-picture-large" aria-hidden="true"><${Icon} name="fit" size=${15} strokeWidth=${2.2} /></span>
+    </button>`;
+  }
+  return html`<div class=${box} style=${{ aspectRatio: ratio }}>
+    ${own ? html`<img src=${own} alt=${t("The theme on the panel")} />` : null}
     ${note ? html`<p class="panel-picture-note">${note}</p>` : null}
   </div>`;
+}
+
+/** How wide the large picture is asked for: as wide as it shows (in the screen's pixels), and no
+ * wider than a panel's frame is (1920). */
+const largeWidth = () =>
+  Math.max(480, Math.min(1920, Math.round(Math.min(window.innerWidth - 96, 1600) * (window.devicePixelRatio || 1))));
+
+/** The picture on the panel large, five a second, in a dialog: which panel, what it shows. */
+function LargePicture({ close, number }) {
+  const app = useStore((s) => s.app);
+  const status = useStore((s) => targetStatus(s));
+  const models = useStore((s) => s.specs?.models || []);
+  const { connected } = usePanelModel();
+  const [width] = useState(largeWidth);
+  const running = app.available && !app.quit;
+  const state = status?.state;
+  const live = useLivePicture({ width, every: 200, on: running && state === "showing", panel: number });
+  const model = number === 1 ? connected : connectedModel({ available: app.available, panel: status }, models);
+  const summary = app.available ? panelSummary(app, model, shownTheme(app, status), status) : null;
+  const picture = running ? live.picture : null;
+  return html`<div class="picture-large-head">
+      <div class="picture-large-title">
+        <h2 class="dialog-title">${summary ? summary.title : t("The picture on the panel")}</h2>
+        ${summary?.line ? html`<p class="muted">${summary.line}</p>` : null}
+      </div>
+      <${IconButton} icon="close" size=${18} class="picture-large-close" label=${t("Close")} onClick=${() => close()} />
+    </div>
+    <div class="picture-large">
+      ${picture
+        ? html`<${LivePicture} picture=${picture} label=${t("The picture on the panel")} />`
+        : html`<p class="panel-picture-note">${noPicture(state)}</p>`}
+    </div>`;
+}
+
+function showLarge(number) {
+  openDialog((close) => html`<${LargePicture} close=${close} number=${number} />`, {
+    label: t("The picture on the panel"),
+    kind: "picture",
+  });
 }
 
 const sameSize = (a, b) => Boolean(a && b) && a[0] === b[0] && a[1] === b[1];
@@ -270,6 +314,10 @@ export function PanelCard() {
         <p class="muted">
           ${summary
             ? summary.line
+              ? html`<a class="panel-card-line" href="#/live" title=${t("How the panel runs, in numbers: Status")}
+                  >${summary.line}<${Icon} name="chevron-right" size=${13} strokeWidth=${2.4}
+                /></a>`
+              : null
             : t("This window is not connected to the running panel. Open Libre Panel from your apps (or its icon in the tray) to see the panel live and control it here.")}
         </p>
         ${summary?.detail ? html`<p class="panel-card-detail">${summary.detail}</p>` : null}
