@@ -84,6 +84,14 @@ pub enum Transparency {
     Colour(u32, u32, u32),
 }
 
+/// info["exif"] as Pillow keeps it: bytes (eXIf, or a tEXt chunk named "exif"), or text (a
+/// zTXt or iTXt named so), on which getexif fails unless it is empty.
+#[derive(Clone, Debug)]
+pub enum Exif {
+    Bytes(Vec<u8>),
+    Text { empty: bool },
+}
+
 /// A decoded picture: its pixels in the mode Pillow gives them, its palette (P: 256 entries
 /// of RGBA, as Pillow's C palette holds them) and what Pillow keeps in its info.
 #[derive(Clone, Debug)]
@@ -95,11 +103,13 @@ pub struct Picture {
     pub palette: Option<Vec<[u8; 4]>>,
     pub transparency: Option<Transparency>,
     /// info["exif"]: the EXIF data (with or without its "Exif\0\0")
-    pub exif: Option<Vec<u8>>,
+    pub exif: Option<Exif>,
     /// info["Raw profile type exif"] (a PNG's text by ImageMagick)
     pub raw_exif: Option<String>,
     /// info["XML:com.adobe.xmp"]
     pub xmp: Option<String>,
+    /// info["xmp"] (an iTXt's bytes, where its text is not UTF-8 too)
+    pub xmp_bytes: Option<Vec<u8>>,
 }
 
 /// ITU-R 601-2's grey as Convert.c weighs it (L24 >> 16).
@@ -112,18 +122,23 @@ impl Picture {
     /// where neither names one, its XMP); 1 where there is none.
     pub fn orientation(&self) -> Result<u32> {
         let exif = match (&self.exif, &self.raw_exif) {
-            (Some(e), _) => Some(e.clone()),
+            (Some(Exif::Bytes(e)), _) => Some(e.clone()),
+            (Some(Exif::Text { empty: false }), _) => {
+                return error("startswith first arg must be str"); // (Exif.load of text)
+            }
+            (Some(Exif::Text { empty: true }), _) => None,
             (None, Some(raw)) => Some(exif::from_raw_profile(raw)?),
             (None, None) => None,
         };
         if let Some(found) = exif.as_deref().map(orientation).transpose()?.flatten() {
             return Ok(found);
         }
-        Ok(self
-            .xmp
-            .as_deref()
-            .and_then(exif::xmp_orientation)
-            .unwrap_or(1))
+        // XMP's text, else (where it is empty or none) its bytes
+        let xmp = match &self.xmp {
+            Some(text) if !text.is_empty() => Some(text.as_bytes()),
+            _ => self.xmp_bytes.as_deref(),
+        };
+        Ok(xmp.and_then(exif::xmp_orientation).unwrap_or(1))
     }
 
     /// Image.convert(mode) to RGBA, RGB or L, with the transparency as Pillow takes it
@@ -236,12 +251,16 @@ pub fn decode(data: &[u8]) -> Result<Picture> {
 }
 
 /// Every frame of an animated picture as the app reads one (render/moving.py's
-/// read_animation: each frame's duration and its picture in RGBA). GIF so far.
+/// read_animation: each frame's duration and its picture in RGBA): GIF's, APNG's (a PNG's
+/// one).
 pub fn frames(data: &[u8]) -> Result<Vec<Frame>> {
+    if data.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return png::frames(data);
+    }
     if is_gif(data) {
         return gif::frames(data);
     }
-    error("frames are read from GIFs so far")
+    error("cannot identify image file")
 }
 
 /// What the app makes of a picture it opens: ImageOps.exif_transpose(picture).convert(mode).

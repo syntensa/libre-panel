@@ -9,5 +9,5 @@ publish.workspace = true
 
 [dependencies]
 lp-pixels = { path = "../pixels" }
-png = "0.18"
-flate2 = "1"
+# (zlib-rs: zlib ported, so that inflating stops where Pillow's zlib stops)
+flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }

@@ -1087,6 +1087,7 @@ impl<'a> Gif<'a> {
             exif: None,
             raw_exif: None,
             xmp: None,
+            xmp_bytes: None,
         })
     }
 }
@@ -1099,10 +1100,10 @@ pub(crate) fn decode(data: &[u8]) -> Result<Picture> {
 }
 
 /// A frame of an animation as the app reads it: its info["duration"] (milliseconds, None where
-/// the frame has no graphic control) and its picture in RGBA.
+/// the frame has none: a GIF's without a graphic control) and its picture in RGBA.
 #[derive(Clone, Debug)]
 pub struct Frame {
-    pub duration: Option<u32>,
+    pub duration: Option<f64>,
     pub image: Image,
 }
 
@@ -1119,7 +1120,7 @@ pub fn frames(data: &[u8]) -> Result<Vec<Frame>> {
         }
         gif.load(n, h)?;
         out.push(Frame {
-            duration: h.duration,
+            duration: h.duration.map(f64::from),
             image: gif.rgba()?,
         });
     }

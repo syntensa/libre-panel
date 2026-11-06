@@ -15,9 +15,10 @@ const PREFIXES: [&[u8; 4]; 6] = [
 ];
 
 /// The orientation in EXIF data (with or without "Exif\0\0" before it, as Exif.load strips one
-/// or two of them): None where IFD0 has no Orientation tag Pillow can read as a whole number;
-/// an error where Pillow fails on it (a header that is not TIFF's, too short to hold its
-/// directory's place, or BigTIFF's, whose place Exif.load cannot read from 8 bytes).
+/// or two of them): None where IFD0 has no Orientation tag (then XMP's counts), Some(0) where
+/// it has one that is no whole number (bytes, text, a fraction: no turn, and XMP's does not
+/// count); an error where Pillow fails on it (a header that is not TIFF's, too short to hold
+/// its directory's place, or BigTIFF's, whose place Exif.load cannot read from 8 bytes).
 pub fn orientation(data: &[u8]) -> Result<Option<u32>> {
     let mut d = data;
     for _ in 0..2 {
@@ -53,7 +54,8 @@ pub fn orientation(data: &[u8]) -> Result<Option<u32>> {
     };
     let next = u32_at(&head[4..8]) as usize;
     let limit = d.len();
-    // ImageFileDirectory_v2.load: the entries until the data ends (a short read stops it)
+    // ImageFileDirectory_v2.load: the entries until the data ends (a short read stops it, a
+    // value beyond the data too)
     let Some(count) = d.get(next..next + 2).map(u16_at) else {
         return Ok(None);
     };
@@ -85,7 +87,7 @@ pub fn orientation(data: &[u8]) -> Result<Option<u32>> {
             }
             match d.get(offset..offset + size) {
                 Some(v) => v,
-                None => continue, // (possibly corrupt: the tag skipped)
+                None => return Ok(None), // (_safe_read's OSError: the directory read no further)
             }
         } else {
             &entry[8..8 + size]
@@ -97,23 +99,20 @@ pub fn orientation(data: &[u8]) -> Result<Option<u32>> {
             continue;
         }
         // the first Orientation read is the one Pillow keeps; its first value as Python
-        // compares it with 2 to 8 (bytes and text never equal them)
-        let whole = |f: f64| (f.fract() == 0.0 && f >= 0.0).then_some(f as u32);
+        // compares it with 2 to 8 (bytes and text never equal them: 0, no turn)
+        let whole = |f: f64| {
+            Some(if f.fract() == 0.0 && f >= 0.0 {
+                f as u32
+            } else {
+                0
+            })
+        };
         return Ok(match typ {
             3 => Some(u32::from(u16_at(value))),
-            8 => {
-                let v = u16_at(value) as i16;
-                (v >= 0).then_some(v as u32)
-            }
+            8 => Some((u16_at(value) as i16).max(0) as u32),
             4 | 13 => Some(u32_at(value)),
-            9 => {
-                let v = u32_at(value) as i32;
-                (v >= 0).then_some(v as u32)
-            }
-            6 => {
-                let v = value[0] as i8;
-                (v >= 0).then_some(v as u32)
-            }
+            9 => Some((u32_at(value) as i32).max(0) as u32),
+            6 => Some((value[0] as i8).max(0) as u32),
             16 => {
                 let (hi, lo) = (u32_at(&value[..4]), u32_at(&value[4..8]));
                 let v = if big {
@@ -121,7 +120,7 @@ pub fn orientation(data: &[u8]) -> Result<Option<u32>> {
                 } else {
                     (u64::from(lo) << 32) | u64::from(hi)
                 };
-                u32::try_from(v).ok()
+                Some(u32::try_from(v).unwrap_or(u32::MAX))
             }
             5 | 10 => {
                 let (num, den) = (u32_at(&value[..4]), u32_at(&value[4..8]));
@@ -131,7 +130,7 @@ pub fn orientation(data: &[u8]) -> Result<Option<u32>> {
                     (f64::from(num), f64::from(den))
                 };
                 if den == 0.0 {
-                    None
+                    Some(0) // (IFDRational's NaN)
                 } else {
                     whole(num / den)
                 }
@@ -146,7 +145,7 @@ pub fn orientation(data: &[u8]) -> Result<Option<u32>> {
                 };
                 whole(f64::from_bits(bits))
             }
-            _ => None,
+            _ => Some(0),
         });
     }
     Ok(None)
@@ -171,8 +170,8 @@ pub fn from_raw_profile(text: &str) -> Result<Vec<u8>> {
 
 /// XMP's orientation (getexif: the first tiff:Orientation=" or tiff:Orientation> and the digit
 /// after it).
-pub fn xmp_orientation(xmp: &str) -> Option<u32> {
-    let bytes = xmp.as_bytes();
+pub fn xmp_orientation(xmp: &[u8]) -> Option<u32> {
+    let bytes = xmp;
     let name = b"tiff:Orientation";
     let mut from = 0;
     while let Some(at) = find(&bytes[from..], name) {
@@ -205,9 +204,9 @@ mod tests {
             b"MM\x00\x2a\x00\x00\x00\x08\x00\x01\x01\x12\x00\x03\x00\x00\x00\x01\x00\x03\x00\x00";
         assert_eq!(orientation(be), Ok(Some(3)));
         assert!(orientation(b"Exif\0\0XX\x2a\x00").is_err());
-        assert_eq!(xmp_orientation("<x tiff:Orientation=\"8\"/>"), Some(8));
+        assert_eq!(xmp_orientation(b"<x tiff:Orientation=\"8\"/>"), Some(8));
         assert_eq!(
-            xmp_orientation("<tiff:Orientation>5</tiff:Orientation>"),
+            xmp_orientation(b"<tiff:Orientation>5</tiff:Orientation>"),
             Some(5)
         );
     }

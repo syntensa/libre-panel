@@ -79,9 +79,9 @@ def _filtered(rows: list[bytes], bpp: int, rng: random.Random) -> bytes:
     return bytes(out)
 
 
-def make_png(rng: random.Random, depth: int, colour: int, w: int, h: int, *, interlace: bool,
-             before: list[bytes], after: list[bytes]) -> bytes:  # fmt: skip
-    """A PNG of random samples, its palette, transparency and the chunks given."""
+def _samples(rng: random.Random, depth: int, colour: int, w: int, h: int, *,
+             interlace: bool) -> tuple[list[list[tuple[int, ...]]], bytes]:  # fmt: skip
+    """Random samples of w x h and their rows filtered as an encoder may filter them."""
     n = SAMPLES[colour]
     top = (1 << depth) - 1
     pixels = [[tuple(rng.choice([0, top, rng.randint(0, top)]) for _ in range(n))
@@ -95,7 +95,14 @@ def make_png(rng: random.Random, depth: int, colour: int, w: int, h: int, *, int
                 data += _filtered(rows, bpp, rng)
     else:
         data = _filtered([_pack(row, depth) for row in pixels], bpp, rng)
-    head = chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, depth, colour, 0, 0, int(interlace)))
+    return pixels, data
+
+
+def _palette_and_transparency(rng: random.Random, depth: int, colour: int,
+                              pixels: list[list[tuple[int, ...]]]) -> list[bytes]:  # fmt: skip
+    """A palette (P) and now and then a tRNS chunk, as make_png gives them."""
+    top = (1 << depth) - 1
+    h, w = len(pixels), len(pixels[0])
     extra = []
     if colour == 3:
         entries = rng.randint(1, min(256, 1 << depth))
@@ -116,6 +123,15 @@ def make_png(rng: random.Random, depth: int, colour: int, w: int, h: int, *, int
                 values = tuple(v | 0x0100 for v in values)
             trns = bytearray(b"".join(struct.pack(">H", v) for v in values))
         extra.append(chunk(b"tRNS", bytes(trns)))
+    return extra
+
+
+def make_png(rng: random.Random, depth: int, colour: int, w: int, h: int, *, interlace: bool,
+             before: list[bytes], after: list[bytes]) -> bytes:  # fmt: skip
+    """A PNG of random samples, its palette, transparency and the chunks given."""
+    pixels, data = _samples(rng, depth, colour, w, h, interlace=interlace)
+    head = chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, depth, colour, 0, 0, int(interlace)))
+    extra = _palette_and_transparency(rng, depth, colour, pixels)
     body = chunk(b"IDAT", zlib.compress(data, rng.randint(0, 9)))
     end = chunk(b"IEND", b"")
     return b"\x89PNG\r\n\x1a\n" + head + b"".join(before) + b"".join(extra) + body + \
@@ -130,12 +146,48 @@ def _exif(orientation: int, big: bool) -> bytes:
     return head + struct.pack(e + "H", 1) + entry + struct.pack(e + "I", 0)
 
 
+# the size of each of TIFF's types (Pillow's _load_dispatch)
+TIFF_UNITS = {1: 1, 2: 1, 6: 1, 7: 1, 3: 2, 8: 2, 4: 4, 9: 4, 11: 4, 13: 4, 5: 8, 10: 8, 12: 8,
+              16: 8}  # fmt: skip
+
+
+def _odd_exif(rng: random.Random) -> bytes:
+    """EXIF of an Orientation tag of any type and count (bytes, text, fractions, negative
+    numbers, none at all: Pillow keeps it and turns nothing, nor reads XMP's), now and then
+    after a tag whose value lies beyond the data (where Pillow reads no further)."""
+    e = ">" if rng.random() < 0.5 else "<"
+    entries = []
+    if rng.random() < 0.3:
+        entries.append((270, 2, 100, struct.pack(e + "I", 5000)))  # (beyond the data)
+    typ = rng.choice([*TIFF_UNITS, 99])
+    count = rng.choice([0, 1, 1, 1, 2])
+    size = TIFF_UNITS.get(typ, 1) * count
+    value = bytes(rng.randrange(256) for _ in range(size))
+    if typ == 3 and count and rng.random() < 0.7:
+        value = struct.pack(e + "H", rng.randint(1, 8)) + value[2:]
+    entries.append((274, typ, count, value))
+    head = (b"MM\x00\x2a" if e == ">" else b"II\x2a\x00") + struct.pack(e + "I", 8)
+    after = 8 + 2 + 12 * len(entries) + 4
+    ifd, data = struct.pack(e + "H", len(entries)), b""
+    for tag, typ_, count_, v in entries:
+        if len(v) > 4:
+            ifd += struct.pack(e + "HHII", tag, typ_, count_, after + len(data))
+            data += v
+        else:
+            ifd += struct.pack(e + "HHI", tag, typ_, count_) + v.ljust(4, b"\0")
+    return head + ifd + struct.pack(e + "I", 0) + data
+
+
 def _text_chunks(rng: random.Random) -> tuple[list[bytes], list[bytes]]:
     """EXIF, XMP and ImageMagick's raw EXIF profile, at random before or after the image."""
     chunks = []
     o = rng.randint(0, 9)
     pick = rng.random()
-    if pick < 0.4:
+    if pick < 0.1:
+        chunks.append(chunk(b"eXIf", _odd_exif(rng)))
+        xmp = f'<x:xmpmeta><rdf:Description tiff:Orientation="{rng.randint(2, 8)}"/></x:xmpmeta>'
+        chunks.append(chunk(b"iTXt", b"XML:com.adobe.xmp\0\0\0\0\0" + xmp.encode()))
+    elif pick < 0.4:
         chunks.append(chunk(b"eXIf", _exif(o, rng.random() < 0.5)))
     elif pick < 0.6:
         xmp = f'<x:xmpmeta><rdf:Description tiff:Orientation="{o}"/></x:xmpmeta>'
@@ -377,7 +429,7 @@ def app_frames(data: bytes) -> list[tuple[Any, Image.Image]]:
         for n, frame in enumerate(ImageSequence.Iterator(source)):
             duration = frame.info.get("duration")
             frames.append((duration, first if n == 0 else frame.convert("RGBA")))
-    assert len(frames) == count
+    assert len(frames) <= count  # (an APNG may have fewer than it says)
     return frames
 
 
@@ -506,5 +558,107 @@ def test_lzw_data_is_read_in_pillow_s_64_kb_reads():
         small = b"," + struct.pack("<HHHHB", 2, 2, 4, 4, 0) + b"\x08"
         small += gif_lzw([1] * 16, 8, rng)
         cases.append((head + data + comment + small + b";", f"{trailing} bytes after the end"))
+    check_frames(cases)
+    check([case_of(data, "RGBA", label) for data, label in cases])
+
+
+# -- APNG -----------------------------------------------------------------------------------------
+
+
+def _split(kind: bytes, data: bytes, rng: random.Random, seq: list[int]) -> bytes:
+    """Image data in one to three chunks (fdAT's each with its sequence number)."""
+    cuts = sorted(rng.sample(range(1, len(data)), min(len(data) - 1, rng.randint(0, 2))))
+    out = b""
+    for a, b in zip([0, *cuts], [*cuts, len(data)], strict=True):
+        if kind == b"fdAT":
+            out += chunk(b"fdAT", struct.pack(">I", seq[0]) + data[a:b])
+            seq[0] += 1
+        else:
+            out += chunk(b"IDAT", data[a:b])
+    return out
+
+
+def make_apng(rng: random.Random, depth: int, colour: int, w: int, h: int) -> bytes:
+    """An APNG of random frames: a default image or not, the first frame's place given before
+    its data or not (or smaller than the picture, which Pillow takes), every disposal and blend
+    (and values beyond them), its frames in one to three chunks, chunks between them, now and
+    then a number of frames that is not the file's, a sequence error, interlaced frames."""
+    interlace = rng.random() < 0.1
+    pixels, _ = _samples(rng, depth, colour, w, h, interlace=False)
+    head = chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, depth, colour, 0, 0, int(interlace)))
+    out = b"\x89PNG\r\n\x1a\n" + head + b"".join(_palette_and_transparency(rng, depth, colour,
+                                                                            pixels))  # fmt: skip
+    count = rng.randint(1, 4)
+    default = rng.random() < 0.25
+    said = count if rng.random() < 0.9 else max(1, count + rng.choice([-1, 1]))
+    out += chunk(b"acTL", struct.pack(">II", said, rng.randrange(3)))
+    if default:
+        _, data = _samples(rng, depth, colour, w, h, interlace=interlace)
+        out += _split(b"IDAT", zlib.compress(data), rng, [0])
+    seq = [0]
+    for n in range(count):
+        if n == 0 and rng.random() < 0.8:
+            x, y, fw, fh = 0, 0, w, h
+        else:
+            fw, fh = rng.randint(1, w), rng.randint(1, h)
+            x, y = rng.randint(0, w - fw), rng.randint(0, h - fh)
+        dispose = rng.choice([0, 1, 2] * 6 + [3])
+        blend = rng.choice([0, 1] * 6 + [2])
+        delay = struct.pack(">HH", rng.randrange(200), rng.choice([0, 10, 100, 1000]))
+        number = seq[0] if rng.random() < 0.97 else seq[0] + 1  # (now and then out of order)
+        out += chunk(b"fcTL", struct.pack(">IIIII", number, fw, fh, x, y) + delay +
+                     bytes([dispose, blend]))  # fmt: skip
+        seq[0] = number + 1
+        _, data = _samples(rng, depth, colour, fw, fh, interlace=interlace)
+        kind = b"IDAT" if n == 0 and not default else b"fdAT"
+        out += _split(kind, zlib.compress(data, rng.randint(0, 9)), rng, seq)
+        if rng.random() < 0.2:
+            out += chunk(b"tEXt", b"Comment\0between frames")
+        if rng.random() < 0.1:
+            out += chunk(b"prVt", b"a chunk of its own")
+    return out + chunk(b"IEND", b"")
+
+
+def test_apng_frames_are_read_as_the_app_reads_them():
+    rng = random.Random(50)
+    cases, pairs = [], []
+    for depth, colour in PNG_KINDS:
+        for n in range(20):
+            w, h = rng.randint(1, 17), rng.randint(1, 15)
+            data = make_apng(rng, depth, colour, w, h)
+            label = f"APNG {n}, {depth}-bit colour {colour} {w}x{h}"
+            cases.append((data, label))
+            pairs.append(case_of(data, "RGBA", label))
+    check_frames(cases)
+    check(pairs)
+
+
+def test_pillow_s_apngs_are_read_as_the_app_reads_them():
+    rng = random.Random(51)
+    cases = []
+    while len(cases) < 60:
+        mode = rng.choice(["RGBA", "RGB", "P", "L", "LA"])
+        w, h = rng.randint(1, 40), rng.randint(1, 40)
+        colours = [tuple(rng.randrange(256) for _ in range(4)) for _ in range(rng.randint(1, 8))]
+        frames = []
+        for _ in range(rng.randint(2, 5)):
+            im = Image.new("RGBA", (w, h), rng.choice(colours))
+            for _ in range(rng.randint(0, 4)):
+                x, y = rng.randrange(w), rng.randrange(h)
+                im.paste(rng.choice(colours), (x, y, rng.randint(x, w), rng.randint(y, h)))
+            frames.append(im if mode == "RGBA" else im.convert(mode))
+        params: dict[str, Any] = {
+            "save_all": True, "append_images": frames[1:], "loop": rng.randrange(3),
+            "duration": rng.choice([40, [rng.randrange(20, 200) for _ in frames]]),
+            "disposal": rng.choice([0, 1, 2, [rng.randrange(3) for _ in frames]]),
+            "blend": rng.choice([0, 1, [rng.randrange(2) for _ in frames]]),
+            "default_image": rng.random() < 0.2,
+        }  # fmt: skip
+        out = io.BytesIO()
+        try:
+            frames[0].save(out, "PNG", **params)
+        except (TypeError, ValueError):  # (Pillow's writer refuses some of these)
+            continue
+        cases.append((out.getvalue(), f"Pillow's {mode} APNG {w}x{h} {len(frames)} frames"))
     check_frames(cases)
     check([case_of(data, "RGBA", label) for data, label in cases])

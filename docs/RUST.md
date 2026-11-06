@@ -31,7 +31,8 @@ below), so that the work can be picked up where it stands.
 - **Libraries in C that Pillow itself uses stay libraries**: FreeType draws the letters
   (only it draws them to the bit as Pillow does), libjpeg-turbo decodes JPEGs as Pillow does,
   x264 encodes as now; ffmpeg stays a program of its own; WebView2 and WebKitGTK are the
-  system's. Where a crate in Rust gives the same bytes (PNG, zlib), the crate is used.
+  system's. Where a crate in Rust gives the same bytes, the crate is used (zlib: zlib-rs, a
+  port of zlib that stops where Pillow's zlib stops).
 - **LibreHardwareMonitor** (C#, a library of its own) is replaced by sensors read in Rust, chip
   family by chip family; until a family is read in Rust, the .NET service reads it, then goes.
 - **Python plugins end** (there is no Python to run them). Plugins come back as WebAssembly
@@ -102,12 +103,15 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
 - [x] drawing: line (thin and wide, joints), polygon, rectangle, rounded_rectangle, ellipse,
       circle, arc, pieslice, chord, point, bitmap; the core (Draw.c) and ImageDraw's own
       methods, on pictures of bytes and of floats (F)
-- [x] decoding PNG (every bit depth and colour type, interlaced, its transparency), the EXIF
-      orientation (EXIF, ImageMagick's raw profile, XMP), opened as the app opens pictures
-      (exif_transpose, then convert)
+- [x] decoding PNG (every bit depth and colour type, interlaced, its transparency; read
+      chunk by chunk as PngImagePlugin reads it, inflated and unfiltered as ZipDecode.c does
+      it), the EXIF orientation (EXIF, ImageMagick's raw profile, XMP), opened as the app
+      opens pictures (exif_transpose, then convert)
 - [x] decoding GIF: the first frame as a still, and every frame as the app reads an
       animation (each laid on the last, every disposal, frames that grow the picture)
-- [ ] decoding: APNG (frames), JPEG (as libjpeg-turbo), WebP
+- [x] decoding APNG: every frame as the app reads an animation (each disposal and blend, a
+      default image, frames in several chunks)
+- [ ] decoding: JPEG (as libjpeg-turbo), WebP (still and animated)
 - [ ] numpy's arithmetic where the renderer uses it (dither, gradients, light)
 
 ### R2 text
