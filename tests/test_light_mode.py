@@ -136,6 +136,21 @@ def test_the_log_says_what_the_process_holds_some_minutes_after_the_app_closed(c
     line = caplog.records[-1].getMessage()
     assert line.startswith("light mode: 3 minutes after the app closed, ")
     assert " MB" in line and "the main process holds: pictures" in line
+    assert "all of Libre Panel" not in line  # (no way to its other processes given)
+    memory = {"total": 90 * 2**20, "processes": [
+        {"label": "main process", "count": 1, "private": 55 * 2**20},
+        {"label": "engine", "count": 2, "private": 35 * 2**20}]}  # fmt: skip
+    with caplog.at_level("INFO", logger="libre_panel.light"):
+        light.say_held(lambda: memory)
+    line = caplog.records[-1].getMessage()
+    assert "; all of Libre Panel 90 MB: main process 55, engine ×2 35 (MB each); " in line
+
+    def refused():
+        raise OSError("refused")
+
+    with caplog.at_level("INFO", logger="libre_panel.light"):
+        light.say_held(refused)  # (the line goes on without them)
+    assert caplog.records[-1].getMessage().startswith("light mode: 3 minutes after")
 
 
 class Kernel32:

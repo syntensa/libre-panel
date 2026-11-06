@@ -147,13 +147,16 @@ def role_of(
     window: int | None,
 ) -> tuple[str, int | None]:
     """What a process of Libre Panel's is (and the panel it is for, where it is a panel's), by
-    its id, its program's name and its command line: "panel", "ffmpeg", "presentmon",
-    "window", "webview" (the window's browser engine) or "other"."""
+    its id, its program's name and its command line: "panel", "engine" (Libre Panel's,
+    devices/engine.py), "ffmpeg", "presentmon", "window", "webview" (the window's browser
+    engine) or "other"."""
     if pid in panels:
         return "panel", panels[pid]
     if pid == window:
         return "window", None
     low = name.lower()
+    if low.startswith("libre-panel-engine"):  # (a panel's, with its pictures and its encoder)
+        return "engine", None
     if low.startswith("ffmpeg"):  # the video of the panel whose process started it
         return "ffmpeg", panels.get(parent) if parent is not None else None
     if low.startswith("presentmon"):
@@ -173,6 +176,8 @@ def label_of(role: str, panel: int | None = None, name: str = "", platform: str 
         return "main process"
     if role == "panel":
         return f"panel {panel}" if panel else "panel"
+    if role == "engine":
+        return "engine"
     if role == "ffmpeg":
         return f"ffmpeg (panel {panel})" if panel else "ffmpeg"
     if role == "presentmon":
@@ -186,8 +191,8 @@ def label_of(role: str, panel: int | None = None, name: str = "", platform: str 
     return f"other: {name}" if name else OTHER
 
 
-_ORDER = {"main": 0, "panel": 1, "ffmpeg": 2, "presentmon": 3, "window": 4, "webview": 5,
-          "service": 6, OTHER: 7}  # fmt: skip
+_ORDER = {"main": 0, "panel": 1, "engine": 2, "ffmpeg": 3, "presentmon": 4, "window": 5,
+          "webview": 6, "service": 7, OTHER: 8}  # fmt: skip
 
 
 @dataclass
@@ -464,6 +469,30 @@ class LoadSampler:
                 if self._thread is threading.current_thread():
                     self._thread = None
 
+    def memory_now(self) -> dict[str, Any]:
+        """What each of Libre Panel's processes holds now, measured once and without their
+        processor time (light mode's line in the log, light.say_held): ``{"total": bytes,
+        "processes": [{"label", "role", "count", "private"}, ...]}`` in the report's order,
+        the sensor service's private memory as it says itself where Windows does not let it be
+        read; a process that may not be read counts as None."""
+        now = self._clock()
+        measured = self._measure_all(now)
+        self._private_of(measured, now)
+        rows: dict[tuple[str, int | None, str], dict[str, Any]] = {}
+        for m in measured:
+            row = rows.setdefault((m.role, m.panel, m.name), {"role": m.role, "panel": m.panel,
+                                  "name": m.name, "count": 0, "private": None})  # fmt: skip
+            row["count"] += 1
+            if m.private is not None:
+                row["private"] = (row["private"] or 0) + m.private
+        said = (self._sensors() or {}).get("memory") or {}
+        processes = sorted(rows.values(), key=lambda r: (_ORDER.get(r["role"], 9), r["panel"] or 0))
+        for row in processes:
+            if row["role"] == "service" and row["private"] is None and said.get("private"):
+                row["private"] = said["private"]  # (Windows does not let it be read: it says)
+            row["label"] = label_of(row["role"], row["panel"], row["name"], self.platform)
+        return {"total": sum(r["private"] or 0 for r in processes), "processes": processes}
+
     # -- a sample -------------------------------------------------------------------------------
 
     def sample(self) -> dict[str, Any] | None:
@@ -738,6 +767,22 @@ _FOUND = {
     "service manager": "the process the Service Control Manager names",
     "program name": "found by its program's name",
 }
+
+
+def memory_text(memory: dict[str, Any] | None) -> str:
+    """:meth:`LoadSampler.memory_now` in a line: "all of Libre Panel 120 MB: main process 55,
+    engine ×2 38, sensor service 21, PresentMon 6 (MB of private memory each)"."""
+    if not memory or not memory.get("processes"):
+        return ""
+
+    def mb(value: int | None) -> str:
+        return "?" if value is None else f"{value / 2**20:.0f}"
+
+    parts = []
+    for row in memory["processes"]:
+        many = f" ×{row['count']}" if row["count"] > 1 else ""
+        parts.append(f"{row['label']}{many} {mb(row['private'])}")
+    return f"all of Libre Panel {mb(memory['total'])} MB: {', '.join(parts)} (MB each)"
 
 
 def _pct(value: float | None) -> str:

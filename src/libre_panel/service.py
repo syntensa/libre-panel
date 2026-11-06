@@ -369,6 +369,12 @@ class EditorService:
         server = self._server
         return None if server is None else server.editor_state.last_request
 
+    def memory_of_processes(self) -> dict[str, Any] | None:
+        """What each of Libre Panel's processes holds now (load_report.py), measured once: for
+        light mode's line in the log."""
+        server = self._server
+        return None if server is None else server.editor_state.load_sampler().memory_now()
+
     def forget_pictures(self) -> None:
         """The app's pictures of the themes, and of the community's: drawn (and fetched) again
         when it asks for them."""
@@ -444,6 +450,7 @@ class BackgroundApp:
             last_request=self.editor.last_request,
             release=lambda: light.release(self.editor.forget_pictures),
             closed=self.editor.forget_pictures,
+            say=lambda: light.say_held(self.editor.memory_of_processes),
         )
 
     # -- lifecycle -----------------------------------------------------------
