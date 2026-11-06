@@ -91,7 +91,7 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
 - [x] reduce, resize (every filter, a box of floats, reducing_gap, the crop where the box is
       the size), in L, RGB, RGBA, RGBa and F
 - [ ] thumbnail, ImageOps.fit/pad/contain
-- [ ] GaussianBlur, BoxBlur (from the engine's lit bars)
+- [x] GaussianBlur, BoxBlur
 - [ ] ImageChops: multiply, add, lighter, difference, subtract, offset; blend, composite
 - [ ] transpose, rotate, transform
 - [ ] drawing: line (thin and wide, joints), polygon, rectangle, rounded_rectangle, ellipse,

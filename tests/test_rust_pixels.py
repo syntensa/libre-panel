@@ -293,3 +293,28 @@ def test_floats_resized_are_pillow_s_to_the_bit():
         assert tuple(got["floats"]["size"]) == want.size
         have = base64.b64decode(got["floats"]["data"])
         assert have == want.tobytes(), (case["filter"], case["size"], case["box"])
+
+
+def test_gaussian_and_box_blurs_are_pillow_s_to_the_bit():
+    from PIL import ImageFilter
+
+    rng = random.Random(12)
+    pairs = []
+    for mode in MODES:
+        for n in range(60):
+            im = noise(rng, mode, (rng.randint(1, 40), rng.randint(1, 40)))
+            pick = rng.random()
+            if pick < 0.4:
+                radius: Any = rng.choice([0.5, 1, 2, 3.5, 6, 10, 25]) * rng.uniform(0.5, 1.5)
+            elif pick < 0.8:
+                radius = (rng.uniform(0, 12), rng.uniform(0, 12))  # x and y apart
+            else:
+                radius = rng.choice([0, (0, 4.2), (3.3, 0)])
+            xy = radius if isinstance(radius, tuple) else (radius, radius)
+            box = n % 2 == 1
+            blur = ImageFilter.BoxBlur(radius) if box else ImageFilter.GaussianBlur(radius)
+            want = im.filter(blur)
+            case = {"op": "box_blur" if box else "gaussian_blur", "image": image(im),
+                    "radius": list(xy), "passes": 1}  # fmt: skip
+            pairs.append((case, want))
+    check(pairs)

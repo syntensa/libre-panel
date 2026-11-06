@@ -204,6 +204,21 @@ fn run(case: &Value) -> Result<Value, String> {
                 json!({"image": value_of(&out)})
             }
         }
+        "gaussian_blur" | "box_blur" => {
+            let r = case["radius"].as_array().ok_or("a radius")?;
+            let (x, y) = (
+                r[0].as_f64().ok_or("x")? as f32,
+                r[1].as_f64().ok_or("y")? as f32,
+            );
+            let im = image_of(&case["image"])?;
+            let out = if op == "gaussian_blur" {
+                im.gaussian_blur(x, y)
+            } else {
+                im.box_blur(x, y, case["passes"].as_u64().unwrap_or(1) as u32)
+            }
+            .map_err(e)?;
+            json!({"image": value_of(&out)})
+        }
         other => return Err(format!("no op {other}")),
     })
 }
