@@ -10,15 +10,7 @@ jobs:
   measure:
     runs-on: windows-latest
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        heap: [nt, segment]
     steps:
-      - name: The segment heap for python.exe (Image File Execution Options)
-        if: matrix.heap == 'segment'
-        shell: cmd
-        run: reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\python.exe" /v FrontEndHeapDebugOptions /t REG_DWORD /d 8 /f
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
@@ -29,19 +21,10 @@ jobs:
         run: python .github/measure/measure_winheap.py
   rig:
     # the background app with two simulated panels through the engine, the window never opened:
-    # what its main process holds, by owner (.github/measure/rig_windows.py); once with Windows'
-    # heap as it is (NT heap), once with the segment heap for python.exe
+    # what its main process holds, by owner (.github/measure/rig_windows.py)
     runs-on: windows-latest
     timeout-minutes: 75
-    strategy:
-      fail-fast: false
-      matrix:
-        heap: [nt, segment]
     steps:
-      - name: The segment heap for python.exe (Image File Execution Options)
-        if: matrix.heap == 'segment'
-        shell: cmd
-        run: reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\python.exe" /v FrontEndHeapDebugOptions /t REG_DWORD /d 8 /f
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
