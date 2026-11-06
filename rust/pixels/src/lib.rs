@@ -16,6 +16,7 @@ pub mod chops;
 mod composite;
 mod convert;
 mod draw;
+mod ellipse;
 mod paste;
 mod point;
 mod reduce;

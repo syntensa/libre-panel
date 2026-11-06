@@ -425,3 +425,61 @@ def test_points_lines_polygons_rectangles_and_bitmaps_are_pillow_s():
                     break
             pairs.append(({"op": "draw", "image": image(im), "commands": commands}, out))
     check(pairs)
+
+
+def _angle(rng: random.Random) -> float:
+    """Angles as themes give them and beyond: quarters, whole and odd degrees, turns over."""
+    pick = rng.random()
+    if pick < 0.3:
+        return float(rng.choice([0, 45, 90, 135, 180, 270, 360, -90, -180, 450, 540, 720]))
+    if pick < 0.6:
+        return float(rng.randint(-400, 800))
+    return rng.uniform(-800, 800)
+
+
+def test_ellipses_arcs_chords_and_pieslices_are_pillow_s():
+    from PIL import ImageDraw
+
+    rng = random.Random(15)
+    pairs = []
+    for mode in MODES:
+        bands = len(Image.new(mode, (1, 1)).getbands())
+        for _ in range(200):
+            im = noise(rng, mode, (rng.randint(1, 48), rng.randint(1, 48)))
+            out: Any = im.copy()
+            draw = ImageDraw.Draw(out).draw
+            commands = []
+            for _ in range(rng.randint(1, 3)):
+                colour = _colour(rng, bands)
+                ink = draw.draw_ink(colour[0] if bands == 1 else tuple(colour))
+                kind = rng.choice(["ellipse", "arc", "chord", "pieslice"])
+                width = rng.choice([0, 1, 1, 2, 3, 4, 6, 9, 15, 40])
+                fill = rng.random() < 0.4
+                x0, y0 = rng.uniform(-12, im.width), rng.uniform(-12, im.height)
+                if rng.random() < 0.4:
+                    x0, y0 = float(round(x0)), float(round(y0))
+                w, h = rng.choice([0.0, 1.0, 2.0, rng.uniform(0, 50)]), rng.uniform(0, 50)
+                if rng.random() < 0.15:
+                    w, h = h, h  # (a circle)
+                xy = (x0, y0, x0 + w, y0 + h)
+                if rng.random() < 0.03:
+                    xy = (x0 + 1, y0, x0, y0 + h)  # (the wrong way round: refused)
+                start = _angle(rng)
+                end = rng.choice([start, start + 360, start + 360.5, start + 90, _angle(rng)])
+                c: dict[str, Any] = {"kind": kind, "ink": colour, "width": width, "fill": fill,
+                                     "xy": list(xy), "start": start, "end": end}  # fmt: skip
+                commands.append(c)
+                try:
+                    if kind == "ellipse":
+                        draw.draw_ellipse(xy, ink, int(fill), width)
+                    elif kind == "arc":
+                        draw.draw_arc(xy, start, end, ink, width)
+                    elif kind == "chord":
+                        draw.draw_chord(xy, start, end, ink, int(fill), width)
+                    else:
+                        draw.draw_pieslice(xy, start, end, ink, int(fill), width)
+                except ValueError:
+                    out = ERROR
+                    break
+            pairs.append(({"op": "draw", "image": image(im), "commands": commands}, out))
+    check(pairs)

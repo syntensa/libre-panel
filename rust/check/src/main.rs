@@ -284,6 +284,20 @@ fn run(case: &Value) -> Result<Value, String> {
                         let b = floats4(&c["xy"])?.ok_or("a box")?;
                         im.draw_rectangle(b, &ink, fill, width)
                     }
+                    "ellipse" => {
+                        let b = floats4(&c["xy"])?.ok_or("a box")?;
+                        im.draw_ellipse(b, &ink, fill, width)
+                    }
+                    "arc" | "chord" | "pieslice" => {
+                        let b = floats4(&c["xy"])?.ok_or("a box")?;
+                        let start = c["start"].as_f64().ok_or("a start")? as f32;
+                        let end = c["end"].as_f64().ok_or("an end")? as f32;
+                        match c["kind"].as_str() {
+                            Some("arc") => im.draw_arc(b, start, end, &ink, width),
+                            Some("chord") => im.draw_chord(b, start, end, &ink, fill, width),
+                            _ => im.draw_pieslice(b, start, end, &ink, fill, width),
+                        }
+                    }
                     "bitmap" => {
                         let at = points(&c["xy"])?;
                         im.draw_bitmap(at[0].0, at[0].1, &image_of(&c["bitmap"])?, &ink)

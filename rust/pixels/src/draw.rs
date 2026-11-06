@@ -43,6 +43,23 @@ fn round_down_d(f: f64) -> i32 {
     }
 }
 
+/// A box as _imaging.c takes it: refused where it is the wrong way round, its corners cast to
+/// whole numbers (toward 0).
+pub(crate) fn corners(bounds: (f64, f64, f64, f64)) -> Result<(i32, i32, i32, i32)> {
+    if bounds.2 < bounds.0 {
+        return error("x1 must be greater than or equal to x0");
+    }
+    if bounds.3 < bounds.1 {
+        return error("y1 must be greater than or equal to y0");
+    }
+    Ok((
+        bounds.0 as i32,
+        bounds.1 as i32,
+        bounds.2 as i32,
+        bounds.3 as i32,
+    ))
+}
+
 /// Draw.c's Edge.
 #[derive(Clone, Copy, Debug)]
 struct Edge {
@@ -83,7 +100,7 @@ impl Image {
     }
 
     /// hline8 / hline32: x0 to x1 (both) on row y, clipped.
-    fn hline(&mut self, x0: i32, y: i32, x1: i32, ink: &[u8]) {
+    pub(crate) fn hline(&mut self, x0: i32, y: i32, x1: i32, ink: &[u8]) {
         if y < 0 || y as usize >= self.height {
             return;
         }
@@ -252,7 +269,7 @@ impl Image {
         self.polygon_edges(&edges, ink);
     }
 
-    fn check_ink(&self, ink: &[u8]) -> Result<()> {
+    pub(crate) fn check_ink(&self, ink: &[u8]) -> Result<()> {
         if ink.len() != self.bands() {
             return error("an ink of another number of bands");
         }
@@ -298,18 +315,7 @@ impl Image {
         width: i32,
     ) -> Result<()> {
         self.check_ink(ink)?;
-        if bounds.2 < bounds.0 {
-            return error("x1 must be greater than or equal to x0");
-        }
-        if bounds.3 < bounds.1 {
-            return error("y1 must be greater than or equal to y0");
-        }
-        let (x0, mut y0, x1, mut y1) = (
-            bounds.0 as i32,
-            bounds.1 as i32,
-            bounds.2 as i32,
-            bounds.3 as i32,
-        );
+        let (x0, mut y0, x1, mut y1) = corners(bounds)?;
         if y0 > y1 {
             std::mem::swap(&mut y0, &mut y1);
         }
