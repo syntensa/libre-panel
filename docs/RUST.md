@@ -44,8 +44,9 @@ below), so that the work can be picked up where it stands.
 The Python app stays in the repository, runnable and tested, until the Rust app has replaced
 all of it. It is the reference every Rust piece is checked against:
 
-- **Pixels.** Each image operation in Rust (rust/pixels) is checked against Pillow on thousands
-  of random cases by `lp-check`, a small program that runs operations it reads and writes their
+- **Pixels.** Each image operation in Rust (rust/pixels) is checked against Pillow 13.0 (the
+  Pillow the Python app is built with now; the comparisons install exactly it, so a Pillow
+  that draws differently changes nothing unseen) on thousands of random cases by `lp-check`, a small program that runs operations it reads and writes their
   results; pytest compares them with Pillow's, byte for byte (tests/test_rust_*.py). numpy's
   arithmetic the same way where the renderer uses it (np.round rounds half to even, astype
   truncates: the Rust code does what numpy does).

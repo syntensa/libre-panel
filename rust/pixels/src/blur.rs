@@ -117,8 +117,12 @@ impl Image {
         if passes < 1 {
             return error("number of passes must be greater than zero");
         }
-        if xradius < 0.0 || yradius < 0.0 {
+        let below = |r: f32| r.is_nan() || r < 0.0; // (BoxBlur.c: !(r >= 0))
+        if below(xradius) || below(yradius) {
             return error("radius must be >= 0");
+        }
+        if xradius >= 2147483648.0 || yradius >= 2147483648.0 {
+            return error("radius too large");
         }
         if xradius != 0.0 {
             for _ in 0..passes {

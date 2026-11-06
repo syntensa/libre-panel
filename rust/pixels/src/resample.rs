@@ -208,11 +208,27 @@ fn vertical_8(src: &Image, offset: usize, c: &Coeffs) -> Image {
     out
 }
 
+/// Whether Resample.c resamples the rows first (Pillow 13: not where the height shrinks by more
+/// than twice what the width does, which it resamples first to make the second pass cheaper).
+fn horizontal_first(in_w: usize, in_h: usize, w: usize, h: usize) -> bool {
+    let shrink_y = in_h as i64 - h as i64;
+    !(shrink_y > 0 && shrink_y > (in_w as i64 - w as i64) * 2)
+}
+
 /// Resample.c's ImagingResampleInner for 8-bit bands.
 fn resample_8(src: &Image, w: usize, h: usize, filter: Filter, bx: [f32; 4]) -> Image {
     let need_h = w != src.width || bx[0] != 0.0 || bx[2] != w as f32;
     let need_v = h != src.height || bx[1] != 0.0 || bx[3] != h as f32;
     let cv = coeffs(src.height, bx[1], bx[3], h, filter);
+    if !horizontal_first(src.width, src.height, w, h) {
+        // (the height shrinks: need_v; the columns first, then the rows of what they made)
+        let tall = vertical_8(src, 0, &cv);
+        if need_h {
+            let ch = coeffs(src.width, bx[0], bx[2], w, filter);
+            return horizontal_8(&tall, 0, h, &ch);
+        }
+        return tall;
+    }
     let first = cv.bounds[0].0;
     let last = cv.bounds[h - 1].0 + cv.bounds[h - 1].1;
     let mut current: Option<Image> = None;
@@ -314,10 +330,9 @@ impl Image {
             return Ok(self.clone());
         }
         if self.mode == Mode::RGBA && filter != Filter::Nearest {
-            // (Image.py resizes the premultiplied copy without reducing_gap)
             return self
                 .convert(Mode::RGBa)?
-                .resize(w, h, filter, Some(bx), None)?
+                .resize(w, h, filter, Some(bx), reducing_gap)?
                 .convert(Mode::RGBA);
         }
         let reduced;
@@ -337,19 +352,8 @@ impl Image {
                 );
             }
         }
-        let f = |b: (f64, f64, f64, f64)| [b.0 as f32, b.1 as f32, b.2 as f32, b.3 as f32];
-        if src.height > src.width * 100 && h < src.height {
-            // a very tall picture: its height first, then its width (Image.py)
-            let tall = core_resize(
-                src,
-                src.width,
-                h,
-                filter,
-                f((0.0, bx.1, src.width as f64, bx.3)),
-            )?;
-            return core_resize(&tall, w, h, filter, f((bx.0, 0.0, bx.2, h as f64)));
-        }
-        core_resize(src, w, h, filter, f(bx))
+        let f = [bx.0 as f32, bx.1 as f32, bx.2 as f32, bx.3 as f32];
+        core_resize(src, w, h, filter, f)
     }
 
     /// Image._get_safe_box: the box with the pixels round it that the filter reaches.
@@ -372,47 +376,67 @@ impl Image {
     }
 }
 
-/// Resample.c's passes for 32-bit floats (mode F): doubles summed, the result a float.
+/// The rows of a float picture from ``first`` on (``rows`` of them), each resampled to ``c``'s
+/// width: doubles summed, the result a float.
+fn horizontal_f(src: &FloatImage, first: usize, rows: usize, c: &Coeffs) -> FloatImage {
+    let w = c.bounds.len();
+    let mut out = FloatImage::new(w, rows);
+    for yy in 0..rows {
+        let line = &src.data[(yy + first) * src.width..(yy + first + 1) * src.width];
+        for (xx, &(xmin, xmax)) in c.bounds.iter().enumerate() {
+            let k = &c.kk[xx * c.ksize..xx * c.ksize + xmax];
+            let mut ss = 0.0f64;
+            for (x, &kx) in k.iter().enumerate() {
+                ss += f64::from(line[x + xmin]) * kx;
+            }
+            out.data[yy * w + xx] = ss as f32;
+        }
+    }
+    out
+}
+
+/// The columns of a float picture resampled to ``c``'s height (its bounds shifted by
+/// ``offset``).
+fn vertical_f(src: &FloatImage, offset: usize, c: &Coeffs) -> FloatImage {
+    let h = c.bounds.len();
+    let mut out = FloatImage::new(src.width, h);
+    for (yy, &(ymin, ymax)) in c.bounds.iter().enumerate() {
+        let k = &c.kk[yy * c.ksize..yy * c.ksize + ymax];
+        for xx in 0..src.width {
+            let mut ss = 0.0f64;
+            for (y, &ky) in k.iter().enumerate() {
+                ss += f64::from(src.data[(y + ymin - offset) * src.width + xx]) * ky;
+            }
+            out.data[yy * src.width + xx] = ss as f32;
+        }
+    }
+    out
+}
+
+/// Resample.c's passes for 32-bit floats (mode F), in the order ImagingResampleInner takes.
 fn resample_f(src: &FloatImage, w: usize, h: usize, filter: Filter, bx: [f32; 4]) -> FloatImage {
     let need_h = w != src.width || bx[0] != 0.0 || bx[2] != w as f32;
     let need_v = h != src.height || bx[1] != 0.0 || bx[3] != h as f32;
     let cv = coeffs(src.height, bx[1], bx[3], h, filter);
+    if !horizontal_first(src.width, src.height, w, h) {
+        let tall = vertical_f(src, 0, &cv);
+        if need_h {
+            let ch = coeffs(src.width, bx[0], bx[2], w, filter);
+            return horizontal_f(&tall, 0, h, &ch);
+        }
+        return tall;
+    }
     let first = cv.bounds[0].0;
     let last = cv.bounds[h - 1].0 + cv.bounds[h - 1].1;
     let mut current: Option<FloatImage> = None;
     let mut offset = 0;
     if need_h {
         let ch = coeffs(src.width, bx[0], bx[2], w, filter);
-        let rows = last - first;
-        let mut out = FloatImage::new(w, rows);
-        for yy in 0..rows {
-            let line = &src.data[(yy + first) * src.width..(yy + first + 1) * src.width];
-            for (xx, &(xmin, xmax)) in ch.bounds.iter().enumerate() {
-                let k = &ch.kk[xx * ch.ksize..xx * ch.ksize + xmax];
-                let mut ss = 0.0f64;
-                for (x, &kx) in k.iter().enumerate() {
-                    ss += f64::from(line[x + xmin]) * kx;
-                }
-                out.data[yy * w + xx] = ss as f32;
-            }
-        }
-        current = Some(out);
+        current = Some(horizontal_f(src, first, last - first, &ch));
         offset = first;
     }
     if need_v {
-        let from = current.as_ref().unwrap_or(src);
-        let mut out = FloatImage::new(from.width, h);
-        for (yy, &(ymin, ymax)) in cv.bounds.iter().enumerate() {
-            let k = &cv.kk[yy * cv.ksize..yy * cv.ksize + ymax];
-            for xx in 0..from.width {
-                let mut ss = 0.0f64;
-                for (y, &ky) in k.iter().enumerate() {
-                    ss += f64::from(from.data[(y + ymin - offset) * from.width + xx]) * ky;
-                }
-                out.data[yy * from.width + xx] = ss as f32;
-            }
-        }
-        return out;
+        return vertical_f(current.as_ref().unwrap_or(src), offset, &cv);
     }
     current.unwrap_or_else(|| src.clone())
 }

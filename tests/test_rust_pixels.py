@@ -230,6 +230,11 @@ def test_blocks_reduced_to_one_pixel_are_pillow_s():
         for bad in ((0, 0, 9, 8), (3, 3, 3, 8)):  # beyond the picture, and empty
             case = {"op": "reduce", "image": image(im), "factor": [2, 2], "box": list(bad)}
             pairs.append((case, ERROR))
+        for box in (None, (0, 0, 9, 8), (2, 3, 6, 3), (5, 2, 1, 4), (1, 6, 7, 2)):
+            # (a factor of 1: Image.py's crop of the box, beyond the picture or the wrong way)
+            case = {"op": "reduce", "image": image(im), "factor": [1, 1],
+                    "box": list(box) if box else None}  # fmt: skip
+            pairs.append((case, expect(lambda im=im, b=box: im.reduce(1, b))))
     check(pairs)
 
 
@@ -267,6 +272,15 @@ def test_a_picture_resized_with_every_filter_is_pillow_s():
                 case = {"op": "resize", "image": image(im), "size": list(size), "filter": int(f),
                         "box": list(box) if box else None, "reducing_gap": gap}  # fmt: skip
                 pairs.append((case, expect(resized)))
+            # the height shrunk by more than twice the width (Pillow 13: its columns first), a
+            # picture over a hundred times as tall as wide, RGBA with a reducing gap
+            for w, h, size in ((12, 33, (32, 1)), (5, 90, (9, 7)), (20, 64, (18, 3)),
+                               (2, 250, (3, 17)), (30, 31, (61, 2))):  # fmt: skip
+                im = noise(rng, mode, (w, h))
+                gap = rng.choice([None, 1.5, 2.0])
+                case = {"op": "resize", "image": image(im), "size": list(size), "filter": int(f),
+                        "box": None, "reducing_gap": gap}  # fmt: skip
+                pairs.append((case, im.resize(size, f, None, gap)))
     check(pairs)
 
 
@@ -317,6 +331,13 @@ def test_gaussian_and_box_blurs_are_pillow_s_to_the_bit():
             case = {"op": "box_blur" if box else "gaussian_blur", "image": image(im),
                     "radius": list(xy), "passes": 1}  # fmt: skip
             pairs.append((case, want))
+        im = noise(rng, mode, (6, 5))
+        for radius in ((-1.0, 2.0), (3.0, float("nan")), (2.0**31, 1.0)):  # (mostly refused)
+            for op, kind in (("box_blur", ImageFilter.BoxBlur), ("gaussian_blur",
+                             ImageFilter.GaussianBlur)):  # fmt: skip
+                given = [str(r) if r != r else r for r in radius]  # (NaN as text: JSON has none)
+                case = {"op": op, "image": image(im), "radius": given, "passes": 1}
+                pairs.append((case, expect(lambda im=im, k=kind, r=radius: im.filter(k(r)))))
     check(pairs)
 
 

@@ -1,5 +1,5 @@
 //! ImageDraw.py's own methods (`draw.line(...)`, `draw.rounded_rectangle(...)`), on top of the
-//! core in draw.rs and ellipse.rs, as Pillow 12.3 writes them: the inks for fill and outline,
+//! core in draw.rs and ellipse.rs, as Pillow 13.0 writes them: the inks for fill and outline,
 //! the outline left out where it is the fill's own ink, the joints of a curved line, the
 //! corners of a rounded rectangle, in Python's arithmetic (its round() half to even, its
 //! floor division, its remainder).

@@ -26,10 +26,20 @@ impl Image {
         yscale: usize,
         bounds: Option<(usize, usize, usize, usize)>,
     ) -> Result<Image> {
-        let (x0, y0, x1, y1) = bounds.unwrap_or((0, 0, self.width, self.height));
-        if (xscale, yscale) == (1, 1) && (x0, y0, x1, y1) == (0, 0, self.width, self.height) {
-            return Ok(self.clone());
+        if (xscale, yscale) == (1, 1) {
+            // (Image.py: a crop of the box, as Image.crop takes it)
+            let Some((x0, y0, x1, y1)) = bounds else {
+                return Ok(self.clone());
+            };
+            if x1 < x0 {
+                return error("Coordinate 'right' is less than 'left'");
+            }
+            if y1 < y0 {
+                return error("Coordinate 'lower' is less than 'upper'");
+            }
+            return Ok(self.crop(x0 as i64, y0 as i64, x1 as i64, y1 as i64));
         }
+        let (x0, y0, x1, y1) = bounds.unwrap_or((0, 0, self.width, self.height));
         if self.mode == Mode::RGBA {
             return self
                 .convert(Mode::RGBa)?
@@ -44,9 +54,6 @@ impl Image {
         }
         if x1 <= x0 || y1 <= y0 {
             return error("box can't be empty");
-        }
-        if (xscale, yscale) == (1, 1) {
-            return Ok(self.crop(x0 as i64, y0 as i64, x1 as i64, y1 as i64));
         }
         let (bw, bh) = (x1 - x0, y1 - y0);
         let (w, h) = (bw.div_ceil(xscale), bh.div_ceil(yscale));

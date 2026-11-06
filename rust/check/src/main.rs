@@ -289,10 +289,13 @@ fn run(case: &Value) -> Result<Value, String> {
         }
         "gaussian_blur" | "box_blur" => {
             let r = case["radius"].as_array().ok_or("a radius")?;
-            let (x, y) = (
-                r[0].as_f64().ok_or("x")? as f32,
-                r[1].as_f64().ok_or("y")? as f32,
-            );
+            // (a number, or one JSON has none of as text: "nan")
+            let radius = |v: &Value| {
+                v.as_f64()
+                    .or_else(|| v.as_str().and_then(|t| t.parse().ok()))
+                    .ok_or("a radius")
+            };
+            let (x, y) = (radius(&r[0])? as f32, radius(&r[1])? as f32);
             let im = image_of(&case["image"])?;
             let out = if op == "gaussian_blur" {
                 im.gaussian_blur(x, y)

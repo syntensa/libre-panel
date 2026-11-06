@@ -1,6 +1,6 @@
 //! Pillow's image operations as Libre Panel uses them, to the bit (docs/RUST.md, stage R1).
 //!
-//! Each operation does what Pillow 12 does, Python's side (PIL/Image.py) and C's
+//! Each operation does what Pillow 13.0 does, Python's side (PIL/Image.py) and C's
 //! (libImaging) together: the same integer arithmetic, the same rounding, the same edge cases.
 //! `lp-check` runs them for tests/test_rust_pixels.py, which compares them with Pillow's on
 //! thousands of random cases, byte for byte.
