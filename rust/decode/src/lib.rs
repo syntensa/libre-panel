@@ -4,9 +4,11 @@
 //! converts every picture it opens, most to RGBA).
 
 mod exif;
+mod gif;
 mod png;
 
 pub use exif::orientation;
+pub use gif::Frame;
 
 use lp_pixels::{Image, Mode};
 use std::fmt;
@@ -218,12 +220,28 @@ impl Picture {
     }
 }
 
+fn is_gif(data: &[u8]) -> bool {
+    data.starts_with(b"GIF87a") || data.starts_with(b"GIF89a")
+}
+
 /// The picture in `data` (its file's bytes), as Image.open reads it and loads its first frame.
 pub fn decode(data: &[u8]) -> Result<Picture> {
     if data.starts_with(b"\x89PNG\r\n\x1a\n") {
         return png::decode(data);
     }
+    if is_gif(data) {
+        return gif::decode(data);
+    }
     error("cannot identify image file")
+}
+
+/// Every frame of an animated picture as the app reads one (render/moving.py's
+/// read_animation: each frame's duration and its picture in RGBA). GIF so far.
+pub fn frames(data: &[u8]) -> Result<Vec<Frame>> {
+    if is_gif(data) {
+        return gif::frames(data);
+    }
+    error("frames are read from GIFs so far")
 }
 
 /// What the app makes of a picture it opens: ImageOps.exif_transpose(picture).convert(mode).

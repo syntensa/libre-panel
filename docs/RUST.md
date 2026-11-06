@@ -105,7 +105,9 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
 - [x] decoding PNG (every bit depth and colour type, interlaced, its transparency), the EXIF
       orientation (EXIF, ImageMagick's raw profile, XMP), opened as the app opens pictures
       (exif_transpose, then convert)
-- [ ] decoding: GIF and APNG (frames), JPEG (as libjpeg-turbo), WebP
+- [x] decoding GIF: the first frame as a still, and every frame as the app reads an
+      animation (each laid on the last, every disposal, frames that grow the picture)
+- [ ] decoding: APNG (frames), JPEG (as libjpeg-turbo), WebP
 - [ ] numpy's arithmetic where the renderer uses it (dither, gradients, light)
 
 ### R2 text

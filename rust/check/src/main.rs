@@ -12,6 +12,7 @@ use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use lp_pixels::{Canvas, Draw, Image, Mode};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 
 fn image_of(v: &Value) -> Result<Image, String> {
     let mode = v["mode"]
@@ -476,6 +477,31 @@ fn run(case: &Value) -> Result<Value, String> {
                     .map_err(fail)?
             };
             json!({"image": value_of(&out)})
+        }
+        "frames" => {
+            // an animation's frames as the app reads them: each one's duration and RGBA picture
+            let data = STANDARD
+                .decode(case["data"].as_str().unwrap_or(""))
+                .map_err(|err| err.to_string())?;
+            let frames = lp_decode::frames(&data).map_err(|err| err.to_string())?;
+            // ("digest": each picture's SHA-256 alone, for animations too big to send whole)
+            let digest = case["digest"].as_bool().unwrap_or(false);
+            let frames: Vec<Value> = frames
+                .iter()
+                .map(|f| {
+                    let mut out = json!({"duration": f.duration});
+                    if digest {
+                        let sum = Sha256::digest(f.image.as_bytes());
+                        let hex: String = sum.iter().map(|b| format!("{b:02x}")).collect();
+                        out["size"] = json!([f.image.width(), f.image.height()]);
+                        out["sha256"] = json!(hex);
+                    } else {
+                        out["image"] = value_of(&f.image);
+                    }
+                    out
+                })
+                .collect();
+            json!({ "frames": frames })
         }
         "draw" | "imagedraw" => {
             let own = op == "imagedraw";

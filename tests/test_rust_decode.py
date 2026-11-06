@@ -1,9 +1,11 @@
 """rust/decode against Pillow (docs/RUST.md, stage R1): pictures decoded from their files as the
-app opens them, ImageOps.exif_transpose(Image.open(file)).convert(mode), byte for byte."""
+app opens them, ImageOps.exif_transpose(Image.open(file)).convert(mode), and animations' frames
+as it reads them (render/moving.py's read_animation), byte for byte."""
 
 from __future__ import annotations
 
 import base64
+import hashlib
 import io
 import random
 import struct
@@ -11,11 +13,14 @@ import zlib
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageSequence
 from rust_check import picture, run
 
 ROOT = Path(__file__).resolve().parent.parent
 ERROR = object()
+# what Pillow raises on files it cannot read (Image.open lets EOFError and IndexError through)
+REFUSED = (OSError, ValueError, SyntaxError, EOFError, IndexError, TypeError, struct.error,
+           Image.DecompressionBombError)  # fmt: skip
 
 # (bit depth, colour type) as PNG allows them, and the samples of a pixel
 PNG_KINDS = [(1, 0), (2, 0), (4, 0), (8, 0), (16, 0), (8, 2), (16, 2), (1, 3), (2, 3), (4, 3),
@@ -166,7 +171,7 @@ def check(pairs: list[tuple[dict[str, Any], Any]]) -> None:
 def case_of(data: bytes, mode: str, label: str) -> tuple[dict[str, Any], Any]:
     try:
         want: Any = opened(data, mode)
-    except (OSError, ValueError, SyntaxError):
+    except REFUSED:
         want = ERROR
     return {"op": "open", "data": base64.b64encode(data).decode(), "mode": mode,
             "label": label}, want  # fmt: skip
@@ -217,3 +222,289 @@ def test_pillow_s_own_pngs_open_as_pillow_opens_them():
             for target in ("RGBA", "RGB", "L"):
                 pairs.append(case_of(out.getvalue(), target, f"Pillow's {mode} {params}"))
     check(pairs)
+
+
+# -- GIF ------------------------------------------------------------------------------------------
+
+
+def _sub_blocks(data: bytes, rng: random.Random) -> bytes:
+    """Data as GIF's sub-blocks of random lengths, and the empty one that ends them."""
+    out, i = bytearray(), 0
+    while i < len(data):
+        part = data[i : i + rng.randint(1, 255)]
+        out += bytes([len(part)]) + part
+        i += len(part)
+    return bytes(out) + b"\0"
+
+
+def gif_lzw(pixels: list[int], bits: int, rng: random.Random, *, literal: bool = False,
+            clears: bool = True) -> bytes:  # fmt: skip
+    """The pixels as GIF's LZW codes, in sub-blocks: strings of the table where ``literal`` is
+    not set, a clear code now and then (``clears``), the code sizes as Pillow's decoder grows
+    them."""
+    clear = 1 << bits
+    codes: list[tuple[int, int]] = []
+    state = {"width": bits + 1, "next": clear + 2, "first": True}
+
+    def emit(code: int) -> None:
+        codes.append((code, state["width"]))
+        if code == clear:
+            state.update(width=bits + 1, next=clear + 2, first=True)
+        elif state["first"]:
+            state["first"] = False
+        elif state["next"] < 4096:
+            if state["next"] == (1 << state["width"]) - 1 and state["width"] < 12:
+                state["width"] += 1
+            state["next"] += 1
+
+    def fresh() -> dict[tuple[int, ...], int]:
+        return {(i,): i for i in range(min(clear, 256))}
+
+    table, following = fresh(), clear + 2
+    if rng.random() < 0.8:
+        emit(clear)
+    run_: tuple[int, ...] = ()
+    for k in pixels:
+        if clears and run_ and rng.random() < 0.02:
+            emit(table[run_])
+            emit(clear)
+            table, following, run_ = fresh(), clear + 2, ()
+        longer = (*run_, k)
+        if longer in table and not (literal and run_):
+            run_ = longer
+            continue
+        emit(table[run_])
+        if not literal and following < 4096:
+            table[longer] = following
+            following += 1
+        run_ = (k,)
+    if run_:
+        emit(table[run_])
+    emit(clear + 1)
+    packed, acc, count = bytearray(), 0, 0
+    for code, width in codes:
+        acc |= code << count
+        count += width
+        while count >= 8:
+            packed.append(acc & 255)
+            acc >>= 8
+            count -= 8
+    if count:
+        packed.append(acc & 255)
+    return _sub_blocks(bytes(packed), rng)
+
+
+def _colour_table(rng: random.Random, size: int, *, grey: bool) -> bytes:
+    """A colour table of 2 << size entries: random, or the grey ramp (Pillow's "not needed")."""
+    n = 2 << size
+    if grey:
+        return bytes(v for i in range(n) for v in (i, i, i))
+    return bytes(rng.randrange(256) for _ in range(3 * n))
+
+
+def _gce(rng: random.Random, colours: int) -> bytes:
+    """A graphic control extension: any disposal (0 to 7), a transparent index or none."""
+    flags = rng.randrange(8) << 2 | rng.randrange(2) << 1
+    index = rng.randrange(colours) if rng.random() < 0.9 else rng.randrange(256)
+    if rng.random() < 0.5:
+        flags |= 1
+    delay = rng.choice([0, 1, 2, 5, 10, 100, rng.randrange(65536)])
+    return b"!\xf9\x04" + struct.pack("<BHB", flags, delay, index) + b"\0"
+
+
+def make_gif(rng: random.Random, *, early_end: bool = False) -> bytes:
+    """A GIF of random frames: its own or the file's colour table (or none, or the grey ramp),
+    any place and size (now and then beyond the screen), interlaced or not, graphic controls of
+    every disposal and transparency, comments, application blocks and stray bytes between."""
+    w, h = rng.randint(1, 24), rng.randint(1, 24)
+    size = rng.randrange(8)
+    pick = rng.random()
+    table = None if pick < 0.2 else _colour_table(rng, size, grey=pick < 0.3)
+    flags = rng.randrange(8) << 4 | rng.randrange(2) << 3 | size
+    if table is not None:
+        flags |= 128
+    out = bytearray(rng.choice([b"GIF89a", b"GIF87a"]) + struct.pack("<HHBBB", w, h, flags,
+                    rng.randrange(256), 0))  # fmt: skip
+    if table is not None:
+        out += table
+    if rng.random() < 0.3:
+        loops = struct.pack("<H", rng.randrange(65536))
+        out += b"!\xff\x0bNETSCAPE2.0\x03\x01" + loops + b"\0"
+    for _ in range(rng.randint(1, 5)):
+        local = None
+        if rng.random() < 0.35:
+            local_size = rng.randrange(8)
+            local = _colour_table(rng, local_size, grey=rng.random() < 0.2)
+        colours = len(local or table or b"\0" * 768) // 3
+        for _ in range(rng.choice([0, 1, 1, 1, 2])):
+            out += _gce(rng, colours)
+        if rng.random() < 0.15:
+            out += b"!\xfe" + _sub_blocks(b"a comment", rng)
+        if rng.random() < 0.05:
+            out += bytes([rng.choice([0, 1, 0x7F, 0xFE])])  # (a stray byte, skipped)
+        x0 = rng.randint(0, w - 1) if rng.random() < 0.6 else 0
+        y0 = rng.randint(0, h - 1) if rng.random() < 0.6 else 0
+        fw = rng.randint(1, w - x0) if rng.random() < 0.85 else rng.randint(1, w + 6)
+        fh = rng.randint(1, h - y0) if rng.random() < 0.85 else rng.randint(1, h + 6)
+        if rng.random() < 0.01:
+            fw = 0  # (a frame of no pixels: Pillow refuses it)
+        descriptor = rng.randrange(2) << 6  # (interlaced)
+        if local is not None:
+            descriptor |= 128 | local_size
+        out += b"," + struct.pack("<HHHHB", x0, y0, fw, fh, descriptor) + (local or b"")
+        need = max(1, (colours - 1).bit_length())
+        bits = rng.choice([max(2, need)] * 8 + [need, min(8, need + rng.randint(1, 3)), 12])
+        literal = bits < 2 or bits == 12  # (no strings at Pillow's own code sizes there)
+        span = 1 << bits
+        pixels = []
+        while len(pixels) < fw * fh:
+            v = rng.randrange(min(colours, span))
+            pixels += [v] * rng.choice([1, 1, 2, 3, 8])
+        count = fw * fh if not early_end else rng.randint(0, fw * fh)
+        out += bytes([bits]) + gif_lzw(pixels[:count], bits, rng, literal=literal)
+    if rng.random() < 0.9:
+        out += b";"
+    return bytes(out)
+
+
+def app_frames(data: bytes) -> list[tuple[Any, Image.Image]]:
+    """An animation's frames as read_animation reads them: n_frames, the first converted, then
+    ImageSequence's frames, each with its duration and converted to RGBA."""
+    with Image.open(io.BytesIO(data)) as source:
+        count = getattr(source, "n_frames", 1)
+        first = source.convert("RGBA")
+        frames = []
+        for n, frame in enumerate(ImageSequence.Iterator(source)):
+            duration = frame.info.get("duration")
+            frames.append((duration, first if n == 0 else frame.convert("RGBA")))
+    assert len(frames) == count
+    return frames
+
+
+def check_frames(cases: list[tuple[bytes, str]], *, digest: bool = False) -> None:
+    pairs: list[tuple[dict[str, Any], Any]] = []
+    for data, label in cases:
+        try:
+            want: Any = app_frames(data)
+        except REFUSED:
+            want = ERROR
+        case = {"op": "frames", "data": base64.b64encode(data).decode(), "digest": digest}
+        pairs.append(({**case, "label": label}, want))
+    answers = run([case for case, _ in pairs])
+    for (case, want), got in zip(pairs, answers, strict=True):
+        label = case["label"]
+        if want is ERROR:
+            assert "error" in got, (label, "Pillow refuses it")
+            continue
+        assert "error" not in got, (label, got.get("error"))
+        assert len(got["frames"]) == len(want), label
+        for n, (frame, (duration, image)) in enumerate(zip(got["frames"], want, strict=True)):
+            assert frame["duration"] == duration, (label, n)
+            if digest:
+                assert tuple(frame["size"]) == image.size, (label, n)
+                assert frame["sha256"] == hashlib.sha256(image.tobytes()).hexdigest(), (label, n)
+                continue
+            have = picture(frame["image"])
+            assert (have.mode, have.size) == (image.mode, image.size), (label, n)
+            assert have.tobytes() == image.tobytes(), (label, n)
+
+
+def test_gif_frames_are_read_as_the_app_reads_them():
+    rng = random.Random(40)
+    check_frames([(make_gif(rng), f"GIF {n}") for n in range(400)])
+
+
+def test_gifs_open_as_pillow_opens_them():
+    rng = random.Random(41)
+    pairs = []
+    for n in range(200):
+        data = make_gif(rng)
+        for mode in ("RGBA", "RGB", "L"):
+            pairs.append(case_of(data, mode, f"GIF {n} {mode}"))
+    check(pairs)
+
+
+def test_broken_gifs_are_refused_where_pillow_refuses_them():
+    """Cut short, a byte changed, bytes put in, LZW data that ends before its frame does (Pillow
+    reads on into the file after it): read or refused as Pillow reads or refuses them."""
+    rng = random.Random(42)
+    cases = []
+    for n in range(300):
+        data = bytearray(make_gif(rng, early_end=n % 4 == 3))
+        if n % 4 == 0:
+            data = data[: rng.randrange(13, len(data) + 1)]
+        elif n % 4 == 1:
+            data[rng.randrange(13, len(data))] = rng.randrange(256)
+        elif n % 4 == 2:
+            at = rng.randrange(13, len(data) + 1)
+            data[at:at] = bytes(rng.randrange(256) for _ in range(rng.randint(1, 4)))
+        cases.append((bytes(data), f"broken GIF {n}"))
+    check_frames(cases)
+    check([case_of(data, "RGBA", label) for data, label in cases])
+
+
+def test_pillow_s_animations_are_read_as_the_app_reads_them():
+    rng = random.Random(43)
+    cases = []
+    while len(cases) < 60:
+        mode = rng.choice(["P", "L", "RGB", "RGBA"])
+        w, h = rng.randint(1, 40), rng.randint(1, 40)
+        colours = [tuple(rng.randrange(256) for _ in range(4)) for _ in range(rng.randint(1, 12))]
+        frames = []
+        for _ in range(rng.randint(2, 6)):
+            im = Image.new("RGBA", (w, h), rng.choice(colours))
+            for _ in range(rng.randint(0, 4)):
+                x, y = rng.randrange(w), rng.randrange(h)
+                box = (x, y, rng.randint(x, w), rng.randint(y, h))
+                im.paste(rng.choice(colours), box)
+            if mode != "RGBA":
+                im = im.convert(mode)
+            frames.append(im)
+        params: dict[str, Any] = {
+            "save_all": True, "append_images": frames[1:], "loop": 0,
+            "duration": rng.choice([40, [rng.randrange(20, 200) for _ in frames]]),
+            "disposal": rng.choice([0, 1, 2, 3, [rng.randrange(4) for _ in frames]]),
+            "optimize": rng.random() < 0.5, "interlace": rng.random() < 0.5,
+        }  # fmt: skip
+        if mode in ("P", "L") and rng.random() < 0.5:
+            params["transparency"] = rng.randrange(256)
+        out = io.BytesIO()
+        try:
+            frames[0].save(out, "GIF", **params)
+        except TypeError:  # (Pillow's writer: a list of disposals for frames all the same)
+            continue
+        cases.append((out.getvalue(), f"Pillow's {mode} {w}x{h} {len(frames)} frames"))
+    check_frames(cases)
+
+
+def test_the_project_s_own_animations_are_read_as_the_app_reads_them():
+    """The GIFs of docs/media (made by other encoders, of hundreds of frames each): the three
+    smallest, each frame by its SHA-256."""
+    paths = sorted((ROOT / "docs" / "media").glob("*.gif"), key=lambda p: p.stat().st_size)
+    assert paths
+    check_frames([(p.read_bytes(), p.name) for p in paths[:3]], digest=True)
+
+
+def test_lzw_data_is_read_in_pillow_s_64_kb_reads():
+    """A frame whose data spans several of ImageFile.load's 64 KB reads; and a frame whose data
+    ends (its end code) before its last pixel, with a comment of zeros after it: Pillow's
+    decoder is given more of the file after an end code where its reads have not reached the
+    end, so it reads on into the comment (and the frame is filled from it) where the file goes
+    on for more than one read, and the file is "truncated" where it does not."""
+    rng = random.Random(44)
+    table = bytes(rng.randrange(256) for _ in range(768))
+    head = b"GIF89a" + struct.pack("<HHBBB", 300, 300, 0xF7, 0, 0) + table
+    cases = []
+    pixels = [rng.randrange(256) for _ in range(300 * 300)]
+    frame = b"," + struct.pack("<HHHHB", 0, 0, 300, 300, 0) + b"\x08"
+    cases.append((head + frame + gif_lzw(pixels, 8, rng) + b";", "a frame of 90,000 pixels"))
+    for trailing in (1000, 65000, 65536, 66000, 140000):
+        pixels = [rng.randrange(256) for _ in range(80 * 80)]
+        frame = b"," + struct.pack("<HHHHB", 0, 0, 80, 80, 0) + b"\x08"
+        data = frame + gif_lzw(pixels[:5000], 8, rng, clears=False)  # (its table full)
+        comment = b"!\xfe" + (b"\xff" + bytes(255)) * (trailing // 256) + b"\0"
+        small = b"," + struct.pack("<HHHHB", 2, 2, 4, 4, 0) + b"\x08"
+        small += gif_lzw([1] * 16, 8, rng)
+        cases.append((head + data + comment + small + b";", f"{trailing} bytes after the end"))
+    check_frames(cases)
+    check([case_of(data, "RGBA", label) for data, label in cases])
