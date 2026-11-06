@@ -39,8 +39,9 @@
 - **The app's picture of the panel from the engine.** Where Libre Panel's engine composes the
   panel's frames (the default with the downloads), the app's picture of the panel (Live, the
   Player, Start) is the engine's own frame, whole, as the panel got it: the main process no
-  longer composes it again from its layers. On Linux with both panels on Lumen, the app on
-  Live: the main process 117 MB instead of 133. The picture is the same, pixel for pixel.
+  longer composes it again from its layers. In Windows CI with both panels on Lumen, after ten
+  minutes on Live: the main process 61 to 70 MB instead of 95 to 106 (on Linux 117 MB instead of
+  133). The picture is the same, pixel for pixel.
 
 **Removed**
 - **Claude Code in the cloud.** The relay for Claude Code's cloud sessions (an ntfy topic,
