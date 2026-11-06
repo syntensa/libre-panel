@@ -73,9 +73,11 @@ PROFILES = ("auto", "baseline", "main", "high")
 # ffmpeg can start it (AUTO_ENCODERS, in that order), else x264 on the processor. NVIDIA's and
 # Intel's are an experiment.
 ENCODERS = ("auto", "libx264", "native", "h264_nvenc", "h264_amf", "h264_qsv")
-# The encoder inside the engine (video.encoder "native"): x264 on the processor, or the graphics
-# card's own through Windows' Media Foundation (engine/src/mf.rs), x264 where that cannot start.
-ENGINE_ENCODERS = ("x264", "card")
+# The encoder inside the engine (video.encoder "native"): "auto" the graphics card's own where it
+# is AMD's or NVIDIA's (engine/src/encoder.rs's proven) and opens, else x264; "x264"
+# on the processor; "card" the graphics card's whichever it is, through Windows' Media
+# Foundation (engine/src/mf.rs), x264 where that cannot start. The cards' are Windows' only.
+ENGINE_ENCODERS = ("auto", "x264", "card")
 HIGH_PROFILE_MODELS = frozenset({"turing-9.2-usb", "turing-12.3-usb"})
 AUTO_ENCODERS = ("h264_amf",)
 # Who turns the frames into YUV (config.toml video.pixels): "auto" the graphics card where the
@@ -186,7 +188,7 @@ class EncoderSettings:
     # full-range YUV (0-255), for a panel whose decoder shows every stream so (video_range)
     full: bool = False
     # the engine's own encoder (ENGINE_ENCODERS), for encoder NATIVE
-    engine_encoder: str = "x264"
+    engine_encoder: str = "auto"
 
 
 # The bit rate measured on the 9.2": 2 Mbit/s for its 1920x480 pixels at 50 frames a second.
@@ -550,10 +552,13 @@ def auto_engine() -> str:
 
 
 def engine_options(
-    size: tuple[int, int], rotate: int | None, settings: EncoderSettings
-) -> list[str]:
+    size: tuple[int, int], rotate: int | None, settings: EncoderSettings,
+    platform: str | None = None,
+) -> list[str]:  # fmt: skip
     """How the engine encodes frames of ``size`` into the panel's framebuffer (``rotate``): as
-    x264 through ffmpeg would (:func:`ffmpeg_command`, for drawn frames)."""
+    x264 through ffmpeg would (:func:`ffmpeg_command`, for drawn frames). ``engine_encoder``
+    "auto" asks for the graphics card's where it is proven, on Windows (``platform``): the
+    cards' encoders are Windows' there, elsewhere x264 encodes as it did."""
     keyint = max(1, round(settings.fps * settings.keyframe_s))
     kbit = max(1, round(mbit(bit_rate(settings, size)) * 1000))
     options = [
@@ -562,8 +567,11 @@ def engine_options(
         "--keyint", str(keyint), "--preset", settings.preset, "--profile", settings.profile,
         "--x264", DRAWN_X264,
     ]  # fmt: skip
-    if settings.engine_encoder == "card":  # (the graphics card's: x264 where it cannot start)
-        options += ["--encoder", "card"]
+    wanted = settings.engine_encoder
+    if wanted == "auto" and (platform or sys.platform) != "win32":
+        wanted = "x264"
+    if wanted in ("card", "auto"):  # (the graphics card's: x264 where it cannot start)
+        options += ["--encoder", wanted]
     return options + (["--full"] if settings.full else [])
 
 

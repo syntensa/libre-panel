@@ -47,6 +47,7 @@ import logging
 import queue
 import statistics
 import struct
+import sys
 import threading
 import time
 from collections import deque
@@ -68,6 +69,7 @@ from libre_panel.devices.engine import (
     can_send,
     cuts_views,
     encodes_on_cards,
+    encodes_on_proven_cards,
     engine_scene,
     grows_sources,
     lays_laid,
@@ -253,7 +255,7 @@ def video_settings(video: Any) -> EncoderSettings:
         maxrate=video.maxrate,
         profile=video.profile,
         encoder=video.encoder,
-        engine_encoder=getattr(video, "engine_encoder", "x264"),
+        engine_encoder=getattr(video, "engine_encoder", "auto"),
     )
 
 
@@ -893,11 +895,17 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
                     self._cards_missing_said = True
                     log.info("video: this engine has no graphics card's encoder (one of "
                              "before); x264 in the engine encodes")  # fmt: skip
+            elif settings.engine_encoder == "auto" and (
+                sys.platform != "win32" or not encodes_on_proven_cards(engine)
+            ):  # (x264 as before: elsewhere than on Windows, and in an engine of before)
+                settings = replace(settings, engine_encoder="x264")
         elif self._makes_yuv(settings, size, source):
             settings = replace(settings, pixels=YUV)
         said = f"{feed_text(settings)}, profile {settings.profile}"
         if engine and settings.engine_encoder == "card":
             said += ", the graphics card's encoder where it opens"
+        elif engine and settings.engine_encoder == "auto":
+            said += ", the graphics card's encoder where it is AMD's or NVIDIA's"
         said += ", full range" if settings.full else ", limited range"
         if source is not None:
             said += f", straight from {source_name(source)}"

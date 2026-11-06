@@ -608,9 +608,9 @@ Where the memory goes:
   draws with: no app server, no sensor source (the first panel's process sends it the readings),
   no tray, no window and no .NET. It takes what its loop takes.
 - **The main process** holds the first panel's loop, the sensors and the app's server. The
-  pictures the app drew of every theme (Start) go a minute after its window was closed; with
-  [light mode](CONFIGURATION.md#light-mode) the caches the app filled while it was open go too,
-  and the memory goes back to the system.
+  pictures the app drew of every theme (Start) go a minute after its window was closed, and
+  with them ([light mode](CONFIGURATION.md#light-mode)) the caches the app filled while it was
+  open; the memory goes back to the system.
 - **The window** starts WebView2 with one renderer process, without a spare one and without
   caches on the disk for its pages and the GPU's shaders. While it is minimized or hidden the
   app asks Libre Panel nothing; closed, its processes end. (An app started with the highest

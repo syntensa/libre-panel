@@ -36,7 +36,7 @@ invalid is refused with the reason, and nothing is written.
 | Sensors | `[sensors] providers` (which sources, and their order; those not in use under *More sources*), the hardware's names, and under *Advanced* `refresh_ms` and `[sensors.librehardwaremonitor]` (`mode`, `url`) |
 | Game mode and more | `[services] enabled` and the options of each `[services.<name>]` table: switches, numbers, texts and lists of texts or numbers. The rules of the autopilot have their own page (*Edit*, under the autopilot), the warnings of `notices` and the limits of `cooling` are still written here |
 | Weather and place | `[weather]` (`enabled`, `latitude`, `longitude`, `place`, `units`, `update_minutes`) |
-| Start and system | `language`, `check_updates`, `light_mode`, `[hotkeys]`, and starting with the system (`libre-panel autostart`) |
+| Start and system | `language`, `check_updates`, `[hotkeys]`, and starting with the system (`libre-panel autostart`) |
 | Start (the page) | `cards`, `card_order`, `card_transition`: *Cards on the panel*, under the panel while its theme has a card slot that leaves them to you (also in *Look*) |
 | About | nothing: the version, the licence, the notices, how to report a panel, and the folders (with *Open folder*) |
 
@@ -206,22 +206,20 @@ administrator rights, a backup is not restored from the app.
 
 ## Light mode
 
-```toml
-light_mode = false             # Settings → Start and system → Save memory with the window closed; on unless set (0.8)
-```
-
-While the app's window is closed (or hidden) for a minute, Libre Panel lets go of what only
-the app needs: its pictures of the themes (and of the community's), and the letters, symbols
-and pieces of every theme they were drawn with. For fifteen seconds after that the renderer's
-caches note what the panel draws with; that stays, the rest goes, so the panel draws on as
-before. That happens light mode or not. Light mode also gives the memory back to the system;
-Windows also takes back the pages the panel does not touch, which is what Task Manager shows
-(they come back as the panel touches them). The app takes a moment longer to open again.
+Always on, with nothing to set (0.8 had a switch, `light_mode`; an old config.toml's is let be,
+and it goes from the file with the next setting written). While the app's window is closed (or
+hidden) for a minute, Libre Panel lets go of what only the app needs: its pictures of the
+themes (and of the community's), and the letters, symbols and pieces of every theme they were
+drawn with. For fifteen seconds after that the renderer's caches note what the panel draws
+with; that stays, the rest goes, so the panel draws on as before. Then the memory goes back to
+the system; Windows also takes back the pages the panel does not touch, which is what Task
+Manager shows (they come back as the panel touches them). The app takes a moment longer to
+open again.
 
 On Linux Libre Panel keeps its memory in two heaps for all its threads, not up to eight per
-core (glibc's `MALLOC_ARENA_MAX`; set in the environment, yours holds). In light mode, while the
-window stays closed, it also gives the heaps' free pages back every fifteen seconds: glibc
-keeps what a frame's work freed for the program otherwise.
+core (glibc's `MALLOC_ARENA_MAX`; set in the environment, yours holds). While the window stays
+closed, it also gives the heaps' free pages back every fifteen seconds (on Windows its heaps'
+free memory): the heap keeps what a frame's work freed for the program otherwise.
 
 ## New versions
 
@@ -1241,8 +1239,8 @@ or delete there.
 
 ### AI activity
 
-What Claude Code and Codex do on this PC, and Claude Code in the cloud: working, waiting for
-you (a question, a permission), idle or not running; the tool at work, the model, and how much
+What Claude Code and Codex do on this PC: working, waiting for you (a question, a
+permission), idle or not running; the tool at work, the model, and how much
 of the plan's limits of five hours and of the week is used. The AI activity module shows it,
 with a sign of its own for each state (no maker's logo); where one of them does not run, the
 other alone. Lumen's card slot brings it in by itself while one works or waits for you, and two
@@ -1266,8 +1264,8 @@ program and does nothing when Libre Panel is not running. A copy of the file as 
 beside it (`settings.json.libre-panel.bak`, once: the first copy is yours); *Remove* takes out
 only Libre Panel's entries, those that call `/api/ai/`. The card says when each program last
 reported. These hooks bring the sessions on this PC (in a terminal, an editor or the desktop
-app); Claude Code's sessions in the cloud come by a relay, below. Where Libre Panel had to take
-another port (its own was taken when it started), the card says so and sets the hooks up again
+app); Claude Code's sessions in the cloud cannot reach it ([below](#claude-code-in-the-cloud)).
+Where Libre Panel had to take another port (its own was taken when it started), the card says so and sets the hooks up again
 with a click.
 
 ```toml
@@ -1278,8 +1276,6 @@ enabled = ["agents"]
 claude_usage = true   # ask Claude Code for the plan's usage every three minutes
 codex_usage = true    # ask Codex's app-server every minute
 task = true           # show what the session is called (ai.<agent>.task)
-cloud = ""            # the relay of the cloud sessions (set up in Settings)
-cloud_token = ""      # the relay's access token, for a topic not open to everyone
 notice = false        # a notice on the panel when a session begins to wait for you
 ```
 
@@ -1297,8 +1293,8 @@ limits (an API key).
 The readings, for `claude` and `codex`: `ai.<agent>.state` (`working`, `waiting`, `idle`,
 `off`), `.busy` (2 waiting for you, 1 working, 0 idle, -1 off: for colours and conditions),
 `.tool`, `.task` (the session's name, where it carries one, never the prompt; Claude Code may
-name a session after its first prompt, so with `task = false` it reads nothing), `.cloud` (1:
-the session that counts runs in the cloud), `.since` (seconds in the state), `.sessions`,
+name a session after its first prompt, so with `task = false` it reads nothing), `.since`
+(seconds in the state), `.sessions`,
 `.model`, `.context` (% of the context window), `.cost` ($ of the session, Claude Code's estimate), `.five_hour` and `.week` (% of the
 plan's limits used), each with `_reset` (seconds until the window begins anew; show it with
 `{value:duration}`) and `_age` (seconds since it was read), Claude Code's `.cost_today` (what
@@ -1306,7 +1302,7 @@ its sessions cost today by their status lines, an estimate: each session's cost 
 status line, from midnight on, added up; a session Libre Panel meets later counts in full) and
 Codex's `.tokens_today` and `.tokens_week`. The sessions one by one, as many as three, the one
 that counts first (waiting for you before working before idle, then the one that came to it
-last): `.s1.state` to `.s3.state`, with `.task`, `.since` and `.cloud`. A widget can show a part
+last): `.s1.state` to `.s3.state`, with `.task` and `.since`. A widget can show a part
 only in a state: `"needs": "ai.claude.state=waiting"`. The AI card of Claude Code alone lists
 its other sessions where it has room under the plan's limits (the 12.3"), and shows *Today $…*
 at the right of its name.
@@ -1318,44 +1314,12 @@ the notice of a new track.
 
 #### Claude Code in the cloud
 
-Claude Code's cloud sessions (claude.ai/code, `claude --cloud`) run on a machine of
-Anthropic's that cannot reach this PC. They come by a relay, an [ntfy](https://ntfy.sh) topic:
-*Claude Code in the cloud → Set up* on the same card makes a long random address on ntfy.sh
-and shows a setup script for the cloud environment, with what to do on claude.ai/code:
-
-1. Open the settings of the environment your sessions run in.
-2. Network access: *Limited* (*Custom* in older apps), with the default list kept and
-   `ntfy.sh` added.
-3. Recommended: a free account at [ntfy.sh](https://ntfy.sh/app), an access token from it
-   (*Account → Access tokens*), and that token as the environment's network secret (*API
-   credentials* in older apps) for `ntfy.sh`: header `Authorization`, `Bearer` before the
-   token. The cloud's sessions share a few addresses, and without an account ntfy.sh often
-   turns them away (HTTP 429); with one it counts what your account sends.
-4. Setup script: add the script (*Copy the script*).
-5. Start a session in it: it reports from then on, and the card says when it last did.
-
-The script writes a hook into the session's own Claude Code settings in the cloud
-(`~/.claude/libre-panel-cloud.py`, called on each event; your own hooks stay). The hook works
-out the session's state as Libre Panel does and posts it to the relay only when it changes,
-and every five minutes while it works: the event's name, a short name for the session (a hash
-of its id) and what the session is called where `task` is on. Never a prompt, a tool's input
-or a file. Libre Panel listens to the topic and shows such a session as Claude Code's, with
-*In the cloud* where the tool or the model stands (`ai.claude.cloud`). It takes from the
-topic nothing but such states: whoever knows the address could read along and post, so it is
-long and random, and *Remove* stops listening (take the script out of the environment too).
-
-When the relay is busy (HTTP 429, or a server error), the hook asks it again a few times
-within a minute; a refusal for good (a wrong token, HTTP 401) it does not repeat. What it
-sent, or why not, it notes in the session in `~/.claude/libre-panel-cloud.log` (its last
-hundred lines): no such file after a prompt means the setup script did not run, a line with
-`not sent` names the relay's answer.
-
-ntfy.sh passes some 250 messages a day for each sender, which is a few a prompt. For more, or
-for a relay of your own, put the address of a topic on your own ntfy server in `cloud` (the
-host has to be among the environment's allowed domains) and, for a topic that is not open to
-everyone, its token in `cloud_token`; the hook in the cloud sends with the token in
-`LIBRE_PANEL_RELAY_TOKEN` (an environment variable of the environment), or the environment
-adds it itself as a network secret for that host.
+Not shown: its sessions on claude.ai/code run on a machine that cannot reach this PC. From
+0.7.4 to 0.8.1rc1 they came by a relay (an ntfy topic) that did not work reliably, and a topic
+that whoever knows its address can read was a risk not worth it: it is gone. An old
+config.toml's `cloud` and `cloud_token` under `[services.agents]` are let be (never read, nothing
+of them in the log) and go from the file with the next setting written; take the setup script
+out of the cloud environment too.
 
 ### Game mode
 
@@ -1888,7 +1852,7 @@ answer too.
 | `pixels` | `"auto"` | who turns the frames' colours into video (see below): `"auto"` the graphics card where the colour check found it converting exactly as ffmpeg does on the processor, else the processor. The default, because the card's conversion saves the processor a few milliseconds a frame but cannot be trusted unseen: the colour check measured AMD's encoder converting with BT.709 and a full-range tag when left to itself, while the panel's decoder applies BT.601 whatever the stream says. `"card"` the card always (AMD's, NVIDIA's and Intel's encoders; x264 has none); `"rgb"` the processor always, fed three bytes a pixel, the way of before. With x264 and `"auto"`, and with a card's encoder that the processor converts for, the processor's conversion is Libre Panel's own since 0.8 (for a card's encoder since 0.8.0: ffmpeg turned and converted each whole frame only to hand the card NV12, Arena on the 12.3" a quarter of a core at 24 frames a second, 3.5 % now): it keeps the panel's YUV and makes it anew only where a frame changed (the parts the renderer composed anew, of those the 16-pixel blocks that differ), turned into the panel's framebuffer already, so ffmpeg reads two megabytes a frame instead of five and a half and only encodes; where much of each frame changes for a while (a video, the screen as a monitor, the Player, a theme scaled to fit), a new ffmpeg beside the running one converts the frames itself again, and the YUV made here comes back after five calm seconds (`libx264, yuv420p` in the log). The log's line `video: encoding with ...` says which it is (`h264_amf, rgb0, card`, `h264_amf, yuv420p`, `h264_amf, rgb0`, `libx264, yuv420p` or `h264_amf, rgb24`). A card's encoder that ends before its first picture converting the colours itself is started again with the processor's conversion, by itself |
 | `engine_sends` | `true` | where the engine encodes (`encoder = "auto"` with the download's engine, or `"native"`): it also has the panel and sends it the pictures, each on its time (stage 1b of the engine): Libre Panel gives it the frames with the time each was drawn for and the commands of the video (its start and stop, the brightness), and the engine sends them to the panel exactly as Libre Panel does, from a thread of its own above the others in priority, every picture a fixed lead after its frame was drawn (two frames' time: 40 ms at 50 frames a second, 80 at 25). Frames that take longer to draw no longer shake the pictures' pace (measured with drawing times between 0 and 15 ms at 50 a second: the pictures 20 ms apart within half a millisecond, against six without). A frame drawn too late costs no beat either: the main loop draws the next ones for their own times and catches up within the lead (without the engine it takes a new beat once it is a frame behind). A video from its file and the screen are encoded by ffmpeg and sent by the engine too. The log says `video: the engine has the panel ...`; where the engine cannot open it (another USB driver on Windows than WinUSB, say), Libre Panel sends the pictures itself and says why. `false`: the engine only encodes and Libre Panel sends the pictures, as for the other encoders (*Settings → Panel → Video experiment*: *The engine sends the pictures*) |
 | `engine_layers` | `true` | with the engine sending (`engine_sends`): it also composes the frames (stage 2 of the engine). Libre Panel sends it each piece it draws (a card, a value, a ring, a graph) once, and with every frame only the order they lie in; the engine composes the frame where a piece came or went, pixel for pixel as Libre Panel does, keeping what lies under the pieces that change. A lit gauge's ring of one colour it makes itself for each value (to a level as Libre Panel makes it), from its groove and lit sweep sent once; a scrolling graph's window it cuts from the graph's strip, sent once while it stays the same; a turning globe it makes for each step of its turn, from its lit map (sent once a light) and its air. The app's main loop takes about half the time a frame (on the 12.3" with Lumen 6.1 ms instead of 10.9), the whole way to the panel a tenth less. A message in the built-in card or in one of the volume's looks goes to the engine as one more piece, laid as Libre Panel draws it, and so does a theme's grid. Where a transition, the alarm's edge, a colour check, the panels' numbers or a message of another style are drawn over the frame, Libre Panel composes that frame itself and sends it as before; the app's picture of the panel is composed only while it is on show. The log says `video: the engine composes the frames from their layers, and makes the lit gauges' rings`. `false`: Libre Panel composes every frame (*Settings → Panel → Video experiment*: *The engine composes the frames*) |
-| `engine_encoder` | `"x264"` | where the engine encodes (`encoder = "auto"` with the download's engine, or `"native"`): its own encoder. `"x264"` on the processor; `"card"` the graphics card's H.264 encoder, an experiment (Windows: AMD's, NVIDIA's or Intel's, the one Windows lists first, through Media Foundation; elsewhere x264). The engine still makes the panel's YUV where the frame changed and hands the card the frame; the card encodes it with the bit rate as its cap (changed in the running stream too; a card that takes no new rate while it runs is opened anew with it, from a keyframe), no B-frames, a keyframe every `keyframe_s` and where one is asked for, and the engine says the colours in every picture's SPS as Libre Panel makes them (BT.601, the panel's range) and puts the SPS and PPS before every keyframe. `crf` and `preset` are x264's. Where the card's encoder cannot start (no hardware encoder, or a Windows without Media Foundation: an N edition without its Media Feature Pack) or stops in the stream, x264 encodes, from a keyframe; the log says which encoder runs (`engine: the stream's encoder: ...`) and why x264 where the card was asked for, and the engine's line of its time a frame names it (*Settings → Panel → Video experiment*: *The engine's encoder*, on Windows) |
+| `engine_encoder` | `"auto"` | where the engine encodes (`encoder = "auto"` with the download's engine, or `"native"`): its own encoder. `"auto"` the graphics card's H.264 encoder where it is AMD's (`AMDh264Encoder`: its pictures on a 12.3" and a 9.2" at 25 frames a second were as x264's to the eye, with both engines' memory a quarter less, 68 MB instead of 90) or NVIDIA's (`NVIDIA H.264 Encoder MFT`), else x264: for Intel's x264 (the log says `the graphics card's encoder (...) is not one the default takes yet; x264 instead`), and elsewhere than on Windows x264. `"x264"` on the processor; `"card"` the graphics card's H.264 encoder whichever it is, an experiment (Windows: AMD's, NVIDIA's or Intel's, the one Windows lists first, through Media Foundation; elsewhere x264). The engine still makes the panel's YUV where the frame changed and hands the card the frame; the card encodes it with the bit rate as its cap (changed in the running stream too; a card that takes no new rate while it runs is opened anew with it, from a keyframe), no B-frames, a keyframe every `keyframe_s` and where one is asked for, and the engine says the colours in every picture's SPS as Libre Panel makes them (BT.601, the panel's range) and puts the SPS and PPS before every keyframe. `crf` and `preset` are x264's. Where the card's encoder cannot start (no hardware encoder, or a Windows without Media Foundation: an N edition without its Media Feature Pack) or stops in the stream, x264 encodes, from a keyframe; the log says which encoder runs (`engine: the stream's encoder: ...`) and why x264 where the card was asked for, and the engine's line of its time a frame names it (*Settings → Panel → Video experiment*: *The engine's encoder*, on Windows: *auto*, *x264 (processor)*, *Graphics card (experiment)*) |
 | `direct` | `false` | a theme that is one video alone across the panel (a picture widget edge to edge with an MP4, nothing else over it) goes to the panel from its file: ffmpeg reads and encodes it in one, with the same encoder and settings as the frames, instead of Libre Panel drawing its frames and ffmpeg encoding those; the app's picture of the panel shows it from its keyframes meanwhile, each until the next (decoded alone: a picture of every frame cost ffmpeg about what the stream from the file saved). Frames again at once when anything else shows (a notice, a transition, the alarm's edge), and for a video ffmpeg cannot play from its file. *Settings → Panel → Videos straight to the panel*; an experiment, off by default |
 | `rest` | `true` | while nothing on the panel moves (no value gliding, no graph scrolling, no notice, transition or video), the panel gets a frame when one is due: at the next reading, at the clock's next second, at least two a second, instead of the same picture at the frame rate. The panel's player shows the last picture meanwhile, as it does between the pictures it gets at 30 a second while it plays at 60 (`device_fps`). Almanac on the 12.3" rests nine frames in ten (8 to 14 % of a core instead of 72), Encore about half the time; on Lumen and Arena something nearly always moves (the fans, the rolling seconds, Arena's frame rate). Also for a udisp USB display. `false`: a frame at every step of `fps`, as before 0.8 |
 | `ffmpeg` | `""` | path to ffmpeg; empty = the download's own, else look in `PATH` |

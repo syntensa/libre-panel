@@ -1,5 +1,64 @@
 # Changelog
 
+## Unreleased
+
+**Lighter**
+- **The graphs' strips kept by the engine alone.** Where Libre Panel's engine cuts the graphs'
+  windows from their strips and grows each strip from the one before, Libre Panel kept every
+  strip's pictures too (Lumen on the 12.3" and the 9.2": 9 MB). Now they go to the engine as
+  their new columns and their pixels go here once it has them; the end of a window drawn again
+  (a reading the strip did not know) goes as a piece the engine lays over the window. The
+  panel's frames are the same, pixel for pixel; the app's picture of the panel draws a strip
+  whole again where it asks for one. On Linux, with both panels on Lumen and all services: the
+  main process 90 MB instead of 101.
+- **The graphics card's encoder by default (Windows, AMD and NVIDIA).** *The engine's encoder*
+  has a new default, *auto*: the graphics card's own H.264 encoder where it is AMD's or
+  NVIDIA's (on the 12.3" and the 9.2" AMD's pictures were as x264's to the eye, and both
+  engines held 68 MB instead of 90), else x264 on the processor as before. Intel's stays with
+  x264 (*Graphics card (experiment)* still takes any). Where the card's does not start, x264
+  encodes, and the log says why.
+- **The sensor service tidies after each round (Windows).** .NET let what a round of
+  LibreHardwareMonitor made pile up to a budget the processor's cache sets (32 MB on a PC with
+  a large cache); it is collected after each round now: in CI 8.3 MB instead of 9.7, .NET's
+  heap 8.1 MB instead of 12.
+- **The heaps tidied while the app is closed (Windows).** With the window closed, Libre Panel
+  now gives the heaps' free memory back every fifteen seconds, as on Linux.
+- **Light mode always on.** Its switch (*Settings → Start and system*) is gone: it had no cost
+  worth one (the app takes a moment longer to open after a minute closed; the panel draws on
+  as it did). An old config.toml's `light_mode` is let be, and goes from the file with the
+  next setting written.
+- **The window holds less while it is minimized (Windows).** WebView2 is asked to hold less
+  while the app's window is minimized (its memory target low), and as before once it is shown
+  again; the page stays as it is. In Windows CI, the window and WebView2's processes after
+  Live: minimized 70 MB instead of 600, shown again 150 MB instead of 760.
+- **The live picture no longer piles up.** The panel's picture in the app (five a second on
+  Live and in the Player, one on Start) is drawn on a canvas and each one let go once the next
+  has come: in an image element the browser kept every picture it had decoded, and WebView2's
+  page grew some 6 MB a second on Live (in Chromium 100 to 398 MB in a minute, now 77 to 80 MB
+  the whole minute). The picture looks as before.
+
+**Removed**
+- **Claude Code in the cloud.** The relay for Claude Code's cloud sessions (an ntfy topic,
+  since 0.7.4) is gone: it did not work reliably, and a topic that whoever knows its address
+  can read is a risk not worth it. AI activity shows Claude Code and Codex on this PC, as
+  before. An old config.toml's `cloud` and `cloud_token` are let be (never read, nothing of
+  them in the log) and go from the file with the next setting written; take the setup script
+  out of the cloud environment on claude.ai/code too.
+
+**Diagnose**
+- Three minutes after the app's window closed, the log says what the main process holds then
+  (its memory as the Task Manager shows it, the C heap in use and free, the pictures): to read
+  afterwards in *Live → Diagnose → Log*.
+
+**Fixed**
+- **An empty app page now and then (Windows).** The app's page asks for its hundred scripts
+  and styles at once; the app's server let only five connections wait, and Windows turned the
+  rest away while the server was busy: a script that did not come left the page empty. It lets
+  128 wait now.
+- *Light mode* (Windows): emptying the working set did nothing where other code had declared
+  Windows' kernel32 otherwise (the Python sensor service of a pip install did): it raised an
+  error that nothing caught.
+
 ## 0.8.1rc1 — 2026-11-05
 
 **Lighter**

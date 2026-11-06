@@ -787,8 +787,12 @@ def test_the_launcher_shows_and_controls_the_running_panel(background):
     with browser_page(url, "home", allow=PICTURE) as page:
         page.wait_for_selector(".panel-card .state-dot.showing")
         expect(page.locator(".panel-card h2")).to_have_text("Showing “Libre Default”")
-        page.wait_for_selector(".panel-picture img[src^='blob:']")  # the picture on the panel
-        assert page.locator(".panel-picture img").get_attribute("src").startswith("blob:")
+        # the picture on the panel: drawn on a canvas, the browser keeps none of its own
+        picture = page.locator(".panel-picture canvas[role=img]")
+        expect(picture).to_have_attribute("aria-label", "What the panel shows now")
+        page.wait_for_function(
+            "document.querySelector('.panel-picture canvas').width > 300"  # (not the default)
+        )
         page.get_by_role("button", name="Pause panel").click()
         assert wait_for(lambda: app.panel.paused)
         page.wait_for_selector(".panel-card .state-dot.paused")
@@ -1098,7 +1102,7 @@ def test_live_shows_the_panel_and_runs_its_services(background, isolated_home):
         expect(page.locator("[data-tile=fps] small")).to_have_text("target 5")
         expect(page.locator("[data-tile=faults] b")).to_have_text("0")
         expect(page.locator("[data-tile=queue] small")).to_have_text("video mode only")
-        page.wait_for_selector(".live-picture img")  # the picture on the panel
+        page.wait_for_selector(".live-picture canvas[role=img]")  # the picture on the panel
         # the sources the panel reads, and the services with their switches
         page.wait_for_selector("[data-source=psutil]")
         page.wait_for_selector("[data-service=notices]")
@@ -1155,7 +1159,7 @@ def test_live_shows_the_picture_of_each_panel(app_url, isolated_home):
     with browser_page(app_url, "live", routes=routes, allow=("control/live",)) as page:
         choice = page.get_by_role("radiogroup", name="Which panel's picture")
         expect(choice.get_by_role("radio")).to_have_text(["Panel 1", "Panel 2"])
-        page.wait_for_selector(".live-picture img")
+        page.wait_for_selector(".live-picture canvas[role=img]")
         assert asked and "panel=" not in asked[-1]  # the first panel's
         expect(page.locator(".live-numbers")).to_have_count(1)
         choice.get_by_role("radio", name="Panel 2").click()

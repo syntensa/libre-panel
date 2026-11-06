@@ -148,8 +148,7 @@ that, and round again.
 
 <p><img src="docs/media/ai-card.gif" width="100%" alt="AI activity on Lumen: the weather card gives way by itself to Claude Code at work, with its moving sign, the tool at work, its session, what today cost and how much of five hours, seven days and the context is used; then it waits for you, in amber"></p>
 
-Claude Code and Codex on this PC, and Claude Code's cloud sessions: working, waiting for you or
-idle, with the tool at work, what today cost and how much of the plan's limits is used. On Lumen
+Claude Code and Codex on this PC: working, waiting for you or idle, with the tool at work, what today cost and how much of the plan's limits is used. On Lumen
 the AI card comes up by itself while one of them works; **Agents** gives them a screen of their
 own. Nothing leaves this PC ([AI activity](docs/CONFIGURATION.md#ai-activity)).
 
@@ -463,9 +462,7 @@ every start.
   configuration and never writes it. No track title, window title or file name is read.
 - **AI activity** is off until you switch it on and set up Claude Code or Codex. Their hooks
   hand what they do to Libre Panel on this PC only, with a key of its own; for the plan's
-  usage Libre Panel asks the programs, which ask their own servers with your sign-in. Claude
-  Code's cloud sessions, once you set them up, send their state (never a prompt) to an ntfy
-  topic with a long random address, which Libre Panel reads.
+  usage Libre Panel asks the programs, which ask their own servers with your sign-in.
 - **The hardware's names** never go to the log, and `libre-panel doctor` writes no serial
   numbers or personal paths into its report.
 </details>

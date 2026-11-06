@@ -714,13 +714,12 @@ def test_the_sessions_one_by_one_the_one_that_counts_first():
     hook(board, "Stop", session="b")
     clock.now += 10
     hook(board, "PermissionRequest", session="c")
-    board.hook("claude", {"hook_event_name": "UserPromptSubmit", "session_id": "d",
-                          "session_title": "In the cloud"}, cloud=True)  # fmt: skip
+    hook(board, "UserPromptSubmit", session="d", session_title="Release notes")
     clock.now += 5
     seen = board.readings()
     assert seen["ai.claude.state"] == "waiting" and seen["ai.claude.sessions"] == 4
     assert [seen[f"ai.claude.s{n}.state"] for n in (1, 2, 3)] == ["waiting", "working", "working"]
-    assert (seen["ai.claude.s2.task"], seen["ai.claude.s2.cloud"]) == ("In the cloud", 1)
+    assert seen["ai.claude.s2.task"] == "Release notes" and "ai.claude.s2.cloud" not in seen
     assert (seen["ai.claude.s3.task"], seen["ai.claude.s3.since"]) == ("The hooks", 25)
     assert seen["ai.codex.s1.state"] is None and seen["ai.codex.s1.since"] is None
     published: dict = {}
@@ -793,3 +792,32 @@ def test_claude_code_alone_lists_its_other_sessions_and_the_cost_of_the_day():
     low = parts("agents-claude")  # (the 9.2": no room)
     assert "claude-cost" in low and not any(p.startswith("claude-s2") for p in low)
     assert "codex-cost" not in parts("agents")
+
+
+def test_the_relay_of_the_cloud_sessions_is_no_more_and_an_old_one_goes_with_the_next_write(
+    tmp_path, caplog
+):
+    """0.7.4 to 0.8.1rc1 listened to a relay for Claude Code's cloud sessions: an old
+    config.toml's relay and token are let be (no word of them in the log, their values not
+    given to the app) and go from the file with its next write; the rest of the table stays."""
+    from libre_panel.config import edit_config, load_config
+    from libre_panel.editor.settings import _without_gone
+    from libre_panel.plugins.host import apply_options
+
+    relay = "https://ntfy.sh/libre-panel-0123456789abcdef"  # (made up for the test)
+    with caplog.at_level("DEBUG"):
+        options = apply_options(service.Agents.options,
+                                {"cloud": relay, "cloud_token": "tk_x", "task": False},
+                                "services.agents")  # fmt: skip
+    assert options["task"] is False and not {"cloud", "cloud_token"} & set(options)
+    assert "cloud" not in caplog.text and relay not in caplog.text
+    path = tmp_path / "config.toml"
+    path.write_text(f'theme = "lumen"\n\n[services]\nenabled = ["agents"]\n\n[services.agents]\n'
+                    f'task = false\ncloud = "{relay}"\ncloud_token = "tk_x"\n',
+                    encoding="utf-8")  # fmt: skip
+    config = load_config(path)
+    assert "cloud" not in _without_gone(config.services.options)["agents"]
+    edit_config(("value", "theme", "arena"), path=path)
+    text = path.read_text(encoding="utf-8")
+    assert relay not in text and "tk_x" not in text and "cloud" not in text
+    assert 'theme = "arena"' in text and "[services.agents]\ntask = false\n" in text

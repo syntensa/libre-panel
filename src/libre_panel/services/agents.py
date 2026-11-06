@@ -9,21 +9,17 @@ the plan's usage, asked of the programs themselves while a theme shows ``ai.*``:
     claude_usage = true   # ask Claude Code every three minutes (2.1.293 and later)
     codex_usage = true    # ask Codex's app-server every minute
     task = true           # what the session is called (Claude Code may name it after the prompt)
-    cloud = ""            # the relay of Claude Code's cloud sessions (agents_cloud), as
-                          # https://ntfy.sh/libre-panel-...: set up in Settings
-    cloud_token = ""      # an access token of the relay's, where its topic is not open
     notice = false        # a notice on the panel when a session begins to wait for you
 
 Readings, for ``claude`` and ``codex``: ``ai.<agent>.state`` (working, waiting, idle, off),
 ``.busy`` (2 waiting for you, 1 working, 0 idle, -1 off), ``.tool``, ``.task`` (what the
-session is called, where it carries a name and ``task`` is on), ``.cloud`` (1: the session
-that counts is a cloud session), ``.since`` (seconds in
-the state), ``.sessions``, ``.model``, ``.context`` (% of the context window), ``.cost`` ($ of
+session is called, where it carries a name and ``task`` is on), ``.since`` (seconds in the
+state), ``.sessions``, ``.model``, ``.context`` (% of the context window), ``.cost`` ($ of
 the session, an estimate), ``.five_hour`` and ``.week`` (% of the plan's limits used), with
 ``_reset`` (seconds until the window begins anew, ``{value:duration}``) and ``_age`` (seconds
 since it was read), Claude Code's ``.cost_today`` ($ of all its sessions today, by their status
 lines) and Codex's ``.tokens_today`` and ``.tokens_week``; the sessions one by one, the one that
-counts first (``.s1`` to ``.s3``: ``.state``, ``.task``, ``.since``, ``.cloud``).
+counts first (``.s1`` to ``.s3``: ``.state``, ``.task``, ``.since``).
 """
 
 from __future__ import annotations
@@ -33,7 +29,7 @@ import time
 from datetime import date, timedelta
 from typing import Any
 
-from libre_panel import agents, agents_cloud
+from libre_panel import agents
 from libre_panel.i18n import t
 from libre_panel.plugins import Service
 from libre_panel.sensors.base import wanted
@@ -52,8 +48,6 @@ class Agents(Service):
         "claude_usage": ("bool", True),
         "codex_usage": ("bool", True),
         "task": ("bool", True),
-        "cloud": ("string", ""),
-        "cloud_token": ("string", ""),
         "notice": ("bool", False),
     }
 
@@ -67,30 +61,14 @@ class Agents(Service):
         self._asking: threading.Thread | None = None
         self._next = {"claude": 0.0, "codex": 0.0}
         self._states: dict[str, str] = {}  # what each agent was at the last look
-        self.cloud: agents_cloud.Listener | None = None
 
     def start(self) -> None:
         self._stop.clear()
         self._thread = threading.Thread(target=self._run, name="service-agents", daemon=True)
         self._thread.start()
-        relay = str(self.options.get("cloud") or "").strip()
-        if relay:
-            problem = agents_cloud.relay_problem(relay)
-            if problem:
-                self.host.log.warning("agents: cloud = %r is no relay address: %s", relay,
-                                      problem)  # fmt: skip
-            else:
-                self.cloud = agents_cloud.Listener(
-                    relay, self.board, token=str(self.options.get("cloud_token") or ""),
-                    named=bool(self.options.get("task", True)),
-                )  # fmt: skip
-                self.cloud.start()
 
     def stop(self) -> None:
         self._stop.set()
-        if self.cloud is not None:
-            self.cloud.stop()
-            self.cloud = None
         if self._thread is not None:
             self._thread.join(timeout=3)
             self._thread = None

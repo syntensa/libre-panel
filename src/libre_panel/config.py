@@ -88,11 +88,6 @@ language = "auto"
 # Stream Deck button), with the key in notify.json; see Settings → Game mode and more.
 # allow_notify = false
 
-# Light mode: while the app's window is closed, Libre Panel lets go of what only the app needs
-# (its pictures of the themes, what they were drawn with) and gives the memory back to the
-# system; the panel keeps what it draws with. On unless set to false.
-# light_mode = true
-
 # Keyboard shortcuts for the whole PC (Windows; Linux with X11), set in Settings → Start and
 # system by pressing the keys. The actions: pause, brightness_up, brightness_down, open,
 # next_scene, timer (start or pause the timer service), timer_reset, mic_mute (the microphone);
@@ -498,11 +493,13 @@ class VideoConfig:
     # over the frame (a transition, the alarm's edge; a message in the built-in card or a look
     # of the volume is one more layer); false: Libre Panel composes every frame
     engine_layers: bool = True
-    # Where the engine encodes: its own encoder. "x264" on the processor; "card" the
-    # graphics card's (AMD's, NVIDIA's or Intel's, through Windows' Media Foundation: Windows
-    # only), the processor then only making the frames' YUV; where the card's cannot start or
-    # stops, x264 encodes and the log says why. An experiment
-    engine_encoder: str = "x264"  # "x264" | "card"
+    # Where the engine encodes: its own encoder. "auto" the graphics card's where it is AMD's
+    # or NVIDIA's (AMD's measured: the engines' memory a quarter less, the pictures as x264's)
+    # and it opens, else x264 (Windows; elsewhere x264); "x264" on the processor; "card" the
+    # graphics card's whichever it is (AMD's, NVIDIA's or Intel's, through Windows' Media
+    # Foundation: Windows only), the processor then only making the frames' YUV. Where the
+    # card's cannot start or stops, x264 encodes and the log says why
+    engine_encoder: str = "auto"  # "auto" | "x264" | "card"
     # A theme that is one video across the panel goes to it straight from its file: ffmpeg
     # reads and encodes it in one, instead of Libre Panel drawing its frames and ffmpeg
     # encoding those (less of the processor). Frames again as soon as anything else shows: a
@@ -739,7 +736,6 @@ class Config:
     transitions: TransitionsConfig = field(default_factory=TransitionsConfig)
     check_updates: bool | None = None  # a look for a newer version once a day; None: not asked
     allow_notify: bool = False  # other programs may show a notice (notify.py)
-    light_mode: bool = True  # less memory while the app is closed (light.py), since 0.8
     device: DeviceConfig = field(default_factory=DeviceConfig)
     sensors: SensorsConfig = field(default_factory=SensorsConfig)
     hardware: HardwareConfig = field(default_factory=HardwareConfig)
@@ -1038,8 +1034,7 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
         cfg.check_updates = _expect(data["check_updates"], bool, "check_updates")
     if "allow_notify" in data:
         cfg.allow_notify = _expect(data["allow_notify"], bool, "allow_notify")
-    if "light_mode" in data:
-        cfg.light_mode = _expect(data["light_mode"], bool, "light_mode")
+    # (what an old config says of a setting that is no more is let be: GONE)
     if "switches" in data:
         cfg.switches = _switches(data["switches"])
     if "hotkeys" in data:
@@ -1714,6 +1709,27 @@ def edit_config(*changes: tuple[str, str, Any], path: Path | None = None) -> Pat
 
 _EDITING = threading.Lock()
 
+# Settings that are no more: what an old config.toml says of one is let be as it loads (no
+# error, nothing in the log, its value never read), and it goes from the file with the file's
+# next write (a setting the app or the tray changes, a theme chosen).
+GONE = (
+    "light_mode",  # 0.8 to 0.8.1rc1: light mode's switch, always on since
+    # 0.7.4 to 0.8.1rc1: the relay of Claude Code's cloud sessions and its access token (only
+    # the agents on this computer count since)
+    "services.agents.cloud",
+    "services.agents.cloud_token",
+)
+
+
+def _holds(document: dict[str, Any], name: str) -> bool:
+    """Whether ``document`` has the setting ``name`` (dotted, as edit_config takes it)."""
+    node: Any = document
+    for part in name.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return False
+        node = node[part]
+    return True
+
 
 def _edit(path: Path, changes: tuple[tuple[str, str, Any], ...]) -> Path:
     if not path.exists():
@@ -1723,6 +1739,17 @@ def _edit(path: Path, changes: tuple[tuple[str, str, Any], ...]) -> Path:
         before = tomllib.loads(original)
     except tomllib.TOMLDecodeError as exc:
         raise ConfigError(f"{path}: {exc}") from exc
+    gone = tuple(("unset", name, None) for name in GONE if _holds(before, name))
+    if gone:  # the settings that are no more go with this write ...
+        try:
+            return _edited(path, original, before, changes + gone)
+        except ConfigError:  # (... where the file's layout lets them: else it is as asked)
+            pass
+    return _edited(path, original, before, changes)
+
+
+def _edited(path: Path, original: str, before: dict[str, Any],
+            changes: tuple[tuple[str, str, Any], ...]) -> Path:  # fmt: skip
     names = ", ".join(name for _, name, _ in changes)
     text, expected = original, copy.deepcopy(before)
     for kind, name, value in sorted(changes, key=lambda change: change[0] != "value"):

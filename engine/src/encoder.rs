@@ -1,10 +1,44 @@
 //! A stream's encoder: x264 on the processor, or where asked for (`--encoder card`) the
 //! graphics card's through Windows' Media Foundation (mf.rs), with x264 again wherever the
 //! card's fails: to open (no such card here, or it does not take the panels' stream) or in
-//! the running stream (it goes on with x264 from a keyframe). The log says which it is, and
-//! why x264 where the card was asked for.
+//! the running stream (it goes on with x264 from a keyframe). `--encoder auto` asks for the
+//! card's where it is AMD's or NVIDIA's ([`proven`]), else x264. The log says which it
+//! is, and why x264 where the card was asked for.
 
 use crate::x264;
+
+/// Which encoder a stream asks for (`--encoder x264|card|auto`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Wanted {
+    /// x264 on the processor
+    X264,
+    /// the graphics card's where it opens, else x264
+    Card,
+    /// the graphics card's where it is proven with the panels ([`proven`]) and opens, else x264
+    Proven,
+}
+
+impl Wanted {
+    pub fn parse(text: &str) -> Option<Wanted> {
+        match text {
+            "x264" => Some(Wanted::X264),
+            "card" => Some(Wanted::Card),
+            "auto" => Some(Wanted::Proven),
+            _ => None,
+        }
+    }
+}
+
+/// Whether the graphics card's encoder Windows names so is the default's: AMD's
+/// ("AMDh264Encoder"), proven with the panels (its pictures as x264's to the eye on a 12.3" and
+/// a 9.2" at 25 frames a second, the engines' memory less: two panels 68 MB instead of 90), and
+/// NVIDIA's ("NVIDIA H.264 Encoder MFT"), of the same kind; Intel's is not yet: x264 encodes for
+/// it unless the card's is asked for. Where one does not start or stops, x264 encodes.
+#[cfg_attr(not(windows), allow(dead_code))] // (Media Foundation's names: Windows)
+pub fn proven(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    name.contains("amd") || name.contains("nvidia")
+}
 
 pub struct Encoder {
     x264: Option<x264::Encoder>,
@@ -15,6 +49,9 @@ pub struct Encoder {
     /// the card's last picture, as x264 keeps its own
     #[cfg(windows)]
     picture: Vec<u8>,
+    /// whether only a card's encoder that is proven may encode (`--encoder auto`)
+    #[cfg(windows)]
+    proven_only: bool,
 }
 
 /// A line for Libre Panel's log, said as it is (devices/engine.py logs it as a note).
@@ -23,9 +60,9 @@ pub fn note(text: &str) {
 }
 
 impl Encoder {
-    /// The encoder of a stream with `settings`: the card's where `card` asks for it and it
-    /// opens, else x264.
-    pub fn open(settings: &x264::Settings, card: bool) -> Result<Encoder, String> {
+    /// The encoder of a stream with `settings`: the card's where `wanted` asks for it (and, for
+    /// [`Wanted::Proven`], it is proven) and it opens, else x264.
+    pub fn open(settings: &x264::Settings, wanted: Wanted) -> Result<Encoder, String> {
         let mut encoder = Encoder {
             x264: None,
             #[cfg(windows)]
@@ -33,9 +70,15 @@ impl Encoder {
             settings: settings.clone(),
             #[cfg(windows)]
             picture: Vec::new(),
+            #[cfg(windows)]
+            proven_only: wanted == Wanted::Proven,
         };
-        if card {
-            encoder.open_card();
+        match wanted {
+            Wanted::X264 => {}
+            Wanted::Card => encoder.open_card(),
+            // (elsewhere than on Windows x264, as it would be: no note)
+            Wanted::Proven if cfg!(windows) => encoder.open_card(),
+            Wanted::Proven => {}
         }
         if !encoder.on_card() {
             encoder.x264 = Some(x264::Encoder::open(settings)?);
@@ -55,6 +98,7 @@ impl Encoder {
             keyint: s.keyint,
             profile: s.profile.clone(),
             full: s.full,
+            proven_only: self.proven_only,
         })
     }
 
@@ -184,14 +228,17 @@ mod tests {
             full: false,
             extra: String::new(),
         };
-        let mut plain = Encoder::open(&settings, false).unwrap();
+        let mut plain = Encoder::open(&settings, Wanted::X264).unwrap();
         assert!(!plain.on_card());
-        let mut asked = Encoder::open(&settings, true).unwrap();
+        let mut asked = Encoder::open(&settings, Wanted::Card).unwrap();
         // (a Windows with a graphics card's encoder takes it: the stream is the card's then)
         if cfg!(windows) && asked.on_card() {
             return;
         }
         assert!(!asked.on_card());
+        // (auto: x264 where no card's encoder opens, and elsewhere than on Windows)
+        let mut auto = Encoder::open(&settings, Wanted::Proven).unwrap();
+        assert!(!auto.on_card());
         let (mut y, mut u, mut v) = (vec![90u8; 64 * 32], vec![128u8; 512], vec![128u8; 512]);
         let mut mb = vec![0u8; 8];
         for pts in 0..3 {
@@ -203,8 +250,13 @@ mod tests {
                 .encode(&mut y, &mut u, &mut v, 64, &mut mb, pts)
                 .unwrap()
                 .to_vec();
+            let c = auto
+                .encode(&mut y, &mut u, &mut v, 64, &mut mb, pts)
+                .unwrap()
+                .to_vec();
             assert!(!a.is_empty());
             assert_eq!(a, b, "x264 alike, frame {pts}");
+            assert_eq!(a, c, "x264 alike (auto), frame {pts}");
         }
         asked.rate(500).unwrap();
         asked.keyframe();
@@ -212,5 +264,18 @@ mod tests {
             .encode(&mut y, &mut u, &mut v, 64, &mut mb, 3)
             .unwrap()
             .is_empty());
+    }
+
+    #[test]
+    fn auto_takes_only_a_card_s_encoder_proven_with_the_panels() {
+        assert!(proven("AMDh264Encoder"));
+        assert!(proven("AMD H.264 Hardware MFT Encoder"));
+        assert!(proven("NVIDIA H.264 Encoder MFT"));
+        assert!(!proven("Intel(R) Quick Sync Video H.264 Encoder MFT"));
+        assert!(!proven("a graphics card's H.264 encoder")); // (no name to be had)
+        assert_eq!(Wanted::parse("auto"), Some(Wanted::Proven));
+        assert_eq!(Wanted::parse("card"), Some(Wanted::Card));
+        assert_eq!(Wanted::parse("x264"), Some(Wanted::X264));
+        assert_eq!(Wanted::parse("gpu"), None);
     }
 }

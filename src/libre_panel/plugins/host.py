@@ -24,7 +24,7 @@ from typing import Any
 from PIL import Image
 
 import libre_panel
-from libre_panel.config import config_dir
+from libre_panel.config import GONE, config_dir
 from libre_panel.sensors.base import Reading, SensorProvider, Snapshot
 from libre_panel.sensors.base import want as want_readings
 
@@ -57,6 +57,8 @@ def apply_options(schema: dict[str, tuple[str, Any]], given: dict[str, Any], whe
 
     result = {key: default for key, (_kind, default) in schema.items()}
     for key, value in given.items():
+        if f"{where}.{key}" in GONE:  # (an option that is no more: let be, its value unread)
+            continue
         if key not in schema:
             log.warning("%s: unknown option %r ignored", where, key)
             continue

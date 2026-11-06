@@ -9,7 +9,7 @@
 
 import { appAction } from "../../core/app.js";
 import { registerCommands, registerProvider } from "../../core/commands.js";
-import { control, useLivePicture, usePolled } from "../../core/console.js";
+import { LivePicture, control, useLivePicture, usePolled } from "../../core/console.js";
 import { t } from "../../core/i18n.js";
 import { loadPanelInfo } from "../../core/settings.js";
 import { store, useStore } from "../../core/state.js";
@@ -140,7 +140,7 @@ function RunState({ background, status }) {
 function Picture({ state, background, panel = 1 }) {
   const live = useLivePicture({ width: 960, every: 200, on: background && state === "showing", panel });
   let note = null;
-  if (live.src === null) {
+  if (live.picture === null) {
     note =
       state === "paused"
         ? t("The panel is paused: there is no picture.")
@@ -149,7 +149,7 @@ function Picture({ state, background, panel = 1 }) {
           : t("There is no picture yet.");
   }
   return html`<div class="live-picture">
-    ${live.src ? html`<img src=${live.src} alt=${t("The picture on the panel")} />` : null}
+    ${live.picture ? html`<${LivePicture} picture=${live.picture} label=${t("The picture on the panel")} />` : null}
     ${note ? html`<p class="live-picture-note">${note}</p>` : null}
   </div>`;
 }

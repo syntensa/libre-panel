@@ -130,7 +130,8 @@
   flex-shrink: 0;
 }
 
-.live-picture img {
+.live-picture img,
+.live-picture canvas {
   display: block;
   width: 100%;
   height: auto;

@@ -23,6 +23,7 @@ from urllib.parse import urlencode
 from libre_panel import __version__, i18n
 from libre_panel.config import (
     ALARM_THEME,
+    GONE,
     JPEG_LAYOUTS,
     JPEG_QUALITY,
     MORE_PANELS,
@@ -252,6 +253,17 @@ def names_a_path(name: str) -> bool:
     if len(parts) == 3 and parts[0] in ("sensors", "services"):
         return any(word in parts[2].lower() for word in PATH_WORDS)
     return False
+
+
+def _without_gone(options: dict[str, Any]) -> dict[str, Any]:
+    """The services' options without those that are no more (config.GONE): an old relay's
+    address, a secret, does not go to the app either."""
+    return {
+        name: {key: value for key, value in table.items() if f"services.{name}.{key}" not in GONE}
+        if isinstance(table, dict)
+        else table
+        for name, table in options.items()
+    }
 
 
 def _plain(value: Any) -> Any:
@@ -490,12 +502,11 @@ class Settings:
                 },
                 "services": {
                     "enabled": list(config.services.enabled),
-                    "options": _plain(config.services.options),
+                    "options": _plain(_without_gone(config.services.options)),
                 },
                 "language": config.language,
                 "check_updates": config.check_updates,
                 "allow_notify": config.allow_notify,
-                "light_mode": config.light_mode,
                 "hotkeys": dict(config.hotkeys),
                 "hotkeys_enabled": config.hotkeys_enabled,
                 "symbols": config.symbols,
@@ -1523,7 +1534,6 @@ RULES: dict[str, Any] = {
     "refresh_ms": lambda n, v, c: _whole(n, v, 100, 3_600_000),
     "check_updates": lambda n, v, c: _flag(n, v),
     "allow_notify": lambda n, v, c: _flag(n, v),
-    "light_mode": lambda n, v, c: _flag(n, v),
     "symbols": lambda n, v, c: _choice(n, v, SYMBOL_PACKS),
     "cards": lambda n, v, c: _rule_cards(n, v),
     "card_order": lambda n, v, c: _choice(n, v, CARD_ORDERS),

@@ -3,7 +3,7 @@
 // poll it politely: only while they are shown and the page is visible, and the next
 // request waits for the last one.
 
-import { useCallback, useEffect, useRef, useState } from "../lib/preact.js";
+import { html, useCallback, useEffect, useLayoutEffect, useRef, useState } from "../lib/preact.js";
 import { authHeaders, get, post } from "./api.js";
 
 const BASE = "/api/plugins/control";
@@ -66,24 +66,30 @@ export function usePolled(load, ms, { on = true, deps = [] } = {}) {
   return { ...state, reload };
 }
 
-const NO_PICTURE = { src: null, status: 0 };
+const NO_PICTURE = { picture: null, status: 0 };
 
 /**
  * The picture on the panel now (`control/live`), one after the other: the next is asked for
  * `every` ms after the last has come, and the old one stays on show meanwhile. Returns
- * `{src, status}`: `src` is a blob URL (or null before the first picture and while the panel
- * has none), `status` is 0 until an answer, 200, or the error's HTTP status (404: none yet,
- * which is also what a paused panel says; -1: no answer at all). `on: false` stops it.
+ * `{picture, status}`: `picture` is an ImageBitmap for <LivePicture> (or null before the first
+ * picture and while the panel has none), `status` is 0 until an answer, 200, or the error's
+ * HTTP status (404: none yet, which is also what a paused panel says; -1: no answer at all).
+ * `on: false` stops it.
+ *
+ * Each picture's pixels go (ImageBitmap.close) once the next has come: shown in an <img>, as
+ * blob URLs (or any other URLs), the browser kept every picture it had decoded, 1.4 MB each,
+ * five a second on Live (WebView2's page some 400 MB after a minute there, and on).
  */
 export function useLivePicture({ width = 960, every = 250, on = true, panel = 1 } = {}) {
   const [shown, setShown] = useState(NO_PICTURE);
-  const url = useRef(null);
-  const keep = (src, status) => {
-    if (url.current && url.current !== src) URL.revokeObjectURL(url.current);
-    url.current = src;
-    setShown({ src, status });
+  const held = useRef(null);
+  const keep = (picture, status) => {
+    // (the canvas has the old one's pixels of its own: they stay on show until it draws the new)
+    if (held.current && held.current !== picture) held.current.close();
+    held.current = picture;
+    setShown({ picture, status });
   };
-  useEffect(() => () => url.current && URL.revokeObjectURL(url.current), []);
+  useEffect(() => () => held.current && held.current.close(), []);
   useEffect(() => {
     if (!on) return undefined;
     let alive = true;
@@ -96,9 +102,12 @@ export function useLivePicture({ width = 960, every = 250, on = true, panel = 1 
           const response = await fetch(control.liveUrl(width, panel), { headers: authHeaders() });
           if (!alive) return;
           if (response.ok) {
-            const picture = await response.blob();
-            if (!alive) return; // the view is gone: nobody revokes a URL made now
-            keep(URL.createObjectURL(picture), 200);
+            const picture = await createImageBitmap(await response.blob());
+            if (!alive) {
+              picture.close(); // (the view is gone: nobody would let it go)
+              return;
+            }
+            keep(picture, 200);
           } else {
             keep(null, response.status);
             wait = Math.max(every, 1500);
@@ -118,4 +127,22 @@ export function useLivePicture({ width = 960, every = 250, on = true, panel = 1 
     };
   }, [width, every, on, panel]);
   return on ? shown : NO_PICTURE;
+}
+
+/**
+ * A picture of useLivePicture's, on a canvas of its size (the page scales it as an <img>: the
+ * same CSS): drawn as it comes, so that the browser keeps no picture of its own of it.
+ */
+export function LivePicture({ picture, label }) {
+  const canvas = useRef(null);
+  useLayoutEffect(() => {
+    const c = canvas.current;
+    if (!c || !picture || !picture.width) return; // (none, or one let go before it was drawn)
+    if (c.width !== picture.width || c.height !== picture.height) {
+      c.width = picture.width;
+      c.height = picture.height;
+    }
+    c.getContext("2d").drawImage(picture, 0, 0);
+  }, [picture]);
+  return html`<canvas ref=${canvas} role="img" aria-label=${label} />`;
 }

@@ -4748,13 +4748,16 @@ class Renderer:
             return layer
 
         view = None
-        if self.native_views and not patch and stretch is None:  # cut by the engine
+        if self.native_views and stretch is None and (not patch or not part):  # cut by the engine
             k = phase * strip.parts + part
             cuts = [(strip.phases[k], offset, 0, 0, 0, w + 2 * pad, h + 2 * pad)]
             if strip.halo is not None:  # beside the window only the glow, as window() cuts
                 cuts += [
                     (strip.halo, offset + x0, 0, x0, 0, pad, h + 2 * pad) for x0 in (0, w + pad)
                 ]
+            if patch:  # the end drawn again, laid over the cut as window() pastes it
+                piece, x = self._patch_piece(widget, strip, history, valid, left)
+                cuts.append((piece, 0, 0, x, 0, piece.width, piece.height))
             view = scenes.viewed((w + 2 * pad, h + 2 * pad), cuts)
             layer = view.layer
         elif not patch or not part:
@@ -4903,7 +4906,8 @@ class Renderer:
                                       bounds)  # fmt: skip
             if grown is not None:
                 return grown
-            return self._draw_strip(widget, values, first, per_point, every, strip, bounds)
+            drawn = self._draw_strip(widget, values, first, per_point, every, strip, bounds)
+            return self._engine_keeps(drawn, widget, _asked_at(before))
 
         return job
 
@@ -4970,20 +4974,65 @@ class Renderer:
         if tail_pad != pad:
             return None
         tails = self._strip_phases(lines, halo, pad, strip.parts)
+        size, keep = (width + 2 * pad, h + 2 * pad), seam + pad
+        cut = seam - begin + pad  # the tail's column of this one's column ``seam``
+        values = list(values)
+        # (where the engine cuts the windows: the pictures are made again here only if asked)
+        again = _Remaking(self, widget, values, first, per_point, every, strip.parts, bounds)
+        asked = _asked_at(before)
 
-        def joined(old: Image.Image, tail: Image.Image) -> Image.Image:
-            out = Image.new("RGBA", (width + 2 * pad, h + 2 * pad), (0, 0, 0, 0))
-            out.paste(old.crop((shift, 0, shift + seam + pad, old.height)), (0, 0))
-            cut = seam - begin + pad  # the tail's column of this one's column ``seam``
-            out.paste(tail.crop((cut, 0, tail.width, tail.height)), (seam + pad, 0))
-            scenes.grew(out, old, shift, seam + pad)  # (an engine that keeps ``old`` grows it)
+        def joined(old: Image.Image, tail: Image.Image, k: int) -> Image.Image:
+            rest = tail.crop((cut, 0, tail.width, tail.height))  # this one's columns from keep
+            if not self.native_views:  # (as always: all of it here)
+                out = Image.new("RGBA", size, (0, 0, 0, 0))
+                out.paste(old.crop((shift, 0, shift + keep, old.height)), (0, 0))
+                out.paste(rest, (keep, 0))
+                scenes.grew(out, old, shift, keep)  # (an engine that keeps ``old`` grows it)
+                return out
+            # the engine grows it from ``old`` and its tail; here it is joined only where the
+            # pixels of ``old`` are still here: not sent yet (a step no window showed: it may go
+            # whole), or asked for a moment ago (the app's picture of the panel)
+            base = scenes.pixels_of(old)
+            pixels = None
+            if base is not None:
+                pixels = Image.new("RGBA", size, (0, 0, 0, 0))
+                pixels.paste(base.crop((shift, 0, shift + keep, base.height)), (0, 0))
+                pixels.paste(rest, (keep, 0))
+            out = scenes.Strip(size, again.maker(k), pixels, asked)
+            out.tail = Image.new("RGBA", (size[0] - keep, size[1]), (0, 0, 0, 0))
+            out.tail.paste(rest, (0, 0))
+            again.add(k, out)
+            scenes.grew(out, old, shift, keep)
             return out
 
         strip.per_point, strip.every, strip.origin, strip.width = per_point, every, origin, width
         strip.bounds, strip.top, strip.pad = bounds, before.top, pad
-        strip.phases = [joined(old, tail) for old, tail in zip(before.phases, tails, strict=True)]
-        strip.halo = None if halo is None else joined(before.halo, halo)
-        strip.values, strip.first = list(values), first
+        strip.phases = [
+            joined(old, tail, k)
+            for k, (old, tail) in enumerate(zip(before.phases, tails, strict=True))
+        ]
+        strip.halo = None if halo is None else joined(before.halo, halo, -1)
+        strip.values, strip.first = values, first
+        return strip
+
+    def _engine_keeps(self, strip: _Strip, widget: dict[str, Any], asked: float) -> _Strip:
+        """``strip`` drawn whole, its pictures the engine's to keep where it cuts the windows
+        (render/scene.py's Strip: they go here once it has them, unless something here asked
+        for the strip before a moment ago, at ``asked``, and are drawn again if asked for)."""
+        if not self.native_views or strip.values is None:
+            return strip
+        again = _Remaking(self, widget, strip.values, strip.first, strip.per_point, strip.every,
+                          strip.parts, strip.bounds)  # fmt: skip
+        pictures = []
+        for k, image in enumerate(strip.phases):
+            picture = scenes.Strip(image.size, again.maker(k), image, asked)
+            again.add(k, picture)
+            pictures.append(picture)
+        strip.phases = pictures
+        if strip.halo is not None:
+            halo = scenes.Strip(strip.halo.size, again.maker(-1), strip.halo, asked)
+            again.add(-1, halo)
+            strip.halo = halo
         return strip
 
     # A strip's left edge lies on a grid of this many pixels (at its scale, times it): the lit
@@ -5065,6 +5114,16 @@ class Renderer:
     ) -> None:  # fmt: skip
         """Draw the end of the window ``layer`` again from where the strip no
         longer holds (a reading it did not know), as the next strip will."""
+        piece, x = self._patch_piece(widget, strip, history, valid, left)
+        layer.paste(piece, (x, 0))
+
+    def _patch_piece(
+        self, widget: dict[str, Any], strip: _Strip, history: History, valid: float, left: int,
+    ) -> tuple[Image.Image, int]:  # fmt: skip
+        """The end of the window (from ``left``) drawn again from where the strip no longer
+        holds: the picture that goes over the window's columns from the one it gives on, to the
+        window's right edge (:meth:`_patch` pastes it; an engine that cuts the window from the
+        strip lays it over its cut, render/scene.py's viewed)."""
         s, w, h, pad = self.STRIP_SCALE, widget["w"], widget["h"], strip.pad
         widget = self._dense(widget, strip.every * strip.per_point)
         reach = self._reach(widget)
@@ -5087,7 +5146,7 @@ class Renderer:
             halo.alpha_composite(inside, (pad + max(0, -begin), pad))
             line = halo
         cut = start - begin + pad  # the patch's column of window column ``start``
-        layer.paste(line.crop((cut, 0, cut + w + pad - start, line.height)), (start + pad, 0))
+        return line.crop((cut, 0, cut + w + pad - start, line.height)), start + pad
 
     def _dense(self, widget: dict[str, Any], step: float) -> dict[str, Any]:
         """Points this close (``step`` pixels at the strip's scale) are a curve
@@ -5402,6 +5461,54 @@ class _Levels:
         return Image.fromarray(self.array, "RGBA")
 
 
+def _asked_at(strip: _Strip | None) -> float:
+    """When something here last asked for the pictures of ``strip`` (render/scene.py's Strip:
+    a frame composed here, the app's picture of the panel); 0: never, or none to ask."""
+    if strip is None:
+        return 0.0
+    return max((getattr(image, "used", 0.0) for image in (*strip.phases, strip.halo)
+                if image is not None), default=0.0)  # fmt: skip
+
+
+class _Remaking:
+    """The pictures of a strip whose windows an engine cuts (render/scene.py's Strip), drawn
+    again, all at once, where something here asks for one whose pixels went: the strip drawn
+    whole through the same values, in the same range (Renderer._draw_strip). The pixels of what
+    a window shows are the same as the grown strip's (Renderer._grown_strip)."""
+
+    def __init__(
+        self, renderer: Renderer, widget: dict[str, Any], values: list[float | None], first: int,
+        per_point: float, every: int, parts: int, bounds: tuple[float, float],
+    ) -> None:  # fmt: skip
+        self.renderer = renderer
+        self.drawing = (widget, values, first, per_point, every, bounds)
+        self.parts = parts
+        self.pictures: dict[int, weakref.ref] = {}  # its pictures: phase k, -1 the glow
+        self.lock = threading.Lock()
+
+    def add(self, k: int, picture: Image.Image) -> None:
+        self.pictures[k] = weakref.ref(picture)
+
+    def maker(self, k: int) -> Callable[[], Image.Image]:
+        return lambda: self.make(k)
+
+    def make(self, k: int) -> Image.Image:
+        """Picture ``k`` drawn again; its siblings whose pixels went get theirs with it."""
+        with self.lock:
+            widget, values, first, per_point, every, bounds = self.drawing
+            strip = _Strip(0, 0.0, 0.0, ())
+            strip.parts = self.parts
+            self.renderer._draw_strip(widget, values, first, per_point, every, strip, bounds)
+            drawn = dict(enumerate(strip.phases))
+            if strip.halo is not None:
+                drawn[-1] = strip.halo
+            for j, ref in list(self.pictures.items()):
+                sibling = ref()
+                if j != k and sibling is not None and j in drawn and sibling._im is None:
+                    sibling.im = drawn[j].im  # (made here: they go again when nothing asks)
+            return drawn[k]
+
+
 class _Strip:
     """A graph's curve drawn ahead (see :meth:`Renderer._timeline`): one image
     per half-pixel step, glow and all, ``pad`` pixels larger on every side."""
@@ -5480,7 +5587,8 @@ class _Strips:
         strip = self.ready
         if strip is None:
             return 0
-        return sum(size_of(image) for image in (*strip.phases, strip.halo))
+        return sum(size_of(image) for image in (*strip.phases, strip.halo)
+                   if not isinstance(image, scenes.Lazy) or image.composed)  # fmt: skip
 
     def collect(self) -> None:
         """Take the strip the helper thread has finished, if it is newer."""

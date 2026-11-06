@@ -167,6 +167,53 @@ class Again(Lazy):
         return self.width * self.height * len(self.mode)
 
 
+class Strip(Again):
+    """A picture of a graph's strip (Renderer._draw_strip, Renderer._grown_strip) where an engine
+    cuts the graph's windows from it (:func:`viewed`) and grows it from the one before
+    (:func:`grew`): its pixels go once the engine has it (:meth:`sent`), unless a frame composed
+    here or the app's picture of the panel asked for them a moment ago (:data:`LET_GO_S`), and
+    are made anew, the strip drawn whole (``make``), should something ask again. ``tail``: its
+    columns the engine does not keep from the strip before (one grown), till they were sent;
+    ``went``: whether they were. So the pixels of the strips are kept by the engine alone (those
+    of one not sent yet, a step no window showed, stay here till it is: they may go whole)."""
+
+    LET_GO_S = 30.0  # (as Renderer.FILLS_IDLE_S: what the app's picture of the panel asked for)
+
+    def __init__(self, size: tuple[int, int], make: Any, pixels: Image.Image | None = None,
+                 used: float = 0.0) -> None:  # fmt: skip
+        super().__init__(size, "RGBA", make)
+        self.tail: Image.Image | None = None
+        self.went = False
+        if pixels is not None:  # (drawn here: they go as the engine has them)
+            self.im = pixels.im
+        self.used = used  # (what the strip before was last asked for at: no one asked since)
+
+    def for_engine(self) -> Image.Image:
+        """Its pixels for the engine (made anew where they went), as a picture of their own: not
+        counted as asked for here."""
+        used = self.used
+        pixels = self._new(self.im)
+        self.used = used
+        return pixels
+
+    def sent(self, now: float | None = None) -> None:
+        """The engine has it: its tail goes, and its pixels, unless something here asked for
+        them since :data:`LET_GO_S`."""
+        self.tail, self.went = None, True
+        now = time.monotonic() if now is None else now
+        self.forget(unused_since=now - self.LET_GO_S)
+
+
+def pixels_of(image: Image.Image) -> Image.Image | None:
+    """``image`` with its pixels where they are here, without asking for them: a :class:`Lazy`'s
+    only where they were made and are still there (and not counted as asked for), as a picture
+    of their own; None where they are not; any other picture itself."""
+    if isinstance(image, Lazy):
+        core = image._im
+        return None if core is None else image._new(core)
+    return image
+
+
 def forget_idle(idle_s: float, now: float | None = None) -> int:
     """The pixels made here of every :class:`Again` that nothing asked for these ``idle_s``
     seconds go (made anew, the same, should something ask again); the bytes they took."""

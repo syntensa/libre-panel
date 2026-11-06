@@ -6,9 +6,9 @@
 import { endpoints } from "../../core/api.js";
 import { inNativeWindow } from "../../core/app.js";
 import { languageSetting, languages, setLanguage, t } from "../../core/i18n.js";
-import { loadSettings, loadSystem, saveSettings, saveSystem, useConfig } from "../../core/settings.js";
-import { store, useStore } from "../../core/state.js";
-import { html, useEffect, useRef, useState } from "../../lib/preact.js";
+import { loadSettings, loadSystem, saveSystem } from "../../core/settings.js";
+import { useStore } from "../../core/state.js";
+import { html, useRef, useState } from "../../lib/preact.js";
 import { Select, Toggle } from "../../ui/controls.js";
 import { confirmDialog, openDialog } from "../../ui/dialog.js";
 import { Icon } from "../../ui/icons.js";
@@ -101,23 +101,6 @@ async function startWithRights(info, on) {
   if (sure) await saveSystem({ elevated: true });
 }
 
-/** Light mode (light.py): less memory while the app is closed, a moment longer to open it. Named
- * for what it does: "Light mode" read as a light colour scheme. */
-function LightRow() {
-  const config = useConfig();
-  useEffect(() => {
-    if (!store.get().settings) loadSettings();
-  }, []);
-  if (!config) return null;
-  return html`<${SettingRow}
-    class="light-row"
-    title=${t("Save memory with the window closed")}
-    hint=${t("While the app's window is closed, Libre Panel lets go of what only the app needs, such as its pictures of the themes, and takes less memory. The panel goes on as it is; the app takes a moment longer to open.")}
-  >
-    <${Toggle} label=${t("Save memory with the window closed")} checked=${Boolean(config.light_mode)} onChange=${(on) => saveSettings({ light_mode: on })} />
-  <//>`;
-}
-
 function StartCard() {
   const info = useStore((s) => s.systemInfo);
   if (!info) return null;
@@ -171,7 +154,6 @@ function StartCard() {
       />
     <//>
     <${UpdatesRow} />
-    <${LightRow} />
     ${inNativeWindow()
       ? null
       : html`<${SettingRow}

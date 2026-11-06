@@ -320,7 +320,7 @@ function Tinkering({ video }) {
 // The video mode's defaults (config.py); the experiment's "Back to the defaults" writes them.
 const MEASURED = { "video.maxrate": "auto", "video.crf": 20, "video.preset": "superfast", "video.profile": "auto",
                    "video.encoder": "auto", "video.keyframe_s": 10, "video.fps": 25, "video.device_fps": 60,
-                   "video.engine_sends": true, "video.engine_layers": true, "video.engine_encoder": "x264" };  // fmt: skip
+                   "video.engine_sends": true, "video.engine_layers": true, "video.engine_encoder": "auto" };  // fmt: skip
 const RATES = ["auto", "4M", "8M", "16M", "24M", "32M"];
 const QUALITIES = [16, 18, 20, 22, 25];
 const PRESETS = ["ultrafast", "superfast", "veryfast"];
@@ -457,7 +457,7 @@ function ExperimentCard({ video }) {
       />
     <//>
     ${engine && (catalog?.platform === "win32" || video.engine_encoder === "card")
-      ? row(t("The engine's encoder"), t("x264 on the processor, or the graphics card's own encoder (AMD's, NVIDIA's or Intel's, through Windows' Media Foundation): the processor then only makes the frames' colours. Where the card's cannot start, x264 encodes, and the log says why."), "engine_encoder", ["x264", "card"], (value) => (value === "card" ? t("Graphics card (experiment)") : t("x264 (processor)")))
+      ? row(t("The engine's encoder"), t("auto: with AMD's and NVIDIA's cards the graphics card's own encoder, else x264 on the processor. Or always x264, or always the graphics card's (AMD's, NVIDIA's or Intel's, through Windows' Media Foundation): the processor then only makes the frames' colours. Where the card's cannot start, x264 encodes, and the log says why."), "engine_encoder", ["auto", "x264", "card"], (value) => (value === "card" ? t("Graphics card (experiment)") : value === "auto" ? t("auto") : t("x264 (processor)")))
       : null}
     ${engine
       ? html`<${SettingRow} title=${t("The engine sends the pictures")} hint=${t("On: Libre Panel's engine has the panel and sends it each picture on its time. Off: Libre Panel sends them, the engine only encodes.")}>

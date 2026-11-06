@@ -230,11 +230,9 @@ def demo_details(t: float, waves: dict[str, Reading]) -> dict[str, Reading]:
         if agent == "claude":  # three sessions: one at work, one waiting, one idle; $ today
             values.update({
                 "sessions": 3, "cost_today": 4.37,
-                "s1.state": "working", "s1.task": task, "s1.since": 95.0, "s1.cloud": 0,
+                "s1.state": "working", "s1.task": task, "s1.since": 95.0,
                 "s2.state": "waiting", "s2.task": "Release notes for 0.7.6", "s2.since": 40.0,
-                "s2.cloud": 1,
                 "s3.state": "idle", "s3.task": "The video element", "s3.since": 1260.0,
-                "s3.cloud": 0,
             })  # fmt: skip
         for part, value in values.items():
             if value is not None:

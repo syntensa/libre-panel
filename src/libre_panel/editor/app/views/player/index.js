@@ -10,7 +10,7 @@
 import { withToken } from "/static/token.js";
 import { endpoints } from "../../core/api.js";
 import { registerCommands } from "../../core/commands.js";
-import { useLivePicture } from "../../core/console.js";
+import { LivePicture, useLivePicture } from "../../core/console.js";
 import { t } from "../../core/i18n.js";
 import { setPref, store, useStore } from "../../core/state.js";
 import { html, useEffect, useRef, useState } from "../../lib/preact.js";
@@ -164,8 +164,8 @@ function NowPlaying({ data, position }) {
   const name = (n) => data.panels?.find((p) => p.number === n)?.name || t("Panel {number}", { number: n });
   return html`<section class="player-now">
     <div class="player-screen">
-      ${playing && live.src
-        ? html`<img src=${live.src} alt=${t("What the panel shows")} />`
+      ${playing && live.picture
+        ? html`<${LivePicture} picture=${live.picture} label=${t("What the panel shows")} />`
         : html`<div class="player-screen-empty">
             <${Icon} name="film" size=${28} />
             <span>${playing ? t("The panel's picture comes…") : t("Nothing plays. Choose something in the library.")}</span>

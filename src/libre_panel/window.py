@@ -726,6 +726,36 @@ def _lighter_engine(environ: Any = None) -> None:
         environ[WEBVIEW2_ARGUMENTS] = arguments
 
 
+def memory_target(window: Any, low: bool, platform: str | None = None) -> bool:
+    """WebView2 (Windows): while the window is minimized its engine is asked to hold less
+    (CoreWebView2's MemoryUsageTargetLevel Low: it lets go of what it can make again and gives
+    pages back to Windows), and as before once it is shown again (Normal), as Microsoft asks of
+    an app whose page is out of sight; the page stays as it is. Set on the window's own thread,
+    as pywebview sets its own. Whether it was set: not off Windows, nor where pywebview or
+    WebView2 does not have it (an older runtime: the window as before)."""
+    if (platform or sys.platform) != "win32":
+        return False
+    try:
+        from Microsoft.Web.WebView2.Core import (  # type: ignore[import-not-found]
+            CoreWebView2MemoryUsageTargetLevel as Level,
+        )
+        from System import Func, Type  # type: ignore[import-not-found]  # (pythonnet's)
+
+        form = window.native  # pywebview's WinForms form, its WebView2 control in .webview
+        level = Level.Low if low else Level.Normal
+
+        def apply() -> None:
+            core = form.webview.CoreWebView2
+            if core is not None:  # (None until its engine has started)
+                core.MemoryUsageTargetLevel = level
+
+        form.Invoke(Func[Type](apply))
+        return True
+    except Exception:  # noqa: BLE001 - the window as before
+        log.debug("WebView2's memory target stays as it is", exc_info=True)
+        return False
+
+
 def _register(listener: socket.socket, token: str, url: str) -> None:
     """Write the file that lets other starts find this window (only this user may read it).
     The window lock is this process's, so one there is left behind by a window that is gone."""
@@ -823,16 +853,21 @@ def _show(webview: Any, url: str, listener: socket.socket, secret: str) -> int:
         if not state["maximized"] and not shown["minimized"]:
             state["width"], state["height"] = max(MIN_SIZE[0], width), max(MIN_SIZE[1], height)
 
+    def out_of_sight(minimized: bool) -> None:
+        if minimized != shown["minimized"]:  # (WebView2 holds less while it is minimized)
+            memory_target(window, low=minimized)
+        shown["minimized"] = minimized
+
     def maximized() -> None:
         state["maximized"] = True
-        shown["minimized"] = False
+        out_of_sight(False)
 
     def minimized() -> None:
-        shown["minimized"] = True
+        out_of_sight(True)
 
     def restored() -> None:
         state["maximized"] = False
-        shown["minimized"] = False
+        out_of_sight(False)
 
     window.events.resized += resized
     window.events.maximized += maximized

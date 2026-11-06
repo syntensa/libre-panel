@@ -72,6 +72,8 @@ pub struct Settings {
     /// "baseline", "main" or "high", as for x264
     pub profile: String,
     pub full: bool,
+    /// only an encoder that is proven with the panels (encoder.rs's `proven`): `--encoder auto`
+    pub proven_only: bool,
 }
 
 pub struct Encoder {
@@ -251,6 +253,11 @@ impl Encoder {
             let platform = Platform(api); // (dropped last, on any error below too)
             let activate = first_hardware_encoder(api)?;
             let name = friendly_name(&activate);
+            if s.proven_only && !crate::encoder::proven(&name) {
+                return Err(format!(
+                    "the graphics card's encoder ({name}) is not one the default takes yet"
+                ));
+            }
             let transform: IMFTransform = match activate.ActivateObject() {
                 Ok(transform) => transform,
                 Err(e) => {

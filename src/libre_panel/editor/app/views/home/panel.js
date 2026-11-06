@@ -5,7 +5,7 @@
 import { normalTheme, openTheme, themeName } from "../../core/actions.js";
 import { appAction } from "../../core/app.js";
 import { endpoints } from "../../core/api.js";
-import { useLivePicture } from "../../core/console.js";
+import { LivePicture, useLivePicture } from "../../core/console.js";
 import { formatNumber, t } from "../../core/i18n.js";
 import { VERTICAL, themeEntry, useMounted, versionFor } from "../../core/orientation.js";
 import { saveSettings } from "../../core/settings.js";
@@ -172,7 +172,7 @@ function Picture({ app, status, number, theme, size }) {
   const live = useLivePicture({ width: 960, every: 1000, on: running && state === "showing", panel: number });
   const ratio = size ? `${size[0]} / ${size[1]}` : "4 / 1";
   let note = null;
-  if (running && live.src === null) {
+  if (running && live.picture === null) {
     note =
       state === "paused"
         ? t("The panel is paused: there is no picture.")
@@ -185,10 +185,14 @@ function Picture({ app, status, number, theme, size }) {
   // what the panel shows; until there is a picture of it (and without the app) the theme's own,
   // which the server draws, dimmed under the note that says why
   const own = theme ? endpoints.previewUrl(versionFor(theme), 960) : null;
-  const src = (running && live.src) || own;
+  const picture = running ? live.picture : null;
   const upright = size && size[1] > size[0];
   return html`<div class=${`panel-picture${upright ? " upright" : ""}${note ? " still" : ""}`} style=${{ aspectRatio: ratio }}>
-    ${src ? html`<img src=${src} alt=${running && live.src ? t("What the panel shows now") : t("The theme on the panel")} />` : null}
+    ${picture
+      ? html`<${LivePicture} picture=${picture} label=${t("What the panel shows now")} />`
+      : own
+        ? html`<img src=${own} alt=${t("The theme on the panel")} />`
+        : null}
     ${note ? html`<p class="panel-picture-note">${note}</p>` : null}
   </div>`;
 }

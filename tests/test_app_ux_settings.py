@@ -811,9 +811,10 @@ def test_the_video_experiment_chooses_the_engines_own_encoder(
     isolated_home,
     monkeypatch,
 ):
-    """With Libre Panel's engine as the encoder: x264 or the graphics card's encoder (Windows'
-    Media Foundation), written on the click. Off Windows the choice shows only while the
-    card's is set (from the file), to set x264 back; back to the defaults is x264 again."""
+    """With Libre Panel's engine as the encoder: auto (the graphics card's where it is proven
+    with the panels), x264 or the graphics card's encoder (Windows' Media Foundation), written
+    on the click. Off Windows the choice shows only while the card's is set (from the file), to
+    set x264 back; back to the defaults is auto again."""
     from test_editor_settings import lacking_ffmpeg, panel_on_the_bus
 
     from libre_panel.config import set_config_value
@@ -832,8 +833,11 @@ def test_the_video_experiment_chooses_the_engines_own_encoder(
         expect(group).to_have_count(0)  # (not Windows: x264 is all there is here)
     set_config_value("video.engine_encoder", "card")
     with browser_page(app_url, "settings/panel/panel-video-experiment") as page:
+        group = page.locator("[role='radiogroup'][aria-label=\"The engine's encoder\"]")
+        expect(group.locator("[role='radio']")).to_have_text(
+            ["auto", "x264 (processor)", "Graphics card (experiment)"])  # fmt: skip
         page.get_by_role("button", name="Back to the defaults").click()
-        waits_for(page, lambda: settings_config().device.video.engine_encoder == "x264")
+        waits_for(page, lambda: settings_config().device.video.engine_encoder == "auto")
         assert settings_config().device.video.encoder == "auto"
 
 
@@ -1262,7 +1266,8 @@ def test_ai_activity_shows_what_it_adds_then_sets_up_and_takes_it_out(
         assert agents.installed(agents.read_settings(settings))["status_line"]
         # set up, nothing heard yet: where it reports from
         expect(claude.locator(".settings-row-status")).to_have_text("Set up; no report from it yet")
-        expect(claude.locator("[data-agents-waiting]")).to_contain_text("Sessions in the cloud")
+        expect(claude.locator("[data-agents-waiting]")).to_contain_text("or the desktop app")
+        expect(card.locator("[data-agent='cloud']")).to_have_count(0)  # (only the agents here)
         agents.BOARD.hook("claude", {"hook_event_name": "SessionStart", "session_id": "s"})
         expect(claude.locator(".settings-row-status")).to_contain_text(
             "its last report came", timeout=10_000
@@ -1295,46 +1300,6 @@ def test_ai_activity_shows_what_it_adds_then_sets_up_and_takes_it_out(
         page.locator(".dialog").get_by_role("button", name="Set up").click()
         expect(claude.get_by_role("button", name="Set up again")).to_have_count(0)
         assert agents.installed(agents.read_settings(settings))["port"] != 1
-
-
-def test_claude_code_in_the_cloud_gives_the_setup_script_and_listens_to_a_relay(
-    app_url,  # noqa: F811
-    isolated_home,
-    monkeypatch,
-):
-    from libre_panel import agents
-    from libre_panel.config import set_config_value
-
-    monkeypatch.setattr(agents, "BOARD", agents.Board())
-    choose_theme(isolated_home, "lumen")
-    set_config_value("services.enabled", ["agents"])
-
-    def relay():
-        return settings_config().services.options.get("agents", {}).get("cloud", "")
-
-    with browser_page(app_url, "settings/services") as page:
-        cloud = page.locator("[data-service='agents'] [data-agent='cloud']")
-        expect(cloud).to_contain_text("Claude Code in the cloud")
-        expect(cloud.locator(".settings-row-status")).to_have_text("Not set up yet")
-        cloud.get_by_role("button", name="Set up").click()
-        dialog = page.locator(".dialog")
-        expect(dialog).to_contain_text("ntfy.sh added")
-        expect(dialog).to_contain_text("(HTTP 429)")  # (the token as a network secret)
-        expect(dialog.locator("[data-agents-cloud-script]")).to_contain_text("libre-panel-cloud.py")
-        assert relay() == ""  # not before it is confirmed
-        dialog.get_by_role("button", name="Set up").click()
-        waits_for(page, lambda: relay().startswith("https://ntfy.sh/libre-panel-"))
-        expect(cloud.locator(".settings-row-status")).to_have_text("Set up; no report from it yet")
-        cloud.get_by_role("button", name="Show the setup script").click()
-        expect(page.locator(".dialog [data-agents-cloud-script]")).to_contain_text(relay())
-        page.locator(".dialog").get_by_role("button", name="Close").click()
-        agents.BOARD.hook("claude", {"hook_event_name": "Stop", "session_id": "c"}, cloud=True)
-        expect(cloud.locator(".settings-row-status")).to_contain_text(
-            "its last report came", timeout=10_000
-        )
-        cloud.get_by_role("button", name="Remove").click()
-        expect(cloud.locator(".settings-row-status")).to_have_text("Not set up yet")
-        assert relay() == ""
 
 
 def test_a_shortcut_is_set_by_pressing_the_keys_and_taken_away_again(app_url, isolated_home):  # noqa: F811

@@ -431,6 +431,53 @@ def test_a_maximized_window_keeps_its_normal_size(monkeypatch):
     assert window.load_state() == {"width": 1300, "height": 800, "maximized": True}
 
 
+def test_the_window_asks_webview2_to_hold_less_while_it_is_minimized(monkeypatch):
+    """Once as it is minimized, and once as it is shown again (restored or maximized)."""
+    asked = []
+    monkeypatch.setattr(window, "memory_target", lambda win, low: asked.append(low))
+
+    def session(win):
+        win.events.minimized.set()
+        win.events.minimized.set()  # (once)
+        win.events.restored.set()
+        win.events.minimized.set()
+        win.events.maximized.set()  # (shown again, maximized)
+        win.events.maximized.set()
+
+    assert window.run_window(URL, None, webview=FakeWebview(session)) == 0
+    assert asked == [True, False, True, False]
+
+
+def test_on_windows_webview2_is_told_its_memory_target_on_the_window_s_thread(monkeypatch):
+    """CoreWebView2's MemoryUsageTargetLevel, set in what the form's Invoke runs (the window's
+    own thread); nothing where it cannot be set, and nothing off Windows."""
+    import types
+
+    for name in ("Microsoft", "Microsoft.Web", "Microsoft.Web.WebView2"):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    core_module = types.ModuleType("Microsoft.Web.WebView2.Core")
+    core_module.CoreWebView2MemoryUsageTargetLevel = SimpleNamespace(Low="low", Normal="normal")
+    monkeypatch.setitem(sys.modules, "Microsoft.Web.WebView2.Core", core_module)
+
+    class Func:  # pythonnet's Func[Type](f): the delegate the form's Invoke runs
+        def __class_getitem__(cls, item):
+            return lambda f: f
+
+    monkeypatch.setitem(sys.modules, "System", SimpleNamespace(Func=Func, Type=object))
+    core, invoked = SimpleNamespace(MemoryUsageTargetLevel="normal"), []
+    form = SimpleNamespace(webview=SimpleNamespace(CoreWebView2=core),
+                           Invoke=lambda delegate: (invoked.append(True), delegate()))  # fmt: skip
+    win = SimpleNamespace(native=form)
+    assert window.memory_target(win, low=True, platform="win32") is True
+    assert core.MemoryUsageTargetLevel == "low" and invoked == [True]
+    assert window.memory_target(win, low=False, platform="win32") is True
+    assert core.MemoryUsageTargetLevel == "normal"
+    form.webview.CoreWebView2 = None  # (its engine not started yet: nothing to tell)
+    assert window.memory_target(win, low=True, platform="win32") is True
+    assert window.memory_target(SimpleNamespace(native=None), low=True, platform="win32") is False
+    assert window.memory_target(win, low=True, platform="linux") is False and len(invoked) == 3
+
+
 def test_without_a_backend_the_browser_opens(monkeypatch):
     opened = []
     monkeypatch.setattr(window.webbrowser, "open", opened.append)

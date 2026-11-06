@@ -134,6 +134,10 @@ internal sealed class Reader
                 {
                     Log.Warning(Name, "LibreHardwareMonitor could not be read", e);
                 }
+                // what a round made is garbage at once: collected now, the memory the service
+                // touches stays what a round makes; left to itself, .NET lets it pile up to a
+                // budget the processor's cache sets (some 30 MB on a PC with a large cache)
+                GC.Collect(0, GCCollectionMode.Forced, blocking: true);
                 if (trimmed is double at && started - at >= TrimSeconds)
                     TrimNow();
                 delay = Math.Max(0.05, poll - (Clock.Now() - started));
