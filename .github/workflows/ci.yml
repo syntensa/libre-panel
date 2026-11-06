@@ -207,10 +207,12 @@ jobs:
           printf '%s  %s\n' 6f30092cef9fb839779646608f4ee14ae3cbac989c47fa05e841b0841f09878e jpeg.tar.gz \
             e4ab7009bf0629fd11982d4c2aa83964cf244cffba7347ecd39019a9e38c4564 webp.tar.gz | sha256sum -c
           tar -xzf jpeg.tar.gz && tar -xzf webp.tar.gz
-          cmake -S libjpeg-turbo-3.2.0 -B jpeg -G "Visual Studio 17 2022" -A x64 \
-            -DENABLE_STATIC=OFF -DWITH_TURBOJPEG=OFF -DREQUIRE_SIMD=ON > /dev/null
+          # (CMake builds with the newest Visual Studio the runner has, and says which)
+          cmake -S libjpeg-turbo-3.2.0 -B jpeg -A x64 \
+            -DENABLE_STATIC=OFF -DWITH_TURBOJPEG=OFF -DREQUIRE_SIMD=ON > jpeg.log
+          grep -h -E "^-- (Building for|SIMD extensions)" jpeg.log || true
           cmake --build jpeg --config Release --parallel > /dev/null
-          cmake -S libwebp-1.6.0 -B webp -G "Visual Studio 17 2022" -A x64 -DBUILD_SHARED_LIBS=ON \
+          cmake -S libwebp-1.6.0 -B webp -A x64 -DBUILD_SHARED_LIBS=ON \
             -DWEBP_BUILD_ANIM_UTILS=OFF -DWEBP_BUILD_CWEBP=OFF -DWEBP_BUILD_DWEBP=OFF \
             -DWEBP_BUILD_GIF2WEBP=OFF -DWEBP_BUILD_IMG2WEBP=OFF -DWEBP_BUILD_VWEBP=OFF \
             -DWEBP_BUILD_WEBPINFO=OFF -DWEBP_BUILD_WEBPMUX=OFF -DWEBP_BUILD_EXTRAS=OFF > /dev/null
