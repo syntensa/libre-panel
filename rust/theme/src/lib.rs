@@ -2,6 +2,8 @@
 //! Python reads it, checked and completed as theme/model.py checks and completes it, with its
 //! messages and warnings in its words.
 
+pub mod adapt;
+pub mod grid;
 pub mod light;
 pub mod model;
 pub mod paths;

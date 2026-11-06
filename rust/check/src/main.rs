@@ -684,6 +684,57 @@ fn run(case: &Value) -> Result<Value, String> {
                 .collect();
             json!({"answers": answers})
         }
+        "py_num" => {
+            // Python's arithmetic: each case `[op, a, b]` as JSON text (Python's json, NaN and
+            // ints of any size), its result as JSON text or its error
+            use lp_py::num;
+            let how = lp_py::json::Dumps::default();
+            let answers: Vec<Value> = case["cases"]
+                .as_array()
+                .ok_or("cases")?
+                .iter()
+                .map(|c| {
+                    let Ok(lp_py::Value::List(parts)) =
+                        lp_py::json::loads(c.as_str().unwrap_or(""))
+                    else {
+                        return json!({"error": "case", "kind": "case"});
+                    };
+                    let op = parts[0].as_str().unwrap_or("");
+                    let (a, b) = (&parts[1], &parts[2]);
+                    let bool_of = |r: num::Result<bool>| r.map(lp_py::Value::Bool);
+                    let result = match op {
+                        "+" => num::add(a, b),
+                        "-" => num::sub(a, b),
+                        "*" => num::mul(a, b),
+                        "/" => num::true_div(a, b),
+                        "//" => num::floor_div(a, b),
+                        "%" => num::rem(a, b),
+                        "<" => bool_of(num::lt(a, b)),
+                        ">" => bool_of(num::gt(a, b)),
+                        "max" => num::max(a, b),
+                        "min" => num::min(a, b),
+                        "round" => num::round(a),
+                        "log" => num::to_float(a).and_then(num::log).map(lp_py::Value::Float),
+                        _ => return json!({"error": op, "kind": "op"}),
+                    };
+                    match result {
+                        Ok(v) => json!({"value": lp_py::json::dumps(&v, &how)}),
+                        Err(e) => json!({"error": e.msg, "kind": e.kind.name()}),
+                    }
+                })
+                .collect();
+            // re.IGNORECASE's lowercase and cased of every code point, as a digest
+            let mut table = String::new();
+            for cp in 0..0x110000u32 {
+                table.push_str(&format!(
+                    "{cp:x} {:x} {}\n",
+                    lp_py::re::lower(cp),
+                    u8::from(lp_py::re::cased(cp))
+                ));
+            }
+            let digest = format!("{:x}", sha2::Sha256::digest(table.as_bytes()));
+            json!({"answers": answers, "re_digest": digest})
+        }
         "py" => {
             let texts = case["texts"].as_array().ok_or("texts")?;
             let reprs: Vec<String> = texts
@@ -1033,6 +1084,211 @@ fn run(case: &Value) -> Result<Value, String> {
                 })
                 .unwrap_or_default();
             json!({"names": answers, "listed": listed, "variants": variants, "saved": saved})
+        }
+        "theme_adapt" => {
+            // grids, adapted themes and themes laid out, as theme/adapt.py makes them; set order
+            // and int() of str
+            let env = lp_theme::Env {
+                fonts_dir: case["fonts_dir"].as_str().unwrap_or("").into(),
+            };
+            let builtin = std::path::PathBuf::from(case["builtin"].as_str().unwrap_or(""));
+            let answer = |r: Result<String, lp_theme::Error>| match r {
+                Ok(text) => json!({"dict": text}),
+                Err(e) => json!({"error": e.msg, "kind": e.kind.name()}),
+            };
+            let how = lp_py::json::Dumps::default();
+            // an int given as a number or, of any size, as its digits
+            let big = |v: &Value| -> num_bigint::BigInt {
+                match v {
+                    Value::String(s) => s.parse().unwrap_or_default(),
+                    other => other.as_i64().unwrap_or(0).into(),
+                }
+            };
+            let fail = |e: lp_theme::Error| json!({"error": e.msg, "kind": e.kind.name()});
+            // grids of what files hold as it is: each of its numbers as JSON text
+            let raw_grids: Vec<Value> = case["raw_grids"]
+                .as_array()
+                .map(|all| {
+                    all.iter()
+                        .map(|g| {
+                            let given = g["grid"]
+                                .as_str()
+                                .map(|t| lp_py::json::loads(t).expect("grid"));
+                            match lp_theme::grid::make_cells(
+                                &big(&g["width"]),
+                                &big(&g["height"]),
+                                given.as_ref(),
+                                g["model"].as_str().unwrap_or("custom"),
+                            ) {
+                                Ok(c) => {
+                                    json!([c.x, c.y, c.cell_w, c.cell_h, c.gap, c.columns, c.rows]
+                                        .iter()
+                                        .map(|v| lp_py::json::dumps(v, &how))
+                                        .collect::<Vec<_>>())
+                                }
+                                Err(e) => fail(e.into()),
+                            }
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            // the versions beside a folder, in the folder's order, and the one nearest a size
+            let versions: Vec<Value> = case["versions"]
+                .as_array()
+                .map(|all| {
+                    all.iter()
+                        .map(|v| {
+                            let folder = std::path::Path::new(v["folder"].as_str().unwrap_or(""));
+                            let size = (
+                                v["size"][0].as_i64().unwrap_or(0),
+                                v["size"][1].as_i64().unwrap_or(0),
+                            );
+                            let listed = match lp_theme::adapt::versions_of(folder) {
+                                Ok(found) => json!(found
+                                    .iter()
+                                    .map(|(n, (w, h))| json!([n, w.to_string(), h.to_string()]))
+                                    .collect::<Vec<_>>()),
+                                Err(e) => fail(e),
+                            };
+                            let nearest = match lp_theme::adapt::nearest_version(folder, size) {
+                                Ok(n) => json!({"name": n}),
+                                Err(e) => fail(e),
+                            };
+                            json!({"listed": listed, "nearest": nearest})
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            // how many characters of a name a stem takes up under re.IGNORECASE
+            let ignorecase: Vec<Value> = case["ignorecase"]
+                .as_array()
+                .map(|all| {
+                    all.iter()
+                        .map(|p| {
+                            json!(lp_py::re::prefix_ignoring_case(
+                                p[0].as_str().unwrap_or(""),
+                                p[1].as_str().unwrap_or("")
+                            ))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            let grids: Vec<Value> = case["grids"]
+                .as_array()
+                .map(|all| {
+                    all.iter()
+                        .map(|g| {
+                            let n = |k: &str| g[k].as_i64().unwrap_or(0);
+                            let given = lp_theme::grid::Settings {
+                                columns: n("columns"),
+                                rows: n("rows"),
+                                gap: n("gap"),
+                                margin: n("margin"),
+                            };
+                            let grid = lp_theme::grid::make_grid(
+                                n("width"),
+                                n("height"),
+                                given,
+                                g["model"].as_str().unwrap_or("custom"),
+                            );
+                            json!([
+                                grid.x,
+                                grid.y,
+                                format!("{:016x}", grid.cell_w.to_bits()),
+                                format!("{:016x}", grid.cell_h.to_bits()),
+                                grid.gap,
+                                grid.columns,
+                                grid.rows
+                            ])
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            let adapted: Vec<Value> = case["adapt"]
+                .as_array()
+                .map(|all| {
+                    all.iter()
+                        .map(|a| {
+                            let data = lp_py::json::loads(a["data"].as_str().unwrap_or("null"));
+                            answer(match data {
+                                Ok(d) => lp_theme::adapt::adapt_theme(
+                                    &d,
+                                    a["model"].as_str().unwrap_or(""),
+                                    a["orientation"].as_str().unwrap_or(""),
+                                    a["mode"].as_str().unwrap_or("scale"),
+                                    &big(&a["width"]),
+                                    &big(&a["height"]),
+                                    &env,
+                                )
+                                .map(|v| lp_py::json::dumps(&v, &how)),
+                                Err(e) => Err(lp_theme::Error {
+                                    kind: lp_theme::Kind::Value,
+                                    msg: e.to_string(),
+                                }),
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            let laid: Vec<Value> = case["laid_out"]
+                .as_array()
+                .map(|all| {
+                    all.iter()
+                        .map(|l| {
+                            let folder = std::path::Path::new(l["folder"].as_str().unwrap_or(""));
+                            let size = l["size"]
+                                .as_array()
+                                .map(|p| (p[0].as_i64().unwrap_or(0), p[1].as_i64().unwrap_or(0)));
+                            answer(
+                                lp_theme::load_theme(folder, &env)
+                                    .and_then(|t| {
+                                        lp_theme::adapt::laid_out(
+                                            &t,
+                                            size,
+                                            l["model"].as_str().unwrap_or("custom"),
+                                            &builtin,
+                                            &env,
+                                        )
+                                    })
+                                    .map(|t| lp_py::json::dumps(&t.to_dict(), &how)),
+                            )
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            let orders: Vec<Value> = case["sets"]
+                .as_array()
+                .map(|all| {
+                    all.iter()
+                        .map(|set| {
+                            let pairs: Vec<(u64, u64)> = set
+                                .as_array()
+                                .map(|ps| {
+                                    ps.iter()
+                                        .map(|p| {
+                                            (p[0].as_u64().unwrap_or(0), p[1].as_u64().unwrap_or(0))
+                                        })
+                                        .collect()
+                                })
+                                .unwrap_or_default();
+                            json!(lp_py::set_order(&pairs))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            let ints: Vec<Value> = case["ints"]
+                .as_array()
+                .map(|all| {
+                    all.iter()
+                        .map(|t| {
+                            lp_py::int_of_str(t.as_str().unwrap_or(""))
+                                .map_or(Value::Null, |n| json!(n.to_string()))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            json!({"grids": grids, "adapt": adapted, "laid_out": laid, "sets": orders, "ints": ints,
+                "raw_grids": raw_grids, "versions": versions, "ignorecase": ignorecase})
         }
         "theme_tables" => {
             // the tables, as JSON text, for the comparison with Python's

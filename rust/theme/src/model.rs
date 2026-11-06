@@ -29,8 +29,15 @@ pub enum Kind {
     Recursion,
     UnicodeDecode,
     Runtime,
+    Key,
+    ZeroDivision,
+    /// MemoryError: what Python would make is too large to make (a set of more pairs than a
+    /// computer holds)
+    Memory,
     /// OSError, by its class: PermissionError, IsADirectoryError ...
     Os(&'static str),
+    /// where Python counts with values that are no numbers ("a" + "b") and lp-py does not
+    Unsupported,
 }
 
 impl Kind {
@@ -45,7 +52,11 @@ impl Kind {
             Kind::Recursion => "RecursionError",
             Kind::UnicodeDecode => "UnicodeDecodeError",
             Kind::Runtime => "RuntimeError",
+            Kind::Key => "KeyError",
+            Kind::ZeroDivision => "ZeroDivisionError",
+            Kind::Memory => "MemoryError",
             Kind::Os(name) => name,
+            Kind::Unsupported => "Unsupported",
         }
     }
 }
@@ -59,6 +70,20 @@ pub struct Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.msg)
+    }
+}
+
+impl From<lp_py::num::Error> for Error {
+    fn from(e: lp_py::num::Error) -> Error {
+        use lp_py::num::ErrorKind as K;
+        let kind = match e.kind {
+            K::Type => Kind::Type,
+            K::ZeroDivision => Kind::ZeroDivision,
+            K::Overflow => Kind::Overflow,
+            K::Value => Kind::Value,
+            K::Unsupported => Kind::Unsupported,
+        };
+        Error { kind, msg: e.msg }
     }
 }
 

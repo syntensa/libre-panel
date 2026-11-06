@@ -66,7 +66,7 @@ all of it. It is the reference every Rust piece is checked against:
 
 | Crate | What it is | Python it replaces |
 |---|---|---|
-| py | what Python does that the app's files and messages depend on: its values (ints of any size, dicts in order, ==), repr(), json, str's white space, digits, lower() and upper(), rounding, the division of ints (Python 3.12, Unicode 15.0: the release's) | — (Python's own rules) |
+| py | what Python does that the app's files and messages depend on: its values (ints of any size, dicts in order, ==), their arithmetic and its errors, repr(), json, str's white space, digits, lower() and upper(), re's matching without case, rounding, the division of ints (Python 3.12, Unicode 15.0: the release's) | — (Python's own rules) |
 | pixels | Pillow's operations as Libre Panel uses them, to the bit | Pillow, numpy (in render/) |
 | decode | pictures from their files as Pillow decodes them (PNG, GIF, JPEG, WebP) | Image.open, Pillow's decoders |
 | text | letters and their layout as Pillow draws them (FreeType, shaping as libraqm) | fonts/, ImageFont |
@@ -193,8 +193,18 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       all), a person's accent, card opacity, the look of the first panel, the switches; light
       colours as theme/light_colours.py works them out in OKLab (the C library's pow, cos,
       sin and atan2 that Python calls, and Python's own hypot)
-- [ ] adapting a theme to another panel (theme/adapt.py), community themes (theme/share.py),
-      the panel's default theme (theme/defaults.py); the cards and modules' layout with R4
+- [x] a theme adapted to another panel (theme/adapt.py: scaled or kept, its modules moved
+      onto the new grid as Python's set orders their sizes) and laid out on a panel it has no
+      version for (the version of the nearest shape, its grid made of what its file holds);
+      Python's arithmetic on what files hold as it is (lp-py: + - * / // % of bools, floats
+      and ints of any size, int / int rounded once, min, max, round, log, every error in its
+      words), the versions in the order the folder lists them, matched without case on
+      Windows as Python's re matches (its own tables, compared over every code point)
+- [ ] community themes (theme/share.py), the panel's default theme (theme/defaults.py); the
+      cards and modules' layout with R4
+- [ ] paths whose names are no Unicode (Linux: bytes that are no UTF-8, kept by Python as
+      surrogates; Windows: a half of a surrogate pair): read as Python reads them, all through
+      rust/theme (today a theme in such a folder finds no versions)
 
 ### R4 render
 - [ ] the renderer's frame, widget by widget (texts, clocks, gauges, rings, bars, lists, graphs

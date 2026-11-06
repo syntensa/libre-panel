@@ -132,6 +132,7 @@ dependencies = [
  "lp-py",
  "lp-text",
  "lp-theme",
+ "num-bigint",
  "serde_json",
  "sha2",
 ]
@@ -166,6 +167,7 @@ version = "0.1.0"
 dependencies = [
  "indexmap",
  "num-bigint",
+ "num-integer",
  "num-traits",
  "unicode-general-category",
 ]

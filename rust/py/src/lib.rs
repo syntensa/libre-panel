@@ -9,6 +9,8 @@ use unicode_general_category::{get_general_category, GeneralCategory as G};
 
 pub mod json;
 pub mod math;
+pub mod num;
+pub mod re;
 pub mod value;
 
 pub use value::{Dict, Value};
@@ -95,6 +97,109 @@ pub fn repr(text: &str) -> String {
 /// round() of a float: to the nearest whole number, halves to the even one.
 pub fn round(x: f64) -> f64 {
     x.round_ties_even()
+}
+
+/// round(x, digits) of a float: the decimal of `digits` places nearest to it (half to even, of
+/// its exact value), as the float nearest to that.
+pub fn round_digits(x: f64, digits: usize) -> f64 {
+    if !x.is_finite() {
+        return x;
+    }
+    format!("{x:.digits$}").parse().unwrap_or(x)
+}
+
+/// int() of a str as Python reads one: white space around it, a sign, digits of any script
+/// with single underscores between them; None where Python raises ValueError.
+pub fn int_of_str(text: &str) -> Option<num_bigint::BigInt> {
+    let body = strip(text);
+    let (negative, digits) = match body.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, body.strip_prefix('+').unwrap_or(body)),
+    };
+    if digits.is_empty()
+        || digits.starts_with('_')
+        || digits.ends_with('_')
+        || digits.contains("__")
+    {
+        return None;
+    }
+    if digits.chars().filter(|&c| c != '_').count() > json::INT_MAX_STR_DIGITS {
+        return None; // (Python's limit of digits)
+    }
+    let mut n = num_bigint::BigInt::from(0);
+    for ch in digits.chars().filter(|&c| c != '_') {
+        n = n * 10 + decimal(ch)?;
+    }
+    Some(if negative { -n } else { n })
+}
+
+/// The order Python's set goes through a set of pairs of small whole numbers (0 up to 2^61 - 2)
+/// made by adding them in this order: by CPython's hash of a tuple and the places its table
+/// gives (setobject.c), as sorted() and iteration meet them.
+pub fn set_order(pairs: &[(u64, u64)]) -> Vec<(u64, u64)> {
+    const PRIME_1: u64 = 11400714785074694791;
+    const PRIME_2: u64 = 14029467366897019727;
+    const PRIME_5: u64 = 2870177450012600261;
+    let hash = |&(a, b): &(u64, u64)| -> u64 {
+        let mut acc = PRIME_5;
+        for lane in [a, b] {
+            acc = acc.wrapping_add(lane.wrapping_mul(PRIME_2));
+            acc = acc.rotate_left(31);
+            acc = acc.wrapping_mul(PRIME_1);
+        }
+        acc = acc.wrapping_add(2 ^ (PRIME_5 ^ 3527539));
+        if acc == u64::MAX {
+            1546275796
+        } else {
+            acc
+        }
+    };
+    // a table of (hash, pair) slots, probed as set_add_entry and set_insert_clean probe it
+    fn place(table: &mut [Option<(u64, (u64, u64))>], h: u64, pair: (u64, u64)) -> bool {
+        let mask = table.len() - 1;
+        let mut i = (h as usize) & mask;
+        let mut perturb = h;
+        loop {
+            let probes = if i + 9 <= mask { 9 } else { 0 };
+            for step in 0..=probes {
+                match table[i + step] {
+                    None => {
+                        table[i + step] = Some((h, pair));
+                        return true;
+                    }
+                    Some((other, p)) if other == h && p == pair => return false,
+                    Some(_) => {}
+                }
+            }
+            perturb >>= 5;
+            i = (i
+                .wrapping_mul(5)
+                .wrapping_add(1)
+                .wrapping_add(perturb as usize))
+                & mask;
+        }
+    }
+    let mut table: Vec<Option<(u64, (u64, u64))>> = vec![None; 8];
+    let mut used = 0usize;
+    for pair in pairs {
+        let h = hash(pair);
+        if place(&mut table, h, *pair) {
+            used += 1;
+            let mask = table.len() - 1;
+            if used * 5 >= mask * 3 {
+                let wanted = if used > 50000 { used * 2 } else { used * 4 };
+                let mut size = 8;
+                while size <= wanted {
+                    size <<= 1;
+                }
+                let old = std::mem::replace(&mut table, vec![None; size]);
+                for (h, p) in old.into_iter().flatten() {
+                    place(&mut table, h, p);
+                }
+            }
+        }
+    }
+    table.into_iter().flatten().map(|(_, p)| p).collect()
 }
 
 /// format(x, ".{precision}g") (and `{x:g}` with 6): `precision` significant digits, rounded as

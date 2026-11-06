@@ -1,8 +1,9 @@
-"""rust/theme against theme/model.py (docs/RUST.md, R3): the format's tables, every theme that
-comes with the app, themes with slips in them (each refused in Python's words, or completed as
-Python completes it), every widget type with every kind of value in every field, and theme
-folders read as Python reads them (line ends, a BOM, what is not UTF-8, assets that leave the
-folder)."""
+"""rust/theme against theme/model.py and theme/adapt.py (docs/RUST.md, R3): the format's tables,
+every theme that comes with the app, themes with slips in them (each refused in Python's words,
+or completed as Python completes it), every widget type with every kind of value in every field,
+theme folders read as Python reads them (line ends, a BOM, what is not UTF-8, assets that leave
+the folder), and themes moved to other panels: adapted, laid out on a size they have no version
+for, with the grids of what their files hold."""
 
 from __future__ import annotations
 
@@ -10,6 +11,7 @@ import copy
 import json
 import os
 import random
+import struct
 import sys
 from pathlib import Path
 from typing import Any
@@ -20,7 +22,7 @@ from libre_panel import config, design, fonts, icons
 from libre_panel.devices import models as devices
 from libre_panel.render import finish, lit
 from libre_panel.render.overlays import BUILT_IN_STYLES
-from libre_panel.theme import model, modules
+from libre_panel.theme import adapt, model, modules
 
 FONTS = str(fonts.FONT_DIR)
 THEMES = sorted(p.parent for p in model.builtin_themes_dir().glob("*/theme.json"))
@@ -557,3 +559,385 @@ def test_versions_places_and_variants_of_themes_as_python_s(
         }
 
     assert files(rs_home) == files(py_home)
+
+
+def _python_answer(call: Any) -> dict[str, Any]:
+    try:
+        return {"dict": json.dumps(call())}
+    except Exception as error:  # noqa: BLE001 (every kind Python raises is compared)
+        return {"error": str(error), "kind": type(error).__name__}
+
+
+def _adapted(data: Any, target: str, way: str, mode: str, size: tuple[int, int]) -> Any:
+    return _python_answer(lambda: adapt.adapt_theme(copy.deepcopy(data), target, way, mode, *size))
+
+
+MODELS = ["custom"] + [m.id for m in devices.MODELS]
+SIZES = sorted({m.size(way) for m in devices.MODELS for way in ("landscape", "portrait")})
+
+
+def _setting(rng: random.Random) -> Any:
+    """A value of a grid's as a file may hold it."""
+    pick = rng.randrange(13)
+    if pick < 4:
+        return rng.randrange(0, 97)
+    choices = [
+        [0, -1, -3, -4, -5, -100, 200, 1000],
+        [10.5, -4.0, 4.0, 0.0, -0.0, 0.25, 1e308, -1e308, 2.5, 47.9, 96.0],
+        [float("nan"), float("inf"), float("-inf")],
+        [True, False, "8", "", "a", [], [1], {}, {"a": 1}, None],
+        [10**19, 10**300, -(10**300), 2**63, 2**64 + 1],
+    ]
+    if pick < 9:
+        return rng.choice(choices[pick - 4])
+    if pick < 11:
+        return struct.unpack("<d", struct.pack("<Q", rng.getrandbits(64)))[0]
+    return rng.uniform(-50, 300)
+
+
+def test_grids_of_what_files_hold_are_python_s() -> None:
+    # make_grid of a version's grid as its file holds it (a margin of 10.5, an int of 300
+    # digits, a string): Python's arithmetic on each, its numbers or its error
+    rng = random.Random(0x6A1D)
+    cases = []
+    for _ in range(8000):
+        grid: Any = {
+            k: _setting(rng)
+            for k in ("columns", "rows", "gap", "margin", "other")
+            if rng.random() < 0.7
+        }
+        if rng.random() < 0.05:
+            grid = rng.choice([None, [], [1], "x", "", 0, 5, True, 1.5, {}])
+        w, h = (
+            rng.choice([rng.randrange(16, 4097)] * 6 + [1, 0, -5, 10**20, 2**1030])
+            for _ in range(2)
+        )
+        cases.append(
+            {"width": w, "height": h, "grid": grid, "model": rng.choice([*MODELS, "nope"])}
+        )
+    ask = [
+        {**c, "width": str(c["width"]), "height": str(c["height"]), "grid": json.dumps(c["grid"])}
+        for c in cases
+    ]
+    [ours] = run([{"op": "theme_adapt", "fonts_dir": FONTS, "builtin": "", "raw_grids": ask}])
+
+    def python(c: dict[str, Any]) -> Any:
+        try:
+            g = modules.make_grid(c["width"], c["height"], c["grid"], c["model"])
+        except Exception as error:  # noqa: BLE001
+            return {"error": str(error), "kind": type(error).__name__}
+        return [json.dumps(v) for v in (g.x, g.y, g.cell_w, g.cell_h, g.gap, g.columns, g.rows)]
+
+    digits = sys.get_int_max_str_digits()
+    sys.set_int_max_str_digits(0)
+    try:
+        assert ours["raw_grids"] == [python(c) for c in cases]
+    finally:
+        sys.set_int_max_str_digits(digits)
+
+
+def test_themes_adapted_to_other_panels_as_python_adapts_them() -> None:
+    rng = random.Random(0xADA9)
+    datas = [json.loads((f / "theme.json").read_text(encoding="utf-8")) for f in THEMES]
+    modular = ['"module"' in json.dumps(d) for d in datas]
+    cases = []
+    for data, has_modules in zip(datas, modular, strict=True):
+        for _ in range(3):
+            target = rng.choice([*MODELS, "nope"])
+            way = rng.choice(["landscape", "portrait"])
+            size = rng.choice([(0, 0), (800, 480), (1920, 720), (320, 480), (480, 480), (-1, 5)])
+            if not has_modules and rng.random() < 0.3:
+                # the editor's /api/adapt takes any int it is sent (a module free theme: on a
+                # grid that large, modules would be placed over a set no computer holds)
+                size = (rng.choice([10**30, 2**63, 10**400, 4097, 1]), rng.choice([480, 10**30]))
+            mode = rng.choice(["scale", "scale", "keep", "other"])
+            cases.append((data, target, way, mode, size))
+    ask = [
+        {
+            "data": json.dumps(d),
+            "model": t,
+            "orientation": w,
+            "mode": m,
+            "width": str(s[0]),
+            "height": str(s[1]),
+        }
+        for d, t, w, m, s in cases
+    ]
+    # the grids modules sit on, for any panel and settings
+    grids = []
+    for _ in range(3000):
+        g = {
+            "width": rng.randrange(16, 4097),
+            "height": rng.randrange(16, 4097),
+            "model": rng.choice(MODELS),
+        }
+        for key in ("columns", "rows", "gap", "margin"):
+            g[key] = rng.choice([0, 0, rng.randrange(1, 97), rng.randrange(1, 201)])
+        grids.append(g)
+    # Python's set of pairs, as _move_modules goes through it; int() of text
+    sets = [
+        [(c, r) for c in range(cols, 0, -1) for r in range(rows, 0, -1)]
+        for cols, rows in ((rng.randrange(1, 13), rng.randrange(1, 13)) for _ in range(600))
+    ]
+    sets += [
+        [(rng.randrange(100), rng.randrange(100)) for _ in range(rng.randrange(60))]
+        for _ in range(200)
+    ]
+    ints = [
+        " 12 ",
+        "1_000",
+        "_1",
+        "1__0",
+        "+5",
+        "-0",
+        "\u0661\u0662",
+        "",
+        " ",
+        "x",
+        "1.5",
+        "0x10",
+        "\u3000 7\n",
+        "- 1",
+        "007",
+        "1_",
+        "9" * 50,
+        "9" * 4301,
+    ]
+    case = {"op": "theme_adapt", "fonts_dir": FONTS, "builtin": str(model.builtin_themes_dir())}
+    [ours] = run([{**case, "adapt": ask, "grids": grids, "sets": sets, "ints": ints}])
+    digits = sys.get_int_max_str_digits()
+    sys.set_int_max_str_digits(0)
+    try:
+        assert ours["adapt"] == [_adapted(*c) for c in cases]
+    finally:
+        sys.set_int_max_str_digits(digits)
+
+    def grid(g: dict[str, Any]) -> list[Any]:
+        settings = {k: g[k] for k in ("columns", "rows", "gap", "margin")}
+        made = modules.make_grid(g["width"], g["height"], settings, g["model"])
+        bits = [struct.pack(">d", made.cell_w).hex(), struct.pack(">d", made.cell_h).hex()]
+        return [made.x, made.y, *bits, made.gap, made.columns, made.rows]
+
+    assert ours["grids"] == [grid(g) for g in grids]
+    assert ours["sets"] == [[list(p) for p in set(s)] for s in sets]
+
+    def python_int(text: str) -> str | None:
+        try:
+            return str(int(text))
+        except ValueError:
+            return None
+
+    assert ours["ints"] == [python_int(text) for text in ints]
+
+
+def test_themes_laid_out_on_panels_they_have_no_version_for_as_python_lays_them_out() -> None:
+    rng = random.Random(0x1A1D)
+    cases = []
+    for folder in THEMES:
+        for size in rng.sample(SIZES, 4):
+            fitting = [
+                m.id for m in devices.MODELS if size in (m.size("landscape"), m.size("portrait"))
+            ]
+            cases.append(
+                {
+                    "folder": str(folder),
+                    "size": list(size),
+                    "model": rng.choice(["custom", *fitting]),
+                }
+            )
+    case = {"op": "theme_adapt", "fonts_dir": FONTS, "builtin": str(model.builtin_themes_dir())}
+    [ours] = run([{**case, "laid_out": cases}])
+
+    def laid(c: dict[str, Any]) -> Any:
+        theme = model.load_theme(Path(c["folder"]))
+        return adapt.laid_out(theme, tuple(c["size"]), c["model"]).to_dict()
+
+    assert ours["laid_out"] == [_python_answer(lambda c=c: laid(c)) for c in cases]
+
+
+def _side(rng: random.Random, true_side: int) -> Any:
+    if rng.random() < 0.4:
+        return true_side
+    return rng.choice(
+        [
+            str(true_side),
+            f" {true_side} ",
+            "8_00",
+            true_side + 0.7,
+            True,
+            float("nan"),
+            float("inf"),
+            -true_side,
+            0,
+            10**30,
+            10**400,
+            "abc",
+            [],
+            {},
+            None,
+            "\u0661\u0662\u0663",
+        ]
+    )
+
+
+def _own_versions(rng: random.Random, root: Path) -> tuple[list[Path], list[Path]]:
+    """Folders of one's own themes beside each other: versions as the app makes them, and
+    versions with odd sizes and grids, files and folders that are none, JSON nested past what
+    Python reads; (every folder with a theme.json, the clean ones among them)."""
+    import shutil
+
+    with_modules = [
+        f for f in THEMES if '"module"' in (f / "theme.json").read_text(encoding="utf-8")
+    ]
+    windows = os.name == "nt"
+    folders: list[Path] = []
+    clean: list[Path] = []
+    stems = [
+        "foo",
+        "\u00c4rger",
+        "\u017ftern",
+        "th\u00e9me",
+        "a[b]",
+        "dot.ted",
+        "K-test",
+        "lumen-pair",
+    ]
+    stems += [] if windows else ["x*y", "q?z"]  # (no such names on Windows)
+    for n, stem in enumerate(stems):
+        parent = root / f"g{n}"
+        parent.mkdir()
+        names = [
+            stem,
+            stem + "-vertical",
+            stem + "-pair",
+            stem + "-companion",
+            stem + "-1x2",
+            stem.swapcase() + "-800x480",
+        ] + ([] if windows else [stem + "-12x34\n"])
+        for _ in range(rng.randrange(2, 6)):
+            w, h = (
+                str(d) if rng.random() < 0.85 else "".join(chr(0x660 + int(c)) for c in str(d))
+                for d in rng.choice(SIZES)
+            )  # (some in Arabic-Indic digits)
+            names.append(f"{stem}-{w}x{h}")
+        good = {stem} | {name for name in names[6:] if rng.random() < 0.6}
+        for name in dict.fromkeys(names):
+            folder = parent / name
+            if folder.exists():  # (the same name in another case, on Windows)
+                continue
+            kind = 99 if name in good else rng.randrange(20)
+            if kind == 0:
+                folder.write_text("{}")  # a file, no folder
+                continue
+            folder.mkdir()
+            if kind == 1:
+                continue  # no theme.json
+            source = rng.choice(with_modules if rng.random() < 0.6 else THEMES)
+            for extra in source.iterdir():
+                if extra.name != "theme.json" and extra.is_file():
+                    shutil.copy(extra, folder / extra.name)
+            data = json.loads((source / "theme.json").read_text(encoding="utf-8"))
+            display = data.setdefault("display", {})
+            if kind == 2:
+                (folder / "theme.json").write_bytes(b"{not json")
+                continue
+            if kind == 3:
+                (folder / "theme.json").write_bytes(
+                    b'{"display": {"width": 800, "height": 480}, "n": "\xff"}'
+                )
+                continue
+            if kind == 4:
+                (folder / "theme.json").write_text('{"display": ' + "[" * 20000 + "]" * 20000 + "}")
+                continue
+            if kind == 99:  # as the app makes a version: its size in its name
+                sized = model._SIZED.match(name)
+                w, h = display.get("width", 800), display.get("height", 480)
+                if sized:
+                    w, h = int(sized[2]), int(sized[3])
+                elif name.endswith(model.VERTICAL):
+                    w, h = sorted((w, h))
+                display.update(
+                    width=w,
+                    height=h,
+                    model="custom",
+                    orientation="portrait" if h > w else "landscape",
+                )
+            elif kind == 5:
+                data["display"] = rng.choice([[], "x", None, 5])
+            else:
+                display["width"] = _side(rng, display.get("width", 800))
+                display["height"] = _side(rng, display.get("height", 480))
+                if rng.random() < 0.2:
+                    display["model"] = rng.choice(["custom", "nope", 5, None, "", *MODELS[1:8]])
+            if rng.random() < 0.45:
+                grid = data.get("grid") if isinstance(data.get("grid"), dict) else {}
+                for key in ("columns", "rows", "gap", "margin"):
+                    if rng.random() < 0.5:
+                        good_values = [0, 2, 4, 8, 12, 24, 48, 96, 10.5, 7.9, 2.5, 0.0, 16]
+                        grid[key] = rng.choice(good_values) if kind == 99 else _setting(rng)
+                data["grid"] = (
+                    grid if kind == 99 or rng.random() < 0.9 else rng.choice([[], [1], "x", 0])
+                )
+            (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+            folders.append(folder)
+            if kind == 99:
+                clean.append(folder)
+    return folders, clean
+
+
+def test_versions_beside_one_s_own_themes_are_found_and_laid_out_as_python_does(
+    tmp_path: Path,
+) -> None:
+    rng = random.Random(0x0E5)
+    folders, clean = _own_versions(rng, tmp_path)
+    sizes = [*SIZES, (250, 250), (320, 170), (1000, 1000), (3000, 400)]
+    versions = [
+        {"folder": str(f), "size": list(rng.choice(sizes))} for f in folders for _ in range(2)
+    ]
+    laid = []
+    for folder in clean + rng.sample(folders, min(20, len(folders))):
+        for _ in range(5):
+            size = rng.choice(sizes)
+            fitting = [
+                m.id for m in devices.MODELS if size in (m.size("landscape"), m.size("portrait"))
+            ]
+            laid.append(
+                {
+                    "folder": str(folder),
+                    "size": list(size),
+                    "model": rng.choice(["custom", "nope", rng.choice(MODELS[1:]), *fitting]),
+                }
+            )
+    case = {"op": "theme_adapt", "fonts_dir": FONTS, "builtin": str(model.builtin_themes_dir())}
+    [ours] = run([{**case, "versions": versions, "laid_out": laid}])
+
+    def found(v: dict[str, Any]) -> dict[str, Any]:
+        folder = Path(v["folder"])
+        try:
+            listed: Any = [[n, str(w), str(h)] for n, (w, h) in adapt.versions_of(folder).items()]
+        except Exception as error:  # noqa: BLE001
+            listed = {"error": str(error), "kind": type(error).__name__}
+        try:
+            nearest: Any = {"name": adapt.nearest_version(folder, tuple(v["size"]))}
+        except Exception as error:  # noqa: BLE001
+            nearest = {"error": str(error), "kind": type(error).__name__}
+        return {"listed": listed, "nearest": nearest}
+
+    moved = []
+
+    def laid_out(c: dict[str, Any]) -> Any:
+        theme = model.load_theme(Path(c["folder"]))
+        made = adapt.laid_out(theme, tuple(c["size"]), c["model"])
+        moved.append(made is not theme)
+        return made.to_dict()
+
+    digits = sys.get_int_max_str_digits()
+    sys.set_int_max_str_digits(0)
+    try:
+        assert ours["versions"] == [found(v) for v in versions]
+        python = [_python_answer(lambda c=c: laid_out(c)) for c in laid]
+    finally:
+        sys.set_int_max_str_digits(digits)
+    assert ours["laid_out"] == python
+    # (versions laid out on sizes as Python lays them out, not only refused alike)
+    assert sum(moved) >= 10, sum(moved)  # (52 of 113 on Linux)

@@ -315,3 +315,127 @@ def test_hypot_is_python_s_own() -> None:
     [ours] = run([{"op": "math", "hypot": bits}])
     want = [struct.pack("<d", math.hypot(a, b))[::-1].hex() for a, b in pairs]
     assert ours["hypot"] == want
+
+
+def _number(rng: random.Random) -> Any:
+    """A number as a JSON file may hold one: bools, small and huge ints, floats of every kind."""
+    sign = rng.choice([1, -1])
+    pick = rng.randrange(11)
+    if pick == 0:
+        return rng.choice([True, False])
+    if pick == 1:
+        return rng.randrange(-5, 6)
+    if pick == 2:
+        return rng.randrange(-(10**6), 10**6)
+    if pick == 3:
+        return sign * rng.randrange(2**52, 2**70)
+    if pick == 4:
+        return sign * rng.randrange(1, 10 ** rng.randrange(20, 400))
+    if pick == 5:
+        specials = [0.0, -0.0, 0.5, 2.5, 1e308, 5e-324, math.inf, -math.inf, math.nan, 4.0, 2.0**53]
+        return rng.choice(specials)
+    if pick == 6:
+        return struct.unpack("<d", struct.pack("<Q", rng.getrandbits(64)))[0]
+    if pick == 7:
+        return rng.uniform(-1000, 1000)
+    if pick == 8:
+        # about the largest float: past it ints no longer turn into one
+        return rng.choice(
+            [sign * 2 ** rng.randrange(1000, 1100), 2**1024 - 2**970, 2**1024 - 2**971]
+        )
+    if pick == 9:
+        return float(rng.randrange(-100, 100)) * 2.0 ** rng.randrange(-1100, 1000)
+    return rng.choice([2**53 + 1, 2**63, -(2**63), 3 * 2**60])
+
+
+def _python_number_op(op: str, a: Any, b: Any) -> dict[str, Any]:
+    calls = {
+        "+": lambda: a + b,
+        "-": lambda: a - b,
+        "*": lambda: a * b,
+        "/": lambda: a / b,
+        "//": lambda: a // b,
+        "%": lambda: a % b,
+        "<": lambda: a < b,
+        ">": lambda: a > b,
+        "max": lambda: max(a, b),
+        "min": lambda: min(a, b),
+        "round": lambda: round(a),
+        "log": lambda: math.log(a),
+    }
+    try:
+        return {"value": json.dumps(calls[op]())}
+    except Exception as error:  # noqa: BLE001 (every kind Python raises is compared)
+        return {"error": str(error), "kind": type(error).__name__}
+
+
+@pytest.mark.skipif(
+    sys.version_info[:2] != (3, 12),
+    reason="Python 3.12's messages (3.13 words a float modulo by zero otherwise)",
+)
+def test_arithmetic_on_numbers_as_python_s() -> None:
+    rng = random.Random(0x4E0)
+    others = [None, "a", "", [1], [], {"a": 1}, {}, "8"]
+
+    def value() -> Any:
+        return _number(rng) if rng.random() < 0.8 else rng.choice(others)
+
+    cases: list[tuple[str, Any, Any]] = []
+    for _ in range(30000):
+        op = rng.choice(["+", "-", "*", "/", "//", "%", "<", ">", "max", "min", "round", "log"])
+        if op == "log":  # (of a float)
+            a = abs(_number(rng)) if rng.random() < 0.7 else _number(rng)
+            cases.append((op, float(a) if abs(a) < 2**1000 else 1.5, 0))
+        else:
+            cases.append((op, value(), value()))
+    [ours] = run([{"op": "py_num", "cases": [json.dumps(c) for c in cases]}])
+    digits = sys.get_int_max_str_digits()
+    sys.set_int_max_str_digits(0)  # (products of ints of 400 digits, written whole)
+    try:
+        for (op, a, b), got in zip(cases, ours["answers"], strict=True):
+            if got.get("kind") == "Unsupported":
+                # what Python counts with sequences (joins, repeats, orders, formats), never a
+                # number with a number
+                assert isinstance(a, (str, list)) or isinstance(b, (str, list)), (op, a, b)
+                continue
+            assert got == _python_number_op(op, a, b), (op, a, b)
+    finally:
+        sys.set_int_max_str_digits(digits)
+
+
+@pytest.mark.skipif(
+    unicodedata.unidata_version != RELEASE_UNICODE,
+    reason=f"needs Python with Unicode {RELEASE_UNICODE} (the release's)",
+)
+def test_names_meet_without_regard_to_case_as_python_s_re() -> None:
+    import _sre
+    import fnmatch
+    import glob
+    import re
+
+    rng = random.Random(0x16C)
+    # characters with case, with more than one lowercase of one uppercase, without case
+    pool = "aAbBkKsSiIeEzZ" + "ſKıİßẞΣσςΙιͅθϑϴβϐвᲀǅǄǆ" + "0123456789-x[]*?._ äÄöÖ"
+    pairs = []
+    for _ in range(6000):
+        stem = "".join(rng.choice(pool) for _ in range(rng.randrange(1, 6)))
+        if rng.random() < 0.5:  # the stem's characters, some in another case
+            name = "".join(
+                rng.choice([c, c.swapcase()[:1], c.lower()[:1], c.upper()[:1], rng.choice(pool)])
+                for c in stem
+            )
+        else:
+            name = "".join(rng.choice(pool) for _ in range(rng.randrange(0, 6)))
+        pairs.append([stem, name + rng.choice(["", "-vertical", "-1920x720"])])
+    [ours] = run([{"op": "theme_adapt", "fonts_dir": "", "builtin": "", "ignorecase": pairs}])
+    for (stem, name), got in zip(pairs, ours["ignorecase"], strict=True):
+        # pathlib's glob on Windows: fnmatch's pattern of the escaped stem, without case
+        pattern = re.compile(fnmatch.translate(glob.escape(stem) + "*"), re.IGNORECASE)
+        assert got == (len(stem) if pattern.match(name) else None), (stem, name)
+    # and the tables it goes by, over every code point
+    [table] = run([{"op": "py_num", "cases": []}])
+    lines = "".join(
+        f"{cp:x} {_sre.unicode_tolower(cp):x} {int(_sre.unicode_iscased(cp))}\n"
+        for cp in range(0x110000)
+    )
+    assert table["re_digest"] == hashlib.sha256(lines.encode()).hexdigest()

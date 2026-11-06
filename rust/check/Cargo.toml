@@ -14,6 +14,7 @@ lp-decode = { path = "../decode" }
 lp-text = { path = "../text" }
 lp-devices = { path = "../devices" }
 lp-theme = { path = "../theme" }
+num-bigint = "0.4"
 serde_json = { version = "1", features = ["float_roundtrip"] }
 base64 = "0.22"
 sha2 = "0.10"

@@ -62,10 +62,7 @@ fn py_mod(x: f64, m: f64) -> f64 {
 /// Python's round(x, digits) for a float: the decimal of `digits` places nearest to it (half
 /// to even), as the double nearest to that.
 fn py_round(x: f64, digits: usize) -> f64 {
-    if !x.is_finite() {
-        return x;
-    }
-    format!("{x:.digits$}").parse().unwrap_or(x)
+    lp_py::round_digits(x, digits)
 }
 
 /// Geometry.c's COORD: where a coordinate falls, -1 for any left of 0.
