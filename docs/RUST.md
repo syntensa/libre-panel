@@ -92,7 +92,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       the size), in L, RGB, RGBA, RGBa and F
 - [ ] thumbnail, ImageOps.fit/pad/contain
 - [x] GaussianBlur, BoxBlur
-- [ ] ImageChops: multiply, add, lighter, difference, subtract, offset; blend, composite
+- [x] ImageChops: multiply, screen, add, subtract, lighter, darker, difference, the modulos,
+      offset; blend, composite
 - [ ] transpose, rotate, transform
 - [ ] drawing: line (thin and wide, joints), polygon, rectangle, rounded_rectangle, ellipse,
       arc (from the engine's fans), pieslice, chord, bitmap

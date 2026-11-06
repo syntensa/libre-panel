@@ -318,3 +318,39 @@ def test_gaussian_and_box_blurs_are_pillow_s_to_the_bit():
                     "radius": list(xy), "passes": 1}  # fmt: skip
             pairs.append((case, want))
     check(pairs)
+
+
+def test_channel_operations_blend_and_composite_are_pillow_s():
+    from PIL import ImageChops
+
+    rng = random.Random(13)
+    pairs = []
+    names = ["multiply", "screen", "add", "subtract", "lighter", "darker", "difference",
+             "add_modulo", "subtract_modulo"]  # fmt: skip
+    for mode in MODES:
+        for name in names:
+            for _ in range(15):
+                a = noise(rng, mode, size(rng))
+                other = rng.choice([mode, "RGBa" if mode == "RGBA" else mode])  # as many bands
+                b = noise(rng, other, size(rng))  # (another size: the smaller of both)
+                extra: dict[str, Any] = {}
+                if name in ("add", "subtract") and rng.random() < 0.6:
+                    extra = {"scale": rng.choice([0.5, 1.0, 1.7, 2.0, 3.0]),
+                             "offset": rng.randint(-60, 60)}  # fmt: skip
+                want = getattr(ImageChops, name)(a, b, **extra)
+                case = {"op": "chop", "name": name, "a": image(a), "b": image(b), **extra}
+                pairs.append((case, want))
+        for _ in range(30):
+            s = size(rng)
+            a, b = noise(rng, mode, s), noise(rng, mode, s)
+            alpha = rng.choice([0.0, 1.0, rng.random(), rng.uniform(-1.5, 2.5)])
+            case = {"op": "blend", "a": image(a), "b": image(b), "alpha": alpha}
+            pairs.append((case, Image.blend(a, b, alpha)))
+            mask = noise(rng, rng.choice(["L", "RGBA"]), s)
+            case = {"op": "composite", "a": image(a), "b": image(b), "mask": image(mask)}
+            pairs.append((case, Image.composite(a, b, mask)))
+            im = noise(rng, mode, s)
+            x, y = rng.randint(-40, 40), rng.randint(-40, 40)
+            pairs.append(({"op": "offset", "image": image(im), "x": x, "y": y},
+                          ImageChops.offset(im, x, y)))  # fmt: skip
+    check(pairs)

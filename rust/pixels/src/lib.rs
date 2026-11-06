@@ -12,6 +12,7 @@
 mod bands;
 mod bbox;
 mod blur;
+pub mod chops;
 mod composite;
 mod convert;
 mod paste;

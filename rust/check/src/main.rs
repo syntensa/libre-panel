@@ -219,6 +219,49 @@ fn run(case: &Value) -> Result<Value, String> {
             .map_err(e)?;
             json!({"image": value_of(&out)})
         }
+        "chop" => {
+            use lp_pixels::chops;
+            let (a, b) = (image_of(&case["a"])?, image_of(&case["b"])?);
+            let scale = case["scale"].as_f64().unwrap_or(1.0) as f32;
+            let offset = case["offset"].as_i64().unwrap_or(0) as i32;
+            let out = match case["name"].as_str().unwrap_or("") {
+                "multiply" => chops::multiply(&a, &b),
+                "screen" => chops::screen(&a, &b),
+                "add" => chops::add(&a, &b, scale, offset),
+                "subtract" => chops::subtract(&a, &b, scale, offset),
+                "lighter" => chops::lighter(&a, &b),
+                "darker" => chops::darker(&a, &b),
+                "difference" => chops::difference(&a, &b),
+                "add_modulo" => chops::add_modulo(&a, &b),
+                "subtract_modulo" => chops::subtract_modulo(&a, &b),
+                other => return Err(format!("no chop {other}")),
+            }
+            .map_err(e)?;
+            json!({"image": value_of(&out)})
+        }
+        "blend" => {
+            let alpha = case["alpha"].as_f64().ok_or("an alpha")? as f32;
+            let out =
+                lp_pixels::chops::blend(&image_of(&case["a"])?, &image_of(&case["b"])?, alpha)
+                    .map_err(e)?;
+            json!({"image": value_of(&out)})
+        }
+        "composite" => {
+            let (a, b, m) = (
+                image_of(&case["a"])?,
+                image_of(&case["b"])?,
+                image_of(&case["mask"])?,
+            );
+            json!({"image": value_of(&lp_pixels::chops::composite(&a, &b, &m).map_err(e)?)})
+        }
+        "offset" => {
+            let im = image_of(&case["image"])?;
+            let (x, y) = (
+                case["x"].as_i64().ok_or("x")?,
+                case["y"].as_i64().ok_or("y")?,
+            );
+            json!({"image": value_of(&im.offset(x, y))})
+        }
         other => return Err(format!("no op {other}")),
     })
 }
