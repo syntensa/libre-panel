@@ -126,6 +126,12 @@ def _panel_pids() -> dict[int, int]:
     return panel_pids()
 
 
+def _picture_pids() -> frozenset[int]:
+    from libre_panel.editor.pictures import picture_pids
+
+    return picture_pids()
+
+
 def _window_pid() -> int | None:
     from libre_panel.window import running
 
@@ -145,13 +151,16 @@ def role_of(
     parent: int | None,
     panels: dict[int, int],
     window: int | None,
+    pictures: frozenset[int] = frozenset(),
 ) -> tuple[str, int | None]:
     """What a process of Libre Panel's is (and the panel it is for, where it is a panel's), by
-    its id, its program's name and its command line: "panel", "engine" (Libre Panel's,
-    devices/engine.py), "ffmpeg", "presentmon", "window", "webview" (the window's browser
-    engine) or "other"."""
+    its id, its program's name and its command line: "panel", "pictures" (the app's, drawn
+    apart while it is open: editor/pictures.py), "engine" (Libre Panel's, devices/engine.py),
+    "ffmpeg", "presentmon", "window", "webview" (the window's browser engine) or "other"."""
     if pid in panels:
         return "panel", panels[pid]
+    if pid in pictures:
+        return "pictures", None
     if pid == window:
         return "window", None
     low = name.lower()
@@ -176,6 +185,8 @@ def label_of(role: str, panel: int | None = None, name: str = "", platform: str 
         return "main process"
     if role == "panel":
         return f"panel {panel}" if panel else "panel"
+    if role == "pictures":
+        return "the app's pictures"
     if role == "engine":
         return "engine"
     if role == "ffmpeg":
@@ -192,7 +203,7 @@ def label_of(role: str, panel: int | None = None, name: str = "", platform: str 
 
 
 _ORDER = {"main": 0, "panel": 1, "engine": 2, "ffmpeg": 3, "presentmon": 4, "window": 5,
-          "webview": 6, "service": 7, OTHER: 8}  # fmt: skip
+          "pictures": 6, "webview": 7, "service": 8, OTHER: 9}  # fmt: skip
 
 
 @dataclass
@@ -359,9 +370,10 @@ class LoadSampler:
     """Samples Libre Panel's processes and this process's threads in a thread of its own, while
     somebody asks (:meth:`report`). Every way to the system is a parameter, for the tests:
     ``me`` this process, ``process(pid)`` another, ``panels()`` the panels' processes,
-    ``window()`` the window's, ``service()`` where the sensor service is, ``lhm()`` the status
-    of LibreHardwareMonitor's source, ``names()`` the names of this process's threads and
-    ``held()`` what this process holds (:func:`inside`)."""
+    ``pictures()`` the app's pictures' (editor/pictures.py), ``window()`` the window's,
+    ``service()`` where the sensor service is, ``lhm()`` the status of LibreHardwareMonitor's
+    source, ``names()`` the names of this process's threads and ``held()`` what this process
+    holds (:func:`inside`)."""
 
     def __init__(
         self,
@@ -370,6 +382,7 @@ class LoadSampler:
         process: Callable[[int], Any] | None = None,
         cpu_count: int | None = None,
         panels: Callable[[], dict[int, int]] = _panel_pids,
+        pictures: Callable[[], frozenset[int]] = _picture_pids,
         window: Callable[[], int | None] = _window_pid,
         service: Callable[[], ServiceFound | None] = find_service,
         lhm: Callable[[], Any] = lambda: None,
@@ -386,6 +399,7 @@ class LoadSampler:
         self._process = process or psutil.Process
         self.cpus = max(1, cpu_count or psutil.cpu_count() or 1)
         self._panels, self._window, self._service = panels, window, service
+        self._pictures = pictures
         self._lhm, self._names = lhm, names
         self._clock, self._wall, self._timer = clock, wall, timer
         self.window_s, self.idle_s = window_s, idle_s
@@ -617,7 +631,7 @@ class LoadSampler:
             parent = proc.ppid()
         except psutil.Error:
             parent = None
-        role, panel = role_of(name, cmdline, proc.pid, parent, panels, window)
+        role, panel = role_of(name, cmdline, proc.pid, parent, panels, window, self._pictures())
         known = (role, panel, name if role == OTHER else "")
         if len(self._roles) > 512:  # ffmpeg's that came and went
             self._roles.clear()

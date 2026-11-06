@@ -207,10 +207,12 @@ administrator rights, a backup is not restored from the app.
 ## Light mode
 
 Always on, with nothing to set (0.8 had a switch, `light_mode`; an old config.toml's is let be,
-and it goes from the file with the next setting written). While the app's window is closed (or
-hidden) for a minute, Libre Panel lets go of what only the app needs: its pictures of the
-themes (and of the community's), and the letters, symbols and pieces of every theme they were
-drawn with. For fifteen seconds after that the renderer's caches note what the panel draws
+and it goes from the file with the next setting written). The app's pictures (every theme's,
+Design's and Look's, the building blocks', the start screen's) are drawn in a process of their
+own, which ends once the app's window has been closed (or hidden) for a minute, and all it took
+goes with it. Libre Panel then also lets go of what else only the app needs: its pictures of
+the themes (and of the community's), and the letters, symbols and pieces of every theme they
+were drawn with. For fifteen seconds after that the renderer's caches note what the panel draws
 with; that stays, the rest goes, so the panel draws on as before. Then the memory goes back to
 the system; Windows also takes back the pages the panel does not touch, which is what Task
 Manager shows (they come back as the panel touches them). The app takes a moment longer to

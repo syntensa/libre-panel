@@ -2984,7 +2984,8 @@
     "How the panel runs, in numbers: Status": "Как работает панель, в цифрах: «Состояние»",
     "Open Status: how the panel runs": "Открыть «Состояние»: как работает панель",
     "Show the picture large": "Показать изображение крупно",
-    "Which panel Start and Status show and Design edits": "Какую панель показывают «Главная» и «Состояние» и изменяет «Дизайн»"
+    "Which panel Start and Status show and Design edits": "Какую панель показывают «Главная» и «Состояние» и изменяет «Дизайн»",
+    "The app's pictures": "Картинки приложения"
   },
   "fields": {
     "night": "ночь",

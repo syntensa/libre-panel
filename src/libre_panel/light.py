@@ -51,6 +51,14 @@ def empty_caches() -> None:
     for cached in vars(moon).values():
         if hasattr(cached, "cache_clear"):
             cached.cache_clear()
+    # the start screen's, where a picture of it was made here (Put on the panel): not imported
+    # for this alone
+    files = sys.modules.get("libre_panel.devices.panel_files")
+    screens = sys.modules.get("libre_panel.render.bootscreen")
+    for module, names in ((files, ("cached_preview", "cached_file")),
+                          (screens, ("_look", "_ends", "_dither"))):  # fmt: skip
+        for name in names if module is not None else ():
+            getattr(module, name).cache_clear()
 
 
 # a block this large or larger is the system's own (mapped), and goes back to it as it is freed

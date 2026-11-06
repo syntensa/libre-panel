@@ -2984,7 +2984,8 @@
     "How the panel runs, in numbers: Status": "面板的运行情况（数据）：状态",
     "Open Status: how the panel runs": "打开“状态”：面板的运行情况",
     "Show the picture large": "放大显示画面",
-    "Which panel Start and Status show and Design edits": "开始和状态显示、设计编辑的是哪块面板"
+    "Which panel Start and Status show and Design edits": "开始和状态显示、设计编辑的是哪块面板",
+    "The app's pictures": "应用的图片"
   },
   "fields": {
     "night": "夜晚",

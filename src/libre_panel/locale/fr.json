@@ -2984,7 +2984,8 @@
     "How the panel runs, in numbers: Status": "Comment le panneau fonctionne, en chiffres : État",
     "Open Status: how the panel runs": "Ouvrir État : comment le panneau fonctionne",
     "Show the picture large": "Afficher l’image en grand",
-    "Which panel Start and Status show and Design edits": "Le panneau que montrent Accueil et État et que modifie Design"
+    "Which panel Start and Status show and Design edits": "Le panneau que montrent Accueil et État et que modifie Design",
+    "The app's pictures": "Les images de l'app"
   },
   "fields": {
     "night": "nuit",

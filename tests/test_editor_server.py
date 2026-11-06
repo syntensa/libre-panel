@@ -345,7 +345,7 @@ def test_every_renderer_a_preview_makes_is_closed_and_freed(plugin_folder, serve
 
     from test_plugins import DRAWING, bar, theme_data
 
-    from libre_panel.editor import server as editor
+    from libre_panel.editor import drawings
     from libre_panel.editor.presets import PRESETS
 
     parts = {"libre_panel.screens": {"tint": "Tint"}, "libre_panel.widgets": {"demo.bar": "Bar"}}
@@ -353,7 +353,7 @@ def test_every_renderer_a_preview_makes_is_closed_and_freed(plugin_folder, serve
 
     made, closed = [], []
 
-    class Tracked(editor.Renderer):
+    class Tracked(drawings.Renderer):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             made.append(weakref.ref(self))
@@ -362,7 +362,7 @@ def test_every_renderer_a_preview_makes_is_closed_and_freed(plugin_folder, serve
             closed.append(id(self))
             super().close()
 
-    monkeypatch.setattr(editor, "Renderer", Tracked)
+    monkeypatch.setattr(drawings, "Renderer", Tracked)  # (the app's pictures: drawings.py)
     palette = {"bg": "#101010", "accent": "#ff8800"}
     calls = [
         ("/api/module-previews", {"palette": palette}, len(MODULE_KINDS)),
@@ -739,14 +739,14 @@ class Drawing:
 
 @pytest.fixture
 def drawing(monkeypatch):
-    from libre_panel.editor import server as editor
+    from libre_panel.editor import drawings
 
     srv = make_server(port=0)
     thread = threading.Thread(target=srv.serve_forever, daemon=True)
     thread.start()
     drawing = Drawing(srv.editor_state)
     drawing.port = srv.server_address[1]
-    monkeypatch.setattr(editor, "Renderer", drawing.renderer())
+    monkeypatch.setattr(drawings, "Renderer", drawing.renderer())
     yield drawing
     drawing.gate.set()  # (a test that failed must not leave its requests waiting)
     srv.shutdown()

@@ -2984,7 +2984,8 @@
     "How the panel runs, in numbers: Status": "Wie das Panel läuft, in Zahlen: Zustand",
     "Open Status: how the panel runs": "Zustand öffnen: wie das Panel läuft",
     "Show the picture large": "Bild groß zeigen",
-    "Which panel Start and Status show and Design edits": "Welches Panel Start und Zustand zeigen und in Gestalten bearbeitet wird"
+    "Which panel Start and Status show and Design edits": "Welches Panel Start und Zustand zeigen und in Gestalten bearbeitet wird",
+    "The app's pictures": "Bilder der App"
   },
   "fields": {
     "night": "Nacht",

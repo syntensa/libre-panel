@@ -9,7 +9,6 @@ answered, and the token is asked for before the answer "not found".
 
 from __future__ import annotations
 
-import base64
 import io
 import json
 import logging
@@ -30,8 +29,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import ParseResult, parse_qs, unquote, urlparse
-
-from PIL import Image, ImageOps
 
 from libre_panel import __version__, agents, i18n, modes, notify, sequence
 from libre_panel.config import (
@@ -55,10 +52,11 @@ from libre_panel.config import (
 )
 from libre_panel.devices.base import DeviceError
 from libre_panel.devices.models import MODELS, PROTOCOLS
-from libre_panel.editor import access, history
+from libre_panel.editor import access, drawings, history
 from libre_panel.editor import settings as app_settings
 from libre_panel.editor.community import Community, CommunityError
 from libre_panel.editor.news import News
+from libre_panel.editor.pictures import PictureError, Pictures, preview_slot_count
 from libre_panel.editor.presets import presets_for_editor
 from libre_panel.editor.updates import Install, UpdateError, Updates
 from libre_panel.fonts import BUILTIN_PREFIX, DEFAULT_FONT, builtin_font_path, builtin_fonts
@@ -102,13 +100,10 @@ from libre_panel.theme.model import (
     with_light_colours,
 )
 from libre_panel.theme.modules import (
-    MODULE_KINDS,
     detach,
-    look_theme_parts,
     make_grid,
     module_info,
     templates,
-    with_cards,
 )
 from libre_panel.theme.share import MAX_ZIP, ShareError, export_theme, import_theme
 
@@ -295,113 +290,12 @@ def _finish_types(types: list[str]) -> dict[str, list[str]]:
     return found
 
 
-NOTICE_AGE_S = 1.2  # how far into its life a preview shows a notice: drawn in full
-
-
-def _with_notice(renderer: Renderer, frame: Any, kind: str, look: str = "") -> Any:
-    """``frame`` with the test message of ``kind`` (the Control page's: volume, music, ...)
-    drawn on it in the theme's toast style (the volume in ``look``, where one is named), a
-    moment after it began; None for an unknown kind. The previews of the editor have no
-    messages of their own."""
-    from libre_panel.pages.control import probes
-    from libre_panel.plugins.host import Toast
-    from libre_panel.render.overlays import ToastLayer
-
-    made = probes(look).get(kind)
-    if made is None:
-        return None
-    _name, options = made
-    toast = Toast(
-        options["text"],
-        options.get("icon"),
-        options.get("level", "info"),
-        options.get("seconds"),
-        options.get("kind", ""),
-        options.get("rank", 0),
-        dict(options.get("payload", {})),
-        "editor",
-    )
-    layer = ToastLayer(renderer)
-    try:
-        layer.add([toast])
-        layer.advance(0.0)
-        return layer.draw(frame, NOTICE_AGE_S)
-    finally:
-        layer.close()
-
-
 def _look_ranges() -> dict[str, dict[str, list[float]]]:
     """``LOOK_RANGES`` by block, for sliders that stop where the theme would refuse."""
     found: dict[str, dict[str, list[float]]] = {}
     for (block, key), (low, high) in LOOK_RANGES.items():
         found.setdefault(block, {})[key] = [low, high]
     return found
-
-
-def _plugin_specs() -> dict[str, Any]:
-    """Installed plugin widget types, screens and toast styles (and the built-in
-    styles besides the card), for the inspector and the building blocks."""
-    from libre_panel.plugins.loader import registry
-    from libre_panel.plugins.render import label_for
-    from libre_panel.render.overlays import BUILT_IN_STYLES
-
-    installed = registry()
-    widgets: dict[str, Any] = {}
-    labels: dict[str, str] = {}
-    presets: list[dict[str, Any]] = []
-    for name in installed.names("widgets"):
-        cls = installed.get("widgets", name)
-        if cls is None:
-            continue
-        widgets[name] = {k: list(v) for k, v in cls.spec.items()}
-        labels[name] = label_for(cls)
-        defaults = {k: v[1] for k, v in cls.spec.items()}
-        for i, preset in enumerate(cls.presets):
-            widget = {"type": name, "id": "part", "x": 0, "y": 0, **defaults, **preset["widget"]}
-            text = preset.get("label", {})
-            presets.append(
-                {
-                    "id": f"{name}-{i + 1}",
-                    "name": text.get(i18n.language()) or text.get("en") or labels[name],
-                    "size": [widget.get("w", 100), widget.get("h", 100)],
-                    "widgets": [widget],
-                }
-            )
-    screens = {}
-    for name in installed.names("screens"):
-        cls = installed.get("screens", name)
-        if cls is not None:
-            options = {k: list(v) for k, v in cls.options.items()}
-            screens[name] = {"label": label_for(cls), "options": options}
-    toasts = {}
-    for name, cls in BUILT_IN_STYLES.items():  # the card is the editor's own first choice
-        if name != "card":
-            label = i18n.t("{name} (built in)", name=label_for(cls))
-            toasts[name] = {"label": label, "options": {k: list(v) for k, v in cls.options.items()}}
-    for name in installed.names("toasts"):
-        cls = installed.get("toasts", name)
-        if cls is not None:
-            options = {k: list(v) for k, v in cls.options.items()}
-            toasts[name] = {"label": label_for(cls), "options": options}
-    return {
-        "widgets": widgets,
-        "widget_labels": labels,
-        "presets": presets,
-        "screens": screens,
-        "toasts": toasts,
-    }
-
-
-def preview_slot_count() -> int:
-    """How many pictures for lists and libraries (a theme's, a building block's) are drawn at
-    once: two, fewer on a PC with fewer cores. A page asks for a screenful of them together, and
-    drawing them all at once would take the processor from the request that matters, the theme
-    that was just clicked to open."""
-    try:
-        cores = len(os.sched_getaffinity(0))
-    except (AttributeError, OSError):  # (Windows and macOS have no such call)
-        cores = os.cpu_count() or 1
-    return max(1, min(2, cores - 1))
 
 
 class EditorState:
@@ -417,6 +311,8 @@ class EditorState:
         # the drawings of those pictures wait here for their turn; the requests that are
         # answered at once (a theme to open, its live picture) never wait for it
         self.preview_slots = threading.BoundedSemaphore(preview_slot_count())
+        # the app's pictures, in a process of their own in the background app (pictures.py)
+        self.pictures = Pictures(in_process=controls is None, turns=lambda: self.preview_slots)
         self.restart = app_settings.Restart()  # settings the panel loop takes in when it restarts
         self.start_screen_jobs: Any = None  # the panel's own screens (a test puts a fake panel)
         self.news = News(config_path)  # whom Start tells what is new (news.py)
@@ -591,6 +487,11 @@ class EditorState:
         """The person's choice of the switches of ``theme`` (one with its folder)."""
         return switches_for(theme, self._chosen()[2])
 
+    def every_switch(self) -> dict[str, dict[str, bool]]:
+        """The person's choices of the themes' switches, as config.toml has them (``switches``
+        works one theme's out of them)."""
+        return self._chosen()[2]
+
     def chosen_switches(self, theme_id: str) -> tuple[tuple[str, bool], ...]:
         """The same by the theme's name, in a form a key of the previews can hold."""
         every = self._chosen()[2]
@@ -610,6 +511,7 @@ class EditorState:
                 pass  # until the file is fixed they go on as they are
 
     def close(self) -> None:
+        self.pictures.stop()
         with self._lock:
             if self._hub is not None:
                 self._hub.close()
@@ -733,33 +635,6 @@ def panel_sizes() -> list[dict[str, Any]]:
     ordered = sorted(found.items(), key=lambda kv: kv[0][0] / kv[0][1])  # (tall to long)
     return [{"size": [w, h], "shape": shape, "panels": sorted(set(names))}
             for (w, h, shape), names in ordered]  # fmt: skip
-
-
-def _draw_theme(
-    theme: Any, width: int, accent: str | None, symbols: str, chosen: tuple[tuple[str, bool], ...],
-    cards: tuple[str, ...] = DEFAULT_CARDS, card_opacity: int = 0,
-    size: tuple[int, int] | None = None, light: bool = False,
-) -> bytes:  # fmt: skip
-    """A theme as a PNG ``width`` wide at most, as the panel shows it with those choices (on a
-    panel of ``size``: scaled into it where it is not laid out on it; ``light``: in light
-    colours)."""
-    dressed = with_light_colours(with_accent(theme, accent), light)
-    dressed = with_card_opacity(dressed, card_opacity)
-    renderer = Renderer(with_cards(dressed, cards), preview=True)
-    renderer.symbols = symbols
-    renderer.switches = dict(chosen)
-    try:
-        frame, _boxes = renderer.render(demo_snapshot(fixed_time=1_700_000_000))
-    finally:
-        renderer.close()
-    frame = frame.convert("RGB")
-    if size is not None and frame.size != tuple(size):  # (as the panel's loop fits it)
-        frame = ImageOps.pad(frame, size, method=Image.Resampling.LANCZOS, color="black")
-    if frame.width > width:
-        frame = frame.resize((width, max(1, round(frame.height * width / frame.width))))
-    buffer = io.BytesIO()
-    frame.save(buffer, format="PNG")
-    return buffer.getvalue()
 
 
 class EditorHandler(BaseHTTPRequestHandler):
@@ -897,6 +772,7 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._error("not found", HTTPStatus.NOT_FOUND)
         if not open_:  # a page of this run of the app asks (light mode, light.py)
             self.state.last_request = time.monotonic()
+            self.state.pictures.warm()  # (its pictures come next)
         route.handle(self, match, url)
         self._discard_body()  # a route that answers without asking for its body
 
@@ -1031,13 +907,14 @@ class EditorHandler(BaseHTTPRequestHandler):
                     if self._client_gone():  # the page left: nobody waits for this picture
                         return
                     try:
-                        theme = load_theme(folder)
-                    except ThemeError as exc:
+                        png = self.state.pictures.ask(
+                            "theme_preview", str(folder), size, width, accent,
+                            self.state.symbols(), chosen, cards, see, light,
+                        )  # fmt: skip
+                    except PictureError as exc:
+                        if exc.kind != "ThemeError":
+                            raise
                         return self._error(str(exc), HTTPStatus.NOT_FOUND)
-                    if size is not None:
-                        theme = laid_out(theme, size)
-                    png = _draw_theme(theme, width, accent, self.state.symbols(), chosen, cards,
-                                      see, size, light)  # fmt: skip
                     with self.state.previews_lock:
                         cache = self.state.previews
                         while len(cache) >= 48:  # the oldest go first
@@ -1138,13 +1015,7 @@ class EditorHandler(BaseHTTPRequestHandler):
         paint = (query.get("paint") or ["theme"])[0]
         if look not in fan_looks.LOOKS or paint not in FAN_PAINTS:
             return self._error("unknown look or colours", HTTPStatus.NOT_FOUND)
-        rotor = fan.Rotor("preview", fan_looks.look(look).blades)
-        rotor.settle(1800.0, 3000.0)  # a fan that runs: lit ...
-        rotor.speed = 0.0  # ... drawn standing, its blades sharp
-        image = fan.fan_image((34, 211, 238), 112, 112, rotor, "square", look, paint)
-        buffer = io.BytesIO()
-        image.save(buffer, format="PNG")
-        self._send(200, buffer.getvalue(), "image/png")
+        self._send(200, self.state.pictures.ask("fan_look", look, paint), "image/png")
 
     _symbol_tiles: dict[str, bytes] = {}
 
@@ -1157,33 +1028,7 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._error("unknown look", HTTPStatus.NOT_FOUND)
         png = self._symbol_tiles.get(pack)
         if png is None:
-            k = 120
-            theme = parse_theme({
-                "format": "libre-panel-theme/1",
-                "display": {"width": 3 * k, "height": k},
-                "palette": look_theme_parts("arctic")[0],
-                "background": {"color": "#0b1016"},
-                "widgets": [
-                    {"type": "symbol", "id": "sun", "x": 0, "y": 0, "size": k, "finish": "lit",
-                     "sensor": "weather.code"},
-                    {"type": "symbol", "id": "snow", "x": k, "y": 0, "size": k, "finish": "lit",
-                     "sensor": "weather.hour.1.code"},
-                    {"type": "moon", "id": "moon", "x": 2 * k + 10, "y": 10, "size": k - 20},
-                ],
-            })  # fmt: skip
-            snapshot = demo_snapshot(fixed_time=1_700_000_000)
-            for key, value in (("weather.code", 2), ("weather.is_day", 1), ("moon.phase", 0.36),
-                               ("weather.hour.1.code", 73), ("weather.hour.1.day", 1)):  # fmt: skip
-                snapshot.readings[key] = Reading(key, value)
-            renderer = Renderer(theme, preview=True)
-            renderer.symbols = pack
-            try:
-                frame, _boxes = renderer.render(snapshot)
-            finally:
-                renderer.close()
-            buffer = io.BytesIO()
-            frame.save(buffer, format="PNG")
-            png = self._symbol_tiles[pack] = buffer.getvalue()
+            png = self._symbol_tiles[pack] = self.state.pictures.ask("symbols_look", pack)
         self._send(200, png, "image/png")
 
     def _readings(self, query: dict[str, list[str]]) -> dict[str, Any]:
@@ -1328,7 +1173,7 @@ class EditorHandler(BaseHTTPRequestHandler):
                 if model.get(said):
                     model[said] = i18n.t(model[said])
         widgets = {t: {k: list(v) for k, v in spec.items()} for t, spec in WIDGET_SPECS.items()}
-        plugins = _plugin_specs()
+        plugins = drawings.plugin_specs()
         widgets.update(plugins["widgets"])
         presets["presets"] += plugins["presets"]
         return {
@@ -2401,14 +2246,14 @@ class EditorHandler(BaseHTTPRequestHandler):
         except ValueError:
             width = 960
         way = self._mounted(_whole_of(query, "panel"))
-        picture = panel_files.cached_preview(model.id, what, width, way, design)
+        picture = self.state.pictures.ask("start_screen_preview", model.id, what, width, way,
+                                          design)  # fmt: skip
         self._send(200, picture, panel_files.picture_type(picture))
 
     def _start_screen_file(self, query: dict[str, list[str]]) -> None:
         """``?model=...&what=logo|clip&design=...``: the boot logo's JPEG or the standby clip
         (H.264) as the panel takes them, to keep: the clip in the range of values the panel at
         ``panel`` gets its video in."""
-        from libre_panel.devices import panel_files
         from libre_panel.devices.turzx_video import full_range
 
         model = self._start_screen_model(query)
@@ -2423,9 +2268,11 @@ class EditorHandler(BaseHTTPRequestHandler):
             place = None
         video_range = place[0].video_range if place is not None else "auto"
         try:
-            data = panel_files.cached_file(model.id, what, self._mounted(n), design,
-                                           full_range(video_range, model))  # fmt: skip
-        except DeviceError as exc:
+            data = self.state.pictures.ask("start_screen_file", model.id, what, self._mounted(n),
+                                           design, full_range(video_range, model))  # fmt: skip
+        except PictureError as exc:
+            if exc.kind != "DeviceError":
+                raise
             return self._error(str(exc), HTTPStatus.CONFLICT)
         name = f"{model.id}-{'boot.jpg' if what == 'logo' else 'standby.h264'}"
         kind = "image/jpeg" if what == "logo" else "application/octet-stream"
@@ -2537,52 +2384,7 @@ class EditorHandler(BaseHTTPRequestHandler):
         if payload is None:
             return
         palette = payload.get("palette") if isinstance(payload, dict) else None
-        palette = palette if isinstance(palette, dict) else {}
-        specs = presets_for_editor()
-        tokens = specs["tokens"]
-
-        def resolve(value: Any) -> Any:  # "$accent": the theme's colour, else the default
-            if isinstance(value, str) and value.startswith("$"):
-                name = value[1:]
-                return f"@{name}" if name in palette else tokens.get(name, "#ffffff")
-            if isinstance(value, list):
-                return [resolve(v) for v in value]
-            if isinstance(value, dict):
-                return {k: resolve(v) for k, v in value.items()}
-            return value
-
-        snapshot = demo_snapshot(fixed_time=1_700_000_000)
-        previews = {}
-        pad = 8
-        for preset in specs["presets"] + _plugin_specs()["presets"]:
-            width, height = (max(16, int(v) + 2 * pad) for v in preset["size"])
-            widgets = [
-                {**raw, "x": raw.get("x", 0) + pad, "y": raw.get("y", 0) + pad}
-                for raw in resolve(preset["widgets"])
-            ]
-            try:
-                theme = parse_theme(
-                    {
-                        "format": "libre-panel-theme/1",
-                        "display": {"width": width, "height": height},
-                        "palette": palette,
-                        "background": {"color": "@bg" if "bg" in palette else "#0b1016"},
-                        "widgets": widgets,
-                    }
-                )
-            except ThemeError as exc:
-                log.debug("no preview for %s: %s", preset["id"], exc)
-                continue
-            with self.state.preview_slots:  # (a turn at a time, as the themes' pictures)
-                renderer = Renderer(theme, preview=True)
-                renderer.symbols = self.state.symbols()
-                try:
-                    frame, _boxes = renderer.render(snapshot)
-                finally:
-                    renderer.close()
-            buffer = io.BytesIO()
-            frame.save(buffer, format="PNG")
-            previews[preset["id"]] = base64.b64encode(buffer.getvalue()).decode("ascii")
+        previews = self.state.pictures.ask("preset_previews", palette, self.state.symbols())
         self._json({"previews": previews})
 
     def _hardware(self, refresh: bool = False) -> None:
@@ -2876,96 +2678,45 @@ class EditorHandler(BaseHTTPRequestHandler):
         return None
 
     def _render(self) -> None:
+        """Design's and Look's picture of the theme it is given (drawings.render)."""
         payload = self._read_json()
         if payload is None:
             return
-        try:
-            theme = parse_theme(payload.get("theme"), root=self._base_folder(payload.get("base")))
-        except ThemeError as exc:
-            return self._error(str(exc))
-        snapshot = demo_snapshot()
+        root = self._base_folder(payload.get("base"))
+        live = None
         if payload.get("live"):
             try:
-                live = self.state.live_snapshot()
-                snapshot.readings.update(live.readings)
-                snapshot.history.update({k: v for k, v in live.history.items() if len(v) > 1})
+                current = self.state.live_snapshot()
+                live = (dict(current.readings),
+                        {k: list(v) for k, v in current.history.items() if len(v) > 1})  # fmt: skip
             except Exception as exc:
                 log.warning("live sensors unavailable: %s", exc)
-        renderer = Renderer(with_cards(theme, self.state.cards()), preview=True)
-        renderer.fan_choices = self.state.fan_choices()
-        renderer.symbols = self.state.symbols()
-        renderer.switches = self.state.switches(theme)
         try:
-            frame, boxes = renderer.render(snapshot)
-            notice = payload.get("notice")
-            if notice:  # a test message on it, as the theme's toast style shows it
-                look = payload.get("look") if isinstance(payload.get("look"), str) else ""
-                shown = (
-                    _with_notice(renderer, frame, notice, look) if isinstance(notice, str) else None
-                )
-                if shown is None:
-                    return self._error("notice must be the kind of a test message")
-                frame = shown
-        finally:
-            renderer.close()  # plugin screens end with the preview
-        buffer = io.BytesIO()
-        frame.save(buffer, format="PNG")
-        has_modules = any(w["type"] == "module" for w in theme.widgets)
-        grid = make_grid(theme.width, theme.height, theme.grid, theme.model)
-        self._json(
-            {
-                "png": base64.b64encode(buffer.getvalue()).decode("ascii"),
-                "boxes": boxes,
-                "width": theme.width,
-                "height": theme.height,
-                "warnings": theme.warnings + renderer.warnings,
-                # the grid modules sit on (active once the theme has modules or a
-                # grid), and every module's cells, also of hidden ones
-                "grid": grid.to_dict(),
-                "grid_active": has_modules or theme.grid is not None,
-                "module_boxes": renderer.module_boxes,
-            }
-        )
+            answer = self.state.pictures.ask(
+                "render", payload.get("theme"), str(root) if root is not None else None,
+                self.state.cards(), self.state.fan_choices(), self.state.symbols(),
+                self.state.every_switch(), live, payload.get("notice"), payload.get("look"),
+            )  # fmt: skip
+        except PictureError as exc:
+            if exc.kind not in ("ThemeError", "BadRequest"):
+                raise
+            return self._error(str(exc))
+        self._json(answer)
 
     def _module_previews(self) -> None:
         """Each module kind in a 2x1 box with the given look, for the library."""
         payload = self._read_json()
         if payload is None:
             return
-        palette = payload.get("palette") or look_theme_parts("arctic")[0]
-        style = payload.get("style") or look_theme_parts("arctic")[1]
-        sources = {"ring": "cpu", "stat": "gpu", "graph": "cpu"}
-        snapshot = demo_snapshot(fixed_time=1_700_000_000)
-        previews = {}
-        for kind in MODULE_KINDS:
-            try:
-                theme = parse_theme(
-                    {
-                        "format": "libre-panel-theme/1",
-                        "display": {"width": 460, "height": 220},
-                        "palette": palette,
-                        "style": style,
-                        "background": {"color": "#000000"},
-                        "grid": {"columns": 2, "rows": 1, "gap": 10, "margin": 10},
-                        "widgets": [
-                            {"type": "module", "id": "m", "module": kind, "cols": 2,
-                             "source": sources.get(kind, "cpu")}
-                        ],
-                    }
-                )  # fmt: skip
-            except ThemeError as exc:
-                return self._error(str(exc))
-            with self.state.preview_slots:  # (a turn at a time, as the themes' pictures)
-                renderer = Renderer(theme, preview=True)
-                renderer.symbols = self.state.symbols()
-                try:
-                    frame, _boxes = renderer.render(snapshot)
-                    x, y, w, h = renderer.module_boxes["m"]
-                finally:
-                    renderer.close()
-            buffer = io.BytesIO()
-            frame.crop((x, y, x + w, y + h)).save(buffer, format="PNG")
-            previews[kind] = base64.b64encode(buffer.getvalue()).decode("ascii")
+        try:
+            previews = self.state.pictures.ask(
+                "module_previews", payload.get("palette"), payload.get("style"),
+                self.state.symbols(),
+            )  # fmt: skip
+        except PictureError as exc:
+            if exc.kind != "ThemeError":
+                raise
+            return self._error(str(exc))
         self._json({"previews": previews})
 
     def _templates(self) -> None:
