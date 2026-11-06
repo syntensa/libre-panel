@@ -53,7 +53,17 @@ from libre_panel.devices.h264 import (
 )
 from libre_panel.i18n import t
 from libre_panel.render import fan, moving
-from libre_panel.render.scene import Bar, BarBase, Filled, Globe, Laid, MaskRecipe, View, growth
+from libre_panel.render.scene import (
+    Bar,
+    BarBase,
+    Filled,
+    Globe,
+    Laid,
+    MaskRecipe,
+    Strip,
+    View,
+    growth,
+)
 
 if TYPE_CHECKING:
     from libre_panel.render.renderer import Piece
@@ -437,16 +447,21 @@ class SceneSender:
                 self.made_sources += 1  # (made by the engine of what it is made of)
             elif grown is not None:
                 base, shift, keep = grown
-                data = image.crop((keep, 0, image.width, image.height)).tobytes()
+                tail = getattr(image, "tail", None)  # (a strip's, where it keeps it: Strip)
+                if tail is None or tail.size != (image.width - keep, image.height):
+                    tail = _pixels(image).crop((keep, 0, image.width, image.height))
+                data = tail.tobytes()
                 head = struct.pack("<IIIII", image.width, image.height, base, shift, keep)
                 parts += [_head(GROWN, number, len(head) + len(data)) + head, data]
                 self.grown_sources += 1
                 self.bytes += len(data)
             else:
-                data = image.tobytes()
+                data = _pixels(image).tobytes()
                 size = struct.pack("<II", image.width, image.height)
                 parts += [_head(SOURCE, number, len(size) + len(data)) + size, data]
                 self.bytes += len(data)
+            if isinstance(image, Strip):  # (the engine has it: here its pixels may go)
+                image.sent()
             hit = (image, number)
         now[key] = hit
         return hit[1]
@@ -701,6 +716,13 @@ def _write_all(out: Any, data: bytes) -> None:
     view = memoryview(data)
     while view:  # an unbuffered pipe may take less than asked
         view = view[out.write(view) :]
+
+
+def _pixels(image: Image.Image) -> Image.Image:
+    """``image``'s pixels to send: a strip's (render/scene.py's Strip) made again where they
+    went, without counting as asked for here (only the app's picture of the panel, a frame
+    composed here, keep them)."""
+    return image.for_engine() if isinstance(image, Strip) else image
 
 
 def _head(kind: int, a: int = 0, b: int = 0) -> bytes:

@@ -1243,6 +1243,72 @@ def test_the_engine_grows_a_strip_from_the_one_before_as_it_was_drawn(engine, tm
     assert sender.grown_sources == 7
 
 
+def test_the_engine_alone_keeps_the_strips_of_the_graphs_and_lays_their_new_ends(
+    engine, tmp_path, monkeypatch
+):
+    """Where the engine cuts the graphs' windows and grows their strips, the strips' pixels go
+    here once the engine has them (only their new columns go to it) and the end of a window
+    drawn again (a reading the strip did not know) goes as a piece laid over the window's cut:
+    the panel's frames are the frames composed here without the engine, pixel for pixel, while
+    no picture of a strip stays here; asked for again (the app's picture of the panel), a strip
+    is drawn whole once more, and the frame composed of it is the same too."""
+    if not engines.grows_sources(engine):
+        pytest.skip("needs libre-panel-engine that grows sources (cargo build --release)")
+    from test_motion import Instant, graph, theme, video
+
+    from libre_panel.render import renderer as renderers
+
+    # (the strips drawn in the helper thread, as in the app, but at once: the frame in between
+    # draws the window's end again, alike in both)
+    monkeypatch.setattr(renderers, "_Builder", Instant)
+    widgets = (graph(w=192, h=40), graph("lit", y=48, w=192, h=40, glow=0.6))
+    cut, own = (video(renderers.Renderer(theme(*widgets, size=(192, 96))), fps=25)
+                for _ in range(2))  # fmt: skip
+    for renderer in (cut, own):
+        renderer.background_builds = True
+    cut.native_views = True
+    out = tmp_path / "frames.rgb"
+    proc = subprocess.Popen(
+        [engine, "encode", "--size", "192x96", "--turn", "0", "--fps", "25", "--crf", "20",
+         "--kbit", "4000", "--keyint", "250", "--dump-rgb", str(out)],
+        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+    )  # fmt: skip
+    sender = engines.SceneSender(views=True, grown=True)
+    frames, laid = [], 0
+    for k in range(100):
+        snapshot, now = snap_at(k), 1000 + k / 25
+        frame, _ = cut.render(snapshot, now, scene=True)
+        assert isinstance(frame, scenes.SceneFrame)
+        for _, piece in frame.scene.pieces:
+            view = piece.native
+            if isinstance(view, scenes.View):
+                laid += any(not isinstance(part[0], scenes.Strip) for part in view.parts)
+        for part in sender.records(frame.scene, k, None):
+            proc.stdin.write(part)
+        mine, _ = own.render(snapshot, now)
+        frames.append(mine.convert("RGB").tobytes())
+    proc.stdin.close()
+    assert proc.wait(30) == 0
+    made, size = out.read_bytes(), 192 * 96 * 3
+    assert len(made) == size * len(frames)
+    for n, frame in enumerate(frames):
+        assert made[n * size : (n + 1) * size] == frame, f"frame {n} is not the renderer's"
+    assert laid > 0 and sender.grown_sources > 10  # (ends laid over, strips grown)
+    strips = [cut._strips[wid].ready for wid in ("g", "lit")]
+    pictures = [p for strip in strips for p in (*strip.phases, strip.halo) if p is not None]
+    assert pictures and all(isinstance(p, scenes.Strip) for p in pictures)
+    sent = [p for p in pictures if p.went]
+    assert sent and not any(p.composed or p.tail is not None for p in sent)  # (all with it)
+    # what stays here: those not sent yet (a step no window showed since), as they may go whole
+    unsent = sum(p.width * p.height * 4 for p in pictures if not p.went)
+    assert sum(cut._strips[wid].nbytes for wid in ("g", "lit")) <= unsent + 4096
+    # the app's picture of the panel asks: the strips drawn whole again, the frame the same
+    snapshot, now = snap_at(100), 1000 + 100 / 25
+    frame, _ = cut.render(snapshot, now, scene=True)
+    mine, _ = own.render(snapshot, now)
+    assert scenes.compose(frame.scene).convert("RGB").tobytes() == mine.convert("RGB").tobytes()
+
+
 def test_a_video_panel_shows_frames_of_layers_the_engine_composed(engine, monkeypatch, caplog):
     from fake_panel import FakePanel
     from panel_socket import PanelSocket
