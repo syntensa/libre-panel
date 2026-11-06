@@ -191,6 +191,17 @@ jobs:
           cargo build --release
       # (the Pillow they are compared with: docs/RUST.md; a new one changes nothing unseen)
       - run: pip install -e ".[dev]" pillow==13.0.0
+      # FriBiDi, which Pillow's libraqm and lp-check load from the system, and fonts of every
+      # kind the text comparisons draw with (tests/test_rust_text.py: OpenType, a collection,
+      # Type 1, CJK, Thai, Devanagari, colour emoji), so that none of them is skipped here
+      - name: FriBiDi and fonts for the text comparisons (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends libfribidi0 fonts-dejavu-core \
+            fonts-freefont-ttf fonts-tlwg-loma-otf fonts-unifont fonts-noto-color-emoji \
+            fonts-wqy-zenhei fonts-inter fonts-ipafont-gothic xfonts-scalable
+          python -c "from PIL import features as f; print('Pillow has libraqm', f.version('raqm'), 'HarfBuzz', f.version('harfbuzz'), 'FriBiDi', f.version('fribidi'))"
       # Windows' Pillow has libjpeg-turbo and libwebp built in, where Linux's has them as files
       # for lp-check to load: here they are built as Pillow's wheel has them (the same
       # versions, MSVC, libjpeg-turbo's SIMD), so the JPEG and WebP comparisons run here too

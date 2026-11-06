@@ -710,6 +710,7 @@ fn font_case(case: &Value) -> Value {
         .collect();
     let (family, style) = font.getname();
     json!({
+        "layout": format!("{:?}", font.layout()),
         "name": [family, style],
         "metrics": font.getmetrics(),
         "height": font.height(),
@@ -807,6 +808,8 @@ fn font_call(font: &lp_text::Font, c: &Value, digest: bool) -> Result<Value, lp_
 }
 
 fn main() {
+    // (as Python does when it starts: HarfBuzz's language of a text without one)
+    lp_text::set_locale_from_environment();
     let stdin = io::stdin();
     let mut out = BufWriter::new(io::stdout().lock());
     for line in stdin.lock().lines() {

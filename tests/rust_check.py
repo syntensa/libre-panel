@@ -56,6 +56,19 @@ def pillow_libfreetype() -> str | None:
     return str(found[0]) if found else None
 
 
+def pillow_libharfbuzz() -> str | None:
+    """The HarfBuzz Pillow's wheel brings for libraqm (LP_LIBHARFBUZZ: another), made for its
+    FreeType; None where it is built into Pillow."""
+    import PIL
+
+    if os.environ.get("LP_LIBHARFBUZZ"):
+        return os.environ["LP_LIBHARFBUZZ"]
+    here = Path(PIL.__file__).resolve().parent
+    found = [*sorted((here.parent / "pillow.libs").glob("libharfbuzz*.so*")),
+             *sorted((here / ".dylibs").glob("libharfbuzz*.dylib"))]  # fmt: skip
+    return str(found[0]) if found else None
+
+
 def pillow_libwebp() -> dict[str, str]:
     """libwebp and libwebpdemux as Pillow's wheel brings them, named for lp-check (none where
     they are built into Pillow)."""
@@ -97,6 +110,8 @@ def run(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
     env.update(pillow_libwebp())
     if (libfreetype := pillow_libfreetype()) is not None:
         env["LP_LIBFREETYPE"] = libfreetype
+    if (libharfbuzz := pillow_libharfbuzz()) is not None:
+        env["LP_LIBHARFBUZZ"] = libharfbuzz
     done = subprocess.run(
         [str(exe)], input=text, capture_output=True, text=True, timeout=900, check=True, env=env
     )

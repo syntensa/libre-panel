@@ -1,6 +1,7 @@
 """rust/text against Pillow (docs/RUST.md, stage R2): fonts opened, measured and drawn as
-Pillow 13.0's FreeTypeFont does it with its basic layout, and ImageDraw's text, textbbox and
-textlength on top, byte for byte, with the FreeType Pillow's wheel brings."""
+Pillow 13.0's FreeTypeFont does it, with its basic layout and with libraqm's (shaped by
+HarfBuzz, ordered by FriBiDi), and ImageDraw's text, textbbox and textlength on top, byte for
+byte, with the FreeType and the HarfBuzz Pillow's wheel brings."""
 
 from __future__ import annotations
 
@@ -11,11 +12,14 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from PIL import Image, ImageDraw, ImageFont
-from rust_check import pillow_libfreetype, run
+from PIL import Image, ImageDraw, ImageFont, features
+from rust_check import pillow_libfreetype, pillow_libharfbuzz, run
 
 ROOT = Path(__file__).resolve().parent.parent
 BASIC = ImageFont.Layout.BASIC
+LAYOUT = {"basic": BASIC, "raqm": ImageFont.Layout.RAQM}
+# libraqm's layout where Pillow has it here (FriBiDi found) and lp-check its HarfBuzz
+LAYOUTS = ["basic"] + (["raqm"] if features.check("raqm") and pillow_libharfbuzz() else [])
 BUNDLED = sorted((ROOT / "src" / "libre_panel" / "fonts").glob("*.ttf"))
 # fonts of other kinds where the system has them: OpenType (CFF), a collection's second face,
 # Type 1, CJK, a font of bitmaps in colour (one size only)
@@ -48,6 +52,34 @@ WORDS = [
     "trail  ",
 ]
 LINES = ["line one\nline two", "a\nbb\nccc ddd eee", "Wo rd s\nj u s t i f y\nend", "x\n\ny"]
+# what libraqm shapes and orders: joined and right-to-left scripts, both directions in one
+# text, marks, paired brackets, the scripts of India and Thailand, ligatures, controls
+SHAPED = [
+    "مرحبا بالعالم",
+    "שלום עולם",
+    "abc אבג 123 def",
+    "(مرحبا) [test] {x}",
+    "«שלום» (abc)",
+    "नमस्ते दुनिया",
+    "สวัสดีครับ",
+    "office ffi fl",
+    "e\u0301 a\u0308 n\u0303",
+    "1 + 2 = ٣",
+    "ABC\u202edef\u202c",
+    "x\u200dy",
+    "١٢٣ 456",
+    "ﻻ لا",
+    "(((((",
+    ")))a((",
+    "a\u00a0b",
+]
+SHAPED_LINES = ["مرحبا\nبالعالم", "abc אבג\n123", "नमस्ते\nदुनिया"]
+SHAPING_FONTS = [
+    ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 0),
+    ("/usr/share/fonts/truetype/freefont/FreeSerif.ttf", 0),
+    ("/usr/share/fonts/opentype/tlwg/Loma.otf", 0),
+    ("/usr/share/fonts/opentype/unifont/unifont.otf", 0),
+]
 ANCHORS = [
     None,
     "la",
@@ -105,19 +137,16 @@ def _pillow(font: ImageFont.FreeTypeFont, c: dict[str, Any]) -> dict[str, Any]:
     try:
         fn, text, mode = c["fn"], c["text"], c.get("mode", "")
         stroke = c.get("stroke_width", 0)
+        how = {key: c.get(key) for key in ("direction", "features", "language")}
         if fn == "getlength":
-            return {"length": font.getlength(text, mode)}
+            return {"length": font.getlength(text, mode, *how.values())}
         if fn == "getbbox":
-            return {
-                "box": list(font.getbbox(text, mode, None, None, None, stroke, c.get("anchor")))
-            }
+            return {"box": list(font.getbbox(text, mode, *how.values(), stroke, c.get("anchor")))}
         if fn == "getmask2":
             im, offset = font.getmask2(
                 text,
                 mode,
-                None,
-                None,
-                None,
+                *how.values(),
                 stroke,
                 c.get("anchor"),
                 c.get("ink", 0),
@@ -131,6 +160,7 @@ def _pillow(font: ImageFont.FreeTypeFont, c: dict[str, Any]) -> dict[str, Any]:
             "spacing": c.get("spacing", 4),
             "align": c.get("align", "left"),
             "embedded_color": c.get("embedded_color", False),
+            **how,
         }
         if fn == "draw":
             v = c["image"]
@@ -153,26 +183,28 @@ def _pillow(font: ImageFont.FreeTypeFont, c: dict[str, Any]) -> dict[str, Any]:
                     draw.textbbox(tuple(c["xy"]), text, font=font, stroke_width=stroke, **options)
                 )
             }
-        return {
-            "length": draw.textlength(text, font=font, embedded_color=options["embedded_color"])
-        }
-    except (OSError, ValueError, KeyError) as error:
+        options.pop("anchor"), options.pop("spacing"), options.pop("align")
+        return {"length": draw.textlength(text, font=font, **options)}
+    except (OSError, ValueError, KeyError, RuntimeError) as error:
         return {"error": str(error)}
 
 
-def _compare(path: str, size: float, calls: list[dict[str, Any]], index: int = 0) -> None:
-    font = ImageFont.truetype(path, size, index, layout_engine=BASIC)
+def _compare(
+    path: str, size: float, calls: list[dict[str, Any]], index: int = 0, layout: str = "basic"
+) -> None:
+    font = ImageFont.truetype(path, size, index, layout_engine=LAYOUT[layout])
     [ours] = run(
         [
             {
                 "op": "font",
                 "digest": True,
                 "calls": calls,
-                "font": {"path": path, "size": size, "index": index, "layout": "basic"},
+                "font": {"path": path, "size": size, "index": index, "layout": layout},
             }
         ]
     )
-    where = f"{Path(path).name}[{index}] at {size}"
+    where = f"{Path(path).name}[{index}] at {size}, {layout}"
+    assert ours.get("layout", "").lower() == layout, where
     assert ours.get("name") == list(font.getname()), where
     assert ours["metrics"] == list(font.getmetrics()), where
     assert (ours["height"], ours["ppem"], ours["glyphs"]) == (
@@ -188,7 +220,8 @@ def _compare(path: str, size: float, calls: list[dict[str, Any]], index: int = 0
             assert mine == theirs, (where, {k: v for k, v in c.items() if k != "image"})
 
 
-def test_fonts_are_measured_and_drawn_as_pillow_does_it() -> None:
+@pytest.mark.parametrize("layout", LAYOUTS)
+def test_fonts_are_measured_and_drawn_as_pillow_does_it(layout: str) -> None:
     rng = random.Random(0x7E47)
     for path, index in _fonts():
         for size in rng.sample([8, 9.5, 11, 12, 13.3, 16, 18, 22.7, 24, 32, 40, 48, 64, 97], 3):
@@ -206,10 +239,11 @@ def test_fonts_are_measured_and_drawn_as_pillow_does_it() -> None:
                     c["stroke_filled"] = rng.random() < 0.5
                     c["start"] = [rng.choice([0, 0.25, 0.5, 0.75, -0.5]), rng.choice([0, 0.3])]
                 calls.append(c)
-            _compare(path, size, calls, index)
+            _compare(path, size, calls, index, layout)
 
 
-def test_text_is_drawn_and_its_box_and_length_are_as_imagedraw_s() -> None:
+@pytest.mark.parametrize("layout", LAYOUTS)
+def test_text_is_drawn_and_its_box_and_length_are_as_imagedraw_s(layout: str) -> None:
     rng = random.Random(0xD7A3)
     for path, index in _fonts():
         for size in rng.sample([9, 12, 13.3, 16, 22.7, 24, 32, 48], 2):
@@ -243,11 +277,55 @@ def test_text_is_drawn_and_its_box_and_length_are_as_imagedraw_s() -> None:
                     if c["fn"] == "textbbox" and rng.random() < 0.3:
                         c["stroke_width"] = rng.choice([1, 2.5])
                 calls.append(c)
-            _compare(path, size, calls, index)
+            _compare(path, size, calls, index, layout)
+
+
+@pytest.mark.skipif("raqm" not in LAYOUTS, reason="needs Pillow's libraqm (FriBiDi)")
+def test_scripts_are_shaped_and_ordered_as_libraqm_does_it() -> None:
+    rng = random.Random(0x5A9E)
+    fonts = [(path, index) for path, index in SHAPING_FONTS if Path(path).is_file()]
+    fonts += [(str(path), 0) for path in BUNDLED[:3]]
+    for path, index in fonts:
+        for size in rng.sample([9, 12, 13.3, 16, 22.7, 32, 48], 2):
+            calls = []
+            for _ in range(40):
+                c: dict[str, Any] = {
+                    "fn": rng.choice(["getlength", "getbbox", "getmask2", "draw", "textbbox"]),
+                    "text": rng.choice(SHAPED + WORDS[:6]),
+                    "mode": rng.choice(["", "L", "1"]),
+                }
+                pick = rng.random()
+                if pick < 0.15:
+                    c["direction"] = rng.choice(["rtl", "ltr", "ttb"])
+                elif pick < 0.25:
+                    c["features"] = rng.choice(
+                        [["-kern"], ["+smcp"], ["liga=0"], ["-liga", "+dlig"]]
+                    )
+                elif pick < 0.32:
+                    c["language"] = rng.choice(["tr", "ar", "sr", "ja", "zh-Hans"])
+                if c["fn"] in ("getbbox", "getmask2", "draw", "textbbox"):
+                    c["anchor"] = rng.choice([None, "la", "ls", "mm", "rd", "lt", "mt", "rb"])
+                    c["stroke_width"] = rng.choice([0, 0, 1, 1.5])
+                if c["fn"] == "getmask2":
+                    c["stroke_filled"] = rng.random() < 0.5
+                    c["start"] = [rng.choice([0, 0.5, -0.25]), rng.choice([0, 0.3])]
+                if c["fn"] in ("draw", "textbbox"):
+                    c["text"] = rng.choice(SHAPED + SHAPED_LINES)
+                    c["xy"] = [rng.choice([0, 20, 40.5]), rng.choice([0, 15, 30.5])]
+                    c["align"] = rng.choice(["left", "center", "right", "justify"])
+                    c.pop("mode")
+                if c["fn"] == "draw":
+                    mode = rng.choice(["L", "RGB", "RGBA"])
+                    base = Image.frombytes(mode, (160, 80), rng.randbytes(160 * 80 * len(mode)))
+                    c["image"] = _image(base)
+                    c["fill"] = [rng.randrange(256) for _ in mode]
+                calls.append(c)
+            _compare(path, size, calls, index, "raqm")
 
 
 @pytest.mark.skipif(not EMOJI.is_file(), reason="needs Noto Color Emoji")
-def test_colour_glyphs_are_drawn_in_their_own_colours_as_pillow_draws_them() -> None:
+@pytest.mark.parametrize("layout", LAYOUTS)
+def test_colour_glyphs_are_drawn_in_their_own_colours_as_pillow_draws_them(layout: str) -> None:
     rng = random.Random(0xE30)
     calls = []
     for text in ["😀", "🎮🔥", "A😀B", "👍🏽", "❤️", "x"]:
@@ -279,7 +357,7 @@ def test_colour_glyphs_are_drawn_in_their_own_colours_as_pillow_draws_them() -> 
                 "image": _image(Image.new("L", (200, 140))),
             }
         )
-    _compare(str(EMOJI), 109, calls)
+    _compare(str(EMOJI), 109, calls, layout=layout)
 
 
 def test_fonts_are_refused_where_pillow_refuses_them(tmp_path: Path) -> None:
@@ -318,3 +396,18 @@ def test_fonts_are_refused_where_pillow_refuses_them(tmp_path: Path) -> None:
         ]
     )
     assert {r["kind"] for r in ours["results"]} == {"Key"}
+
+
+@pytest.mark.skipif("raqm" not in LAYOUTS, reason="needs Pillow's libraqm (FriBiDi)")
+def test_libraqm_s_refusals_and_the_default_layout_are_pillow_s() -> None:
+    calls = [
+        {"fn": "getlength", "text": "two\rparagraphs"},  # (RuntimeError: one paragraph only)
+        {"fn": "getlength", "text": "x\u2029y"},
+        {"fn": "getlength", "text": "x", "direction": "up"},
+        {"fn": "getbbox", "text": "x", "features": ["not a feature"]},
+    ]
+    _compare(str(BUNDLED[0]), 12, calls, layout="raqm")
+    # a font opened without a layout has Pillow's: libraqm's, where it has it
+    [ours] = run([{"op": "font", "font": {"path": str(BUNDLED[0]), "size": 12}, "calls": []}])
+    default = ImageFont.truetype(str(BUNDLED[0]), 12).layout_engine
+    assert ours["layout"].lower() == {BASIC: "basic"}.get(default, "raqm")

@@ -9,8 +9,11 @@
 //! FreeType itself stays FreeType (a library of C, loaded where the app runs: [`ft`]).
 
 mod ft;
+mod raqm;
 mod render;
 pub mod text;
+
+pub use raqm::set_locale_from_environment;
 
 use std::ffi::{c_int, c_ulong, CStr};
 use std::fmt;
@@ -33,6 +36,8 @@ pub enum Kind {
     Key,
     /// DecompressionBombError: a mask larger than Pillow makes
     Bomb,
+    /// RuntimeError: a text libraqm cannot lay out (more than one paragraph)
+    Runtime,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -77,10 +82,15 @@ pub enum Layout {
     Raqm,
 }
 
-/// core.HAVE_RAQM: whether text can be laid out as libraqm lays it out (not yet in Rust: the
-/// faces lay text out as Pillow does without it).
+/// core.HAVE_RAQM: whether text can be laid out as libraqm lays it out (HarfBuzz and FriBiDi
+/// found where the app runs).
 pub fn have_raqm() -> bool {
-    false
+    raqm::available()
+}
+
+/// The HarfBuzz that shapes the text, where there is one.
+pub fn harfbuzz_version() -> Option<String> {
+    raqm::harfbuzz_version()
 }
 
 /// The FreeType that draws the letters: (major, minor, patch).
@@ -97,7 +107,7 @@ pub(crate) struct GlyphInfo {
     pub x_advance: i32,
     pub y_offset: i32,
     pub y_advance: i32,
-    #[allow(dead_code)] // (the character a glyph is of: libraqm's clusters)
+    #[allow(dead_code)] // (the character a glyph is of; libraqm's clusters, as Pillow keeps them)
     pub cluster: u32,
 }
 
@@ -338,7 +348,10 @@ impl Font {
         features: Option<&[String]>,
         language: Option<&str>,
     ) -> Result<Vec<GlyphInfo>> {
-        self.layout_basic(text, mode, direction, features, language)
+        match self.layout {
+            Layout::Raqm => raqm::layout(self.face, text, direction, features, language),
+            Layout::Basic => self.layout_basic(text, mode, direction, features, language),
+        }
     }
 
     /// text_layout_fallback: each character's glyph with FreeType's advance at this size; the

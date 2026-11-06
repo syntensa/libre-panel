@@ -153,9 +153,13 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       stroker, filled as ImageDraw has it), colour glyphs unpremultiplied
 - [x] Pillow's text drawing on top: ImageText's lines, anchors, alignment (justify too) and
       spacing, textbbox, textlength, the stroke in its own ink, embedded colours
-- [ ] the layout shaped and reordered as libraqm 0.11 does it (HarfBuzz's shaping, FriBiDi's
-      order): Pillow's own on Linux, where FriBiDi is there (Windows' Pillow finds none and
-      lays out as above)
+- [x] the layout shaped and reordered as libraqm 0.11 does it, Pillow's on Linux where
+      FriBiDi is (Windows' Pillow finds none and lays out as above): FriBiDi's levels and
+      raqm's reordering of the runs, its scripts (common and inherited characters, paired
+      brackets), HarfBuzz's shaping of each run with the direction, features and language;
+      HarfBuzz and FriBiDi stay libraries (Pillow's HarfBuzz, made for its FreeType). The
+      language of a text without one is HarfBuzz's default, the locale's: the Rust app sets
+      it from the environment when it starts, as Python does
 - [ ] fonts/fallback: the fallback chains, emoji and symbols
 - [ ] the comparisons on Windows: a FreeType 2.14.3 built as Pillow builds its own (zlib,
       libpng, HarfBuzz and Brotli in it), for lp-check to load
