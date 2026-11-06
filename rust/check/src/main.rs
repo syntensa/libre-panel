@@ -651,6 +651,55 @@ fn run(case: &Value) -> Result<Value, String> {
             }
         }
         "font" => font_case(case),
+        "coverage" => {
+            let path = case["path"].as_str().unwrap_or_default();
+            let index = case["index"].as_i64().unwrap_or(0);
+            match lp_text::fallback::coverage(std::path::Path::new(path), index) {
+                None => json!({"coverage": null}),
+                Some(c) => {
+                    let codes = ints(&case["codes"])?;
+                    let has: Vec<bool> =
+                        codes.iter().map(|&code| c.contains(code as u32)).collect();
+                    json!({"coverage": {"outlines": c.outlines, "len": c.len(), "has": has}})
+                }
+            }
+        }
+        "unicode" => {
+            let sum = Sha256::digest(lp_text::fallback::unicode_table().as_bytes());
+            let hex: String = sum.iter().map(|b| format!("{b:02x}")).collect();
+            json!({"sha256": hex})
+        }
+        "discover" => {
+            let language = case["language"].as_str().unwrap_or_default().to_string();
+            let found = lp_text::fallback::discover(
+                case["windows"].as_bool().unwrap_or(false),
+                case["windir"].as_str(),
+                Box::new(move || language.clone()),
+            );
+            let mut scripts: Vec<(&String, &Vec<lp_text::fallback::Entry>)> =
+                found.scripts.iter().collect();
+            scripts.sort();
+            json!({"fonts": found.fonts, "scripts": scripts, "variant": found.variant()})
+        }
+        "fontconfig" => {
+            let language = case["language"].as_str().unwrap_or_default();
+            let answers: Vec<Value> = case["text"]
+                .as_str()
+                .unwrap_or_default()
+                .chars()
+                .map(|ch| {
+                    match lp_text::fallback::fontconfig(
+                        ch,
+                        case["bold"].as_bool().unwrap_or(false),
+                        language,
+                    ) {
+                        Ok(found) => json!(found),
+                        Err(e) => json!({"error": e}),
+                    }
+                })
+                .collect();
+            json!({"answers": answers})
+        }
         other => return Err(format!("no op {other}")),
     })
 }
@@ -704,23 +753,67 @@ fn font_case(case: &Value) -> Value {
     };
     let digest = case["digest"].as_bool().unwrap_or(false);
     let calls = case["calls"].as_array().cloned().unwrap_or_default();
-    let results: Vec<Value> = calls
-        .iter()
-        .map(|c| font_call(&font, c, digest).unwrap_or_else(text_error))
-        .collect();
     let (family, style) = font.getname();
-    json!({
+    let mut answer = json!({
         "layout": format!("{:?}", font.layout()),
         "name": [family, style],
         "metrics": font.getmetrics(),
         "height": font.height(),
         "ppem": font.ppem(),
         "glyphs": font.glyphs(),
-        "results": results,
-    })
+    });
+    let results: Vec<Value> = if case["fallbacks"].is_object() {
+        let face = lp_text::fallback::FallbackFont::new(
+            font,
+            Some(std::sync::Arc::new(chain_of(&case["fallbacks"]))),
+        );
+        calls
+            .iter()
+            .map(|c| font_call(&face, c, digest).unwrap_or_else(text_error))
+            .collect()
+    } else {
+        calls
+            .iter()
+            .map(|c| font_call(&font, c, digest).unwrap_or_else(text_error))
+            .collect()
+    };
+    answer["results"] = json!(results);
+    answer
 }
 
-fn font_call(font: &lp_text::Font, c: &Value, digest: bool) -> Result<Value, lp_text::Error> {
+/// A chain of fonts to fall back to: {"fonts": [[regular, bold or null, index]], "scripts":
+/// {"ja": [...]}, "language": "ja"} (no system query: what the tests set).
+fn chain_of(v: &Value) -> lp_text::fallback::Fallbacks {
+    let entries = |v: &Value| -> Vec<lp_text::fallback::Entry> {
+        v.as_array()
+            .map(|a| {
+                a.iter()
+                    .map(|e| {
+                        (
+                            e[0].as_str().unwrap_or_default().to_string(),
+                            e[1].as_str().map(str::to_string),
+                            e[2].as_i64().unwrap_or(0),
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let scripts = v["scripts"]
+        .as_object()
+        .map(|o| o.iter().map(|(k, e)| (k.clone(), entries(e))).collect())
+        .unwrap_or_default();
+    let language = v["language"].as_str().map(str::to_string);
+    let language: Option<Box<dyn Fn() -> String + Send + Sync>> =
+        language.map(|l| Box::new(move || l.clone()) as Box<dyn Fn() -> String + Send + Sync>);
+    lp_text::fallback::Fallbacks::new(entries(&v["fonts"]), None, language, scripts)
+}
+
+fn font_call<F: lp_text::text::TextFace>(
+    font: &F,
+    c: &Value,
+    digest: bool,
+) -> Result<Value, lp_text::Error> {
     use lp_text::text::{draw, Text};
     let bad = |m: &str| lp_text::Error {
         kind: lp_text::Kind::Value,

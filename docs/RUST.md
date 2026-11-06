@@ -160,7 +160,11 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       HarfBuzz and FriBiDi stay libraries (Pillow's HarfBuzz, made for its FreeType). The
       language of a text without one is HarfBuzz's default, the locale's: the Rust app sets
       it from the environment when it starts, as Python does
-- [ ] fonts/fallback: the fallback chains, emoji and symbols
+- [x] fonts/fallback: what a font covers, read from its cmap as the app reads it (broken
+      tables too), the system's chains (Windows' table, the folders and fontconfig elsewhere,
+      the East Asian fonts of the app's language first), the faces that draw what their file
+      lacks in runs on its baseline; Pillow's truetype with its search of the font folders.
+      Python's Unicode database is the release's (3.12: Unicode 15.0), the crates pinned to it
 - [ ] the comparisons on Windows: a FreeType 2.14.3 built as Pillow builds its own (zlib,
       libpng, HarfBuzz and Brotli in it), for lp-check to load
 

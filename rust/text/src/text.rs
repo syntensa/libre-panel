@@ -369,8 +369,24 @@ pub fn draw<F: TextFace + ?Sized>(
     anchor: Option<&str>,
     align: &str,
 ) -> Result<()> {
-    let stroke_ink = (text.stroke_width != 0.0).then(|| stroke_ink.unwrap_or(ink));
     let fontmode = draw_fontmode(image.mode());
+    draw_in(image, xy, text, ink, stroke_ink, anchor, align, fontmode)
+}
+
+/// ImageDraw.text with the draw's fontmode set ("1": the letters hinted and drawn without
+/// their grey edges).
+#[allow(clippy::too_many_arguments)]
+pub fn draw_in<F: TextFace + ?Sized>(
+    image: &mut Image,
+    xy: (f64, f64),
+    text: &Text<'_, F>,
+    ink: [u8; 4],
+    stroke_ink: Option<[u8; 4]>,
+    anchor: Option<&str>,
+    align: &str,
+    fontmode: &str,
+) -> Result<()> {
+    let stroke_ink = (text.stroke_width != 0.0).then(|| stroke_ink.unwrap_or(ink));
     for line in text.split(xy, anchor, align)? {
         let mut draw_text = |ink: [u8; 4], stroke_width: f64| -> Result<()> {
             let mode = if stroke_width == 0.0 && text.embedded_color {

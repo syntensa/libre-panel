@@ -153,8 +153,8 @@ def _pillow(font: ImageFont.FreeTypeFont, c: dict[str, Any]) -> dict[str, Any]:
                 tuple(c.get("start", (0, 0))),
                 stroke_filled=c.get("stroke_filled", False),
             )
-            mask = Image.frombytes(im.mode, im.size, bytes(im)) if 0 not in im.size else None
-            return {"image": _digest(mask or Image.new(im.mode, im.size)), "offset": list(offset)}
+            mask = Image.new(im.mode, (1, 1))._new(im)  # (the core in an Image)
+            return {"image": _digest(mask), "offset": list(offset)}
         options = {
             "anchor": c.get("anchor"),
             "spacing": c.get("spacing", 4),
@@ -230,7 +230,7 @@ def test_fonts_are_measured_and_drawn_as_pillow_does_it(layout: str) -> None:
                 c: dict[str, Any] = {
                     "fn": rng.choice(["getlength", "getbbox", "getmask2"]),
                     "text": rng.choice(WORDS),
-                    "mode": rng.choice(["", "L", "1"]),
+                    "mode": rng.choice(["", "L", "1", "RGBA"]),
                 }
                 if c["fn"] != "getlength":
                     c["anchor"] = rng.choice(ANCHORS)
@@ -411,3 +411,214 @@ def test_libraqm_s_refusals_and_the_default_layout_are_pillow_s() -> None:
     [ours] = run([{"op": "font", "font": {"path": str(BUNDLED[0]), "size": 12}, "calls": []}])
     default = ImageFont.truetype(str(BUNDLED[0]), 12).layout_engine
     assert ours["layout"].lower() == {BASIC: "basic"}.get(default, "raqm")
+
+
+# -- fonts/fallback.py ---------------------------------------------------------------------------
+
+CHAIN = [
+    (
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        0,
+    ),
+    ("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc", None, 0),
+    (
+        "/usr/share/fonts/truetype/freefont/FreeSerif.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSerifBold.ttf",
+        0,
+    ),
+    (str(EMOJI), None, 0),  # (bitmaps only: never fallen back to)
+    ("/usr/share/fonts/opentype/unifont/unifont.otf", None, 0),
+]
+CHAIN_SCRIPTS = {"ja": [("/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf", None, 0)]}
+MIXED = [
+    "Hello",
+    "Привет мир",
+    "Γειά σου",
+    "中文 测试",
+    "日本語のテキスト",
+    "Grüße äöü",
+    "مرحبا بالعالم",
+    "שלום עולם",
+    "abc 中文 def",
+    " 中 ",
+    "áb",
+    "é ẍ",
+    "x 中 y",
+    "Ω≈∑ ★ ♫",
+    "A‍B",
+    "tab\there",
+    "́start",
+    "中́",
+    "x 😀 y",
+    "Łódź ŠŽ",
+    "x  中文  y",
+    "　中　",
+    "abc def",
+    "١٢٣ ٤",
+]
+
+
+def _chain_files() -> bool:
+    return all(Path(path).is_file() for path, _, _ in CHAIN + CHAIN_SCRIPTS["ja"])
+
+
+@pytest.mark.skipif(not _chain_files(), reason="needs the fonts of the chain")
+@pytest.mark.parametrize("layout", LAYOUTS)
+def test_faces_that_fall_back_draw_and_measure_as_fallback_py_s(layout: str) -> None:
+    from libre_panel.fonts.fallback import FallbackFont, Fallbacks
+
+    rng = random.Random(0xFA11)
+    for path in BUNDLED:
+        size = rng.choice([11, 13.3, 16, 22.7, 32])
+        language = rng.choice([None, "ja", "zh", "de"])
+        asked = None if language is None else (lambda named=language: named)
+        chain = Fallbacks(CHAIN, None, asked, CHAIN_SCRIPTS)
+        font = FallbackFont(str(path), size, layout_engine=LAYOUT[layout], chain=chain)
+        calls = []
+        for _ in range(30):
+            c: dict[str, Any] = {
+                "fn": rng.choice(
+                    ["getlength", "getbbox", "getmask2", "draw", "textbbox", "textlength"]
+                ),
+                "text": rng.choice(MIXED),
+            }
+            if c["fn"] in ("getlength", "getbbox", "getmask2"):
+                c["mode"] = rng.choice(["", "L", "1", "RGBA"])
+            if c["fn"] in ("getbbox", "getmask2", "draw", "textbbox"):
+                c["anchor"] = rng.choice(
+                    [None, "la", "ls", "lm", "mm", "ms", "rd", "ra", "lt", "xx"]
+                )
+                c["stroke_width"] = rng.choice([0, 0, 1, 1.5])
+            if c["fn"] == "getmask2":
+                c["stroke_filled"] = rng.random() < 0.5
+                c["start"] = [rng.choice([0, 0.5, -0.25]), rng.choice([0, 0.3])]
+            if c["fn"] in ("draw", "textbbox"):
+                c["xy"] = [rng.choice([0, 20, 40.5]), rng.choice([0, 15, 30.5])]
+            if c["fn"] == "draw":
+                mode = rng.choice(["L", "RGBA"])
+                c["image"] = _image(
+                    Image.frombytes(mode, (180, 70), rng.randbytes(180 * 70 * len(mode)))
+                )
+                c["fill"] = [rng.randrange(256) for _ in mode]
+            calls.append(c)
+        fallbacks = {
+            "fonts": [list(e) for e in CHAIN],
+            "language": language,
+            "scripts": {k: [list(e) for e in v] for k, v in CHAIN_SCRIPTS.items()},
+        }
+        [ours] = run(
+            [
+                {
+                    "op": "font",
+                    "digest": True,
+                    "calls": calls,
+                    "fallbacks": fallbacks,
+                    "font": {"path": str(path), "size": size, "layout": layout},
+                }
+            ]
+        )
+        for c, mine in zip(calls, ours["results"], strict=True):
+            theirs = _pillow(font, c)
+            where = (path.name, size, language, {k: v for k, v in c.items() if k != "image"})
+            if "error" in theirs:
+                assert mine.get("error") == theirs["error"], where
+            else:
+                assert mine == theirs, where
+
+
+def test_what_a_font_covers_is_read_as_fallback_py_reads_it(tmp_path: Path) -> None:
+    from libre_panel.fonts.fallback import coverage
+
+    fonts = [(str(p), 0) for p in BUNDLED] + [(p, i) for p, i in SYSTEM if Path(p).is_file()]
+    fonts += [(p, i) for p, _, i in CHAIN if Path(p).is_file()]
+    fonts += [
+        ("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc", 1),
+        ("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc", 7),
+    ]
+    # files that are no fonts, or broken ones: cut short anywhere, a collection's header alone
+    whole = BUNDLED[0].read_bytes()
+    for n, cut in enumerate([0, 3, 10, 100, 300, 1000, 5000, 20000, len(whole) - 7]):
+        broken = tmp_path / f"cut{n}.ttf"
+        broken.write_bytes(whole[:cut])
+        fonts.append((str(broken), 0))
+    for name, data in [
+        ("ttcf.ttc", b"ttcf\x00\x01\x00\x00\x00\x00\x00\x02"),
+        ("short.ttc", b"ttcf\x00\x01"),
+        ("noise.ttf", random.Random(5).randbytes(999)),
+    ]:
+        (tmp_path / name).write_bytes(data)
+        fonts.append((str(tmp_path / name), 0))
+    rng = random.Random(0xC0DE)
+    codes = sorted(
+        {
+            *range(0, 0x250),
+            *range(0x2000, 0x2070),
+            *range(0x4E00, 0x4E40),
+            *(rng.randrange(0x110000) for _ in range(400)),
+            0xFFFF,
+            0x1F600,
+            0x10FFFF,
+        }
+    )
+    answers = run([{"op": "coverage", "path": p, "index": i, "codes": codes} for p, i in fonts])
+    for (path, index), ours in zip(fonts, answers, strict=True):
+        theirs = coverage(path, index)
+        if theirs is None:
+            assert ours["coverage"] is None, (path, index)
+            continue
+        mine = ours["coverage"]
+        assert mine is not None, (path, index)
+        assert (mine["outlines"], mine["len"]) == (theirs.outlines, len(theirs)), (path, index)
+        assert mine["has"] == [code in theirs for code in codes], (path, index)
+
+
+@pytest.mark.skipif(
+    __import__("unicodedata").unidata_version != "15.0.0",
+    reason="the tables are Unicode 15.0's, as the release's Python (3.12) has them",
+)
+def test_the_unicode_tables_are_those_of_the_release_s_python() -> None:
+    import unicodedata
+
+    follows = {"Mn", "Mc", "Me", "Cf", "Zs", "Zl", "Zp", "Cc"}
+    lines = []
+    for code in range(0x110000):
+        if 0xD800 <= code <= 0xDFFF:
+            continue
+        kind = unicodedata.category(chr(code))
+        parts = unicodedata.normalize("NFD", chr(code))
+        if kind in follows or parts != chr(code):
+            kind = kind if kind in follows else "-"
+            lines.append(f"{code:04X} {kind} {','.join(f'{ord(p):04X}' for p in parts)}\n")
+    [ours] = run([{"op": "unicode"}])
+    assert ours["sha256"] == hashlib.sha256("".join(lines).encode()).hexdigest()
+
+
+def test_system_fonts_are_found_as_discover_finds_them(tmp_path: Path) -> None:
+    from libre_panel import i18n
+    from libre_panel.fonts.fallback import _fontconfig, discover
+
+    # Windows: its font folder, here a made one with some of the table's files
+    fonts = tmp_path / "Fonts"
+    fonts.mkdir()
+    for name in ("segoeui.ttf", "segoeuib.ttf", "msyh.ttc", "YuGothR.ttc", "arial.ttf"):
+        (fonts / name).write_bytes(b"")
+    cases = [(True, str(tmp_path)), (False, None)]
+    answers = run(
+        [
+            {"op": "discover", "windows": w, "windir": d, "language": i18n.language()}
+            for w, d in cases
+        ]
+    )
+    for (windows, windir), ours in zip(cases, answers, strict=True):
+        environ = {"WINDIR": windir} if windir else dict(__import__("os").environ)
+        theirs = discover("win32" if windows else "linux", environ)
+        assert [tuple(e) for e in ours["fonts"]] == theirs.fonts, windows
+        assert {k: [tuple(e) for e in v] for k, v in ours["scripts"]} == theirs.scripts, windows
+    # fontconfig's answers, where it is there (an ideograph with the app's language too)
+    for bold in (False, True):
+        [ours] = run(
+            [{"op": "fontconfig", "text": "A中ω😀", "bold": bold, "language": i18n.language()}]
+        )
+        theirs = [_fontconfig(ch, bold) for ch in "A中ω😀"]
+        assert [[tuple(f) for f in a] for a in ours["answers"]] == theirs

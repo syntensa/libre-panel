@@ -8,6 +8,7 @@
 //!
 //! FreeType itself stays FreeType (a library of C, loaded where the app runs: [`ft`]).
 
+pub mod fallback;
 mod ft;
 mod raqm;
 mod render;
@@ -291,6 +292,10 @@ impl Font {
 
     pub fn layout(&self) -> Layout {
         self.layout
+    }
+
+    pub fn encoding(&self) -> &str {
+        &self.encoding
     }
 
     /// The file the font was opened from (None for one made of bytes).
@@ -619,6 +624,119 @@ impl Font {
             },
         )
     }
+}
+
+/// ImageFont.truetype: the font of the file; where FreeType cannot open it, the first font of
+/// that name in the system's font folders (Pillow's search, folder by folder as os.walk goes).
+pub fn truetype(
+    path: impl AsRef<Path>,
+    size: f64,
+    index: i64,
+    encoding: &str,
+    layout: Option<Layout>,
+) -> Result<Font> {
+    let path = path.as_ref();
+    let refused = match Font::open(path, size, index, encoding, layout) {
+        Err(e) if e.kind == Kind::Os => e,
+        other => return other,
+    };
+    let text = path.to_string_lossy();
+    let name = text
+        .rsplit(|c| c == '/' || (cfg!(windows) && c == '\\'))
+        .next()
+        .unwrap_or_default()
+        .to_string();
+    let (stem, ext) = split_ext(&name);
+    let mut first_other: Option<PathBuf> = None;
+    for dir in font_dirs() {
+        let mut found = None;
+        walk(&dir, &mut |file: &Path| {
+            let Some(file_name) = file.file_name().map(|n| n.to_string_lossy().into_owned()) else {
+                return false;
+            };
+            if !ext.is_empty() && file_name == name {
+                found = Some(file.to_path_buf());
+                return true;
+            }
+            if ext.is_empty() && split_ext(&file_name).0 == stem && stem == name {
+                if split_ext(&file_name).1 == ".ttf" {
+                    found = Some(file.to_path_buf());
+                    return true;
+                }
+                if first_other.is_none() {
+                    first_other = Some(file.to_path_buf());
+                }
+            }
+            false
+        });
+        if let Some(found) = found {
+            return Font::open(found, size, index, encoding, layout);
+        }
+    }
+    match first_other {
+        Some(other) => Font::open(other, size, index, encoding, layout),
+        None => Err(refused),
+    }
+}
+
+/// os.path.splitext: (the name before its last dot, the dot and what follows), leading dots
+/// not counted.
+fn split_ext(name: &str) -> (&str, &str) {
+    let skip = name.len() - name.trim_start_matches('.').len();
+    match name[skip..].rfind('.') {
+        Some(at) => name.split_at(skip + at),
+        None => (name, ""),
+    }
+}
+
+/// The folders Pillow's truetype looks in for a font it could not open.
+fn font_dirs() -> Vec<PathBuf> {
+    let var = |key: &str| std::env::var(key).ok().filter(|v| !v.is_empty());
+    if cfg!(windows) {
+        return var("WINDIR")
+            .map(|w| PathBuf::from(w).join("fonts"))
+            .into_iter()
+            .collect();
+    }
+    if cfg!(target_os = "macos") {
+        let home = var("HOME").unwrap_or_default();
+        return vec![
+            PathBuf::from("/Library/Fonts"),
+            PathBuf::from("/System/Library/Fonts"),
+            PathBuf::from(home).join("Library/Fonts"),
+        ];
+    }
+    let home = var("HOME").unwrap_or_default();
+    let data_home = var("XDG_DATA_HOME").unwrap_or_else(|| format!("{home}/.local/share"));
+    let data_dirs = var("XDG_DATA_DIRS").unwrap_or_else(|| "/usr/local/share:/usr/share".into());
+    std::iter::once(data_home.as_str())
+        .chain(data_dirs.split(':'))
+        .map(|d| PathBuf::from(d).join("fonts"))
+        .collect()
+}
+
+/// os.walk from the top down: a folder's files in the order the system lists them, then its
+/// folders (not those that are links); `visit` says when to stop.
+fn walk(dir: &Path, visit: &mut dyn FnMut(&Path) -> bool) -> bool {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    let mut dirs = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            dirs.push(path);
+        } else if visit(&path) {
+            return true;
+        }
+    }
+    for sub in dirs {
+        let link = std::fs::symlink_metadata(&sub).is_ok_and(|m| m.file_type().is_symlink());
+        if !link && walk(&sub, visit) {
+            return true;
+        }
+    }
+    false
 }
 
 /// _string_length_check.

@@ -11,3 +11,6 @@ publish.workspace = true
 lp-pixels = { path = "../pixels" }
 # (FreeType, loaded where the app runs: ft.rs)
 libloading = "0.8"
+# (Unicode 15.0, as Python 3.12's unicodedata has it, the release's: fallback.rs)
+unicode-general-category = "=0.6.0"
+unicode-normalization = { version = "=0.1.22", default-features = false, features = ["std"] }
