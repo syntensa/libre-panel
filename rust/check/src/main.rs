@@ -757,6 +757,52 @@ fn run(case: &Value) -> Result<Value, String> {
             }
             answer
         }
+        "json" => {
+            // each text read as json.loads reads it, and written back as json.dumps writes
+            let ways = [
+                lp_py::json::Dumps::default(),
+                lp_py::json::Dumps::file(2),
+                lp_py::json::Dumps {
+                    sort_keys: true,
+                    ensure_ascii: false,
+                    ..Default::default()
+                },
+                lp_py::json::Dumps {
+                    separators: Some((",".into(), ":".into())),
+                    ..Default::default()
+                },
+            ];
+            let results: Vec<Value> = case["texts"]
+                .as_array()
+                .ok_or("texts")?
+                .iter()
+                .map(|t| match lp_py::json::loads(t.as_str().unwrap_or_default()) {
+                    Ok(v) => json!({
+                        "repr": v.repr(),
+                        "dumps": ways.iter().map(|w| lp_py::json::dumps(&v, w)).collect::<Vec<_>>(),
+                    }),
+                    Err(e) => json!({"error": e.to_string(), "kind": match e.kind {
+                        lp_py::json::ErrorKind::Decode { .. } => "decode",
+                        lp_py::json::ErrorKind::Value => "value",
+                        lp_py::json::ErrorKind::Recursion => "recursion",
+                    }}),
+                })
+                .collect();
+            // repr() of floats given by their bits
+            let floats: Vec<String> = case["floats"]
+                .as_array()
+                .map(|all| {
+                    all.iter()
+                        .map(|b| {
+                            let bits =
+                                u64::from_str_radix(b.as_str().unwrap_or("0"), 16).unwrap_or(0);
+                            lp_py::float_repr(f64::from_bits(bits))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            json!({"results": results, "floats": floats, "max_depth": lp_py::json::MAX_DEPTH})
+        }
         "unicode" => {
             let sum = Sha256::digest(lp_text::fallback::unicode_table().as_bytes());
             let hex: String = sum.iter().map(|b| format!("{b:02x}")).collect();

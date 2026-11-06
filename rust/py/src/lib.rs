@@ -7,6 +7,11 @@
 
 use unicode_general_category::{get_general_category, GeneralCategory as G};
 
+pub mod json;
+pub mod value;
+
+pub use value::{Dict, Value};
+
 /// str.isspace (and the regular expressions' \s) for one character.
 pub fn isspace(ch: char) -> bool {
     matches!(ch, '\t'..='\r' | '\x1c'..='\x1f' | ' ' | '\u{85}' | '\u{a0}' | '\u{1680}'
@@ -89,6 +94,93 @@ pub fn repr(text: &str) -> String {
 /// round() of a float: to the nearest whole number, halves to the even one.
 pub fn round(x: f64) -> f64 {
     x.round_ties_even()
+}
+
+/// Of the numbers of as many digits as `digits` that read back as `x` (x > 0, its value
+/// 0.<digits> times ten to the power of `point`), the one Python's repr takes: the nearest to
+/// x, and of two as near the one that ends in an even digit (Rust's own can be the other:
+/// 1853594818928005.25 is 1853594818928005.2 to Python and .3 to Rust).
+fn nearest(x: f64, digits: &str, point: i32) -> String {
+    use num_bigint::BigInt;
+    use num_traits::{One, Signed, Zero};
+    if x == 0.0 {
+        return digits.to_string();
+    }
+    let n = digits.len() as u32;
+    let here: BigInt = digits.parse().expect("digits");
+    let ten_power = |k: i32| BigInt::from(10u32).pow(k.max(0) as u32);
+    // x exactly: m times 2 to the power of e
+    let bits = x.to_bits();
+    let (biased, fraction) = ((bits >> 52) as i32, bits & ((1 << 52) - 1));
+    let (m, e) = if biased == 0 {
+        (fraction, -1074)
+    } else {
+        (fraction | (1 << 52), biased - 1075)
+    };
+    let q = point - n as i32; // a candidate is c times 10 to the power of q
+                              // both as whole numbers over one denominator, 10^-q 2^-e where those are below 0
+    let exact = (BigInt::from(m) * ten_power(-q)) << e.max(0) as usize;
+    let scaled = |c: &BigInt| (c * ten_power(q)) << (-e).max(0) as usize;
+    let (low, high) = (ten_power(n as i32 - 1), ten_power(n as i32));
+    let mut best: Option<(BigInt, BigInt)> = None;
+    for c in [&here - BigInt::one(), here.clone(), &here + BigInt::one()] {
+        if c < low || c >= high || format!("{c}e{q}").parse::<f64>() != Ok(x) {
+            continue;
+        }
+        let distance = (scaled(&c) - &exact).abs();
+        let better = match &best {
+            None => true,
+            Some((_, d)) => distance < *d || (distance == *d && (&c % 2u32).is_zero()),
+        };
+        if better {
+            best = Some((c, distance));
+        }
+    }
+    best.map_or_else(|| digits.to_string(), |(c, _)| c.to_string())
+}
+
+/// repr() of a float: the fewest digits that read back as it, the nearest of them (nearest),
+/// laid out as Python lays them out: in full from 1e-4 up to below 1e16 (`0.0001`, `100.0`), with an
+/// exponent beyond (`1e-05`, `1e+16`, `1.5e+300`); `inf`, `-inf`, `nan`.
+pub fn float_repr(x: f64) -> String {
+    if x.is_nan() {
+        return "nan".into();
+    }
+    if x.is_infinite() {
+        return if x > 0.0 { "inf" } else { "-inf" }.into();
+    }
+    let shortest = format!("{x:e}"); // d.ddde±x, the fewest digits
+    let (mantissa, exponent) = shortest.split_once('e').expect("an exponent");
+    let digits: String = mantissa.chars().filter(char::is_ascii_digit).collect();
+    // the value is 0.<digits> times ten to the power of point
+    let point = exponent.parse::<i32>().expect("a whole exponent") + 1;
+    let digits = nearest(x.abs(), &digits, point);
+    let mut out = String::from(if mantissa.starts_with('-') { "-" } else { "" });
+    if point <= -4 || point > 16 {
+        out.push_str(&digits[..1]);
+        if digits.len() > 1 {
+            out.push('.');
+            out.push_str(&digits[1..]);
+        }
+        let e = point - 1;
+        out.push_str(&format!("e{}{:02}", if e < 0 { '-' } else { '+' }, e.abs()));
+    } else if point <= 0 {
+        out.push_str("0.");
+        out.push_str(&"0".repeat(point.unsigned_abs() as usize));
+        out.push_str(&digits);
+    } else {
+        let whole = point as usize;
+        if digits.len() <= whole {
+            out.push_str(&digits);
+            out.push_str(&"0".repeat(whole - digits.len()));
+            out.push_str(".0");
+        } else {
+            out.push_str(&digits[..whole]);
+            out.push('.');
+            out.push_str(&digits[whole..]);
+        }
+    }
+    out
 }
 
 /// `a / b` of two ints: the float nearest the exact quotient (halfway: the even one), as

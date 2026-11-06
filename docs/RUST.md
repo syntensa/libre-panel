@@ -66,7 +66,7 @@ all of it. It is the reference every Rust piece is checked against:
 
 | Crate | What it is | Python it replaces |
 |---|---|---|
-| py | what Python does that the app's files and messages depend on: str's repr, white space, digits, lower() and upper(), rounding, the division of ints (Unicode 15.0, the release's) | — (Python's own rules) |
+| py | what Python does that the app's files and messages depend on: its values (ints of any size, dicts in order, ==), repr(), json, str's white space, digits, lower() and upper(), rounding, the division of ints (Python 3.12, Unicode 15.0: the release's) | — (Python's own rules) |
 | pixels | Pillow's operations as Libre Panel uses them, to the bit | Pillow, numpy (in render/) |
 | decode | pictures from their files as Pillow decodes them (PNG, GIF, JPEG, WebP) | Image.open, Pillow's decoders |
 | text | letters and their layout as Pillow draws them (FreeType, shaping as libraqm) | fonts/, ImageFont |
@@ -174,6 +174,11 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       libpng, HarfBuzz and Brotli in it), for lp-check to load
 
 ### R3 theme
+- [x] Python's json as the app reads and writes its files (lp-py): NaN and Infinity, ints of any
+      size, a key given twice, every refusal in Python 3.12's words at its place, dumps' indent,
+      separators, ensure_ascii and sort_keys, floats as repr() writes them (of the fewest
+      digits, the nearest, an even last digit between two); a half of a surrogate pair, which
+      Python keeps in its str (and cannot save), is refused here, as Rust's str cannot hold it
 - [ ] theme.json in every version, checks and messages, versions per shape, adapting
       (theme.adapt.laid_out), the built-in themes and their files
 

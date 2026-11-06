@@ -6,8 +6,13 @@ point where the Unicode database is the release's (Python 3.12: Unicode 15.0).""
 from __future__ import annotations
 
 import hashlib
+import json
 import random
+import struct
+import sys
 import unicodedata
+from pathlib import Path
+from typing import Any
 
 import pytest
 from rust_check import run
@@ -94,3 +99,174 @@ def test_digits_printable_white_space_and_case_over_every_code_point() -> None:
     [ours] = run([{"op": "py", "texts": []}])
     assert ours["sha256"] == hashlib.sha256("".join(lines).encode()).hexdigest()
     assert ours["case_sha256"] == hashlib.sha256("".join(cases).encode()).hexdigest()
+
+
+# what JSON's strings hold: the escapes, quotes and controls, Latin-1, the line separators
+# Python's splitlines() knows, CJK, an astral emoji, a private use character
+_CHARS = ['a', 'Z', ' ', '"', '\\', '/', '\n', '\t', '\x00', '\x1f', '\x7f', 'é', ' ',
+          '\u0085', '中', '😀', '', '﻿', '퟿', '￿']  # fmt: skip
+
+
+def _json_text(rng: random.Random, depth: int = 0) -> str:
+    """A JSON text as anyone may write one: white space anywhere, escapes of any kind (pairs and
+    halves of surrogates among them), numbers of every form, ints of many digits, NaN and
+    Infinity, a key given twice."""
+
+    def space() -> str:
+        return "".join(rng.choice(" \t\n\r") for _ in range(rng.choice([0, 0, 0, 1, 2])))
+
+    def string() -> str:
+        out = []
+        for _ in range(rng.randrange(6)):
+            ch = rng.choice(_CHARS)
+            kind = rng.randrange(6)
+            if kind == 0:
+                out.append(f"\\u{ord(ch):04x}" if ord(ch) < 0x10000 else "\\ud83d\\ude00")
+            elif kind == 1:
+                out.append(rng.choice(['\\"', "\\\\", "\\/", "\\b", "\\f", "\\n", "\\r", "\\t"]))
+            elif kind == 2 and rng.random() < 0.1:
+                out.append(rng.choice(["\\ud800", "\\udfff", "\\ud83d\\u0041", "\\uDBFF\\uDFFF"]))
+            elif ch in '"\\' or ord(ch) < 0x20:
+                out.append(json.dumps(ch)[1:-1])
+            else:
+                out.append(ch)
+        return '"' + "".join(out) + '"'
+
+    def number() -> str:
+        kind = rng.randrange(6)
+        if kind == 0:
+            return str(rng.randrange(-(10**6), 10**6))
+        if kind == 1:
+            return str(rng.randrange(-(10**40), 10**40))
+        if kind == 2:
+            return rng.choice(["0", "-0", "0.0", "-0.0", "1e16", "1E-5", "2.5e+300", "1e400"])
+        if kind == 3:
+            return rng.choice(["NaN", "Infinity", "-Infinity"])
+        whole = str(rng.randrange(10 ** rng.randrange(1, 20)))
+        fraction = (
+            "." + str(rng.randrange(10 ** rng.randrange(1, 20))) if rng.random() < 0.7 else ""
+        )
+        exponent = rng.choice(["", "e", "E"]) + rng.choice(["", "+", "-"]) + str(rng.randrange(330))
+        return rng.choice(["", "-"]) + whole + fraction + (exponent if exponent[0] in "eE" else "")
+
+    kind = rng.randrange(9 if depth < 4 else 6)
+    if kind == 0:
+        return rng.choice(["null", "true", "false"])
+    if kind in (1, 2):
+        return number()
+    if kind in (3, 4, 5):
+        return string()
+    items = [_json_text(rng, depth + 1) for _ in range(rng.randrange(4))]
+    if kind in (6, 7):
+        keys = [string() for _ in items]
+        if len(keys) > 1 and rng.random() < 0.3:
+            keys[-1] = keys[0]  # given twice: the last value in the first one's place
+        pairs = [
+            space() + k + space() + ":" + space() + v + space()
+            for k, v in zip(keys, items, strict=True)
+        ]
+        return "{" + ",".join(pairs) + space() + "}"
+    return "[" + ",".join(space() + v + space() for v in items) + space() + "]"
+
+
+def _broken(rng: random.Random, text: str) -> str:
+    """The text with a slip or two: a character gone, one too many, cut short."""
+    for _ in range(rng.choice([1, 1, 2])):
+        at = rng.randrange(len(text) + 1)
+        kind = rng.randrange(4)
+        if kind == 0 and text:
+            text = text[:at] + text[at + 1 :]
+        elif kind == 1:
+            text = text[:at] + rng.choice(',:[]{}"\\ 0eE.+-ntfNIu\x01x') + text[at:]
+        elif kind == 2:
+            text = text[:at]
+        else:
+            text = text[:at] + text[at : at + 1] * 2 + text[at + 1 :]
+    return text
+
+
+def _python_json(text: str) -> dict[str, Any]:
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError as error:
+        return {"error": str(error), "kind": "decode"}
+    except RecursionError as error:
+        return {"error": str(error), "kind": "recursion"}
+    except ValueError as error:
+        return {"error": str(error), "kind": "value"}
+    try:
+        json.dumps(value, ensure_ascii=False).encode("utf-8")
+    except UnicodeEncodeError:  # half a surrogate pair: Rust's str cannot hold it
+        return {"half": True}
+    return {
+        "repr": repr(value),
+        "dumps": [
+            json.dumps(value),
+            json.dumps(value, indent=2, ensure_ascii=False),
+            json.dumps(value, sort_keys=True, ensure_ascii=False),
+            json.dumps(value, separators=(",", ":")),
+        ],
+    }
+
+
+@pytest.mark.skipif(
+    sys.version_info[:2] != (3, 12),
+    reason="the release's json is Python 3.12's (3.13 words some refusals differently)",
+)
+def test_json_is_read_and_written_as_python_s() -> None:
+    rng = random.Random(0x15)
+    texts = [_json_text(rng) for _ in range(3000)]
+    texts += [_broken(rng, text) for text in texts[:3000]]
+    texts += ["", " ", "﻿[]", "1" * 4300, "-" + "1" * 4301, '{"a":1,}', "[1,]", "01"]
+    # every theme that comes with the app, as it is on disk
+    themes = sorted(
+        (Path(__file__).resolve().parent.parent / "src/libre_panel/themes").glob("*/theme.json")
+    )
+    texts += [path.read_text(encoding="utf-8") for path in themes]
+    [ours] = run([{"op": "json", "texts": texts}])
+    halves = 0
+    for text, mine in zip(texts, ours["results"], strict=True):
+        want = _python_json(text)
+        if "half" in want:
+            halves += 1
+            assert mine["kind"] == "value" and mine["error"].startswith("half of a surrogate pair")
+            continue
+        assert mine == want, repr(text)
+    assert len(themes) > 20 and 0 < halves < len(texts) // 10
+
+
+def test_floats_are_written_as_python_s_repr() -> None:
+    rng = random.Random(0xF1)
+    specials = [0.0, -0.0, 1e16, 1e15, 9999999999999998.0, 1e-4, 1e-5, 0.1, 5e-324, 2e16 + 8]
+    specials += [1.7976931348623157e308, 123.456, float("inf"), float("-inf"), float("nan")]
+    values = specials + [struct.unpack("<d", rng.randbytes(8))[0] for _ in range(20000)]
+    values += [rng.uniform(-1e6, 1e6) for _ in range(5000)] + [
+        float(rng.randrange(10**18)) for _ in range(2000)
+    ]
+    bits = [struct.pack("<d", v)[::-1].hex() for v in values]
+    [ours] = run([{"op": "json", "texts": [], "floats": bits}])
+    assert ours["floats"] == [repr(v) for v in values]
+
+
+def test_nesting_as_deep_as_python_reads_it() -> None:
+    [ours] = run([{"op": "json", "texts": []}])
+    deepest = ours["max_depth"]
+
+    def reads(depth: int) -> bool:
+        try:
+            json.loads("[" * depth + "]" * depth)
+        except RecursionError:
+            return False
+        return True
+
+    # Python's own limit, less what the test's stack already holds: as deep as here, or a little
+    # less; and never deeper
+    assert not reads(deepest + 1) and reads(deepest - 200)
+    texts = ["[" * n + "]" * n for n in (deepest - 200, deepest, deepest + 1)]
+    texts.append('{"a":' * (deepest + 1) + "1" + "}" * (deepest + 1))
+    [ours] = run([{"op": "json", "texts": texts}])
+    results = ours["results"]
+    assert "repr" in results[0] and "repr" in results[1]
+    too_deep = "maximum recursion depth exceeded while decoding a JSON array from a unicode string"
+    assert results[2] == {"error": too_deep, "kind": "recursion"}
+    assert results[3]["error"].endswith("decoding a JSON object from a unicode string")
