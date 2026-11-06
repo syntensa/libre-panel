@@ -377,10 +377,12 @@ class EditorService:
 
     def forget_pictures(self) -> None:
         """The app's pictures of the themes, and of the community's: drawn (and fetched) again
-        when it asks for them."""
+        when it asks for them; the process they are drawn in ends, and its memory goes with it
+        (editor/pictures.py)."""
         server = self._server
         if server is not None:
             state = server.editor_state
+            state.pictures.stop()
             with state.previews_lock:
                 state.previews.clear()
             with state.community.lock:

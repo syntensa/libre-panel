@@ -43,6 +43,15 @@
   longer composes it again from its layers. In Windows CI with both panels on Lumen, after ten
   minutes of the picture five a second: the main process 61 to 70 MB instead of 95 to 106 (on
   Linux 117 MB instead of 133). The picture is the same, pixel for pixel.
+- **The app's pictures in a process of their own.** Every theme's picture (Start, Design's
+  sizes), Design's and Look's picture of the theme, the building blocks' and the start
+  screen's are drawn in a process of their own while the app is open; it ends a minute after
+  the app's window closed (*Status → Diagnose → Load* calls it *The app's pictures* while it
+  runs). Python gave back only part of what they took: on Linux, with both panels on Lumen
+  and all services, the main process held 75 MB before the app had been open and 122 MB
+  after, to the end; now 93 MB. In Windows CI, three minutes after the window closed, the main
+  process had 128 MB committed instead of 180. The pictures are the same, byte for byte, and
+  while the app is open, drawing them no longer takes the panels' turn.
 
 **Changes**
 - **One live picture: on Start.** Start and Live both showed the panel's picture, each with

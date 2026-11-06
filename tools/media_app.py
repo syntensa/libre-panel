@@ -352,7 +352,7 @@ def running(
     """The editor's server on a port of its own, with ``theme`` (and the files in ``folder``)
     in a home called LibrePanel; yields its address, with the access token the app takes."""
     from libre_panel.config import set_config_value
-    from libre_panel.editor import access
+    from libre_panel.editor import access, drawings
     from libre_panel.editor import server as editor
     from libre_panel.plugins import loader
     from libre_panel.sensors.demo import demo_snapshot
@@ -367,6 +367,7 @@ def running(
             stack.enter_context(mock.patch.dict(os.environ, {"LIBRE_PANEL_HOME": str(home)}))
             stack.enter_context(mock.patch.object(loader, "_installed", lambda group: iter(())))
             stack.enter_context(mock.patch.object(editor, "demo_snapshot", preview))
+            stack.enter_context(mock.patch.object(drawings, "demo_snapshot", preview))
             loader.reset_registry()
             if folder is not None:
                 shutil.copytree(folder, user_themes_dir() / THEME, dirs_exist_ok=True)

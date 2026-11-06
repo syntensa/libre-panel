@@ -462,6 +462,7 @@ function processName(row) {
     ffmpeg: () => (row.panel ? t("Video of panel {n} (ffmpeg)", { n: row.panel }) : t("Video (ffmpeg)")),
     presentmon: () => t("Frame rates (PresentMon)"),
     window: () => t("Window"),
+    pictures: () => t("The app's pictures"),
     webview: () => t("Browser engine of the window"),
     service: () => t("Sensor service"),
   };

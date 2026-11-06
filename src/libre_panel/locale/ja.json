@@ -2984,7 +2984,8 @@
     "How the panel runs, in numbers: Status": "パネルの動作状況を数値で：状態",
     "Open Status: how the panel runs": "状態を開く：パネルの動作状況",
     "Show the picture large": "画像を大きく表示",
-    "Which panel Start and Status show and Design edits": "ホームと状態で表示し、デザインで編集するパネル"
+    "Which panel Start and Status show and Design edits": "ホームと状態で表示し、デザインで編集するパネル",
+    "The app's pictures": "アプリの画像"
   },
   "fields": {
     "night": "夜",
