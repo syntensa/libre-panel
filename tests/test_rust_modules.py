@@ -1,7 +1,7 @@
 """rust/i18n and the modules of rust/theme against i18n.py and theme/modules.py (docs/RUST.md,
 R4): every text of every language as t() finds it, the system's language, and themes of
 modules laid out on their grids (expand) in every language, with every look, size and option of
-the module kinds Rust builds, widget for widget, field for field."""
+every module kind and card, widget for widget, field for field."""
 
 from __future__ import annotations
 
@@ -18,12 +18,13 @@ from libre_panel import design, fonts, i18n
 from libre_panel.devices import models as devices
 from libre_panel.theme import model, modules
 
-# The module kinds rust/theme builds (the cards of theme/cards.py follow).
+# The module kinds of theme/modules.py and theme/cards.py, every one.
 BUILT = [
     "ring", "stat", "graph", "bars", "network", "clock", "date", "weather", "outlook", "system",
     "sun", "moon", "earth", "analog", "world", "countdown", "huge", "text", "temps", "cores",
     "drives", "processes", "netinfo", "values", "ping", "timer", "power", "ups", "mic", "battery",
-    "ai", "image", "music", "volume", "agenda", "game",
+    "ai", "image", "music", "volume", "agenda", "game", "playback", "forecast", "download",
+    "instrument", "cards", "netcard",
 ]  # fmt: skip
 
 
@@ -85,6 +86,8 @@ PLACES = [
     "Kolkata Australia/Perth = ", "Europe/Berlin\r\nAsia/Seoul = 서울\vUS/Pacific",
     "Europe/Rome\nAfrica/Cairo\nAsia/Dubai\nPacific/Auckland\nAmerica/Chicago\nAsia/Shanghai",
     "photos/*.jpg", "a.png\n\n  b.jpg  \n\u2029", "  ",  # a picture's
+    "playback\nforecast for 5m if weather.temperature\n# x\nnet\nring\nbogus", "download",
+    "  instrument  for 90s # cpu\ncards\nnetcard", "net if net.up\x1cgame", "# nothing",  # a slot's
 ]  # fmt: skip
 
 
@@ -122,6 +125,7 @@ def _module(rng: random.Random, i: int, columns: int, rows: int) -> dict[str, An
         "speed": [1.0, 0.5, 2, 0],
         "time": ["total", "remaining"],
         "top": [175, 0, -5, 60.5, 10**20],
+        "history": [True, False],
     }
     for key, choices in options.items():
         if rng.random() < 0.4:

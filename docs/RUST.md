@@ -210,19 +210,22 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       rust/theme (today a theme in such a folder finds no versions)
 
 ### R4 render
-- [x] modules on their grid as theme/modules.py lays them out (expand), every kind it builds
-      (ring, stat, huge, graph, bars, network, netinfo, system, clock, date, analog, world,
-      countdown, weather, outlook, sun, moon, earth, text, temps, cores, drives, processes,
-      values, ping, timer, power, ups, mic, battery, ai, image, music, volume, agenda and
-      game): their parts as widgets, field for field in Python's order and of its types,
-      with every look, size and option, in every language, and Python's error where it has
-      one (a card no higher than its padding); the app's texts in each language and the
-      system's language as i18n.py finds them (lp-i18n); Python's sum() of floats,
-      splitlines(), East Asian widths and the zones zoneinfo finds (lp-py)
-- [ ] the cards (theme/cards.py: playback, forecast, download, instrument, cards, netcard),
-      the card slots and the detached modules; the zones on Windows (Python finds them in the
-      tzdata package there, which the Rust app does not bring yet: none is found there for
-      now)
+- [x] modules on their grid as theme/modules.py and theme/cards.py lay them out (expand),
+      every kind of both (ring, stat, huge, graph, bars, network, netinfo, system, clock,
+      date, analog, world, countdown, weather, outlook, sun, moon, earth, text, temps, cores,
+      drives, processes, values, ping, timer, power, ups, mic, battery, ai, image, music,
+      volume, agenda, game; the cards playback, forecast, download, instrument and netcard,
+      and the slot of cards with the cards its lines name): their parts as widgets, field for
+      field in Python's order and of its types, with every look, size and option, in every
+      language, and Python's error where it has one (a card no higher than its padding); the
+      app's texts in each language and the system's language as i18n.py finds them
+      (lp-i18n); Python's sum() of floats, splitlines(), East Asian widths and the zones
+      zoneinfo finds (lp-py)
+- [ ] what the app asks of the modules besides their layout: module_info, the templates, a
+      module detached, the person's cards in a slot (with_cards, follows_cards) and a card's
+      turn (card_time, time_text), with the editor in R9 and the slots' frames in R4; the
+      zones on Windows (Python finds them in the tzdata package there, which the Rust app
+      does not bring yet: none is found there for now)
 - [ ] the renderer's frame, widget by widget (texts, clocks, gauges, rings, bars, lists, graphs
       and their strips, fans, images, videos, icons, weather, globes, moon, sun path, slots,
       cards, notices), effects (glow, lit finish, dither), motion, transitions, toasts, start

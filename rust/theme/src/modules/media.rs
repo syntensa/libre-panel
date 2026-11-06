@@ -180,7 +180,7 @@ pub fn build_music(b: &mut Build, _src: &Source) -> Result<()> {
 }
 
 /// _cover: the cover's frame, a note while there is no cover, and the cover.
-fn cover(b: &mut Build, x: f64, y: f64, d: N) -> Result<()> {
+pub(super) fn cover(b: &mut Build, x: f64, y: f64, d: N) -> Result<()> {
     let radius = corner(b, d);
     let df = d.f();
     let frame: Fields = vec![

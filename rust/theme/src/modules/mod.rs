@@ -12,6 +12,7 @@ use crate::design::{self, MODULE_LABEL, MODULE_PADDING, MODULE_PADDING_BARE};
 use crate::grid::{make_grid, Grid, Settings};
 use crate::model::{normalize_widget, Env, Error, Kind, Result, Theme};
 
+mod cards;
 mod lists;
 mod media;
 mod readings;
@@ -1089,6 +1090,7 @@ pub struct KindOf {
 
 const READINGS: &[&str] = &["cpu", "gpu", "mem", "disk", "net", "sensor"];
 const RINGS: &[&str] = &["cpu", "gpu", "mem", "disk"];
+const INSTRUMENTS: &[&str] = &["cpu", "gpu", "mem", "disk", "fan"];
 
 /// kinds(): the module kinds this crate builds.
 pub fn kind_of(name: &str) -> Option<KindOf> {
@@ -1097,6 +1099,10 @@ pub fn kind_of(name: &str) -> Option<KindOf> {
         sources,
         span,
         finish: "flat",
+    };
+    let lit = |kind: KindOf| KindOf {
+        finish: "lit",
+        ..kind
     };
     Some(match name {
         "ring" => k(readings::build_ring, RINGS, (1, 1)),
@@ -1107,10 +1113,7 @@ pub fn kind_of(name: &str) -> Option<KindOf> {
         "clock" => k(time::build_clock, &[], (2, 1)),
         "date" => k(time::build_date, &[], (1, 1)),
         "weather" => k(weather::build_weather, &[], (2, 1)),
-        "outlook" => KindOf {
-            finish: "lit",
-            ..k(weather::build_outlook, &[], (3, 1))
-        },
+        "outlook" => lit(k(weather::build_outlook, &[], (3, 1))),
         "system" => k(readings::build_system, &[], (1, 1)),
         "sun" => k(sky::build_sun, &[], (2, 1)),
         "moon" => k(sky::build_moon, &[], (1, 1)),
@@ -1138,6 +1141,13 @@ pub fn kind_of(name: &str) -> Option<KindOf> {
         "volume" => k(media::build_volume, &[], (2, 1)),
         "agenda" => k(media::build_agenda, &[], (2, 2)),
         "game" => k(media::build_game, &[], (2, 1)),
+        // the cards after SPUR II's Studio screen: lit by themselves (theme.cards)
+        "playback" => lit(k(cards::build_playback, &[], (3, 2))),
+        "forecast" => lit(k(cards::build_forecast, &[], (3, 2))),
+        "download" => lit(k(cards::build_download, &[], (2, 1))),
+        "instrument" => lit(k(cards::build_instrument, INSTRUMENTS, (1, 2))),
+        "cards" => lit(k(cards::build_cards, &[], (3, 2))),
+        "netcard" => lit(k(cards::build_netcard, &[], (2, 1))),
         _ => return None,
     })
 }

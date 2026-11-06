@@ -35,7 +35,7 @@ fn needs_first(b: &mut Build, start: usize, first: &str) {
 }
 
 /// _text_fields(size, cap_top, font, **kw): the font, size and y, then `kw`.
-fn text(b: &Build, size: f64, cap_top: f64, font: &str, kw: Fields) -> Fields {
+pub(super) fn text(b: &Build, size: f64, cap_top: f64, font: &str, kw: Fields) -> Fields {
     let mut fields = b.text_fields(size, cap_top, font);
     for (k, v) in kw {
         match fields.iter_mut().find(|(name, _)| *name == k) {
@@ -147,7 +147,14 @@ pub fn build_weather(b: &mut Build, _src: &Source) -> Result<()> {
 }
 
 /// _temp_fields: a temperature in the display font.
-fn temp_fields(b: &Build, x: f64, cap_top: f64, size: f64, width: f64, align: &str) -> Fields {
+pub(super) fn temp_fields(
+    b: &Build,
+    x: f64,
+    cap_top: f64,
+    size: f64,
+    width: f64,
+    align: &str,
+) -> Fields {
     let kw: Fields = vec![
         ("x", round(x).into()),
         ("color", b.c("text").into()),
@@ -159,7 +166,7 @@ fn temp_fields(b: &Build, x: f64, cap_top: f64, size: f64, width: f64, align: &s
 }
 
 /// _weather_desc: the sky in words.
-fn weather_desc(b: &mut Build, x: f64, top: f64, w: f64, size: f64) -> Result<()> {
+pub(super) fn weather_desc(b: &mut Build, x: f64, top: f64, w: f64, size: f64) -> Result<()> {
     let kw: Fields = vec![
         ("x", round(x).into()),
         ("color", b.c("text2").into()),
@@ -725,13 +732,24 @@ fn outlook_column(
     clouds: &str,
     rain: &str,
 ) -> Result<()> {
-    let (ix, iy, iw, ih, ts) = (
-        b.ix as f64,
-        b.iy as f64,
-        b.iw as f64,
-        b.ih as f64,
-        b.ts as f64,
-    );
+    let inner = (b.ix as f64, b.iy as f64, b.iw as f64, b.ih as f64);
+    outlook_column_in(b, inner, i, key, count, clouds, rain)
+}
+
+/// _outlook_column in the box `inner` (x, y, w, h): the weather card lays its days out in
+/// a box of its own, of fractions of a pixel.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn outlook_column_in(
+    b: &mut Build,
+    inner: (f64, f64, f64, f64),
+    i: i64,
+    key: &str,
+    count: i64,
+    clouds: &str,
+    rain: &str,
+) -> Result<()> {
+    let (ix, iy, iw, ih) = inner;
+    let ts = b.ts as f64;
     let col = iw / count as f64;
     let cx = ix + col * (i as f64 + 0.5);
     let name = fmin(ts * 1.1, col * 0.2);
