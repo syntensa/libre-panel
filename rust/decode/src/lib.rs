@@ -7,6 +7,7 @@ mod exif;
 mod gif;
 mod jpeg;
 mod png;
+mod webp;
 
 pub use exif::orientation;
 pub use gif::Frame;
@@ -285,6 +286,9 @@ pub fn decode_draft(data: &[u8], draft: Option<(Option<Kind>, (usize, usize))>) 
     if is_jpeg(data) {
         return jpeg::decode_picture(data, draft);
     }
+    if webp::accepts(data) {
+        return webp::decode(data);
+    }
     error("cannot identify image file")
 }
 
@@ -300,6 +304,9 @@ pub fn frames(data: &[u8]) -> Result<Vec<Frame>> {
     }
     if is_jpeg(data) {
         return jpeg::frames(data);
+    }
+    if webp::accepts(data) {
+        return webp::frames(data);
     }
     error("cannot identify image file")
 }

@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 from PIL import Image, ImageOps, ImageSequence
-from rust_check import picture, pillow_libjpeg, run
+from rust_check import picture, pillow_libjpeg, pillow_libwebp, run
 
 ROOT = Path(__file__).resolve().parent.parent
 ERROR = object()
@@ -826,3 +826,77 @@ def test_the_app_s_earth_maps_are_read_as_earth_py_reads_them():
                     "label": f"{name} for a globe of {width}"}  # fmt: skip
             pairs.append((case, want))
     check(pairs)
+
+
+# -- WebP -----------------------------------------------------------------------------------------
+
+# (libwebp is Pillow's own, given to lp-check: Windows' wheels have it built in)
+needs_libwebp = pytest.mark.skipif(not pillow_libwebp(), reason="Pillow's libwebp as files")
+
+
+def _webp_frame(rng: random.Random, mode: str, w: int, h: int) -> Image.Image:
+    colours = [tuple(rng.randrange(256) for _ in range(4)) for _ in range(rng.randint(1, 6))]
+    im = Image.frombytes("RGBA", (w, h), rng.randbytes(w * h * 4))
+    for _ in range(rng.randint(0, 5)):
+        x, y = rng.randrange(w), rng.randrange(h)
+        im.paste(rng.choice(colours), (x, y, rng.randint(x, w), rng.randint(y, h)))
+    return im if mode == "RGBA" else im.convert(mode)
+
+
+def make_webp(rng: random.Random, *, frames: int = 1) -> bytes:
+    """A WebP written by Pillow: lossy or lossless, with alpha or none, an EXIF orientation and
+    XMP's now and then; animated where `frames` > 1 (each frame its own duration)."""
+    mode = rng.choice(["RGB", "RGBA"])
+    w, h = rng.randint(1, 60), rng.randint(1, 45)
+    ims = [_webp_frame(rng, mode, w, h) for _ in range(frames)]
+    params: dict[str, Any] = {"lossless": rng.random() < 0.4, "quality": rng.randint(0, 100),
+                              "method": rng.randint(0, 6)}  # fmt: skip
+    if rng.random() < 0.4:
+        params["exif"] = b"Exif\0\0" + _exif(rng.randint(0, 9), rng.random() < 0.5)
+    if rng.random() < 0.2:
+        params["xmp"] = (b'<x:xmpmeta><rdf:Description tiff:Orientation="'
+                         + str(rng.randint(1, 8)).encode() + b'"/></x:xmpmeta>')  # fmt: skip
+    if frames > 1:
+        params.update(save_all=True, append_images=ims[1:], loop=rng.randrange(3),
+                      duration=[rng.randrange(1, 300) for _ in ims],
+                      minimize_size=rng.random() < 0.5, allow_mixed=rng.random() < 0.3)  # fmt: skip
+    out = io.BytesIO()
+    ims[0].save(out, "WEBP", **params)
+    return out.getvalue()
+
+
+@needs_libwebp
+def test_webps_open_as_pillow_opens_them():
+    rng = random.Random(70)
+    pairs = []
+    for n in range(150):
+        data = make_webp(rng)
+        for target in ("RGBA", "RGB", "L"):
+            pairs.append(case_of(data, target, f"WebP {n} {target}"))
+    check(pairs)
+
+
+@needs_libwebp
+def test_webp_animations_are_read_as_the_app_reads_them():
+    """Frames laid on each other by libwebp itself; their durations as the app reads them
+    (before each frame is loaded: the first frame's alone)."""
+    rng = random.Random(71)
+    cases = [(make_webp(rng, frames=rng.randint(2, 5)), f"WebP animation {n}") for n in range(60)]
+    check_frames(cases)
+
+
+@needs_libwebp
+def test_broken_webps_are_refused_where_pillow_refuses_them():
+    rng = random.Random(72)
+    pairs, cases = [], []
+    for n in range(200):
+        data = bytearray(make_webp(rng, frames=rng.choice([1, 1, 3])))
+        if n % 2 == 0:
+            data = data[: rng.randrange(16, len(data))]
+        else:
+            for _ in range(rng.randint(1, 4)):
+                data[rng.randrange(16, len(data))] = rng.randrange(256)
+        pairs.append(case_of(bytes(data), "RGBA", f"broken WebP {n}"))
+        cases.append((bytes(data), f"broken WebP {n}"))
+    check(pairs)
+    check_frames(cases)

@@ -115,9 +115,13 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       Pillow reads them, CMYK, a draft's scale and grey, MPO's pictures as frames); loaded
       where the app runs (LP_LIBJPEG: the comparisons use Pillow's own copy, so they run where
       Pillow's wheel has it as a file, Linux and macOS)
-- [ ] the JPEG comparisons on Windows too (libjpeg-turbo 3.2.0 built in CI: Windows' wheels
-      have it built in)
-- [ ] decoding WebP (still and animated, libwebp as Pillow uses it)
+- [x] decoding WebP: still and animated, through libwebp's animation decoder as Pillow uses
+      it (loaded as libjpeg-turbo is: LP_LIBWEBP, LP_LIBWEBPDEMUX)
+- [ ] the JPEG and WebP comparisons on Windows too (libjpeg-turbo 3.2.0 and libwebp 1.6.0
+      built in CI: Windows' wheels have them built in)
+- [ ] to decide: the app reads an animated WebP's durations before each frame is loaded,
+      when Pillow has not set them yet, so it plays those at its usual pace (the Rust frames
+      read them as the app does for now)
 - [ ] numpy's arithmetic where the renderer uses it (dither, gradients, light)
 
 ### R2 text

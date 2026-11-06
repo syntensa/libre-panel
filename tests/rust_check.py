@@ -43,6 +43,24 @@ def pillow_libjpeg() -> str | None:
     return str(found[0]) if found else None
 
 
+def pillow_libwebp() -> dict[str, str]:
+    """libwebp and libwebpdemux as Pillow's wheel brings them, named for lp-check (none where
+    they are built into Pillow)."""
+    import PIL
+
+    here = Path(PIL.__file__).resolve().parent
+    named = {}
+    for key, stem in (("LP_LIBWEBP", "libwebp-"), ("LP_LIBWEBPDEMUX", "libwebpdemux")):
+        if os.environ.get(key):
+            named[key] = os.environ[key]
+            continue
+        found = [*sorted((here.parent / "pillow.libs").glob(stem + "*.so*")),
+                 *sorted((here / ".dylibs").glob(stem + "*.dylib"))]  # fmt: skip
+        if found:
+            named[key] = str(found[0])
+    return named if len(named) == 2 else {}
+
+
 def image(im: Image.Image) -> dict[str, Any]:
     """An image as lp-check takes it."""
     data = base64.b64encode(im.tobytes()).decode("ascii")
@@ -63,6 +81,7 @@ def run(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
     env = dict(os.environ)
     if (libjpeg := pillow_libjpeg()) is not None:
         env["LP_LIBJPEG"] = libjpeg
+    env.update(pillow_libwebp())
     done = subprocess.run(
         [str(exe)], input=text, capture_output=True, text=True, timeout=900, check=True, env=env
     )
