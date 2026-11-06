@@ -213,12 +213,13 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
 - [x] modules on their grid as theme/modules.py lays them out (expand), so far of the kinds
       ring, stat, huge, graph, bars, network, netinfo, system, clock, date, analog, world,
       countdown, weather, outlook, sun, moon, earth, text, temps, cores, drives, processes,
-      values, ping, timer, power and ups: their parts as widgets, field for field in
-      Python's order and of its types, with every look, size and option, in every language;
-      the app's texts in each language and the system's language as i18n.py finds them
+      values, ping, timer, power, ups, mic, battery and ai: their parts as widgets, field for
+      field in Python's order and of its types, with every look, size and option, in every
+      language, and Python's error where it has one (a card no higher than its padding); the
+      app's texts in each language and the system's language as i18n.py finds them
       (lp-i18n); Python's sum() of floats, splitlines(), East Asian widths and the zones
       zoneinfo finds (lp-py)
-- [ ] the other module kinds (battery, image, music, volume, agenda, game, mic, ai), the cards
+- [ ] the other module kinds (image, music, volume, agenda, game), the cards
       (theme/cards.py: playback, forecast, download, instrument, cards, netcard), the card
       slots and the detached modules; the zones on Windows (Python finds them in the tzdata
       package there, which the Rust app does not bring yet: none is found there for now)

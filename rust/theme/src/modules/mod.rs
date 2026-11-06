@@ -15,6 +15,7 @@ use crate::model::{normalize_widget, Env, Error, Kind, Result, Theme};
 mod lists;
 mod readings;
 mod sky;
+mod status;
 mod time;
 mod weather;
 
@@ -1128,6 +1129,9 @@ pub fn kind_of(name: &str) -> Option<KindOf> {
         "timer" => k(lists::build_timer, &[], (2, 1)),
         "power" => k(lists::build_power, &[], (2, 1)),
         "ups" => k(lists::build_ups, &[], (2, 1)),
+        "mic" => k(status::build_mic, &[], (1, 1)),
+        "battery" => k(status::build_battery, &[], (1, 1)),
+        "ai" => k(status::build_ai, &[], (2, 1)),
         _ => return None,
     })
 }

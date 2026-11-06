@@ -22,7 +22,8 @@ from libre_panel.theme import model, modules
 BUILT = [
     "ring", "stat", "graph", "bars", "network", "clock", "date", "weather", "outlook", "system",
     "sun", "moon", "earth", "analog", "world", "countdown", "huge", "text", "temps", "cores",
-    "drives", "processes", "netinfo", "values", "ping", "timer", "power", "ups",
+    "drives", "processes", "netinfo", "values", "ping", "timer", "power", "ups", "mic", "battery",
+    "ai",
 ]  # fmt: skip
 
 
@@ -115,6 +116,7 @@ def _module(rng: random.Random, i: int, columns: int, rows: int) -> dict[str, An
         "threads": [True, False],
         "total": [True, False],
         "sort": ["cpu", "memory"],
+        "agent": ["both", "claude", "codex"],
     }
     for key, choices in options.items():
         if rng.random() < 0.4:
@@ -168,6 +170,22 @@ def test_modules_laid_out_as_python_lays_them_out() -> None:
     rng = random.Random(0x40D)
     cases = [{"data": json.dumps(_theme(rng)), "light": rng.random() < 0.3,
               "language": rng.choice(list(i18n.LANGUAGES))} for _ in range(500)]  # fmt: skip
+    # a battery's card no higher than its padding: Python's ZeroDivisionError, of a float
+    # (wide) and of an int (narrow)
+    for width in (480, 30):
+        tiny = {
+            "format": model.THEME_FORMAT,
+            "name": "Tiny",
+            "display": {
+                "model": "custom",
+                "orientation": "landscape" if width > 80 else "portrait",
+                "width": width,
+                "height": 80,
+            },
+            "grid": {"columns": 1, "rows": 2, "gap": 8, "margin": 24},
+            "widgets": [{"type": "module", "id": "b", "module": "battery", "card": "on"}],
+        }
+        cases.append({"data": json.dumps(tiny), "light": False, "language": "en"})
     case = {"op": "theme_expand", "fonts_dir": str(fonts.FONT_DIR), "locale": str(i18n.LOCALE_DIR)}
     [ours] = run([{**case, "themes": cases}])
     try:
@@ -177,3 +195,4 @@ def test_modules_laid_out_as_python_lays_them_out() -> None:
     assert ours["answers"] == python
     # (laid out, not only refused alike: most themes hold modules that are drawn)
     assert sum("widgets" in answer for answer in python) > 300
+    assert [a["error"] for a in python[-2:]] == ["float division by zero", "division by zero"]
