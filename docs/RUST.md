@@ -179,8 +179,17 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       separators, ensure_ascii and sort_keys, floats as repr() writes them (of the fewest
       digits, the nearest, an even last digit between two); a half of a surrogate pair, which
       Python keeps in its str (and cannot save), is refused here, as Rust's str cannot hold it
-- [ ] theme.json in every version, checks and messages, versions per shape, adapting
-      (theme.adapt.laid_out), the built-in themes and their files
+- [x] theme.json read and checked as theme/model.py reads it (rust/theme): every field of
+      every widget type completed and checked, the palette, fonts, background, toast, look,
+      switches and the detached modules, every refusal in its words and every warning; what
+      Python itself raises on the way (an int() of NaN, a font that is no str, an int too
+      large for a float) raised of the same kind; assets kept in the theme's folder as
+      Path.resolve() keeps them (links, "..", a loop of links), the file read as read_text
+      reads it (line ends, UTF-8's refusals); its tables (the widgets' fields, the panel
+      models, icons, finishes) the Python app's own, compared
+- [ ] versions per shape (theme_for, the pairs and companions), the search of the folders,
+      list_themes, save_theme, the colours of a person's accent, light colours, the look of
+      the first panel, adapting (theme.adapt.laid_out)
 
 ### R4 render
 - [ ] the renderer's frame, widget by widget (texts, clocks, gauges, rings, bars, lists, graphs

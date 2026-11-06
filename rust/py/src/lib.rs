@@ -96,6 +96,52 @@ pub fn round(x: f64) -> f64 {
     x.round_ties_even()
 }
 
+/// format(x, ".{precision}g") (and `{x:g}` with 6): `precision` significant digits, rounded as
+/// Python rounds them (to the nearest, a tie to the even one), in full from 1e-4 up to below
+/// 10^precision and with an exponent beyond, trailing zeros dropped (5.0 is `5`, 1234567.0
+/// `1.23457e+06`).
+pub fn format_g(x: f64, precision: usize) -> String {
+    if x.is_nan() {
+        return "nan".into();
+    }
+    if x.is_infinite() {
+        return if x > 0.0 { "inf" } else { "-inf" }.into();
+    }
+    let p = precision.max(1);
+    let rounded = format!("{:.*e}", p - 1, x);
+    let (mantissa, exponent) = rounded.split_once('e').expect("an exponent");
+    let exponent: i32 = exponent.parse().expect("a whole exponent");
+    let digits: String = mantissa.chars().filter(char::is_ascii_digit).collect();
+    let mut out = String::from(if mantissa.starts_with('-') { "-" } else { "" });
+    let trim = |text: String| -> String {
+        if text.contains('.') {
+            text.trim_end_matches('0').trim_end_matches('.').to_string()
+        } else {
+            text
+        }
+    };
+    if (-4..p as i32).contains(&exponent) {
+        let point = exponent + 1; // the digits before the decimal point
+        let body = if point <= 0 {
+            format!("0.{}{digits}", "0".repeat(point.unsigned_abs() as usize))
+        } else if point as usize >= digits.len() {
+            format!("{digits}{}", "0".repeat(point as usize - digits.len()))
+        } else {
+            format!(
+                "{}.{}",
+                &digits[..point as usize],
+                &digits[point as usize..]
+            )
+        };
+        out.push_str(&trim(body));
+    } else {
+        out.push_str(&trim(format!("{}.{}", &digits[..1], &digits[1..])));
+        let sign = if exponent < 0 { '-' } else { '+' };
+        out.push_str(&format!("e{sign}{:02}", exponent.abs()));
+    }
+    out
+}
+
 /// Of the numbers of as many digits as `digits` that read back as `x` (x > 0, its value
 /// 0.<digits> times ten to the power of `point`), the one Python's repr takes: the nearest to
 /// x, and of two as near the one that ends in an even digit (Rust's own can be the other:

@@ -270,3 +270,16 @@ def test_nesting_as_deep_as_python_reads_it() -> None:
     too_deep = "maximum recursion depth exceeded while decoding a JSON array from a unicode string"
     assert results[2] == {"error": too_deep, "kind": "recursion"}
     assert results[3]["error"].endswith("decoding a JSON object from a unicode string")
+
+
+def test_floats_are_formatted_as_python_s_g() -> None:
+    rng = random.Random(0x6E)
+    values = [0.0, -0.0, 5.0, 12.3, 2.1, 0.125, 2.5, 0.5, 999999.5, 1e-5, 1e-4, 123456789.0]
+    values += [float("inf"), float("-inf"), float("nan")]
+    values += [struct.unpack("<d", rng.randbytes(8))[0] for _ in range(5000)]
+    values += [rng.randrange(-2000, 2000) / rng.choice([2, 4, 8, 1024, 10]) for _ in range(5000)]
+    values += [round(rng.uniform(0, 30), 1) for _ in range(2000)]
+    general = [(v, rng.choice([1, 2, 3, 6, 6, 10, 17])) for v in values]
+    pairs = [[struct.pack("<d", v)[::-1].hex(), p] for v, p in general]
+    [ours] = run([{"op": "json", "texts": [], "general": pairs}])
+    assert ours["general"] == [format(v, f".{p}g") for v, p in general]

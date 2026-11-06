@@ -801,7 +801,198 @@ fn run(case: &Value) -> Result<Value, String> {
                         .collect()
                 })
                 .unwrap_or_default();
-            json!({"results": results, "floats": floats, "max_depth": lp_py::json::MAX_DEPTH})
+            // format(x, ".{p}g") of floats given by their bits, each with its precision
+            let general: Vec<String> = case["general"]
+                .as_array()
+                .map(|all| {
+                    all.iter()
+                        .map(|pair| {
+                            let bits = u64::from_str_radix(pair[0].as_str().unwrap_or("0"), 16)
+                                .unwrap_or(0);
+                            lp_py::format_g(
+                                f64::from_bits(bits),
+                                pair[1].as_u64().unwrap_or(6) as usize,
+                            )
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            json!({"results": results, "floats": floats, "general": general,
+                "max_depth": lp_py::json::MAX_DEPTH})
+        }
+        "theme" | "parse_theme" | "widget" => {
+            // a theme read from its folder, or from its data, or one widget, as theme/model.py
+            // reads them: what comes of it as JSON text (json.dumps), its warnings; or the error
+            let env = lp_theme::Env {
+                fonts_dir: case["fonts_dir"].as_str().unwrap_or("").into(),
+            };
+            let root = case["root"].as_str().map(std::path::PathBuf::from);
+            let data = |key: &str| lp_py::json::loads(case[key].as_str().unwrap_or("null"));
+            let how = lp_py::json::Dumps::default();
+            let answer = match op {
+                "theme" => lp_theme::load_theme(
+                    std::path::Path::new(case["folder"].as_str().unwrap_or("")),
+                    &env,
+                )
+                .map(|t| (lp_py::json::dumps(&t.to_dict(), &how), t.warnings)),
+                "parse_theme" => match data("data") {
+                    Ok(d) => lp_theme::parse_theme(&d, root.as_deref(), &env)
+                        .map(|t| (lp_py::json::dumps(&t.to_dict(), &how), t.warnings)),
+                    Err(e) => Err(lp_theme::Error {
+                        kind: lp_theme::Kind::Value,
+                        msg: e.to_string(),
+                    }),
+                },
+                _ => match data("data") {
+                    Ok(d) => {
+                        let palette = match data("palette") {
+                            Ok(lp_py::Value::Dict(p)) => Some(p),
+                            _ => None,
+                        };
+                        let index = case["index"].as_u64().unwrap_or(0) as usize;
+                        lp_theme::normalize_widget(&d, index, palette.as_ref(), root.as_deref())
+                            .map(|(w, warnings)| {
+                                (lp_py::json::dumps(&lp_py::Value::Dict(w), &how), warnings)
+                            })
+                    }
+                    Err(e) => Err(lp_theme::Error {
+                        kind: lp_theme::Kind::Value,
+                        msg: e.to_string(),
+                    }),
+                },
+            };
+            match answer {
+                Ok((dict, warnings)) => json!({"dict": dict, "warnings": warnings}),
+                Err(e) => json!({"error": e.msg, "kind": e.kind.name()}),
+            }
+        }
+        "theme_tables" => {
+            // the tables, as JSON text, for the comparison with Python's
+            use lp_py::{Dict, Value};
+            use lp_theme::tables as t;
+            let fields = |fs: &[lp_theme::specs::Field]| {
+                Value::Dict(
+                    fs.iter()
+                        .map(|f| {
+                            (
+                                f.name.to_string(),
+                                Value::List(vec![f.kind.into(), f.default.value()]),
+                            )
+                        })
+                        .collect(),
+                )
+            };
+            let strs = |xs: &[&str]| Value::List(xs.iter().map(|&x| x.into()).collect());
+            let by_type = |table: &[(&str, &[lp_theme::specs::Field])]| {
+                Value::Dict(
+                    table
+                        .iter()
+                        .map(|(k, fs)| (k.to_string(), fields(fs)))
+                        .collect(),
+                )
+            };
+            let mut d = Dict::new();
+            d.insert("COMMON".into(), fields(t::COMMON));
+            d.insert("WIDGET_SPECS".into(), by_type(t::WIDGETS));
+            d.insert("LOOK_SPECS".into(), by_type(t::LOOK_SPECS));
+            d.insert("TOAST_STYLES".into(), by_type(t::TOAST_STYLES));
+            d.insert(
+                "PRIMARY_FIELDS".into(),
+                Value::Dict(
+                    t::PRIMARY_FIELDS
+                        .iter()
+                        .map(|(k, v)| (k.to_string(), strs(v)))
+                        .collect(),
+                ),
+            );
+            d.insert(
+                "FINISH_TYPES".into(),
+                Value::Dict(
+                    t::FINISH_TYPES
+                        .iter()
+                        .map(|(k, v)| (k.to_string(), strs(v)))
+                        .collect(),
+                ),
+            );
+            d.insert(
+                "LOOK_RANGES".into(),
+                Value::List(
+                    t::LOOK_RANGES
+                        .iter()
+                        .map(|(a, b, lo, hi)| {
+                            Value::List(vec![(*a).into(), (*b).into(), (*lo).into(), (*hi).into()])
+                        })
+                        .collect(),
+                ),
+            );
+            d.insert(
+                "STYLE_DEFAULTS".into(),
+                Value::Dict(lp_theme::model::style_defaults()),
+            );
+            d.insert(
+                "TOAST_DEFAULTS".into(),
+                Value::Dict(lp_theme::model::toast_defaults()),
+            );
+            d.insert(
+                "GRID_DEFAULTS".into(),
+                Value::Dict(
+                    t::GRID_DEFAULTS
+                        .iter()
+                        .map(|(k, v)| (k.to_string(), (*v).into()))
+                        .collect(),
+                ),
+            );
+            for (name, xs) in [
+                ("FINISHES", t::FINISHES),
+                ("EFFECT_FIELDS", t::EFFECT_FIELDS),
+                ("TOAST_ANCHORS", t::TOAST_ANCHORS),
+                ("GONE_LOOK", t::GONE_LOOK),
+                ("CARDS", t::CARDS),
+                ("BACKDROPS", t::BACKDROPS),
+                ("MODULE_KINDS", t::MODULE_KINDS),
+                ("MODULE_SOURCES", t::MODULE_SOURCES),
+                ("MODULE_FALLBACKS", t::MODULE_FALLBACKS),
+                ("SYMBOL_PACKS", t::SYMBOL_PACKS),
+                ("FAN_LOOKS", t::FAN_LOOKS),
+                ("FAN_PAINTS", t::FAN_PAINTS),
+                ("ICON_NAMES", t::ICON_NAMES),
+                ("WEATHER_ICONS", t::WEATHER_ICONS),
+                ("PART_TYPES", t::PART_TYPES),
+            ] {
+                d.insert(name.into(), strs(xs));
+            }
+            d.insert(
+                "GONE_FIELDS".into(),
+                Value::Dict(
+                    t::GONE_FIELDS
+                        .iter()
+                        .map(|(k, v)| (k.to_string(), strs(v)))
+                        .collect(),
+                ),
+            );
+            let scalars = [
+                ("THEME_FORMAT", Value::from(t::THEME_FORMAT)),
+                ("THEME_FILENAME", t::THEME_FILENAME.into()),
+                ("BLUR_MAX", t::BLUR_MAX.into()),
+                ("MAX_SWITCHES", (t::MAX_SWITCHES as i64).into()),
+                ("MAX_DETACHED", (t::MAX_DETACHED as i64).into()),
+                ("CARD_OPACITY_MIN", t::CARD_OPACITY_MIN.into()),
+                ("COVER_COLOR", t::COVER_COLOR.into()),
+                ("AUTO", t::AUTO.into()),
+                ("DEFAULT_THEME", t::DEFAULT_THEME.into()),
+                ("BUILTIN_PREFIX", t::BUILTIN_PREFIX.into()),
+                ("DEFAULT_FONT", t::DEFAULT_FONT.into()),
+                ("GRID_CELLS", t::GRID_CELLS.into()),
+            ];
+            for (name, v) in scalars {
+                d.insert(name.into(), v);
+            }
+            let models: Vec<Value> = lp_devices::models::MODELS
+                .iter()
+                .map(|m| m.to_dict())
+                .collect();
+            d.insert("MODELS".into(), Value::List(models));
+            json!({"tables": lp_py::json::dumps(&Value::Dict(d), &lp_py::json::Dumps::default())})
         }
         "unicode" => {
             let sum = Sha256::digest(lp_text::fallback::unicode_table().as_bytes());

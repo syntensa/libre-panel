@@ -1,0 +1,11 @@
+[package]
+name = "lp-devices"
+description = "The panels Libre Panel drives: their catalog first (devices/models.py)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+lp-py = { path = "../py" }

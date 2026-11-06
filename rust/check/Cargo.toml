@@ -12,6 +12,8 @@ lp-py = { path = "../py" }
 lp-pixels = { path = "../pixels" }
 lp-decode = { path = "../decode" }
 lp-text = { path = "../text" }
+lp-devices = { path = "../devices" }
+lp-theme = { path = "../theme" }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 base64 = "0.22"
 sha2 = "0.10"

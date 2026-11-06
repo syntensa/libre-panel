@@ -127,9 +127,11 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "lp-decode",
+ "lp-devices",
  "lp-pixels",
  "lp-py",
  "lp-text",
+ "lp-theme",
  "serde_json",
  "sha2",
 ]
@@ -142,6 +144,13 @@ dependencies = [
  "libloading",
  "lp-pixels",
  "zlib-rs",
+]
+
+[[package]]
+name = "lp-devices"
+version = "0.1.0"
+dependencies = [
+ "lp-py",
 ]
 
 [[package]]
@@ -170,6 +179,17 @@ dependencies = [
  "lp-py",
  "unicode-general-category",
  "unicode-normalization",
+]
+
+[[package]]
+name = "lp-theme"
+version = "0.1.0"
+dependencies = [
+ "lp-devices",
+ "lp-pixels",
+ "lp-py",
+ "num-bigint",
+ "num-traits",
 ]
 
 [[package]]
