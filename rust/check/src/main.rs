@@ -43,6 +43,35 @@ fn ints(v: &Value) -> Result<Vec<i64>, String> {
         .collect()
 }
 
+fn floats4(v: &Value) -> Result<Option<(f64, f64, f64, f64)>, String> {
+    if v.is_null() {
+        return Ok(None);
+    }
+    let a = v.as_array().ok_or("a box")?;
+    let f = |i: usize| a[i].as_f64().ok_or("a number");
+    Ok(Some((f(0)?, f(1)?, f(2)?, f(3)?)))
+}
+
+/// A mode-F image goes as {"mode": "F", "size": [w, h], "data": base64 of its float32s}.
+fn float_of(v: &Value) -> Result<lp_pixels::FloatImage, String> {
+    let size = v["size"].as_array().ok_or("an image without a size")?;
+    let w = size[0].as_u64().ok_or("a width")? as usize;
+    let h = size[1].as_u64().ok_or("a height")? as usize;
+    let bytes = STANDARD
+        .decode(v["data"].as_str().unwrap_or(""))
+        .map_err(|e| e.to_string())?;
+    let data = bytes
+        .chunks_exact(4)
+        .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+        .collect();
+    lp_pixels::FloatImage::from_vec(w, h, data).map_err(|e| e.to_string())
+}
+
+fn float_value(im: &lp_pixels::FloatImage) -> Value {
+    let bytes: Vec<u8> = im.data.iter().flat_map(|f| f.to_le_bytes()).collect();
+    json!({"mode": "F", "size": [im.width, im.height], "data": STANDARD.encode(bytes)})
+}
+
 fn mask_of(v: &Value) -> Result<Option<Image>, String> {
     if v.is_null() {
         Ok(None)
@@ -140,6 +169,40 @@ fn run(case: &Value) -> Result<Value, String> {
             let alpha_only = case["alpha_only"].as_bool().unwrap_or(true);
             let found = image_of(&case["image"])?.getbbox(alpha_only);
             json!({"box": found.map(|(a, b, c, d)| vec![a, b, c, d])})
+        }
+        "reduce" => {
+            let f = ints(&case["factor"])?;
+            let bounds = if case["box"].is_null() {
+                None
+            } else {
+                let b = ints(&case["box"])?;
+                Some((b[0] as usize, b[1] as usize, b[2] as usize, b[3] as usize))
+            };
+            let out = image_of(&case["image"])?
+                .reduce(f[0] as usize, f[1] as usize, bounds)
+                .map_err(e)?;
+            json!({"image": value_of(&out)})
+        }
+        "resize" => {
+            let size = ints(&case["size"])?;
+            let filter = case["filter"]
+                .as_i64()
+                .and_then(lp_pixels::Filter::from_number)
+                .ok_or("a filter")?;
+            let bounds = floats4(&case["box"])?;
+            let gap = case["reducing_gap"].as_f64();
+            if case["image"]["mode"] == "F" {
+                let src = float_of(&case["image"])?;
+                let out = src
+                    .resize(size[0] as usize, size[1] as usize, filter, bounds)
+                    .map_err(e)?;
+                json!({"floats": float_value(&out)})
+            } else {
+                let out = image_of(&case["image"])?
+                    .resize(size[0] as usize, size[1] as usize, filter, bounds, gap)
+                    .map_err(e)?;
+                json!({"image": value_of(&out)})
+            }
         }
         other => return Err(format!("no op {other}")),
     })

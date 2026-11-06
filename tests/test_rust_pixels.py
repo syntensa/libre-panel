@@ -3,7 +3,9 @@ result byte for byte as Pillow's, and refused where Pillow refuses it."""
 
 from __future__ import annotations
 
+import base64
 import random
+import struct
 from collections.abc import Callable
 from typing import Any
 
@@ -208,3 +210,86 @@ def test_the_box_round_what_is_not_empty_is_pillow_s():
                 case = {"op": "getbbox", "image": image(im), "alpha_only": alpha_only}
                 pairs.append((case, im.getbbox(alpha_only=alpha_only)))
     check(pairs)
+
+
+def test_blocks_reduced_to_one_pixel_are_pillow_s():
+    rng = random.Random(9)
+    pairs = []
+    for mode in MODES:
+        for _ in range(80):
+            im = noise(rng, mode, (rng.randint(1, 30), rng.randint(1, 30)))
+            factor = (rng.randint(1, 7), rng.randint(1, 7))
+            box = None
+            if rng.random() < 0.5:
+                x0, y0 = rng.randrange(im.width), rng.randrange(im.height)
+                box = (x0, y0, rng.randint(x0 + 1, im.width), rng.randint(y0 + 1, im.height))
+            case = {"op": "reduce", "image": image(im), "factor": list(factor),
+                    "box": list(box) if box else None}  # fmt: skip
+            pairs.append((case, expect(lambda im=im, f=factor, b=box: im.reduce(f, b))))
+        im = noise(rng, mode, (8, 8))
+        for bad in ((0, 0, 9, 8), (3, 3, 3, 8)):  # beyond the picture, and empty
+            case = {"op": "reduce", "image": image(im), "factor": [2, 2], "box": list(bad)}
+            pairs.append((case, ERROR))
+    check(pairs)
+
+
+FILTERS = [
+    Image.Resampling.NEAREST,
+    Image.Resampling.BOX,
+    Image.Resampling.BILINEAR,
+    Image.Resampling.HAMMING,
+    Image.Resampling.BICUBIC,
+    Image.Resampling.LANCZOS,
+]
+
+
+def test_a_picture_resized_with_every_filter_is_pillow_s():
+    rng = random.Random(10)
+    pairs = []
+    for mode in MODES:
+        for f in FILTERS:
+            for n in range(30):
+                im = noise(rng, mode, (rng.randint(1, 40), rng.randint(1, 40)))
+                size = (rng.randint(1, 60), rng.randint(1, 60))
+                box = None
+                if n % 3 == 1:  # a box of floats inside the picture
+                    x0, y0 = rng.uniform(0, im.width - 0.01), rng.uniform(0, im.height - 0.01)
+                    box = (x0, y0, rng.uniform(x0, im.width), rng.uniform(y0, im.height))
+                elif n % 3 == 2:  # whole pixels, the size asked for: a crop
+                    w, h = rng.randint(1, im.width), rng.randint(1, im.height)
+                    x0, y0 = rng.randint(0, im.width - w), rng.randint(0, im.height - h)
+                    box, size = (x0, y0, x0 + w, y0 + h), (w, h)
+                gap = rng.choice([None, None, 1.5, 2.0, 3.0])
+
+                def resized(im=im, size=size, f=f, box=box, gap=gap):
+                    return im.resize(size, f, box, gap)
+
+                case = {"op": "resize", "image": image(im), "size": list(size), "filter": int(f),
+                        "box": list(box) if box else None, "reducing_gap": gap}  # fmt: skip
+                pairs.append((case, expect(resized)))
+    check(pairs)
+
+
+def test_floats_resized_are_pillow_s_to_the_bit():
+    rng = random.Random(11)
+    pairs = []
+    for f in FILTERS:
+        for n in range(30):
+            w, h = rng.randint(1, 30), rng.randint(1, 30)
+            values = [rng.uniform(-2.0, 300.0) for _ in range(w * h)]
+            im = Image.frombytes("F", (w, h), struct.pack(f"<{w * h}f", *values))
+            size = (rng.randint(1, 45), rng.randint(1, 45))
+            box = None
+            if n % 2:
+                x0, y0 = rng.uniform(0, w - 0.01), rng.uniform(0, h - 0.01)
+                box = (x0, y0, rng.uniform(x0, w), rng.uniform(y0, h))
+            floats = {"mode": "F", "size": [w, h], "data": base64.b64encode(im.tobytes()).decode()}
+            case = {"op": "resize", "image": floats, "size": list(size), "filter": int(f),
+                    "box": list(box) if box else None}  # fmt: skip
+            pairs.append((case, im.resize(size, f, box)))
+    answers = run([case for case, _ in pairs])
+    for (case, want), got in zip(pairs, answers, strict=True):
+        assert "floats" in got, (case["filter"], case["size"], got.get("error"))
+        assert tuple(got["floats"]["size"]) == want.size
+        have = base64.b64decode(got["floats"]["data"])
+        assert have == want.tobytes(), (case["filter"], case["size"], case["box"])

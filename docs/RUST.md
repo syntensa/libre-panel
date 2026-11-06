@@ -88,7 +88,9 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
 ### R1 pixels: Pillow's operations
 - [x] images in L, RGB, RGBA (and RGBa, premultiplied, as Pillow converts), new, crop, paste
       (with a mask), alpha_composite, convert, point, putalpha, split/merge/getchannel, getbbox
-- [ ] reduce, resize (NEAREST, BILINEAR, BICUBIC, LANCZOS, BOX; with box), thumbnail, fit/pad/contain
+- [x] reduce, resize (every filter, a box of floats, reducing_gap, the crop where the box is
+      the size), in L, RGB, RGBA, RGBa and F
+- [ ] thumbnail, ImageOps.fit/pad/contain
 - [ ] GaussianBlur, BoxBlur (from the engine's lit bars)
 - [ ] ImageChops: multiply, add, lighter, difference, subtract, offset; blend, composite
 - [ ] transpose, rotate, transform

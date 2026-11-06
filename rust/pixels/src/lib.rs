@@ -15,10 +15,13 @@ mod composite;
 mod convert;
 mod paste;
 mod point;
+mod reduce;
+mod resample;
 
 pub use bands::merge;
 pub use composite::alpha_composite;
 pub use point::round_half_even;
+pub use resample::Filter;
 
 use std::fmt;
 
@@ -217,6 +220,37 @@ impl Image {
             }
         }
         out
+    }
+}
+
+/// An image of 32-bit floats, one band (Pillow's mode F, as the renderer makes them of numpy
+/// arrays).
+#[derive(Clone, PartialEq, Debug)]
+pub struct FloatImage {
+    pub width: usize,
+    pub height: usize,
+    pub data: Vec<f32>,
+}
+
+impl FloatImage {
+    /// Every pixel 0.
+    pub fn new(width: usize, height: usize) -> FloatImage {
+        FloatImage {
+            width,
+            height,
+            data: vec![0.0; width * height],
+        }
+    }
+
+    pub fn from_vec(width: usize, height: usize, data: Vec<f32>) -> Result<FloatImage> {
+        if data.len() != width * height {
+            return error("not enough image data");
+        }
+        Ok(FloatImage {
+            width,
+            height,
+            data,
+        })
     }
 }
 
