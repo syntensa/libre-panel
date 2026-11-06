@@ -22,6 +22,7 @@ mod imagedraw;
 mod ops;
 mod paste;
 mod point;
+mod quantize;
 mod reduce;
 mod resample;
 

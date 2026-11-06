@@ -96,6 +96,9 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
 - [x] thumbnail (of a decoded picture; a JPEG's draft is the decoder's), ImageOps.fit, pad,
       contain, cover, the EXIF orientation's turn; getextrema, linear and radial gradients
 - [x] GaussianBlur, BoxBlur
+- [x] quantize (MEDIANCUT) and getcolors, as render/cover.py finds a cover's colour: every
+      order Pillow's answer depends on as Pillow has it (its hash tables, merge sort, heap of
+      boxes), past 65536 colours too
 - [x] ImageChops: multiply, screen, add, subtract, lighter, darker, difference, the modulos,
       offset; blend, composite
 - [x] transpose, rotate, transform (affine, extent, perspective, quad; nearest, bilinear,

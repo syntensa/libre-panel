@@ -267,6 +267,30 @@ fn run(case: &Value) -> Result<Value, String> {
                 .map_err(e)?;
             json!({"image": value_of(&out)})
         }
+        "quantize" => {
+            // im.quantize(colors, method=MEDIANCUT).convert("RGB"), and its palette
+            let im = image_of(&case["image"])?;
+            let colors = case["colors"].as_u64().unwrap_or(256) as usize;
+            let (indices, palette) = im.quantize(colors).map_err(e)?;
+            let rgb: Vec<u8> = indices
+                .iter()
+                .flat_map(|&i| palette[usize::from(i)])
+                .collect();
+            let out = Image::from_bytes(Mode::RGB, im.width(), im.height(), rgb).map_err(e)?;
+            json!({"image": value_of(&out), "palette": palette})
+        }
+        "getcolors" => {
+            // im.getcolors(maxcolors): [count, pixel] each, in Pillow's order; null past it
+            let im = image_of(&case["image"])?;
+            let maxcolors = case["maxcolors"].as_u64().unwrap_or(256) as usize;
+            match im.getcolors(maxcolors).map_err(e)? {
+                None => json!({ "colors": null }),
+                Some(list) => {
+                    let list: Vec<Value> = list.iter().map(|(c, px)| json!([c, px])).collect();
+                    json!({ "colors": list })
+                }
+            }
+        }
         "resize" => {
             let size = ints(&case["size"])?;
             let filter = case["filter"]

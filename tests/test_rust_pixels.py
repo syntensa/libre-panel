@@ -717,3 +717,85 @@ def test_thumbnails_image_ops_extrema_and_gradients_are_pillow_s():
     for name in ("linear_gradient", "radial_gradient"):
         pairs.append(({"op": name}, getattr(Image, name)("L")))
     check(pairs)
+
+
+def _few_colours(rng: random.Random, w: int, h: int) -> Image.Image:
+    """An RGB picture of one of the kinds a quantizer meets: noise, a few colours, smooth
+    light, shapes on a ground, or values that repeat along a channel (ties along an axis)."""
+    kind = rng.randrange(5)
+    if kind == 0:
+        return Image.frombytes("RGB", (w, h), rng.randbytes(w * h * 3))
+    if kind == 1:
+        cols = [bytes(rng.randrange(256) for _ in range(3)) for _ in range(rng.randint(1, 12))]
+        return Image.frombytes("RGB", (w, h), b"".join(rng.choice(cols) for _ in range(w * h)))
+    if kind == 2:
+        small = Image.frombytes("RGB", (3, 3), rng.randbytes(27))
+        return small.resize((w, h), Image.Resampling.BICUBIC)
+    if kind == 3:
+        im = Image.new("RGB", (w, h), tuple(rng.randrange(256) for _ in range(3)))
+        for _ in range(rng.randint(1, 8)):
+            x, y = rng.randrange(w), rng.randrange(h)
+            box = (x, y, rng.randint(x, w), rng.randint(y, h))
+            im.paste(tuple(rng.randrange(256) for _ in range(3)), box)
+        return im
+    vals = [rng.randrange(256) for _ in range(rng.randint(1, 4))]
+    data = bytes(rng.choice(vals) if rng.random() < 0.7 else rng.randrange(256)
+                 for _ in range(w * h * 3))  # fmt: skip
+    return Image.frombytes("RGB", (w, h), data)
+
+
+def test_quantized_pictures_and_their_colours_are_pillow_s():
+    """quantize(colors, MEDIANCUT) then convert("RGB"), as render/cover.py cuts a cover down
+    (its 48 x 48 picture to 8 colours among them), and getcolors in Pillow's own order (None
+    past maxcolors); pictures of more than 65536 colours too (counted at half the precision);
+    RGBA and a number of colours outside 1 to 256 refused."""
+    rng = random.Random(90)
+    cases: list[dict[str, Any]] = []
+    wants: list[Any] = []
+
+    def quantized(im: Image.Image, colors: int) -> None:
+        cases.append({"op": "quantize", "image": image(im), "colors": colors})
+        wants.append(expect(lambda: im.quantize(colors, Image.Quantize.MEDIANCUT).convert("RGB")))
+
+    def coloured(im: Image.Image, maxcolors: int) -> None:
+        cases.append({"op": "getcolors", "image": image(im), "maxcolors": maxcolors})
+        wants.append(("colours", im.getcolors(maxcolors)))
+
+    for _ in range(150):
+        im = _few_colours(rng, rng.randint(1, 90), rng.randint(1, 70))
+        if rng.random() < 0.15:
+            im = im.convert("L")
+        colors = rng.choice([1, 2, 3, 5, 8, 8, 8, 16, 64, 255, 256, rng.randint(1, 256)])
+        quantized(im, colors)
+        few = im.quantize(colors, Image.Quantize.MEDIANCUT).convert("RGB")
+        maxcolors = rng.choice([1, 2, 7, 8, 256, im.width * im.height, rng.randint(1, 3000)])
+        coloured(few, maxcolors)
+        coloured(im, maxcolors)
+    for _ in range(20):
+        cover = noise(rng, "RGBA", (rng.randint(48, 400), rng.randint(48, 400)))
+        cover = cover.resize((5, 4)).resize(cover.size, Image.Resampling.BICUBIC)
+        small = cover.convert("RGB").resize((48, 48), Image.Resampling.BILINEAR)
+        quantized(small, 8)
+        coloured(small.quantize(8, Image.Quantize.MEDIANCUT).convert("RGB"), 48 * 48)
+    for size in ((300, 260), (270, 280)):
+        quantized(Image.frombytes("RGB", size, rng.randbytes(size[0] * size[1] * 3)), 64)
+    quantized(noise(rng, "RGBA", (9, 7)), 8)
+    quantized(noise(rng, "RGBa", (9, 7)), 8)
+    quantized(noise(rng, "RGB", (9, 7)), 0)
+    quantized(noise(rng, "RGB", (9, 7)), 257)
+    answers = run(cases)
+    for case, want, got in zip(cases, wants, answers, strict=True):
+        label = (case["op"], case["image"]["mode"], tuple(case["image"]["size"]))
+        if want is ERROR:
+            assert "error" in got, (label, "Pillow refuses it")
+            continue
+        assert "error" not in got, (label, got.get("error"))
+        if isinstance(want, Image.Image):
+            assert picture(got["image"]).tobytes() == want.tobytes(), label
+            continue
+        listed = want[1]
+        if listed is None:
+            assert got["colors"] is None, label
+        else:
+            mine = [(c, tuple(px) if len(px) > 1 else px[0]) for c, px in got["colors"]]
+            assert mine == listed, label
