@@ -191,6 +191,36 @@ jobs:
           cargo build --release
       # (the Pillow they are compared with: docs/RUST.md; a new one changes nothing unseen)
       - run: pip install -e ".[dev]" pillow==13.0.0
+      # Windows' Pillow has libjpeg-turbo and libwebp built in, where Linux's has them as files
+      # for lp-check to load: here they are built as Pillow's wheel has them (the same
+      # versions, MSVC, libjpeg-turbo's SIMD), so the JPEG and WebP comparisons run here too
+      - name: libjpeg-turbo 3.2.0 and libwebp 1.6.0 for the comparisons (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          python -c "from PIL import features as f; print('Pillow has libjpeg-turbo', f.version_feature('libjpeg_turbo'), 'and libwebp', f.version_module('webp'))"
+          choco install nasm -y --no-progress > /dev/null
+          export PATH="$PATH:/c/Program Files/NASM"
+          mkdir -p "$RUNNER_TEMP/libs" && cd "$RUNNER_TEMP/libs"
+          curl -sSfL -o jpeg.tar.gz https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.2.0/libjpeg-turbo-3.2.0.tar.gz
+          curl -sSfL -o webp.tar.gz https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.6.0.tar.gz
+          printf '%s  %s\n' 6f30092cef9fb839779646608f4ee14ae3cbac989c47fa05e841b0841f09878e jpeg.tar.gz \
+            e4ab7009bf0629fd11982d4c2aa83964cf244cffba7347ecd39019a9e38c4564 webp.tar.gz | sha256sum -c
+          tar -xzf jpeg.tar.gz && tar -xzf webp.tar.gz
+          cmake -S libjpeg-turbo-3.2.0 -B jpeg -G "Visual Studio 17 2022" -A x64 \
+            -DENABLE_STATIC=OFF -DWITH_TURBOJPEG=OFF -DREQUIRE_SIMD=ON > /dev/null
+          cmake --build jpeg --config Release --parallel > /dev/null
+          cmake -S libwebp-1.6.0 -B webp -G "Visual Studio 17 2022" -A x64 -DBUILD_SHARED_LIBS=ON \
+            -DWEBP_BUILD_ANIM_UTILS=OFF -DWEBP_BUILD_CWEBP=OFF -DWEBP_BUILD_DWEBP=OFF \
+            -DWEBP_BUILD_GIF2WEBP=OFF -DWEBP_BUILD_IMG2WEBP=OFF -DWEBP_BUILD_VWEBP=OFF \
+            -DWEBP_BUILD_WEBPINFO=OFF -DWEBP_BUILD_WEBPMUX=OFF -DWEBP_BUILD_EXTRAS=OFF > /dev/null
+          cmake --build webp --config Release --parallel > /dev/null
+          ls jpeg/Release/*.dll webp/Release/*.dll
+          # (libwebp's DLLs find each other, and libsharpyuv, on the PATH)
+          cygpath -w "$PWD/webp/Release" >> "$GITHUB_PATH"
+          echo "LP_LIBJPEG=$(cygpath -w "$PWD/jpeg/Release/jpeg62.dll")" >> "$GITHUB_ENV"
+          echo "LP_LIBWEBP=$(cygpath -w "$PWD/webp/Release/libwebp.dll")" >> "$GITHUB_ENV"
+          echo "LP_LIBWEBPDEMUX=$(cygpath -w "$PWD/webp/Release/libwebpdemux.dll")" >> "$GITHUB_ENV"
       - name: The crates against the Python app
         run: python -m pytest -q tests/test_rust_pixels.py tests/test_rust_decode.py
 

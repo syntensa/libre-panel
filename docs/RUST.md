@@ -132,8 +132,9 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       into the picture, resampling a pixel's bands together and summing rows whole (the same
       integer sums), zlib-rs with its SIMD; a cover made small takes 0.82 to 0.99 of the
       instructions Pillow's takes (callgrind: JPEG 600 to 3000 pixels, PNG, WebP)
-- [ ] the JPEG and WebP comparisons on Windows too (libjpeg-turbo 3.2.0 and libwebp 1.6.0
-      built in CI: Windows' wheels have them built in)
+- [x] the JPEG and WebP comparisons on Windows too: CI builds libjpeg-turbo 3.2.0 and libwebp
+      1.6.0 there as Pillow's Windows wheel has them built in (MSVC, the SIMD), from archives
+      checked by their SHA-256 (libjpeg's boolean is a byte on Windows, an int elsewhere)
 - [ ] to decide: the app reads an animated WebP's durations before each frame is loaded,
       when Pillow has not set them yet, so it plays those at its usual pace (the Rust frames
       read them as the app does for now)
