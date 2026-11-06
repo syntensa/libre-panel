@@ -19,9 +19,78 @@ jobs:
       - name: The heap after the app's pictures, and given back
         shell: bash
         run: python .github/measure/measure_winheap.py
+  pages:
+    # the rig's pages did not show after 27dc8fa: they open as the rig opens them, with the code
+    # as it is and as it was at 703da72 (.github/measure/pages_check.py)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: MinGW and libx264 (MSYS2)
+        uses: msys2/setup-msys2@v2
+        id: msys2
+        with:
+          msystem: MINGW64
+          update: false
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-libx264
+      - name: Build the engine
+        shell: bash
+        run: |
+          cd engine
+          mingw="$(cygpath -u '${{ steps.msys2.outputs.msys2-location }}')/mingw64"
+          export PATH="$mingw/bin:$PATH" CC=gcc AR=ar X264_DIR="$(cygpath -m "$mingw")" X264_STATIC=1
+          export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=gcc RUSTFLAGS="-C target-feature=+crt-static"
+          rustup target add x86_64-pc-windows-gnu
+          cargo build --release --target x86_64-pc-windows-gnu
+          built="target/x86_64-pc-windows-gnu/release/libre-panel-engine.exe"
+          "./$built" version
+          echo "LIBRE_PANEL_ENGINE=$(cygpath -w "$PWD/$built")" >> "$GITHUB_ENV"
+      - run: pip install -e ".[dev,usb,media]" playwright
+      - name: A browser for the app's pages, and ffmpeg
+        shell: bash
+        run: |
+          python -m playwright install chromium
+          python packaging/fetch_tools.py "$RUNNER_TEMP/tools"
+          cygpath -w "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
+      - name: The app's pages, now and at 703da72
+        shell: bash
+        env:
+          LP_PAGES_SHOTS: pages_shots
+        run: |
+          python .github/measure/pages_check.py . home,design,live || true
+          git worktree add "$RUNNER_TEMP/old" 703da72
+          python .github/measure/pages_check.py "$RUNNER_TEMP/old" home,design,live || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pages-shots
+          path: pages_shots
+          if-no-files-found: ignore
+  webview2:
+    # what the app's window holds (WebView2's processes), open on its pages, minimized and shown
+    # again; as it is, as before, and with flags to try (.github/measure/webview2_memory.py)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev,window]"
+      - name: The window open, minimized and shown again
+        shell: bash
+        env:
+          LP_WV2_TRY: "--enable-features=NetworkServiceInProcess2;--enable-features=NetworkServiceInProcess"
+        run: python .github/measure/webview2_memory.py
   rig:
     # the background app with two simulated panels through the engine, the window never opened:
-    # what its main process holds, by owner (.github/measure/rig_windows.py)
+    # what its main process holds, by owner (.github/measure/rig_windows.py); not this time
+    if: false
     runs-on: windows-latest
     timeout-minutes: 75
     steps:
