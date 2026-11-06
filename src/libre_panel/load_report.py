@@ -770,19 +770,20 @@ _FOUND = {
 
 
 def memory_text(memory: dict[str, Any] | None) -> str:
-    """:meth:`LoadSampler.memory_now` in a line: "all of Libre Panel 120 MB: main process 55,
-    engine ×2 38, sensor service 21, PresentMon 6 (MB of private memory each)"."""
+    """:meth:`LoadSampler.memory_now` in a line of the log, its private memory: "all of Libre
+    Panel 120 MB: main process 55 MB, engine 38 MB (2 processes), sensor service 21 MB,
+    PresentMon 6 MB" (letters any log shows: a log read as another code page too)."""
     if not memory or not memory.get("processes"):
         return ""
 
     def mb(value: int | None) -> str:
-        return "?" if value is None else f"{value / 2**20:.0f}"
+        return "? MB" if value is None else f"{value / 2**20:.0f} MB"
 
     parts = []
     for row in memory["processes"]:
-        many = f" ×{row['count']}" if row["count"] > 1 else ""
-        parts.append(f"{row['label']}{many} {mb(row['private'])}")
-    return f"all of Libre Panel {mb(memory['total'])} MB: {', '.join(parts)} (MB each)"
+        many = f" ({row['count']} processes)" if row["count"] > 1 else ""
+        parts.append(f"{row['label']} {mb(row['private'])}{many}")
+    return f"all of Libre Panel {mb(memory['total'])}: {', '.join(parts)}"
 
 
 def _pct(value: float | None) -> str:

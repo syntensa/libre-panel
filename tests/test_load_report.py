@@ -704,6 +704,9 @@ def test_what_each_process_holds_now_in_a_line_for_light_mode():
     assert memory["total"] == sum(r["private"] or 0 for r in memory["processes"])
     assert [r["role"] for r in memory["processes"]][:3] == ["main", "panel", "engine"]
     line = load_report.memory_text(memory)
-    assert line.startswith(f"all of Libre Panel {memory['total'] / MB:.0f} MB: main process 55, ")
-    assert "engine ×2 60" in line and "sensor service 21" in line and line.endswith("(MB each)")
+    assert line.startswith(
+        f"all of Libre Panel {memory['total'] / MB:.0f} MB: main process 55 MB, "
+    )
+    assert "engine 60 MB (2 processes)" in line and "sensor service 21 MB" in line
+    assert line.isascii()  # (a log read as another code page shows it as it is)
     assert load_report.memory_text(None) == "" and load_report.memory_text({"processes": []}) == ""

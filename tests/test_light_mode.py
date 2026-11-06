@@ -143,7 +143,7 @@ def test_the_log_says_what_the_process_holds_some_minutes_after_the_app_closed(c
     with caplog.at_level("INFO", logger="libre_panel.light"):
         light.say_held(lambda: memory)
     line = caplog.records[-1].getMessage()
-    assert "; all of Libre Panel 90 MB: main process 55, engine ×2 35 (MB each); " in line
+    assert "; all of Libre Panel 90 MB: main process 55 MB, engine 35 MB (2 processes); " in line
 
     def refused():
         raise OSError("refused")
