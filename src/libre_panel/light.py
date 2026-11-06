@@ -33,6 +33,7 @@ log = logging.getLogger(__name__)
 
 IDLE_S = 60.0  # no page of the app asked anything for this long: it is closed
 LOOK_S = 15.0  # how often the watch looks (and how long the caches note what the panel uses)
+SAID_S = 180.0  # this long after its memory went back, the log says what the process holds
 
 
 def empty_caches() -> None:
@@ -186,6 +187,26 @@ def release(also: Callable[[], None] | None = None) -> None:
     give_back()
 
 
+def say_held() -> None:
+    """The log's line of what this process holds, some minutes after the app closed (light
+    mode): its memory as the Task Manager's Memory column shows it (on Linux what is its own
+    alone), what Windows has committed to it, and what it holds as the load report counts it
+    (load_report.py's inside): what a person can read later in Live → Diagnosis → Log, with the
+    window open again."""
+    import psutil
+
+    from libre_panel import load_report
+
+    info = psutil.Process().memory_full_info()
+    said = f"{info.uss / 2**20:.0f} MB"
+    commit = getattr(info, "private", None)  # (Windows: what is committed to it)
+    if commit is not None:
+        said += f" (committed {commit / 2**20:.0f} MB)"
+    held = load_report.inside_text(load_report.inside())
+    log.info("light mode: %.0f minutes after the app closed, %s; %s", SAID_S / 60,
+             said, " ".join(line.strip() for line in held))  # fmt: skip
+
+
 def mark() -> None:
     from libre_panel.render import kept
 
@@ -227,11 +248,14 @@ class Watch:
         shed: Callable[[], None] = shed,
         unmark: Callable[[], None] = unmark,
         tidy: Callable[[], None] = tidy,
+        say: Callable[[], None] = say_held,
     ) -> None:
         self.light, self.last_request = light, last_request
         self.release, self.clock, self.closed = release, clock, closed
         self.mark, self.shed, self.unmark = mark, shed, unmark
-        self.tidy = tidy
+        self.tidy, self.say = tidy, say
+        self.released_at = 0.0  # when it released last
+        self.said_for: Any = object()  # the request it said what the process holds after
         self.began = clock()  # (an app never opened is closed since then)
         self.marking = False  # the caches note what is used (between closed and shed)
         self.released_for: Any = object()  # the request it released after (none yet)
@@ -265,8 +289,12 @@ class Watch:
             return False
         if last == self.released_for:  # released: what the panel's frames freed since goes too
             self.tidy()
+            if last != self.said_for and self.clock() - self.released_at >= SAID_S:
+                self.said_for = last  # (once a while after: what stays with the app closed)
+                self.say()
             return False
         self.released_for = last
+        self.released_at = self.clock()
         self.release()
         log.info("light mode: the app is closed, its memory went back to the system")
         return True

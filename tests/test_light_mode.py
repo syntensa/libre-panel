@@ -25,7 +25,7 @@ class Clock:
 
 def watch(on=True, last=None):
     state = {"on": on, "last": last, "released": 0, "closed": 0, "marked": 0, "shed": 0,
-             "unmarked": 0, "tidied": 0}  # fmt: skip
+             "unmarked": 0, "tidied": 0, "said": 0}  # fmt: skip
 
     def count(name):
         return lambda: state.__setitem__(name, state[name] + 1)
@@ -41,6 +41,7 @@ def watch(on=True, last=None):
         shed=count("shed"),
         unmark=count("unmarked"),
         tidy=count("tidied"),
+        say=count("said"),
     )
     return w, state, clock
 
@@ -107,6 +108,35 @@ def test_the_heap_is_tidied_at_each_look_while_the_app_stays_closed_in_light_mod
         clock.now += light.LOOK_S
         w.look()
     assert state["tidied"] == 3 and state["released"] == 1
+
+
+def test_the_log_says_what_the_process_holds_some_minutes_after_the_app_closed(caplog):
+    """Once per time the app was closed, SAID_S after its memory went back (what stays with
+    the app closed, to read in the log once the window is open again); not with it open, nor
+    without light mode; the line itself names the memory and what the load report counts."""
+    w, state, clock = watch(last=1000.0)
+    clock.now = 1000 + light.IDLE_S
+    w.look()
+    clock.now += light.LOOK_S
+    assert w.look() and state["said"] == 0  # (released now)
+    while clock.now < 1000 + light.IDLE_S + light.LOOK_S + light.SAID_S - light.LOOK_S:
+        clock.now += light.LOOK_S
+        w.look()
+    assert state["said"] == 0
+    for _ in range(8):
+        clock.now += light.LOOK_S
+        w.look()
+    assert state["said"] == 1  # (once)
+    state["last"] = clock.now  # opened and closed again: said again, once
+    for _ in range(round((light.IDLE_S + light.SAID_S) / light.LOOK_S) + 4):
+        clock.now += light.LOOK_S
+        w.look()
+    assert state["said"] == 2
+    with caplog.at_level("INFO", logger="libre_panel.light"):
+        light.say_held()
+    line = caplog.records[-1].getMessage()
+    assert line.startswith("light mode: 3 minutes after the app closed, ")
+    assert " MB" in line and "the main process holds: pictures" in line
 
 
 class Kernel32:
