@@ -408,7 +408,7 @@ impl Font {
             glyphs.push(GlyphInfo {
                 index,
                 x_offset: 0,
-                x_advance: advance as i32,
+                x_advance: long(advance) as i32,
                 y_offset: 0,
                 y_advance: 0,
                 cluster: code,
