@@ -880,3 +880,82 @@ def test_the_renderer_s_dither_its_levels_ramps_and_blur():
             assert np.abs(mine - ours).max() <= 5e-4, (case["w"], case["h"], case["radius"])
         else:
             assert np.array_equal(mine, ours), (case["op"], case.get("radius"))
+
+
+def _colour_texts(rng: random.Random, count: int) -> list[str]:
+    """Colours in every form ImageColor reads, and as many it refuses: names in any case,
+    hex of every length, rgb() in numbers and percent, hsl(), hsv(), hsb(), rgba(), white space
+    and digits of other scripts, a last line end, numbers of more than 53 bits (where floats
+    are no longer whole), garbage."""
+    from PIL import ImageColor
+
+    names = list(ImageColor.colormap)
+    spaces = ["", " ", "  ", "\t", "　", "\xa0", "\n", "​"]
+    other_digits = "٠٣٩۵१３"
+
+    def number(top: int) -> str:
+        text = str(rng.randrange(top))
+        return "".join(rng.choice(other_digits) if rng.random() < 0.15 else c for c in text)
+
+    def space() -> str:
+        return rng.choice(spaces) if rng.random() < 0.4 else ""
+
+    def one() -> str:
+        kind = rng.randrange(10)
+        end = rng.choice(["", "", "\n", " "])
+        if kind == 0:
+            return "".join(c.upper() if rng.random() < 0.3 else c for c in rng.choice(names))
+        if kind == 1:
+            n = rng.choice([3, 4, 5, 6, 7, 8, 9])
+            return "#" + "".join(rng.choice("0123456789abcdefABCDEFg") for _ in range(n)) + end
+        if kind in (2, 3):
+            percent = rng.choice(["", "%"])
+            n = rng.choice([3, 3, 3, 2, 4])
+            # (at most 18 digits: within 64 bits, also in percent and with other digits)
+            top = rng.choice([400, 400, 400, 10**17])
+            parts = (space() + number(top) + percent + space() for _ in range(n))
+            return "rgb(" + ",".join(parts) + ")" + end
+        if kind in (4, 5):
+            parts = []
+            for i in range(3):
+                fraction = (
+                    rng.choice(["", ".", ".5", "." + number(99)]) if rng.random() < 0.5 else ""
+                )
+                parts.append(space() + number(400) + fraction + ("%" if i else "") + space())
+            return rng.choice(["hsl", "hsv", "hsb", "HSL"]) + "(" + ",".join(parts) + ")" + end
+        if kind == 6:
+            top = rng.choice([300, 300, 300, 2**31])
+            parts = (space() + number(top) + space() for _ in range(rng.choice([4, 4, 3])))
+            return "rgba(" + ",".join(parts) + ")"
+        if kind == 7:
+            return "".join(rng.choice("abcdefrgbhsl(),.%# 0123456789") for _ in range(9))
+        if kind == 8:
+            return "#" + "a" * rng.randrange(95, 105)
+        # (and lower()'s: İ to two characters, the final sigma, ʕ a letter of a case and
+        # U+A7CB none yet in Unicode 15.0)
+        garbage = ["", " ", "#", "rgb()", "RGB(1,2,3)", "rgb(1, 2, 3, )"]
+        return rng.choice([*garbage, "İ", "ΣΑΣ", "ΑΣʕ", "ΑΣ'ʰ", "\ua7cb"])
+
+    return [one() for _ in range(count)]
+
+
+def test_colours_are_read_and_given_as_imagecolor_does_it() -> None:
+    from PIL import ImageColor
+
+    colors = _colour_texts(random.Random(0xC010), 3000)
+    modes = ["RGB", "RGBA", "RGBa", "L", "LA", "La", "1", "I", "F", "P", "HSV", "PA"]
+    cases = [{"op": "getrgb", "colors": colors}]
+    cases += [{"op": "getcolor", "colors": colors, "mode": mode} for mode in modes]
+    answers = [answer["answers"] for answer in run(cases)]
+
+    def pillow(read: Any, *args: str) -> Any:
+        try:
+            value = read(*args)
+        except ValueError as error:
+            return {"error": str(error)}
+        return list(value) if isinstance(value, tuple) else [value]
+
+    for i, color in enumerate(colors):
+        assert answers[0][i] == pillow(ImageColor.getrgb, color), repr(color)
+        for mode, ours in zip(modes, answers[1:], strict=True):
+            assert ours[i] == pillow(ImageColor.getcolor, color, mode), (repr(color), mode)

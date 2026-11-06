@@ -1,0 +1,266 @@
+//! lp-py: what Python does that Libre Panel's files and messages depend on, for the Rust app
+//! to do the same (docs/RUST.md): str's repr (the app's messages quote values with it), its
+//! white space and its digits (Python's regular expressions and int() go by them), lower()
+//! and upper(), its rounding and its division of whole numbers. Python's Unicode database is
+//! the release's (Python 3.12: Unicode 15.0), and so is this crate's: Rust's own (17.0 in Rust
+//! 1.97) is taken only for characters 15.0 has.
+
+use unicode_general_category::{get_general_category, GeneralCategory as G};
+
+/// str.isspace (and the regular expressions' \s) for one character.
+pub fn isspace(ch: char) -> bool {
+    matches!(ch, '\t'..='\r' | '\x1c'..='\x1f' | ' ' | '\u{85}' | '\u{a0}' | '\u{1680}'
+        | '\u{2000}'..='\u{200a}' | '\u{2028}' | '\u{2029}' | '\u{202f}' | '\u{205f}' | '\u{3000}')
+}
+
+/// str.strip(): the text without Python's white space at either end.
+pub fn strip(text: &str) -> &str {
+    text.trim_matches(isspace)
+}
+
+/// str.isprintable for one character: all but the "Other" and "Separator" categories (the
+/// ASCII space is printable).
+pub fn isprintable(ch: char) -> bool {
+    if ch == ' ' {
+        return true;
+    }
+    !matches!(
+        get_general_category(ch),
+        G::Control
+            | G::Format
+            | G::Surrogate
+            | G::PrivateUse
+            | G::Unassigned
+            | G::LineSeparator
+            | G::ParagraphSeparator
+            | G::SpaceSeparator
+    )
+}
+
+/// The value of a decimal digit (category Nd, the regular expressions' \d, what int() reads):
+/// Unicode keeps them in runs of ten from 0.
+pub fn decimal(ch: char) -> Option<u32> {
+    if get_general_category(ch) != G::DecimalNumber {
+        return None;
+    }
+    let mut start = u32::from(ch);
+    while let Some(before) = start.checked_sub(1).and_then(char::from_u32) {
+        if get_general_category(before) != G::DecimalNumber {
+            break;
+        }
+        start -= 1;
+    }
+    Some((u32::from(ch) - start) % 10)
+}
+
+/// repr() of a str: in single quotes unless it has some and no double ones, with Python's
+/// escapes for the quote, the backslash and what is not printable.
+pub fn repr(text: &str) -> String {
+    let quote = if text.contains('\'') && !text.contains('"') {
+        '"'
+    } else {
+        '\''
+    };
+    let mut out = String::with_capacity(text.len() + 2);
+    out.push(quote);
+    for ch in text.chars() {
+        match ch {
+            _ if ch == quote || ch == '\\' => {
+                out.push('\\');
+                out.push(ch);
+            }
+            '\t' => out.push_str("\\t"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            _ if (ch as u32) < 0x20 || ch as u32 == 0x7f => {
+                out.push_str(&format!("\\x{:02x}", ch as u32));
+            }
+            _ if (ch as u32) < 0x7f => out.push(ch),
+            _ if isprintable(ch) => out.push(ch),
+            _ if (ch as u32) <= 0xff => out.push_str(&format!("\\x{:02x}", ch as u32)),
+            _ if (ch as u32) <= 0xffff => out.push_str(&format!("\\u{:04x}", ch as u32)),
+            _ => out.push_str(&format!("\\U{:08x}", ch as u32)),
+        }
+    }
+    out.push(quote);
+    out
+}
+
+/// round() of a float: to the nearest whole number, halves to the even one.
+pub fn round(x: f64) -> f64 {
+    x.round_ties_even()
+}
+
+/// `a / b` of two ints: the float nearest the exact quotient (halfway: the even one), as
+/// Python's true division of ints gives it (not `a as f64 / b as f64`, which rounds twice
+/// once a number has more than 53 bits). `b` must not be 0.
+pub fn true_div(a: i128, b: i64) -> f64 {
+    assert!(b != 0, "division by zero");
+    let negative = (a < 0) != (b < 0);
+    let (a, b) = (a.unsigned_abs(), u128::from(b.unsigned_abs()));
+    let q = if a == 0 {
+        0.0
+    } else if a <= 1 << 53 && b <= 1 << 53 {
+        a as f64 / b as f64 // (both exact: one rounding)
+    } else {
+        // the quotient to 55 bits or more, the rest only as whether there is any
+        let bits = |n: u128| 128 - n.leading_zeros() as i32;
+        let shift = (55 + bits(b) - bits(a)).max(0);
+        let scaled = a << shift; // (at most 55 + 64 bits)
+        let (mut n, inexact) = (scaled / b, scaled % b != 0);
+        let drop = bits(n) - 53;
+        let rest = n & ((1u128 << drop) - 1);
+        let half = 1u128 << (drop - 1);
+        n >>= drop;
+        if rest > half || (rest == half && (inexact || n & 1 == 1)) {
+            n += 1;
+        }
+        n as f64 * 2f64.powi(drop - shift)
+    };
+    if negative {
+        -q
+    } else {
+        q
+    }
+}
+
+/// Whether Unicode 15.0 has the character (Python 3.12's database knows nothing of later ones:
+/// no case, no category).
+fn known(ch: char) -> bool {
+    get_general_category(ch) != G::Unassigned
+}
+
+/// Word_Break MidLetter, MidNumLet and Single_Quote (Unicode 15.0): case-ignorable as the
+/// marks, format characters and modifiers are.
+const MIDS: [char; 17] = [
+    '\'', '.', ':', '\u{b7}', '\u{387}', '\u{55f}', '\u{5f4}', '\u{2018}', '\u{2019}', '\u{2024}',
+    '\u{2027}', '\u{fe13}', '\u{fe52}', '\u{fe55}', '\u{ff07}', '\u{ff0e}', '\u{ff1a}',
+];
+
+/// Unicode's Case_Ignorable, as Python 3.12 has it.
+fn case_ignorable(ch: char) -> bool {
+    matches!(
+        get_general_category(ch),
+        G::NonspacingMark | G::EnclosingMark | G::Format | G::ModifierLetter | G::ModifierSymbol
+    ) || MIDS.contains(&ch)
+}
+
+/// Unicode's Cased, as Python 3.12 has it: the letters of a case in Unicode 15.0 (ʕ was one
+/// until 16.0) and what else Unicode counts as lower- or uppercase.
+fn cased(ch: char) -> bool {
+    known(ch)
+        && (matches!(
+            get_general_category(ch),
+            G::UppercaseLetter | G::LowercaseLetter | G::TitlecaseLetter
+        ) || ch.is_lowercase()
+            || ch.is_uppercase())
+}
+
+/// A character's case mapping as Unicode 15.0 has it: Rust's, unless the character or what it
+/// maps to came later (ƛ's capital was new in 16.0: 15.0 has ƛ without one).
+fn push_mapped(out: &mut String, ch: char, to: impl Iterator<Item = char> + Clone) {
+    if known(ch) && to.clone().all(known) {
+        out.extend(to);
+    } else {
+        out.push(ch);
+    }
+}
+
+/// Whether the capital sigma at `at` ends a word (Final_Sigma): a cased letter before it and
+/// none after it, case-ignorable characters between not counted.
+fn final_sigma(chars: &[char], at: usize) -> bool {
+    let before = chars[..at].iter().rev().find(|&&c| !case_ignorable(c));
+    let after = chars[at + 1..].iter().find(|&&c| !case_ignorable(c));
+    before.is_some_and(|&c| cased(c)) && !after.is_some_and(|&c| cased(c))
+}
+
+/// str.lower(): every character's full lowercase (some become two), the capital sigma at the
+/// end of a word the final one (ς).
+pub fn lower(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    for (i, &ch) in chars.iter().enumerate() {
+        if ch == '\u{3a3}' {
+            out.push(if final_sigma(&chars, i) {
+                '\u{3c2}'
+            } else {
+                '\u{3c3}'
+            });
+        } else {
+            push_mapped(&mut out, ch, ch.to_lowercase());
+        }
+    }
+    out
+}
+
+/// str.upper(): every character's full uppercase (ß becomes SS).
+pub fn upper(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for ch in text.chars() {
+        push_mapped(&mut out, ch, ch.to_uppercase());
+    }
+    out
+}
+
+/// int() of a text of decimal digits only (what a regular expression's \d+ matched): its
+/// value, in Python's digits of any script (beyond i128's range: its largest, where Python's
+/// ints go on); None for anything else.
+pub fn int_of_digits(text: &str) -> Option<i128> {
+    if text.is_empty() {
+        return None;
+    }
+    text.chars().try_fold(0i128, |n, ch| {
+        let d = decimal(ch)?;
+        Some(n.saturating_mul(10).saturating_add(i128::from(d)))
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn repr_quotes_and_escapes_as_python_does() {
+        assert_eq!(repr("abc"), "'abc'");
+        assert_eq!(repr("it's"), "\"it's\"");
+        assert_eq!(repr("'\""), "'\\'\"'");
+        assert_eq!(repr("a\\b\n\t\r\x01\x7f"), "'a\\\\b\\n\\t\\r\\x01\\x7f'");
+        assert_eq!(repr("\u{a0}é\u{200b}\u{e000}"), "'\\xa0é\\u200b\\ue000'");
+        assert_eq!(repr("\u{10ffff}😀"), "'\\U0010ffff😀'");
+    }
+
+    #[test]
+    fn digits_of_every_script_and_python_s_rounding() {
+        assert_eq!(decimal('7'), Some(7));
+        assert_eq!(decimal('\u{663}'), Some(3));
+        assert_eq!(decimal('\u{1D7D8}'), Some(0)); // (the third run of ten in a row)
+        assert_eq!(decimal('x'), None);
+        assert_eq!(int_of_digits("\u{663}\u{661}"), Some(31));
+        assert_eq!(
+            [0.5, 1.5, 2.5, -2.5, 2.6].map(round),
+            [0.0, 2.0, 2.0, -2.0, 3.0]
+        );
+        assert!(isspace('\u{1c}') && !isspace('\u{200b}'));
+        assert_eq!(strip("\u{3000} a \n"), "a");
+    }
+
+    #[test]
+    fn case_and_division_as_python_s() {
+        // (the apostrophe and the accent are skipped: what comes after them decides)
+        assert_eq!(
+            lower("ΣΑΣ ΑΣ'Α Α\u{301}Σ\u{301}"),
+            "σας ασ'α α\u{301}ς\u{301}"
+        );
+        assert_eq!(lower("İ"), "i\u{307}");
+        assert_eq!(upper("straße ŉ"), "STRASSE ʼN");
+        // (16.0's capitals of ƛ and ɤ, and ʕ a letter of a case until then)
+        assert_eq!(upper("ƛɤ\u{a7cb}"), "ƛɤ\u{a7cb}");
+        assert_eq!(lower("ΑΣʕ"), "ασʕ");
+        assert_eq!(true_div(0, -5).to_bits(), (-0.0f64).to_bits());
+        assert_eq!(true_div(-7, 2), -3.5);
+        // 2⁵⁵ + 3 over 1 and 2⁵⁴ + 1 over 1: halfway and past it, to the even neighbour
+        assert_eq!(true_div((1 << 55) + 3, 1), ((1u64 << 55) + 4) as f64);
+        assert_eq!(true_div((1 << 54) + 2, 1), (1u64 << 54) as f64);
+        assert_eq!(true_div(11997452401628418 * 100, 100), 11997452401628418.0);
+    }
+}

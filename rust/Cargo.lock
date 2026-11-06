@@ -100,6 +100,7 @@ dependencies = [
  "base64",
  "lp-decode",
  "lp-pixels",
+ "lp-py",
  "lp-text",
  "serde_json",
  "sha2",
@@ -118,6 +119,16 @@ dependencies = [
 [[package]]
 name = "lp-pixels"
 version = "0.1.0"
+dependencies = [
+ "lp-py",
+]
+
+[[package]]
+name = "lp-py"
+version = "0.1.0"
+dependencies = [
+ "unicode-general-category",
+]
 
 [[package]]
 name = "lp-text"
@@ -125,6 +136,7 @@ version = "0.1.0"
 dependencies = [
  "libloading",
  "lp-pixels",
+ "lp-py",
  "unicode-general-category",
  "unicode-normalization",
 ]

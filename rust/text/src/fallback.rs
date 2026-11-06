@@ -826,12 +826,6 @@ pub fn unicode_table() -> String {
     out
 }
 
-/// str.isspace as Python 3.12 has it.
-fn python_space(ch: char) -> bool {
-    matches!(ch, '\t'..='\r' | '\x1c'..='\x1f' | ' ' | '\u{85}' | '\u{a0}' | '\u{1680}'
-        | '\u{2000}'..='\u{200a}' | '\u{2028}' | '\u{2029}' | '\u{202f}' | '\u{205f}' | '\u{3000}')
-}
-
 /// Blocks of scripts whose letters join (Arabic, Syriac, N'Ko, Mandaic, Mongolian, Adlam).
 const CURSIVE: [(u32, u32); 8] = [
     (0x0600, 0x077F),
@@ -888,12 +882,12 @@ fn edged(runs: Vec<(Spec, String)>) -> Plan {
         }
     };
     for (spec, run) in runs {
-        let body = run.trim_matches(python_space);
+        let body = run.trim_matches(lp_py::isspace);
         if spec.is_none() || body.is_empty() {
             put(None, &run);
             continue;
         }
-        let lead = run.len() - run.trim_start_matches(python_space).len();
+        let lead = run.len() - run.trim_start_matches(lp_py::isspace).len();
         put(None, &run[..lead]);
         put(spec, body);
         put(None, &run[lead + body.len()..]);
@@ -924,16 +918,6 @@ pub struct FallbackFont {
 /// (where each run starts from the anchor, how far below it the baseline lies, the
 /// horizontal anchor)
 type Placed = (Vec<(Rc<Font>, String, f64)>, i64, char);
-
-/// Python's round(): half to even.
-fn round_half_even(x: f64) -> f64 {
-    let r = x.round();
-    if (x - x.trunc()).abs() == 0.5 {
-        2.0 * (x / 2.0).round()
-    } else {
-        r
-    }
-}
 
 impl FallbackFont {
     /// truetype: Pillow's font, falling back to `chain` (None: the system's).
@@ -1112,7 +1096,7 @@ impl FallbackFont {
                 .getbbox("H", "", None, None, None, 0.0, Some(anchor))?
                 .1)
         };
-        let d = round_half_even(top(&format!("l{vertical}"))? - top("ls")?) as i64;
+        let d = lp_py::round(top(&format!("l{vertical}"))? - top("ls")?) as i64;
         self.kept.borrow_mut().drops.insert(vertical, d);
         Ok(d)
     }
@@ -1142,7 +1126,7 @@ impl FallbackFont {
             widths.push(face.getlength(run, mode, direction, features, language)?);
             faces.push(face);
         }
-        let units = round_half_even(widths.iter().fold(0.0, |s, w| s + w) * 64.0) as i64;
+        let units = lp_py::round(widths.iter().fold(0.0, |s, w| s + w) * 64.0) as i64;
         let mut x = match letters[0] {
             'l' => 0.0,
             'm' => -((units.div_euclid(2) + 32) >> 6) as f64,
@@ -1415,12 +1399,7 @@ mod tests {
     }
 
     #[test]
-    fn python_s_round_and_spaces() {
-        assert_eq!(
-            [0.5, 1.5, 2.5, -0.5, -1.5, 2.4].map(round_half_even),
-            [0.0, 2.0, 2.0, -0.0, -2.0, 2.0]
-        );
-        assert!(python_space('\u{1c}') && python_space('\u{3000}') && !python_space('\u{200b}'));
+    fn python_s_line_ends() {
         assert_eq!(python_lines("a\r\nb\nc\u{2028}d"), vec!["a", "b", "c", "d"]);
     }
 }

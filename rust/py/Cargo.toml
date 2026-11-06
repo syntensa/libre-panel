@@ -1,0 +1,12 @@
+[package]
+name = "lp-py"
+description = "Python's ways the app's files and messages depend on: str's repr, white space, digits, rounding"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# (Unicode 15.0, as Python 3.12's unicodedata has it, the release's)
+unicode-general-category = "=0.6.0"

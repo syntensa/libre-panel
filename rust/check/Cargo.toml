@@ -8,6 +8,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+lp-py = { path = "../py" }
 lp-pixels = { path = "../pixels" }
 lp-decode = { path = "../decode" }
 lp-text = { path = "../text" }

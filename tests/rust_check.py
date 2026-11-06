@@ -115,7 +115,8 @@ def run(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
     done = subprocess.run(
         [str(exe)], input=text, capture_output=True, text=True, timeout=900, check=True, env=env
     )
-    answers = [json.loads(line) for line in done.stdout.splitlines()]
+    # (one answer a line: split at "\n" only, as JSON leaves U+2028 and the like as they are)
+    answers = [json.loads(line) for line in done.stdout.split("\n") if line]
     assert len(answers) == len(cases), done.stderr
     return answers
 

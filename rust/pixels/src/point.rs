@@ -38,6 +38,5 @@ impl Image {
 
 /// Python's round(x) to a whole number: halves go to the even neighbour.
 pub fn round_half_even(x: f64) -> i64 {
-    let r = x.round_ties_even();
-    r as i64
+    lp_py::round(x) as i64
 }

@@ -13,6 +13,7 @@ mod bands;
 mod bbox;
 mod blur;
 pub mod chops;
+pub mod colour;
 mod composite;
 mod convert;
 pub mod dither;

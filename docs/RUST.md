@@ -66,6 +66,7 @@ all of it. It is the reference every Rust piece is checked against:
 
 | Crate | What it is | Python it replaces |
 |---|---|---|
+| py | what Python does that the app's files and messages depend on: str's repr, white space, digits, lower() and upper(), rounding, the division of ints (Unicode 15.0, the release's) | — (Python's own rules) |
 | pixels | Pillow's operations as Libre Panel uses them, to the bit | Pillow, numpy (in render/) |
 | decode | pictures from their files as Pillow decodes them (PNG, GIF, JPEG, WebP) | Image.open, Pillow's decoders |
 | text | letters and their layout as Pillow draws them (FreeType, shaping as libraqm) | fonts/, ImageFont |
@@ -104,6 +105,10 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       boxes), past 65536 colours too
 - [x] ImageChops: multiply, screen, add, subtract, lighter, darker, difference, the modulos,
       offset; blend, composite
+- [x] ImageColor: getrgb and getcolor in every form Pillow reads (names, hex, rgb() in numbers
+      and percent, hsl(), hsv(), hsb(), rgba()), its regular expressions matched as Python
+      matches them (any script's digits, Python's white space, a last line end) and its
+      messages quoted as Python quotes them (lp-py)
 - [x] transpose, rotate, transform (affine, extent, perspective, quad; nearest, bilinear,
       bicubic)
 - [x] drawing: line (thin and wide, joints), polygon, rectangle, rounded_rectangle, ellipse,

@@ -664,6 +664,99 @@ fn run(case: &Value) -> Result<Value, String> {
                 }
             }
         }
+        "getrgb" | "getcolor" => {
+            let answers: Vec<Value> = case["colors"]
+                .as_array()
+                .ok_or("colors")?
+                .iter()
+                .map(|c| {
+                    let color = c.as_str().unwrap_or_default();
+                    let found = if op == "getrgb" {
+                        lp_pixels::colour::getrgb(color)
+                    } else {
+                        lp_pixels::colour::getcolor(color, case["mode"].as_str().unwrap_or("RGB"))
+                    };
+                    match found {
+                        Ok(v) => json!(v),
+                        Err(e) => json!({"error": e.0}),
+                    }
+                })
+                .collect();
+            json!({"answers": answers})
+        }
+        "py" => {
+            let texts = case["texts"].as_array().ok_or("texts")?;
+            let reprs: Vec<String> = texts
+                .iter()
+                .map(|t| lp_py::repr(t.as_str().unwrap_or_default()))
+                .collect();
+            // over every code point: the digits' values, what is printable, what is space
+            let mut table = String::new();
+            for ch in (0..=0x10FFFFu32).filter_map(char::from_u32) {
+                let (d, p, w) = (
+                    lp_py::decimal(ch),
+                    lp_py::isprintable(ch),
+                    lp_py::isspace(ch),
+                );
+                if d.is_some() || !p || w {
+                    table += &format!(
+                        "{:04X} {} {} {}\n",
+                        u32::from(ch),
+                        d.map_or(-1, i64::from),
+                        u8::from(p),
+                        u8::from(w)
+                    );
+                }
+            }
+            let sum = Sha256::digest(table.as_bytes());
+            let hex: String = sum.iter().map(|b| format!("{b:02x}")).collect();
+            // over every code point: lower(), upper() and how the final sigma sees it
+            let code = |text: String| -> String {
+                let codes: Vec<String> = text
+                    .chars()
+                    .map(|c| format!("{:X}", u32::from(c)))
+                    .collect();
+                codes.join(".")
+            };
+            let mut cases = String::new();
+            for ch in (0..=0x10FFFFu32).filter_map(char::from_u32) {
+                let (low, up) = (lp_py::lower(&ch.to_string()), lp_py::upper(&ch.to_string()));
+                let class = match (
+                    lp_py::lower(&format!("A\u{3a3}{ch}")).chars().nth(1),
+                    lp_py::lower(&format!("A\u{3a3}{ch}B")).chars().nth(1),
+                ) {
+                    (Some('\u{3c2}'), Some('\u{3c3}')) => "I",
+                    (Some('\u{3c3}'), Some('\u{3c3}')) => "C",
+                    _ => "N",
+                };
+                if low != ch.to_string() || up != ch.to_string() || class != "N" {
+                    cases += &format!("{:04X} {} {} {class}\n", u32::from(ch), code(low), code(up));
+                }
+            }
+            let case_sum = Sha256::digest(cases.as_bytes());
+            let case_hex: String = case_sum.iter().map(|b| format!("{b:02x}")).collect();
+            let text = |t: &Value| t.as_str().unwrap_or_default().to_string();
+            let lowers: Vec<String> = texts.iter().map(|t| lp_py::lower(&text(t))).collect();
+            let uppers: Vec<String> = texts.iter().map(|t| lp_py::upper(&text(t))).collect();
+            let quotients: Vec<f64> = case["divisions"]
+                .as_array()
+                .map(|all| {
+                    all.iter()
+                        .map(|pair| {
+                            let int =
+                                |v: &Value| v.as_str().and_then(|s| s.parse().ok()).unwrap_or(1);
+                            lp_py::true_div(int(&pair[0]), int(&pair[1]) as i64)
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            let mut answer = json!({"reprs": reprs, "sha256": hex, "case_sha256": case_hex,
+                "lowers": lowers, "uppers": uppers, "quotients": quotients});
+            if case["case_table"].as_bool() == Some(true) {
+                answer["case_table"] = json!(cases);
+            }
+            answer
+        }
         "unicode" => {
             let sum = Sha256::digest(lp_text::fallback::unicode_table().as_bytes());
             let hex: String = sum.iter().map(|b| format!("{b:02x}")).collect();
