@@ -22,7 +22,7 @@ from libre_panel import config, design, fonts, icons
 from libre_panel.devices import models as devices
 from libre_panel.render import finish, lit
 from libre_panel.render.overlays import BUILT_IN_STYLES
-from libre_panel.theme import adapt, model, modules
+from libre_panel.theme import adapt, defaults, model, modules
 
 FONTS = str(fonts.FONT_DIR)
 THEMES = sorted(p.parent for p in model.builtin_themes_dir().glob("*/theme.json"))
@@ -513,6 +513,11 @@ def test_versions_places_and_variants_of_themes_as_python_s(
     case = {"op": "theme_versions", "user": str(user), "builtin": str(builtin), "fonts_dir": FONTS}
     [ours] = run([{**case, "names": names, "sizes": sizes, "variants": variants}])
     assert ours["names"] == _python_versions(names, sizes)
+    # each panel's default theme (theme/defaults.py), with the user's Lumen in place
+    panels = [None, *devices.MODELS]
+    assert ours["defaults"] == [
+        [m.id if m else "", defaults.is_bar(m), defaults.default_theme(m)] for m in panels
+    ]
     assert ours["listed"] == [json.dumps(entry) for entry in model.list_themes()]
 
     def variant_of(w: dict[str, Any]) -> dict[str, Any]:

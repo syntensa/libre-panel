@@ -3,6 +3,7 @@
 //! messages and warnings in its words.
 
 pub mod adapt;
+pub mod defaults;
 pub mod grid;
 pub mod light;
 pub mod model;

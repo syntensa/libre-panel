@@ -985,6 +985,17 @@ fn run(case: &Value) -> Result<Value, String> {
                         .collect()
                 })
                 .unwrap_or_default();
+            // each panel's default theme (and none's), and whether it is a bar
+            let defaults: Vec<Value> = std::iter::once(None)
+                .chain(lp_devices::models::MODELS.iter().map(Some))
+                .map(|m| {
+                    json!([
+                        m.map_or("", |m| m.id),
+                        lp_theme::defaults::is_bar(m),
+                        lp_theme::defaults::default_theme(m, &places)
+                    ])
+                })
+                .collect();
             let answers: Vec<Value> = names.iter().map(|name| {
                 let mut fors = Vec::new();
                 for orientation in ["landscape", "portrait", ""] {
@@ -1083,7 +1094,8 @@ fn run(case: &Value) -> Result<Value, String> {
                         .collect()
                 })
                 .unwrap_or_default();
-            json!({"names": answers, "listed": listed, "variants": variants, "saved": saved})
+            json!({"names": answers, "listed": listed, "variants": variants, "saved": saved,
+                "defaults": defaults})
         }
         "theme_adapt" => {
             // grids, adapted themes and themes laid out, as theme/adapt.py makes them; set order

@@ -200,13 +200,17 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       and ints of any size, int / int rounded once, min, max, round, log, every error in its
       words), the versions in the order the folder lists them, matched without case on
       Windows as Python's re matches (its own tables, compared over every code point)
-- [ ] community themes (theme/share.py), the panel's default theme (theme/defaults.py); the
-      cards and modules' layout with R4
+- [x] the panel's default theme (theme/defaults.py): Lumen on a bar and on a round panel it
+      has a version for, Libre Default elsewhere (the panel a config is for, and the theme of
+      its normal page, come with the config in R9; community themes with the editor's import
+      and export in R9; the cards and modules' layout in R4)
 - [ ] paths whose names are no Unicode (Linux: bytes that are no UTF-8, kept by Python as
       surrogates; Windows: a half of a surrogate pair): read as Python reads them, all through
       rust/theme (today a theme in such a folder finds no versions)
 
 ### R4 render
+- [ ] the cards and modules' layout (theme/modules.py, theme/cards.py): modules on their grid,
+      their parts as widgets, the cards of Start
 - [ ] the renderer's frame, widget by widget (texts, clocks, gauges, rings, bars, lists, graphs
       and their strips, fans, images, videos, icons, weather, globes, moon, sun path, slots,
       cards, notices), effects (glow, lit finish, dither), motion, transitions, toasts, start
@@ -238,6 +242,12 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       tests (Playwright) against the Rust app
 - [ ] the window (wry, tao), the tray icon, the command line, autostart, single instance,
       updates, languages, the log, light mode
+- [ ] config.toml and its folders; the panel a config is for (theme/defaults.py's
+      panel_model: the configured model, the one a display reports, a TURZX panel on the USB
+      bus) and the theme of its normal page
+- [ ] community themes as one file (theme/share.py): the zip read as Python's zipfile reads it
+      (every entry, name, method and damage) and written as it writes it, every check of an
+      import in its words, the files a theme names, what is scrubbed from it
 
 ### R10 plugins
 - [ ] WebAssembly plugins: services, sensors and pages, an API of their own
