@@ -469,12 +469,24 @@ fn run(case: &Value) -> Result<Value, String> {
                 .and_then(Mode::from_name)
                 .ok_or("a mode")?;
             let fail = |err: lp_decode::Error| err.to_string();
+            // ("draft": {"mode", "size"}, im.draft(mode, size) before; "exif": false, no turn)
+            let draft = match &case["draft"] {
+                Value::Null => None,
+                d => {
+                    let kind = match d["mode"].as_str() {
+                        Some("L") => Some(lp_decode::Kind::L),
+                        Some("RGB") => Some(lp_decode::Kind::RGB),
+                        _ => None,
+                    };
+                    let size = ints(&d["size"])?;
+                    Some((kind, (size[0] as usize, size[1] as usize)))
+                }
+            };
+            let picture = lp_decode::decode_draft(&data, draft).map_err(fail)?;
             let out = if case["exif"].as_bool().unwrap_or(true) {
-                lp_decode::open(&data, mode).map_err(fail)?
+                lp_decode::opened(&picture, mode).map_err(fail)?
             } else {
-                lp_decode::decode(&data)
-                    .and_then(|p| p.convert(mode))
-                    .map_err(fail)?
+                picture.convert(mode).map_err(fail)?
             };
             json!({"image": value_of(&out)})
         }

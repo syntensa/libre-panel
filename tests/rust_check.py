@@ -30,6 +30,19 @@ def find() -> Path | None:
     return None
 
 
+def pillow_libjpeg() -> str | None:
+    """The libjpeg Pillow's wheel brings, the one its JPEGs are decoded with (LP_LIBJPEG:
+    another); None where it is built into Pillow (Windows' wheels)."""
+    import PIL
+
+    if os.environ.get("LP_LIBJPEG"):
+        return os.environ["LP_LIBJPEG"]
+    here = Path(PIL.__file__).resolve().parent
+    found = [*sorted((here.parent / "pillow.libs").glob("libjpeg*.so*")),
+             *sorted((here / ".dylibs").glob("libjpeg*.dylib"))]  # fmt: skip
+    return str(found[0]) if found else None
+
+
 def image(im: Image.Image) -> dict[str, Any]:
     """An image as lp-check takes it."""
     data = base64.b64encode(im.tobytes()).decode("ascii")
@@ -47,8 +60,11 @@ def run(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if exe is None:
         pytest.skip("needs lp-check (cargo build --release in rust/)")
     text = "".join(json.dumps(case) + "\n" for case in cases)
+    env = dict(os.environ)
+    if (libjpeg := pillow_libjpeg()) is not None:
+        env["LP_LIBJPEG"] = libjpeg
     done = subprocess.run(
-        [str(exe)], input=text, capture_output=True, text=True, timeout=900, check=True
+        [str(exe)], input=text, capture_output=True, text=True, timeout=900, check=True, env=env
     )
     answers = [json.loads(line) for line in done.stdout.splitlines()]
     assert len(answers) == len(cases), done.stderr

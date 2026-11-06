@@ -111,7 +111,13 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       animation (each laid on the last, every disposal, frames that grow the picture)
 - [x] decoding APNG: every frame as the app reads an animation (each disposal and blend, a
       default image, frames in several chunks)
-- [ ] decoding: JPEG (as libjpeg-turbo), WebP (still and animated)
+- [x] decoding JPEG: libjpeg-turbo itself, set up as Pillow sets it up (its markers read as
+      Pillow reads them, CMYK, a draft's scale and grey, MPO's pictures as frames); loaded
+      where the app runs (LP_LIBJPEG: the comparisons use Pillow's own copy, so they run where
+      Pillow's wheel has it as a file, Linux and macOS)
+- [ ] the JPEG comparisons on Windows too (libjpeg-turbo 3.2.0 built in CI: Windows' wheels
+      have it built in)
+- [ ] decoding WebP (still and animated, libwebp as Pillow uses it)
 - [ ] numpy's arithmetic where the renderer uses it (dither, gradients, light)
 
 ### R2 text

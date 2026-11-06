@@ -13,8 +13,9 @@ import zlib
 from pathlib import Path
 from typing import Any
 
+import pytest
 from PIL import Image, ImageOps, ImageSequence
-from rust_check import picture, run
+from rust_check import picture, pillow_libjpeg, run
 
 ROOT = Path(__file__).resolve().parent.parent
 ERROR = object()
@@ -662,3 +663,166 @@ def test_pillow_s_apngs_are_read_as_the_app_reads_them():
         cases.append((out.getvalue(), f"Pillow's {mode} APNG {w}x{h} {len(frames)} frames"))
     check_frames(cases)
     check([case_of(data, "RGBA", label) for data, label in cases])
+
+
+# -- JPEG -----------------------------------------------------------------------------------------
+
+# (libjpeg-turbo is Pillow's own, given to lp-check: Windows' wheels have it built in)
+needs_libjpeg = pytest.mark.skipif(pillow_libjpeg() is None, reason="Pillow's libjpeg as a file")
+
+
+def _jfif(rng: random.Random) -> bytes:
+    """A JFIF segment of a density in no unit, in inches or in centimetres."""
+    unit = rng.randrange(3)
+    data = b"JFIF\0\x01\x02" + bytes([unit]) + struct.pack(">HHBB", 72, 72, 0, 0)
+    return b"\xff\xe0" + struct.pack(">H", len(data) + 2) + data
+
+
+def _with_segments(jpeg: bytes, segments: list[bytes]) -> bytes:
+    """A JPEG with segments put in after its SOI (in place of its own JFIF where one is given)."""
+    body = jpeg[2:]
+    if body.startswith(b"\xff\xe0") and any(s.startswith(b"\xff\xe0") for s in segments):
+        body = body[2 + struct.unpack(">H", body[2:4])[0] :]
+    return b"\xff\xd8" + b"".join(segments) + body
+
+
+def make_jpeg(rng: random.Random, mode: str, w: int, h: int) -> bytes:
+    """A JPEG written by Pillow (any quality, subsampling, progressive or not), with an EXIF
+    orientation (or an odd EXIF, or one Pillow cannot read), XMP's, a JFIF density or none."""
+    colours = [tuple(rng.randrange(256) for _ in range(4)) for _ in range(rng.randint(1, 6))]
+    im = Image.frombytes("RGBA", (w, h), rng.randbytes(w * h * 4))
+    if rng.random() < 0.6:  # (flat regions as well as noise)
+        for _ in range(rng.randint(1, 5)):
+            x, y = rng.randrange(w), rng.randrange(h)
+            im.paste(rng.choice(colours), (x, y, rng.randint(x, w), rng.randint(y, h)))
+    im = im.convert(mode)
+    params: dict[str, Any] = {"quality": rng.randint(1, 100), "optimize": rng.random() < 0.3,
+                              "progressive": rng.random() < 0.3}  # fmt: skip
+    if mode != "L":
+        params["subsampling"] = rng.randrange(3)
+    out = io.BytesIO()
+    im.save(out, "JPEG", **params)
+    segments = []
+    if rng.random() < 0.5:
+        segments.append(_jfif(rng))
+    pick = rng.random()
+    if pick < 0.4:
+        exif = b"Exif\0\0" + _exif(rng.randint(0, 9), rng.random() < 0.5)
+    elif pick < 0.55:
+        exif = b"Exif\0\0" + _odd_exif(rng)
+    elif pick < 0.62:
+        exif = b"Exif\0\0XX\x2a\0\x08\0\0\0"  # (not TIFF's head)
+    else:
+        exif = b""
+    if exif:
+        segments.append(b"\xff\xe1" + struct.pack(">H", len(exif) + 2) + exif)
+    if rng.random() < 0.3:
+        xmp = (b"http://ns.adobe.com/xap/1.0/\0<x:xmpmeta><rdf:Description tiff:Orientation=\""
+               + str(rng.randint(1, 8)).encode() + b'"/></x:xmpmeta>')  # fmt: skip
+        segments.append(b"\xff\xe1" + struct.pack(">H", len(xmp) + 2) + xmp)
+    return _with_segments(out.getvalue(), segments)
+
+
+@needs_libjpeg
+def test_jpegs_open_as_pillow_opens_them():
+    rng = random.Random(60)
+    pairs = []
+    for n in range(240):
+        mode = ("L", "RGB", "CMYK")[n % 3]
+        w, h = rng.randint(1, 70), rng.randint(1, 50)
+        data = make_jpeg(rng, mode, w, h)
+        for target in ("RGBA", "RGB", "L"):
+            pairs.append(case_of(data, target, f"JPEG {n}, {mode} {w}x{h} {target}"))
+    check(pairs)
+
+
+def drafted(data: bytes, mode: str | None, size: tuple[int, int], target: str, *,
+            exif: bool) -> Image.Image:  # fmt: skip
+    """Image.open(f), draft(mode, size), then (exif_transpose and) convert, as render/earth.py
+    reads its maps."""
+    with Image.open(io.BytesIO(data)) as im:
+        im.draft(mode, size)
+        return (ImageOps.exif_transpose(im) if exif else im).convert(target)
+
+
+@needs_libjpeg
+def test_jpeg_drafts_are_read_as_pillow_reads_them():
+    rng = random.Random(61)
+    pairs = []
+    for n in range(240):
+        mode = ("L", "RGB", "CMYK")[n % 3]
+        w, h = rng.randint(1, 160), rng.randint(1, 120)
+        data = make_jpeg(rng, mode, w, h)
+        # (sizes the scales 1/2, 1/4 and 1/8 cover, and larger)
+        size = tuple(max(1, v // rng.choice([1, 2, 3, 4, 5, 8, 9, 16, 20]) + rng.randint(-1, 3))
+                     for v in (w, h))  # fmt: skip
+        ask = rng.choice([None, "L", "RGB"])
+        target = rng.choice(["RGB", "L", "RGBA"])
+        exif = rng.random() < 0.3
+        label = f"JPEG {n}, {mode} {w}x{h} drafted {ask} {size} as {target}"
+        try:
+            want: Any = drafted(data, ask, size, target, exif=exif)
+        except REFUSED:
+            want = ERROR
+        case = {"op": "open", "data": base64.b64encode(data).decode(), "mode": target,
+                "draft": {"mode": ask, "size": list(size)}, "exif": exif,
+                "label": label}  # fmt: skip
+        pairs.append((case, want))
+    check(pairs)
+
+
+@needs_libjpeg
+def test_broken_jpegs_are_refused_where_pillow_refuses_them():
+    """Cut short, bytes changed or put in: refused as Pillow refuses them, and read (libjpeg's
+    warnings and all) where it reads them."""
+    rng = random.Random(62)
+    pairs = []
+    for n in range(300):
+        data = bytearray(make_jpeg(rng, ("L", "RGB", "CMYK")[n % 3], rng.randint(1, 60),
+                                   rng.randint(1, 40)))  # fmt: skip
+        if n % 3 == 0:
+            data = data[: rng.randrange(2, len(data))]
+        elif n % 3 == 1:
+            for _ in range(rng.randint(1, 4)):
+                data[rng.randrange(2, len(data))] = rng.randrange(256)
+        else:
+            at = rng.randrange(2, len(data))
+            data[at:at] = rng.randbytes(rng.randint(1, 8))
+        pairs.append(case_of(bytes(data), "RGB", f"broken JPEG {n}"))
+    check(pairs)
+
+
+@needs_libjpeg
+def test_mpo_frames_are_read_as_the_app_reads_them():
+    """MPOs (a JPEG of several pictures, as cameras keep a large preview): Pillow gives each as
+    a frame, and the app reads them as an animation."""
+    rng = random.Random(63)
+    cases = []
+    for n in range(30):
+        frames = []
+        for _ in range(rng.randint(2, 4)):
+            w, h = rng.randint(1, 40), rng.randint(1, 30)
+            frames.append(Image.frombytes("RGB", (w, h), rng.randbytes(w * h * 3)))
+        out = io.BytesIO()
+        frames[0].save(out, "MPO", save_all=True, append_images=frames[1:],
+                       quality=rng.randint(30, 95))  # fmt: skip
+        cases.append((out.getvalue(), f"MPO {n} of {len(frames)}"))
+    check_frames(cases)
+    check([case_of(data, "RGBA", label) for data, label in cases])
+
+
+@needs_libjpeg
+def test_the_app_s_earth_maps_are_read_as_earth_py_reads_them():
+    """render/earth.py's _read: each map drafted to the globe's width (JPEG's fast scales),
+    then converted (day and night to RGB, the clouds to L)."""
+    maps = ROOT / "src" / "libre_panel" / "assets" / "earth"
+    pairs = []
+    for name, mode in (("day.jpg", "RGB"), ("night.jpg", "RGB"), ("clouds.jpg", "L")):
+        data = (maps / name).read_bytes()
+        for width in (90, 300, 700, 2048):
+            want = drafted(data, mode, (width, width // 2), mode, exif=False)
+            case = {"op": "open", "data": base64.b64encode(data).decode(), "mode": mode,
+                    "draft": {"mode": mode, "size": [width, width // 2]}, "exif": False,
+                    "label": f"{name} for a globe of {width}"}  # fmt: skip
+            pairs.append((case, want))
+    check(pairs)

@@ -5,6 +5,7 @@
 
 mod exif;
 mod gif;
+mod jpeg;
 mod png;
 
 pub use exif::orientation;
@@ -45,6 +46,8 @@ pub enum Kind {
     RGBA,
     /// "I;16": a 16-bit grey a pixel (kept as two bytes, little end first)
     I16,
+    /// "CMYK" (a JPEG's of four layers)
+    Cmyk,
 }
 
 impl Kind {
@@ -54,7 +57,7 @@ impl Kind {
             Kind::Bilevel | Kind::L | Kind::P => 1,
             Kind::LA | Kind::I16 => 2,
             Kind::RGB => 3,
-            Kind::RGBA => 4,
+            Kind::RGBA | Kind::Cmyk => 4,
         }
     }
 
@@ -67,6 +70,7 @@ impl Kind {
             Kind::RGB => "RGB",
             Kind::RGBA => "RGBA",
             Kind::I16 => "I;16",
+            Kind::Cmyk => "CMYK",
         }
     }
 }
@@ -89,7 +93,12 @@ pub enum Transparency {
 #[derive(Clone, Debug)]
 pub enum Exif {
     Bytes(Vec<u8>),
-    Text { empty: bool },
+    Text {
+        empty: bool,
+    },
+    /// a JPEG's EXIF that _read_dpi_from_exif failed on while opening: getexif gives none
+    /// after, and reads no XMP
+    Spoilt,
 }
 
 /// A decoded picture: its pixels in the mode Pillow gives them, its palette (P: 256 entries
@@ -127,6 +136,7 @@ impl Picture {
                 return error("startswith first arg must be str"); // (Exif.load of text)
             }
             (Some(Exif::Text { empty: true }), _) => None,
+            (Some(Exif::Spoilt), _) => return Ok(1),
             (None, Some(raw)) => Some(exif::from_raw_profile(raw)?),
             (None, None) => None,
         };
@@ -170,6 +180,20 @@ impl Picture {
                     // (I16_RGB, and I;16 to L, which RGBA goes through: above 255 white)
                     let v = if src[2 * i + 1] == 0 { src[2 * i] } else { 255 };
                     [v, v, v, 255]
+                }
+                Kind::Cmyk => {
+                    // cmyk2rgb (and to L through RGB, as convert goes where it has no way)
+                    let k = 255 - u32::from(src[4 * i + 3]);
+                    let ink = |c: u8| {
+                        let tmp = u32::from(c) * k + 128;
+                        (k - (((tmp >> 8) + tmp) >> 8)) as u8
+                    };
+                    [
+                        ink(src[4 * i]),
+                        ink(src[4 * i + 1]),
+                        ink(src[4 * i + 2]),
+                        255,
+                    ]
                 }
             }
         };
@@ -239,13 +263,27 @@ fn is_gif(data: &[u8]) -> bool {
     data.starts_with(b"GIF87a") || data.starts_with(b"GIF89a")
 }
 
+fn is_jpeg(data: &[u8]) -> bool {
+    data.starts_with(b"\xff\xd8\xff")
+}
+
 /// The picture in `data` (its file's bytes), as Image.open reads it and loads its first frame.
 pub fn decode(data: &[u8]) -> Result<Picture> {
+    decode_draft(data, None)
+}
+
+/// The same after draft(mode, size): a JPEG decoded at the scale of 1/2, 1/4 or 1/8 that still
+/// covers `size` (JpegImageFile.draft; "L" read as grey by libjpeg where the file is RGB);
+/// other pictures as they are.
+pub fn decode_draft(data: &[u8], draft: Option<(Option<Kind>, (usize, usize))>) -> Result<Picture> {
     if data.starts_with(b"\x89PNG\r\n\x1a\n") {
         return png::decode(data);
     }
     if is_gif(data) {
         return gif::decode(data);
+    }
+    if is_jpeg(data) {
+        return jpeg::decode_picture(data, draft);
     }
     error("cannot identify image file")
 }
@@ -260,12 +298,19 @@ pub fn frames(data: &[u8]) -> Result<Vec<Frame>> {
     if is_gif(data) {
         return gif::frames(data);
     }
+    if is_jpeg(data) {
+        return jpeg::frames(data);
+    }
     error("cannot identify image file")
 }
 
 /// What the app makes of a picture it opens: ImageOps.exif_transpose(picture).convert(mode).
 pub fn open(data: &[u8], mode: Mode) -> Result<Image> {
-    let picture = decode(data)?;
+    opened(&decode(data)?, mode)
+}
+
+/// The same of a picture decoded (after a draft, say).
+pub fn opened(picture: &Picture, mode: Mode) -> Result<Image> {
     let orientation = picture.orientation()?;
     let converted = picture.convert(mode)?;
     Ok(converted.exif_transposed(orientation.min(u32::from(u16::MAX)) as u16))
