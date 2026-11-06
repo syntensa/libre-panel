@@ -3,8 +3,8 @@
 //! of half pixels round the middle, cut by trees of half planes where only a part is drawn, each
 //! pixel set to the ink.
 
-use crate::draw::corners;
-use crate::{Image, Result};
+use crate::draw::{corners, Canvas, Draw};
+use crate::Result;
 
 /// Draw.c's quarter_state: the top right quarter of an ellipse of semi-axes a and b, on the
 /// points (2x + x0, 2y + y0) of the grid where (a, b) lies (x0, y0 each 0 or 1).
@@ -400,12 +400,12 @@ fn pie_tree(a: i32, b: i32, al: f32, ar: f32) -> Clip {
     }
 }
 
-impl Image {
+impl<C: Canvas> Draw<'_, C> {
     /// ellipseNew: the ellipse in the box, a ring `width` wide or (`fill`) all of it.
     fn ellipse_new(
         &mut self,
         (x0, y0, x1, y1): (i32, i32, i32, i32),
-        ink: &[u8],
+        ink: C::Ink,
         fill: bool,
         width: i32,
     ) {
@@ -420,6 +420,7 @@ impl Image {
                 y0 + (sy + b) / 2,
                 x0 + (sx1 + a) / 2,
                 ink,
+                None,
             );
         }
     }
@@ -429,7 +430,7 @@ impl Image {
     fn clip_ellipse_new(
         &mut self,
         (x0, y0, x1, y1): (i32, i32, i32, i32),
-        ink: &[u8],
+        ink: C::Ink,
         init: impl FnOnce(i32, i32) -> (Ellipse, Option<Clip>),
     ) {
         let (a, b) = (x1 - x0, y1 - y0);
@@ -444,6 +445,7 @@ impl Image {
                     y0 + (sy + b) / 2,
                     x0 + (span[1].0 + a) / 2,
                     ink,
+                    None,
                 );
             }
         }
@@ -453,11 +455,10 @@ impl Image {
     pub fn draw_ellipse(
         &mut self,
         bounds: (f64, f64, f64, f64),
-        ink: &[u8],
+        ink: C::Ink,
         fill: bool,
         width: i32,
     ) -> Result<()> {
-        self.check_ink(ink)?;
         let corners = corners(bounds)?;
         self.ellipse_new(corners, ink, fill, width);
         Ok(())
@@ -470,10 +471,9 @@ impl Image {
         bounds: (f64, f64, f64, f64),
         start: f32,
         end: f32,
-        ink: &[u8],
+        ink: C::Ink,
         width: i32,
     ) -> Result<()> {
-        self.check_ink(ink)?;
         let corners = corners(bounds)?;
         let (start, end) = normalized(start, end);
         if start + 360.0 == end {
@@ -493,11 +493,10 @@ impl Image {
         bounds: (f64, f64, f64, f64),
         start: f32,
         end: f32,
-        ink: &[u8],
+        ink: C::Ink,
         fill: bool,
         width: i32,
     ) -> Result<()> {
-        self.check_ink(ink)?;
         let corners = corners(bounds)?;
         let (start, end) = normalized(start, end);
         if start + 360.0 == end {
@@ -533,11 +532,10 @@ impl Image {
         bounds: (f64, f64, f64, f64),
         start: f32,
         end: f32,
-        ink: &[u8],
+        ink: C::Ink,
         fill: bool,
         width: i32,
     ) -> Result<()> {
-        self.check_ink(ink)?;
         let corners = corners(bounds)?;
         let (start, end) = normalized(start, end);
         if start + 360.0 == end {

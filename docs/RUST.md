@@ -95,8 +95,9 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
 - [x] ImageChops: multiply, screen, add, subtract, lighter, darker, difference, the modulos,
       offset; blend, composite
 - [ ] transpose, rotate, transform
-- [ ] drawing: line (thin and wide, joints), polygon, rectangle, rounded_rectangle, ellipse,
-      arc (from the engine's fans), pieslice, chord, bitmap
+- [x] drawing: line (thin and wide, joints), polygon, rectangle, rounded_rectangle, ellipse,
+      circle, arc, pieslice, chord, point, bitmap; the core (Draw.c) and ImageDraw's own
+      methods, on pictures of bytes and of floats (F)
 - [ ] decoding: PNG, JPEG (as libjpeg-turbo), GIF (frames), WebP; EXIF orientation
 - [ ] numpy's arithmetic where the renderer uses it (dither, gradients, light)
 

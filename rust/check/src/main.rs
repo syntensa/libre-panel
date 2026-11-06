@@ -10,7 +10,7 @@ use std::io::{self, BufRead, BufWriter, Write};
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
-use lp_pixels::{Image, Mode};
+use lp_pixels::{Canvas, Draw, Image, Mode};
 use serde_json::{json, Value};
 
 fn image_of(v: &Value) -> Result<Image, String> {
@@ -86,6 +86,81 @@ fn mask_of(v: &Value) -> Result<Option<Image>, String> {
     } else {
         image_of(v).map(Some)
     }
+}
+
+/// One drawing command on a canvas: the core's (`draw`: kind "lines", "fill" true or false, an
+/// "ink") or, `own`, ImageDraw's methods (`imagedraw`: kind "line", "fill" and "outline" inks
+/// or null), as Pillow's keyword names have them; bitmaps by `bitmap` (bytes only).
+fn drawn<C: Canvas>(
+    d: &mut Draw<C>,
+    c: &Value,
+    own: bool,
+    ink: impl Fn(&Value) -> Result<Option<C::Ink>, String>,
+    bitmap: impl FnOnce(&mut Draw<C>, &Value) -> Result<(), String>,
+) -> Result<(), String> {
+    let width = c["width"].as_i64().unwrap_or(1) as i32;
+    let kind = c["kind"].as_str().unwrap_or("");
+    if kind == "bitmap" {
+        return bitmap(d, c);
+    }
+    let bounds = || floats4(&c["xy"])?.ok_or_else(|| "a box".to_string());
+    let (start, end) = (
+        c["start"].as_f64().unwrap_or(0.0),
+        c["end"].as_f64().unwrap_or(0.0),
+    );
+    if own {
+        let (fill, outline) = (ink(&c["fill"])?, ink(&c["outline"])?);
+        match kind {
+            "point" => d.point(&points(&c["xy"])?, fill),
+            "line" => {
+                let curve = c["joint"].as_str() == Some("curve");
+                d.line(&points(&c["xy"])?, fill, width, curve)
+            }
+            "rectangle" => d.rectangle(bounds()?, fill, outline, width),
+            "rounded_rectangle" => {
+                let mut corners = lp_pixels::ALL_CORNERS;
+                if let Some(given) = c["corners"].as_array() {
+                    for (corner, v) in corners.iter_mut().zip(given) {
+                        *corner = v.as_bool().unwrap_or(true);
+                    }
+                }
+                let radius = c["radius"].as_f64().unwrap_or(0.0);
+                d.rounded_rectangle(bounds()?, radius, fill, outline, width, corners)
+            }
+            "ellipse" => d.ellipse(bounds()?, fill, outline, width),
+            "circle" => {
+                let at = points(&c["xy"])?;
+                d.circle(
+                    at[0],
+                    c["radius"].as_f64().unwrap_or(0.0),
+                    fill,
+                    outline,
+                    width,
+                )
+            }
+            "arc" => d.arc(bounds()?, start, end, fill, width),
+            "chord" => d.chord(bounds()?, start, end, fill, outline, width),
+            "pieslice" => d.pieslice(bounds()?, start, end, fill, outline, width),
+            "polygon" => d.polygon(&points(&c["xy"])?, fill, outline, width),
+            other => return Err(format!("no ImageDraw.{other}")),
+        }
+    } else {
+        let ink = ink(&c["ink"])?.ok_or("an ink")?;
+        let filled = c["fill"].as_bool().unwrap_or(false);
+        let (s, e) = (start as f32, end as f32);
+        match kind {
+            "points" => d.draw_points(&points(&c["xy"])?, ink),
+            "lines" => d.draw_lines(&points(&c["xy"])?, ink, width),
+            "polygon" => d.draw_polygon(&points(&c["xy"])?, ink, filled, width),
+            "rectangle" => d.draw_rectangle(bounds()?, ink, filled, width),
+            "ellipse" => d.draw_ellipse(bounds()?, ink, filled, width),
+            "arc" => d.draw_arc(bounds()?, s, e, ink, width),
+            "chord" => d.draw_chord(bounds()?, s, e, ink, filled, width),
+            "pieslice" => d.draw_pieslice(bounds()?, s, e, ink, filled, width),
+            other => return Err(format!("no drawing {other}")),
+        }
+    }
+    .map_err(|err| err.to_string())
 }
 
 fn run(case: &Value) -> Result<Value, String> {
@@ -270,43 +345,44 @@ fn run(case: &Value) -> Result<Value, String> {
             );
             json!({"image": value_of(&im.offset(x, y))})
         }
-        "draw" => {
-            let mut im = image_of(&case["image"])?;
-            for c in case["commands"].as_array().ok_or("commands")? {
-                let ink: Vec<u8> = ints(&c["ink"])?.iter().map(|&v| v as u8).collect();
-                let width = c["width"].as_i64().unwrap_or(1) as i32;
-                let fill = c["fill"].as_bool().unwrap_or(false);
-                match c["kind"].as_str().unwrap_or("") {
-                    "points" => im.draw_points(&points(&c["xy"])?, &ink),
-                    "lines" => im.draw_lines(&points(&c["xy"])?, &ink, width),
-                    "polygon" => im.draw_polygon(&points(&c["xy"])?, &ink, fill, width),
-                    "rectangle" => {
-                        let b = floats4(&c["xy"])?.ok_or("a box")?;
-                        im.draw_rectangle(b, &ink, fill, width)
-                    }
-                    "ellipse" => {
-                        let b = floats4(&c["xy"])?.ok_or("a box")?;
-                        im.draw_ellipse(b, &ink, fill, width)
-                    }
-                    "arc" | "chord" | "pieslice" => {
-                        let b = floats4(&c["xy"])?.ok_or("a box")?;
-                        let start = c["start"].as_f64().ok_or("a start")? as f32;
-                        let end = c["end"].as_f64().ok_or("an end")? as f32;
-                        match c["kind"].as_str() {
-                            Some("arc") => im.draw_arc(b, start, end, &ink, width),
-                            Some("chord") => im.draw_chord(b, start, end, &ink, fill, width),
-                            _ => im.draw_pieslice(b, start, end, &ink, fill, width),
-                        }
-                    }
-                    "bitmap" => {
-                        let at = points(&c["xy"])?;
-                        im.draw_bitmap(at[0].0, at[0].1, &image_of(&c["bitmap"])?, &ink)
-                    }
-                    other => return Err(format!("no drawing {other}")),
+        "draw" | "imagedraw" => {
+            let own = op == "imagedraw";
+            let commands = case["commands"].as_array().ok_or("commands")?;
+            if case["image"]["mode"].as_str() == Some("F") {
+                let mut im = float_of(&case["image"])?;
+                let ink = |v: &Value| Ok(v.as_f64().map(|f| f as f32));
+                for c in commands {
+                    drawn(&mut Draw::new(&mut im), c, own, ink, |_, _| {
+                        Err("no bitmap on F".into())
+                    })?;
                 }
-                .map_err(e)?;
+                json!({"image": float_value(&im)})
+            } else {
+                let mut im = image_of(&case["image"])?;
+                let mode = im.mode();
+                let ink = |v: &Value| -> Result<Option<[u8; 4]>, String> {
+                    if v.is_null() {
+                        return Ok(None);
+                    }
+                    let colour: Vec<u8> = ints(v)?.iter().map(|&b| b as u8).collect();
+                    mode.ink(&colour).map(Some).map_err(|err| err.to_string())
+                };
+                for c in commands {
+                    drawn(&mut Draw::new(&mut im), c, own, ink, |d, c| {
+                        let at = points(&c["xy"])?;
+                        let bitmap = image_of(&c["bitmap"])?;
+                        let colour = if own { "fill" } else { "ink" };
+                        let fill = ink(&c[colour])?;
+                        if own {
+                            d.bitmap(at[0].0, at[0].1, &bitmap, fill)
+                        } else {
+                            d.draw_bitmap(at[0].0, at[0].1, &bitmap, fill.ok_or("an ink")?)
+                        }
+                        .map_err(|err| err.to_string())
+                    })?;
+                }
+                json!({"image": value_of(&im)})
             }
-            json!({"image": value_of(&im)})
         }
         other => return Err(format!("no op {other}")),
     })

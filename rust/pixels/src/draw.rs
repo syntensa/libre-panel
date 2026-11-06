@@ -1,8 +1,103 @@
 //! ImageDraw's drawing in C (libImaging/Draw.c and _imaging.c's draw_* methods), as
 //! ImageDraw.Draw(image) draws it: without a blend mode, each pixel set to the ink (Libre Panel
-//! draws no other way). Coordinates are truncated as _imaging.c casts them.
+//! draws no other way), on pictures of bytes and of floats alike. Coordinates are truncated as
+//! _imaging.c casts them. ImageDraw.py's methods on top of these are in imagedraw.rs, the
+//! ellipses in ellipse.rs.
 
-use crate::{error, Image, Result};
+use crate::{error, FloatImage, Image, Mode, Result};
+
+/// A picture ImageDraw draws on, and its ink: bytes (L, RGB, RGBA, RGBa) with the four bytes
+/// Pillow keeps for an ink (getink: one value and three 0s for L, the alpha 255 where a colour
+/// has none), or floats (F) with a float.
+pub trait Canvas {
+    type Ink: Copy;
+    /// Its width and height.
+    fn canvas_size(&self) -> (usize, usize);
+    /// The pixels x0..=x1 of row y set to the ink (all of them on the picture).
+    fn fill_span(&mut self, x0: usize, x1: usize, y: usize, ink: Self::Ink);
+    /// ImageDraw's ink where it is given none (self.ink): white, black on L, 1 on F.
+    fn default_ink(&self) -> Self::Ink;
+    /// Whether ImageDraw takes two inks for the same (it compares Pillow's INT32s of them).
+    fn same_ink(a: Self::Ink, b: Self::Ink) -> bool;
+    /// The byte a mask of ImageDraw.polygon's is drawn with: the first of the ink it makes of
+    /// 1 on this canvas (1, and 0 on F: the lowest byte of 1.0).
+    fn mask_ink(&self) -> u8;
+}
+
+impl Canvas for Image {
+    type Ink = [u8; 4];
+
+    fn canvas_size(&self) -> (usize, usize) {
+        (self.width, self.height)
+    }
+
+    fn fill_span(&mut self, x0: usize, x1: usize, y: usize, ink: [u8; 4]) {
+        let b = self.bands();
+        let row = self.row_mut(y);
+        if b == 1 {
+            row[x0..=x1].fill(ink[0]);
+        } else {
+            for px in row[x0 * b..(x1 + 1) * b].chunks_exact_mut(b) {
+                px.copy_from_slice(&ink[..b]);
+            }
+        }
+    }
+
+    fn default_ink(&self) -> [u8; 4] {
+        if self.mode == Mode::L {
+            [0; 4]
+        } else {
+            [255; 4]
+        }
+    }
+
+    fn same_ink(a: [u8; 4], b: [u8; 4]) -> bool {
+        a == b
+    }
+
+    fn mask_ink(&self) -> u8 {
+        1
+    }
+}
+
+impl Canvas for FloatImage {
+    type Ink = f32;
+
+    fn canvas_size(&self) -> (usize, usize) {
+        (self.width, self.height)
+    }
+
+    fn fill_span(&mut self, x0: usize, x1: usize, y: usize, ink: f32) {
+        let at = y * self.width;
+        self.data[at + x0..=at + x1].fill(ink);
+    }
+
+    fn default_ink(&self) -> f32 {
+        1.0
+    }
+
+    fn same_ink(a: f32, b: f32) -> bool {
+        a.to_bits() == b.to_bits()
+    }
+
+    fn mask_ink(&self) -> u8 {
+        1.0f32.to_le_bytes()[0]
+    }
+}
+
+impl Mode {
+    /// The ink ImageDraw makes of a colour on a picture of this mode (getink): one value on L,
+    /// three or four on the others (the alpha 255 where it is left out), as the four bytes
+    /// Pillow keeps.
+    pub fn ink(self, colour: &[u8]) -> Result<[u8; 4]> {
+        match (self.bands(), colour) {
+            (1, &[v]) => Ok([v, 0, 0, 0]),
+            (b, &[r, g, bl]) if b > 1 => Ok([r, g, bl, 255]),
+            (b, &[r, g, bl, a]) if b > 1 => Ok([r, g, bl, a]),
+            _ => error("color must be int or tuple"),
+        }
+    }
+}
 
 /// Draw.c's ROUND_UP and ROUND_DOWN on a float (the polygon's crossings): halves away from 0,
 /// and toward it.
@@ -88,23 +183,39 @@ fn edge(x0: i32, y0: i32, x1: i32, y1: i32) -> Edge {
     }
 }
 
-impl Image {
-    /// point8 / point32: the pixel set where it lies on the image.
+/// Where a drawing may set pixels (Draw.c's mask: an L picture of the canvas's size, its
+/// pixels that are not 0), or anywhere.
+pub(crate) type Mask<'m> = Option<&'m Image>;
+
+/// Drawing on a canvas as ImageDraw.Draw(canvas) draws: here its core, Draw.c's draw_*
+/// methods (`draw.draw.draw_lines(...)`); ImageDraw.py's own (`draw.line(...)`) in
+/// imagedraw.rs.
+pub struct Draw<'a, C: Canvas> {
+    pub(crate) canvas: &'a mut C,
+}
+
+impl<'a, C: Canvas> Draw<'a, C> {
+    pub fn new(canvas: &'a mut C) -> Self {
+        Draw { canvas }
+    }
+
+    /// point8 / point32: the pixel set where it lies on the picture.
     #[inline(always)]
-    fn put(&mut self, x: i32, y: i32, ink: &[u8]) {
-        if x >= 0 && y >= 0 && (x as usize) < self.width && (y as usize) < self.height {
-            let b = self.bands();
-            let at = (y as usize * self.width + x as usize) * b;
-            self.data[at..at + b].copy_from_slice(ink);
+    pub(crate) fn put(&mut self, x: i32, y: i32, ink: C::Ink) {
+        let (w, h) = self.canvas.canvas_size();
+        if x >= 0 && y >= 0 && (x as usize) < w && (y as usize) < h {
+            self.canvas
+                .fill_span(x as usize, x as usize, y as usize, ink);
         }
     }
 
-    /// hline8 / hline32: x0 to x1 (both) on row y, clipped.
-    pub(crate) fn hline(&mut self, x0: i32, y: i32, x1: i32, ink: &[u8]) {
-        if y < 0 || y as usize >= self.height {
+    /// hline8 / hline32: x0 to x1 (both) on row y, clipped; with a mask only where it is set.
+    pub(crate) fn hline(&mut self, x0: i32, y: i32, x1: i32, ink: C::Ink, mask: Mask) {
+        let (w, h) = self.canvas.canvas_size();
+        if y < 0 || y as usize >= h {
             return;
         }
-        let w = self.width as i32;
+        let w = w as i32;
         let x0 = if x0 < 0 {
             0
         } else if x0 >= w {
@@ -116,13 +227,32 @@ impl Image {
             return;
         }
         let x1 = x1.min(w - 1);
-        for x in x0..=x1 {
-            self.put(x, y, ink);
+        if x0 > x1 {
+            return;
+        }
+        let (x0, x1, y) = (x0 as usize, x1 as usize, y as usize);
+        match mask {
+            None => self.canvas.fill_span(x0, x1, y, ink),
+            Some(m) => {
+                let row = m.row(y);
+                let mut x = x0;
+                while x <= x1 {
+                    if row[x] == 0 {
+                        x += 1;
+                        continue;
+                    }
+                    let from = x;
+                    while x <= x1 && row[x] != 0 {
+                        x += 1;
+                    }
+                    self.canvas.fill_span(from, x - 1, y, ink);
+                }
+            }
         }
     }
 
     /// line8 / line32: Bresenham's line from (x0, y0) toward (x1, y1), its last point not drawn.
-    fn thin_line(&mut self, mut x0: i32, mut y0: i32, x1: i32, y1: i32, ink: &[u8]) {
+    fn thin_line(&mut self, mut x0: i32, mut y0: i32, x1: i32, y1: i32, ink: C::Ink) {
         let (mut dx, xs) = if x1 - x0 < 0 {
             (x0 - x1, -1)
         } else {
@@ -174,26 +304,27 @@ impl Image {
         }
     }
 
-    /// polygon_generic without a mask, its pixels set (Draw.c: crossings in floats, sorted,
-    /// spans from ROUND_UP of one to ROUND_DOWN of the next, horizontal edges drawn whole).
-    fn polygon_edges(&mut self, edges: &[Edge], ink: &[u8]) {
+    /// polygon_generic, its pixels set (Draw.c: crossings in floats, sorted, spans from
+    /// ROUND_UP of one to ROUND_DOWN of the next, horizontal edges drawn whole).
+    fn polygon_edges(&mut self, edges: &[Edge], ink: C::Ink, mask: Mask) {
         if edges.is_empty() {
             return;
         }
-        let mut ymin = self.height as i32 - 1;
+        let height = self.canvas.canvas_size().1 as i32;
+        let mut ymin = height - 1;
         let mut ymax = 0;
         let mut table: Vec<&Edge> = Vec::with_capacity(edges.len());
         for e in edges {
             ymin = ymin.min(e.ymin);
             ymax = ymax.max(e.ymax);
             if e.ymin == e.ymax {
-                self.hline(e.xmin, e.ymin, e.xmax, ink);
+                self.hline(e.xmin, e.ymin, e.xmax, ink, mask);
                 continue;
             }
             table.push(e);
         }
         ymin = ymin.max(0);
-        ymax = ymax.min(self.height as i32);
+        ymax = ymax.min(height);
         let mut xx: Vec<f32> = Vec::with_capacity(table.len() * 2);
         let at = |e: &Edge, y: i32| (y - e.y0) as f32 * e.dx + e.x0 as f32;
         for y in ymin..=ymax {
@@ -233,14 +364,25 @@ impl Image {
             xx.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
             let mut i = 1;
             while i < xx.len() {
-                self.hline(round_up_f(xx[i - 1]), y, round_down_f(xx[i]), ink);
+                self.hline(round_up_f(xx[i - 1]), y, round_down_f(xx[i]), ink, mask);
                 i += 2;
             }
         }
     }
 
-    /// ImagingDrawWideLine: a line ``width`` wide as the polygon of its four corners.
-    fn wide_line(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, ink: &[u8], width: i32) {
+    /// ImagingDrawWideLine: a line `width` wide as the polygon of its four corners (a line of
+    /// no length a point, whatever the mask).
+    #[allow(clippy::too_many_arguments)]
+    fn wide_line(
+        &mut self,
+        x0: i32,
+        y0: i32,
+        x1: i32,
+        y1: i32,
+        ink: C::Ink,
+        width: i32,
+        mask: Mask,
+    ) {
         let (dx, dy) = (x1 - x0, y1 - y0);
         if dx == 0 && dy == 0 {
             self.put(x0, y0, ink);
@@ -266,19 +408,11 @@ impl Image {
             edge(v[2].0, v[2].1, v[3].0, v[3].1),
             edge(v[3].0, v[3].1, v[0].0, v[0].1),
         ];
-        self.polygon_edges(&edges, ink);
-    }
-
-    pub(crate) fn check_ink(&self, ink: &[u8]) -> Result<()> {
-        if ink.len() != self.bands() {
-            return error("an ink of another number of bands");
-        }
-        Ok(())
+        self.polygon_edges(&edges, ink, mask);
     }
 
     /// draw_points: each point (truncated) set.
-    pub fn draw_points(&mut self, xy: &[(f64, f64)], ink: &[u8]) -> Result<()> {
-        self.check_ink(ink)?;
+    pub fn draw_points(&mut self, xy: &[(f64, f64)], ink: C::Ink) -> Result<()> {
         for &(x, y) in xy {
             self.put(x as i32, y as i32, ink);
         }
@@ -287,8 +421,7 @@ impl Image {
 
     /// draw_lines: the segments between the points, thin (and the last point) for a width of
     /// 1 or less, else each as a wide line.
-    pub fn draw_lines(&mut self, xy: &[(f64, f64)], ink: &[u8], width: i32) -> Result<()> {
-        self.check_ink(ink)?;
+    pub fn draw_lines(&mut self, xy: &[(f64, f64)], ink: C::Ink, width: i32) -> Result<()> {
         let p: Vec<(i32, i32)> = xy.iter().map(|&(x, y)| (x as i32, y as i32)).collect();
         if width <= 1 {
             for s in p.windows(2) {
@@ -300,26 +433,25 @@ impl Image {
             }
         } else {
             for s in p.windows(2) {
-                self.wide_line(s[0].0, s[0].1, s[1].0, s[1].1, ink, width);
+                self.wide_line(s[0].0, s[0].1, s[1].0, s[1].1, ink, width, None);
             }
         }
         Ok(())
     }
 
-    /// draw_rectangle: filled, or its outline ``width`` wide inside the box.
+    /// draw_rectangle: filled, or its outline `width` wide inside the box.
     pub fn draw_rectangle(
         &mut self,
         bounds: (f64, f64, f64, f64),
-        ink: &[u8],
+        ink: C::Ink,
         fill: bool,
         width: i32,
     ) -> Result<()> {
-        self.check_ink(ink)?;
         let (x0, mut y0, x1, mut y1) = corners(bounds)?;
         if y0 > y1 {
             std::mem::swap(&mut y0, &mut y1);
         }
-        let h = self.height as i32;
+        let h = self.canvas.canvas_size().1 as i32;
         if fill {
             if y0 < 0 {
                 y0 = 0;
@@ -332,13 +464,13 @@ impl Image {
                 y1 = h;
             }
             for y in y0..=y1 {
-                self.hline(x0, y, x1, ink);
+                self.hline(x0, y, x1, ink, None);
             }
         } else {
             let width = if width == 0 { 1 } else { width };
             for i in 0..width {
-                self.hline(x0, y0 + i, x1, ink);
-                self.hline(x0, y1 - i, x1, ink);
+                self.hline(x0, y0 + i, x1, ink, None);
+                self.hline(x0, y1 - i, x1, ink, None);
                 self.thin_line(x1 - i, y0 + width, x1 - i, y1 - width + 1, ink);
                 self.thin_line(x0 + i, y0 + width, x0 + i, y1 - width + 1, ink);
             }
@@ -351,11 +483,22 @@ impl Image {
     pub fn draw_polygon(
         &mut self,
         xy: &[(f64, f64)],
-        ink: &[u8],
+        ink: C::Ink,
         fill: bool,
         width: i32,
     ) -> Result<()> {
-        self.check_ink(ink)?;
+        self.draw_polygon_in(xy, ink, fill, width, None)
+    }
+
+    /// draw_polygon with a mask (ImageDraw.polygon's outline: wide lines only inside).
+    pub(crate) fn draw_polygon_in(
+        &mut self,
+        xy: &[(f64, f64)],
+        ink: C::Ink,
+        fill: bool,
+        width: i32,
+        mask: Mask,
+    ) -> Result<()> {
         if xy.len() < 2 {
             return error("coordinate list must contain at least 2 coordinates");
         }
@@ -386,7 +529,7 @@ impl Image {
             if p[i] != p[0] {
                 edges.push(edge(p[i].0, p[i].1, p[0].0, p[0].1));
             }
-            self.polygon_edges(&edges, ink);
+            self.polygon_edges(&edges, ink, mask);
         } else if width == 1 {
             for s in p.windows(2) {
                 self.thin_line(s[0].0, s[0].1, s[1].0, s[1].1, ink);
@@ -395,19 +538,23 @@ impl Image {
             self.thin_line(last.0, last.1, p[0].0, p[0].1, ink);
         } else {
             for s in p.windows(2) {
-                self.wide_line(s[0].0, s[0].1, s[1].0, s[1].1, ink, width);
+                self.wide_line(s[0].0, s[0].1, s[1].0, s[1].1, ink, width, mask);
             }
             let last = p[count - 1];
-            self.wide_line(last.0, last.1, p[0].0, p[0].1, ink, width);
+            self.wide_line(last.0, last.1, p[0].0, p[0].1, ink, width, mask);
         }
         Ok(())
     }
+}
 
-    /// draw_bitmap: ``ink`` through ``bitmap`` (an L mask) with its corner at (x, y)
+impl Draw<'_, Image> {
+    /// draw_bitmap: the ink through `bitmap` (an L mask) with its corner at (x, y)
     /// (ImagingFill2).
-    pub fn draw_bitmap(&mut self, x: f64, y: f64, bitmap: &Image, ink: &[u8]) -> Result<()> {
+    pub fn draw_bitmap(&mut self, x: f64, y: f64, bitmap: &Image, ink: [u8; 4]) -> Result<()> {
         let (x, y) = (i64::from(x as i32), i64::from(y as i32));
         let bounds = (x, y, x + bitmap.width as i64, y + bitmap.height as i64);
-        self.paste_colour(ink, bounds, Some(bitmap))
+        let bands = self.canvas.bands();
+        self.canvas
+            .paste_colour(&ink[..bands], bounds, Some(bitmap))
     }
 }

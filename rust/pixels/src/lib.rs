@@ -17,6 +17,7 @@ mod composite;
 mod convert;
 mod draw;
 mod ellipse;
+mod imagedraw;
 mod paste;
 mod point;
 mod reduce;
@@ -24,6 +25,8 @@ mod resample;
 
 pub use bands::merge;
 pub use composite::alpha_composite;
+pub use draw::{Canvas, Draw};
+pub use imagedraw::ALL_CORNERS;
 pub use point::round_half_even;
 pub use resample::Filter;
 

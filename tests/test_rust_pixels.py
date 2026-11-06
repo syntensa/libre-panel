@@ -483,3 +483,104 @@ def test_ellipses_arcs_chords_and_pieslices_are_pillow_s():
                     break
             pairs.append(({"op": "draw", "image": image(im), "commands": commands}, out))
     check(pairs)
+
+
+def _floats(rng: random.Random, size: tuple[int, int]) -> Image.Image:
+    w, h = size
+    values = [rng.choice([0.0, 1.0, -1.0, rng.uniform(-5, 5)]) for _ in range(w * h)]
+    return Image.frombytes("F", size, struct.pack(f"<{w * h}f", *values))
+
+
+def _ink(rng: random.Random, mode: str) -> Any:
+    """A colour as a theme gives ImageDraw one (and as lp-check takes it)."""
+    if mode == "F":
+        return rng.choice([0.0, 1.0, 0.5, rng.uniform(-3, 3)])
+    if mode == "L":
+        return rng.randrange(256)
+    return tuple(rng.randrange(256) for _ in range(rng.choice([3, 4])))
+
+
+def _json_ink(ink: Any) -> Any:
+    """An ink as lp-check takes it: a list of values (bytes), a number (F) or null."""
+    if isinstance(ink, int):
+        return [ink]
+    return list(ink) if isinstance(ink, tuple) else ink
+
+
+def test_imagedraw_s_own_methods_are_pillow_s_on_bytes_and_floats():
+    from PIL import ImageDraw
+
+    rng = random.Random(16)
+    pairs = []
+    kinds = ["point", "line", "line", "rectangle", "rounded_rectangle", "rounded_rectangle",
+             "ellipse", "circle", "arc", "chord", "pieslice", "polygon", "bitmap"]  # fmt: skip
+    for mode in [*MODES, "F"]:
+        for _ in range(150):
+            size = (rng.randint(1, 56), rng.randint(1, 56))
+            im = _floats(rng, size) if mode == "F" else noise(rng, mode, size)
+            out: Any = im.copy()
+            draw = ImageDraw.Draw(out)
+            commands = []
+            for _ in range(rng.randint(1, 3)):
+                kind = rng.choice(kinds[:-1] if mode == "F" else kinds)
+                fill = None if rng.random() < 0.3 else _ink(rng, mode)
+                outline = None if rng.random() < 0.4 else _ink(rng, mode)
+                if rng.random() < 0.15:
+                    outline = fill  # (its own fill's ink: ImageDraw leaves the outline out)
+                width = rng.choice([0, 1, 1, 2, 3, 5, 6, 9, 12, 20])
+                x0, y0 = rng.uniform(-10, size[0]), rng.uniform(-10, size[1])
+                if rng.random() < 0.5:
+                    x0, y0 = float(round(x0)), float(round(y0))
+                box = (x0, y0, x0 + rng.uniform(0, 45), y0 + rng.uniform(0, 45))
+                if rng.random() < 0.3:
+                    box = tuple(float(round(v)) for v in box)
+                xy = _points(rng, size[0], size[1], rng.randint(1, 7))
+                start, end = _angle(rng), _angle(rng)
+                c: dict[str, Any] = {"kind": kind, "fill": _json_ink(fill), "width": width,
+                                     "outline": _json_ink(outline)}  # fmt: skip
+                try:
+                    if kind == "point":
+                        draw.point(xy, fill)
+                        c["xy"] = [list(p) for p in xy]
+                    elif kind == "line":
+                        joint = rng.choice([None, "curve", "curve"])
+                        draw.line(xy, fill, width, joint)
+                        c |= {"xy": [list(p) for p in xy], "joint": joint}
+                    elif kind == "rectangle":
+                        draw.rectangle(box, fill, outline, width)
+                        c["xy"] = list(box)
+                    elif kind == "rounded_rectangle":
+                        radius = rng.choice([0, 1, 2.5, 4, 8, 15, 40, rng.uniform(0, 30)])
+                        corners = None
+                        if rng.random() < 0.3:
+                            corners = tuple(rng.random() < 0.6 for _ in range(4))
+                        draw.rounded_rectangle(box, radius, fill, outline, width, corners=corners)
+                        c |= {"xy": list(box), "radius": radius, "corners": corners}
+                    elif kind == "ellipse":
+                        draw.ellipse(box, fill, outline, width)
+                        c["xy"] = list(box)
+                    elif kind == "circle":
+                        middle, radius = xy[0], rng.uniform(0, 25)
+                        draw.circle(middle, radius, fill, outline, width)
+                        c |= {"xy": [list(middle)], "radius": radius}
+                    elif kind == "arc":
+                        draw.arc(box, start, end, fill, width)
+                        c |= {"xy": list(box), "start": start, "end": end}
+                    elif kind in ("chord", "pieslice"):
+                        getattr(draw, kind)(box, start, end, fill, outline, width)
+                        c |= {"xy": list(box), "start": start, "end": end}
+                    elif kind == "polygon":
+                        draw.polygon(xy, fill, outline, width)
+                        c["xy"] = [list(p) for p in xy]
+                    else:
+                        mask = noise(rng, "L", (rng.randint(1, 12), rng.randint(1, 12)))
+                        at = (rng.uniform(-8, size[0]), rng.uniform(-8, size[1]))
+                        draw.bitmap(at, mask, fill)
+                        c |= {"xy": [list(at)], "bitmap": image(mask)}
+                except (ValueError, TypeError):
+                    commands.append(c)
+                    out = ERROR
+                    break
+                commands.append(c)
+            pairs.append(({"op": "imagedraw", "image": image(im), "commands": commands}, out))
+    check(pairs)
