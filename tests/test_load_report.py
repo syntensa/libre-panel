@@ -199,6 +199,14 @@ def rows(report):
         ),
         ("python3", ["python3", "tool.py", "window"], 36, 1, ("other", None)),
         ("conhost.exe", ["conhost.exe", "0xffffffff"], 13, 1, ("other", None)),
+        (
+            "libre-panel-engine.exe",
+            ["libre-panel-engine.exe", "panel", "--pid", "0092"],
+            14,
+            1,
+            ("engine", None),
+        ),  # fmt: skip
+        ("libre-panel-engine", ["libre-panel-engine", "encode"], 15, 1, ("engine", None)),
         ("anything", [], 30, 1, ("window", None)),  # the one window.json names
     ],
 )
@@ -673,3 +681,32 @@ def test_an_older_service_says_nothing_of_what_it_holds():
     assert rows(report)[("service", None, "")]["private"] is None
     assert report["sensors"]["memory"] is None
     assert "the service holds" not in report["text"]
+
+
+def test_what_each_process_holds_now_in_a_line_for_light_mode():
+    """Measured once, without the processor's time (light mode's line in the log): the
+    processes by what they are, the engines with their count, the sensor service as it says
+    itself where Windows does not let it be read, and all of them together."""
+    machine = Machine()
+    engine = ["libre-panel-engine.exe", "panel"]
+    engines = [FakeProcess(pid, engine[0], engine, born=10.0, parent=1, rss=40 * MB, uss=30 * MB)
+               for pid in (41, 42)]  # fmt: skip
+    machine.me.kids += engines
+    machine.me.uss = 55 * MB
+    machine.lhm = LhmStatus("service", timing=Timing(RoundTime((CPU,))), version="0.8.1",
+                            memory=ServiceMemory(private=21 * MB, working_set=30 * MB,
+                                                 managed=8 * MB))  # fmt: skip
+    memory = machine.sampler().memory_now()
+    found = {(r["role"], r["panel"]): r for r in memory["processes"]}
+    assert found[("main", None)]["private"] == 55 * MB
+    assert found[("engine", None)]["count"] == 2 and found[("engine", None)]["private"] == 60 * MB
+    assert found[("service", None)]["private"] == 21 * MB  # (as it says)
+    assert memory["total"] == sum(r["private"] or 0 for r in memory["processes"])
+    assert [r["role"] for r in memory["processes"]][:3] == ["main", "panel", "engine"]
+    line = load_report.memory_text(memory)
+    assert line.startswith(
+        f"all of Libre Panel {memory['total'] / MB:.0f} MB: main process 55 MB, "
+    )
+    assert "engine 60 MB (2 processes)" in line and "sensor service 21 MB" in line
+    assert line.isascii()  # (a log read as another code page shows it as it is)
+    assert load_report.memory_text(None) == "" and load_report.memory_text({"processes": []}) == ""

@@ -36,6 +36,11 @@
   has come: in an image element the browser kept every picture it had decoded, and WebView2's
   page grew some 6 MB a second on Live (in Chromium 100 to 398 MB in a minute, now 77 to 80 MB
   the whole minute). The picture looks as before.
+- **The app's picture of the panel from the engine.** Where Libre Panel's engine composes the
+  panel's frames (the default with the downloads), the app's picture of the panel (Live, the
+  Player, Start) is the engine's own frame, whole, as the panel got it: the main process no
+  longer composes it again from its layers. On Linux with both panels on Lumen, the app on
+  Live: the main process 117 MB instead of 133. The picture is the same, pixel for pixel.
 
 **Removed**
 - **Claude Code in the cloud.** The relay for Claude Code's cloud sessions (an ntfy topic,
@@ -46,9 +51,12 @@
   out of the cloud environment on claude.ai/code too.
 
 **Diagnose**
-- Three minutes after the app's window closed, the log says what the main process holds then
-  (its memory as the Task Manager shows it, the C heap in use and free, the pictures): to read
-  afterwards in *Live → Diagnose → Log*.
+- Three minutes after the app's window closed, the log says what each of Libre Panel's
+  processes holds then (the main process, the engines, the sensor service, PresentMon) and what
+  the main process holds in detail (its memory as the Task Manager shows it, the C heap in use
+  and free, the pictures): one line to read afterwards in *Live → Diagnose → Log*.
+- *Live → Diagnose → Load* names Libre Panel's engine among the processes (it said
+  `libre-panel-engine.exe`).
 
 **Fixed**
 - **An empty app page now and then (Windows).** The app's page asks for its hundred scripts

@@ -188,12 +188,13 @@ def release(also: Callable[[], None] | None = None) -> None:
     give_back()
 
 
-def say_held() -> None:
-    """The log's line of what this process holds, some minutes after the app closed (light
-    mode): its memory as the Task Manager's Memory column shows it (on Linux what is its own
-    alone), what Windows has committed to it, and what it holds as the load report counts it
-    (load_report.py's inside): what a person can read later in Live → Diagnosis → Log, with the
-    window open again."""
+def say_held(processes: Callable[[], dict[str, Any] | None] | None = None) -> None:
+    """The log's line of what Libre Panel holds, some minutes after the app closed: this
+    process's memory as the Task Manager's Memory column shows it (on Linux what is its own
+    alone) and what Windows has committed to it, each of its processes' (``processes()``:
+    load_report's LoadSampler.memory_now; the engines, the sensor service, PresentMon), and
+    what this one holds as the load report counts it (load_report.py's inside): what a person
+    can read later in Live → Diagnose → Log, with the window open again, in one line."""
     import psutil
 
     from libre_panel import load_report
@@ -203,6 +204,14 @@ def say_held() -> None:
     commit = getattr(info, "private", None)  # (Windows: what is committed to it)
     if commit is not None:
         said += f" (committed {commit / 2**20:.0f} MB)"
+    every = ""
+    if processes is not None:
+        try:
+            every = load_report.memory_text(processes())
+        except Exception:  # noqa: BLE001 - the line goes on without them
+            log.debug("Libre Panel's processes could not be measured", exc_info=True)
+    if every:
+        said += f"; {every}"
     held = load_report.inside_text(load_report.inside())
     log.info("light mode: %.0f minutes after the app closed, %s; %s", SAID_S / 60,
              said, " ".join(line.strip() for line in held))  # fmt: skip

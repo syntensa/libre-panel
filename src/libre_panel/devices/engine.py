@@ -47,6 +47,7 @@ from libre_panel.devices.h264 import (
     EncoderStopped,
     _close_pipe,
     _wide_pipe,
+    _wide_pipe_back,
     _widen,
     auto_engine,
     find_engine,
@@ -89,6 +90,8 @@ GLOBE, GLOBE_LAYER, FILL, LAID, GROWN, BAR, BAR_LAYER = 16, 17, 18, 19, 20, 21, 
 ROTOR, BLADES, FAN_RING = 23, 24, 25
 MASKED = 26  # a picture of a mask filled with an ink (a text, a letter: scene.rs's masked)
 MASKED_LAYER = 27  # a layer of a mask filled with an ink (a text laid alone: masked_layer)
+# the frame of layers it composed last, whole, before it turns (the app's picture of the panel)
+SHOWN = 28
 MOST_ROTORS = 8  # the rotors it keeps for a stream, those used last (scene.rs's MOST_ROTORS)
 # how a layer goes on: RGBA through its alpha, RGB as it is (a video's frame), RGB light added
 OVER, SOLID, ADD = 0, 1, 2
@@ -204,6 +207,12 @@ def makes_masks(engine: str) -> bool:
     """Whether ``engine`` makes a picture of a mask and an ink itself (render/scene.py's
     MaskRecipe: a text, a letter)."""
     return "masks" in _can(engine)
+
+
+def gives_shown(engine: str) -> bool:
+    """Whether ``engine`` gives the frame of layers it composed last, whole (:data:`SHOWN`: the
+    app's picture of the panel, its pixels not made here)."""
+    return "shown" in _can(engine)
 
 
 def encodes_on_cards(engine: str) -> bool:
@@ -757,29 +766,37 @@ class EngineLink:
         self._closing = False  # (an end asked for, not one to report)
         if winsession.ending():  # Windows refuses a new program now, with a box that names it
             raise DeviceError("Windows is ending the session: no engine now")
-        # its stdin as wide as ffmpeg's (h264.Encoder: Windows gives a pipe 4 KB of room)
+        # its stdin as wide as ffmpeg's (h264.Encoder: Windows gives a pipe 4 KB of room), and
+        # its stdout (the frame shown, a 12.3"'s 4 MB, in a few reads instead of a thousand)
         wide = _wide_pipe() if popen is subprocess.Popen else None
+        back = _wide_pipe_back() if popen is subprocess.Popen else None
         # (on Linux its large blocks the system's own, as this process has them: light.py)
         mapped = light.mapped_blocks()
         try:
             self.proc = popen(
                 command,
                 stdin=subprocess.PIPE if wide is None else wide[0],
-                stdout=subprocess.PIPE,
+                stdout=subprocess.PIPE if back is None else back[0],
                 stderr=subprocess.PIPE,
                 bufsize=0,
                 creationflags=DETACHED | ABOVE_NORMAL,
                 **({"env": {**os.environ, **mapped}} if mapped else {}),
             )
         except OSError as exc:
-            if wide is not None:
-                _close_pipe(wide)
+            for pipe in (wide, back):
+                if pipe is not None:
+                    _close_pipe(pipe)
             raise DeviceError(t("cannot start Libre Panel's engine: {error}", error=exc)) from exc
         if wide is not None:  # (the engine has its end: this process keeps the one it writes to)
             os.close(wide[0])
             self.proc.stdin = wide[1]
         else:
             _widen(self.proc.stdin)
+        if back is not None:  # (and the one it reads from)
+            os.close(back[0])
+            self.proc.stdout = back[1]
+        else:
+            _widen(self.proc.stdout)
         self._threads = [
             threading.Thread(target=self._read_loop, name="engine-reader", daemon=True),
             threading.Thread(target=self._error_loop, name="engine-errors", daemon=True),
@@ -942,6 +959,40 @@ class EngineLink:
                 why = self.reason() if not self.alive else "in time"
                 raise DeviceError(f"USB error on command {cmd}: the engine gave no reply ({why})")
             return slot[0]
+
+    def shown(self, timeout: float = 1.0) -> Image.Image | None:
+        """The frame of layers the engine composed last, whole, as it is before it turns (for
+        the app's picture of the panel: composed by the engine, as the panel got it); None
+        where it has none (one of Libre Panel's own frames or a picture made elsewhere went
+        since, no frame of layers yet), gives none in ``timeout`` seconds, or is gone."""
+        if not self.alive:
+            return None
+        number = next(self._ids)
+        event, slot = threading.Event(), []
+        self._replies[number] = (event, slot)
+        # (not behind a frame that waits to go in while the panel sets the pace: none then)
+        if not self._write_lock.acquire(timeout=timeout):
+            self._replies.pop(number, None)
+            return None
+        try:
+            try:
+                stdin, view = self.proc.stdin, memoryview(_head(SHOWN, number))
+                while view:  # an unbuffered pipe may take less than asked
+                    view = view[stdin.write(view) :]
+            finally:
+                self._write_lock.release()
+            event.wait(timeout)
+        except (OSError, ValueError):
+            return None
+        finally:
+            self._replies.pop(number, None)
+        if not slot or slot[0][0] != 0 or len(slot[0][1]) < 8:
+            return None
+        data = memoryview(slot[0][1])
+        width, height = struct.unpack_from("<II", data)
+        if not width or not height or len(data) != 8 + width * height * 3:
+            return None
+        return Image.frombytes("RGB", (width, height), data[8:])
 
     def stream(self, options: list[str], block: int) -> None:
         """A new stream of drawn frames: the engine's encoder with ``options`` (those of
@@ -1111,8 +1162,11 @@ class EngineStream:
         lead: float | None = None, scenes: bool = False, rings: bool = False,
         views: bool = False, globes: bool = False, fills: bool = False, laid: bool = False,
         grown: bool = False, bars: bool = False, fans: bool = False, masks: bool = False,
+        shown: bool = False,
     ) -> None:  # fmt: skip
         self.link, self.size = link, size
+        # with ``shown``: the engine gives the frame of layers it composed last (EngineLink.shown)
+        self.shown = shown and scenes
         # with ``scenes``: frames of layers go to the engine as them (render/scene.py); the
         # engine's stream has none of their layers yet, and nor has this; with ``rings`` the
         # engine makes a lit gauge's ring itself, with ``views`` it cuts a graph's window, with

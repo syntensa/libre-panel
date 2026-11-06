@@ -203,7 +203,8 @@ fn encode(options: Options) -> Result<(), String> {
                 wire::Record::Command(_)
                 | wire::Record::Stream { .. }
                 | wire::Record::End
-                | wire::Record::Picture { .. },
+                | wire::Record::Picture { .. }
+                | wire::Record::Shown { .. },
             ) => return Err("a panel's record, but no panel here (see `panel`)".into()),
             Some(wire::Record::Ground { colour, picture }) => match colour {
                 Some(rgb) => scene.ground_colour(rgb),
@@ -461,9 +462,11 @@ fn main() -> ExitCode {
             // sources it grows from those it keeps, a graph's strip (scene.rs's grown); "bars", a
             // lit bar's picture and glow it makes for each value (bar.rs); "fans", a fan's rotor
             // at each position and its ring it makes as sources (fan.rs); "masks", a source of a
-            // mask and an ink, a text or a letter (scene.rs's masked))
+            // mask and an ink, a text or a letter (scene.rs's masked); "shown", the frame of
+            // layers it composed last, whole, for the app's picture of the panel (wire.rs's
+            // kind 28))
             println!(
-                "libre-panel-engine {} (x264 build {}; panel, scenes, rings, views, globes, cards, proven, fills, laid, grown, bars, fans, masks)",
+                "libre-panel-engine {} (x264 build {}; panel, scenes, rings, views, globes, cards, proven, fills, laid, grown, bars, fans, masks, shown)",
                 env!("CARGO_PKG_VERSION"),
                 x264::build()
             );

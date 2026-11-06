@@ -458,6 +458,7 @@ function processName(row) {
   const names = {
     main: () => t("Main process"),
     panel: () => (row.panel ? t("Panel {n}", { n: row.panel }) : t("A panel's process")),
+    engine: () => t("Libre Panel's engine"),
     ffmpeg: () => (row.panel ? t("Video of panel {n} (ffmpeg)", { n: row.panel }) : t("Video (ffmpeg)")),
     presentmon: () => t("Frame rates (PresentMon)"),
     window: () => t("Window"),

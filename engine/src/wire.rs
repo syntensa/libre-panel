@@ -111,6 +111,13 @@
 //!                     each), w, h (u32 each), its ink (RGBA), then its mask (one byte a pixel,
 //!                     row by row): the layer through its alpha, its pixels a masked source's
 //!                     (a text laid alone), scene.rs's `masked_layer`
+//! kind 28, the frame shown: a the reply's number (as a command's), b 0: the frame of layers
+//!                     composed last, whole and as it is before it turns, for the app's
+//!                     picture of the panel (once no record of the next frame came between,
+//!                     else after that frame), in a reply (kind 65): 0, then w, h (u32 each)
+//!                     and its pixels, three bytes each, row by row; or 1, none: no frame of
+//!                     layers was composed, or one of Libre Panel's own frames, a picture made
+//!                     elsewhere or a new stream came since
 //! ```
 //!
 //! On its stdout, with a panel of its own (`panel`): the same head, then b bytes:
@@ -246,6 +253,10 @@ pub enum Record {
         h: usize,
         ink: [u8; 4],
         mask: Vec<u8>,
+    },
+    /// The frame shown asked for (the app's picture of the panel), `id` the reply's number.
+    Shown {
+        id: u32,
     },
     Fill {
         id: u32,
@@ -1015,6 +1026,12 @@ pub fn read(input: &mut impl Read) -> io::Result<Option<Record>> {
                 ink: [head[16], head[17], head[18], head[19]],
                 mask,
             }))
+        }
+        28 => {
+            if b != 0 {
+                return Err(invalid("a question for the frame shown with more to it"));
+            }
+            Ok(Some(Record::Shown { id: a }))
         }
         kind => Err(invalid(&format!("a record of kind {kind}"))),
     }

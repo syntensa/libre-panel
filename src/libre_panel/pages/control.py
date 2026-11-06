@@ -25,6 +25,7 @@ from libre_panel.i18n import t
 from libre_panel.pages.base import ConsolePage, Refused, Request
 from libre_panel.plugins.host import LEFT_OUT, OFF_IN_THEME
 from libre_panel.plugins.loader import registry
+from libre_panel.render.scene import SceneFrame
 from libre_panel.services.game import MODE as GAME_MODE
 from libre_panel.theme.defaults import normal_theme
 from libre_panel.theme.model import ThemeError, find_theme, list_themes
@@ -235,7 +236,8 @@ class Control(ConsolePage):
         return {**self._themes(config), "config_problem": problem}
 
     def live(self, request: Request):
-        frame = self.context.shown_frame(request.integer("panel", 1, 1, 4))  # (which is which)
+        panel = request.integer("panel", 1, 1, 4)  # (which is which)
+        frame = self.context.shown_frame(panel)
         if frame is None:
             return 404, {"error": t("no picture yet")}
         kind = request.param("format", "jpeg").lower()
@@ -244,8 +246,20 @@ class Control(ConsolePage):
         width = request.integer("w", LIVE_WIDTH, 160, 1920)
         made = self._live
         if made is None or made[0] is not frame or made[1:3] != (width, kind):
-            made = self._live = (frame, width, kind, encode(frame, width, kind))
+            picture = encode(self._pixels(panel, frame), width, kind)
+            made = self._live = (frame, width, kind, picture)
         return 200, made[3], PICTURES[kind]
+
+    def _pixels(self, panel: int, frame: Image.Image) -> Image.Image:
+        """The pixels of ``frame``, the frame on ``panel`` now: where it is a frame of layers whose
+        pixels were not made here, the engine's (it composed it as the panel got it), else its
+        own, made now where they were not."""
+        if isinstance(frame, SceneFrame) and not frame.composed:
+            ask = getattr(self.context, "shown_picture", None)
+            given = ask(panel) if ask is not None else None
+            if given is not None and given.size == frame.size:
+                return given
+        return frame
 
     def log(self, request: Request) -> dict[str, Any]:
         lines = self.context.log_tail(request.integer("lines", 60, 1, 1000))

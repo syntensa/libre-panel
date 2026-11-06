@@ -370,6 +370,57 @@ def test_a_live_picture_is_made_once_for_a_frame(isolated_home):
     assert page.handle("GET", "live", {"format": ["png"]}, None)[1] is png[1]
 
 
+def test_a_live_picture_of_a_frame_of_layers_is_the_engine_s_where_it_gives_one(
+    isolated_home, monkeypatch
+):
+    """Where the panel's engine composed the frame from its layers, the live picture is its
+    picture of it (the same pixels): the frame's own are not made here. Where it gives none,
+    or one of another size, the frame's own, made now."""
+    from types import SimpleNamespace
+
+    from libre_panel.app import RunStatus
+    from libre_panel.pages import control
+    from libre_panel.plugins import PageContext, PluginHost
+    from libre_panel.render import scene as scenes
+
+    encoded = []
+    real = control.encode
+    monkeypatch.setattr(control, "encode", lambda frame, *a: encoded.append(frame) or real(
+        frame, *a))  # fmt: skip
+    given = Image.new("RGB", (640, 160), "teal")
+    answers = [given]
+    status = RunStatus(picture=lambda: answers[0])
+    host = PluginHost()
+    page = Control(PageContext(SimpleNamespace(plugin_host=host,
+                                               panel=SimpleNamespace(status=status))))  # fmt: skip
+
+    def frame():
+        made = scenes.SceneFrame(scenes.Scene((640, 160), (10, 20, 30), ()))
+        host.shown = status.shown = made
+        return made
+
+    first = frame()
+    assert page.handle("GET", "live", {}, None)[0] == 200
+    assert encoded[-1] is given and not first.composed  # the engine's: nothing composed here
+    answers[0] = None  # it gives none (one of Libre Panel's own frames went meanwhile)
+    second = frame()
+    page.handle("GET", "live", {}, None)
+    assert encoded[-1] is second and second.composed
+    answers[0] = Image.new("RGB", (320, 80))  # one of another size: not the frame's
+    third = frame()
+    page.handle("GET", "live", {}, None)
+    assert encoded[-1] is third and third.composed
+    answers[0] = given
+    status.picture = lambda: 1 / 0  # (it failed: the frame's own)
+    fourth = frame()
+    page.handle("GET", "live", {}, None)
+    assert encoded[-1] is fourth and fourth.composed
+    host.shown = status.shown = plain = Image.new("RGB", (640, 160), "navy")  # composed here
+    status.picture = lambda: pytest.fail("not asked for a frame composed here")
+    page.handle("GET", "live", {}, None)
+    assert encoded[-1] is plain
+
+
 def test_a_test_message_says_whether_the_theme_lets_it_show(running, isolated_home):
     app, port = running
     status, answer = post(port, "control/probe", {"kind": "volume"})

@@ -1360,6 +1360,116 @@ def test_a_video_panel_shows_frames_of_layers_the_engine_composed(engine, monkey
         assert max(ImageStat.Stat(ImageChops.difference(native, picture)).mean) < 6
 
 
+def test_the_frame_shown_is_asked_of_the_panel_s_own_display_through_those_around_it():
+    """TURZX's display and auto's open the panel's own (a video display) inside: the question for
+    the frame shown goes on to it, and has no answer without one that gives it."""
+    from libre_panel.devices.auto import AutoDisplay
+    from libre_panel.devices.turzx import TurzxDisplay
+
+    picture, asked = Image.new("RGB", (4, 2)), []
+
+    class Inner:
+        def shown_picture(self, timeout=1.0):
+            asked.append(timeout)
+            return picture
+
+    for kind in (TurzxDisplay, AutoDisplay):
+        outer = kind(DeviceConfig())
+        assert outer.shown_picture() is None  # (none open yet)
+        outer._impl = Inner()
+        assert outer.shown_picture(0.5) is picture and asked[-1] == 0.5
+        outer._impl = object()  # (a panel's display without an engine)
+        assert outer.shown_picture() is None
+
+
+def test_the_frame_shown_is_the_engine_s_own_whole_as_composed_here(engine, monkeypatch):
+    """The app's picture of the panel (Live, Start, the Player) from the engine, which composed
+    the frame: the same pixels as composed here, before it turns, its pixels not made here;
+    none while the panel shows one of Libre Panel's own frames, again with the next of layers."""
+    from fake_panel import FakePanel
+    from panel_socket import PanelSocket
+    from test_video import video_config
+
+    from libre_panel.devices import turzx_usb, turzx_video
+    from libre_panel.devices.engine import EngineLink, EngineTransport
+    from libre_panel.devices.turzx_video import TurzxVideoDisplay
+
+    if not engines.gives_shown(engine):
+        pytest.skip("needs libre-panel-engine that gives the frame shown (cargo build --release)")
+    fake = FakePanel()
+    sock = PanelSocket(fake)
+
+    def open_by_engine(path, pid=None, beside=(), skip=0, popen=subprocess.Popen):
+        command = [path, "panel", "--pid", f"{fake.pid:04x}", "--link", sock.link]
+        return EngineTransport(EngineLink(command), fake.pid)
+
+    monkeypatch.setattr(EngineTransport, "open", staticmethod(open_by_engine))
+    monkeypatch.setattr(turzx_usb.UsbTransport, "present", staticmethod(lambda pid: True))
+    monkeypatch.setattr(turzx_video, "RESTART", turzx_video._Restart())
+    monkeypatch.setattr(turzx_video, "RATES", {})
+    display = TurzxVideoDisplay(video_config(encoder="native"))
+    display.open()
+
+    def shown_soon(wanted):  # (the frame goes to the engine from the stream's writer thread)
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            picture = display.shown_picture()
+            if picture is not None and picture.tobytes() == wanted.tobytes():
+                return picture
+            time.sleep(0.02)
+        return display.shown_picture()
+
+    try:
+        for n in range(8):
+            ring = Image.new("RGBA", (160, 160), (0, 0, 0, 0))
+            ImageDraw.Draw(ring).ellipse((8, 8, 152, 152), outline=(40, 220, 200, 200), width=12)
+            glow = Image.new("RGB", (300, 90), (30, 10, 60))
+            pieces = (("ring", Piece(ring, 30 + n * 90, 60)),
+                      ("glow", Piece(glow, 900 - n * 40, 300, add=True)))  # fmt: skip
+            frame = scenes.SceneFrame(scenes.Scene((1920, 480), (20, 40, 80), pieces))
+            out = frame.turned() if n % 3 == 2 else frame  # (a panel mounted upside down)
+            display.show(out)
+            wanted = scenes.compose(frame.scene)  # (before it turns, as the app shows it)
+            picture = shown_soon(wanted)
+            assert picture is not None and picture.size == (1920, 480), n
+            assert picture.tobytes() == wanted.tobytes(), n
+            assert not frame.composed and not out.composed  # (its pixels not made here)
+        # asked for while the next frame's layers come and not yet the frame: that frame's,
+        # once it came (never the scene between two frames)
+        dot = Image.new("RGBA", (40, 40), (250, 250, 250, 255))
+        later = scenes.SceneFrame(
+            scenes.Scene((1920, 480), (20, 40, 80), (("dot", Piece(dot, 5, 5)),))
+        )
+        number = display.encoder.numbered
+        display.encoder.numbered += 1
+        parts = display.encoder.scenes.records(later.scene, number, None)
+        display.link.write(b"".join(parts[:-1]))  # (its new layer, not the frame)
+        given = []
+        asking = threading.Thread(target=lambda: given.append(display.shown_picture(10.0)))
+        asking.start()
+        asking.join(0.5)
+        assert asking.is_alive()  # (it waits for the frame)
+        display.link.write(parts[-1])
+        asking.join(10)
+        assert given and given[0].tobytes() == scenes.compose(later.scene).tobytes()
+        # one of Libre Panel's own frames (a transition, the alarm's edge): none from the engine
+        own = Image.new("RGB", (1920, 480), (200, 30, 30))
+        display.show(own)
+        deadline = time.monotonic() + 10
+        while display.shown_picture() is not None and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert display.shown_picture() is None
+        frame = scenes.SceneFrame(scenes.Scene((1920, 480), (5, 6, 7), ()))
+        display.show(frame)  # and frames of layers again
+        wanted = scenes.compose(frame.scene)
+        assert shown_soon(wanted).tobytes() == wanted.tobytes()
+    finally:
+        display.close()
+        sock.close()
+    assert sock.errors == []
+    assert display.shown_picture() is None  # (closed: no engine to ask)
+
+
 # -- a lit gauge's ring, made by the engine (render/lit.py's Ring, engine/src/ring.rs) ---------
 
 
