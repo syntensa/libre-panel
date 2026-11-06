@@ -92,7 +92,7 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
 - [x] images in L, RGB, RGBA (and RGBa, premultiplied, as Pillow converts), new, crop, paste
       (with a mask), alpha_composite, convert, point, putalpha, split/merge/getchannel, getbbox
 - [x] reduce, resize (every filter, a box of floats, reducing_gap, the crop where the box is
-      the size), in L, RGB, RGBA, RGBa and F
+      the size), in L, RGB, RGBA, RGBa and F, and resize in I;16 (16 bits, its reduce refused)
 - [x] thumbnail (of a decoded picture; a JPEG's draft is the decoder's), ImageOps.fit, pad,
       contain, cover, the EXIF orientation's turn; getextrema, linear and radial gradients
 - [x] GaussianBlur, BoxBlur
@@ -117,6 +117,15 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       Pillow's wheel has it as a file, Linux and macOS)
 - [x] decoding WebP: still and animated, through libwebp's animation decoder as Pillow uses
       it (loaded as libjpeg-turbo is: LP_LIBWEBP, LP_LIBWEBPDEMUX)
+- [x] thumbnail on a file just opened, as media.py makes a track's cover small: a JPEG drafted
+      first (decoded at 1/2, 1/4 or 1/8, then resized from the box its draft gives), every
+      picture resized in its file's own mode (1 and P by NEAREST, LA, CMYK, I;16), a GIF whose
+      L is P underneath (its own colour table the grey ramp) resized and converted as Pillow
+      does it
+- [x] as fast as Pillow or faster where the app reads pictures: libjpeg-turbo's rows straight
+      into the picture, resampling a pixel's bands together and summing rows whole (the same
+      integer sums), zlib-rs with its SIMD; a cover made small takes 0.82 to 0.99 of the
+      instructions Pillow's takes (callgrind: JPEG 600 to 3000 pixels, PNG, WebP)
 - [ ] the JPEG and WebP comparisons on Windows too (libjpeg-turbo 3.2.0 and libwebp 1.6.0
       built in CI: Windows' wheels have them built in)
 - [ ] to decide: the app reads an animated WebP's durations before each frame is loaded,

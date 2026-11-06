@@ -12,7 +12,7 @@ mod webp;
 pub use exif::orientation;
 pub use gif::Frame;
 
-use lp_pixels::{Image, Mode};
+use lp_pixels::{thumbnail_size, Filter, Image, Mode};
 use std::fmt;
 
 /// What Pillow would refuse, with its reason.
@@ -120,6 +120,59 @@ pub struct Picture {
     pub xmp: Option<String>,
     /// info["xmp"] (an iTXt's bytes, where its text is not UTF-8 too)
     pub xmp_bytes: Option<Vec<u8>>,
+    /// Python's mode says L while the pixels are P's, read through the file's palette (a GIF's
+    /// first frame whose own colour table is the grey ramp: Image.load puts the file's palette
+    /// on the L picture, which makes it P underneath). So the picture as Image.open leaves it
+    /// converts as an L would ask and a P would do (convert("RGBA") with a transparency
+    /// refused, convert("L") the P picture itself), and resizes only by NEAREST; a copy of it
+    /// (exif_transpose's) is P through and through.
+    pub l_over_p: bool,
+}
+
+/// The `n` pixels in `mode`, each from its RGBA in `px`: RGB its first three, L its grey (a
+/// grey kind's own, the others' weighed), RGBA all four with the transparency's `key` made
+/// clear.
+#[inline(always)]
+fn lay(
+    n: usize,
+    mode: Mode,
+    key: Option<[u8; 4]>,
+    grey_kind: bool,
+    px: impl Iterator<Item = [u8; 4]>,
+) -> Vec<u8> {
+    let mut out = vec![0u8; n * mode.bands()];
+    match mode {
+        Mode::RGB => {
+            for (o, p) in out.chunks_exact_mut(3).zip(px) {
+                o.copy_from_slice(&p[..3]);
+            }
+        }
+        Mode::L => {
+            for (o, p) in out.iter_mut().zip(px) {
+                *o = if grey_kind {
+                    p[0]
+                } else {
+                    grey(p[0], p[1], p[2])
+                };
+            }
+        }
+        _ => match key {
+            None => {
+                for (o, p) in out.chunks_exact_mut(4).zip(px) {
+                    o.copy_from_slice(&p);
+                }
+            }
+            Some(key) => {
+                for (o, mut p) in out.chunks_exact_mut(4).zip(px) {
+                    if p == key {
+                        p[3] = 0;
+                    }
+                    o.copy_from_slice(&p);
+                }
+            }
+        },
+    }
+    out
 }
 
 /// ITU-R 601-2's grey as Convert.c weighs it (L24 >> 16).
@@ -152,52 +205,100 @@ impl Picture {
         Ok(xmp.and_then(exif::xmp_orientation).unwrap_or(1))
     }
 
+    /// Image.resize(to, filter, box, reducing_gap) in the picture's own mode, as
+    /// Image.thumbnail calls it (nothing where it has that size already): "1" and "P" by
+    /// NEAREST whatever the filter, "LA" with its grey multiplied by its alpha as RGBA's
+    /// colours are (the same bytes as through RGBA), CMYK's four bands as they are, I;16 in 16
+    /// bits.
+    fn resized(
+        &self,
+        to: (usize, usize),
+        filter: Filter,
+        bounds: Option<(f64, f64, f64, f64)>,
+        gap: Option<f64>,
+    ) -> Result<Picture> {
+        if to == (self.width, self.height) {
+            return Ok(self.clone());
+        }
+        if self.l_over_p && filter != Filter::Nearest {
+            // (asked as of an L, done by the P picture, which has no other filter)
+            return error("image has wrong mode");
+        }
+        let (w, h) = (self.width, self.height);
+        let fail = |e: lp_pixels::Error| Error(e.to_string());
+        let resize = |mode: Mode, data: Vec<u8>, filter: Filter| -> Result<Image> {
+            Image::from_bytes(mode, w, h, data)
+                .and_then(|im| im.resize(to.0, to.1, filter, bounds, gap))
+                .map_err(fail)
+        };
+        let data = match self.kind {
+            Kind::Bilevel | Kind::P => resize(Mode::L, self.data.clone(), Filter::Nearest)?,
+            Kind::L => resize(Mode::L, self.data.clone(), filter)?,
+            Kind::RGB => resize(Mode::RGB, self.data.clone(), filter)?,
+            Kind::RGBA => resize(Mode::RGBA, self.data.clone(), filter)?,
+            // (RGBa: four bands resized as they are, none multiplied by another)
+            Kind::Cmyk => resize(Mode::RGBa, self.data.clone(), filter)?,
+            Kind::LA => {
+                let rgba = self
+                    .data
+                    .chunks_exact(2)
+                    .flat_map(|p| [p[0], p[0], p[0], p[1]]);
+                let out = resize(Mode::RGBA, rgba.collect(), filter)?;
+                let la = out.as_bytes().chunks_exact(4).flat_map(|p| [p[0], p[3]]);
+                return Ok(self.with_data(to, la.collect()));
+            }
+            Kind::I16 => {
+                let out = lp_pixels::resize_16(&self.data, w, h, to.0, to.1, filter, bounds, gap);
+                return Ok(self.with_data(to, out.map_err(fail)?));
+            }
+        };
+        Ok(self.with_data(to, data.into_bytes()))
+    }
+
+    /// The picture with other pixels, of `size`.
+    fn with_data(&self, size: (usize, usize), data: Vec<u8>) -> Picture {
+        Picture {
+            kind: self.kind,
+            width: size.0,
+            height: size.1,
+            data,
+            palette: self.palette.clone(),
+            transparency: self.transparency.clone(),
+            exif: self.exif.clone(),
+            raw_exif: self.raw_exif.clone(),
+            xmp: self.xmp.clone(),
+            xmp_bytes: self.xmp_bytes.clone(),
+            // (a resized picture is a new one, in the pixels' own mode)
+            l_over_p: false,
+        }
+    }
+
     /// Image.convert(mode) to RGBA, RGB or L, with the transparency as Pillow takes it
     /// (convert_transparent for 1, L, I;16 and RGB to RGBA; the palette's alphas for P). RGBa,
     /// which the app opens nothing in, is refused.
     pub fn convert(&self, mode: Mode) -> Result<Image> {
+        if self.l_over_p {
+            if mode == Mode::RGBA && self.transparency.is_some() {
+                return error("conversion from P to RGBA not supported in convert_transparent");
+            }
+            if mode == Mode::L {
+                // (mode == self.mode: Pillow's copy, which is the P picture)
+                return error("convert(\"L\") gives the picture in P");
+            }
+        }
+        self.convert_pixels(mode)
+    }
+
+    /// Image.convert(mode) as the pixels' own mode does it (a copy's: exif_transpose's).
+    fn convert_pixels(&self, mode: Mode) -> Result<Image> {
         if mode == Mode::RGBa {
             return error("pictures open in RGBA, RGB or L");
         }
         let (w, h) = (self.width, self.height);
         let n = w * h;
-        let out_bands = mode.bands();
-        let mut out = Vec::with_capacity(n * out_bands);
         let src = &self.data;
         // the RGBA each pixel converts to (alpha 255), as Convert.c's converters make it
         let palette = self.palette_for(mode)?;
-        let rgba = |i: usize| -> [u8; 4] {
-            match self.kind {
-                Kind::Bilevel => {
-                    let v = if src[i] != 0 { 255 } else { 0 };
-                    [v, v, v, 255]
-                }
-                Kind::L => [src[i], src[i], src[i], 255],
-                Kind::LA => [src[2 * i], src[2 * i], src[2 * i], src[2 * i + 1]],
-                Kind::P => palette[usize::from(src[i])],
-                Kind::RGB => [src[3 * i], src[3 * i + 1], src[3 * i + 2], 255],
-                Kind::RGBA => [src[4 * i], src[4 * i + 1], src[4 * i + 2], src[4 * i + 3]],
-                Kind::I16 => {
-                    // (I16_RGB, and I;16 to L, which RGBA goes through: above 255 white)
-                    let v = if src[2 * i + 1] == 0 { src[2 * i] } else { 255 };
-                    [v, v, v, 255]
-                }
-                Kind::Cmyk => {
-                    // cmyk2rgb (and to L through RGB, as convert goes where it has no way)
-                    let k = 255 - u32::from(src[4 * i + 3]);
-                    let ink = |c: u8| {
-                        let tmp = u32::from(c) * k + 128;
-                        (k - (((tmp >> 8) + tmp) >> 8)) as u8
-                    };
-                    [
-                        ink(src[4 * i]),
-                        ink(src[4 * i + 1]),
-                        ink(src[4 * i + 2]),
-                        255,
-                    ]
-                }
-            }
-        };
         // convert_transparent's key (rgbT2a: each value's low byte, the alpha 255)
         let key = match (&self.transparency, self.kind, mode) {
             (Some(Transparency::Grey(t)), Kind::Bilevel | Kind::L | Kind::I16, Mode::RGBA) => {
@@ -209,22 +310,82 @@ impl Picture {
             }
             _ => None,
         };
-        for i in 0..n {
-            let mut px = rgba(i);
-            match mode {
-                Mode::RGB => out.extend_from_slice(&px[..3]),
-                Mode::L => out.push(match self.kind {
-                    Kind::L | Kind::Bilevel | Kind::I16 | Kind::LA => px[0],
-                    _ => grey(px[0], px[1], px[2]),
+        // (to L a grey kind keeps its grey; the others are weighed)
+        let grey_kind = matches!(self.kind, Kind::L | Kind::Bilevel | Kind::I16 | Kind::LA);
+        let out = match self.kind {
+            Kind::Bilevel => lay(
+                n,
+                mode,
+                key,
+                grey_kind,
+                src.iter().map(|&v| {
+                    let v = if v != 0 { 255 } else { 0 };
+                    [v, v, v, 255]
                 }),
-                _ => {
-                    if key == Some(px) {
-                        px[3] = 0;
-                    }
-                    out.extend_from_slice(&px);
+            ),
+            Kind::L => lay(n, mode, key, grey_kind, src.iter().map(|&v| [v, v, v, 255])),
+            Kind::LA => lay(
+                n,
+                mode,
+                key,
+                grey_kind,
+                src.chunks_exact(2).map(|p| [p[0], p[0], p[0], p[1]]),
+            ),
+            Kind::P => {
+                // (the 256 entries as an array: an index of a byte needs no check)
+                let mut table = [[0u8, 0, 0, 255]; 256];
+                for (t, p) in table.iter_mut().zip(&palette) {
+                    *t = *p;
                 }
+                lay(
+                    n,
+                    mode,
+                    key,
+                    grey_kind,
+                    src.iter().map(|&v| table[usize::from(v)]),
+                )
             }
-        }
+            Kind::RGB => lay(
+                n,
+                mode,
+                key,
+                grey_kind,
+                src.chunks_exact(3).map(|p| [p[0], p[1], p[2], 255]),
+            ),
+            Kind::RGBA => lay(
+                n,
+                mode,
+                key,
+                grey_kind,
+                src.chunks_exact(4).map(|p| [p[0], p[1], p[2], p[3]]),
+            ),
+            Kind::I16 => lay(
+                n,
+                mode,
+                key,
+                grey_kind,
+                src.chunks_exact(2).map(|p| {
+                    // (I16_RGB, and I;16 to L, which RGBA goes through: above 255 white)
+                    let v = if p[1] == 0 { p[0] } else { 255 };
+                    [v, v, v, 255]
+                }),
+            ),
+            Kind::Cmyk => lay(
+                n,
+                mode,
+                key,
+                grey_kind,
+                src.chunks_exact(4).map(|p| {
+                    // cmyk2rgb (and to L through RGB, as convert goes where it has no way)
+                    let k = 255 - u32::from(p[3]);
+                    let ink = |c: u8| {
+                        let tmp = u32::from(c) * k + 128;
+                        (k - (((tmp >> 8) + tmp) >> 8)) as u8
+                    };
+                    [ink(p[0]), ink(p[1]), ink(p[2]), 255]
+                }),
+            ),
+        };
         Image::from_bytes(mode, w, h, out).map_err(|e| Error(e.to_string()))
     }
 
@@ -292,6 +453,51 @@ pub fn decode_draft(data: &[u8], draft: Option<(Option<Kind>, (usize, usize))>) 
     error("cannot identify image file")
 }
 
+/// Image.thumbnail(size, filter, reducing_gap) on a file just opened, before anything else is
+/// asked of it (media.py makes a track's cover small so: Image.open, thumbnail((512, 512)),
+/// convert("RGBA")). A JPEG is drafted first where there is a reducing_gap (libjpeg decoding
+/// it at 1/2, 1/4 or 1/8, the resize then from the box JpegImageFile.draft gives); every
+/// picture is resized in its file's own mode, its palette, transparency and EXIF kept for what
+/// comes after.
+pub fn thumbnail(
+    data: &[u8],
+    size: (f64, f64),
+    filter: Filter,
+    reducing_gap: Option<f64>,
+) -> Result<Picture> {
+    let fail = |e: lp_pixels::Error| Error(e.to_string());
+    if !is_jpeg(data) {
+        let picture = decode(data)?;
+        return match thumbnail_size(picture.width, picture.height, size).map_err(fail)? {
+            Some(to) => picture.resized(to, filter, None, reducing_gap),
+            None => Ok(picture),
+        };
+    }
+    let opened = jpeg::opened_size(data)?;
+    let Some(to) = thumbnail_size(opened.0, opened.1, size).map_err(fail)? else {
+        return decode(data);
+    };
+    let Some(gap) = reducing_gap else {
+        return decode(data)?.resized(to, filter, None, None);
+    };
+    // draft(None, (int(size[0] * reducing_gap), int(size[1] * reducing_gap))), which divides
+    // the size by it as Python's // does: by 0 refused, by less than 0 a scale of 1 (as the
+    // size itself gives)
+    let want = ((size.0 * gap) as i64, (size.1 * gap) as i64);
+    if want.0 == 0 || want.1 == 0 {
+        return error("integer division or modulo by zero");
+    }
+    let want = if want.0 < 0 || want.1 < 0 {
+        opened
+    } else {
+        (want.0 as usize, want.1 as usize)
+    };
+    let scale = jpeg::draft_scale(opened, want) as f64;
+    let picture = jpeg::decode_picture(data, Some((None, want)))?;
+    let bounds = (0.0, 0.0, opened.0 as f64 / scale, opened.1 as f64 / scale);
+    picture.resized(to, filter, Some(bounds), Some(gap))
+}
+
 /// Every frame of an animated picture as the app reads one (render/moving.py's
 /// read_animation: each frame's duration and its picture in RGBA): GIF's, APNG's (a PNG's
 /// one).
@@ -319,6 +525,7 @@ pub fn open(data: &[u8], mode: Mode) -> Result<Image> {
 /// The same of a picture decoded (after a draft, say).
 pub fn opened(picture: &Picture, mode: Mode) -> Result<Image> {
     let orientation = picture.orientation()?;
-    let converted = picture.convert(mode)?;
+    // (exif_transpose makes a copy, in the pixels' own mode)
+    let converted = picture.convert_pixels(mode)?;
     Ok(converted.exif_transposed(orientation.min(u32::from(u16::MAX)) as u16))
 }

@@ -261,6 +261,7 @@ fn picture(
         raw_exif: None,
         xmp: None,
         xmp_bytes: xmp,
+        l_over_p: false,
     }
 }
 

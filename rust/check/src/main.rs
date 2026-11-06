@@ -482,13 +482,37 @@ fn run(case: &Value) -> Result<Value, String> {
                     Some((kind, (size[0] as usize, size[1] as usize)))
                 }
             };
-            let picture = lp_decode::decode_draft(&data, draft).map_err(fail)?;
+            // ("thumbnail": {"size", "resample", "reducing_gap"}, im.thumbnail(...) first, as
+            // media.py makes a cover small)
+            let picture = match &case["thumbnail"] {
+                Value::Null => lp_decode::decode_draft(&data, draft).map_err(fail)?,
+                t => {
+                    let size = t["size"].as_array().ok_or("a thumbnail size")?;
+                    let side = |i: usize| size.get(i).and_then(Value::as_f64).ok_or("a size");
+                    let filter =
+                        lp_pixels::Filter::from_number(t["resample"].as_i64().unwrap_or(3))
+                            .ok_or("a resampling filter")?;
+                    let gap = match &t["reducing_gap"] {
+                        Value::Null if t.get("reducing_gap").is_some() => None,
+                        Value::Null => Some(2.0),
+                        g => Some(g.as_f64().ok_or("a reducing_gap")?),
+                    };
+                    lp_decode::thumbnail(&data, (side(0)?, side(1)?), filter, gap).map_err(fail)?
+                }
+            };
             let out = if case["exif"].as_bool().unwrap_or(true) {
                 lp_decode::opened(&picture, mode).map_err(fail)?
             } else {
                 picture.convert(mode).map_err(fail)?
             };
-            json!({"image": value_of(&out)})
+            // ("digest": the picture's size and SHA-256 alone, for pictures too big to send)
+            if case["digest"].as_bool().unwrap_or(false) {
+                let sum = Sha256::digest(out.as_bytes());
+                let hex: String = sum.iter().map(|b| format!("{b:02x}")).collect();
+                json!({"size": [out.width(), out.height()], "sha256": hex})
+            } else {
+                json!({"image": value_of(&out)})
+            }
         }
         "frames" => {
             // an animation's frames as the app reads them: each one's duration and RGBA picture

@@ -12,6 +12,53 @@ fn py_round(x: f64) -> i64 {
     x.round_ties_even() as i64
 }
 
+/// Image.thumbnail's size for a picture of `width` x `height` (its preserve_aspect_ratio): the
+/// largest within `size` of the picture's aspect, as Pillow rounds it; None where the picture
+/// fits in `size` already.
+pub fn thumbnail_size(
+    width: usize,
+    height: usize,
+    size: (f64, f64),
+) -> Result<Option<(usize, usize)>> {
+    let (x, y) = (size.0.floor() as i64, size.1.floor() as i64);
+    let (w, h) = (width as i64, height as i64);
+    if x >= w && y >= h {
+        return Ok(None);
+    }
+    if h == 0 || y == 0 {
+        return error("division by zero");
+    }
+    // round_aspect: the floor or the ceiling, whichever is nearer by `key` (the floor where
+    // they tie), and at least 1
+    let round_aspect = |number: f64, key: &dyn Fn(i64) -> f64| -> i64 {
+        let (lo, hi) = (number.floor() as i64, number.ceil() as i64);
+        let pick = if key(hi) < key(lo) { hi } else { lo };
+        pick.max(1)
+    };
+    let aspect = w as f64 / h as f64;
+    let (fx, fy) = (x as f64, y as f64);
+    let (x, y) = if fx / fy >= aspect {
+        (
+            round_aspect(fy * aspect, &|n| (aspect - n as f64 / fy).abs()),
+            y,
+        )
+    } else {
+        let key = |n: i64| {
+            if n == 0 {
+                0.0
+            } else {
+                (aspect - fx / n as f64).abs()
+            }
+        };
+        (x, round_aspect(fx / aspect, &key))
+    };
+    // (a size of none or less the resize after refuses)
+    if (x, y) != (w, h) && (x < 1 || y < 1) {
+        return error("height and width must be > 0");
+    }
+    Ok(Some((x as usize, y as usize)))
+}
+
 impl Image {
     /// Image.thumbnail(size, resample, reducing_gap) of a picture already decoded (a JPEG's
     /// draft is the decoder's): the largest size within `size` of the picture's aspect, as
@@ -22,42 +69,12 @@ impl Image {
         resample: Filter,
         reducing_gap: Option<f64>,
     ) -> Result<Image> {
-        let (x, y) = (size.0.floor() as i64, size.1.floor() as i64);
-        let (w, h) = (self.width as i64, self.height as i64);
-        if x >= w && y >= h {
-            return Ok(self.clone());
+        match thumbnail_size(self.width, self.height, size)? {
+            Some((x, y)) if (x, y) != self.size() => {
+                self.resize(x, y, resample, None, reducing_gap)
+            }
+            _ => Ok(self.clone()),
         }
-        if h == 0 || y == 0 {
-            return error("division by zero");
-        }
-        // round_aspect: the floor or the ceiling, whichever is nearer by `key` (the floor
-        // where they tie), and at least 1
-        let round_aspect = |number: f64, key: &dyn Fn(i64) -> f64| -> i64 {
-            let (lo, hi) = (number.floor() as i64, number.ceil() as i64);
-            let pick = if key(hi) < key(lo) { hi } else { lo };
-            pick.max(1)
-        };
-        let aspect = w as f64 / h as f64;
-        let (fx, fy) = (x as f64, y as f64);
-        let (x, y) = if fx / fy >= aspect {
-            (
-                round_aspect(fy * aspect, &|n| (aspect - n as f64 / fy).abs()),
-                y,
-            )
-        } else {
-            let key = |n: i64| {
-                if n == 0 {
-                    0.0
-                } else {
-                    (aspect - fx / n as f64).abs()
-                }
-            };
-            (x, round_aspect(fx / aspect, &key))
-        };
-        if (x, y) == (w, h) {
-            return Ok(self.clone());
-        }
-        self.resize(x as usize, y as usize, resample, None, reducing_gap)
     }
 
     /// ImageOps.contain(image, size, method): as large as fits in `size`, its aspect kept.

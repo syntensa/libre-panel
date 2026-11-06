@@ -30,8 +30,9 @@ pub use composite::alpha_composite;
 pub use draw::{Canvas, Draw};
 pub use geometry::{Transform, Transpose};
 pub use imagedraw::ALL_CORNERS;
+pub use ops::thumbnail_size;
 pub use point::round_half_even;
-pub use resample::Filter;
+pub use resample::{resize_16, Filter};
 
 use std::fmt;
 

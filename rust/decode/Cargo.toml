@@ -11,5 +11,8 @@ publish.workspace = true
 lp-pixels = { path = "../pixels" }
 # (zlib-rs: zlib ported, so that inflating stops where Pillow's zlib stops)
 flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
+# (zlib-rs with its "std": it looks for the processor's AVX2 and SSE when it runs, for its
+# checksum and its copies; flate2 asks for none. The same bytes either way.)
+zlib-rs = { version = "0.6.7", default-features = false, features = ["std"] }
 # (libjpeg-turbo, loaded where the app runs: jpeg.rs)
 libloading = "0.8"

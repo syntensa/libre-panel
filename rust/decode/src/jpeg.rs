@@ -25,7 +25,7 @@ type Boolean = c_int;
 
 const JCS_GRAYSCALE: c_int = 1;
 const JCS_CMYK: c_int = 4;
-const JCS_EXT_RGBX: c_int = 7;
+const JCS_EXT_RGB: c_int = 6;
 const JPEG_SUSPENDED: c_int = 0;
 const JPEG_HEADER_TABLES_ONLY: c_int = 2;
 
@@ -240,8 +240,9 @@ unsafe extern "C-unwind" fn skip_input_data(cinfo: *mut Decompress, n: c_long) {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Raw {
     L,
-    /// RGB (JCS_EXT_RGBX: Pillow's own four bytes a pixel)
-    Rgbx,
+    /// RGB: JCS_EXT_RGB. (Pillow asks for JCS_EXT_RGBX, its own four bytes a pixel; libjpeg-turbo
+    /// makes the same colours for both, the fourth byte Pillow's alone.)
+    Rgb,
     /// CMYK;I: Adobe's inverted CMYK
     CmykI,
 }
@@ -250,14 +251,15 @@ impl Raw {
     fn bytes(self) -> usize {
         match self {
             Raw::L => 1,
-            _ => 4,
+            Raw::Rgb => 3,
+            Raw::CmykI => 4,
         }
     }
 }
 
-/// ImagingJpegDecode on the whole of `data` (from the tile's offset): rows of `size`, each in
-/// the raw mode's bytes. A suspension (the data ended first) is "image file is truncated",
-/// libjpeg's errors are "broken data stream".
+/// ImagingJpegDecode on the whole of `data` (from the tile's offset): the picture's pixels, rows
+/// of `size` (CMYK;I's inverted to CMYK). A suspension (the data ended first) is "image file is
+/// truncated", libjpeg's errors are "broken data stream".
 fn decode(data: &[u8], raw: Raw, scale: u32, size: (usize, usize)) -> Result<Vec<u8>> {
     let lib = lib()?;
     // SAFETY: zeroed is how JPEGSTATE starts (calloc'd); every pointer is set before use
@@ -297,7 +299,7 @@ fn decode(data: &[u8], raw: Raw, scale: u32, size: (usize, usize)) -> Result<Vec
             }
             cinfo.out_color_space = match raw {
                 Raw::L => JCS_GRAYSCALE,
-                Raw::Rgbx => JCS_EXT_RGBX,
+                Raw::Rgb => JCS_EXT_RGB,
                 Raw::CmykI => JCS_CMYK,
             };
             if scale > 1 {
@@ -314,19 +316,40 @@ fn decode(data: &[u8], raw: Raw, scale: u32, size: (usize, usize)) -> Result<Vec
                 return error("broken data stream when reading image file");
             }
             let stride = size.0 * raw.bytes();
-            for y in 0..size.1 {
-                let mut line = vec![
-                    0u8;
-                    (cinfo.output_components as usize * cinfo.output_width as usize)
-                        .max(stride)
-                ];
-                let mut row = line.as_mut_ptr();
-                if (lib.read_scanlines)(&mut *cinfo, &mut row, 1) != 1 {
+            let given = cinfo.output_components as usize * cinfo.output_width as usize;
+            // (libjpeg's rows straight into the picture's, several at a call; a row narrower
+            // than the picture's through a line of its own, the rest of the row 0)
+            let mut line = vec![0u8; if given < stride { stride } else { 0 }];
+            let mut y = 0;
+            while y < size.1 {
+                let mut at = [std::ptr::null_mut::<u8>(); 16];
+                let want = if line.is_empty() {
+                    (size.1 - y).min(at.len())
+                } else {
+                    1
+                };
+                for (i, p) in at.iter_mut().take(want).enumerate() {
+                    *p = if line.is_empty() {
+                        rows.as_mut_ptr().add((y + i) * stride)
+                    } else {
+                        line.as_mut_ptr()
+                    };
+                }
+                let got = (lib.read_scanlines)(&mut *cinfo, at.as_mut_ptr(), want as c_uint);
+                if got == 0 {
                     return truncated();
                 }
-                rows[y * stride..(y + 1) * stride].copy_from_slice(&line[..stride]);
+                if !line.is_empty() {
+                    rows[y * stride..(y + 1) * stride].copy_from_slice(&line);
+                }
+                y += got as usize;
             }
             let _ = (lib.finish)(&mut *cinfo);
+            if raw == Raw::CmykI {
+                for v in rows.iter_mut() {
+                    *v = !*v;
+                }
+            }
             Ok(())
         }
     }));
@@ -563,6 +586,18 @@ fn find(hay: &[u8], needle: &[u8]) -> bool {
 /// A JPEG's first picture as the app opens it, a draft asked for or not: draft(mode, size)
 /// as JpegImageFile.draft takes it (the scale of 1/2, 1/4 or 1/8 that still covers `size`;
 /// "L" read as grey by libjpeg itself where the file is RGB).
+/// JpegImageFile.draft's scale for a picture of `size` drafted to `want` (at least 1 each):
+/// the largest of 8, 4, 2 and 1 it can shrink by and still cover `want`.
+pub(crate) fn draft_scale(size: (usize, usize), want: (usize, usize)) -> usize {
+    let s = (size.0 / want.0).min(size.1 / want.1);
+    [8, 4, 2, 1].into_iter().find(|&f| s >= f).unwrap_or(1)
+}
+
+/// The size a JPEG opens with (its frame header's), before any draft.
+pub(crate) fn opened_size(data: &[u8]) -> Result<(usize, usize)> {
+    Ok(open_at(data, 0)?.size)
+}
+
 pub(crate) fn decode_picture(
     data: &[u8],
     draft: Option<(Option<Kind>, (usize, usize))>,
@@ -575,7 +610,7 @@ pub(crate) fn decode_picture(
     let mut kind = h.mode;
     let mut raw = match kind {
         Kind::L => Raw::L,
-        Kind::RGB => Raw::Rgbx,
+        Kind::RGB => Raw::Rgb,
         _ => Raw::CmykI,
     };
     let (mut size, mut scale) = (h.size, 1u32);
@@ -585,8 +620,7 @@ pub(crate) fn decode_picture(
             raw = Raw::L;
         }
         if want.0 > 0 && want.1 > 0 {
-            let s = (w / want.0).min(ht / want.1);
-            let s = [8, 4, 2, 1].into_iter().find(|&f| s >= f).unwrap_or(1);
+            let s = draft_scale(h.size, want);
             size = (w.div_ceil(s), ht.div_ceil(s));
             scale = s as u32;
         } else if want.0 == 0 || want.1 == 0 {
@@ -596,15 +630,7 @@ pub(crate) fn decode_picture(
     if size.0 == 0 || size.1 == 0 {
         return error("tile cannot extend outside image");
     }
-    let rows = decode(data, raw, scale, size)?;
-    let pixels = match raw {
-        Raw::L => rows,
-        Raw::Rgbx => rows
-            .chunks_exact(4)
-            .flat_map(|p| [p[0], p[1], p[2]])
-            .collect(),
-        Raw::CmykI => rows.iter().map(|&v| 255 - v).collect(),
-    };
+    let pixels = decode(data, raw, scale, size)?;
     // (_read_dpi_from_exif reads the EXIF while opening where JFIF gives no density: an
     // EXIF Pillow fails on then is read as none later, and XMP's with it)
     let exif = match h.exif {
@@ -623,6 +649,7 @@ pub(crate) fn decode_picture(
         raw_exif: None,
         xmp: None,
         xmp_bytes: h.xmp,
+        l_over_p: false,
     })
 }
 
@@ -716,18 +743,10 @@ pub(crate) fn frames(data: &[u8]) -> Result<Vec<Frame>> {
         }
         let raw = match h.mode {
             Kind::L => Raw::L,
-            Kind::RGB => Raw::Rgbx,
+            Kind::RGB => Raw::Rgb,
             _ => Raw::CmykI,
         };
-        let rows = decode(&data[offset..], raw, 1, h.size)?;
-        let pixels = match raw {
-            Raw::L => rows,
-            Raw::Rgbx => rows
-                .chunks_exact(4)
-                .flat_map(|p| [p[0], p[1], p[2]])
-                .collect(),
-            Raw::CmykI => rows.iter().map(|&v| 255 - v).collect(),
-        };
+        let pixels = decode(&data[offset..], raw, 1, h.size)?;
         let picture = Picture {
             kind: h.mode,
             width: w,
@@ -739,6 +758,7 @@ pub(crate) fn frames(data: &[u8]) -> Result<Vec<Frame>> {
             raw_exif: None,
             xmp: None,
             xmp_bytes: None,
+            l_over_p: false,
         };
         out.push(Frame {
             duration: None,

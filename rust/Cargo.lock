@@ -111,6 +111,7 @@ dependencies = [
  "flate2",
  "libloading",
  "lp-pixels",
+ "zlib-rs",
 ]
 
 [[package]]

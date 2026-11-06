@@ -900,3 +900,183 @@ def test_broken_webps_are_refused_where_pillow_refuses_them():
         cases.append((bytes(data), f"broken WebP {n}"))
     check(pairs)
     check_frames(cases)
+
+
+# -- thumbnails as media.py makes a cover small: Image.open, thumbnail, convert ------------------
+
+
+def thumbnailed(data: bytes, size: tuple[float, float], resample: int, gap: float | None,
+                target: str) -> Image.Image:  # fmt: skip
+    """Image.open(f), thumbnail(size, resample, reducing_gap), convert(target), no
+    exif_transpose between: as media.py makes a track's cover small."""
+    with Image.open(io.BytesIO(data)) as im:
+        im.thumbnail(size, resample, gap)
+        out = im.convert(target)
+    if out.mode != target:
+        # (convert("L") of a GIF whose L is P underneath gives that P picture itself, which
+        # no part of the app can use: lp-check refuses it)
+        raise ValueError(f"{target} asked, {out.mode} given")
+    return out
+
+
+def thumbnail_case(data: bytes, size: tuple[float, float], resample: int, gap: float | None,
+                   target: str, label: str) -> tuple[dict[str, Any], Any]:  # fmt: skip
+    try:
+        want: Any = thumbnailed(data, size, resample, gap, target)
+    except (*REFUSED, ZeroDivisionError):
+        want = ERROR
+    return {"op": "open", "data": base64.b64encode(data).decode(), "mode": target,
+            "exif": False, "label": label,
+            "thumbnail": {"size": list(size), "resample": resample,
+                          "reducing_gap": gap}}, want  # fmt: skip
+
+
+def _small_size(rng: random.Random, w: int, h: int) -> tuple[float, float]:
+    """A thumbnail's size for a picture of w x h: from as large to a 33rd, whole or not, now
+    and then 0 or less."""
+    div = rng.choice([1, 1.5, 2, 3, 4, 5, 7, 8, 9, 13, 16, 17, 33])
+    size = (max(1, w / div + rng.uniform(-2, 2)), max(1, h / div + rng.uniform(-2, 2)))
+    if rng.random() < 0.3:
+        size = (round(size[0]), round(size[1]))
+    if rng.random() < 0.05:
+        size = (rng.choice([0, -3, 1]), rng.randint(-2, 40))
+    return size
+
+
+def test_thumbnails_are_made_as_pillow_makes_them():
+    """Every kind of picture made small in its own mode (P and 1 by NEAREST, LA as RGBA is,
+    CMYK's bands as they are, I;16 in 16 bits), by each filter and reducing_gap, a JPEG
+    drafted first (decoded at 1/2, 1/4 or 1/8, resized from the box its draft gives)."""
+    rng = random.Random(80)
+    sources = ["png", "gif"]
+    if pillow_libjpeg():
+        sources += ["jpeg", "jpeg"]
+    if pillow_libwebp():
+        sources.append("webp")
+    pairs = []
+    for n in range(150):
+        kind = sources[n % len(sources)]
+        if kind == "png":
+            depth, colour = rng.choice(PNG_KINDS)
+            w, h = rng.randint(1, 90), rng.randint(1, 70)
+            data = make_png(rng, depth, colour, w, h, interlace=rng.random() < 0.3, before=[],
+                            after=[])  # fmt: skip
+            label = f"PNG {depth}/{colour} {w}x{h}"
+        elif kind == "gif":
+            data, label = make_gif(rng), "GIF"
+        elif kind == "jpeg":
+            mode = rng.choice(["L", "RGB", "CMYK"])
+            w, h = rng.randint(1, 160), rng.randint(1, 120)
+            data, label = make_jpeg(rng, mode, w, h), f"JPEG {mode} {w}x{h}"
+        else:
+            data, label = make_webp(rng), "WebP"
+        try:
+            with Image.open(io.BytesIO(data)) as im:
+                w, h = im.size
+        except REFUSED:
+            w, h = 20, 20
+        for _ in range(3):
+            size = _small_size(rng, w, h)
+            resample, gap = rng.randrange(6), rng.choice([None, 1.0, 1.5, 2.0, 2.0, 3.0])
+            target = rng.choice(["RGBA", "RGBA", "RGB", "L"])
+            pairs.append(thumbnail_case(data, size, resample, gap, target,
+                                        f"{n} {label} to {size}, filter {resample}, "
+                                        f"gap {gap}, {target}"))  # fmt: skip
+    check(pairs)
+
+
+def _photo(rng: random.Random, mode: str, w: int, h: int) -> Image.Image:
+    """A picture of w x h as a cover is (smooth light and colour, a few hard edges), small
+    to write at any size."""
+    im = Image.frombytes("RGBA", (6, 5), rng.randbytes(6 * 5 * 4))
+    im = im.resize((w, h), Image.Resampling.BICUBIC).convert(mode if mode != "CMYK" else "RGB")
+    for _ in range(4):
+        x, y = rng.randrange(w), rng.randrange(h)
+        box = (x, y, rng.randint(x, w), rng.randint(y, h))
+        im.paste(tuple(rng.randrange(256) for _ in im.getbands()), box)
+    return im.convert("CMYK") if mode == "CMYK" else im
+
+
+def test_covers_are_made_small_as_media_py_makes_them():
+    """thumbnail((512, 512)) and convert("RGBA") on covers of the sizes covers come in: JPEGs
+    of every draft scale (1, 2, 4 and 8), PNGs, GIFs and WebPs larger than 512."""
+    rng = random.Random(81)
+    covers = []
+    for mode, fmt, (w, h) in [("RGBA", "PNG", (700, 700)), ("P", "PNG", (1000, 800)),
+                              ("LA", "PNG", (600, 900)), ("P", "GIF", (640, 640))]:  # fmt: skip
+        im = _photo(rng, "RGBA" if mode in ("RGBA", "LA") else "RGB", w, h)
+        im = im.convert(mode) if mode != "P" else im.quantize(rng.choice([16, 200, 256]))
+        out = io.BytesIO()
+        im.save(out, fmt)
+        covers.append((out.getvalue(), f"{fmt} {mode} {w}x{h}"))
+    if pillow_libwebp():
+        out = io.BytesIO()
+        _photo(rng, "RGBA", 900, 900).save(out, "WEBP", quality=80)
+        covers.append((out.getvalue(), "WebP RGBA 900x900"))
+    if pillow_libjpeg():
+        for mode, (w, h) in [("RGB", (600, 600)), ("RGB", (1023, 700)), ("RGB", (1500, 1500)),
+                             ("RGB", (2048, 2048)), ("L", (3001, 2201)),
+                             ("CMYK", (2100, 2500)), ("RGB", (4100, 4097)),
+                             ("L", (8200, 8199))]:  # fmt: skip
+            out = io.BytesIO()
+            _photo(rng, mode, w, h).save(
+                out,
+                "JPEG",
+                quality=rng.choice([75, 85, 95]),
+                subsampling=rng.randrange(3) if mode != "L" else -1,
+            )
+            covers.append((out.getvalue(), f"JPEG {mode} {w}x{h}"))
+    check([thumbnail_case(data, (512, 512), Image.Resampling.BICUBIC, 2.0, "RGBA", label)
+           for data, label in covers])  # fmt: skip
+
+
+def test_sixteen_bit_greys_are_made_small_as_pillow_makes_them():
+    """I;16 resized in 16 bits as Pillow 13.0 does it (each pass's sum CLIP16(ROUND_UP)), its
+    reduce refused: greys below 256 to see each value, and 0 next to 65535 to see what the
+    filters' lobes do at the ends, in the first pass and the second."""
+    rng = random.Random(82)
+    pairs = []
+    for n in range(120):
+        w, h = rng.randint(1, 60), rng.randint(1, 50)
+        if n % 2:
+            values = [rng.choice([0, 65535, rng.randrange(300)]) for _ in range(w * h)]
+        else:
+            values = [rng.randrange(300) for _ in range(w * h)]
+        out = io.BytesIO()
+        Image.frombytes("I;16", (w, h), struct.pack(f"<{w * h}H", *values)).save(out, "PNG")
+        size = _small_size(rng, w, h)
+        resample, gap = rng.randrange(6), rng.choice([None, 1.0, 2.0])
+        pairs.append(thumbnail_case(out.getvalue(), size, resample, gap,
+                                    rng.choice(["RGB", "L", "RGBA"]),
+                                    f"I;16 {n} {w}x{h} to {size}, filter {resample}, "
+                                    f"gap {gap}"))  # fmt: skip
+    check(pairs)
+
+
+def test_a_gif_whose_l_is_p_underneath_is_made_small_as_pillow_makes_it():
+    """A GIF's first frame whose own colour table is the grey ramp, under the file's palette:
+    L to Python, P underneath. Resized only by NEAREST (into P), converted as an L would ask
+    and a P would do (to RGBA with a transparency refused), as the cover would be."""
+    rng = random.Random(83)
+    found = []
+    for _ in range(4000):
+        data = make_gif(rng)
+        try:
+            with Image.open(io.BytesIO(data)) as im:
+                im.load()
+                if im.mode == "L" and im.im.mode == "P":
+                    found.append((data, im.size))
+        except REFUSED:
+            continue
+        if len(found) == 24:
+            break
+    assert len(found) == 24
+    pairs = []
+    for n, (data, (w, h)) in enumerate(found):
+        for resample in (0, 3):
+            for target in ("RGBA", "RGB", "L"):
+                size = (w + 5, h) if n % 4 == 0 else _small_size(rng, w, h)
+                pairs.append(thumbnail_case(data, size, resample, 2.0, target,
+                                            f"L over P {n} to {size}, filter {resample}, "
+                                            f"{target}"))  # fmt: skip
+    check(pairs)

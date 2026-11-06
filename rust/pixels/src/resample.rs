@@ -163,46 +163,62 @@ fn clip8(ss: i32) -> u8 {
     (ss >> PRECISION_BITS).clamp(0, 255) as u8
 }
 
+/// One row resampled to ``c``'s width, `B` bands a pixel: each pixel's bands summed together
+/// over its weights (in 32 bits, wrapping, as Resample.c's int sums: the order adds nothing).
+#[inline(always)]
+fn horizontal_row<const B: usize>(line: &[u8], dst: &mut [u8], c: &Coeffs, kk: &[i32]) {
+    for (xx, &(xmin, xmax)) in c.bounds.iter().enumerate() {
+        let k = &kk[xx * c.ksize..xx * c.ksize + xmax];
+        let px = &line[xmin * B..(xmin + xmax) * B];
+        let mut ss = [1i32 << (PRECISION_BITS - 1); B];
+        for (p, &kx) in px.chunks_exact(B).zip(k) {
+            for band in 0..B {
+                ss[band] = ss[band].wrapping_add(i32::from(p[band]).wrapping_mul(kx));
+            }
+        }
+        for band in 0..B {
+            dst[xx * B + band] = clip8(ss[band]);
+        }
+    }
+}
+
 /// The rows of ``src`` from ``offset`` on, each resampled to ``c``'s width (8 bits a band).
 fn horizontal_8(src: &Image, offset: usize, rows: usize, c: &Coeffs) -> Image {
     let w = c.bounds.len();
-    let b = src.bands();
     let kk = fixed(&c.kk);
     let mut out = Image::blank(src.mode, w, rows);
     for yy in 0..rows {
         let line = src.row(yy + offset);
         let dst = out.row_mut(yy);
-        for (xx, &(xmin, xmax)) in c.bounds.iter().enumerate() {
-            let k = &kk[xx * c.ksize..xx * c.ksize + xmax];
-            for band in 0..b {
-                let mut ss: i32 = 1 << (PRECISION_BITS - 1);
-                for (x, &kx) in k.iter().enumerate() {
-                    ss = ss.wrapping_add(i32::from(line[(x + xmin) * b + band]).wrapping_mul(kx));
-                }
-                dst[xx * b + band] = clip8(ss);
-            }
+        match src.bands() {
+            1 => horizontal_row::<1>(line, dst, c, &kk),
+            3 => horizontal_row::<3>(line, dst, c, &kk),
+            _ => horizontal_row::<4>(line, dst, c, &kk),
         }
     }
     out
 }
 
-/// The columns of ``src``, resampled to ``c``'s height (``c``'s bounds shifted by ``offset``).
+/// The columns of ``src``, resampled to ``c``'s height (``c``'s bounds shifted by ``offset``):
+/// each output row summed a whole input row at a time (the same int sums as Resample.c's,
+/// column by column).
 fn vertical_8(src: &Image, offset: usize, c: &Coeffs) -> Image {
     let h = c.bounds.len();
-    let b = src.bands();
     let kk = fixed(&c.kk);
     let mut out = Image::blank(src.mode, src.width, h);
-    let n = src.width * b;
+    let n = src.width * src.bands();
+    let mut acc = vec![0i32; n];
     for (yy, &(ymin, ymax)) in c.bounds.iter().enumerate() {
         let k = &kk[yy * c.ksize..yy * c.ksize + ymax];
-        let dst = out.row_mut(yy);
-        for (i, o) in dst.iter_mut().enumerate().take(n) {
-            let mut ss: i32 = 1 << (PRECISION_BITS - 1);
-            for (y, &ky) in k.iter().enumerate() {
-                let v = src.data[(y + ymin - offset) * n + i];
-                ss = ss.wrapping_add(i32::from(v).wrapping_mul(ky));
+        acc.fill(1 << (PRECISION_BITS - 1));
+        for (y, &ky) in k.iter().enumerate() {
+            let at = (y + ymin - offset) * n;
+            for (a, &v) in acc.iter_mut().zip(&src.data[at..at + n]) {
+                *a = a.wrapping_add(i32::from(v).wrapping_mul(ky));
             }
-            *o = clip8(ss);
+        }
+        for (o, &a) in out.row_mut(yy).iter_mut().zip(&acc) {
+            *o = clip8(a);
         }
     }
     out
@@ -257,7 +273,6 @@ fn nearest(src: &Image, w: usize, h: usize, bx: [f32; 4]) -> Image {
             v as i64
         }
     };
-    let b = src.bands();
     let mut out = Image::blank(src.mode, w, h);
     let mut xin = vec![None; w];
     let mut xo = f64::from(bx[0]) + a0 * 0.5;
@@ -274,15 +289,27 @@ fn nearest(src: &Image, w: usize, h: usize, bx: [f32; 4]) -> Image {
         if yi >= 0 && (yi as usize) < src.height {
             let line = src.row(yi as usize);
             let dst = out.row_mut(y);
-            for (x, slot) in xin.iter().enumerate() {
-                if let Some(sx) = slot {
-                    dst[x * b..(x + 1) * b].copy_from_slice(&line[sx * b..(sx + 1) * b]);
-                }
+            match src.bands() {
+                1 => nearest_row::<1>(line, dst, &xin),
+                3 => nearest_row::<3>(line, dst, &xin),
+                _ => nearest_row::<4>(line, dst, &xin),
             }
         }
         yo += a4;
     }
     out
+}
+
+/// One row of NEAREST: each pixel's `B` bytes from the input's under it (none where it has
+/// none: left as it is).
+#[inline(always)]
+fn nearest_row<const B: usize>(line: &[u8], dst: &mut [u8], xin: &[Option<usize>]) {
+    for (o, slot) in dst.chunks_exact_mut(B).zip(xin) {
+        if let Some(sx) = *slot {
+            let from: &[u8; B] = line[sx * B..sx * B + B].try_into().expect("B bytes");
+            o.copy_from_slice(from);
+        }
+    }
 }
 
 /// _imaging.c's _resize, with the box as the floats it parses.
@@ -506,4 +533,161 @@ impl FloatImage {
         }
         out
     }
+}
+
+/// A 16-bit grey's two bytes (I;16: the low first) as the number.
+#[inline(always)]
+fn grey16(line: &[u8], x: usize) -> f64 {
+    f64::from(u32::from(line[x * 2]) | u32::from(line[x * 2 + 1]) << 8)
+}
+
+/// Resample.c's end of a 16-bit sum: CLIP16(ROUND_UP(ss)), the low byte first.
+#[inline(always)]
+fn put16(out: &mut [u8], at: usize, ss: f64) {
+    let v = (if ss >= 0.0 { ss + 0.5 } else { ss - 0.5 } as i32).clamp(0, 65535);
+    out[at * 2] = (v & 0xff) as u8;
+    out[at * 2 + 1] = (v >> 8) as u8;
+}
+
+/// ImagingResampleHorizontal_16bpc: rows ``first..first + rows`` of an I;16 picture
+/// ``width`` wide, each resampled to ``c``'s width (doubles summed).
+fn horizontal_16(src: &[u8], width: usize, first: usize, rows: usize, c: &Coeffs) -> Vec<u8> {
+    let w = c.bounds.len();
+    let mut out = vec![0u8; w * rows * 2];
+    for yy in 0..rows {
+        let line = &src[(yy + first) * width * 2..(yy + first + 1) * width * 2];
+        for (xx, &(xmin, xmax)) in c.bounds.iter().enumerate() {
+            let k = &c.kk[xx * c.ksize..xx * c.ksize + xmax];
+            let mut ss = 0.0f64;
+            for (x, &kx) in k.iter().enumerate() {
+                ss += grey16(line, x + xmin) * kx;
+            }
+            put16(&mut out, yy * w + xx, ss);
+        }
+    }
+    out
+}
+
+/// ImagingResampleVertical_16bpc: the columns of an I;16 picture ``width`` wide, resampled to
+/// ``c``'s height (its bounds shifted by ``offset``).
+fn vertical_16(src: &[u8], width: usize, offset: usize, c: &Coeffs) -> Vec<u8> {
+    let h = c.bounds.len();
+    let mut out = vec![0u8; width * h * 2];
+    for (yy, &(ymin, ymax)) in c.bounds.iter().enumerate() {
+        let k = &c.kk[yy * c.ksize..yy * c.ksize + ymax];
+        for xx in 0..width {
+            let mut ss = 0.0f64;
+            for (y, &ky) in k.iter().enumerate() {
+                let row = (y + ymin - offset) * width * 2;
+                ss += grey16(&src[row..row + width * 2], xx) * ky;
+            }
+            put16(&mut out, yy * width + xx, ss);
+        }
+    }
+    out
+}
+
+/// Image.resize((w, h), filter, box, reducing_gap) of an I;16 picture (``src``, two bytes a
+/// pixel, the low first, ``width`` x ``height``) as Pillow 13.0 makes it: NEAREST through
+/// Geometry.c's generic transform (each pixel's place worked out by itself), the other
+/// filters through Resample.c's 16-bit passes; a reducing_gap that would reduce first is
+/// refused, as ImagingReduce refuses I;16.
+#[allow(clippy::too_many_arguments)]
+pub fn resize_16(
+    src: &[u8],
+    width: usize,
+    height: usize,
+    w: usize,
+    h: usize,
+    filter: Filter,
+    bounds: Option<(f64, f64, f64, f64)>,
+    reducing_gap: Option<f64>,
+) -> Result<Vec<u8>> {
+    if src.len() != width * height * 2 {
+        return error("wrong size of I;16 data");
+    }
+    if reducing_gap.is_some_and(|g| g < 1.0) {
+        return error("reducing_gap must be 1.0 or greater");
+    }
+    let full = (0.0, 0.0, width as f64, height as f64);
+    let bx = bounds.unwrap_or(full);
+    if (w, h) == (width, height) && bx == full {
+        return Ok(src.to_vec());
+    }
+    if let (Some(gap), false) = (reducing_gap, filter == Filter::Nearest) {
+        let fx = ((bx.2 - bx.0) / w as f64 / gap) as i64;
+        let fy = ((bx.3 - bx.1) / h as f64 / gap) as i64;
+        if fx > 1 || fy > 1 {
+            return error("image has wrong mode");
+        }
+    }
+    let bx = [bx.0 as f32, bx.1 as f32, bx.2 as f32, bx.3 as f32];
+    if w < 1 || h < 1 {
+        return error("height and width must be > 0");
+    }
+    if bx[0] < 0.0 || bx[1] < 0.0 {
+        return error("box offset can't be negative");
+    }
+    if bx[2] > width as f32 || bx[3] > height as f32 {
+        return error("box can't exceed original image size");
+    }
+    if bx[2] - bx[0] < 0.0 || bx[3] - bx[1] < 0.0 {
+        return error("box can't be empty");
+    }
+    let whole = |v: f32| v - (v as i32) as f32 == 0.0;
+    if whole(bx[0]) && bx[2] - bx[0] == w as f32 && whole(bx[1]) && bx[3] - bx[1] == h as f32 {
+        let (x0, y0) = (bx[0] as usize, bx[1] as usize);
+        let mut out = vec![0u8; w * h * 2];
+        for y in 0..h {
+            let from = ((y0 + y) * width + x0) * 2;
+            out[y * w * 2..(y + 1) * w * 2].copy_from_slice(&src[from..from + w * 2]);
+        }
+        return Ok(out);
+    }
+    if filter == Filter::Nearest {
+        let a0 = f64::from(bx[2] - bx[0]) / w as f64;
+        let a4 = f64::from(bx[3] - bx[1]) / h as f64;
+        let (a2, a5) = (f64::from(bx[0]), f64::from(bx[1]));
+        let coord = |v: f64| if v < 0.0 { -1 } else { v as i64 };
+        let mut out = vec![0u8; w * h * 2];
+        for y in 0..h {
+            let yi = coord(a4 * (y as f64 + 0.5) + a5);
+            if yi < 0 || yi as usize >= height {
+                continue;
+            }
+            for x in 0..w {
+                let xi = coord(a0 * (x as f64 + 0.5) + a2);
+                if xi >= 0 && (xi as usize) < width {
+                    let from = (yi as usize * width + xi as usize) * 2;
+                    out[(y * w + x) * 2..(y * w + x) * 2 + 2].copy_from_slice(&src[from..from + 2]);
+                }
+            }
+        }
+        return Ok(out);
+    }
+    let need_h = w != width || bx[0] != 0.0 || bx[2] != w as f32;
+    let need_v = h != height || bx[1] != 0.0 || bx[3] != h as f32;
+    let cv = coeffs(height, bx[1], bx[3], h, filter);
+    if !horizontal_first(width, height, w, h) {
+        let tall = vertical_16(src, width, 0, &cv);
+        if need_h {
+            let ch = coeffs(width, bx[0], bx[2], w, filter);
+            return Ok(horizontal_16(&tall, width, 0, h, &ch));
+        }
+        return Ok(tall);
+    }
+    let first = cv.bounds[0].0;
+    let last = cv.bounds[h - 1].0 + cv.bounds[h - 1].1;
+    if need_h {
+        let ch = coeffs(width, bx[0], bx[2], w, filter);
+        let wide = horizontal_16(src, width, first, last - first, &ch);
+        if need_v {
+            return Ok(vertical_16(&wide, w, first, &cv));
+        }
+        return Ok(wide);
+    }
+    if need_v {
+        return Ok(vertical_16(src, width, 0, &cv));
+    }
+    Ok(src.to_vec())
 }

@@ -1194,6 +1194,7 @@ impl<'a> Png<'a> {
             raw_exif: info.raw_exif.clone(),
             xmp: info.xmp.clone(),
             xmp_bytes: info.xmp_bytes.clone(),
+            l_over_p: false,
         }
     }
 }

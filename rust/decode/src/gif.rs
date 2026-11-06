@@ -1088,6 +1088,7 @@ impl<'a> Gif<'a> {
             raw_exif: None,
             xmp: None,
             xmp_bytes: None,
+            l_over_p: self.mode == M::L && im.mode == M::P,
         })
     }
 }
