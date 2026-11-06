@@ -66,7 +66,7 @@ all of it. It is the reference every Rust piece is checked against:
 
 | Crate | What it is | Python it replaces |
 |---|---|---|
-| py | what Python does that the app's files and messages depend on: its values (ints of any size, dicts in order, ==), their arithmetic and its errors, repr(), json, str's white space, digits, lower() and upper(), re's matching without case, rounding, the division of ints, sum() of floats, splitlines(), the wide characters of East Asian scripts, the zones zoneinfo finds (Python 3.12, Unicode 15.0: the release's) | — (Python's own rules) |
+| py | what Python does that the app's files and messages depend on: its values (ints of any size, dicts in order, ==), their arithmetic and its errors, repr(), json, str's white space, digits, lower() and upper(), re's matching without case, rounding, the division of ints, float() of a str, sum() of floats, splitlines(), the wide characters of East Asian scripts, the zones zoneinfo finds (Python 3.12, Unicode 15.0: the release's) | — (Python's own rules) |
 | pixels | Pillow's operations as Libre Panel uses them, to the bit | Pillow, numpy (in render/) |
 | decode | pictures from their files as Pillow decodes them (PNG, GIF, JPEG, WebP) | Image.open, Pillow's decoders |
 | text | letters and their layout as Pillow draws them (FreeType, shaping as libraqm) | fonts/, ImageFont |
@@ -221,11 +221,14 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       app's texts in each language and the system's language as i18n.py finds them
       (lp-i18n); Python's sum() of floats, splitlines(), East Asian widths and the zones
       zoneinfo finds (lp-py)
-- [ ] what the app asks of the modules besides their layout: module_info, the templates, a
-      module detached, the person's cards in a slot (with_cards, follows_cards) and a card's
-      turn (card_time, time_text), with the editor in R9 and the slots' frames in R4; the
-      zones on Windows (Python finds them in the tzdata package there, which the Rust app
-      does not bring yet: none is found there for now)
+- [x] what the editor asks of the modules: module_info (the kinds, their names in the
+      language, sources and sizes, the looks), the starting layouts of a grid (packed where
+      there is none, the sizes in the order Python's set has them), a module detached into
+      its parts, the person's cards in each slot open to them (with_cards, follows_cards)
+      and the cards a slot's lines name with their turns (card_time, time_text); Python's
+      float() of a str (lp-py)
+- [ ] the zones on Windows (Python finds them in the tzdata package there, which the Rust
+      app does not bring yet: none is found there for now)
 - [ ] the renderer's frame, widget by widget (texts, clocks, gauges, rings, bars, lists, graphs
       and their strips, fans, images, videos, icons, weather, globes, moon, sun path, slots,
       cards, notices), effects (glow, lit finish, dither), motion, transitions, toasts, start

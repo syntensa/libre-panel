@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import json
 import locale
+import math
 import random
+import struct
 import sys
 from typing import Any
 
@@ -205,3 +207,97 @@ def test_modules_laid_out_as_python_lays_them_out() -> None:
     # (laid out, not only refused alike: most themes hold modules that are drawn)
     assert sum("widgets" in answer for answer in python) > 300
     assert [a["error"] for a in python[-2:]] == ["float division by zero", "division by zero"]
+
+
+CARD_LINES = [
+    "playback", "forecast for 5m", "bogus", " net if net.up ", "# c", "ring for 2h if x",
+    "download\u2028", "clock for 90s # a comment", "cards", "netcard", "instrument for 4s",
+    "agenda for 1e1m if calendar.events, weather.temperature", "moon  for  2.5 min", "",
+]  # fmt: skip
+TIMES = [
+    "5m", "90s", "1h", "2.5 min", " 10 ", "3", "4", "86401s", "24h", "1440", "1441", "1e1m",
+    "inf", "nan", "-5m", "\u0661\u0660m", "5 M", "5mins", "5 sec", "5 secs", "1_0m", "1__0m",
+    "_10m", "10_m", "0x10", "", "m", "m5", "5.m", ".5h", "5.e1s", "5 h ", "\u200a5m", "5\u00b5s",
+    "İ5m", "6 MIN", "4.999s", "5s", "86400s", "1.4e3", "2 h", "1 hour", "5\x00m",
+]  # fmt: skip
+
+
+def _bits(x: float | None) -> str | None:
+    return None if x is None else struct.pack(">d", x).hex()
+
+
+def _card(card: Any) -> list[Any] | None:
+    return None if card is None else [card.name, card.rule, _bits(card.seconds)]
+
+
+def test_what_the_editor_asks_of_the_modules_as_python_answers() -> None:
+    grids = [(c, r) for c in range(1, 13) for r in range(1, 7)] + [(24, 6), (16, 12), (1, 24)]
+    slots = [{"module": "cards", "items": x} for x in [*CARD_LINES, "\n".join(CARD_LINES)]]
+    slots += [{"module": "netcard", "items": "ring"}, {"module": "cards", "items": "# only"}]
+    rng = random.Random(0x5107)
+    seconds = [5.0, 90.0, 300.0, 3600.0, 7200.0, 5.5, 86400.0, 1e-5, 1e22, -0.0, 0.0, 61.0,
+               math.inf, -math.inf, math.nan, 123456789.0, 2.5e-300]  # fmt: skip
+    seconds += [rng.choice([60, 3600, 1]) * rng.uniform(0, 3000) for _ in range(300)]
+    seconds += [float(rng.randrange(1, 100000)) for _ in range(300)]
+    languages = list(i18n.LANGUAGES)
+    case = {"op": "module_app", "fonts_dir": str(fonts.FONT_DIR), "locale": str(i18n.LOCALE_DIR),
+            "languages": languages, "grids": grids, "lines": CARD_LINES + TIMES,
+            "modules": [json.dumps(m) for m in slots], "times": TIMES + CARD_LINES,
+            "seconds": [_bits(x) for x in seconds], "themes": []}  # fmt: skip
+    [ours] = run([case])
+    try:
+        for code, got in zip(languages, ours["languages"], strict=True):
+            i18n.set_language(code)
+            assert got == {
+                "info": json.dumps(modules.module_info()),
+                "templates": [json.dumps(modules.templates(c, r)) for c, r in grids],
+            }
+    finally:
+        i18n.set_language("en")
+    assert ours["lines"] == [_card(modules.card_line(x)) for x in CARD_LINES + TIMES]
+    assert ours["slot_cards"] == [[_card(c) for c in modules.slot_cards(m)] for m in slots]
+    assert ours["times"] == [_bits(modules.card_time(x)) for x in TIMES + CARD_LINES]
+    assert ours["time_texts"] == [modules.time_text(x) for x in seconds]
+
+
+def _app(case: dict[str, Any]) -> dict[str, Any]:
+    i18n.set_language(case["language"])
+    try:
+        theme = model.with_light_colours(model.parse_theme(json.loads(case["data"])), case["light"])
+    except Exception as error:  # noqa: BLE001 (every kind Python raises is compared)
+        return {"error": str(error), "kind": type(error).__name__}
+    try:
+        detached: Any = json.dumps(modules.detach(theme, case["id"]))
+    except Exception as error:  # noqa: BLE001
+        detached = {"error": str(error), "kind": type(error).__name__}
+    chosen = modules.with_cards(theme, case["cards"], case["order"], case["transition"])
+    return {"detach": detached, "follows": modules.follows_cards(theme),
+            "changed": chosen is not theme, "with_cards": json.dumps(chosen.widgets)}  # fmt: skip
+
+
+def test_modules_detached_and_the_person_s_cards_as_python_has_them() -> None:
+    if pillow_libfreetype() is None:
+        pytest.skip("Pillow's FreeType is built into it here: none for lp-check to load")
+    rng = random.Random(0xDE7)
+    cases = []
+    for _ in range(200):
+        data = _theme(rng)
+        if rng.random() < 0.6:  # a card slot: open to the person's cards (empty), or its own
+            items = rng.choice(["", "  ", "\n", "ring", "playback\nforecast for 5m"])
+            data["widgets"].append({"type": "module", "id": "slot", "module": "cards",
+                                    "col": 0, "row": 0, "cols": 2, "items": items})  # fmt: skip
+        ids = [w["id"] for w in data["widgets"]] + ["nope", ""]
+        cases.append({"data": json.dumps(data), "light": rng.random() < 0.3,
+                      "language": rng.choice(list(i18n.LANGUAGES)), "id": rng.choice(ids),
+                      "cards": rng.sample(CARD_LINES, rng.randrange(0, 5)),
+                      "order": rng.choice(["first", "turns", "x"]),
+                      "transition": rng.choice(["light", "fade", "random", "zz"])})  # fmt: skip
+    case = {"op": "module_app", "fonts_dir": str(fonts.FONT_DIR), "locale": str(i18n.LOCALE_DIR)}
+    [ours] = run([{**case, "themes": cases}])
+    try:
+        python = [_app(c) for c in cases]
+    finally:
+        i18n.set_language("en")
+    assert ours["themes"] == python
+    assert sum("detach" in a and a["detach"] != "[]" for a in python) > 50  # (parts, not none)
+    assert sum(a.get("changed", False) for a in python) > 20  # (cards chosen in open slots)

@@ -1420,6 +1420,156 @@ fn run(case: &Value) -> Result<Value, String> {
                 .collect();
             json!({"answers": answers})
         }
+        "py_float" => {
+            // float(text) of each text, as its bits (16 hex digits), or null for a ValueError
+            let floats: Vec<Value> = case["texts"]
+                .as_array()
+                .map(|all| {
+                    all.iter()
+                        .map(|t| match lp_py::float_of_str(t.as_str().unwrap_or("")) {
+                            Some(x) => json!(format!("{:016x}", x.to_bits())),
+                            None => Value::Null,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            json!({"floats": floats})
+        }
+        "module_app" => {
+            // what the editor asks of the modules: module_info and the templates of grids in
+            // each language (JSON text); card lines, slots' cards, turns and their texts; and
+            // per theme a module detached, follows_cards and with_cards
+            use lp_theme::modules::{info, slots};
+            let env = lp_theme::Env {
+                fonts_dir: case["fonts_dir"].as_str().unwrap_or("").into(),
+            };
+            let locale = std::path::PathBuf::from(case["locale"].as_str().unwrap_or(""));
+            let how = lp_py::json::Dumps::default();
+            let text = |v: &lp_py::Value| lp_py::json::dumps(v, &how);
+            let bits = |x: Option<f64>| match x {
+                Some(x) => json!(format!("{:016x}", x.to_bits())),
+                None => Value::Null,
+            };
+            let card = |c: slots::SlotCard| json!([c.name, c.rule, bits(c.seconds)]);
+            let strings = |k: &str| -> Vec<String> {
+                case[k]
+                    .as_array()
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            };
+            let grids: Vec<(i64, i64)> = case["grids"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .map(|g| (g[0].as_i64().unwrap_or(1), g[1].as_i64().unwrap_or(1)))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let mut languages = Vec::new();
+            for code in strings("languages") {
+                lp_i18n::set_language(lp_i18n::Language::load(&locale, &code)?);
+                let templates: Vec<String> = grids
+                    .iter()
+                    .map(|&(c, r)| text(&info::templates(c, r)))
+                    .collect();
+                languages.push(json!({
+                    "info": text(&lp_py::Value::Dict(info::module_info())),
+                    "templates": templates,
+                }));
+            }
+            lp_i18n::set_language(lp_i18n::Language::english());
+            let lines: Vec<Value> = strings("lines")
+                .iter()
+                .map(|l| slots::card_line(l).map_or(Value::Null, card))
+                .collect();
+            let slot_cards: Vec<Value> = strings("modules")
+                .iter()
+                .map(|m| match lp_py::json::loads(m) {
+                    Ok(lp_py::Value::Dict(d)) => {
+                        Value::Array(slots::slot_cards(&d).into_iter().map(card).collect())
+                    }
+                    _ => Value::Null,
+                })
+                .collect();
+            let times: Vec<Value> = strings("times")
+                .iter()
+                .map(|t| bits(slots::card_time(t)))
+                .collect();
+            let time_texts: Vec<String> = strings("seconds")
+                .iter()
+                .map(|h| slots::time_text(f64::from_bits(u64::from_str_radix(h, 16).unwrap_or(0))))
+                .collect();
+            let themes: Vec<Value> = case["themes"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|c| {
+                    let code = c["language"].as_str().unwrap_or("en");
+                    match lp_i18n::Language::load(&locale, code) {
+                        Ok(language) => lp_i18n::set_language(language),
+                        Err(e) => return json!({"error": e, "kind": "language"}),
+                    }
+                    let made = lp_py::json::loads(c["data"].as_str().unwrap_or("null"))
+                        .map_err(|e| lp_theme::Error {
+                            kind: lp_theme::Kind::Value,
+                            msg: e.to_string(),
+                        })
+                        .and_then(|data| lp_theme::parse_theme(&data, None, &env))
+                        .and_then(|theme| {
+                            lp_theme::versions::with_light_colours(
+                                &theme,
+                                c["light"].as_bool().unwrap_or(false),
+                            )
+                        });
+                    let theme = match made {
+                        Ok(theme) => theme,
+                        Err(e) => return json!({"error": e.msg, "kind": e.kind.name()}),
+                    };
+                    let cards: Vec<String> = c["cards"]
+                        .as_array()
+                        .map(|a| {
+                            a.iter()
+                                .filter_map(|v| v.as_str().map(String::from))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let order = c["order"].as_str().unwrap_or("first");
+                    let transition = c["transition"].as_str().unwrap_or("light");
+                    let with = slots::with_cards(&theme, &cards, order, transition);
+                    let widgets = |t: &lp_theme::Theme| {
+                        text(&lp_py::Value::List(
+                            t.widgets.iter().cloned().map(lp_py::Value::Dict).collect(),
+                        ))
+                    };
+                    let detached = match info::detach(&theme, &env, c["id"].as_str().unwrap_or(""))
+                    {
+                        Ok(parts) => json!(text(&lp_py::Value::List(
+                            parts.into_iter().map(lp_py::Value::Dict).collect()
+                        ))),
+                        Err(e) => json!({"error": e.msg, "kind": e.kind.name()}),
+                    };
+                    json!({
+                        "detach": detached,
+                        "follows": slots::follows_cards(&theme),
+                        "changed": with.is_some(),
+                        "with_cards": widgets(with.as_ref().unwrap_or(&theme)),
+                    })
+                })
+                .collect();
+            lp_i18n::set_language(lp_i18n::Language::english());
+            json!({
+                "languages": languages,
+                "lines": lines,
+                "slot_cards": slot_cards,
+                "times": times,
+                "time_texts": time_texts,
+                "themes": themes,
+            })
+        }
         "theme_tables" => {
             // the tables, as JSON text, for the comparison with Python's
             use lp_py::{Dict, Value};

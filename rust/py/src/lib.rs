@@ -577,3 +577,53 @@ pub fn splitlines(text: &str) -> Vec<&str> {
     }
     lines
 }
+
+/// float(text) of a str, as Python 3.12 reads it (PyFloat_FromString): its digits of any
+/// script and its white space made ASCII (what is neither, nor ASCII, is no number),
+/// underscores only between two digits, ASCII white space at either end, then a sign and
+/// inf, infinity or nan, or digits with a point and an exponent, rounded to the nearest;
+/// None where Python raises ValueError.
+pub fn float_of_str(text: &str) -> Option<f64> {
+    // _PyUnicode_TransformDecimalAndSpaceToASCII
+    let mut ascii = String::with_capacity(text.len());
+    for ch in text.chars() {
+        if (ch as u32) < 127 {
+            ascii.push(ch);
+        } else if isspace(ch) {
+            ascii.push(' ');
+        } else {
+            ascii.push(char::from(b'0' + decimal(ch)? as u8));
+        }
+    }
+    if ascii.contains('\0') {
+        return None; // (no embedded NULs)
+    }
+    // _Py_string_to_number_with_underscores: underscores only after a digit and before one
+    let mut clean = String::with_capacity(ascii.len());
+    let mut prev = '\0';
+    for ch in ascii.chars() {
+        if ch == '_' {
+            if !prev.is_ascii_digit() {
+                return None;
+            }
+        } else {
+            if prev == '_' && !ch.is_ascii_digit() {
+                return None;
+            }
+            clean.push(ch);
+        }
+        prev = ch;
+    }
+    if prev == '_' {
+        return None;
+    }
+    // float_from_string_inner: Py_ISSPACE stripped, then the whole of it a number
+    let s = clean.trim_matches(|c: char| matches!(c, ' ' | '\t' | '\n' | '\x0b' | '\x0c' | '\r'));
+    if s.is_empty() {
+        return None;
+    }
+    // (Rust's grammar is _Py_dg_strtod's and _Py_parse_inf_or_nan's: a sign, inf, infinity or
+    // nan in any case, digits with a point and digits on one side at least, an exponent
+    // with a digit at least; and it rounds as dtoa does, to the nearest)
+    s.parse::<f64>().ok()
+}

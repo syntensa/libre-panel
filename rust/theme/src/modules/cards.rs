@@ -8,7 +8,7 @@ use lp_py::{num, Dict, Value};
 
 use super::{
     build_module, clamp, floor_div, fmax, fmin, heat, heat_rules, mix, pmax, pmin, py_take, round,
-    round_to, sources, Build, Fields, Source, CAP, DEFAULT_CARDS, N,
+    round_to, slots::slot_items, sources, Build, Fields, Source, CAP, N,
 };
 use crate::model::Result;
 
@@ -1538,50 +1538,6 @@ fn link(b: &mut Build, r: &Ref, x: f64, right: f64) -> Result<()> {
 }
 
 // -- a slot: one card of several ---------------------------------------------------------------
-
-/// Whether `name` is a card a slot can hold (CARD_NAMES): every module kind but the slots,
-/// and "net".
-fn is_card(name: &str) -> bool {
-    name == "net" || (name != "cards" && name != "netcard" && super::kind_of(name).is_some())
-}
-
-/// card_line: the card a line of a slot's `items` names (`name`, then `for <time>`, then
-/// `if <conditions>`; a `#` begins a comment), with its rule; None for a line that names none.
-pub fn card_line(line: &str) -> Option<(String, String)> {
-    let line = lp_py::strip(line.split('#').next().unwrap_or(""));
-    let (head, rule) = line.split_once(" if ").unwrap_or((line, ""));
-    let head = lp_py::strip(head);
-    let name = lp_py::strip(head.split_once(" for ").map_or(head, |(n, _)| n));
-    is_card(name).then(|| (name.to_string(), lp_py::strip(rule).to_string()))
-}
-
-/// slot_items: the cards a slot module holds, each with its rule, in the order they are
-/// asked; `netcard` holds a download card and the network.
-pub fn slot_items(module: &Dict) -> Vec<(String, String)> {
-    let get = |k: &str| module.get(k).map(Value::str).unwrap_or_default();
-    if get("module") == "netcard" {
-        return vec![
-            ("download".into(), String::new()),
-            ("net".into(), String::new()),
-        ];
-    }
-    let items = match module.get("items") {
-        Some(Value::Str(s)) if !s.is_empty() => s.clone(),
-        _ => DEFAULT_CARDS.to_string(),
-    };
-    let found: Vec<(String, String)> = lp_py::splitlines(&items)
-        .into_iter()
-        .filter_map(card_line)
-        .collect();
-    if found.is_empty() {
-        DEFAULT_CARDS
-            .lines()
-            .map(|name| (name.to_string(), String::new()))
-            .collect()
-    } else {
-        found
-    }
-}
 
 /// _child: the parts of the card `name` in `bx` (a module without a card of its own).
 fn child(b: &Build, name: &str, bx: [i64; 4]) -> Result<Vec<Dict>> {

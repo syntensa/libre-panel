@@ -501,3 +501,34 @@ def test_time_zones_found_as_zoneinfo_finds_them() -> None:
     keys += ["Asia", "Europe/Berlin\0", "Antarctica/Troll", "iso3166.tab", "right/UTC"]
     [ours] = run([{"op": "py_num", "cases": [], "zones": keys}])
     assert ours["zones"] == [timezones.zone.__wrapped__(k) is not None for k in keys]
+
+
+def _float_bits(text: str) -> str | None:
+    try:
+        return struct.pack(">d", float(text)).hex()
+    except ValueError:
+        return None
+
+
+def test_floats_read_as_python_reads_them() -> None:
+    texts = ["", " ", "5", "-5", "+5", "5.", ".5", ".", "-.", "1e5", "1E5", "1e", "1e+", "1e-5",
+             "1.e5", ".e5", "e5", "1_0", "1__0", "_10", "10_", "1_.0", "1._0", "1.0_1", "1e1_0",
+             "1_e10", "0x10", "inf", "-inf", "+Inf", "INFINITY", "infinity", "infin", "nan",
+             "-nan", "NaN", "+nAn", "nana", "  7  ", "\t7\n", "7\x0b", "7\x0c", "\r7", "7\x1c",
+             "\x1f7", "7\x00", "\x00", "1" * 400, "0." + "0" * 400 + "1", "1e400", "-1e400",
+             "1e-400", "2.2250738585072011e-308", "4.9406564584124654e-324", "9007199254740993",
+             "0.1", "00012", "-0", "-0.0", "+.5e-3", "1e999999999999", "1e-999999999999",
+             "12abc", "abc", "1,5", "١٢", "۱۲.۵", "1 2", " 5　", " " "6",
+             "5\u0085", "7 ", "8\x85", "٥_٥", "5é", "١e٢", "𝟓", "Ⅻ", "½",
+             "\U0001d7ce\U0001d7cf", "\x7f", "5\x7f", "1e٢"]  # fmt: skip
+    rng = random.Random(0xF10A7)
+    parts = ["", "-", "+", "1", "23", "0", ".", "e", "E", "_", " ", "5", "9", "inf", "nan", "\t"]
+    for _ in range(3000):
+        texts.append("".join(rng.choice(parts) for _ in range(rng.randrange(1, 7))))
+    for _ in range(500):
+        x = struct.unpack(">d", rng.getrandbits(64).to_bytes(8, "big"))[0]
+        texts.append(repr(x) if rng.random() < 0.7 else f"{x:.{rng.randrange(1, 25)}e}")
+    if unicodedata.unidata_version != RELEASE_UNICODE:  # (digits and spaces of every script)
+        texts = [t for t in texts if t.isascii()]
+    [ours] = run([{"op": "py_float", "texts": texts}])
+    assert ours["floats"] == [_float_bits(t) for t in texts]

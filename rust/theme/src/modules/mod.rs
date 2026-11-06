@@ -13,10 +13,13 @@ use crate::grid::{make_grid, Grid, Settings};
 use crate::model::{normalize_widget, Env, Error, Kind, Result, Theme};
 
 mod cards;
+pub mod info;
+mod layouts;
 mod lists;
 mod media;
 mod readings;
 mod sky;
+pub mod slots;
 mod status;
 mod time;
 mod weather;
