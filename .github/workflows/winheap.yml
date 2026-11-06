@@ -67,3 +67,7 @@ jobs:
           LP_RIG_VIEWS: home,design,settings/panel,live
           LP_RIG_STAY: "600"
         run: python .github/measure/rig_windows.py 23
+      - name: An engine by itself (what one process costs before any panel's pictures)
+        if: always()
+        shell: bash
+        run: python .github/measure/engine_alone.py
