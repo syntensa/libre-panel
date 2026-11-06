@@ -128,6 +128,7 @@ dependencies = [
  "base64",
  "lp-decode",
  "lp-devices",
+ "lp-i18n",
  "lp-pixels",
  "lp-py",
  "lp-text",
@@ -149,6 +150,13 @@ dependencies = [
 
 [[package]]
 name = "lp-devices"
+version = "0.1.0"
+dependencies = [
+ "lp-py",
+]
+
+[[package]]
+name = "lp-i18n"
 version = "0.1.0"
 dependencies = [
  "lp-py",
@@ -187,9 +195,12 @@ dependencies = [
 name = "lp-theme"
 version = "0.1.0"
 dependencies = [
+ "indexmap",
  "lp-devices",
+ "lp-i18n",
  "lp-pixels",
  "lp-py",
+ "lp-text",
  "num-bigint",
  "num-traits",
 ]

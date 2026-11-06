@@ -66,18 +66,19 @@ all of it. It is the reference every Rust piece is checked against:
 
 | Crate | What it is | Python it replaces |
 |---|---|---|
-| py | what Python does that the app's files and messages depend on: its values (ints of any size, dicts in order, ==), their arithmetic and its errors, repr(), json, str's white space, digits, lower() and upper(), re's matching without case, rounding, the division of ints (Python 3.12, Unicode 15.0: the release's) | — (Python's own rules) |
+| py | what Python does that the app's files and messages depend on: its values (ints of any size, dicts in order, ==), their arithmetic and its errors, repr(), json, str's white space, digits, lower() and upper(), re's matching without case, rounding, the division of ints, sum() of floats, splitlines(), the wide characters of East Asian scripts, the zones zoneinfo finds (Python 3.12, Unicode 15.0: the release's) | — (Python's own rules) |
 | pixels | Pillow's operations as Libre Panel uses them, to the bit | Pillow, numpy (in render/) |
 | decode | pictures from their files as Pillow decodes them (PNG, GIF, JPEG, WebP) | Image.open, Pillow's decoders |
 | text | letters and their layout as Pillow draws them (FreeType, shaping as libraqm) | fonts/, ImageFont |
-| theme | themes: reading, checking, versions per shape, adapting | theme/ |
+| i18n | the app's languages: its texts and the fields' names in each, the system's language | i18n.py |
+| theme | themes: reading, checking, versions per shape, adapting, the modules and cards laid out | theme/ |
 | render | the renderer and every widget, effect, motion and transition | render/ |
 | devices | TURZX (from the engine), Waveshare, udisp, BeadaPanel, NZXT, virtual, monitor | devices/ |
 | sensors | Linux and Windows sensors, history, demo | sensors/, sensorservice/, the C# service |
 | services | game mode, notices, AI activity, downloads, memory, timer, cooling, power, autopilot, weather, media, audio | services/, weather/ |
 | server | the app's HTTP server and its API | editor/ (server side) |
 | ui | the app's pages in Rust (WebAssembly), the same HTML and CSS | editor/app (JavaScript) |
-| app | the program: command line, config, languages, log, single instance, tray, window, autostart, light mode | the top-level modules |
+| app | the program: command line, config, log, single instance, tray, window, autostart, light mode | the top-level modules |
 | check | `lp-check`, the comparison program for the tests | — |
 
 The engine (engine/) moves into the workspace as the panels' loop takes it over: one process
@@ -209,8 +210,18 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       rust/theme (today a theme in such a folder finds no versions)
 
 ### R4 render
-- [ ] the cards and modules' layout (theme/modules.py, theme/cards.py): modules on their grid,
-      their parts as widgets, the cards of Start
+- [x] modules on their grid as theme/modules.py lays them out (expand), so far of the kinds
+      ring, stat, graph, bars, network, system, clock, date, analog, world, countdown,
+      weather, outlook, sun, moon and earth: their parts as widgets, field for field in
+      Python's order and of its types, with every look, size and option, in every language;
+      the app's texts in each language and the system's language as i18n.py finds them
+      (lp-i18n); Python's sum() of floats, splitlines(), East Asian widths and the zones
+      zoneinfo finds (lp-py)
+- [ ] the other module kinds (text, temps, cores, drives, processes, netinfo, battery, values,
+      image, music, volume, agenda, game, ping, timer, power, mic, ups, huge, ai), the cards
+      (theme/cards.py: playback, forecast, download, instrument, cards, netcard), the card
+      slots and the detached modules; the zones on Windows (Python finds them in the tzdata
+      package there, which the Rust app does not bring yet: none is found there for now)
 - [ ] the renderer's frame, widget by widget (texts, clocks, gauges, rings, bars, lists, graphs
       and their strips, fans, images, videos, icons, weather, globes, moon, sun path, slots,
       cards, notices), effects (glow, lit finish, dither), motion, transitions, toasts, start

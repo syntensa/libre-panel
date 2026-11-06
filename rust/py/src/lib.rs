@@ -12,6 +12,7 @@ pub mod math;
 pub mod num;
 pub mod re;
 pub mod value;
+pub mod zoneinfo;
 
 pub use value::{Dict, Value};
 
@@ -507,4 +508,72 @@ mod tests {
         assert_eq!(true_div((1 << 54) + 2, 1), (1u64 << 54) as f64);
         assert_eq!(true_div(11997452401628418 * 100, 100), 11997452401628418.0);
     }
+}
+
+#[path = "wide.rs"]
+mod wide_table;
+
+/// unicodedata.east_asian_width(ch) in "WF": a character Unicode 15.0 calls wide or
+/// fullwidth.
+pub fn east_asian_wide(ch: char) -> bool {
+    let cp = ch as u32;
+    let i = wide_table::WIDE.partition_point(|&(_, last)| last < cp);
+    wide_table::WIDE
+        .get(i)
+        .is_some_and(|&(first, _)| first <= cp)
+}
+
+/// sum() of floats as Python 3.12 adds them: from the int 0, the first added to it, the
+/// others with Neumaier's compensation (sum([0.55] * 7) is 3.8500000000000005, not the
+/// 3.8499999999999996 a plain loop gives).
+pub fn sum_floats(items: impl IntoIterator<Item = f64>) -> f64 {
+    let mut items = items.into_iter();
+    let Some(first) = items.next() else {
+        return 0.0;
+    };
+    let (mut total, mut c) = (0.0 + first, 0.0f64);
+    for x in items {
+        let t = total + x;
+        if total.abs() >= x.abs() {
+            c += (total - t) + x;
+        } else {
+            c += (x - t) + total;
+        }
+        total = t;
+    }
+    // (the compensation not added where it is 0 or no number, keeping a sum's sign and
+    // infinity)
+    if c != 0.0 && c.is_finite() {
+        total += c;
+    }
+    total
+}
+
+/// str.splitlines(): the lines of a text, split at every line boundary Python knows (\n, \r,
+/// \r\n, \v, \f, \x1c, \x1d, \x1e, \x85, U+2028, U+2029), the ends left out.
+pub fn splitlines(text: &str) -> Vec<&str> {
+    let mut lines = Vec::new();
+    let mut start = 0;
+    let mut chars = text.char_indices().peekable();
+    while let Some((i, ch)) = chars.next() {
+        let end = match ch {
+            '\r' => {
+                if let Some(&(_, '\n')) = chars.peek() {
+                    chars.next();
+                    i + 2
+                } else {
+                    i + 1
+                }
+            }
+            '\n' | '\x0b' | '\x0c' | '\x1c' | '\x1d' | '\x1e' | '\u{85}' | '\u{2028}'
+            | '\u{2029}' => i + ch.len_utf8(),
+            _ => continue,
+        };
+        lines.push(&text[start..i]);
+        start = end;
+    }
+    if start < text.len() {
+        lines.push(&text[start..]);
+    }
+    lines
 }

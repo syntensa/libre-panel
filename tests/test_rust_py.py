@@ -439,3 +439,65 @@ def test_names_meet_without_regard_to_case_as_python_s_re() -> None:
         for cp in range(0x110000)
     )
     assert table["re_digest"] == hashlib.sha256(lines.encode()).hexdigest()
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="Python 3.12's sum() (Neumaier's)")
+def test_floats_summed_as_python_s_sum() -> None:
+    rng = random.Random(0x5E)
+    lists: list[list[float]] = [[], [-0.0], [0.55] * 7, [0.1] * 10, [1e308, 1e308, -1e308]]
+    lists += [[1e16, 1.0, -1e16], [math.inf, -math.inf], [math.nan, 1.0], [5e-324] * 3]
+    for _ in range(3000):
+        pick = rng.randrange(3)
+        n = rng.randrange(1, 12)
+        if pick == 0:
+            lists.append([rng.uniform(-100, 100) for _ in range(n)])
+        elif pick == 1:
+            lists.append([float(rng.choice([0.55, 1.0, 0.1, 0.3, 2.65])) for _ in range(n)])
+        else:
+            lists.append([struct.unpack("<d", struct.pack("<Q", rng.getrandbits(64)))[0]
+                          for _ in range(n)])  # fmt: skip
+    bits = [[struct.pack(">d", x).hex() for x in items] for items in lists]
+    [ours] = run([{"op": "py_num", "cases": [], "sums": bits}])
+    want = [struct.pack(">d", float(sum(items))).hex() for items in lists]
+    # (NaN's bits as the sums make them: compared as NaN)
+    for got, expected, items in zip(ours["sums"], want, lists, strict=True):
+        if math.isnan(sum(items)):
+            assert math.isnan(struct.unpack(">d", bytes.fromhex(got))[0]), items
+        else:
+            assert got == expected, items
+
+
+def test_lines_split_as_python_s_splitlines() -> None:
+    rng = random.Random(0x11E)
+    ends = ["\n", "\r", "\r\n", "\v", "\f", "\x1c", "\x1d", "\x1e", "\x85", " ", " "]
+    texts = ["", "\n", "a", "a\n", "\r\n\r\n", "a\r\rb", "\n\na"]
+    for _ in range(2000):
+        texts.append(
+            "".join(rng.choice(["a", "bc", " ", "é", *ends]) for _ in range(rng.randrange(8)))
+        )
+    [ours] = run([{"op": "py_num", "cases": [], "splitlines": texts}])
+    assert ours["splitlines"] == [text.splitlines() for text in texts]
+
+
+@pytest.mark.skipif(
+    unicodedata.unidata_version != RELEASE_UNICODE,
+    reason=f"needs Python with Unicode {RELEASE_UNICODE} (the release's)",
+)
+def test_wide_characters_as_python_s_east_asian_width() -> None:
+    [ours] = run([{"op": "py_num", "cases": []}])
+    wide = "".join(
+        "1" if unicodedata.east_asian_width(chr(cp)) in "WF" else "0" for cp in range(0x110000)
+    )
+    assert ours["wide_digest"] == hashlib.sha256(wide.encode()).hexdigest()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Python's zones come from tzdata there")
+def test_time_zones_found_as_zoneinfo_finds_them() -> None:
+    from libre_panel import timezones
+
+    keys = ["", "UTC", "Asia/Tokyo", "Europe/Berlin", "America/Argentina/Buenos_Aires", "Nope/Zone"]
+    keys += ["/etc/localtime", "../etc/passwd", "Europe/", "./UTC", "..", ".", "a//b", "zone.tab"]
+    keys += ["tzdata.zi", "posixrules", "Factory", "Etc/GMT+5", "US/Pacific", "europe/berlin"]
+    keys += ["Asia", "Europe/Berlin\0", "Antarctica/Troll", "iso3166.tab", "right/UTC"]
+    [ours] = run([{"op": "py_num", "cases": [], "zones": keys}])
+    assert ours["zones"] == [timezones.zone.__wrapped__(k) is not None for k in keys]

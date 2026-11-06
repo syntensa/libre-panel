@@ -176,7 +176,7 @@ fn compose(n: u64, last: i64) -> Option<f64> {
 }
 
 /// CPython's _float_div_mod: the floor of vx / wx and the remainder with wx's sign.
-fn float_div_mod(vx: f64, wx: f64) -> (f64, f64) {
+pub fn float_div_mod(vx: f64, wx: f64) -> (f64, f64) {
     let mut rest = vx % wx;
     let mut div = (vx - rest) / wx;
     if rest != 0.0 {

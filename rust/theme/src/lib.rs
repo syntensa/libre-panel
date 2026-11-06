@@ -4,9 +4,11 @@
 
 pub mod adapt;
 pub mod defaults;
+pub mod design;
 pub mod grid;
 pub mod light;
 pub mod model;
+pub mod modules;
 pub mod paths;
 pub mod specs;
 pub mod tables;

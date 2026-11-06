@@ -733,7 +733,49 @@ fn run(case: &Value) -> Result<Value, String> {
                 ));
             }
             let digest = format!("{:x}", sha2::Sha256::digest(table.as_bytes()));
-            json!({"answers": answers, "re_digest": digest})
+            // East_Asian_Width W and F over every code point, as a digest
+            // (a surrogate is no char here: never wide, as in Python)
+            let wide: String = (0..=0x10FFFFu32)
+                .map(|cp| match char::from_u32(cp) {
+                    Some(c) if lp_py::east_asian_wide(c) => '1',
+                    _ => '0',
+                })
+                .collect();
+            let wide_digest = format!("{:x}", sha2::Sha256::digest(wide.as_bytes()));
+            // sum() of floats given by their bits
+            let sums: Vec<String> = case["sums"]
+                .as_array()
+                .map(|all| {
+                    all.iter()
+                        .map(|list| {
+                            let items = list.as_array().into_iter().flatten().map(|b| {
+                                f64::from_bits(
+                                    u64::from_str_radix(b.as_str().unwrap_or("0"), 16).unwrap_or(0),
+                                )
+                            });
+                            format!("{:016x}", lp_py::sum_floats(items).to_bits())
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            let lines: Vec<Vec<&str>> = case["splitlines"]
+                .as_array()
+                .map(|all| {
+                    all.iter()
+                        .map(|s| lp_py::splitlines(s.as_str().unwrap_or("")))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let zones: Vec<bool> = case["zones"]
+                .as_array()
+                .map(|all| {
+                    all.iter()
+                        .map(|k| lp_py::zoneinfo::exists(k.as_str().unwrap_or("")))
+                        .collect()
+                })
+                .unwrap_or_default();
+            json!({"answers": answers, "re_digest": digest, "wide_digest": wide_digest,
+                "sums": sums, "splitlines": lines, "zones": zones})
         }
         "py" => {
             let texts = case["texts"].as_array().ok_or("texts")?;
@@ -1302,6 +1344,82 @@ fn run(case: &Value) -> Result<Value, String> {
             json!({"grids": grids, "adapt": adapted, "laid_out": laid, "sets": orders, "ints": ints,
                 "raw_grids": raw_grids, "versions": versions, "ignorecase": ignorecase})
         }
+        "i18n" => {
+            // each language's texts as t() finds them, its fields' labels, and the system's
+            // language from an environment's variables (and Windows' own language)
+            let locale = std::path::PathBuf::from(case["locale"].as_str().unwrap_or(""));
+            let texts: Vec<&str> = case["texts"]
+                .as_array()
+                .map(|a| a.iter().filter_map(Value::as_str).collect())
+                .unwrap_or_default();
+            let mut languages = Vec::new();
+            for code in case["languages"].as_array().into_iter().flatten() {
+                let code = code.as_str().unwrap_or("");
+                let language = lp_i18n::Language::load(&locale, code)?;
+                languages.push(json!({
+                    "t": texts.iter().map(|x| language.t(x)).collect::<Vec<_>>(),
+                    "fields": texts.iter().map(|x| language.field_label(x)).collect::<Vec<_>>(),
+                }));
+            }
+            let systems: Vec<String> = case["envs"]
+                .as_array()
+                .map(|all| {
+                    all.iter()
+                        .map(|e| {
+                            let env = |k: &str| e[k].as_str().unwrap_or("").to_string();
+                            let windows = e["windows"]
+                                .as_u64()
+                                .map(|id| lp_i18n::windows_name(id as u32));
+                            lp_i18n::system_language(&env, windows)
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            json!({"languages": languages, "systems": systems})
+        }
+        "theme_expand" => {
+            // themes with their modules laid out (theme/modules.py's expand): each theme's data
+            // as JSON text, read, in light colours where asked, expanded in its language; its
+            // widgets as JSON text, the modules' boxes and the warnings, or the error
+            let env = lp_theme::Env {
+                fonts_dir: case["fonts_dir"].as_str().unwrap_or("").into(),
+            };
+            let locale = std::path::PathBuf::from(case["locale"].as_str().unwrap_or(""));
+            let how = lp_py::json::Dumps::default();
+            let answers: Vec<Value> = case["themes"]
+                .as_array()
+                .ok_or("themes")?
+                .iter()
+                .map(|c| {
+                    let code = c["language"].as_str().unwrap_or("en");
+                    match lp_i18n::Language::load(&locale, code) {
+                        Ok(language) => lp_i18n::set_language(language),
+                        Err(e) => return json!({"error": e, "kind": "language"}),
+                    }
+                    let made = lp_py::json::loads(c["data"].as_str().unwrap_or("null"))
+                        .map_err(|e| lp_theme::Error { kind: lp_theme::Kind::Value, msg: e.to_string() })
+                        .and_then(|data| lp_theme::parse_theme(&data, None, &env))
+                        .and_then(|theme| {
+                            lp_theme::versions::with_light_colours(&theme, c["light"].as_bool().unwrap_or(false))
+                        })
+                        .and_then(|theme| lp_theme::modules::expand(&theme, &env).map(|e| (theme, e)));
+                    match made {
+                        Ok((theme, e)) => {
+                            let widgets = lp_py::Value::List(e.widgets.into_iter().map(lp_py::Value::Dict).collect());
+                            let mut warnings = theme.warnings.clone();
+                            warnings.extend(e.warnings);
+                            json!({
+                                "widgets": lp_py::json::dumps(&widgets, &how),
+                                "boxes": e.boxes.iter().map(|(k, b)| json!([k, b])).collect::<Vec<_>>(),
+                                "warnings": warnings,
+                            })
+                        }
+                        Err(e) => json!({"error": e.msg, "kind": e.kind.name()}),
+                    }
+                })
+                .collect();
+            json!({"answers": answers})
+        }
         "theme_tables" => {
             // the tables, as JSON text, for the comparison with Python's
             use lp_py::{Dict, Value};
@@ -1669,6 +1787,8 @@ fn font_call<F: lp_text::text::TextFace>(
 fn main() {
     // (as Python does when it starts: HarfBuzz's language of a text without one)
     lp_text::set_locale_from_environment();
+    // (the fallback fonts of the East Asian languages go by the app's language, as Python's)
+    lp_text::fallback::set_language(Box::new(|| lp_i18n::language().code().to_string()));
     let stdin = io::stdin();
     let mut out = BufWriter::new(io::stdout().lock());
     for line in stdin.lock().lines() {
