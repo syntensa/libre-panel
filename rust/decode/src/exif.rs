@@ -1,0 +1,214 @@
+//! The EXIF orientation as Pillow 13.0 reads it (Image.getexif, Exif.load and
+//! TiffImagePlugin's ImageFileDirectory_v2 on the first directory): the first Orientation tag
+//! (274) of IFD0, its first value; XMP's tiff:Orientation where EXIF has none.
+
+use crate::{error, Result};
+
+/// TiffImagePlugin.PREFIXES: the headers ImageFileDirectory_v2 takes.
+const PREFIXES: [&[u8; 4]; 6] = [
+    b"MM\x00\x2a",
+    b"II\x2a\x00",
+    b"MM\x2a\x00",
+    b"II\x00\x2a",
+    b"MM\x00\x2b",
+    b"II\x2b\x00",
+];
+
+/// The orientation in EXIF data (with or without "Exif\0\0" before it, as Exif.load strips one
+/// or two of them): None where IFD0 has no Orientation tag Pillow can read as a whole number;
+/// an error where Pillow fails on it (a header that is not TIFF's, too short to hold its
+/// directory's place, or BigTIFF's, whose place Exif.load cannot read from 8 bytes).
+pub fn orientation(data: &[u8]) -> Result<Option<u32>> {
+    let mut d = data;
+    for _ in 0..2 {
+        match d.strip_prefix(b"Exif\0\0") {
+            Some(rest) => d = rest,
+            None => break,
+        }
+    }
+    if d.is_empty() {
+        return Ok(None);
+    }
+    let head = &d[..d.len().min(8)];
+    if head.len() < 4 || !PREFIXES.iter().any(|p| head[..4] == p[..]) {
+        return error("not a TIFF file (header not valid)");
+    }
+    let big = &head[..2] == b"MM";
+    if head[2] == 43 || head.len() < 8 {
+        return error("unpack requires a buffer of more bytes"); // (struct.error)
+    }
+    let u16_at = |b: &[u8]| -> u16 {
+        if big {
+            u16::from_be_bytes([b[0], b[1]])
+        } else {
+            u16::from_le_bytes([b[0], b[1]])
+        }
+    };
+    let u32_at = |b: &[u8]| -> u32 {
+        if big {
+            u32::from_be_bytes([b[0], b[1], b[2], b[3]])
+        } else {
+            u32::from_le_bytes([b[0], b[1], b[2], b[3]])
+        }
+    };
+    let next = u32_at(&head[4..8]) as usize;
+    let limit = d.len();
+    // ImageFileDirectory_v2.load: the entries until the data ends (a short read stops it)
+    let Some(count) = d.get(next..next + 2).map(u16_at) else {
+        return Ok(None);
+    };
+    let mut total = 0usize;
+    for i in 0..usize::from(count) {
+        let at = next + 2 + i * 12;
+        let Some(entry) = d.get(at..at + 12) else {
+            return Ok(None);
+        };
+        let (tag, typ, n) = (
+            u16_at(&entry[0..2]),
+            u16_at(&entry[2..4]),
+            u32_at(&entry[4..8]),
+        );
+        // (_load_dispatch: each type's size; others are skipped)
+        let unit = match typ {
+            1 | 2 | 6 | 7 => 1,
+            3 | 8 => 2,
+            4 | 9 | 11 | 13 => 4,
+            5 | 10 | 12 | 16 => 8,
+            _ => continue,
+        };
+        let size = n as usize * unit;
+        let value: &[u8] = if size > 4 {
+            let offset = u32_at(&entry[8..12]) as usize;
+            total += size;
+            if total > limit {
+                continue;
+            }
+            match d.get(offset..offset + size) {
+                Some(v) => v,
+                None => continue, // (possibly corrupt: the tag skipped)
+            }
+        } else {
+            &entry[8..8 + size]
+        };
+        if value.is_empty() {
+            continue;
+        }
+        if tag != 274 {
+            continue;
+        }
+        // the first Orientation read is the one Pillow keeps; its first value as Python
+        // compares it with 2 to 8 (bytes and text never equal them)
+        let whole = |f: f64| (f.fract() == 0.0 && f >= 0.0).then_some(f as u32);
+        return Ok(match typ {
+            3 => Some(u32::from(u16_at(value))),
+            8 => {
+                let v = u16_at(value) as i16;
+                (v >= 0).then_some(v as u32)
+            }
+            4 | 13 => Some(u32_at(value)),
+            9 => {
+                let v = u32_at(value) as i32;
+                (v >= 0).then_some(v as u32)
+            }
+            6 => {
+                let v = value[0] as i8;
+                (v >= 0).then_some(v as u32)
+            }
+            16 => {
+                let (hi, lo) = (u32_at(&value[..4]), u32_at(&value[4..8]));
+                let v = if big {
+                    (u64::from(hi) << 32) | u64::from(lo)
+                } else {
+                    (u64::from(lo) << 32) | u64::from(hi)
+                };
+                u32::try_from(v).ok()
+            }
+            5 | 10 => {
+                let (num, den) = (u32_at(&value[..4]), u32_at(&value[4..8]));
+                let (num, den) = if typ == 10 {
+                    (f64::from(num as i32), f64::from(den as i32))
+                } else {
+                    (f64::from(num), f64::from(den))
+                };
+                if den == 0.0 {
+                    None
+                } else {
+                    whole(num / den)
+                }
+            }
+            11 => whole(f64::from(f32::from_bits(u32_at(value)))),
+            12 => {
+                let (hi, lo) = (u32_at(&value[..4]), u32_at(&value[4..8]));
+                let bits = if big {
+                    (u64::from(hi) << 32) | u64::from(lo)
+                } else {
+                    (u64::from(lo) << 32) | u64::from(hi)
+                };
+                whole(f64::from_bits(bits))
+            }
+            _ => None,
+        });
+    }
+    Ok(None)
+}
+
+/// The EXIF data of ImageMagick's "Raw profile type exif" text (Image.getexif: its lines from
+/// the fourth on, joined, as hexadecimal; bytes.fromhex skips the spaces between).
+pub fn from_raw_profile(text: &str) -> Result<Vec<u8>> {
+    let hex: String = text.split('\n').skip(3).collect();
+    let digits: Vec<u8> = hex.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
+    if !digits.len().is_multiple_of(2) {
+        return error("non-hexadecimal number found in fromhex() arg");
+    }
+    digits
+        .chunks_exact(2)
+        .map(|pair| {
+            let s = std::str::from_utf8(pair).map_err(|e| crate::Error(e.to_string()))?;
+            u8::from_str_radix(s, 16).map_err(|e| crate::Error(e.to_string()))
+        })
+        .collect()
+}
+
+/// XMP's orientation (getexif: the first tiff:Orientation=" or tiff:Orientation> and the digit
+/// after it).
+pub fn xmp_orientation(xmp: &str) -> Option<u32> {
+    let bytes = xmp.as_bytes();
+    let name = b"tiff:Orientation";
+    let mut from = 0;
+    while let Some(at) = find(&bytes[from..], name) {
+        let rest = &bytes[from + at + name.len()..];
+        let digit = match rest {
+            [b'=', b'"', d, ..] | [b'>', d, ..] if d.is_ascii_digit() => Some(*d),
+            _ => None,
+        };
+        if let Some(d) = digit {
+            return Some(u32::from(d - b'0'));
+        }
+        from += at + 1;
+    }
+    None
+}
+
+fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
+    hay.windows(needle.len()).position(|w| w == needle)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_orientation_is_read_from_either_byte_order() {
+        let le = b"Exif\0\0II\x2a\x00\x08\x00\x00\x00\x01\x00\x12\x01\x03\x00\x01\x00\x00\x00\x06\x00\x00\x00";
+        assert_eq!(orientation(le), Ok(Some(6)));
+        let be =
+            b"MM\x00\x2a\x00\x00\x00\x08\x00\x01\x01\x12\x00\x03\x00\x00\x00\x01\x00\x03\x00\x00";
+        assert_eq!(orientation(be), Ok(Some(3)));
+        assert!(orientation(b"Exif\0\0XX\x2a\x00").is_err());
+        assert_eq!(xmp_orientation("<x tiff:Orientation=\"8\"/>"), Some(8));
+        assert_eq!(
+            xmp_orientation("<tiff:Orientation>5</tiff:Orientation>"),
+            Some(5)
+        );
+    }
+}

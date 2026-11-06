@@ -63,6 +63,7 @@ all of it. It is the reference every Rust piece is checked against:
 | Crate | What it is | Python it replaces |
 |---|---|---|
 | pixels | Pillow's operations as Libre Panel uses them, to the bit | Pillow, numpy (in render/) |
+| decode | pictures from their files as Pillow decodes them (PNG, GIF, JPEG, WebP) | Image.open, Pillow's decoders |
 | text | letters and their layout as Pillow draws them (FreeType, shaping as libraqm) | fonts/, ImageFont |
 | theme | themes: reading, checking, versions per shape, adapting | theme/ |
 | render | the renderer and every widget, effect, motion and transition | render/ |
@@ -101,7 +102,10 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
 - [x] drawing: line (thin and wide, joints), polygon, rectangle, rounded_rectangle, ellipse,
       circle, arc, pieslice, chord, point, bitmap; the core (Draw.c) and ImageDraw's own
       methods, on pictures of bytes and of floats (F)
-- [ ] decoding: PNG, JPEG (as libjpeg-turbo), GIF (frames), WebP; EXIF orientation
+- [x] decoding PNG (every bit depth and colour type, interlaced, its transparency), the EXIF
+      orientation (EXIF, ImageMagick's raw profile, XMP), opened as the app opens pictures
+      (exif_transpose, then convert)
+- [ ] decoding: GIF and APNG (frames), JPEG (as libjpeg-turbo), WebP
 - [ ] numpy's arithmetic where the renderer uses it (dither, gradients, light)
 
 ### R2 text

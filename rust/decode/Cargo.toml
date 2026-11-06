@@ -1,0 +1,13 @@
+[package]
+name = "lp-decode"
+description = "Pictures from their files as Pillow decodes them: PNG and APNG, GIF, JPEG, WebP"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+lp-pixels = { path = "../pixels" }
+png = "0.18"
+flate2 = "1"

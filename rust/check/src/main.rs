@@ -458,6 +458,25 @@ fn run(case: &Value) -> Result<Value, String> {
         }
         "linear_gradient" => json!({"image": value_of(&Image::linear_gradient())}),
         "radial_gradient" => json!({"image": value_of(&Image::radial_gradient())}),
+        "open" => {
+            // a file's bytes as the app opens them: exif_transpose(Image.open(f)).convert(mode)
+            let data = STANDARD
+                .decode(case["data"].as_str().unwrap_or(""))
+                .map_err(|err| err.to_string())?;
+            let mode = case["mode"]
+                .as_str()
+                .and_then(Mode::from_name)
+                .ok_or("a mode")?;
+            let fail = |err: lp_decode::Error| err.to_string();
+            let out = if case["exif"].as_bool().unwrap_or(true) {
+                lp_decode::open(&data, mode).map_err(fail)?
+            } else {
+                lp_decode::decode(&data)
+                    .and_then(|p| p.convert(mode))
+                    .map_err(fail)?
+            };
+            json!({"image": value_of(&out)})
+        }
         "draw" | "imagedraw" => {
             let own = op == "imagedraw";
             let commands = case["commands"].as_array().ok_or("commands")?;

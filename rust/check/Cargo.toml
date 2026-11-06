@@ -9,5 +9,6 @@ publish.workspace = true
 
 [dependencies]
 lp-pixels = { path = "../pixels" }
+lp-decode = { path = "../decode" }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 base64 = "0.22"

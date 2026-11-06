@@ -192,7 +192,7 @@ jobs:
       # (the Pillow they are compared with: docs/RUST.md; a new one changes nothing unseen)
       - run: pip install -e ".[dev]" pillow==13.0.0
       - name: The crates against the Python app
-        run: python -m pytest -q tests/test_rust_pixels.py
+        run: python -m pytest -q tests/test_rust_pixels.py tests/test_rust_decode.py
 
   sensor-host:
     # The sensor service as a .NET program of its own (sensorhost/, C#; docs/ROADMAP.md): built
