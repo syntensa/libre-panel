@@ -112,8 +112,16 @@ def run(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
         env["LP_LIBFREETYPE"] = libfreetype
     if (libharfbuzz := pillow_libharfbuzz()) is not None:
         env["LP_LIBHARFBUZZ"] = libharfbuzz
+    # (UTF-8 both ways: lp-check's answers hold any character, and Windows' own code page
+    # would read them otherwise)
     done = subprocess.run(
-        [str(exe)], input=text, capture_output=True, text=True, timeout=900, check=True, env=env
+        [str(exe)],
+        input=text,
+        capture_output=True,
+        encoding="utf-8",
+        timeout=900,
+        check=True,
+        env=env,
     )
     # (one answer a line: split at "\n" only, as JSON leaves U+2028 and the like as they are)
     answers = [json.loads(line) for line in done.stdout.split("\n") if line]
