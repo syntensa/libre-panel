@@ -1142,6 +1142,20 @@ def test_the_sensor_list_has_the_three_names(server):
     assert status == 200 and {"cpu.name", "gpu.name", "mem.name"} <= keys
 
 
+def test_the_server_queues_the_connections_a_page_opens_at_once(isolated_home):
+    """The app's page asks for its hundred scripts and styles at once, each over a connection
+    of its own (HTTP/1.0), as many at a time as the browser opens: with socketserver's queue
+    of 5, Windows turned the rest away while the server was busy, and the page stayed empty."""
+    from libre_panel.editor.server import EditorServer
+
+    httpd = make_server(port=0)
+    try:
+        assert isinstance(httpd, EditorServer) and httpd.request_queue_size >= 64
+    finally:
+        httpd.server_close()
+        httpd.editor_state.close()
+
+
 def test_on_windows_the_port_is_this_servers_alone():
     """SO_REUSEADDR on Windows lets another program bind the port and read the token."""
     from libre_panel.editor.server import hold_port

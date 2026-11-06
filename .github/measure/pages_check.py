@@ -56,7 +56,8 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
                "--port", "0"]  # fmt: skip
     app = App(home, command)
     print("panel 1:", app.get("api/app")["panel"].get("state"), flush=True)
-    time.sleep(20)
+    # (LP_PAGES_AFTER: as the rig, after light mode let go, its heaps tidied every 15 s)
+    time.sleep(float(os.environ.get("LP_PAGES_AFTER", "20")))
     from playwright.sync_api import sync_playwright
 
     from libre_panel.editor import access
@@ -85,7 +86,9 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
                 (shots / f"{name}.html").write_text(page.content(), encoding="utf-8")
             page.wait_for_timeout(5_000)
         browser.close()
-        print("\n".join(said[-60:]), flush=True)
+        print("\n".join(said), flush=True)
+        refused = sum("ERR_CONNECTION_REFUSED" in line and "failed:" in line for line in said)
+        print(f"connections turned away: {refused}", flush=True)
     log = home / "logs" / "libre-panel.log"
     if log.exists():
         for line in log.read_text("utf-8", "replace").splitlines():

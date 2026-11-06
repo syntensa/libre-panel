@@ -57,14 +57,19 @@ jobs:
           python -m playwright install chromium
           python packaging/fetch_tools.py "$RUNNER_TEMP/tools"
           cygpath -w "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
-      - name: The app's pages, now and at 703da72
+      - name: The app's pages as the rig opens them (after light mode), with the server's longer queue and without
         shell: bash
         env:
           LP_PAGES_SHOTS: pages_shots
+          LP_PAGES_AFTER: "150"
         run: |
-          python .github/measure/pages_check.py . home,design,live || true
-          git worktree add "$RUNNER_TEMP/old" 703da72
-          python .github/measure/pages_check.py "$RUNNER_TEMP/old" home,design,live || true
+          git worktree add "$RUNNER_TEMP/queue5" HEAD~1
+          for round in 1 2; do
+            echo "== round $round: the queue of 128"
+            python .github/measure/pages_check.py . home,design,settings/panel,live || true
+            echo "== round $round: the queue of 5 (the commit before)"
+            python .github/measure/pages_check.py "$RUNNER_TEMP/queue5" home,design,settings/panel,live || true
+          done
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -73,7 +78,9 @@ jobs:
           if-no-files-found: ignore
   webview2:
     # what the app's window holds (WebView2's processes), open on its pages, minimized and shown
-    # again; as it is, as before, and with flags to try (.github/measure/webview2_memory.py)
+    # again; as it is, as before, and with flags to try (.github/measure/webview2_memory.py);
+    # not this time
+    if: false
     runs-on: windows-latest
     timeout-minutes: 45
     steps:

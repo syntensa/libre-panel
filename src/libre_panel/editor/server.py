@@ -3297,6 +3297,12 @@ def hold_port(sock: Any, platform: str = sys.platform) -> bool:
 
 class EditorServer(ThreadingHTTPServer):
     daemon_threads = True
+    # The app's page asks for its hundred scripts and styles at once, over as many connections
+    # as the browser opens: socketserver's queue of 5 waiting connections was too short for
+    # that. Windows turns a connection away at once when the queue is full (Linux lets it
+    # wait), and a script that did not come left the app's page empty, its view never shown
+    # (seen on Windows with both panels busy and the app opened again after light mode).
+    request_queue_size = 128
 
     def __init__(self, address: tuple[str, int], handler: type[EditorHandler]) -> None:
         super().__init__(address, handler)

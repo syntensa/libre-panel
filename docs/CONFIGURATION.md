@@ -1264,9 +1264,8 @@ program and does nothing when Libre Panel is not running. A copy of the file as 
 beside it (`settings.json.libre-panel.bak`, once: the first copy is yours); *Remove* takes out
 only Libre Panel's entries, those that call `/api/ai/`. The card says when each program last
 reported. These hooks bring the sessions on this PC (in a terminal, an editor or the desktop
-app); Claude Code's sessions in the cloud (claude.ai/code) cannot reach it, and a relay for
-them (0.7.4 to 0.8.1rc1) is no more: an old config.toml's `cloud` and `cloud_token` are let be
-and go from the file with the next setting written. Where Libre Panel had to take another port (its own was taken when it started), the card says so and sets the hooks up again
+app); Claude Code's sessions in the cloud cannot reach it ([below](#claude-code-in-the-cloud)).
+Where Libre Panel had to take another port (its own was taken when it started), the card says so and sets the hooks up again
 with a click.
 
 ```toml
@@ -1312,6 +1311,15 @@ With `notice` on, a notice comes on the panel when a session begins to wait for 
 (a question, a permission): what the session is called where `task` is on, else *Waiting for
 you*. A theme that shows `ai.*` itself leaves it out, as one that shows what plays leaves out
 the notice of a new track.
+
+#### Claude Code in the cloud
+
+Not shown: its sessions on claude.ai/code run on a machine that cannot reach this PC. From
+0.7.4 to 0.8.1rc1 they came by a relay (an ntfy topic) that did not work reliably, and a topic
+that whoever knows its address can read was a risk not worth it: it is gone. An old
+config.toml's `cloud` and `cloud_token` under `[services.agents]` are let be (never read, nothing
+of them in the log) and go from the file with the next setting written; take the setup script
+out of the cloud environment too.
 
 ### Game mode
 
