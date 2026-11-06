@@ -13,6 +13,7 @@ use crate::grid::{make_grid, Grid, Settings};
 use crate::model::{normalize_widget, Env, Error, Kind, Result, Theme};
 
 mod lists;
+mod media;
 mod readings;
 mod sky;
 mod status;
@@ -1132,6 +1133,11 @@ pub fn kind_of(name: &str) -> Option<KindOf> {
         "mic" => k(status::build_mic, &[], (1, 1)),
         "battery" => k(status::build_battery, &[], (1, 1)),
         "ai" => k(status::build_ai, &[], (2, 1)),
+        "image" => k(media::build_image, &[], (2, 2)),
+        "music" => k(media::build_music, &[], (2, 1)),
+        "volume" => k(media::build_volume, &[], (2, 1)),
+        "agenda" => k(media::build_agenda, &[], (2, 2)),
+        "game" => k(media::build_game, &[], (2, 1)),
         _ => return None,
     })
 }

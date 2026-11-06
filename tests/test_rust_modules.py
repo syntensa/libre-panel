@@ -18,12 +18,12 @@ from libre_panel import design, fonts, i18n
 from libre_panel.devices import models as devices
 from libre_panel.theme import model, modules
 
-# The module kinds rust/theme builds so far (the others follow, kind by kind).
+# The module kinds rust/theme builds (the cards of theme/cards.py follow).
 BUILT = [
     "ring", "stat", "graph", "bars", "network", "clock", "date", "weather", "outlook", "system",
     "sun", "moon", "earth", "analog", "world", "countdown", "huge", "text", "temps", "cores",
     "drives", "processes", "netinfo", "values", "ping", "timer", "power", "ups", "mic", "battery",
-    "ai",
+    "ai", "image", "music", "volume", "agenda", "game",
 ]  # fmt: skip
 
 
@@ -84,6 +84,7 @@ PLACES = [
     "Nope/Zone = X\n../etc/passwd\n/etc/localtime\nzone.tab\nEurope/Paris=Paris\x1cAsia/"
     "Kolkata Australia/Perth = ", "Europe/Berlin\r\nAsia/Seoul = 서울\vUS/Pacific",
     "Europe/Rome\nAfrica/Cairo\nAsia/Dubai\nPacific/Auckland\nAmerica/Chicago\nAsia/Shanghai",
+    "photos/*.jpg", "a.png\n\n  b.jpg  \n\u2029", "  ",  # a picture's
 ]  # fmt: skip
 
 
@@ -117,6 +118,10 @@ def _module(rng: random.Random, i: int, columns: int, rows: int) -> dict[str, An
         "total": [True, False],
         "sort": ["cpu", "memory"],
         "agent": ["both", "claude", "codex"],
+        "seconds": [0, 1, 5, -3, 10**30],
+        "speed": [1.0, 0.5, 2, 0],
+        "time": ["total", "remaining"],
+        "top": [175, 0, -5, 60.5, 10**20],
     }
     for key, choices in options.items():
         if rng.random() < 0.4:
