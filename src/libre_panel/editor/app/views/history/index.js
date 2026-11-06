@@ -1,4 +1,4 @@
-// History (#/live/history, #/live/history/week, #/live/history/month), the other half of Live:
+// History (#/live/history, #/live/history/week, #/live/history/month), the other half of Status:
 // what the memory kept on this computer.
 // The temperatures, the load and the power of the CPU and the GPU over a day, a week or a month
 // (the time in games behind them), what that came to, the games played most and the last
@@ -343,7 +343,7 @@ function Off({ onOn }) {
   </div>`;
 }
 
-/** History, under Live's switch (`switcher`); `rest` is the span: "", "week" or "month". */
+/** History, under Status's switch (`switcher`); `rest` is the span: "", "week" or "month". */
 export function HistoryView({ rest, switcher }) {
   const span = SPANS().some((item) => item.value === rest) ? rest : "day";
   const found = usePolled(() => get(`/api/history?span=${span}`), 60_000, { deps: [span] });

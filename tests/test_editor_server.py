@@ -565,7 +565,7 @@ def kept_rounds(home):
 def test_a_round_of_history_is_kept_as_a_picture_of_its_report(
     server, isolated_home, tmp_path, monkeypatch
 ):
-    """Live → History's *Keep as a picture*: the round's report as the panel shows it, in a
+    """Status → History's *Keep as a picture*: the round's report as the panel shows it, in a
     picture of the panel, in the Pictures folder, which opens; again: a file of its own."""
     from io import BytesIO
     from pathlib import Path
@@ -1184,7 +1184,7 @@ def test_on_windows_the_port_is_this_servers_alone():
 
 
 def test_the_panel_test_and_the_log_have_their_routes(editor, monkeypatch, isolated_home):
-    """Live → Diagnose: the panel test's state and actions, the log's entries, the whole log
+    """Status → Diagnose: the panel test's state and actions, the log's entries, the whole log
     to keep (a link: the token in its address) and the detail it is written with."""
     import logging
     from pathlib import Path
@@ -1351,7 +1351,7 @@ def test_the_pages_of_a_panel_beside_the_first_are_read_and_written(tmp_path):
 
 
 def test_the_load_has_its_route_and_is_measured_only_while_asked(editor):
-    """Live → Diagnose → Load: the first answer comes at once (no measurement waits for a
+    """Status → Diagnose → Load: the first answer comes at once (no measurement waits for a
     request), the next ones say what this process and its children cost; the thread that
     measures ends with the server."""
     from fake_sensors import wait_for

@@ -134,8 +134,8 @@ in 0.8.0. The goal is half of that.
       while the app is closed and the engine in small pages (Linux), a sensor service without
       Python's web client: on Linux (both panels with Lumen, every service, the window closed,
       each process's anonymous memory) 161 MB instead of 270
-- [ ] Measured on Windows: *Live → Diagnose → Load on this PC* says what the main process holds
-      and what the sensor service holds by its own word
+- [ ] Measured on Windows: *Status → Diagnose → Load on this PC* says what the main process
+      holds and what the sensor service holds by its own word
 - [x] The sensor service without Python: a small .NET program that hosts LibreHardwareMonitor
       and answers on the same pipe (`sensorhost/`, tested on Windows CI against the Python
       service: the same answers, sensors, rights and limits, as a Windows service too; on CI's

@@ -1,5 +1,5 @@
-"""Settings and Live as a person meets them (0.6.0's pass over them): the overview of what needs
-attention, the plain words of each section, the report of a panel and Live's status line. In a
+"""Settings and Status as a person meets them (0.6.0's pass over them): the overview of what
+needs attention, the plain words of each section, the report of a panel and Status's line. In a
 real browser, as test_app_browser.py; skipped when Playwright or Chromium are missing."""
 
 import json
@@ -650,7 +650,7 @@ def test_the_sections_speak_german(app_url, monkeypatch):  # noqa: F811
         expect(page.locator(".sources-more")).to_contain_text("Weitere Quellen")
 
 
-# -- Live: how it runs, in a calm sentence ---------------------------------------------------------
+# -- Status: how it runs, in a calm sentence -------------------------------------------------------
 
 
 RUN_STATE = """async ([background, status]) => {
@@ -718,7 +718,7 @@ def test_the_video_experiment_writes_each_choice_at_once_and_leads_back(
     monkeypatch,
 ):
     """Settings → Panel → Video experiment: the cap, the quality, the speed, the profile, the
-    encoder and the keyframes, each written on the click; Live's tiles and the log's lines
+    encoder and the keyframes, each written on the click; Status's tiles and the log's lines
     about the video under them; and a way back to what was measured, greyed while it holds."""
     from test_app_browser import radio
     from test_editor_settings import lacking_ffmpeg, panel_on_the_bus
@@ -741,7 +741,7 @@ def test_the_video_experiment_writes_each_choice_at_once_and_leads_back(
         radio(page, "Frames per second", "60").click()  # the panel is told 70 with it
         waits_for(page, lambda: settings_config().device.video.device_fps == 70)
         assert settings_config().device.video.fps == 60
-        expect(card.locator(".live-tile")).to_have_count(5)  # as Live shows them
+        expect(card.locator(".live-tile")).to_have_count(5)  # as Status shows them
         expect(card.locator(".experiment-log")).to_contain_text("Nothing about the video")
         expect(back).to_be_enabled()
         back.click()

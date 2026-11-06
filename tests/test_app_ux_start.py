@@ -32,6 +32,9 @@ from test_share import GitHub, github  # noqa: E402, F401
 
 from libre_panel import __version__  # noqa: E402
 
+# the header's choice of the panel (with more panels set up)
+PANEL_SWITCH = "Which panel Start and Status show and Design edits"
+
 
 def updated(home, seen=""):
     """What news.json says where Libre Panel ran in a version from before this release."""
@@ -528,7 +531,7 @@ def test_start_shows_the_panel_the_header_chose_and_the_header_counts_every_pane
     url = app.start()
     try:
         with browser_page(url, "home", allow=PICTURE) as page:
-            switch = page.get_by_role("radiogroup", name="Which panel Live shows and Design edits")
+            switch = page.get_by_role("radiogroup", name=PANEL_SWITCH)
             expect(switch.get_by_role("radio")).to_have_count(3)
             page.wait_for_selector(".panel-card .state-dot.showing")
             expect(page.locator(".panel-card h2")).to_contain_text("Libre Default")
@@ -540,6 +543,14 @@ def test_start_shows_the_panel_the_header_chose_and_the_header_counts_every_pane
             expect(page.locator(".panel-card h2")).to_contain_text("Slate", timeout=20000)
             switch.get_by_role("radio", name="Panel 1").click()
             expect(page.locator(".panel-card h2")).to_contain_text("Libre Default")
+            # Status is about the panel the header chose: the first's numbers, the others' line
+            page.goto(f"{url}#/live")
+            page.wait_for_selector(".live-numbers")
+            switch.get_by_role("radio", name="Panel 2").click()
+            expect(page.locator(".live-state")).to_contain_text("Pico", timeout=20000)
+            expect(page.locator(".live-numbers")).to_have_count(0)
+            switch.get_by_role("radio", name="Panel 1").click()
+            page.wait_for_selector(".live-numbers")
     finally:
         app.quit()
         app.shutdown()

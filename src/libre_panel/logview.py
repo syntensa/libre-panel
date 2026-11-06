@@ -1,4 +1,4 @@
-"""The log for the app (Live → Diagnose): its last entries, the whole of it to save, and the
+"""The log for the app (Status → Diagnose): its last entries, the whole of it to save, and the
 detail it is written with, set without a restart.
 
 The background app writes ``libre-panel.log`` (cli._log_file: a line per entry, "date time LEVEL

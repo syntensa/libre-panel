@@ -1,7 +1,7 @@
 // Which panel the app is about (the header's "Panel 1 | Panel 2", there while more panels are
-// set up): Live shows its picture, Design edits the theme it shows, in its size and the way it is
-// mounted, and puts what is saved on that panel and its pages. Start and Settings are about all of
-// them. A choice of a panel that is gone is the first panel again.
+// set up): Start shows its picture and Status how it runs, Design edits the theme it shows, in its
+// size and the way it is mounted, and puts what is saved on that panel and its pages. Settings is
+// about all of them. A choice of a panel that is gone is the first panel again.
 
 import { endpoints } from "./api.js";
 import { setPref, store, useStore } from "./state.js";
@@ -11,7 +11,7 @@ export function target(state = store.get()) {
   const chosen = Number(state.prefs?.target) || 1;
   const panels = state.settings?.config?.panels;
   if (!panels) return chosen; // (before config.toml is read)
-  const running = state.app?.panel?.more?.length || 0; // (Live goes by what the app says)
+  const running = state.app?.panel?.more?.length || 0; // (Status goes by what the app says)
   return chosen >= 1 && chosen <= 1 + Math.max(panels.length, running) ? chosen : 1;
 }
 

@@ -1,9 +1,9 @@
 """MEASUREMENT (feature branch only): what the app's window holds on Windows, WebView2's
-processes beside the window's own: open on the app's pages (Start, Design, Live), then
-minimized, then shown again. The window as it is (WebView2 told to hold less while it is
-minimized: window.memory_target), as before (not told), and with browser flags to try beside
-Libre Panel's own (LP_WV2_TRY: sets of them, split by ";"). The Task Manager's Memory column is
-the private working set; the commit beside it.
+processes beside the window's own: open on the app's pages (Start, Design, Status, then Start
+again, its picture once a second), then minimized, then shown again. The window as it is
+(WebView2 told to hold less while it is minimized: window.memory_target), as before (not told),
+and with browser flags to try beside Libre Panel's own (LP_WV2_TRY: sets of them, split by
+";"). The Task Manager's Memory column is the private working set; the commit beside it.
 
     python .github/measure/webview2_memory.py"""
 
@@ -125,10 +125,13 @@ def session(app: App, variant: str, flags: str, window_module) -> dict[str, floa
     time.sleep(25)
     say("open: Design", held(window))
     window_module.focus_window(app.url, "live", app.token)
+    time.sleep(25)
+    say("open: Status", held(window))
+    window_module.focus_window(app.url, "home", app.token)
     time.sleep(40)
     seen = {}
     for n in range(3):
-        seen["open"] = say(f"open: Live ({n + 1})", held(window))[0]
+        seen["open"] = say(f"open: Start ({n + 1})", held(window))[0]
         time.sleep(5)
     user32.ShowWindow(hwnd, SW_MINIMIZE)
     time.sleep(30)

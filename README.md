@@ -222,8 +222,9 @@ facets, acrylic or flat.</td>
 - **Design**: drag building blocks onto the panel. A module fits itself to the room you give
   it and shows more the larger it is; 35 of them, from every core to the ping, a timer, the
   power the PC draws and your next appointment.
-- **Start** shows the panel at a glance, the themes made for it and the community's, the cards
-  and the screens in turn; **Live** shows how it runs, and with the memory on, the **history**:
+- **Start** shows the panel at a glance (a click shows its picture large), the themes made for
+  it and the community's, the cards and the screens in turn; **Status** shows how it runs, and
+  with the memory on, the **history**:
   temperatures, load and power over a day, a week or a month, and the games you played.
 - **Settings** writes `config.toml` for you, comments kept, and finds the names of your
   processor, graphics card and memory by itself. **Keyboard shortcuts** pause the panel, turn
@@ -305,7 +306,7 @@ nothing while no theme shows it.
 **Not supported yet:** GUITION 3.5", Fuldho 3.5", AX206 picture frames, and Lian Li's TL LCD,
 Galahad II LCD and Lancool 207.
 
-**Own an unverified one?** The panel test in the app (*Live → Diagnose*, or `libre-panel
+**Own an unverified one?** The panel test in the app (*Status → Diagnose*, or `libre-panel
 doctor`) checks it end to end and writes a report without serial numbers; one click opens a
 [panel report](https://github.com/syntensa/libre-panel/issues/new?template=panel_support.yml)
 with it filled in, and the model becomes verified for everyone. The panels on a COM port are the

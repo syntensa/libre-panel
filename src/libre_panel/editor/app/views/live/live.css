@@ -118,35 +118,6 @@
   background: var(--danger);
 }
 
-.live-picture {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 150px;
-  border-radius: 14px;
-  padding: 10px;
-  background: var(--surface);
-  border: 1px solid var(--surface-4);
-  flex-shrink: 0;
-}
-
-.live-picture img,
-.live-picture canvas {
-  display: block;
-  width: 100%;
-  height: auto;
-  max-height: 46vh;
-  object-fit: contain;
-  border-radius: 6px;
-}
-
-.live-picture-note {
-  margin: 0;
-  padding: 0 20px;
-  color: var(--muted);
-  text-align: center;
-}
-
 .live-tiles {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -458,26 +429,6 @@
   color: var(--warn);
 }
 
-/* -- the header's own parts ------------------------------------------------------------------------ */
-
-.live-pause {
-  height: 34px;
-}
-
-.live-brightness {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--text-2);
-  font-size: 13px;
-}
-
-.live-brightness .slider input {
-  min-width: 100px;
-  width: 120px;
-  flex: none;
-}
-
 /* Now or History (index.js), at the top of both */
 .live-switch {
   display: flex;
@@ -506,6 +457,3 @@
   background: var(--surface-3);
   color: var(--text);
 }
-
-/* with more panels: whose picture the view shows */
-.live-panels { margin: 2px 0 12px; }

@@ -21,7 +21,7 @@ thread of its own. ``LibreHardwareMonitorProvider`` takes this way when it can
 - **Cost.** Updating every hardware node can take over ten milliseconds, and .NET holds
   Python's lock all the while. So only the nodes with a sensor that a theme on show reads
   (``wanted``) are updated, with a short pause between two of them for the renderer. What
-  each node's update took is in the status (``timing``): *Live → Diagnose → Load* shows it.
+  each node's update took is in the status (``timing``): *Status → Diagnose → Load* shows it.
 """
 
 from __future__ import annotations
@@ -465,7 +465,7 @@ class InProcessSource:
         self._on_ready = on_ready
         self._on_failure = on_failure
         self._clock = clock
-        self._timer = timer  # what each node's update took (Live -> Diagnose -> Load)
+        self._timer = timer  # what each node's update took (Status -> Diagnose -> Load)
         self._timing = Timing()
         self._nodes: list[_Node] = []
         self._node_of: dict[str, _Node] = {}  # sensor id -> node

@@ -142,8 +142,8 @@ version for it: what plays, the time, CPU and GPU, a part on each screen.
 
 **Each screen a panel of its own.** *Settings → More panels* turns the one picture into three panels
 with one click (*Each screen its own panel*), and back (*Back to one picture*): each screen then
-shows a theme of its own, the header's panel switch chooses the one that *Live* shows and
-*Design* edits, and screens 2 and 3 follow screen 1's brightness. They start with Lumen for
+shows a theme of its own, the header's panel switch chooses the one that *Start* and *Status*
+show and *Design* edits, and screens 2 and 3 follow screen 1's brightness. They start with Lumen for
 640×180: CPU, GPU and memory, each a lit ring beside its history; the time, what plays, the time
 with the CPU, and CPU and GPU together are there too. Behind the click: `device.model =
 "jonsbo-zc360-screen"` with `device.port` "1", "2" or "3", the screen by the place it hangs
@@ -503,7 +503,7 @@ a rev. C panel stays dark with Libre Panel, please report it with the
 
 ## Check your panel
 
-In the app: *Live → Diagnose → Panel test*. Libre Panel gives the panel to the test while it
+In the app: *Status → Diagnose → Panel test*. Libre Panel gives the panel to the test while it
 runs, shows the test pictures, asks what you see with buttons and writes the report; *Report
 the panel as working* (or *Report the problem*) then opens the form on GitHub with the report
 filled in, and you send it. The same tab has *Check and fix* (it mends what Libre Panel can
@@ -554,7 +554,7 @@ do not know that yet.
 
 ## What Libre Panel costs your PC
 
-*Live → Diagnose → Load* shows it while the card is on screen, measured every two seconds;
+*Status → Diagnose → Load* shows it while the card is on screen, measured every two seconds;
 when it is not on screen nothing is measured at all.
 
 - **At the top**: Libre Panel's share of the processor, of the whole PC, and the memory of

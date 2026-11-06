@@ -133,10 +133,10 @@ jobs:
         run: |
           python packaging/fetch_tools.py "$RUNNER_TEMP/tools"
           cygpath -w "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
-      - name: The app at login, its pages open a while (the live picture ten minutes) and closed
+      - name: The app at login, its pages open a while (the panel's picture large ten minutes) and closed
         shell: bash
         env:
-          LP_RIG_VIEWS: home,design,settings/panel,live
+          LP_RIG_VIEWS: home,design,settings/panel,live,home+large
           LP_RIG_STAY: "600"
         run: python .github/measure/rig_windows.py 23
       - name: An engine by itself (what one process costs before any panel's pictures)

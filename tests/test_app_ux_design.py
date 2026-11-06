@@ -23,6 +23,9 @@ pytest.importorskip("playwright.sync_api")
 
 from playwright.sync_api import expect  # noqa: E402
 
+# the header's choice of the panel (with more panels set up)
+PANEL_SWITCH = "Which panel Start and Status show and Design edits"
+
 
 def items(page, id):
     return widget(page, id)["items"]
@@ -443,7 +446,7 @@ def test_design_edits_the_theme_of_the_panel_chosen_in_the_header(app_url, isola
                      'theme = "lumen-companion"\n')  # fmt: skip
     with browser_page(app_url, "design") as page:
         page.wait_for_function("window.libre.store.get().doc?.id === 'lumen'")
-        switch = page.get_by_role("radiogroup", name="Which panel Live shows and Design edits")
+        switch = page.get_by_role("radiogroup", name=PANEL_SWITCH)
         expect(switch.get_by_role("radio")).to_have_text(["Panel 1", "Panel 2"])
         switch.get_by_role("radio", name="Panel 2").click()
         page.wait_for_function("window.libre.store.get().doc?.id === 'lumen-companion-vertical'")
@@ -473,7 +476,7 @@ def test_panel_2_has_a_companion_and_a_look_of_its_own(app_url, isolated_home): 
     with browser_page(app_url, "look") as page:
         page.wait_for_function("window.libre.store.get().doc?.id?.startsWith('lumen')")
         expect(page.locator("[data-same-look]")).to_have_count(0)  # (panel 1)
-        switch = page.get_by_role("radiogroup", name="Which panel Live shows and Design edits")
+        switch = page.get_by_role("radiogroup", name=PANEL_SWITCH)
         switch.get_by_role("radio", name="Panel 2").click()
         page.wait_for_function("window.libre.store.get().doc?.id === 'lumen-companion-vertical'")
         note = page.locator("[data-same-look]")
@@ -522,7 +525,7 @@ def test_look_and_the_panel_chip_follow_the_panel_chosen_in_the_header(app_url, 
         page.wait_for_function("window.libre.store.get().doc?.id?.startsWith('lumen')")
         chip = page.locator(".panel-chip-name")
         expect(chip).to_contain_text("12.3")
-        switch = page.get_by_role("radiogroup", name="Which panel Live shows and Design edits")
+        switch = page.get_by_role("radiogroup", name=PANEL_SWITCH)
         switch.get_by_role("radio", name="Panel 2").click()
         page.wait_for_function(
             "window.libre.store.get().doc?.id?.startsWith('lumen-companion')"

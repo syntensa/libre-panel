@@ -93,15 +93,16 @@ fixed).
 
 The same controls are in the app: the panel button at the top right of
 *Design* shows the state and has pause, brightness, upside down, start with
-system and quit. *Start* shows the picture on the panel with pause, brightness
-and upside down, and *Live* says in a sentence how it runs ("Runs smoothly at 50
+system and quit. *Start* shows the picture on the panel (a click shows it large, five
+times a second) with pause, brightness and upside down, and *Status* says in a sentence how
+it runs ("Runs smoothly at 50
 fps", slower than planned and what helps, waiting for the panel and why), with its numbers
 under it, the sensor sources, the services and test messages (the *Control* page, below, in
 the app's look).
 
 ## The app's window
 
-Libre Panel shows its app (*Start*, *Design*, *Look*, *Live*, *Settings*) in a
+Libre Panel shows its app (*Start*, *Design*, *Look*, *Status*, *Settings*) in a
 window of its own, not in the browser. There is one window at a time: whatever
 asks for the app again (the tray, `libre-panel start`, `libre-panel editor`, a
 second start) brings that window to the front, on the view it asks for. The
@@ -159,7 +160,7 @@ and counts, and makes the numbers once a second; nothing waits for it.
 ## The Control and Autopilot pages
 
 The **Control** page is the console of the background app. It is under *Pages →
-From plugins* in *Design* and found by Ctrl+K; *Live* shows the same numbers,
+From plugins* in *Design* and found by Ctrl+K; *Status* shows the same numbers,
 sources, services and test messages in the app's own look. In a plain
 `libre-panel editor` there is no panel, so the page says so and keeps what works
 without one: the theme per mode and the log.
@@ -270,7 +271,7 @@ power supply), as LibreHardwareMonitor itself does.
 `\\.\pipe\LibrePanelSensors`, and understands two requests: *hello* (its version) and *read*
 (the readings, and which pieces of hardware the client's themes show, which it then reads for
 the next ten seconds). The answer to *read* also says how long each piece's update took in the
-last round and in the last round of all hardware (*Live → Diagnose → Load*); a service older
+last round and in the last round of all hardware (*Status → Diagnose → Load*); a service older
 than that leaves it out, and the protocol is the same either way. Anything else gets an error
 answer. A message is a JSON object after
 its length, at most 4 KiB in and 4 MiB out; a length out of bounds ends the connection, as

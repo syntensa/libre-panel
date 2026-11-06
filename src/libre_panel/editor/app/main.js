@@ -1,4 +1,4 @@
-// Libre Panel's app: the shell, its views (Start, Design, Look, Live,
+// Libre Panel's app: the shell, its views (Start, Design, Look, Status,
 // Settings) and the theme being edited. See README.md in this folder.
 
 import { blankTheme, normalTheme, openTheme, refreshPages, refreshThemes } from "./core/actions.js";

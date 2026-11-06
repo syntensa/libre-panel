@@ -78,7 +78,7 @@ const NO_PICTURE = { picture: null, status: 0 };
  *
  * Each picture's pixels go (ImageBitmap.close) once the next has come: shown in an <img>, as
  * blob URLs (or any other URLs), the browser kept every picture it had decoded, 1.4 MB each,
- * five a second on Live (WebView2's page some 400 MB after a minute there, and on).
+ * five a second on Live, as it was then (WebView2's page some 400 MB after a minute there, and on).
  */
 export function useLivePicture({ width = 960, every = 250, on = true, panel = 1 } = {}) {
   const [shown, setShown] = useState(NO_PICTURE);

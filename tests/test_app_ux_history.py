@@ -74,7 +74,7 @@ def test_live_leads_to_history_and_back(app_url, isolated_home):  # noqa: F811
         switch.get_by_role("link", name="History").click()
         page.wait_for_selector(".history")
         assert page.url.endswith("#/live/history")
-        expect(page.locator(".tabs .tab[aria-current='page']")).to_have_text("Live")
+        expect(page.locator(".tabs .tab[aria-current='page']")).to_have_text("Status")
         page.locator(".live-switch").get_by_role("link", name="Now").click()
         page.wait_for_selector(".live-main")
 

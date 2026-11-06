@@ -1,4 +1,4 @@
-"""What Libre Panel costs this PC, and where: *Live → Diagnose → Load* (``GET /api/load``), and
+"""What Libre Panel costs this PC, and where: *Status → Diagnose → Load* (``GET /api/load``), and
 the same lines in the panel report.
 
 Libre Panel is several processes: this one (the first panel's loop, the sensors, the app's

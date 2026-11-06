@@ -3,8 +3,9 @@ simulated TURZX panels (the 12.3" with Lumen, the 9.2" with its companion) throu
 engine, the services on, the window never opened; every 15 s the private working set (Task
 Manager's Memory column) and the commit of its processes, and a breakdown of the main process
 (rig_site/sitecustomize.py, winmap.py). As at the user's: first some minutes with the window
-never opened, then the app's pages open in a browser for a while (Start, Design, Look, Live,
-the settings, the history, the diagnosis), then closed; a breakdown some minutes after.
+never opened, then the app's pages open in a browser for a while (Start, Design, Look, Status,
+the settings, the history, the diagnosis, Start with the panel's picture large), then closed; a
+breakdown some minutes after.
 
     python .github/measure/rig_windows.py MINUTES"""
 
@@ -60,9 +61,9 @@ config = (
 )
 census_at = minutes * 60 - 220  # (the census takes 150 s and more)
 OPEN_AT = 150  # s: the app's pages open
-VIEWS = ("home", "design", "look", "live", "settings/panel", "history", "diagnose")
-# (LP_RIG_STAY: seconds on the last of LP_RIG_VIEWS, "live": the panel's picture, one after the
-# other, as a person who leaves the window open on it)
+VIEWS = ("home", "design", "look", "live", "settings/panel", "history", "diagnose", "home+large")
+# (LP_RIG_STAY: seconds on the last of LP_RIG_VIEWS, "home+large": Start with the panel's picture
+# shown large, five a second, as a person who leaves the window open on it)
 VIEWS = tuple(os.environ.get("LP_RIG_VIEWS", ",".join(VIEWS)).split(","))
 STAY_S = float(os.environ.get("LP_RIG_STAY", "20"))
 with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
@@ -129,9 +130,13 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
             page.on("response", lambda r: said.append(f"{r.status} {r.url}"[:200])
                     if r.status >= 400 else None)  # fmt: skip
             for view in VIEWS:
-                page.goto(access.with_token(f"{app.url}#/{view}", app.token))
+                route, _, large = view.partition("+")  # ("home+large": its picture large)
+                page.goto(access.with_token(f"{app.url}#/{route}", app.token))
                 try:
                     page.wait_for_selector(".view > *", timeout=30_000)
+                    if large:
+                        page.click(".panel-picture-open", timeout=30_000)
+                        page.wait_for_selector(".dialog.picture canvas", timeout=30_000)
                 except Exception as exc:  # noqa: BLE001
                     print("  (the page", view, "did not show:", str(exc)[:80], ")")
                     print("\n".join(f"    {line}" for line in said[-30:]), flush=True)

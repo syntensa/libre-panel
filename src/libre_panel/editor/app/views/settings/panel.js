@@ -411,7 +411,7 @@ function ExperimentRun() {
  * Settings → Panel → Video experiment: what the panels take beyond what was measured on the 9.2"
  * (the bit rate's cap, the quality, x264's speed, the profile, the encoder, the keyframes), each
  * written at once (the panel's video starts anew), with how the panel is doing underneath (the
- * tiles of Live, every second) and the log's lines about the video (every three seconds), so
+ * tiles of Status, every second) and the log's lines about the video (every three seconds), so
  * that a try and its outcome are on one page.
  */
 function ExperimentCard({ video }) {
