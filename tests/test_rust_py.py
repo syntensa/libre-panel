@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import random
 import struct
 import sys
@@ -283,3 +284,34 @@ def test_floats_are_formatted_as_python_s_g() -> None:
     pairs = [[struct.pack("<d", v)[::-1].hex(), p] for v, p in general]
     [ours] = run([{"op": "json", "texts": [], "general": pairs}])
     assert ours["general"] == [format(v, f".{p}g") for v, p in general]
+
+
+def test_hypot_is_python_s_own() -> None:
+    rng = random.Random(0x4799)
+    specials = [
+        0.0,
+        -0.0,
+        1.0,
+        3.0,
+        4.0,
+        5e-324,
+        2.2250738585072014e-308,
+        1e308,
+        1.7976931348623157e308,
+    ]
+    specials += [float("inf"), float("-inf"), float("nan"), 0.1, 1e-300]
+    pairs = [(a, b) for a in specials for b in specials]
+    for _ in range(20000):
+        kind = rng.randrange(3)
+        if kind == 0:
+            pairs.append((rng.uniform(-1, 1), rng.uniform(-1, 1)))
+        elif kind == 1:
+            draw = lambda: struct.unpack("<d", rng.randbytes(8))[0]  # noqa: E731
+            pairs.append((draw(), draw()))
+        else:
+            scale = 10.0 ** rng.randrange(-320, 300)
+            pairs.append((rng.uniform(-1, 1) * scale, rng.uniform(-1, 1) * scale))
+    bits = [[struct.pack("<d", v)[::-1].hex() for v in pair] for pair in pairs]
+    [ours] = run([{"op": "math", "hypot": bits}])
+    want = [struct.pack("<d", math.hypot(a, b))[::-1].hex() for a, b in pairs]
+    assert ours["hypot"] == want

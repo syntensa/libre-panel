@@ -410,3 +410,150 @@ def test_theme_folders_are_read_as_python_reads_them(tmp_path: Path) -> None:
     answers = run([{"op": "theme", "folder": str(f), "fonts_dir": FONTS} for f in folders])
     for folder, ours in zip(folders, answers, strict=True):
         assert ours == _theme(folder), folder.name
+
+
+def test_light_colours_are_worked_out_as_python_works_them_out() -> None:
+    from libre_panel.theme import light_colours
+
+    rng = random.Random(0x11647)
+    roles = [*light_colours.GROUND_ROLES, *light_colours.INK_ROLES, "accent", "cpu", "x", "", None]
+    colours = ["", "@cpu", "nope", "red", "teal", "#000", "#fff", "#0b8", "rgb(1,2,3)", "#0B8C84CC"]
+    for _ in range(20000):
+        digits = rng.choice([3, 4, 6, 6, 6, 8])
+        colours.append("#" + "".join(rng.choice("0123456789abcdefABCDEF") for _ in range(digits)))
+    cases = [[c, rng.choice(roles)] for c in colours]
+    [ours] = run([{"op": "light_colours", "colours": cases}])
+    want = [light_colours.light_colour.__wrapped__(c, role) for c, role in cases]
+    assert ours["made"] == want
+
+
+def _python_versions(names: list[str], sizes: list[Any]) -> list[dict[str, Any]]:
+    out = []
+    for name in names:
+        try:
+            found: dict[str, Any] = {"path": str(model.find_theme(name))}
+        except model.ThemeError as error:
+            found = {"error": str(error)}
+        fors = [
+            model.theme_for(name, orientation, None if size is None else tuple(size))
+            for orientation in ("landscape", "portrait", "")
+            for size in sizes
+        ]
+        out.append(
+            {
+                "stem": model.version_stem(name),
+                "base": model.version_base(name),
+                "root": model._root(name),
+                "companion": model.is_companion(name),
+                "agents": model.is_agents_screen(name),
+                "pair": model.pair_version(name),
+                "unpaired": model.unpaired_version(name),
+                "companion_for": model.companion_for(name),
+                "find": found,
+                "theme_for": fors,
+            }
+        )
+    return out
+
+
+def test_versions_places_and_variants_of_themes_as_python_s(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    import shutil
+
+    home = tmp_path / "home"
+    user = home / "themes"
+    user.mkdir(parents=True)
+    monkeypatch.setenv("LIBRE_PANEL_HOME", str(home))
+    builtin = model.builtin_themes_dir()
+    # the user's own: versions of a theme of theirs, and one of the app's shadowed
+    for name, source in [
+        ("mine", "libre-default"),
+        ("mine-1920x720", "libre-default"),
+        ("mine-vertical", "libre-default"),
+        ("mine-pair", "libre-default"),
+        ("mine-companion", "libre-default"),
+        ("lumen", "lumen"),
+        ("not-a-theme", None),
+    ]:
+        if source is None:
+            (user / name).mkdir()
+        else:
+            shutil.copytree(builtin / source, user / name)
+    names = sorted({f.name for f in THEMES} | {p.name for p in user.iterdir()})
+    names += ["lumen-1920x720\n", "x-١٢x34", "", "a..b", "agents", "agentsx", "-pair"]
+    names += ["lumen-pair-vertical", "arena-pair-1920x720", "mine-640x480", "lumen-companions"]
+    sizes = [None, [1920, 720], [1920, 480], [480, 480], [320, 480], [800, 480], [1280, 720]]
+    variants = []
+    rng = random.Random(0x7A21)
+    for folder in THEMES:
+        variant: dict[str, Any] = {"folder": str(folder), "light": rng.random() < 0.8}
+        if rng.random() < 0.4:
+            variant["accent"] = rng.choice(["#ff8800", "#FF8800", "", "teal"])
+        if rng.random() < 0.4:
+            variant["card_opacity"] = rng.choice([0, 30, 50, 100, -5])
+        if rng.random() < 0.3:
+            variant["look"] = str(rng.choice(THEMES))
+        variants.append(variant)
+    py_home, rs_home = tmp_path / "py", tmp_path / "rs"
+    for root in (py_home, rs_home):
+        shutil.copytree(home, root)
+    lumen = json.loads((builtin / "lumen" / "theme.json").read_text(encoding="utf-8"))
+    broken = {**lumen, "refresh_ms": 5}
+    saves = [
+        {"name": "my-lumen", "data": json.dumps(lumen), "source": "lumen"},
+        {"name": "my-lumen", "data": json.dumps({**lumen, "name": "Again"}), "source": "lumen"},
+        {"name": "from-mine", "data": json.dumps(lumen), "source": "mine"},
+        {"name": "bad name", "data": json.dumps(lumen), "source": None},
+        {"name": "broken", "data": json.dumps(broken), "source": "lumen"},
+        {"name": "plain", "data": json.dumps({**lumen, "widgets": []}), "source": None},
+    ]
+    case = {"op": "theme_versions", "user": str(user), "builtin": str(builtin), "fonts_dir": FONTS}
+    [ours] = run([{**case, "names": names, "sizes": sizes, "variants": variants}])
+    assert ours["names"] == _python_versions(names, sizes)
+    assert ours["listed"] == [json.dumps(entry) for entry in model.list_themes()]
+
+    def variant_of(w: dict[str, Any]) -> dict[str, Any]:
+        def call() -> tuple[Any, list[str]]:
+            theme = model.load_theme(Path(w["folder"]))
+            if "accent" in w:
+                theme = model.with_accent(theme, w["accent"])
+            if "card_opacity" in w:
+                theme = model.with_card_opacity(theme, w["card_opacity"])
+            if "look" in w:
+                theme = model.with_look(theme, model.load_theme(Path(w["look"])))
+            theme = model.with_light_colours(theme, w["light"])
+            return theme.to_dict(), []
+
+        made = _answer(call)
+        return {"dict": made["dict"]} if "dict" in made else made
+
+    assert ours["variants"] == [variant_of(w) for w in variants]
+
+    # themes saved into each one's own folder of the user's themes, one after another
+    def saved_python() -> list[dict[str, Any]]:
+        monkeypatch.setenv("LIBRE_PANEL_HOME", str(py_home))
+        answers = []
+        for s in saves:
+            try:
+                path = model.save_theme(s["name"], json.loads(s["data"]), s["source"])
+                answers.append({"path": str(path)})
+            except Exception as error:  # noqa: BLE001
+                answers.append({"error": str(error), "kind": type(error).__name__})
+        return answers
+
+    py_saved = saved_python()
+    rs_case = {**case, "user": str(rs_home / "themes"), "names": [], "saves": saves}
+    [rs] = run([rs_case])
+
+    def same(answer: dict[str, Any], root: Path) -> dict[str, Any]:
+        return {k: v.replace(str(root), "HOME") for k, v in answer.items()}
+
+    assert [same(a, rs_home) for a in rs["saved"]] == [same(a, py_home) for a in py_saved]
+
+    def files(root: Path) -> dict[str, bytes]:
+        return {
+            str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()
+        }
+
+    assert files(rs_home) == files(py_home)

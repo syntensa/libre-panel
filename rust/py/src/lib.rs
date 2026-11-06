@@ -8,6 +8,7 @@
 use unicode_general_category::{get_general_category, GeneralCategory as G};
 
 pub mod json;
+pub mod math;
 pub mod value;
 
 pub use value::{Dict, Value};

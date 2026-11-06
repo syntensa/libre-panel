@@ -866,6 +866,174 @@ fn run(case: &Value) -> Result<Value, String> {
                 Err(e) => json!({"error": e.msg, "kind": e.kind.name()}),
             }
         }
+        "math" => {
+            // math.hypot of pairs of floats given by their bits
+            let bits = |v: &Value| {
+                f64::from_bits(u64::from_str_radix(v.as_str().unwrap_or("0"), 16).unwrap_or(0))
+            };
+            let hypot: Vec<String> = case["hypot"]
+                .as_array()
+                .map(|all| {
+                    all.iter()
+                        .map(|p| {
+                            format!(
+                                "{:016x}",
+                                lp_py::math::hypot(bits(&p[0]), bits(&p[1])).to_bits()
+                            )
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            json!({"hypot": hypot})
+        }
+        "light_colours" => {
+            // light_colour of colours, each with its role (a palette name, "" for ink, null)
+            let made: Vec<String> = case["colours"]
+                .as_array()
+                .ok_or("colours")?
+                .iter()
+                .map(|c| {
+                    let colour = c[0].as_str().unwrap_or_default();
+                    let role = match c[1].as_str() {
+                        None => lp_theme::light::Role::None,
+                        Some("") => lp_theme::light::Role::Ink,
+                        Some(name) => lp_theme::light::Role::Named(name),
+                    };
+                    lp_theme::light::light_colour(colour, role)
+                })
+                .collect();
+            json!({"made": made})
+        }
+        "theme_versions" => {
+            // what the versions, the places and the variants of themes come to
+            use lp_theme::versions as v;
+            let places = v::Places {
+                user: case["user"].as_str().unwrap_or("").into(),
+                plugins: Vec::new(),
+                builtin: case["builtin"].as_str().unwrap_or("").into(),
+            };
+            let env = lp_theme::Env {
+                fonts_dir: case["fonts_dir"].as_str().unwrap_or("").into(),
+            };
+            let names: Vec<String> = case["names"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .map(|n| n.as_str().unwrap_or("").to_string())
+                        .collect()
+                })
+                .unwrap_or_default();
+            let sizes: Vec<Option<(i64, i64)>> = case["sizes"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .map(|s| {
+                            s.as_array()
+                                .map(|p| (p[0].as_i64().unwrap_or(0), p[1].as_i64().unwrap_or(0)))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            let answers: Vec<Value> = names.iter().map(|name| {
+                let mut fors = Vec::new();
+                for orientation in ["landscape", "portrait", ""] {
+                    for size in &sizes {
+                        fors.push(v::theme_for(name, orientation, *size, &places));
+                    }
+                }
+                json!({
+                    "stem": v::version_stem(name), "base": v::version_base(name), "root": v::root(name),
+                    "companion": v::is_companion(name), "agents": v::is_agents_screen(name),
+                    "pair": v::pair_version(name, &places), "unpaired": v::unpaired_version(name, &places),
+                    "companion_for": v::companion_for(name, &places),
+                    "find": match v::find_theme(name, &places) {
+                        Ok(p) => json!({"path": p.to_string_lossy()}),
+                        Err(e) => json!({"error": e.msg}),
+                    },
+                    "theme_for": fors,
+                })
+            }).collect();
+            let listed: Vec<String> = v::list_themes(&places)
+                .iter()
+                .map(|d| {
+                    lp_py::json::dumps(
+                        &lp_py::Value::Dict(d.clone()),
+                        &lp_py::json::Dumps::default(),
+                    )
+                })
+                .collect();
+            // the variants of each theme asked for: accent, card opacity, light colours, look
+            let variants: Vec<Value> = case["variants"]
+                .as_array()
+                .map(|all| {
+                    all.iter()
+                        .map(|w| {
+                            let load = |key: &str| {
+                                lp_theme::load_theme(
+                                    std::path::Path::new(w[key].as_str().unwrap_or("")),
+                                    &env,
+                                )
+                            };
+                            let made = (|| -> Result<String, lp_theme::Error> {
+                                let mut theme = load("folder")?;
+                                if let Some(colour) = w["accent"].as_str() {
+                                    theme = v::with_accent(&theme, Some(colour));
+                                }
+                                if let Some(percent) = w["card_opacity"].as_i64() {
+                                    theme = v::with_card_opacity(&theme, percent);
+                                }
+                                if w["look"].is_string() {
+                                    let source = load("look")?;
+                                    theme = v::with_look(&theme, Some(&source));
+                                }
+                                theme = v::with_light_colours(
+                                    &theme,
+                                    w["light"].as_bool().unwrap_or(false),
+                                )?;
+                                Ok(lp_py::json::dumps(
+                                    &theme.to_dict(),
+                                    &lp_py::json::Dumps::default(),
+                                ))
+                            })();
+                            match made {
+                                Ok(text) => json!({"dict": text}),
+                                Err(e) => json!({"error": e.msg, "kind": e.kind.name()}),
+                            }
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            // themes saved into the user's folder, one after another
+            let saved: Vec<Value> = case["saves"]
+                .as_array()
+                .map(|all| {
+                    all.iter()
+                        .map(|s| {
+                            let data = lp_py::json::loads(s["data"].as_str().unwrap_or("null"));
+                            let result = match data {
+                                Ok(d) => v::save_theme(
+                                    s["name"].as_str().unwrap_or(""),
+                                    &d,
+                                    s["source"].as_str(),
+                                    &places,
+                                    &env,
+                                )
+                                .map(|p| p.to_string_lossy().into_owned()),
+                                Err(e) => Err(lp_theme::Error {
+                                    kind: lp_theme::Kind::Value,
+                                    msg: e.to_string(),
+                                }),
+                            };
+                            match result {
+                                Ok(path) => json!({"path": path}),
+                                Err(e) => json!({"error": e.msg, "kind": e.kind.name()}),
+                            }
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            json!({"names": answers, "listed": listed, "variants": variants, "saved": saved})
+        }
         "theme_tables" => {
             // the tables, as JSON text, for the comparison with Python's
             use lp_py::{Dict, Value};

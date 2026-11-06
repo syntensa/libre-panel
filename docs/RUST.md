@@ -187,9 +187,14 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       Path.resolve() keeps them (links, "..", a loop of links), the file read as read_text
       reads it (line ends, UTF-8's refusals); its tables (the widgets' fields, the panel
       models, icons, finishes) the Python app's own, compared
-- [ ] versions per shape (theme_for, the pairs and companions), the search of the folders,
-      list_themes, save_theme, the colours of a person's accent, light colours, the look of
-      the first panel, adapting (theme.adapt.laid_out)
+- [x] versions per shape (theme_for: a size's own, vertical, the pairs and companions, the
+      agents' screens), the search of the folders (the user's over a plugin's over the app's),
+      list_themes, save_theme (a copy takes its theme's files along, written whole or not at
+      all), a person's accent, card opacity, the look of the first panel, the switches; light
+      colours as theme/light_colours.py works them out in OKLab (the C library's pow, cos,
+      sin and atan2 that Python calls, and Python's own hypot)
+- [ ] adapting a theme to another panel (theme/adapt.py), community themes (theme/share.py),
+      the panel's default theme (theme/defaults.py); the cards and modules' layout with R4
 
 ### R4 render
 - [ ] the renderer's frame, widget by widget (texts, clocks, gauges, rings, bars, lists, graphs
