@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.1rc2 — 2026-11-06
 
 **Lighter**
 - **The graphs' strips kept by the engine alone.** Where Libre Panel's engine cuts the graphs'
