@@ -437,12 +437,10 @@ class BackgroundApp:
         self.quit_requested = threading.Event()
         self._on_quit: list[Callable[[], None]] = []
         self.session_watcher: Any = None  # Windows: stops cleanly at shutdown (tray.run_app)
-        # what only the app needs goes while it is closed, more of it in light mode (light.py)
+        # what only the app needs goes while it is closed, and its memory back (light.py)
         from libre_panel import light
 
-        self.light_mode = True  # (until config.toml is read: its default)
         self.light = light.Watch(
-            light=lambda: self.light_mode,
             last_request=self.editor.last_request,
             release=lambda: light.release(self.editor.forget_pictures),
             closed=self.editor.forget_pictures,
@@ -475,7 +473,6 @@ class BackgroundApp:
             config = load_config(self.config_path)
             self.services.apply(config)
             self.hotkeys.apply(_held(config))
-            self.light_mode = config.light_mode
         except ConfigError as exc:
             log.error("services not started: %s", exc)  # they start once the config is fixed
         from libre_panel import colour_show
@@ -503,7 +500,6 @@ class BackgroundApp:
     def _config_loaded(self, config: Any) -> None:
         """config.toml changed: bring the services in line (in the background, so
         starting or stopping one never stalls the panel)."""
-        self.light_mode = config.light_mode
         threading.Thread(
             target=self.services.apply, args=(config,), name="services", daemon=True
         ).start()

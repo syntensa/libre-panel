@@ -2164,9 +2164,6 @@
     "When Libre Panel quits, Windows shutting down too, the panel shows black and its light goes off; it lights up again when Libre Panel starts. Off: it keeps the last picture.": "Al cerrar Libre Panel, también al apagar Windows, el panel muestra negro y su luz se apaga; vuelve a encenderse cuando Libre Panel arranca. Desactivado: conserva la última imagen.",
     "the panel's light off when it quits": "luz del panel apagada al cerrar",
     "dark off black quit close exit shutdown sleep screen off backlight": "oscuro apagado negro salir cerrar apagar suspender pantalla apagada retroiluminación",
-    "While the app's window is closed, Libre Panel lets go of what only the app needs, such as its pictures of the themes, and takes less memory. The panel goes on as it is; the app takes a moment longer to open.": "Mientras la ventana de la aplicación está cerrada, Libre Panel libera lo que solo necesita la aplicación, como sus imágenes de los temas, y ocupa menos memoria. El panel sigue igual; la aplicación tarda un momento más en abrirse.",
-    "less memory while the app is closed": "menos memoria mientras la aplicación está cerrada",
-    "memory ram light lean small resources background usage": "memoria ram ligero liviano pequeño recursos segundo plano uso",
     "A part of the {name} module, detached into widgets.": "Una parte del módulo {name}, separado en widgets.",
     "Select all its parts": "Seleccionar todas sus partes",
     "Its parts go, with what was changed on them": "Sus partes desaparecen, con lo que se cambió en ellas",
@@ -2999,12 +2996,11 @@
     "The engine composes the frames": "El motor compone las imágenes",
     "On: it composes each frame from the layers Libre Panel draws, and makes the lit gauges' rings. Off: Libre Panel composes every frame, to compare.": "Encendido: compone cada imagen a partir de las capas que dibuja Libre Panel y crea los anillos de los indicadores iluminados. Apagado: Libre Panel compone cada imagen, para comparar.",
     "The engine's encoder": "Codificador del motor",
-    "auto: the graphics card's own encoder where it is proven with the panels (AMD's so far), else x264 on the processor. Or always x264, or always the graphics card's (AMD's, NVIDIA's or Intel's, through Windows' Media Foundation): the processor then only makes the frames' colours. Where the card's cannot start, x264 encodes, and the log says why.": "auto: el codificador propio de la tarjeta gráfica donde está probado con los paneles (por ahora el de AMD); si no, x264 en el procesador. O siempre x264, o siempre el de la tarjeta gráfica (de AMD, NVIDIA o Intel, a través de Media Foundation de Windows): el procesador entonces solo hace los colores de las imágenes. Donde el de la tarjeta no puede arrancar, codifica x264, y el registro dice por qué.",
+    "auto: with AMD's and NVIDIA's cards the graphics card's own encoder, else x264 on the processor. Or always x264, or always the graphics card's (AMD's, NVIDIA's or Intel's, through Windows' Media Foundation): the processor then only makes the frames' colours. Where the card's cannot start, x264 encodes, and the log says why.": "auto: con tarjetas de AMD y NVIDIA, el codificador propio de la tarjeta gráfica; si no, x264 en el procesador. O siempre x264, o siempre el de la tarjeta gráfica (de AMD, NVIDIA o Intel, a través de Media Foundation de Windows): el procesador entonces solo hace los colores de las imágenes. Donde el de la tarjeta no puede arrancar, codifica x264, y el registro dice por qué.",
     "Graphics card (experiment)": "Tarjeta gráfica (experimento)",
     "Libre Panel's engine": "El motor de Libre Panel",
     "Fine-tuning for experiments": "Ajustes finos para experimentar",
-    "The video's encoder, bit rate and quality to try out, and a check of the panel's colours.": "El codificador, la tasa de bits y la calidad del vídeo para probar, y una comprobación de los colores del panel.",
-    "Save memory with the window closed": "Ahorrar memoria con la ventana cerrada"
+    "The video's encoder, bit rate and quality to try out, and a check of the panel's colours.": "El codificador, la tasa de bits y la calidad del vídeo para probar, y una comprobación de los colores del panel."
   },
   "fields": {
     "night": "noche",

@@ -214,7 +214,7 @@ def encodes_on_cards(engine: str) -> bool:
 
 def encodes_on_proven_cards(engine: str) -> bool:
     """Whether ``engine`` takes ``--encoder auto`` (video.engine_encoder "auto": the graphics
-    card's encoder where it is proven with the panels, AMD's, else x264); one of before does not
+    card's encoder where it is AMD's or NVIDIA's, else x264); one of before does not
     start with it."""
     return "proven" in _can(engine)
 

@@ -2164,9 +2164,6 @@
     "When Libre Panel quits, Windows shutting down too, the panel shows black and its light goes off; it lights up again when Libre Panel starts. Off: it keeps the last picture.": "Gdy Libre Panel się zamyka, także przy wyłączaniu Windows, panel pokazuje czerń i gaśnie jego podświetlenie; zapala się ponownie przy starcie Libre Panel. Wyłączone: zostaje ostatni obraz.",
     "the panel's light off when it quits": "podświetlenie panelu wyłączone przy zamknięciu",
     "dark off black quit close exit shutdown sleep screen off backlight": "ciemny wyłączony czarny zamknij wyjście wyłączanie uśpienie ekran wyłączony podświetlenie",
-    "While the app's window is closed, Libre Panel lets go of what only the app needs, such as its pictures of the themes, and takes less memory. The panel goes on as it is; the app takes a moment longer to open.": "Gdy okno aplikacji jest zamknięte, Libre Panel zwalnia to, czego potrzebuje tylko aplikacja, np. jej obrazy motywów, i zajmuje mniej pamięci. Panel działa jak dotąd; aplikacja otwiera się chwilę dłużej.",
-    "less memory while the app is closed": "mniej pamięci, gdy aplikacja jest zamknięta",
-    "memory ram light lean small resources background usage": "pamięć ram lekki oszczędny mały zasoby tło użycie",
     "A part of the {name} module, detached into widgets.": "Część modułu {name}, rozbitego na widżety.",
     "Select all its parts": "Zaznacz wszystkie jego części",
     "Its parts go, with what was changed on them": "Jego części znikają, razem z tym, co w nich zmieniono",
@@ -2999,12 +2996,11 @@
     "The engine composes the frames": "Silnik składa obrazy",
     "On: it composes each frame from the layers Libre Panel draws, and makes the lit gauges' rings. Off: Libre Panel composes every frame, to compare.": "Wł.: składa każdą klatkę z warstw rysowanych przez Libre Panel i tworzy pierścienie podświetlanych wskaźników. Wył.: Libre Panel składa każdą klatkę, dla porównania.",
     "The engine's encoder": "Koder silnika",
-    "auto: the graphics card's own encoder where it is proven with the panels (AMD's so far), else x264 on the processor. Or always x264, or always the graphics card's (AMD's, NVIDIA's or Intel's, through Windows' Media Foundation): the processor then only makes the frames' colours. Where the card's cannot start, x264 encodes, and the log says why.": "auto: własny koder karty graficznej tam, gdzie jest sprawdzony z panelami (na razie AMD), w przeciwnym razie x264 na procesorze. Albo zawsze x264, albo zawsze koder karty graficznej (AMD, NVIDIA lub Intel, przez Media Foundation systemu Windows): procesor robi wtedy tylko kolory klatek. Gdzie koder karty nie może wystartować, koduje x264, a dziennik mówi dlaczego.",
+    "auto: with AMD's and NVIDIA's cards the graphics card's own encoder, else x264 on the processor. Or always x264, or always the graphics card's (AMD's, NVIDIA's or Intel's, through Windows' Media Foundation): the processor then only makes the frames' colours. Where the card's cannot start, x264 encodes, and the log says why.": "auto: przy kartach AMD i NVIDIA własny koder karty graficznej, w przeciwnym razie x264 na procesorze. Albo zawsze x264, albo zawsze koder karty graficznej (AMD, NVIDIA lub Intel, przez Media Foundation systemu Windows): procesor robi wtedy tylko kolory klatek. Gdzie koder karty nie może wystartować, koduje x264, a dziennik mówi dlaczego.",
     "Graphics card (experiment)": "Karta graficzna (eksperyment)",
     "Libre Panel's engine": "Silnik Libre Panel",
     "Fine-tuning for experiments": "Dostrajanie do eksperymentów",
-    "The video's encoder, bit rate and quality to try out, and a check of the panel's colours.": "Koder, przepływność i jakość wideo do wypróbowania oraz sprawdzenie kolorów panelu.",
-    "Save memory with the window closed": "Oszczędzaj pamięć przy zamkniętym oknie"
+    "The video's encoder, bit rate and quality to try out, and a check of the panel's colours.": "Koder, przepływność i jakość wideo do wypróbowania oraz sprawdzenie kolorów panelu."
   },
   "fields": {
     "night": "noc",

@@ -74,7 +74,7 @@ PROFILES = ("auto", "baseline", "main", "high")
 # Intel's are an experiment.
 ENCODERS = ("auto", "libx264", "native", "h264_nvenc", "h264_amf", "h264_qsv")
 # The encoder inside the engine (video.encoder "native"): "auto" the graphics card's own where it
-# is proven with the panels (AMD's: engine/src/encoder.rs's proven) and opens, else x264; "x264"
+# is AMD's or NVIDIA's (engine/src/encoder.rs's proven) and opens, else x264; "x264"
 # on the processor; "card" the graphics card's whichever it is, through Windows' Media
 # Foundation (engine/src/mf.rs), x264 where that cannot start. The cards' are Windows' only.
 ENGINE_ENCODERS = ("auto", "x264", "card")

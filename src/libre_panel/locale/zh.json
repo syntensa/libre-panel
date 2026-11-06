@@ -2164,9 +2164,6 @@
     "When Libre Panel quits, Windows shutting down too, the panel shows black and its light goes off; it lights up again when Libre Panel starts. Off: it keeps the last picture.": "当 Libre Panel 退出（包括 Windows 关机）时，面板显示黑色并关闭背光；Libre Panel 启动时会重新亮起。关闭：保留最后一幅画面。",
     "the panel's light off when it quits": "退出时关闭面板背光",
     "dark off black quit close exit shutdown sleep screen off backlight": "变暗 关闭 黑色 退出 关机 睡眠 熄屏 背光",
-    "While the app's window is closed, Libre Panel lets go of what only the app needs, such as its pictures of the themes, and takes less memory. The panel goes on as it is; the app takes a moment longer to open.": "当应用窗口关闭时，Libre Panel 会释放只有应用需要的内容（例如主题图片），以占用更少内存。面板照常运行；应用打开会稍慢一些。",
-    "less memory while the app is closed": "应用关闭时占用更少内存",
-    "memory ram light lean small resources background usage": "内存 ram 轻量 精简 小 资源 后台 占用",
     "A part of the {name} module, detached into widgets.": "{name} 模块的一部分，已拆分为控件。",
     "Select all its parts": "选择其所有部分",
     "Its parts go, with what was changed on them": "其各部分及其上的更改将一并移除",
@@ -2999,12 +2996,11 @@
     "The engine composes the frames": "由引擎合成画面",
     "On: it composes each frame from the layers Libre Panel draws, and makes the lit gauges' rings. Off: Libre Panel composes every frame, to compare.": "开启：用 Libre Panel 绘制的图层合成每一帧，并生成发光仪表的圆环。关闭：由 Libre Panel 合成每一帧，便于对比。",
     "The engine's encoder": "引擎的编码器",
-    "auto: the graphics card's own encoder where it is proven with the panels (AMD's so far), else x264 on the processor. Or always x264, or always the graphics card's (AMD's, NVIDIA's or Intel's, through Windows' Media Foundation): the processor then only makes the frames' colours. Where the card's cannot start, x264 encodes, and the log says why.": "自动：在与面板验证过的地方使用显卡自带的编码器（目前为 AMD 的），否则使用处理器上的 x264。或者始终用 x264，或者始终用显卡的（AMD、NVIDIA 或 Intel 的，经由 Windows 的 Media Foundation）：此时处理器只负责生成画面的颜色。显卡的编码器无法启动时由 x264 编码，日志会说明原因。",
+    "auto: with AMD's and NVIDIA's cards the graphics card's own encoder, else x264 on the processor. Or always x264, or always the graphics card's (AMD's, NVIDIA's or Intel's, through Windows' Media Foundation): the processor then only makes the frames' colours. Where the card's cannot start, x264 encodes, and the log says why.": "自动：AMD 和 NVIDIA 显卡使用显卡自带的编码器，否则使用处理器上的 x264。或者始终用 x264，或者始终用显卡的（AMD、NVIDIA 或 Intel 的，经由 Windows 的 Media Foundation）：此时处理器只负责生成画面的颜色。显卡的编码器无法启动时由 x264 编码，日志会说明原因。",
     "Graphics card (experiment)": "显卡（实验）",
     "Libre Panel's engine": "Libre Panel 的引擎",
     "Fine-tuning for experiments": "实验用微调",
-    "The video's encoder, bit rate and quality to try out, and a check of the panel's colours.": "可试用的视频编码器、码率和画质，以及面板颜色检查。",
-    "Save memory with the window closed": "窗口关闭时节省内存"
+    "The video's encoder, bit rate and quality to try out, and a check of the panel's colours.": "可试用的视频编码器、码率和画质，以及面板颜色检查。"
   },
   "fields": {
     "night": "夜晚",

@@ -2,7 +2,7 @@
 //! graphics card's through Windows' Media Foundation (mf.rs), with x264 again wherever the
 //! card's fails: to open (no such card here, or it does not take the panels' stream) or in
 //! the running stream (it goes on with x264 from a keyframe). `--encoder auto` asks for the
-//! card's where it is proven with the panels ([`proven`]), else x264. The log says which it
+//! card's where it is AMD's or NVIDIA's ([`proven`]), else x264. The log says which it
 //! is, and why x264 where the card was asked for.
 
 use crate::x264;
@@ -29,13 +29,15 @@ impl Wanted {
     }
 }
 
-/// Whether the graphics card's encoder Windows names so is proven with the panels: its pictures
-/// as x264's to the eye, on a 12.3" and a 9.2" at 25 frames a second, and the engines' memory
-/// less (two panels: 68 MB instead of 90). AMD's ("AMDh264Encoder") is; NVIDIA's and Intel's
-/// are not yet: x264 encodes for them unless the card's is asked for.
+/// Whether the graphics card's encoder Windows names so is the default's: AMD's
+/// ("AMDh264Encoder"), proven with the panels (its pictures as x264's to the eye on a 12.3" and
+/// a 9.2" at 25 frames a second, the engines' memory less: two panels 68 MB instead of 90), and
+/// NVIDIA's ("NVIDIA H.264 Encoder MFT"), of the same kind; Intel's is not yet: x264 encodes for
+/// it unless the card's is asked for. Where one does not start or stops, x264 encodes.
 #[cfg_attr(not(windows), allow(dead_code))] // (Media Foundation's names: Windows)
 pub fn proven(name: &str) -> bool {
-    name.to_ascii_lowercase().contains("amd")
+    let name = name.to_ascii_lowercase();
+    name.contains("amd") || name.contains("nvidia")
 }
 
 pub struct Encoder {
@@ -268,7 +270,7 @@ mod tests {
     fn auto_takes_only_a_card_s_encoder_proven_with_the_panels() {
         assert!(proven("AMDh264Encoder"));
         assert!(proven("AMD H.264 Hardware MFT Encoder"));
-        assert!(!proven("NVIDIA H.264 Encoder MFT"));
+        assert!(proven("NVIDIA H.264 Encoder MFT"));
         assert!(!proven("Intel(R) Quick Sync Video H.264 Encoder MFT"));
         assert!(!proven("a graphics card's H.264 encoder")); // (no name to be had)
         assert_eq!(Wanted::parse("auto"), Some(Wanted::Proven));

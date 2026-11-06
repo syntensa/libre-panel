@@ -2165,9 +2165,6 @@
     "When Libre Panel quits, Windows shutting down too, the panel shows black and its light goes off; it lights up again when Libre Panel starts. Off: it keeps the last picture.": "Libre Panelを終了すると（Windowsのシャットダウン時も）、パネルは黒を表示してライトが消え、Libre Panelの起動時に再び点灯します。オフの場合：最後の画像を表示したままにします。",
     "the panel's light off when it quits": "終了時にパネルのライトを消す",
     "dark off black quit close exit shutdown sleep screen off backlight": "消灯 オフ 黒 終了 閉じる シャットダウン スリープ 画面オフ バックライト",
-    "While the app's window is closed, Libre Panel lets go of what only the app needs, such as its pictures of the themes, and takes less memory. The panel goes on as it is; the app takes a moment longer to open.": "アプリのウィンドウを閉じている間、Libre Panelはアプリだけが必要とするもの（テーマの画像など）を解放し、使用メモリを減らします。パネルは通常どおり動作し、アプリを開くときに少し時間がかかります。",
-    "less memory while the app is closed": "アプリを閉じている間はメモリ使用量を削減",
-    "memory ram light lean small resources background usage": "メモリ ram 軽量 小さい リソース バックグラウンド 使用量",
     "A part of the {name} module, detached into widgets.": "モジュール「{name}」の一部で、ウィジェットに分解されています。",
     "Select all its parts": "すべてのパーツを選択",
     "Its parts go, with what was changed on them": "パーツは、変更内容とともに削除されます",
@@ -2999,12 +2996,11 @@
     "The engine composes the frames": "エンジンが画像を合成",
     "On: it composes each frame from the layers Libre Panel draws, and makes the lit gauges' rings. Off: Libre Panel composes every frame, to compare.": "オン: Libre Panel が描くレイヤーから各フレームを合成し、発光ゲージのリングも作ります。オフ: 比較用に Libre Panel がすべてのフレームを合成します。",
     "The engine's encoder": "エンジンのエンコーダー",
-    "auto: the graphics card's own encoder where it is proven with the panels (AMD's so far), else x264 on the processor. Or always x264, or always the graphics card's (AMD's, NVIDIA's or Intel's, through Windows' Media Foundation): the processor then only makes the frames' colours. Where the card's cannot start, x264 encodes, and the log says why.": "自動: パネルで実証済みのグラフィックカード自身のエンコーダー（現時点では AMD のもの）。それ以外はプロセッサの x264。または常に x264、あるいは常にグラフィックカードのもの（AMD、NVIDIA、Intel のもの。Windows の Media Foundation 経由）。その場合プロセッサはフレームの色を作るだけです。カードのエンコーダーが起動できない場合は x264 がエンコードし、その理由がログに出ます。",
+    "auto: with AMD's and NVIDIA's cards the graphics card's own encoder, else x264 on the processor. Or always x264, or always the graphics card's (AMD's, NVIDIA's or Intel's, through Windows' Media Foundation): the processor then only makes the frames' colours. Where the card's cannot start, x264 encodes, and the log says why.": "自動: AMD と NVIDIA のカードではグラフィックカード自身のエンコーダー、それ以外はプロセッサの x264。または常に x264、あるいは常にグラフィックカードのもの（AMD、NVIDIA、Intel のもの。Windows の Media Foundation 経由）。その場合プロセッサはフレームの色を作るだけです。カードのエンコーダーが起動できない場合は x264 がエンコードし、その理由がログに出ます。",
     "Graphics card (experiment)": "グラフィックカード（実験）",
     "Libre Panel's engine": "Libre Panel のエンジン",
     "Fine-tuning for experiments": "実験用の詳細設定",
-    "The video's encoder, bit rate and quality to try out, and a check of the panel's colours.": "試すための動画のエンコーダー、ビットレート、画質と、パネルの色の確認。",
-    "Save memory with the window closed": "ウィンドウを閉じている間はメモリを節約"
+    "The video's encoder, bit rate and quality to try out, and a check of the panel's colours.": "試すための動画のエンコーダー、ビットレート、画質と、パネルの色の確認。"
   },
   "fields": {
     "night": "夜",

@@ -1,5 +1,5 @@
-"""Light mode (libre_panel.light): what only the app needs goes once it has been closed for a
-minute (what the panel draws with stays), and the memory goes back while the setting is on; once
+"""Light mode (libre_panel.light, always on since 0.8.1): what only the app needs goes once it
+has been closed for a minute (what the panel draws with stays), and the memory goes back; once
 per time the app was open."""
 
 import sys
@@ -23,16 +23,15 @@ class Clock:
         return self.now
 
 
-def watch(on=True, last=None):
-    state = {"on": on, "last": last, "released": 0, "closed": 0, "marked": 0, "shed": 0,
-             "unmarked": 0, "tidied": 0, "said": 0}  # fmt: skip
+def watch(last=None):
+    state = {"last": last, "released": 0, "closed": 0, "marked": 0, "shed": 0, "unmarked": 0,
+             "tidied": 0, "said": 0}  # fmt: skip
 
     def count(name):
         return lambda: state.__setitem__(name, state[name] + 1)
 
     clock = Clock()
     w = light.Watch(
-        light=lambda: state["on"],
         last_request=lambda: state["last"],
         release=count("released"),
         clock=clock,
@@ -46,27 +45,27 @@ def watch(on=True, last=None):
     return w, state, clock
 
 
-@pytest.mark.parametrize("on", [False, True])
-def test_the_apps_own_pictures_go_a_minute_after_it_was_closed_light_mode_or_not(on):
+def test_the_apps_own_pictures_go_a_minute_after_it_was_closed():
     """Its pictures of the themes are the app's alone: they go once it has been closed for a
-    minute, with light mode off too, once per time it was open; light mode lets go of more."""
-    w, state, clock = watch(on=on, last=1000.0)
+    minute, once per time it was open; a look later the caches let go of what the panel did
+    not use, and the memory goes back."""
+    w, state, clock = watch(last=1000.0)
     clock.now = 1000 + light.IDLE_S - 1
     w.look()
     assert state["closed"] == state["marked"] == 0  # (still open, or just closed)
     clock.now = 1000 + light.IDLE_S
     assert not w.look() and state["closed"] == state["marked"] == 1 and state["shed"] == 0
     clock.now += light.LOOK_S  # the caches noted what the panel draws with meanwhile
-    assert w.look() is on and state["shed"] == 1 and state["released"] == int(on)
+    assert w.look() and state["shed"] == 1 and state["released"] == 1
     clock.now += 600
     w.look()
-    assert state["closed"] == state["shed"] == 1 and state["released"] == int(on)
+    assert state["closed"] == state["shed"] == 1 and state["released"] == 1
     state["last"] = clock.now  # opened again, and closed
     clock.now += light.IDLE_S
     w.look()
     clock.now += light.LOOK_S
     w.look()
-    assert state["closed"] == state["shed"] == 2 and state["released"] == 2 * int(on)
+    assert state["closed"] == state["shed"] == 2 and state["released"] == 2
 
 
 def test_the_memory_goes_a_minute_after_the_app_was_closed_and_once():
@@ -86,10 +85,10 @@ def test_the_memory_goes_a_minute_after_the_app_was_closed_and_once():
     assert w.look() and state["released"] == 2  # ... and closed
 
 
-def test_the_heap_is_tidied_at_each_look_while_the_app_stays_closed_in_light_mode():
+def test_the_heap_is_tidied_at_each_look_while_the_app_stays_closed():
     """After the memory went back (the release tidies itself), each look while the app stays
-    closed gives back what the panel's frames freed since; not while it is open, nor with light
-    mode off."""
+    closed gives back what the panel's frames freed since; not while it is open, and again
+    once it is closed again and its memory went back again."""
     w, state, clock = watch(last=1000.0)
     clock.now = 1000 + light.IDLE_S
     w.look()
@@ -102,18 +101,18 @@ def test_the_heap_is_tidied_at_each_look_while_the_app_stays_closed_in_light_mod
     clock.now += light.LOOK_S
     w.look()
     assert state["tidied"] == 3
-    state["on"] = False  # light mode off, the app closed again: nothing either
-    clock.now += light.IDLE_S + 3 * light.LOOK_S
-    for _ in range(4):
-        clock.now += light.LOOK_S
-        w.look()
-    assert state["tidied"] == 3 and state["released"] == 1
+    clock.now = state["last"] + light.IDLE_S  # closed again: first its pictures go ...
+    assert not w.look() and state["tidied"] == 3
+    clock.now += light.LOOK_S
+    assert w.look() and state["released"] == 2 and state["tidied"] == 3  # ... then the memory
+    clock.now += light.LOOK_S
+    assert not w.look() and state["tidied"] == 4
 
 
 def test_the_log_says_what_the_process_holds_some_minutes_after_the_app_closed(caplog):
     """Once per time the app was closed, SAID_S after its memory went back (what stays with
-    the app closed, to read in the log once the window is open again); not with it open, nor
-    without light mode; the line itself names the memory and what the load report counts."""
+    the app closed, to read in the log once the window is open again); not with it open; the
+    line itself names the memory and what the load report counts."""
     w, state, clock = watch(last=1000.0)
     clock.now = 1000 + light.IDLE_S
     w.look()
@@ -288,19 +287,10 @@ def test_the_caches_keep_all_when_the_app_is_opened_again_before_they_let_go():
     assert state["unmarked"] == 1
 
 
-@pytest.mark.parametrize(("on", "last"), [(False, 1000.0), (False, None)])
-def test_nothing_goes_with_light_mode_off(on, last):
-    w, state, clock = watch(on=on, last=last)
-    for _ in range(5):
-        clock.now += 10 * light.IDLE_S
-        assert not w.look()
-    assert state["released"] == 0
-
-
 def test_an_app_never_opened_lets_go_a_minute_after_the_start_and_once():
     """Libre Panel started at login, its window never opened: what only the start touched
     goes as it goes for an app closed (the caches keep what the panel draws with), once."""
-    w, state, clock = watch(on=True, last=None)
+    w, state, clock = watch(last=None)
     clock.now = w.began + light.IDLE_S - 1
     assert not w.look() and state["closed"] == 0
     clock.now = w.began + light.IDLE_S
@@ -342,7 +332,7 @@ def test_the_caches_let_go_of_what_only_the_apps_pictures_drew_with_and_keep_the
     assert misses == 0
     panel.close()
     told = []
-    light.release(lambda: told.append(True))  # light mode: also the caches that cannot tell
+    light.release(lambda: told.append(True))  # the memory: also the caches that cannot tell
     assert told == [True] and len(symbols._sets) == 0
     light.give_back("win32")  # (no Windows here: it says so in the log, no error)
 
@@ -364,9 +354,26 @@ def test_a_cache_notes_what_is_used_and_lets_go_of_the_rest():
     assert kept.shed() == 0 and len(kept) == 3
 
 
-def test_the_setting_is_on_unless_set_off():
-    assert parse_config({}).light_mode is True
-    assert parse_config({"light_mode": False}).light_mode is False
+def test_an_old_config_s_switch_of_light_mode_is_let_be_and_goes_with_the_next_write(tmp_path):
+    """0.8 to 0.8.1rc1 had a switch (``light_mode = false``): such a config.toml loads as any
+    other, the switch said nothing, and the next write of the file takes it out (the comments
+    stay); a layout that cannot lose it still takes the write asked for."""
+    from libre_panel.config import edit_config
+
+    assert not hasattr(parse_config({"light_mode": False}), "light_mode")
+    path = tmp_path / "config.toml"
+    path.write_text('# mine\ntheme = "lumen"\nlight_mode = false\n\n[device]\nbrightness = 50\n',
+                    encoding="utf-8")  # fmt: skip
+    edit_config(("value", "device.brightness", 70), path=path)
+    assert path.read_text(encoding="utf-8") == (
+        '# mine\ntheme = "lumen"\n\n[device]\nbrightness = 70\n'
+    )
+    path.write_text('theme = "lumen"\nlight_mode = false\n', encoding="utf-8")
+    edit_config(("value", "theme", "arena"), path=path)
+    assert path.read_text(encoding="utf-8") == 'theme = "arena"\n'
+    path.write_text('theme = "lumen"\n', encoding="utf-8")  # (nothing to take out)
+    edit_config(("value", "theme", "arena"), path=path)
+    assert path.read_text(encoding="utf-8") == 'theme = "arena"\n'
 
 
 def test_only_a_page_of_this_run_counts_as_the_app_being_open(isolated_home):

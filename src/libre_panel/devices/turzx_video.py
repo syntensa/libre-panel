@@ -905,7 +905,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         if engine and settings.engine_encoder == "card":
             said += ", the graphics card's encoder where it opens"
         elif engine and settings.engine_encoder == "auto":
-            said += ", the graphics card's encoder where it is proven with the panels (AMD's)"
+            said += ", the graphics card's encoder where it is AMD's or NVIDIA's"
         said += ", full range" if settings.full else ", limited range"
         if source is not None:
             said += f", straight from {source_name(source)}"

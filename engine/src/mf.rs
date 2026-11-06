@@ -255,7 +255,7 @@ impl Encoder {
             let name = friendly_name(&activate);
             if s.proven_only && !crate::encoder::proven(&name) {
                 return Err(format!(
-                    "the graphics card's encoder ({name}) is not proven with the panels yet"
+                    "the graphics card's encoder ({name}) is not one the default takes yet"
                 ));
             }
             let transform: IMFTransform = match activate.ActivateObject() {

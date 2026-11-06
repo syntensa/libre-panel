@@ -2165,9 +2165,6 @@
     "When Libre Panel quits, Windows shutting down too, the panel shows black and its light goes off; it lights up again when Libre Panel starts. Off: it keeps the last picture.": "Когда Libre Panel завершает работу (в том числе при выключении Windows), панель показывает чёрный экран, и её подсветка гаснет; при запуске Libre Panel она снова включается. Выкл.: сохраняется последнее изображение.",
     "the panel's light off when it quits": "подсветка панели гаснет при выходе",
     "dark off black quit close exit shutdown sleep screen off backlight": "тёмный выключить чёрный выход закрыть завершение работы сон экран выключен подсветка",
-    "While the app's window is closed, Libre Panel lets go of what only the app needs, such as its pictures of the themes, and takes less memory. The panel goes on as it is; the app takes a moment longer to open.": "Пока окно приложения закрыто, Libre Panel освобождает то, что нужно только приложению, например его изображения тем, и занимает меньше памяти. Панель работает как обычно; приложение открывается чуть дольше.",
-    "less memory while the app is closed": "меньше памяти, пока приложение закрыто",
-    "memory ram light lean small resources background usage": "память ram лёгкий компактный ресурсы фон потребление",
     "A part of the {name} module, detached into widgets.": "Часть модуля {name}, разбитого на элементы.",
     "Select all its parts": "Выделить все его части",
     "Its parts go, with what was changed on them": "Его части исчезнут вместе со всеми изменениями",
@@ -2999,12 +2996,11 @@
     "The engine composes the frames": "Движок собирает кадры",
     "On: it composes each frame from the layers Libre Panel draws, and makes the lit gauges' rings. Off: Libre Panel composes every frame, to compare.": "Вкл.: собирает каждый кадр из слоёв, которые рисует Libre Panel, и рисует кольца светящихся индикаторов. Выкл.: Libre Panel собирает каждый кадр сам, для сравнения.",
     "The engine's encoder": "Кодировщик движка",
-    "auto: the graphics card's own encoder where it is proven with the panels (AMD's so far), else x264 on the processor. Or always x264, or always the graphics card's (AMD's, NVIDIA's or Intel's, through Windows' Media Foundation): the processor then only makes the frames' colours. Where the card's cannot start, x264 encodes, and the log says why.": "авто: собственный кодировщик видеокарты там, где он проверен с панелями (пока AMD), иначе x264 на процессоре. Или всегда x264, или всегда кодировщик видеокарты (AMD, NVIDIA или Intel, через Media Foundation Windows): процессор тогда лишь готовит цвета кадров. Где кодировщик карты не запускается, кодирует x264, а журнал говорит почему.",
+    "auto: with AMD's and NVIDIA's cards the graphics card's own encoder, else x264 on the processor. Or always x264, or always the graphics card's (AMD's, NVIDIA's or Intel's, through Windows' Media Foundation): the processor then only makes the frames' colours. Where the card's cannot start, x264 encodes, and the log says why.": "авто: на картах AMD и NVIDIA собственный кодировщик видеокарты, иначе x264 на процессоре. Или всегда x264, или всегда кодировщик видеокарты (AMD, NVIDIA или Intel, через Media Foundation Windows): процессор тогда лишь готовит цвета кадров. Где кодировщик карты не запускается, кодирует x264, а журнал говорит почему.",
     "Graphics card (experiment)": "Видеокарта (эксперимент)",
     "Libre Panel's engine": "Движок Libre Panel",
     "Fine-tuning for experiments": "Тонкая настройка для экспериментов",
-    "The video's encoder, bit rate and quality to try out, and a check of the panel's colours.": "Кодировщик, битрейт и качество видео для проб и проверка цветов панели.",
-    "Save memory with the window closed": "Экономить память при закрытом окне"
+    "The video's encoder, bit rate and quality to try out, and a check of the panel's colours.": "Кодировщик, битрейт и качество видео для проб и проверка цветов панели."
   },
   "fields": {
     "night": "ночь",

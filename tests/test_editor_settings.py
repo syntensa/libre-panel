@@ -1251,7 +1251,7 @@ def test_the_settings_that_name_a_program_or_a_file_are_the_ones_locked():
         "video.device_fps", "video.crf", "video.preset", "video.keyframe_s", "video.maxrate",
         "video.profile", "video.encoder", "video.pixels", "video.direct", "video.rest",
         "video.engine_sends", "video.engine_layers", "video.engine_encoder",
-        "check_updates", "allow_notify", "light_mode", "symbols", "cards", "card_order",
+        "check_updates", "allow_notify", "symbols", "cards", "card_order",
         "card_transition", "accent", "card_opacity", "light_colours", "graph_steps", "across",
         "hotkeys.enabled", "hotkeys.pause",
         "hotkeys.brightness_up", "hotkeys.brightness_down", "hotkeys.open", "hotkeys.next_scene",
@@ -1327,14 +1327,19 @@ def test_the_preview_of_the_app_draws_the_theme_as_switched(server):
     assert status == 200 and "frame-mid" not in shown["boxes"]
 
 
-def test_light_mode_is_on_unless_switched_off_and_written_as_asked(server):
+def test_light_mode_has_no_switch_and_an_old_one_goes_with_the_next_write(server):
+    """Light mode is always on since 0.8.1: the settings neither show nor take a switch, and
+    0.8's ``light_mode = false`` goes from config.toml as the app writes a setting."""
     status, data = request(server, "GET", "/api/settings")
-    assert status == 200 and data["config"]["light_mode"] is True
-    status, data = write(server, light_mode=False)
-    assert status == 200 and data["config"]["light_mode"] is False
-    assert "light_mode = false" in config_text()
-    status, data = write(server, light_mode=True)
-    assert status == 200 and data["config"]["light_mode"] is True
+    assert status == 200 and "light_mode" not in data["config"]
+    status, _ = write(server, light_mode=False)
+    assert status == 400
+    assert write(server, check_updates=True)[0] == 200  # (a config.toml of 0.8 ...)
+    path = config_dir() / "config.toml"
+    path.write_text("light_mode = false\n" + path.read_text(encoding="utf-8"), encoding="utf-8")
+    status, data = write(server, check_updates=False)  # (... the next setting the app writes)
+    assert status == 200 and "light_mode" not in config_text()
+    assert "check_updates = false" in config_text()
 
 
 def test_the_sources_of_values_from_json_are_set_in_the_app_and_keep_their_headers(server):

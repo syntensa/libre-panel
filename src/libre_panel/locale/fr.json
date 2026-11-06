@@ -2164,9 +2164,6 @@
     "When Libre Panel quits, Windows shutting down too, the panel shows black and its light goes off; it lights up again when Libre Panel starts. Off: it keeps the last picture.": "Quand Libre Panel se ferme, y compris à l'arrêt de Windows, le panneau affiche du noir et son éclairage s'éteint ; il se rallume au prochain démarrage de Libre Panel. Désactivé : il garde la dernière image.",
     "the panel's light off when it quits": "éclairage du panneau éteint à la fermeture",
     "dark off black quit close exit shutdown sleep screen off backlight": "sombre éteint noir quitter fermer arrêt veille écran éteint rétroéclairage",
-    "While the app's window is closed, Libre Panel lets go of what only the app needs, such as its pictures of the themes, and takes less memory. The panel goes on as it is; the app takes a moment longer to open.": "Tant que la fenêtre de l'application est fermée, Libre Panel libère ce dont seule l'application a besoin, comme ses images des thèmes, et occupe moins de mémoire. Le panneau continue comme avant ; l'application met un instant de plus à s'ouvrir.",
-    "less memory while the app is closed": "moins de mémoire tant que l'application est fermée",
-    "memory ram light lean small resources background usage": "mémoire ram léger sobre petit ressources arrière-plan utilisation",
     "A part of the {name} module, detached into widgets.": "Une partie du module {name}, détaché en widgets.",
     "Select all its parts": "Sélectionner toutes ses parties",
     "Its parts go, with what was changed on them": "Ses parties disparaissent, avec ce qui y a été changé",
@@ -2999,12 +2996,11 @@
     "The engine composes the frames": "Le moteur compose les images",
     "On: it composes each frame from the layers Libre Panel draws, and makes the lit gauges' rings. Off: Libre Panel composes every frame, to compare.": "Activé : il compose chaque image à partir des calques que dessine Libre Panel et crée les anneaux des jauges lumineuses. Désactivé : Libre Panel compose chaque image, pour comparer.",
     "The engine's encoder": "Encodeur du moteur",
-    "auto: the graphics card's own encoder where it is proven with the panels (AMD's so far), else x264 on the processor. Or always x264, or always the graphics card's (AMD's, NVIDIA's or Intel's, through Windows' Media Foundation): the processor then only makes the frames' colours. Where the card's cannot start, x264 encodes, and the log says why.": "auto : l'encodeur propre de la carte graphique là où il est éprouvé avec les panneaux (pour l'instant celui d'AMD), sinon x264 sur le processeur. Ou toujours x264, ou toujours celui de la carte graphique (celui d'AMD, de NVIDIA ou d'Intel, via Media Foundation de Windows) : le processeur ne fait alors plus que les couleurs des images. Là où celui de la carte ne peut pas démarrer, x264 encode, et le journal dit pourquoi.",
+    "auto: with AMD's and NVIDIA's cards the graphics card's own encoder, else x264 on the processor. Or always x264, or always the graphics card's (AMD's, NVIDIA's or Intel's, through Windows' Media Foundation): the processor then only makes the frames' colours. Where the card's cannot start, x264 encodes, and the log says why.": "auto : avec les cartes d'AMD et de NVIDIA, l'encodeur propre de la carte graphique, sinon x264 sur le processeur. Ou toujours x264, ou toujours celui de la carte graphique (celui d'AMD, de NVIDIA ou d'Intel, via Media Foundation de Windows) : le processeur ne fait alors plus que les couleurs des images. Là où celui de la carte ne peut pas démarrer, x264 encode, et le journal dit pourquoi.",
     "Graphics card (experiment)": "Carte graphique (expérience)",
     "Libre Panel's engine": "Le moteur de Libre Panel",
     "Fine-tuning for experiments": "Réglages fins pour expérimenter",
-    "The video's encoder, bit rate and quality to try out, and a check of the panel's colours.": "L'encodeur, le débit et la qualité de la vidéo à essayer, et une vérification des couleurs du panneau.",
-    "Save memory with the window closed": "Économiser la mémoire fenêtre fermée"
+    "The video's encoder, bit rate and quality to try out, and a check of the panel's colours.": "L'encodeur, le débit et la qualité de la vidéo à essayer, et une vérification des couleurs du panneau."
   },
   "fields": {
     "night": "nuit",

@@ -51,8 +51,8 @@ under its id, and themes in the 0.7 format, community themes among them, are rea
       blur as matrices: 6 to 16 % less of the processor
 - [x] The panel's loop runs lean while the app's window is closed (discussion #4: about
       480 MB on Windows): the caches keep what the panel draws with and let go of the rest,
-      light mode is on unless switched off, two heaps on Linux; on Linux with the 12.3" 175 to
-      190 MB instead of 330 (to be measured on Windows)
+      light mode is always on (0.8.1; 0.8 had a switch), two heaps on Linux; on Linux with
+      the 12.3" 175 to 190 MB instead of 330 (to be measured on Windows)
 - [ ] Targets, measured on the 12.3" in video mode with every core busy (as in a game): at
       most 8 ms a frame (p95; Arena takes 12 to 18 ms today), and well under 200 MB of
       memory on Windows with the window closed
@@ -174,8 +174,8 @@ in 0.8.0. The goal is half of that.
       (Media Foundation's: AMD's, NVIDIA's, Intel's, on Windows), says the colours in every
       SPS and the SPS and PPS before every keyframe, x264 where it cannot start
       (`[video] engine_encoder = "card"`). Measured on the panels with AMD's: the pictures as
-      x264's, both engines 68 MB instead of 90; the default where it is proven
-      (`engine_encoder = "auto"`: AMD's), x264 for NVIDIA's and Intel's until they are
+      x264's, both engines 68 MB instead of 90; the default with AMD's and NVIDIA's cards
+      (`engine_encoder = "auto"`), x264 for Intel's until it is measured
 - [x] Pictures sent on a steady beat: the engine has the panel and sends each picture a fixed
       lead (two frames) after the time its frame was drawn for, from a thread of its own above
       the others in priority (`[video] engine_sends`). Frames that came with up to 15 ms of

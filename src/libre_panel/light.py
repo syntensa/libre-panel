@@ -1,5 +1,5 @@
-"""Light mode (``light_mode`` in config.toml, on unless set since 0.8): what only the app needs
-is let go of while no page of it is open.
+"""Light mode (always on since 0.8.1; 0.8's ``light_mode`` in config.toml is let be): what only
+the app needs is let go of while no page of it is open, and the memory goes back to the system.
 
 The app's pictures of every theme (Start, Design) fill the renderer's caches with the letters,
 symbols and pieces of all of them: well over 100 MB. Once no page of the app has asked for
@@ -8,13 +8,14 @@ as at login), its own pictures go (of every theme, the
 previews of the community's themes), and the caches note for a while what the panel draws with
 (render/kept.py: :func:`~libre_panel.render.kept.mark_all`); then they let go of the rest
 (:func:`~libre_panel.render.kept.shed_all`). So the panel keeps what it uses and draws on as it
-did, and the app draws its pictures again when it asks. That happens light mode or not.
+did, and the app draws its pictures again when it asks.
 
-Light mode also empties the caches that cannot tell what was used (symbols, the moon) and gives
-the memory back to the system; Windows also takes back the pages the panel does not touch (the
+Then the caches that cannot tell what was used (symbols, the moon) are emptied and the memory
+goes back to the system; Windows also takes back the pages the panel does not touch (the
 "Memory" Task Manager shows), which come back as the panel touches them. The C heap's free
 pages (on Windows its heaps') go back again at each look while the app stays closed
-(:func:`tidy`).
+(:func:`tidy`). A switch for it (0.8) had no cost worth one: the app takes a moment longer to
+open after a minute closed, the panel draws on as it did.
 """
 
 from __future__ import annotations
@@ -124,8 +125,8 @@ def empty_working_set() -> None:
 
 
 def tidy(platform: str = sys.platform) -> None:
-    """The C heap's free pages back to the system, at each look while the app is closed in
-    light mode: a frame's work frees pictures and buffers between those that stay, and the heap
+    """The C heap's free pages back to the system, at each look while the app is closed: a
+    frame's work frees pictures and buffers between those that stay, and the heap
     keeps those pages for the program. Linux (glibc's trim): Lumen on the 12.3" and the 9.2",
     the main process 90 MB instead of 100, each time some milliseconds, no picture later for it.
     Windows: its heaps' free memory (:func:`windows_heaps`). Elsewhere nothing (musl has no
@@ -229,17 +230,15 @@ def shed() -> None:
 class Watch:
     """Once the app has been closed for :data:`IDLE_S` seconds, lets go of the app's own
     pictures (``closed``) and has the caches note what the panel uses (``mark``); a look later
-    they let go of the rest (``shed``), and while ``light()`` says light mode is on the memory
-    goes (``release``). Each once per time the app was open (``last_request()``: when a page of
-    it last asked something, monotonic seconds; None: never), and once for an app never opened
-    since the watch began (Libre Panel started at login: what only its start touched went on
-    holding the memory, on Windows the pages of its start too). After that each look, while
-    the app stays closed and light mode on, gives back what the panel's frames freed meanwhile
-    (``tidy``)."""
+    they let go of the rest (``shed``) and the memory goes (``release``). Each once per time the
+    app was open (``last_request()``: when a page of it last asked something, monotonic
+    seconds; None: never), and once for an app never opened since the watch began (Libre Panel
+    started at login: what only its start touched went on holding the memory, on Windows the
+    pages of its start too). After that each look, while the app stays closed, gives back what
+    the panel's frames freed meanwhile (``tidy``)."""
 
     def __init__(
         self,
-        light: Callable[[], bool],
         last_request: Callable[[], float | None],
         release: Callable[[], None] = release,
         clock: Callable[[], float] = time.monotonic,
@@ -250,7 +249,7 @@ class Watch:
         tidy: Callable[[], None] = tidy,
         say: Callable[[], None] = say_held,
     ) -> None:
-        self.light, self.last_request = light, last_request
+        self.last_request = last_request
         self.release, self.clock, self.closed = release, clock, closed
         self.mark, self.shed, self.unmark = mark, shed, unmark
         self.tidy, self.say = tidy, say
@@ -265,7 +264,7 @@ class Watch:
         self._thread: threading.Thread | None = None
 
     def look(self) -> bool:
-        """One look: whether it released now (light mode)."""
+        """One look: whether it released now."""
         last = self.last_request()
         if last is None:
             last = self.began
@@ -285,8 +284,6 @@ class Watch:
             self.shed_for = last
             self.marking = False
             self.shed()
-        if not self.light():
-            return False
         if last == self.released_for:  # released: what the panel's frames freed since goes too
             self.tidy()
             if last != self.said_for and self.clock() - self.released_at >= SAID_S:
