@@ -166,6 +166,33 @@ jobs:
           pytest -q -rs tests/test_native_engine.py tests/test_engine_panel.py tests/test_yuv.py \
             tests/test_scene.py
 
+  rust:
+    # Libre Panel in Rust (docs/RUST.md): the workspace's crates, then their comparisons with
+    # the Python app they replace (tests/test_rust_*.py, through lp-check)
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Build and test the crates
+        shell: bash
+        working-directory: rust
+        run: |
+          rustup component add rustfmt clippy
+          cargo fmt --all --check
+          cargo clippy --release --all-targets -- -D warnings
+          cargo test --release
+          cargo build --release
+      - run: pip install -e ".[dev]"
+      - name: The crates against the Python app
+        run: python -m pytest -q tests/test_rust_pixels.py
+
   sensor-host:
     # The sensor service as a .NET program of its own (sensorhost/, C#; docs/ROADMAP.md): built
     # against LibreHardwareMonitor's libraries as the release fetches them, its own look at the

@@ -1,0 +1,13 @@
+[package]
+name = "lp-check"
+description = "Runs Libre Panel's Rust operations it reads, for the comparisons with the Python app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+lp-pixels = { path = "../pixels" }
+serde_json = "1"
+base64 = "0.22"
