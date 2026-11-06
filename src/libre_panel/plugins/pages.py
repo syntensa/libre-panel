@@ -158,6 +158,23 @@ class PageContext:
         beside = more.get(panel - 2)
         return getattr(beside, "shown", None)
 
+    def shown_picture(self, panel: int = 1) -> Image.Image | None:
+        """The frame on the panel now (:meth:`shown_frame`) as Libre Panel's engine composed it
+        from its layers, the same pixels, not made here; None where the panel's engine gives
+        none (another display, a frame of another kind, no answer in time): the frame's own
+        pixels are made when asked for then."""
+        status = getattr(getattr(self._controls, "panel", None), "status", None)
+        if panel != 1:
+            status = (getattr(status, "more", None) or {}).get(panel - 2)
+        ask = getattr(status, "picture", None)
+        if not callable(ask):
+            return None
+        try:
+            return ask()
+        except Exception as exc:  # noqa: BLE001 - the frame's own pixels then
+            log.debug("the engine gave no picture of the frame shown: %s", exc)
+            return None
+
     def notify(self, text: str, **options: Any) -> Delivery:
         """A message on the panel, for a test or to answer an action of the page. The
         arguments are those of ``ServiceHost.notify`` (``icon``, ``level``, ``seconds``,

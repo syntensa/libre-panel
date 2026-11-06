@@ -1000,6 +1000,24 @@ def _wide_pipe() -> tuple[int, Any] | None:
         return None
 
 
+def _wide_pipe_back() -> tuple[int, Any] | None:
+    """Windows: a pipe from a program's stdout with :data:`PIPE_BYTES` of room (Popen's has the
+    system's 4 KB): the descriptor of its end for the program, and the file this process reads
+    from (its handle not inherited: the output ends once the program's end is closed). None
+    elsewhere, or where it cannot be made: Popen's own then."""
+    if sys.platform != "win32":
+        return None
+    try:
+        import _winapi
+        import msvcrt
+
+        read, write = _winapi.CreatePipe(None, PIPE_BYTES)
+        ours = open(msvcrt.open_osfhandle(read, 0), "rb", buffering=0)  # noqa: SIM115
+        return msvcrt.open_osfhandle(write, 0), ours  # (EngineLink closes it, as Popen's)
+    except (OSError, ImportError):
+        return None
+
+
 def _close_pipe(pipe: tuple[int, Any]) -> None:
     for close in (lambda: os.close(pipe[0]), pipe[1].close):
         try:

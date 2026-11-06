@@ -1083,6 +1083,62 @@ impl Scene {
         }
     }
 
+    /// The frame of the layers it holds (those of the frame before, bottom first), whole and as
+    /// it is before it turns: three bytes a pixel, row by row, the pixels its blocks were
+    /// composed of (the app's picture of the panel). What it keeps for the frames after (the
+    /// pixels beneath a block's newest layers) is used where it fits, and stays as it is.
+    pub fn picture(&self) -> Vec<u8> {
+        let (width, height) = (self.width, self.height);
+        let mut out = vec![0u8; width * height * 3];
+        let cuts: Vec<(u32, Rect)> = self
+            .order
+            .iter()
+            .filter_map(|id| Some((*id, self.cut(self.layers.get(id)?)?)))
+            .collect();
+        for r in 0..self.rows {
+            let (y0, y1) = (r * self.block, ((r + 1) * self.block).min(height));
+            let reach: Vec<&(u32, Rect)> = cuts
+                .iter()
+                .filter(|(_, (_, ly0, _, ly1))| *ly0 < y1 && *ly1 > y0)
+                .collect();
+            for c in 0..self.cols {
+                let (x0, x1) = (c * self.block, ((c + 1) * self.block).min(width));
+                let ids: Vec<u32> = reach
+                    .iter()
+                    .filter(|(_, (lx0, _, lx1, _))| *lx0 < x1 && *lx1 > x0)
+                    .map(|(id, _)| *id)
+                    .collect();
+                let (start, mut pixels) = match &self.under[r * self.cols + c] {
+                    Some(u)
+                        if u.pixels.len() == (x1 - x0) * (y1 - y0) * 3
+                            && ids.starts_with(&u.below) =>
+                    {
+                        (u.below.len(), u.pixels.clone())
+                    }
+                    _ => (0, self.ground_of((x0, y0, x1, y1))),
+                };
+                for id in &ids[start..] {
+                    lay(
+                        &self.layers[id],
+                        &self.sources,
+                        &mut pixels,
+                        (x0, y0, x1, y1),
+                    );
+                }
+                for (row, line) in pixels.chunks_exact((x1 - x0) * 3).enumerate() {
+                    let at = ((y0 + row) * width + x0) * 3;
+                    out[at..at + line.len()].copy_from_slice(line);
+                }
+            }
+        }
+        out
+    }
+
+    /// The frame's size: width, height.
+    pub fn size(&self) -> (usize, usize) {
+        (self.width, self.height)
+    }
+
     /// The ground of the box (x0, y0)-(x1, y1), three bytes a pixel, row by row.
     fn ground_of(&self, (x0, y0, x1, y1): Rect) -> Vec<u8> {
         let w = x1 - x0;
@@ -2264,6 +2320,72 @@ mod tests {
                 all[0].4 == canvas,
                 "frame {frame} differs from the same frame composed whole"
             );
+        }
+    }
+
+    #[test]
+    fn the_frame_shown_whole_is_the_frame_composed_and_leaves_the_next_ones_as_they_were() {
+        let (w, h) = (96, 64);
+        let mut dice = Dice(11);
+        let mut kept = Scene::new(w, h, 16); // (asked for its picture after each frame)
+        let mut asked_never = Scene::new(w, h, 16);
+        for s in [&mut kept, &mut asked_never] {
+            s.ground_colour([12, 34, 56]);
+        }
+        assert_eq!(kept.picture(), [12, 34, 56].repeat(w * h)); // (no frame yet: the ground)
+        let mut canvas = vec![0u8; w * h * 3];
+        let mut order: Vec<u32> = Vec::new();
+        let mut next = 1u32;
+        for frame in 0..60 {
+            let mut now = Vec::new();
+            for id in &order {
+                match dice.roll(6) {
+                    0 => {}
+                    1 => {
+                        let layer = dice.layer(w, h);
+                        kept.layer(next, layer.clone());
+                        asked_never.layer(next, layer);
+                        now.push(next);
+                        next += 1;
+                    }
+                    _ => now.push(*id),
+                }
+            }
+            while now.len() < 12 {
+                let layer = dice.layer(w, h);
+                kept.layer(next, layer.clone());
+                asked_never.layer(next, layer);
+                now.push(next);
+                next += 1;
+            }
+            order = now;
+            let half = frame % 7 == 3; // (now and then turned half a turn, as for a panel so)
+            let boxes = kept.frame(order.clone(), half).unwrap();
+            assert!(
+                boxes == asked_never.frame(order.clone(), half).unwrap(),
+                "frame {frame}: the boxes differ where the picture was asked for"
+            );
+            for (x0, y0, x1, y1, pixels) in boxes {
+                let (x0, y0, x1, y1, pixels) = if half {
+                    let mut back = pixels;
+                    reverse(&mut back);
+                    (w - x1, h - y1, w - x0, h - y0, back)
+                } else {
+                    (x0, y0, x1, y1, pixels)
+                };
+                for y in y0..y1 {
+                    let row = &pixels[(y - y0) * (x1 - x0) * 3..(y - y0 + 1) * (x1 - x0) * 3];
+                    canvas[(y * w + x0) * 3..(y * w + x1) * 3].copy_from_slice(row);
+                }
+            }
+            assert!(
+                kept.picture() == canvas,
+                "frame {frame}: the picture is not the frame composed (before it turns)"
+            );
+            if frame == 30 {
+                kept.ground_colour([200, 10, 90]); // (a new ground: the frame after is whole)
+                asked_never.ground_colour([200, 10, 90]);
+            }
         }
     }
 

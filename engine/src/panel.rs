@@ -467,6 +467,57 @@ fn sender(shared: Arc<Shared>, mut transport: Transport, hang_blocks: usize) {
     shared.say(wire::COUNTS, 0, &[text.as_bytes()]);
 }
 
+/// The app's picture of the panel (wire.rs's kind 28): whether the panel's frame is one of
+/// layers composed here (`layers`), whether no record of the next frame came since it was
+/// (`settled`: what the scene holds is that frame), and who asked meanwhile (answered after
+/// the next frame: one at most, an earlier one gets none).
+#[derive(Default)]
+struct Asked {
+    layers: bool,
+    settled: bool,
+    waiting: Option<u32>,
+}
+
+impl Asked {
+    /// Asked for by `id`: answered now where the scene holds the frame shown, after the next
+    /// frame where records of it came, else with none.
+    fn ask(&mut self, shared: &Shared, id: u32, scene: Option<&Scene>) {
+        match scene {
+            Some(scene) if self.layers && self.settled => answer(shared, id, Some(scene)),
+            Some(_) if self.layers => {
+                if let Some(earlier) = self.waiting.replace(id) {
+                    answer(shared, earlier, None);
+                }
+            }
+            _ => answer(shared, id, None),
+        }
+    }
+
+    /// A frame of layers was composed (`scene`), or one of another kind went (None: one of
+    /// Libre Panel's own frames, a picture made elsewhere, a new stream or its end): whoever
+    /// waits is answered.
+    fn composed(&mut self, shared: &Shared, scene: Option<&Scene>) {
+        self.layers = scene.is_some();
+        self.settled = self.layers;
+        if let Some(id) = self.waiting.take() {
+            answer(shared, id, scene);
+        }
+    }
+}
+
+/// The frame shown for whoever asked (`id`): the scene's picture, whole, or none.
+fn answer(shared: &Shared, id: u32, scene: Option<&Scene>) {
+    match scene {
+        Some(scene) => {
+            let (w, h) = scene.size();
+            let pixels = scene.picture();
+            let (w, h) = ((w as u32).to_le_bytes(), (h as u32).to_le_bytes());
+            shared.say(wire::REPLY, id, &[&[0], &w, &h, &pixels]);
+        }
+        None => shared.say(wire::REPLY, id, &[&[1]]),
+    }
+}
+
 /// Hand a picture to the sender, waiting while two wait already (the panel sets the pace;
 /// Libre Panel is told, so that it does not take the engine for stalled).
 fn hand_on(shared: &Shared, picture: Picture) {
@@ -573,12 +624,20 @@ pub fn run(options: Options) -> Result<(), String> {
     let mut input = BufReader::with_capacity(1 << 20, io::stdin().lock());
     let mut stream: Option<Stream> = None;
     let mut pacer = Pacer::default();
+    let mut asked = Asked::default();
     let result = loop {
         let record = match wire::read(&mut input) {
             Ok(Some(record)) => record,
             Ok(None) => break Ok(()),
             Err(e) => break Err(format!("the input: {e}")),
         };
+        let between = !matches!(
+            record,
+            Record::Command(_) | Record::Rate(_) | Record::Keyframe | Record::Shown { .. }
+        );
+        if between {
+            asked.settled = false; // (a record of the next frame: the scene no longer the one shown)
+        }
         match record {
             Record::Frame {
                 number,
@@ -590,6 +649,7 @@ pub fn run(options: Options) -> Result<(), String> {
                     break Err("a frame before its stream".into());
                 };
                 s.scene.frame_between(); // (the next frame of layers: composed whole)
+                asked.composed(&shared, None);
                 if let Err(e) = take_frame(
                     &shared,
                     s,
@@ -627,7 +687,9 @@ pub fn run(options: Options) -> Result<(), String> {
                 ) {
                     break Err(e);
                 }
+                asked.composed(&shared, Some(&s.scene)); // (after its picture went on)
             }
+            Record::Shown { id } => asked.ask(&shared, id, stream.as_ref().map(|s| &s.scene)),
             Record::Ground { colour, picture } => {
                 let Some(s) = stream.as_mut() else {
                     break Err("a ground before its stream".into());
@@ -888,6 +950,7 @@ pub fn run(options: Options) -> Result<(), String> {
                 block,
                 options: encoding,
             } => {
+                asked.composed(&shared, None);
                 drop(stream.take()); // (the old encoder closed first: the memory of one)
                 {
                     let mut state = shared.state();
@@ -902,6 +965,7 @@ pub fn run(options: Options) -> Result<(), String> {
                 pacer = Pacer::default();
             }
             Record::Picture { block, data } => {
+                asked.composed(&shared, None);
                 let current = shared.state().stream;
                 let block = if block == 0 {
                     DEFAULT_BLOCK
@@ -920,6 +984,7 @@ pub fn run(options: Options) -> Result<(), String> {
                 );
             }
             Record::End => {
+                asked.composed(&shared, None);
                 stream = None;
                 {
                     let mut state = shared.state();

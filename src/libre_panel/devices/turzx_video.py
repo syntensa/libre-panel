@@ -71,6 +71,7 @@ from libre_panel.devices.engine import (
     encodes_on_cards,
     encodes_on_proven_cards,
     engine_scene,
+    gives_shown,
     grows_sources,
     lays_laid,
     makes_bars,
@@ -686,6 +687,16 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         sender = getattr(self.encoder, "scenes", None)
         return self.takes_scenes and bool(getattr(sender, "fans", False))
 
+    def shown_picture(self, timeout: float = 1.0) -> Image.Image | None:
+        """The frame the panel shows as the engine composed it from its layers, whole and
+        before it turns (the app's picture of the panel, its pixels not made here); None where
+        the engine gives none: it does not compose the frames, or the frame it has is not one
+        of layers (EngineLink.shown)."""
+        link = self.link
+        if link is None or not getattr(self.encoder, "shown", False) or not self.takes_scenes:
+            return None
+        return link.shown(timeout)
+
     def _as_scene(self, frame: Image.Image) -> bool:
         """Whether ``frame`` goes to the encoder as its layers, its pixels not made here."""
         return isinstance(frame, SceneFrame) and self.takes_scenes
@@ -980,7 +991,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
                 globes=layers and makes_globes(engine), fills=layers and makes_fills(engine),
                 laid=layers and lays_laid(engine), grown=layers and grows_sources(engine),
                 bars=layers and makes_bars(engine), fans=layers and makes_fans(engine),
-                masks=layers and makes_masks(engine),
+                masks=layers and makes_masks(engine), shown=layers and gives_shown(engine),
             )  # fmt: skip
             if layers and not self._layers_said:  # (once: a new stream starts as often)
                 self._layers_said = True
