@@ -209,7 +209,7 @@ class Pictures:
                 _PIDS.add(process.pid)
             threading.Thread(target=self._hear, args=(ours,), name="pictures-hear",
                              daemon=True).start()  # fmt: skip
-            log.debug("the app's pictures: in a process of their own (%s)", process.pid)
+            log.info("the app's pictures: in a process of their own (%s)", process.pid)
             return ours
 
     def _hear(self, conn: Any) -> None:
@@ -270,7 +270,7 @@ class Pictures:
         system with it; the next picture starts it again."""
         with self._lock:
             if self._process is not None:
-                log.debug("the app's pictures: their process ends (%s)", self._process.pid)
+                log.info("the app's pictures: their process ends (%s)", self._process.pid)
             self._ended()
 
     def pid(self) -> int | None:

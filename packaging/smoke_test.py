@@ -156,6 +156,10 @@ def main(command):
             wait(lambda: fetch(live).startswith(b"\xff\xd8"), 20, "live picture (JPEG)")
             png = live + "?format=png"
             wait(lambda: fetch(png).startswith(b"\x89PNG"), 20, "live picture (PNG)")
+            # a theme's picture, drawn in the process of the app's pictures (editor/pictures.py:
+            # the build starts itself once more for it, as for a panel's own process)
+            theme = url + "api/themes/lumen/preview?w=240"
+            wait(lambda: fetch(theme).startswith(b"\x89PNG"), 60, "a theme's picture (PNG)")
             api(url, "quit")
             code = proc.wait(30)
             if code != 0:
@@ -174,6 +178,8 @@ def main(command):
             raise SystemExit("FAIL: the app only ended through the last-resort exit")
         if "service 'notices' started" not in text:
             raise SystemExit("FAIL: the built-in service notices did not start")
+        if "the app's pictures: in a process of their own" not in text or "; drawn here" in text:
+            raise SystemExit("FAIL: the app's pictures were not drawn in a process of their own")
     print("OK")
 
 
