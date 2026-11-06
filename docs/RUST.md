@@ -95,7 +95,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
 - [x] GaussianBlur, BoxBlur
 - [x] ImageChops: multiply, screen, add, subtract, lighter, darker, difference, the modulos,
       offset; blend, composite
-- [ ] transpose, rotate, transform
+- [x] transpose, rotate, transform (affine, extent, perspective, quad; nearest, bilinear,
+      bicubic)
 - [x] drawing: line (thin and wide, joints), polygon, rectangle, rounded_rectangle, ellipse,
       circle, arc, pieslice, chord, point, bitmap; the core (Draw.c) and ImageDraw's own
       methods, on pictures of bytes and of floats (F)

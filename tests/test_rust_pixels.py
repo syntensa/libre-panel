@@ -4,6 +4,7 @@ result byte for byte as Pillow's, and refused where Pillow refuses it."""
 from __future__ import annotations
 
 import base64
+import math
 import random
 import struct
 from collections.abc import Callable
@@ -604,4 +605,61 @@ def test_imagedraw_s_own_methods_are_pillow_s_on_bytes_and_floats():
                     break
                 commands.append(c)
             pairs.append(({"op": "imagedraw", "image": image(im), "commands": commands}, out))
+    check(pairs)
+
+
+def test_transposes_transforms_and_rotations_are_pillow_s():
+    rng = random.Random(17)
+    pairs = []
+    resamples = [0, 0, 2, 2, 3, 3]
+    for mode in MODES:
+        bands = len(Image.new(mode, (1, 1)).getbands())
+        for method in range(7):
+            im = noise(rng, mode, size(rng))
+            case = {"op": "transpose", "image": image(im), "method": method}
+            pairs.append((case, im.transpose(Image.Transpose(method))))
+        for _ in range(160):
+            im = noise(rng, mode, (rng.randint(1, 30), rng.randint(1, 30)))
+            resample = rng.choice(resamples + [1] * (rng.random() < 0.05))
+            fill = _colour(rng, bands) if rng.random() < 0.3 else None
+            out_size = (rng.randint(1, 36), rng.randint(1, 36))
+            kind = rng.choice(["affine", "affine", "affine", "extent", "perspective", "quad"])
+            turn, scale = rng.uniform(-3.2, 3.2), rng.choice([1.0, 0.5, 2.0, rng.uniform(0.2, 3)])
+            if kind == "affine":
+                c, s = math.cos(turn) / scale, math.sin(turn) / scale
+                data = [c, s, rng.uniform(-20, 30), -s, c, rng.uniform(-20, 30)]
+                if rng.random() < 0.25:  # (a scale only: Geometry.c's own path for it)
+                    data[1] = data[3] = 0.0
+                if rng.random() < 0.1:  # (beyond fixed point's reach)
+                    data[0] *= 3000
+            elif kind == "extent":
+                x0, y0 = rng.uniform(-10, 20), rng.uniform(-10, 20)
+                data = [x0, y0, x0 + rng.uniform(-5, 40), y0 + rng.uniform(-5, 40)]
+            elif kind == "perspective":
+                tilt = rng.uniform(-0.3, 0.3)
+                data = [1 / scale, tilt, rng.uniform(-5, 5), -tilt, 1 / scale, rng.uniform(-5, 5),
+                        rng.uniform(-0.01, 0.01), rng.uniform(-0.01, 0.01)]  # fmt: skip
+            else:
+                data = [rng.uniform(-5, 35) for _ in range(8)]
+            how = getattr(Image.Transform, kind.upper())
+            case = {"op": "transform", "image": image(im), "size": list(out_size), "method": kind,
+                    "data": data, "resample": resample, "fillcolor": fill}  # fmt: skip
+            colour = None if fill is None else fill[0] if bands == 1 else tuple(fill)
+            pairs.append((case, expect(
+                lambda im=im, s=out_size, how=how, d=data, r=resample, c=colour: im.transform(
+                    s, how, d, r, fillcolor=c))))  # fmt: skip
+        for _ in range(160):
+            im = noise(rng, mode, (rng.randint(1, 30), rng.randint(1, 30)))
+            angle = rng.choice([0.0, 90.0, 180.0, 270.0, -90.0, 450.0, 45.0, 30.0,
+                                rng.uniform(-720, 720), rng.uniform(-3, 3)])  # fmt: skip
+            resample = rng.choice(resamples)
+            expand = rng.random() < 0.5
+            center = (rng.uniform(-5, 35), rng.uniform(-5, 35)) if rng.random() < 0.25 else None
+            shift = (rng.randint(-6, 6), rng.randint(-6, 6)) if rng.random() < 0.2 else None
+            fill = _colour(rng, bands) if rng.random() < 0.3 else None
+            case = {"op": "rotate", "image": image(im), "angle": angle, "resample": resample,
+                    "expand": expand, "center": center, "translate": shift,
+                    "fillcolor": fill}  # fmt: skip
+            colour = None if fill is None else fill[0] if bands == 1 else tuple(fill)
+            pairs.append((case, im.rotate(angle, resample, expand, center, shift, colour)))
     check(pairs)

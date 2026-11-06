@@ -348,6 +348,69 @@ fn run(case: &Value) -> Result<Value, String> {
             );
             json!({"image": value_of(&im.offset(x, y))})
         }
+        "transpose" => {
+            let method = case["method"]
+                .as_i64()
+                .and_then(lp_pixels::Transpose::from_number)
+                .ok_or("a transpose")?;
+            json!({"image": value_of(&image_of(&case["image"])?.transpose(method))})
+        }
+        "transform" | "rotate" => {
+            let im = image_of(&case["image"])?;
+            let filter = lp_pixels::Filter::from_number(case["resample"].as_i64().unwrap_or(0))
+                .ok_or("a filter")?;
+            let fill: Option<Vec<u8>> = if case["fillcolor"].is_null() {
+                None
+            } else {
+                Some(ints(&case["fillcolor"])?.iter().map(|&v| v as u8).collect())
+            };
+            let pair = |v: &Value| -> Result<Option<(f64, f64)>, String> {
+                if v.is_null() {
+                    return Ok(None);
+                }
+                Ok(Some((v[0].as_f64().ok_or("x")?, v[1].as_f64().ok_or("y")?)))
+            };
+            let out = if op == "rotate" {
+                im.rotate(
+                    case["angle"].as_f64().ok_or("an angle")?,
+                    filter,
+                    case["expand"].as_bool().unwrap_or(false),
+                    pair(&case["center"])?,
+                    pair(&case["translate"])?,
+                    fill.as_deref(),
+                )
+            } else {
+                let size = ints(&case["size"])?;
+                let data: Vec<f64> = case["data"]
+                    .as_array()
+                    .ok_or("data")?
+                    .iter()
+                    .map(|v| v.as_f64().unwrap_or(f64::NAN))
+                    .collect();
+                let take = |n: usize| -> Result<Vec<f64>, String> {
+                    data.get(..n)
+                        .map(<[f64]>::to_vec)
+                        .ok_or("too little data".into())
+                };
+                let method = match case["method"].as_str().unwrap_or("") {
+                    "affine" => lp_pixels::Transform::Affine(take(6)?.try_into().unwrap()),
+                    "extent" => lp_pixels::Transform::Extent(take(4)?.try_into().unwrap()),
+                    "perspective" => {
+                        lp_pixels::Transform::Perspective(take(8)?.try_into().unwrap())
+                    }
+                    "quad" => lp_pixels::Transform::Quad(take(8)?.try_into().unwrap()),
+                    other => return Err(format!("no transform {other}")),
+                };
+                im.transform(
+                    (size[0] as usize, size[1] as usize),
+                    method,
+                    filter,
+                    fill.as_deref(),
+                )
+            }
+            .map_err(e)?;
+            json!({"image": value_of(&out)})
+        }
         "draw" | "imagedraw" => {
             let own = op == "imagedraw";
             let commands = case["commands"].as_array().ok_or("commands")?;
