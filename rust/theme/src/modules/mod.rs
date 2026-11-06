@@ -12,6 +12,7 @@ use crate::design::{self, MODULE_LABEL, MODULE_PADDING, MODULE_PADDING_BARE};
 use crate::grid::{make_grid, Grid, Settings};
 use crate::model::{normalize_widget, Env, Error, Kind, Result, Theme};
 
+mod lists;
 mod readings;
 mod sky;
 mod time;
@@ -958,15 +959,20 @@ fn times_div(a: N, b: N, c: f64) -> f64 {
     }
 }
 
-/// [{"above": 75, "color": warn}, {"above": 88, "color": crit}]
-pub fn heat(b: &Build) -> Value {
+/// _heat_rules: [{"above": warn, "color": warn}, {"above": crit, "color": crit}]
+pub fn heat_rules(b: &Build, warn: i64, crit: i64) -> Value {
     let rule = |above: i64, color: String| {
         let mut d = Dict::new();
         d.insert("above".into(), above.into());
         d.insert("color".into(), color.into());
         Value::Dict(d)
     };
-    Value::List(vec![rule(75, b.c("warn")), rule(88, b.c("crit"))])
+    Value::List(vec![rule(warn, b.c("warn")), rule(crit, b.c("crit"))])
+}
+
+/// _heat_rules(b): from 75 and 88.
+pub fn heat(b: &Build) -> Value {
+    heat_rules(b, 75, 88)
 }
 
 /// _detail_rows: source title, the hardware name and detail rows in a column.
@@ -1110,6 +1116,18 @@ pub fn kind_of(name: &str) -> Option<KindOf> {
         "analog" => k(time::build_analog, &[], (1, 1)),
         "world" => k(time::build_world, &[], (2, 1)),
         "countdown" => k(time::build_countdown, &[], (2, 1)),
+        "huge" => k(lists::build_huge, READINGS, (1, 1)),
+        "text" => k(lists::build_text, &[], (2, 1)),
+        "temps" => k(lists::build_temps, &[], (1, 2)),
+        "cores" => k(lists::build_cores, &[], (2, 1)),
+        "drives" => k(lists::build_drives, &[], (2, 1)),
+        "processes" => k(lists::build_processes, &[], (1, 2)),
+        "netinfo" => k(lists::build_netinfo, &[], (2, 1)),
+        "values" => k(lists::build_values, &[], (2, 1)),
+        "ping" => k(lists::build_ping, &[], (2, 1)),
+        "timer" => k(lists::build_timer, &[], (2, 1)),
+        "power" => k(lists::build_power, &[], (2, 1)),
+        "ups" => k(lists::build_ups, &[], (2, 1)),
         _ => return None,
     })
 }

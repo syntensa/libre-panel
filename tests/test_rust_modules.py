@@ -21,7 +21,8 @@ from libre_panel.theme import model, modules
 # The module kinds rust/theme builds so far (the others follow, kind by kind).
 BUILT = [
     "ring", "stat", "graph", "bars", "network", "clock", "date", "weather", "outlook", "system",
-    "sun", "moon", "earth", "analog", "world", "countdown",
+    "sun", "moon", "earth", "analog", "world", "countdown", "huge", "text", "temps", "cores",
+    "drives", "processes", "netinfo", "values", "ping", "timer", "power", "ups",
 ]  # fmt: skip
 
 
@@ -75,6 +76,7 @@ TITLES = ["", "", "CPU", "Prozessor-Temperatur", "温度", "Ärger ſtrasse", "�
 TARGETS = [
     "", "12-24", "2026-12-24 18:00", "2026-2-30", "٢٠٢٦-١٢-٢٤", " 12-24 ", "12-24\n", "1-1T9:05",
     "13-01", "2026-12-24 24:00", "2026-12-24 18:60", "junk", "123-4",
+    "2", " 3 ", "4", "5", "\u30004\n", "2 ",  # a ping's host
 ]  # fmt: skip
 PLACES = [
     "", "Asia/Tokyo = Tokio\nEurope/London", "# none\nUTC", "America/Argentina/Buenos_Aires",
@@ -95,7 +97,7 @@ def _module(rng: random.Random, i: int, columns: int, rows: int) -> dict[str, An
     options = {
         "source": ["cpu", "gpu", "mem", "disk", "net", "sensor", "fan"],
         "sensor": ["", "cpu.temp", "gpu.fan2", "net.up"],
-        "format": ["", "{value:.1f} °C", "{value:bytes}", "{value}"],
+        "format": ["", "{value:.1f} °C", "{value:bytes}", "{value}", "{value:.0f}%", "{value}°%"],
         "title": TITLES,
         "color": [None, "#ff8800", "#0b8", "#11223380", "teal", "@accent", "@nope", "@warn"],
         "card": ["auto", "on", "off"],
@@ -107,6 +109,12 @@ def _module(rng: random.Random, i: int, columns: int, rows: int) -> dict[str, An
         "timezone": ["", "Asia/Tokyo", "Europe/Berlin", "Nowhere/Land"],
         "target": TARGETS,
         "items": PLACES,
+        "text": TITLES,
+        "fans": [0, 1, 2, 3, 6, 9, -1, 10**30],
+        "fan_items": ["", "fan.lpc.fan_2 = Front\nfan.*"],
+        "threads": [True, False],
+        "total": [True, False],
+        "sort": ["cpu", "memory"],
     }
     for key, choices in options.items():
         if rng.random() < 0.4:
