@@ -11,6 +11,7 @@ use lp_py::{Dict, Value};
 use lp_text::fallback::FallbackFont;
 use lp_theme::{Env, Theme};
 
+use crate::agent;
 use crate::bar;
 use crate::compose;
 use crate::countdown;
@@ -22,6 +23,7 @@ use crate::metric::{self, Shown};
 use crate::piece::{Failed, Piece, Result};
 use crate::shapes::{self, Rgba};
 use crate::snapshot::{need_holds, needs_of, number, Snapshot};
+use crate::sunpath;
 use crate::widget;
 
 /// The most pixels one layer may have: what Python could not make either (an absurd size a
@@ -61,6 +63,8 @@ impl From<Failed> for Unported {
 /// A widget's drawing: its piece, or why there is none.
 enum Drawn {
     Piece(Rc<Piece>),
+    /// nothing to draw (Python's None: no piece, no box)
+    Nothing,
     Failed(Failed),
     Unported(String),
 }
@@ -497,6 +501,57 @@ impl Renderer {
                 ]);
                 self.cached(&w, content, |r| r.calendar_piece(&w, &today))
             }
+            "agent" => {
+                let w = w.clone();
+                let snapshot = self.snapshot.clone().unwrap_or_default();
+                let state = match snapshot.value(widget::text(&w, "sensor")) {
+                    Value::Str(s) if matches!(s.as_str(), "working" | "waiting" | "idle") => s,
+                    _ => "off".to_string(),
+                };
+                // (a sign at work or waiting moves)
+                if self.options.animate && matches!(state.as_str(), "working" | "waiting") {
+                    return Drawn::Unported("agents' signs that move".into());
+                }
+                let size = widget::int(&w, "size", 64).max(8);
+                let mut colours = [[0i64; 4]; 3];
+                for (colour, key) in colours.iter_mut().zip(["color", "color2", "muted"]) {
+                    match self.colour_of(&w, key) {
+                        Ok(c) => *colour = c.unwrap_or([0, 0, 0, 0]),
+                        Err(e) => return Drawn::Failed(e),
+                    }
+                }
+                let mut content = vec![state.clone().into(), Value::int(size)];
+                content.extend(colours.map(|c| Value::List(c.map(Value::int).to_vec())));
+                let (x, y) = (widget::int(&w, "x", 0), widget::int(&w, "y", 0));
+                self.cached(&w, Value::List(content), |_| {
+                    let [a, b, c] = colours;
+                    Ok(agent::piece(
+                        x,
+                        y,
+                        size,
+                        agent::picture(size, &state, a, b, c)?,
+                    ))
+                })
+            }
+            "sunpath" => {
+                let w = w.clone();
+                let snapshot = self.snapshot.clone().unwrap_or_default();
+                let at = match sunpath::step(&snapshot.value(widget::text(&w, "sensor"))) {
+                    Ok(at) => at,
+                    Err(e) => return Drawn::Failed(e),
+                };
+                let up = snapshot.value("sun.up");
+                if at.is_none() && up == Value::None {
+                    return Drawn::Nothing; // (no place: no sun's times)
+                }
+                // (the midnight sun: up all day, at its height)
+                let at = at.or_else(|| (number(&up) == Some(1.0)).then_some(sunpath::STEPS / 2));
+                let way = match self.sunpath_of(&w, at) {
+                    Ok(way) => way,
+                    Err(e) => return Drawn::Failed(e),
+                };
+                self.cached(&w, way.content(), |_| way.piece())
+            }
             "bar" => {
                 let w = w.clone();
                 // (a bar gliding to a new reading, a colour fading: motion, not drawn here yet)
@@ -686,6 +741,7 @@ impl Renderer {
             let id = widget::text(w, "id").to_string();
             let piece = match self.draw(w) {
                 Drawn::Piece(piece) => piece,
+                Drawn::Nothing => continue,
                 Drawn::Unported(what) => return Err(Unported(what)),
                 Drawn::Failed(e) => {
                     self.warn(format!("widget {} failed: {e}", lp_py::repr(&id)));

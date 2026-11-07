@@ -1,6 +1,7 @@
 //! Libre Panel's renderer (render/ of the Python app, docs/RUST.md R4): the frames of a theme,
 //! widget by widget, to the bit; so far the texts readings become, the ground and the cards.
 
+mod agent;
 mod bar;
 mod calendar;
 pub mod compose;
@@ -16,6 +17,7 @@ mod rect;
 pub mod renderer;
 pub mod shapes;
 pub mod snapshot;
+mod sunpath;
 mod text;
 pub mod widget;
 

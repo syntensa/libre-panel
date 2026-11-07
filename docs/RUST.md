@@ -335,6 +335,16 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       dark on a light dot); in the last week of 9999 left out as Python leaves it (its Sunday
       lies past the dates it knows). The frames of random themes of calendars the same to the
       bit, in six languages
+- [x] an AI agent's sign (agent widgets) in a still frame: three lights on a faint ring at
+      work, the ring and a light in its middle in the waiting colour, a light resting at its
+      top while idle, the ring faint while off (any other reading), drawn four times larger
+      and reduced. The frames the same to the bit; a sign at work or waiting moves: Rust says
+      it does not draw it yet in a moving frame
+- [x] the sun's way (sunpath widgets): the horizon fading at its ends and the day's way
+      dotted; by day the part of the day gone from the day's start's colour to the sun's, in
+      its own soft light (a blur), the sun glowing where it stands, worked out in numpy's
+      float32 as Python's is; by night the moon's crescent; the midnight sun at its height;
+      nothing where the sun's times are not known. The frames the same to the bit
 - [ ] the zones on Windows (Python finds them in the tzdata package there, which the Rust
       app does not bring yet: none is found there for now)
 - [ ] the C library's locale where Python's text follows it: format()'s 'n' and what strftime

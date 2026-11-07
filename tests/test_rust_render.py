@@ -1263,6 +1263,96 @@ def test_frames_of_calendars_in_other_languages_as_python_draws_them(tmp_path: P
         assert drawn > 30, language
 
 
+AGENT_STATES = ["working", "waiting", "idle", "off", "busy", "", 3, None, "Working"]
+
+
+def _agent(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """The sign of an AI agent at work: its size, its colours (at work, waiting, off), the
+    reading of its state."""
+    w, h = size
+    sign: dict[str, Any] = {"type": "agent", "id": f"a{i}", "x": rng.randrange(-20, w),
+                            "y": rng.randrange(-20, h),
+                            "size": rng.choice([1, 8, 9, 20, 33, 64, 130]),
+                            "color": _colour(rng), "color2": _colour(rng),
+                            "muted": _colour(rng)}  # fmt: skip
+    if rng.random() < 0.3:
+        sign["sensor"] = rng.choice(["ai.codex.state", "ai.claude.state"])
+    if rng.random() < 0.2:
+        sign["opacity"] = rng.choice([0.5, 0.0])
+    return sign
+
+
+def _agent_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _agent(rng, i, size) if rng.random() < 0.7 else _card_or_text(rng, i, size)
+
+
+def _agent_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
+    """The states the agents' readings say (some of them none Python knows, or none)."""
+    readings: dict[str, Reading] = {}
+    given: dict[str, Any] = {}
+    for key in ("ai.claude.state", "ai.codex.state"):
+        if rng.random() < 0.9:
+            value = rng.choice(AGENT_STATES)
+            readings[key] = Reading(key, value)
+            given[key] = _typed(value)
+    return {"readings": given, "images": {}}, Snapshot(readings=readings)
+
+
+def test_frames_of_agents_signs_as_python_draws_them(tmp_path: Path) -> None:
+    # (at work three lights on a faint ring, waiting the ring in its colour with a light in its
+    # middle, idle a light resting at its top, off the ring faint; any other state is off)
+    assert _compare_frames(tmp_path, 0xA6E, 160, _agent_or_more, _agent_snapshot) > 120
+
+
+def _sunpath(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """The sun's way over the sky: its size and thickness, the sun's colour and the day's
+    start's, the horizon's and the moon's."""
+    w, h = size
+    way: dict[str, Any] = {"type": "sunpath", "id": f"s{i}", "x": rng.randrange(-20, w),
+                           "y": rng.randrange(-20, h),
+                           "w": rng.choice([0, 8, 30, 77, 160, 300]),
+                           "h": rng.choice([0, 6, 20, 44, 120]),
+                           "thickness": rng.choice([2, 0.5, 1, 3.7, 8, -1, 20]),
+                           "color": _colour(rng), "background": _colour(rng),
+                           "night": _colour(rng)}  # fmt: skip
+    if rng.random() < 0.4:
+        way["color2"] = _colour(rng)
+    if rng.random() < 0.2:
+        way["sensor"] = "sun.other"
+    if rng.random() < 0.2:
+        way["opacity"] = rng.choice([0.5, 0.0])
+    return way
+
+
+def _sunpath_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _sunpath(rng, i, size) if rng.random() < 0.7 else _card_or_text(rng, i, size)
+
+
+SUN_PROGRESS = [0, 0.5, 1, 0.25, 0.731, 0.001, 0.999, 1.2, -0.1, "0.4", " 0.7 ", "x", "nan",
+                True, 2**60]  # fmt: skip
+
+
+def _sunpath_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
+    """Where the sun is on its way (or what is no such place), whether it is up."""
+    readings: dict[str, Reading] = {}
+    given: dict[str, Any] = {}
+    progress = rng.choice([*SUN_PROGRESS, rng.random(), rng.random(), None])
+    up = rng.choice([None, None, 0, 1, 1.0, True, "1", 0.5])
+    for key, value in (("sun.progress", progress), ("sun.up", up), ("sun.other", rng.random())):
+        if value is not None:
+            readings[key] = Reading(key, value)
+            given[key] = _typed(value)
+    return {"readings": given, "images": {}}, Snapshot(readings=readings)
+
+
+def test_frames_of_the_sun_s_way_as_python_draws_them(tmp_path: Path) -> None:
+    # (the horizon fading at its ends, the day's way dotted; by day the part gone from the
+    # day's start's colour to the sun's in its own soft light, the sun glowing where it stands,
+    # in numpy's float32; by night the moon's crescent; nothing where the sun's times are not
+    # known)
+    assert _compare_frames(tmp_path, 0x50A, 200, _sunpath_or_more, _sunpath_snapshot) > 150
+
+
 def test_a_calendar_s_dot_as_python_rounds_its_side(tmp_path: Path) -> None:
     # (October 2026 in six rows of 37.5 px: today's dot 34.5 px across, which round() makes
     # 34, half to even, where rounding half away from zero would make it 35)
@@ -1274,3 +1364,37 @@ def test_a_calendar_s_dot_as_python_rounds_its_side(tmp_path: Path) -> None:
         return {"readings": {}, "images": {}, "now": _moment(now)}, Snapshot(readings={}, now=now)
 
     assert _compare_frames(tmp_path, 0xD07, 12, month, october) > 8
+
+
+THEMES = Path(__file__).parent.parent / "src" / "libre_panel" / "themes"
+
+
+def test_the_app_s_own_themes_as_python_draws_them() -> None:
+    # (every theme the app brings, with the demo's readings at a fixed moment: the same to the
+    # bit where Rust draws all a frame holds, else Rust says what it does not draw yet; how
+    # many it draws is the measure of what is done)
+    import dataclasses
+
+    from libre_panel.sensors.demo import demo_snapshot
+
+    snapshot = dataclasses.replace(demo_snapshot(fixed_time=1_760_000_000.0),
+                                   now=datetime(2026, 11, 7, 18, 5, 9, 250))  # fmt: skip
+    readings = {key: {"v": _typed(r.value), "unit": r.unit, "label": r.label}
+                for key, r in snapshot.readings.items()}  # fmt: skip
+    given = {"readings": readings, "images": {k: image(v) for k, v in snapshot.images.items()},
+             "now": _moment(snapshot.now)}  # fmt: skip
+    folders = sorted(p.parent for p in THEMES.glob("*/theme.json"))
+    cases = [{"folder": str(f), "snapshot": given, "dither": False} for f in folders]
+    expected = [_python_frame(f, snapshot, False) for f in folders]
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR),
+                   "language": "en", "locale": str(i18n.LOCALE_DIR)}])  # fmt: skip
+    drawn = []
+    for folder, got, want in zip(folders, ours["frames"], expected, strict=True):
+        if "unported" in got:
+            continue
+        assert "frame" in want and "sha256" in got, (folder.name, got, want.get("error"))
+        assert got["sha256"] == hashlib.sha256(want["frame"].tobytes()).hexdigest(), folder.name
+        assert got["boxes"] == want["boxes"], folder.name
+        drawn.append(folder.name)
+    assert len(folders) > 90
+    assert len(drawn) >= 20, drawn
