@@ -645,7 +645,12 @@ impl Renderer {
                     Err(e) => return Drawn::Failed(e),
                 };
                 let content = bar::content(frac, paint);
-                self.cached(&w, content, |r| r.gauge_piece(&w, frac, paint))
+                if finish::of(&w) == Finish::LitGauge && lit::ringed(&w) {
+                    let content = Value::List(vec!["lit".into(), content]);
+                    self.cached(&w, content, |r| r.lit_gauge_piece(&w, frac, paint))
+                } else {
+                    self.cached(&w, content, |r| r.gauge_piece(&w, frac, paint))
+                }
             }
             "metric" => {
                 let w = w.clone();

@@ -526,8 +526,8 @@ def test_frames_of_texts_that_just_fit_as_python_fits_them(tmp_path: Path) -> No
 
 def test_frames_beyond_their_widgets_are_not_drawn_here_yet(tmp_path: Path) -> None:
     # (a screen, the panel's look and a finish Rust does not draw yet: the facets' rings, the
-    # lit finish's rings and weather icons; Rust says it does not draw them yet, rather than a
-    # frame without them)
+    # lit finish's weather icons; Rust says it does not draw them yet, rather than a frame
+    # without them)
     rng = random.Random(0xB3D)
     cases, wanted = [], []
     for n in range(30):
@@ -542,7 +542,7 @@ def test_frames_beyond_their_widgets_are_not_drawn_here_yet(tmp_path: Path) -> N
             finished = rng.choice([_icon, _gauge])(rng, 99, (64, 48))
             if finished["type"] == "icon":
                 finished["icon"] = rng.choice(WEATHER_ICONS)
-            finishes = {"icon": ["lit"]}.get(finished["type"])
+            finishes = {"icon": ["lit"], "gauge": ["facet"]}.get(finished["type"])
             finished["finish"] = rng.choice(finishes or ["lit", "facet"])
             data["widgets"].append(finished)
         (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
@@ -1402,7 +1402,7 @@ def test_the_app_s_own_themes_as_python_draws_them() -> None:
         assert got["boxes"] == want["boxes"], folder.name
         drawn.append(folder.name)
     assert len(folders) > 90
-    assert len(drawn) >= 29, drawn
+    assert len(drawn) >= 32, drawn
 
 
 def _lit(
@@ -1502,15 +1502,16 @@ FLAT_FINISHES = [("lit", "clock"), ("lit", "weather"), ("lit", "countdown"), ("l
                  ("flat", "metric"), ("lit", "agent"), ("facet", "sunpath")]  # fmt: skip
 LETTERED_FINISHES = [(finish, kind) for finish in ("facet", "acrylic")
                      for kind in ("text", "metric", "clock", "weather", "countdown")]  # fmt: skip
-OWN_FINISHES = [("lit", "bar"), ("facet", "bar")]
-UNDRAWN_FINISHES = [("lit", "gauge"), ("lit", "graph"), ("lit", "symbol"), ("lit", "downloads"),
-                    ("facet", "gauge"), ("facet", "graph")]  # fmt: skip
+OWN_FINISHES = [("lit", "bar"), ("facet", "bar"), ("lit", "gauge")]
+UNDRAWN_FINISHES = [("lit", "graph"), ("lit", "symbol"), ("lit", "downloads"), ("facet", "gauge"),
+                    ("facet", "graph")]  # fmt: skip
 
 
 def test_each_finish_rust_does_not_draw_yet_is_refused(tmp_path: Path) -> None:
     # (a finish that takes the widget and that Rust does not draw: the whole frame refused,
     # rather than a frame without it; one that does not take it: the widget drawn flat; the
-    # facets' letters and bars, the lit bar: their own, the lit bar's halo within a level)
+    # facets' letters and bars, the lit bar and ring: their own, the lit ones' halos within a
+    # level)
     import numpy as np
 
     makers = {"clock": _clock, "weather": _weather_or_countdown, "rect": _rect, "bar": _bar,
@@ -1533,6 +1534,8 @@ def test_each_finish_rust_does_not_draw_yet_is_refused(tmp_path: Path) -> None:
         if (finish, kind) in OWN_FINISHES:  # (raised, or its light, in a groove; the lit glow)
             widget.update(x=8, y=12, w=40, h=10, glow=0.8 if finish == "lit" else 0, glow_radius=6,
                           background="@surface")  # fmt: skip
+            if kind == "gauge":
+                widget.update(y=4, h=40, thickness=8)
         if kind in ("graph", "symbol", "downloads"):
             widget.pop("text", None)
         folder = tmp_path / f"t{n}"
@@ -1553,7 +1556,7 @@ def test_each_finish_rust_does_not_draw_yet_is_refused(tmp_path: Path) -> None:
         if pair in UNDRAWN_FINISHES:
             continue
         want = _python_frame(Path(case["folder"]), now, False)["frame"]  # (drawn as Python does)
-        if pair == ("lit", "bar"):
+        if pair in OWN_FINISHES and pair[0] == "lit":
             apart = np.abs(np.asarray(picture(frame["frame"]), int) - np.asarray(want, int))
             assert apart.max() <= 1, pair
         else:
@@ -1849,3 +1852,64 @@ def test_frames_of_facet_bars_as_python_draws_them(tmp_path: Path) -> None:
     # (a raised bar with straight, bevelled ends in a milled track, in its colour, a gradient
     # or a threshold's; segments; flat where a bevel does not read)
     assert _compare_frames(tmp_path, 0xFA8, 160, _facet_bar_or_more, _unkept_bar_snapshot) > 120
+
+
+def _lit_gauge(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """Rings lit: the arc of light on the middle of a groove milled into the panel, its ticks
+    flat on it; a round one's arc worked out, any other's drawn; flat under 8 px across or
+    with a groove under 2."""
+    gauge = _gauge(rng, i, size)
+    gauge["finish"] = "lit"
+    if rng.random() < 0.6:
+        gauge["background"] = rng.choice([_colour(rng), "@accent", "#16233280"])
+    if rng.random() < 0.1:  # (where the finish begins to draw it)
+        gauge["w"] = gauge["h"] = rng.choice([7, 8])
+    if rng.random() < 0.1:  # (ticks with no groove under them)
+        gauge["background"], gauge["ticks"] = None, rng.choice([4, 12])
+    return gauge
+
+
+def _lit_gauge_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _lit_gauge(rng, i, size) if rng.random() < 0.8 else _card_or_text(rng, i, size)
+
+
+def _unkept_ring_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
+    """_bar_snapshot, each frame from no kept lights: Python keeps a closed ring's start by all
+    it is made of but its halo, so after a frame of another panel size it may take one of
+    another softness."""
+    from libre_panel.render import lit
+
+    lit._PICTURES.clear()
+    return _bar_snapshot(rng)
+
+
+def test_frames_of_lit_gauges_within_a_level(tmp_path: Path) -> None:
+    # (a round ring's arc worked out from each pixel's distance and angle, the angle numpy's
+    # float32 arctan2, which it takes from SVML on a processor with AVX-512, as the groove's;
+    # its light's halo blurred in floating point: now and then a pixel a level apart)
+    import numpy as np
+
+    rng = random.Random(0x1A6)
+    cases, expected = [], []
+    for n in range(120):
+        folder = tmp_path / f"t{n}"
+        _frame_theme(rng, folder, _lit_gauge_or_more)
+        given, snapshot = _unkept_ring_snapshot(rng)
+        dither = rng.random() < 0.3
+        cases.append({"folder": str(folder), "snapshot": given, "dither": dither, "bytes": True})
+        expected.append(_python_frame(folder, snapshot, dither))
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    differ = total = drawn = 0
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        if "error" in want:
+            assert "error" in got, n
+            continue
+        assert "frame" in got, (n, got)
+        apart = np.abs(np.asarray(picture(got["frame"]), int) - np.asarray(want["frame"], int))
+        assert apart.max() <= 1, n
+        differ += int((apart.max(axis=2) > 0).sum())
+        total += apart.shape[0] * apart.shape[1]
+        assert got["boxes"] == want["boxes"], n
+        drawn += 1
+    assert drawn > 90
+    assert differ <= total // 10000

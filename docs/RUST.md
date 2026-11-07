@@ -353,8 +353,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       added over it; clocks, the weather, countdowns and line icons the lit finish leaves flat,
       as Python leaves them. The frames the same to the bit; with a shadow, or the renderer's
       own glow round what the finish leaves flat, a pixel now and then a level apart, as a
-      card's. The facets' rings and graphs and the lit finish's rings, graphs, weather icons,
-      symbols and downloads: Rust says it does not draw them yet
+      card's. The facets' rings and graphs and the lit finish's graphs, weather icons, symbols
+      and downloads: Rust says it does not draw them yet
 - [x] the facet and acrylic finishes' letters (facet.py, facets.py): each letter of a text of
       one line, from 20 px on, the finish's own: of bright metal that mirrors the sky (the
       palette's accent, else its primary or cpu colour, a third of the way to white) above it
@@ -380,6 +380,19 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       to the bit; the lit bars' frames the same to the bit here (240 of them), a pixel now and
       then a level apart allowed, as numpy multiplies by the blur's matrices in float32 as
       another processor's library adds them up
+- [x] the lit finish's ring gauges (lit.py's LitGauge): the groove milled into the panel as
+      facets.py's groove_ring mills it (the band's samples, two by two to a pixel, their edges
+      and cuts, the shading in doubles as numpy's normals are), the gauge's ticks flat on it;
+      on the middle of the groove the value's arc of light: a round ring's worked out from each
+      pixel's distance and angle (numpy's float32 arctan2), any other's drawn twice as large
+      and made smaller; the whole sweep's light up to the arc's tip, and around the tip (and
+      the start of a closed ring) the light made anew of the coverage in a window round it,
+      cut as numpy slices, where the window lies off the canvas too; of a gradient the colour
+      where the arc ends; flat under 8 px across or with a groove under 2. The frames the same
+      to the bit where numpy takes float32 arctan2 from the C library, as Rust does (240 of
+      them); on a processor with AVX-512 numpy takes it from SVML, a unit in the last place
+      apart in two of five angles, and there a pixel now and then comes out a level apart
+      (3 in 4 million). 32 of the app's 99 themes are drawn by Rust, all the same to the bit
 - [ ] the zones on Windows (Python finds them in the tzdata package there, which the Rust
       app does not bring yet: none is found there for now)
 - [ ] the C library's locale where Python's text follows it: format()'s 'n' and what strftime

@@ -1,6 +1,7 @@
 //! The lit finish (render/lit.py), SPUR II's light: a text's and a metric's glow, its colours
 //! blurred and added over the text and around it as light (LitText, text_light); a bar's
-//! light in its milled groove, and its glow (LitBar, bar_piece).
+//! light in its milled groove, and its glow (LitBar, bar_piece); a ring gauge's arc of light
+//! on the middle of its milled groove (LitGauge, gauge_piece).
 
 use lp_pixels::{Draw, Filter, Image, Mode, Transpose, ALL_CORNERS};
 use lp_py::{Dict, Value};
@@ -165,13 +166,15 @@ fn rise_steps() -> [(f64, f64); GLOW_STEPS] {
 
 /// light: SPUR II's light of a coverage `mask` (h x w, 0 to 1) in `colour` (RGB 0 to 255, one,
 /// or one per column), straight RGBA: the core towards white, the halo in the colour; its
-/// halo the coverage cut to whole levels and blurred in float32, `halo` px.
+/// halo the coverage cut to whole levels and blurred in float32, `halo` px. With `bounds`
+/// (x0, y0, x1, y1) the light in that part alone, its halo still worked out of all the mask.
 fn light(
     mask: &[f32],
     h: usize,
     w: usize,
     colour: &dyn Fn(usize) -> [f32; 3],
     halo: f64,
+    bounds: Option<(usize, usize, usize, usize)>,
 ) -> Vec<u8> {
     let cut: Vec<f32> = mask.iter().map(|&m| f32::from((m * 255.0) as u8)).collect();
     let share = (1.0f64 / 255.0) as f32;
@@ -180,9 +183,10 @@ fn light(
         .map(|&v| v * share)
         .collect();
     let exponent = 0.7f64 as f32;
-    let mut out = Vec::with_capacity(h * w * 4);
-    for y in 0..h {
-        for x in 0..w {
+    let (x0, y0, x1, y1) = bounds.unwrap_or((0, 0, w, h));
+    let mut out = Vec::with_capacity((y1 - y0) * (x1 - x0) * 4);
+    for y in y0..y1 {
+        for x in x0..x1 {
             let i = y * w + x;
             let m = mask[i];
             let core = m.powf(exponent);
@@ -588,7 +592,7 @@ fn bar_canvas(
                 let at = (start - pad as i64 + column as i64).clamp(0, length as i64 - 1) as usize;
                 colours.at(at).map(|v| v * 255.0)
             };
-            let rgba = light(&mask, mh, mw, &colour, BAR_HALO * unit_px);
+            let rgba = light(&mask, mh, mw, &colour, BAR_HALO * unit_px, None);
             let mut image = Image::from_bytes(Mode::RGBA, mw, mh, rgba)?;
             if fade < 0.999 {
                 image = alpha_scaled(&image, fade)?;
@@ -663,5 +667,328 @@ impl Renderer {
                 Err(e) => Drawn::Failed(e),
             },
         )
+    }
+}
+
+// -- rings ------------------------------------------------------------------------------------
+
+/// A ring's light: this share of its groove (6 of 10 px), and its halo's softness (px, on a
+/// panel 480 high).
+const RING_CORE: f64 = 0.6;
+const RING_HALO: f64 = 6.0;
+
+/// LitGauge's own: a gauge from 8 px on with a groove from 2 px on (any other is drawn flat).
+pub(crate) fn ringed(w: &Dict) -> bool {
+    widget::int(w, "w", 120).min(widget::int(w, "h", 120)) >= 8
+        && widget::int(w, "thickness", 12) >= 2
+}
+
+/// The gauge as a ring's light takes it: its size and groove, where it starts and ends
+/// (degrees), and the room round it on its canvas (px).
+struct RingShape {
+    w: i64,
+    h: i64,
+    thickness: i64,
+    start: f64,
+    end: f64,
+    room: usize,
+}
+
+impl RingShape {
+    fn of(w: &Dict, room: usize) -> RingShape {
+        RingShape {
+            w: widget::int(w, "w", 120),
+            h: widget::int(w, "h", 120),
+            thickness: widget::int(w, "thickness", 12),
+            start: widget::number(w, "start_angle", 135.0),
+            end: widget::number(w, "end_angle", 405.0),
+            room,
+        }
+    }
+
+    /// The canvas's size: the gauge's, `room` px larger on every side.
+    fn canvas(&self) -> (usize, usize) {
+        let grown = |side: i64| (side + 2 * self.room as i64).max(0) as usize;
+        (grown(self.w), grown(self.h))
+    }
+
+    /// _round: whether its arc is worked out (_cover): round, turning clockwise.
+    fn round(&self) -> bool {
+        self.w == self.h && self.end > self.start
+    }
+}
+
+/// _cover: how much of each pixel of `bounds` (x0, y0, x1, y1) of a round gauge's canvas the
+/// arc of `frac` covers, `stroke` px wide on the middle of its groove, its ends cut along the
+/// radius: from each pixel's distance to its edges (_field's distance and angle, in float32).
+fn ring_cover(
+    shape: &RingShape,
+    frac: f64,
+    stroke: i64,
+    (x0, y0, x1, y1): (usize, usize, usize, usize),
+) -> Vec<f32> {
+    let side = shape.w as usize + 2 * shape.room;
+    let offset = (0.5 - side as f64 / 2.0) as f32;
+    let at = |i: usize| i as f32 + offset;
+    let start = shape.start.to_radians() as f32;
+    let turn = (2.0 * std::f64::consts::PI) as f32;
+    let middle = ((shape.w - shape.thickness) as f64 / 2.0) as f32;
+    let half = (stroke as f64 / 2.0 + 0.5) as f32;
+    let sweep = ((shape.end - shape.start) * frac).to_radians();
+    let ends = (sweep < 2.0 * std::f64::consts::PI).then_some(sweep as f32);
+    let mut out = Vec::with_capacity((x1 - x0) * (y1 - y0));
+    for y in y0..y1 {
+        let dy = at(y);
+        for x in x0..x1 {
+            let dx = at(x);
+            let far = (dx * dx + dy * dy).sqrt();
+            let cover = clip01(half - (far - middle).abs());
+            let Some(sweep) = ends else {
+                out.push(cover);
+                continue;
+            };
+            let angle = facets::mod32(dy.atan2(dx) - start, turn);
+            // (in the arc: how far from its nearer end, in radians; beyond it, how far before)
+            let within = angle.min(sweep - angle);
+            let beyond = -(angle - sweep).min(turn - angle);
+            let end = if angle <= sweep { within } else { beyond };
+            out.push(cover * clip01(end * far + 0.5));
+        }
+    }
+    out
+}
+
+/// A Python slice start:stop of a length `len`, as numpy cuts: an end below 0 counted from the
+/// far end, both held to the length, nothing where the stop comes before the start.
+fn py_slice(start: i64, stop: i64, len: usize) -> (usize, usize) {
+    let n = len as i64;
+    let at = |v: i64| if v < 0 { (v + n).max(0) } else { v.min(n) };
+    let (a, b) = (at(start), at(stop));
+    (a as usize, b.max(a) as usize)
+}
+
+/// _arc_part: the coverage of the arc of `frac` in `bounds` (x0, y0, x1, y1) of the gauge's
+/// canvas, and its width and height: worked out for a round gauge (its field cut as numpy
+/// slices it, where a window lies off the canvas too), drawn twice as large and made smaller
+/// (LANCZOS) for any other (where Pillow refuses a window of no size).
+fn arc_part(
+    shape: &RingShape,
+    frac: f64,
+    stroke: i64,
+    (x0, y0, x1, y1): (i64, i64, i64, i64),
+) -> Result<(Vec<f32>, usize, usize)> {
+    let (width, height) = shape.canvas();
+    if shape.round() {
+        let (left, right) = py_slice(x0, x1, width);
+        let (top, bottom) = py_slice(y0, y1, height);
+        let cover = ring_cover(shape, frac, stroke, (left, top, right, bottom));
+        return Ok((cover, right - left, bottom - top));
+    }
+    let (bw, bh) = (x1 - x0, y1 - y0);
+    if bw < 0 || bh < 0 {
+        return Err(Failed("Width and height must be >= 0".into()));
+    }
+    if bw == 0 || bh == 0 {
+        return Err(Failed("height and width must be > 0".into()));
+    }
+    let (bw, bh) = (bw as usize, bh as usize);
+    let u = 2usize;
+    let mut mask = Image::blank(Mode::L, bw * u, bh * u);
+    let cx = (width * u) as f64 / 2.0 - (x0 * u as i64) as f64;
+    let cy = (height * u) as f64 / 2.0 - (y0 * u as i64) as f64;
+    let th = shape.thickness;
+    let rx = (shape.w - th) as f64 / 2.0 + stroke as f64 / 2.0;
+    let ry = (shape.h - th) as f64 / 2.0 + stroke as f64 / 2.0;
+    let (uf, end) = (u as f64, shape.start + (shape.end - shape.start) * frac);
+    let reach = (stroke * u as i64).max(1);
+    let wide = i32::try_from(reach).map_err(|_| Failed("a ring too wide".into()))?;
+    Draw::new(&mut mask).arc(
+        (cx - rx * uf, cy - ry * uf, cx + rx * uf, cy + ry * uf),
+        shape.start,
+        end,
+        Some([255, 0, 0, 0]),
+        wide,
+    )?;
+    let small = mask.resize(bw, bh, Filter::Lanczos, None, None)?;
+    let cover = small.as_bytes().iter().map(|&v| f32::from(v) / 255.0);
+    Ok((cover.collect(), bw, bh))
+}
+
+/// _ring_sweep: the light of a ring's whole sweep in `colour`: how far towards white and how
+/// opaque each pixel is (light's of the sweep in black), the white laid over the colour by it.
+fn ring_sweep(shape: &RingShape, colour: [i64; 3], stroke: i64, halo: f64) -> Result<Image> {
+    let (width, height) = shape.canvas();
+    let (arc, ..) = arc_part(shape, 1.0, stroke, (0, 0, width as i64, height as i64))?;
+    let rgba = light(&arc, height, width, &|_| [0.0; 3], halo, None);
+    let band = |i: usize| rgba.chunks_exact(4).map(|p| p[i]).collect::<Vec<u8>>();
+    let (white, opaque) = (band(0), band(3));
+    let white = Image::from_bytes(Mode::L, width, height, white)?;
+    let opaque = Image::from_bytes(Mode::L, width, height, opaque)?;
+    let ink = colour.map(|v| v.clamp(0, 255) as u8);
+    let rgb = lp_pixels::chops::composite(
+        &Image::new(Mode::RGB, width, height, &[255, 255, 255]),
+        &Image::new(Mode::RGB, width, height, &ink),
+        &white,
+    )?;
+    let mut sweep = rgb.convert(Mode::RGBA)?;
+    sweep.putalpha(&opaque)?;
+    Ok(sweep)
+}
+
+/// _ring_light: the light of a ring's arc of `frac` in `colour`: the whole sweep's up to the
+/// arc's tip (through a sector), and around the tip and the start of a closed ring the light
+/// made anew of the coverage in a window round it, laid over that in turn.
+fn ring_light(
+    shape: &RingShape,
+    frac: f64,
+    colour: [i64; 3],
+    stroke: i64,
+    halo: f64,
+) -> Result<Image> {
+    let (width, height) = shape.canvas();
+    let (start, end) = (shape.start, shape.end);
+    let tip = start + (end - start) * frac;
+    let gap = 360.0 - (end - start).abs();
+    let mut sector = Image::blank(Mode::L, width, height);
+    let far = (width + height) as f64;
+    let (mx, my) = (width as f64 / 2.0, height as f64 / 2.0);
+    let low = if end < start { end } else { start } - gap / 2.0;
+    Draw::new(&mut sector).pieslice(
+        (mx - far, my - far, mx + far, my + far),
+        low,
+        if low > tip { low } else { tip },
+        Some([255, 0, 0, 0]),
+        None,
+        1,
+    )?;
+    let mut out = Image::blank(Mode::RGBA, width, height);
+    out.paste(
+        &ring_sweep(shape, colour, stroke, halo)?,
+        0,
+        0,
+        Some(&sector),
+    )?;
+    let radius = (shape.w.min(shape.h) - shape.thickness) as f64 / 2.0;
+    let reach = (stroke as f64 / 2.0 + 3.0 * halo).ceil() as i64 + 3;
+    let margin = (3.0 * halo).ceil() as i64 + 4;
+    let (cw, ch) = (width as i64, height as i64);
+    let window = |angle: f64| {
+        let a = angle.to_radians();
+        let x = width as f64 / 2.0 + (shape.w - shape.thickness) as f64 / 2.0 * a.cos();
+        let y = height as f64 / 2.0 + (shape.h - shape.thickness) as f64 / 2.0 * a.sin();
+        let inner = (
+            ((x - reach as f64).floor() as i64).max(0),
+            ((y - reach as f64).floor() as i64).max(0),
+            ((x + reach as f64).ceil() as i64).min(cw),
+            ((y + reach as f64).ceil() as i64).min(ch),
+        );
+        let outer = (
+            (inner.0 - margin).max(0),
+            (inner.1 - margin).max(0),
+            (inner.2 + margin).min(cw),
+            (inner.3 + margin).min(ch),
+        );
+        (inner, outer)
+    };
+    let c = colour.map(|v| v as f32);
+    // (the light worked out of the coverage in the outer window, kept in the inner one, each
+    // cut as numpy slices)
+    let patch = |inner: (i64, i64, i64, i64), outer: (i64, i64, i64, i64)| -> Result<Image> {
+        let (cover, ow, oh) = arc_part(shape, frac, stroke, outer)?;
+        let (x0, y0) = (inner.0 - outer.0, inner.1 - outer.1);
+        let (left, right) = py_slice(x0, x0 + inner.2 - inner.0, ow);
+        let (top, bottom) = py_slice(y0, y0 + inner.3 - inner.1, oh);
+        let kept = Some((left, top, right, bottom));
+        let local = light(&cover, oh, ow, &|_| c, halo, kept);
+        Ok(Image::from_bytes(
+            Mode::RGBA,
+            right - left,
+            bottom - top,
+            local,
+        )?)
+    };
+    let mut patches = vec![];
+    let (tip_inner, tip_outer) = window(tip);
+    if gap * std::f64::consts::PI / 180.0 * radius < (2 * reach + 2) as f64 {
+        // (closed: the sweep's light has no start)
+        let (inner, outer) = window(start);
+        patches.push((inner, patch(inner, outer)?));
+    }
+    patches.push((tip_inner, patch(tip_inner, tip_outer)?));
+    for (inner, image) in patches {
+        out.paste(&image, inner.0, inner.1, None)?;
+    }
+    Ok(out)
+}
+
+impl Renderer {
+    /// _groove_ring: a lit ring's groove, the gauge's size: milled into the panel in its
+    /// background (facets.groove_ring), its ticks flat on it; None where it has neither.
+    fn lit_groove(&self, w: &Dict) -> Result<Option<Image>> {
+        let track = self.colour_of(w, "background")?;
+        let ticks = widget::int(w, "ticks", 0);
+        if track.is_none() && ticks <= 0 {
+            return Ok(None);
+        }
+        let shape = RingShape::of(w, 0);
+        let (gw, gh) = shape.canvas();
+        let mut out = Image::blank(Mode::RGBA, gw, gh);
+        if let Some(track) = track {
+            let groove =
+                facets::groove_ring(gw, gh, shape.thickness, shape.start, shape.end, track)?;
+            out.paste(&groove, 0, 0, None)?;
+        }
+        if ticks > 0 {
+            // (the ticks alone, in their colour, else the groove's)
+            let mut alone = w.clone();
+            let tick = match w.get("tick_color") {
+                Some(colour) if widget::truthy(w, "tick_color") => colour.clone(),
+                _ => w.get("background").cloned().unwrap_or(Value::None),
+            };
+            alone.insert("background".into(), Value::None);
+            alone.insert("tick_color".into(), tick);
+            let ticked = self.gauge_static(&alone)?;
+            let whole = (0, 0, ticked.width() as i64, ticked.height() as i64);
+            out.alpha_composite_at(&ticked, (0, 0), whole)?;
+        }
+        Ok(Some(out))
+    }
+
+    /// gauge_piece: the lit ring: its groove on a canvas with room round it for the light, and
+    /// the value's arc of light on it (in its colour, or of a gradient where the arc ends).
+    pub(crate) fn lit_gauge_piece(&self, w: &Dict, frac: f64, paint: Paint) -> Result<Piece> {
+        let (x, y) = (widget::int(w, "x", 0), widget::int(w, "y", 0));
+        let (gw, gh) = (widget::int(w, "w", 120), widget::int(w, "h", 120));
+        let unit_px = self.theme.width.min(self.theme.height) as f64 / 480.0;
+        let room = (3.0 * RING_HALO * unit_px).ceil() as usize;
+        let shape = RingShape::of(w, room);
+        let (width, height) = shape.canvas();
+        if (width as i64).saturating_mul(height as i64) > crate::renderer::MOST_PIXELS {
+            return Err(Failed("a ring too large".into()));
+        }
+        let mut canvas = Image::blank(Mode::RGBA, width, height);
+        if let Some(groove) = self.lit_groove(w)? {
+            canvas.paste(&groove, room as i64, room as i64, None)?;
+        }
+        if frac > 0.0 {
+            let (a, b) = paint;
+            let stroke = (lp_py::round(shape.thickness as f64 * RING_CORE) as i64).max(2);
+            let halo = RING_HALO * unit_px;
+            // (a gradient: the colour where the arc ends, in whole levels)
+            let colour = match b {
+                None => [a[0], a[1], a[2]],
+                Some(b) => [0, 1, 2]
+                    .map(|i| lp_py::round(a[i] as f64 + (b[i] - a[i]) as f64 * frac) as i64),
+            };
+            let mut light = ring_light(&shape, frac, colour, stroke, halo)?;
+            if a[3] < 255 {
+                light = alpha_scaled(&light, a[3] as f64 / 255.0)?;
+            }
+            let whole = (0, 0, width as i64, height as i64);
+            canvas.alpha_composite_at(&light, (0, 0), whole)?;
+        }
+        let mut piece = Piece::new(canvas, x - room as i64, y - room as i64);
+        piece.hit = Some([x, y, gw, gh]);
+        Ok(piece)
     }
 }

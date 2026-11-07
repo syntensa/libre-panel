@@ -91,7 +91,7 @@ fn cap(px: f64, py: f64, thick: f64) -> (f64, f64, f64, f64) {
 
 impl Renderer {
     /// _gauge_static: the track (an arc, round caps at its ends) and the ticks across it.
-    fn gauge_static(&self, w: &Dict) -> Result<Image> {
+    pub(crate) fn gauge_static(&self, w: &Dict) -> Result<Image> {
         let (gw, gh) = (widget::int(w, "w", 120), widget::int(w, "h", 120));
         // (_canvas: a pixel at least)
         let (lw, lh) = sized(gw.saturating_mul(S).max(1), gh.saturating_mul(S).max(1))?;

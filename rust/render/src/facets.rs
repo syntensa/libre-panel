@@ -939,3 +939,228 @@ pub fn check_bar(
 ) -> Result<Option<Image>> {
     bar_layer(w, h, frac, direction, paint, track, segments, gap)
 }
+
+// -- rings ----------------------------------------------------------------------------------
+
+/// A ring's band is worked out this much larger.
+const RING_SUB: usize = 2;
+
+/// np.mod of float32: the remainder with the divisor's sign (numpy's npy_remainderf).
+pub(crate) fn mod32(a: f32, b: f32) -> f32 {
+    let m = a % b;
+    if m == 0.0 {
+        0.0f32.copysign(b)
+    } else if (b < 0.0) != (m < 0.0) {
+        m + b
+    } else {
+        m
+    }
+}
+
+/// ring_band: the pixels a ring in a box covers (its circle the largest the box holds, its band
+/// `thickness` px wide, from `start` to `end` degrees clockwise from 3 o'clock) and, per sample
+/// (RING_SUB squared of them to a pixel), where it lies: samples first, pixels last, as numpy
+/// keeps them.
+struct RingBand {
+    /// the pixels (row, column), row by row
+    pixels: Vec<(usize, usize)>,
+    /// radians from the start of the sweep, px from the middle, px to the inner and the outer
+    /// edge (negative: outside), the light along the way round and along the radius
+    along: Vec<f32>,
+    radius: Vec<f32>,
+    inner: Vec<f32>,
+    outer: Vec<f32>,
+    tangent: Vec<f32>,
+    radial: Vec<f32>,
+    /// 1 where a sample lies within both edges
+    inside: Vec<f32>,
+    /// radians, and the band's width (px)
+    sweep: f64,
+    thickness: f64,
+}
+
+fn ring_band(w: usize, h: usize, thickness: i64, start: f64, end: f64) -> RingBand {
+    let outer_r = w.min(h) as f64 / 2.0;
+    let inner_r = (outer_r - thickness.max(1) as f64).max(0.0);
+    let sign = if end >= start { 1.0f32 } else { -1.0 };
+    let sweep = (2.0 * std::f64::consts::PI).min((end - start).abs().to_radians());
+    // (np.mgrid, np.nonzero: in a pixel and a half of the band, row by row; in doubles)
+    let (half_w, half_h) = (w as f64 / 2.0, h as f64 / 2.0);
+    let mut pixels = vec![];
+    for row in 0..h {
+        for col in 0..w {
+            let centre = (col as f64 + 0.5 - half_w).hypot(row as f64 + 0.5 - half_h);
+            if centre >= inner_r - 1.5 && centre <= outer_r + 1.5 {
+                pixels.push((row, col));
+            }
+        }
+    }
+    let light = light();
+    let start_at = start.to_radians() as f32;
+    let turn = (2.0 * std::f64::consts::PI) as f32;
+    let tiny = 1e-6f64 as f32;
+    let (inner_at, outer_at) = (inner_r as f32, outer_r as f32);
+    let samples = RING_SUB * RING_SUB;
+    let size = samples * pixels.len();
+    let mut band = RingBand {
+        pixels: vec![],
+        along: Vec::with_capacity(size),
+        radius: Vec::with_capacity(size),
+        inner: Vec::with_capacity(size),
+        outer: Vec::with_capacity(size),
+        tangent: Vec::with_capacity(size),
+        radial: Vec::with_capacity(size),
+        inside: Vec::with_capacity(size),
+        sweep,
+        thickness: outer_r - inner_r,
+    };
+    for s in 0..samples {
+        // (a sample a quarter or three quarters into its pixel down and across)
+        let (down, across) = (
+            (s / RING_SUB) as f64 * 0.5 + 0.25,
+            (s % RING_SUB) as f64 * 0.5 + 0.25,
+        );
+        for &(row, col) in &pixels {
+            let dx = (col as f64 + across - half_w) as f32;
+            let dy = (row as f64 + down - half_h) as f32;
+            let radius = dx.hypot(dy);
+            let safe = if radius > tiny { radius } else { tiny };
+            let angle = dy.atan2(dx);
+            band.along.push(mod32(sign * (angle - start_at), turn));
+            band.tangent
+                .push(sign * (-dy * light[0] + dx * light[1]) / safe);
+            band.radial.push((dx * light[0] + dy * light[1]) / safe);
+            let (inner, outer) = (radius - inner_at, outer_at - radius);
+            band.radius.push(radius);
+            band.inner.push(inner);
+            band.outer.push(outer);
+            band.inside.push(if inner >= 0.0 && outer >= 0.0 {
+                1.0
+            } else {
+                0.0
+            });
+        }
+    }
+    band.pixels = pixels;
+    band
+}
+
+/// shade in doubles (as numpy works a ring's out: its normals float64), made float32.
+fn shade64(k: f64, (lighten, darken): (f64, f64)) -> (f32, f32) {
+    let lit = k >= 1.0;
+    let m = ((k - 1.0) * lighten).clamp(0.0, 1.0);
+    let a = if lit {
+        1.0 - m
+    } else {
+        darken + (1.0 - darken) * k
+    };
+    let b = if lit { 255.0 * m } else { 0.0 };
+    (a as f32, b as f32)
+}
+
+/// _ring_shading: (A, B) of the band's sample `q`, its cuts `u` px from the start of the sweep
+/// and `left` px from its end (infinite: none).
+fn ring_shading(
+    band: &RingBand,
+    q: usize,
+    u: f32,
+    left: f32,
+    groove: bool,
+    style: (f64, f64),
+) -> (f32, f32) {
+    let (inner, outer) = (band.inner[q], band.outer[q]);
+    let bevel = (band.thickness / 6.0) as f32;
+    let nearest = inner.min(outer).min(u.min(left));
+    let flat = nearest >= bevel;
+    let at_start = u <= left && u <= inner && u <= outer;
+    let at_end = !at_start && left <= inner && left <= outer;
+    let at_inner = !at_start && !at_end && inner <= outer;
+    let s45 = sin45();
+    let (mut way, mut out) = match (flat, at_start, at_end) {
+        (true, ..) => (0.0, 0.0),
+        (false, true, _) => (-s45, 0.0),
+        (false, false, true) => (s45, 0.0),
+        _ => (0.0, if at_inner { -s45 } else { s45 }),
+    };
+    if groove {
+        (way, out) = (-way, -out);
+    }
+    let top = if flat { 1.0 } else { s45 };
+    let light = light();
+    let k = way * f64::from(band.tangent[q])
+        + out * f64::from(band.radial[q])
+        + top * f64::from(light[2]);
+    shade64(k.clamp(0.0, 1.0) / f64::from(light[2]), style)
+}
+
+/// ring_maps: (A, B, coverage) of each pixel of the band, the ring filled `frac` of its sweep:
+/// within the bevel of its nearest edge (the inner and outer circle, the straight cuts at its
+/// ends) a point tilts 45 degrees away from it; each pixel the mean of its samples.
+fn ring_maps(band: &RingBand, frac: f64, groove: bool, style: (f64, f64)) -> [Vec<f32>; 3] {
+    let arc = band.sweep * frac.clamp(0.0, 1.0);
+    let closed = band.sweep >= 2.0 * std::f64::consts::PI - 1e-6 && frac >= 0.999;
+    let arc_at = arc as f32;
+    let bevel = (band.thickness / 6.0) as f32;
+    let n = band.pixels.len();
+    let samples = band.along.len() / n.max(1);
+    let (mut a, mut b) = (vec![0f32; n], vec![0f32; n]);
+    let mut alpha = vec![0f32; n];
+    for s in 0..samples {
+        for p in 0..n {
+            let q = s * n + p;
+            let mut shaded = ring_shading(band, q, f32::INFINITY, f32::INFINITY, groove, style);
+            if !closed {
+                let u = band.radius[q] * band.along[q];
+                let left = band.radius[q] * arc_at - u;
+                if (u < bevel || left < bevel) && left >= 0.0 {
+                    shaded = ring_shading(band, q, u, left, groove, style);
+                }
+            }
+            let cover = band.inside[q] * if band.along[q] <= arc_at { 1.0 } else { 0.0 };
+            // (sums over the samples, one after another, as numpy sums down)
+            if s == 0 {
+                (a[p], b[p], alpha[p]) = (shaded.0 * cover, shaded.1 * cover, cover);
+            } else {
+                a[p] += shaded.0 * cover;
+                b[p] += shaded.1 * cover;
+                alpha[p] += cover;
+            }
+        }
+    }
+    let share = (1.0 / samples as f64) as f32;
+    let floor = 1e-6f64 as f32;
+    for p in 0..n {
+        alpha[p] *= share;
+        let safe = if alpha[p] > floor { alpha[p] } else { floor };
+        a[p] = a[p] * share / safe;
+        b[p] = b[p] * share / safe;
+    }
+    [a, b, alpha]
+}
+
+/// groove_ring: the milled groove of a ring, RGBA w x h: a band `thickness` px wide on the
+/// largest circle the box holds, from `start` to `end` degrees (a sweep of 360 closed), a floor
+/// of exactly `colour` and a 45-degree bevel thickness / 6 px wide along both edges and, in an
+/// open ring, at its two straight ends.
+pub(crate) fn groove_ring(
+    w: usize,
+    h: usize,
+    thickness: i64,
+    start: f64,
+    end: f64,
+    colour: Rgba,
+) -> Result<Image> {
+    let band = ring_band(w, h, thickness, start, end);
+    let [a, b, alpha] = ring_maps(&band, 1.0, true, GROOVE);
+    let c = colour.map(|v| v as f32);
+    let byte = |v: f32| clip(v + 0.5, 0.0, 255.0) as u8;
+    let mut out = vec![0u8; w * h * 4];
+    for (p, &(row, col)) in band.pixels.iter().enumerate() {
+        let at = (row * w + col) * 4;
+        for i in 0..3 {
+            out[at + i] = byte(c[i] * a[p] + b[p]);
+        }
+        out[at + 3] = byte(alpha[p] * c[3]);
+    }
+    Ok(Image::from_bytes(Mode::RGBA, w, h, out)?)
+}
