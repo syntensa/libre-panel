@@ -648,7 +648,9 @@ def test_dates_written_as_python_s_strftime_writes_them() -> None:
              if (not (isinstance(got, dict) and "unported" in got) if want == "unported"
                  else got != want)]  # fmt: skip
     assert not wrong, f"{len(wrong)} differ: {wrong[:40]}"
-    assert sum(isinstance(w, str) and w != "unported" for w in expected) > 50_000
+    # (Windows refuses every flag but #: a third of the codes written there)
+    written = sum(isinstance(w, str) and w != "unported" for w in expected)
+    assert written > (30_000 if sys.platform == "win32" else 50_000)
 
 
 _DATE_PIECES = ["%d", "%-d", "%B", "%b", "%a", "%A", "%H:%M", "%Y", "%y", "%e", "%j", "%p", "%I",
