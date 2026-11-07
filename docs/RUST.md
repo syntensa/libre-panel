@@ -345,6 +345,16 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       its own soft light (a blur), the sun glowing where it stands, worked out in numpy's
       float32 as Python's is; by night the moon's crescent; the midnight sun at its height;
       nothing where the sun's times are not known. The frames the same to the bit
+- [x] finishes (render/finish.py), as a widget's finish is found and whether it takes the
+      widget: the lit finish's texts and readings (lit.py's LitText): the text as the renderer
+      draws it without its glow, its letters faded by its opacity and not its light, its glow
+      as light (the text in its colours on black, blurred, in whole levels, the light's alpha
+      its brightest band, only inside its glow area if it has one, of ints of any size),
+      added over it; clocks, the weather, countdowns and line icons the lit finish leaves flat,
+      as Python leaves them. The frames the same to the bit; with a shadow, or the renderer's
+      own glow round what the finish leaves flat, a pixel now and then a level apart, as a
+      card's. The facets, acrylic and the lit finish's bars, rings, graphs, weather icons,
+      symbols and downloads: Rust says it does not draw them yet
 - [ ] the zones on Windows (Python finds them in the tzdata package there, which the Rust
       app does not bring yet: none is found there for now)
 - [ ] the C library's locale where Python's text follows it: format()'s 'n' and what strftime

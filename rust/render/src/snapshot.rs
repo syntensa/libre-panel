@@ -41,12 +41,25 @@ pub use lp_py::datetime::DateTime as Moment;
 
 /// The readings of a frame: by key, their histories, the frame's time and the pictures the
 /// services published.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct Snapshot {
     pub readings: IndexMap<String, Reading>,
     pub history: IndexMap<String, Vec<f64>>,
     pub now: Moment,
     pub images: IndexMap<String, Image>,
+}
+
+impl Default for Snapshot {
+    /// No readings, at the first moment of 1970 (Python's takes the time it is made at: a
+    /// frame that shows the time is given its own).
+    fn default() -> Snapshot {
+        Snapshot {
+            readings: IndexMap::new(),
+            history: IndexMap::new(),
+            now: Moment::date(1970, 1, 1),
+            images: IndexMap::new(),
+        }
+    }
 }
 
 impl Snapshot {

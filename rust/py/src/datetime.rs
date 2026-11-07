@@ -4,7 +4,7 @@
 
 /// A naive datetime, as Python's has it: the year 1 to 9999, a month, a day of it, the time to
 /// the microsecond. Ordered as time goes.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DateTime {
     pub year: i64,
     pub month: u32,
@@ -48,7 +48,10 @@ impl DateTime {
             year,
             month,
             day,
-            ..DateTime::default()
+            hour: 0,
+            minute: 0,
+            second: 0,
+            microsecond: 0,
         }
     }
 

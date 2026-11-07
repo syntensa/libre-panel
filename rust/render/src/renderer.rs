@@ -17,12 +17,14 @@ use crate::compose;
 use crate::countdown;
 use crate::cover;
 use crate::effects;
+use crate::finish::{self, Finish};
 use crate::gauge;
 use crate::icons;
+use crate::lit;
 use crate::metric::{self, Shown};
 use crate::piece::{Failed, Piece, Result};
 use crate::shapes::{self, Rgba};
-use crate::snapshot::{need_holds, needs_of, number, Snapshot};
+use crate::snapshot::{need_holds, needs_of, number, Moment, Snapshot};
 use crate::sunpath;
 use crate::widget;
 
@@ -34,8 +36,6 @@ pub const MOST_PIXELS: i64 = 1 << 28;
 pub const COVER_COLOR: &str = "@cover";
 /// A need on one of the theme's switches: "switch.frames".
 const SWITCH: &str = "switch.";
-/// The finish a widget has unless it names another (theme/model.py's FINISHES[0]).
-const FLAT: &str = "flat";
 
 /// How a renderer draws: as the editor's preview or a picture (not the panel), with what moves
 /// (animate), with the dither of the panel's video.
@@ -110,7 +110,8 @@ impl Renderer {
             env: env.clone(),
             options,
             dither: options.dither,
-            widgets: expanded.widgets,
+            // (finish.py's attach: the widgets as their finishes keep them)
+            widgets: expanded.widgets.into_iter().map(finish::kept).collect(),
             module_boxes: expanded.boxes,
             modules,
             background: None,
@@ -184,6 +185,13 @@ impl Renderer {
             rgb[2],
             (alpha as f64 * alpha_scale).trunc() as i64,
         ]))
+    }
+
+    /// The frame's time (a frame drawn without readings has Snapshot's own).
+    fn now(&self) -> Moment {
+        self.snapshot
+            .as_ref()
+            .map_or_else(|| Snapshot::default().now, |s| s.now)
     }
 
     /// The colour of a widget's colour field (None where it has none).
@@ -452,7 +460,7 @@ impl Renderer {
             }
             "countdown" => {
                 let w = w.clone();
-                let now = self.snapshot.as_ref().map(|s| s.now).unwrap_or_default();
+                let now = self.now();
                 let (target, part) = (widget::text(&w, "target"), widget::text(&w, "part"));
                 let text =
                     match countdown::countdown_text(target, part, &now, widget::text(&w, "done")) {
@@ -473,7 +481,7 @@ impl Renderer {
                 if self.options.animate && kind != "jump" && 0.0 < seconds && seconds <= 1.0 {
                     return Drawn::Unported("clocks whose digits roll or fade".into());
                 }
-                let now = self.snapshot.as_ref().map(|s| s.now).unwrap_or_default();
+                let now = self.now();
                 // _clock_format: a hundred characters at most; "--:--" where strftime refuses
                 let text: String = match lp_i18n::format_date(&now, widget::text(&w, "format")) {
                     Ok(text) => text.chars().take(100).collect(),
@@ -490,7 +498,7 @@ impl Renderer {
             }
             "calendar" => {
                 let w = w.clone();
-                let now = self.snapshot.as_ref().map(|s| s.now).unwrap_or_default();
+                let now = self.now();
                 let today = now.midnight();
                 let content = Value::List(vec![
                     Value::int(today.toordinal()),
@@ -640,6 +648,12 @@ impl Renderer {
             other => return Drawn::Unported(format!("{other} widgets")),
         };
         match made {
+            // (LitText: the text's or the metric's glow as light, its letters faded)
+            Ok(piece) if finish::of(w) == Finish::LitText => match lit::lit_text(w, &piece) {
+                Ok(Some(lit)) => Drawn::Piece(Rc::new(lit)),
+                Ok(None) => Drawn::Piece(piece),
+                Err(e) => Drawn::Failed(e),
+            },
             Ok(piece) => Drawn::Piece(piece),
             Err(e) => Drawn::Failed(e),
         }
@@ -675,10 +689,11 @@ impl Renderer {
     }
 
     /// What a frame of the theme holds beyond its widgets that is not drawn here yet: a screen
-    /// (a plugin's, drawn under the widgets), the panel's look (its grid beneath them) and
-    /// finishes other than flat (render/finish.py: lit, facet, acrylic). Rust says so for any of
-    /// them, also where Python goes on without (a screen no plugin has, a finish a widget does
-    /// not take): never a frame drawn without what Python draws.
+    /// (a plugin's, drawn under the widgets), the panel's look (its grid beneath them) and the
+    /// finishes Rust does not draw yet (render/finish.py: lit, facet, acrylic; one that does not
+    /// take a widget leaves it flat, here as there). Rust says so for any of them, also where
+    /// Python goes on without (a screen no plugin has): never a frame drawn without what Python
+    /// draws.
     fn beyond_widgets(&self) -> Option<&'static str> {
         if self.theme.screen.is_some() {
             return Some("screens");
@@ -686,12 +701,11 @@ impl Renderer {
         if widget::truthy(&self.theme.look, "grid") {
             return Some("looks");
         }
-        let flat = |w: &Dict| match w.get("finish") {
-            None => true,
-            Some(Value::Str(name)) => name == FLAT,
-            Some(_) => false,
-        };
-        if !self.widgets.iter().all(flat) {
+        if self
+            .widgets
+            .iter()
+            .any(|w| finish::of(w) == Finish::Unported)
+        {
             return Some("finishes");
         }
         None

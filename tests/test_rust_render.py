@@ -23,6 +23,7 @@ from libre_panel import icons as icon_set
 from libre_panel.fonts.fallback import cursive
 from libre_panel.render import formatting
 from libre_panel.render.countdown import countdown_text
+from libre_panel.render.lit import WEATHER_ICONS
 from libre_panel.render.renderer import Renderer, need_holds
 from libre_panel.sensors.base import Reading, Snapshot
 from libre_panel.theme.model import ThemeError, load_theme
@@ -524,8 +525,9 @@ def test_frames_of_texts_that_just_fit_as_python_fits_them(tmp_path: Path) -> No
 
 
 def test_frames_beyond_their_widgets_are_not_drawn_here_yet(tmp_path: Path) -> None:
-    # (a screen, the panel's look and a finish other than flat: Rust says it does not draw them
-    # yet, rather than a frame without them)
+    # (a screen, the panel's look and a finish Rust does not draw yet: the facets, the lit
+    # finish's bars, rings and weather icons; Rust says it does not draw them yet, rather than
+    # a frame without them)
     rng = random.Random(0xB3D)
     cases, wanted = [], []
     for n in range(30):
@@ -537,8 +539,11 @@ def test_frames_beyond_their_widgets_are_not_drawn_here_yet(tmp_path: Path) -> N
         elif beyond == "looks":
             data["look"] = {"grid": rng.choice([True, {}, {"spacing": 12, "major": 0}])}
         else:
-            finished = _text(rng, 99, (64, 48))
-            finished["finish"] = rng.choice(["lit", "facet", "acrylic"])
+            finished = rng.choice([_text, _icon, _bar, _gauge])(rng, 99, (64, 48))
+            if finished["type"] == "icon":
+                finished["icon"] = rng.choice(WEATHER_ICONS)
+            finishes = {"text": ["facet", "acrylic"], "icon": ["lit"]}.get(finished["type"])
+            finished["finish"] = rng.choice(finishes or ["lit", "facet"])
             data["widgets"].append(finished)
         (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
         try:
@@ -1398,3 +1403,178 @@ def test_the_app_s_own_themes_as_python_draws_them() -> None:
         drawn.append(folder.name)
     assert len(folders) > 90
     assert len(drawn) >= 20, drawn
+
+
+def _lit(
+    rng: random.Random, i: int, size: tuple[int, int], shadowed: bool = False
+) -> dict[str, Any]:
+    """Texts and readings lit (their glow light added over them and around them, their letters
+    faded), in an area or not; clocks and line icons the lit finish leaves flat (`shadowed`:
+    with the renderer's own glow round those, and shadows)."""
+    w, h = size
+    pick = rng.random()
+    if pick < 0.4:
+        widget = _text(rng, i, size)
+    elif pick < 0.7:
+        widget = _metric(rng, i, size)
+    elif pick < 0.8:
+        widget = _clock(rng, i, size)
+    elif pick < 0.9:
+        widget = _icon(rng, i, size)
+        if widget["icon"] in WEATHER_ICONS:  # (the finish's own: not drawn by Rust yet)
+            widget["icon"] = rng.choice([n for n in icon_set.ICON_NAMES if n not in WEATHER_ICONS])
+    else:
+        return _card_or_text(rng, i, size)
+    widget["finish"] = "lit"
+    if widget["type"] in ("text", "metric") or shadowed:
+        widget["glow"] = rng.choice([0, 0.25, 0.6, 1, 1.0])
+        widget["glow_radius"] = rng.choice([0, 1, 3, 10, 24])
+    widget["opacity"] = rng.choice([1, 1.0, 0.999, 0.5, 0.0, 0.998])
+    if rng.random() < 0.3:
+        widget["glow_area"] = [rng.randrange(-20, w), rng.randrange(-20, h),
+                               rng.randrange(1, w + 40), rng.randrange(1, h + 40)]  # fmt: skip
+    elif rng.random() < 0.1:  # (from far off to inside the panel: ints past a machine's)
+        far = rng.choice([10**30, 2**63, 2**64 + 7])
+        widget["glow_area"] = [-far, rng.randrange(-20, h), far + rng.randrange(1, w + 40), far]
+    if shadowed and rng.random() < 0.6:
+        widget["shadow"] = _hex(rng, alpha=rng.random() < 0.5)
+        widget["shadow_blur"] = rng.choice([0, 2, 4, 6, 12])
+        widget["shadow_offset"] = rng.choice([0, 3, -4, 8])
+    return widget
+
+
+def _lit_shadowed(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _lit(rng, i, size, shadowed=True)
+
+
+def _lit_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
+    """Readings of every kind, at a moment of the years round now."""
+    given, snapshot = _metric_snapshot(rng)
+    moment, at = _clock_snapshot(rng)
+    return {**given, "now": moment["now"]}, Snapshot(readings=snapshot.readings, now=at.now)
+
+
+def test_frames_of_lit_texts_and_readings_as_python_draws_them(tmp_path: Path) -> None:
+    # (a lit text's glow is light: the text in its colours on black, blurred, in whole levels,
+    # added over it and around it; its letters faded by its opacity, not its light; the lit
+    # finish leaves clocks and line icons flat)
+    assert _compare_frames(tmp_path, 0x117, 200, _lit, _lit_snapshot) > 150
+
+
+def test_the_lit_finish_s_own_icons_are_not_drawn_here_yet(tmp_path: Path) -> None:
+    # (the lit finish draws the weather's icons as its symbols, which Rust does not draw yet;
+    # every other icon it leaves a line icon, as Rust draws it)
+    names = sorted({*icon_set.ICON_NAMES, *WEATHER_ICONS, "link"})
+    cases = []
+    for n, name in enumerate(names):
+        folder = tmp_path / f"t{n}"
+        folder.mkdir()
+        icon = {"type": "icon", "id": "i", "x": 4, "y": 4, "icon": name, "size": 32,
+                "color": "#4ad", "finish": "lit"}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps({
+            "format": THEME_FORMAT, "name": "lit", "display": {"width": 40, "height": 40},
+            "widgets": [icon]}), encoding="utf-8")  # fmt: skip
+        cases.append({"folder": str(folder), "snapshot": {"readings": {}, "images": {}},
+                      "dither": False})  # fmt: skip
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    frames = dict(zip(names, ours["frames"], strict=True))
+    assert {name for name, got in frames.items() if "unported" in got} == set(WEATHER_ICONS)
+    assert all(frames[name]["unported"] == "finishes" for name in WEATHER_ICONS)
+    assert all("sha256" in got for name, got in frames.items() if name not in WEATHER_ICONS)
+
+
+def test_a_lit_text_s_light_in_float32_as_numpy_works_it_out(tmp_path: Path) -> None:
+    # (its strength made float32 before it scales the blurred text: one a hair below 1 is 1
+    # there, and the light's levels whole levels of that)
+    rng = random.Random(0x1F32)
+
+    def lit_text(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+        text = _text(rng, i, size)
+        text.update(finish="lit", glow=rng.choice([0.99999998, 0.3, 0.7, 0.1, 0.999999]),
+                    glow_radius=rng.choice([1, 2, 6]), color="#ffffff")  # fmt: skip
+        return text
+
+    assert _compare_frames(tmp_path, rng.randrange(1 << 30), 60, lit_text, _lit_snapshot) > 45
+
+
+FLAT_FINISHES = [("lit", "clock"), ("lit", "weather"), ("lit", "countdown"), ("lit", "rect"),
+                 ("lit", "calendar"), ("facet", "icon"), ("acrylic", "bar"), ("flat", "text"),
+                 ("flat", "metric"), ("lit", "agent"), ("facet", "sunpath")]  # fmt: skip
+UNDRAWN_FINISHES = [("lit", "bar"), ("lit", "gauge"), ("lit", "graph"), ("lit", "symbol"),
+                    ("lit", "downloads"), ("facet", "bar"), ("facet", "gauge"),
+                    ("facet", "graph"), *((finish, kind) for finish in ("facet", "acrylic")
+                    for kind in ("text", "metric", "clock", "weather", "countdown"))]  # fmt: skip
+
+
+def test_each_finish_rust_does_not_draw_yet_is_refused(tmp_path: Path) -> None:
+    # (a finish that takes the widget and that Rust does not draw: the whole frame refused,
+    # rather than a frame without it; a finish that does not take it: the widget drawn flat)
+    makers = {"clock": _clock, "weather": _weather_or_countdown, "rect": _rect, "bar": _bar,
+              "gauge": _gauge, "calendar": _calendar, "icon": _icon, "agent": _agent,
+              "sunpath": _sunpath}  # fmt: skip
+    rng = random.Random(0xF1)
+    cases, wanted = [], []
+    for n, (finish, kind) in enumerate([*FLAT_FINISHES, *UNDRAWN_FINISHES]):
+        widget = makers.get(kind, _text)(rng, 0, (64, 48))
+        if kind in ("weather", "countdown"):
+            widget = {**_text(rng, 0, (64, 48)), "type": kind, "field": "temperature",
+                      "target": "2030-01-01", "part": "number"}  # fmt: skip
+            widget.pop("text", None)
+        widget.update(type=kind, finish=finish)
+        if (finish, kind) in FLAT_FINISHES:  # (faded as the renderer fades it, not as lit does)
+            widget.update(opacity=0.5, glow=0)
+        if kind in ("graph", "symbol", "downloads"):
+            widget.pop("text", None)
+        folder = tmp_path / f"t{n}"
+        folder.mkdir()
+        (folder / "theme.json").write_text(json.dumps({
+            "format": THEME_FORMAT, "name": "finishes", "display": {"width": 64, "height": 48},
+            "palette": {"accent": "#2ee6d6", "surface": "#223344", "line": "#3155573b",
+                        "text2": "#a93214"}, "widgets": [widget]}), encoding="utf-8")  # fmt: skip
+        cases.append({"folder": str(folder), "snapshot": {"readings": {}, "images": {},
+                      "now": [2026, 11, 7, 18, 5, 9, 0]}, "dither": False})  # fmt: skip
+        wanted.append("finishes" if (finish, kind) in UNDRAWN_FINISHES else None)
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    pairs = [*FLAT_FINISHES, *UNDRAWN_FINISHES]
+    got = [frame.get("unported") for frame in ours["frames"]]
+    now = Snapshot(readings={}, now=datetime(2026, 11, 7, 18, 5, 9))
+    for case, frame, pair in zip(cases, ours["frames"], pairs, strict=True):
+        if pair in FLAT_FINISHES:  # (drawn as Python draws it, flat)
+            want = _python_frame(Path(case["folder"]), now, False)["frame"]
+            assert frame.get("sha256") == hashlib.sha256(want.tobytes()).hexdigest(), pair
+    wrong = [(pair, g) for pair, g, w in zip(pairs, got, wanted, strict=True) if g != w]
+    refused = [frame["error"] for frame in ours["frames"] if "error" in frame]
+    assert not refused, refused
+    assert not wrong, wrong
+
+
+def test_frames_of_lit_texts_with_shadows_within_a_level(tmp_path: Path) -> None:
+    # (a lit text's shadow is the renderer's, under the letters, and their light is worked out
+    # of both; the shadow and the glow round a clock or an icon the finish leaves flat are
+    # blurred in floating point, as a card's are: now and then a pixel a level apart)
+    import numpy as np
+
+    rng = random.Random(0x5AD)
+    cases, expected = [], []
+    for n in range(80):
+        folder = tmp_path / f"t{n}"
+        _frame_theme(rng, folder, _lit_shadowed)
+        given, snapshot = _lit_snapshot(rng)
+        dither = rng.random() < 0.3
+        cases.append({"folder": str(folder), "snapshot": given, "dither": dither, "bytes": True})
+        expected.append(_python_frame(folder, snapshot, dither))
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    differ = total = drawn = 0
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        if "error" in want:
+            assert "error" in got, n
+            continue
+        assert "frame" in got, (n, got)
+        apart = np.abs(np.asarray(picture(got["frame"]), int) - np.asarray(want["frame"], int))
+        assert apart.max() <= 1, n
+        differ += int((apart.max(axis=2) > 0).sum())
+        total += apart.shape[0] * apart.shape[1]
+        assert got["boxes"] == want["boxes"], n
+        drawn += 1
+    assert drawn > 60
+    assert differ <= total // 10000
