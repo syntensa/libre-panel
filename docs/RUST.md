@@ -329,6 +329,12 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       ring within a level. A ring gliding and a colour fading are motion, and a bar's or a
       ring's numbers past 53 bits (Python counts with them exactly, a float rounds them): Rust
       says it does not draw them yet
+- [x] calendars (calendar widgets): the month as a grid of days, the week from Monday or
+      Sunday, the days' names of the panel's language cut to two letters over the columns,
+      the days in their cells, today on a dot drawn four times larger and reduced (its number
+      dark on a light dot); in the last week of 9999 left out as Python leaves it (its Sunday
+      lies past the dates it knows). The frames of random themes of calendars the same to the
+      bit, in six languages
 - [ ] the zones on Windows (Python finds them in the tzdata package there, which the Rust
       app does not bring yet: none is found there for now)
 - [ ] the C library's locale where Python's text follows it: format()'s 'n' and what strftime

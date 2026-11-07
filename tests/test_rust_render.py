@@ -1209,3 +1209,68 @@ def test_numbers_a_float_does_not_hold_are_not_drawn_here_yet(tmp_path: Path) ->
     [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
     unported = "numbers a float does not hold as they are"
     assert [got.get("unported") for got in ours["frames"]] == [unported] * 5
+
+
+def _calendar(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """The month as a grid of days: its size, the font and its size, the colours of the days,
+    of today's dot and of the weekdays' names, the week starting on Monday or Sunday."""
+    w, h = size
+    month: dict[str, Any] = {"type": "calendar", "id": f"k{i}", "x": rng.randrange(-20, w),
+                             "y": rng.randrange(-20, h),
+                             "w": rng.choice([0, 14, 60, 140, 280, 400]),
+                             "h": rng.choice([0, 14, 50, 120, 200, 300]),
+                             "font_size": rng.choice([16, 6, 30, 1, 100]),
+                             "color": _colour(rng), "color2": _colour(rng),
+                             "muted": _colour(rng)}  # fmt: skip
+    if rng.random() < 0.5:
+        month["first_day"] = "sunday"
+    if rng.random() < 0.5:
+        month["font"] = rng.choice(FONTS)
+    if rng.random() < 0.2:
+        month["opacity"] = rng.choice([0.5, 0.0])
+    return month
+
+
+def _calendar_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _calendar(rng, i, size) if rng.random() < 0.6 else _card_or_text(rng, i, size)
+
+
+def _calendar_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
+    """A day of the years round now, now and then one of the first week of the year 1 or of the
+    last of 9999 (whose Sunday Python cannot name)."""
+    pick = rng.random()
+    if pick < 0.05:
+        now = datetime(1, 1, rng.randrange(1, 8), 12)
+    elif pick < 0.1:
+        now = datetime(9999, 12, rng.randrange(24, 32), 12)
+    else:
+        return _clock_snapshot(rng)
+    return {"readings": {}, "images": {}, "now": _moment(now)}, Snapshot(readings={}, now=now)
+
+
+def test_frames_of_calendars_as_python_draws_them(tmp_path: Path) -> None:
+    # (the weekdays' names cut to two letters, the days of the month below them in their
+    # cells, today on a dot drawn four times larger and reduced, its number dark or light)
+    assert _compare_frames(tmp_path, 0xCA1, 160, _calendar_or_more, _calendar_snapshot) > 120
+
+
+def test_frames_of_calendars_in_other_languages_as_python_draws_them(tmp_path: Path) -> None:
+    # (the weekdays' names of the language, cut to two letters: "Mo", "周一", "月", "pn", "Пн")
+    for n, language in enumerate(["de", "zh", "ja", "pl", "ru"]):
+        folder = tmp_path / language
+        folder.mkdir()
+        drawn = _compare_frames(folder, 0xCA10 + n, 40, _calendar, _calendar_snapshot, language)
+        assert drawn > 30, language
+
+
+def test_a_calendar_s_dot_as_python_rounds_its_side(tmp_path: Path) -> None:
+    # (October 2026 in six rows of 37.5 px: today's dot 34.5 px across, which round() makes
+    # 34, half to even, where rounding half away from zero would make it 35)
+    def month(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+        return {**_calendar(rng, i, size), "w": 280, "h": 225, "first_day": "monday"}
+
+    def october(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
+        now = datetime(2026, 10, rng.randrange(1, 32), 12)
+        return {"readings": {}, "images": {}, "now": _moment(now)}, Snapshot(readings={}, now=now)
+
+    assert _compare_frames(tmp_path, 0xD07, 12, month, october) > 8

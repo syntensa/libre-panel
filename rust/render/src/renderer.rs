@@ -484,6 +484,19 @@ impl Renderer {
                 };
                 self.text_widget(&w, text, widget::text(&w, "color").to_string())
             }
+            "calendar" => {
+                let w = w.clone();
+                let now = self.snapshot.as_ref().map(|s| s.now).unwrap_or_default();
+                let today = now.midnight();
+                let content = Value::List(vec![
+                    Value::int(today.toordinal()),
+                    widget::text(&w, "color").into(),
+                    widget::text(&w, "color2").into(),
+                    widget::text(&w, "muted").into(),
+                    lp_i18n::language().code().into(),
+                ]);
+                self.cached(&w, content, |r| r.calendar_piece(&w, &today))
+            }
             "bar" => {
                 let w = w.clone();
                 // (a bar gliding to a new reading, a colour fading: motion, not drawn here yet)

@@ -52,6 +52,31 @@ impl DateTime {
         }
     }
 
+    /// date.fromordinal: the day of number `n` (1 January of the year 1 the first), at
+    /// midnight; None before the year 1 or past 9999.
+    pub fn from_ordinal(n: i64) -> Option<DateTime> {
+        if !(1..=3_652_059).contains(&n) {
+            return None;
+        }
+        // (CPython's ord_to_ymd: the 400, 100 and 4 years and the single ones before the day)
+        let n = n - 1;
+        let (n400, n) = (n / 146_097, n % 146_097);
+        let (n100, n) = (n / 36_524, n % 36_524);
+        let (n4, n) = (n / 1_461, n % 1_461);
+        let (n1, mut n) = (n / 365, n % 365);
+        let year = n400 * 400 + 1 + n100 * 100 + n4 * 4 + n1;
+        if n1 == 4 || n100 == 4 {
+            // (the last day of a leap year that ends four years, or of 400 years)
+            return Some(DateTime::date(year - 1, 12, 31));
+        }
+        let mut month = 1;
+        while n >= i64::from(days_in_month(year, month)) {
+            n -= i64::from(days_in_month(year, month));
+            month += 1;
+        }
+        Some(DateTime::date(year, month, n as u32 + 1))
+    }
+
     /// The day alone, at midnight (datetime.combine(d.date(), time())).
     pub fn midnight(&self) -> DateTime {
         DateTime::date(self.year, self.month, self.day)
@@ -141,5 +166,46 @@ mod tests {
         }
         assert_eq!(DateTime::date(2026, 12, 31).tm_yday(), 364);
         assert_eq!(DateTime::date(2028, 12, 31).tm_yday(), 365);
+    }
+
+    #[test]
+    fn days_from_their_numbers_as_python_finds_them() {
+        // (datetime.date.fromordinal(n) in Python 3.12)
+        let cases = [
+            (1, (1, 1, 1)),
+            (2, (1, 1, 2)),
+            (59, (1, 2, 28)),
+            (60, (1, 3, 1)),
+            (365, (1, 12, 31)),
+            (366, (2, 1, 1)),
+            (730_179, (2000, 2, 29)),
+            (730_180, (2000, 3, 1)),
+            (693_596, (1900, 1, 1)),
+            (693_960, (1900, 12, 31)),
+            (739_927, (2026, 11, 7)),
+            (3_652_059, (9999, 12, 31)),
+            (146_097, (400, 12, 31)),
+            (146_096, (400, 12, 30)),
+            (36_524, (100, 12, 31)),
+            (36_525, (101, 1, 1)),
+            (1_461, (4, 12, 31)),
+            (1_460, (4, 12, 30)),
+            (2_612_640, (7154, 3, 2)),
+            (1_071_415, (2934, 6, 8)),
+            (3_111_281, (8519, 5, 26)),
+            (1_503_807, (4118, 4, 14)),
+            (3_335_284, (9132, 9, 12)),
+            (2_895_944, (7929, 10, 29)),
+        ];
+        for (n, (y, m, d)) in cases {
+            assert_eq!(
+                DateTime::from_ordinal(n),
+                Some(DateTime::date(y, m, d)),
+                "{n}"
+            );
+            assert_eq!(DateTime::date(y, m, d).toordinal(), n);
+        }
+        assert_eq!(DateTime::from_ordinal(0), None);
+        assert_eq!(DateTime::from_ordinal(3_652_060), None);
     }
 }

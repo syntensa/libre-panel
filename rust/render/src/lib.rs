@@ -2,6 +2,7 @@
 //! widget by widget, to the bit; so far the texts readings become, the ground and the cards.
 
 mod bar;
+mod calendar;
 pub mod compose;
 pub mod countdown;
 pub mod cover;
