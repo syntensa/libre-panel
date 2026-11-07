@@ -6,6 +6,7 @@ a picture) and their cards."""
 
 from __future__ import annotations
 
+import calendar
 import hashlib
 import json
 import math
@@ -21,7 +22,7 @@ from libre_panel import fonts, i18n
 from libre_panel import icons as icon_set
 from libre_panel.fonts.fallback import cursive
 from libre_panel.render import formatting
-from libre_panel.render.countdown import countdown, countdown_text
+from libre_panel.render.countdown import countdown_text
 from libre_panel.render.renderer import Renderer, need_holds
 from libre_panel.sensors.base import Reading, Snapshot
 from libre_panel.theme.model import ThemeError, load_theme
@@ -832,8 +833,6 @@ def _moment(now: datetime) -> list[int]:
 
 def _countdown_expected(text: str, part: str, now: datetime, done: str) -> Any:
     try:
-        if part == "date" and countdown(text, now) is not None:
-            return {"unported": "countdown dates"}
         return countdown_text(text, part, now, done)
     except ValueError as error:
         return {"error": str(error)}
@@ -842,8 +841,7 @@ def _countdown_expected(text: str, part: str, now: datetime, done: str) -> Any:
 def test_countdown_texts_as_countdown_py_tells_them() -> None:
     # (the regular expression's digits and white space as Python's re reads them, the 28th for
     # a day the month lacks, the year 0 as this year's, every year's next one, to the
-    # microsecond, in the panel's language; the date it counts to is format_date's: Rust says
-    # it does not write it yet)
+    # microsecond, in the panel's language; the date it counts to as format_date writes it)
     rng = random.Random(0xC0D)
     targets = COUNTDOWN_TARGETS + [_target(rng) for _ in range(400)]
     cases, expected = [], []
@@ -868,7 +866,8 @@ def test_countdown_texts_as_countdown_py_tells_them() -> None:
     said = {w for w in expected if isinstance(w, str)}
     assert {"--", "0", "", "Party!", "1", "00:00:00"} <= said
     assert any(isinstance(w, dict) and "error" in w for w in expected)
-    assert sum(isinstance(w, dict) and "unported" in w for w in expected) > 50
+    dates = [w for c, w in zip(cases, expected, strict=True) if c["part"] == "date"]
+    assert sum(isinstance(w, str) and w != "--" for w in dates) > 300
 
 
 WEATHER_FIELDS = ["temperature", "apparent_temperature", "humidity", "wind_speed", "description",
@@ -928,3 +927,67 @@ def test_frames_of_the_weather_and_countdowns_in_german_as_python_draws_them(
 ) -> None:
     # (the weather's description, the countdown's units and "Heute" in the panel's language)
     assert _compare_frames(tmp_path, 0xDE, 120, _weather_or_countdown, _weather_snapshot, "de") > 90
+
+
+CLOCK_FORMATS = ["%H:%M", "%H:%M:%S", "%I:%M %p", "%-I:%M", "%A", "%a %d %b", "%d %B %Y",
+                 "%A, %d. %B", "%B %d", "%d.%m.%Y", "%x", "%X", "%c", "%Y-%m-%d", "%j",
+                 "%U/%W/%V", "%%", "%-d.%-m.", "%e %b", "%k:%M", "%l:%M %P", "%#d", "",
+                 "Week %V", "%A %d %B %Y %H:%M:%S %p", "%G-W%V-%u", "%y", "%C", "%h", "%D",
+                 "%F", "%R", "%T", "%r", "%n%H", "%t%M", "%Z%z", "%^A", "%#A", "%-d %B",
+                 "%b %-d", "%:z", "%", "%Q", "%Ey", "Grüße %H", "%c %c %c %c %c"]  # fmt: skip
+
+
+def _clock(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """The time in a format of strftime's, in capitals now and then."""
+    clock = _text(rng, i, size)
+    for key in ("text", "uppercase", "translate"):
+        clock.pop(key, None)
+    clock.update(type="clock", format=rng.choice(CLOCK_FORMATS))
+    if rng.random() < 0.3:
+        clock["uppercase"] = True
+    if rng.random() < 0.3:
+        clock["digits"] = rng.choice(["jump", "roll", "fade"])
+        clock["digits_seconds"] = rng.choice([0.42, 1, 0.1, 2, 0])
+    return clock
+
+
+def _clock_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _clock(rng, i, size) if rng.random() < 0.7 else _card_or_text(rng, i, size)
+
+
+def _clock_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
+    """A moment of the years round now, to the microsecond."""
+    year, month = rng.randrange(1990, 2070), rng.randrange(1, 13)
+    day = rng.randrange(1, calendar.monthrange(year, month)[1] + 1)
+    now = datetime(year, month, day, rng.randrange(24), rng.randrange(60), rng.randrange(60),
+                   rng.randrange(10**6))  # fmt: skip
+    return {"readings": {}, "images": {}, "now": _moment(now)}, Snapshot(readings={}, now=now)
+
+
+def test_frames_of_clocks_as_python_draws_them(tmp_path: Path) -> None:
+    # (strftime's codes as the C library writes them: glibc's on Linux, the Universal CRT's on
+    # Windows, where a code it does not know makes the clock "--:--")
+    assert _compare_frames(tmp_path, 0xC10C, 160, _clock_or_more, _clock_snapshot) > 120
+
+
+def test_frames_of_clocks_in_german_as_python_draws_them(tmp_path: Path) -> None:
+    # (the days' and the months' names in German, "7. November")
+    assert _compare_frames(tmp_path, 0xDE0C, 120, _clock_or_more, _clock_snapshot, "de") > 90
+
+
+def test_clocks_in_another_time_zone_are_not_drawn_here_yet(tmp_path: Path) -> None:
+    # (another place's time needs the computer's own zone and the other's: Rust says it does
+    # not draw them yet, rather than a clock at the wrong time)
+    rng = random.Random(0x7E)
+    cases = []
+    for n, zone in enumerate(["Asia/Tokyo", "UTC", "Nowhere/Else", "Europe/Berlin"]):
+        folder = tmp_path / f"t{n}"
+        data = _frame_theme(rng, folder, _card_or_text)
+        clock = _clock(rng, 99, (64, 48))
+        clock["timezone"] = zone
+        data["widgets"].append(clock)
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        given, _ = _clock_snapshot(rng)
+        cases.append({"folder": str(folder), "snapshot": given, "dither": False})
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    assert [got.get("unported") for got in ours["frames"]] == ["clocks in a time zone"] * 4

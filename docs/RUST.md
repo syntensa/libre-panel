@@ -293,10 +293,24 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       the target as its regular expression reads it (any decimal digit, Python's white
       space), the 28th for a day the month lacks, the year 0 as this one, every year's next
       one, to the microsecond; its number, its unit, the time left in the day, the whole in
-      words or the days, in the panel's language. Every part's text to the letter, and the
-      frames of random themes of them the same to the bit, in English and German. The date a
-      countdown counts to is i18n.format_date's (strftime's): Rust says it does not write it
-      yet
+      words or the days, the date it counts to (i18n.format_date), in the panel's language.
+      Every part's text to the letter, and the frames of random themes of them the same to the
+      bit, in English and German
+- [x] clocks (clock widgets) in a still frame, and dates as i18n.format_date writes them:
+      strftime's codes one at a time, with the days' and the months' names of the language, a
+      day's number before a month's name joined as the language joins them ("7. November",
+      "7 de noviembre", "7 listopada", "11月7日"); each code as Python's datetime.strftime writes
+      it in the C locale (lp_py::strftime): %f, %z and %Z its own, the rest the C library's,
+      glibc's on Linux (the flags -, _, 0, ^ and #, a code it does not know as it stands) and
+      the Universal CRT's on Windows (# alone; for anything else Python's ValueError, which a
+      clock shows as "--:--"); a hundred characters at most, in capitals where the clock asks.
+      Every code on dates from the year 1 to 9999, random formats in all ten languages, and the
+      frames of random themes of clocks the same to the bit, in English and German; a clock
+      whose digits roll or fade laid out letter by letter in a still frame too, as Python lays
+      it out. Not here yet, and Rust says so: another place's time (a clock's time zone needs
+      the computer's own and the other's), digits that roll or fade as they move, the years
+      before 1000 (Python's own answer for them differs between its releases), %s (the seconds
+      since 1970 in the computer's zone) and, on Windows, %#z and %#Z
 - [ ] the zones on Windows (Python finds them in the tzdata package there, which the Rust
       app does not bring yet: none is found there for now)
 - [ ] the C library's locale where Python's text follows it: format()'s 'n' and what strftime

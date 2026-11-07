@@ -36,17 +36,8 @@ impl Reading {
     }
 }
 
-/// A moment of local time, as a datetime has it.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Moment {
-    pub year: i64,
-    pub month: u32,
-    pub day: u32,
-    pub hour: u32,
-    pub minute: u32,
-    pub second: u32,
-    pub microsecond: u32,
-}
+/// A moment of local time, as a (naive) datetime has it.
+pub use lp_py::datetime::DateTime as Moment;
 
 /// The readings of a frame: by key, their histories, the frame's time and the pictures the
 /// services published.

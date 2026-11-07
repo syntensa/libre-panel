@@ -266,6 +266,43 @@ fn run(case: &Value) -> Result<Value, String> {
                 Err(e) => json!({"error": e.0}),
             }
         }
+        "strftime" => {
+            // datetime(...).strftime(token) for each case: Python's own codes and the C library's
+            let answers: Vec<Value> = case["cases"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|c| {
+                    let at = datetime_of(c["at"].as_array().map_or(&[], Vec::as_slice));
+                    match lp_py::strftime::strftime(c["token"].as_str().unwrap_or(""), &at) {
+                        Ok(text) => json!(text),
+                        Err(lp_py::strftime::Refused::ValueError(msg)) => json!({"error": msg}),
+                        Err(lp_py::strftime::Refused::Unported(what)) => json!({"unported": what}),
+                    }
+                })
+                .collect();
+            json!(answers)
+        }
+        "format_date" => {
+            // i18n.format_date(moment, fmt) for each case, in its language
+            let locale = std::path::PathBuf::from(case["locale"].as_str().unwrap_or(""));
+            let mut answers = Vec::new();
+            for c in case["cases"].as_array().into_iter().flatten() {
+                let code = c["language"].as_str().unwrap_or("en");
+                lp_i18n::set_language(lp_i18n::Language::load(&locale, code)?);
+                let at = datetime_of(c["at"].as_array().map_or(&[], Vec::as_slice));
+                answers.push(
+                    match lp_i18n::format_date(&at, c["fmt"].as_str().unwrap_or("")) {
+                        Ok(text) => json!(text),
+                        Err(lp_i18n::DateError::ValueError(msg)) => json!({"error": msg}),
+                        Err(lp_i18n::DateError::Failed(msg)) => json!({"failed": msg}),
+                        Err(lp_i18n::DateError::Unported(what)) => json!({"unported": what}),
+                    },
+                );
+            }
+            lp_i18n::set_language(lp_i18n::Language::english());
+            json!(answers)
+        }
         "countdown_text" => {
             // countdown.py's countdown_text(text, part, now, done) for each case, in its language
             let locale = std::path::PathBuf::from(case["locale"].as_str().unwrap_or(""));
@@ -273,13 +310,13 @@ fn run(case: &Value) -> Result<Value, String> {
             for c in case["cases"].as_array().into_iter().flatten() {
                 let code = c["language"].as_str().unwrap_or("en");
                 lp_i18n::set_language(lp_i18n::Language::load(&locale, code)?);
-                let now = moment_of(c["now"].as_array().map_or(&[], Vec::as_slice));
+                let now = datetime_of(c["now"].as_array().map_or(&[], Vec::as_slice));
                 let s = |k: &str| c[k].as_str().unwrap_or("");
                 let (text, part, done) = (s("text"), s("part"), s("done"));
                 answers.push(
                     match lp_render::countdown::countdown_text(text, part, &now, done) {
-                        Ok(Some(text)) => json!(text),
-                        Ok(None) => json!({"unported": "countdown dates"}),
+                        Ok(lp_render::countdown::Said::Text(text)) => json!(text),
+                        Ok(lp_render::countdown::Said::Unported(what)) => json!({"unported": what}),
                         Err(e) => json!({"error": e.0}),
                     },
                 );
@@ -2249,15 +2286,15 @@ fn snapshot_of(v: &Value) -> lp_render::snapshot::Snapshot {
         }
     }
     if let Some(now) = v["now"].as_array() {
-        snap.now = moment_of(now);
+        snap.now = datetime_of(now);
     }
     snap
 }
 
-/// A moment from [year, month, day, hour, minute, second, microsecond].
-fn moment_of(now: &[Value]) -> lp_render::snapshot::Moment {
-    let n = |i: usize| now.get(i).and_then(Value::as_i64).unwrap_or(0);
-    lp_render::snapshot::Moment {
+/// A naive datetime from [year, month, day, hour, minute, second, microsecond].
+fn datetime_of(at: &[Value]) -> lp_py::datetime::DateTime {
+    let n = |i: usize| at.get(i).and_then(Value::as_i64).unwrap_or(0);
+    lp_py::datetime::DateTime {
         year: n(0),
         month: n(1) as u32,
         day: n(2) as u32,

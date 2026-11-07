@@ -450,10 +450,36 @@ impl Renderer {
                 let (target, part) = (widget::text(&w, "target"), widget::text(&w, "part"));
                 let text =
                     match countdown::countdown_text(target, part, &now, widget::text(&w, "done")) {
-                        Ok(Some(text)) => text,
-                        Ok(None) => return Drawn::Unported("countdown dates".into()),
+                        Ok(countdown::Said::Text(text)) => text,
+                        Ok(countdown::Said::Unported(what)) => return Drawn::Unported(what.into()),
                         Err(e) => return Drawn::Failed(e),
                     };
+                self.text_widget(&w, text, widget::text(&w, "color").to_string())
+            }
+            "clock" => {
+                let w = w.clone();
+                // (another place's time: the computer's own zone and the other's, not here yet)
+                if !widget::text(&w, "timezone").is_empty() {
+                    return Drawn::Unported("clocks in a time zone".into());
+                }
+                let kind = widget::optional(&w, "digits").unwrap_or("jump");
+                let seconds = widget::number(&w, "digits_seconds", 0.42);
+                if self.options.animate && kind != "jump" && 0.0 < seconds && seconds <= 1.0 {
+                    return Drawn::Unported("clocks whose digits roll or fade".into());
+                }
+                let now = self.snapshot.as_ref().map(|s| s.now).unwrap_or_default();
+                // _clock_format: a hundred characters at most; "--:--" where strftime refuses
+                let text: String = match lp_i18n::format_date(&now, widget::text(&w, "format")) {
+                    Ok(text) => text.chars().take(100).collect(),
+                    Err(lp_i18n::DateError::ValueError(_)) => "--:--".into(),
+                    Err(lp_i18n::DateError::Unported(what)) => return Drawn::Unported(what.into()),
+                    Err(lp_i18n::DateError::Failed(e)) => return Drawn::Failed(Failed(e)),
+                };
+                let text = if widget::truthy(&w, "uppercase") {
+                    lp_py::upper(&text)
+                } else {
+                    text
+                };
                 self.text_widget(&w, text, widget::text(&w, "color").to_string())
             }
             "metric" => {

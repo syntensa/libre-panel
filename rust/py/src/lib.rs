@@ -7,11 +7,13 @@
 
 use unicode_general_category::{get_general_category, GeneralCategory as G};
 
+pub mod datetime;
 pub mod format;
 pub mod json;
 pub mod math;
 pub mod num;
 pub mod re;
+pub mod strftime;
 pub mod value;
 pub mod zoneinfo;
 

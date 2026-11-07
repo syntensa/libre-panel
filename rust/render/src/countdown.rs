@@ -1,12 +1,20 @@
 //! Counting down to a moment (render/countdown.py): "2026-12-24", "2026-12-24 18:00" or "12-24"
 //! (every year), as the countdown widget shows it: the number, its unit, the time left in the
-//! day, the whole in words, the days. The date it counts to is written by i18n's format_date,
-//! which Rust does not have yet.
+//! day, the whole in words, the days, the date it counts to (i18n.format_date).
 
+use lp_i18n::DateError;
+use lp_py::datetime::days_in_month;
 use num_bigint::BigInt;
 
 use crate::piece::{Failed, Result};
 use crate::snapshot::Moment;
+
+/// What a countdown says: its text, or what Rust does not write yet.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Said {
+    Text(String),
+    Unported(&'static str),
+}
 
 /// A target's year (None: every year), month, day, hour and minute (None: a date).
 pub type Parts = (Option<i64>, u32, u32, Option<u32>, Option<u32>);
@@ -106,28 +114,6 @@ pub fn parse_target(text: &str) -> Option<Parts> {
     Some((year.map(i64::from), month, day, hour, minute))
 }
 
-fn leap(year: i64) -> bool {
-    year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
-}
-
-fn days_in_month(year: i64, month: u32) -> u32 {
-    match month {
-        2 if leap(year) => 29,
-        2 => 28,
-        4 | 6 | 9 | 11 => 30,
-        _ => 31,
-    }
-}
-
-/// date.toordinal: the day's number, 1 January of year 1 the first.
-fn ordinal(m: &Moment) -> i64 {
-    let y = m.year - 1;
-    let before_month: i64 = (1..m.month)
-        .map(|k| i64::from(days_in_month(m.year, k)))
-        .sum();
-    y * 365 + y / 4 - y / 100 + y / 400 + before_month + i64::from(m.day)
-}
-
 /// datetime(year, month, day, hour, minute), as Python checks it.
 fn datetime(year: i64, month: u32, day: u32, hour: u32, minute: u32) -> Result<Moment> {
     if !(1..=9999).contains(&year) {
@@ -160,31 +146,6 @@ fn moment(
     datetime(year, month, day, h, m).or_else(|_| datetime(year, month, day.min(28), h, m))
 }
 
-fn date(m: &Moment) -> (i64, u32, u32) {
-    (m.year, m.month, m.day)
-}
-
-fn order(m: &Moment) -> (i64, u32, u32, u32, u32, u32, u32) {
-    (
-        m.year,
-        m.month,
-        m.day,
-        m.hour,
-        m.minute,
-        m.second,
-        m.microsecond,
-    )
-}
-
-/// datetime - datetime, in microseconds.
-fn between(later: &Moment, earlier: &Moment) -> i64 {
-    let us = |m: &Moment| {
-        ((i64::from(m.hour) * 60 + i64::from(m.minute)) * 60 + i64::from(m.second)) * 1_000_000
-            + i64::from(m.microsecond)
-    };
-    (ordinal(later) - ordinal(earlier)) * 86_400_000_000 + us(later) - us(earlier)
-}
-
 /// countdown: where `text` stands from `now`; None if it is no date.
 pub fn countdown(text: &str, now: &Moment) -> Result<Option<Countdown>> {
     let Some((year, month, day, hour, minute)) = parse_target(text) else {
@@ -193,7 +154,7 @@ pub fn countdown(text: &str, now: &Moment) -> Result<Option<Countdown>> {
     let timed = hour.is_some();
     let given = year.filter(|&y| y != 0); // (`year or now.year`: the year 0 is this one)
     let mut target = moment(given.unwrap_or(now.year), month, day, hour, minute)?;
-    if year.is_none() && date(&target) < date(now) {
+    if year.is_none() && target.midnight() < now.midnight() {
         target = moment(now.year + 1, month, day, hour, minute)?; // every year: the next one
     }
     let stand = |target: Moment, left: i64, done: bool, over: bool| Countdown {
@@ -203,16 +164,16 @@ pub fn countdown(text: &str, now: &Moment) -> Result<Option<Countdown>> {
         timed,
         over,
     };
-    if date(&target) == date(now) && (!timed || order(now) >= order(&target)) {
+    if target.midnight() == now.midnight() && (!timed || *now >= target) {
         return Ok(Some(stand(target, 0, true, false)));
     }
-    if order(&target) < order(now) {
+    if target < *now {
         if year.is_some() {
             return Ok(Some(stand(target, 0, true, true)));
         }
         target = moment(now.year + 1, month, day, hour, minute)?;
     }
-    Ok(Some(stand(target, between(&target, now), false, false)))
+    Ok(Some(stand(target, target.since(now), false, false)))
 }
 
 /// int(timedelta.total_seconds()): the microseconds divided as Python divides two ints (to
@@ -230,14 +191,23 @@ fn clock(seconds: i64) -> String {
 }
 
 /// countdown_text: one part of a countdown: the number, its unit, the time left in the day,
-/// the whole in words, the days; None for the date it counts to (not written here yet).
-pub fn countdown_text(text: &str, part: &str, now: &Moment, done: &str) -> Result<Option<String>> {
+/// the whole in words, the days, or the date it counts to.
+pub fn countdown_text(text: &str, part: &str, now: &Moment, done: &str) -> Result<Said> {
     let t = lp_i18n::t;
     let Some(state) = countdown(text, now)? else {
-        return Ok(Some("--".into()));
+        return Ok(Said::Text("--".into()));
     };
     if part == "date" {
-        return Ok(None);
+        let fmt = if state.timed {
+            "%A, %d %B %Y %H:%M"
+        } else {
+            "%A, %d %B %Y"
+        };
+        return match lp_i18n::format_date(&state.target, fmt) {
+            Ok(date) => Ok(Said::Text(date)),
+            Err(DateError::ValueError(msg) | DateError::Failed(msg)) => Err(Failed(msg)),
+            Err(DateError::Unported(what)) => Ok(Said::Unported(what)),
+        };
     }
     let or_done = |otherwise: String| {
         if done.is_empty() {
@@ -248,7 +218,7 @@ pub fn countdown_text(text: &str, part: &str, now: &Moment, done: &str) -> Resul
     };
     if state.over {
         // (nothing left to count)
-        return Ok(Some(match part {
+        return Ok(Said::Text(match part {
             "unit" => t("days"),
             "clock" => String::new(),
             "text" => or_done("0".into()),
@@ -257,9 +227,9 @@ pub fn countdown_text(text: &str, part: &str, now: &Moment, done: &str) -> Resul
     }
     if state.done {
         if part == "unit" || part == "clock" {
-            return Ok(Some(String::new()));
+            return Ok(Said::Text(String::new()));
         }
-        return Ok(Some(or_done(if state.timed {
+        return Ok(Said::Text(or_done(if state.timed {
             t("Now")
         } else {
             t("Today")
@@ -270,10 +240,10 @@ pub fn countdown_text(text: &str, part: &str, now: &Moment, done: &str) -> Resul
     let (hours, minutes) = (rest / 3600, rest % 3600 / 60);
     if !state.timed {
         // a date: the days still to sleep, today not counted
-        days = ordinal(&state.target) - ordinal(now);
+        days = state.target.toordinal() - now.toordinal();
     }
     let unit = |days: i64| if days == 1 { t("day") } else { t("days") };
-    Ok(Some(match part {
+    Ok(Said::Text(match part {
         "days" => days.to_string(),
         "clock" => clock(rest),
         "unit" if days != 0 => unit(days),

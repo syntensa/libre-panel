@@ -199,8 +199,9 @@ impl Renderer {
         Ok(Piece::new(layer, x0, y0))
     }
 
-    /// _letters: the text laid out letter by letter, for letter spacing or equal-width digits;
-    /// None where it is drawn whole. `size` is the font size the text fits in.
+    /// _letters: the text laid out letter by letter, for letter spacing, equal-width digits or
+    /// a clock's digits that roll or fade (laid out so in a still frame too); None where it is
+    /// drawn whole. `size` is the font size the text fits in.
     fn letters(&self, w: &Dict, text: &str, colour: &str, size: i64) -> Result<Option<Letters>> {
         let font = self.font(widget::text(w, "font"), size)?;
         let fill = ink(self.color(Some(colour), 1.0)?.unwrap_or([0, 0, 0, 0]));
@@ -212,7 +213,8 @@ impl Renderer {
             return Ok(None); // (letters that join: the whole text, as it is)
         }
         let digits = tabular && text.chars().any(|c| DIGITS.contains(c));
-        if spacing == 0.0 && !digits {
+        let rolls = widget::optional(w, "digits").unwrap_or("jump") != "jump";
+        if spacing == 0.0 && !digits && !rolls {
             return Ok(None);
         }
         let cell = Self::digit_cell(&font)?;

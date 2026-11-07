@@ -5,6 +5,7 @@ point where the Unicode database is the release's (Python 3.12: Unicode 15.0).""
 
 from __future__ import annotations
 
+import calendar
 import hashlib
 import json
 import math
@@ -13,11 +14,14 @@ import string
 import struct
 import sys
 import unicodedata
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 from rust_check import run
+
+from libre_panel import i18n
 
 RELEASE_UNICODE = "15.0.0"
 
@@ -573,3 +577,110 @@ def test_format_strings_read_as_python_s_str_format() -> None:
     assert ours["texts"] == [_echo_outcome(t) for t in texts]
     # (texts, not only refusals alike)
     assert sum("text" in o for o in ours["texts"]) > 1500
+
+
+STRFTIME_TOKENS = [f"%{flag}{code}" for flag in ("", "-", "#", "_", "0", "^")
+                   for code in string.ascii_letters + "%"]  # fmt: skip
+
+
+def _moments(rng: random.Random, small_years: bool = True) -> list[datetime]:
+    """Edge days (the years from 1 to 9999, the turns of the ISO weeks, midnight and noon) and
+    random ones."""
+    years = (1, 9, 99, 999, 1000, 1899, 1900, 1999, 2000, 2026, 9999)
+    moments = [datetime(year, month, day, hour, 5, 9, 250)
+               for year in (years if small_years else years[4:])
+               for month, day in ((1, 1), (1, 3), (1, 4), (2, 28), (12, 28), (12, 29), (12, 31))
+               for hour in (0, 12, 13, 23)]  # fmt: skip
+    for _ in range(200):
+        year = rng.choice([rng.randrange(1 if small_years else 1000, 10000),
+                           rng.randrange(1990, 2060)])  # fmt: skip
+        month = rng.randrange(1, 13)
+        day = rng.randrange(1, calendar.monthrange(year, month)[1] + 1)
+        moments.append(datetime(year, month, day, rng.randrange(24), rng.randrange(60),
+                                rng.randrange(60), rng.randrange(10**6)))  # fmt: skip
+    return moments
+
+
+def _at(moment: datetime) -> list[int]:
+    return [moment.year, moment.month, moment.day, moment.hour, moment.minute, moment.second,
+            moment.microsecond]  # fmt: skip
+
+
+def _strftime_unported(token: str, at: datetime) -> bool:
+    """What lp_py::strftime does not write yet: the years before 1000 (Python's own answer for
+    them differs between its releases), %s on Linux (the computer's zone), %#z and %#Z on
+    Windows (the same)."""
+    flag, code = (token[1], token[2]) if len(token) == 3 else ("", token[1])
+    small, iso_small = at.year < 1000, at.isocalendar()[0] < 1000
+    if sys.platform == "win32":
+        if flag not in ("", "#"):
+            return False  # (Python's ValueError)
+        if code in "zZ":
+            return flag == "#"
+        if code == "G":
+            return iso_small
+        return small and (code in "CFYc" or (code == "x" and flag == "#"))
+    if code == "s":
+        return True
+    if code == "G":
+        return iso_small
+    return small and code in "CFYc"
+
+
+def test_dates_written_as_python_s_strftime_writes_them() -> None:
+    # (each code as datetime.strftime writes it: %f, %z and %Z its own, the rest the C
+    # library's, glibc's on Linux, the Universal CRT's on Windows, where Python refuses what
+    # the CRT does not know; what Rust does not write yet, it says, and nothing else)
+    rng = random.Random(0x57F)
+    cases, expected = [], []
+    for at in _moments(rng):
+        for token in STRFTIME_TOKENS:
+            try:
+                want: Any = at.strftime(token)
+            except ValueError as error:
+                want = {"error": str(error)}
+            if _strftime_unported(token, at):
+                want = "unported"
+            cases.append({"token": token, "at": _at(at)})
+            expected.append(want)
+    [ours] = run([{"op": "strftime", "cases": cases}])
+    for case, got, want in zip(cases, ours, expected, strict=True):
+        if want == "unported":
+            assert isinstance(got, dict) and "unported" in got, (case, got)
+        else:
+            assert got == want, case
+    assert sum(isinstance(w, str) and w != "unported" for w in expected) > 50_000
+
+
+_DATE_PIECES = ["%d", "%-d", "%B", "%b", "%a", "%A", "%H:%M", "%Y", "%y", "%e", "%j", "%p", "%I",
+                " ", ". ", ", ", "Uhr", "年", "日", "%", "%%", "%:", "%d %B", "%d. %B", "%-d. %b",
+                "%B %d", "%b %-d", "%d %b", "%-d %B", "%A, %d %B %Y", "%a %d %b", "%x", "%X",
+                "%c", "%#d", "%-m/%-d", "%d  %B", " %d %B", "%B%d", "%d %B %d %b"]  # fmt: skip
+
+
+def test_dates_on_the_panel_as_format_date_writes_them() -> None:
+    # (strftime's codes one at a time, with the days' and the months' names of the language, a
+    # day's number before a month's name joined as the language joins them, the month and the
+    # day as numbers in Chinese and Japanese)
+    rng = random.Random(0xDA7E)
+    tokens = [t for t in STRFTIME_TOKENS if t[-1] != "s" and t not in ("%#z", "%#Z")]
+    moments = _moments(rng, small_years=False)
+    cases, expected = [], []
+    try:
+        for n in range(6000):
+            pieces = [rng.choice(_DATE_PIECES if rng.random() < 0.7 else tokens)
+                      for _ in range(rng.randrange(1, 6))]  # fmt: skip
+            fmt, at, language = "".join(pieces), rng.choice(moments), list(i18n.LANGUAGES)[n % 10]
+            i18n.set_language(language)
+            try:
+                want: Any = i18n.format_date(at, fmt)
+            except ValueError as error:
+                want = {"error": str(error)}
+            cases.append({"fmt": fmt, "at": _at(at), "language": language})
+            expected.append(want)
+    finally:
+        i18n.set_language("en")
+    [ours] = run([{"op": "format_date", "locale": str(i18n.LOCALE_DIR), "cases": cases}])
+    for case, got, want in zip(cases, ours, expected, strict=True):
+        assert got == want, case
+    assert sum(isinstance(w, str) for w in expected) > 2000

@@ -11,8 +11,10 @@ use std::sync::{Arc, RwLock};
 
 use lp_py::{Dict, Value};
 
+mod dates;
 mod windows;
 
+pub use dates::{format_date, DateError};
 pub use windows::WINDOWS_LOCALE;
 
 /// The languages Libre Panel speaks, with their own names.
