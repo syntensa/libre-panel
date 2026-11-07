@@ -296,8 +296,14 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       owner found it on the panel (15 with 00 03, its answer waited for, the backlight at 95),
       its brightness in its pictures as devices/base.py dims them. Its model stays beside the
       catalog until the switch: the catalog is the Python app's, themes are checked against it
-- [ ] the serial port at 2 Mbaud and finding it by its USB ids (Windows' COM ports, Linux's
-      ttyACM); a program to try a panel with, for its owner (the MAJESTY's first)
+- [x] the serial port as pyserial opens it (8N1 at 2 Mbaud, DTR and RTS on, a read waiting a
+      second, a write ten) and the ports found with their USB ids as its list_ports finds them
+      (Linux's ttys from sysfs, Windows' COM ports from SetupAPI); over a pseudo-terminal every
+      byte goes through as it is (XON and XOFF among them: 11 is the live picture) and the
+      MAJESTY is opened, set up and shown. lp-panel, to try a panel with for its owner: the
+      ports, then a card to tell its way round by, the brightness stepped, pictures as fast as
+      it takes them (CI makes it for Windows, with the libjpeg it saves with). Not yet seen on
+      a panel: a MAJESTY's owner can try it
 - [ ] TURZX (the engine's), Waveshare, udisp, BeadaPanel, NZXT Kraken, virtual, the other
       serial panels, the panel as a monitor (Windows' virtual display driver, X11, Wayland)
 
