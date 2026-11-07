@@ -1402,7 +1402,7 @@ def test_the_app_s_own_themes_as_python_draws_them() -> None:
         assert got["boxes"] == want["boxes"], folder.name
         drawn.append(folder.name)
     assert len(folders) > 90
-    assert len(drawn) >= 20, drawn
+    assert len(drawn) >= 29, drawn
 
 
 def _lit(
@@ -1500,21 +1500,23 @@ def test_a_lit_text_s_light_in_float32_as_numpy_works_it_out(tmp_path: Path) -> 
 FLAT_FINISHES = [("lit", "clock"), ("lit", "weather"), ("lit", "countdown"), ("lit", "rect"),
                  ("lit", "calendar"), ("facet", "icon"), ("acrylic", "bar"), ("flat", "text"),
                  ("flat", "metric"), ("lit", "agent"), ("facet", "sunpath")]  # fmt: skip
+LETTERED_FINISHES = [(finish, kind) for finish in ("facet", "acrylic")
+                     for kind in ("text", "metric", "clock", "weather", "countdown")]  # fmt: skip
 UNDRAWN_FINISHES = [("lit", "bar"), ("lit", "gauge"), ("lit", "graph"), ("lit", "symbol"),
                     ("lit", "downloads"), ("facet", "bar"), ("facet", "gauge"),
-                    ("facet", "graph"), *((finish, kind) for finish in ("facet", "acrylic")
-                    for kind in ("text", "metric", "clock", "weather", "countdown"))]  # fmt: skip
+                    ("facet", "graph")]  # fmt: skip
 
 
 def test_each_finish_rust_does_not_draw_yet_is_refused(tmp_path: Path) -> None:
     # (a finish that takes the widget and that Rust does not draw: the whole frame refused,
-    # rather than a frame without it; a finish that does not take it: the widget drawn flat)
+    # rather than a frame without it; one that does not take it: the widget drawn flat; the
+    # facets' letters: their own)
     makers = {"clock": _clock, "weather": _weather_or_countdown, "rect": _rect, "bar": _bar,
               "gauge": _gauge, "calendar": _calendar, "icon": _icon, "agent": _agent,
               "sunpath": _sunpath}  # fmt: skip
     rng = random.Random(0xF1)
     cases, wanted = [], []
-    for n, (finish, kind) in enumerate([*FLAT_FINISHES, *UNDRAWN_FINISHES]):
+    for n, (finish, kind) in enumerate([*FLAT_FINISHES, *LETTERED_FINISHES, *UNDRAWN_FINISHES]):
         widget = makers.get(kind, _text)(rng, 0, (64, 48))
         if kind in ("weather", "countdown"):
             widget = {**_text(rng, 0, (64, 48)), "type": kind, "field": "temperature",
@@ -1523,6 +1525,8 @@ def test_each_finish_rust_does_not_draw_yet_is_refused(tmp_path: Path) -> None:
         widget.update(type=kind, finish=finish)
         if (finish, kind) in FLAT_FINISHES:  # (faded as the renderer fades it, not as lit does)
             widget.update(opacity=0.5, glow=0)
+        if (finish, kind) in LETTERED_FINISHES:
+            widget.update(font_size=40, max_width=300)
         if kind in ("graph", "symbol", "downloads"):
             widget.pop("text", None)
         folder = tmp_path / f"t{n}"
@@ -1535,11 +1539,11 @@ def test_each_finish_rust_does_not_draw_yet_is_refused(tmp_path: Path) -> None:
                       "now": [2026, 11, 7, 18, 5, 9, 0]}, "dither": False})  # fmt: skip
         wanted.append("finishes" if (finish, kind) in UNDRAWN_FINISHES else None)
     [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
-    pairs = [*FLAT_FINISHES, *UNDRAWN_FINISHES]
+    pairs = [*FLAT_FINISHES, *LETTERED_FINISHES, *UNDRAWN_FINISHES]
     got = [frame.get("unported") for frame in ours["frames"]]
     now = Snapshot(readings={}, now=datetime(2026, 11, 7, 18, 5, 9))
     for case, frame, pair in zip(cases, ours["frames"], pairs, strict=True):
-        if pair in FLAT_FINISHES:  # (drawn as Python draws it, flat)
+        if pair not in UNDRAWN_FINISHES:  # (drawn as Python draws it)
             want = _python_frame(Path(case["folder"]), now, False)["frame"]
             assert frame.get("sha256") == hashlib.sha256(want.tobytes()).hexdigest(), pair
     wrong = [(pair, g) for pair, g, w in zip(pairs, got, wanted, strict=True) if g != w]
@@ -1578,3 +1582,114 @@ def test_frames_of_lit_texts_with_shadows_within_a_level(tmp_path: Path) -> None
         drawn += 1
     assert drawn > 60
     assert differ <= total // 10000
+
+
+FACET_CHARS = "0123456789:AaBgjQW%°.,-–@iIl€ß+ ?"
+
+
+def test_facet_letters_as_python_makes_them() -> None:
+    # (a letter's bevel worked out of its coverage drawn four times larger: the distance to its
+    # edge, the slope of that, the normals averaged down, lit and, of metal, mirroring the sky
+    # and the ground; in numpy's float32, in numpy's order; then coloured)
+    import numpy as np
+
+    from libre_panel.fonts.fallback import truetype
+    from libre_panel.render import facets
+
+    rng = random.Random(0xFAC)
+    cases, wanted = [], []
+    for n in range(260):
+        path = str(fonts.builtin_font_path(rng.choice(FONTS[2:])))
+        size = rng.choice([20, 21, 27, 28, 29, 33, 40, 51, 52, 53, 64, 96] + [130, 220] * (n < 12))
+        ch, quarter = rng.choice(FACET_CHARS), rng.randrange(4)
+        style = rng.choice(["metal", "acrylic"])
+        fill = (rng.randrange(256), rng.randrange(256), rng.randrange(256),
+                rng.choice([255, 255, 128, 77, 0]))  # fmt: skip
+        sky = tuple(rng.randrange(256) for _ in range(3))
+        ground = tuple(rng.randrange(256) for _ in range(3))
+        cases.append({"op": "facet_glyph", "path": path, "size": size, "ch": ch,
+                      "quarter": quarter, "style": style, "fill": list(fill),
+                      "environment": [*sky, *ground]})  # fmt: skip
+        g = facets._glyph_geometry(truetype(path, size), ch, quarter, style)
+        if g is None:
+            wanted.append(None)
+            continue
+        patch = facets._coloured(g, fill, (sky, ground))
+        wanted.append((g.left, g.top, g.cover, g.terms, np.asarray(patch)))
+    blanks = 0
+    for n, (got, want) in enumerate(zip(run(cases), wanted, strict=True)):
+        if want is None:
+            assert got["glyph"] is None, n
+            blanks += 1
+            continue
+        glyph = got["glyph"]
+        assert (glyph["left"], glyph["top"]) == want[:2], n
+        assert np.array_equal(np.asarray(picture(glyph["cover"])), want[2]), n
+        assert np.array_equal(np.asarray(picture(glyph["terms"])), want[3]), (n, cases[n])
+        assert np.array_equal(np.asarray(picture(glyph["patch"])), want[4]), n
+    assert 0 < blanks < 30
+
+
+def _lettered(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """Texts, readings, clocks, the weather and countdowns lettered by the facet and acrylic
+    finishes (from 20 px on; smaller ones, and texts of more than a line, stay flat)."""
+    pick = rng.random()
+    if pick < 0.3:
+        widget = _text(rng, i, size)
+    elif pick < 0.5:
+        widget = _metric(rng, i, size)
+    elif pick < 0.75:
+        widget = _clock(rng, i, size)
+    elif pick < 0.9:
+        widget = _weather_or_countdown(rng, i, size)
+        if widget["type"] not in ("weather", "countdown"):
+            return widget
+    else:
+        return _card_or_text(rng, i, size)
+    widget["finish"] = rng.choice(["facet", "acrylic"])
+    widget["font_size"] = rng.choice([12, 19, 20, 24, 28, 29, 40, 52, 64, 90])
+    return widget
+
+
+def _lettered_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
+    """Readings of every kind and the weather's, at a moment the clocks and countdowns show."""
+    given, snapshot = _metric_snapshot(rng)
+    weather, at = _weather_snapshot(rng)
+    readings = {**snapshot.readings, **at.readings}
+    return ({**given, "readings": {**given["readings"], **weather["readings"]},
+             "now": weather["now"]}, Snapshot(readings=readings, now=at.now))  # fmt: skip
+
+
+def test_frames_of_lettered_texts_as_python_draws_them(tmp_path: Path) -> None:
+    # (each letter the finish's own, laid where the renderer lays its letters: at the pen's
+    # quarter pixel, over what is laid before it)
+    assert _compare_frames(tmp_path, 0xACC, 160, _lettered, _lettered_snapshot) > 120
+
+
+def test_frames_of_metal_lettering_mirroring_the_theme_s_sky(tmp_path: Path) -> None:
+    # (the sky metal mirrors is the palette's accent, else its primary colour, else its cpu
+    # colour, a third of the way to white; the Libre look's where it has none of them; the
+    # ground below is the background)
+    palettes = [{}, {"accent": "#ff2050"}, {"primary": "rgb(10, 200, 30)"}, {"cpu": "#5020ff80"},
+                {"primary": "#123456", "cpu": "#654321"}, {"cpu": "red", "accent": "#0ff"},
+                {"text": "#ffffff"}]  # fmt: skip
+    cases, expected = [], []
+    for n, palette in enumerate(palettes):
+        folder = tmp_path / f"t{n}"
+        folder.mkdir()
+        text = {"type": "text", "id": "t", "x": 4, "y": 2, "text": "MWo", "font_size": 60,
+                "font": "builtin:Barlow-Bold", "color": "#c8ccd4", "finish": "facet"}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps({
+            "format": THEME_FORMAT, "name": "sky", "display": {"width": 140, "height": 80},
+            "palette": palette, "background": {"color": ["#000000", "#203040"][n % 2]},
+            "widgets": [text]}), encoding="utf-8")  # fmt: skip
+        snapshot = Snapshot(readings={})
+        cases.append({"folder": str(folder), "snapshot": {"readings": {}, "images": {}},
+                      "dither": False})  # fmt: skip
+        expected.append(_python_frame(folder, snapshot, False))
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    frames = [hashlib.sha256(want["frame"].tobytes()).hexdigest() for want in expected]
+    assert len(set(frames)) == len(palettes) - 1  # (each sky shows ...)
+    assert frames[0] == frames[-1]  # (... and a palette of none of its names has the Libre one)
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        assert got.get("sha256") == hashlib.sha256(want["frame"].tobytes()).hexdigest(), n

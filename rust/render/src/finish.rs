@@ -4,6 +4,7 @@
 
 use lp_py::{Dict, Value};
 
+use crate::facets::Style;
 use crate::widget;
 
 /// The finish a widget is drawn with, as finish.py's attach finds it.
@@ -13,6 +14,8 @@ pub(crate) enum Finish {
     Flat,
     /// lit.py's LitText: a text's or a metric's glow is light
     LitText,
+    /// facet.py's FacetText and AcrylicText: the text's letters the finish's own
+    Lettered(Style),
     /// a finish Rust does not draw yet
     Unported,
 }
@@ -33,9 +36,12 @@ pub(crate) fn of(w: &Dict) -> Finish {
         // (LitIcon accepts the weather's icons alone: the others stay line icons)
         ("lit", "icon") if !WEATHER_ICONS.contains(&widget::text(w, "icon")) => Finish::Flat,
         ("lit", "bar" | "gauge" | "graph" | "icon" | "symbol" | "downloads")
-        | ("facet", "bar" | "gauge" | "graph")
-        | ("facet" | "acrylic", "text" | "metric" | "clock" | "weather" | "countdown") => {
-            Finish::Unported
+        | ("facet", "bar" | "gauge" | "graph") => Finish::Unported,
+        ("facet", "text" | "metric" | "clock" | "weather" | "countdown") => {
+            Finish::Lettered(Style::Metal)
+        }
+        ("acrylic", "text" | "metric" | "clock" | "weather" | "countdown") => {
+            Finish::Lettered(Style::Acrylic)
         }
         _ => Finish::Flat,
     }

@@ -8,6 +8,7 @@ pub mod compose;
 pub mod countdown;
 pub mod cover;
 pub mod effects;
+pub mod facets;
 mod finish;
 pub mod formatting;
 mod gauge;

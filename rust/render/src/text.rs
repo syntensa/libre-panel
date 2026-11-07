@@ -3,6 +3,8 @@
 //! its width (a smaller font, or cut with "…"), drawn whole, or letter by letter where its
 //! letters are spaced or its digits of equal width.
 
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use lp_pixels::{Image, Mode};
@@ -12,9 +14,11 @@ use lp_text::text::TextFace;
 use lp_text::text::{draw, Text};
 
 use crate::compose;
+use crate::facets::{self, Glyph, Style};
+use crate::finish::{self, Finish};
 use crate::piece::{Failed, Piece, Result};
 use crate::renderer::Renderer;
-use crate::shapes::ink;
+use crate::shapes::{ink, Rgba};
 use crate::widget;
 
 /// The theme's font where a widget names none, and the app's where the theme names none.
@@ -34,11 +38,20 @@ fn anchor_of(align: &str) -> &'static str {
     }
 }
 
+/// Where a letter's ink lies in its picture (getbbox: left, top, right, bottom); that it has
+/// none; or, for a finish's letter, that it is not known (all of its picture is laid).
+#[derive(Clone, Copy)]
+enum Ink {
+    At((usize, usize, usize, usize)),
+    Blank,
+    Unknown,
+}
+
+/// The finishes' letters kept: by font, character, quarter pixel and style (None: a blank).
+pub(crate) type FacetGlyphs = RefCell<HashMap<(usize, char, i64, Style), Option<Rc<Glyph>>>>;
+
 /// A text laid out letter by letter (_Letters): its layer's size, where the layer goes, the
 /// box, and each letter on the layer with where its ink lies in its picture.
-/// Where a letter's ink lies in its picture (getbbox: left, top, right, bottom); None for none.
-type Ink = Option<(usize, usize, usize, usize)>;
-
 struct Letters {
     size: (usize, usize),
     left: i64,
@@ -199,12 +212,13 @@ impl Renderer {
         Ok(Piece::new(layer, x0, y0))
     }
 
-    /// _letters: the text laid out letter by letter, for letter spacing, equal-width digits or
-    /// a clock's digits that roll or fade (laid out so in a still frame too); None where it is
-    /// drawn whole. `size` is the font size the text fits in.
+    /// _letters: the text laid out letter by letter, for letter spacing, equal-width digits, a
+    /// finish's own letters or a clock's digits that roll or fade (laid out so in a still frame
+    /// too); None where it is drawn whole. `size` is the font size the text fits in.
     fn letters(&self, w: &Dict, text: &str, colour: &str, size: i64) -> Result<Option<Letters>> {
         let font = self.font(widget::text(w, "font"), size)?;
-        let fill = ink(self.color(Some(colour), 1.0)?.unwrap_or([0, 0, 0, 0]));
+        let colour = self.color(Some(colour), 1.0)?;
+        let fill = ink(colour.unwrap_or([0, 0, 0, 0]));
         let (x, y) = (widget::int(w, "x", 0), widget::int(w, "y", 0));
         let align = widget::text(w, "align");
         let spacing = widget::number(w, "letter_spacing", 0.0);
@@ -214,7 +228,12 @@ impl Renderer {
         }
         let digits = tabular && text.chars().any(|c| DIGITS.contains(c));
         let rolls = widget::optional(w, "digits").unwrap_or("jump") != "jump";
-        if spacing == 0.0 && !digits && !rolls {
+        // (a finish that letters a text of one line its own way: FacetText.lettering)
+        let lettered = match finish::of(w) {
+            Finish::Lettered(style) if facets::usable(&font) => Some(style),
+            _ => None,
+        };
+        if spacing == 0.0 && !digits && !rolls && lettered.is_none() {
             return Ok(None);
         }
         let cell = Self::digit_cell(&font)?;
@@ -246,9 +265,23 @@ impl Renderer {
             } else {
                 pen
             };
-            let (glyph, gx, glyph_ink) = self.glyph(&font, ch, fill, at, margin, lh)?;
-            glyphs.push((glyph, gx, 0));
-            inks.push(glyph_ink);
+            if let Some(style) = lettered {
+                // (the finish's letter, at the pen's fraction of a pixel: `at % 1.0`)
+                match self.facet_glyph(&font, ch, colour, at - at.floor(), style)? {
+                    Some((patch, dx, dy)) => {
+                        glyphs.push((patch, at.floor() as i64 + dx, dy));
+                        inks.push(Ink::Unknown);
+                    }
+                    None => {
+                        glyphs.push((Image::blank(Mode::RGBA, 0, 0), 0, 0));
+                        inks.push(Ink::Blank);
+                    }
+                }
+            } else {
+                let (glyph, gx, glyph_ink) = self.glyph(&font, ch, fill, at, margin, lh)?;
+                glyphs.push((glyph, gx, 0));
+                inks.push(glyph_ink);
+            }
             pen += advance;
         }
         let left = start.floor() as i64 - margin;
@@ -287,8 +320,40 @@ impl Renderer {
         let written = Text::new(&text, font, "RGBA");
         let start = (at - whole + pad as f64, 0.0);
         draw(&mut image, start, &written, fill, None, Some("la"), "left").map_err(failed)?;
-        let found = image.getbbox(true);
+        let found = image.getbbox(true).map_or(Ink::Blank, Ink::At);
         Ok((image, whole as i64 - pad, found))
+    }
+
+    /// facets.glyph: a finish's letter `ch` at `frac` of a pixel from the pen's (rounded to a
+    /// quarter), in `fill`, and where it goes from the pen's pixel and the line's top; None for a
+    /// blank. Its geometry built once per font, character, quarter and style.
+    fn facet_glyph(
+        &self,
+        font: &Rc<FallbackFont>,
+        ch: char,
+        fill: Option<Rgba>,
+        frac: f64,
+        style: Style,
+    ) -> Result<Option<(Image, i64, i64)>> {
+        let (quarter, shift) = facets::quarter_of(frac);
+        let key = (Rc::as_ptr(font) as usize, ch, quarter, style);
+        let kept = self.facet_glyphs.borrow().get(&key).cloned();
+        let geometry = match kept {
+            Some(geometry) => geometry,
+            None => {
+                let built = facets::glyph_geometry(font, ch, quarter, style)?.map(Rc::new);
+                self.facet_glyphs.borrow_mut().insert(key, built.clone());
+                built
+            }
+        };
+        let Some(glyph) = geometry else {
+            return Ok(None);
+        };
+        // (Python's tuple(fill) of a colour that is none)
+        let fill = fill.ok_or_else(|| Failed("'NoneType' object is not iterable".into()))?;
+        let patch = facets::coloured(&glyph, fill, self.world)?;
+        let (dx, dy) = facets::placed(&glyph, shift);
+        Ok(Some((patch, dx, dy)))
     }
 
     /// _laid: the letters laid on a clear layer one after the other: one whose ink lies over
@@ -299,10 +364,18 @@ impl Renderer {
         let mut layer = Image::blank(Mode::RGBA, w, h);
         let mut inked: Vec<(i64, i64, i64, i64)> = Vec::new();
         for ((image, x, y), found) in letters.glyphs.iter().zip(&letters.inks) {
-            let Some(found) = found else {
-                continue; // (a letter without ink)
-            };
             let (x, y) = (*x, *y);
+            let found = match found {
+                Ink::At(found) => found,
+                Ink::Blank => continue, // (a letter without ink)
+                Ink::Unknown => {
+                    // (a finish's letter: where it has ink is not known, so all of it)
+                    compose::paste(&mut layer, image, x, y, false)?;
+                    let (w, h) = (image.width() as i64, image.height() as i64);
+                    inked.push((x, y, x + w, y + h));
+                    continue;
+                }
+            };
             let (a, b) = (x + found.0 as i64, y + found.1 as i64);
             let (c, d) = (x + found.2 as i64, y + found.3 as i64);
             let inside = a >= 0 && b >= 0 && c <= w as i64 && d <= h as i64;

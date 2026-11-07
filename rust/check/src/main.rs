@@ -753,6 +753,41 @@ fn run(case: &Value) -> Result<Value, String> {
             }
         }
         "font" => font_case(case),
+        "facet_glyph" => {
+            // a finish's letter (render/facets.py): its geometry, its terms as an image's four
+            // bands, and the letter coloured; null for a blank
+            let font = lp_text::fallback::FallbackFont::open(
+                case["path"].as_str().unwrap_or_default(),
+                case["size"].as_f64().unwrap_or(24.0),
+                0,
+                None,
+            )
+            .map_err(|e| e.to_string())?;
+            let ch = case["ch"]
+                .as_str()
+                .and_then(|s| s.chars().next())
+                .ok_or("ch")?;
+            let fill = ints(&case["fill"])?;
+            let env = ints(&case["environment"])?;
+            let sky = [env[0], env[1], env[2]].map(|v| v as u8);
+            let ground = [env[3], env[4], env[5]].map(|v| v as u8);
+            let metal = case["style"].as_str() == Some("metal");
+            match lp_render::facets::check_glyph(
+                &font,
+                ch,
+                case["quarter"].as_i64().unwrap_or(0),
+                metal,
+                [fill[0], fill[1], fill[2], fill[3]],
+                (sky, ground),
+            )
+            .map_err(|e| e.0)?
+            {
+                None => json!({"glyph": null}),
+                Some((left, top, cover, terms, patch)) => json!({"glyph": {
+                    "left": left, "top": top, "cover": value_of(&cover),
+                    "terms": value_of(&terms), "patch": value_of(&patch)}}),
+            }
+        }
         "coverage" => {
             let path = case["path"].as_str().unwrap_or_default();
             let index = case["index"].as_i64().unwrap_or(0);

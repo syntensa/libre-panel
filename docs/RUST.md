@@ -353,8 +353,18 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       added over it; clocks, the weather, countdowns and line icons the lit finish leaves flat,
       as Python leaves them. The frames the same to the bit; with a shadow, or the renderer's
       own glow round what the finish leaves flat, a pixel now and then a level apart, as a
-      card's. The facets, acrylic and the lit finish's bars, rings, graphs, weather icons,
-      symbols and downloads: Rust says it does not draw them yet
+      card's. The facets' bars, rings and graphs and the lit finish's bars, rings, graphs,
+      weather icons, symbols and downloads: Rust says it does not draw them yet
+- [x] the facet and acrylic finishes' letters (facet.py, facets.py): each letter of a text of
+      one line, from 20 px on, the finish's own: of bright metal that mirrors the sky (the
+      palette's accent, else its primary or cpu colour, a third of the way to white) above it
+      and the ground (the background) below, or of acrylic lit from within; its bevel worked
+      out of its coverage drawn four times larger (the distance to its edge, exact, its slope
+      by a Sobel filter, the normals averaged down), lit from the top left, in numpy's float32
+      and in numpy's order of sums; laid where the renderer lays its letters, at the pen's
+      quarter pixel. The letters and the frames the same to the bit. (numpy takes float32
+      powers from SVML on a processor with AVX-512, now and then a unit in the last place
+      apart from the C library's; the terms, made 8 bits, came out the same in every test)
 - [ ] the zones on Windows (Python finds them in the tzdata package there, which the Rust
       app does not bring yet: none is found there for now)
 - [ ] the C library's locale where Python's text follows it: format()'s 'n' and what strftime

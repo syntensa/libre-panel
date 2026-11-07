@@ -94,6 +94,10 @@ pub struct Renderer {
     cache: HashMap<String, (Value, Rc<Piece>)>,
     /// the fonts by name and size, opened once
     pub(crate) fonts: RefCell<HashMap<(String, i64), Rc<FallbackFont>>>,
+    /// what metal lettering mirrors: the sky (the palette's accent) and the ground
+    pub(crate) world: ([u8; 3], [u8; 3]),
+    /// the finishes' letters by font, character, quarter pixel and style, built once
+    pub(crate) facet_glyphs: crate::text::FacetGlyphs,
 }
 
 impl Renderer {
@@ -122,10 +126,15 @@ impl Renderer {
             warnings: RefCell::new(Vec::new()),
             cache: HashMap::new(),
             fonts: RefCell::new(HashMap::new()),
+            world: ([0; 3], [0; 3]),
+            facet_glyphs: RefCell::new(HashMap::new()),
         };
         renderer.background = renderer.load_background()?;
         let ground = renderer.color(Some(&renderer.theme.background_color.clone()), 1.0)?;
         renderer.opaque = ground.is_some_and(|c| c[3] == 255);
+        // (FacetText.glyph: the sky is the palette's accent, the ground the background)
+        renderer.world =
+            crate::facets::environment_for(&renderer.theme.palette, ground.unwrap_or([0; 4]));
         renderer.mode = if renderer.opaque {
             Mode::RGB
         } else {
