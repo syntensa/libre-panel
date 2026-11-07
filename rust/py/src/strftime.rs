@@ -3,7 +3,8 @@
 //! %Z are Python's own; the rest is the C library's, and the two differ: glibc (Linux) takes
 //! the flags `-` (no padding), `_` (spaces), `0` (zeros), `^` (capitals) and `#` (the other
 //! case) and writes a code it does not know as it stands; the Universal CRT (Windows) takes
-//! `#` alone, and for anything else Python raises ValueError("Invalid format string").
+//! `#` alone, and for anything else Python raises ValueError("Invalid format string"), as it
+//! does for %y and %#y before the year 1900 there, before the CRT is asked.
 //!
 //! Not written here yet: the years before 1000 (Python's own answer for them differs between
 //! its releases: some pad the year to four digits on Linux), %s (the seconds since 1970 in the
@@ -232,6 +233,12 @@ fn c_library(flag: Option<char>, code: char, token: &str, at: &DateTime) -> Resu
 /// among the flags (no padding, or the long date); E and O passed over.
 #[cfg(windows)]
 fn c_library(flag: Option<char>, code: char, _token: &str, at: &DateTime) -> Result<String> {
+    // (timemodule.c's time_strftime1 looks at the format first: %y, and %#y, before 1900)
+    if code == 'y' && matches!(flag, None | Some('#')) && at.year < 1900 {
+        return Err(Refused::ValueError(
+            "format %y requires year >= 1900 on Windows".into(),
+        ));
+    }
     let invalid = || Refused::ValueError("Invalid format string".into());
     let alternate = match flag {
         None => false,
@@ -352,6 +359,24 @@ mod tests {
         assert_eq!(strftime("%z", &t), Ok(String::new()));
         assert_eq!(strftime("%Z", &t), Ok(String::new()));
         assert_eq!(strftime("%%", &t), Ok("%".into()));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn python_s_refusals_on_windows() {
+        // (timemodule.c's time_strftime1: %y and %#y before 1900, before the CRT is asked)
+        let old = at(1899, 12, 31, 23, 5, 9);
+        let refused = |msg: &str| Err(Refused::ValueError(msg.into()));
+        assert_eq!(
+            strftime("%y", &old),
+            refused("format %y requires year >= 1900 on Windows")
+        );
+        assert_eq!(
+            strftime("%#y", &old),
+            refused("format %y requires year >= 1900 on Windows")
+        );
+        assert_eq!(strftime("%-y", &old), refused("Invalid format string"));
+        assert_eq!(strftime("%q", &old), refused("Invalid format string"));
     }
 
     #[cfg(not(windows))]

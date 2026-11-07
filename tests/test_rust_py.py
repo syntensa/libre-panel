@@ -644,11 +644,10 @@ def test_dates_written_as_python_s_strftime_writes_them() -> None:
             cases.append({"token": token, "at": _at(at)})
             expected.append(want)
     [ours] = run([{"op": "strftime", "cases": cases}])
-    for case, got, want in zip(cases, ours, expected, strict=True):
-        if want == "unported":
-            assert isinstance(got, dict) and "unported" in got, (case, got)
-        else:
-            assert got == want, case
+    wrong = [(case, got, want) for case, got, want in zip(cases, ours, expected, strict=True)
+             if (not (isinstance(got, dict) and "unported" in got) if want == "unported"
+                 else got != want)]  # fmt: skip
+    assert not wrong, f"{len(wrong)} differ: {wrong[:40]}"
     assert sum(isinstance(w, str) and w != "unported" for w in expected) > 50_000
 
 
@@ -681,6 +680,7 @@ def test_dates_on_the_panel_as_format_date_writes_them() -> None:
     finally:
         i18n.set_language("en")
     [ours] = run([{"op": "format_date", "locale": str(i18n.LOCALE_DIR), "cases": cases}])
-    for case, got, want in zip(cases, ours, expected, strict=True):
-        assert got == want, case
+    wrong = [(case, got, want) for case, got, want in zip(cases, ours, expected, strict=True)
+             if got != want]  # fmt: skip
+    assert not wrong, f"{len(wrong)} differ: {wrong[:40]}"
     assert sum(isinstance(w, str) for w in expected) > 2000
