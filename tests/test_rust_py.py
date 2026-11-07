@@ -42,7 +42,7 @@ def test_repr_quotes_and_escapes_as_python_does() -> None:
     assert ours["reprs"] == [repr(text) for text in texts]
 
 
-def test_lower_and_upper_as_python_s() -> None:
+def test_lower_upper_and_casefold_as_python_s() -> None:
     rng = random.Random(0x10E)
     # the capital sigma among cased letters, case-ignorable ones (marks, modifiers, the
     # apostrophe, the full stop, format characters) and caseless ones; letters that lower()
@@ -61,6 +61,7 @@ def test_lower_and_upper_as_python_s() -> None:
     [ours] = run([{"op": "py", "texts": texts}])
     assert ours["lowers"] == [text.lower() for text in texts]
     assert ours["uppers"] == [text.upper() for text in texts]
+    assert ours["casefolds"] == [text.casefold() for text in texts]
 
 
 def test_ints_divide_to_the_nearest_float() -> None:
@@ -80,10 +81,10 @@ def test_ints_divide_to_the_nearest_float() -> None:
     reason="the tables are Unicode 15.0's, as the release's Python (3.12) has them",
 )
 def test_digits_printable_white_space_and_case_over_every_code_point() -> None:
-    # lower() and upper() of each character, and what the final sigma makes of it: one that
-    # is skipped (case-ignorable), a letter of a case, or neither
+    # lower(), upper() and casefold() of each character, and what the final sigma makes of it:
+    # one that is skipped (case-ignorable), a letter of a case, or neither
     sigma = {("ς", "σ"): "I", ("σ", "σ"): "C", ("ς", "ς"): "N"}
-    lines, cases = [], []
+    lines, cases, folds = [], [], []
     for code in range(0x110000):
         if 0xD800 <= code <= 0xDFFF:
             continue
@@ -98,9 +99,12 @@ def test_digits_printable_white_space_and_case_over_every_code_point() -> None:
             low_codes = ".".join(f"{ord(c):X}" for c in low)
             up_codes = ".".join(f"{ord(c):X}" for c in up)
             cases.append(f"{code:04X} {low_codes} {up_codes} {kind}\n")
+        if (folded := ch.casefold()) != ch:
+            folds.append(f"{code:04X} {'.'.join(f'{ord(c):X}' for c in folded)}\n")
     [ours] = run([{"op": "py", "texts": []}])
     assert ours["sha256"] == hashlib.sha256("".join(lines).encode()).hexdigest()
     assert ours["case_sha256"] == hashlib.sha256("".join(cases).encode()).hexdigest()
+    assert ours["fold_sha256"] == hashlib.sha256("".join(folds).encode()).hexdigest()
 
 
 # what JSON's strings hold: the escapes, quotes and controls, Latin-1, the line separators

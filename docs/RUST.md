@@ -66,7 +66,7 @@ all of it. It is the reference every Rust piece is checked against:
 
 | Crate | What it is | Python it replaces |
 |---|---|---|
-| py | what Python does that the app's files and messages depend on: its values (ints of any size, dicts in order, ==), their arithmetic and its errors, repr(), json, str's white space, digits, lower() and upper(), re's matching without case, rounding, the division of ints, float() of a str, sum() of floats, splitlines(), format() and str.format, the wide characters of East Asian scripts, the zones zoneinfo finds (Python 3.12, Unicode 15.0: the release's) | — (Python's own rules) |
+| py | what Python does that the app's files and messages depend on: its values (ints of any size, dicts in order, ==), their arithmetic and its errors, repr(), json, str's white space, digits, lower() and upper(), re's matching without case, rounding, the division of ints, float() of a str, sum() of floats, splitlines(), casefold(), format() and str.format, the wide characters of East Asian scripts, the zones zoneinfo finds (Python 3.12, Unicode 15.0: the release's) | — (Python's own rules) |
 | pixels | Pillow's operations as Libre Panel uses them, to the bit | Pillow, numpy (in render/) |
 | decode | pictures from their files as Pillow decodes them (PNG, GIF, JPEG, WebP) | Image.open, Pillow's decoders |
 | text | letters and their layout as Pillow draws them (FreeType, shaping as libraqm) | fonts/, ImageFont |
@@ -238,6 +238,21 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       refuses or raises, of the same kind. {value:c} of a half of a surrogate pair, which
       Python makes, is refused here, as Rust's str cannot hold it (the widget shows its
       fallback)
+- [x] the frame's ground and its cards (lp-render's Renderer): the background's colour, its
+      picture fitted, its gradient in numpy's float32 (bit for bit) made 8 bits with the
+      dither where the panel's video has it; the pieces laid as _compose lays them (pasted
+      through their alpha on an opaque frame in RGB, composited on one that is not, a frosted
+      backdrop blurring what lies beneath its box, light added); rects as cards with their
+      corners alone drawn three times larger and as shapes drawn three times larger and
+      reduced (colours, gradients, outlines, the surface as see-through as the style asks,
+      the cover's colour as render/cover.py finds it); a widget's opacity, the conditions it
+      is drawn on (needs: readings, pictures, comparisons with numbers and words in any case,
+      the theme's switches), hide_if_missing, and Python's refusals, where a widget is left
+      out. Kept as Python keeps it: a card made once. The frames of random themes of cards
+      the same to the bit; with a glow or a shadow a pixel now and then a level apart, as
+      their soft light is blurred in floating point: numpy multiplies by the blur's matrices
+      in float32 (BLAS), Rust takes the passes, and Python's own answer differs as much from
+      one processor to another
 - [ ] the zones on Windows (Python finds them in the tzdata package there, which the Rust
       app does not bring yet: none is found there for now)
 - [ ] the C library's locale where Python's text follows it: format()'s 'n' and what strftime

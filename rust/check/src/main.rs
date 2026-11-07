@@ -828,9 +828,20 @@ fn run(case: &Value) -> Result<Value, String> {
             }
             let case_sum = Sha256::digest(cases.as_bytes());
             let case_hex: String = case_sum.iter().map(|b| format!("{b:02x}")).collect();
+            // over every code point: casefold() where it changes the character
+            let mut folds = String::new();
+            for ch in (0..=0x10FFFFu32).filter_map(char::from_u32) {
+                let folded = lp_py::casefold(&ch.to_string());
+                if folded != ch.to_string() {
+                    folds += &format!("{:04X} {}\n", u32::from(ch), code(folded));
+                }
+            }
+            let fold_sum = Sha256::digest(folds.as_bytes());
+            let fold_hex: String = fold_sum.iter().map(|b| format!("{b:02x}")).collect();
             let text = |t: &Value| t.as_str().unwrap_or_default().to_string();
             let lowers: Vec<String> = texts.iter().map(|t| lp_py::lower(&text(t))).collect();
             let uppers: Vec<String> = texts.iter().map(|t| lp_py::upper(&text(t))).collect();
+            let casefolds: Vec<String> = texts.iter().map(|t| lp_py::casefold(&text(t))).collect();
             let quotients: Vec<f64> = case["divisions"]
                 .as_array()
                 .map(|all| {
@@ -844,7 +855,8 @@ fn run(case: &Value) -> Result<Value, String> {
                 })
                 .unwrap_or_default();
             let mut answer = json!({"reprs": reprs, "sha256": hex, "case_sha256": case_hex,
-                "lowers": lowers, "uppers": uppers, "quotients": quotients});
+                "fold_sha256": fold_hex, "lowers": lowers, "uppers": uppers,
+                "casefolds": casefolds, "quotients": quotients});
             if case["case_table"].as_bool() == Some(true) {
                 answer["case_table"] = json!(cases);
             }
@@ -1570,6 +1582,115 @@ fn run(case: &Value) -> Result<Value, String> {
                 "themes": themes,
             })
         }
+        "render_frame" => {
+            // render/renderer.py's Renderer(theme, preview=True, dither=...).render(snapshot) of
+            // each theme's folder: its frame's SHA-256 (and bytes where asked) and its boxes;
+            // or what the Rust renderer does not draw yet, or why the theme was not read
+            let env = lp_theme::Env {
+                fonts_dir: case["fonts_dir"].as_str().unwrap_or("").into(),
+            };
+            let frames: Vec<Value> = case["frames"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|c| {
+                    let folder = std::path::PathBuf::from(c["folder"].as_str().unwrap_or(""));
+                    let theme = match lp_theme::load_theme(&folder, &env) {
+                        Ok(theme) => theme,
+                        Err(e) => return json!({"error": e.msg}),
+                    };
+                    let options = lp_render::Options {
+                        preview: true,
+                        animate: false,
+                        dither: c["dither"].as_bool().unwrap_or(false),
+                    };
+                    let mut renderer = match lp_render::Renderer::new(theme, &env, options) {
+                        Ok(r) => r,
+                        Err(e) => return json!({"error": e.0}),
+                    };
+                    match renderer.render(snapshot_of(&c["snapshot"])) {
+                        Ok((frame, boxes)) => {
+                            let sum = Sha256::digest(frame.as_bytes());
+                            let hex: String = sum.iter().map(|b| format!("{b:02x}")).collect();
+                            let boxes: serde_json::Map<String, Value> =
+                                boxes.into_iter().map(|(k, b)| (k, json!(b))).collect();
+                            let mut out = json!({"sha256": hex, "size": [frame.width(),
+                                frame.height()], "boxes": boxes, "warnings": renderer.warnings});
+                            if c["bytes"].as_bool() == Some(true) {
+                                out["frame"] = value_of(&frame);
+                            }
+                            out
+                        }
+                        Err(lp_render::Unported(what)) => json!({"unported": what}),
+                    }
+                })
+                .collect();
+            json!({"frames": frames})
+        }
+        "render_ramps" => {
+            // the float32s of gradients: the background's line (_gradient_ground) and a card's
+            // ramp (_ramp_floats), each value's bits in hex
+            use lp_render::shapes;
+            let four = |v: &Value| -> [i64; 4] {
+                std::array::from_fn(|i| v.get(i).and_then(Value::as_i64).unwrap_or(0))
+            };
+            let bits = |floats: Vec<f32>| -> Vec<String> {
+                floats
+                    .iter()
+                    .map(|f| format!("{:08x}", f.to_bits()))
+                    .collect()
+            };
+            let grounds: Vec<Vec<String>> = case["grounds"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|g| {
+                    let (a, b) = (four(&g[0]).map(|v| v as f32), four(&g[1]).map(|v| v as f32));
+                    bits(shapes::ground_line(
+                        a,
+                        b,
+                        g[2].as_u64().unwrap_or(0) as usize,
+                    ))
+                })
+                .collect();
+            let ramps: Vec<Vec<String>> = case["ramps"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|r| {
+                    let (steps, sub) = (r[2].as_u64().unwrap_or(0), r[3].as_u64().unwrap_or(1));
+                    bits(shapes::ramp_floats(
+                        four(&r[0]),
+                        four(&r[1]),
+                        steps as usize,
+                        sub as usize,
+                    ))
+                })
+                .collect();
+            json!({"grounds": grounds, "ramps": ramps})
+        }
+        "render_needs" => {
+            // need_holds of each condition over each snapshot (its readings typed, the keys of
+            // its pictures, its time)
+            use lp_render::snapshot as sn;
+            let snapshots: Vec<sn::Snapshot> = case["snapshots"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(snapshot_of)
+                .collect();
+            let needs: Vec<&str> = case["needs"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|n| n.as_str().unwrap_or(""))
+                .collect();
+            let holds: Vec<Vec<bool>> = snapshots
+                .iter()
+                .map(|snap| needs.iter().map(|n| sn::need_holds(n, snap)).collect())
+                .collect();
+            json!({"holds": holds})
+        }
         "py_vformat" => {
             // string.Formatter().format of each text, with a get_field that gives each field's
             // name as its value: the text, or the kind of Python's error
@@ -1592,21 +1713,6 @@ fn run(case: &Value) -> Result<Value, String> {
             // render/formatting.py: safe_format of each case, auto_format, and the parts
             // (bytes, duration, clock, rate) of values given with their types
             use lp_render::formatting as f;
-            fn typed(v: &Value) -> lp_py::Value {
-                if let Some(h) = v["f"].as_str() {
-                    lp_py::Value::Float(f64::from_bits(u64::from_str_radix(h, 16).unwrap_or(0)))
-                } else if let Some(i) = v["i"].as_str() {
-                    lp_py::Value::Int(i.parse().unwrap_or_default())
-                } else if let Some(s) = v["s"].as_str() {
-                    lp_py::Value::Str(s.into())
-                } else if let Some(b) = v["b"].as_bool() {
-                    lp_py::Value::Bool(b)
-                } else if let Some(l) = v["l"].as_array() {
-                    lp_py::Value::List(l.iter().map(typed).collect())
-                } else {
-                    lp_py::Value::None
-                }
-            }
             fn kind(k: lp_py::format::Kind) -> &'static str {
                 match k {
                     lp_py::format::Kind::Value => "ValueError",
@@ -2023,6 +2129,60 @@ fn font_call<F: lp_text::text::TextFace>(
         }
         other => return Err(bad(&format!("no font call {other}"))),
     })
+}
+
+/// A value as the tests give it with its type: `{"f": bits in hex}`, `{"i": decimal}`,
+/// `{"s": text}`, `{"b": bool}`, `{"l": [...]}`; anything else None.
+fn typed(v: &Value) -> lp_py::Value {
+    if let Some(h) = v["f"].as_str() {
+        lp_py::Value::Float(f64::from_bits(u64::from_str_radix(h, 16).unwrap_or(0)))
+    } else if let Some(i) = v["i"].as_str() {
+        lp_py::Value::Int(i.parse().unwrap_or_default())
+    } else if let Some(s) = v["s"].as_str() {
+        lp_py::Value::Str(s.into())
+    } else if let Some(b) = v["b"].as_bool() {
+        lp_py::Value::Bool(b)
+    } else if let Some(l) = v["l"].as_array() {
+        lp_py::Value::List(l.iter().map(typed).collect())
+    } else {
+        lp_py::Value::None
+    }
+}
+
+/// A snapshot as the tests give it: `readings` (key to a typed value), `images` (the keys
+/// of the pictures: a blank one stands for each), `now` (year to microsecond).
+fn snapshot_of(v: &Value) -> lp_render::snapshot::Snapshot {
+    use lp_render::snapshot as sn;
+    let mut snap = sn::Snapshot::default();
+    if let Some(readings) = v["readings"].as_object() {
+        for (key, value) in readings {
+            snap.readings
+                .insert(key.clone(), sn::Reading::of(typed(value)));
+        }
+    }
+    // (the keys of the pictures, a blank one each; or each key with its picture)
+    for key in v["images"].as_array().into_iter().flatten() {
+        let blank = Image::blank(Mode::RGBA, 1, 1);
+        snap.images.insert(key.as_str().unwrap_or("").into(), blank);
+    }
+    for (key, picture) in v["images"].as_object().into_iter().flatten() {
+        if let Ok(im) = image_of(picture) {
+            snap.images.insert(key.clone(), im);
+        }
+    }
+    if let Some(now) = v["now"].as_array() {
+        let n = |i: usize| now.get(i).and_then(Value::as_i64).unwrap_or(0);
+        snap.now = sn::Moment {
+            year: n(0),
+            month: n(1) as u32,
+            day: n(2) as u32,
+            hour: n(3) as u32,
+            minute: n(4) as u32,
+            second: n(5) as u32,
+            microsecond: n(6) as u32,
+        };
+    }
+    snap
 }
 
 fn main() {

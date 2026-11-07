@@ -9,6 +9,11 @@ publish.workspace = true
 
 [dependencies]
 lp-py = { path = "../py" }
+lp-pixels = { path = "../pixels" }
+lp-decode = { path = "../decode" }
+lp-theme = { path = "../theme" }
+indexmap = "2"
+unicode-general-category = "=0.6.0"
 num-bigint = "0.4"
 num-integer = "0.1"
 num-traits = "0.2"

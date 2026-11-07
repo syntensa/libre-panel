@@ -479,6 +479,23 @@ pub fn upper(text: &str) -> String {
     out
 }
 
+#[path = "fold.rs"]
+mod fold;
+
+/// str.casefold(): every character folded as Unicode's CaseFolding has it (C and F: ß becomes
+/// ss, ς σ, Cherokee's small letters its capitals), else its full lowercase (without the
+/// final sigma of lower()).
+pub fn casefold(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for ch in text.chars() {
+        match fold::FOLD.binary_search_by_key(&u32::from(ch), |&(from, _)| from) {
+            Ok(i) => out.push_str(fold::FOLD[i].1),
+            Err(_) => push_mapped(&mut out, ch, ch.to_lowercase()),
+        }
+    }
+    out
+}
+
 /// int() of a text of decimal digits only (what a regular expression's \d+ matched): its
 /// value, in Python's digits of any script (beyond i128's range: its largest, where Python's
 /// ints go on); None for anything else.

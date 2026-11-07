@@ -185,10 +185,15 @@ dependencies = [
 name = "lp-render"
 version = "0.1.0"
 dependencies = [
+ "indexmap",
+ "lp-decode",
+ "lp-pixels",
  "lp-py",
+ "lp-theme",
  "num-bigint",
  "num-integer",
  "num-traits",
+ "unicode-general-category",
 ]
 
 [[package]]
