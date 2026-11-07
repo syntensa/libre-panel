@@ -279,6 +279,14 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       gliding to a new reading and a colour fading to a threshold's are motion
       (render/motion.py): where the renderer animates them, and where a threshold is NaN, Rust
       says it does not draw them yet
+- [x] icons (icons.py, icon widgets): every one of the line icons drawn as icons.py draws it
+      (four times larger on the grid of 24, lines with curved joints and round caps, rings,
+      arcs, the outlines of shapes eroded by a blur, the gap a shape clears, then reduced with
+      Lanczos), in every size from 8 to 512 and every stroke; the weather's icon for a WMO code
+      (Python's int() of it) by day or night as the reading or the clock says, the network
+      connection's for its kind and signal. Each icon to the bit, and the frames of random
+      themes of them; left out where what it follows has no value (hide_if_missing: a weather
+      icon's code, a weather widget's field), as render/renderer.py leaves them out
 - [ ] the zones on Windows (Python finds them in the tzdata package there, which the Rust
       app does not bring yet: none is found there for now)
 - [ ] the C library's locale where Python's text follows it: format()'s 'n' and what strftime

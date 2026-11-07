@@ -18,6 +18,7 @@ from typing import Any
 from rust_check import image, noise, picture, run
 
 from libre_panel import fonts
+from libre_panel import icons as icon_set
 from libre_panel.fonts.fallback import cursive
 from libre_panel.render import formatting
 from libre_panel.render.renderer import Renderer, need_holds
@@ -605,3 +606,177 @@ def test_gradients_in_float32_as_numpy_works_them_out() -> None:
         assert got == bits(lo[None, :3] + (hi - lo)[None, :3] * t[:, None]), n
     for (a, b, steps, sub), got in zip(ramps, ours["ramps"], strict=True):
         assert got == bits(_ramp_floats(tuple(a), tuple(b), steps, sub)), (steps, sub)
+
+
+def test_every_icon_as_icons_py_draws_it() -> None:
+    rng = random.Random(0x1C0)
+    cases, expected = [], []
+    for name in [*icon_set.ICON_NAMES, "no-such-icon"]:
+        sizes = [(8, 2.0), (24, 2.0), (37, 2.5), (64, 1.0)]
+        sizes.append((rng.choice([5, 13, 48, 100, 160]), rng.choice([0.5, 1.75, 4.0, 2])))
+        for size, stroke in sizes:
+            colour = (*(rng.randrange(256) for _ in range(3)), rng.choice([255, 255, 128, 30]))
+            cases.append({"op": "icon", "name": name, "size": size, "color": list(colour),
+                          "stroke": stroke})  # fmt: skip
+            expected.append(icon_set.draw_icon(name, size, colour, stroke))
+    for name in ("partly", "gamepad", "wifi-1"):  # (the largest: drawn 2048 px wide)
+        cases.append({"op": "icon", "name": name, "size": 600, "color": [9, 200, 90, 255],
+                      "stroke": 2.0})  # fmt: skip
+        expected.append(icon_set.draw_icon(name, 600, (9, 200, 90, 255), 2.0))
+    for n, (got, want) in enumerate(zip(run(cases), expected, strict=True)):
+        assert "image" in got, (n, got)
+        shown = (cases[n]["name"], cases[n]["size"], cases[n]["stroke"])
+        assert picture(got["image"]).tobytes() == want.tobytes(), shown
+
+
+WEATHER_CODES: list[Any] = [0, 1, 2, 3, 45, 48, 51, 61, 82, 83, 71, 85, 86, 77, 94, 95, 99,
+                            1e300, -1e300, -5, 2.9, -0.5, "3", " 45 ", "abc", "", None,
+                            math.nan, math.inf, True, False, 10**30, -(10**30), "1_000", [1],
+                            "٣"]  # fmt: skip
+SIGNALS: list[Any] = [None, 10, 33.9, 34, 66, 66.99, 67, 100, True, False, math.nan, "50",
+                      2**70, -(2**70), -math.inf]  # fmt: skip
+
+
+def test_the_icon_the_weather_and_the_connection_show_as_icons_py_chooses_it() -> None:
+    weather = [{"code": _typed(code), "night": night} for code in WEATHER_CODES
+               for night in (False, True)]  # fmt: skip
+    kinds = ["lan", "wlan", "", None, 5, "LAN"]
+    link = [{"kind": _typed(kind), "signal": _typed(signal)}
+            for kind in kinds for signal in SIGNALS]  # fmt: skip
+    [got] = run([{"op": "icon_names", "weather": weather, "link": link}])
+    assert got["weather"] == [icon_set.weather_icon_name(code, night) for code in WEATHER_CODES
+                              for night in (False, True)]  # fmt: skip
+    assert got["link"] == [icon_set.link_icon(kind, signal)
+                           for kind in kinds for signal in SIGNALS]  # fmt: skip
+
+
+def _icon(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    w, h = size
+    icon: dict[str, Any] = {"type": "icon", "id": f"i{i}", "x": rng.randrange(-20, w),
+                            "y": rng.randrange(-20, h),
+                            "icon": rng.choice([*icon_set.ICON_NAMES, "weather", "link"]),
+                            "size": rng.choice([8, 16, 24, 32, 48, 70]), "color": _colour(rng),
+                            "stroke": rng.choice([1, 1.5, 2, 2.5, 3])}  # fmt: skip
+    if icon["icon"] in ("weather", "link") and rng.random() < 0.4:
+        icon["sensor"] = rng.choice(["weather.hour.3.code", "weather.code", "net.link.kind",
+                                     "other.code", "x"])  # fmt: skip
+    if rng.random() < 0.2:
+        icon["opacity"] = rng.choice([0.5, 0.0])
+    if rng.random() < 0.3:
+        icon["hide_if_missing"] = True
+    return icon
+
+
+def _icon_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _icon(rng, i, size) if rng.random() < 0.7 else _card_or_text(rng, i, size)
+
+
+def _icon_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
+    """The weather and the connection the icons follow, at an hour of the day or night."""
+    values = {"weather.code": WEATHER_CODES, "weather.hour.3.code": WEATHER_CODES,
+              "weather.hour.3.day": [True, False, 0, 1, None], "weather.is_day": [1, 0, None],
+              "net.link.kind": ["lan", "wlan", "", None], "net.wifi.signal": SIGNALS,
+              "other.code": [61]}  # fmt: skip
+    readings = {k: rng.choice(v) for k, v in values.items() if rng.random() < 0.7}
+    now = datetime(2026, 11, 7, rng.randrange(24), rng.randrange(60), 5)
+    snapshot = Snapshot(readings={k: Reading(k, v) for k, v in readings.items()}, now=now)
+    moment = [now.year, now.month, now.day, now.hour, now.minute, now.second, 0]
+    given = {"readings": {k: _typed(v) for k, v in readings.items()}, "images": {},
+             "now": moment}  # fmt: skip
+    return given, snapshot
+
+
+def test_frames_of_icons_as_python_draws_them(tmp_path: Path) -> None:
+    assert _compare_frames(tmp_path, 0x1C05, 120, _icon_or_more, _icon_snapshot) > 90
+
+
+def test_the_weather_icon_by_day_and_night_as_python_tells_it(tmp_path: Path) -> None:
+    # (the sun or the moon: the reading of its own hour says, else now's for now, else the
+    # clock: night before 6 and from 20)
+    cases, expected = [], []
+    absent = object()
+    for sensor in ["", "weather.code", "weather.hour.3.code", "x"]:
+        for hour in (0, 5, 6, 12, 19, 20, 23):
+            for day in (absent, True, False, 0, None, "", 0.0, "yes"):
+                for is_day in (absent, 1, 0):
+                    folder = tmp_path / f"t{len(cases)}"
+                    folder.mkdir()
+                    icon = {"type": "icon", "id": "w", "icon": "weather", "x": 4, "y": 4,
+                            "size": 32, "color": "#ffcc00"}  # fmt: skip
+                    if sensor:
+                        icon["sensor"] = sensor
+                    data = {"format": THEME_FORMAT, "name": "night", "widgets": [icon],
+                            "display": {"width": 40, "height": 40},
+                            "background": {"color": "#000000"}}  # fmt: skip
+                    (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+                    readings: dict[str, Any] = {"weather.code": 0, "weather.hour.3.code": 1,
+                                                "x": 0}  # fmt: skip
+                    if day is not absent:
+                        readings["weather.day"] = readings["weather.hour.3.day"] = day
+                    if is_day is not absent:
+                        readings["weather.is_day"] = is_day
+                    now = datetime(2026, 11, 7, hour, 30)
+                    snapshot = Snapshot(
+                        readings={k: Reading(k, v) for k, v in readings.items()}, now=now
+                    )
+                    given = {"readings": {k: _typed(v) for k, v in readings.items()},
+                             "images": {}, "now": [2026, 11, 7, hour, 30, 0, 0]}  # fmt: skip
+                    cases.append({"folder": str(folder), "snapshot": given, "dither": False})
+                    expected.append(_python_frame(folder, snapshot, False))
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        assert got.get("sha256") == hashlib.sha256(want["frame"].tobytes()).hexdigest(), n
+
+
+def test_widgets_left_out_where_their_reading_is_missing_as_python_leaves_them_out(
+    tmp_path: Path,
+) -> None:
+    # (hide_if_missing: a weather widget's field, the code a weather icon follows, else the
+    # widget's sensor; a graph Python leaves out by its course and history: Rust says it does
+    # not draw graphs yet, rather than a frame with it or without it)
+    rng = random.Random(0x41D)
+    cases, expected, left_out = [], [], 0
+    for n in range(80):
+        folder = tmp_path / f"t{n}"
+        data = _frame_theme(rng, folder, _card_or_text)
+        kind = rng.choice(["weather", "icon", "icon", "graph", "metric"])
+        widget: dict[str, Any] = {"type": kind, "id": "left", "x": rng.randrange(40),
+                                  "y": rng.randrange(40)}  # fmt: skip
+        widget["hide_if_missing"] = rng.random() < 0.8
+        if kind == "weather":
+            widget["field"] = rng.choice(["temperature", "humidity", "code", "description"])
+        elif kind == "icon":
+            widget.update(icon=rng.choice(["weather", "weather", "link", "cpu"]), size=24)
+        if kind != "weather" and rng.random() < 0.6:
+            widget["sensor"] = rng.choice(["weather.hour.3.code", "weather.code", "cpu.load",
+                                           "net.link.kind"])  # fmt: skip
+        data["widgets"].insert(rng.randrange(len(data["widgets"]) + 1), widget)
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        try:
+            theme = load_theme(folder)
+        except ThemeError:
+            continue  # (one Python refuses: the frame tests have those)
+        values = {"weather.temperature": 21.5, "weather.humidity": 40, "weather.code": 61,
+                  "weather.hour.3.code": 3, "cpu.load": 50, "net.link.kind": "lan"}  # fmt: skip
+        readings = {k: v for k, v in values.items() if rng.random() < 0.5}
+        now = datetime(2026, 11, 7, 12, 30, 5)
+        snapshot = Snapshot(readings={k: Reading(k, v) for k, v in readings.items()}, now=now)
+        given = {"readings": {k: _typed(v) for k, v in readings.items()}, "images": {},
+                 "now": [2026, 11, 7, 12, 30, 5, 0]}  # fmt: skip
+        renderer = Renderer(theme, preview=True)
+        [shown] = [w for w in renderer.widgets if w["id"] == "left"]
+        gone = renderer._missing(shown, snapshot)
+        left_out += gone
+        cases.append({"folder": str(folder), "snapshot": given, "dither": False})
+        if kind == "graph" or (kind == "weather" and not gone):
+            expected.append({"unported": f"{kind} widgets"})
+        else:
+            expected.append(_python_frame(folder, snapshot, False))
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        if "unported" in want:
+            assert got.get("unported") == want["unported"], (n, got)
+            continue
+        assert got.get("sha256") == hashlib.sha256(want["frame"].tobytes()).hexdigest(), n
+        assert got["boxes"] == want["boxes"], n
+    assert left_out > 20 and len(cases) > 60

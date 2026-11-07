@@ -253,6 +253,46 @@ fn run(case: &Value) -> Result<Value, String> {
         }
         "jpeg_save" | "dimmed" | "hongtai_frame" | "hongtai_picture" | "hongtai_jpeg"
         | "hongtai_answer" | "hongtai_session" => devices::run(op, case)?,
+        "icon" => {
+            // icons.py's draw_icon(name, size, color, stroke)
+            let colour: Vec<i64> = ints(&case["color"])?;
+            let ink =
+                [0, 1, 2, 3].map(|i| colour.get(i).copied().unwrap_or(255).clamp(0, 255) as u8);
+            let size = case["size"].as_i64().ok_or("a size")?;
+            let stroke = case["stroke"].as_f64().ok_or("a stroke")?;
+            let name = case["name"].as_str().unwrap_or("");
+            match lp_render::icons::draw_icon(name, size, ink, stroke) {
+                Ok(icon) => json!({"image": value_of(&icon)}),
+                Err(e) => json!({"error": e.0}),
+            }
+        }
+        "icon_names" => {
+            // weather_icon_name(code, night) and link_icon(kind, signal) for each case
+            let names: Vec<Value> = case["weather"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|w| {
+                    let night = w["night"].as_bool().unwrap_or(false);
+                    json!(lp_render::icons::weather_icon_name(
+                        &typed(&w["code"]),
+                        night
+                    ))
+                })
+                .collect();
+            let links: Vec<Value> = case["link"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|l| {
+                    json!(lp_render::icons::link_icon(
+                        &typed(&l["kind"]),
+                        &typed(&l["signal"])
+                    ))
+                })
+                .collect();
+            json!({"weather": names, "link": links})
+        }
         "getbbox" => {
             let alpha_only = case["alpha_only"].as_bool().unwrap_or(true);
             let found = image_of(&case["image"])?.getbbox(alpha_only);

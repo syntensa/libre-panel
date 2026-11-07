@@ -5,6 +5,7 @@ pub mod compose;
 pub mod cover;
 pub mod effects;
 pub mod formatting;
+pub mod icons;
 mod metric;
 pub mod piece;
 mod rect;

@@ -14,6 +14,7 @@ use lp_theme::{Env, Theme};
 use crate::compose;
 use crate::cover;
 use crate::effects;
+use crate::icons;
 use crate::metric::{self, Shown};
 use crate::piece::{Failed, Piece, Result};
 use crate::shapes::{self, Rgba};
@@ -317,7 +318,9 @@ impl Renderer {
     }
 
     /// _missing: whether a widget is left out: a condition of its needs that does not hold, or
-    /// (hide_if_missing) its reading has no value.
+    /// (hide_if_missing) its reading has no value: a weather widget's field, the code a
+    /// weather icon follows, else its sensor's. (A graph Python leaves out by its course and
+    /// its history: graphs are not drawn here yet, so Rust leaves none out and says so.)
     fn missing(&self, w: &Dict, snapshot: &Snapshot) -> bool {
         let needs = widget::text(w, "needs");
         if needs_of(needs).any(|need| !self.holds(need, snapshot)) {
@@ -327,8 +330,16 @@ impl Renderer {
         if kind == "module" || !widget::truthy(w, "hide_if_missing") {
             return false;
         }
-        let key = widget::text(w, "sensor");
-        !key.is_empty() && snapshot.value(key) == Value::None
+        let sensor = widget::text(w, "sensor");
+        let key = match kind {
+            "weather" => format!("weather.{}", widget::text(w, "field")),
+            "icon" if widget::text(w, "icon") == "weather" && sensor.is_empty() => {
+                "weather.code".to_string()
+            }
+            "graph" => return false,
+            _ => sensor.to_string(),
+        };
+        !key.is_empty() && snapshot.value(&key) == Value::None
     }
 
     /// _effects: the widget's opacity, and its shadow and glow round it.
@@ -392,6 +403,31 @@ impl Renderer {
                 let content = Value::List(vec![text.clone().into(), colour.clone().into()]);
                 self.cached(&w, content, |r| r.text_piece(&w, &text, &colour))
             }
+            "icon" => {
+                let w = w.clone();
+                let snapshot = self.snapshot.clone().unwrap_or_default();
+                let name = Self::icon_name(&w, &snapshot);
+                let colour = match self.color(Some(widget::text(&w, "color")), 1.0) {
+                    Ok(colour) => colour.unwrap_or([0, 0, 0, 0]),
+                    Err(e) => return Drawn::Failed(e),
+                };
+                let content = Value::List(vec![
+                    name.clone().into(),
+                    Value::List(colour.iter().map(|&c| Value::int(c)).collect()),
+                ]);
+                self.cached(&w, content, |_| {
+                    let (size, stroke) = (
+                        widget::int(&w, "size", 32),
+                        widget::number(&w, "stroke", 2.0),
+                    );
+                    let layer = icons::draw_icon(&name, size, shapes::ink(colour), stroke)?;
+                    Ok(Piece::new(
+                        layer,
+                        widget::int(&w, "x", 0),
+                        widget::int(&w, "y", 0),
+                    ))
+                })
+            }
             "metric" => {
                 let w = w.clone();
                 // (a number gliding, a colour fading: motion, not drawn here yet)
@@ -415,6 +451,35 @@ impl Renderer {
             Ok(piece) => Drawn::Piece(piece),
             Err(e) => Drawn::Failed(e),
         }
+    }
+
+    /// _icon_name: the icon a widget shows: its own, the network connection's for "link", the
+    /// weather's for "weather" (by day or night as its reading says, else the clock).
+    fn icon_name(w: &Dict, snapshot: &Snapshot) -> String {
+        let name = widget::text(w, "icon");
+        let sensor = widget::optional(w, "sensor").filter(|s| !s.is_empty());
+        if name == "link" {
+            let kind = snapshot.value(sensor.unwrap_or("net.link.kind"));
+            return icons::link_icon(&kind, &snapshot.value("net.wifi.signal")).to_string();
+        }
+        if name == "weather" {
+            let key = sensor.unwrap_or("weather.code");
+            let day = match key.strip_suffix(".code") {
+                Some(stem) => format!("{stem}.day"),
+                None => String::new(),
+            };
+            let mut daylight = snapshot.value(&day);
+            if daylight == Value::None && key == "weather.code" {
+                daylight = snapshot.value("weather.is_day");
+            }
+            let night = if daylight == Value::None {
+                !(6..20).contains(&snapshot.now.hour)
+            } else {
+                !daylight.truthy()
+            };
+            return icons::weather_icon_name(&snapshot.value(key), night).to_string();
+        }
+        name.to_string()
     }
 
     /// What a frame of the theme holds beyond its widgets that is not drawn here yet: a screen
