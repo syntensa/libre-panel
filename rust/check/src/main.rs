@@ -266,6 +266,27 @@ fn run(case: &Value) -> Result<Value, String> {
                 Err(e) => json!({"error": e.0}),
             }
         }
+        "countdown_text" => {
+            // countdown.py's countdown_text(text, part, now, done) for each case, in its language
+            let locale = std::path::PathBuf::from(case["locale"].as_str().unwrap_or(""));
+            let mut answers = Vec::new();
+            for c in case["cases"].as_array().into_iter().flatten() {
+                let code = c["language"].as_str().unwrap_or("en");
+                lp_i18n::set_language(lp_i18n::Language::load(&locale, code)?);
+                let now = moment_of(c["now"].as_array().map_or(&[], Vec::as_slice));
+                let s = |k: &str| c[k].as_str().unwrap_or("");
+                let (text, part, done) = (s("text"), s("part"), s("done"));
+                answers.push(
+                    match lp_render::countdown::countdown_text(text, part, &now, done) {
+                        Ok(Some(text)) => json!(text),
+                        Ok(None) => json!({"unported": "countdown dates"}),
+                        Err(e) => json!({"error": e.0}),
+                    },
+                );
+            }
+            lp_i18n::set_language(lp_i18n::Language::english());
+            json!(answers)
+        }
         "icon_names" => {
             // weather_icon_name(code, night) and link_icon(kind, signal) for each case
             let names: Vec<Value> = case["weather"]
@@ -1629,10 +1650,14 @@ fn run(case: &Value) -> Result<Value, String> {
         "render_frame" => {
             // render/renderer.py's Renderer(theme, preview=True, dither=...).render(snapshot) of
             // each theme's folder: its frame's SHA-256 (and bytes where asked) and its boxes;
-            // or what the Rust renderer does not draw yet, or why the theme was not read
+            // or what the Rust renderer does not draw yet, or why the theme was not read; in the
+            // language asked (English by default)
             let env = lp_theme::Env {
                 fonts_dir: case["fonts_dir"].as_str().unwrap_or("").into(),
             };
+            let locale = std::path::PathBuf::from(case["locale"].as_str().unwrap_or(""));
+            let code = case["language"].as_str().unwrap_or("en");
+            lp_i18n::set_language(lp_i18n::Language::load(&locale, code)?);
             let frames: Vec<Value> = case["frames"]
                 .as_array()
                 .into_iter()
@@ -1669,6 +1694,7 @@ fn run(case: &Value) -> Result<Value, String> {
                     }
                 })
                 .collect();
+            lp_i18n::set_language(lp_i18n::Language::english());
             json!({"frames": frames})
         }
         "render_ramps" => {
@@ -2223,18 +2249,23 @@ fn snapshot_of(v: &Value) -> lp_render::snapshot::Snapshot {
         }
     }
     if let Some(now) = v["now"].as_array() {
-        let n = |i: usize| now.get(i).and_then(Value::as_i64).unwrap_or(0);
-        snap.now = sn::Moment {
-            year: n(0),
-            month: n(1) as u32,
-            day: n(2) as u32,
-            hour: n(3) as u32,
-            minute: n(4) as u32,
-            second: n(5) as u32,
-            microsecond: n(6) as u32,
-        };
+        snap.now = moment_of(now);
     }
     snap
+}
+
+/// A moment from [year, month, day, hour, minute, second, microsecond].
+fn moment_of(now: &[Value]) -> lp_render::snapshot::Moment {
+    let n = |i: usize| now.get(i).and_then(Value::as_i64).unwrap_or(0);
+    lp_render::snapshot::Moment {
+        year: n(0),
+        month: n(1) as u32,
+        day: n(2) as u32,
+        hour: n(3) as u32,
+        minute: n(4) as u32,
+        second: n(5) as u32,
+        microsecond: n(6) as u32,
+    }
 }
 
 fn main() {

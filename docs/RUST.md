@@ -287,6 +287,16 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       connection's for its kind and signal. Each icon to the bit, and the frames of random
       themes of them; left out where what it follows has no value (hide_if_missing: a weather
       icon's code, a weather widget's field), as render/renderer.py leaves them out
+- [x] the weather's readings and countdowns as texts (weather and countdown widgets): the
+      weather's field in the widget's format, as a metric's reading (its description in the
+      panel's language); counting down to a day or a moment as render/countdown.py counts:
+      the target as its regular expression reads it (any decimal digit, Python's white
+      space), the 28th for a day the month lacks, the year 0 as this one, every year's next
+      one, to the microsecond; its number, its unit, the time left in the day, the whole in
+      words or the days, in the panel's language. Every part's text to the letter, and the
+      frames of random themes of them the same to the bit, in English and German. The date a
+      countdown counts to is i18n.format_date's (strftime's): Rust says it does not write it
+      yet
 - [ ] the zones on Windows (Python finds them in the tzdata package there, which the Rust
       app does not bring yet: none is found there for now)
 - [ ] the C library's locale where Python's text follows it: format()'s 'n' and what strftime

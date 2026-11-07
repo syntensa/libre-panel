@@ -17,10 +17,11 @@ from typing import Any
 
 from rust_check import image, noise, picture, run
 
-from libre_panel import fonts
+from libre_panel import fonts, i18n
 from libre_panel import icons as icon_set
 from libre_panel.fonts.fallback import cursive
 from libre_panel.render import formatting
+from libre_panel.render.countdown import countdown, countdown_text
 from libre_panel.render.renderer import Renderer, need_holds
 from libre_panel.sensors.base import Reading, Snapshot
 from libre_panel.theme.model import ThemeError, load_theme
@@ -423,20 +424,30 @@ def _python_frame(folder: Path, snapshot: Snapshot, dither: bool) -> dict[str, A
 
 
 def _compare_frames(
-    tmp_path: Path, seed: int, count: int, make: Any = None, snapshot_of: Any = None
+    tmp_path: Path,
+    seed: int,
+    count: int,
+    make: Any = None,
+    snapshot_of: Any = None,
+    language: str = "en",
 ) -> int:
     """Frames of `count` random themes (of what `make` makes) drawn by both, compared to the
     bit, and their boxes; how many were drawn."""
     rng = random.Random(seed)
     cases, expected = [], []
-    for n in range(count):
-        folder = tmp_path / f"t{n}"
-        _frame_theme(rng, folder, make)
-        given, snapshot = (snapshot_of or _frame_snapshot)(rng)
-        dither = rng.random() < 0.3
-        cases.append({"folder": str(folder), "snapshot": given, "dither": dither})
-        expected.append(_python_frame(folder, snapshot, dither))
-    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    try:
+        i18n.set_language(language)
+        for n in range(count):
+            folder = tmp_path / f"t{n}"
+            _frame_theme(rng, folder, make)
+            given, snapshot = (snapshot_of or _frame_snapshot)(rng)
+            dither = rng.random() < 0.3
+            cases.append({"folder": str(folder), "snapshot": given, "dither": dither})
+            expected.append(_python_frame(folder, snapshot, dither))
+    finally:
+        i18n.set_language("en")
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR),
+                   "language": language, "locale": str(i18n.LOCALE_DIR)}])  # fmt: skip
     drawn = 0
     for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
         if "error" in want:
@@ -768,8 +779,8 @@ def test_widgets_left_out_where_their_reading_is_missing_as_python_leaves_them_o
         gone = renderer._missing(shown, snapshot)
         left_out += gone
         cases.append({"folder": str(folder), "snapshot": given, "dither": False})
-        if kind == "graph" or (kind == "weather" and not gone):
-            expected.append({"unported": f"{kind} widgets"})
+        if kind == "graph":
+            expected.append({"unported": "graph widgets"})
         else:
             expected.append(_python_frame(folder, snapshot, False))
     [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
@@ -780,3 +791,140 @@ def test_widgets_left_out_where_their_reading_is_missing_as_python_leaves_them_o
         assert got.get("sha256") == hashlib.sha256(want["frame"].tobytes()).hexdigest(), n
         assert got["boxes"] == want["boxes"], n
     assert left_out > 20 and len(cases) > 60
+
+
+COUNTDOWN_TARGETS = [
+    "12-24", "2026-12-24", "2026-12-24 18:00", "2026-12-24T18:00", " 12-24 ", "12-24\n", "1-1",
+    "01-01", "2-29", "2-30", "4-31", "2027-2-29", "2028-2-29 12:00", "13-1", "0-5", "12-0",
+    "12-32", "11-07", "11-7", "2026-11-07", "11-07 19:30", "11-07 12:00", "11-07 12:30",
+    "2025-12-24", "2026-11-06 23:59", "0000-12-24", "0000-1-1", "9999-12-31 23:59",
+    "\u0661\u0662-\u0662\u0664",
+    "\uff12\uff10\uff12\uff16-\uff11\uff12-\uff12\uff14 \uff10\uff18:\uff10\uff15",
+    "12-24 24:00", "12-24 23:60", "12-24 7:05", "12-24 07:5", "12-24  18:00", "12-24 18:00:00",
+    "12-24t18:00", "\u00a012-24\u3000", "123-4-5", "12345-1-1", "", "x", "12/24", "12-24 18",
+    "2026-1-1 0:00", "12-24 \n", "\t2026-12-24\t", "12-24\u0085", "12-24\u200b", "2-28 23:00",
+    "12-31 23:59", "1-1 0:00", "11-08 12:30", "11-09 12:31", "11-10 12:31", "11-10 12:30",
+    "11-07 13:35", "11-07 12:35", "2026-11-10 12:30", "11-08", "12-24\x1f", "\x1e12-24 \x1d",
+]  # fmt: skip
+COUNTDOWN_NOWS = [
+    datetime(2026, 11, 7, 12, 30, 5, 250000), datetime(2026, 12, 24, 0, 0, 0, 0),
+    datetime(2026, 12, 31, 23, 59, 59, 999999), datetime(2028, 2, 29, 10, 0, 0, 1),
+    datetime(2026, 2, 28, 23, 0, 0, 0), datetime(2026, 12, 24, 18, 0, 0, 0),
+    datetime(9999, 12, 31, 12, 0, 0, 7),
+]  # fmt: skip
+COUNTDOWN_PARTS = ["number", "unit", "clock", "text", "days", "date", "nope"]
+
+
+def _target(rng: random.Random) -> str:
+    """A countdown's target, as one may write it, or nearly."""
+    year = rng.choice(["", "", "2026-", "2027-", "2025-", "0000-", "9999-", "2028-"])
+    month, day = rng.randrange(14), rng.randrange(33)
+    text = f"{year}{month:02d}-{day:02d}" if rng.random() < 0.5 else f"{year}{month}-{day}"
+    if rng.random() < 0.5:
+        sep = rng.choice([" ", "T", " ", "  ", "t"])
+        text += f"{sep}{rng.randrange(25)}:{rng.randrange(61):02d}"
+    return rng.choice(["", " ", "\t"]) + text + rng.choice(["", " ", "\n"])
+
+
+def _moment(now: datetime) -> list[int]:
+    return [now.year, now.month, now.day, now.hour, now.minute, now.second, now.microsecond]
+
+
+def _countdown_expected(text: str, part: str, now: datetime, done: str) -> Any:
+    try:
+        if part == "date" and countdown(text, now) is not None:
+            return {"unported": "countdown dates"}
+        return countdown_text(text, part, now, done)
+    except ValueError as error:
+        return {"error": str(error)}
+
+
+def test_countdown_texts_as_countdown_py_tells_them() -> None:
+    # (the regular expression's digits and white space as Python's re reads them, the 28th for
+    # a day the month lacks, the year 0 as this year's, every year's next one, to the
+    # microsecond, in the panel's language; the date it counts to is format_date's: Rust says
+    # it does not write it yet)
+    rng = random.Random(0xC0D)
+    targets = COUNTDOWN_TARGETS + [_target(rng) for _ in range(400)]
+    cases, expected = [], []
+    try:
+        for n, text in enumerate(targets):
+            for now in COUNTDOWN_NOWS:
+                parts = COUNTDOWN_PARTS
+                if n >= len(COUNTDOWN_TARGETS):
+                    parts = rng.sample(COUNTDOWN_PARTS, 3)
+                for part in parts:
+                    done = rng.choice(["", "", "Party!"])
+                    language = rng.choice(["en", "de", "ja", "ru"])
+                    i18n.set_language(language)
+                    expected.append(_countdown_expected(text, part, now, done))
+                    cases.append({"text": text, "part": part, "now": _moment(now), "done": done,
+                                  "language": language})  # fmt: skip
+    finally:
+        i18n.set_language("en")
+    [ours] = run([{"op": "countdown_text", "locale": str(i18n.LOCALE_DIR), "cases": cases}])
+    for n, (got, want) in enumerate(zip(ours, expected, strict=True)):
+        assert got == want, (n, cases[n])
+    said = {w for w in expected if isinstance(w, str)}
+    assert {"--", "0", "", "Party!", "1", "00:00:00"} <= said
+    assert any(isinstance(w, dict) and "error" in w for w in expected)
+    assert sum(isinstance(w, dict) and "unported" in w for w in expected) > 50
+
+
+WEATHER_FIELDS = ["temperature", "apparent_temperature", "humidity", "wind_speed", "description",
+                  "code"]  # fmt: skip
+
+
+def _weather_or_countdown(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """The weather's readings and countdowns, as texts; cards and texts between them."""
+    pick = rng.random()
+    if pick < 0.3:
+        return _card_or_text(rng, i, size)
+    widget = _text(rng, i, size)
+    for key in ("text", "uppercase", "translate"):
+        widget.pop(key, None)
+    if pick < 0.65:
+        widget.update(type="weather", field=rng.choice(WEATHER_FIELDS))
+        if rng.random() < 0.6:
+            widget["format"] = rng.choice(["{value:.0f}{unit}", "{value}", "{value:.1f} {unit}",
+                                           "{nope}", "{label}", "{value:>6}"])  # fmt: skip
+        if rng.random() < 0.3:
+            widget["fallback"] = rng.choice(["--", "", "n/a"])
+        return widget
+    widget.update(type="countdown", target=rng.choice(COUNTDOWN_TARGETS[:28]),
+                  part=rng.choice(["number", "unit", "clock", "text", "days"]))  # fmt: skip
+    if rng.random() < 0.3:
+        widget["done"] = rng.choice(["", "Party!", "Grüße"])
+    return widget
+
+
+def _weather_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
+    """The weather's readings now, at a moment the countdowns count from."""
+    values = {"weather.temperature": [21.5, -3.25, 0.0, 35, None, "warm"],
+              "weather.apparent_temperature": [19.75, -10.0], "weather.humidity": [40, 100, 0],
+              "weather.wind_speed": [12.3, 0, 99.95],
+              "weather.description": ["Overcast", "Partly cloudy", "Grüße", ""],
+              "weather.code": [61, 3, 0, 95]}  # fmt: skip
+    units = {"weather.temperature": "°C", "weather.apparent_temperature": "°C",
+             "weather.humidity": "%", "weather.wind_speed": "km/h"}  # fmt: skip
+    readings: dict[str, Reading] = {}
+    given: dict[str, Any] = {}
+    for key, choices in values.items():
+        if rng.random() < 0.75:
+            value, label = rng.choice(choices), rng.choice(["", "Weather"])
+            readings[key] = Reading(key, value, unit=units.get(key, ""), label=label)
+            given[key] = {"v": _typed(value), "unit": units.get(key, ""), "label": label}
+    now = rng.choice(COUNTDOWN_NOWS[:6])
+    snapshot = Snapshot(readings=readings, now=now)
+    return {"readings": given, "images": {}, "now": _moment(now)}, snapshot
+
+
+def test_frames_of_the_weather_and_countdowns_as_python_draws_them(tmp_path: Path) -> None:
+    assert _compare_frames(tmp_path, 0x3EA7, 160, _weather_or_countdown, _weather_snapshot) > 120
+
+
+def test_frames_of_the_weather_and_countdowns_in_german_as_python_draws_them(
+    tmp_path: Path,
+) -> None:
+    # (the weather's description, the countdown's units and "Heute" in the panel's language)
+    assert _compare_frames(tmp_path, 0xDE, 120, _weather_or_countdown, _weather_snapshot, "de") > 90

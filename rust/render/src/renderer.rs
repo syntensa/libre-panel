@@ -12,6 +12,7 @@ use lp_text::fallback::FallbackFont;
 use lp_theme::{Env, Theme};
 
 use crate::compose;
+use crate::countdown;
 use crate::cover;
 use crate::effects;
 use crate::icons;
@@ -390,6 +391,12 @@ impl Renderer {
         Ok(piece)
     }
 
+    /// _text_widget: the text as a piece in its colour, kept by the two.
+    fn text_widget(&mut self, w: &Dict, text: String, colour: String) -> Result<Rc<Piece>> {
+        let content = Value::List(vec![text.clone().into(), colour.clone().into()]);
+        self.cached(w, content, |r| r.text_piece(w, &text, &colour))
+    }
+
     /// A widget's piece, or why it has none.
     fn draw(&mut self, w: &Dict) -> Drawn {
         let made = match widget::text(w, "type") {
@@ -399,9 +406,8 @@ impl Renderer {
             }
             "text" => {
                 let w = w.clone();
-                let (text, colour) = (self.text_of(&w), widget::text(&w, "color").to_string());
-                let content = Value::List(vec![text.clone().into(), colour.clone().into()]);
-                self.cached(&w, content, |r| r.text_piece(&w, &text, &colour))
+                let text = self.text_of(&w);
+                self.text_widget(&w, text, widget::text(&w, "color").to_string())
             }
             "icon" => {
                 let w = w.clone();
@@ -428,6 +434,28 @@ impl Renderer {
                     ))
                 })
             }
+            "weather" => {
+                let w = w.clone();
+                let snapshot = self.snapshot.clone().unwrap_or_default();
+                let key = format!("weather.{}", widget::text(&w, "field"));
+                let text = match self.format_reading(&w, &key, snapshot.readings.get(&key)) {
+                    Ok((text, _)) => text,
+                    Err(e) => return Drawn::Failed(e),
+                };
+                self.text_widget(&w, text, widget::text(&w, "color").to_string())
+            }
+            "countdown" => {
+                let w = w.clone();
+                let now = self.snapshot.as_ref().map(|s| s.now).unwrap_or_default();
+                let (target, part) = (widget::text(&w, "target"), widget::text(&w, "part"));
+                let text =
+                    match countdown::countdown_text(target, part, &now, widget::text(&w, "done")) {
+                        Ok(Some(text)) => text,
+                        Ok(None) => return Drawn::Unported("countdown dates".into()),
+                        Err(e) => return Drawn::Failed(e),
+                    };
+                self.text_widget(&w, text, widget::text(&w, "color").to_string())
+            }
             "metric" => {
                 let w = w.clone();
                 // (a number gliding, a colour fading: motion, not drawn here yet)
@@ -442,8 +470,7 @@ impl Renderer {
                     Ok(Shown::Unported(what)) => return Drawn::Unported(what.into()),
                     Err(e) => return Drawn::Failed(e),
                 };
-                let content = Value::List(vec![text.clone().into(), colour.clone().into()]);
-                self.cached(&w, content, |r| r.text_piece(&w, &text, &colour))
+                self.text_widget(&w, text, colour)
             }
             other => return Drawn::Unported(format!("{other} widgets")),
         };

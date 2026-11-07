@@ -2,6 +2,7 @@
 //! widget by widget, to the bit; so far the texts readings become, the ground and the cards.
 
 pub mod compose;
+pub mod countdown;
 pub mod cover;
 pub mod effects;
 pub mod formatting;
