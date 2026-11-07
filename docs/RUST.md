@@ -270,6 +270,15 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       texts exactly as wide as their max_width among them. A frame with a screen, the panel's
       look or a finish other than flat is not drawn here yet: Rust says so, rather than draw
       one without them
+- [x] readings shown as texts (metric widgets) in a still frame: the reading's value in the
+      widget's format, the fallback where there is none and where the format refuses a number,
+      the text itself where it refuses a text, Python's error where it raises one (the widget
+      left out); the sensor texts in the panel's language; the colour of the highest threshold
+      the value is above (sorted as sorted() sorts them); the volume's "MUTE" in the palette's
+      crit while it is muted. The frames of random themes of them the same to the bit. A number
+      gliding to a new reading and a colour fading to a threshold's are motion
+      (render/motion.py): where the renderer animates them, and where a threshold is NaN, Rust
+      says it does not draw them yet
 - [ ] the zones on Windows (Python finds them in the tzdata package there, which the Rust
       app does not bring yet: none is found there for now)
 - [ ] the C library's locale where Python's text follows it: format()'s 'n' and what strftime

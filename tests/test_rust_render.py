@@ -306,6 +306,64 @@ def _card_or_text(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str
     return _rect(rng, i, size) if rng.random() < 0.3 else _text(rng, i, size)
 
 
+SENSORS = ["cpu.load", "cpu.temp", "gpu.temp", "audio.volume", "weather.description",
+           "net.down", "mem.used", "battery.state"]  # fmt: skip
+METRIC_FORMATS = ["{value:.0f}{unit}", "{value}", "{value:.1f} {unit}", "{label}: {value:.0f}",
+                  "{value:bytes}", "{value:duration}", "{value:rate}", "{value:upper}", "{nope}",
+                  "{value:x}", "{value:>8}", "", "{unit}", "{value:.0f}%", "{value:,}",
+                  "{value:gb}", "{value!r}", "{0}", "{value:c}"]  # fmt: skip
+
+
+def _metric(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """A reading shown as a text, in a format, a fallback, colours above thresholds."""
+    metric = _text(rng, i, size)
+    for key in ("text", "uppercase", "translate"):
+        metric.pop(key, None)
+    metric.update(type="metric", sensor=rng.choice(SENSORS), format=rng.choice(METRIC_FORMATS))
+    if rng.random() < 0.3:
+        metric["fallback"] = rng.choice(["--", "", "n/a", "…", "Grüße"])
+    if rng.random() < 0.5:
+        metric["color_rules"] = [
+            {"above": rng.choice([0, 20, 50.5, 80, -5, 10**9, 100, 50, 49.99]),
+             "color": rng.choice([_colour(rng), "@accent", "@text2"])}
+            for _ in range(rng.randrange(1, 4))
+        ]  # fmt: skip
+    if rng.random() < 0.2:
+        metric["smooth"] = True  # (a still frame: no glide)
+    if rng.random() < 0.15:
+        metric["needs"] = rng.choice(["audio.muted", "cpu.load>10", "audio.muted, cpu.load"])
+    return metric
+
+
+def _metric_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    pick = rng.random()
+    return _metric(rng, i, size) if pick < 0.7 else _card_or_text(rng, i, size)
+
+
+READING_VALUES: list[Any] = [0, 1, 42, -3, 99.5, 50.5, 50, 1e12, 2**70, 0.004, -0.0, True,
+                             False, None, "Overcast", "Clear", "42", "", "charging", math.nan,
+                             math.inf, 123456789, 7.25]  # fmt: skip
+
+
+def _metric_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
+    """Readings of every kind for the metrics: their values, units and labels, the volume's
+    muting."""
+    readings: dict[str, Reading] = {}
+    given: dict[str, Any] = {}
+    for key in SENSORS:
+        if rng.random() < 0.8:
+            value = rng.choice(READING_VALUES)
+            unit = rng.choice(["", "%", "°C", "B/s", "GB", "W"])
+            label = rng.choice(["", "CPU", "Grüße"])
+            readings[key] = Reading(key, value, unit=unit, label=label)
+            given[key] = {"v": _typed(value), "unit": unit, "label": label}
+    if rng.random() < 0.5:
+        muted = rng.choice([1, 0, 1.0, True, "1", None, 2])
+        readings["audio.muted"] = Reading("audio.muted", muted)
+        given["audio.muted"] = _typed(muted)
+    return {"readings": given, "images": {}}, Snapshot(readings=readings)
+
+
 def _frame_theme(rng: random.Random, folder: Path, make: Any = None) -> dict[str, Any]:
     """A theme of cards (or what `make` makes) on a ground of a colour, a gradient, a picture
     or all of them."""
@@ -313,6 +371,8 @@ def _frame_theme(rng: random.Random, folder: Path, make: Any = None) -> dict[str
     folder.mkdir()
     size = rng.choice([(64, 48), (160, 120), (320, 240), (480, 128), (17, 400)])
     palette = {name: _hex(rng, alpha=rng.random() < 0.2) for name in PALETTE}
+    if make is _metric_or_more and rng.random() < 0.6:  # (the colour of a muted volume)
+        palette["crit"] = _hex(rng)
     background: dict[str, Any] = {"color": rng.choice([_hex(rng), _hex(rng), _hex(rng, True),
                                                        "@accent", "#00000000"])}  # fmt: skip
     if rng.random() < 0.3:
@@ -361,7 +421,9 @@ def _python_frame(folder: Path, snapshot: Snapshot, dither: bool) -> dict[str, A
     return {"frame": frame, "boxes": boxes}
 
 
-def _compare_frames(tmp_path: Path, seed: int, count: int, make: Any = None) -> int:
+def _compare_frames(
+    tmp_path: Path, seed: int, count: int, make: Any = None, snapshot_of: Any = None
+) -> int:
     """Frames of `count` random themes (of what `make` makes) drawn by both, compared to the
     bit, and their boxes; how many were drawn."""
     rng = random.Random(seed)
@@ -369,7 +431,7 @@ def _compare_frames(tmp_path: Path, seed: int, count: int, make: Any = None) -> 
     for n in range(count):
         folder = tmp_path / f"t{n}"
         _frame_theme(rng, folder, make)
-        given, snapshot = _frame_snapshot(rng)
+        given, snapshot = (snapshot_of or _frame_snapshot)(rng)
         dither = rng.random() < 0.3
         cases.append({"folder": str(folder), "snapshot": given, "dither": dither})
         expected.append(_python_frame(folder, snapshot, dither))
@@ -398,6 +460,10 @@ def test_frames_of_cards_as_python_draws_them(tmp_path: Path) -> None:
 
 def test_frames_of_texts_as_python_draws_them(tmp_path: Path) -> None:
     assert _compare_frames(tmp_path, 0x7E47, 160, _card_or_text) > 120
+
+
+def test_frames_of_readings_shown_as_texts_as_python_draws_them(tmp_path: Path) -> None:
+    assert _compare_frames(tmp_path, 0x3E7, 200, _metric_or_more, _metric_snapshot) > 150
 
 
 def _measured(renderer: Renderer, widget: dict[str, Any]) -> float:

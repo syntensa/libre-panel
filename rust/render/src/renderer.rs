@@ -14,6 +14,7 @@ use lp_theme::{Env, Theme};
 use crate::compose;
 use crate::cover;
 use crate::effects;
+use crate::metric::{self, Shown};
 use crate::piece::{Failed, Piece, Result};
 use crate::shapes::{self, Rgba};
 use crate::snapshot::{need_holds, needs_of, Snapshot};
@@ -388,6 +389,23 @@ impl Renderer {
             "text" => {
                 let w = w.clone();
                 let (text, colour) = (self.text_of(&w), widget::text(&w, "color").to_string());
+                let content = Value::List(vec![text.clone().into(), colour.clone().into()]);
+                self.cached(&w, content, |r| r.text_piece(&w, &text, &colour))
+            }
+            "metric" => {
+                let w = w.clone();
+                // (a number gliding, a colour fading: motion, not drawn here yet)
+                if self.options.animate
+                    && (widget::flag(&w, "smooth", false) || metric::has_rules(&w))
+                {
+                    return Drawn::Unported("metrics that move".into());
+                }
+                let snapshot = self.snapshot.clone().unwrap_or_default();
+                let (text, colour) = match self.metric_text(&w, &snapshot) {
+                    Ok(Shown::Text(text, colour)) => (text, colour),
+                    Ok(Shown::Unported(what)) => return Drawn::Unported(what.into()),
+                    Err(e) => return Drawn::Failed(e),
+                };
                 let content = Value::List(vec![text.clone().into(), colour.clone().into()]);
                 self.cached(&w, content, |r| r.text_piece(&w, &text, &colour))
             }

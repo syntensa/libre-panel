@@ -2160,8 +2160,16 @@ fn snapshot_of(v: &Value) -> lp_render::snapshot::Snapshot {
     let mut snap = sn::Snapshot::default();
     if let Some(readings) = v["readings"].as_object() {
         for (key, value) in readings {
-            snap.readings
-                .insert(key.clone(), sn::Reading::of(typed(value)));
+            // (a value, or {"v": value, "unit": .., "label": ..})
+            let reading = match value.get("v") {
+                Some(inner) => sn::Reading {
+                    unit: value["unit"].as_str().unwrap_or("").to_string(),
+                    label: value["label"].as_str().unwrap_or("").to_string(),
+                    ..sn::Reading::of(typed(inner))
+                },
+                None => sn::Reading::of(typed(value)),
+            };
+            snap.readings.insert(key.clone(), reading);
         }
     }
     // (the keys of the pictures, a blank one each; or each key with its picture)
