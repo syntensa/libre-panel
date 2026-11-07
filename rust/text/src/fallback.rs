@@ -1126,7 +1126,7 @@ impl FallbackFont {
             widths.push(face.getlength(run, mode, direction, features, language)?);
             faces.push(face);
         }
-        let units = lp_py::round(widths.iter().fold(0.0, |s, w| s + w) * 64.0) as i64;
+        let units = lp_py::round(lp_py::sum_floats(widths.iter().copied()) * 64.0) as i64;
         let mut x = match letters[0] {
             'l' => 0.0,
             'm' => -((units.div_euclid(2) + 32) >> 6) as f64,
@@ -1248,14 +1248,15 @@ impl TextFace for FallbackFont {
                 .font
                 .getlength(text, mode, direction, features, language);
         };
-        let mut total = 0.0;
+        let mut lengths = Vec::with_capacity(plan.len());
         for (spec, run) in &plan {
             let face = self
                 .face(spec)
                 .ok_or_else(|| Error::new(Kind::Os, "a face of the plan"))?;
-            total += face.getlength(run, mode, direction, features, language)?;
+            lengths.push(face.getlength(run, mode, direction, features, language)?);
         }
-        Ok(total)
+        // (summed as Python's sum() sums floats: without the loss of each step, since 3.12)
+        Ok(lp_py::sum_floats(lengths))
     }
 
     fn getbbox(

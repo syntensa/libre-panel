@@ -10,6 +10,7 @@ mod rect;
 pub mod renderer;
 pub mod shapes;
 pub mod snapshot;
+mod text;
 pub mod widget;
 
 pub use piece::{Failed, Piece};

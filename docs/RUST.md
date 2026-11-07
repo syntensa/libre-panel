@@ -253,6 +253,19 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       their soft light is blurred in floating point: numpy multiplies by the blur's matrices
       in float32 (BLAS), Rust takes the passes, and Python's own answer differs as much from
       one processor to another
+- [x] the theme's texts (text widgets): the font the widget names or the theme's (a built-in
+      one or a file of the theme's; the default where it cannot be read, said once), its size
+      in Python's range, the text in the panel's language and in capitals where it asks
+      (Python's upper()); made to fit its max_width as _fit does (a smaller size, 6 at the
+      least, or cut short with an ellipsis), the widths summed as Python's sum() sums floats;
+      laid out whole where it can be (anchored la, ma or ra) and letter by letter where it has
+      letter spacing or equal-width digits: each letter on a picture of its own, with room for
+      what reaches beyond it (an accent on its own), put on a clear layer as it is where its
+      ink meets none put before, laid over it where it does; the fallback fonts for the
+      letters a font does not have. The frames of random themes of texts the same to the bit,
+      texts exactly as wide as their max_width among them. A frame with a screen, the panel's
+      look or a finish other than flat is not drawn here yet: Rust says so, rather than draw
+      one without them
 - [ ] the zones on Windows (Python finds them in the tzdata package there, which the Rust
       app does not bring yet: none is found there for now)
 - [ ] the C library's locale where Python's text follows it: format()'s 'n' and what strftime

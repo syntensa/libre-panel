@@ -18,6 +18,7 @@ from typing import Any
 from rust_check import image, noise, picture, run
 
 from libre_panel import fonts
+from libre_panel.fonts.fallback import cursive
 from libre_panel.render import formatting
 from libre_panel.render.renderer import Renderer, need_holds
 from libre_panel.sensors.base import Reading, Snapshot
@@ -267,8 +268,48 @@ def _rect(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
     return rect
 
 
-def _frame_theme(rng: random.Random, folder: Path) -> dict[str, Any]:
-    """A theme of cards on a ground of a colour, a gradient, a picture or all of them."""
+# (and marks that reach beyond their letter: a combining acute's ink lies left of where it
+# goes (Barlow), a double breve's right of it (Liberation), past a small text's margin)
+TEXTS = ["CPU", "GPU Temp", "Hello World", "1234567890", "12:45", "Grüße aus Köln", "ﬁne ﬂow",
+         "Ünïcödé", "  spaced  ", "", "two\nlines", "日本語", "😀 ok", "مرحبا", "x" * 40, "ß",
+         "Ⅻ", "-12.5 °C", "W", "iiii", "e\u0301te\u0301 42", "a\u0361b 12"]  # fmt: skip
+FONTS = ["", "", "builtin:Barlow-Medium", "builtin:Barlow-Bold", "builtin:Barlow-Regular",
+         "builtin:BarlowCondensed-SemiBold", "builtin:JetBrainsMono-Medium",
+         "builtin:LiberationSans-Regular", "builtin:LiberationSans-Bold"]  # fmt: skip
+
+
+def _text(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    w, h = size
+    text: dict[str, Any] = {"type": "text", "id": f"t{i}", "text": rng.choice(TEXTS),
+                            "x": rng.randrange(-20, w + 10), "y": rng.randrange(-20, h),
+                            "font": rng.choice(FONTS),
+                            "font_size": rng.choice([6, 10, 14, 24, 37, 60, 120]),
+                            "color": _colour(rng),
+                            "align": rng.choice(["left", "center", "right"])}  # fmt: skip
+    if rng.random() < 0.4:
+        text["letter_spacing"] = rng.choice([1, 2.5, -1, 4, 0.3])
+    if rng.random() < 0.4:
+        text["tabular"] = True
+    if rng.random() < 0.4:
+        text["max_width"] = rng.choice([20, 40, 100, 300])
+        text["fit"] = rng.choice(["shrink", "ellipsis"])
+    if rng.random() < 0.2:
+        text["uppercase"] = True
+    if rng.random() < 0.1:
+        text["translate"] = True
+    if rng.random() < 0.2:
+        text["opacity"] = rng.choice([0.5, 0.0, 0.999])
+    return text
+
+
+def _card_or_text(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _rect(rng, i, size) if rng.random() < 0.3 else _text(rng, i, size)
+
+
+def _frame_theme(rng: random.Random, folder: Path, make: Any = None) -> dict[str, Any]:
+    """A theme of cards (or what `make` makes) on a ground of a colour, a gradient, a picture
+    or all of them."""
+    make = make or _rect
     folder.mkdir()
     size = rng.choice([(64, 48), (160, 120), (320, 240), (480, 128), (17, 400)])
     palette = {name: _hex(rng, alpha=rng.random() < 0.2) for name in PALETTE}
@@ -283,7 +324,7 @@ def _frame_theme(rng: random.Random, folder: Path) -> dict[str, Any]:
         picture_size = (rng.randrange(8, 400), rng.randrange(8, 300))
         noise(rng, mode, picture_size).save(folder / "ground.png")
         background["image"] = "ground.png"
-    widgets = [_rect(rng, i, size) for i in range(rng.randrange(13))]
+    widgets = [make(rng, i, size) for i in range(rng.randrange(13))]
     data: dict[str, Any] = {"format": THEME_FORMAT, "name": "cards",
                             "display": {"width": size[0], "height": size[1]},
                             "palette": palette, "background": background,
@@ -292,6 +333,8 @@ def _frame_theme(rng: random.Random, folder: Path) -> dict[str, Any]:
         data["style"] = {"card_opacity": rng.choice([1.0, 0.5, 0.4, 1, 0.75, 0.3])}
     if rng.random() < 0.2:
         data["switches"] = {"frames": {"name": "Frames", "on": rng.random() < 0.5}}
+    if make is not _rect and rng.random() < 0.3:
+        data["font"] = rng.choice(FONTS[2:])
     (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
     return data
 
@@ -318,12 +361,14 @@ def _python_frame(folder: Path, snapshot: Snapshot, dither: bool) -> dict[str, A
     return {"frame": frame, "boxes": boxes}
 
 
-def test_frames_of_cards_as_python_draws_them(tmp_path: Path) -> None:
-    rng = random.Random(0xCA2D)
+def _compare_frames(tmp_path: Path, seed: int, count: int, make: Any = None) -> int:
+    """Frames of `count` random themes (of what `make` makes) drawn by both, compared to the
+    bit, and their boxes; how many were drawn."""
+    rng = random.Random(seed)
     cases, expected = [], []
-    for n in range(160):
+    for n in range(count):
         folder = tmp_path / f"t{n}"
-        _frame_theme(rng, folder)
+        _frame_theme(rng, folder, make)
         given, snapshot = _frame_snapshot(rng)
         dither = rng.random() < 0.3
         cases.append({"folder": str(folder), "snapshot": given, "dither": dither})
@@ -344,7 +389,89 @@ def test_frames_of_cards_as_python_draws_them(tmp_path: Path) -> None:
             raise AssertionError(f"theme {n}: {differ} pixels differ")
         assert got["boxes"] == want["boxes"], n
         drawn += 1
-    assert drawn > 120
+    return drawn
+
+
+def test_frames_of_cards_as_python_draws_them(tmp_path: Path) -> None:
+    assert _compare_frames(tmp_path, 0xCA2D, 160) > 120
+
+
+def test_frames_of_texts_as_python_draws_them(tmp_path: Path) -> None:
+    assert _compare_frames(tmp_path, 0x7E47, 160, _card_or_text) > 120
+
+
+def _measured(renderer: Renderer, widget: dict[str, Any]) -> float:
+    """The width _fit holds a widget's text against its max_width."""
+    font = renderer.font(widget.get("font", ""), widget.get("font_size", 24))
+    text, tabular = widget["text"], widget.get("tabular", False)
+    if cursive(text):
+        return float(font.getlength(text))
+    cell = renderer._digit_cell(font) if tabular else 0
+    advances = [cell if tabular and ch in "0123456789" else renderer._advance(font, ch)
+                for ch in text]  # fmt: skip
+    return sum(advances) + widget.get("letter_spacing", 0) * max(0, len(text) - 1)
+
+
+def test_frames_of_texts_that_just_fit_as_python_fits_them(tmp_path: Path) -> None:
+    # (a text as wide as its max_width keeps its size; a pixel narrower, it is made to fit)
+    folder = tmp_path / "measure"
+    folder.mkdir()
+    (folder / "theme.json").write_text(json.dumps({
+        "format": THEME_FORMAT, "name": "measure", "display": {"width": 64, "height": 48},
+        "widgets": []}), encoding="utf-8")  # fmt: skip
+    measurer = Renderer(load_theme(folder), preview=True)
+    exact = 0
+
+    def just_fitting(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+        nonlocal exact
+        text = _text(rng, i, size)
+        for key in ("uppercase", "translate"):
+            text.pop(key, None)
+        if not text["text"].strip() or "\n" in text["text"]:
+            text["text"] = rng.choice(["CPU 42", "12:45", "Grüße"])
+        text["font"] = rng.choice(FONTS[2:])
+        text["letter_spacing"] = rng.choice([0, 0, 1, -1, 4])
+        measured = _measured(measurer, text)
+        if measured == int(measured):
+            exact += 1
+            text["max_width"] = max(1, int(measured) - rng.choice([0, 0, 1]))
+        else:
+            text["max_width"] = max(1, rng.choice([math.floor(measured), math.ceil(measured)]))
+        text["fit"] = rng.choice(["shrink", "ellipsis"])
+        return text
+
+    assert _compare_frames(tmp_path, 0xF175, 90, just_fitting) > 70
+    assert exact > 40  # (widths that are whole: there it is the max_width to the pixel)
+
+
+def test_frames_beyond_their_widgets_are_not_drawn_here_yet(tmp_path: Path) -> None:
+    # (a screen, the panel's look and a finish other than flat: Rust says it does not draw them
+    # yet, rather than a frame without them)
+    rng = random.Random(0xB3D)
+    cases, wanted = [], []
+    for n in range(30):
+        folder = tmp_path / f"t{n}"
+        data = _frame_theme(rng, folder, _text)
+        beyond = rng.choice(["screens", "looks", "finishes"])
+        if beyond == "screens":
+            data["screen"] = {"name": rng.choice(["earth", "no-such-screen"])}
+        elif beyond == "looks":
+            data["look"] = {"grid": rng.choice([True, {}, {"spacing": 12, "major": 0}])}
+        else:
+            finished = _text(rng, 99, (64, 48))
+            finished["finish"] = rng.choice(["lit", "facet", "acrylic"])
+            data["widgets"].append(finished)
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        try:
+            load_theme(folder)
+        except ThemeError:
+            continue  # (one Python refuses: the frame tests have those)
+        given, _ = _frame_snapshot(rng)
+        cases.append({"folder": str(folder), "snapshot": given, "dither": False})
+        wanted.append(beyond)
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    assert [got.get("unported", got) for got in ours["frames"]] == wanted
+    assert len(wanted) > 20
 
 
 def test_frames_of_cards_with_glow_and_shadow_within_a_level(tmp_path: Path) -> None:

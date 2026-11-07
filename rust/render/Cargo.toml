@@ -12,6 +12,8 @@ lp-py = { path = "../py" }
 lp-pixels = { path = "../pixels" }
 lp-decode = { path = "../decode" }
 lp-theme = { path = "../theme" }
+lp-text = { path = "../text" }
+lp-i18n = { path = "../i18n" }
 indexmap = "2"
 unicode-general-category = "=0.6.0"
 num-bigint = "0.4"

@@ -187,8 +187,10 @@ version = "0.1.0"
 dependencies = [
  "indexmap",
  "lp-decode",
+ "lp-i18n",
  "lp-pixels",
  "lp-py",
+ "lp-text",
  "lp-theme",
  "num-bigint",
  "num-integer",

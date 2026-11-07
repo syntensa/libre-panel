@@ -1,12 +1,14 @@
 //! A theme and a sensor snapshot made a frame (render/renderer.py's Renderer): every widget drawn
 //! into its own layer, its effects applied, the layers laid on the theme's ground.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
 use indexmap::IndexMap;
 use lp_pixels::{alpha_composite, dither, Filter, Image, Mode};
 use lp_py::{Dict, Value};
+use lp_text::fallback::FallbackFont;
 use lp_theme::{Env, Theme};
 
 use crate::compose;
@@ -25,6 +27,8 @@ pub const MOST_PIXELS: i64 = 1 << 28;
 pub const COVER_COLOR: &str = "@cover";
 /// A need on one of the theme's switches: "switch.frames".
 const SWITCH: &str = "switch.";
+/// The finish a widget has unless it names another (theme/model.py's FINISHES[0]).
+const FLAT: &str = "flat";
 
 /// How a renderer draws: as the editor's preview or a picture (not the panel), with what moves
 /// (animate), with the dither of the panel's video.
@@ -58,6 +62,7 @@ enum Drawn {
 
 pub struct Renderer {
     pub theme: Theme,
+    pub(crate) env: Env,
     pub options: Options,
     pub(crate) dither: bool,
     /// the widgets to draw: the theme's, its modules replaced by their parts
@@ -75,9 +80,11 @@ pub struct Renderer {
     pub switches: IndexMap<String, bool>,
     /// the readings it drew last (the cover's colour)
     snapshot: Option<Snapshot>,
-    pub warnings: Vec<String>,
+    warnings: RefCell<Vec<String>>,
     /// each widget's finished piece, while it and what it shows stay the same
     cache: HashMap<String, (Value, Rc<Piece>)>,
+    /// the fonts by name and size, opened once
+    pub(crate) fonts: RefCell<HashMap<(String, i64), Rc<FallbackFont>>>,
 }
 
 impl Renderer {
@@ -91,6 +98,7 @@ impl Renderer {
             .collect();
         let mut renderer = Renderer {
             theme,
+            env: env.clone(),
             options,
             dither: options.dither,
             widgets: expanded.widgets,
@@ -101,8 +109,9 @@ impl Renderer {
             mode: Mode::RGBA,
             switches: IndexMap::new(),
             snapshot: None,
-            warnings: Vec::new(),
+            warnings: RefCell::new(Vec::new()),
             cache: HashMap::new(),
+            fonts: RefCell::new(HashMap::new()),
         };
         renderer.background = renderer.load_background()?;
         let ground = renderer.color(Some(&renderer.theme.background_color.clone()), 1.0)?;
@@ -115,10 +124,16 @@ impl Renderer {
         Ok(renderer)
     }
 
-    fn warn(&mut self, message: String) {
-        if !self.warnings.contains(&message) {
-            self.warnings.push(message);
+    pub(crate) fn warn(&self, message: String) {
+        let mut warnings = self.warnings.borrow_mut();
+        if !warnings.contains(&message) {
+            warnings.push(message);
         }
+    }
+
+    /// What went wrong while it drew, each once (a widget left out, a picture or a font not read).
+    pub fn warnings(&self) -> Vec<String> {
+        self.warnings.borrow().clone()
     }
 
     // -- resources -------------------------------------------------------------------------
@@ -370,6 +385,12 @@ impl Renderer {
                 let w = w.clone();
                 self.cached(&w, Value::None, |r| r.rect_piece(&w))
             }
+            "text" => {
+                let w = w.clone();
+                let (text, colour) = (self.text_of(&w), widget::text(&w, "color").to_string());
+                let content = Value::List(vec![text.clone().into(), colour.clone().into()]);
+                self.cached(&w, content, |r| r.text_piece(&w, &text, &colour))
+            }
             other => return Drawn::Unported(format!("{other} widgets")),
         };
         match made {
@@ -378,12 +399,38 @@ impl Renderer {
         }
     }
 
+    /// What a frame of the theme holds beyond its widgets that is not drawn here yet: a screen
+    /// (a plugin's, drawn under the widgets), the panel's look (its grid beneath them) and
+    /// finishes other than flat (render/finish.py: lit, facet, acrylic). Rust says so for any of
+    /// them, also where Python goes on without (a screen no plugin has, a finish a widget does
+    /// not take): never a frame drawn without what Python draws.
+    fn beyond_widgets(&self) -> Option<&'static str> {
+        if self.theme.screen.is_some() {
+            return Some("screens");
+        }
+        if widget::truthy(&self.theme.look, "grid") {
+            return Some("looks");
+        }
+        let flat = |w: &Dict| match w.get("finish") {
+            None => true,
+            Some(Value::Str(name)) => name == FLAT,
+            Some(_) => false,
+        };
+        if !self.widgets.iter().all(flat) {
+            return Some("finishes");
+        }
+        None
+    }
+
     /// render: the frame (RGB) of `snapshot`, and the widgets' boxes; Unported where it holds
     /// what is not drawn here yet.
     pub fn render(
         &mut self,
         snapshot: Snapshot,
     ) -> std::result::Result<(Image, IndexMap<String, [i64; 4]>), Unported> {
+        if let Some(what) = self.beyond_widgets() {
+            return Err(Unported(what.into()));
+        }
         let snapshot = snapshot.finite();
         self.snapshot = Some(snapshot.clone());
         let mut boxes = IndexMap::new();

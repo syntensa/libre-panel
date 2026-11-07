@@ -1615,7 +1615,7 @@ fn run(case: &Value) -> Result<Value, String> {
                             let boxes: serde_json::Map<String, Value> =
                                 boxes.into_iter().map(|(k, b)| (k, json!(b))).collect();
                             let mut out = json!({"sha256": hex, "size": [frame.width(),
-                                frame.height()], "boxes": boxes, "warnings": renderer.warnings});
+                                frame.height()], "boxes": boxes, "warnings": renderer.warnings()});
                             if c["bytes"].as_bool() == Some(true) {
                                 out["frame"] = value_of(&frame);
                             }
