@@ -1097,3 +1097,115 @@ def test_frames_of_bars_with_glow_within_a_level(tmp_path: Path) -> None:
         drawn += 1
     assert drawn > 45
     assert differ <= total // 10000
+
+
+GAUGE_ANGLES = [
+    (135, 405), (90, 450), (180, 360), (0, 360), (-90, 270), (405, 135), (0, 0), (10.5, 300.25),
+    (0, 720), (270, -90), (-45, 45), (150, 390.5), (-200, 160), (0, 3600), (359.5, 0.25),
+]  # fmt: skip
+GAUGE_THICKNESS = [1, 2, 4, 8, 12, 20, 60, 0, -3, 1000]
+
+
+def _gauge(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """A reading as a ring: its range and scale, its sweep, thickness and caps, its colours (a
+    gradient along the scale), its track and the ticks across it, thresholds; now and then one
+    of no size or less (Python leaves it out where it cannot draw it)."""
+    w, h = size
+    d = rng.choice([1, 2, 5, 12, 30, 48, 80, 120, 200, 0, -4])
+    gauge: dict[str, Any] = {"type": "gauge", "id": f"g{i}", "x": rng.randrange(-20, w),
+                             "y": rng.randrange(-20, h), "w": d,
+                             "h": d if rng.random() < 0.7 else rng.choice([1, 9, 40, 130]),
+                             "sensor": rng.choice(BAR_SENSORS), "color": _colour(rng),
+                             "thickness": rng.choice(GAUGE_THICKNESS)}  # fmt: skip
+    if rng.random() < 0.7:
+        gauge["start_angle"], gauge["end_angle"] = rng.choice(GAUGE_ANGLES)
+    if rng.random() < 0.4:
+        gauge["min"], gauge["max"] = rng.choice([(0, 100), (-50, 50), (10, 10), (0, 1e6),
+                                                 (100, 0), (0, 1), (0.5, 99.5)])  # fmt: skip
+    if rng.random() < 0.3:
+        gauge["scale"] = rng.choice(["sqrt", "log"])
+    if rng.random() < 0.4:
+        gauge["color2"] = _colour(rng)
+    if rng.random() < 0.4:
+        gauge["background"] = rng.choice([None, _colour(rng), "@accent"])
+    if rng.random() < 0.4:
+        gauge["cap"] = "flat"
+    if rng.random() < 0.4:
+        gauge["ticks"] = rng.choice([1, 4, 12, 0, -2])
+        if rng.random() < 0.5:
+            gauge["tick_color"] = rng.choice([None, _colour(rng)])
+    if rng.random() < 0.3:
+        thresholds = [0, 20, 50, 80, 100, -5, 50.5]
+        gauge["color_rules"] = [
+            {"above": rng.choice(thresholds), "color": _colour(rng)}
+            for _ in range(rng.randrange(1, 4))
+        ]
+    if rng.random() < 0.2:
+        gauge["opacity"] = rng.choice([0.5, 0.0])
+    return gauge
+
+
+def _gauge_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _gauge(rng, i, size) if rng.random() < 0.7 else _card_or_text(rng, i, size)
+
+
+def test_frames_of_gauges_as_python_draws_them(tmp_path: Path) -> None:
+    # (where the reading stands on the ring, in steps of the supersampled grid along its arc;
+    # the track and the ticks across it; the value's arc, its caps round or flat, in one
+    # colour, a gradient along the scale or a threshold's colour)
+    assert _compare_frames(tmp_path, 0x6A6E, 200, _gauge_or_more, _bar_snapshot) > 150
+
+
+def test_frames_of_gauges_with_glow_within_a_level(tmp_path: Path) -> None:
+    # (the glow round a ring: blurred in floating point, as a card's is, so now and then a
+    # pixel a level apart)
+    import numpy as np
+
+    rng = random.Random(0x6A61)
+    cases, expected = [], []
+    for n in range(50):
+        folder = tmp_path / f"t{n}"
+        data = _frame_theme(rng, folder, _gauge)
+        for widget in data["widgets"]:
+            widget["glow"] = rng.choice([0.3, 0.7, 1.0, 1])
+            widget["glow_radius"] = rng.choice([2, 4, 6, 10, 20])
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        given, snapshot = _bar_snapshot(rng)
+        dither = rng.random() < 0.3
+        cases.append({"folder": str(folder), "snapshot": given, "dither": dither, "bytes": True})
+        expected.append(_python_frame(folder, snapshot, dither))
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    differ = total = drawn = 0
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        if "error" in want:
+            assert "error" in got, n
+            continue
+        assert "frame" in got, (n, got)
+        apart = np.abs(np.asarray(picture(got["frame"]), int) - np.asarray(want["frame"], int))
+        assert apart.max() <= 1, n
+        differ += int((apart.max(axis=2) > 0).sum())
+        total += apart.shape[0] * apart.shape[1]
+        assert got["boxes"] == want["boxes"], n
+        drawn += 1
+    assert drawn > 40
+    assert differ <= total // 10000
+
+
+def test_numbers_a_float_does_not_hold_are_not_drawn_here_yet(tmp_path: Path) -> None:
+    # (Python counts with an int of more than 53 bits exactly, where a float rounds it: Rust
+    # says it does not draw such a ring or bar yet, rather than one a step off)
+    rng = random.Random(0xF10A7)
+    cases = []
+    for n, (make, key) in enumerate([(_gauge, "max"), (_gauge, "start_angle"), (_bar, "min"),
+                                     (_gauge, "end_angle"), (_bar, "max")]):  # fmt: skip
+        folder = tmp_path / f"t{n}"
+        data = _frame_theme(rng, folder, _card_or_text)
+        widget = make(rng, 99, (64, 48))
+        widget[key] = 2**53 + 1
+        data["widgets"].append(widget)
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        given, _ = _bar_snapshot(rng)
+        cases.append({"folder": str(folder), "snapshot": given, "dither": False})
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    unported = "numbers a float does not hold as they are"
+    assert [got.get("unported") for got in ours["frames"]] == [unported] * 5

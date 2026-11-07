@@ -16,6 +16,7 @@ use crate::compose;
 use crate::countdown;
 use crate::cover;
 use crate::effects;
+use crate::gauge;
 use crate::icons;
 use crate::metric::{self, Shown};
 use crate::piece::{Failed, Piece, Result};
@@ -491,6 +492,9 @@ impl Renderer {
                 {
                     return Drawn::Unported("bars that move".into());
                 }
+                if !["min", "max"].iter().all(|k| widget::exact(&w, k)) {
+                    return Drawn::Unported("numbers a float does not hold as they are".into());
+                }
                 let snapshot = self.snapshot.clone().unwrap_or_default();
                 let value = number(&snapshot.value(widget::text(&w, "sensor")));
                 let Some(rules) = metric::rules_of(&w) else {
@@ -509,13 +513,45 @@ impl Renderer {
                     Ok(made) => made,
                     Err(e) => return Drawn::Failed(e),
                 };
-                let (a, b) = paint;
-                let colours = |c: Option<Rgba>| match c {
-                    Some(c) => Value::List(c.map(Value::int).to_vec()),
-                    None => Value::None,
-                };
-                let content = Value::List(vec![Value::Float(frac), colours(Some(a)), colours(b)]);
+                let content = bar::content(frac, paint);
                 self.cached(&w, content, |r| r.bar_piece(&w, frac, paint))
+            }
+            "gauge" => {
+                let w = w.clone();
+                // (a ring gliding to a new reading, a colour fading: motion, not drawn here yet)
+                if self.options.animate
+                    && (widget::flag(&w, "smooth", true) || metric::has_rules(&w))
+                {
+                    return Drawn::Unported("gauges that move".into());
+                }
+                let numbers = ["min", "max", "start_angle", "end_angle"];
+                if !numbers.iter().all(|k| widget::exact(&w, k)) {
+                    return Drawn::Unported("numbers a float does not hold as they are".into());
+                }
+                let snapshot = self.snapshot.clone().unwrap_or_default();
+                let value = number(&snapshot.value(widget::text(&w, "sensor")));
+                let Some(rules) = metric::rules_of(&w) else {
+                    return Drawn::Unported("colour rules above NaN".into());
+                };
+                let (lo, hi) = (
+                    widget::number(&w, "min", 0.0),
+                    widget::number(&w, "max", 100.0),
+                );
+                let frac = bar::fraction(value, lo, hi, widget::text(&w, "scale"));
+                // (the arc's length on the ring, as many steps of the supersampled grid)
+                let sweep = (widget::number(&w, "end_angle", 405.0)
+                    - widget::number(&w, "start_angle", 135.0))
+                .abs();
+                let size = widget::int(&w, "w", 120).max(widget::int(&w, "h", 120));
+                let length = sweep.to_radians() * size as f64 / 2.0;
+                let (frac, paint) = match gauge::steps_along(frac, length)
+                    .and_then(|frac| Ok((frac, self.rule_paint(&w, value, &rules)?)))
+                {
+                    Ok(made) => made,
+                    Err(e) => return Drawn::Failed(e),
+                };
+                let content = bar::content(frac, paint);
+                self.cached(&w, content, |r| r.gauge_piece(&w, frac, paint))
             }
             "metric" => {
                 let w = w.clone();

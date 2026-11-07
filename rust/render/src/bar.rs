@@ -22,6 +22,19 @@ pub(crate) type Paint = (Rgba, Option<Rgba>);
 /// and the piece.
 pub(crate) type Over = (Dict, Value, Piece);
 
+/// What a bar or a ring shows, as the piece is kept by: where it stands, its colours.
+pub(crate) fn content(frac: f64, paint: Paint) -> Value {
+    let colours = |c: Option<Rgba>| match c {
+        Some(c) => Value::List(c.map(Value::int).to_vec()),
+        None => Value::None,
+    };
+    Value::List(vec![
+        Value::Float(frac),
+        colours(Some(paint.0)),
+        colours(paint.1),
+    ])
+}
+
 /// Python's floor division by 2.
 fn half(n: i64) -> i64 {
     n.div_euclid(2)

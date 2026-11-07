@@ -320,6 +320,15 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       quarter pixels. The frames of random themes of bars the same to the bit; with a glow
       round the bar and its dot within a level, as a card's. A bar gliding to a new reading and
       a colour fading to a threshold's are motion: Rust says it does not draw them yet
+- [x] ring gauges (gauge widgets) in a still frame: where the reading stands, in steps of the
+      supersampled grid along the arc; drawn three times larger and reduced: the track with
+      round caps or flat and the ticks across it; the value's arc a mask over the gauge's
+      colour, a gradient along the scale (thin wedges round the centre) or a threshold's
+      colour. A gauge Python cannot draw (no size, a box the wrong way round) is left out as
+      there. The frames of random themes of gauges the same to the bit; with a glow round the
+      ring within a level. A ring gliding and a colour fading are motion, and a bar's or a
+      ring's numbers past 53 bits (Python counts with them exactly, a float rounds them): Rust
+      says it does not draw them yet
 - [ ] the zones on Windows (Python finds them in the tzdata package there, which the Rust
       app does not bring yet: none is found there for now)
 - [ ] the C library's locale where Python's text follows it: format()'s 'n' and what strftime

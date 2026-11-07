@@ -34,6 +34,15 @@ pub fn number(w: &Dict, key: &str, default: f64) -> f64 {
     }
 }
 
+/// Whether a number field is one a float holds as it is: an int of 53 bits at most (Python
+/// counts with a larger one exactly, where a float would round it).
+pub fn exact(w: &Dict, key: &str) -> bool {
+    match w.get(key) {
+        Some(Value::Int(n)) => n.bits() <= 53,
+        _ => true,
+    }
+}
+
 /// A text field ("" where there is none).
 pub fn text<'a>(w: &'a Dict, key: &str) -> &'a str {
     match w.get(key) {

@@ -7,6 +7,7 @@ pub mod countdown;
 pub mod cover;
 pub mod effects;
 pub mod formatting;
+mod gauge;
 pub mod icons;
 mod metric;
 pub mod piece;
