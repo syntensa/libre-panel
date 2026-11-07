@@ -10,7 +10,13 @@ use lp_pixels::{Filter, Image, Mode};
 use lp_text::fallback::FallbackFont;
 use lp_text::text::{draw, Text, TextFace};
 
-use crate::piece::{Failed, Result};
+use lp_py::Dict;
+
+use crate::bar::Paint;
+use crate::piece::{Failed, Piece, Result};
+use crate::renderer::{Renderer, MOST_PIXELS};
+use crate::shapes::Rgba;
+use crate::widget;
 
 /// The light's direction (towards it, from the top left and in front), made of length 1 in
 /// float32 as numpy makes it; a flat top gets its third part.
@@ -292,6 +298,27 @@ fn shrink(n: &[[f32; 3]], weight: &[f32], bh: usize, bw: usize) -> Vec<[f32; 3]>
     out
 }
 
+/// facing: how much light a surface of normal `n` gets, as a share of what a flat top gets (1
+/// for the top, above facing the light, below away; never negative), in float32.
+fn facing(n: [f32; 3], light: [f32; 3]) -> f32 {
+    clip(
+        (n[0] * light[0] + n[1] * light[1]) + n[2] * light[2],
+        0.0,
+        1.0,
+    ) / light[2]
+}
+
+/// shade: (A, B) with rgb = colour * A + B for light `k` (see facing), in float32: a surface
+/// facing the light goes towards white, one facing away towards black.
+fn shade(k: f32, (lighten, darken): (f64, f64)) -> (f32, f32) {
+    let (lighten, rest, darken) = (lighten as f32, (1.0 - darken) as f32, darken as f32);
+    let lit = k >= 1.0;
+    let m = clip((k - 1.0) * lighten, 0.0, 1.0);
+    let a = if lit { 1.0 - m } else { darken + rest * k };
+    let b = if lit { 255.0 * m } else { 0.0 };
+    (a, b)
+}
+
 /// The shading terms of lettering with these normals (A * 255, B, S * 255, G * 255, with
 /// rgb = colour * A + B + sky * S + ground * G): the light first, then what a metal bevel takes
 /// on of its surroundings; small lettering gets a light touch, bigger more.
@@ -302,11 +329,10 @@ fn lettering_terms(normals: &[[f32; 3]], style: Style, size: f64) -> Vec<[u8; 4]
         Style::Acrylic => (ACRYLIC, 0.0),
     };
     let (soft_lighten, soft_darken) = LIGHT_TOUCH;
-    let lighten = (soft_lighten + (lighten - soft_lighten) * t) as f32;
-    let (darken, rest) = {
-        let darken = soft_darken + (darken - soft_darken) * t;
-        (darken as f32, (1.0 - darken) as f32)
-    };
+    let shading = (
+        soft_lighten + (lighten - soft_lighten) * t,
+        soft_darken + (darken - soft_darken) * t,
+    );
     let mirror = mirror * t;
     let s45 = sin45();
     let (sky_steep, up_by) = ((1.0 - s45) as f32, s45 as f32);
@@ -317,17 +343,7 @@ fn lettering_terms(normals: &[[f32; 3]], style: Style, size: f64) -> Vec<[u8; 4]
     normals
         .iter()
         .map(|n| {
-            // facing: how much light it gets, a flat top's 1
-            let k = clip(
-                (n[0] * light[0] + n[1] * light[1]) + n[2] * light[2],
-                0.0,
-                1.0,
-            ) / light[2];
-            // shade: towards white facing the light, towards black away from it
-            let lit = k >= 1.0;
-            let m = clip((k - 1.0) * lighten, 0.0, 1.0);
-            let a = if lit { 1.0 - m } else { darken + rest * k };
-            let b = if lit { 255.0 * m } else { 0.0 };
+            let (a, b) = shade(facing(*n, light), shading);
             // mirrors: the sky facing up, the ground facing down or to a side
             let (sky, ground) = if mirror != 0.0 {
                 let steep = clip((1.0 - n[2]) / sky_steep, 0.0, 1.0);
@@ -507,4 +523,419 @@ pub fn check_glyph(
     let terms = Image::from_bytes(Mode::RGBA, g.w, g.h, terms)?;
     let patch = coloured(&g, fill, environment)?;
     Ok(Some((g.left, g.top, cover, terms, patch)))
+}
+
+// -- bars ------------------------------------------------------------------------------------
+
+/// Thinner bars stay flat (a bevel does not read there), thicker too.
+const MIN_BAR: i64 = 6;
+const MAX_BAR: i64 = 400;
+/// A window is worked out this much larger.
+const SUB: usize = 4;
+/// Bars and rings: narrow, so a hard contrast reads as an edge.
+const SOLID: (f64, f64) = (1.35, 0.16);
+/// A milled channel is background: it hints at an edge, no more.
+const GROOVE: (f64, f64) = (0.20, 0.55);
+
+/// The mean over each `SUB` x `SUB` block of `x` (height * SUB rows of width * SUB), as numpy
+/// works out x.reshape(height, SUB, width, SUB).mean(axis=(1, 3)): a block's rows each summed
+/// from 0, then added up.
+fn small(x: &[f32], height: usize, width: usize) -> Vec<f32> {
+    let row = width * SUB;
+    let mut out = Vec::with_capacity(height * width);
+    for i in 0..height {
+        for j in 0..width {
+            let mut sum = 0f32;
+            for k in 0..SUB {
+                let mut part = 0f32;
+                for l in 0..SUB {
+                    part += x[(i * SUB + k) * row + j * SUB + l];
+                }
+                sum = if k == 0 { part } else { sum + part };
+            }
+            out.push(sum / (SUB * SUB) as f32);
+        }
+    }
+    out
+}
+
+/// A window's shading: the maps (A, B, coverage), each height x width, row by row.
+struct Maps {
+    a: Vec<f32>,
+    b: Vec<f32>,
+    alpha: Vec<f32>,
+}
+
+/// box_window: the shading of a window `width` x `height` px on a box whose edges lie at
+/// (left, right, top, bottom) px of the window (an infinity for one beyond it): within `bevel`
+/// of the nearest edge it tilts 45 degrees away from it (a mitre where two are as near); a
+/// `groove` is the same milled in, the tilt mirrored.
+fn box_window(
+    width: usize,
+    height: usize,
+    edges: (f64, f64, f64, f64),
+    bevel: f64,
+    style: (f64, f64),
+    groove: bool,
+) -> Maps {
+    let (left, right, top, bottom) = (
+        edges.0 as f32,
+        edges.1 as f32,
+        edges.2 as f32,
+        edges.3 as f32,
+    );
+    let s45 = sin45() as f32;
+    let light = light();
+    let bevel = bevel as f32;
+    let sign = if groove { -1.0f32 } else { 1.0 };
+    let sides = [[-s45, 0.0], [s45, 0.0], [0.0, -s45], [0.0, s45]];
+    let (bw, bh) = (width * SUB, height * SUB);
+    let mut a = Vec::with_capacity(bw * bh);
+    let mut b = Vec::with_capacity(bw * bh);
+    let mut cover = Vec::with_capacity(bw * bh);
+    for y in 0..bh {
+        let ys = (y as f32 + 0.5) / SUB as f32;
+        for x in 0..bw {
+            let xs = (x as f32 + 0.5) / SUB as f32;
+            let to = [xs - left, right - xs, ys - top, bottom - ys];
+            // (argmin: the first of the nearest; min: NaN where one is)
+            let mut nearest = 0;
+            for i in 1..4 {
+                if to[i] < to[nearest] {
+                    nearest = i;
+                }
+            }
+            let least = to
+                .iter()
+                .copied()
+                .fold(f32::INFINITY, |m, v| if v < m { v } else { m });
+            let flat = least >= bevel;
+            let n = if flat {
+                [0.0, 0.0, 1.0]
+            } else {
+                let tilt = sides[nearest];
+                [tilt[0] * sign, tilt[1] * sign, s45]
+            };
+            let (sa, sb) = shade(facing(n, light), style);
+            let inside = if least >= 0.0 { 1.0 } else { 0.0 };
+            a.push(sa * inside);
+            b.push(sb * inside);
+            cover.push(inside);
+        }
+    }
+    let alpha = small(&cover, height, width);
+    let floor = 1e-6f64 as f32;
+    let safe: Vec<f32> = alpha
+        .iter()
+        .map(|&v| if v > floor { v } else { floor })
+        .collect();
+    let a = small(&a, height, width)
+        .iter()
+        .zip(&safe)
+        .map(|(v, s)| v / s)
+        .collect();
+    let b = small(&b, height, width)
+        .iter()
+        .zip(&safe)
+        .map(|(v, s)| v / s)
+        .collect();
+    Maps { a, b, alpha }
+}
+
+/// _body: the shading maps of a bar's body from `start` to `end` px along its length, over the
+/// pixels from floor(start) to ceil(end): that first pixel, the maps (thick rows of n, or n
+/// rows of thick), and n. Only its two ends and one column between are worked out; the column
+/// is repeated.
+fn body(
+    horizontal: bool,
+    thick: usize,
+    start: f64,
+    end: f64,
+    groove: bool,
+    style: (f64, f64),
+) -> (i64, Maps, usize) {
+    let bevel = thick as f64 / 6.0;
+    let (first, last) = (start.floor() as i64, end.ceil() as i64);
+    let n = (last - first).max(0) as usize;
+    let cap = bevel.ceil() as usize + 2;
+    let window = |px: usize, low: f64, high: f64| {
+        if horizontal {
+            box_window(
+                px,
+                thick,
+                (low, high, 0.0, thick as f64),
+                bevel,
+                style,
+                groove,
+            )
+        } else {
+            box_window(
+                thick,
+                px,
+                (0.0, thick as f64, low, high),
+                bevel,
+                style,
+                groove,
+            )
+        }
+    };
+    let (s, e) = (start - first as f64, end - first as f64);
+    if n <= 2 * cap + 2 {
+        return (first, window(n, s, e), n);
+    }
+    let low = window(cap, s, f64::INFINITY);
+    let high = window(cap, f64::NEG_INFINITY, end - (last - cap as i64) as f64);
+    let middle = window(1, f64::NEG_INFINITY, f64::INFINITY);
+    let repeat = n - 2 * cap;
+    // (np.concatenate of the start, the middle column repeated and the end, along the bar)
+    let joined = |pick: fn(&Maps) -> &Vec<f32>| -> Vec<f32> {
+        let (lo, mid, hi) = (pick(&low), pick(&middle), pick(&high));
+        let mut out = Vec::with_capacity(n * thick);
+        if horizontal {
+            for row in 0..thick {
+                out.extend_from_slice(&lo[row * cap..(row + 1) * cap]);
+                out.extend(std::iter::repeat_n(mid[row], repeat));
+                out.extend_from_slice(&hi[row * cap..(row + 1) * cap]);
+            }
+        } else {
+            out.extend_from_slice(lo);
+            for _ in 0..repeat {
+                out.extend_from_slice(mid);
+            }
+            out.extend_from_slice(hi);
+        }
+        out
+    };
+    let maps = Maps {
+        a: joined(|m| &m.a),
+        b: joined(|m| &m.b),
+        alpha: joined(|m| &m.alpha),
+    };
+    (first, maps, n)
+}
+
+/// The colour (RGBA, float32) of each pixel along a bar, from its place on the bar.
+type Colours<'a> = &'a dyn Fn(f32) -> [f32; 4];
+
+/// _box_image: a bar's body as an image, and the pixel it starts at along the bar; `colours`
+/// gives each pixel's colour from where it lies.
+fn box_image(
+    horizontal: bool,
+    thick: usize,
+    start: f64,
+    end: f64,
+    colours: Colours,
+    groove: bool,
+    style: (f64, f64),
+) -> Result<(Image, i64)> {
+    let (first, maps, n) = body(horizontal, thick, start, end, groove, style);
+    let c: Vec<[f32; 4]> = (0..n)
+        .map(|i| colours(first as f32 + i as f32 + 0.5))
+        .collect();
+    let (w, h) = if horizontal { (n, thick) } else { (thick, n) };
+    let mut out = Vec::with_capacity(w * h * 4);
+    for y in 0..h {
+        for x in 0..w {
+            let at = y * w + x;
+            let colour = c[if horizontal { x } else { y }];
+            let (a, b) = (maps.a[at], maps.b[at]);
+            for &v in &colour[..3] {
+                out.push(clip(clip(v * a + b + 0.5, 0.0, 255.0), 0.0, 255.0) as u8);
+            }
+            out.push(clip(maps.alpha[at] * colour[3] + 0.5, 0.0, 255.0) as u8);
+        }
+    }
+    Ok((Image::from_bytes(Mode::RGBA, w, h, out)?, first))
+}
+
+/// _mix: a colour along `a` to `b` at `t` (0 to 1), in float32; `a` alone without `b`.
+fn mix(a: [i64; 4], b: Option<[i64; 4]>, t: f32) -> [f32; 4] {
+    let first = a.map(|v| v as f32);
+    match b {
+        None => first,
+        Some(b) => {
+            let t = clip(t, 0.0, 1.0);
+            [0, 1, 2, 3].map(|i| first[i] + (b[i] as f32 - first[i]) * t)
+        }
+    }
+}
+
+/// bar_layer: a bar as RGBA, w x h: a raised body in `paint` (a colour, or a gradient along the
+/// whole track to the second) filled `frac` of the way from the side `direction` names, with
+/// straight, bevelled ends, in a milled track of colour `track`; or `segments` such blocks
+/// `gap` px apart. None where a bevel does not read or the blocks do not fit.
+#[allow(clippy::too_many_arguments)]
+fn bar_layer(
+    w: i64,
+    h: i64,
+    frac: f64,
+    direction: &str,
+    paint: Paint,
+    track: Option<Rgba>,
+    segments: i64,
+    gap: f64,
+) -> Result<Option<Image>> {
+    let horizontal = matches!(direction, "right" | "left");
+    let (span, thick) = if horizontal { (w, h) } else { (h, w) };
+    let reverse = matches!(direction, "left" | "up");
+    if !(MIN_BAR..=MAX_BAR).contains(&thick) || span < 2 {
+        return Ok(None);
+    }
+    if w.saturating_mul(h) > MOST_PIXELS {
+        return Err(Failed("a layer too large".into()));
+    }
+    let (w, h, span, thick) = (w as usize, h as usize, span as usize, thick as usize);
+    let (a, b) = paint;
+    let mut layer = Image::blank(Mode::RGBA, w, h);
+    let put_at = |layer: &mut Image, image: &Image, first: i64| -> Result<()> {
+        let at = if horizontal { (first, 0) } else { (0, first) };
+        let whole = (0, 0, image.width() as i64, image.height() as i64);
+        layer.alpha_composite_at(image, at, whole)?;
+        Ok(())
+    };
+    let along = |start: f64, end: f64| -> (f64, f64) {
+        if reverse {
+            (span as f64 - end, span as f64 - start)
+        } else {
+            (start, end)
+        }
+    };
+    let spanf = span as f32;
+    let gradient = move |pos: f32| -> [f32; 4] {
+        let t = if reverse { spanf - pos } else { pos } / spanf;
+        mix(a, b, t)
+    };
+    let solid = |colour: [i64; 4], share: f64| -> [f32; 4] {
+        [
+            colour[0] as f32,
+            colour[1] as f32,
+            colour[2] as f32,
+            (colour[3] as f64 * share) as f32,
+        ]
+    };
+    let quarter = |v: f64| lp_py::round(v * SUB as f64) / SUB as f64;
+    let boxed =
+        |layer: &mut Image, start: f64, end: f64, colours: Colours, groove: bool| -> Result<()> {
+            let style = if groove { GROOVE } else { SOLID };
+            let (image, first) = box_image(
+                horizontal,
+                thick,
+                quarter(start),
+                quarter(end),
+                colours,
+                groove,
+                style,
+            )?;
+            put_at(layer, &image, first)
+        };
+    if segments > 0 {
+        let cell = (span as f64 - gap * (segments - 1) as f64) / segments as f64;
+        if cell < 1.0 {
+            return Ok(None);
+        }
+        let cells: Vec<(f64, f64)> = (0..segments)
+            .map(|i| {
+                let at = i as f64 * (cell + gap);
+                along(at, at + cell)
+            })
+            .collect();
+        if let Some(track) = track {
+            let c = solid(track, 1.0);
+            for &(start, end) in &cells {
+                boxed(&mut layer, start, end, &|_| c, true)?;
+            }
+        }
+        for (i, &(start, end)) in cells.iter().enumerate() {
+            let amount = (frac * segments as f64 - i as f64).clamp(0.0, 1.0);
+            if amount <= 0.0 {
+                continue;
+            }
+            // (_mix of a float64 place: worked out in float64, then rounded half to even)
+            let t = (i as f64 / (segments - 1).max(1) as f64).clamp(0.0, 1.0);
+            let colour = match b {
+                None => a,
+                Some(b) => [0, 1, 2, 3].map(|c| {
+                    let first = a[c] as f32 as f64;
+                    let step = (b[c] as f32 - a[c] as f32) as f64;
+                    (first + step * t).round_ties_even() as i64
+                }),
+            };
+            let c = solid(colour, amount);
+            boxed(&mut layer, start, end, &|_| c, false)?;
+        }
+        return Ok(Some(layer));
+    }
+    if let Some(track) = track {
+        let c = solid(track, 1.0);
+        boxed(&mut layer, 0.0, span as f64, &|_| c, true)?;
+    }
+    let length = (span as f64).min((frac * span as f64).max(0.0));
+    if length > 0.0 {
+        let (start, end) = along(0.0, length.max(1.0));
+        boxed(&mut layer, start, end, &gradient, false)?;
+    }
+    Ok(Some(layer))
+}
+
+/// groove_bar: a bar's milled groove, RGBA w x h, lying along w (`vertical`: along h): a floor
+/// of exactly `colour` and a 45-degree bevel all round; None where a bevel does not read.
+pub(crate) fn groove_bar(
+    w: usize,
+    h: usize,
+    colour: [i64; 4],
+    vertical: bool,
+) -> Result<Option<Image>> {
+    let (thick, span) = if vertical { (w, h) } else { (h, w) };
+    if !(MIN_BAR..=MAX_BAR).contains(&(thick as i64)) || span < 2 {
+        return Ok(None);
+    }
+    let direction = if vertical { "down" } else { "right" };
+    bar_layer(
+        w as i64,
+        h as i64,
+        0.0,
+        direction,
+        (colour, None),
+        Some(colour),
+        0,
+        0.0,
+    )
+}
+
+impl Renderer {
+    /// FacetBar's piece (facet.py): a raised bar with straight, bevelled ends in a milled track,
+    /// at `frac` in `paint`; drawn flat where a bevel does not read.
+    pub(crate) fn facet_bar_piece(&self, w: &Dict, frac: f64, paint: Paint) -> Result<Piece> {
+        let (x, y) = (widget::int(w, "x", 0), widget::int(w, "y", 0));
+        let (bw, bh) = (widget::int(w, "w", 200), widget::int(w, "h", 16));
+        let track = self.colour_of(w, "background")?;
+        let (segments, gap) = (
+            widget::int(w, "segments", 0),
+            widget::number(w, "segment_gap", 2.0),
+        );
+        let direction = widget::text(w, "direction");
+        match bar_layer(bw, bh, frac, direction, paint, track, segments, gap)? {
+            None => self.bar_piece(w, frac, paint),
+            Some(raised) => {
+                let mut piece = Piece::new(raised, x, y);
+                piece.hit = Some([x, y, bw, bh]);
+                Ok(piece)
+            }
+        }
+    }
+}
+
+/// For lp-check: bar_layer of a bar `w` x `h` (None where a bevel does not read).
+#[allow(clippy::too_many_arguments)]
+pub fn check_bar(
+    w: i64,
+    h: i64,
+    frac: f64,
+    direction: &str,
+    paint: ([i64; 4], Option<[i64; 4]>),
+    track: Option<[i64; 4]>,
+    segments: i64,
+    gap: f64,
+) -> Result<Option<Image>> {
+    bar_layer(w, h, frac, direction, paint, track, segments, gap)
 }

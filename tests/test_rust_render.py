@@ -525,9 +525,9 @@ def test_frames_of_texts_that_just_fit_as_python_fits_them(tmp_path: Path) -> No
 
 
 def test_frames_beyond_their_widgets_are_not_drawn_here_yet(tmp_path: Path) -> None:
-    # (a screen, the panel's look and a finish Rust does not draw yet: the facets, the lit
-    # finish's bars, rings and weather icons; Rust says it does not draw them yet, rather than
-    # a frame without them)
+    # (a screen, the panel's look and a finish Rust does not draw yet: the facets' rings, the
+    # lit finish's rings and weather icons; Rust says it does not draw them yet, rather than a
+    # frame without them)
     rng = random.Random(0xB3D)
     cases, wanted = [], []
     for n in range(30):
@@ -539,10 +539,10 @@ def test_frames_beyond_their_widgets_are_not_drawn_here_yet(tmp_path: Path) -> N
         elif beyond == "looks":
             data["look"] = {"grid": rng.choice([True, {}, {"spacing": 12, "major": 0}])}
         else:
-            finished = rng.choice([_text, _icon, _bar, _gauge])(rng, 99, (64, 48))
+            finished = rng.choice([_icon, _gauge])(rng, 99, (64, 48))
             if finished["type"] == "icon":
                 finished["icon"] = rng.choice(WEATHER_ICONS)
-            finishes = {"text": ["facet", "acrylic"], "icon": ["lit"]}.get(finished["type"])
+            finishes = {"icon": ["lit"]}.get(finished["type"])
             finished["finish"] = rng.choice(finishes or ["lit", "facet"])
             data["widgets"].append(finished)
         (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
@@ -1502,21 +1502,24 @@ FLAT_FINISHES = [("lit", "clock"), ("lit", "weather"), ("lit", "countdown"), ("l
                  ("flat", "metric"), ("lit", "agent"), ("facet", "sunpath")]  # fmt: skip
 LETTERED_FINISHES = [(finish, kind) for finish in ("facet", "acrylic")
                      for kind in ("text", "metric", "clock", "weather", "countdown")]  # fmt: skip
-UNDRAWN_FINISHES = [("lit", "bar"), ("lit", "gauge"), ("lit", "graph"), ("lit", "symbol"),
-                    ("lit", "downloads"), ("facet", "bar"), ("facet", "gauge"),
-                    ("facet", "graph")]  # fmt: skip
+OWN_FINISHES = [("lit", "bar"), ("facet", "bar")]
+UNDRAWN_FINISHES = [("lit", "gauge"), ("lit", "graph"), ("lit", "symbol"), ("lit", "downloads"),
+                    ("facet", "gauge"), ("facet", "graph")]  # fmt: skip
 
 
 def test_each_finish_rust_does_not_draw_yet_is_refused(tmp_path: Path) -> None:
     # (a finish that takes the widget and that Rust does not draw: the whole frame refused,
     # rather than a frame without it; one that does not take it: the widget drawn flat; the
-    # facets' letters: their own)
+    # facets' letters and bars, the lit bar: their own, the lit bar's halo within a level)
+    import numpy as np
+
     makers = {"clock": _clock, "weather": _weather_or_countdown, "rect": _rect, "bar": _bar,
               "gauge": _gauge, "calendar": _calendar, "icon": _icon, "agent": _agent,
               "sunpath": _sunpath}  # fmt: skip
     rng = random.Random(0xF1)
     cases, wanted = [], []
-    for n, (finish, kind) in enumerate([*FLAT_FINISHES, *LETTERED_FINISHES, *UNDRAWN_FINISHES]):
+    pairs = [*FLAT_FINISHES, *LETTERED_FINISHES, *OWN_FINISHES, *UNDRAWN_FINISHES]
+    for n, (finish, kind) in enumerate(pairs):
         widget = makers.get(kind, _text)(rng, 0, (64, 48))
         if kind in ("weather", "countdown"):
             widget = {**_text(rng, 0, (64, 48)), "type": kind, "field": "temperature",
@@ -1527,6 +1530,9 @@ def test_each_finish_rust_does_not_draw_yet_is_refused(tmp_path: Path) -> None:
             widget.update(opacity=0.5, glow=0)
         if (finish, kind) in LETTERED_FINISHES:
             widget.update(font_size=40, max_width=300)
+        if (finish, kind) in OWN_FINISHES:  # (raised, or its light, in a groove; the lit glow)
+            widget.update(x=8, y=12, w=40, h=10, glow=0.8 if finish == "lit" else 0, glow_radius=6,
+                          background="@surface")  # fmt: skip
         if kind in ("graph", "symbol", "downloads"):
             widget.pop("text", None)
         folder = tmp_path / f"t{n}"
@@ -1537,14 +1543,20 @@ def test_each_finish_rust_does_not_draw_yet_is_refused(tmp_path: Path) -> None:
                         "text2": "#a93214"}, "widgets": [widget]}), encoding="utf-8")  # fmt: skip
         cases.append({"folder": str(folder), "snapshot": {"readings": {}, "images": {},
                       "now": [2026, 11, 7, 18, 5, 9, 0]}, "dither": False})  # fmt: skip
+        if finish == "lit" and (finish, kind) in OWN_FINISHES:
+            cases[-1]["bytes"] = True
         wanted.append("finishes" if (finish, kind) in UNDRAWN_FINISHES else None)
     [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
-    pairs = [*FLAT_FINISHES, *LETTERED_FINISHES, *UNDRAWN_FINISHES]
     got = [frame.get("unported") for frame in ours["frames"]]
     now = Snapshot(readings={}, now=datetime(2026, 11, 7, 18, 5, 9))
     for case, frame, pair in zip(cases, ours["frames"], pairs, strict=True):
-        if pair not in UNDRAWN_FINISHES:  # (drawn as Python draws it)
-            want = _python_frame(Path(case["folder"]), now, False)["frame"]
+        if pair in UNDRAWN_FINISHES:
+            continue
+        want = _python_frame(Path(case["folder"]), now, False)["frame"]  # (drawn as Python does)
+        if pair == ("lit", "bar"):
+            apart = np.abs(np.asarray(picture(frame["frame"]), int) - np.asarray(want, int))
+            assert apart.max() <= 1, pair
+        else:
             assert frame.get("sha256") == hashlib.sha256(want.tobytes()).hexdigest(), pair
     wrong = [(pair, g) for pair, g, w in zip(pairs, got, wanted, strict=True) if g != w]
     refused = [frame["error"] for frame in ours["frames"] if "error" in frame]
@@ -1693,3 +1705,147 @@ def test_frames_of_metal_lettering_mirroring_the_theme_s_sky(tmp_path: Path) -> 
     assert frames[0] == frames[-1]  # (... and a palette of none of its names has the Libre one)
     for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
         assert got.get("sha256") == hashlib.sha256(want["frame"].tobytes()).hexdigest(), n
+
+
+def _lit_bar(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """Bars lit: their groove milled into the panel (from 6 px thick to 400), the light of each
+    lit span a pill over it, a glow light added over it, in an area or not (one whose corner
+    no panel meets, or whose side no machine makes, too); some with a shadow."""
+    w, h = size
+    bar = _bar(rng, i, size)
+    bar["finish"] = "lit"
+    bar[rng.choice(["w", "h"])] = rng.choice([2, 5, 6, 9, 14, 24, 400, 401])
+    if rng.random() < 0.7:
+        bar["glow"] = rng.choice([0, 0.3, 0.6, 1, 1.0])
+        bar["glow_radius"] = rng.choice([0, 1, 3, 6, 10, 24])
+    if rng.random() < 0.25:
+        bar["glow_area"] = [rng.randrange(-20, w), rng.randrange(-20, h),
+                            rng.randrange(1, w + 40), rng.randrange(1, h + 40)]  # fmt: skip
+    elif rng.random() < 0.08:
+        far = rng.choice([10**30, 2**63, 2**64 + 7])
+        areas = [
+            [far, 0, 50, 50],
+            [-far, 0, 50, 50],
+            [0, -far, far + 9, 30],
+            [-far, 0, far + 9, far],
+        ]
+        bar["glow_area"] = rng.choice(areas)
+    if rng.random() < 0.6:
+        bar["background"] = rng.choice([_colour(rng), "@accent", "#16233280"])
+    if rng.random() < 0.15:
+        bar["shadow"] = _hex(rng, alpha=rng.random() < 0.5)
+        bar["shadow_blur"] = rng.choice([0, 2, 4, 6, 12])
+        bar["shadow_offset"] = rng.choice([0, 3, -4, 8])
+    return bar
+
+
+def _lit_bar_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _lit_bar(rng, i, size) if rng.random() < 0.8 else _card_or_text(rng, i, size)
+
+
+def test_frames_of_lit_bars_within_a_level(tmp_path: Path) -> None:
+    # (a lit bar's light: its core towards white, its halo the coverage blurred in floating
+    # point, as a card's glow is, and its core's curve a power numpy takes from SVML on a
+    # processor with AVX-512: now and then a pixel a level apart)
+    import numpy as np
+
+    rng = random.Random(0x11B)
+    cases, expected = [], []
+    for n in range(120):
+        folder = tmp_path / f"t{n}"
+        _frame_theme(rng, folder, _lit_bar_or_more)
+        given, snapshot = _bar_snapshot(rng)
+        dither = rng.random() < 0.3
+        cases.append({"folder": str(folder), "snapshot": given, "dither": dither, "bytes": True})
+        expected.append(_python_frame(folder, snapshot, dither))
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    differ = total = drawn = 0
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        if "error" in want:
+            assert "error" in got, n
+            continue
+        assert "frame" in got, (n, got)
+        apart = np.abs(np.asarray(picture(got["frame"]), int) - np.asarray(want["frame"], int))
+        assert apart.max() <= 1, n
+        differ += int((apart.max(axis=2) > 0).sum())
+        total += apart.shape[0] * apart.shape[1]
+        assert got["boxes"] == want["boxes"], n
+        drawn += 1
+    assert drawn > 90
+    assert differ <= total // 10000
+
+
+def test_facet_bars_as_python_makes_them() -> None:
+    # (a raised bar in a milled track: each box's shading worked out four times larger at its
+    # ends and in one column between, in numpy's float32 and order; one colour or a gradient
+    # along the whole track, segments in their colours, filled from either end; none where a
+    # bevel does not read or the segments do not fit)
+    import numpy as np
+
+    from libre_panel.render import facets
+
+    rng = random.Random(0xFAB)
+
+    def rgba() -> tuple[int, int, int, int]:
+        return (rng.randrange(256), rng.randrange(256), rng.randrange(256),
+                rng.choice([255, 255, 128, 0]))  # fmt: skip
+
+    cases, wanted = [], []
+    for n in range(300):
+        thick = rng.choice([5, 6, 7, 9, 12, 16, 24, 40] if n % 10 else [6, 400, 401])
+        span = rng.choice([-3, 1, 2, 3, 7, 12, 30, 80, 300])
+        direction = rng.choice(["right", "left", "up", "down"])
+        w, h = (span, thick) if direction in ("right", "left") else (thick, span)
+        frac = rng.choice([0, 1e-9, 0.001, 0.1, 0.25, 0.5, 0.731, 0.999, 1, 1.5, -0.2,
+                           rng.random()])  # fmt: skip
+        paint = (rgba(), rgba() if rng.random() < 0.4 else None)
+        track = rgba() if rng.random() < 0.7 else None
+        segments, gap = rng.choice([0, 0, 0, 1, 3, 10, 24]), rng.choice([0, 1, 2, 5])
+        if n % 6 == 0:  # (a gradient's middle segments: their colours a half apart, to even)
+            paint, segments, gap, frac = (rgba(), rgba()), rng.choice([3, 5]), 1, 1
+        cases.append({"op": "facet_bar", "w": w, "h": h, "frac": frac, "direction": direction,
+                      "paint": list(paint[0]), "paint2": paint[1] and list(paint[1]),
+                      "track": track and list(track), "segments": segments,
+                      "gap": gap})  # fmt: skip
+        facets._images.clear()  # (a segment's box is kept by its fill in 64ths: none from before)
+        layer = facets.bar_layer(w, h, frac, direction, paint, track, segments, gap)
+        wanted.append(None if layer is None else np.asarray(layer))
+    raised = 0
+    for n, (got, want) in enumerate(zip(run(cases), wanted, strict=True)):
+        if want is None:
+            assert got["layer"] is None, n
+            continue
+        assert np.array_equal(np.asarray(picture(got["layer"])), want), (n, cases[n])
+        raised += 1
+    assert raised > 120
+
+
+def _facet_bar(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """Bars of the facet finish: raised in a milled track (from 6 px thick to 400), flat where
+    a bevel does not read."""
+    bar = _bar(rng, i, size)
+    bar["finish"] = "facet"
+    bar[rng.choice(["w", "h"])] = rng.choice([2, 5, 6, 9, 14, 24, 400, 401])
+    if rng.random() < 0.6:
+        bar["background"] = rng.choice([_colour(rng), "@accent", "#16233280"])
+    return bar
+
+
+def _facet_bar_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _facet_bar(rng, i, size) if rng.random() < 0.8 else _card_or_text(rng, i, size)
+
+
+def _unkept_bar_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
+    """_bar_snapshot, each frame from no kept boxes: Python keeps a raised segment's box by its
+    fill in 64ths, so after another frame of the same bar it may take one filled a little
+    apart."""
+    from libre_panel.render import facets
+
+    facets._images.clear()
+    return _bar_snapshot(rng)
+
+
+def test_frames_of_facet_bars_as_python_draws_them(tmp_path: Path) -> None:
+    # (a raised bar with straight, bevelled ends in a milled track, in its colour, a gradient
+    # or a threshold's; segments; flat where a bevel does not read)
+    assert _compare_frames(tmp_path, 0xFA8, 160, _facet_bar_or_more, _unkept_bar_snapshot) > 120

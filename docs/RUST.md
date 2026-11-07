@@ -353,8 +353,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       added over it; clocks, the weather, countdowns and line icons the lit finish leaves flat,
       as Python leaves them. The frames the same to the bit; with a shadow, or the renderer's
       own glow round what the finish leaves flat, a pixel now and then a level apart, as a
-      card's. The facets' bars, rings and graphs and the lit finish's bars, rings, graphs,
-      weather icons, symbols and downloads: Rust says it does not draw them yet
+      card's. The facets' rings and graphs and the lit finish's rings, graphs, weather icons,
+      symbols and downloads: Rust says it does not draw them yet
 - [x] the facet and acrylic finishes' letters (facet.py, facets.py): each letter of a text of
       one line, from 20 px on, the finish's own: of bright metal that mirrors the sky (the
       palette's accent, else its primary or cpu colour, a third of the way to white) above it
@@ -365,6 +365,21 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       quarter pixel. The letters and the frames the same to the bit. (numpy takes float32
       powers from SVML on a processor with AVX-512, now and then a unit in the last place
       apart from the C library's; the terms, made 8 bits, came out the same in every test)
+- [x] the lit finish's bars (lit.py's LitBar): the groove milled into the panel as the facets
+      mill it (facets.py's groove_bar: a floor of the track's colour and a 45-degree bevel all
+      round, worked out four times larger at its ends and in one column between, in numpy's
+      float32 and order), plain where a bevel does not read; over it the light of each lit
+      span, a pill centred in the groove (drawn twice as large with round ends, reduced), its
+      core towards white and a soft halo in its colour (the coverage blurred in floating
+      point, as a card's glow); its glow light added over it, brightest at the head, worked
+      out over its glow area (ints of any size, as Python's) at a fraction of the size, as
+      SPUR II's glow zones are; flat where it is too thin for light. The facets' raised bars
+      (facet.py's FacetBar): a body in its colour, a gradient along the whole track or a
+      threshold's colour, filled from either end, or segments in their colours, in the milled
+      track; flat where a bevel does not read. The raised bars, alone and in frames, the same
+      to the bit; the lit bars' frames the same to the bit here (240 of them), a pixel now and
+      then a level apart allowed, as numpy multiplies by the blur's matrices in float32 as
+      another processor's library adds them up
 - [ ] the zones on Windows (Python finds them in the tzdata package there, which the Rust
       app does not bring yet: none is found there for now)
 - [ ] the C library's locale where Python's text follows it: format()'s 'n' and what strftime

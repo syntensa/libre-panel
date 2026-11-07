@@ -61,7 +61,7 @@ impl From<Failed> for Unported {
 }
 
 /// A widget's drawing: its piece, or why there is none.
-enum Drawn {
+pub(crate) enum Drawn {
     Piece(Rc<Piece>),
     /// nothing to draw (Python's None: no piece, no box)
     Nothing,
@@ -396,7 +396,7 @@ impl Renderer {
 
     /// _cached: the finished piece kept while the widget and what it shows (`content`) stay the
     /// same.
-    fn cached(
+    pub(crate) fn cached(
         &mut self,
         w: &Dict,
         content: Value,
@@ -590,6 +590,11 @@ impl Renderer {
                     widget::number(&w, "max", 100.0),
                 );
                 let frac = bar::fraction(value, lo, hi, widget::text(&w, "scale"));
+                if finish::of(&w) == Finish::LitBar {
+                    if let Some(lit) = self.lit_bar(&w, frac, value, &rules) {
+                        return lit;
+                    }
+                }
                 let horizontal = matches!(widget::text(&w, "direction"), "right" | "left");
                 let length = widget::int(&w, if horizontal { "w" } else { "h" }, 0);
                 let (frac, paint) = match bar::steps(frac, length)
@@ -599,7 +604,11 @@ impl Renderer {
                     Err(e) => return Drawn::Failed(e),
                 };
                 let content = bar::content(frac, paint);
-                self.cached(&w, content, |r| r.bar_piece(&w, frac, paint))
+                if finish::of(&w) == Finish::FacetBar {
+                    self.cached(&w, content, |r| r.facet_bar_piece(&w, frac, paint))
+                } else {
+                    self.cached(&w, content, |r| r.bar_piece(&w, frac, paint))
+                }
             }
             "gauge" => {
                 let w = w.clone();

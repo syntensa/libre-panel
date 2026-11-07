@@ -788,6 +788,36 @@ fn run(case: &Value) -> Result<Value, String> {
                     "terms": value_of(&terms), "patch": value_of(&patch)}}),
             }
         }
+        "facet_bar" => {
+            // the facet finish's raised bar (render/facets.py's bar_layer); null where a bevel
+            // does not read
+            let rgba = |v: &Value| -> Result<Option<[i64; 4]>, String> {
+                if v.is_null() {
+                    return Ok(None);
+                }
+                let c = ints(v)?;
+                Ok(Some([c[0], c[1], c[2], c[3]]))
+            };
+            let paint = (
+                rgba(&case["paint"])?.ok_or("paint")?,
+                rgba(&case["paint2"])?,
+            );
+            match lp_render::facets::check_bar(
+                case["w"].as_i64().ok_or("w")?,
+                case["h"].as_i64().ok_or("h")?,
+                case["frac"].as_f64().ok_or("frac")?,
+                case["direction"].as_str().ok_or("direction")?,
+                paint,
+                rgba(&case["track"])?,
+                case["segments"].as_i64().unwrap_or(0),
+                case["gap"].as_f64().unwrap_or(0.0),
+            )
+            .map_err(|e| e.0)?
+            {
+                None => json!({"layer": null}),
+                Some(layer) => json!({"layer": value_of(&layer)}),
+            }
+        }
         "coverage" => {
             let path = case["path"].as_str().unwrap_or_default();
             let index = case["index"].as_i64().unwrap_or(0);

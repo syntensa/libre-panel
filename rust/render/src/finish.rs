@@ -14,6 +14,10 @@ pub(crate) enum Finish {
     Flat,
     /// lit.py's LitText: a text's or a metric's glow is light
     LitText,
+    /// lit.py's LitBar: a bar's light in its milled groove
+    LitBar,
+    /// facet.py's FacetBar: a raised bar with bevelled ends in a milled track
+    FacetBar,
     /// facet.py's FacetText and AcrylicText: the text's letters the finish's own
     Lettered(Style),
     /// a finish Rust does not draw yet
@@ -33,10 +37,12 @@ pub(crate) fn of(w: &Dict) -> Finish {
     };
     match (name.as_str(), widget::text(w, "type")) {
         ("lit", "text" | "metric") => Finish::LitText,
+        ("lit", "bar") => Finish::LitBar,
         // (LitIcon accepts the weather's icons alone: the others stay line icons)
         ("lit", "icon") if !WEATHER_ICONS.contains(&widget::text(w, "icon")) => Finish::Flat,
-        ("lit", "bar" | "gauge" | "graph" | "icon" | "symbol" | "downloads")
-        | ("facet", "bar" | "gauge" | "graph") => Finish::Unported,
+        ("lit", "gauge" | "graph" | "icon" | "symbol" | "downloads")
+        | ("facet", "gauge" | "graph") => Finish::Unported,
+        ("facet", "bar") => Finish::FacetBar,
         ("facet", "text" | "metric" | "clock" | "weather" | "countdown") => {
             Finish::Lettered(Style::Metal)
         }
