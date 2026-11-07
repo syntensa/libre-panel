@@ -8,6 +8,8 @@
 
 use std::io::{self, BufRead, BufWriter, Write};
 
+mod devices;
+
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use lp_pixels::{Canvas, Draw, Image, Mode};
@@ -249,6 +251,8 @@ fn run(case: &Value) -> Result<Value, String> {
             }
             json!({"image": value_of(&im)})
         }
+        "jpeg_save" | "dimmed" | "hongtai_frame" | "hongtai_picture" | "hongtai_jpeg"
+        | "hongtai_answer" | "hongtai_session" => devices::run(op, case)?,
         "getbbox" => {
             let alpha_only = case["alpha_only"].as_bool().unwrap_or(true);
             let found = image_of(&case["image"])?.getbbox(alpha_only);

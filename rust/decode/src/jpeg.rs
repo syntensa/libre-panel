@@ -155,6 +155,90 @@ struct Decompress {
     cquantize: *mut c_void,
 }
 
+/// jpeg_destination_mgr, with where this saver keeps what libjpeg wrote (jdatadst.c's way:
+/// a chunk at a time, the whole chunk taken each time libjpeg has filled it).
+#[repr(C)]
+struct Destination {
+    next_output_byte: *mut u8,
+    free_in_buffer: usize,
+    init_destination: unsafe extern "C-unwind" fn(*mut Compress),
+    empty_output_buffer: unsafe extern "C-unwind" fn(*mut Compress) -> Boolean,
+    term_destination: unsafe extern "C-unwind" fn(*mut Compress),
+    chunk: Vec<u8>,
+    out: Vec<u8>,
+}
+
+/// jpeg_compress_struct of the 6.2 interface (JPEG_LIB_VERSION 62), as libjpeg-turbo 3 lays it
+/// out (jpeg_CreateCompress refuses another size).
+#[repr(C)]
+struct Compress {
+    err: *mut ErrorMgr,
+    mem: *mut c_void,
+    progress: *mut c_void,
+    client_data: *mut c_void,
+    is_decompressor: Boolean,
+    global_state: c_int,
+    dest: *mut Destination,
+    image_width: c_uint,
+    image_height: c_uint,
+    input_components: c_int,
+    in_color_space: c_int,
+    input_gamma: f64,
+    data_precision: c_int,
+    num_components: c_int,
+    jpeg_color_space: c_int,
+    comp_info: *mut c_void,
+    quant_tbl_ptrs: [*mut c_void; 4],
+    dc_huff_tbl_ptrs: [*mut c_void; 4],
+    ac_huff_tbl_ptrs: [*mut c_void; 4],
+    arith_dc_l: [u8; 16],
+    arith_dc_u: [u8; 16],
+    arith_ac_k: [u8; 16],
+    num_scans: c_int,
+    scan_info: *const c_void,
+    raw_data_in: Boolean,
+    arith_code: Boolean,
+    optimize_coding: Boolean,
+    ccir601_sampling: Boolean,
+    smoothing_factor: c_int,
+    dct_method: c_int,
+    restart_interval: c_uint,
+    restart_in_rows: c_int,
+    write_jfif_header: Boolean,
+    jfif_major_version: u8,
+    jfif_minor_version: u8,
+    density_unit: u8,
+    x_density: u16,
+    y_density: u16,
+    write_adobe_marker: Boolean,
+    next_scanline: c_uint,
+    progressive_mode: Boolean,
+    max_h_samp_factor: c_int,
+    max_v_samp_factor: c_int,
+    total_imcu_rows: c_uint,
+    comps_in_scan: c_int,
+    cur_comp_info: [*mut c_void; 4],
+    mcus_per_row: c_uint,
+    mcu_rows_in_scan: c_uint,
+    blocks_in_mcu: c_int,
+    mcu_membership: [c_int; 10],
+    ss: c_int,
+    se: c_int,
+    ah: c_int,
+    al: c_int,
+    master: *mut c_void,
+    main: *mut c_void,
+    prep: *mut c_void,
+    coef: *mut c_void,
+    marker: *mut c_void,
+    cconvert: *mut c_void,
+    downsample: *mut c_void,
+    fdct: *mut c_void,
+    entropy: *mut c_void,
+    script_space: *mut c_void,
+    script_space_size: c_int,
+}
+
 /// The library's functions this needs.
 struct Lib {
     _lib: libloading::Library,
@@ -166,6 +250,14 @@ struct Lib {
     read_scanlines: unsafe extern "C-unwind" fn(*mut Decompress, *mut *mut u8, c_uint) -> c_uint,
     finish: unsafe extern "C-unwind" fn(*mut Decompress) -> Boolean,
     resync: unsafe extern "C-unwind" fn(*mut Decompress, c_int) -> Boolean,
+    // (the compressor's, for save)
+    create_compress: unsafe extern "C-unwind" fn(*mut Compress, c_int, usize),
+    destroy_compress: unsafe extern "C-unwind" fn(*mut Compress),
+    set_defaults: unsafe extern "C-unwind" fn(*mut Compress),
+    set_quality: unsafe extern "C-unwind" fn(*mut Compress, c_int, Boolean),
+    start_compress: unsafe extern "C-unwind" fn(*mut Compress, Boolean),
+    write_scanlines: unsafe extern "C-unwind" fn(*mut Compress, *mut *mut u8, c_uint) -> c_uint,
+    finish_compress: unsafe extern "C-unwind" fn(*mut Compress),
 }
 
 static LIB: OnceLock<std::result::Result<Lib, String>> = OnceLock::new();
@@ -188,6 +280,13 @@ fn load(path: &str) -> std::result::Result<Lib, String> {
         read_scanlines: get!("jpeg_read_scanlines"),
         finish: get!("jpeg_finish_decompress"),
         resync: get!("jpeg_resync_to_restart"),
+        create_compress: get!("jpeg_CreateCompress"),
+        destroy_compress: get!("jpeg_destroy_compress"),
+        set_defaults: get!("jpeg_set_defaults"),
+        set_quality: get!("jpeg_set_quality"),
+        start_compress: get!("jpeg_start_compress"),
+        write_scanlines: get!("jpeg_write_scanlines"),
+        finish_compress: get!("jpeg_finish_compress"),
         _lib: lib,
     })
 }
@@ -766,4 +865,124 @@ pub(crate) fn frames(data: &[u8]) -> Result<Vec<Frame>> {
         });
     }
     Ok(out)
+}
+
+// -- saving -------------------------------------------------------------------------------
+
+const JCS_RGB: c_int = 2;
+/// What a chunk of the destination holds (Pillow's ImageFile.MAXBLOCK, the buffer it encodes
+/// into; the bytes come out the same whatever its size).
+const CHUNK: usize = 65536;
+
+unsafe extern "C-unwind" fn init_destination(cinfo: *mut Compress) {
+    // SAFETY: dest is the Destination save made, alive while libjpeg writes
+    let dest = unsafe { &mut *(*cinfo).dest };
+    dest.next_output_byte = dest.chunk.as_mut_ptr();
+    dest.free_in_buffer = dest.chunk.len();
+}
+
+unsafe extern "C-unwind" fn empty_output_buffer(cinfo: *mut Compress) -> Boolean {
+    // SAFETY: as above; libjpeg calls this with the whole chunk written
+    let dest = unsafe { &mut *(*cinfo).dest };
+    dest.out.extend_from_slice(&dest.chunk);
+    dest.next_output_byte = dest.chunk.as_mut_ptr();
+    dest.free_in_buffer = dest.chunk.len();
+    1
+}
+
+unsafe extern "C-unwind" fn term_destination(cinfo: *mut Compress) {
+    // SAFETY: as above
+    let dest = unsafe { &mut *(*cinfo).dest };
+    let used = dest.chunk.len() - dest.free_in_buffer;
+    dest.out.extend_from_slice(&dest.chunk[..used]);
+}
+
+unsafe extern "C-unwind" fn compress_error_exit(_: *mut Compress) {
+    panic::resume_unwind(Box::new(Broken));
+}
+
+unsafe extern "C-unwind" fn compress_output_message(_: *mut Compress) {}
+
+/// `image.save(fp, "JPEG", quality=quality)` as Pillow 13.0 saves an L or RGB picture
+/// (JpegImagePlugin._save, JpegEncode.c): libjpeg-turbo set up as ImagingJpegEncode sets it up,
+/// its defaults, then its tables for `quality` forced to baseline (none for -1, Pillow's
+/// default: the library's, of 75), the chroma halved both ways
+/// (4:2:0, the library's default), no smoothing, no optimising, no restarts, the JFIF header
+/// as the library writes it (no density), the whole stream in one. Another mode is refused as
+/// Pillow refuses it.
+pub fn save(image: &lp_pixels::Image, quality: i64) -> Result<Vec<u8>> {
+    let (components, space) = match image.mode() {
+        lp_pixels::Mode::L => (1, JCS_GRAYSCALE),
+        lp_pixels::Mode::RGB => (3, JCS_RGB),
+        other => return error(format!("cannot write mode {other} as JPEG")),
+    };
+    let (width, height) = image.size();
+    if width == 0 || height == 0 {
+        return error("encoder error -2 when writing image file"); // (libjpeg's empty image)
+    }
+    let lib = lib()?;
+    // SAFETY: zeroed is how JPEGENCODERSTATE starts (calloc'd); every pointer is set before use
+    let mut err: Box<ErrorMgr> = Box::new(unsafe { std::mem::zeroed() });
+    let mut cinfo: Box<Compress> = Box::new(unsafe { std::mem::zeroed() });
+    let mut dest = Box::new(Destination {
+        next_output_byte: std::ptr::null_mut(),
+        free_in_buffer: 0,
+        init_destination,
+        empty_output_buffer,
+        term_destination,
+        chunk: vec![0; CHUNK],
+        out: Vec::new(),
+    });
+    let created = std::cell::Cell::new(false);
+    let quality = quality.clamp(c_int::MIN as i64, c_int::MAX as i64) as c_int;
+    let run = panic::catch_unwind(AssertUnwindSafe(|| {
+        // SAFETY: the structures live (boxed) for the whole of this; libjpeg is given them as
+        // jpeglib.h has them, and the rows it reads are the picture's, one at a time
+        unsafe {
+            cinfo.err = (lib.std_error)(&mut *err);
+            err.error_exit = Some(std::mem::transmute::<
+                unsafe extern "C-unwind" fn(*mut Compress),
+                unsafe extern "C-unwind" fn(*mut Decompress),
+            >(compress_error_exit));
+            err.output_message = Some(std::mem::transmute::<
+                unsafe extern "C-unwind" fn(*mut Compress),
+                unsafe extern "C-unwind" fn(*mut Decompress),
+            >(compress_output_message));
+            (lib.create_compress)(&mut *cinfo, 62, std::mem::size_of::<Compress>());
+            created.set(true);
+            cinfo.dest = &mut *dest;
+            cinfo.image_width = width as c_uint;
+            cinfo.image_height = height as c_uint;
+            cinfo.input_components = components;
+            cinfo.in_color_space = space;
+            (lib.set_defaults)(&mut *cinfo);
+            if quality != -1 {
+                (lib.set_quality)(&mut *cinfo, quality, 1); // (-1: Pillow's "not given")
+            }
+            cinfo.smoothing_factor = 0;
+            cinfo.optimize_coding = 0;
+            cinfo.restart_interval = 0;
+            cinfo.restart_in_rows = 0;
+            (lib.start_compress)(&mut *cinfo, 1);
+            let stride = width * components as usize;
+            let data = image.as_bytes();
+            while (cinfo.next_scanline as usize) < height {
+                let y = cinfo.next_scanline as usize;
+                let mut row = data[y * stride..].as_ptr() as *mut u8;
+                if (lib.write_scanlines)(&mut *cinfo, &mut row, 1) != 1 {
+                    break; // (never: the destination takes all)
+                }
+            }
+            (lib.finish_compress)(&mut *cinfo);
+        }
+    }));
+    if created.get() {
+        // SAFETY: made by create_compress above
+        unsafe { (lib.destroy_compress)(&mut *cinfo) };
+    }
+    match run {
+        Ok(()) => Ok(std::mem::take(&mut dest.out)),
+        Err(e) if e.is::<Broken>() => error("encoder error -2 when writing image file"),
+        Err(e) => panic::resume_unwind(e),
+    }
 }

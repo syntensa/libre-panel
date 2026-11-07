@@ -1,6 +1,6 @@
 [package]
 name = "lp-devices"
-description = "The panels Libre Panel drives: their catalog first (devices/models.py)"
+description = "The panels Libre Panel drives: their catalog (devices/models.py) and their drivers"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,3 +9,6 @@ publish.workspace = true
 
 [dependencies]
 lp-py = { path = "../py" }
+lp-pixels = { path = "../pixels" }
+lp-decode = { path = "../decode" }
+lp-i18n = { path = "../i18n" }

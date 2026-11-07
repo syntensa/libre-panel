@@ -153,6 +153,9 @@ dependencies = [
 name = "lp-devices"
 version = "0.1.0"
 dependencies = [
+ "lp-decode",
+ "lp-i18n",
+ "lp-pixels",
  "lp-py",
 ]
 

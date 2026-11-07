@@ -73,7 +73,7 @@ all of it. It is the reference every Rust piece is checked against:
 | i18n | the app's languages: its texts and the fields' names in each, the system's language | i18n.py |
 | theme | themes: reading, checking, versions per shape, adapting, the modules and cards laid out | theme/ |
 | render | the renderer and every widget, effect, motion and transition | render/ |
-| devices | TURZX (from the engine), Waveshare, udisp, BeadaPanel, NZXT, virtual, monitor | devices/ |
+| devices | TURZX (from the engine), Hongtai and the MAJESTY, Waveshare, udisp, BeadaPanel, NZXT, virtual, monitor | devices/ |
 | sensors | Linux and Windows sensors, history, demo | sensors/, sensorservice/, the C# service |
 | services | game mode, notices, AI activity, downloads, memory, timer, cooling, power, autopilot, weather, media, audio | services/, weather/ |
 | server | the app's HTTP server and its API | editor/ (server side) |
@@ -127,6 +127,10 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       Pillow reads them, CMYK, a draft's scale and grey, MPO's pictures as frames); loaded
       where the app runs (LP_LIBJPEG: the comparisons use Pillow's own copy, so they run where
       Pillow's wheel has it as a file, Linux and macOS)
+- [x] saving JPEG, for the panels that take JPEGs: libjpeg-turbo set up as JpegEncode.c sets
+      it up (its tables for the quality forced to baseline, none for Pillow's default, the
+      chroma halved both ways, no smoothing or optimising); L and RGB, every quality, the bytes
+      Pillow's
 - [x] decoding WebP: still and animated, through libwebp's animation decoder as Pillow uses
       it (loaded as libjpeg-turbo is: LP_LIBWEBP, LP_LIBWEBPDEMUX)
 - [x] thumbnail on a file just opened, as media.py makes a track's cover small: a JPEG drafted
@@ -283,8 +287,19 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       beside each other, game mode and the alarm's frames, videos (ffmpeg)
 
 ### R6 devices
-- [ ] TURZX (the engine's), Waveshare, udisp, BeadaPanel, NZXT Kraken, virtual, the panel as a
-      monitor (Windows' virtual display driver, X11, Wayland)
+- [x] the Hongtai / Jungle Leopard family (devices/hongtai.py, lp-devices) on a link of its
+      own: its frames, its pictures as JPEGs of the panel's size (the quality going down until
+      the firmware takes them), the answer it gives (read with Python's json and int()), the
+      opening, the live picture kept from a thread of its own, the brightness, the letting go;
+      whole sessions on a panel the tests script sent the same to the byte as the Python driver
+      sends them. And the MAJESTY 9.16" (33c3:7792, issue #40), in Rust alone: set up as its
+      owner found it on the panel (15 with 00 03, its answer waited for, the backlight at 95),
+      its brightness in its pictures as devices/base.py dims them. Its model stays beside the
+      catalog until the switch: the catalog is the Python app's, themes are checked against it
+- [ ] the serial port at 2 Mbaud and finding it by its USB ids (Windows' COM ports, Linux's
+      ttyACM); a program to try a panel with, for its owner (the MAJESTY's first)
+- [ ] TURZX (the engine's), Waveshare, udisp, BeadaPanel, NZXT Kraken, virtual, the other
+      serial panels, the panel as a monitor (Windows' virtual display driver, X11, Wayland)
 
 ### R7 sensors
 - [ ] Linux: hwmon, /proc, the cards' (amdgpu, NVML), storage, network, fans
