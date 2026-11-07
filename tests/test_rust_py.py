@@ -9,6 +9,7 @@ import hashlib
 import json
 import math
 import random
+import string
 import struct
 import sys
 import unicodedata
@@ -532,3 +533,39 @@ def test_floats_read_as_python_reads_them() -> None:
         texts = [t for t in texts if t.isascii()]
     [ours] = run([{"op": "py_float", "texts": texts}])
     assert ours["floats"] == [_float_bits(t) for t in texts]
+
+
+class _Echo(string.Formatter):
+    """A Formatter whose fields are their own names: what str.format reads of a format string
+    (its fields, conversions, nested specs and numbering), not what a field holds."""
+
+    def get_field(self, field_name: str, args: Any, kwargs: Any) -> tuple[str, str]:
+        return field_name, field_name
+
+
+_FORMAT_PIECES = ["{", "}", "{{", "}}", "!", ":", "[", "]", "0", "1", "²", "١", "①", "a", "x",
+                  "s", "r", "\0", "<", ">5", "^7", ".2", "=", " ", "é", "{}", "{0}", "{1}",
+                  "{a}", "{²}", "{١}", "!r", "!s", "!a", "!\0", "!x", ":{}", "{a:{b}}"]  # fmt: skip
+
+
+def _echo_outcome(text: str) -> dict[str, Any]:
+    kinds = {ValueError: "Value", TypeError: "Type", OverflowError: "Overflow"}
+    try:
+        return {"text": _Echo().format(text)}
+    except (ValueError, TypeError, OverflowError) as error:
+        return {"error": kinds[type(error)]}
+
+
+def test_format_strings_read_as_python_s_str_format() -> None:
+    rng = random.Random(0x5F0)
+    texts = ["", "a", "{a:{b:{c}}}", "{a:{b}}", "{:{:{}}}", "{}{}", "{0}{}", "{}{0}", "{²}{}",
+             "{}{²}", "{①}{}", "{a!\0}", "{a!\0:>5}", "{a[}]}", "{a[b}", "{a!r:^9}", "{!r}",
+             "{a!}", "{a!}}", "{a!r", "{a:", "{a:{", "}", "{", "{{}}", "x{a!a}y", "{é!a}",
+             "{a:{b!r}}", "{a:{}}{}", "{0:{1}}{}", "{0:{}}", "{x:{<:{}}}", "{x:{<:{<}}}",
+             "{x:{<}}"]  # fmt: skip
+    for _ in range(6000):
+        texts.append("".join(rng.choice(_FORMAT_PIECES) for _ in range(rng.randrange(9))))
+    [ours] = run([{"op": "py_vformat", "texts": texts}])
+    assert ours["texts"] == [_echo_outcome(t) for t in texts]
+    # (texts, not only refusals alike)
+    assert sum("text" in o for o in ours["texts"]) > 1500

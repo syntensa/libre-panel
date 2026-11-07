@@ -1570,6 +1570,97 @@ fn run(case: &Value) -> Result<Value, String> {
                 "themes": themes,
             })
         }
+        "py_vformat" => {
+            // string.Formatter().format of each text, with a get_field that gives each field's
+            // name as its value: the text, or the kind of Python's error
+            let texts: Vec<Value> = case["texts"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|t| {
+                    let get = |name: &str| Ok(lp_py::Value::Str(name.into()));
+                    let field = |v: &lp_py::Value, spec: &str| lp_py::format::format(v, spec);
+                    match lp_py::format::vformat(t.as_str().unwrap_or(""), &get, &field) {
+                        Ok(text) => json!({"text": text}),
+                        Err(e) => json!({"error": format!("{:?}", e.kind)}),
+                    }
+                })
+                .collect();
+            json!({"texts": texts})
+        }
+        "render_format" => {
+            // render/formatting.py: safe_format of each case, auto_format, and the parts
+            // (bytes, duration, clock, rate) of values given with their types
+            use lp_render::formatting as f;
+            fn typed(v: &Value) -> lp_py::Value {
+                if let Some(h) = v["f"].as_str() {
+                    lp_py::Value::Float(f64::from_bits(u64::from_str_radix(h, 16).unwrap_or(0)))
+                } else if let Some(i) = v["i"].as_str() {
+                    lp_py::Value::Int(i.parse().unwrap_or_default())
+                } else if let Some(s) = v["s"].as_str() {
+                    lp_py::Value::Str(s.into())
+                } else if let Some(b) = v["b"].as_bool() {
+                    lp_py::Value::Bool(b)
+                } else if let Some(l) = v["l"].as_array() {
+                    lp_py::Value::List(l.iter().map(typed).collect())
+                } else {
+                    lp_py::Value::None
+                }
+            }
+            fn kind(k: lp_py::format::Kind) -> &'static str {
+                match k {
+                    lp_py::format::Kind::Value => "ValueError",
+                    lp_py::format::Kind::Type => "TypeError",
+                    lp_py::format::Kind::Overflow => "OverflowError",
+                }
+            }
+            let outcome = |r: Result<String, lp_py::format::FmtError>| match r {
+                Ok(text) => json!({"text": text}),
+                Err(e) => json!({"error": kind(e.kind)}),
+            };
+            let s = |v: &Value| v.as_str().unwrap_or("").to_string();
+            let cases: Vec<Value> = case["cases"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|c| {
+                    match f::safe_format(
+                        &s(&c["fmt"]),
+                        &typed(&c["value"]),
+                        &s(&c["unit"]),
+                        &s(&c["label"]),
+                    ) {
+                        Ok(text) => json!({"text": text}),
+                        Err(f::FormatError::Format(_)) => json!({"error": "FormatError"}),
+                        Err(f::FormatError::Uncaught(k, _)) => json!({"error": kind(k)}),
+                    }
+                })
+                .collect();
+            let auto: Vec<Value> = case["auto"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|c| outcome(f::auto_format(&typed(&c["value"]), &s(&c["unit"]))))
+                .collect();
+            let parts: Vec<Value> = case["parts"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|v| {
+                    let v = typed(v);
+                    json!({
+                        "bytes": outcome(f::human_bytes(&v)),
+                        "duration": outcome(f::human_duration(&v)),
+                        "clock": outcome(f::clock_duration(&v)),
+                        "rate": match f::rate_parts(&v) {
+                            Ok((n, u)) => json!({"text": [n, u]}),
+                            Err(e) => json!({"error": kind(e.kind)}),
+                        },
+                    })
+                })
+                .collect();
+            json!({"cases": cases, "auto": auto, "parts": parts})
+        }
         "theme_tables" => {
             // the tables, as JSON text, for the comparison with Python's
             use lp_py::{Dict, Value};

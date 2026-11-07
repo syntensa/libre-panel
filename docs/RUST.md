@@ -66,7 +66,7 @@ all of it. It is the reference every Rust piece is checked against:
 
 | Crate | What it is | Python it replaces |
 |---|---|---|
-| py | what Python does that the app's files and messages depend on: its values (ints of any size, dicts in order, ==), their arithmetic and its errors, repr(), json, str's white space, digits, lower() and upper(), re's matching without case, rounding, the division of ints, float() of a str, sum() of floats, splitlines(), the wide characters of East Asian scripts, the zones zoneinfo finds (Python 3.12, Unicode 15.0: the release's) | — (Python's own rules) |
+| py | what Python does that the app's files and messages depend on: its values (ints of any size, dicts in order, ==), their arithmetic and its errors, repr(), json, str's white space, digits, lower() and upper(), re's matching without case, rounding, the division of ints, float() of a str, sum() of floats, splitlines(), format() and str.format, the wide characters of East Asian scripts, the zones zoneinfo finds (Python 3.12, Unicode 15.0: the release's) | — (Python's own rules) |
 | pixels | Pillow's operations as Libre Panel uses them, to the bit | Pillow, numpy (in render/) |
 | decode | pictures from their files as Pillow decodes them (PNG, GIF, JPEG, WebP) | Image.open, Pillow's decoders |
 | text | letters and their layout as Pillow draws them (FreeType, shaping as libraqm) | fonts/, ImageFont |
@@ -227,8 +227,24 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       its parts, the person's cards in each slot open to them (with_cards, follows_cards)
       and the cards a slot's lines name with their turns (card_time, time_text); Python's
       float() of a str (lp-py)
+- [x] the texts readings become (render/formatting.py, lp-render): str.format locked down to
+      value, unit and label, the format string read piece by piece as Python's
+      formatter_parser reads it (a field's error before what is wrong further on; its
+      conversions, specs nested two deep, the numbering of fields); Python's format() of ints,
+      floats, strs, bools and the rest in every spec (fill, alignment, sign, z, #, 0 and the
+      width, grouping with its zeros, the precision, every type, 'n' in the C locale, the
+      digits of floats as dtoa makes them) in lp-py; the app's own specs (bytes, duration,
+      clock, gb, rate, rate_unit, upper), a reading's usual text (auto_format), and what Python
+      refuses or raises, of the same kind. {value:c} of a half of a surrogate pair, which
+      Python makes, is refused here, as Rust's str cannot hold it (the widget shows its
+      fallback)
 - [ ] the zones on Windows (Python finds them in the tzdata package there, which the Rust
       app does not bring yet: none is found there for now)
+- [ ] the C library's locale where Python's text follows it: format()'s 'n' and what strftime
+      writes of a date in English (i18n.format_date: the names, %p, %c) are the C locale's
+      unless something in the process sets another. GTK sets the person's when it starts, and
+      on Linux the tray's AppIndicator (PyGObject) may start it in the app's process: to be
+      checked on a desktop with PyGObject. lp-py keeps to the C locale for now
 - [ ] the renderer's frame, widget by widget (texts, clocks, gauges, rings, bars, lists, graphs
       and their strips, fans, images, videos, icons, weather, globes, moon, sun path, slots,
       cards, notices), effects (glow, lit finish, dither), motion, transitions, toasts, start

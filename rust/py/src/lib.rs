@@ -7,6 +7,7 @@
 
 use unicode_general_category::{get_general_category, GeneralCategory as G};
 
+pub mod format;
 pub mod json;
 pub mod math;
 pub mod num;
@@ -60,6 +61,37 @@ pub fn decimal(ch: char) -> Option<u32> {
         start -= 1;
     }
     Some((u32::from(ch) - start) % 10)
+}
+
+/// The digits that are no decimals (superscripts, circled digits and the like), which
+/// str.isdigit takes too, as Python 3.12's Unicode 15.0 has them.
+const DIGITS: &[(u32, u32)] = &[
+    (0xb2, 0xb3),
+    (0xb9, 0xb9),
+    (0x1369, 0x1371),
+    (0x19da, 0x19da),
+    (0x2070, 0x2070),
+    (0x2074, 0x2079),
+    (0x2080, 0x2089),
+    (0x2460, 0x2468),
+    (0x2474, 0x247c),
+    (0x2488, 0x2490),
+    (0x24ea, 0x24ea),
+    (0x24f5, 0x24fd),
+    (0x24ff, 0x24ff),
+    (0x2776, 0x277e),
+    (0x2780, 0x2788),
+    (0x278a, 0x2792),
+    (0x10a40, 0x10a43),
+    (0x10e60, 0x10e68),
+    (0x11052, 0x1105a),
+    (0x1f100, 0x1f10a),
+];
+
+/// str.isdigit of a character: a decimal or another digit.
+pub fn isdigit(ch: char) -> bool {
+    let c = u32::from(ch);
+    decimal(ch).is_some() || DIGITS.iter().any(|&(first, last)| first <= c && c <= last)
 }
 
 /// repr() of a str: in single quotes unless it has some and no double ones, with Python's

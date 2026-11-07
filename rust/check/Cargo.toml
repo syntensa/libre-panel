@@ -10,6 +10,7 @@ publish.workspace = true
 [dependencies]
 lp-py = { path = "../py" }
 lp-i18n = { path = "../i18n" }
+lp-render = { path = "../render" }
 lp-pixels = { path = "../pixels" }
 lp-decode = { path = "../decode" }
 lp-text = { path = "../text" }

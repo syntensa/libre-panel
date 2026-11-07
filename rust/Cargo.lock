@@ -131,6 +131,7 @@ dependencies = [
  "lp-i18n",
  "lp-pixels",
  "lp-py",
+ "lp-render",
  "lp-text",
  "lp-theme",
  "num-bigint",
@@ -178,6 +179,16 @@ dependencies = [
  "num-integer",
  "num-traits",
  "unicode-general-category",
+]
+
+[[package]]
+name = "lp-render"
+version = "0.1.0"
+dependencies = [
+ "lp-py",
+ "num-bigint",
+ "num-integer",
+ "num-traits",
 ]
 
 [[package]]
