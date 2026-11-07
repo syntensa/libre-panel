@@ -311,6 +311,15 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       the computer's own and the other's), digits that roll or fade as they move, the years
       before 1000 (Python's own answer for them differs between its releases), %s (the seconds
       since 1970 in the computer's zone) and, on Windows, %#z and %#Z
+- [x] bars (bar widgets) in a still frame: where the reading stands between min and max on
+      a linear, square-root or logarithmic scale, in steps of the supersampled grid; drawn
+      three times larger and reduced: the track, the filled part in one colour, a gradient
+      across the whole track (the other way round for left and up) or the colour of the highest
+      threshold the reading is above; segments, the last lit one partly, rising as levels on a
+      mixer; a thin mark where a second reading stands, a dot at the bar's head placed in
+      quarter pixels. The frames of random themes of bars the same to the bit; with a glow
+      round the bar and its dot within a level, as a card's. A bar gliding to a new reading and
+      a colour fading to a threshold's are motion: Rust says it does not draw them yet
 - [ ] the zones on Windows (Python finds them in the tzdata package there, which the Rust
       app does not bring yet: none is found there for now)
 - [ ] the C library's locale where Python's text follows it: format()'s 'n' and what strftime

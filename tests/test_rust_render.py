@@ -991,3 +991,109 @@ def test_clocks_in_another_time_zone_are_not_drawn_here_yet(tmp_path: Path) -> N
         cases.append({"folder": str(folder), "snapshot": given, "dither": False})
     [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
     assert [got.get("unported") for got in ours["frames"]] == ["clocks in a time zone"] * 4
+
+
+BAR_SENSORS = ["cpu.load", "gpu.temp", "net.down", "audio.volume", "mem.used"]
+BAR_VALUES = [0, 1, 50, 50.5, 99.99, 100, 150, -5, 33.3333, 1e9, 0.0001, None, "x", True, 7,
+              12.5, 66.66666, 0.5]  # fmt: skip
+
+
+def _bar(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """A reading as a bar: its range and scale, its colours, segments rising as levels on a
+    mixer, thresholds, a mark where a second reading stands, a dot at its head."""
+    w, h = size
+    bar: dict[str, Any] = {"type": "bar", "id": f"b{i}", "x": rng.randrange(-20, w),
+                           "y": rng.randrange(-20, h), "w": rng.choice([1, 2, 7, 40, 120, 300]),
+                           "h": rng.choice([1, 3, 8, 16, 40]), "sensor": rng.choice(BAR_SENSORS),
+                           "color": _colour(rng), "radius": rng.choice([0, 2, 4, 8, 50]),
+                           "direction": rng.choice(["right", "left", "up", "down"])}  # fmt: skip
+    if rng.random() < 0.4:
+        bar["min"], bar["max"] = rng.choice([(0, 100), (-50, 50), (10, 10), (0, 1e6), (100, 0),
+                                             (0, 1), (0.5, 99.5)])  # fmt: skip
+    if rng.random() < 0.3:
+        bar["scale"] = rng.choice(["sqrt", "log"])
+    if rng.random() < 0.4:
+        bar["color2"] = _colour(rng)
+    if rng.random() < 0.3:
+        bar["background"] = rng.choice([None, _colour(rng), "@accent"])
+    if rng.random() < 0.4:
+        bar["segments"] = rng.choice([1, 3, 10, 24])
+        bar["segment_gap"] = rng.choice([0, 1, 2, 5])
+        if rng.random() < 0.5:
+            bar["rising"] = rng.choice([0.2, 0.5, 1, 0])
+    if rng.random() < 0.4:
+        thresholds = [0, 20, 50, 80, 100, -5, 50.5]
+        bar["color_rules"] = [
+            {"above": rng.choice(thresholds), "color": _colour(rng)}
+            for _ in range(rng.randrange(1, 4))
+        ]
+    if rng.random() < 0.3:
+        bar["mark"] = rng.choice(BAR_SENSORS)
+        bar["mark_color"] = _colour(rng)
+        bar["mark_width"] = rng.choice([1, 2, 5, 400])
+    if rng.random() < 0.3:
+        bar["end_dot"] = rng.choice([1, 2.5, 4, 0.4])
+    if rng.random() < 0.2:
+        bar["opacity"] = rng.choice([0.5, 0.0])
+    return bar
+
+
+def _bar_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _bar(rng, i, size) if rng.random() < 0.7 else _card_or_text(rng, i, size)
+
+
+def _bar_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
+    """The readings the bars stand at, and their marks."""
+    readings: dict[str, Reading] = {}
+    given: dict[str, Any] = {}
+    for key in BAR_SENSORS:
+        if rng.random() < 0.85:
+            value = rng.choice(BAR_VALUES)
+            readings[key] = Reading(key, value)
+            given[key] = _typed(value)
+    return {"readings": given, "images": {}}, Snapshot(readings=readings)
+
+
+def test_frames_of_bars_as_python_draws_them(tmp_path: Path) -> None:
+    # (where the reading stands on a linear, square-root or logarithmic scale, in steps of the
+    # supersampled grid; the track, the filled part in one colour, a gradient across the whole
+    # track or a threshold's; segments, the last lit one partly, rising as levels on a mixer;
+    # a mark where a second reading stands, a dot at the head)
+    assert _compare_frames(tmp_path, 0xBA2, 200, _bar_or_more, _bar_snapshot) > 150
+
+
+def test_frames_of_bars_with_glow_within_a_level(tmp_path: Path) -> None:
+    # (the glow round a bar and round its dot: blurred in floating point, as a card's is, so
+    # now and then a pixel a level apart)
+    import numpy as np
+
+    rng = random.Random(0xB61)
+    cases, expected = [], []
+    for n in range(60):
+        folder = tmp_path / f"t{n}"
+        data = _frame_theme(rng, folder, _bar)
+        for widget in data["widgets"]:
+            widget["glow"] = rng.choice([0.3, 0.7, 1.0, 1])
+            widget["glow_radius"] = rng.choice([2, 4, 6, 10, 20])
+            if rng.random() < 0.6:
+                widget["end_dot"] = rng.choice([1, 2.5, 4])
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        given, snapshot = _bar_snapshot(rng)
+        dither = rng.random() < 0.3
+        cases.append({"folder": str(folder), "snapshot": given, "dither": dither, "bytes": True})
+        expected.append(_python_frame(folder, snapshot, dither))
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    differ = total = drawn = 0
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        if "error" in want:
+            assert "error" in got, n
+            continue
+        assert "frame" in got, (n, got)
+        apart = np.abs(np.asarray(picture(got["frame"]), int) - np.asarray(want["frame"], int))
+        assert apart.max() <= 1, n
+        differ += int((apart.max(axis=2) > 0).sum())
+        total += apart.shape[0] * apart.shape[1]
+        assert got["boxes"] == want["boxes"], n
+        drawn += 1
+    assert drawn > 45
+    assert differ <= total // 10000

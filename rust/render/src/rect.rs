@@ -83,7 +83,7 @@ impl Renderer {
     }
 
     /// _fill_shape: a rounded rectangle filled with a colour, or a gradient across the layer.
-    fn fill_shape(
+    pub(crate) fn fill_shape(
         &self,
         layer: &mut Image,
         bounds: (f64, f64, f64, f64),

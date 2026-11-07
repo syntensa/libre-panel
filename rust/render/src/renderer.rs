@@ -11,6 +11,7 @@ use lp_py::{Dict, Value};
 use lp_text::fallback::FallbackFont;
 use lp_theme::{Env, Theme};
 
+use crate::bar;
 use crate::compose;
 use crate::countdown;
 use crate::cover;
@@ -19,7 +20,7 @@ use crate::icons;
 use crate::metric::{self, Shown};
 use crate::piece::{Failed, Piece, Result};
 use crate::shapes::{self, Rgba};
-use crate::snapshot::{need_holds, needs_of, Snapshot};
+use crate::snapshot::{need_holds, needs_of, number, Snapshot};
 use crate::widget;
 
 /// The most pixels one layer may have: what Python could not make either (an absurd size a
@@ -482,6 +483,40 @@ impl Renderer {
                 };
                 self.text_widget(&w, text, widget::text(&w, "color").to_string())
             }
+            "bar" => {
+                let w = w.clone();
+                // (a bar gliding to a new reading, a colour fading: motion, not drawn here yet)
+                if self.options.animate
+                    && (widget::flag(&w, "smooth", true) || metric::has_rules(&w))
+                {
+                    return Drawn::Unported("bars that move".into());
+                }
+                let snapshot = self.snapshot.clone().unwrap_or_default();
+                let value = number(&snapshot.value(widget::text(&w, "sensor")));
+                let Some(rules) = metric::rules_of(&w) else {
+                    return Drawn::Unported("colour rules above NaN".into());
+                };
+                let (lo, hi) = (
+                    widget::number(&w, "min", 0.0),
+                    widget::number(&w, "max", 100.0),
+                );
+                let frac = bar::fraction(value, lo, hi, widget::text(&w, "scale"));
+                let horizontal = matches!(widget::text(&w, "direction"), "right" | "left");
+                let length = widget::int(&w, if horizontal { "w" } else { "h" }, 0);
+                let (frac, paint) = match bar::steps(frac, length)
+                    .and_then(|frac| Ok((frac, self.rule_paint(&w, value, &rules)?)))
+                {
+                    Ok(made) => made,
+                    Err(e) => return Drawn::Failed(e),
+                };
+                let (a, b) = paint;
+                let colours = |c: Option<Rgba>| match c {
+                    Some(c) => Value::List(c.map(Value::int).to_vec()),
+                    None => Value::None,
+                };
+                let content = Value::List(vec![Value::Float(frac), colours(Some(a)), colours(b)]);
+                self.cached(&w, content, |r| r.bar_piece(&w, frac, paint))
+            }
             "metric" => {
                 let w = w.clone();
                 // (a number gliding, a colour fading: motion, not drawn here yet)
@@ -614,6 +649,30 @@ impl Renderer {
                 return Err(Unported("turned widgets".into()));
             }
             pieces.push((id.clone(), piece.clone()));
+            if widget::text(w, "type") == "bar" {
+                // what lies over a bar: its mark, its end dot (Python's frame fails where one
+                // cannot be made: Rust makes none)
+                let refused = |e: Failed| Unported(format!("a bar's mark or dot: {}", e.0));
+                let mark = if widget::truthy(w, "mark") {
+                    self.bar_mark(w, &snapshot).map_err(refused)?
+                } else {
+                    None
+                };
+                let dot = if widget::truthy(w, "end_dot") {
+                    let rules = metric::rules_of(w).unwrap_or_default();
+                    self.bar_dot(w, &snapshot, &rules).map_err(refused)?
+                } else {
+                    None
+                };
+                for (name, over) in [("mark", mark), ("dot", dot)] {
+                    if let Some((plain, content, made)) = over {
+                        let made = self
+                            .cached(&plain, content, |_| Ok(made))
+                            .map_err(refused)?;
+                        pieces.push((format!("{id}\0{name}"), made));
+                    }
+                }
+            }
             if let Some(module) = &module {
                 let mid = widget::text(module, "id").to_string();
                 if let Some(b) = self.module_boxes.get(&mid) {
