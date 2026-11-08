@@ -123,6 +123,9 @@ pub struct Renderer {
     slots_begun: bool,
     /// the time the frame is drawn for (render's `now`: a download's running light)
     at: f64,
+    /// your place (latitude, longitude), for the earth: the loop sets it (Python's
+    /// renderer.place); None for none
+    pub place: Option<(f64, f64)>,
 }
 
 impl Renderer {
@@ -158,6 +161,7 @@ impl Renderer {
             slots: IndexMap::new(),
             slots_begun: false,
             at: 0.0,
+            place: None,
         };
         renderer.slots = renderer.make_slots()?;
         renderer.background = renderer.load_background()?;
@@ -290,10 +294,46 @@ impl Renderer {
     }
 
     /// The frame's time (a frame drawn without readings has Snapshot's own).
-    fn now(&self) -> Moment {
+    pub(crate) fn now(&self) -> Moment {
         self.snapshot
             .as_ref()
             .map_or_else(|| Snapshot::default().now, |s| s.now)
+    }
+
+    /// The fold of the frame's time.
+    pub(crate) fn fold(&self) -> bool {
+        self.snapshot.as_ref().is_some_and(|s| s.fold)
+    }
+
+    /// _time: the time in the widget's time zone (empty: the computer's): the frame's time put
+    /// into the zone (astimezone); the frame's own where no zone has the name (warned, as
+    /// timezones.zone finds none).
+    fn time_of(&self, w: &Dict) -> std::result::Result<Moment, Drawn> {
+        let now = self.now();
+        let name = widget::text(w, "timezone");
+        if name.is_empty() {
+            return Ok(now);
+        }
+        let Some(zone) = lp_py::zones::named(name) else {
+            if lp_py::zoneinfo::exists(name) {
+                return Err(Drawn::Unported(
+                    "a time zone's file Rust does not read".into(),
+                ));
+            }
+            self.warn(format!(
+                "unknown time zone {} (widget {})",
+                lp_py::repr(name),
+                lp_py::repr(widget::text(w, "id"))
+            ));
+            return Ok(now);
+        };
+        let Some(local) = lp_py::zones::local() else {
+            return Err(Drawn::Unported(
+                "another place's time without the computer's own time zone".into(),
+            ));
+        };
+        lp_py::zones::astimezone(local, &zone, &now, self.fold())
+            .ok_or_else(|| Drawn::Unported("a time in a time zone that Python fails at".into()))
     }
 
     /// _range_now in a still frame: the range a graph of its own range was drawn in; None for
@@ -609,16 +649,15 @@ impl Renderer {
             }
             "clock" => {
                 let w = w.clone();
-                // (another place's time: the computer's own zone and the other's, not here yet)
-                if !widget::text(&w, "timezone").is_empty() {
-                    return Drawn::Unported("clocks in a time zone".into());
-                }
+                let now = match self.time_of(&w) {
+                    Ok(now) => now,
+                    Err(drawn) => return drawn,
+                };
                 let kind = widget::optional(&w, "digits").unwrap_or("jump");
                 let seconds = widget::number(&w, "digits_seconds", 0.42);
                 if self.options.animate && kind != "jump" && 0.0 < seconds && seconds <= 1.0 {
                     return Drawn::Unported("clocks whose digits roll or fade".into());
                 }
-                let now = self.now();
                 // _clock_format: a hundred characters at most; "--:--" where strftime refuses
                 let text: String = match lp_i18n::format_date(&now, widget::text(&w, "format")) {
                     Ok(text) => text.chars().take(100).collect(),
@@ -635,16 +674,15 @@ impl Renderer {
             }
             "analog" => {
                 let w = w.clone();
-                // (another place's time: the computer's own zone and the other's, not here yet)
-                if !widget::text(&w, "timezone").is_empty() {
-                    return Drawn::Unported("clocks in a time zone".into());
-                }
+                let now = match self.time_of(&w) {
+                    Ok(now) => now,
+                    Err(drawn) => return drawn,
+                };
                 let seconds = widget::truthy(&w, "seconds");
                 let kind = widget::optional(&w, "hand").unwrap_or("tick");
                 if self.options.animate && seconds && kind != "tick" {
                     return Drawn::Unported("clocks whose second hand glides or goes round".into());
                 }
-                let now = self.now();
                 // (the hour on the dial, the minute and the second, -1 where none is shown)
                 let hands = [
                     i64::from(now.hour % 12),
@@ -655,6 +693,10 @@ impl Renderer {
                 self.cached(&w, content, |r| {
                     r.analog_piece(&w, hands[0], hands[1], hands[2])
                 })
+            }
+            "earth" => {
+                let w = w.clone();
+                return self.earth_widget(&w);
             }
             "calendar" => {
                 let w = w.clone();

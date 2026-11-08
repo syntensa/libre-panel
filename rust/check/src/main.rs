@@ -2191,6 +2191,10 @@ fn run(case: &Value) -> Result<Value, String> {
                     if let Some(look) = c["symbols"].as_str() {
                         renderer.symbols = look.to_string();
                     }
+                    // (your place, for the earth, as the loop sets it)
+                    if let Some([lat, lon]) = c["place"].as_array().map(Vec::as_slice) {
+                        renderer.place = lat.as_f64().zip(lon.as_f64());
+                    }
                     // (each frame as a process's first, no fan seen running before it, unless it
                     // follows the one before)
                     if !c["after"].as_bool().unwrap_or(false) {
@@ -2794,6 +2798,7 @@ fn snapshot_of(v: &Value) -> lp_render::snapshot::Snapshot {
     }
     if let Some(now) = v["now"].as_array() {
         snap.now = datetime_of(now);
+        snap.fold = now.get(7).and_then(Value::as_i64) == Some(1);
     }
     // (each sensor's history: its numbers, typed as the readings are)
     for (key, values) in v["history"].as_object().into_iter().flatten() {

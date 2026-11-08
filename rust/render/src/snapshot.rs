@@ -46,6 +46,8 @@ pub struct Snapshot {
     pub readings: IndexMap<String, Reading>,
     pub history: IndexMap<String, Vec<f64>>,
     pub now: Moment,
+    /// the fold of `now` (datetime's: true for the later of two moments of one local time)
+    pub fold: bool,
     pub images: IndexMap<String, Image>,
 }
 
@@ -57,6 +59,7 @@ impl Default for Snapshot {
             readings: IndexMap::new(),
             history: IndexMap::new(),
             now: Moment::date(1970, 1, 1),
+            fold: false,
             images: IndexMap::new(),
         }
     }

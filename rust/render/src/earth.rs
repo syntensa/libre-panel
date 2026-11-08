@@ -18,8 +18,12 @@ use std::path::{Path, PathBuf};
 use lp_decode::Kind;
 use lp_pixels::{alpha_composite, Image, Mode};
 
+use lp_py::{Dict, Value};
+
 use crate::np;
-use crate::piece::{Failed, Result};
+use crate::piece::{Failed, Piece, Result};
+use crate::renderer::{Drawn, Renderer};
+use crate::widget;
 
 /// earth.SHARE: the disc's share of the picture, the rest the air's glow.
 pub const SHARE: f64 = 0.86;
@@ -584,6 +588,90 @@ pub fn picture(
         }
     }
     Ok(out)
+}
+
+// -- the earth widget ---------------------------------------------------------------------------
+
+/// earth.zone_longitude: the longitude of the computer's time zone, its offset from UTC now (as
+/// datetime.now() finds it when asked), 15 degrees an hour; None where Python fails at it.
+fn zone_longitude(local: &lp_py::zones::Zone) -> Option<f64> {
+    let hours = lp_py::zones::now_offset(local)? as f64 / 3600.0;
+    Some((hours * 15.0).clamp(-180.0, 180.0))
+}
+
+impl Renderer {
+    /// _draw_earth, the standing globe: the earth as it is at the frame's moment, its time on
+    /// the wall clock in steps of redraw_s (the moment it is lit for), seen from above your
+    /// place (else your time zone's longitude a little north of the equator), your place
+    /// marked where the widget asks; drawn again where its day, its view or its look moves.
+    /// A globe that turns in a moving frame: Rust says it does not draw it yet.
+    pub(crate) fn earth_widget(&mut self, w: &Dict) -> Drawn {
+        if self.options.animate && widget::number(w, "spin", 0.0) > 0.0 {
+            return Drawn::Unported("turning globes".into());
+        }
+        let Some(local) = lp_py::zones::local() else {
+            return Drawn::Unported("the earth without the computer's own time zone".into());
+        };
+        let size = widget::int(w, "size", 160).max(8);
+        let mark = if widget::truthy(w, "place") {
+            self.place
+        } else {
+            None
+        };
+        let mut colours = [[0u8; 3]; 2];
+        for (colour, key) in colours.iter_mut().zip(["color", "color2"]) {
+            match self.colour_of(w, key) {
+                Ok(Some(c)) => *colour = [c[0] as u8, c[1] as u8, c[2] as u8],
+                Ok(None) => {
+                    return Drawn::Failed(Failed("'NoneType' object is not subscriptable".into()))
+                }
+                Err(e) => return Drawn::Failed(e),
+            }
+        }
+        let look = Look {
+            air: colours[0],
+            mark: colours[1],
+            clouds: widget::truthy(w, "clouds"),
+            lights: widget::truthy(w, "lights"),
+        };
+        let every = redraw_s(size);
+        // (the moment it is lit for, on the wall clock)
+        let Some(stamp) = lp_py::zones::timestamp(local, &self.now(), self.fold()) else {
+            return Drawn::Unported("the earth at a time that Python fails at".into());
+        };
+        let moment = (stamp / every).floor() * every;
+        // (earth.view_of)
+        let centre = match self.place {
+            Some(place) => place,
+            None => match zone_longitude(local) {
+                Some(longitude) => (20.0, longitude),
+                None => return Drawn::Unported("the earth at a time that Python fails at".into()),
+            },
+        };
+        let pair = |p: (f64, f64)| Value::List(vec![Value::Float(p.0), Value::Float(p.1)]);
+        let rgb = |c: [u8; 3]| Value::List(c.iter().map(|&v| Value::int(i64::from(v))).collect());
+        let content = Value::List(vec![
+            Value::int(size),
+            pair(centre),
+            mark.map_or(Value::None, pair),
+            rgb(look.air),
+            rgb(look.mark),
+            Value::Bool(look.clouds),
+            Value::Bool(look.lights),
+            Value::Float(moment),
+        ]);
+        let (x, y) = (widget::int(w, "x", 0), widget::int(w, "y", 0));
+        let dir = maps_dir(&self.env.fonts_dir);
+        match self.cached(w, content, |_| {
+            let globe = picture(&dir, size, moment, centre, mark, look)?;
+            let mut piece = Piece::new(globe, x, y);
+            piece.hit = Some([x, y, size, size]);
+            Ok(piece)
+        }) {
+            Ok(piece) => Drawn::Piece(piece),
+            Err(e) => Drawn::Failed(e),
+        }
+    }
 }
 
 #[cfg(test)]

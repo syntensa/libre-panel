@@ -309,10 +309,10 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       Every code on dates from the year 1 to 9999, random formats in all ten languages, and the
       frames of random themes of clocks the same to the bit, in English and German; a clock
       whose digits roll or fade laid out letter by letter in a still frame too, as Python lays
-      it out. Not here yet, and Rust says so: another place's time (a clock's time zone needs
-      the computer's own and the other's), digits that roll or fade as they move, the years
-      before 1000 (Python's own answer for them differs between its releases), %s (the seconds
-      since 1970 in the computer's zone) and, on Windows, %#z and %#Z
+      it out (another place's time: with the earth widget, below). Not here yet, and Rust says
+      so: digits that roll or fade as they move, the years before 1000 (Python's own answer
+      for them differs between its releases), %s (the seconds since 1970 in the computer's
+      zone) and, on Windows, %#z and %#Z
 - [x] bars (bar widgets) in a still frame: where the reading stands between min and max on
       a linear, square-root or logarithmic scale, in steps of the supersampled grid; drawn
       three times larger and reduced: the track, the filled part in one colour, a gradient
@@ -621,12 +621,13 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       is the same times pi/180 as Rust's to_radians); kept by the hands they show. A second
       hand that ticks, glides or goes round stands alike in a still frame. The frames of 300
       random themes of clocks of every size, square or not, at moments of the years round now
-      and at the hands' edges (235 drawn, all the same to the bit); every side from 1 to
-      140 px, square and not, to the bit; 40 themes drawn frame after frame a part of a second
-      to half a day apart (150 frames, to the bit); clocks with a glow or a shadow at six sizes
-      within a level (none apart here). The counter-checks put in 27 faults, and the tests
-      catch them all. Another place's time, and a second hand that glides or goes round in a
-      moving frame: Rust says it does not draw them yet. 93 of the app's 99 themes are drawn
+      and at the hands' edges (288 drawn, all the same to the bit, another place's time among
+      them since the earth widget's work, below); every side from 1 to 140 px, square and not,
+      to the bit; 40 themes drawn frame after frame a part of a second to half a day apart
+      (181 frames, to the bit); clocks with a glow or a shadow at six sizes within a level
+      (none apart here). The counter-checks put in 27 faults, and the tests catch them all. A
+      second hand that glides or goes round in a moving frame: Rust says it does not draw it
+      yet. 93 of the app's 99 themes are drawn
       by Rust, 83 of them the same to the bit (almanac with its analog face, in both its
       shapes, is new, the same to the bit; terra's six, the earth, are left)
 - [x] the earth's picture (render/earth.py's picture, subsolar, _basis, _lookup, _lit, _air,
@@ -656,9 +657,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       nothing the tests' globes show, nor 160 more looked for them, the sun all round: the
       glint looked for in a band the sun does not reach, and bands of 64 rows (where the sun
       is below the horizon its glint is far below a level), and the clouds' veil over the
-      glint in float32 (a unit in the last place of the glint at most). The earth widget waits
-      for the computer's own zone (the moment its globe is lit for, and the longitude of the
-      zone): Rust says it does not draw it yet
+      glint in float32 (a unit in the last place of the glint at most). The earth widget:
+      below, after the zones
 - [x] time zones as Python takes them (lp_py::zones): a zone's file read as zoneinfo reads it
       (TZif of every version: its transitions and types, past the last transition its
       footer's POSIX rule; before the first and after the last as CPython's C zoneinfo takes
@@ -685,6 +685,34 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       all (5 of them once cases were added: J59 in a leap year for both, a version 1 file whose
       two blocks part, a rule that changes at new year's seen from 14 hours east, and a fault
       written anew where it changed nothing)
+- [x] the earth widget, standing (the renderer's _draw_earth; earth.view_of, zone_longitude and
+      redraw_s), and clocks and clock faces in another time zone (_time): the globe lit for
+      the frame's moment on the wall clock (its timestamp in the computer's zone, in steps of
+      redraw_s), seen from above your place, else your time zone's longitude a little north of
+      the equator (the computer's offset now, as datetime.now() finds it when asked, 15 degrees
+      an hour), your place marked where the widget asks, in its colours, with its clouds and
+      lights; drawn again where its moment, its view or its look moves, kept where none does.
+      A clock's time in another zone is the frame's time put into it as astimezone puts it
+      (through the computer's zone, its fold where the clocks go back and the gap where they
+      go on, then zoneinfo's fromutc); where no zone has the name, the computer's own time,
+      warned as Python warns. The frame's time carries its fold. In the tests Python's globes
+      are those it makes with the C library's float32 functions (where numpy takes SVML's
+      here, the globes a frame asks for are made so in a process of their own, and the frames
+      drawn again with them; the globe itself is the earth's picture's, above): the frames of
+      60 random themes of globes (57 drawn, all the same to the bit), 24 themes drawn frame
+      after frame a part of a step to a day apart (78 frames, to the bit), globes with a glow
+      or a shadow at four sizes (within a level); with the computer's zone made five others
+      (summer time north and south, half an hour's, 14 hours east, a TZ string), 57 frames of
+      globes and 192 of clocks in 14 zones, at moments about those when the clocks change in
+      either fold and at random, all to the bit, and the warnings as Python's. The
+      counter-checks put in 23 faults (in the zone a clock asks for, its warning, the fold, the
+      globe's turning, size, mark, colours, clouds and lights, its step, its view, the zone's
+      longitude and its bounds, its box and place, the moment it is kept by, lp-check's fold
+      and place), and the tests catch them all. A globe that turns in a moving frame, and
+      on Windows the earth and another place's time (Rust does not know the computer's zone
+      there): Rust says it does not draw them yet. All 99 of the app's themes are drawn by
+      Rust on Linux, 89 of them the same to the bit (Terra's six are new, all to the bit); 93
+      on Windows
 - [ ] the zones on Windows: Python finds them in the tzdata package there, and Rust finds
       them where it is told the package is (LP_TZDATA: the tests tell lp-check where
       Python's is). The Rust app does not bring one yet: without it, no key is a zone there.

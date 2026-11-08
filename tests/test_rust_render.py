@@ -18,10 +18,11 @@ import struct
 import subprocess
 import sys
 import tempfile
-from collections.abc import Iterator
+import time
+from collections.abc import Callable, Iterator
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 import pytest
 from rust_check import image, noise, picture, run
@@ -243,7 +244,7 @@ def _snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
                         images={key: object() for key in images})  # fmt: skip
     given = {"readings": {k: _typed(v) for k, v in readings.items()}, "images": images,
              "now": [now.year, now.month, now.day, now.hour, now.minute, now.second,
-                     now.microsecond]}  # fmt: skip
+                     now.microsecond, now.fold]}  # fmt: skip
     return given, snapshot
 
 
@@ -458,7 +459,12 @@ def _frame_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
 
 
 def _python_frame(
-    folder: Path, snapshot: Snapshot, dither: bool, look: str | None = None, now: float = 1000.0
+    folder: Path,
+    snapshot: Snapshot,
+    dither: bool,
+    look: str | None = None,
+    now: float = 1000.0,
+    place: tuple[float, float] | None = None,
 ) -> dict[str, Any]:
     try:
         theme = load_theme(folder)
@@ -467,12 +473,13 @@ def _python_frame(
     renderer = Renderer(theme, preview=True, dither=dither)
     if look is not None:  # (the look of the symbols and the moon the person chose)
         renderer.symbols = look
+    renderer.place = place  # (your place, for the earth, as the loop sets it)
     lists._RAN.clear()  # (each frame as a process's first: no fan seen running before it)
     try:
         frame, boxes = renderer.render(snapshot, now=now)
     except Exception as error:  # (a frame Python cannot make: what lies over a widget failed)
         return {"failed": f"{type(error).__name__}: {error}"}
-    return {"frame": frame, "boxes": boxes}
+    return {"frame": frame, "boxes": boxes, "warnings": list(renderer.warnings)}
 
 
 def _compare_frames(
@@ -485,14 +492,17 @@ def _compare_frames(
     undefined: tuple[str, ...] = (),
     looks: tuple[str, ...] = (),
     when: Any = None,
+    place_of: Any = None,
+    globes: bool = False,
 ) -> int:
     """Frames of `count` random themes (of what `make` makes) drawn by both, compared to the
     bit, and their boxes; how many were drawn. Rust may leave out those it says are `undefined`:
     where what Python draws is left to the processor. Each in one of `looks` (the person's look
     of the symbols and the moon), where there are any; each at a time `when` tells, where it
-    is given."""
+    is given; your place where `place_of` gives one; Python's globes as it makes them with the
+    C library's float32 functions where they are drawn (`globes`: _exact_globes)."""
     rng = random.Random(seed)
-    cases, expected = [], []
+    cases, asked = [], []
     try:
         i18n.set_language(language)
         for n in range(count):
@@ -506,7 +516,15 @@ def _compare_frames(
                 cases[-1]["symbols"] = look
             now = 1000.0 if when is None else when(rng)
             cases[-1]["now"] = now
-            expected.append(_python_frame(folder, snapshot, dither, look, now))
+            place = None if place_of is None else place_of(rng)
+            if place is not None:
+                cases[-1]["place"] = list(place)
+            asked.append((folder, snapshot, dither, look, now, place))
+
+        def draw() -> list[dict[str, Any]]:
+            return [_python_frame(*frame) for frame in asked]
+
+        expected = _exact_globes(tmp_path, draw) if globes else draw()
     finally:
         i18n.set_language("en")
     [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR),
@@ -901,7 +919,8 @@ def _target(rng: random.Random) -> str:
 
 
 def _moment(now: datetime) -> list[int]:
-    return [now.year, now.month, now.day, now.hour, now.minute, now.second, now.microsecond]
+    return [now.year, now.month, now.day, now.hour, now.minute, now.second, now.microsecond,
+            now.fold]  # fmt: skip
 
 
 def _countdown_expected(text: str, part: str, now: datetime, done: str) -> Any:
@@ -1048,22 +1067,125 @@ def test_frames_of_clocks_in_german_as_python_draws_them(tmp_path: Path) -> None
     assert _compare_frames(tmp_path, 0xDE0C, 120, _clock_or_more, _clock_snapshot, "de") > 90
 
 
-def test_clocks_in_another_time_zone_are_not_drawn_here_yet(tmp_path: Path) -> None:
-    # (another place's time needs the computer's own zone and the other's: Rust says it does
-    # not draw them yet, rather than a clock at the wrong time)
+# (the zones a clock shows: of every kind of offset and summer time, none of the name, a key
+# Python refuses, none)
+CLOCK_ZONES = ["Asia/Tokyo", "UTC", "Europe/Berlin", "America/St_Johns", "Australia/Lord_Howe",
+               "Pacific/Chatham", "Asia/Kolkata", "America/New_York", "Etc/GMT+12",
+               "Pacific/Kiritimati", "America/Santiago", "Nowhere/Else", "../etc", ""]  # fmt: skip
+
+
+def _zoned(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """A clock or a clock face in a time zone (CLOCK_ZONES), or a card."""
+    if rng.random() < 0.15:
+        return _card_or_text(rng, i, size)
+    widget = _clock(rng, i, size) if rng.random() < 0.6 else _analog(rng, i, size)
+    widget["timezone"] = rng.choice(CLOCK_ZONES)
+    return widget
+
+
+def _local_changes(years: range) -> list[tuple[int, int, int]]:
+    """The moments the computer's clocks change in `years` (UTC seconds), as the C library has
+    them, and the offsets before and after."""
+
+    def offset(t: int) -> int:
+        return time.localtime(t).tm_gmtoff
+
+    found = []
+    t = int(datetime(years.start, 1, 1).timestamp())
+    end = int(datetime(years.stop, 1, 1).timestamp())
+    while t < end:
+        if offset(t) != offset(t + 86400):
+            lo, hi = t, t + 86400
+            while hi - lo > 1:
+                mid = (lo + hi) // 2
+                lo, hi = (mid, hi) if offset(mid) == offset(t) else (lo, mid)
+            found.append((hi, offset(lo), offset(hi)))
+        t += 86400
+    return found
+
+
+def _near_changes(changes: list[tuple[int, int, int]]) -> Any:
+    """Snapshots at moments about the computer's clocks' changes (in a gap, twice in a fold,
+    either fold) and at random."""
+
+    def snapshot_of(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
+        if not changes or rng.random() < 0.3:
+            given, snapshot = _clock_snapshot(rng)
+            now = snapshot.now.replace(fold=rng.randrange(2))
+        else:
+            at, before, after = rng.choice(changes)
+            wall = at + rng.choice([before, after]) + rng.choice([-3600, -1, 0, 1, 1800, 3599])
+            now = (datetime(1970, 1, 1) + timedelta(seconds=wall)).replace(
+                microsecond=rng.choice([0, 1, 999999]), fold=rng.randrange(2)
+            )
+        return _clock_moment(now)
+
+    return snapshot_of
+
+
+@pytest.fixture
+def local_zone(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[[str], None]]:
+    """The computer's zone made another (TZ, the C library's tzset), for this process and
+    lp-check's; as it was afterwards."""
+
+    def set_zone(tz: str) -> None:
+        monkeypatch.setenv("TZ", tz)
+        time.tzset()
+
+    yield set_zone
+    monkeypatch.undo()
+    time.tzset()
+
+
+# (the computer's zones: of summer time, north and south, half an hour's, 14 hours east, a TZ
+# string)
+LOCAL_ZONES = ["Europe/Berlin", "Australia/Lord_Howe", "America/St_Johns", "Pacific/Kiritimati",
+               "CET-1CEST,M3.5.0,M10.5.0/3"]  # fmt: skip
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Rust does not know the computer's zone there")
+def test_clocks_in_another_time_zone_as_python_shows_them(tmp_path: Path,
+                                                         local_zone: Any) -> None:  # fmt: skip
+    # (the frame's time in another zone: through the computer's zone (its fold where the clocks
+    # go back, the gap where they go on) into the other, as datetime's astimezone and zoneinfo
+    # take it; the computer's own time where no zone has the name, warned as Python warns)
+    drawn = 0
+    for n, tz in enumerate(LOCAL_ZONES):
+        local_zone(tz)
+        changes = _local_changes(range(2024, 2028))
+        snapshot_of = _near_changes(changes)
+        folder = tmp_path / f"z{n}"
+        folder.mkdir()
+        drawn += _compare_frames(folder, 0x2E0 + n, 40, _zoned, snapshot_of)
+    assert drawn > 150, drawn
+
+
+def _zone_warnings(warnings: list[str]) -> list[str]:
+    return [w for w in warnings if w.startswith("unknown time zone")]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Rust does not know the computer's zone there")
+def test_clocks_of_no_zone_warn_as_python_warns(tmp_path: Path) -> None:
+    # (a zone of no such name, a key Python refuses: the computer's own time, and the warning;
+    # none for a zone that is, nor for none)
     rng = random.Random(0x7E)
-    cases = []
-    for n, zone in enumerate(["Asia/Tokyo", "UTC", "Nowhere/Else", "Europe/Berlin"]):
+    cases, expected = [], []
+    for n, zone in enumerate(["Nowhere/Else", "../etc", "Asia/Tokyo", "Europe/Berlin/", "UTC", ""]):
         folder = tmp_path / f"t{n}"
         data = _frame_theme(rng, folder, _card_or_text)
-        clock = _clock(rng, 99, (64, 48))
-        clock["timezone"] = zone
-        data["widgets"].append(clock)
+        for kind in (_clock, _analog):
+            clock = kind(rng, 90 + len(data["widgets"]), (64, 48))
+            clock["timezone"] = zone
+            data["widgets"].append(clock)
         (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
-        given, _ = _clock_snapshot(rng)
+        given, snapshot = _clock_snapshot(rng)
         cases.append({"folder": str(folder), "snapshot": given, "dither": False})
+        expected.append(_python_frame(folder, snapshot, False))
     [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
-    assert [got.get("unported") for got in ours["frames"]] == ["clocks in a time zone"] * 4
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        assert got["sha256"] == hashlib.sha256(want["frame"].tobytes()).hexdigest(), n
+        assert _zone_warnings(got["warnings"]) == _zone_warnings(want["warnings"]), n
+    assert sum(len(_zone_warnings(w["warnings"])) for w in expected) == 6
 
 
 # (the sides of a clock face's box: none, less than the least face, odd and even, about where
@@ -1074,8 +1196,8 @@ ANALOG_SIDES = [-4, 0, 7, 8, 9, 31, 64, 109, 110, 111, 160, 201, 396, 402]
 def _analog(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
     """A clock face: of every size, square or not, with its face and marks or without them,
     its hands in the theme's colours or their own, its second hand shown or not, ticking,
-    gliding or going round (a still frame shows them alike); another place's time now and then
-    (Rust says it does not draw it yet)."""
+    gliding or going round (a still frame shows them alike); another place's time now and
+    then."""
     w, h = size
     widget: dict[str, Any] = {
         "type": "analog", "id": f"a{i}", "x": rng.randrange(-60, w), "y": rng.randrange(-60, h),
@@ -1130,8 +1252,7 @@ def test_frames_of_analog_clocks_as_python_draws_them(tmp_path: Path) -> None:
     # (the face, its rim and its marks (those between the hours from 110 px), the hour and the
     # minute hands, the second hand and the dot in the middle, drawn three times as large and
     # reduced as the renderer's _canvas and _down make them)
-    drawn = _compare_frames(tmp_path, 0xA7A1, 300, _analog_or_more, _analog_snapshot,
-                            undefined=("clocks in a time zone",))  # fmt: skip
+    drawn = _compare_frames(tmp_path, 0xA7A1, 300, _analog_or_more, _analog_snapshot)
     assert drawn > 200, drawn
 
 
@@ -1167,8 +1288,6 @@ def test_analog_clocks_frame_after_frame_as_python_keeps_them(tmp_path: Path) ->
         for i, (g, w) in enumerate(zip(got["steps"], want, strict=True)):
             if "failed" in w:  # (Python's frame fails: Rust makes none)
                 assert "unported" in g, (n, i, g, w)
-                continue
-            if g.get("unported") == "clocks in a time zone":
                 continue
             assert g["sha256"] == hashlib.sha256(w["frame"].tobytes()).hexdigest(), (n, i)
             assert g["boxes"] == w["boxes"], (n, i)
@@ -1624,7 +1743,7 @@ def _soft_light(folder: Path) -> bool:
                for w in renderer.widgets)  # fmt: skip
 
 
-def test_the_app_s_own_themes_as_python_draws_them() -> None:
+def test_the_app_s_own_themes_as_python_draws_them(tmp_path: Path) -> None:
     # (every theme the app brings, with the demo's readings at a fixed moment: the same to the
     # bit where Rust draws all a frame holds, a pixel now and then a level apart where its light
     # is blurred in floating point, else Rust says what it does not draw yet; how many it draws
@@ -1652,7 +1771,7 @@ def test_the_app_s_own_themes_as_python_draws_them() -> None:
     soft = {f for f in folders if _soft_light(f)}
     cases = [{"folder": str(f), "snapshot": given, "dither": False, "bytes": f in soft}
              for f in folders]  # fmt: skip
-    expected = [_python_frame(f, snapshot, False) for f in folders]
+    expected = _exact_globes(tmp_path, lambda: [_python_frame(f, snapshot, False) for f in folders])
     [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR),
                    "language": "en", "locale": str(i18n.LOCALE_DIR)}])  # fmt: skip
     drawn = []
@@ -1670,7 +1789,8 @@ def test_the_app_s_own_themes_as_python_draws_them() -> None:
         assert got["boxes"] == want["boxes"], folder.name
         drawn.append(folder.name)
     assert len(folders) > 90
-    assert len(drawn) >= 93, drawn
+    # (on Windows Rust does not know the computer's zone: the earth's themes, Terra's, wait)
+    assert len(drawn) >= (93 if sys.platform == "win32" else 99), drawn
 
 
 def _lit(
@@ -3681,6 +3801,199 @@ def test_the_earth_as_python_draws_it(tmp_path: Path) -> None:
     assert most <= 48, (apart, most)
 
 
+T = TypeVar("T")
+
+
+def _exact_globes(tmp_path: Path, draw: Callable[[], T]) -> T:
+    """What `draw` draws, its globes as Python makes them where numpy's float32 functions are
+    the C library's: where numpy takes SVML's here (AVX-512), the globes it asks earth.picture
+    for are made so in a process of their own, and drawn again with them (the globe itself is
+    test_the_earth_as_python_draws_it's)."""
+    from PIL import Image
+
+    from libre_panel.render import earth
+
+    if not _avx512():
+        return draw()
+    real, asked = earth.picture, []
+
+    def key(*args: Any) -> tuple[Any, ...]:
+        size, t, centre, place, air, mark, clouds, lights = args
+        return (max(8, int(size)), t, tuple(centre), None if place is None else tuple(place),
+                tuple(air), tuple(mark), bool(clouds), bool(lights))  # fmt: skip
+
+    def record(*args: Any) -> Image.Image:
+        asked.append(key(*args))
+        return Image.new("RGBA", (asked[-1][0],) * 2)
+
+    earth.picture = record
+    try:
+        draw()
+    finally:
+        earth.picture = real
+    wanted = list(dict.fromkeys(asked))
+    cases = [{"size": k[0], "t": k[1], "centre": list(k[2]),
+              "place": None if k[3] is None else list(k[3]), "air": list(k[4]),
+              "mark": list(k[5]), "clouds": k[6], "lights": k[7]} for k in wanted]  # fmt: skip
+    folder = tmp_path / "globes"
+    folder.mkdir()
+    raws = _earth_pictures(folder, cases, libm=True)
+    made = {k: Image.frombytes("RGBA", (k[0], k[0]), raw)
+            for k, raw in zip(wanted, raws, strict=True)}  # fmt: skip
+    earth.picture = lambda *args: made[key(*args)].copy()
+    try:
+        return draw()
+    finally:
+        earth.picture = real
+
+
+# (a globe's sides: none, the least, odd and even, where libjpeg reads the maps at another
+# scale (47 and 48, 94 and 95, 189 and 190), the almanacs')
+EARTH_SIDES = [-5, 0, 8, 9, 16, 31, 47, 48, 64, 94, 95, 120, 160, 189, 190]
+
+
+def _earth(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """A globe: of every size, anywhere on the panel and over its edges, your place marked or
+    not, its air and your place in any colours, with its clouds and lights or without, turning
+    or not (a still frame shows a turning globe standing)."""
+    w, h = size
+    widget: dict[str, Any] = {"type": "earth", "id": f"e{i}", "x": rng.randrange(-40, w),
+                              "y": rng.randrange(-40, h),
+                              "size": rng.choice(EARTH_SIDES)}  # fmt: skip
+    for key in ("color", "color2"):
+        if rng.random() < 0.6:
+            widget[key] = rng.choice([_colour(rng), "@accent", "#6badff", _hex(rng, True)])
+    for key in ("clouds", "lights", "place"):
+        if rng.random() < 0.4:
+            widget[key] = rng.random() < 0.5
+    if rng.random() < 0.3:
+        widget["spin"] = rng.choice([0, 0.5, 2, -1])
+    if rng.random() < 0.1:
+        widget["opacity"] = rng.choice([0.5, 0.0, 0.25])
+    return widget
+
+
+def _earth_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _earth(rng, i, size) if rng.random() < 0.5 else _card_or_text(rng, i, size)
+
+
+def _earth_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
+    """A moment of the years round now, its fold now and then."""
+    given, snapshot = _clock_snapshot(rng)
+    return _clock_moment(snapshot.now.replace(fold=int(rng.random() < 0.2)))
+
+
+def _place(rng: random.Random) -> tuple[float, float] | None:
+    """Your place: none (the globe faces your time zone's longitude), or anywhere."""
+    return rng.choice([None, None, (48.1, 11.6), (-33.9, 151.2), (89.9, 0.0), (0.0, 180.0),
+                       (rng.uniform(-90, 90), rng.uniform(-180, 180))])  # fmt: skip
+
+
+def test_frames_of_the_earth_as_python_draws_them(tmp_path: Path) -> None:
+    # (the globe lit for the frame's moment on the wall clock, in steps of redraw_s, seen from
+    # above your place or else your time zone's longitude a little north, your place marked
+    # where the widget asks, laid where the widget stands)
+    drawn = _compare_frames(tmp_path, 0xEA28, 60, _earth_or_more, _earth_snapshot,
+                            place_of=_place, globes=True)  # fmt: skip
+    assert drawn > 45, drawn
+
+
+def test_the_earth_frame_after_frame_as_python_keeps_it(tmp_path: Path) -> None:
+    # (one renderer drawing its globes frame after frame: the same moment again, a part of a
+    # step of redraw_s, a step, a minute, an hour, a day later: each globe lit anew where its
+    # moment moved, kept where it did not)
+    rng = random.Random(0xEA29)
+    cases, asked = [], []
+    for n in range(24):
+        folder = tmp_path / f"t{n}"
+        _frame_theme(rng, folder, _earth)
+        now, place = _earth_snapshot(rng)[1].now, _place(rng)
+        steps, given = [], []
+        for _ in range(rng.randrange(2, 6)):
+            readings, snapshot = _clock_moment(now)
+            steps.append((snapshot, 1000.0))
+            given.append({"snapshot": readings, "now": 1000.0})
+            now += timedelta(seconds=rng.choice([0, 0.4, 19.9, 20, 60, 600, 3600, 86400]))
+        cases.append({"folder": str(folder), "dither": False, "steps": given,
+                      **({} if place is None else {"place": list(place)})})  # fmt: skip
+        asked.append((folder, steps, place))
+
+    def draw() -> list[Any]:
+        out: list[Any] = []
+        for folder, steps, place in asked:
+            try:
+                out.append(_python_steps(folder, steps, place))
+            except ThemeError:
+                out.append(None)
+        return out
+
+    expected = _exact_globes(tmp_path, draw)
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR),
+                   "language": "en", "locale": str(i18n.LOCALE_DIR)}])  # fmt: skip
+    drawn = 0
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        if want is None:  # (a theme Python does not read: nor does Rust)
+            assert "error" in got, n
+            continue
+        for i, (g, w) in enumerate(zip(got["steps"], want, strict=True)):
+            if "failed" in w:  # (Python's frame fails: Rust makes none)
+                assert "unported" in g, (n, i, g, w)
+                continue
+            assert g["sha256"] == hashlib.sha256(w["frame"].tobytes()).hexdigest(), (n, i)
+            assert g["boxes"] == w["boxes"], (n, i)
+            drawn += 1
+    assert drawn > 60, drawn
+
+
+def test_the_earth_with_glow_and_shadow_within_a_level(tmp_path: Path) -> None:
+    # (a globe casts its light as a card does: blurred in floating point, now and then a pixel
+    # a level apart)
+    import numpy as np
+
+    looks = [{"glow": 0.15}, {"shadow": "#000000a0", "shadow_blur": 4, "opacity": 0.8},
+             {"glow": 1, "glow_radius": 6, "place": False}]  # fmt: skip
+    rng = random.Random(0xEA2A)
+    cases, asked = [], []
+    for n, (look, side) in enumerate((lk, sd) for lk in looks for sd in (16, 48, 95, 160)):
+        folder = tmp_path / f"t{n}"
+        folder.mkdir()
+        widgets = [{"type": "earth", "id": "e0", "x": 10, "y": 8, "size": side, **look}]
+        data = {"format": THEME_FORMAT, "name": "globes",
+                "display": {"width": side + 40, "height": side + 30},
+                "palette": {name: "#808080" for name in PALETTE},
+                "background": {"color": "#101418"}, "widgets": widgets}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        given, snapshot = _earth_snapshot(rng)
+        place = _place(rng)
+        cases.append({"folder": str(folder), "snapshot": given, "dither": False, "bytes": True,
+                      **({} if place is None else {"place": list(place)})})  # fmt: skip
+        asked.append((folder, snapshot, False, None, 1000.0, place))
+    expected = _exact_globes(tmp_path, lambda: [_python_frame(*a) for a in asked])
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    for case, got, want in zip(cases, ours["frames"], expected, strict=True):
+        apart = np.abs(np.asarray(picture(got["frame"]), int) - np.asarray(want["frame"], int))
+        assert apart.max() <= 1, case["folder"]
+        assert got["boxes"] == want["boxes"], case["folder"]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Rust does not know the computer's zone there")
+def test_the_earth_in_the_computer_s_zone_as_python_draws_it(tmp_path: Path,
+                                                             local_zone: Any) -> None:  # fmt: skip
+    # (the moment a globe is lit for, the frame's time as a timestamp of the computer's zone,
+    # its fold where the clocks go back; without your place, the globe faces your time zone's
+    # longitude: its offset now, 15 degrees an hour)
+    drawn = 0
+    for n, tz in enumerate(LOCAL_ZONES):
+        local_zone(tz)
+        changes = _local_changes(range(2024, 2028))
+        snapshot_of = _near_changes(changes)
+        folder = tmp_path / f"z{n}"
+        folder.mkdir()
+        drawn += _compare_frames(folder, 0xEA30 + n, 12, _earth_or_more, snapshot_of,
+                                 place_of=lambda rng: None, globes=True)  # fmt: skip
+    assert drawn > 45, drawn
+
+
 # -- downloads: what loads, its progress, its speed ---------------------------------------------
 
 # numbers a download's state may carry, and what is none: an int past a float's range (Python
@@ -4312,9 +4625,11 @@ def test_frames_of_card_slots_as_python_draws_them(tmp_path: Path) -> None:
     assert chosen > 180
 
 
-def _python_steps(folder: Path, steps: list[tuple[Snapshot, float]]) -> list[dict[str, Any]]:
-    """Frames one after another by one renderer, each at its time."""
+def _python_steps(folder: Path, steps: list[tuple[Snapshot, float]],
+                  place: tuple[float, float] | None = None) -> list[dict[str, Any]]:  # fmt: skip
+    """Frames one after another by one renderer, each at its time (your place `place`)."""
     renderer = Renderer(load_theme(folder), preview=True)
+    renderer.place = place
     lists._RAN.clear()
     out: list[dict[str, Any]] = []
     for snapshot, now in steps:
