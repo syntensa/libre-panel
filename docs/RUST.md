@@ -543,8 +543,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       tanh's intervals); the Generator's draws of eleven seeds, the moons of every size from a
       pixel, phase, colour and night (234 pictures), the frames of 160 random themes of moons in
       their own look or the one the person chose, and of 60 of moon and sun modules: the same to
-      the bit. A moon of more than 4096 px a side, and one whose halo breathes where the panel
-      moves, Rust says it does not draw yet. The counter-checks put in 120 faults, and the tests
+      the bit. A moon of more than 4096 px a side Rust says it does not draw yet (where the
+      panel moves, its halo breathes: below). The counter-checks put in 120 faults, and the tests
       catch 110; the other 10 change nothing in any picture the tests make (two in numpy's tanh,
       its first step unfused and 1 from 2^127 on, which still give numpy's tanh on every
       float32; the full moon drawn waning, the same polygon; the halo's level among what keeps a
@@ -888,6 +888,24 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       faded in its alpha alone, which a frame adds without it (on a clear ground onto a card
       that already covers it); light cut or faded in its colour, which no part of a card is; a
       line's strip two rows narrower, whose rows beyond its halo hold no light
+- [x] moons whose halo breathes (the renderer's _draw_moon and _moon_piece in a moving frame,
+      render/moon.py's halo_level and picture at a time): the halo of the moon as it looks
+      swells and settles over seven seconds, its strength at the frame's time in steps of a
+      tenth of a second (Python's round: at a step's very half the even one), the picture made
+      anew only where that strength changed, a few times a breath; the classic moon stands. The
+      frame moves on while a moon breathes. The tests: 70 random themes of moons in either look
+      and of moon modules frame after frame at a frame rate or none, the frames at any
+      distance, back in time too, over a breath and more, the phase new now and then: 598
+      frames to the bit, 440 of them on the way; moons full, at 0.6 and at 0.3 and a classic
+      one in frames at a step's very half, where the strengths on either side of it are apart,
+      back in time and long after, at two frame rates: 20 frames to the bit; the app's themes
+      in moving frames: 78 of the 99 drawn by Rust all along (72 before; 77 on Windows). The
+      counter-checks put in 17 faults (the steps a second, how the time is rounded to them,
+      steps by the second; moving; the halo's time the step itself, half a step on, the
+      frame's own; what keeps the picture: the phase alone, the still halo's strength; the
+      picture's halo still; a moon that breathes in a preview only, or on a panel only; the
+      breath's start and length), and the tests catch all of them (the one of a preview by the
+      still frames', whose moons would breathe)
 - [ ] pictures as Pillow fails at them: lp-decode's errors as Python's exceptions, so that
       where Python catches an OSError and goes on (a picture cut short, a file of no picture)
       Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,

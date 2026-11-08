@@ -31,6 +31,8 @@ const SS: usize = 2;
 pub const BREATH: f64 = 7.0;
 /// the strengths a halo is made in
 pub const HALO_LEVELS: i64 = 48;
+/// how often a moving moon's halo changes, per second (the renderer's MOON_STEP)
+pub const MOON_STEP: f64 = 10.0;
 /// px of the largest moon drawn here (lit at twice its size)
 pub const LARGEST: i64 = 4096;
 
@@ -669,8 +671,9 @@ impl Renderer {
         ))
     }
 
-    /// _moon_piece: the moon as it looks (render/moon.py's picture), still.
-    pub(crate) fn moon_piece(&self, w: &Dict, phase: f64) -> Result<Piece> {
+    /// _moon_piece: the moon as it looks at `phase` (render/moon.py's picture), its halo as it
+    /// breathes at `t` (seconds; None: still).
+    pub(crate) fn moon_piece(&self, w: &Dict, phase: f64, t: Option<f64>) -> Result<Piece> {
         let size = widget::int(w, "size", 64).max(8);
         let night = if widget::truthy(w, "color2") {
             self.colour_of(w, "color2")?
@@ -685,7 +688,7 @@ impl Renderer {
         };
         let rgb = |c: Rgba| [c[0], c[1], c[2]].map(|v| v.clamp(0, 255) as u8);
         let mirror = widget::truthy(w, "mirror");
-        let image = picture(size as usize, phase, rgb(lit), night.map(rgb), mirror, None);
+        let image = picture(size as usize, phase, rgb(lit), night.map(rgb), mirror, t);
         Ok(Piece::new(
             image,
             widget::int(w, "x", 0),

@@ -6390,6 +6390,79 @@ def test_fans_on_one_beat_through_pauses_and_back_in_time_as_python_turns_them(
     assert drawn == 3 * len(times) and moving > 150, (drawn, moving)
 
 
+# (how far apart frames of a breathing moon come: as other moving frames, and over a breath)
+BREATH_STEPS = [*MOVING_STEPS, 0.05, 0.149, 0.15, 0.3, 0.7, 1.3, 3.5, 7.0]
+
+
+def _breathing_moon(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _moon(rng, i, size) if rng.random() < 0.8 else _card_or_text(rng, i, size)
+
+
+def test_moons_whose_halo_breathes_as_python_draws_them(tmp_path: Path) -> None:
+    # (one renderer drawing its moons frame after frame as the panels' loop does: the halo of
+    # the moon as it looks breathing slowly, its strength at the frame's time in steps of a
+    # tenth of a second (a step's edges too), the picture made anew where that changed, the
+    # classic moon standing; at a frame rate or none, the frames at any distance, back in time
+    # too, over a breath and more, the phase new now and then; moon modules the same)
+    rng = random.Random(0x300E)
+    cases, expected = [], []
+    for n in range(70):
+        folder = tmp_path / f"t{n}"
+        if n < 55:
+            _frame_theme(rng, folder, _breathing_moon)
+            given, snapshot = _moon_snapshot(rng)
+        else:
+            import dataclasses
+
+            _moon_module_theme(rng, folder)
+            snapshot = dataclasses.replace(_demo(), history={})
+            given = _snapshot_given(snapshot)
+        now, fps = rng.choice([rng.uniform(1000, 2000), 1000.05, 1000.25]), rng.choice([0, 25, 50])
+        steps, frames = [], []
+        for _ in range(rng.randrange(2, 16)):
+            steps.append((snapshot, now))
+            frames.append({"snapshot": given, "now": now})
+            now += rng.choice(BREATH_STEPS)
+            if n < 55 and rng.random() < 0.15:
+                given, snapshot = _moon_snapshot(rng)
+        cases.append({"folder": str(folder), "dither": False, "animate": True, "fps": fps,
+                      "steps": frames})  # fmt: skip
+        expected.append(_python_moving(folder, steps, fps))
+    drawn, moving = _compare_moving(cases, expected)
+    assert drawn > 550 and moving > 400, (drawn, moving)
+
+
+def test_moons_at_the_edges_of_their_halo_s_steps_as_python_draws_them(tmp_path: Path) -> None:
+    # (moons full, at 0.6 and at 0.3, and a classic one, in frames at the very half of a step
+    # of the halo's time, where Python's round takes the even step: the halo's strength on
+    # either side of it apart; back in time to a strength drawn before, and long after)
+    folder = tmp_path / "halves"
+    folder.mkdir()
+    moons = [{"type": "moon", "id": "a", "x": 0, "y": 0, "size": 48, "sensor": "moon.phase",
+              "color": "#f2efe6"},
+             {"type": "moon", "id": "b", "x": 50, "y": 0, "size": 48, "sensor": "other.phase",
+              "color": "@accent", "mirror": True},
+             {"type": "moon", "id": "c", "x": 100, "y": 0, "size": 48, "sensor": "third.phase",
+              "color": "#e8d8a0", "color2": "#2b3242"},
+             {"type": "moon", "id": "d", "x": 150, "y": 0, "size": 40, "sensor": "moon.phase",
+              "color": "#f2efe6", "pack": "classic"}]  # fmt: skip
+    theme = {"format": THEME_FORMAT, "name": "halves", "display": {"width": 200, "height": 50},
+             "palette": {name: "#808080" for name in PALETTE},
+             "background": {"color": "#101418"}, "widgets": moons}  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+    readings = {key: Reading(key, phase) for key, phase in
+                (("moon.phase", 0.5), ("other.phase", 0.6), ("third.phase", 0.3))}  # fmt: skip
+    times = [1000.25, 1000.55, 1000.95, 1001.15, 1003.15, 1005.25, 1005.85, 1006.65, 1000.25,
+             2000.05]  # fmt: skip
+    steps = [(Snapshot(readings=readings), now) for now in times]
+    given = [{"snapshot": _moving_given(readings), "now": now} for now in times]
+    cases = [{"folder": str(folder), "dither": False, "animate": True, "fps": fps,
+              "steps": given} for fps in (0, 50)]  # fmt: skip
+    expected = [_python_moving(folder, steps, fps) for fps in (0, 50)]
+    drawn, moving = _compare_moving(cases, expected)
+    assert drawn == moving == 2 * len(times), (drawn, moving)
+
+
 def test_the_app_s_own_themes_in_moving_frames_as_python_draws_them(tmp_path: Path) -> None:
     # (every theme the app brings, drawn as the panels' loop draws it: frames a 25th of a second
     # apart and more, its readings new between them, at 50 fps; the same to the bit where Rust
@@ -6450,4 +6523,4 @@ def test_the_app_s_own_themes_in_moving_frames_as_python_draws_them(tmp_path: Pa
             assert g["moving"] == w["moving"], (folder.name, i)
         drawn.append(folder.name)
     # (on Windows Rust does not know the computer's zone: Terra's standing globe is left out)
-    assert len(drawn) >= (71 if sys.platform == "win32" else 72), drawn
+    assert len(drawn) >= (77 if sys.platform == "win32" else 78), drawn

@@ -1194,13 +1194,20 @@ impl Renderer {
                 }
                 if self.pack(&w) == "classic" {
                     self.cached(&w, Value::Float(phase), |r| r.moon_classic(&w, phase))
-                } else if self.options.animate {
-                    // (its halo breathes where the panel moves: a moving frame)
-                    return Drawn::Unported("moons whose halo breathes".into());
                 } else {
-                    let level = Value::int(moon::halo_level(phase, None));
+                    // (its halo breathes where the panel moves, a step a tenth of a second: the
+                    // picture made anew only when its strength changed, a few times a breath)
+                    let step = self
+                        .options
+                        .animate
+                        .then(|| lp_py::round(self.at * moon::MOON_STEP));
+                    if step.is_some() {
+                        self.moving = true;
+                    }
+                    let t = step.map(|step| step / moon::MOON_STEP);
+                    let level = Value::int(moon::halo_level(phase, t));
                     let content = Value::List(vec![Value::Float(phase), level]);
-                    self.cached(&w, content, |r| r.moon_piece(&w, phase))
+                    self.cached(&w, content, |r| r.moon_piece(&w, phase, t))
                 }
             }
             "fan" => {
