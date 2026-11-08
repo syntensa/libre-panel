@@ -440,12 +440,51 @@ fn font_size(w: &Dict) -> f64 {
     widget::int(w, "font_size", 18).max(6) as f64
 }
 
+/// What of a list _list_piece draws: all of it, its text alone (names, numbers), or its levels
+/// alone (bars and tiles: they glide, the text stays).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ListPart {
+    All,
+    Text,
+    Levels,
+}
+
+/// _joined: two pieces of a widget as one, `above` laid on `below` (the place of both).
+pub(crate) fn joined(below: &Piece, above: &Piece) -> Result<Piece> {
+    let (bw, bh) = (below.layer.width() as i64, below.layer.height() as i64);
+    let (aw, ah) = (above.layer.width() as i64, above.layer.height() as i64);
+    let (x0, y0) = (below.x.min(above.x), below.y.min(above.y));
+    let (x1, y1) = (
+        (below.x + bw).max(above.x + aw),
+        (below.y + bh).max(above.y + ah),
+    );
+    let mut layer = if (x0, y0, x1 - x0, y1 - y0) == (below.x, below.y, bw, bh) {
+        below.layer.clone()
+    } else {
+        let mut layer = Image::blank(Mode::RGBA, (x1 - x0) as usize, (y1 - y0) as usize);
+        layer.alpha_composite_at(&below.layer, (below.x - x0, below.y - y0), (0, 0, bw, bh))?;
+        layer
+    };
+    layer.alpha_composite_at(&above.layer, (above.x - x0, above.y - y0), (0, 0, aw, ah))?;
+    let mut piece = below.clone();
+    (piece.layer, piece.x, piece.y) = (layer, x0, y0);
+    Ok(piece)
+}
+
 impl Renderer {
-    /// _draw_list in a still frame: of the `items` picked, those the list shows, their rows (the
-    /// bars at their readings) by its colour `rules` (sorted), and the top of its range (what a
-    /// fan's ring is a share of).
+    /// _list_piece of `part`: the list's text alone or its levels alone (or all of it).
+    pub(crate) fn list_part_piece(&self, w: &Dict, rows: &[Row], part: ListPart) -> Result<Piece> {
+        self.list_part.set(part);
+        let made = self.list_piece(w, rows);
+        self.list_part.set(ListPart::All);
+        made
+    }
+
+    /// _draw_list: of the `items` picked, those the list shows, their rows (the bars at their
+    /// readings, in a moving frame smooth ones on their glide, each with its sensor's) by its
+    /// colour `rules` (sorted), and the top of its range (what a fan's ring is a share of).
     pub(crate) fn list_rows(
-        &self,
+        &mut self,
         w: &Dict,
         mut items: Vec<Item>,
         rules: &[(Value, String)],
@@ -462,6 +501,10 @@ impl Renderer {
                 .fold(lo + 1e-9, py_max);
         }
         let format = widget::text(w, "format");
+        // (the bars glide to a new reading, with the other bars and rings of its sensor)
+        let glide = widget::truthy(w, "smooth")
+            && widget::truthy(w, "levels")
+            && widget::text(w, "style") != "fans";
         let mut rows = Vec::new();
         for item in &items {
             let reading = &item.reading;
@@ -490,7 +533,17 @@ impl Renderer {
                 };
             }
             let number = item.number();
-            let frac = bar::fraction(number, lo, hi, widget::text(w, "scale"));
+            let mut shown = number;
+            if glide && number.is_some() {
+                let mut spring = Dict::new();
+                spring.insert("type".into(), "list".into());
+                spring.insert("sensor".into(), item.key.clone().into());
+                spring.insert("smooth".into(), Value::Bool(true));
+                spring.insert("min".into(), Value::Float(lo));
+                spring.insert("max".into(), Value::Float(hi));
+                shown = self.eased(&spring, number);
+            }
+            let frac = bar::fraction(shown, lo, hi, widget::text(w, "scale"));
             rows.push(Row {
                 name: item.name.clone(),
                 detail,
@@ -669,7 +722,7 @@ impl Renderer {
         (align, width): (&str, f64),
         label: bool,
     ) -> Result<()> {
-        if text.is_empty() {
+        if text.is_empty() || self.list_part.get() == ListPart::Levels {
             return Ok(());
         }
         let size = round_int(size).max(6);
@@ -713,7 +766,7 @@ impl Renderer {
             round_int(bounds.2),
             round_int(bounds.3),
         );
-        if bw < 2 || bh < 2 {
+        if bw < 2 || bh < 2 || self.list_part.get() == ListPart::Text {
             return Ok(());
         }
         let steps = (if direction == "up" || direction == "down" {
@@ -1056,6 +1109,9 @@ impl Renderer {
         frac: f64,
         rule: Option<&str>,
     ) -> Result<()> {
+        if self.list_part.get() == ListPart::Text {
+            return Ok(()); // (a tile is a level: not in the text alone)
+        }
         let s = SUPERSAMPLE as i64;
         let track = self.colour_of(w, "background")?;
         let (tw, th) = (cw.saturating_mul(s).max(1), ch.saturating_mul(s).max(1));

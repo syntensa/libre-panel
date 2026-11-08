@@ -467,8 +467,7 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       under no key) at every third width from 8 to 400 px, low and tall, and of no width or
       height, to the bit; three lists casting a glow or a shadow, small type among them,
       within a level (their light blurred in floating point, as a card's: 2 pixels of 17.2
-      million a level apart). Lists whose bars glide in a moving frame: Rust says it does not
-      draw them yet
+      million a level apart). Lists whose bars glide in a moving frame: below
 - [x] fans in a still frame (lists of fans: the renderer's _list_fan_grid, _list_fan_places,
       _list_fan_texts and _list_turning; render/fan.py's Rotor.settle, rotor_layers,
       _coloured, disc_image, blades_image and ring_image): each fan beside its name and
@@ -810,6 +809,27 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       nearest, which is as it is; a digits' time Rust takes where a clock has none, which the
       theme always gives; the layouts' places compared beside their sizes, which on a whole
       pixel are the same where the sizes are)
+- [x] lists whose bars glide (the renderer's _draw_list in a moving frame, with _list_piece's
+      parts and _joined): each bar glides to its reading on its item's own spring, with the
+      bars and rings of its sensor, and stands once within a five-hundredth of its span (of a
+      list without a range of its own, the span its largest value gives); the colour rules go
+      by the reading itself. The names and numbers are made once and kept while they read the
+      same, the bars and tiles anew while they move, the text laid over them. A list of smooth
+      false, without levels or of fans does not glide. The tests: 60 random themes of lists
+      (rows, bars, columns, tiles; the volume and cores among their items; smooth or not, with
+      levels or not) frame after frame at a frame rate or none, 344 frames to the bit, 66 of
+      them on the way; lists whose largest value fills their bars and one whose range is
+      upside down, frames a 50th apart as the readings jump there and back, 240 frames to the
+      bit. The counter-checks put in 13 faults (the bars' glide, its spring and its span,
+      gliding without levels, the rules by the gliding number, the text and the levels apart,
+      kept apart, joined, in a still frame too), and the tests catch 12 of them, 1 once a case
+      was added (the span of a list whose largest value fills its bars); the other changes
+      nothing that is drawn (the levels left out where the two parts are not laid alike, which
+      they always are: both the list's box with its margin, under the same effects). Where a
+      list's text lies on none of its bars, Python lays the two apart on the frame, which
+      gives the pixels the join gives; turned, it turns them apart (Rust says it does not draw
+      turned widgets yet: it will have to turn them so too). Lists whose fans turn in a moving
+      frame: Rust says it does not draw them yet
 - [ ] pictures as Pillow fails at them: lp-decode's errors as Python's exceptions, so that
       where Python catches an OSError and goes on (a picture cut short, a file of no picture)
       Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,

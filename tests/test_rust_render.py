@@ -5963,6 +5963,99 @@ def test_a_rolling_clock_s_texts_fitted_otherwise_or_over_midnight_as_python_sho
     assert (drawn, moving) == (3, 2 if sys.platform == "win32" else 1), (drawn, moving)
 
 
+def _gliding_list(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """A list whose bars glide to each new reading (smooth, as lists are unless told not to;
+    the theme's glide, or for the volume its own), or not; rows, bars, columns or tiles."""
+    data = _list(rng, i, size)
+    data["items"] += rng.choice(["", "\naudio.volume = Vol", "\ncore.*"])
+    if rng.random() < 0.25:
+        data["smooth"] = rng.random() < 0.5
+    if rng.random() < 0.2:
+        data["levels"] = False
+    return data
+
+
+def _gliding_list_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _gliding_list(rng, i, size) if rng.random() < 0.8 else _card_or_text(rng, i, size)
+
+
+def _list_readings_after(rng: random.Random, readings: dict[str, Reading]) -> dict[str, Reading]:
+    """The readings of the next frame: as before, or now and then new numbers for some."""
+    out = dict(readings)
+    if rng.random() < 0.5:
+        for key, reading in readings.items():
+            number = reading.value
+            if isinstance(number, (int, float)) and not isinstance(number, bool):
+                if rng.random() < 0.6:
+                    value = rng.choice([number * rng.uniform(0.2, 1.8), rng.uniform(0, 100), 0])
+                    out[key] = Reading(key, value, reading.unit, reading.label, reading.origin)
+    if rng.random() < 0.3:
+        out["audio.volume"] = Reading("audio.volume", rng.choice([10, 55, 90, 33.3]), "%")
+    return out
+
+
+def test_lists_whose_bars_glide_as_python_draws_them(tmp_path: Path) -> None:
+    # (one renderer drawing its lists frame after frame: each bar on its way to its reading with
+    # the bars and rings of its sensor, the volume's a third of a second behind, in steps of what
+    # can be seen; drawn apart from the names and numbers, which stay as they are, and laid
+    # under them; the tiles of cells too)
+    rng = random.Random(0x1157)
+    cases, expected = [], []
+    for n in range(60):
+        folder = tmp_path / f"t{n}"
+        data = _frame_theme(rng, folder, _gliding_list_or_more)
+        data["animation"] = {"smoothing_ms": rng.choice([0, 100, 400, 400, 1000])}
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        _, first = _list_snapshot(rng)
+        readings, now, fps = dict(first.readings), rng.uniform(1000, 2000), rng.choice([0, 25, 50])
+        steps, given = [], []
+        for _ in range(rng.randrange(2, 10)):
+            steps.append((Snapshot(readings=readings, now=first.now), now))
+            given.append({"snapshot": {
+                "readings": {k: {"v": _typed(r.value), "unit": r.unit, "label": r.label,
+                                 "origin": r.origin} for k, r in readings.items()},
+                "images": {}, "now": _moment(first.now)}, "now": now})  # fmt: skip
+            now += rng.choice(MOVING_STEPS)
+            readings = _list_readings_after(rng, readings)
+        cases.append({"folder": str(folder), "dither": False, "animate": True, "fps": fps,
+                      "steps": given})  # fmt: skip
+        expected.append(_python_moving(folder, steps, fps))
+    drawn, moving = _compare_moving(cases, expected)
+    assert drawn > 250 and moving > 60, (drawn, moving)
+
+
+def test_lists_whose_largest_value_fills_their_bars_glide_as_python_draws_them(
+    tmp_path: Path,
+) -> None:
+    # (lists without a range of their own: the largest value shown fills the bar, and a bar
+    # stands once it is within a five-hundredth of that span; one whose range is upside down,
+    # its bars empty below its least, the same; frames a 50th of a second apart as the readings
+    # jump there and back)
+    cases, expected = [], []
+    for n, (lo, hi) in enumerate([(0, 0), (50, 10)]):
+        folder = tmp_path / f"t{n}"
+        folder.mkdir()
+        widget = {"type": "list", "id": "l", "x": 2, "y": 2, "w": 100, "h": 28,
+                  "items": "core.*", "style": "bars", "font_size": 9, "min": lo, "max": hi,
+                  "color": "#40c0ff", "muted": "#203040"}  # fmt: skip
+        theme = {"format": THEME_FORMAT, "name": "largest", "display": {"width": 104, "height": 32},
+                 "palette": {name: "#808080" for name in PALETTE},
+                 "background": {"color": "#101418"}, "animation": {"smoothing_ms": 400},
+                 "widgets": [widget]}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+        steps, given = [], []
+        for k in range(120):
+            values = [12.0, 30.0, 47.0] if k < 3 or k >= 60 else [40.0, 8.0, 33.0]
+            readings = {f"core.{i}": Reading(f"core.{i}", v, "%", f"Core {i}")
+                        for i, v in enumerate(values, 1)}  # fmt: skip
+            steps.append((Snapshot(readings=readings), 400.0 + k / 50))
+            given.append({"snapshot": _moving_given(readings), "now": 400.0 + k / 50})
+        cases.append({"folder": str(folder), "dither": False, "animate": True, "steps": given})
+        expected.append(_python_moving(folder, steps))
+    drawn, moving = _compare_moving(cases, expected)
+    assert drawn == 240 and moving > 180, (drawn, moving)
+
+
 def test_the_app_s_own_themes_in_moving_frames_as_python_draws_them(tmp_path: Path) -> None:
     # (every theme the app brings, drawn as the panels' loop draws it: frames a 25th of a second
     # apart and more, its readings new between them, at 50 fps; the same to the bit where Rust

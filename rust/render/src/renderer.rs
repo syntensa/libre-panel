@@ -155,6 +155,8 @@ pub struct Renderer {
     pub(crate) began: HashMap<(String, String), f64>,
     /// each slideshow's pictures, and when its folders were read (_slide_lists)
     pub(crate) slide_lists: HashMap<String, (std::time::Instant, Vec<String>)>,
+    /// what of a list is drawn now (_list_piece's part): all of it, its text or its levels
+    pub(crate) list_part: std::cell::Cell<list::ListPart>,
 }
 
 /// VOLUME_GLIDE_MS: the volume's bars and rings, 95 % of a step after about a third of a
@@ -231,6 +233,7 @@ impl Renderer {
             moves: HashMap::new(),
             began: HashMap::new(),
             slide_lists: HashMap::new(),
+            list_part: std::cell::Cell::new(list::ListPart::All),
         };
         renderer.slots = renderer.make_slots()?;
         renderer.background = renderer.load_background()?;
@@ -1068,8 +1071,8 @@ impl Renderer {
                 // frame, and stand in a still one)
                 let fans = widget::text(&w, "style") == "fans";
                 let glide = widget::truthy(&w, "smooth") && widget::truthy(&w, "levels") && !fans;
-                if self.options.animate && (glide || fans) {
-                    return Drawn::Unported("lists whose bars glide or whose fans turn".into());
+                if self.options.animate && fans {
+                    return Drawn::Unported("lists whose fans turn".into());
                 }
                 if !["min", "max"].iter().all(|k| widget::exact(&w, k)) {
                     return Drawn::Unported("numbers a float does not hold as they are".into());
@@ -1098,8 +1101,26 @@ impl Renderer {
                         }
                         other => other,
                     }
-                } else {
+                } else if !(glide && self.options.animate) {
                     self.cached(&w, list::rows_key(&rows), |r| r.list_piece(&w, &rows))
+                } else {
+                    // gliding bars: drawn anew while they move, on their own; the text stays as
+                    // it is, laid over them (where it meets no bar, Python lays it over the
+                    // frame apart from them: the same pixels)
+                    let text = self.cached(&w, list::texts_key(&rows), |r| {
+                        r.list_part_piece(&w, &rows, list::ListPart::Text)
+                    });
+                    let text = match text {
+                        Ok(text) => text,
+                        Err(e) => return Drawn::Failed(e),
+                    };
+                    let mut apart = w.clone();
+                    let id = format!("{}\0levels", widget::text(&w, "id"));
+                    apart.insert("id".into(), id.into());
+                    self.cached(&apart, list::rows_key(&rows), |r| {
+                        r.list_part_piece(&w, &rows, list::ListPart::Levels)
+                    })
+                    .and_then(|levels| Ok(Rc::new(list::joined(&levels, &text)?)))
                 }
             }
             "symbol" => {
