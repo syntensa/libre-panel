@@ -1374,11 +1374,23 @@ def test_a_calendar_s_dot_as_python_rounds_its_side(tmp_path: Path) -> None:
 THEMES = Path(__file__).parent.parent / "src" / "libre_panel" / "themes"
 
 
+def _soft_light(folder: Path) -> bool:
+    """Whether a theme's frame holds light blurred in floating point (a glow, a shadow, the lit
+    finish's): numpy multiplies by the blur's matrices in float32, and a processor's library
+    adds them up in its own order."""
+    renderer = Renderer(load_theme(folder), preview=True)
+    return any(w.get("glow") or w.get("shadow") or w.get("finish") == "lit"
+               for w in renderer.widgets)  # fmt: skip
+
+
 def test_the_app_s_own_themes_as_python_draws_them() -> None:
     # (every theme the app brings, with the demo's readings at a fixed moment: the same to the
-    # bit where Rust draws all a frame holds, else Rust says what it does not draw yet; how
-    # many it draws is the measure of what is done)
+    # bit where Rust draws all a frame holds, a pixel now and then a level apart where its light
+    # is blurred in floating point, else Rust says what it does not draw yet; how many it draws
+    # is the measure of what is done)
     import dataclasses
+
+    import numpy as np
 
     from libre_panel.sensors.demo import demo_snapshot
 
@@ -1389,7 +1401,9 @@ def test_the_app_s_own_themes_as_python_draws_them() -> None:
     given = {"readings": readings, "images": {k: image(v) for k, v in snapshot.images.items()},
              "now": _moment(snapshot.now)}  # fmt: skip
     folders = sorted(p.parent for p in THEMES.glob("*/theme.json"))
-    cases = [{"folder": str(f), "snapshot": given, "dither": False} for f in folders]
+    soft = {f for f in folders if _soft_light(f)}
+    cases = [{"folder": str(f), "snapshot": given, "dither": False, "bytes": f in soft}
+             for f in folders]  # fmt: skip
     expected = [_python_frame(f, snapshot, False) for f in folders]
     [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR),
                    "language": "en", "locale": str(i18n.LOCALE_DIR)}])  # fmt: skip
@@ -1397,12 +1411,18 @@ def test_the_app_s_own_themes_as_python_draws_them() -> None:
     for folder, got, want in zip(folders, ours["frames"], expected, strict=True):
         if "unported" in got:
             continue
-        assert "frame" in want and "sha256" in got, (folder.name, got, want.get("error"))
-        assert got["sha256"] == hashlib.sha256(want["frame"].tobytes()).hexdigest(), folder.name
+        assert "frame" in want, (folder.name, got, want.get("error"))
+        if folder in soft:  # (its light blurred in floating point: within a level)
+            apart = np.abs(np.asarray(picture(got["frame"]), int) - np.asarray(want["frame"], int))
+            assert apart.max() <= 1, folder.name
+            assert (apart.max(axis=2) > 0).sum() <= apart.shape[0] * apart.shape[1] // 10000
+        else:
+            sha = hashlib.sha256(want["frame"].tobytes()).hexdigest()
+            assert got.get("sha256") == sha, folder.name
         assert got["boxes"] == want["boxes"], folder.name
         drawn.append(folder.name)
     assert len(folders) > 90
-    assert len(drawn) >= 32, drawn
+    assert len(drawn) >= 41, drawn
 
 
 def _lit(
@@ -1913,3 +1933,75 @@ def test_frames_of_lit_gauges_within_a_level(tmp_path: Path) -> None:
         drawn += 1
     assert drawn > 90
     assert differ <= total // 10000
+
+
+LIVE_PICTURES = ["media.cover", "game.logo", "media.app_icon"]
+
+
+def _image(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """A picture a source or a service has (an album cover, a game's logo, the playing app's
+    icon), fitted into its box (stretched, contained where it says, covering it), blurred into a
+    backdrop of its colours, its corners rounded; one the snapshot lacks, a widget with none,
+    now and then one of no size or with a slideshow of blank lines."""
+    w, h = size
+    image: dict[str, Any] = {"type": "image", "id": f"m{i}", "x": rng.randrange(-20, w),
+                             "y": rng.randrange(-20, h), "w": rng.choice([0, 1, 7, 40, 64, 120]),
+                             "h": rng.choice([0, 1, 9, 40, 64, 90]),
+                             "src": rng.choice(["@media.cover", "@game.logo", "@media.app_icon",
+                                                "@nothing", ""]),
+                             "fit": rng.choice(["stretch", "contain", "cover"])}  # fmt: skip
+    if rng.random() < 0.4:
+        image["align"] = rng.choice(["left", "center", "right"])
+    if rng.random() < 0.35:
+        image["blur"] = rng.choice([1, 4, 9, 20, 40])
+    if rng.random() < 0.35:
+        image["radius"] = rng.choice([1, 4, 12, 50, 400])
+    if rng.random() < 0.2:
+        image["opacity"] = rng.choice([0.5, 0.0])
+    if rng.random() < 0.1:  # (a slideshow of no lines: none)
+        image["slides"] = rng.choice(["", "\n", "  \n\t \n"])
+    return image
+
+
+def _image_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _image(rng, i, size) if rng.random() < 0.8 else _card_or_text(rng, i, size)
+
+
+def _image_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
+    """The pictures the sources give: of any size and shape, opaque, see-through or grey."""
+    images, given = {}, {}
+    for name in LIVE_PICTURES:
+        if rng.random() < 0.85:
+            size = (rng.choice([1, 3, 16, 64, 300]), rng.choice([1, 5, 16, 64, 240]))
+            picture = noise(rng, rng.choice(["RGB", "RGBA", "L"]), size)
+            images[name], given[name] = picture, image(picture)
+    return {"readings": {}, "images": given}, Snapshot(readings={}, images=images)
+
+
+def test_frames_of_live_pictures_as_python_draws_them(tmp_path: Path) -> None:
+    # (a picture a source or a service has, fitted into the widget's box with LANCZOS, blurred
+    # into a backdrop at a fraction of its size and drawn up, its corners rounded; nothing for
+    # one the snapshot lacks, a clear piece for a widget with none)
+    assert _compare_frames(tmp_path, 0x1AA6E, 160, _image_or_more, _image_snapshot) > 120
+
+
+def test_pictures_rust_does_not_draw_yet_are_refused(tmp_path: Path) -> None:
+    # (the theme's own pictures and a slideshow: Rust says it does not draw them yet)
+    cases = []
+    for n, change in enumerate([{"src": "pictures/cover.png"}, {"slides": "@media.cover"},
+                                {"src": "", "slides": "photos/*.jpg"}]):  # fmt: skip
+        folder = tmp_path / f"t{n}"
+        folder.mkdir()
+        widget = {"type": "image", "id": "m0", "x": 0, "y": 0, "w": 20, "h": 20,
+                  "src": "@media.cover", **change}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps({
+            "format": THEME_FORMAT, "name": "pictures", "display": {"width": 32, "height": 32},
+            "widgets": [widget]}), encoding="utf-8")  # fmt: skip
+        cases.append({"folder": str(folder), "snapshot": {"readings": {}, "images": {}},
+                      "dither": False})  # fmt: skip
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    assert [frame.get("unported") for frame in ours["frames"]] == [
+        "pictures from the theme's files",
+        "slideshows",
+        "slideshows",
+    ]

@@ -13,6 +13,7 @@ mod finish;
 pub mod formatting;
 mod gauge;
 pub mod icons;
+mod image;
 mod lit;
 mod metric;
 pub mod piece;

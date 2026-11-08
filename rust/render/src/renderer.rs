@@ -20,6 +20,7 @@ use crate::effects;
 use crate::finish::{self, Finish};
 use crate::gauge;
 use crate::icons;
+use crate::image;
 use crate::lit;
 use crate::metric::{self, Shown};
 use crate::piece::{Failed, Piece, Result};
@@ -394,6 +395,11 @@ impl Renderer {
         })
     }
 
+    /// The picture a source or a service has under `name`, in the frame's snapshot.
+    fn live_picture(&self, name: &str) -> Option<&Image> {
+        self.snapshot.as_ref()?.images.get(name)
+    }
+
     /// _cached: the finished piece kept while the widget and what it shows (`content`) stay the
     /// same.
     pub(crate) fn cached(
@@ -667,6 +673,25 @@ impl Renderer {
                     Err(e) => return Drawn::Failed(e),
                 };
                 self.text_widget(&w, text, colour)
+            }
+            "image" => {
+                let w = w.clone();
+                match image::shown(&w) {
+                    image::Shown::Unported(what) => return Drawn::Unported(what.into()),
+                    image::Shown::Clear => {
+                        self.cached(&w, Value::None, |r| r.clear_image_piece(&w))
+                    }
+                    image::Shown::Live(name) => {
+                        let picture = self.live_picture(&name);
+                        let Some(content) = picture.map(|p| image::picture_key(&name, p)) else {
+                            return Drawn::Nothing;
+                        };
+                        self.cached(&w, content, |r| match r.live_picture(&name) {
+                            Some(p) => r.live_image_piece(&w, p),
+                            None => Err(Failed("a picture gone".into())),
+                        })
+                    }
+                }
             }
             other => return Drawn::Unported(format!("{other} widgets")),
         };

@@ -392,7 +392,19 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       to the bit where numpy takes float32 arctan2 from the C library, as Rust does (240 of
       them); on a processor with AVX-512 numpy takes it from SVML, a unit in the last place
       apart in two of five angles, and there a pixel now and then comes out a level apart
-      (3 in 4 million). 32 of the app's 99 themes are drawn by Rust, all the same to the bit
+      (3 in 4 million)
+- [x] image widgets in a still frame (renderer.py's _draw_image and _live_image): a picture a
+      sensor source or a service has (an album cover, a game's logo, the playing app's icon),
+      fitted into the widget's box with LANCZOS (stretched, contained at the left, in the
+      middle or at the right, or covering it), blurred into a backdrop of its colours (fitted
+      and blurred premultiplied at a fraction of the size, then drawn up), its corners rounded
+      (their mask drawn three times larger and reduced); nothing for a picture the snapshot
+      lacks, a clear piece for a widget with none. The frames of random themes of them the
+      same to the bit. The theme's own pictures, animated ones, videos and slideshows: Rust
+      says it does not draw them yet. 41 of the app's 99 themes are drawn by Rust, 39 of them
+      the same to the bit; in the two encore themes of 1920 x 720 one pixel of 1.4 million is
+      a level apart here, where the volume's bar glow is blurred (numpy multiplies by the
+      blur's matrices in float32)
 - [ ] the zones on Windows (Python finds them in the tzdata package there, which the Rust
       app does not bring yet: none is found there for now)
 - [ ] the C library's locale where Python's text follows it: format()'s 'n' and what strftime
