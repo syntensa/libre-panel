@@ -117,7 +117,7 @@ pub struct Renderer {
     snapshot: Option<Snapshot>,
     warnings: RefCell<Vec<String>>,
     /// each widget's finished piece, while it and what it shows stay the same
-    cache: HashMap<String, (Value, Rc<Piece>)>,
+    pub(crate) cache: HashMap<String, (Value, Rc<Piece>)>,
     /// the fonts by name and size, opened once
     pub(crate) fonts: RefCell<HashMap<(String, i64), Rc<FallbackFont>>>,
     /// what metal lettering mirrors: the sky (the palette's accent) and the ground
@@ -163,6 +163,10 @@ pub struct Renderer {
     /// where the blades of each sensor's fans stand (beats: Beats.of), by the sensor, the frame
     /// rate and the blades of the look
     beats: HashMap<(String, u64, i64), fan::Beat>,
+    /// the faces of clocks whose second hand moves, without it (_analog_parts)
+    pub(crate) analog_parts: crate::analog::Faces<Rc<Image>>,
+    /// their shadow and glow where the face is not see-through (_analog_halos)
+    pub(crate) analog_halos: crate::analog::Faces<Option<(Rc<Image>, i64)>>,
 }
 
 /// VOLUME_GLIDE_MS: the volume's bars and rings, 95 % of a step after about a third of a
@@ -242,6 +246,8 @@ impl Renderer {
             list_part: std::cell::Cell::new(list::ListPart::All),
             rotors: HashMap::new(),
             beats: HashMap::new(),
+            analog_parts: crate::analog::Faces::default(),
+            analog_halos: crate::analog::Faces::default(),
         };
         renderer.slots = renderer.make_slots()?;
         renderer.background = renderer.load_background()?;
@@ -681,7 +687,7 @@ impl Renderer {
     }
 
     /// _effects: the widget's opacity, and its shadow and glow round it.
-    fn effects(&self, w: &Dict, mut piece: Piece) -> Result<Piece> {
+    pub(crate) fn effects(&self, w: &Dict, mut piece: Piece) -> Result<Piece> {
         let opacity = widget::number(w, "opacity", 1.0);
         let scaled = effects::scale_alpha(&piece.layer, opacity)?;
         piece.hit = Some(piece.bounds());
@@ -689,10 +695,7 @@ impl Renderer {
         if let Some(layer) = scaled {
             piece.layer = layer;
         }
-        let shadow = match widget::optional(w, "shadow") {
-            Some(s) if !s.is_empty() => self.color(Some(s), 1.0)?,
-            _ => None,
-        };
+        let shadow = self.shadow_tint(w)?;
         let Some((mut out, pad)) = effects::halo(w, &piece.layer, shadow, self.dither)? else {
             return Ok(piece);
         };
@@ -706,6 +709,14 @@ impl Renderer {
         } else {
             piece
         })
+    }
+
+    /// The colour of a widget's shadow (_halo's tint), None without one.
+    pub(crate) fn shadow_tint(&self, w: &Dict) -> Result<Option<Rgba>> {
+        match widget::optional(w, "shadow") {
+            Some(s) if !s.is_empty() => self.color(Some(s), 1.0),
+            _ => Ok(None),
+        }
     }
 
     /// The picture a source or a service has under `name`, in the frame's snapshot.
@@ -871,19 +882,21 @@ impl Renderer {
                 };
                 let seconds = widget::truthy(&w, "seconds");
                 let kind = widget::optional(&w, "hand").unwrap_or("tick");
-                if self.options.animate && seconds && kind != "tick" {
-                    return Drawn::Unported("clocks whose second hand glides or goes round".into());
-                }
                 // (the hour on the dial, the minute and the second, -1 where none is shown)
                 let hands = [
                     i64::from(now.hour % 12),
                     i64::from(now.minute),
                     if seconds { i64::from(now.second) } else { -1 },
                 ];
-                let content = Value::List(hands.iter().map(|&v| Value::int(v)).collect());
-                self.cached(&w, content, |r| {
-                    r.analog_piece(&w, hands[0], hands[1], hands[2])
-                })
+                if kind != "tick" && hands[2] >= 0 && self.options.animate {
+                    // (its second hand glides or goes round: laid onto the face it keeps)
+                    self.analog_moving(&w, &now, kind)
+                } else {
+                    let content = Value::List(hands.iter().map(|&v| Value::int(v)).collect());
+                    self.cached(&w, content, |r| {
+                        r.analog_piece(&w, hands[0], hands[1], hands[2], false)
+                    })
+                }
             }
             "earth" => {
                 let w = w.clone();

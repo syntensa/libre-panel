@@ -625,10 +625,9 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       to the bit; 40 themes drawn frame after frame a part of a second to half a day apart
       (181 frames, to the bit); clocks with a glow or a shadow at six sizes within a level
       (none apart here). The counter-checks put in 27 faults, and the tests catch them all. A
-      second hand that glides or goes round in a moving frame: Rust says it does not draw it
-      yet. 93 of the app's 99 themes are drawn
-      by Rust, 83 of them the same to the bit (almanac with its analog face, in both its
-      shapes, is new, the same to the bit; terra's six, the earth, are left)
+      second hand that glides or goes round in a moving frame: below. 93 of the app's 99 themes
+      are drawn by Rust, 83 of them the same to the bit (almanac with its analog face, in both
+      its shapes, is new, the same to the bit; terra's six, the earth, are left)
 - [x] the earth's picture (render/earth.py's picture, subsolar, _basis, _lookup, _lit, _air,
       _air_pixels and _spot; sensors/sky.py's _sun_path): a globe lit by the sun where the
       sunrise equation puts it at a moment, seen from above a place: the day's land and sea,
@@ -906,6 +905,38 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       picture's halo still; a moon that breathes in a preview only, or on a panel only; the
       breath's start and length), and the tests catch all of them (the one of a preview by the
       still frames', whose moons would breathe)
+- [x] clocks whose second hand glides or goes round (the renderer's _draw_analog in a moving
+      frame, _analog_part, _second_hand and _hand_effects): a second hand that glides moves to
+      each second in the clock's digits_seconds (0.42 s), as rolling digits do, and rests for
+      the rest of the second, kept; one that goes round never stops. The face with its hour
+      and minute hands (the minute hand moving on every five seconds) is kept by the clock, the
+      widget and those hands, the newest eight (as Python's dict keeps them: a face in the
+      cover's colour stays as it was made while it is kept); the second hand and the dot are
+      drawn in their own small box and laid onto it. On a face that is not see-through the
+      shadow and glow are the face's alone, kept alike; a see-through face's are made whole
+      each frame. The frame moves on while a hand moves. The tests: 60 random themes of clocks
+      that glide (in their own time, the digits', or one that is none), go round, tick or show
+      no second hand, frame after frame at a frame rate or none, the frames at any distance,
+      back in time too: 484 frames to the bit, 374 of them on the way; 40 of clocks with a glow
+      or a shadow, their faces solid, see-through or none, the whole see-through now and then:
+      303 frames within a level, 277 on the way; the edges: a second's very start, a moment
+      before and at the end of a glide, a second's last microsecond, five seconds on, a minute
+      and noon, back in time to a face kept, faces and a resting hand in the cover's colour as
+      the cover changes (kept as they were, made anew once eight others came after them), a
+      clock going round alone on the second, at two frame rates: 62 frames to the bit; the
+      app's themes in moving frames: 80 of the 99 drawn by Rust all along (78 before; 79 on
+      Windows). The counter-checks put in 39 faults (a sweep's and a glide's time, the glide's
+      curve and how long it may take; the minute hand's steps; what is kept at rest, and when;
+      moving; the faces kept, which go, by what; the face without its second hand; the hand's
+      length, tail, width, angle, place, round ends and box, the dot; the effects of a solid
+      and of a see-through face, the halo kept and by what, see-through faces laid on, moved
+      by the halo; a glide taken as a tick, a clock without a second hand moving; the shadow's
+      colour), and the tests catch 36 of them, 3 once the edge cases were added (a resting hand
+      kept, a lone sweep on the second, a face let go); the other three change nothing a frame
+      shows: the faces kept by the id and the hands alone (a theme's ids are its own, and a
+      widget stays the same while a renderer draws it), and the hand's box a pixel narrower
+      round it or its left edge rounded rather than floored (the box holds all of the hand's
+      pixels either way)
 - [ ] pictures as Pillow fails at them: lp-decode's errors as Python's exceptions, so that
       where Python catches an OSError and goes on (a picture cut short, a file of no picture)
       Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,

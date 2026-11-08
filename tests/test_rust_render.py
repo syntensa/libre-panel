@@ -6463,6 +6463,155 @@ def test_moons_at_the_edges_of_their_halo_s_steps_as_python_draws_them(tmp_path:
     assert drawn == moving == 2 * len(times), (drawn, moving)
 
 
+def _moving_analog(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """A clock face whose second hand glides to each second (in the clock's own time, the
+    digits' 0.42 s, or a time that is none) or goes round; now and then one that ticks or shows
+    no second hand."""
+    widget = _analog(rng, i, size)
+    widget["seconds"] = rng.random() < 0.9
+    widget["hand"] = rng.choice(["glide", "glide", "sweep", "sweep", "tick"])
+    if rng.random() < 0.5:
+        widget["digits_seconds"] = rng.choice([1, 1.0, 0.999, 0.25, 0.05, 0.0, -0.5, 2, 0.42])
+    return widget
+
+
+def _moving_analog_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _moving_analog(rng, i, size) if rng.random() < 0.8 else _card_or_text(rng, i, size)
+
+
+def _glowing_analog(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """A clock face whose second hand moves, with a glow or a shadow or both, its face solid,
+    see-through or none, the whole now and then see-through too."""
+    widget = _moving_analog(rng, i, size)
+    widget["face"] = rng.choice(["#1f2937", "#1f2937", "#1f293780", None, "@surface"])
+    if rng.random() < 0.7:
+        widget.update(glow=rng.choice([0.3, 0.8, 1.0]), glow_radius=rng.choice([2, 6, 10]))
+    if rng.random() < 0.6:
+        widget["shadow"] = rng.choice(["#000000", "#00000080", "@accent"])
+        widget.update(shadow_blur=rng.choice([2, 6]), shadow_offset=rng.choice([0, 3, -2]))
+    if rng.random() < 0.2:
+        widget["opacity"] = rng.choice([0.5, 0.25])
+    return widget
+
+
+# (how far apart the frames of a moving clock come: at once, a 60th, 50th, 25th of a second, a
+# tenth and so, the digits' time, half a second, a second, five, back in time)
+CLOCK_STEPS = [0, 1 / 60, 0.02, 0.04, 0.1, 0.13, 0.25, 0.42, 0.5, 1.0, 2.5, 5.0, -0.1, -1.0]
+
+
+def _clock_frames(
+    rng: random.Random, start: datetime, count: int
+) -> tuple[list[tuple[Snapshot, float]], list[dict[str, Any]]]:
+    """`count` frames from the moment `start` on, a step of CLOCK_STEPS apart, the panel's
+    clock going with it."""
+    steps, given = [], []
+    moment, now = start, rng.uniform(1000, 2000)
+    for _ in range(count):
+        readings, snapshot = _clock_moment(moment)
+        steps.append((snapshot, now))
+        given.append({"snapshot": readings, "now": now})
+        step = rng.choice(CLOCK_STEPS)
+        moment += timedelta(seconds=step)
+        now += step
+    return steps, given
+
+
+def _moving_clocks(tmp_path: Path, rng: random.Random, count: int, make: Any,
+                   level: bool = False) -> tuple[int, int]:  # fmt: skip
+    """`count` themes of the clocks `make` makes, each drawn frame after frame by one renderer
+    as the panels' loop draws it, by Rust and by Python: _compare_moving's counts."""
+    cases, expected = [], []
+    for n in range(count):
+        folder = tmp_path / f"t{n}"
+        _frame_theme(rng, folder, make)
+        steps, given = _clock_frames(rng, _analog_snapshot(rng)[1].now, rng.randrange(2, 16))
+        fps = rng.choice([0, 25, 50])
+        cases.append({"folder": str(folder), "dither": False, "animate": True, "fps": fps,
+                      "steps": given, "bytes": level})  # fmt: skip
+        expected.append(_python_moving(folder, steps, fps))
+    return _compare_moving(cases, expected, level)
+
+
+def test_clocks_whose_second_hand_glides_or_goes_round_as_python_draws_them(
+    tmp_path: Path,
+) -> None:
+    # (one renderer drawing its clocks frame after frame as the panels' loop does: a second hand
+    # that glides to each second as rolling digits do, in the clock's own time or the digits',
+    # or goes round; the face with the hour and minute hands kept, the minute hand moving on
+    # every five seconds; at rest for the rest of the second; frames at any distance, back in
+    # time too)
+    drawn, moving = _moving_clocks(tmp_path, random.Random(0xA7A5), 60, _moving_analog_or_more)
+    assert drawn > 400 and moving > 300, (drawn, moving)
+
+
+def test_clocks_whose_second_hand_moves_with_their_glow_and_shadow_within_a_level(
+    tmp_path: Path,
+) -> None:
+    # (moving second hands on faces with a glow or a shadow: a solid face's kept while it is,
+    # the hand lying on it; a see-through face's, or none's, made whole each frame; blurred in
+    # floating point, so now and then a pixel a level apart)
+    drawn, moving = _moving_clocks(tmp_path, random.Random(0xA7A6), 40, _glowing_analog, True)
+    assert drawn > 240 and moving > 210, (drawn, moving)
+
+
+def test_second_hands_at_the_edges_of_their_seconds_as_python_draws_them(tmp_path: Path) -> None:
+    # (clocks gliding in the digits' time, in a second, in a quarter, one going round, one that
+    # ticks, one without its second hand, at the edges: a second's very start, a moment before
+    # and at the end of a glide, a second's last microsecond; over five seconds (the minute hand
+    # moves on), a minute and noon; back in time to a face kept; faces of the cover's colour as
+    # the cover changes: kept as they were while their hands stay, made anew once eight others
+    # came after them, and a hand at rest in the cover's colour kept as it was for the rest of
+    # its second; a clock going round alone, on the second: the frame moves on all the same)
+    folder = tmp_path / "edges"
+    folder.mkdir()
+    clocks = [{"type": "analog", "id": "g", "x": 0, "y": 0, "w": 64, "h": 64, "hand": "glide",
+               "color2": "@cover"},
+              {"type": "analog", "id": "o", "x": 66, "y": 0, "w": 64, "h": 64, "hand": "glide",
+               "digits_seconds": 1, "face": "@cover"},
+              {"type": "analog", "id": "q", "x": 132, "y": 0, "w": 48, "h": 64, "hand": "glide",
+               "digits_seconds": 0.25, "color": "@cover"},
+              {"type": "analog", "id": "s", "x": 0, "y": 66, "w": 120, "h": 120, "hand": "sweep",
+               "color2": "@cover", "marks": "@cover"},
+              {"type": "analog", "id": "t", "x": 122, "y": 66, "w": 40, "h": 40, "hand": "tick"},
+              {"type": "analog", "id": "n", "x": 122, "y": 110, "w": 40, "h": 40, "hand": "glide",
+               "seconds": False}]  # fmt: skip
+    theme = {"format": THEME_FORMAT, "name": "edges", "display": {"width": 182, "height": 188},
+             "palette": {name: "#808080" for name in PALETTE},
+             "background": {"color": "#101418"}, "widgets": clocks}  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+    rng = random.Random(0xA7A7)
+    covers = [noise(rng, "RGB", (40, 40)), noise(rng, "RGB", (40, 40))]
+    base = datetime(2026, 11, 8, 11, 59, 50)
+    frames = [(0, 0), (0, 1), (0, 249_999), (0, 250_000), (0, 419_999), (0, 420_000),
+              (0, 999_999), (4, 999_999), (5, 0), (5, 200_000), (9, 900_000), (10, 100_000),
+              (9, 950_000), (10, 300_000), *[(15 + 5 * k, 300_000) for k in range(9)],
+              (10, 300_000), (10, 600_000), (0, 500_000)]  # fmt: skip
+    steps, given = [], []
+    for k, (second, micro) in enumerate(frames):
+        moment = base + timedelta(seconds=second, microseconds=micro)
+        cover = covers[k >= 6]  # (another cover from the seventh frame on)
+        now = 2000.0 + second + micro / 1e6
+        steps.append((Snapshot(readings={}, images={"media.cover": cover}, now=moment), now))
+        given.append({"snapshot": {"readings": {}, "images": {"media.cover": image(cover)},
+                                   "now": _moment(moment)}, "now": now})  # fmt: skip
+    alone = tmp_path / "alone"
+    alone.mkdir()
+    sweep = {"type": "analog", "id": "s", "x": 0, "y": 0, "w": 60, "h": 60, "hand": "sweep"}
+    data = {**theme, "name": "alone", "display": {"width": 60, "height": 60}, "widgets": [sweep]}
+    (alone / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+    seconds = [0, 1, 1, 6, 5]
+    on_the_second = [_clock_moment(base + timedelta(seconds=k)) for k in seconds]
+    lone = [(snapshot, 3000.0 + k) for k, (_, snapshot) in zip(seconds, on_the_second, strict=True)]
+    lone_given = [{"snapshot": g, "now": 3000.0 + k}
+                  for k, (g, _) in zip(seconds, on_the_second, strict=True)]  # fmt: skip
+    cases = [{"folder": str(f), "dither": False, "animate": True, "fps": fps, "steps": g}
+             for f, g in ((folder, given), (alone, lone_given)) for fps in (0, 50)]  # fmt: skip
+    expected = [_python_moving(f, st, fps) for f, st in ((folder, steps), (alone, lone))
+                for fps in (0, 50)]  # fmt: skip
+    drawn, moving = _compare_moving(cases, expected)
+    assert drawn == moving == 2 * (len(frames) + len(seconds)), (drawn, moving)
+
+
 def test_the_app_s_own_themes_in_moving_frames_as_python_draws_them(tmp_path: Path) -> None:
     # (every theme the app brings, drawn as the panels' loop draws it: frames a 25th of a second
     # apart and more, its readings new between them, at 50 fps; the same to the bit where Rust
@@ -6523,4 +6672,4 @@ def test_the_app_s_own_themes_in_moving_frames_as_python_draws_them(tmp_path: Pa
             assert g["moving"] == w["moving"], (folder.name, i)
         drawn.append(folder.name)
     # (on Windows Rust does not know the computer's zone: Terra's standing globe is left out)
-    assert len(drawn) >= (77 if sys.platform == "win32" else 78), drawn
+    assert len(drawn) >= (79 if sys.platform == "win32" else 80), drawn
