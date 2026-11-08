@@ -17,6 +17,7 @@ use crate::compose;
 use crate::countdown;
 use crate::cover;
 use crate::effects;
+use crate::fan;
 use crate::finish::{self, Finish};
 use crate::gauge;
 use crate::graph;
@@ -946,6 +947,77 @@ impl Renderer {
                     let content = Value::List(vec![Value::Float(phase), level]);
                     self.cached(&w, content, |r| r.moon_piece(&w, phase))
                 }
+            }
+            "fan" => {
+                let w = w.clone();
+                // (fan_choices.for_widget with none of the person's choices: the widget's look
+                // and paint, else Noctua's G2 in the theme's colour)
+                let look = match widget::text(&w, "look") {
+                    "auto" => fan::DEFAULT_LOOK,
+                    other => other,
+                };
+                if look != fan::DEFAULT_LOOK {
+                    return Drawn::Unported("fans of other looks".into());
+                }
+                if widget::text(&w, "paint") == "own" {
+                    return Drawn::Unported("fans in their look's own colours".into());
+                }
+                let ring = match widget::text(&w, "frame") {
+                    "ring" => true,
+                    "none" => false,
+                    _ => return Drawn::Unported("fans in a square frame".into()),
+                };
+                if self.options.animate {
+                    return Drawn::Unported("fans that turn".into());
+                }
+                let snapshot = self.snapshot.clone().unwrap_or_default();
+                let rpm = number(&snapshot.value(widget::text(&w, "sensor")));
+                // (an int of the theme's as Python's sums take it, as a float: one past a
+                // float's range fails them where there is a reading to take it to, and is
+                // not looked at where there is none)
+                let max_rpm = match w.get("max_rpm") {
+                    Some(Value::Int(n)) => match lp_py::num::int_to_float(n) {
+                        Ok(most) => most,
+                        Err(e) if rpm.is_some() => return Drawn::Failed(Failed(e.msg)),
+                        Err(_) => f64::INFINITY,
+                    },
+                    _ => widget::number(&w, "max_rpm", 3000.0),
+                };
+                // (a still frame shows it as Rotor.settle has it: standing as fast as it runs)
+                let rotor = fan::Rotor::settled(widget::text(&w, "id"), rpm, max_rpm);
+                let colour = match self.colour_of(&w, "color") {
+                    Ok(Some([r, g, b, _])) => [r, g, b].map(|v| v.clamp(0, 255) as u8),
+                    Ok(None) => {
+                        return Drawn::Failed(Failed(
+                            "'NoneType' object is not subscriptable".into(),
+                        ))
+                    }
+                    Err(e) => return Drawn::Failed(e),
+                };
+                let (x, y) = (widget::int(&w, "x", 0), widget::int(&w, "y", 0));
+                let (fw, fh) = (widget::int(&w, "w", 48), widget::int(&w, "h", 48));
+                let (size, _margin, canvas) = fan::geometry(fw, fh);
+                let content = Value::List(vec![
+                    Value::List(colour.iter().map(|&c| Value::int(i64::from(c))).collect()),
+                    Value::int(size),
+                    Value::int(rotor.phase() as i64),
+                    Value::int(rotor.blur()),
+                    Value::int(rotor.dim()),
+                    Value::int(rotor.steps()),
+                    Value::Bool(ring),
+                ]);
+                let dir = fan::pictures_dir(&self.env.fonts_dir);
+                self.cached(&w, content, |_| {
+                    // (its ring as it is, the rotor over it, the square in the middle of its box)
+                    let image = fan::picture(&dir, colour, size, &rotor, ring)?;
+                    let at = (
+                        x + (fw - canvas).div_euclid(2),
+                        y + (fh - canvas).div_euclid(2),
+                    );
+                    let mut piece = Piece::new(image, at.0, at.1);
+                    piece.hit = Some([x, y, fw, fh]);
+                    Ok(piece)
+                })
             }
             "downloads" => {
                 let w = w.clone();

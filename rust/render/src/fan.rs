@@ -22,6 +22,8 @@ use lp_pixels::{alpha_composite, chops, Draw, Filter, FloatImage, Image, Mode};
 
 use crate::piece::{Failed, Result};
 
+/// fan_looks.DEFAULT: the look of a fan that names none, and the one Rust draws.
+pub(crate) const DEFAULT_LOOK: &str = "noctua-g2";
 /// fan.py's POSITIONS: rotor pictures over one blade's pitch.
 pub(crate) const POSITIONS: usize = 48;
 /// fan.py's FAN_SIZE, LAYER_SIZE, RING_CENTRE, RING_STROKE, RING_HALO and MARGIN: the sizes,

@@ -1497,7 +1497,7 @@ def test_the_app_s_own_themes_as_python_draws_them() -> None:
         assert got["boxes"] == want["boxes"], folder.name
         drawn.append(folder.name)
     assert len(folders) > 90
-    assert len(drawn) >= 87, drawn
+    assert len(drawn) >= 91, drawn
 
 
 def _lit(
@@ -3042,6 +3042,154 @@ def test_fans_seen_running_stay_in_a_list(tmp_path: Path) -> None:
     for got, want in zip(ours["frames"], expected, strict=True):
         assert got["sha256"] == hashlib.sha256(want.tobytes()).hexdigest()
     assert expected[1].tobytes() != expected[2].tobytes()  # (the one that ran shows)
+
+
+# (what Rust says it does not draw of fans yet: the other looks, their own colours, the square)
+FAN_UNDRAWN = ("fans of other looks", "fans in their look's own colours", "fans in a square frame")
+# (the sides of a fan's box: none, less than the least fan, odd and even, the lists' sizes)
+FAN_SIDES = [-6, 0, 1, 5, 7, 8, 9, 12, 13, 17, 23, 34, 47, 48, 49, 57, 66, 76, 100, 151]
+
+
+def _fan(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """A fan: of every size, square or not (the fan and its glow in the middle of its box, a
+    pixel more to one side where the room is odd), in its ring or none, in the theme's colour
+    or one of its own, at a most of its own (past a float's range among them); the other looks,
+    their own colours and the square frame now and then (Rust says it does not draw them)."""
+    w, h = size
+    widget: dict[str, Any] = {
+        "type": "fan", "id": rng.choice([f"f{i}", f"fan-{i}", f"Lüfter {i}", f"gpu.fan.{i}"]),
+        "x": rng.randrange(-40, w), "y": rng.randrange(-40, h),
+        "w": rng.choice(FAN_SIDES), "h": rng.choice(FAN_SIDES),
+    }  # fmt: skip
+    if rng.random() < 0.4:  # (square, as most are)
+        widget["h"] = widget["w"]
+    if rng.random() < 0.85:
+        widget["sensor"] = rng.choice(["gpu.fan", "gpu.fan", "fan.1", "fan.2", "fan.cpu",
+                                       "fan.gpu", "pump.fan", "temp.cpu", "fan.none"])  # fmt: skip
+    if rng.random() < 0.7:
+        widget["max_rpm"] = rng.choice([1, 0.5, 30, 1000, 2000, 2000.0, 2400.5, 4500, 1e-9,
+                                        1e300, math.inf, math.nan, 2**60 + 1, 10**400])  # fmt: skip
+    if rng.random() < 0.6:
+        widget["color"] = rng.choice([_colour(rng), _colour(rng), "@accent", "@text2",
+                                      _hex(rng, True)])  # fmt: skip
+    if rng.random() < 0.5:
+        widget["frame"] = rng.choice(["ring", "none"])
+    if rng.random() < 0.4:
+        widget["look"] = rng.choice(["auto", "noctua-g2"])
+    if rng.random() < 0.4:
+        widget["paint"] = rng.choice(["auto", "theme"])
+    if rng.random() < 0.06:  # (what Rust does not draw yet, and says so)
+        key, value = rng.choice([("frame", "square"), ("look", "noctua-a12x25"),
+                                 ("look", "noctua-a14"), ("look", "libre"),
+                                 ("paint", "own")])  # fmt: skip
+        widget[key] = value
+    if rng.random() < 0.1:
+        widget["opacity"] = rng.choice([0.5, 0.0, 0.25])
+    return widget
+
+
+def _fan_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _fan(rng, i, size) if rng.random() < 0.75 else _card_or_text(rng, i, size)
+
+
+def _fan_widget_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
+    """The fans' readings as the lists' (none, standing, turning, past the most, no number),
+    now and then one an int: past a float's range, or one a float rounds."""
+    given, snapshot = _fan_snapshot(rng)
+    if rng.random() < 0.25:
+        key = rng.choice(["gpu.fan", "fan.1", "fan.cpu"])
+        r = Reading(key, rng.choice([10**400, -(10**400), 2**60 + 1, 1800]), "rpm", "")
+        snapshot.readings[key] = r
+        given["readings"][key] = {"v": _typed(r.value), "unit": r.unit, "label": r.label,
+                                  "origin": r.origin}  # fmt: skip
+    return given, snapshot
+
+
+def test_frames_of_fans_as_python_draws_them(tmp_path: Path) -> None:
+    # (each fan as a still frame shows it, Rotor.settle: where its id puts its blades, its blur
+    # and light by its speed, its ring as full; laid in the middle of its box, with its effects)
+    drawn = _compare_frames(tmp_path, 0xFA46, 300, _fan_or_more, _fan_widget_snapshot,
+                            undefined=FAN_UNDRAWN)  # fmt: skip
+    assert drawn > 190, drawn
+
+
+def test_fans_frame_after_frame_as_python_keeps_them(tmp_path: Path) -> None:
+    # (one renderer drawing its fans frame after frame as their readings change: each drawn anew
+    # where its blur, its light or its ring shows otherwise, kept where they show the same)
+    rng = random.Random(0xFA48)
+    cases, expected = [], []
+    for n in range(60):
+        folder = tmp_path / f"t{n}"
+        _frame_theme(rng, folder, _fan)
+        steps: list[tuple[Snapshot, float]] = []
+        given = []
+        for _ in range(rng.randrange(2, 8)):
+            readings, snapshot = _fan_widget_snapshot(rng)
+            steps.append((snapshot, 1000.0))
+            given.append({"snapshot": readings, "now": 1000.0})
+        cases.append({"folder": str(folder), "dither": False, "steps": given})
+        try:
+            expected.append(_python_steps(folder, steps))
+        except ThemeError:
+            expected.append(None)
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR),
+                   "language": "en", "locale": str(i18n.LOCALE_DIR)}])  # fmt: skip
+    drawn = 0
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        if want is None:  # (a theme Python does not read: nor does Rust)
+            assert "error" in got, n
+            continue
+        for i, (g, w) in enumerate(zip(got["steps"], want, strict=True)):
+            if "failed" in w:  # (Python's frame fails: Rust makes none)
+                assert "unported" in g, (n, i, g, w)
+                continue
+            if g.get("unported") in FAN_UNDRAWN:
+                continue
+            assert g["sha256"] == hashlib.sha256(w["frame"].tobytes()).hexdigest(), (n, i)
+            assert g["boxes"] == w["boxes"], (n, i)
+            drawn += 1
+    assert drawn > 180, drawn
+
+
+def test_fans_with_glow_and_shadow_within_a_level(tmp_path: Path) -> None:
+    # (a fan casts its light as a card does: blurred in floating point, now and then a pixel a
+    # level apart; at every size the lists draw them, in its ring and in none)
+    import numpy as np
+
+    found = [Reading("gpu.fan", 1200.0, "rpm", "GPU"), Reading("fan.1", 0.0, "rpm", "Front"),
+             Reading("fan.2", 2900.0, "rpm", "Back")]  # fmt: skip
+    snapshot = Snapshot(readings={r.key: r for r in found}, now=datetime(2026, 11, 8, 6, 5))
+    given = {"readings": {r.key: {"v": _typed(r.value), "unit": r.unit, "label": r.label}
+                          for r in found},
+             "images": {}, "now": [2026, 11, 8, 6, 5, 0, 0]}  # fmt: skip
+    looks = [{"glow": 0.7, "glow_radius": 6, "sensor": "gpu.fan"},
+             {"shadow": "#000000a0", "shadow_blur": 4, "opacity": 0.8, "sensor": "fan.1"},
+             {"glow": 1, "shadow": "#102030", "frame": "none", "sensor": "fan.2"},
+             {"glow": 0.3, "glow_radius": 14, "frame": "none", "sensor": "fan.none"}]  # fmt: skip
+    cases, expected = [], []
+    for n, side in enumerate([8, 13, 23, 34, 48, 49, 57, 76, 100, 151]):
+        folder = tmp_path / f"t{side}"
+        folder.mkdir()
+        widgets = [{"type": "fan", "id": f"f{i}", "x": 20 + i * 170, "y": 24, "w": side,
+                    "h": side + i % 2, "color": "#13e5d7", **look}
+                   for i, look in enumerate(looks)]  # fmt: skip
+        data = {"format": THEME_FORMAT, "name": "fans", "display": {"width": 690, "height": 220},
+                "palette": {name: "#808080" for name in PALETTE},
+                "background": {"color": "#101418"}, "widgets": widgets}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        dither = n % 2 == 1
+        cases.append({"folder": str(folder), "snapshot": given, "dither": dither, "bytes": True})
+        expected.append(_python_frame(folder, snapshot, dither))
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    differ = total = 0
+    for case, got, want in zip(cases, ours["frames"], expected, strict=True):
+        assert "frame" in want and "frame" in got, (case["folder"], got, want)
+        apart = np.abs(np.asarray(picture(got["frame"]), int) - np.asarray(want["frame"], int))
+        assert apart.max() <= 1, case["folder"]
+        differ += int((apart.max(axis=2) > 0).sum())
+        total += apart.shape[0] * apart.shape[1]
+        assert got["boxes"] == want["boxes"], case["folder"]
+    assert differ <= total // 10000, differ
 
 
 def test_frames_of_lists_as_python_draws_them(tmp_path: Path) -> None:

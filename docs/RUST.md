@@ -490,10 +490,10 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       renderer lays them. The frames of 200 random themes of fan lists the same to the bit
       (and 1,200 more), five lists at every ninth width from 8 to 640 px, low and tall, and
       of no width or height, to the bit; two with a glow or a shadow within a level; a fan
-      seen running kept from one frame to the next. Fans in a moving frame (they turn), fan
-      widgets, and the looks and colours one may choose for the fans in the app's settings:
-      Rust does not draw them yet (the default's only). 66 of the app's 99 themes are drawn
-      by Rust, 61 of them the same to the bit
+      seen running kept from one frame to the next. Fans in a moving frame (they turn), and
+      the looks and colours one may choose for the fans in the app's settings: Rust does not
+      draw them yet (the default's only; fan widgets: below). 66 of the app's 99 themes are
+      drawn by Rust, 61 of them the same to the bit
 - [x] card slots in a still frame (render/slot.py's Slot: begin, wants, _turn, _has, _target,
       _weather, _line_width, _outline, _cut, _frame and overlay; the renderer's _make_slots and
       its frame loop): which card a slot shows, the first whose rule holds or that has
@@ -555,9 +555,10 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       tail's edge or where log and log1p of one number round apart, none of which the tests'
       draws meet; and the C library's float32 tanh in the terminator and its exp in the halo in
       place of numpy's, 3 and 2 units in the last place apart at most, which no byte of the
-      tests' moons shows). 83 of the app's 99 themes are drawn by Rust, 78 of them the same to
+      tests' moons shows). 83 of the app's 99 themes are drawn by Rust, 77 of them the same to
       the bit (nimbus in its four shapes and the companion screens of almanac and encore are
-      new)
+      new; nimbus at 1920 x 720 has a pixel a level apart in its moon's light, which was
+      counted at first with those the same)
 - [x] download cards in a still frame (render/download.py: read, amount, time_left, of_total,
       layout, rail, _tracked, _cut, _graph, _bar_flat, _base, _empty and draw; the lit finish's
       LitDownloads), flat and lit: what loads (its phase, source and name, cut to its room), the
@@ -589,8 +590,29 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       pixel smaller and one of a pixel, which Pillow joins the same or never draws; the
       stretch's place kept where no light runs, where it is 0; and the bar's glow kept before
       the stretch's, where the bar has none. A download whose light runs in a moving frame: Rust
-      says it does not draw it yet. 87 of the app's 99 themes are drawn by Rust, 80 of them the
+      says it does not draw it yet. 87 of the app's 99 themes are drawn by Rust, 79 of them the
       same to the bit (lumen-pair in its four shapes is new)
+- [x] fan widgets in a still frame (the renderer's _draw_fan and _laid_fan; fan.Choices'
+      for_widget, with none of the person's choices; render/fan.py's geometry, fan_parts and
+      Rotor.settle): a rotor of the default look in its ring or in none, in the theme's colour
+      or one of its own, standing as its reading shows against the widget's most (blurred by
+      its speed, dimmed by its light, its ring's arc as far round as its share), its blades
+      where its id puts them; the square of fan and glow in the middle of its box, the room on
+      either side floored as Python's // floors it (below nought too), the box the editor hits
+      the widget's own, with the widget's effects. A most past a float's range fails the fan
+      where there is a reading, as Python's sums with it fail. The frames of 300 random themes
+      of fans of every size, square or not, at every speed a reading gives (216 drawn, all the
+      same to the bit); 60 themes drawn frame after frame as their readings change (202
+      frames, to the bit); fans with a glow or a shadow at ten sizes within a level (2 pixels
+      of 1.5 million a level apart, their light blurred in floating point). The counter-checks
+      put in 19 faults, and the tests catch 17; the other two change nothing a picture can
+      show: a most past a float's range taken as 0 where there is no reading, which nothing
+      then looks at, and another most where the widget gives none, which never happens (the
+      theme's table gives every fan its own). The other looks, their own colours and the
+      square frame, and fans that turn in a moving frame: Rust says it does not draw them yet.
+      91 of the app's 99 themes are drawn by Rust, 81 of them the same to the bit (Lumen in its
+      four shapes is new; its two of a level apart in the glow of their rings and a frame, none
+      in their fans)
 - [ ] the zones on Windows: Python finds them in the tzdata package there, and Rust finds
       them where it is told the package is (LP_TZDATA: the tests tell lp-check where
       Python's is). The Rust app does not bring one yet: without it, no key is a zone there
