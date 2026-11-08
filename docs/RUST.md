@@ -492,6 +492,35 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       widgets, and the looks and colours one may choose for the fans in the app's settings:
       Rust does not draw them yet (the default's only). 66 of the app's 99 themes are drawn
       by Rust, 61 of them the same to the bit
+- [x] card slots in a still frame (render/slot.py's Slot: begin, wants, _turn, _has, _target,
+      _weather, _line_width, _outline, _cut, _frame and overlay; the renderer's _make_slots and
+      its frame loop): which card a slot shows, the first whose rule holds or that has
+      something to show by its own (a track that plays, or is paused for less than the slot's
+      `hold`; the weather; Claude Code or Codex at work or waiting, or so less than 45 s ago; a
+      download whose state json.loads reads as a dict), else the first; in turns the one on
+      show while its turn lasts (its line's time, else the slot's, held between 5 s and a
+      day), then the next that has. Only the parts of the card on show are drawn, and none of
+      the marks or dots that lie over a bar or a graph. The slot's frame is a thin line in the
+      card's colour (the module's own, the cover's, the weather's by day and night, the
+      network's, else the accent, mixed over the ground), drawn three times its size and
+      averaged down, laid in strips along its edges right after the slot's last part. A
+      renderer drawing one frame after another keeps what the rules remember, as Python's
+      does. lp-check tells what each slot shows (its card, its frame's colour and thickness),
+      also where a card holds a widget Rust does not draw yet. The frames of 240 random themes
+      of slots, in every look, style, corner and size, beside and over other modules: 137 the
+      same to the bit, and in 205 what each slot shows as Python has it; 100 slots drawn frame
+      after frame by one renderer (445 frames, 324 to the bit, 60 changes of card); 26 slots
+      a hair before, at and a hair after each time a rule keeps (turns and holds no float
+      holds among them, and every kind of number a track plays by); the frame's colour of
+      every card, the weather's of each kind by day and night (171 frames); and a slot
+      whose numbers are past a float's range, which Python's renderer cannot be made for,
+      is not made by Rust either. The counter-checks put in 80 faults, and the tests catch
+      72; the other 8 change nothing a picture can show (the frame laid whole or in strips,
+      which hold every pixel of its line; its layer's opacity, which putalpha replaces; a
+      frame of no thickness, which draws nothing; a hold below none, which keeps no track
+      on a clock that only goes forward). Slots in a moving frame (changes that roll, fade or
+      move, a new track sliding in, the line of light): Rust says it does not draw them yet.
+      73 of the app's 99 themes are drawn by Rust, 68 of them the same to the bit
 - [ ] the zones on Windows (Python finds them in the tzdata package there, which the Rust
       app does not bring yet: none is found there for now)
 - [ ] the C library's locale where Python's text follows it: format()'s 'n' and what strftime

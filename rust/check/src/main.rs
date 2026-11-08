@@ -1959,21 +1959,44 @@ fn run(case: &Value) -> Result<Value, String> {
                     if !c["after"].as_bool().unwrap_or(false) {
                         lp_render::forget_fans_run();
                     }
-                    match renderer.render(snapshot_of(&c["snapshot"])) {
-                        Ok((frame, boxes)) => {
-                            let sum = Sha256::digest(frame.as_bytes());
-                            let hex: String = sum.iter().map(|b| format!("{b:02x}")).collect();
-                            let boxes: serde_json::Map<String, Value> =
-                                boxes.into_iter().map(|(k, b)| (k, json!(b))).collect();
-                            let mut out = json!({"sha256": hex, "size": [frame.width(),
-                                frame.height()], "boxes": boxes, "warnings": renderer.warnings()});
-                            if c["bytes"].as_bool() == Some(true) {
-                                out["frame"] = value_of(&frame);
+                    let bytes = c["bytes"].as_bool() == Some(true);
+                    let mut frame_at = |snapshot: &Value, now: f64| {
+                        let mut out = match renderer.render(snapshot_of(snapshot), now) {
+                            Ok((frame, boxes)) => {
+                                let sum = Sha256::digest(frame.as_bytes());
+                                let hex: String = sum.iter().map(|b| format!("{b:02x}")).collect();
+                                let boxes: serde_json::Map<String, Value> =
+                                    boxes.into_iter().map(|(k, b)| (k, json!(b))).collect();
+                                let mut out = json!({"sha256": hex, "size": [frame.width(),
+                                    frame.height()], "boxes": boxes,
+                                    "warnings": renderer.warnings()});
+                                if bytes {
+                                    out["frame"] = value_of(&frame);
+                                }
+                                out
                             }
-                            out
+                            Err(lp_render::Unported(what)) => json!({"unported": what}),
+                        };
+                        // (what each card slot shows: its card, its frame's colour and
+                        // thickness, also where the frame is not drawn here yet)
+                        if let Some(slots) = renderer.slots_shown() {
+                            out["slots"] = slots
+                                .into_iter()
+                                .map(|(id, card, colour, width)| json!([id, card, colour, width]))
+                                .collect();
                         }
-                        Err(lp_render::Unported(what)) => json!({"unported": what}),
+                        out
+                    };
+                    // (frames one after another by the one renderer, each at its time: what the
+                    // slots' rules keep from one to the next)
+                    if let Some(steps) = c["steps"].as_array() {
+                        let steps: Vec<Value> = steps
+                            .iter()
+                            .map(|s| frame_at(&s["snapshot"], s["now"].as_f64().unwrap_or(1000.0)))
+                            .collect();
+                        return json!({"steps": steps});
                     }
+                    frame_at(&c["snapshot"], c["now"].as_f64().unwrap_or(1000.0))
                 })
                 .collect();
             lp_i18n::set_language(lp_i18n::Language::english());

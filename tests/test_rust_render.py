@@ -1445,7 +1445,7 @@ def test_the_app_s_own_themes_as_python_draws_them() -> None:
         assert got["boxes"] == want["boxes"], folder.name
         drawn.append(folder.name)
     assert len(folders) > 90
-    assert len(drawn) >= 66, drawn
+    assert len(drawn) >= 73, drawn
 
 
 def _lit(
@@ -2988,3 +2988,492 @@ def test_frames_of_lists_as_python_draws_them(tmp_path: Path) -> None:
     # out, named and sorted as lists.pick does; as rows, bars, columns and tiles, with their
     # details, rules and the largest value filling the bar where the range is none)
     assert _compare_frames(tmp_path, 0x7157, 200, _list_or_more, _list_snapshot) > 150
+
+
+# -- card slots: a module showing one card of several ----------------------------------------
+
+# the cards whose rule is their own (a track, the weather, an agent, a download), the network's,
+# and others that always have something to show
+SLOT_CARDS = ["playback", "music", "forecast", "weather", "ai", "download", "net", "network"]
+SLOT_OTHERS = ["clock", "date", "ring", "stat", "text", "countdown", "huge", "system", "values",
+               "volume", "game", "agenda", "netinfo", "ping", "timer", "battery", "instrument",
+               "graph", "bars", "world", "sun", "temps", "cores"]  # fmt: skip
+SLOT_RULES = ["media.playing=1", "weather.temperature", "!ai.claude.busy", "ai.codex.busy>=1",
+              "media.title, weather.temperature", "net.up>100", "@media.cover", "nope", ",",
+              "!nope", "media.playing = 0", "game.limiter=GPU",
+              " ai.claude.busy > 1 , !media.title"]  # fmt: skip
+# the downloads' state as a service publishes it, and what is no dict: a list, JSON it is not,
+# a dict json.loads reads with NaN and an infinity in it
+SLOT_DOWNLOADS = [None, '{"files": [{"name": "a.iso", "done": 0.5}]}', "[1, 2]", "{", "null",
+                  '{"a": NaN}', " {} ", '{"a": 1}x', "{}", '"text"', '{"a": 1e999}',
+                  '\ufeff{}']  # fmt: skip
+
+
+def _demo() -> Snapshot:
+    from libre_panel.sensors.demo import demo_snapshot
+
+    global _DEMO
+    if _DEMO is None:
+        _DEMO = demo_snapshot(fixed_time=1_760_000_000.0)
+    return _DEMO
+
+
+_DEMO: Snapshot | None = None
+
+
+def _slot_items(rng: random.Random, cards: list[str] | None = None) -> str:
+    """A slot's cards, one a line: a card, its own time, its own rule; a comment, a line that
+    names no card."""
+    lines = []
+    for _ in range(rng.randrange(1, 5)):
+        if cards is not None:
+            line = rng.choice(cards)
+        else:
+            line = rng.choice(SLOT_CARDS) if rng.random() < 0.7 else rng.choice(SLOT_OTHERS)
+        if rng.random() < 0.25:
+            line += rng.choice([" for 5m", " for 90s", " for 1h", " for 3", " for 5s"])
+        if rng.random() < 0.25:
+            line += " if " + rng.choice(SLOT_RULES)
+        lines.append(line)
+    if rng.random() < 0.1:
+        lines.insert(rng.randrange(len(lines) + 1), "# a comment")
+    if rng.random() < 0.05:
+        lines.append("bogus")
+    return "\n".join(lines)
+
+
+def _slot_theme(rng: random.Random, folder: Path, make: Any = None, glow: float = 0.0,
+                cards: list[str] | None = None) -> None:  # fmt: skip
+    """A theme of card slots on a grid (and other modules beside them, over them, under them),
+    in a look's palette and style, the style's corners, cards and glow as given."""
+    from libre_panel import design
+    from libre_panel.theme import modules
+
+    folder.mkdir()
+    w, h = rng.choice([(480, 320), (320, 240), (800, 480), (480, 128), (640, 180), (240, 320),
+                       (160, 128), (64, 48)])  # fmt: skip
+    look = design.LOOKS[rng.choice(list(design.LOOKS))]
+    style = dict(look["style"])
+    if rng.random() < 0.7:
+        style.update(card=rng.choice(modules.CARDS), radius=rng.randrange(0, 101),
+                     backdrop=rng.choice(modules.BACKDROPS),
+                     card_opacity=rng.choice([0.4, 0.7, 1, 0.85]))  # fmt: skip
+    style["glow"] = glow
+    grid = {"columns": rng.choice([1, 2, 3, 4, 6]), "rows": rng.choice([1, 2, 3, 4]),
+            "gap": rng.choice([0, 4, 8, 16]), "margin": rng.choice([0, 8, 24])}  # fmt: skip
+    columns, rows = grid["columns"], grid["rows"]
+    widgets: list[dict[str, Any]] = []
+    for i in range(rng.randrange(1, 4)):
+        at = {"col": rng.randrange(columns), "row": rng.randrange(rows),
+              "cols": rng.randrange(1, columns + 1),
+              "rows": rng.randrange(1, rows + 1)}  # fmt: skip
+        if i and rng.random() < 0.35:  # (another module: the frame lies over the slot's alone)
+            kind = rng.choice(["ring", "clock", "text", "stat", "date"])
+            widgets.append({"type": "module", "id": f"m{i}", "module": kind, "finish": "flat",
+                            **at})  # fmt: skip
+            continue
+        # (the module's kind, then its cards: in this order from the generator)
+        kind = rng.choice(["cards", "cards", "cards", "netcard"])
+        items = _slot_items(rng, cards) if rng.random() < 0.9 else ""
+        module: dict[str, Any] = {"type": "module", "id": f"s{i}", **at, "module": kind,
+                                  "items": items}  # fmt: skip
+        options: dict[str, list[Any]] = {
+            "order": ["first", "turns"], "transition": ["light", "fade", "cut", "random"],
+            "hold": [2.0, 0, 0.5, -1, 10], "change": [0.6, 0, 2], "slide": [0, 0.4],
+            "turn": [5.0, 0.01, 1, 1440], "card": ["auto", "on", "off"],
+            "color": [None, "#ff8800", "@accent", "@cover", "teal", "#11223380"],
+            "forecast": ["auto", "off", "days"],
+        }  # fmt: skip
+        for key, choices in options.items():
+            if rng.random() < 0.5:
+                module[key] = rng.choice(choices)
+        if rng.random() < 0.85:  # (most flat: the finishes Rust does not draw yet aside)
+            module["finish"] = "flat"
+        widgets.append(module)
+    rng.shuffle(widgets)
+    data = {"format": THEME_FORMAT, "name": "slots",
+            "display": {"model": "custom", "width": w, "height": h,
+                        "orientation": "portrait" if h > w else "landscape"},
+            "palette": dict(look["palette"]) if rng.random() < 0.8 else
+            {"accent": _hex(rng), "bg": _hex(rng), "net": _hex(rng)},
+            "grid": grid, "style": style, "widgets": widgets}  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+
+
+def _snapshot_given(snapshot: Snapshot) -> dict[str, Any]:
+    """`snapshot` as lp-check reads it: its readings with their units, labels and origins, its
+    pictures, histories and moment."""
+    return {"readings": {k: {"v": _typed(r.value), "unit": r.unit, "label": r.label,
+                             "origin": r.origin} for k, r in snapshot.readings.items()},
+            "images": {k: image(v) for k, v in snapshot.images.items()},
+            "history": {k: [_typed(v) for v in values] for k, values in snapshot.history.items()},
+            "now": _moment(snapshot.now)}  # fmt: skip
+
+
+def _slot_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
+    """The demo's readings, with a track playing, paused or none, the weather of any kind by day
+    or night or none, agents at work or not, a download running or what is no download; its
+    cover or another or none, at an hour of the day or the night."""
+    import dataclasses
+
+    demo = _demo()
+    readings = dict(demo.readings)
+    images = dict(demo.images)
+
+    def put(key: str, choices: list[Any]) -> None:
+        value = rng.choice(choices)
+        if value == "<gone>":
+            readings.pop(key, None)
+        else:
+            readings[key] = Reading(key, value)
+
+    for key, p, choices in [
+        ("media.title", 0.8, ["Midnight Drive", "", None, 0, "<gone>", "Song"]),
+        ("media.playing", 0.8, [1, 0, True, False, 0.0, 2.5, "1", None, "<gone>"]),
+        ("media.artist", 0.5, ["The Night Owls", "", None, "<gone>"]),
+        ("weather.temperature", 0.6, [21.5, None, "<gone>", 0, -3.0]),
+        ("weather.code", 0.6, [0, 1, 2, 3, 45, 61, 71, 95, 51, None, "x", 2.7]),
+        ("weather.is_day", 0.5, [0, 1, None, "<gone>"]),
+        ("ai.claude.busy", 0.7, [0, 1, 2, True, 0.5, 1.5, None, "1", "<gone>"]),
+        ("ai.codex.busy", 0.7, [0, 1, 2, False, 0.99, None, "<gone>"]),
+        ("downloads", 0.7, [*SLOT_DOWNLOADS[1:], "<gone>"]),
+    ]:  # fmt: skip
+        if rng.random() < p:
+            put(key, choices)
+    if rng.random() < 0.3:
+        images.pop("media.cover", None)
+    elif rng.random() < 0.3:  # (another cover: its colour, or a grey one's none)
+        side = (rng.randrange(20, 90), rng.randrange(20, 90))
+        cover = noise(rng, rng.choice(["RGB", "RGBA"]), side)
+        images["media.cover"] = cover.convert("L").convert("RGB") if rng.random() < 0.3 else cover
+    # (the histories the cards' graphs draw, their last numbers: the same for both)
+    history = {k: [float(v) for v in values[-100:]] for k, values in demo.history.items()}
+    now = datetime(2026, 11, 7, rng.randrange(24), rng.randrange(60), 9, 250)
+    snapshot = dataclasses.replace(demo, readings=readings, images=images, history=history,
+                                   now=now)  # fmt: skip
+    return _snapshot_given(snapshot), snapshot
+
+
+# what a slot's card may hold that Rust does not draw yet (it still chooses the card and its
+# frame's colour as Python does: the checks compare those of every frame)
+SLOT_NOT_YET = ("downloads widgets", "moon widgets", "earth widgets", "analog widgets",
+                "clocks in a time zone")  # fmt: skip
+
+
+def _slots_of(renderer: Renderer) -> list[list[Any]]:
+    """What each slot shows, as lp-check tells it: its id, its card, its frame's colour and
+    thickness."""
+    return [[s.id, s.kinds[s.shown], list(s._colour) if s._colour else None, s.width]
+            for s in renderer._slots.values()]  # fmt: skip
+
+
+def _compare_slot_frames(got: dict[str, Any], want: dict[str, Any], where: Any) -> bool:
+    """A frame of card slots: whether both drew it (to the bit, its boxes, what each slot shows),
+    or Rust says it does not draw one of its card's widgets yet (what each slot shows still as
+    Python has it)."""
+    if "failed" in want:  # (Python's frame fails: Rust makes none)
+        assert "unported" in got, (where, got, want)
+        return False
+    if "slots" in got:
+        assert got["slots"] == want["slots"], where
+    if "unported" in got:
+        assert got["unported"] in SLOT_NOT_YET or got["unported"] == "finishes", (where, got)
+        return False
+    assert got["sha256"] == hashlib.sha256(want["frame"].tobytes()).hexdigest(), where
+    assert got["boxes"] == want["boxes"], where
+    return True
+
+
+def test_frames_of_card_slots_as_python_draws_them(tmp_path: Path) -> None:
+    # (which card each slot shows: the first with something to show by its rule or its own,
+    # else the first; only its parts drawn, none of the bars' marks or the graphs' dots over
+    # them; the slot's frame round it in the card's colour (the module's own, the cover's, the
+    # weather's by day and night, the network's, the accent) over the ground, in strips along
+    # its edges where it is a frame, laid right after the slot's parts; in every style, corner
+    # and size)
+    rng = random.Random(0x5107)
+    cases, expected = [], []
+    for n in range(240):
+        folder = tmp_path / f"t{n}"
+        _slot_theme(rng, folder)
+        given, snapshot = _slot_snapshot(rng)
+        dither = rng.random() < 0.2
+        cases.append({"folder": str(folder), "snapshot": given, "dither": dither})
+        renderer = Renderer(load_theme(folder), preview=True, dither=dither)
+        lists._RAN.clear()
+        try:
+            frame, boxes = renderer.render(snapshot, now=1000.0)
+            expected.append({"frame": frame, "boxes": boxes, "slots": _slots_of(renderer)})
+        except Exception as error:  # noqa: BLE001 (a frame Python cannot make)
+            expected.append({"failed": f"{type(error).__name__}: {error}"})
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    drawn = chosen = 0
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        drawn += _compare_slot_frames(got, want, n)
+        chosen += "slots" in got
+    assert drawn > 120
+    assert chosen > 180
+
+
+def _python_steps(folder: Path, steps: list[tuple[Snapshot, float]]) -> list[dict[str, Any]]:
+    """Frames one after another by one renderer, each at its time."""
+    renderer = Renderer(load_theme(folder), preview=True)
+    lists._RAN.clear()
+    out: list[dict[str, Any]] = []
+    for snapshot, now in steps:
+        try:
+            frame, boxes = renderer.render(snapshot, now=now)
+            out.append({"frame": frame, "boxes": boxes, "slots": _slots_of(renderer)})
+        except Exception as error:  # noqa: BLE001 (a frame Python cannot make)
+            out.append({"failed": f"{type(error).__name__}: {error}"})
+    return out
+
+
+def test_card_slots_frame_after_frame_as_python_keeps_them(tmp_path: Path) -> None:
+    # (what a slot's rules keep from frame to frame: a track paused since when, for `hold`
+    # minutes; an agent at work until when, for 45 s more; a card's turn since when, for its own
+    # time or the slot's; frames a second apart and exactly at each of those times)
+    import dataclasses
+
+    rng = random.Random(0x5109)
+    deltas = [0, 1, 4.99, 5, 30, 44.9, 45, 45.1, 60, 89, 90, 119.9, 120, 120.1, 300, 299.99, 3600]
+    kinds = ["playback", "music", "forecast", "weather", "ai", "net", "date", "clock", "text"]
+    cases, expected = [], []
+    for n in range(100):
+        folder = tmp_path / f"t{n}"
+        _slot_theme(rng, folder, cards=kinds)
+        steps: list[tuple[Snapshot, float]] = []
+        snapshot, now = dataclasses.replace(_demo(), history={}), 1000.0
+        for _ in range(rng.randrange(2, 8)):
+            readings = dict(snapshot.readings)
+            for key, p, choices in [
+                ("media.title", 0.3, ["Midnight Drive", "Other", "", "<gone>"]),
+                ("media.playing", 0.5, [1, 0, 0, False]),
+                ("media.artist", 0.15, ["The Night Owls", "Someone"]),
+                ("weather.temperature", 0.2, [21.5, "<gone>"]),
+                ("ai.claude.busy", 0.4, [0, 1, 2, "<gone>"]),
+                ("ai.codex.busy", 0.3, [0, 1, "<gone>"]),
+            ]:  # fmt: skip
+                if rng.random() < p:
+                    value = rng.choice(choices)
+                    if value == "<gone>":
+                        readings.pop(key, None)
+                    else:
+                        readings[key] = Reading(key, value)
+            snapshot = dataclasses.replace(snapshot, readings=readings)
+            steps.append((snapshot, now))
+            now += rng.choice(deltas)
+        given = [{"snapshot": _snapshot_given(s), "now": t} for s, t in steps]
+        cases.append({"folder": str(folder), "dither": False, "steps": given})
+        expected.append(_python_steps(folder, steps))
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    drawn = changed = 0
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        before = None
+        for i, (g, w) in enumerate(zip(got["steps"], want, strict=True)):
+            drawn += _compare_slot_frames(g, w, (n, i))
+            if "slots" in w:
+                shown = [slot[1] for slot in w["slots"]]
+                changed += before is not None and shown != before
+                before = shown
+    assert drawn > 280
+    assert changed > 45  # (cards that came and went, from one frame to the next)
+
+
+def test_card_slots_keep_their_cards_to_the_second(tmp_path: Path) -> None:
+    # (frames a hair before, at and a hair after each time a slot's rules keep: an agent's 45 s,
+    # a paused track's `hold` (begun anew for another track, another artist, a title gone, a
+    # track played in between), each card's turn (its line's, the slot's, the slot's held to its
+    # shortest and longest), as Python's renderer keeps them, frame after frame)
+    import dataclasses
+
+    demo = dataclasses.replace(_demo(), history={})
+    quiet = {"ai.claude.busy": 0, "ai.codex.busy": 0, "media.playing": 0}
+
+    def at(**given: Any) -> Snapshot:
+        """The demo's readings with these (``ai__claude__busy`` for ai.claude.busy; None: gone),
+        no agent at work and nothing playing unless they say so."""
+        found = dict(demo.readings)
+        for key, value in {**quiet, **{k.replace("__", "."): v for k, v in given.items()}}.items():
+            if value is None:
+                found.pop(key, None)
+            else:
+                found[key] = Reading(key, value)
+        return dataclasses.replace(demo, readings=found)
+
+    title = {"media__title": "Midnight Drive", "media__artist": "The Night Owls"}
+    scenes: list[tuple[dict[str, Any], list[tuple[Snapshot, float]]]] = [
+        ({"items": "ai\ndate"}, [  # an agent's card, 45 s after it last worked
+            (at(ai__claude__busy=1), 1000.0), (at(), 1044.9), (at(), 1044.999), (at(), 1045.0),
+            (at(), 1045.1)]),
+        ({"items": "ai\ndate"}, [
+            (at(ai__codex__busy=2), 1000.0), (at(), 1030.0), (at(ai__codex__busy=1), 1040.0),
+            (at(), 1084.99), (at(), 1085.0)]),
+        ({"items": "playback\ndate", "hold": 0.5}, [  # a paused track, 30 s
+            (at(**title, media__playing=1), 1000.0), (at(**title), 1010.0), (at(**title), 1039.9),
+            (at(**title), 1040.0), (at(**title), 1040.1)]),
+        ({"items": "playback\ndate", "hold": 0.5}, [  # another track: begun anew
+            (at(**title), 1000.0), (at(**{**title, "media__title": "Other"}), 1020.0),
+            (at(**{**title, "media__title": "Other"}), 1045.0),
+            (at(**{**title, "media__title": "Other"}), 1050.0)]),
+        ({"items": "playback\ndate", "hold": 0.5}, [  # another artist
+            (at(**title), 1000.0), (at(**{**title, "media__artist": "Someone"}), 1020.0),
+            (at(**{**title, "media__artist": "Someone"}), 1045.0)]),
+        ({"items": "playback\ndate", "hold": 0.5}, [  # the title gone between
+            (at(**title), 1000.0), (at(media__title=None), 1020.0), (at(**title), 1025.0),
+            (at(**title), 1045.0), (at(**title), 1055.0)]),
+        ({"items": "playback\ndate", "hold": 0.5}, [  # played between
+            (at(**title), 1000.0), (at(**title, media__playing=1), 1020.0), (at(**title), 1035.0),
+            (at(**title), 1060.0), (at(**title), 1065.0)]),
+        *[({"items": "playback\ndate", "hold": 0}, [(at(**title, media__playing=playing), 1000.0)])
+          for playing in (True, False, 0.5, -1.0, 2, 0.0, "1", None)],  # (what plays: a number)
+        ({"items": "playback\ndate", "hold": 2}, [  # the default's two minutes
+            (at(**title), 1000.0), (at(**title), 1119.99), (at(**title), 1120.0)]),
+        ({"items": "date for 5s\nclock for 90s\ntext", "order": "turns", "turn": 1}, [
+            (at(), 1000.0), (at(), 1004.99), (at(), 1005.0), (at(), 1094.99), (at(), 1095.0),
+            (at(), 1154.99), (at(), 1155.0), (at(), 1159.99), (at(), 1160.0)]),
+        ({"items": "date\nclock", "order": "turns", "turn": 0.01}, [  # held to 5 s at least
+            (at(), 1000.0), (at(), 1001.0), (at(), 1004.99), (at(), 1005.0), (at(), 1009.0)]),
+        ({"items": "date\nclock", "order": "turns", "turn": 2000}, [  # and to a day at most
+            (at(), 1000.0), (at(), 1000.0 + 86399.9), (at(), 1000.0 + 86400.0)]),
+        ({"items": "date for 5s\nplayback for 5s", "order": "turns", "hold": 0}, [  # alone again
+            (at(**title), 1000.0), (at(**title), 1005.0), (at(**title, media__playing=1), 1006.0),
+            (at(**title, media__playing=1), 1010.0)]),
+        ({"items": "date\nclock", "order": "turns", "turn": math.inf}, [  # none finite: 5 min
+            (at(), 1000.0), (at(), 1299.9), (at(), 1300.0)]),
+        ({"items": "date\nclock", "order": "turns", "turn": math.nan}, [
+            (at(), 1000.0), (at(), 1001.0), (at(), 1299.9), (at(), 1300.0)]),
+        ({"items": "playback\ndate", "hold": math.inf}, [  # a pause held for ever
+            (at(**title), 1000.0), (at(**title), 1000.0 + 1e9)]),
+        ({"items": "playback\ndate", "hold": math.nan}, [(at(**title), 1000.0)]),  # for none
+        ({"items": "playback\ndate", "hold": -math.inf}, [(at(**title), 1000.0)]),
+        ({"items": "playback\ndate\nclock", "order": "turns", "turn": 1, "hold": 0.5}, [
+            (at(**title, media__playing=1), 1000.0), (at(**title, media__playing=1), 1059.0),
+            (at(**title), 1060.0), (at(), 1120.0), (at(), 1180.0), (at(**title, media__playing=1),
+                                                                   1200.0), (at(), 1240.0)]),
+    ]  # fmt: skip
+    cases, expected = [], []
+    for n, (module, steps) in enumerate(scenes):
+        folder = tmp_path / f"t{n}"
+        folder.mkdir()
+        data = {"format": THEME_FORMAT, "name": "slots",
+                "display": {"model": "custom", "width": 320, "height": 240,
+                            "orientation": "landscape"},
+                "grid": {"columns": 2, "rows": 2, "gap": 8, "margin": 8},
+                "style": {"card": "glass", "radius": 18, "glow": 0},
+                "widgets": [{"type": "module", "id": "s0", "module": "cards", "finish": "flat",
+                             "col": 0, "row": 0, "cols": 2, "rows": 1, **module}]}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        given = [{"snapshot": _snapshot_given(s), "now": t} for s, t in steps]
+        cases.append({"folder": str(folder), "dither": False, "steps": given})
+        expected.append(_python_steps(folder, steps))
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    changes = 0
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        cards = [w["slots"][0][1] for w in want]
+        changes += sum(a != b for a, b in zip(cards, cards[1:], strict=False))
+        for i, (g, w) in enumerate(zip(got["steps"], want, strict=True)):
+            assert _compare_slot_frames(g, w, (n, i)), (n, i, g.get("unported"))
+    assert changes >= 16  # (each scene's card changes where its time is up, and only there)
+
+
+def test_card_slots_python_cannot_make_are_not_made(tmp_path: Path) -> None:
+    # (a slot's turn, hold or change past a float's range: Python's renderer fails as it is
+    # made, at float() of it, and Rust makes none either)
+    cases, expected = [], []
+    for field in ("turn", "hold", "change", "slide"):
+        folder = tmp_path / field
+        folder.mkdir()
+        data = {"format": THEME_FORMAT, "name": "slots",
+                "display": {"model": "custom", "width": 320, "height": 240,
+                            "orientation": "landscape"},
+                "grid": {"columns": 2, "rows": 2},
+                "widgets": [{"type": "module", "id": "s0", "module": "cards",
+                             "items": "date\nclock", field: 10**400}]}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        try:
+            Renderer(load_theme(folder), preview=True)
+            expected.append(None)
+        except OverflowError as error:
+            expected.append(str(error))
+        cases.append({"folder": str(folder), "snapshot": {"readings": {}, "images": {}},
+                      "dither": False})  # fmt: skip
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    assert expected == ["int too large to convert to float"] * 4
+    assert [got.get("error") for got in ours["frames"]] == expected
+
+
+def test_card_slots_frames_in_their_cards_colours(tmp_path: Path) -> None:
+    # (the colour of a slot's frame for every card: the weather's of each kind of weather, by
+    # day and by night (the forecast's word for it, Open-Meteo's, the clock's), the network's,
+    # a download's, the cover's (a grey one carries none), the accent; the module's own over
+    # all of them)
+    import dataclasses
+
+    from libre_panel import design
+
+    demo = dataclasses.replace(_demo(), history={})
+    palette = dict(design.LOOKS["neon"]["palette"])
+    rng = random.Random(0x5C01)
+    grey = noise(rng, "RGB", (40, 40)).convert("L").convert("RGB")
+    cases, expected = [], []
+
+    def case(items: str, changes: dict[str, Any], hour: int = 12, color: Any = None,
+             cover: Any = "demo") -> None:  # fmt: skip
+        n = len(cases)
+        folder = tmp_path / f"t{n}"
+        folder.mkdir()
+        module = {"type": "module", "id": "s0", "module": "cards", "finish": "flat",
+                  "col": 0, "row": 0, "cols": 2, "rows": 1, "items": items}  # fmt: skip
+        if color is not None:
+            module["color"] = color
+        data = {"format": THEME_FORMAT, "name": "slots",
+                "display": {"model": "custom", "width": 320, "height": 240,
+                            "orientation": "landscape"},
+                "grid": {"columns": 2, "rows": 2, "gap": 8, "margin": 8},
+                "style": {"card": "outline", "radius": 30, "glow": 0},
+                "palette": palette, "widgets": [module]}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        readings = dict(demo.readings)
+        for key, value in changes.items():
+            if value is None:
+                readings.pop(key, None)
+            else:
+                readings[key] = Reading(key, value)
+        images = dict(demo.images)
+        if cover is None:
+            images.pop("media.cover", None)
+        elif cover != "demo":
+            images["media.cover"] = cover
+        snapshot = dataclasses.replace(demo, readings=readings, images=images,
+                                       now=datetime(2026, 11, 7, hour, 5, 9))  # fmt: skip
+        cases.append({"folder": str(folder), "snapshot": _snapshot_given(snapshot),
+                      "dither": False})  # fmt: skip
+        renderer = Renderer(load_theme(folder), preview=True)
+        frame, boxes = renderer.render(snapshot, now=1000.0)
+        expected.append({"frame": frame, "boxes": boxes, "slots": _slots_of(renderer)})
+
+    for code in [0, 1, 2, 3, 45, 48, 51, 55, 61, 67, 80, 71, 77, 86, 95, 99, None, "x", 2.7]:
+        for day in [{"weather.is_day": 1}, {"weather.is_day": 0}, {"weather.is_day": None}]:
+            for hour in [12, 23] if day["weather.is_day"] is None else [12]:
+                for items in ["forecast", "weather"]:
+                    case(items, {"weather.code": code, "weather.temperature": 21.5, **day},
+                         hour)  # fmt: skip
+    for items in ["net", "network", "date", "ai", "clock"]:
+        case(items, {})
+    case("download\nnet", {"downloads": '{"files": []}'})
+    case("playback", {"media.playing": 1})  # (the demo's cover)
+    case("playback", {"media.playing": 1}, cover=None)  # (none: the third text, half over)
+    case("playback", {"media.playing": 1}, cover=grey)  # (a grey one carries no colour)
+    for color in ["#ff8800", "@accent", "@cover", "teal", "#11223380"]:
+        case("forecast\nplayback", {"weather.code": 71, "media.playing": 1}, color=color)
+        case("playback", {"media.playing": 1}, color=color, cover=None)
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    colours = set()
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        drawn = _compare_slot_frames(got, want, n)
+        # (a download's card is not drawn by Rust yet: its frame's colour is still compared)
+        assert drawn or got["unported"] == "downloads widgets", (n, got.get("unported"))
+        assert "slots" in got, n
+        colours.add(tuple(want["slots"][0][2]))
+    assert len(colours) >= 12  # (the cards' colours, each its own)

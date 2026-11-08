@@ -25,6 +25,7 @@ pub mod piece;
 mod rect;
 pub mod renderer;
 pub mod shapes;
+mod slot;
 pub mod snapshot;
 mod sunpath;
 pub mod symbols;

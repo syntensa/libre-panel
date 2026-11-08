@@ -27,6 +27,7 @@ use crate::lit;
 use crate::metric::{self, Shown};
 use crate::piece::{Failed, Piece, Result};
 use crate::shapes::{self, Rgba};
+use crate::slot::Slot;
 use crate::snapshot::{need_holds, needs_of, number, Moment, Snapshot};
 use crate::sunpath;
 use crate::symbols;
@@ -40,6 +41,8 @@ pub const MOST_PIXELS: i64 = 1 << 28;
 pub const COVER_COLOR: &str = "@cover";
 /// A need on one of the theme's switches: "switch.frames".
 const SWITCH: &str = "switch.";
+/// The modules that show one card of several (theme/modules.py's SLOT_KINDS).
+const SLOT_KINDS: [&str; 2] = ["cards", "netcard"];
 
 /// How a renderer draws: as the editor's preview or a picture (not the panel), with what moves
 /// (animate), with the dither of the panel's video.
@@ -52,6 +55,10 @@ pub struct Options {
 
 /// What a frame is made of: its pieces in the order they are laid, by widget id.
 type Pieces = Vec<(String, Rc<Piece>)>;
+
+/// What a card slot shows: its id, the card on show, its frame's colour (None: none chosen) and
+/// thickness.
+pub type SlotShown = (String, String, Option<[i64; 3]>, i64);
 
 /// Why a frame is not made here: something on it the Rust renderer does not draw yet (the
 /// Python app's frame is the reference: none is made in its place).
@@ -108,6 +115,10 @@ pub struct Renderer {
     /// the range each graph of its own range was drawn in (_ranges: still, the values' with
     /// room), by id: its end dot lies in it
     ranges: HashMap<String, graph::Range>,
+    /// the slot of every module that shows one card of several, by its id (_slots)
+    slots: IndexMap<String, Slot>,
+    /// whether this frame's slots have chosen their cards
+    slots_begun: bool,
 }
 
 impl Renderer {
@@ -140,7 +151,10 @@ impl Renderer {
             facet_glyphs: RefCell::new(HashMap::new()),
             symbols: crate::symbols::DEFAULT_PACK.to_string(),
             ranges: HashMap::new(),
+            slots: IndexMap::new(),
+            slots_begun: false,
         };
+        renderer.slots = renderer.make_slots()?;
         renderer.background = renderer.load_background()?;
         let ground = renderer.color(Some(&renderer.theme.background_color.clone()), 1.0)?;
         renderer.opaque = ground.is_some_and(|c| c[3] == 255);
@@ -153,6 +167,68 @@ impl Renderer {
             Mode::RGBA
         };
         Ok(renderer)
+    }
+
+    /// _make_slots: the slot of every module that shows one card of several (render/slot.py),
+    /// a module laid out in a box.
+    fn make_slots(&self) -> Result<IndexMap<String, Slot>> {
+        let mut slots = IndexMap::new();
+        for module in self.modules.values() {
+            let id = widget::text(module, "id");
+            if !SLOT_KINDS.contains(&widget::text(module, "module")) {
+                continue;
+            }
+            if let Some(&bounds) = self.module_boxes.get(id) {
+                slots.insert(id.to_string(), Slot::new(module, bounds, &self.theme)?);
+            }
+        }
+        Ok(slots)
+    }
+
+    /// The slots' cards for this frame (Slot.begin, in a still frame), and the colour of each
+    /// one's frame: its module's own (a colour, a palette's, the cover's), else its card's.
+    fn begin_slots(&mut self, snapshot: &Snapshot, now: f64) -> std::result::Result<(), Unported> {
+        let mut slots = std::mem::take(&mut self.slots);
+        let mut begun = Ok(());
+        for slot in slots.values_mut() {
+            if let Err(what) = slot.begin(snapshot, now) {
+                begun = Err(Unported(what));
+                break;
+            }
+            let own = match slot.module.get("color") {
+                Some(v) if v.truthy() => match self.color(Some(&v.str()), 1.0) {
+                    Ok(Some(c)) => Some([c[0], c[1], c[2]]),
+                    // (Python's frame fails at a colour that is none: None[:3])
+                    Ok(None) => {
+                        begun = Err(Unported("a card slot's colour failed".into()));
+                        break;
+                    }
+                    Err(Failed(e)) => {
+                        begun = Err(Unported(format!("a card slot's colour failed: {e}")));
+                        break;
+                    }
+                },
+                _ => None,
+            };
+            slot.set_colour(slot.target(own, snapshot));
+        }
+        self.slots = slots;
+        self.slots_begun = begun.is_ok();
+        begun
+    }
+
+    /// What each slot shows in the frame drawn last, by its id: the card on show, the frame's
+    /// colour and its thickness; None where the frame did not get as far as choosing them.
+    pub fn slots_shown(&self) -> Option<Vec<SlotShown>> {
+        self.slots_begun.then(|| {
+            self.slots
+                .iter()
+                .map(|(id, slot)| {
+                    let (card, colour, width) = slot.state();
+                    (id.clone(), card, colour, width)
+                })
+                .collect()
+        })
     }
 
     pub(crate) fn warn(&self, message: String) {
@@ -901,17 +977,26 @@ impl Renderer {
         None
     }
 
-    /// render: the frame (RGB) of `snapshot`, and the widgets' boxes; Unported where it holds
-    /// what is not drawn here yet.
+    /// render: the frame (RGB) of `snapshot` at `now` (the clock the slots' rules keep their
+    /// times by: render's own `now`, not the snapshot's moment), and the widgets' boxes;
+    /// Unported where it holds what is not drawn here yet.
     pub fn render(
         &mut self,
         snapshot: Snapshot,
+        now: f64,
     ) -> std::result::Result<(Image, IndexMap<String, [i64; 4]>), Unported> {
+        self.slots_begun = false;
         if let Some(what) = self.beyond_widgets() {
             return Err(Unported(what.into()));
         }
+        if !self.slots.is_empty() && self.options.animate {
+            // (a moving frame warms every card up and rolls from one to the next)
+            return Err(Unported("card slots in a moving frame".into()));
+        }
         let snapshot = snapshot.finite();
         self.snapshot = Some(snapshot.clone());
+        // which card each slot shows
+        self.begin_slots(&snapshot, now)?;
         let mut boxes = IndexMap::new();
         let mut pieces: Pieces = Vec::new();
         let mut gone: HashMap<String, bool> = HashMap::new();
@@ -921,8 +1006,16 @@ impl Renderer {
                 continue;
             }
             let module = self.modules.get(widget::text(w, "_module")).cloned();
-            if w.contains_key("_card") && module.is_some() {
-                return Err(Unported("card slots".into()));
+            // a part of a card in a slot: drawn while its card is on show
+            let slot = match &module {
+                Some(module) if w.contains_key("_card") => {
+                    self.slots.get(widget::text(module, "id"))
+                }
+                _ => None,
+            };
+            let in_slot = slot.is_some();
+            if slot.is_some_and(|slot| !slot.shows(widget::int(w, "_card", 0))) {
+                continue;
             }
             if self.missing(w, &snapshot) {
                 continue;
@@ -958,7 +1051,9 @@ impl Renderer {
                 return Err(Unported("turned widgets".into()));
             }
             pieces.push((id.clone(), piece.clone()));
-            if widget::text(w, "type") == "bar" {
+            if in_slot {
+                // (what lies over a bar or a graph is laid for widgets in no slot alone)
+            } else if widget::text(w, "type") == "bar" {
                 // what lies over a bar: its mark, its end dot (Python's frame fails where one
                 // cannot be made: Rust makes none)
                 let refused = |e: Failed| Unported(format!("a bar's mark or dot: {}", e.0));
@@ -1005,6 +1100,13 @@ impl Renderer {
             }
             boxes.insert(id, piece.bounds());
         }
+        // the slots' frames, over their cards
+        let mut slots = std::mem::take(&mut self.slots);
+        let laid = slots
+            .values_mut()
+            .try_for_each(|slot| slot.overlay(&self.theme, &mut pieces));
+        self.slots = slots;
+        laid.map_err(|Failed(e)| Unported(format!("a card slot's frame failed: {e}")))?;
         let canvas = self.compose(&pieces)?;
         Ok((compose::as_rgb(&canvas)?, boxes))
     }
