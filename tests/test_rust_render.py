@@ -5959,7 +5959,8 @@ def test_a_rolling_clock_s_texts_fitted_otherwise_or_over_midnight_as_python_sho
         cases.append({"folder": str(folder), "dither": False, "animate": True, "steps": given})
         expected.append(_python_moving(folder, steps))
     drawn, moving = _compare_moving(cases, expected)
-    assert (drawn, moving) == (3, 1), (drawn, moving)
+    # (on Windows, where the C library and the glyphs are another's, two of them roll)
+    assert (drawn, moving) == (3, 2 if sys.platform == "win32" else 1), (drawn, moving)
 
 
 def test_the_app_s_own_themes_in_moving_frames_as_python_draws_them(tmp_path: Path) -> None:
@@ -6021,4 +6022,5 @@ def test_the_app_s_own_themes_in_moving_frames_as_python_draws_them(tmp_path: Pa
             assert g["boxes"] == w["boxes"], (folder.name, i)
             assert g["moving"] == w["moving"], (folder.name, i)
         drawn.append(folder.name)
-    assert len(drawn) >= 49, drawn
+    # (on Windows Rust does not know the computer's zone: Terra's standing globe is left out)
+    assert len(drawn) >= (48 if sys.platform == "win32" else 49), drawn
