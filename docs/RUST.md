@@ -355,8 +355,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       added over it; clocks, the weather, countdowns and line icons the lit finish leaves flat,
       as Python leaves them. The frames the same to the bit; with a shadow, or the renderer's
       own glow round what the finish leaves flat, a pixel now and then a level apart, as a
-      card's. The facets' rings and graphs and the lit finish's downloads: Rust says it does
-      not draw them yet (the lit finish's weather icons, symbols and graphs: below)
+      card's. The facets' rings and graphs: Rust says it does not draw them yet (the lit
+      finish's weather icons, symbols, graphs and download cards: below)
 - [x] the facet and acrylic finishes' letters (facet.py, facets.py): each letter of a text of
       one line, from 20 px on, the finish's own: of bright metal that mirrors the sky (the
       palette's accent, else its primary or cpu colour, a third of the way to white) above it
@@ -558,6 +558,39 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       tests' moons shows). 83 of the app's 99 themes are drawn by Rust, 78 of them the same to
       the bit (nimbus in its four shapes and the companion screens of almanac and encore are
       new)
+- [x] download cards in a still frame (render/download.py: read, amount, time_left, of_total,
+      layout, rail, _tracked, _cut, _graph, _bar_flat, _base, _empty and draw; the lit finish's
+      LitDownloads), flat and lit: what loads (its phase, source and name, cut to its room), the
+      two readings (the speed or the time left, the amount loaded or the duration) and the
+      amount against the whole where it keeps off the second reading's unit, laid out in the
+      inset's numbers and scaled with its box, wide or stacked; the speed of the last minutes as
+      a curve on its own scale, with its halo and its fill fading below it (np.convolve's sums
+      and np.linspace's float32s as numpy makes them); the progress a pill in its groove, or
+      with the lit finish light in its milled groove, and for a download of unknown size a
+      stretch of light that runs to and fro, where it is at the frame's time, kept frame after
+      frame by its place of 64 as Python keeps it. A state is read as Snapshot.state reads it
+      (json.loads anew; the card slots' rule now reads it the same way), its numbers as _number
+      takes them (an int past a float's range fails the card, as Python's OverflowError does).
+      The tests: 2500 random states in five languages read as Python reads them (2085, the
+      others failing as Python fails); the frames of 300 random themes of cards in every size,
+      colour and finish, at times all along the light's way (284 drawn, all the same to the
+      bit); 2304 cards of every width and height; 569 where the card's rules decide by a pixel
+      or less (a source beside the heading in the smallest fonts, a long amount beside the unit
+      or meeting it to the bit, a name as long as its room to the 64th of a pixel); 80 themes
+      drawn frame after frame (415 frames); 60 themes of download modules in every look (59 to
+      the bit, one a level apart where the look's glow is blurred in floating point). The
+      counter-checks put in 147 faults, and the tests catch 136; the other 11 change nothing a
+      picture can show: two graphs' thresholds no box of whole pixels meets; the smoothing
+      summed from its other end, a unit in the last place in a quarter of the sums, which moves
+      the curve's points by 10^-13 px at most; the area's floor a row higher and the fade's last
+      row worked out, which make the same bytes; the halo laid under the fill, in the same
+      colour (Pillow's alpha_composite gives the same bytes in either order, all colours and
+      alphas tried); a curve kept from its top, which it never reaches; a flat pill's corners a
+      pixel smaller and one of a pixel, which Pillow joins the same or never draws; the
+      stretch's place kept where no light runs, where it is 0; and the bar's glow kept before
+      the stretch's, where the bar has none. A download whose light runs in a moving frame: Rust
+      says it does not draw it yet. 87 of the app's 99 themes are drawn by Rust, 80 of them the
+      same to the bit (lumen-pair in its four shapes is new)
 - [ ] the zones on Windows: Python finds them in the tzdata package there, and Rust finds
       them where it is told the package is (LP_TZDATA: the tests tell lp-check where
       Python's is). The Rust app does not bring one yet: without it, no key is a zone there

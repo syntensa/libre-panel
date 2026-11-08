@@ -7,6 +7,7 @@ mod calendar;
 pub mod compose;
 pub mod countdown;
 pub mod cover;
+pub mod download;
 pub mod effects;
 pub mod facets;
 pub mod fan;

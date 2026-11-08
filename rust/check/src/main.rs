@@ -343,6 +343,29 @@ fn run(case: &Value) -> Result<Value, String> {
                 .collect();
             json!(answers)
         }
+        "download_read" => {
+            // render/download.py's read of each state (a JSON text, read as json.loads reads
+            // it), in its language: its facts as repr() shows them (lists for tuples), or the
+            // error it raises
+            let locale = std::path::PathBuf::from(case["locale"].as_str().unwrap_or(""));
+            let mut answers = Vec::new();
+            for c in case["cases"].as_array().into_iter().flatten() {
+                let code = c["language"].as_str().unwrap_or("en");
+                lp_i18n::set_language(lp_i18n::Language::load(&locale, code)?);
+                answers.push(
+                    match lp_py::json::loads(c["state"].as_str().unwrap_or_default()) {
+                        Ok(lp_py::Value::Dict(state)) => match lp_render::download::read(&state) {
+                            Ok(facts) => json!({"facts": facts.value().repr()}),
+                            Err(e) => json!({"error": e.0}),
+                        },
+                        Ok(_) => json!({"error": "no dict"}),
+                        Err(e) => json!({"error": e.to_string()}),
+                    },
+                );
+            }
+            lp_i18n::set_language(lp_i18n::Language::english());
+            json!(answers)
+        }
         "countdown_text" => {
             // countdown.py's countdown_text(text, part, now, done) for each case, in its language
             let locale = std::path::PathBuf::from(case["locale"].as_str().unwrap_or(""));

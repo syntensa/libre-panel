@@ -29,7 +29,7 @@ from rust_check import image, noise, picture, run
 from libre_panel import fonts, i18n
 from libre_panel import icons as icon_set
 from libre_panel.fonts.fallback import cursive
-from libre_panel.render import formatting, lists, moon
+from libre_panel.render import download, formatting, lists, moon
 from libre_panel.render.countdown import countdown_text
 from libre_panel.render.lit import WEATHER_ICONS
 from libre_panel.render.renderer import Renderer, need_holds
@@ -458,7 +458,7 @@ def _frame_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
 
 
 def _python_frame(
-    folder: Path, snapshot: Snapshot, dither: bool, look: str | None = None
+    folder: Path, snapshot: Snapshot, dither: bool, look: str | None = None, now: float = 1000.0
 ) -> dict[str, Any]:
     try:
         theme = load_theme(folder)
@@ -469,7 +469,7 @@ def _python_frame(
         renderer.symbols = look
     lists._RAN.clear()  # (each frame as a process's first: no fan seen running before it)
     try:
-        frame, boxes = renderer.render(snapshot, now=1000.0)
+        frame, boxes = renderer.render(snapshot, now=now)
     except Exception as error:  # (a frame Python cannot make: what lies over a widget failed)
         return {"failed": f"{type(error).__name__}: {error}"}
     return {"frame": frame, "boxes": boxes}
@@ -484,11 +484,13 @@ def _compare_frames(
     language: str = "en",
     undefined: tuple[str, ...] = (),
     looks: tuple[str, ...] = (),
+    when: Any = None,
 ) -> int:
     """Frames of `count` random themes (of what `make` makes) drawn by both, compared to the
     bit, and their boxes; how many were drawn. Rust may leave out those it says are `undefined`:
     where what Python draws is left to the processor. Each in one of `looks` (the person's look
-    of the symbols and the moon), where there are any."""
+    of the symbols and the moon), where there are any; each at a time `when` tells, where it
+    is given."""
     rng = random.Random(seed)
     cases, expected = [], []
     try:
@@ -502,7 +504,9 @@ def _compare_frames(
             look = rng.choice(looks) if looks else None
             if look is not None:
                 cases[-1]["symbols"] = look
-            expected.append(_python_frame(folder, snapshot, dither, look))
+            now = 1000.0 if when is None else when(rng)
+            cases[-1]["now"] = now
+            expected.append(_python_frame(folder, snapshot, dither, look, now))
     finally:
         i18n.set_language("en")
     [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR),
@@ -1493,7 +1497,7 @@ def test_the_app_s_own_themes_as_python_draws_them() -> None:
         assert got["boxes"] == want["boxes"], folder.name
         drawn.append(folder.name)
     assert len(folders) > 90
-    assert len(drawn) >= 83, drawn
+    assert len(drawn) >= 87, drawn
 
 
 def _lit(
@@ -1593,10 +1597,14 @@ FLAT_FINISHES = [("lit", "clock"), ("lit", "weather"), ("lit", "countdown"), ("l
                  ("flat", "metric"), ("lit", "agent"), ("facet", "sunpath")]  # fmt: skip
 LETTERED_FINISHES = [(finish, kind) for finish in ("facet", "acrylic")
                      for kind in ("text", "metric", "clock", "weather", "countdown")]  # fmt: skip
-OWN_FINISHES = [("lit", "bar"), ("facet", "bar"), ("lit", "gauge")]
+OWN_FINISHES = [("lit", "bar"), ("facet", "bar"), ("lit", "gauge"), ("lit", "downloads")]
 SYMBOL_FINISHES = [("lit", "symbol"), ("lit", "icon")]
 GRAPH_FINISHES = [("lit", "graph")]
-UNDRAWN_FINISHES = [("lit", "downloads"), ("facet", "gauge"), ("facet", "graph")]
+UNDRAWN_FINISHES = [("facet", "gauge"), ("facet", "graph")]
+# a download the lit card shows (the state the downloads service publishes)
+DOWNLOADING = json.dumps({"phase": "downloading", "bytes": 3e8, "total": 1e9, "rate": 2.5e6,
+                          "remaining_s": 280, "name": "a.iso",
+                          "history": [1e6, 2e6, 3e6, 2.5e6]})  # fmt: skip
 
 
 def test_each_finish_rust_does_not_draw_yet_is_refused(tmp_path: Path) -> None:
@@ -1604,7 +1612,7 @@ def test_each_finish_rust_does_not_draw_yet_is_refused(tmp_path: Path) -> None:
     # rather than a frame without it; one that does not take it: the widget drawn flat; the
     # facets' letters and bars, the lit bar and ring: their own, the lit ones' halos within a
     # level; a lit symbol and a lit weather icon: frosted glass, to the bit; a lit graph with
-    # no history: its ground alone, to the bit)
+    # no history: its ground alone, to the bit; a lit download card: its light in its groove)
     import numpy as np
 
     makers = {"clock": _clock, "weather": _weather_or_countdown, "rect": _rect, "bar": _bar,
@@ -1630,6 +1638,8 @@ def test_each_finish_rust_does_not_draw_yet_is_refused(tmp_path: Path) -> None:
                           background="@surface")  # fmt: skip
             if kind == "gauge":
                 widget.update(y=4, h=40, thickness=8)
+            if kind == "downloads":
+                widget.update(x=0, y=0, w=64, h=48)
         if (finish, kind) in SYMBOL_FINISHES:  # (a weather's symbol, large enough to be one)
             widget.update(x=8, y=4, size=40, opacity=1.0, icon="weather", sensor="weather.code")
             widget.pop("hide_if_missing", None)
@@ -1643,17 +1653,20 @@ def test_each_finish_rust_does_not_draw_yet_is_refused(tmp_path: Path) -> None:
             "format": THEME_FORMAT, "name": "finishes", "display": {"width": 64, "height": 48},
             "palette": {"accent": "#2ee6d6", "surface": "#223344", "line": "#3155573b",
                         "text2": "#a93214"}, "widgets": [widget]}), encoding="utf-8")  # fmt: skip
-        cases.append({"folder": str(folder), "snapshot": {"readings": {}, "images": {},
+        readings = {"downloads": DOWNLOADING} if kind == "downloads" else {}
+        given = {k: _typed(v) for k, v in readings.items()}
+        cases.append({"folder": str(folder), "snapshot": {"readings": given, "images": {},
                       "now": [2026, 11, 7, 18, 5, 9, 0]}, "dither": False})  # fmt: skip
         if finish == "lit" and (finish, kind) in OWN_FINISHES:
             cases[-1]["bytes"] = True
         wanted.append("finishes" if (finish, kind) in UNDRAWN_FINISHES else None)
     [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
     got = [frame.get("unported") for frame in ours["frames"]]
-    now = Snapshot(readings={}, now=datetime(2026, 11, 7, 18, 5, 9))
     for case, frame, pair in zip(cases, ours["frames"], pairs, strict=True):
         if pair in UNDRAWN_FINISHES:
             continue
+        state = {"downloads": Reading("downloads", DOWNLOADING)} if pair[1] == "downloads" else {}
+        now = Snapshot(readings=state, now=datetime(2026, 11, 7, 18, 5, 9))
         want = _python_frame(Path(case["folder"]), now, False)["frame"]  # (drawn as Python does)
         if pair in OWN_FINISHES and pair[0] == "lit":
             apart = np.abs(np.asarray(picture(frame["frame"]), int) - np.asarray(want, int))
@@ -3243,6 +3256,413 @@ def test_moons_too_large_are_not_drawn_here(tmp_path: Path) -> None:
     assert ours["frames"][0].get("unported") == "moons larger than 4096 px"
 
 
+# -- downloads: what loads, its progress, its speed ---------------------------------------------
+
+# numbers a download's state may carry, and what is none: an int past a float's range (Python
+# fails at it), the infinities and NaN json.loads reads, a bool, a text, a list
+DOWNLOAD_NUMBERS = [0, 1, -1, 7, 59, 60, 61, 3599, 3600, 86399, 10**6, 2**53 + 1, 10**20,
+                    10**308, 10**309, -(10**309), 0.0, -0.0, 0.5, 0.9999, 1.0, 1.5, 59.999,
+                    3599.5, -3.5, 1e300, 1.7e308, 5e-324, math.inf, -math.inf, math.nan,
+                    1048575.6, 1048576.0, 1073741823.9, 1073741824.0, 9.95 * 1073741824,
+                    123456789.0, -5e9, -(2**40), -1.5e12, True, False, None, "5", [],
+                    {}]  # fmt: skip
+DOWNLOAD_TEXTS = ["", " ", "  x  ", "file.iso", "Ünïcødé ßtraße", "名前", "a\nb", " lead",
+                  "trail ", "x" * 200, "ﬁ", 0, 1, 0.0, 2.5, True, False, None, [],
+                  [1, "a"], {"k": None}, {}]  # fmt: skip
+
+
+def _download_number(rng: random.Random, wild: float = 0.4) -> Any:
+    """A number of a download's state: one of every kind now and then (`wild`), else a size,
+    a speed or a time of the sizes a download has."""
+    if rng.random() < wild:
+        return rng.choice(DOWNLOAD_NUMBERS)
+    kind = rng.random()
+    if kind < 0.3:
+        return rng.randrange(-(10**4), 10**12)
+    if kind < 0.6:
+        return rng.uniform(-1e3, 3e10)
+    return round(rng.uniform(0, 5e9), rng.randrange(0, 4))
+
+
+def _download_state(rng: random.Random, wild: float = 0.4) -> dict[str, Any]:
+    """A state as the downloads service publishes one, or another sender: each field there or
+    not, of the kind it should be or of another."""
+    state: dict[str, Any] = {}
+    if rng.random() < 0.9:
+        state["phase"] = rng.choice([*download.PHASES, "downloading", "", "Done", 3, None])
+    for key in ("bytes", "total", "rate", "remaining_s", "elapsed_s", "more"):
+        if rng.random() < 0.75:
+            state[key] = _download_number(rng, wild)
+    if rng.random() < 0.85:
+        state["name"] = rng.choice([*DOWNLOAD_TEXTS, "ubuntu-24.04.iso", "Game (Steam)"])
+    if rng.random() < 0.7:
+        state["source"] = rng.choice([*DOWNLOAD_TEXTS, "steam", "browser", "aria2"])
+    if rng.random() < 0.5:
+        state["estimated"] = rng.choice([True, False, 1, "yes", None])
+    if rng.random() < 0.8:
+        n = rng.choice([0, 1, 2, 3, 10, 60, 179, 180, 181, 400])
+        base = rng.choice([rng.uniform(0, 4e7), rng.uniform(0, 1e6), rng.uniform(0, 3e4)])
+        speeds = [max(0.0, base + rng.gauss(0, base / 3 + 1)) if rng.random() > wild / 4
+                  else _download_number(rng, wild) for _ in range(n)]  # fmt: skip
+        state["history"] = speeds if rng.random() < 0.95 else "speeds"
+    return state
+
+
+def test_downloads_read_as_download_py_reads_them() -> None:
+    # (a state's texts, in five languages: the phase, the source and the name, a bool that is no
+    # number, minus nought, a size past a float's range as Python fails at it, the infinities
+    # and NaN; seconds, minutes and hours of any number; MB and GB; the last 180 speeds)
+    rng = random.Random(0xD0A1)
+    cases, expected = [], []
+    try:
+        for _ in range(2500):
+            text = json.dumps(_download_state(rng))
+            language = rng.choice(["en", "de", "ja", "ru", "fr"])
+            i18n.set_language(language)
+            try:
+                facts = download.read(json.loads(text))
+                want = {"facts": repr([facts.phase, facts.source, facts.name, facts.share,
+                                       [list(row) for row in facts.rows], facts.amount,
+                                       list(facts.history)])}  # fmt: skip
+            except OverflowError as error:
+                want = {"error": str(error)}
+            cases.append({"state": text, "language": language})
+            expected.append(want)
+    finally:
+        i18n.set_language("en")
+    [ours] = run([{"op": "download_read", "locale": str(i18n.LOCALE_DIR), "cases": cases}])
+    for n, (got, want) in enumerate(zip(ours, expected, strict=True)):
+        assert got == want, (n, cases[n])
+    facts = [w["facts"] for w in expected if "facts" in w]
+    assert len(facts) > 1200 and len(expected) - len(facts) > 300
+    for said in ["'0', 's'", "'min'", "'h'", "'GB'", "'KB/s'", "'MB/s'", "'--'", "≈ ", "  +"]:
+        assert any(said in f for f in facts), said
+
+
+# boxes at the edges of the card's rules: a width 2.4 to 2.5 times its height (stacked or not),
+# a graph of 40 reference px or just less, one of four px, the reference's sizes and more
+DOWNLOAD_BOXES = [(245, 100), (299, 122), (596, 240), (240, 100), (68, 20), (67, 20), (69, 28),
+                  (8, 60), (9, 60), (7, 70), (330, 254), (400, 254), (609, 254), (596, 130),
+                  (700, 130)]  # fmt: skip
+
+
+def _download(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """A download card: wide, stacked or too small for its parts, flat or lit, in colours of
+    its own or the palette's, with a groove or none, a glow, a text for nothing downloading."""
+    w, h = size
+    widget: dict[str, Any] = {
+        "type": "downloads", "id": f"d{i}", "x": rng.randrange(-30, w), "y": rng.randrange(-30, h),
+        "w": rng.choice([0, 1, 3, 20, 60, 120, 200, 330, 400, 596, 700]),
+        "h": rng.choice([0, 1, 4, 10, 30, 60, 130, 180, 254, 300]),
+    }  # fmt: skip
+    if rng.random() < 0.3:  # (at an edge of the layout's rules)
+        widget["w"], widget["h"] = rng.choice(DOWNLOAD_BOXES)
+    if rng.random() < 0.5:
+        widget["finish"] = "lit"
+    for key in ("color", "muted", "color2", "done"):
+        if rng.random() < 0.5:
+            widget[key] = rng.choice([_colour(rng), "@accent", "@text2", _hex(rng, True)])
+    if rng.random() < 0.5:
+        widget["background"] = rng.choice([None, _colour(rng), "@surface", _hex(rng, True)])
+    if rng.random() < 0.5:
+        widget["empty"] = rng.choice(["", "No download running", "Nichts lädt", "x\ny"])
+    if rng.random() < 0.5:
+        widget["glow"] = rng.choice([0, 0.3, 0.6, 1])
+    if rng.random() < 0.25:
+        widget["state"] = rng.choice(["downloads", "other.state", "missing"])
+    for key in ("font", "label_font"):
+        if rng.random() < 0.3:
+            widget[key] = rng.choice(FONTS)
+    if rng.random() < 0.1:
+        widget["opacity"] = 0.5
+    return widget
+
+
+def _download_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _download(rng, i, size) if rng.random() < 0.75 else _card_or_text(rng, i, size)
+
+
+def _download_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
+    """The downloads' state (mostly a download's, of the sizes downloads have), another's, or
+    what is no dict."""
+    readings: dict[str, Any] = {}
+    if rng.random() < 0.9:
+        digits = '{"phase": "done", "bytes": 1' + "0" * 4400 + "}"  # (past json's 4300)
+        readings["downloads"] = rng.choice(["", "null", "[1, 2]", "{", "5", digits])
+        if rng.random() < 0.93:
+            readings["downloads"] = json.dumps(_download_state(rng, wild=0.1))
+    if rng.random() < 0.3:
+        readings["other.state"] = json.dumps(_download_state(rng, wild=0.1))
+    snapshot = Snapshot(readings={k: Reading(k, v) for k, v in readings.items()})
+    return {"readings": {k: _typed(v) for k, v in readings.items()}}, snapshot
+
+
+def _download_time(rng: random.Random) -> float:
+    """When a frame is drawn: where a stretch of light runs, at any point of its way."""
+    return rng.choice([1000.0, 0.0, 0.6, 1.2, rng.uniform(0, 1e5), 1.7e9 + rng.random()])
+
+
+def test_frames_of_downloads_as_python_draws_them(tmp_path: Path) -> None:
+    # (a download card standing: its heading, source and name, its two readings, the amount, the
+    # speed's curve with its halo and fading fill; its progress a flat pill or light in its
+    # groove, the share it shows to its pixels, or a stretch of light where the size is not
+    # known, where it is at the frame's time; wide, stacked, or too small for some of it; its
+    # text where nothing downloads)
+    drawn = _compare_frames(tmp_path, 0xD0A2, 300, _download_or_more, _download_snapshot,
+                            when=_download_time)  # fmt: skip
+    assert drawn > 240
+
+
+# the downloads a card's edges are tried with: one of a known size, from a source, with a long
+# name and its amount beside the second reading; one paused, of fewer MB, that waits
+DOWNLOAD_EDGE_STATES = [
+    {"phase": "downloading", "source": "steam", "rate": 2.5e6, "remaining_s": 75,
+     "name": "Counter-Strike 2 — the workshop's maps and sounds", "bytes": 3.2e9, "total": 9.9e9,
+     "estimated": True, "history": [1.5e6 + 9e5 * ((i * 7) % 11) for i in range(180)]},
+    {"phase": "paused", "source": "browser", "name": "ubuntu-24.04.1-desktop-amd64.iso",
+     "bytes": 3.27e8, "total": 1.028e9, "elapsed_s": 41,
+     "history": [4e5 + 3e4 * ((i * 5) % 13) for i in range(120)]},
+]  # fmt: skip
+
+
+def test_download_cards_at_the_edges_of_what_fits(tmp_path: Path) -> None:
+    # (a card of every width from 312 px to 1000, 130 high, of both downloads, and stacked, 254
+    # high, from 120 to 609: where the source and the name come and go, the name is cut, and the
+    # amount keeps off the second reading's unit, each a pixel apart; and of every height, wide
+    # and stacked: the graph's fill fading over each height of its own)
+    boxes = [*((w, 130, s) for s in (0, 1) for w in range(312, 1001)),
+             *((w, 254, 0) for w in range(120, 610)), *((1000, h, 0) for h in range(30, 300)),
+             *((609, h, 1) for h in range(254, 420))]  # fmt: skip
+    cases, expected = [], []
+    for n, (w, h, s) in enumerate(boxes):
+        folder = tmp_path / f"t{n}"
+        folder.mkdir()
+        card = {"type": "downloads", "id": "d", "x": 0, "y": 0, "w": w, "h": h}
+        data = {"format": THEME_FORMAT, "name": "edges", "display": {"width": w, "height": h},
+                "background": {"color": "#101418"}, "widgets": [card]}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        text = json.dumps(DOWNLOAD_EDGE_STATES[s])
+        snapshot = Snapshot(readings={"downloads": Reading("downloads", text)})
+        cases.append({"folder": str(folder), "snapshot": {"readings": {"downloads": _typed(text)}}})
+        expected.append(_python_frame(folder, snapshot, False))
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        sha = hashlib.sha256(want["frame"].tobytes()).hexdigest()
+        assert got.get("sha256") == sha, (n, boxes[n])
+        assert got["boxes"] == want["boxes"], (n, boxes[n])
+
+
+def _download_edge_cases(folder: Path) -> list[tuple[int, int, dict[str, Any]]]:
+    """Cards where the card's texts just fit, found by download.py's own measures: of the
+    smallest fonts, a source that just comes or goes beside the heading; long amounts beside the
+    second reading's unit, a pixel or less off it or on it; names exactly as long as their
+    room, wide after the heading and the source, and stacked."""
+    from libre_panel.render import light
+
+    folder.mkdir()
+    data = {"format": THEME_FORMAT, "name": "measures", "display": {"width": 64, "height": 48},
+            "widgets": []}  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+    renderer = Renderer(load_theme(folder), preview=True)
+
+    def font(size: float) -> Any:
+        return renderer.font("", max(6, round(size)))
+
+    word = download.heading("downloading").upper()
+    cases: list[tuple[int, int, dict[str, Any]]] = []
+    base = {"phase": "downloading", "source": "steam", "rate": 2.5e6, "remaining_s": 75}
+    for h in (10, 60):  # (the source: in 6 px fonts, where g is 0.15)
+        cases += [(w, h, {**base, "name": "a.iso"}) for w in range(8, 121)]
+    for total in (1e18, 2.5e18, 7e18, 4e20, 1e22, 3e24, 1e27, 5e29, 1e32, 7.7e33):
+        amount = "≈ " + download.of_total(0.45 * total, total)
+        for w in range(312, 1001):
+            lay = download.layout(w, 130)
+            g = lay.g
+            unit, small = font(19 * g), font(20 * g)
+            edge = download.VALUE_X * g + 6 * g + 14 * g
+            off = lay.right - small.getlength(amount) - edge - unit.getlength("MB/s")
+            if abs(off) <= 2 + abs(unit.getlength("MB/s") - unit.getlength("KB/s")) + 4 * g:
+                cases.append((w, 130, {**base, "bytes": 0.45 * total, "total": total,
+                                       "estimated": True, "name": "a.iso"}))  # fmt: skip
+    small, unit = font(20), font(19)
+    exact = []  # (long amounts that meet the unit to the bit, the card 130 high: g is 1)
+    for k in range(18, 60):
+        for m in range(10, 100):
+            total = m * 10.0 ** (k - 1)
+            for share, near in ((0.45, True), (0.13, False)):
+                amount = ("≈ " if near else "") + download.of_total(share * total, total)
+                length = small.getlength(amount) + unit.getlength("MB/s")
+                if length == int(length) and 320 <= length <= 724:
+                    exact.append((int(276 + length), 130, {**base, "bytes": share * total,
+                                  "total": total, "estimated": near, "name": "a.iso"}))  # fmt: skip
+    assert len(exact) >= 3
+    cases += exact[:8]
+    names = {}
+    for a in range(61):
+        for b in range(21):
+            for c in range(4):
+                name = "x" * a + "i" * b + "m" * c
+                names.setdefault(font(22).getlength(name), name)
+    wide = [w for w in range(596, 1000) if (download.layout(w, 130).right - download.MARGIN - (
+        light.tracked_width(font(26), word, 3) + 14 + light.tracked_width(font(20), "STEAM", 2)
+        + 20)) in names]  # fmt: skip
+    for w in wide[:8]:
+        room = (download.layout(w, 130).right - download.MARGIN - light.tracked_width(
+            font(26), word, 3) - 14 - light.tracked_width(font(20), "STEAM", 2) - 20)  # fmt: skip
+        cases.append((w, 130, {**base, "name": names[room]}))
+    stacked = [w for w in range(330, 610) if w - 29 in names][:8]
+    cases += [(w, 254, {**base, "name": names[w - 29]}) for w in stacked]
+    assert len(wide) >= 3 and len(stacked) >= 3
+    return cases
+
+
+def test_download_cards_where_their_texts_just_fit(tmp_path: Path) -> None:
+    # (the cards the card's rules decide by a pixel or less, found by download.py's measures: a
+    # source beside the heading in the smallest fonts, a long amount beside the second
+    # reading's unit or meeting it to the bit, a name as long as its room to the 64th of a
+    # pixel: whole)
+    edges = _download_edge_cases(tmp_path / "measures")
+    cases, expected = [], []
+    for n, (w, h, state) in enumerate(edges):
+        folder = tmp_path / f"t{n}"
+        folder.mkdir()
+        card = {"type": "downloads", "id": "d", "x": 0, "y": 0, "w": w, "h": h}
+        display = {"width": max(16, w), "height": max(16, h)}  # (16 px at least)
+        data = {"format": THEME_FORMAT, "name": "fit", "display": display,
+                "background": {"color": "#101418"}, "widgets": [card]}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        text = json.dumps(state)
+        snapshot = Snapshot(readings={"downloads": Reading("downloads", text)})
+        cases.append({"folder": str(folder), "snapshot": {"readings": {"downloads": _typed(text)}}})
+        expected.append(_python_frame(folder, snapshot, False))
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        sha = hashlib.sha256(want["frame"].tobytes()).hexdigest()
+        assert got.get("sha256") == sha, (n, edges[n][:2])
+    assert len(edges) > 560
+
+
+def test_downloads_frame_after_frame_as_python_keeps_them(tmp_path: Path) -> None:
+    # (one renderer drawing a card frame after frame, a hair or seconds apart: the stretch of
+    # light of a download of unknown size kept by its place of 64, drawn where it stood when it
+    # came there; a new state drawn anew)
+    rng = random.Random(0xD0A3)
+    cases, expected = [], []
+    for n in range(80):
+        folder = tmp_path / f"t{n}"
+        _frame_theme(rng, folder, _download)
+        state = _download_state(rng, wild=0.1)
+        if rng.random() < 0.7:  # (of unknown size: its stretch of light runs)
+            state.pop("total", None)
+            state["phase"] = rng.choice(["downloading", "preparing", "paused"])
+        now = rng.uniform(0, 1e4)
+        steps: list[tuple[Snapshot, float]] = []
+        given = []
+        for _ in range(rng.randrange(2, 9)):
+            if rng.random() < 0.2:
+                state = _download_state(rng, wild=0.1)
+            text = json.dumps(state)
+            steps.append((Snapshot(readings={"downloads": Reading("downloads", text)}), now))
+            given.append({"snapshot": {"readings": {"downloads": _typed(text)}}, "now": now})
+            now += rng.choice([0.0, 0.004, 0.01, 0.02, 0.04, 0.1, 0.3, 1.2, 2.4])
+        cases.append({"folder": str(folder), "dither": False, "steps": given})
+        try:
+            expected.append(_python_steps(folder, steps))
+        except ThemeError:
+            expected.append(None)
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR),
+                   "language": "en", "locale": str(i18n.LOCALE_DIR)}])  # fmt: skip
+    drawn = 0
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        if want is None:  # (a theme Python does not read: nor does Rust)
+            assert "error" in got, n
+            continue
+        for i, (g, w) in enumerate(zip(got["steps"], want, strict=True)):
+            if "failed" in w:  # (Python's frame fails: Rust makes none)
+                assert "unported" in g, (n, i, g, w)
+                continue
+            assert g["sha256"] == hashlib.sha256(w["frame"].tobytes()).hexdigest(), (n, i)
+            assert g["boxes"] == w["boxes"], (n, i)
+            drawn += 1
+    assert drawn > 350
+
+
+def _download_module_theme(rng: random.Random, folder: Path) -> None:
+    """A theme of download modules (and others) on a grid, in a look's palette and style: lit,
+    flat, or the finish the module brings."""
+    from libre_panel import design
+    from libre_panel.theme import modules
+
+    folder.mkdir()
+    w, h = rng.choice([(480, 320), (320, 240), (800, 480), (480, 128), (240, 320), (1920, 480)])
+    look = design.LOOKS[rng.choice(list(design.LOOKS))]
+    style = dict(look["style"])
+    if rng.random() < 0.6:
+        style.update(card=rng.choice(modules.CARDS), radius=rng.randrange(0, 101))
+    grid = {"columns": rng.choice([1, 2, 3, 4]), "rows": rng.choice([1, 2, 3]),
+            "gap": rng.choice([0, 8]), "margin": rng.choice([0, 8, 24])}  # fmt: skip
+    widgets = []
+    for i in range(rng.randrange(1, 4)):
+        kind = rng.choice(["download", "download", "download", "text", "clock"])
+        at = {"col": rng.randrange(grid["columns"]), "row": rng.randrange(grid["rows"]),
+              "cols": rng.randrange(1, grid["columns"] + 1),
+              "rows": rng.randrange(1, grid["rows"] + 1)}  # fmt: skip
+        module: dict[str, Any] = {"type": "module", "id": f"m{i}", "module": kind, **at}
+        if rng.random() < 0.6:
+            module["finish"] = rng.choice(["lit", "flat"])
+        widgets.append(module)
+    data = {"format": THEME_FORMAT, "name": "downloads",
+            "display": {"model": "custom", "width": w, "height": h,
+                        "orientation": "portrait" if h > w else "landscape"},
+            "palette": dict(look["palette"]), "grid": grid, "style": style,
+            "widgets": widgets}  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+
+
+def test_frames_of_download_modules_as_python_draws_them(tmp_path: Path) -> None:
+    # (the download module in every look, lit or flat, its card in the cell it is given, a
+    # download of every phase or none, by the demo's readings; to the bit, but where the look's
+    # glow is blurred in floating point: a level apart now and then, as in the app's themes)
+    import dataclasses
+
+    import numpy as np
+
+    rng = random.Random(0xD0A4)
+    cases, expected = [], []
+    for n in range(60):
+        folder = tmp_path / f"t{n}"
+        _download_module_theme(rng, folder)
+        snapshot = dataclasses.replace(_demo(), history={})
+        readings = dict(snapshot.readings)
+        if rng.random() < 0.85:
+            text = json.dumps(_download_state(rng, wild=0.05))
+            readings["downloads"] = Reading("downloads", text)
+        snapshot = dataclasses.replace(snapshot, readings=readings)
+        now = _download_time(rng)
+        soft = _soft_light(folder)
+        cases.append({"folder": str(folder), "snapshot": _snapshot_given(snapshot), "now": now,
+                      "bytes": soft})  # fmt: skip
+        expected.append(_python_frame(folder, snapshot, False, now=now))
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR),
+                   "language": "en", "locale": str(i18n.LOCALE_DIR)}])  # fmt: skip
+    drawn = exact = 0
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        if "unported" in got:
+            continue
+        assert "frame" in want, (n, got, want)
+        sha = hashlib.sha256(want["frame"].tobytes()).hexdigest()
+        if cases[n]["bytes"] and got["sha256"] != sha:
+            apart = np.abs(np.asarray(picture(got["frame"]), int) - np.asarray(want["frame"], int))
+            assert apart.max() <= 1, n
+            assert (apart.max(axis=2) > 0).sum() <= apart.shape[0] * apart.shape[1] // 10000, n
+        else:
+            assert got["sha256"] == sha, n
+            exact += 1
+        assert got["boxes"] == want["boxes"], n
+        drawn += 1
+    assert drawn > 40 and exact > drawn - 8
+
+
 # -- card slots: a module showing one card of several ----------------------------------------
 
 # the cards whose rule is their own (a track, the weather, an agent, a download), the network's,
@@ -3409,8 +3829,7 @@ def _slot_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
 
 # what a slot's card may hold that Rust does not draw yet (it still chooses the card and its
 # frame's colour as Python does: the checks compare those of every frame)
-SLOT_NOT_YET = ("downloads widgets", "earth widgets", "analog widgets",
-                "clocks in a time zone")  # fmt: skip
+SLOT_NOT_YET = ("earth widgets", "analog widgets", "clocks in a time zone")
 
 
 def _slots_of(renderer: Renderer) -> list[list[Any]]:
@@ -3724,9 +4143,7 @@ def test_card_slots_frames_in_their_cards_colours(tmp_path: Path) -> None:
     [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
     colours = set()
     for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
-        drawn = _compare_slot_frames(got, want, n)
-        # (a download's card is not drawn by Rust yet: its frame's colour is still compared)
-        assert drawn or got["unported"] == "downloads widgets", (n, got.get("unported"))
+        assert _compare_slot_frames(got, want, n), (n, got.get("unported"))
         assert "slots" in got, n
         colours.add(tuple(want["slots"][0][2]))
     assert len(colours) >= 12  # (the cards' colours, each its own)

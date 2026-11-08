@@ -24,6 +24,8 @@ pub(crate) enum Finish {
     LitSymbol,
     /// lit.py's LitGraph: a graph's line as light, its halo under it
     LitGraph,
+    /// download.py's LitDownloads: a download card's progress light in its groove
+    LitDownloads,
     /// facet.py's FacetBar: a raised bar with bevelled ends in a milled track
     FacetBar,
     /// facet.py's FacetText and AcrylicText: the text's letters the finish's own
@@ -52,7 +54,8 @@ pub(crate) fn of(w: &Dict) -> Finish {
         ("lit", "icon") => Finish::LitIcon,
         ("lit", "symbol") => Finish::LitSymbol,
         ("lit", "graph") => Finish::LitGraph,
-        ("lit", "downloads") | ("facet", "gauge" | "graph") => Finish::Unported,
+        ("lit", "downloads") => Finish::LitDownloads,
+        ("facet", "gauge" | "graph") => Finish::Unported,
         ("facet", "bar") => Finish::FacetBar,
         ("facet", "text" | "metric" | "clock" | "weather" | "countdown") => {
             Finish::Lettered(Style::Metal)

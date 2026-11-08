@@ -556,32 +556,5 @@ impl Slot {
 /// (RecursionError), or reads what Rust's str cannot hold, or nests it deeper than Python's
 /// stack is known to take here.
 fn downloads(snapshot: &Snapshot) -> std::result::Result<bool, String> {
-    let Value::Str(text) = snapshot.value("downloads") else {
-        return Ok(false);
-    };
-    match lp_py::json::loads(&text) {
-        Ok(found) => {
-            if depth(&found) > 1000 {
-                return Err("a state nested deeper than 1000 levels".into());
-            }
-            Ok(matches!(found, Value::Dict(_)))
-        }
-        Err(e) => match e.kind {
-            lp_py::json::ErrorKind::Decode { .. } => Ok(false),
-            lp_py::json::ErrorKind::Value if e.msg.starts_with("Exceeds the limit") => Ok(false),
-            _ => Err(format!(
-                "a state Rust does not read as Python does: {}",
-                e.msg
-            )),
-        },
-    }
-}
-
-/// How deep lists and dicts nest in `value` (a number or a text: 0).
-fn depth(value: &Value) -> usize {
-    match value {
-        Value::List(items) => 1 + items.iter().map(depth).max().unwrap_or(0),
-        Value::Dict(d) => 1 + d.values().map(depth).max().unwrap_or(0),
-        _ => 0,
-    }
+    Ok(matches!(snapshot.state("downloads")?, Some(Value::Dict(_))))
 }

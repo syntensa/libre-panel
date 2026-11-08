@@ -120,6 +120,8 @@ pub struct Renderer {
     slots: IndexMap<String, Slot>,
     /// whether this frame's slots have chosen their cards
     slots_begun: bool,
+    /// the time the frame is drawn for (render's `now`: a download's running light)
+    at: f64,
 }
 
 impl Renderer {
@@ -154,6 +156,7 @@ impl Renderer {
             ranges: HashMap::new(),
             slots: IndexMap::new(),
             slots_begun: false,
+            at: 0.0,
         };
         renderer.slots = renderer.make_slots()?;
         renderer.background = renderer.load_background()?;
@@ -944,6 +947,12 @@ impl Renderer {
                     self.cached(&w, content, |r| r.moon_piece(&w, phase))
                 }
             }
+            "downloads" => {
+                let w = w.clone();
+                let snapshot = self.snapshot.clone().unwrap_or_default();
+                let lit = finish::of(&w) == Finish::LitDownloads;
+                return self.download(&w, lit, &snapshot, self.at);
+            }
             other => return Drawn::Unported(format!("{other} widgets")),
         };
         match made {
@@ -1008,6 +1017,7 @@ impl Renderer {
         now: f64,
     ) -> std::result::Result<(Image, IndexMap<String, [i64; 4]>), Unported> {
         self.slots_begun = false;
+        self.at = now;
         if let Some(what) = self.beyond_widgets() {
             return Err(Unported(what.into()));
         }

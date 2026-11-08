@@ -62,6 +62,15 @@ impl Default for Snapshot {
     }
 }
 
+/// How deep lists and dicts nest in `value` (a number or a text: 0).
+fn depth(value: &Value) -> usize {
+    match value {
+        Value::List(items) => 1 + items.iter().map(depth).max().unwrap_or(0),
+        Value::Dict(d) => 1 + d.values().map(depth).max().unwrap_or(0),
+        _ => 0,
+    }
+}
+
 impl Snapshot {
     /// Snapshot.value: the reading's value, the clock's own second, or None.
     pub fn value(&self, key: &str) -> Value {
@@ -73,6 +82,32 @@ impl Snapshot {
             return Value::Float(f64::from(now.second) + f64::from(now.microsecond) / 1e6);
         }
         Value::None
+    }
+
+    /// Snapshot.state: the dict or list a service published (its text, read by json.loads anew);
+    /// None where there is none, it is null or the text is no JSON. Err where Python fails at
+    /// it otherwise (RecursionError), reads what Rust's str cannot hold, or nests it deeper
+    /// than Python's stack is known to take here.
+    pub fn state(&self, key: &str) -> std::result::Result<Option<Value>, String> {
+        let Value::Str(text) = self.value(key) else {
+            return Ok(None);
+        };
+        match lp_py::json::loads(&text) {
+            Ok(found) => {
+                if depth(&found) > 1000 {
+                    return Err("a state nested deeper than 1000 levels".into());
+                }
+                Ok(matches!(found, Value::Dict(_) | Value::List(_)).then_some(found))
+            }
+            Err(e) => match e.kind {
+                lp_py::json::ErrorKind::Decode { .. } => Ok(None),
+                lp_py::json::ErrorKind::Value if e.msg.starts_with("Exceeds the limit") => Ok(None),
+                _ => Err(format!(
+                    "a state Rust does not read as Python does: {}",
+                    e.msg
+                )),
+            },
+        }
     }
 
     /// _finite: every reading that is NaN, infinite or an int too large for a float taken for
