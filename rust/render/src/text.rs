@@ -109,12 +109,12 @@ impl Renderer {
     }
 
     /// font.getlength(text), as Pillow measures it.
-    fn length(font: &FallbackFont, text: &str) -> Result<f64> {
+    pub(crate) fn length(font: &FallbackFont, text: &str) -> Result<f64> {
         font.getlength(text, "", None, None, None).map_err(failed)
     }
 
     /// _digit_cell: the widest digit's advance.
-    fn digit_cell(font: &FallbackFont) -> Result<f64> {
+    pub(crate) fn digit_cell(font: &FallbackFont) -> Result<f64> {
         let mut widest = f64::NEG_INFINITY;
         for d in DIGITS.chars() {
             let w = Self::length(font, &d.to_string())?;
@@ -126,7 +126,7 @@ impl Renderer {
     }
 
     /// _advance: a letter's advance.
-    fn advance(font: &FallbackFont, ch: char) -> Result<f64> {
+    pub(crate) fn advance(font: &FallbackFont, ch: char) -> Result<f64> {
         Self::length(font, &ch.to_string())
     }
 

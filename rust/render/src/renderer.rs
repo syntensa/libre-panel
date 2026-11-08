@@ -22,6 +22,7 @@ use crate::gauge;
 use crate::graph;
 use crate::icons;
 use crate::image;
+use crate::list;
 use crate::lit;
 use crate::metric::{self, Shown};
 use crate::piece::{Failed, Piece, Result};
@@ -783,6 +784,33 @@ impl Renderer {
                         r.graph_piece(&w, &values, slots, range.as_ref())
                     })
                 }
+            }
+            "list" => {
+                let w = w.clone();
+                // (fans turning on their names, or left out where they have not run: their
+                // fans are not drawn here yet; bars gliding to a reading: motion)
+                if widget::text(&w, "style") == "fans" {
+                    return Drawn::Unported("lists of fans".into());
+                }
+                if widget::truthy(&w, "hide_unused") {
+                    return Drawn::Unported("lists that leave out the fans not running".into());
+                }
+                let glide = widget::truthy(&w, "smooth") && widget::truthy(&w, "levels");
+                if self.options.animate && glide {
+                    return Drawn::Unported("lists whose bars glide".into());
+                }
+                if !["min", "max"].iter().all(|k| widget::exact(&w, k)) {
+                    return Drawn::Unported("numbers a float does not hold as they are".into());
+                }
+                let Some(rules) = metric::rules_of(&w) else {
+                    return Drawn::Unported("colour rules above NaN".into());
+                };
+                let snapshot = self.snapshot.clone().unwrap_or_default();
+                let rows = match self.list_rows(&w, &snapshot, &rules) {
+                    Ok(rows) => rows,
+                    Err(e) => return Drawn::Failed(e),
+                };
+                self.cached(&w, list::rows_key(&rows), |r| r.list_piece(&w, &rows))
             }
             "symbol" => {
                 let w = w.clone();

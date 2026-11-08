@@ -444,6 +444,32 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       on x86, 0 on ARM), so Rust leaves those out. A graph whose own range glides from frame
       to frame: Rust says it does not draw it yet. 56 of the app's 99 themes are drawn by
       Rust, 54 of them the same to the bit
+- [x] lists in a still frame (lists.py's pick, the renderer's _draw_list and its rows, bars,
+      columns and cells): the readings a list's lines pick, by key or by pattern as fnmatch
+      matches it (translate's sets and ranges, a range running backwards left out; filter
+      taking names and pattern as normcase has them, on Windows the system's own small
+      letters), in natural order (re's \d, int() of each run: a run of digits int()
+      refuses fails the list, as Python's), a reading once (not again under the key it
+      repeats, nor one a line leaves out), named by the line, the reading beside the key or
+      the sensor's label, sorted by number or by name (casefolded), as many as fit (64 at
+      most); each as its text and its bar's share, the largest value filling the bar where
+      the range is none; as rows with their bars beside or below the names, as upright bars
+      side by side or as tiles filled as high as their values, with a detail beside a name,
+      colour rules, names in capitals. fnmatch on 600 random patterns, each against 178
+      names, and on 2,000 sets of ranges both ways, hyphens alone and doubled, a first ! or ]
+      and escapes (1,418 different), each against every printable letter: 296,800 pairs as
+      Python matches them, and filter on both systems. The frames of 200 random themes of
+      lists the same to the bit (and 1,200 more); ten lists (rows with a detail and a
+      comment, columns of cores and of long names, bars beside their names and below them,
+      one low list showing three of its cores, names in capitals as Python's Unicode makes
+      them, tiles with and without their levels, more of them than a list takes, a reading
+      under no key) at every third width from 8 to 400 px, low and tall, and of no width or
+      height, to the bit; three lists casting a glow or a shadow, small type among them,
+      within a level (their light blurred in floating point, as a card's: 2 pixels of 17.2
+      million a level apart). Lists of fans, and lists that leave out the fans never run
+      (Python keeps the fans seen running from frame to frame): Rust says it does not draw
+      them yet; nor lists whose bars glide in a moving frame. Of the app's own themes no more
+      are drawn yet: the lists in them are of fans
 - [ ] the zones on Windows (Python finds them in the tzdata package there, which the Rust
       app does not bring yet: none is found there for now)
 - [ ] the C library's locale where Python's text follows it: format()'s 'n' and what strftime

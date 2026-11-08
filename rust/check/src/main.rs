@@ -858,6 +858,43 @@ fn run(case: &Value) -> Result<Value, String> {
                 Some(layer) => json!({"layer": value_of(&layer)}),
             }
         }
+        "fnmatch" => {
+            // fnmatch.fnmatchcase of each [name, pattern], and fnmatch.filter of the names by
+            // each pattern: true, false, or the error re raises
+            let matched: Vec<Value> = case["cases"]
+                .as_array()
+                .ok_or("cases")?
+                .iter()
+                .map(|pair| {
+                    let (name, pattern) = (
+                        pair[0].as_str().unwrap_or(""),
+                        pair[1].as_str().unwrap_or(""),
+                    );
+                    match lp_py::fnmatch::fnmatchcase(name, pattern) {
+                        Ok(found) => json!(found),
+                        Err(e) => json!({"error": e.0}),
+                    }
+                })
+                .collect();
+            let names: Vec<&str> = case["names"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect();
+            let filtered: Vec<Value> = case["patterns"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|p| {
+                    match lp_py::fnmatch::filter(names.iter().copied(), p.as_str().unwrap_or("")) {
+                        Ok(found) => json!(found),
+                        Err(e) => json!({"error": e.0}),
+                    }
+                })
+                .collect();
+            json!({"matched": matched, "filtered": filtered})
+        }
         "np_exp" => {
             // numpy's float32 exp of each float32 (their bits)
             let bits: Vec<u64> = case["bits"]
@@ -2403,11 +2440,12 @@ fn snapshot_of(v: &Value) -> lp_render::snapshot::Snapshot {
     let mut snap = sn::Snapshot::default();
     if let Some(readings) = v["readings"].as_object() {
         for (key, value) in readings {
-            // (a value, or {"v": value, "unit": .., "label": ..})
+            // (a value, or {"v": value, "unit": .., "label": .., "origin": ..})
             let reading = match value.get("v") {
                 Some(inner) => sn::Reading {
                     unit: value["unit"].as_str().unwrap_or("").to_string(),
                     label: value["label"].as_str().unwrap_or("").to_string(),
+                    origin: value["origin"].as_str().unwrap_or("").to_string(),
                     ..sn::Reading::of(typed(inner))
                 },
                 None => sn::Reading::of(typed(value)),

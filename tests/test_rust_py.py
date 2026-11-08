@@ -6,10 +6,12 @@ point where the Unicode database is the release's (Python 3.12: Unicode 15.0).""
 from __future__ import annotations
 
 import calendar
+import fnmatch
 import hashlib
 import json
 import math
 import random
+import re
 import string
 import struct
 import sys
@@ -686,3 +688,42 @@ def test_dates_on_the_panel_as_format_date_writes_them() -> None:
              if got != want]  # fmt: skip
     assert not wrong, f"{len(wrong)} differ: {wrong[:40]}"
     assert sum(isinstance(w, str) for w in expected) > 2000
+
+
+def test_fnmatch_as_python_matches() -> None:
+    # (fnmatchcase as translate() makes a pattern a regular expression: sets and their ranges, a
+    # range running backwards left out, a set's first ] or !, hyphens at its ends, escapes,
+    # stars; each pattern against every name. And filter, which on Windows takes the names and
+    # the pattern as normcase has them: slashes turned, letters small as the system makes them)
+    rng = random.Random(0xF4A7)
+    patterns = ["".join(rng.choice("ab-]![\\^*?&~|z.0") for _ in range(rng.randrange(0, 9)))
+                for _ in range(400)]  # fmt: skip
+    patterns += [rng.choice(["", "a", "*", "?"]) + "["
+                 + "".join(rng.choice("!]-abz0^\\[") for _ in range(rng.randrange(0, 6))) + "]"
+                 + rng.choice(["", "*", "a", "]", "-]"]) for _ in range(200)]  # fmt: skip
+    names = sorted({"".join(rng.choice("ab-]![\\^&~|z.0A") for _ in range(rng.randrange(0, 5)))
+                    for _ in range(300)})  # fmt: skip
+    pairs = [(pattern, name) for pattern in patterns for name in names]
+    # (sets made of ranges both ways, hyphens alone and doubled, a first ! or ], escapes: each
+    # against every printable letter)
+    parts = ["a-z", "z-a", "0-9", "-", "a", "b", "z", "0", "\\", "^", "[", "a-", "-z", "!", "]",
+             "--", "b-a", "a-b-c", "-a-", "c-b", "c-b-a"]  # fmt: skip
+    for _ in range(2000):
+        body = ("!" if rng.random() < 0.4 else "") + ("]" if rng.random() < 0.15 else "")
+        body += "".join(rng.choice(parts) for _ in range(rng.randrange(1, 5)))
+        pairs += [(f"[{body}]", chr(c)) for c in range(32, 127)]
+    cases, wanted = [], []
+    for pattern, name in pairs:
+        cases.append([name, pattern])
+        try:
+            wanted.append(fnmatch.fnmatchcase(name, pattern))
+        except re.error:
+            wanted.append("error")
+    files = ["temp.cpu", "temp.gpu", "fan.1", "fan.10", "fan.2", "Fan.3", "disk.a-b", "x[1]",
+             "C:/x", "ÄÖ.ü", "İ", "ß", "ΣΑΣ"]  # fmt: skip
+    globs = ["temp.*", "fan.?", "fan.*", "*[0-9]", "F*", "x[[]*", "*", "[!t]*", "disk.a[-]b",
+             "c:\\*", "äö.*", "i̇", "SS", "σας"]  # fmt: skip
+    [got] = run([{"op": "fnmatch", "cases": cases, "names": files, "patterns": globs}])
+    assert ["error" if isinstance(g, dict) else g for g in got["matched"]] == wanted
+    assert got["filtered"] == [fnmatch.filter(files, p) for p in globs]
+    assert sum(w is True for w in wanted) > 20000

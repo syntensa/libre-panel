@@ -15,3 +15,7 @@ indexmap = "2"
 num-bigint = "0.4"
 num-integer = "0.1"
 num-traits = "0.2"
+
+# (os.path.normcase on Windows: the system's own small letters, as Python's ntpath takes them)
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Globalization"] }

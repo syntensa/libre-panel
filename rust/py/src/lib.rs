@@ -8,6 +8,7 @@
 use unicode_general_category::{get_general_category, GeneralCategory as G};
 
 pub mod datetime;
+pub mod fnmatch;
 pub mod format;
 pub mod json;
 pub mod math;

@@ -16,6 +16,7 @@ mod graph;
 pub mod icons;
 mod image;
 mod light;
+mod list;
 mod lit;
 mod metric;
 pub mod np;

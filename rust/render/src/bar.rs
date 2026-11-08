@@ -84,7 +84,7 @@ fn gradient_colours(a: Rgba, b: Option<Rgba>, n: usize) -> Vec<Rgba> {
 
 impl Renderer {
     /// _paint: a bar's colours: a threshold's colour plain, else `color` (to `color2`).
-    fn paint(&self, w: &Dict, rule: Option<&str>) -> Result<Paint> {
+    pub(crate) fn paint(&self, w: &Dict, rule: Option<&str>) -> Result<Paint> {
         if let Some(rule) = rule.filter(|r| !r.is_empty()) {
             let colour = self.color(Some(rule), 1.0)?.unwrap_or([0, 0, 0, 0]);
             return Ok((colour, None));

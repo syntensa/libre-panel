@@ -2405,3 +2405,268 @@ def test_frames_of_graphs_as_python_draws_them(tmp_path: Path) -> None:
     drawn = _compare_frames(tmp_path, 0x6A9, 200, _graph_or_more, _graph_snapshot,
                             undefined=undefined)  # fmt: skip
     assert drawn > 150
+
+
+# (a line left out twice over, a name with an = in it, a set with no star, every reading, a
+# pattern with no line's name and none at all, keys without a dot, digits of other scripts)
+LIST_ITEMS = ["cpu.temp = CPU", "gpu.temp = GPU", "fan.*", "temp.*", "!temp.acpi*", "disk.*.load",
+              "core.?", "core.*", "proc.[0-9]*", "proc.[!1]*", "# a comment", "", "  ", "nothing",
+              "!cpu.temp", "net.* = Net", "fan.[a-c]*", "*.load", "!*.name", "gpu.*",
+              "drive.ü*", "fan.gpu = Card", "!!core.1", "gpu.* = GPU = 2", "core.[12]", "disk.*",
+              "= Nameless", "!", "up*", "area.*", "*", "core.٣*", "# fan.*", "load.*",
+              "temp.*\ncpu.temp = CPU", "!cpu.temp\ntemp.*",
+              "!temp.k10temp*\ncpu.temp = CPU"]  # fmt: skip
+LIST_FORMATS = ["auto", "", "{value:.1f}", "{value:.0f} {unit}", "{label}: {value}", "{nope}",
+                "{value:q}", "{value:bytes}", "{value:>6.2f}"]  # fmt: skip
+
+
+def _list(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """A list of readings picked by key and pattern (left out, named, sorted), as rows, bars,
+    upright columns or tiles, in columns of its own or as many as fit, with a detail beside
+    a name, colour rules, the largest value filling the bar where its range is none."""
+    w, h = size
+    items = "\n".join(rng.choice(LIST_ITEMS) for _ in range(rng.randrange(0, 6)))
+    data: dict[str, Any] = {"type": "list", "id": f"l{i}", "x": rng.randrange(-20, w),
+                            "y": rng.randrange(-20, h),
+                            "w": rng.choice([1, 20, 80, 160, 240, 300, 400, 640]),
+                            "h": rng.choice([1, 12, 40, 100, 200, 400]), "items": items,
+                            "style": rng.choice(["rows", "bars", "bars", "columns", "cells"]),
+                            "columns": rng.choice([0, 0, 0, 1, 2, 3, 5]),
+                            "max_items": rng.choice([0, 0, 1, 3, 10, -1]),
+                            "sort": rng.choice(["none", "high", "low", "name"]),
+                            "format": rng.choice(LIST_FORMATS),
+                            "font_size": rng.choice([3, 5, 6, 9, 12, 18, 26, 40]),
+                            "uppercase": rng.random() < 0.6, "levels": rng.random() < 0.8,
+                            "color": _colour(rng), "muted": _colour(rng), "color2": _colour(rng),
+                            "scale": rng.choice(["linear", "sqrt", "log"])}  # fmt: skip
+    if rng.random() < 0.4:
+        data["detail"] = rng.choice(["name", "free", "nope", "crit"])
+        data["detail_format"] = rng.choice(["{value:.0f} {unit}", "{value}", "{bad}"])
+    if rng.random() < 0.5:
+        data["min"], data["max"] = rng.choice([(0, 100), (20, 90), (0, 0), (50, 10), (-5, 5.5)])
+    if rng.random() < 0.3:
+        data["background"] = rng.choice([None, _hex(rng), _hex(rng, True), "@surface"])
+    if rng.random() < 0.3:
+        data["color_rules"] = [{"above": rng.choice([10, 50, 70.5]), "color": _hex(rng)}
+                               for _ in range(rng.randrange(1, 4))]  # fmt: skip
+    if rng.random() < 0.2:
+        data["empty"] = rng.choice(["No readings", "—", "Keine Werte"])
+    if rng.random() < 0.5:
+        data["font"], data["label_font"] = rng.choice(FONTS), rng.choice(FONTS)
+    if rng.random() < 0.15:
+        data["opacity"] = 0.6
+    return data
+
+
+def _list_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _list(rng, i, size) if rng.random() < 0.8 else _card_or_text(rng, i, size)
+
+
+def _list_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
+    """Readings a list picks among: temperatures (one repeating another under a friendlier
+    key), fans, drives with their names and free room beside them, cores, processes, values
+    of every kind (none, text, a bool, an int, a float) and units."""
+    readings: list[Reading] = []
+
+    def add(key: str, value: Any, unit: str = "", label: str = "", origin: str = "") -> None:
+        if rng.random() < 0.85:
+            readings.append(Reading(key, value, unit, label, origin))
+
+    add("cpu.temp", rng.uniform(30, 95), "°C", "CPU Package", "temp.k10temp.tctl")
+    add("temp.k10temp.tctl", rng.uniform(30, 95), "°C", "Tctl")
+    add("temp.acpi.1", rng.uniform(20, 60), "°C", "ACPI")
+    add("temp.k10temp.crit", 95.0, "°C", "Tctl crit")  # (details beside the temperatures)
+    add("temp.acpi.crit", 80, "°C")
+    add("load.avg", rng.uniform(0, 0.9), "", "Load")  # (a largest value below 1)
+    add("gpu.temp", rng.uniform(30, 90), "°C", "GPU Core")
+    for n in rng.sample([1, 2, 3, 10, 11, 20], rng.randrange(0, 6)):
+        add(f"fan.{n}", rng.choice([0, 0.0, rng.uniform(300, 2400), 1200]), "rpm", f"Fan {n}")
+    add("fan.gpu", rng.uniform(0, 3000), "rpm", "")
+    add("fan.amd", rng.uniform(0, 3000), "rpm", "AMD")
+    for n in range(1, rng.randrange(1, 4)):
+        add(f"disk.{n}.load", rng.uniform(0, 100), "%", "")
+        add(f"disk.{n}.name", rng.choice(["System", "Games", "Ⅻ", ""]))
+        add(f"disk.{n}.free", rng.choice([rng.uniform(1e9, 2e12), None]), "B")
+    for n in range(1, rng.randrange(1, 14)):
+        add(f"core.{n}", rng.uniform(0, 100), "%", f"Core {n}")
+    for n in rng.sample(range(1, 100), rng.choice([0, 3, 7, 70, 70])):  # (more than a list takes)
+        add(f"proc.{n}", rng.choice([rng.uniform(0, 50), "idle", None, True, 7, 50, 10]), "%",
+            rng.choice(["Firefox", "Steam", "ſystem", "Code", "Code 2"]))  # fmt: skip
+    add("net.down", rng.uniform(0, 1e8), "B/s", "Down")
+    add("net.up", rng.choice([0, 12.5, 1e7]), "B/s", "Up")
+    add("drive.ünter", 42, "GB", "")
+    add("gpu.load", rng.choice([True, None, "high", 61.5]), "%", "GPU")
+    add("uptime", rng.uniform(0, 1e6), "s", "Uptime")  # (keys without a dot: none beside them)
+    add("name", "Box")
+    add("core.٣", rng.uniform(0, 100), "%", "Core ٣")  # (a digit re's \d takes, int() reads)
+    add("area.1²", 12.0, "m²", "Area")  # (a digit int() refuses: the list fails, as Python's)
+    rng.shuffle(readings)
+    now = datetime(2026, 11, 7, 18, 5, 9)
+    snapshot = Snapshot(readings={r.key: r for r in readings}, now=now)
+    given = {"readings": {r.key: {"v": _typed(r.value), "unit": r.unit, "label": r.label,
+                                  "origin": r.origin} for r in readings},
+             "images": {}, "now": [2026, 11, 7, 18, 5, 9, 0]}  # fmt: skip
+    return given, snapshot
+
+
+def test_lists_rust_does_not_draw_yet(tmp_path: Path) -> None:
+    # (fans turning and the ones never run left out: render/fans, and Python keeps the fans
+    # seen running from frame to frame; ints a float does not hold, rules above NaN)
+    rng = random.Random(0x1157)
+    looks: list[tuple[dict[str, Any], str]] = [
+        ({"style": "fans"}, "lists of fans"),
+        ({"style": "rows", "hide_unused": True}, "lists that leave out the fans not running"),
+        ({"max": 2**53 + 1}, "numbers a float does not hold as they are"),
+        ({"color_rules": [{"above": math.nan, "color": "#ff0000"}]}, "colour rules above NaN"),
+    ]
+    cases = []
+    for n, (look, _why) in enumerate(looks):
+        folder = tmp_path / f"t{n}"
+        data = _frame_theme(rng, folder, _card_or_text)
+        data["widgets"].append({**_list(rng, 99, (64, 48)), "items": "fan.*", **look})
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        given, _ = _list_snapshot(rng)
+        cases.append({"folder": str(folder), "snapshot": given, "dither": False})
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    assert [got.get("unported", got.get("error")) for got in ours["frames"]] == [
+        why for _look, why in looks
+    ]
+
+
+def _list_sweep_snapshot() -> tuple[dict[str, Any], Snapshot]:
+    """The readings the lists across their widths pick among, at fixed values: one repeating
+    another, details beside some (one of none), cores to fill columns and tiles, tasks to fill
+    more of them than a list takes, one under no key."""
+    readings = [
+        Reading("cpu.temp", 61.5, "°C", "CPU Package", "temp.k10temp.tctl"),
+        Reading("temp.k10temp.tctl", 61.5, "°C", "Tctl"),
+        Reading("temp.k10temp.crit", 95.0, "°C", "Tctl crit"),
+        Reading("temp.acpi.1", 41.0, "°C", "ACPI"),
+        Reading("temp.acpi.crit", 80, "°C"),
+        *(Reading(f"core.{n}", float(n * 37 % 101), "%", f"Core {n}") for n in range(1, 10)),
+        Reading("disk.1.load", 37.5, "%"),
+        Reading("disk.1.name", "System"),
+        Reading("disk.1.free", None, "B"),
+        Reading("disk.2.load", 81.0, "%"),
+        Reading("disk.2.name", "Games"),
+        Reading("disk.2.free", 4.2e11, "B"),
+        Reading("load.avg", 0.37, "", "Load"),
+        *(Reading(f"proc.{n}", float(n * 13 % 50), "%", f"Task {n}") for n in range(1, 71)),
+        Reading("# note", 12.0, "%", "Note"),  # (a line of its name is a comment all the same)
+        Reading("", 7.0, "%", "Unnamed"),  # (a service may publish under no key at all)
+    ]
+    snapshot = Snapshot(readings={r.key: r for r in readings}, now=datetime(2026, 11, 8, 9, 5, 9))
+    given = {"readings": {r.key: {"v": _typed(r.value), "unit": r.unit, "label": r.label,
+                                  "origin": r.origin} for r in readings},
+             "images": {}, "now": [2026, 11, 8, 9, 5, 9, 0]}  # fmt: skip
+    return given, snapshot
+
+
+# rows with a detail beside the names (and a comment), upright columns of cores and of long
+# names, bars beside the names and below them (names in capitals as Python's Unicode makes them,
+# not as a later one would: ƛ and ɤ have none in 15.0; a low list showing three of its cores:
+# they share the width), tiles with and without their levels, and more of them than a list
+# takes (64, and one a later line adds); a line of no pattern (none), and a reading under no key
+# with one left out that repeats nothing
+LIST_SWEEP: list[dict[str, Any]] = [
+    {"items": "temp.*\ncpu.temp = CPU\ncore.*\n# note", "style": "rows", "detail": "crit",
+     "detail_format": "{value:.0f} {unit}", "font_size": 12},
+    {"items": "core.*", "style": "columns", "font_size": 12, "uppercase": True},
+    {"items": "disk.*.load\ntemp.*", "style": "columns", "font_size": 12},
+    {"items": "core.*\nload.*", "style": "bars", "font_size": 9, "min": 0, "max": 0},
+    {"items": "disk.*.load\n!cpu.temp\ntemp.*\nload.avg = Load ƛɤ", "style": "bars",
+     "detail": "free", "detail_format": "{value}", "font_size": 12, "uppercase": True,
+     "label_font": "builtin:LiberationSans-Regular"},
+    {"items": "core.*", "style": "bars", "font_size": 6, "h": 24, "max_items": 3},
+    {"items": "core.[1-4]\ndisk.*.load", "style": "cells", "font_size": 18},
+    {"items": "core.*", "style": "cells", "levels": False, "font_size": 18},
+    {"items": "proc.*\ncore.1", "style": "cells", "font_size": 9, "max_items": 100},
+    {"items": "= Nameless\n!core.2\n*", "style": "rows", "font_size": 9, "max_items": 4},
+]  # fmt: skip
+
+
+def test_lists_across_their_widths(tmp_path: Path) -> None:
+    # (each list at every third width from 8 to 400 px (each list one more than the one before:
+    # every width comes up), low and tall: where a name, a detail or a value fits, how many
+    # columns, whether bars stand beside the names, how wide the tiles: Python's thresholds,
+    # each crossed; and lists of no width or height, or less, as Python draws them: a pixel)
+    given, snapshot = _list_sweep_snapshot()
+    cases, expected = [], []
+    sizes = [(w, h) for w in range(8, 401, 3) for h in (40, 160)]
+    for w, h in [*sizes, (-8, 40), (-1, 160), (0, 0), (2, 40), (100, -4), (100, 0)]:
+        folder = tmp_path / f"t{w}x{h}"
+        folder.mkdir()
+        widgets, y = [], 4
+        for i, look in enumerate(LIST_SWEEP):
+            widget = {"type": "list", "id": f"l{i}", "x": 4, "y": y, "w": w + i, "h": h,
+                      "color": "#e0e0e0", "muted": "#909090", "color2": "#40c0ff",
+                      "background": "#202830", "levels": True, **look}  # fmt: skip
+            widgets.append(widget)
+            y += widget["h"] + 12
+        data = {"format": THEME_FORMAT, "name": "lists", "display": {"width": 424, "height": y},
+                "palette": {name: "#808080" for name in PALETTE},
+                "background": {"color": "#101418"}, "widgets": widgets}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        cases.append({"folder": str(folder), "snapshot": given, "dither": False})
+        expected.append(_python_frame(folder, snapshot, False))
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    for case, got, want in zip(cases, ours["frames"], expected, strict=True):
+        assert "frame" in want, (case["folder"], want)
+        sha = hashlib.sha256(want["frame"].tobytes()).hexdigest()
+        assert got.get("sha256") == sha, case["folder"]
+        assert got["boxes"] == want["boxes"], case["folder"]
+
+
+# lists casting a glow or a shadow, small type among them (the least room round a list for its
+# glyphs: the light's picture two pixels smaller), at widths that take the light's picture across
+# the size it is blurred at half from
+LIST_LIGHT: list[dict[str, Any]] = [
+    {"items": "temp.*\ncpu.temp = CPU\ncore.*", "style": "rows", "detail": "crit",
+     "detail_format": "{value:.0f} {unit}", "font_size": 4, "glow": 0.7, "glow_radius": 6},
+    {"items": "disk.*.load\ncore.*", "style": "bars", "font_size": 5, "shadow": "#000000a0",
+     "shadow_blur": 4, "shadow_offset": 3},
+    {"items": "core.*", "style": "cells", "font_size": 12, "glow": 0.35, "glow_radius": 10,
+     "shadow": "#00000060", "shadow_blur": 6},
+]  # fmt: skip
+
+
+def test_lists_with_glow_and_shadow_within_a_level(tmp_path: Path) -> None:
+    # (their light blurred in floating point, as a card's: now and then a pixel a level apart)
+    import numpy as np
+
+    given, snapshot = _list_sweep_snapshot()
+    cases, expected = [], []
+    for w in range(8, 401, 3):
+        folder = tmp_path / f"t{w}"
+        folder.mkdir()
+        widgets, y = [], 24
+        for i, look in enumerate(LIST_LIGHT):
+            widget = {"type": "list", "id": f"l{i}", "x": 24, "y": y, "w": w + i, "h": 40,
+                      "color": "#e0e0e0", "muted": "#909090", "color2": "#40c0ff",
+                      "background": "#202830", "levels": True, **look}  # fmt: skip
+            widgets.append(widget)
+            y += widget["h"] + 48
+        data = {"format": THEME_FORMAT, "name": "lists", "display": {"width": 456, "height": y},
+                "palette": {name: "#808080" for name in PALETTE},
+                "background": {"color": "#101418"}, "widgets": widgets}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        dither = w % 2 == 0
+        cases.append({"folder": str(folder), "snapshot": given, "dither": dither, "bytes": True})
+        expected.append(_python_frame(folder, snapshot, dither))
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    differ = total = 0
+    for case, got, want in zip(cases, ours["frames"], expected, strict=True):
+        assert "frame" in want and "frame" in got, (case["folder"], got, want)
+        apart = np.abs(np.asarray(picture(got["frame"]), int) - np.asarray(want["frame"], int))
+        assert apart.max() <= 1, case["folder"]
+        differ += int((apart.max(axis=2) > 0).sum())
+        total += apart.shape[0] * apart.shape[1]
+        assert got["boxes"] == want["boxes"], case["folder"]
+    assert differ <= total // 10000
+
+
+def test_frames_of_lists_as_python_draws_them(tmp_path: Path) -> None:
+    # (readings picked by key and pattern as fnmatch matches them, in natural order, left
+    # out, named and sorted as lists.pick does; as rows, bars, columns and tiles, with their
+    # details, rules and the largest value filling the bar where the range is none)
+    assert _compare_frames(tmp_path, 0x7157, 200, _list_or_more, _list_snapshot) > 150
