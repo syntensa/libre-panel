@@ -87,6 +87,20 @@ def pillow_libwebp() -> dict[str, str]:
     return named if len(named) == 2 else {}
 
 
+def python_tzdata() -> str | None:
+    """The tzdata package Python's zoneinfo finds the zones in where its search path has
+    them not (on Windows all of them), for lp-check to find the same (LP_TZDATA: another);
+    None where Python has none."""
+    import importlib.util
+
+    if os.environ.get("LP_TZDATA"):
+        return os.environ["LP_TZDATA"]
+    spec = importlib.util.find_spec("tzdata")
+    if spec is None or not spec.submodule_search_locations:
+        return None
+    return str(next(iter(spec.submodule_search_locations)))
+
+
 def image(im: Image.Image) -> dict[str, Any]:
     """An image as lp-check takes it."""
     data = base64.b64encode(im.tobytes()).decode("ascii")
@@ -112,6 +126,8 @@ def run(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
         env["LP_LIBFREETYPE"] = libfreetype
     if (libharfbuzz := pillow_libharfbuzz()) is not None:
         env["LP_LIBHARFBUZZ"] = libharfbuzz
+    if (tzdata := python_tzdata()) is not None:
+        env["LP_TZDATA"] = tzdata
     # (UTF-8 both ways: lp-check's answers hold any character, and Windows' own code page
     # would read them otherwise)
     done = subprocess.run(

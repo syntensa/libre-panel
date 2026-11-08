@@ -502,14 +502,17 @@ def test_wide_characters_as_python_s_east_asian_width() -> None:
     assert ours["wide_digest"] == hashlib.sha256(wide.encode()).hexdigest()
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Python's zones come from tzdata there")
 def test_time_zones_found_as_zoneinfo_finds_them() -> None:
+    # (in the search path, else in the tzdata package, on Windows all of them; a key checked
+    # by the system's own paths' rules)
     from libre_panel import timezones
 
     keys = ["", "UTC", "Asia/Tokyo", "Europe/Berlin", "America/Argentina/Buenos_Aires", "Nope/Zone"]
     keys += ["/etc/localtime", "../etc/passwd", "Europe/", "./UTC", "..", ".", "a//b", "zone.tab"]
     keys += ["tzdata.zi", "posixrules", "Factory", "Etc/GMT+5", "US/Pacific", "europe/berlin"]
     keys += ["Asia", "Europe/Berlin\0", "Antarctica/Troll", "iso3166.tab", "right/UTC"]
+    keys += ["Europe\\Berlin", "C:UTC", "..\\zoneinfo\\UTC", "America/Argentina", "Etc/UTC"]
+    keys += ["Europe/Berlin/", "America.Argentina/Cordoba", "__init__.py", "America/Indiana/Knox"]
     [ours] = run([{"op": "py_num", "cases": [], "zones": keys}])
     assert ours["zones"] == [timezones.zone.__wrapped__(k) is not None for k in keys]
 

@@ -224,7 +224,9 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       language, and Python's error where it has one (a card no higher than its padding); the
       app's texts in each language and the system's language as i18n.py finds them
       (lp-i18n); Python's sum() of floats, splitlines(), East Asian widths and the zones
-      zoneinfo finds (lp-py)
+      zoneinfo finds (lp-py): in its search path (PYTHONTZPATH's, else the one it is built
+      with, none on Windows), else in the tzdata package, the folders of a key packages as
+      the import system finds them, a key checked by the system's own paths' rules
 - [x] what the editor asks of the modules: module_info (the kinds, their names in the
       language, sources and sizes, the looks), the starting layouts of a grid (packed where
       there is none, the sizes in the order Python's set has them), a module detached into
@@ -521,8 +523,9 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       on a clock that only goes forward). Slots in a moving frame (changes that roll, fade or
       move, a new track sliding in, the line of light): Rust says it does not draw them yet.
       73 of the app's 99 themes are drawn by Rust, 68 of them the same to the bit
-- [ ] the zones on Windows (Python finds them in the tzdata package there, which the Rust
-      app does not bring yet: none is found there for now)
+- [ ] the zones on Windows: Python finds them in the tzdata package there, and Rust finds
+      them where it is told the package is (LP_TZDATA: the tests tell lp-check where
+      Python's is). The Rust app does not bring one yet: without it, no key is a zone there
 - [ ] the C library's locale where Python's text follows it: format()'s 'n' and what strftime
       writes of a date in English (i18n.format_date: the names, %p, %c) are the C locale's
       unless something in the process sets another. GTK sets the person's when it starts, and
