@@ -519,7 +519,7 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       which hold every pixel of its line; its layer's opacity, which putalpha replaces; a
       frame of no thickness, which draws nothing; a hold below none, which keeps no track
       on a clock that only goes forward). Slots in a moving frame (changes that roll, fade or
-      move, a new track sliding in, the line of light): Rust says it does not draw them yet.
+      move, a new track sliding in, the line of light): below.
       73 of the app's 99 themes are drawn by Rust, 68 of them the same to the bit
 - [x] moon widgets in a still frame (render/moon.py: face, disc, halo, picture, halo_level and
       lit_share; the renderer's _draw_moon, _moon_classic and _moon_piece), in both looks. The
@@ -851,6 +851,43 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       time, back in time, another clock, its time kept, where it begins, whose it is; moving;
       the widget and the list standing in a moving frame, a list's rotors by the item alone),
       and the tests catch all of them
+- [x] card slots in a moving frame (render/slot.py's Slot.begin with its changes, _move,
+      _slide, live, leave, _changing, _accent, _ignition and overlay; window, slid, moved,
+      faded and _shade; render/light.py's add_line and its curves; the renderer's frame loop
+      with the parts of the card that goes): a change from one card to the next takes the
+      slot's `change` seconds of the frames' planned time, from the frame it begins in (not the
+      slot's first, nor with `cut`): the light rolls the card on show up into a line of light
+      at the top edge and the new one down out of it, each row it cuts showing its share; a
+      fade takes the old one out as the new one comes in; a slide or a rise has the new one
+      push the old one out to the left or upwards, a gap between them; a wipe sweeps a beam of
+      light across, the new card behind it. The card that goes shows what it showed last, as
+      its parts were then. A new track on the playback card on show slides in from the right
+      as the old one moves out (`slide` seconds). The frame's colour reaches the card's over
+      0.55 s. The frame moves on while any of that is on its way. Changes chosen at random
+      (Python's random module picks them) and a panel's first moving frame, which draws every
+      card once first (not in a preview): Rust says it does not draw them yet. The tests: a
+      slot of a track's card and the weather's changing each way at a frame rate and none,
+      frames a 25th of a second apart through the change and back in time within it, the
+      track back and another sliding in: 768 frames to the bit, 594 of them on the way; 80
+      random themes of slots (every way of changing, of a moment to seconds, tracks sliding
+      in) frame after frame: 792 frames to the bit, 311 on the way; the edges: a change that
+      ends exactly at a frame, a fade a moment after it began and before it ends, a track
+      sliding in with less to show and then rolling up, a change into the track's card that
+      gets another track on the way, a cut from one track's card to another's, a small slot
+      on a large panel, a slot on a clear ground under a see-through bar, frames 8192ths of a
+      second apart where the rolling edges meet in one row: 516 frames to the bit; a lit slot
+      whose track's progress glows, changing each way: 240 frames within a level; the app's
+      themes in moving frames: 72 of the 99 drawn by Rust all along (57 before; 71 on
+      Windows). The counter-checks put in 52 faults (the light's shares and strength, the
+      fade's, the slide's gap, the colour's time; when a change begins, ends and moves on, what
+      the old card shows and the new one keeps; the curves of each way; the track's slide,
+      when, how and with what; the rows cut and their shares, light cut and faded; the
+      frame's colour on its way; the line of light's strip, colour, alpha, place and ends; the
+      old track shown; the frozen parts' needs; moving), and the tests catch 48 of them, 8 once
+      cases were added (the edges above); the other four change nothing a frame shows: a glow
+      faded in its alpha alone, which a frame adds without it (on a clear ground onto a card
+      that already covers it); light cut or faded in its colour, which no part of a card is; a
+      line's strip two rows narrower, whose rows beyond its halo hold no light
 - [ ] pictures as Pillow fails at them: lp-decode's errors as Python's exceptions, so that
       where Python catches an OSError and goes on (a picture cut short, a file of no picture)
       Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,

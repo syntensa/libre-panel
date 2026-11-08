@@ -7,6 +7,15 @@
 //! its own), and where none has, the first. With `order` `turns` each card that has something
 //! to show is on show for its turn, then the next.
 //!
+//! In a moving frame a change from one card to the next takes the module's `change` seconds of
+//! the frames' planned time, as its `transition` has it: a line of light ignites at the top
+//! edge, the card on show rolls up into it and the new one rolls down out of it ("light"); or
+//! the old one fades out as the new one fades in, the new one pushes the old one out to the
+//! left or upwards, a beam of light wipes it away from the left, or the new one is there at
+//! once. The old card shows what it showed last, cut, faded or moved as the change has it. A
+//! new track on the playback card on show slides in from the right as the old one moves out
+//! (`slide` seconds). The frame's colour follows the card's over half a second.
+//!
 //! In a still frame no change rolls, fades or moves, no new track slides in and no line of
 //! light ignites: what the frame shows is the card on show and its frame. A renderer drawing
 //! one frame after another keeps what the rules remember (a track paused since when, an agent
@@ -14,7 +23,8 @@
 
 use std::rc::Rc;
 
-use lp_pixels::{Draw, Filter, Image, Mode, ALL_CORNERS};
+use indexmap::IndexMap;
+use lp_pixels::{chops, Draw, Filter, Image, Mode, Transpose, ALL_CORNERS};
 use lp_py::{Dict, Value};
 use lp_theme::modules::slots::{self, TURN_S};
 
@@ -35,6 +45,182 @@ const AI_HOLD: f64 = 45.0;
 const WEATHER: [&str; 2] = ["forecast", "weather"];
 /// The frame's mask is drawn at this many times its size.
 const SUPER: usize = 3;
+/// ROLL_UP and ROLL_DOWN: the card on show has rolled up into the top edge by this share of a
+/// change; from the other share on the new one rolls down out of it.
+const ROLL_UP: f64 = 0.42;
+const ROLL_DOWN: f64 = 0.36;
+/// GLOW: how bright the line of light gets.
+const GLOW: f64 = 0.9;
+/// FADE: seconds the frame takes to change its colour.
+const FADE: f64 = 0.55;
+/// GAP: px between the old card or track and the new one in a slide, on a bar 480 px tall.
+const GAP: f64 = 48.0;
+/// FADE_OUT and FADE_IN: in a fade the old card has gone by this share of the change, and the
+/// new one comes from the other share on.
+const FADE_OUT: f64 = 0.6;
+const FADE_IN: f64 = 0.4;
+/// CARD_TRANSITIONS: the ways from one card to the next a slot may name.
+const TRANSITIONS: [&str; 7] = ["light", "fade", "slide", "rise", "wipe", "cut", "random"];
+
+/// How a part of a card goes on the panel (Slot.shows): drawn now, or what the card that goes
+/// showed last.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum OnShow {
+    Live,
+    Frozen,
+}
+
+fn failed(e: lp_pixels::Error) -> Failed {
+    Failed(e.to_string())
+}
+
+/// _shade: `part` with its first row at `first` of its strength and its last at `last` (light,
+/// `additive`: its colour is what is added, all its bands dimmed).
+fn shade(part: &Image, first: f64, last: f64, additive: bool) -> Result<Image> {
+    let n = part.height();
+    let mut values = vec![255u8; n];
+    if n == 1 {
+        // (both cuts in one row: what is left of it)
+        values[0] = lp_py::round(255.0 * py_max(0.0, first + last - 1.0)) as u8;
+    } else if n > 1 {
+        values[0] = lp_py::round(255.0 * first) as u8;
+        values[n - 1] = lp_py::round(255.0 * last) as u8;
+    }
+    let mask = Image::from_bytes(Mode::L, 1, n, values)
+        .and_then(|m| m.resize(part.width(), n, Filter::Nearest, None, None))
+        .map_err(failed)?;
+    let part = if part.mode() == Mode::RGBA {
+        part.clone()
+    } else {
+        part.convert(Mode::RGBA).map_err(failed)?
+    };
+    if additive {
+        let bands = part.split();
+        let dimmed = bands
+            .iter()
+            .map(|band| chops::multiply(band, &mask))
+            .collect::<lp_pixels::Result<Vec<Image>>>()
+            .map_err(failed)?;
+        let refs: Vec<&Image> = dimmed.iter().collect();
+        return lp_pixels::merge(Mode::RGBA, &refs).map_err(failed);
+    }
+    let mut out = part.clone();
+    let alpha = chops::multiply(&part.getchannel(3).map_err(failed)?, &mask).map_err(failed)?;
+    out.putalpha(&alpha).map_err(failed)?;
+    Ok(out)
+}
+
+/// A piece that shows nothing but its glow: Python's Piece(Image.new("RGBA", (1, 1)), glow.x,
+/// glow.y, piece.box, light=glow).
+fn glow_alone(piece: &Piece, glow: Piece) -> Piece {
+    let mut alone = Piece::new(Image::blank(Mode::RGBA, 1, 1), glow.x, glow.y);
+    alone.hit = piece.hit;
+    alone.light = Some(Box::new(glow));
+    alone
+}
+
+/// window: `piece` cut to the panel rows from `top` to `bottom`; a row that is cut shows its
+/// share, so an edge that moves slowly glides instead of stepping. None: nothing of it shows.
+pub(crate) fn window(piece: Option<&Piece>, top: f64, bottom: f64) -> Result<Option<Piece>> {
+    let Some(piece) = piece else {
+        return Ok(None);
+    };
+    if bottom <= top {
+        return Ok(None);
+    }
+    let (layer, y0) = (&piece.layer, piece.y as f64);
+    let a = py_max(top, y0);
+    let b = py_min(bottom, y0 + layer.height() as f64);
+    let glow = match &piece.light {
+        Some(light) => window(Some(light), top, bottom)?,
+        None => None,
+    };
+    if b <= a {
+        return Ok(glow.map(|glow| glow_alone(piece, glow)));
+    }
+    let first = a.floor() as i64 - piece.y;
+    let last = b.ceil() as i64 - piece.y;
+    let mut part = layer.crop(0, first, layer.width() as i64, last);
+    let share_first = 1.0 - (a - (y0 + first as f64));
+    let share_last = 1.0 - ((y0 + last as f64) - b);
+    if share_first < 0.999 || share_last < 0.999 {
+        part = shade(&part, share_first, share_last, piece.add)?;
+    }
+    let mut out = piece.clone();
+    (out.layer, out.y, out.light) = (part, piece.y + first, glow.map(Box::new));
+    Ok(Some(out))
+}
+
+/// slid: `piece` moved `dx` px to the right and cut to the panel columns from `left` to
+/// `right`. None: nothing of it shows.
+fn slid(piece: Option<&Piece>, dx: i64, left: i64, right: i64) -> Result<Option<Piece>> {
+    let Some(piece) = piece else {
+        return Ok(None);
+    };
+    let glow = match &piece.light {
+        Some(light) => slid(Some(light), dx, left, right)?,
+        None => None,
+    };
+    let (layer, x0) = (&piece.layer, piece.x + dx);
+    let (a, b) = (left.max(x0), right.min(x0 + layer.width() as i64));
+    if b <= a {
+        return Ok(glow.map(|glow| glow_alone(piece, glow)));
+    }
+    let mut out = piece.clone();
+    if (a, b) != (x0, x0 + layer.width() as i64) {
+        out.layer = layer.crop(a - x0, 0, b - x0, layer.height() as i64);
+    }
+    (out.x, out.light) = (a, glow.map(Box::new));
+    Ok(Some(out))
+}
+
+/// moved: `piece` moved `dx` px to the right and `dy` px down, its glow with it.
+fn moved(piece: Option<&Piece>, dx: i64, dy: i64) -> Option<Piece> {
+    let piece = piece?;
+    let glow = piece.light.as_deref().and_then(|l| moved(Some(l), dx, dy));
+    let mut out = piece.clone();
+    (out.x, out.y, out.light) = (piece.x + dx, piece.y + dy, glow.map(Box::new));
+    Some(out)
+}
+
+/// faded: `piece` at `share` of its strength (light dimmed in its colour, anything else in its
+/// alpha), its glow with it. None: nothing of it shows.
+fn faded(piece: Option<&Piece>, share: f64) -> Result<Option<Piece>> {
+    let Some(piece) = piece else {
+        return Ok(None);
+    };
+    if share <= 0.004 {
+        return Ok(None);
+    }
+    if share >= 0.996 {
+        return Ok(Some(piece.clone()));
+    }
+    let glow = match &piece.light {
+        Some(light) => faded(Some(light), share)?,
+        None => None,
+    };
+    let dim = |v: u8| f64::from(v) * share;
+    let layer = if piece.layer.mode() == Mode::RGBA {
+        piece.layer.clone()
+    } else {
+        piece.layer.convert(Mode::RGBA).map_err(failed)?
+    };
+    let layer = if piece.add {
+        layer.point_with(dim).map_err(failed)?
+    } else {
+        let mut layer = layer;
+        let alpha = layer
+            .getchannel(3)
+            .map_err(failed)?
+            .point_with(dim)
+            .map_err(failed)?;
+        layer.putalpha(&alpha).map_err(failed)?;
+        layer
+    };
+    let mut out = piece.clone();
+    (out.layer, out.light) = (layer, glow.map(Box::new));
+    Ok(Some(out))
+}
 
 /// _number: a number a module gives, else `default` (a bool, no number, or one not finite).
 fn number_or(value: Option<&Value>, default: f64) -> std::result::Result<f64, Failed> {
@@ -141,6 +327,39 @@ pub(crate) struct Slot {
     strips: Option<Vec<(i64, i64, Image)>>,
     /// the frame in the colour it was drawn in last
     frame: Option<([i64; 3], Vec<Rc<Piece>>)>,
+    /// how it goes from one card to the next (one of TRANSITIONS), and how the change on its
+    /// way moves
+    transition: String,
+    effect: String,
+    /// seconds a change takes, and a new track to slide in
+    change: f64,
+    slide: f64,
+    /// the panel's size (what a slide's gap and the line of light scale with)
+    panel: (i64, i64),
+    /// the card that rolls up, and the planned time its change began
+    leaving: Option<usize>,
+    since: f64,
+    /// what the leaving card showed last, by part; what the card on show shows
+    frozen: IndexMap<String, Rc<Piece>>,
+    last: IndexMap<String, Rc<Piece>>,
+    started: bool,
+    /// in a change: how far each card has rolled, the light's strength, in a fade the old
+    /// card's and the new one's strength, in a slide or a rise the old one's and the new
+    /// one's px, in a wipe the column the new card has reached
+    rows: Option<(f64, f64)>,
+    line: f64,
+    alpha: Option<(f64, f64)>,
+    push: Option<(i64, i64)>,
+    edge: Option<f64>,
+    /// the track the playback card on show shows; a slide's planned start and what the old
+    /// track showed; in a slide the old track's and the new one's x
+    track: Option<(Value, Value)>,
+    sliding: Option<(f64, IndexMap<String, Rc<Piece>>)>,
+    shift: Option<(i64, i64)>,
+    /// the frame's colour: the one a change of it starts from and goes to, and when
+    from: Option<[i64; 3]>,
+    to: Option<[i64; 3]>,
+    colour_at: f64,
 }
 
 impl Slot {
@@ -156,9 +375,12 @@ impl Slot {
         let turns_order = module.get("order") == Some(&Value::from("turns"));
         let turn = number_or(module.get("turn"), 5.0)? * 60.0;
         let turn = py_min(py_max(turn, TURN_S.0), TURN_S.1);
-        // (change and slide: what a moving frame takes, read as Python reads them)
-        py_max(0.0, float_of(module, "change")?);
-        py_max(0.0, float_of(module, "slide")?);
+        let transition = match module.get("transition") {
+            Some(Value::Str(t)) if TRANSITIONS.contains(&t.as_str()) => t.clone(),
+            _ => "light".to_string(),
+        };
+        let change = py_max(0.0, float_of(module, "change")?);
+        let slide = py_max(0.0, float_of(module, "slide")?);
         let hold = py_max(0.0, float_of(module, "hold")?) * 60.0;
         let colours = Colours::of(&theme.palette)?;
         let mut slot = Slot {
@@ -186,6 +408,27 @@ impl Slot {
             colour: None,
             strips: None,
             frame: None,
+            transition,
+            effect: "light".to_string(),
+            change,
+            slide,
+            panel: (theme.width, theme.height),
+            leaving: None,
+            since: 0.0,
+            frozen: IndexMap::new(),
+            last: IndexMap::new(),
+            started: false,
+            rows: None,
+            line: 0.0,
+            alpha: None,
+            push: None,
+            edge: None,
+            track: None,
+            sliding: None,
+            shift: None,
+            from: None,
+            to: None,
+            colour_at: 0.0,
         };
         slot.width = slot.line_width(theme);
         Ok(slot)
@@ -341,28 +584,227 @@ impl Slot {
             .unwrap_or(0)
     }
 
-    /// begin, in a still frame: the card for this frame (no change is on its way, none
-    /// begins), and the frame's colour.
-    pub fn begin(&mut self, snapshot: &Snapshot, now: f64) -> std::result::Result<(), String> {
-        let want = self.wants(snapshot, now)?;
-        if want != self.shown {
-            self.shown = want;
-            self.turn_at = Some(now);
-        } else if self.turn_at.is_none()
-            || (self.turns_order
-                && self
-                    .turn_at
-                    .is_some_and(|at| now - at >= self.turns[self.shown]))
-        {
-            // (the first frame, or its turn again: no other has something to show)
-            self.turn_at = Some(now);
-        }
-        Ok(())
+    /// _still: no change on its way: nothing rolls, fades or moves.
+    fn still(&mut self) {
+        (self.rows, self.line, self.alpha, self.push, self.edge) = (None, 0.0, None, None, None);
     }
 
-    /// shows: whether part of `card` goes on the panel (in a still frame: the card on show).
-    pub fn shows(&self, card: i64) -> bool {
-        usize::try_from(card).is_ok_and(|c| c == self.shown)
+    /// _inner: what rolls: the module's box inside its frame.
+    fn inner(&self) -> [i64; 4] {
+        let [x, y, w, h] = self.bounds;
+        let f = self.width;
+        [x + f, y + f, w - 2 * f, h - 2 * f]
+    }
+
+    /// What a slide's gap and the line of light scale with: the panel's height of 480 px.
+    fn unit(&self) -> f64 {
+        self.panel.0.min(self.panel.1) as f64 / 480.0
+    }
+
+    /// begin: the card for this frame, and where a change has got to; in a moving frame
+    /// (`animate`) a change of cards begins (where the slot has been drawn before and its
+    /// change takes a while), and a new track slides in. Whether it moves on. Unported where
+    /// Python's frame fails at a rule, and where the change is chosen at random (Python's
+    /// random module chooses it: no other frame can show the same).
+    pub fn begin(
+        &mut self,
+        snapshot: &Snapshot,
+        now: f64,
+        animate: bool,
+    ) -> std::result::Result<bool, String> {
+        if self.leaving.is_some() && now - self.since >= self.change {
+            (self.leaving, self.frozen) = (None, IndexMap::new());
+        }
+        let want = self.wants(snapshot, now)?;
+        if self.leaving.is_none() {
+            // (a change on its way finishes first)
+            if want != self.shown {
+                let moves =
+                    self.started && animate && self.change > 0.0 && self.transition != "cut";
+                if moves {
+                    if self.transition == "random" {
+                        return Err("card slots whose change is chosen at random".into());
+                    }
+                    self.leaving = Some(self.shown);
+                    self.since = now;
+                    self.frozen = std::mem::take(&mut self.last);
+                    self.effect = self.transition.clone();
+                }
+                self.last = IndexMap::new();
+                (self.shown, self.turn_at) = (want, Some(now));
+            } else if self.turn_at.is_none()
+                || (self.turns_order
+                    && self
+                        .turn_at
+                        .is_some_and(|at| now - at >= self.turns[self.shown]))
+            {
+                // (the first frame, or its turn again: no other has something to show)
+                self.turn_at = Some(now);
+            }
+        }
+        self.started = true;
+        self.still();
+        let mut moving = false;
+        if self.leaving.is_some() {
+            moving = true;
+            self.move_to(light::clamp((now - self.since) / self.change));
+        }
+        moving |= self.slide_track(snapshot, now, animate);
+        Ok(moving)
+    }
+
+    /// _move: where the change has got to at `p` (0 to 1) of its time.
+    fn move_to(&mut self, p: f64) {
+        let [x, _, w, h] = self.inner();
+        let (w, h) = (w as f64, h as f64);
+        match self.effect.as_str() {
+            "fade" => {
+                self.alpha = Some((
+                    1.0 - light::smooth(light::clamp(p / FADE_OUT)),
+                    light::smooth(light::clamp((p - FADE_IN) / (1.0 - FADE_IN))),
+                ));
+            }
+            "slide" | "rise" => {
+                // (the new card pushes the old one out)
+                let across = if self.effect == "slide" { w } else { h };
+                let reach = lp_py::round(across) as i64 + lp_py::round(GAP * self.unit()) as i64;
+                let away = lp_py::round(reach as f64 * light::smooth(p)) as i64;
+                self.push = Some((-away, reach - away));
+            }
+            "wipe" => {
+                // (a beam of light sweeps across, the new card behind it)
+                self.edge = Some(x as f64 + w * light::smooth(p));
+                self.line = GLOW * (std::f64::consts::PI * p).sin();
+            }
+            _ => {
+                // (light: the old card rolls up into a line of light, the new one rolls down)
+                let up = if p < ROLL_UP {
+                    h * (1.0 - light::ease_in(p / ROLL_UP))
+                } else {
+                    0.0
+                };
+                let down = if p > ROLL_DOWN {
+                    h * light::ease_out((p - ROLL_DOWN) / (1.0 - ROLL_DOWN))
+                } else {
+                    0.0
+                };
+                self.rows = Some((up, down));
+                self.line = if p < ROLL_UP {
+                    GLOW * light::ease_out(p / ROLL_UP)
+                } else {
+                    GLOW * (1.0 - light::ease_out((p - ROLL_UP) / (1.0 - ROLL_UP)))
+                };
+            }
+        }
+    }
+
+    /// _slide: where a slide has got to: it begins when the playback card on show has a new
+    /// track (not in a change of cards: that one shows the new track anyway), and takes `slide`
+    /// seconds of the frames' planned time. Whether it moves on.
+    fn slide_track(&mut self, snapshot: &Snapshot, now: f64, animate: bool) -> bool {
+        let mut track = None;
+        if self.leaving.is_none() && PLAYBACK.contains(&self.kinds[self.shown].as_str()) {
+            let title = snapshot.value("media.title");
+            if title.truthy() {
+                track = Some((title, snapshot.value("media.artist")));
+            }
+        }
+        match &track {
+            None => self.sliding = None,
+            Some(new) => {
+                let other = self.track.as_ref().is_some_and(|old| old != new);
+                if other && !self.last.is_empty() && self.slide > 0.0 && animate {
+                    // (the new track fills a new set)
+                    self.sliding = Some((now, std::mem::take(&mut self.last)));
+                }
+            }
+        }
+        (self.track, self.shift) = (track, None);
+        let Some((began, _)) = &self.sliding else {
+            return false;
+        };
+        let began = *began;
+        if now - began >= self.slide {
+            self.sliding = None;
+            return false;
+        }
+        let reach = self.inner()[2] + lp_py::round(GAP * self.unit()) as i64;
+        let away = lp_py::round(reach as f64 * light::ease_out((now - began) / self.slide)) as i64;
+        self.shift = Some((-away, reach - away));
+        true
+    }
+
+    /// shows: how part of `card` goes on the panel: drawn now (the card on show), what the card
+    /// that rolls up showed before, or not at all.
+    pub fn shows(&self, card: i64) -> Option<OnShow> {
+        let card = usize::try_from(card).ok()?;
+        if card == self.shown {
+            return Some(OnShow::Live);
+        }
+        if self.leaving == Some(card) {
+            return Some(OnShow::Frozen);
+        }
+        None
+    }
+
+    /// live: a part of the card on show, as drawn: kept for when the card goes or the track
+    /// changes, and during a change as the new card is (cut to the rows it has rolled down to,
+    /// faded, moved), or moved in from the right and cut to the card during a slide.
+    pub fn live(&mut self, part: &str, piece: Rc<Piece>) -> Result<Option<Rc<Piece>>> {
+        self.last.insert(part.to_string(), piece.clone());
+        if let Some((_, new)) = self.shift {
+            let [x, _, w, _] = self.inner();
+            return Ok(slid(Some(&piece), new, x, x + w)?.map(Rc::new));
+        }
+        if self.leaving.is_none() {
+            return Ok(Some(piece));
+        }
+        Ok(self.changing(Some(&piece), 1)?.map(Rc::new))
+    }
+
+    /// leave: a part of the card that goes: what it showed last, as the change has it.
+    pub fn leave(&self, part: &str) -> Result<Option<Rc<Piece>>> {
+        if self.leaving.is_none() {
+            return Ok(None);
+        }
+        let piece = self.frozen.get(part).map(|p| p.as_ref());
+        Ok(self.changing(piece, 0)?.map(Rc::new))
+    }
+
+    /// _changing: `piece` of the old card (`which` 0) or the new one (1) as the change has it.
+    fn changing(&self, piece: Option<&Piece>, which: usize) -> Result<Option<Piece>> {
+        let [x, y, w, h] = self.inner();
+        let pick = |pair: (i64, i64)| if which == 0 { pair.0 } else { pair.1 };
+        if let Some((old, new)) = self.alpha {
+            return faded(piece, if which == 0 { old } else { new });
+        }
+        if let Some(push) = self.push {
+            if self.effect == "slide" {
+                return slid(piece, pick(push), x, x + w);
+            }
+            // (rise)
+            return window(
+                moved(piece, 0, pick(push)).as_ref(),
+                y as f64,
+                (y + h) as f64,
+            );
+        }
+        if let Some(edge) = self.edge {
+            let edge = lp_py::round(edge) as i64;
+            return if which == 1 {
+                slid(piece, 0, x, edge)
+            } else {
+                slid(piece, 0, edge, x + w)
+            };
+        }
+        let Some((up, down)) = self.rows else {
+            return Ok(None);
+        };
+        let y = y as f64;
+        if which == 1 {
+            return window(piece, y, y + down);
+        }
+        window(piece, y + down, y + up)
     }
 
     /// _target: the colour of the card on show, over the ground; `own` the module's own colour
@@ -410,9 +852,25 @@ impl Slot {
         }
     }
 
-    /// _accent in a still frame: the frame's colour is the card's at once.
-    pub fn set_colour(&mut self, colour: [i64; 3]) {
-        self.colour = Some(colour);
+    /// _accent: the frame's colour for this frame, the card's `target`: at once in a still
+    /// frame, reached over half a second in a moving one. Whether it moves on.
+    pub fn accent(&mut self, target: [i64; 3], now: f64, animate: bool) -> bool {
+        let Some(to) = self.to.filter(|_| animate) else {
+            (self.from, self.to, self.colour, self.colour_at) =
+                (Some(target), Some(target), Some(target), now);
+            return false;
+        };
+        if target != to {
+            (self.from, self.to, self.colour_at) = (self.colour, Some(target), now);
+        }
+        let u = light::clamp((now - self.colour_at) / FADE);
+        let from = self.from.unwrap_or(target);
+        self.colour = Some(light::mix(
+            self.to.unwrap_or(target),
+            from,
+            light::smooth(u),
+        ));
+        u < 1.0
     }
 
     /// The card on show, the frame's colour and its thickness (for the checks).
@@ -524,8 +982,59 @@ impl Slot {
         Ok(pieces)
     }
 
-    /// overlay: the frame over the module's pieces, right after the last of them; none where
-    /// none of them is drawn.
+    /// _ignition: the line of light at the top edge, over the module's width; in a wipe the
+    /// beam at its edge, down the card's height. None while it is out.
+    fn ignition(&self, theme: &lp_theme::Theme) -> Result<Option<Piece>> {
+        if self.line <= 0.004 {
+            return Ok(None);
+        }
+        let [x, y, w, _] = self.bounds;
+        let unit = self.unit();
+        let half = (lp_py::round(32.0 * unit) as i64).max(3);
+        let inner = self.inner();
+        let across = if self.edge.is_none() { w } else { inner[3] };
+        let mut strip = Image::blank(Mode::RGB, across.max(0) as usize, (2 * half) as usize);
+        // (the card's that comes: one strip)
+        let colour = self.to.or(self.colour).unwrap_or([255, 255, 255]);
+        let look = light::Look {
+            unit,
+            soft: 40.0 * unit,
+            halo: 7.0,
+            share: 0.8,
+            colour,
+            white: light::role_colour(&theme.palette, "text"),
+        };
+        light::add_line(
+            &mut strip,
+            (0.0, across as f64, half as f64),
+            self.line,
+            &look,
+        )?;
+        let bands = strip.split();
+        let brightest = chops::lighter(
+            &chops::lighter(&bands[0], &bands[1]).map_err(failed)?,
+            &bands[2],
+        )
+        .map_err(failed)?;
+        strip.putalpha(&brightest).map_err(failed)?;
+        let Some(edge) = self.edge else {
+            let top = lp_py::round(y as f64 + self.width as f64 / 2.0) as i64 - half;
+            let mut line = Piece::new(strip, x, top);
+            line.add = true;
+            return Ok(Some(line));
+        };
+        let mut beam = Piece::new(
+            strip.transpose(Transpose::Rotate90),
+            lp_py::round(edge) as i64 - half,
+            inner[1],
+        );
+        beam.add = true;
+        slid(Some(&beam), 0, inner[0], inner[0] + inner[2])
+    }
+
+    /// overlay: over the module's pieces, right after the last of them: in a slide the old
+    /// track moving out, the frame, and during a change the line of light; none where none of
+    /// its pieces is drawn.
     pub fn overlay(
         &mut self,
         theme: &lp_theme::Theme,
@@ -535,17 +1044,26 @@ impl Slot {
         let Some(at) = pieces.iter().rposition(|(id, _)| id.starts_with(&prefix)) else {
             return Ok(());
         };
-        let Some(colour) = self.colour else {
-            return Ok(());
-        };
-        if self.width == 0 {
-            return Ok(());
+        let mut extra: Vec<(String, Rc<Piece>)> = Vec::new();
+        if let (Some((old, _)), Some((_, parts))) = (self.shift, &self.sliding) {
+            // (the old track, moving out)
+            let [x, _, w, _] = self.inner();
+            for (part, piece) in parts {
+                if let Some(moved) = slid(Some(piece), old, x, x + w)? {
+                    extra.push((format!("{part}\0old"), Rc::new(moved)));
+                }
+            }
         }
-        let strips = self.frame(theme, colour)?;
-        let extra = strips.into_iter().enumerate().map(|(i, strip)| {
-            let n = if i == 0 { String::new() } else { i.to_string() };
-            (format!("{prefix}\0frame{n}"), strip)
-        });
+        if let (true, Some(colour)) = (self.width != 0, self.colour) {
+            let strips = self.frame(theme, colour)?;
+            for (i, strip) in strips.into_iter().enumerate() {
+                let n = if i == 0 { String::new() } else { i.to_string() };
+                extra.push((format!("{prefix}\0frame{n}"), strip));
+            }
+        }
+        if let Some(line) = self.ignition(theme)? {
+            extra.push((format!("{prefix}\0line"), Rc::new(line)));
+        }
         pieces.splice(at + 1..at + 1, extra);
         Ok(())
     }

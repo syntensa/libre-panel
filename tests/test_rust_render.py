@@ -4976,9 +4976,10 @@ def _slot_items(rng: random.Random, cards: list[str] | None = None) -> str:
 
 
 def _slot_theme(rng: random.Random, folder: Path, make: Any = None, glow: float = 0.0,
-                cards: list[str] | None = None) -> None:  # fmt: skip
+                cards: list[str] | None = None, moving: bool = False) -> None:  # fmt: skip
     """A theme of card slots on a grid (and other modules beside them, over them, under them),
-    in a look's palette and style, the style's corners, cards and glow as given."""
+    in a look's palette and style, the style's corners, cards and glow as given; `moving`: its
+    changes of every way, of a moment to seconds, its tracks sliding in."""
     from libre_panel import design
     from libre_panel.theme import modules
 
@@ -5017,6 +5018,9 @@ def _slot_theme(rng: random.Random, folder: Path, make: Any = None, glow: float 
             "color": [None, "#ff8800", "@accent", "@cover", "teal", "#11223380"],
             "forecast": ["auto", "off", "days"],
         }  # fmt: skip
+        if moving:
+            options.update(transition=["light", "fade", "slide", "rise", "wipe", "cut", "random"],
+                           change=[0.6, 0, 2, 0.3], slide=[0, 0.4, 1.0])  # fmt: skip
         for key, choices in options.items():
             if rng.random() < 0.5:
                 module[key] = rng.choice(choices)
@@ -5212,6 +5216,235 @@ def test_card_slots_frame_after_frame_as_python_keeps_them(tmp_path: Path) -> No
                 before = shown
     assert drawn > 280
     assert changed > 45  # (cards that came and went, from one frame to the next)
+
+
+def _slot_readings_after(rng: random.Random, readings: dict[str, Reading]) -> dict[str, Reading]:
+    """The slots' readings of the next frame: as before, or now and then a track that comes, goes,
+    pauses or is another, the weather and the agents coming and going."""
+    out = dict(readings)
+    for key, p, choices in [
+        ("media.title", 0.25, ["Midnight Drive", "Other", "Midnight Drive", "", "<gone>"]),
+        ("media.playing", 0.3, [1, 1, 0, False]),
+        ("media.artist", 0.15, ["The Night Owls", "Someone"]),
+        ("weather.temperature", 0.2, [21.5, "<gone>"]),
+        ("weather.code", 0.1, [0, 61, 71, 95, 3]),
+    ]:  # fmt: skip
+        if rng.random() < p:
+            value = rng.choice(choices)
+            if value == "<gone>":
+                out.pop(key, None)
+            else:
+                out[key] = Reading(key, value)
+    return out
+
+
+def test_card_slots_moving_from_card_to_card_as_python_draws_them(tmp_path: Path) -> None:
+    # (one renderer drawing its slots frame after frame as the panels' loop does: a change of
+    # cards on its way, as the light rolls them, a fade, a slide, a rise or a wipe has them, or at
+    # once, the old card as it showed itself last; a new track sliding in on the playback card;
+    # the frame's colour reaching the card's over half a second; at a frame rate or none, the
+    # frames a moment to a second apart, and back in time)
+    import dataclasses
+
+    rng = random.Random(0x5110)
+    kinds = ["playback", "music", "forecast", "weather", "net", "date", "clock", "text", "ring",
+             "stat"]  # fmt: skip
+    cases, expected = [], []
+    for n in range(80):
+        folder = tmp_path / f"t{n}"
+        _slot_theme(rng, folder, cards=kinds, moving=True)
+        snapshot = dataclasses.replace(_demo(), history={})
+        now, fps = rng.uniform(1000, 2000), rng.choice([0, 25, 50])
+        steps: list[tuple[Snapshot, float]] = []
+        for _ in range(rng.randrange(3, 20)):
+            steps.append((snapshot, now))
+            now += rng.choice([0.02, 0.04, 0.04, 0.1, 0.1, 0.2, 0.3, 0.5, 1.0, 0, -0.1])
+            readings = _slot_readings_after(rng, dict(snapshot.readings))
+            snapshot = dataclasses.replace(snapshot, readings=readings)
+        given = [{"snapshot": _snapshot_given(s), "now": t} for s, t in steps]
+        cases.append({"folder": str(folder), "dither": False, "animate": True, "fps": fps,
+                      "steps": given})  # fmt: skip
+        expected.append(_python_moving(folder, steps, fps))
+    drawn, moving = _compare_moving(cases, expected)
+    assert drawn > 700 and moving > 250, (drawn, moving)
+
+
+def test_card_slots_change_every_way_as_python_draws_them(tmp_path: Path) -> None:
+    # (a slot of a track's card and the weather's, its change of each way: the track stops and
+    # the weather shows, frames a 25th of a second apart through the change, one back in time
+    # within it; the track again, then another track sliding in; the frame's colour on its way;
+    # at a frame rate and none)
+    import dataclasses
+
+    from libre_panel import design
+
+    look = design.LOOKS["libre"]
+    cases, expected = [], []
+    for n, (transition, fps) in enumerate([(t, fps) for t in ("light", "fade", "slide", "rise",
+                                           "wipe", "cut") for fps in (0, 50)]):  # fmt: skip
+        folder = tmp_path / f"t{n}"
+        folder.mkdir()
+        module = {"type": "module", "id": "s", "col": 0, "row": 0, "cols": 2, "rows": 1,
+                  "module": "cards", "items": "playback\nweather", "transition": transition,
+                  "change": 0.6, "slide": 0.4, "hold": 0, "finish": "flat"}  # fmt: skip
+        theme = {"format": THEME_FORMAT, "name": "change",
+                 "display": {"model": "custom", "width": 320, "height": 120,
+                             "orientation": "landscape"},
+                 "palette": dict(look["palette"]), "style": dict(look["style"]),
+                 "grid": {"columns": 2, "rows": 1, "gap": 4, "margin": 8},
+                 "widgets": [module]}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+        demo = dataclasses.replace(_demo(), history={})
+        steps: list[tuple[Snapshot, float]] = []
+        for k in range(64):
+            readings = dict(demo.readings)
+            title = "Midnight Drive" if k < 48 else "Another Song"
+            readings["media.title"] = Reading("media.title", title)
+            readings["media.playing"] = Reading("media.playing", 0 if 10 <= k < 30 else 1)
+            readings["weather.temperature"] = Reading("weather.temperature", 21.5)
+            now = 1000.0 + k / 25 - (0.1 if k == 16 else 0.0)
+            steps.append((dataclasses.replace(demo, readings=readings), now))
+        given = [{"snapshot": _snapshot_given(s), "now": t} for s, t in steps]
+        cases.append({"folder": str(folder), "dither": False, "animate": True, "fps": fps,
+                      "steps": given})  # fmt: skip
+        expected.append(_python_moving(folder, steps, fps))
+    drawn, moving = _compare_moving(cases, expected)
+    assert drawn == 12 * 64 and moving > 500, (drawn, moving)
+
+
+def _slot_case(folder: Path, module: dict[str, Any], size: tuple[int, int] = (320, 120),
+               grid: tuple[int, int] = (2, 1), at: tuple[int, int, int, int] = (0, 0, 2, 1),
+               more: list[dict[str, Any]] | None = None, ground: str | None = None,
+               style: dict[str, Any] | None = None) -> None:  # fmt: skip
+    """A theme of one card slot (in the Libre look), its module's own fields given, at `at` on a
+    grid of `grid` on a panel of `size`; other modules after it, another ground or style."""
+    from libre_panel import design
+
+    look = design.LOOKS["libre"]
+    folder.mkdir()
+    slot = {"type": "module", "id": "s", "col": at[0], "row": at[1], "cols": at[2],
+            "rows": at[3], "module": "cards", "finish": "flat", **module}  # fmt: skip
+    theme: dict[str, Any] = {
+        "format": THEME_FORMAT, "name": "slot",
+        "display": {"model": "custom", "width": size[0], "height": size[1],
+                    "orientation": "portrait" if size[1] > size[0] else "landscape"},
+        "palette": dict(look["palette"]), "style": {**look["style"], **(style or {})},
+        "grid": {"columns": grid[0], "rows": grid[1], "gap": 4, "margin": 8},
+        "widgets": [slot, *(more or [])]}  # fmt: skip
+    if ground is not None:
+        theme["background"] = {"color": ground}
+    (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+
+
+def _slot_steps(times: list[float], readings_at: Any) -> list[tuple[Snapshot, float]]:
+    """The demo's snapshot at each of `times`, its readings as `readings_at(k, readings)` makes
+    them for the k-th."""
+    import dataclasses
+
+    demo = dataclasses.replace(_demo(), history={})
+    steps = []
+    for k, now in enumerate(times):
+        readings = dict(demo.readings)
+        readings_at(k, readings)
+        steps.append((dataclasses.replace(demo, readings=readings), now))
+    return steps
+
+
+def test_card_slots_at_the_edges_of_their_changes_as_python_draws_them(tmp_path: Path) -> None:
+    # (frames at times a float holds as they are: a change that ends exactly at a frame, a fade
+    # a moment after it began and a moment before it ends; a track sliding in with less to show,
+    # then rolling up; a change into the track's card that gets another track on the way; a cut
+    # from one track's card to another's; a small slot on a large panel whose line of light is
+    # short; a slot on a clear ground under a see-through bar laid after it; frames close
+    # together where the cards' rolling edges meet in one row)
+    def put(readings: dict[str, Reading], **values: Any) -> None:
+        for key, value in values.items():
+            key = key.replace("_", ".")
+            if value is None:
+                readings.pop(key, None)
+            else:
+                readings[key] = Reading(key, value)
+
+    def track(title: str, artist: str | None, playing: int) -> dict[str, Any]:
+        return {"media_title": title, "media_artist": artist, "media_playing": playing,
+                "weather_temperature": 21.5}  # fmt: skip
+
+    quick = [1000.0 + k / 32 for k in range(72)]
+    plays = {"items": "playback\nweather", "hold": 0, "change": 0.5, "slide": 0.25}
+    cases: list[tuple[dict[str, Any], dict[str, Any], list[float], Any]] = [
+        # (a change of 0.5 s from 1000.25 on, ending at the frame of 1000.75; the frame's colour
+        # its own: nothing else moves on then)
+        ({**plays, "transition": "light", "color": "#ff8800"}, {}, quick[:40],
+         lambda k, r: put(r, **track("Midnight Drive", "A", int(not 8 <= k < 30)))),
+        # (a fade, and frames a 128th after it began and before it ends)
+        ({**plays, "transition": "fade"}, {},
+         sorted([*quick[:40], 1000.25 + 1 / 128, 1000.25 + 63 / 128]),
+         lambda k, r: put(r, **track("Midnight Drive", "A", int(not 8 <= k < 30)))),
+        # (another track with no artist slides in, then the card rolls up; it comes back, and
+        # on its way another track plays)
+        ({**plays, "transition": "light"}, {}, quick,
+         lambda k, r: put(r, **track("Midnight Drive" if k < 8 else "Another" if k < 50
+                                     else "Third", "A" if k < 8 else None,
+                                     int(not 20 <= k < 44)))),
+        # (a cut from the track's card to the music card: another artist, nothing kept to slide)
+        ({"items": "playback if media.artist=A\nmusic if media.artist=B", "hold": 0,
+          "slide": 0.25, "transition": "cut"}, {}, quick[:40],
+         lambda k, r: put(r, **track("Song", "B" if 8 <= k < 24 else "A", 1))),
+        # (a small slot on a panel 480 px high: a short line of light, and a short beam)
+        ({**plays, "transition": "light"}, {"size": (480, 480), "grid": (6, 8),
+                                             "at": (1, 1, 1, 1)}, quick[:40],
+         lambda k, r: put(r, **track("Midnight Drive", "A", int(not 8 <= k < 30)))),
+        ({**plays, "transition": "wipe"}, {"size": (480, 480), "grid": (6, 8),
+                                            "at": (1, 1, 1, 1)}, quick[:40],
+         lambda k, r: put(r, **track("Midnight Drive", "A", int(not 8 <= k < 30)))),
+        # (on a clear ground, a see-through bar laid after the slot over its top edge, where
+        # the line of light glows over the ground)
+        ({**plays, "transition": "light"},
+         {"ground": "#00000000", "more": [{"type": "rect", "id": "r", "x": 0, "y": 0, "w": 320,
+                                            "h": 18, "color": "#ffffff80"}]}, quick[:40],
+         lambda k, r: put(r, **track("Midnight Drive", "A", int(not 8 <= k < 30)))),
+        # (frames 8192ths of a second apart where the rolling up and down meet in one row)
+        ({**plays, "transition": "light"}, {},
+         [1000.0, 1000.25, *[1000.25 + 0.183 + k / 8192 for k in range(200)]],
+         lambda k, r: put(r, **track("Midnight Drive", "A", int(k < 1)))),
+    ]  # fmt: skip
+    given, expected = [], []
+    for n, (module, shape, times, readings_at) in enumerate(cases):
+        folder = tmp_path / f"t{n}"
+        _slot_case(folder, module, **shape)
+        steps = _slot_steps(times, readings_at)
+        frames = [{"snapshot": _snapshot_given(s), "now": t} for s, t in steps]
+        given.append({"folder": str(folder), "dither": False, "animate": True, "fps": 0,
+                      "steps": frames})  # fmt: skip
+        expected.append(_python_moving(folder, steps))
+    drawn, moving = _compare_moving(given, expected)
+    assert drawn == sum(len(case[2]) for case in cases) and moving > 250, (drawn, moving)
+
+
+def test_card_slots_change_with_their_glow_as_python_draws_them(tmp_path: Path) -> None:
+    # (a lit slot whose parts glow (the track's progress, its light added over it), changing each
+    # way: the glow cut, faded and moved with its part; within a level, the light blurred in
+    # floating point)
+    given, expected = [], []
+    for n, transition in enumerate(["light", "fade", "slide", "rise", "wipe"]):
+        folder = tmp_path / f"t{n}"
+        _slot_case(folder, {"items": "playback\nweather", "hold": 0, "change": 0.5,
+                            "transition": transition, "finish": "lit"},
+                   style={"glow": 0.8})  # fmt: skip
+
+        def readings_at(k: int, r: dict[str, Reading]) -> None:
+            r["media.title"] = Reading("media.title", "Midnight Drive")
+            r["media.playing"] = Reading("media.playing", int(not 8 <= k < 30))
+            r["media.progress"] = Reading("media.progress", 0.6)
+            r["weather.temperature"] = Reading("weather.temperature", 21.5)
+
+        steps = _slot_steps([1000.0 + k / 32 for k in range(48)], readings_at)
+        frames = [{"snapshot": _snapshot_given(s), "now": t} for s, t in steps]
+        given.append({"folder": str(folder), "dither": False, "animate": True, "fps": 0,
+                      "bytes": True, "steps": frames})  # fmt: skip
+        expected.append(_python_moving(folder, steps))
+    drawn, moving = _compare_moving(given, expected, level=True)
+    assert drawn == 5 * 48 and moving > 180, (drawn, moving)
 
 
 def test_card_slots_keep_their_cards_to_the_second(tmp_path: Path) -> None:
@@ -6217,4 +6450,4 @@ def test_the_app_s_own_themes_in_moving_frames_as_python_draws_them(tmp_path: Pa
             assert g["moving"] == w["moving"], (folder.name, i)
         drawn.append(folder.name)
     # (on Windows Rust does not know the computer's zone: Terra's standing globe is left out)
-    assert len(drawn) >= (56 if sys.platform == "win32" else 57), drawn
+    assert len(drawn) >= (71 if sys.platform == "win32" else 72), drawn

@@ -32,7 +32,7 @@ use crate::motion;
 use crate::piece::{Failed, Piece, Result};
 use crate::roll;
 use crate::shapes::{self, Rgba};
-use crate::slot::Slot;
+use crate::slot::{OnShow, Slot};
 use crate::snapshot::{need_holds, needs_of, number, Moment, Snapshot};
 use crate::sunpath;
 use crate::symbols;
@@ -274,15 +274,21 @@ impl Renderer {
         Ok(slots)
     }
 
-    /// The slots' cards for this frame (Slot.begin, in a still frame), and the colour of each
-    /// one's frame: its module's own (a colour, a palette's, the cover's), else its card's.
+    /// The slots' cards for this frame (Slot.begin: a change from one to the next on its way in
+    /// a moving frame, a new track sliding in), and the colour of each one's frame: its module's
+    /// own (a colour, a palette's, the cover's), else its card's, reached over half a second in
+    /// a moving frame. The frame moves on while one of them does.
     fn begin_slots(&mut self, snapshot: &Snapshot, now: f64) -> std::result::Result<(), Unported> {
         let mut slots = std::mem::take(&mut self.slots);
         let mut begun = Ok(());
+        let animate = self.options.animate;
         for slot in slots.values_mut() {
-            if let Err(what) = slot.begin(snapshot, now) {
-                begun = Err(Unported(what));
-                break;
+            match slot.begin(snapshot, now, animate) {
+                Ok(moves) => self.moving |= moves,
+                Err(what) => {
+                    begun = Err(Unported(what));
+                    break;
+                }
             }
             let own = match slot.module.get("color") {
                 Some(v) if v.truthy() => match self.color(Some(&v.str()), 1.0) {
@@ -299,7 +305,8 @@ impl Renderer {
                 },
                 _ => None,
             };
-            slot.set_colour(slot.target(own, snapshot));
+            let target = slot.target(own, snapshot);
+            self.moving |= slot.accent(target, now, animate);
         }
         self.slots = slots;
         self.slots_begun = begun.is_ok();
@@ -1348,9 +1355,9 @@ impl Renderer {
         if let Some(what) = self.beyond_widgets() {
             return Err(Unported(what.into()));
         }
-        if !self.slots.is_empty() && self.options.animate {
-            // (a moving frame warms every card up and rolls from one to the next)
-            return Err(Unported("card slots in a moving frame".into()));
+        if !self.slots.is_empty() && self.options.animate && !self.options.preview {
+            // (a panel's first moving frame draws every card of every slot once first)
+            return Err(Unported("card slots warmed up for a panel".into()));
         }
         let snapshot = snapshot.finite();
         self.snapshot = Some(snapshot.clone());
@@ -1375,18 +1382,25 @@ impl Renderer {
                 continue;
             }
             let module = self.modules.get(widget::text(w, "_module")).cloned();
-            // a part of a card in a slot: drawn while its card is on show
-            let slot = match &module {
+            // a part of a card in a slot: drawn while its card is on show, what it showed last
+            // while it goes
+            let slot_id = match &module {
                 Some(module) if w.contains_key("_card") => {
-                    self.slots.get(widget::text(module, "id"))
+                    let id = widget::text(module, "id");
+                    self.slots.contains_key(id).then(|| id.to_string())
                 }
                 _ => None,
             };
-            let in_slot = slot.is_some();
-            if slot.is_some_and(|slot| !slot.shows(widget::int(w, "_card", 0))) {
-                continue;
-            }
-            if self.missing(w, &snapshot) {
+            let in_slot = slot_id.is_some();
+            let how = match &slot_id {
+                Some(id) => match self.slots[id].shows(widget::int(w, "_card", 0)) {
+                    Some(how) => Some(how),
+                    None => continue,
+                },
+                None => None,
+            };
+            // (what a card that rolls up shows is what it showed: its conditions held then)
+            if how != Some(OnShow::Frozen) && self.missing(w, &snapshot) {
                 continue;
             }
             if let Some(module) = &module {
@@ -1405,7 +1419,18 @@ impl Renderer {
                 }
             }
             let id = widget::text(w, "id").to_string();
-            let piece = match self.draw(w) {
+            let drawn = match how {
+                // (a card that rolls up: what it showed last, as the change has it)
+                Some(OnShow::Frozen) => {
+                    match self.slots[slot_id.as_deref().unwrap_or_default()].leave(&id) {
+                        Ok(Some(piece)) => Drawn::Piece(piece),
+                        Ok(None) => Drawn::Nothing,
+                        Err(e) => Drawn::Failed(e),
+                    }
+                }
+                _ => self.draw(w),
+            };
+            let piece = match drawn {
                 Drawn::Piece(piece) => piece,
                 Drawn::Nothing => continue,
                 Drawn::Unported(what) => return Err(Unported(what)),
@@ -1413,6 +1438,22 @@ impl Renderer {
                     self.warn(format!("widget {} failed: {e}", lp_py::repr(&id)));
                     continue;
                 }
+            };
+            // (the card on show: kept for when it goes, cut or moved as a change or a slide
+            // has it)
+            let piece = match (how, &slot_id) {
+                (Some(OnShow::Live), Some(sid)) => {
+                    let slot = self.slots.get_mut(sid).expect("a slot of this frame");
+                    match slot.live(&id, piece) {
+                        Ok(Some(piece)) => piece,
+                        Ok(None) => continue,
+                        Err(e) => {
+                            self.warn(format!("widget {} failed: {e}", lp_py::repr(&id)));
+                            continue;
+                        }
+                    }
+                }
+                _ => piece,
             };
             // (a module's parts turn with the module)
             let owner = module.as_ref().unwrap_or(w);
