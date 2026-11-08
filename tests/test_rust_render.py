@@ -6814,6 +6814,78 @@ def test_graph_ranges_widening_narrowing_and_in_steps_as_python_draws_them(
     assert drawn == 2 * len(times) and moving > 60, (drawn, moving)
 
 
+def _moving_agent(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _agent(rng, i, size) if rng.random() < 0.8 else _card_or_text(rng, i, size)
+
+
+def _agent_readings(rng: random.Random) -> dict[str, Reading]:
+    """The agents' states: at work and waiting mostly, idle, off, one Python does not know, or
+    none."""
+    readings = {}
+    for key in ("ai.claude.state", "ai.codex.state"):
+        if rng.random() < 0.9:
+            state = rng.choice(["working", "working", "waiting", "waiting", "idle", "off", "busy"])
+            readings[key] = Reading(key, state)
+    return readings
+
+
+def test_agents_signs_that_move_as_python_draws_them(tmp_path: Path) -> None:
+    # (one renderer drawing its agents' signs frame after frame as the panels' loop does: at
+    # work three lights going round once in 1.6 s, waiting the ring breathing once in 2.4 s,
+    # each in 48 steps of the frame's time; idle and off standing; the states new now and then;
+    # at a frame rate or none, the frames at any distance, back in time too)
+    rng = random.Random(0xA6F)
+    cases, expected = [], []
+    for n in range(60):
+        folder = tmp_path / f"t{n}"
+        _frame_theme(rng, folder, _moving_agent)
+        readings = _agent_readings(rng)
+        now, fps = rng.uniform(-100, 5000), rng.choice([0, 25, 50])
+        steps, given = [], []
+        for _ in range(rng.randrange(2, 14)):
+            steps.append((Snapshot(readings=readings), now))
+            given.append({"snapshot": _moving_given(readings), "now": now})
+            now += rng.choice([*MOVING_STEPS, 1.6 / 48, 2.4 / 48, 0.8, 1.2, 1.6, 2.4])
+            if rng.random() < 0.15:
+                readings = _agent_readings(rng)
+        cases.append({"folder": str(folder), "dither": False, "animate": True, "fps": fps,
+                      "steps": given})  # fmt: skip
+        expected.append(_python_moving(folder, steps, fps))
+    drawn, moving = _compare_moving(cases, expected)
+    assert drawn > 350 and moving > 200, (drawn, moving)
+
+
+def test_agents_signs_at_the_edges_of_their_steps_as_python_draws_them(tmp_path: Path) -> None:
+    # (a sign at work and one waiting, in frames a float either side of the times their steps
+    # change at (int() of the steps gone), at a round's and a breath's end, before nought (the
+    # steps counted back from the last), far on, and back in time)
+    folder = tmp_path / "steps"
+    folder.mkdir()
+    signs = [{"type": "agent", "id": "w", "x": 0, "y": 0, "size": 40, "sensor": "ai.claude.state",
+              "color": "#22d3ee", "color2": "#f59e0b", "muted": "#5b6472"},
+             {"type": "agent", "id": "b", "x": 44, "y": 0, "size": 40, "sensor": "ai.codex.state",
+              "color": "#a3e635", "color2": "#f472b6", "muted": "#5b6472"}]  # fmt: skip
+    theme = {"format": THEME_FORMAT, "name": "steps", "display": {"width": 84, "height": 40},
+             "palette": {name: "#808080" for name in PALETTE},
+             "background": {"color": "#101418"}, "widgets": signs}  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+    readings = {"ai.claude.state": Reading("ai.claude.state", "working"),
+                "ai.codex.state": Reading("ai.codex.state", "waiting")}  # fmt: skip
+    times = []
+    for k in (1, 5, 24, 47, 48, 49, 96, -1, -47, -48):
+        for length in (1.6, 2.4):
+            at = k * length / 48
+            times += [math.nextafter(at, -math.inf), at, math.nextafter(at, math.inf)]
+    times += [1e9, 1e9 + 0.0333, 123456.789, 0.0, -0.0, 3.2, 2.0]
+    steps = [(Snapshot(readings=readings), now) for now in times]
+    given = [{"snapshot": _moving_given(readings), "now": now} for now in times]
+    cases = [{"folder": str(folder), "dither": False, "animate": True, "fps": fps,
+              "steps": given} for fps in (0, 50)]  # fmt: skip
+    expected = [_python_moving(folder, steps, fps) for fps in (0, 50)]
+    drawn, moving = _compare_moving(cases, expected)
+    assert drawn == moving == 2 * len(times), (drawn, moving)
+
+
 def test_the_app_s_own_themes_in_moving_frames_as_python_draws_them(tmp_path: Path) -> None:
     # (every theme the app brings, drawn as the panels' loop draws it: frames a 25th of a second
     # apart and more, its readings new between them, at 50 fps; the same to the bit where Rust
@@ -6874,4 +6946,4 @@ def test_the_app_s_own_themes_in_moving_frames_as_python_draws_them(tmp_path: Pa
             assert g["moving"] == w["moving"], (folder.name, i)
         drawn.append(folder.name)
     # (on Windows Rust does not know the computer's zone: Terra's standing globe is left out)
-    assert len(drawn) >= (83 if sys.platform == "win32" else 84), drawn
+    assert len(drawn) >= (87 if sys.platform == "win32" else 88), drawn

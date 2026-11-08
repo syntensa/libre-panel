@@ -339,8 +339,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
 - [x] an AI agent's sign (agent widgets) in a still frame: three lights on a faint ring at
       work, the ring and a light in its middle in the waiting colour, a light resting at its
       top while idle, the ring faint while off (any other reading), drawn four times larger
-      and reduced. The frames the same to the bit; a sign at work or waiting moves: Rust says
-      it does not draw it yet in a moving frame
+      and reduced. The frames the same to the bit; a sign at work or waiting moves in a moving
+      frame: below
 - [x] the sun's way (sunpath widgets): the horizon fading at its ends and the day's way
       dotted; by day the part of the day gone from the day's start's colour to the sun's, in
       its own soft light (a blur), the sun glowing where it stands, worked out in numpy's
@@ -963,6 +963,21 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       inside; moving), and the tests catch 28 of them; the other changes nothing a frame
       shows: the end dot laid in the range drawn last rather than in the range now (it is
       drawn right after its graph, in the same frame, where the two are one)
+- [x] agents' signs that move (render/agent.py's step and picture at a step, the renderer's
+      _draw_agent in a moving frame): a sign at work has its three lights go round once in
+      1.6 s, a waiting one breathes once in 2.4 s, each in 48 pictures, the step the frame's
+      time gives (int() of the steps gone, counted on from the last before nought); idle and
+      off signs stand. The frame moves on while a sign moves. The tests: 60 random themes of
+      signs frame after frame, their states new now and then, at a frame rate or none, the
+      frames at any distance, back in time too: 415 frames to the bit, 255 of them on the way;
+      a sign at work and one waiting in frames a float either side of the times their steps
+      change at, at a round's and a breath's end, before nought, far on and back in time, at
+      two frame rates: 134 frames to the bit; the app's themes in moving frames: 88 of the 99
+      drawn by Rust all along (84 before; 87 on Windows). The counter-checks put in 12 faults
+      (a round's and a breath's time, the steps, floored, a remainder below nought, counted in
+      another order; a breath as long as a round, an idle sign going round; the picture where
+      its motion starts; moving; what keeps the picture; the step's time), and the tests catch
+      all of them
 - [ ] pictures as Pillow fails at them: lp-decode's errors as Python's exceptions, so that
       where Python catches an OSError and goes on (a picture cut short, a file of no picture)
       Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,

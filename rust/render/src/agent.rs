@@ -1,7 +1,9 @@
-//! The sign of an AI agent at work (render/agent.py, the agent widget) in a still frame, in
-//! Libre Panel's own look: three lights on a faint ring while it works, the ring in the waiting
-//! colour while it waits for you, the ring calm with a light resting at its top while idle,
-//! the ring faint while off; drawn four times larger and reduced.
+//! The sign of an AI agent at work (render/agent.py, the agent widget), in Libre Panel's own
+//! look: three lights running round a faint ring while it works, the ring in the waiting colour
+//! breathing while it waits for you, a light in its middle with it; the ring calm with a light
+//! resting at its top while idle, the ring faint while off; drawn four times larger and
+//! reduced. In a moving frame a working sign goes round once a ROUND_S, a waiting one breathes
+//! once a BREATH_S, in STEPS pictures.
 
 use std::f64::consts::PI;
 
@@ -12,6 +14,23 @@ use crate::renderer::MOST_PIXELS;
 use crate::shapes::{ink, Rgba};
 
 const SUPERSAMPLE: i64 = 4;
+/// seconds a working sign takes to go round once
+const ROUND_S: f64 = 1.6;
+/// seconds a waiting sign takes to breathe once
+const BREATH_S: f64 = 2.4;
+/// pictures a round (or a breath)
+const STEPS: i64 = 48;
+
+/// step: the picture of the motion at `now` (seconds), None for a sign that stands still.
+pub fn step(state: &str, now: f64) -> Option<i64> {
+    let length = match state {
+        "working" => ROUND_S,
+        "waiting" => BREATH_S,
+        _ => return None,
+    };
+    // (int() of the steps gone, toward nought; Python's % of an int: never below nought)
+    Some(((now / length * STEPS as f64).trunc() as i64).rem_euclid(STEPS))
+}
 
 /// _alpha: the colour, its alpha times `share` (rounded half to even, within a byte).
 fn alpha(colour: Rgba, share: f64) -> [u8; 4] {
@@ -24,9 +43,16 @@ fn alpha(colour: Rgba, share: f64) -> [u8; 4] {
     ]
 }
 
-/// _draw: the sign, `size` square (8 px at least), for `state` (working, waiting, idle, off)
-/// where its motion starts.
-pub fn picture(size: i64, state: &str, colour: Rgba, waiting: Rgba, muted: Rgba) -> Result<Image> {
+/// picture (_draw): the sign, `size` square (8 px at least), for `state` (working, waiting, idle,
+/// off) at step `at` of its motion (None: where it starts).
+pub fn picture(
+    size: i64,
+    state: &str,
+    at: Option<i64>,
+    colour: Rgba,
+    waiting: Rgba,
+    muted: Rgba,
+) -> Result<Image> {
     let side = size.max(8);
     let k = side.saturating_mul(SUPERSAMPLE);
     if k.saturating_mul(k) > MOST_PIXELS {
@@ -36,7 +62,8 @@ pub fn picture(size: i64, state: &str, colour: Rgba, waiting: Rgba, muted: Rgba)
     let big = k as f64;
     let (c, r) = (big / 2.0, big * 0.36);
     let width = (lp_py::round(big * 0.055) as i64).max(SUPERSAMPLE) as f64;
-    let phase = 0.0f64;
+    // ((at or 0) / STEPS)
+    let phase = at.unwrap_or(0) as f64 / STEPS as f64;
     let mut draw = Draw::new(&mut layer);
     // (its outline round(w) wide, a pixel at least)
     let ring = |draw: &mut Draw<Image>, fill: [u8; 4], w: f64| -> Result<()> {

@@ -925,9 +925,14 @@ impl Renderer {
                     Value::Str(s) if matches!(s.as_str(), "working" | "waiting" | "idle") => s,
                     _ => "off".to_string(),
                 };
-                // (a sign at work or waiting moves)
-                if self.options.animate && matches!(state.as_str(), "working" | "waiting") {
-                    return Drawn::Unported("agents' signs that move".into());
+                // (a sign at work or waiting moves, a step at a time)
+                let at = if self.options.animate {
+                    agent::step(&state, self.at)
+                } else {
+                    None
+                };
+                if at.is_some() {
+                    self.moving = true;
                 }
                 let size = widget::int(&w, "size", 64).max(8);
                 let mut colours = [[0i64; 4]; 3];
@@ -937,7 +942,8 @@ impl Renderer {
                         Err(e) => return Drawn::Failed(e),
                     }
                 }
-                let mut content = vec![state.clone().into(), Value::int(size)];
+                let step = at.map_or(Value::None, Value::int);
+                let mut content = vec![state.clone().into(), step, Value::int(size)];
                 content.extend(colours.map(|c| Value::List(c.map(Value::int).to_vec())));
                 let (x, y) = (widget::int(&w, "x", 0), widget::int(&w, "y", 0));
                 self.cached(&w, Value::List(content), |_| {
@@ -946,7 +952,7 @@ impl Renderer {
                         x,
                         y,
                         size,
-                        agent::picture(size, &state, a, b, c)?,
+                        agent::picture(size, &state, at, a, b, c)?,
                     ))
                 })
             }
