@@ -482,6 +482,13 @@ def _python_frame(
     return {"frame": frame, "boxes": boxes, "warnings": list(renderer.warnings)}
 
 
+# what Rust does not draw where it does not know the computer's zone (on Windows, as yet)
+ZONE_NEEDED = ("another place's time without the computer's own time zone",
+               "the earth without the computer's own time zone")  # fmt: skip
+# (what the frames here may leave out for it: all of that on Windows, none of it elsewhere)
+NOT_HERE = ZONE_NEEDED if sys.platform == "win32" else ()
+
+
 def _compare_frames(
     tmp_path: Path,
     seed: int,
@@ -494,13 +501,16 @@ def _compare_frames(
     when: Any = None,
     place_of: Any = None,
     globes: bool = False,
+    left_out: list[str] | None = None,
 ) -> int:
     """Frames of `count` random themes (of what `make` makes) drawn by both, compared to the
     bit, and their boxes; how many were drawn. Rust may leave out those it says are `undefined`:
     where what Python draws is left to the processor. Each in one of `looks` (the person's look
     of the symbols and the moon), where there are any; each at a time `when` tells, where it
     is given; your place where `place_of` gives one; Python's globes as it makes them with the
-    C library's float32 functions where they are drawn (`globes`: _exact_globes)."""
+    C library's float32 functions where they are drawn (`globes`: _exact_globes). What Rust
+    does not draw here (NOT_HERE) it may leave out too; why it left each out, in `left_out`
+    where it is given."""
     rng = random.Random(seed)
     cases, asked = [], []
     try:
@@ -537,7 +547,9 @@ def _compare_frames(
         if "failed" in want:  # (Python's frame fails: Rust makes none)
             assert "unported" in got, (n, got, want)
             continue
-        if got.get("unported") in undefined:
+        if got.get("unported") in undefined + NOT_HERE:
+            if left_out is not None:
+                left_out.append(got["unported"])
             continue
         assert "sha256" in got, (n, got)
         frame = want["frame"]
@@ -1188,6 +1200,35 @@ def test_clocks_of_no_zone_warn_as_python_warns(tmp_path: Path) -> None:
     assert sum(len(_zone_warnings(w["warnings"])) for w in expected) == 6
 
 
+def _zoned_or_earth(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    pick = rng.random()
+    if pick < 0.1:
+        return _earth(rng, i, size)
+    return _zoned(rng, i, size) if pick < 0.4 else _card_or_text(rng, i, size)
+
+
+def test_without_the_computer_s_zone_rust_leaves_out_what_needs_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # (where Rust does not know the computer's zone (on Windows; elsewhere a TZ the C library
+    # reads by a rule of its own, summer time without its rules): a globe and another place's
+    # time Rust says it does not draw, never a frame otherwise than Python's; the computer's own
+    # time and a zone of no such name it draws)
+    if sys.platform != "win32":
+        monkeypatch.setenv("TZ", "CET-1CEST")
+        time.tzset()
+    left_out: list[str] = []
+    try:
+        drawn = _compare_frames(tmp_path, 0x2E9, 80, _zoned_or_earth, _clock_snapshot,
+                                undefined=ZONE_NEEDED, left_out=left_out)  # fmt: skip
+    finally:
+        monkeypatch.undo()
+        if sys.platform != "win32":
+            time.tzset()
+    assert sorted(set(left_out)) == sorted(ZONE_NEEDED), left_out
+    assert drawn > 10 and len(left_out) > 30, (drawn, len(left_out))
+
+
 # (the sides of a clock face's box: none, less than the least face, odd and even, about where
 # its marks between the hours show (110 px), the almanacs')
 ANALOG_SIDES = [-4, 0, 7, 8, 9, 31, 64, 109, 110, 111, 160, 201, 396, 402]
@@ -1288,6 +1329,8 @@ def test_analog_clocks_frame_after_frame_as_python_keeps_them(tmp_path: Path) ->
         for i, (g, w) in enumerate(zip(got["steps"], want, strict=True)):
             if "failed" in w:  # (Python's frame fails: Rust makes none)
                 assert "unported" in g, (n, i, g, w)
+                continue
+            if g.get("unported") in NOT_HERE:
                 continue
             assert g["sha256"] == hashlib.sha256(w["frame"].tobytes()).hexdigest(), (n, i)
             assert g["boxes"] == w["boxes"], (n, i)
@@ -3889,6 +3932,7 @@ def _place(rng: random.Random) -> tuple[float, float] | None:
                        (rng.uniform(-90, 90), rng.uniform(-180, 180))])  # fmt: skip
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Rust does not know the computer's zone there")
 def test_frames_of_the_earth_as_python_draws_them(tmp_path: Path) -> None:
     # (the globe lit for the frame's moment on the wall clock, in steps of redraw_s, seen from
     # above your place or else your time zone's longitude a little north, your place marked
@@ -3898,6 +3942,7 @@ def test_frames_of_the_earth_as_python_draws_them(tmp_path: Path) -> None:
     assert drawn > 45, drawn
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Rust does not know the computer's zone there")
 def test_the_earth_frame_after_frame_as_python_keeps_it(tmp_path: Path) -> None:
     # (one renderer drawing its globes frame after frame: the same moment again, a part of a
     # step of redraw_s, a step, a minute, an hour, a day later: each globe lit anew where its
@@ -3945,6 +3990,7 @@ def test_the_earth_frame_after_frame_as_python_keeps_it(tmp_path: Path) -> None:
     assert drawn > 60, drawn
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Rust does not know the computer's zone there")
 def test_the_earth_with_glow_and_shadow_within_a_level(tmp_path: Path) -> None:
     # (a globe casts its light as a card does: blurred in floating point, now and then a pixel
     # a level apart)
@@ -4565,9 +4611,9 @@ def _slot_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
     return _snapshot_given(snapshot), snapshot
 
 
-# what a slot's card may hold that Rust does not draw yet (it still chooses the card and its
+# what a slot's card may hold that Rust does not draw here (it still chooses the card and its
 # frame's colour as Python does: the checks compare those of every frame)
-SLOT_NOT_YET = ("earth widgets", "analog widgets", "clocks in a time zone")
+SLOT_NOT_YET = NOT_HERE
 
 
 def _slots_of(renderer: Renderer) -> list[list[Any]]:
