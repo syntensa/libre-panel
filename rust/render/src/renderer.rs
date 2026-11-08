@@ -1181,8 +1181,12 @@ impl Renderer {
             }
             "symbol" => {
                 let w = w.clone();
-                if self.options.animate && widget::truthy(&w, "moving") {
-                    return Drawn::Unported("weather symbols that move".into());
+                // (moving with the planned time of the frame, a step a 25th of a second)
+                let live = widget::truthy(&w, "moving") && self.options.animate;
+                let offset = widget::number(&w, "offset", 0.0);
+                let step = live.then(|| lp_py::round((self.at + offset) * symbols::STEP));
+                if live {
+                    self.moving = true;
                 }
                 let snapshot = self.snapshot.clone().unwrap_or_default();
                 let lit = finish::of(&w) == Finish::LitSymbol;
@@ -1197,8 +1201,10 @@ impl Renderer {
                     Value::Bool(lit),
                     self.pack(&w).into(),
                     colours.into(),
+                    step.map_or(Value::None, Value::Float),
                 ]);
-                self.cached(&w, content, |r| r.symbol_piece(&w, &snapshot, lit))
+                let t = step.map(|step| step / symbols::STEP);
+                self.cached(&w, content, |r| r.symbol_piece(&w, &snapshot, lit, t))
             }
             "moon" => {
                 let w = w.clone();

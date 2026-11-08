@@ -420,8 +420,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       rest in the palette's (light.role_color). The look the person chose: vivid until the app
       sets it, as in Python's renderer. Still symbols of each kind at 30 sizes from 8 to 300 px
       (1,440 of them), and the frames of random themes of them the same to the bit. A symbol
-      that moves: Rust says it does not draw it yet in a moving frame. 43 of the app's 99
-      themes are drawn by Rust, 41 of them the same to the bit
+      that moves: below. 43 of the app's 99 themes are drawn by Rust, 41 of them the same to
+      the bit
 - [x] graphs in a still frame (renderer.py's _draw_graph, _curve, _draw_end_dot): the curve
       of a sensor's history, or of a course a service publishes whole as text (course_of:
       JSON as Python's json reads it, a gap where a point is no number to draw), across the
@@ -978,6 +978,39 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       another order; a breath as long as a round, an idle sign going round; the picture where
       its motion starts; moving; what keeps the picture; the step's time), and the tests catch
       all of them
+- [x] weather symbols that move (symbols.py's compose at a time and its draw in a moving
+      frame): a symbol widget that moves is drawn at the frame's planned time, its offset
+      added, in 25ths of a second (Python's round: at a step's very half the even one), the
+      picture made anew only where the step changed. The corona breathes over 4.3 s, the rays
+      turn 7 degrees a second (turned in quarter degrees, bicubic, as Pillow turns them) and
+      on a big sun pulse, the stars twinkle each at its own pace, now and then a shooting star
+      crosses a big clear night behind the moon, fog's bands pass each other and thicken a
+      little, rain falls a second a drop and faster as it falls (on a big symbol farther drops
+      behind it, and a ring opening where the last drop landed), drizzle two drops a lane
+      (three on a big one), crystals fall, sway and turn (in steps of three degrees in the
+      second look; farther ones behind them on a big symbol), the clouds drift, rise and sink
+      and breathe, each motion at its own period, and a bolt flashes twice and rests, its
+      cloud lit from within as it fades (lit in float32 as numpy lights it); a big symbol is
+      one of the second look from 120 px, and below 120 px the fog and the clouds move 1.8
+      times as fast. The frame moves on while a symbol moves. The tests: each kind of
+      weather, by day and by night, at eight sizes from 8 to 262 px, in both looks, flat and
+      lit, at four of 28 moments (before nought and past a thousand seconds, through a bolt's
+      flashes a 25th of a second apart): 1,536 pictures to the bit; 60 random themes of
+      symbols frame after frame, the weather new now and then, at a frame rate or none, the
+      frames at any distance, back in time too: 397 frames to the bit, 343 of them on the
+      way; the app's themes in moving frames: 94 of the 99 drawn by Rust all along (88
+      before; 93 on Windows). The counter-checks put in 43 faults (the steps a second, the
+      offset, what keeps the picture, moving; the tempo of a small symbol and where small
+      ends; the corona's breath; the rays' pace, their turn, its way and steps, the pulse;
+      the stars' twinkle; the shooting star's way, time, fade and width; the fog's drift and
+      thickening; the rain's fall, the far drops' size, the splashes' time, ring, opening and
+      size; drizzle's fall and its third drop; the crystals' fall, way, sway, turn and the far
+      ones' pace; the clouds' breath, drift and stretch; the bolt's beat and flashes, the
+      cloud's light and its fade), and the tests catch 42 of them; the other changes nothing
+      a frame shows: a crystal's turn counted as the floor of its angle over three rather than
+      by Python's floor division (for a divisor of three and an angle from nought the two
+      never differ: the quotient, rounded, does not reach the next whole number; 2.1 million
+      angles, the neighbours of every multiple of three among them, the same)
 - [ ] pictures as Pillow fails at them: lp-decode's errors as Python's exceptions, so that
       where Python catches an OSError and goes on (a picture cut short, a file of no picture)
       Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,

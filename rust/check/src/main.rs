@@ -1310,6 +1310,7 @@ fn run(case: &Value) -> Result<Value, String> {
                 five,
                 case["pack"].as_str().unwrap_or("vivid"),
                 case["lit"].as_bool().unwrap_or(false),
+                case["t"].as_f64(),
             )?;
             json!({"image": value_of(&image)})
         }

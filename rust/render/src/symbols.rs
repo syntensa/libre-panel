@@ -1,10 +1,16 @@
 //! Weather symbols (render/symbols.py) in a still frame: a kind of weather's layers (the sun or
 //! the moon's crescent, the rays, stars, clouds, the light behind a cloud, what falls, fog's
 //! bands, the bolt), drawn as weather_art draws them, flat or as frosted glass (the lit finish),
-//! in the first look or the second ("vivid"); laid over each other in their resting places as
-//! symbols.compose lays them where the symbol stands. A symbol that moves: not drawn here yet.
+//! in the first look or the second ("vivid"); laid over each other as symbols.compose lays
+//! them: in their resting places where the symbol stands, and where the planned time of the
+//! frame has them where it moves (the corona breathing, the rays turning, stars twinkling, a
+//! shooting star, fog's bands passing, rain, drizzle and snow falling near and far, a splash
+//! where a drop lands, crystals spinning, clouds drifting and breathing, a bolt flashing and
+//! lighting its cloud).
 
-use lp_pixels::{alpha_composite, chops, Filter, Image, Mode, Transform};
+use std::f64::consts::PI;
+
+use lp_pixels::{alpha_composite, chops, Draw, Filter, Image, Mode, Transform};
 use lp_py::{Dict, Value};
 
 use crate::light;
@@ -20,6 +26,12 @@ const PACKS: [&str; 2] = ["classic", "vivid"];
 pub(crate) const DEFAULT_PACK: &str = "vivid";
 /// The second look has the most to it from this size on.
 const SMALL: usize = 120;
+/// How often a moving symbol's picture changes, per second.
+pub(crate) const STEP: f64 = 25.0;
+/// The tempo of a symbol under SMALL px, as a multiple of a big one's.
+const QUICK: f64 = 1.8;
+/// Degrees a second the sun's rays turn.
+const TURN: f64 = 7.0;
 /// The lit finish's weather icons draw a symbol from this size on (lit.MIN_ICON), and these
 /// icons are the weathers' symbols (lit.SYMBOLS).
 pub(crate) const MIN_ICON: i64 = 16;
@@ -84,6 +96,7 @@ const BAND_WIDTH: f64 = 4.2;
 const LIFT: f64 = -4.0;
 const FALL: f64 = 76.0;
 const LANES: [f64; 3] = [52.0, 64.0, 76.0];
+const FAR_LANES: [f64; 2] = [58.0, 70.0];
 const SNOW_LANES: [(f64, f64, f64); 3] =
     [(49.0, 89.0, 0.0), (64.0, 97.0, 18.0), (79.0, 88.0, 33.0)];
 /// A drop's length, its width at the top and at the foot (lit; flat: Meteocons' strokes).
@@ -181,8 +194,23 @@ struct Layers {
     drop: Option<Part>,
     flake: Option<Part>,
     bolt: Option<Part>,
+    /// the bolt between its flashes
+    bolt_rest: Option<Part>,
     bars: Vec<Part>,
     corona: Option<Part>,
+    /// the front cloud lit by its bolt
+    flash: Option<Part>,
+    /// a shooting star (a big clear night)
+    streak: Option<Part>,
+    /// the ring where a drop lands (big rain)
+    splash: Option<Part>,
+}
+
+impl Layers {
+    /// The second look at SMALL px and more: it has the most to it.
+    fn big(&self) -> bool {
+        self.rich && self.k >= SMALL
+    }
 }
 
 /// _part: `image` cut to its content plus a little room, premultiplied; None for a layer with
@@ -249,6 +277,99 @@ fn flake_part(k: usize, colour: [i64; 4], branched: bool) -> Result<Option<Part>
     )
 }
 
+/// _brightened: `part` lit from within, as a cloud by its own bolt: towards a cool white, in
+/// numpy's float32 (each level cut to a byte as astype cuts it).
+fn brightened(part: &Part) -> Result<Part> {
+    let rgba = part.image.convert(Mode::RGBA)?;
+    let (w, h) = rgba.size();
+    let mut bytes = rgba.as_bytes().to_vec();
+    let white = [236.0f32, 242.0, 255.0];
+    let light = 0.78f32;
+    for p in bytes.chunks_exact_mut(4) {
+        for (v, white) in p.iter_mut().zip(white) {
+            let a = f32::from(*v);
+            *v = (a + (white - a) * light) as u8;
+        }
+    }
+    Ok(Part {
+        image: Image::from_bytes(Mode::RGBA, w, h, bytes)?.convert(Mode::RGBa)?,
+        x: part.x,
+        y: part.y,
+    })
+}
+
+/// _streak: a shooting star: a bright head at the lower left, its tail fading up to the right,
+/// drawn OVER times larger and reduced.
+fn streak_part(k: usize, colour: [i64; 4]) -> Result<Option<Part>> {
+    let over = art::OVER as f64;
+    let length = 0.34 * k as f64;
+    let (w, h) = (length, 0.5 * length);
+    let side = |v: f64| (lp_py::round(v * over) as i64).max(1) as usize;
+    let mut image = Image::blank(Mode::RGBA, side(w), side(h));
+    let mut draw = Draw::new(&mut image);
+    let head = (0.06 * w * over, 0.86 * h * over);
+    let tail = (0.96 * w * over, 0.08 * h * over);
+    let steps = 28;
+    let [r, g, b, _] = colour.map(|v| v.clamp(0, 255) as u8);
+    for i in 0..steps {
+        let (f0, f1) = (
+            f64::from(i) / f64::from(steps),
+            f64::from(i + 1) / f64::from(steps),
+        );
+        let along = |f: f64| {
+            (
+                tail.0 + (head.0 - tail.0) * f,
+                tail.1 + (head.1 - tail.1) * f,
+            )
+        };
+        let alpha = (255.0 * f1.powf(2.0)) as u8;
+        let width = (((0.4 + 1.6 * f1) * over) as i32).max(1);
+        draw.line(
+            &[along(f0), along(f1)],
+            Some([r, g, b, alpha]),
+            width,
+            false,
+        )?;
+    }
+    let dot = 0.022 * k as f64 * over;
+    let ink = colour.map(|v| v.clamp(0, 255) as u8);
+    draw.ellipse(
+        (head.0 - dot, head.1 - dot, head.0 + dot, head.1 + dot),
+        Some(ink),
+        None,
+        1,
+    )?;
+    let reduced = image
+        .convert(Mode::RGBa)?
+        .reduce(art::OVER, art::OVER, None)?;
+    if reduced.getbbox(true).is_none() {
+        return Ok(None);
+    }
+    Ok(Some(Part {
+        image: reduced,
+        x: 0,
+        y: 0,
+    }))
+}
+
+/// _splash: the ring a raindrop leaves where it lands, flat, seen from the side (put by its
+/// middle).
+fn splash_part(k: usize, colour: [i64; 4]) -> Result<Option<Part>> {
+    let s = art::px(k);
+    let over = art::OVER as i64;
+    let w = (lp_py::round(11.0 * s) as i64).max(4);
+    let h = (lp_py::round(3.6 * s) as i64).max(2);
+    let mut image = Image::blank(Mode::L, (w * over) as usize, (h * over) as usize);
+    let pad = 0.8 * s * over as f64;
+    let width = (lp_py::round(0.7 * s * over as f64) as i32).max(1);
+    let bounds = (pad, pad, (w * over) as f64 - pad, (h * over) as f64 - pad);
+    Draw::new(&mut image).ellipse(bounds, None, Some([255, 0, 0, 0]), width)?;
+    let reduced = image.reduce(art::OVER, art::OVER, None)?;
+    let cov = art::Plane::of_levels(&reduced, |b| f32::from(b) / 255.0);
+    let ring = art::flat(&cov, rgb(colour))?;
+    anchored(&ring, w as f64 / 2.0, h as f64 / 2.0)
+}
+
 /// _band_rows: where fog's `count` bands lie, top to foot.
 fn band_rows(count: usize) -> Vec<f64> {
     let step = (BAND_FOOT - BAND_TOP) / (count.max(2) - 1) as f64;
@@ -303,8 +424,12 @@ fn made(kind: &str, night: bool, k: usize, c: &Colours, rich: bool, lit: bool) -
         drop: None,
         flake: None,
         bolt: None,
+        bolt_rest: None,
         bars: vec![],
         corona: None,
+        flash: None,
+        streak: None,
+        splash: None,
     };
     let cloud =
         |colour: [i64; 4], dark: bool, scale: f64, dx: f64, dy: f64| -> Result<Option<Part>> {
@@ -402,6 +527,16 @@ fn made(kind: &str, night: bool, k: usize, c: &Colours, rich: bool, lit: bool) -
     }
     if storm {
         layers.bolt = part(&art::bolt(k, rgb(c.sun), lit, true, LIFT)?)?;
+        layers.bolt_rest = part(&art::bolt(k, rgb(c.sun), lit, false, LIFT)?)?;
+        if rich {
+            if let Some(cloud) = &layers.cloud {
+                layers.flash = Some(brightened(cloud)?);
+            }
+        }
+    }
+    let falls = kind == "rain" || storm;
+    if rich && k >= SMALL && layers.drop.is_some() && falls {
+        layers.splash = splash_part(k, c.rain)?;
     }
     Ok(layers)
 }
@@ -413,13 +548,14 @@ struct Placed {
     y: i64,
 }
 
-/// _moved: `image` shifted by (dx, dy) (bilinear), as it is where the shift is under a fiftieth.
-fn moved(image: &Image, dx: f64, dy: f64) -> Result<Image> {
-    if dx.abs() < 0.02 && dy.abs() < 0.02 {
+/// _moved: `image` shifted by (dx, dy) and stretched by `stretch` about its middle, in one step
+/// (bilinear), as it is where the shift is under a fiftieth and the stretch under a 500th.
+fn moved(image: &Image, dx: f64, dy: f64, stretch: f64) -> Result<Image> {
+    if dx.abs() < 0.02 && dy.abs() < 0.02 && (stretch - 1.0).abs() < 0.002 {
         return Ok(image.clone());
     }
     let (w, h) = (image.width() as f64, image.height() as f64);
-    let s = 1.0;
+    let s = 1.0 / stretch;
     let matrix = [
         s,
         0.0,
@@ -444,34 +580,64 @@ fn fade_table(share: f64) -> Vec<i64> {
     one.iter().copied().cycle().take(1024).collect()
 }
 
-/// symbols.compose with no time: the symbol standing, in its resting places, on a clear picture
-/// `layers.k` px square.
-fn compose(layers: &Layers, kind: &str) -> Result<Image> {
+/// _fall: how much of a falling thing shows at `p` (0 to 1) of its way: it fades in at the top
+/// and out at the end.
+fn fall(p: f64) -> f64 {
+    let (rise, fall) = (0.15, 0.25);
+    py_min3(1.0, p / rise, (1.0 - p) / fall)
+}
+
+/// Python's min(a, b, c) of floats: the first of the smallest.
+fn py_min3(a: f64, b: f64, c: f64) -> f64 {
+    let ab = if b < a { b } else { a };
+    if c < ab {
+        c
+    } else {
+        ab
+    }
+}
+
+/// Python's x % y of floats (the sign of y).
+fn rem(x: f64, y: f64) -> f64 {
+    lp_py::num::float_rem(x, y)
+}
+
+/// symbols.compose: the symbol at time `t` (seconds; None: standing, in its resting places) on a
+/// clear picture `layers.k` px square.
+fn compose(layers: &Layers, kind: &str, t: Option<f64>) -> Result<Image> {
     let k = layers.k;
+    let u = art::px(k);
     let at = |v: f64| art::at(k, v);
     let mut out = Image::blank(Mode::RGBA, k, k);
-    // place: a layer whose corner lies at (x, y) (fractions shifted in), faded to `share`
-    let place = |part: Option<&Part>, x: f64, y: f64, share: f64| -> Result<Option<Placed>> {
-        let Some(part) = part else { return Ok(None) };
-        if share <= 0.01 {
-            return Ok(None);
-        }
-        let (px, py) = (x + part.x as f64, y + part.y as f64);
-        let (xi, yi) = (px.floor() as i64, py.floor() as i64);
-        let (w, h) = (part.image.width() as i64, part.image.height() as i64);
-        if xi >= k as i64 || yi >= k as i64 || xi + w <= 0 || yi + h <= 0 {
-            return Ok(None);
-        }
-        let mut image = moved(&part.image, px - xi as f64, py - yi as f64)?;
-        if share < 0.999 {
-            image = image.point(&fade_table(share))?;
-        }
-        Ok(Some(Placed {
-            image: image.convert(Mode::RGBA)?,
-            x: xi,
-            y: yi,
-        }))
-    };
+    let tau = 2.0 * PI;
+    let moving = t.is_some();
+    let s = t.unwrap_or(0.0);
+    // (the tempo of a small symbol)
+    let quick = s * if k >= SMALL { 1.0 } else { QUICK };
+    // place: a layer whose corner lies at (x, y) (fractions shifted in), faded to `share`,
+    // stretched about its middle; None where it is not on the picture
+    let place =
+        |part: Option<&Part>, x: f64, y: f64, share: f64, stretch: f64| -> Result<Option<Placed>> {
+            let Some(part) = part else { return Ok(None) };
+            if share <= 0.01 {
+                return Ok(None);
+            }
+            let (px, py) = (x + part.x as f64, y + part.y as f64);
+            let (xi, yi) = (px.floor() as i64, py.floor() as i64);
+            let (w, h) = (part.image.width() as i64, part.image.height() as i64);
+            if xi >= k as i64 || yi >= k as i64 || xi + w <= 0 || yi + h <= 0 {
+                return Ok(None);
+            }
+            let mut image = moved(&part.image, px - xi as f64, py - yi as f64, stretch)?;
+            if share < 0.999 {
+                image = image.point(&fade_table(share))?;
+            }
+            Ok(Some(Placed {
+                image: image.convert(Mode::RGBA)?,
+                x: xi,
+                y: yi,
+            }))
+        };
     let lay = |out: &mut Image, placed: &Option<Placed>| -> Result<()> {
         if let Some(p) = placed {
             let source = (
@@ -484,68 +650,207 @@ fn compose(layers: &Layers, kind: &str) -> Result<Image> {
         }
         Ok(())
     };
+    let put = |out: &mut Image,
+               part: Option<&Part>,
+               x: f64,
+               y: f64,
+               share: f64,
+               stretch: f64|
+     -> Result<Option<Placed>> {
+        let placed = place(part, x, y, share, stretch)?;
+        lay(out, &placed)?;
+        Ok(placed)
+    };
     // where: how much `placed` covers of the box (x, y, w, h) of the picture (L)
     let covered = |p: &Placed, x: i64, y: i64, w: i64, h: i64| -> Result<Image> {
         let a = p.image.getchannel(3)?;
         Ok(a.crop(x - p.x, y - p.y, x - p.x + w, y - p.y + h))
     };
-    // (the corona at its mean, the stars at their brightest, the rays unturned)
-    lay(
-        &mut out,
-        &place(layers.corona.as_ref(), 0.0, 0.0, 0.6 + 0.4 * 0.5)?,
-    )?;
+    let big = layers.big() && moving;
+
+    // the corona breathes, the stars twinkle and the rays turn (and on a big sun pulse)
+    if layers.corona.is_some() {
+        let breath = if moving {
+            0.5 + 0.5 * (tau * s / 4.3).sin()
+        } else {
+            0.5
+        };
+        put(
+            &mut out,
+            layers.corona.as_ref(),
+            0.0,
+            0.0,
+            0.6 + 0.4 * breath,
+            1.0,
+        )?;
+    }
     if let Some(rays) = &layers.rays {
+        let angle = if moving {
+            rem(lp_py::round(s * STEP) / STEP * TURN, 45.0)
+        } else {
+            0.0
+        };
+        // (_rays_turned: in steps of a quarter degree)
+        let key = lp_py::round(angle * 4.0) as i64;
         let centre = (
             layers.centre.0 - rays.x as f64,
             layers.centre.1 - rays.y as f64,
         );
-        let turned = rays
+        let mut turned = rays
             .image
-            .rotate(0.0, Filter::Bicubic, false, Some(centre), None, None)?
+            .rotate(
+                (-key) as f64 / 4.0,
+                Filter::Bicubic,
+                false,
+                Some(centre),
+                None,
+                None,
+            )?
             .convert(Mode::RGBA)?;
+        if big {
+            turned = moved(&turned, 0.0, 0.0, 1.0 + 0.035 * (tau * s / 3.1).sin())?;
+        }
         let whole = (0, 0, turned.width() as i64, turned.height() as i64);
         out.alpha_composite_at(&turned, (rays.x, rays.y), whole)?;
     }
-    for star in &layers.stars {
-        lay(&mut out, &place(Some(star), 0.0, 0.0, 0.25 + 0.75 * 1.0)?)?;
+    for (i, star) in layers.stars.iter().enumerate() {
+        let i = i as f64;
+        let glint = if moving {
+            0.5 + 0.5 * (tau * (s / (1.9 + 0.7 * i) + i * 0.37)).sin()
+        } else {
+            1.0
+        };
+        put(&mut out, Some(star), 0.0, 0.0, 0.25 + 0.75 * glint, 1.0)?;
     }
-    lay(&mut out, &place(layers.disc.as_ref(), 0.0, 0.0, 1.0)?)?;
-    for bar in &layers.bars {
-        lay(&mut out, &place(Some(bar), 0.0, 0.0, 1.0)?)?;
+    if let (Some(streak), true) = (&layers.streak, moving) {
+        // (now and then a shooting star, behind the moon)
+        let p = rem(s, 9.3) / 0.8;
+        if p < 1.0 {
+            let (x, y) = (k as f64 * (0.62 - 0.42 * p), k as f64 * (0.02 + 0.20 * p));
+            put(&mut out, Some(streak), x, y, (PI * p).sin(), 1.0)?;
+        }
+    }
+    put(&mut out, layers.disc.as_ref(), 0.0, 0.0, 1.0, 1.0)?;
+    for (i, bar) in layers.bars.iter().enumerate() {
+        // (fog: the bands pass each other and thicken a little)
+        if moving {
+            let way = if i % 2 == 0 { 1.0 } else { -1.0 };
+            let i = i as f64;
+            let x = way * 4.0 * u * (tau * quick / (8.0 + i) + i * 1.3).sin();
+            let share = 0.75 + 0.25 * (0.5 + 0.5 * (tau * quick / (6.0 + 1.7 * i) + i).sin());
+            put(&mut out, Some(bar), x, 0.0, share, 1.0)?;
+        } else {
+            put(&mut out, Some(bar), 0.0, 0.0, 1.0, 1.0)?;
+        }
     }
     // what falls comes out from under the clouds, so it goes in before them
     if let Some(drop) = &layers.drop {
         if kind == "rain" || kind == "storm" {
-            for (x, down) in LANES.iter().zip([5.0, 11.0, 6.0]) {
-                lay(&mut out, &place(Some(drop), at(*x), at(FALL + down), 1.0)?)?;
+            if big {
+                // (far drops first: smaller, fainter, slower)
+                for (j, x) in FAR_LANES.into_iter().enumerate() {
+                    let p = rem(s / 1.35 + j as f64 * 0.5 + 0.3, 1.0);
+                    let y = at(FALL + 2.0 + 16.0 * p.powf(1.5));
+                    put(&mut out, Some(drop), at(x), y, 0.5 * fall(p), 0.68)?;
+                }
+            }
+            for (i, (x, down)) in LANES.into_iter().zip([5.0, 11.0, 6.0]).enumerate() {
+                if moving {
+                    // (Meteocons' lanes, a second a fall)
+                    let p = rem(s / 1.0 + [0.0, 0.6, 0.2][i], 1.0);
+                    let y = at(FALL + 20.0 * p.powf(1.5));
+                    put(&mut out, Some(drop), at(x), y, fall(p), 1.0)?;
+                    if let (true, Some(splash), true) = (big, &layers.splash, p < 0.22) {
+                        // (where the last drop of this lane landed, a ring opens and fades)
+                        let q = p / 0.22;
+                        let y = at(FALL + 20.0 + RAIN.0 + 1.5);
+                        let (share, stretch) = (0.75 * (1.0 - q), 0.55 + 0.75 * q);
+                        put(&mut out, Some(splash), at(x), y, share, stretch)?;
+                    }
+                } else {
+                    put(&mut out, Some(drop), at(x), at(FALL + down), 1.0, 1.0)?;
+                }
             }
         } else {
-            for x in LANES {
-                for j in 0..2 {
-                    lay(
-                        &mut out,
-                        &place(Some(drop), at(x), at(FALL + 7.0 + 9.0 * j as f64), 1.0)?,
-                    )?;
+            // (drizzle: two drops a lane, three on a big symbol)
+            for (i, x) in LANES.into_iter().enumerate() {
+                for j in 0..if big { 3 } else { 2 } {
+                    if moving {
+                        let shift = j as f64 * if j < 2 { 0.5 } else { 0.25 };
+                        let p = rem(s / 1.6 + i as f64 * 0.29 + shift, 1.0);
+                        let y = at(FALL + 5.0 + 18.0 * p.powf(1.3));
+                        let share = fall(p) * if j == 2 { 0.6 } else { 1.0 };
+                        put(&mut out, Some(drop), at(x), y, share, 1.0)?;
+                    } else {
+                        let y = at(FALL + 7.0 + 9.0 * j as f64);
+                        put(&mut out, Some(drop), at(x), y, 1.0, 1.0)?;
+                    }
                 }
             }
         }
     }
     if let Some(flake) = &layers.flake {
-        for (x, y, turn) in SNOW_LANES {
-            let crystal = if layers.rich {
-                spun(flake, turn)?
-            } else {
-                flake.clone()
-            };
-            lay(&mut out, &place(Some(&crystal), at(x), at(y), 1.0)?)?;
+        let mut lanes: Vec<(f64, f64, f64, f64, f64, f64)> = SNOW_LANES
+            .iter()
+            .map(|&(x, y, turn)| (x, y, turn, 1.0, 3.4, 0.0))
+            .collect();
+        if big {
+            // (crystals further back: smaller, fainter, slower, between the near ones)
+            lanes.extend(
+                SNOW_LANES[..2]
+                    .iter()
+                    .map(|&(x, y, turn)| (x + 7.5, y, turn, 0.62, 4.6, 0.17)),
+            );
+        }
+        for (n, (x, y, turn0, scale, period, shift)) in lanes.into_iter().enumerate() {
+            if moving {
+                let p = rem(s / period + n as f64 * 0.33 + shift, 1.0);
+                let yy = FALL + 6.0 + 26.0 * p;
+                let xx = x + 3.0 * (tau * (p * 1.5 + n as f64 * 0.4)).sin();
+                let spin = if n % 2 == 0 { 38.0 } else { -31.0 };
+                let turn = rem(s * spin + turn0, 60.0);
+                let crystal = if layers.rich {
+                    spun(flake, turn)?
+                } else {
+                    flake.clone()
+                };
+                let share = fall(p) * if scale < 1.0 { 0.55 } else { 1.0 };
+                put(&mut out, Some(&crystal), at(xx), at(yy), share, scale)?;
+            } else if scale == 1.0 {
+                let crystal = if layers.rich {
+                    spun(flake, turn0)?
+                } else {
+                    flake.clone()
+                };
+                put(&mut out, Some(&crystal), at(x), at(y), 1.0, 1.0)?;
+            }
         }
     }
-    let cloud = place(layers.cloud.as_ref(), 0.0, 0.0, 1.0)?;
-    let behind = place(layers.back.as_ref(), 0.0, 0.0, 1.0)?;
-    lay(&mut out, &behind)?;
+    // Clouds: three small motions, each with its own period so that nothing runs in step:
+    // they drift across (the front one further than the back one: depth), rise and sink more
+    // slowly, and breathe a little.
+    let kf = k as f64;
+    let (back, front) = if moving {
+        (
+            (
+                0.030 * kf * (tau * quick / 17.0).sin(),
+                0.008 * kf * (tau * quick / 12.5 + 0.8).sin(),
+                1.0 + 0.008 * (tau * quick / 15.0 + 2.1).sin(),
+            ),
+            (
+                0.055 * kf * (tau * quick / 13.0 + 1.0).sin(),
+                0.014 * kf * (tau * quick / 9.5 + 2.2).sin(),
+                1.0 + 0.014 * (tau * quick / 11.0).sin(),
+            ),
+        )
+    } else {
+        ((0.0, 0.0, 1.0), (0.0, 0.0, 1.0))
+    };
+    let cloud = place(layers.cloud.as_ref(), front.0, front.1, 1.0, front.2)?;
+    let behind = put(&mut out, layers.back.as_ref(), back.0, back.1, 1.0, back.2)?;
     if let (true, Some(behind), Some(front)) = (layers.lit, &behind, &cloud) {
         // the cloud in front shades the one behind it, softly, a little below and to the right
-        let reach = (lp_py::round(k as f64 * 0.03) as i64).max(1);
+        let reach = (lp_py::round(kf * 0.03) as i64).max(1);
         let pad = 3 * reach;
         let (w, h) = (
             front.image.width() as i64 + 2 * pad,
@@ -554,8 +859,8 @@ fn compose(layers: &Layers, kind: &str) -> Result<Image> {
         let mut shade = Image::blank(Mode::L, w as usize, h as usize);
         shade.paste(&front.image.getchannel(3)?, pad, pad, None)?;
         let shade = shade.gaussian_blur(reach as f32, reach as f32)?;
-        let x = front.x - pad + lp_py::round(0.006 * k as f64) as i64;
-        let y = front.y - pad + lp_py::round(0.012 * k as f64) as i64;
+        let x = front.x - pad + lp_py::round(0.006 * kf) as i64;
+        let y = front.y - pad + lp_py::round(0.012 * kf) as i64;
         let table: Vec<i64> = (0..256).map(|v| v * 30 / 100).collect();
         let shade = chops::multiply(&shade, &covered(behind, x, y, w, h)?)?.point(&table)?;
         let mut dark = Image::blank(Mode::RGBA, w as usize, h as usize);
@@ -574,13 +879,41 @@ fn compose(layers: &Layers, kind: &str) -> Result<Image> {
         )?)?;
         out.alpha_composite_at(&light, (glow.x, glow.y), (0, 0, w, h))?;
     }
-    lay(&mut out, &place(layers.bolt.as_ref(), 0.0, 0.0, 1.0)?)?;
+    if layers.bolt.is_some() {
+        // (a flash now and then: two quick ones, then it rests a while)
+        let beat = rem(s, 3.7);
+        let lit = !moving || beat < 0.07 || (0.14 < beat && beat < 0.22);
+        if let (Some(flash), true) = (&layers.flash, moving) {
+            // (the cloud lights up from within, and fades)
+            let mut flare: Option<f64> = None;
+            for start in [0.0, 0.14] {
+                if beat >= start {
+                    let v = (-(beat - start) / 0.09).exp();
+                    // (max keeps the first of equals: a later one only where it is larger)
+                    flare = Some(match flare {
+                        Some(best) if v > best => v,
+                        Some(best) => best,
+                        None => v,
+                    });
+                }
+            }
+            let flare = flare.unwrap_or(0.0);
+            put(&mut out, Some(flash), front.0, front.1, flare, front.2)?;
+        }
+        let bolt = if lit || layers.bolt_rest.is_none() {
+            layers.bolt.as_ref()
+        } else {
+            layers.bolt_rest.as_ref()
+        };
+        put(&mut out, bolt, 0.0, 0.0, 1.0, 1.0)?;
+    }
     Ok(out)
 }
 
-/// _spun: the snow crystal turned by `angle` degrees, in steps of three degrees.
+/// _spun: the snow crystal turned by `angle` degrees, in steps of three degrees (int() of
+/// Python's angle // 3).
 fn spun(flake: &Part, angle: f64) -> Result<Part> {
-    let key = ((angle / 3.0).floor() as i64).rem_euclid(20);
+    let key = (lp_py::num::float_div_mod(angle, 3.0).0 as i64).rem_euclid(20);
     let image = flake
         .image
         .rotate((key * 3) as f64, Filter::Bicubic, false, None, None, None)?;
@@ -591,14 +924,26 @@ fn spun(flake: &Part, angle: f64) -> Result<Part> {
     })
 }
 
-/// A still symbol of a kind of weather: `k` px square, in a look, lit or flat.
-fn still(kind: &str, night: bool, k: usize, c: &Colours, pack: &str, lit: bool) -> Result<Image> {
-    let layers = made(kind, night, k, c, pack == "vivid", lit)?;
-    compose(&layers, kind)
+/// A symbol of a kind of weather: `k` px square, in a look, lit or flat, at time `t` (None:
+/// standing). (layers_for: its layers, with a big clear night's shooting star.)
+fn symbol(
+    kind: &str,
+    night: bool,
+    k: usize,
+    c: &Colours,
+    pack: &str,
+    lit: bool,
+    t: Option<f64>,
+) -> Result<Image> {
+    let mut layers = made(kind, night, k, c, pack == "vivid", lit)?;
+    if layers.big() && night && kind == "clear" {
+        layers.streak = streak_part(k, c.cloud)?;
+    }
+    compose(&layers, kind, t)
 }
 
-/// For the comparisons: a still symbol of a kind of weather, `k` px square, its colours (cloud,
-/// dark, sun, rain, snow), in a look, lit or flat.
+/// For the comparisons: a symbol of a kind of weather, `k` px square, its colours (cloud, dark,
+/// sun, rain, snow), in a look, lit or flat, at time `t` (None: standing).
 pub fn check_symbol(
     kind: &str,
     night: bool,
@@ -606,6 +951,7 @@ pub fn check_symbol(
     colours: [[i64; 4]; 5],
     pack: &str,
     lit: bool,
+    t: Option<f64>,
 ) -> std::result::Result<Image, String> {
     let [cloud, dark, sun, rain, snow] = colours;
     let c = Colours {
@@ -615,7 +961,7 @@ pub fn check_symbol(
         rain,
         snow,
     };
-    still(kind, night, k, &c, pack, lit).map_err(|e| e.0)
+    symbol(kind, night, k, &c, pack, lit, t).map_err(|e| e.0)
 }
 
 impl Renderer {
@@ -647,13 +993,20 @@ impl Renderer {
         })
     }
 
-    /// symbols.draw: a symbol widget standing: the weather of its code sensor, flat or lit.
-    pub(crate) fn symbol_piece(&self, w: &Dict, snapshot: &Snapshot, lit: bool) -> Result<Piece> {
+    /// symbols.draw: a symbol widget: the weather of its code sensor, flat or lit, at time `t`
+    /// (None: standing).
+    pub(crate) fn symbol_piece(
+        &self,
+        w: &Dict,
+        snapshot: &Snapshot,
+        lit: bool,
+        t: Option<f64>,
+    ) -> Result<Piece> {
         let k = widget::int(w, "size", 64).max(8);
         let sensor = widget::text(w, "sensor");
         let kind = kind_of(&snapshot.value(sensor));
         let night = night_at(snapshot, sensor);
-        let image = self.symbol_image(w, kind, night, k, lit)?;
+        let image = self.symbol_image(w, kind, night, k, lit, t)?;
         Ok(Piece::new(
             image,
             widget::int(w, "x", 0),
@@ -670,7 +1023,7 @@ impl Renderer {
             "cloud" => ("overcast", false),
             other => (other, false),
         };
-        let image = self.symbol_image(w, kind, night, widget::int(w, "size", 0), true)?;
+        let image = self.symbol_image(w, kind, night, widget::int(w, "size", 0), true, None)?;
         Ok(Piece::new(
             image,
             widget::int(w, "x", 0),
@@ -678,17 +1031,26 @@ impl Renderer {
         ))
     }
 
-    fn symbol_image(&self, w: &Dict, kind: &str, night: bool, k: i64, lit: bool) -> Result<Image> {
+    fn symbol_image(
+        &self,
+        w: &Dict,
+        kind: &str,
+        night: bool,
+        k: i64,
+        lit: bool,
+        t: Option<f64>,
+    ) -> Result<Image> {
         if k > 4096 {
             return Err(Failed("a symbol too large".into()));
         }
-        still(
+        symbol(
             kind,
             night,
             k as usize,
             &self.symbol_colours(w)?,
             &self.pack(w),
             lit,
+            t,
         )
     }
 }

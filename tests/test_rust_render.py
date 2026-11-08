@@ -3031,6 +3031,50 @@ def test_still_weather_symbols_as_python_makes_them() -> None:
     assert not apart, apart
 
 
+# (the moments of a moving symbol: a step's start, within a breath and a turn, a bolt's flashes
+# and their edges (0.07, 0.14, 0.22 of its 3.7 s), the shooting star's window (0.8 s of 9.3), a
+# splash's (0.22 of a fall), far on, before nought)
+SYMBOL_TIMES = [0.0, 0.04, 0.5, 1.0, 1.36, 2.2, 3.1, 3.7, 3.76, 3.8, 3.84, 3.88, 3.92, 3.96,
+                4.3, 7.4, 9.3, 9.5, 9.7, 10.04, 12.9, 18.6, 18.9, 33.3, 100.04, 1234.56,
+                -0.04, -2.6]  # fmt: skip
+
+
+def test_moving_weather_symbols_as_python_makes_them() -> None:
+    # (each kind of weather, by day and by night where it has a sky, at sizes from 8 px to past
+    # the second look's largest, in both looks, flat and as frosted glass, at moments of its
+    # motion: the corona breathing, the rays turned (and on a big sun pulsing), the stars
+    # twinkling, a big clear night's shooting star, fog's bands passing, rain and drizzle
+    # falling near and far and splashing, crystals falling and turning, clouds drifting and
+    # breathing, a bolt's flashes and its cloud lit from within: the same to the bit)
+    from libre_panel.render import symbols
+
+    rng = random.Random(0x5B02)
+    cases, expected = [], []
+    for kind in symbols.KINDS:
+        for night in (False, True) if kind in ("clear", "mostly", "partly") else (False,):
+            for k in (8, 16, 33, 64, 120, 136, 161, 262):
+                for pack in symbols.PACKS:
+                    for lit in (False, True):
+                        own = (*(rng.randrange(256) for _ in range(3)), rng.choice([255, 180]))
+                        dark = (*(rng.randrange(256) for _ in range(3)), own[3])
+                        sun, rain, snow = [(*(rng.randrange(256) for _ in range(3)), 255)
+                                           for _ in range(3)]  # fmt: skip
+                        colours = {"cloud": own, "moon": own, "dark": dark, "sun": sun,
+                                   "bolt": sun, "rain": rain, "snow": snow}  # fmt: skip
+                        layers, _ = symbols.layers_for(kind, night, k, "lit" if lit else "flat",
+                                                       colours, pack)  # fmt: skip
+                        for t in rng.sample(SYMBOL_TIMES, 4):
+                            expected.append(symbols.compose(layers, kind, night, t))
+                            cases.append({"op": "symbol", "kind": kind, "night": night, "k": k,
+                                          "pack": pack, "lit": lit, "t": t,
+                                          "colours": [own, dark, sun, rain, snow]})  # fmt: skip
+    got = run(cases)
+    apart = [(c["kind"], c["night"], c["k"], c["pack"], c["lit"], c["t"]) for c, g, want
+             in zip(cases, got, expected, strict=True)
+             if picture(g["image"]).tobytes() != want.tobytes()]  # fmt: skip
+    assert not apart, (len(apart), apart[:8])
+
+
 GRAPH_SENSORS = ["cpu.load", "gpu.temp", "net.down", "report.course", "game.fps", "none"]
 
 
@@ -6886,6 +6930,44 @@ def test_agents_signs_at_the_edges_of_their_steps_as_python_draws_them(tmp_path:
     assert drawn == moving == 2 * len(times), (drawn, moving)
 
 
+def _moving_symbol(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """A weather symbol that moves (or now and then one that stands), its motion shifted by an
+    offset of its own now and then."""
+    if rng.random() < 0.15:
+        return _card_or_text(rng, i, size)
+    symbol = _symbol(rng, i, size)
+    symbol["moving"] = rng.random() < 0.85
+    if rng.random() < 0.4:
+        symbol["offset"] = rng.choice([0.37, -1.2, 2, 0.02, 4.65])
+    return symbol
+
+
+def test_weather_symbols_that_move_as_python_draws_them(tmp_path: Path) -> None:
+    # (one renderer drawing its symbols frame after frame as the panels' loop does: each moving
+    # with the planned time of the frame (its offset added), a picture a 25th of a second, the
+    # weather new now and then; flat or lit, in either look; at a frame rate or none, the frames
+    # at any distance, back in time too)
+    rng = random.Random(0x5D3C)
+    cases, expected = [], []
+    for n in range(60):
+        folder = tmp_path / f"t{n}"
+        _frame_theme(rng, folder, _moving_symbol)
+        given, snapshot = _symbol_snapshot(rng)
+        now, fps = rng.uniform(1000, 2000), rng.choice([0, 25, 50])
+        steps, frames = [], []
+        for _ in range(rng.randrange(2, 12)):
+            steps.append((snapshot, now))
+            frames.append({"snapshot": given, "now": now})
+            now += rng.choice([*MOVING_STEPS, 0.07, 0.14, 0.8, 3.7])
+            if rng.random() < 0.15:
+                given, snapshot = _symbol_snapshot(rng)
+        cases.append({"folder": str(folder), "dither": False, "animate": True, "fps": fps,
+                      "steps": frames})  # fmt: skip
+        expected.append(_python_moving(folder, steps, fps))
+    drawn, moving = _compare_moving(cases, expected)
+    assert drawn > 340 and moving > 290, (drawn, moving)
+
+
 def test_the_app_s_own_themes_in_moving_frames_as_python_draws_them(tmp_path: Path) -> None:
     # (every theme the app brings, drawn as the panels' loop draws it: frames a 25th of a second
     # apart and more, its readings new between them, at 50 fps; the same to the bit where Rust
@@ -6946,4 +7028,4 @@ def test_the_app_s_own_themes_in_moving_frames_as_python_draws_them(tmp_path: Pa
             assert g["moving"] == w["moving"], (folder.name, i)
         drawn.append(folder.name)
     # (on Windows Rust does not know the computer's zone: Terra's standing globe is left out)
-    assert len(drawn) >= (87 if sys.platform == "win32" else 88), drawn
+    assert len(drawn) >= (93 if sys.platform == "win32" else 94), drawn
