@@ -327,10 +327,27 @@ impl Renderer {
             None => start,
             Some(end) => lerp(start, end, frac),
         };
-        // _dot
+        self.dot(w, cx, cy, colour).map(Some)
+    }
+
+    /// _dot: a dot of the widget's `end_dot` radius round (`cx`, `cy`) in `colour`, placed in
+    /// quarter pixels, with the widget's glow; the dict its effects come from (its opacity) and
+    /// what it is kept by with it.
+    pub(crate) fn dot(&self, w: &Dict, cx: f64, cy: f64, colour: Rgba) -> Result<Over> {
+        // (math.floor, as Python takes it: an error for NaN or an infinity, such as a graph's
+        // end on a log scale of no finite span; Python's frame fails there)
+        let floor_int = |v: f64| -> Result<f64> {
+            if v.is_nan() {
+                Err(Failed("cannot convert float NaN to integer".into()))
+            } else if v.is_infinite() {
+                Err(Failed("cannot convert float infinity to integer".into()))
+            } else {
+                Ok(v.floor())
+            }
+        };
         let radius = widget::number(w, "end_dot", 0.0);
         let (left, top) = (cx - radius - 1.0, cy - radius - 1.0);
-        let (ix, iy) = (left.floor(), top.floor());
+        let (ix, iy) = (floor_int(left)?, floor_int(top)?);
         let px = (((left - ix) * 4.0) as i64).rem_euclid(4);
         let py = (((top - iy) * 4.0) as i64).rem_euclid(4);
         let size = (2.0 * radius + 3.0).ceil() as i64;
@@ -388,10 +405,10 @@ impl Renderer {
                 .cloned(),
         );
         let content = Value::List(look);
-        Ok(Some((
+        Ok((
             plain,
             content,
             Piece::new(dot, ix as i64 - pad, iy as i64 - pad),
-        )))
+        ))
     }
 }

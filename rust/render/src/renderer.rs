@@ -19,6 +19,7 @@ use crate::cover;
 use crate::effects;
 use crate::finish::{self, Finish};
 use crate::gauge;
+use crate::graph;
 use crate::icons;
 use crate::image;
 use crate::lit;
@@ -103,6 +104,9 @@ pub struct Renderer {
     /// the look of the weather symbols the person chose (config.toml's symbols: the app sets
     /// it; vivid where it does not, as Python's renderer has it)
     pub symbols: String,
+    /// the range each graph of its own range was drawn in (_ranges: still, the values' with
+    /// room), by id: its end dot lies in it
+    ranges: HashMap<String, graph::Range>,
 }
 
 impl Renderer {
@@ -134,6 +138,7 @@ impl Renderer {
             world: ([0; 3], [0; 3]),
             facet_glyphs: RefCell::new(HashMap::new()),
             symbols: crate::symbols::DEFAULT_PACK.to_string(),
+            ranges: HashMap::new(),
         };
         renderer.background = renderer.load_background()?;
         let ground = renderer.color(Some(&renderer.theme.background_color.clone()), 1.0)?;
@@ -207,6 +212,15 @@ impl Renderer {
         self.snapshot
             .as_ref()
             .map_or_else(|| Snapshot::default().now, |s| s.now)
+    }
+
+    /// _range_now in a still frame: the range a graph of its own range was drawn in; None for
+    /// one with min and max, or none drawn yet.
+    pub(crate) fn range_now(&self, w: &Dict) -> Option<graph::Range> {
+        if graph::fixed(w) {
+            return None;
+        }
+        self.ranges.get(widget::text(w, "id")).cloned()
     }
 
     /// The colour of a widget's colour field (None where it has none).
@@ -349,8 +363,8 @@ impl Renderer {
 
     /// _missing: whether a widget is left out: a condition of its needs that does not hold, or
     /// (hide_if_missing) its reading has no value: a weather widget's field, the code a
-    /// weather icon follows, else its sensor's. (A graph Python leaves out by its course and
-    /// its history: graphs are not drawn here yet, so Rust leaves none out and says so.)
+    /// weather icon follows, else its sensor's; a graph without a course published whole and
+    /// with fewer than two values in its history.
     fn missing(&self, w: &Dict, snapshot: &Snapshot) -> bool {
         let needs = widget::text(w, "needs");
         if needs_of(needs).any(|need| !self.holds(need, snapshot)) {
@@ -366,7 +380,12 @@ impl Renderer {
             "icon" if widget::text(w, "icon") == "weather" && sensor.is_empty() => {
                 "weather.code".to_string()
             }
-            "graph" => return false,
+            "graph" => {
+                if graph::course_of(&snapshot.value(sensor)).is_some() {
+                    return false;
+                }
+                return snapshot.history.get(sensor).map_or(0, Vec::len) < 2;
+            }
             _ => sensor.to_string(),
         };
         !key.is_empty() && snapshot.value(&key) == Value::None
@@ -714,6 +733,57 @@ impl Renderer {
                     }
                 }
             }
+            "graph" => {
+                let w = w.clone();
+                let snapshot = self.snapshot.clone().unwrap_or_default();
+                // (a course published whole: across the width, its range the values' own)
+                if let Some(course) = graph::course_of(&snapshot.value(widget::text(&w, "sensor")))
+                {
+                    let numbers: Vec<f64> = course.iter().flatten().copied().collect();
+                    let range = if numbers.is_empty() {
+                        None
+                    } else {
+                        match graph::bounds(&w, &numbers) {
+                            Ok(range) => Some(range),
+                            Err(e) => return Drawn::Failed(e),
+                        }
+                    };
+                    if graph::points_undrawable(&w, &course, range.as_ref()) {
+                        return Drawn::Unported(graph::NAN_POINTS.into());
+                    }
+                    let content = graph::course_key(&course, range.as_ref());
+                    let slots = course.len();
+                    self.cached(&w, content, |r| {
+                        r.graph_piece(&w, &course, slots, range.as_ref())
+                    })
+                } else {
+                    let (values, slots) = graph::history_of(&snapshot, &w);
+                    let numbers: Vec<f64> = values.iter().flatten().copied().collect();
+                    let mut range = None;
+                    if !numbers.is_empty() {
+                        let id = widget::text(&w, "id").to_string();
+                        let own = !graph::fixed(&w);
+                        // (a range of its own glides from one frame to the next: motion)
+                        if own && self.options.animate && self.ranges.contains_key(&id) {
+                            return Drawn::Unported("graphs whose own range glides".into());
+                        }
+                        match graph::still_bounds(&w, &numbers) {
+                            Ok(want) => range = Some(want),
+                            Err(e) => return Drawn::Failed(e),
+                        }
+                        if let (true, Some(want)) = (own, &range) {
+                            self.ranges.insert(id, want.clone());
+                        }
+                    }
+                    if graph::points_undrawable(&w, &values, range.as_ref()) {
+                        return Drawn::Unported(graph::NAN_POINTS.into());
+                    }
+                    let content = graph::history_key(&values, range.as_ref());
+                    self.cached(&w, content, |r| {
+                        r.graph_piece(&w, &values, slots, range.as_ref())
+                    })
+                }
+            }
             "symbol" => {
                 let w = w.clone();
                 if self.options.animate && widget::truthy(&w, "moving") {
@@ -869,6 +939,17 @@ impl Renderer {
                             .map_err(refused)?;
                         pieces.push((format!("{id}\0{name}"), made));
                     }
+                }
+            } else if widget::text(w, "type") == "graph" && widget::truthy(w, "end_dot") {
+                // (what lies over a graph: its end dot)
+                let refused = |e: Failed| Unported(format!("a graph's end dot: {}", e.0));
+                if let Some((plain, content, made)) =
+                    self.graph_dot(w, &snapshot).map_err(refused)?
+                {
+                    let made = self
+                        .cached(&plain, content, |_| Ok(made))
+                        .map_err(refused)?;
+                    pieces.push((format!("{id}\0dot"), made));
                 }
             }
             if let Some(module) = &module {

@@ -22,6 +22,8 @@ pub(crate) enum Finish {
     LitIcon,
     /// symbols.py's LitSymbol: a weather symbol as frosted glass lit from above
     LitSymbol,
+    /// lit.py's LitGraph: a graph's line as light, its halo under it
+    LitGraph,
     /// facet.py's FacetBar: a raised bar with bevelled ends in a milled track
     FacetBar,
     /// facet.py's FacetText and AcrylicText: the text's letters the finish's own
@@ -49,7 +51,8 @@ pub(crate) fn of(w: &Dict) -> Finish {
         ("lit", "icon") if !WEATHER_ICONS.contains(&widget::text(w, "icon")) => Finish::Flat,
         ("lit", "icon") => Finish::LitIcon,
         ("lit", "symbol") => Finish::LitSymbol,
-        ("lit", "graph" | "downloads") | ("facet", "gauge" | "graph") => Finish::Unported,
+        ("lit", "graph") => Finish::LitGraph,
+        ("lit", "downloads") | ("facet", "gauge" | "graph") => Finish::Unported,
         ("facet", "bar") => Finish::FacetBar,
         ("facet", "text" | "metric" | "clock" | "weather" | "countdown") => {
             Finish::Lettered(Style::Metal)
@@ -63,15 +66,23 @@ pub(crate) fn of(w: &Dict) -> Finish {
 
 /// The widget as its finish keeps it (Finish.widget, when a renderer starts): a lit text's
 /// without the renderer's glow and fading, which its light and its letters' fading take the
-/// place of.
+/// place of; a lit graph's glow in its line's halo, not round the whole graph.
 pub(crate) fn kept(mut w: Dict) -> Dict {
-    if of(&w) == Finish::LitText {
-        let glow = w.get("glow").cloned().unwrap_or(Value::Float(0.0));
-        let opacity = w.get("opacity").cloned().unwrap_or(Value::Float(1.0));
-        w.insert("glow".into(), Value::Float(0.0));
-        w.insert("opacity".into(), Value::Float(1.0));
-        w.insert(LIGHT.into(), glow);
-        w.insert(OPACITY.into(), opacity);
+    match of(&w) {
+        Finish::LitText => {
+            let glow = w.get("glow").cloned().unwrap_or(Value::Float(0.0));
+            let opacity = w.get("opacity").cloned().unwrap_or(Value::Float(1.0));
+            w.insert("glow".into(), Value::Float(0.0));
+            w.insert("opacity".into(), Value::Float(1.0));
+            w.insert(LIGHT.into(), glow);
+            w.insert(OPACITY.into(), opacity);
+        }
+        Finish::LitGraph => {
+            let glow = w.get("glow").cloned().unwrap_or(Value::Float(0.0));
+            w.insert("glow".into(), Value::Float(0.0));
+            w.insert(HALO.into(), glow);
+        }
+        _ => {}
     }
     w
 }
@@ -79,3 +90,5 @@ pub(crate) fn kept(mut w: Dict) -> Dict {
 /// Where a lit text keeps its own glow and opacity.
 pub(crate) const LIGHT: &str = "\0light";
 pub(crate) const OPACITY: &str = "\0opacity";
+/// Where a lit graph keeps its glow, for its line's halo.
+pub(crate) const HALO: &str = "\0halo";

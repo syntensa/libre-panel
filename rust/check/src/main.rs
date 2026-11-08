@@ -303,6 +303,46 @@ fn run(case: &Value) -> Result<Value, String> {
             lp_i18n::set_language(lp_i18n::Language::english());
             json!(answers)
         }
+        "graph_range" => {
+            // the range a graph is drawn in, in a still frame (_glided_bounds), of each case's
+            // widget (min, max, range_step, as typed values) and numbers: its ends as typed
+            // values, or {"failed": what Python raises}
+            let answers: Vec<Value> = case["cases"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|c| {
+                    let mut w = lp_py::Dict::new();
+                    for (k, v) in c["widget"].as_object().into_iter().flatten() {
+                        w.insert(k.clone(), typed(v));
+                    }
+                    let numbers: Vec<f64> = c["numbers"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .map(|v| match typed(v) {
+                            lp_py::Value::Float(f) => f,
+                            _ => f64::NAN,
+                        })
+                        .collect();
+                    if numbers.is_empty() {
+                        return json!({"error": "no numbers"});
+                    }
+                    // (each end typed as Python has it: an int or a float)
+                    let typed_out = |v: &lp_py::Value| match v {
+                        lp_py::Value::Int(n) => json!({"i": n.to_string()}),
+                        lp_py::Value::Float(f) => json!({"f": format!("{:016x}", f.to_bits())}),
+                        lp_py::Value::Bool(b) => json!({"b": b}),
+                        _ => json!({"n": null}),
+                    };
+                    match lp_render::graph_range(&w, &numbers) {
+                        Ok((lo, hi)) => json!([typed_out(&lo), typed_out(&hi)]),
+                        Err(e) => json!({"failed": e}),
+                    }
+                })
+                .collect();
+            json!(answers)
+        }
         "countdown_text" => {
             // countdown.py's countdown_text(text, part, now, done) for each case, in its language
             let locale = std::path::PathBuf::from(case["locale"].as_str().unwrap_or(""));
@@ -2356,7 +2396,8 @@ fn typed(v: &Value) -> lp_py::Value {
 }
 
 /// A snapshot as the tests give it: `readings` (key to a typed value), `images` (the keys
-/// of the pictures: a blank one stands for each), `now` (year to microsecond).
+/// of the pictures: a blank one stands for each), `now` (year to microsecond), `history` (key
+/// to its typed numbers).
 fn snapshot_of(v: &Value) -> lp_render::snapshot::Snapshot {
     use lp_render::snapshot as sn;
     let mut snap = sn::Snapshot::default();
@@ -2386,6 +2427,19 @@ fn snapshot_of(v: &Value) -> lp_render::snapshot::Snapshot {
     }
     if let Some(now) = v["now"].as_array() {
         snap.now = datetime_of(now);
+    }
+    // (each sensor's history: its numbers, typed as the readings are)
+    for (key, values) in v["history"].as_object().into_iter().flatten() {
+        let numbers = values
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|x| match typed(x) {
+                lp_py::Value::Float(f) => f,
+                lp_py::Value::Int(n) => lp_py::num::int_to_float(&n).unwrap_or(f64::NAN),
+                _ => f64::NAN,
+            });
+        snap.history.insert(key.clone(), numbers.collect());
     }
     snap
 }

@@ -423,7 +423,10 @@ def _python_frame(folder: Path, snapshot: Snapshot, dither: bool) -> dict[str, A
     except ThemeError as error:
         return {"error": str(error)}
     renderer = Renderer(theme, preview=True, dither=dither)
-    frame, boxes = renderer.render(snapshot, now=1000.0)
+    try:
+        frame, boxes = renderer.render(snapshot, now=1000.0)
+    except Exception as error:  # (a frame Python cannot make: what lies over a widget failed)
+        return {"failed": f"{type(error).__name__}: {error}"}
     return {"frame": frame, "boxes": boxes}
 
 
@@ -434,9 +437,11 @@ def _compare_frames(
     make: Any = None,
     snapshot_of: Any = None,
     language: str = "en",
+    undefined: tuple[str, ...] = (),
 ) -> int:
     """Frames of `count` random themes (of what `make` makes) drawn by both, compared to the
-    bit, and their boxes; how many were drawn."""
+    bit, and their boxes; how many were drawn. Rust may leave out those it says are `undefined`:
+    where what Python draws is left to the processor."""
     rng = random.Random(seed)
     cases, expected = [], []
     try:
@@ -456,6 +461,11 @@ def _compare_frames(
     for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
         if "error" in want:
             assert "error" in got, n
+            continue
+        if "failed" in want:  # (Python's frame fails: Rust makes none)
+            assert "unported" in got, (n, got, want)
+            continue
+        if got.get("unported") in undefined:
             continue
         assert "sha256" in got, (n, got)
         frame = want["frame"]
@@ -527,9 +537,8 @@ def test_frames_of_texts_that_just_fit_as_python_fits_them(tmp_path: Path) -> No
 
 
 def test_frames_beyond_their_widgets_are_not_drawn_here_yet(tmp_path: Path) -> None:
-    # (a screen, the panel's look and a finish Rust does not draw yet: the facets' rings, the
-    # lit and the facets' graphs; Rust says it does not draw them yet, rather than a frame
-    # without them)
+    # (a screen, the panel's look and a finish Rust does not draw yet: the facets' rings and
+    # graphs; Rust says it does not draw them yet, rather than a frame without them)
     rng = random.Random(0xB3D)
     cases, wanted = [], []
     for n in range(30):
@@ -545,7 +554,7 @@ def test_frames_beyond_their_widgets_are_not_drawn_here_yet(tmp_path: Path) -> N
                 finished = {**_gauge(rng, 99, (64, 48)), "finish": "facet"}
             else:
                 finished = {"type": "graph", "id": "g99", "x": 4, "y": 4, "w": 40, "h": 20,
-                            "finish": rng.choice(["lit", "facet"])}  # fmt: skip
+                            "finish": "facet"}  # fmt: skip
             data["widgets"].append(finished)
         (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
         try:
@@ -751,8 +760,8 @@ def test_widgets_left_out_where_their_reading_is_missing_as_python_leaves_them_o
     tmp_path: Path,
 ) -> None:
     # (hide_if_missing: a weather widget's field, the code a weather icon follows, else the
-    # widget's sensor; a graph Python leaves out by its course and history: Rust says it does
-    # not draw graphs yet, rather than a frame with it or without it)
+    # widget's sensor; a graph without a course published whole and with fewer than two
+    # values in its history)
     rng = random.Random(0x41D)
     cases, expected, left_out = [], [], 0
     for n in range(80):
@@ -778,24 +787,27 @@ def test_widgets_left_out_where_their_reading_is_missing_as_python_leaves_them_o
         values = {"weather.temperature": 21.5, "weather.humidity": 40, "weather.code": 61,
                   "weather.hour.3.code": 3, "cpu.load": 50, "net.link.kind": "lan"}  # fmt: skip
         readings = {k: v for k, v in values.items() if rng.random() < 0.5}
+        history: dict[str, list[float]] = {}
+        if kind == "graph":  # (its history of no value, one or more; now and then a course)
+            key = widget.get("sensor", "cpu.load")
+            if rng.random() < 0.8:
+                history[key] = [rng.uniform(0, 100) for _ in range(rng.choice([0, 1, 2, 5]))]
+            if rng.random() < 0.25:
+                readings[key] = rng.choice(["[40, 61.5, 52]", "[7]", "[1, 2", "61.5"])
         now = datetime(2026, 11, 7, 12, 30, 5)
-        snapshot = Snapshot(readings={k: Reading(k, v) for k, v in readings.items()}, now=now)
+        snapshot = Snapshot(readings={k: Reading(k, v) for k, v in readings.items()},
+                            history=history, now=now)  # fmt: skip
         given = {"readings": {k: _typed(v) for k, v in readings.items()}, "images": {},
+                 "history": {k: [_typed(v) for v in vs] for k, vs in history.items()},
                  "now": [2026, 11, 7, 12, 30, 5, 0]}  # fmt: skip
         renderer = Renderer(theme, preview=True)
         [shown] = [w for w in renderer.widgets if w["id"] == "left"]
         gone = renderer._missing(shown, snapshot)
         left_out += gone
         cases.append({"folder": str(folder), "snapshot": given, "dither": False})
-        if kind == "graph":
-            expected.append({"unported": "graph widgets"})
-        else:
-            expected.append(_python_frame(folder, snapshot, False))
+        expected.append(_python_frame(folder, snapshot, False))
     [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
     for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
-        if "unported" in want:
-            assert got.get("unported") == want["unported"], (n, got)
-            continue
         assert got.get("sha256") == hashlib.sha256(want["frame"].tobytes()).hexdigest(), n
         assert got["boxes"] == want["boxes"], n
     assert left_out > 20 and len(cases) > 60
@@ -1400,9 +1412,15 @@ def test_the_app_s_own_themes_as_python_draws_them() -> None:
                                    now=datetime(2026, 11, 7, 18, 5, 9, 250))  # fmt: skip
     readings = {key: {"v": _typed(r.value), "unit": r.unit, "label": r.label}
                 for key, r in snapshot.readings.items()}  # fmt: skip
-    given = {"readings": readings, "images": {k: image(v) for k, v in snapshot.images.items()},
-             "now": _moment(snapshot.now)}  # fmt: skip
     folders = sorted(p.parent for p in THEMES.glob("*/theme.json"))
+    # (the histories the themes' graphs draw, their last numbers: none shows more of them)
+    graphs = [w for f in folders for w in Renderer(load_theme(f), preview=True).widgets
+              if w["type"] == "graph"]  # fmt: skip
+    assert max(w["history"] for w in graphs) <= 400
+    drawn_from = sorted({w["sensor"] for w in graphs} & set(snapshot.history))
+    history = {key: [_typed(float(v)) for v in snapshot.history[key][-400:]] for key in drawn_from}
+    given = {"readings": readings, "images": {k: image(v) for k, v in snapshot.images.items()},
+             "history": history, "now": _moment(snapshot.now)}  # fmt: skip
     soft = {f for f in folders if _soft_light(f)}
     cases = [{"folder": str(f), "snapshot": given, "dither": False, "bytes": f in soft}
              for f in folders]  # fmt: skip
@@ -1424,7 +1442,7 @@ def test_the_app_s_own_themes_as_python_draws_them() -> None:
         assert got["boxes"] == want["boxes"], folder.name
         drawn.append(folder.name)
     assert len(folders) > 90
-    assert len(drawn) >= 41, drawn
+    assert len(drawn) >= 56, drawn
 
 
 def _lit(
@@ -1526,14 +1544,16 @@ LETTERED_FINISHES = [(finish, kind) for finish in ("facet", "acrylic")
                      for kind in ("text", "metric", "clock", "weather", "countdown")]  # fmt: skip
 OWN_FINISHES = [("lit", "bar"), ("facet", "bar"), ("lit", "gauge")]
 SYMBOL_FINISHES = [("lit", "symbol"), ("lit", "icon")]
-UNDRAWN_FINISHES = [("lit", "graph"), ("lit", "downloads"), ("facet", "gauge"), ("facet", "graph")]
+GRAPH_FINISHES = [("lit", "graph")]
+UNDRAWN_FINISHES = [("lit", "downloads"), ("facet", "gauge"), ("facet", "graph")]
 
 
 def test_each_finish_rust_does_not_draw_yet_is_refused(tmp_path: Path) -> None:
     # (a finish that takes the widget and that Rust does not draw: the whole frame refused,
     # rather than a frame without it; one that does not take it: the widget drawn flat; the
     # facets' letters and bars, the lit bar and ring: their own, the lit ones' halos within a
-    # level; a lit symbol and a lit weather icon: frosted glass, to the bit)
+    # level; a lit symbol and a lit weather icon: frosted glass, to the bit; a lit graph with
+    # no history: its ground alone, to the bit)
     import numpy as np
 
     makers = {"clock": _clock, "weather": _weather_or_countdown, "rect": _rect, "bar": _bar,
@@ -1542,7 +1562,7 @@ def test_each_finish_rust_does_not_draw_yet_is_refused(tmp_path: Path) -> None:
     rng = random.Random(0xF1)
     cases, wanted = [], []
     pairs = [*FLAT_FINISHES, *LETTERED_FINISHES, *OWN_FINISHES, *SYMBOL_FINISHES,
-             *UNDRAWN_FINISHES]  # fmt: skip
+             *GRAPH_FINISHES, *UNDRAWN_FINISHES]  # fmt: skip
     for n, (finish, kind) in enumerate(pairs):
         widget = makers.get(kind, _text)(rng, 0, (64, 48))
         if kind in ("weather", "countdown"):
@@ -2133,3 +2153,255 @@ def test_still_weather_symbols_as_python_makes_them() -> None:
              in zip(cases, got, expected, strict=True)
              if picture(g["image"]).tobytes() != want.tobytes()]  # fmt: skip
     assert not apart, apart
+
+
+GRAPH_SENSORS = ["cpu.load", "gpu.temp", "net.down", "report.course", "game.fps", "none"]
+
+
+def _graph(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """A graph of a sensor's history or of a course a service published: of any size, its
+    range its own or the values', on any scale, filled or not, fading or flat, smoothed or not,
+    hanging from the top, inset or to the edges, with a grid, a background, an end dot, a glow
+    kept between its sides, left out where its reading is missing; flat or lit."""
+    w, h = size
+    graph: dict[str, Any] = {"type": "graph", "id": f"g{i}", "x": rng.randrange(-20, w),
+                             "y": rng.randrange(-20, h),
+                             "w": rng.choice([0, 1, 2, 7, 40, 120, 300]),
+                             "h": rng.choice([1, 2, 9, 30, 60, 100]),
+                             "sensor": rng.choice([*GRAPH_SENSORS, *["report.course"] * 2]),
+                             "color": _colour(rng),
+                             "history": rng.choice([0, 1, 2, 3, 10, 60, 120, 200]),
+                             "fill": rng.random() < 0.8, "fill_fade": rng.random() < 0.7,
+                             "smooth": rng.random() < 0.8, "inset": rng.random() < 0.7,
+                             "direction": rng.choice(["up", "up", "down"]),
+                             "scale": rng.choice(["linear", "linear", "sqrt", "log"]),
+                             "line_width": rng.choice([1, 2, 2, 3, 4])}  # fmt: skip
+    # (min and max none: the range the values' own, with room; one of them fixed, the values
+    # perhaps beyond it)
+    if rng.random() < 0.7:
+        graph["min"] = rng.choice([None, None, None, 0, 0, -50, 10.5, 30])
+    if rng.random() < 0.7:
+        graph["max"] = rng.choice([None, None, None, 100, 100, 50, 175, 1e6, 0, 2**53 + 1])
+    if rng.random() < 0.1 and graph.get("min") is not None:  # (a range of one value)
+        graph["max"] = graph["min"]
+    if rng.random() < 0.05:  # (ints a float does not hold: Python counts with them exactly)
+        graph["min"], graph["max"] = rng.choice([(2**53, 2**53 + 1), (10**30, 10**30 + 7),
+                                                 (-(2**60), 2**60)])  # fmt: skip
+    if rng.random() < 0.2:
+        graph["range_step"] = rng.choice([5, 10, 0.5, 25])
+    if rng.random() < 0.4:
+        graph["fill_alpha"] = rng.choice([0.0, 0.25, 0.28, 0.3, 0.5, 1.0, 1.7, -0.5, math.nan])
+    if rng.random() < 0.25:
+        graph["grid"] = rng.choice([1, 2, 3, 6])  # (3 at an odd height: a line half a row off)
+        graph["grid_color"] = rng.choice([None, "#ffffff1f", _hex(rng, True), "@line"])
+    if rng.random() < 0.2:
+        graph["background"] = rng.choice([_hex(rng), _hex(rng, True), "@surface"])
+    if rng.random() < 0.25:
+        graph["end_dot"] = rng.choice([1.7, 2, 3.4, 0.5])
+    if rng.random() < 0.3:
+        graph["glow"] = rng.choice([0.21, 0.35, 1.0])
+        graph["glow_radius"] = rng.choice([2, 6, 10, 24])
+    if rng.random() < 0.2:
+        graph["clip"] = True
+    if rng.random() < 0.15:
+        graph["opacity"] = rng.choice([0.5, 0.0])
+    if rng.random() < 0.2:
+        graph["hide_if_missing"] = True
+    if rng.random() < 0.4:
+        graph["finish"] = "lit"
+    return graph
+
+
+def _graph_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _graph(rng, i, size) if rng.random() < 0.8 else _card_or_text(rng, i, size)
+
+
+def _history(rng: random.Random) -> list[float]:
+    """A sensor's numbers as the hub keeps them: a load, a temperature, a rate over many
+    powers of ten, a constant, now and then one that is no number to draw (NaN, infinity)."""
+    n = rng.choice([0, 1, 2, 3, 5, 40, 119, 120, 121, 300])
+    kind = rng.choice(["load", "temp", "rate", "flat", "idle", "wild"])
+    out: list[float] = []
+    v = rng.uniform(0, 100)
+    for _ in range(n):
+        if kind == "load":
+            v = min(100.0, max(0.0, v + rng.uniform(-15, 15)))
+        elif kind == "temp":
+            v = 30 + 50 * rng.random()
+        elif kind == "rate":
+            v = 10 ** rng.uniform(0, 9)
+        elif kind == "flat":
+            v = 42.0
+        elif kind == "idle":  # (resting at 0 now and then: the least value 0)
+            v = max(0.0, rng.uniform(-40.0, 25.0))
+        else:
+            v = rng.choice([rng.uniform(-1e6, 1e6), -3.5, 0.0, 1e300, -1e300, 1.7e308, -1.7e308])
+        out.append(v)
+    if out and rng.random() < 0.2:
+        for _ in range(rng.randrange(1, 4)):
+            out[rng.randrange(len(out))] = rng.choice([math.nan, math.inf, -math.inf])
+    return out
+
+
+def _course_text(rng: random.Random) -> Any:
+    """A course a service published whole: numbers as text, a gap null (or anything not a
+    number to draw: an integer of over 1023 bits too), and what is none: too short, too long,
+    not a list, not text, not starting with its bracket."""
+    n = rng.choice([0, 1, 2, 3, 30, 300, 4000, 4001])
+    points: list[str] = []
+    for _ in range(n):
+        points.append(rng.choice([f"{rng.uniform(20, 90):.2f}", str(rng.randrange(0, 100)),
+                                  "null", "NaN", "Infinity", "true", "1e400", "-0.0",
+                                  str(10**400), str(2**1023), '"61"', "[1]"]))  # fmt: skip
+    same = rng.choice(["42", "0", "-7.5"])  # (a course of one value: a range from it to one above)
+    return rng.choice([f"[{', '.join(points)}]", f"[{', '.join(points)}]", "61.5", "[1, 2",
+                       "", 61.5, None, f"[{same}, {same}, {same}]",
+                       f" [{', '.join(points)}]"])  # fmt: skip
+
+
+def _graph_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
+    """The histories the graphs draw, a course as a reading, at a moment."""
+    history = {k: _history(rng) for k in GRAPH_SENSORS if rng.random() < 0.85}
+    readings: dict[str, Any] = {}
+    if rng.random() < 0.8:
+        readings["report.course"] = _course_text(rng)
+    if rng.random() < 0.3:  # (a number where a course could be: the history draws)
+        readings["cpu.load"] = rng.uniform(0, 100)
+    now = datetime(2026, 11, 7, rng.randrange(24), rng.randrange(60), 5)
+    snapshot = Snapshot(readings={k: Reading(k, v) for k, v in readings.items()},
+                        history=history, now=now)  # fmt: skip
+    moment = [now.year, now.month, now.day, now.hour, now.minute, now.second, 0]
+    given = {"readings": {k: _typed(v) for k, v in readings.items()}, "images": {},
+             "history": {k: [_typed(float(v)) for v in values] for k, values in history.items()},
+             "now": moment}  # fmt: skip
+    return given, snapshot
+
+
+class _StillRange:
+    """The renderer's _glided_bounds as a still frame takes it: no range kept, none gliding."""
+
+    RANGE_ROOM = Renderer.RANGE_ROOM
+    animate = False
+    _graph_bounds = Renderer._graph_bounds
+    _glided_bounds = Renderer._glided_bounds
+
+    def __init__(self) -> None:
+        self._ranges: dict[str, Any] = {}
+
+
+def _range_case(rng: random.Random) -> tuple[dict[str, Any], list[float]]:
+    """A graph's min, max and range step and the numbers it draws: a range of its own, the
+    values' or one of each; one value (a range of none), values beyond a fixed end, a least value
+    of 0, steps fine and coarse, spans over a float's largest."""
+    pool = [0.0, -0.0, 0.1, 1.0, 5.0, 10.5, 25.0, 30.0, 42.0, 99.9, 100.0, 175.0, 1e6, -3.5,
+            -50.0, 1e300, -1e300, 1.7e308, -1.7e308, 5e-324]  # fmt: skip
+
+    def number() -> float:
+        r = rng.random()
+        if r < 0.5:
+            return rng.choice(pool)
+        if r < 0.75:
+            return rng.uniform(-100, 200)
+        return 10 ** rng.uniform(-3, 9) * rng.choice([1, -1])
+
+    n = rng.choice([1, 1, 2, 3, 5, 8, 40])
+    numbers = [number()] * n if rng.random() < 0.25 else [number() for _ in range(n)]
+    # (ints a float does not hold: Python counts with them exactly; one past a float's largest)
+    ends: list[Any] = [0, 0.0, -50, 10.5, 30, 42, 100, 175, 1e6, -1e300, 1.7e308, math.nan,
+                       math.inf, -math.inf, 2**53 + 1, -(2**60) - 3, 10**30 + 7, 2**1030,
+                       *numbers]  # fmt: skip
+    widget: dict[str, Any] = {"id": "g", "min": None, "max": None}
+    if rng.random() < 0.5:
+        widget["min"] = rng.choice(ends)
+    if rng.random() < 0.5:
+        widget["max"] = rng.choice(ends)
+    if rng.random() < 0.15 and widget["min"] is not None:
+        widget["max"] = widget["min"]
+    if rng.random() < 0.5:
+        widget["range_step"] = rng.choice([5, 10, 0.5, 25, 0.1, 3, 1e-300, 1e300, -5, 0, math.nan])
+    return widget, numbers
+
+
+def test_ranges_of_graphs_as_python_finds_them() -> None:
+    # (the range a still frame draws a graph in: its ends to the bit, an int where Python's is
+    # one, exact however large (a range in whole steps of an int); and Python's errors)
+    rng = random.Random(0x7A9E)
+    cases, expected = [], []
+    for _ in range(20000):
+        widget, numbers = _range_case(rng)
+        try:
+            (lo, hi), _glides = _StillRange()._glided_bounds(widget, numbers, 0.0)
+            want: Any = [_typed(lo), _typed(hi)]  # (an int or a float, as Python has it)
+        except (ValueError, OverflowError, ZeroDivisionError) as error:
+            want = {"failed": str(error)}
+        cases.append({"widget": {k: _typed(v) for k, v in widget.items()},
+                      "numbers": [_typed(float(v)) for v in numbers]})  # fmt: skip
+        expected.append(want)
+    [ours] = run([{"op": "graph_range", "cases": cases}])
+    apart = [(c, g, w) for c, g, w in zip(cases, ours, expected, strict=True) if g != w]
+    assert not apart, apart[:3]
+    assert sum("failed" in w for w in expected if isinstance(w, dict)) > 100
+
+
+def test_graphs_through_points_that_are_no_numbers(tmp_path: Path) -> None:
+    # (values near a float's largest: a range of no finite span. On a log scale every point is
+    # NaN: smoothed, the points stay between the rows; a fill's fade fails on them, as does a
+    # range in whole steps, as Python's widget does; drawn as they are, Pillow's C turns them
+    # into ints as the processor does (the least int on x86, 0 on ARM): Rust leaves those out.
+    # A NaN end dot fails Python's frame. Linear and square-root scales lay them at the bottom)
+    rng = random.Random(0x4A4)
+    undefined = "graphs through points that are no numbers (a log scale of no finite span)"
+    dot = "a graph's end dot: cannot convert float NaN to integer"
+    looks: list[tuple[dict[str, Any], str | None]] = [
+        ({"scale": "log"}, undefined),
+        ({"scale": "log", "smooth": True}, None),
+        ({"scale": "log", "fill": True, "fill_fade": True}, None),
+        ({"scale": "log", "fill": True, "fill_fade": True, "direction": "down"}, None),
+        ({"scale": "log", "fill": True, "fill_fade": True, "range_step": 5}, None),
+        ({"scale": "log", "fill": True, "fill_fade": False}, undefined),
+        ({"scale": "log", "finish": "lit"}, undefined),
+        ({"scale": "log", "smooth": True, "end_dot": 2}, dot),
+        ({"scale": "linear", "end_dot": 2}, None),
+        ({"scale": "sqrt", "fill": True}, None),
+    ]
+    values = [1.7e308 if i % 7 == 0 else -1.7e308 if i % 11 == 0 else 40.0 + i for i in range(60)]
+    now = datetime(2026, 11, 8, 3, 0, 5)
+    snapshot = Snapshot(readings={}, history={"cpu.load": values}, now=now)
+    given = {"readings": {}, "images": {}, "history": {"cpu.load": [_typed(v) for v in values]},
+             "now": [2026, 11, 8, 3, 0, 5, 0]}  # fmt: skip
+    cases, expected = [], []
+    graph = {"type": "graph", "id": "nan", "x": 2, "y": 2, "w": 40, "h": 30, "sensor": "cpu.load",
+             "color": "#40c0ff", "history": 60, "fill": False, "smooth": False, "line_width": 2,
+             "min": None, "max": None}  # fmt: skip
+    for n, (look, _wanted) in enumerate(looks):
+        for attempt in range(20):  # (on a ground the theme takes)
+            folder = tmp_path / f"t{n}_{attempt}"
+            data = _frame_theme(rng, folder, _card_or_text)
+            data["widgets"].append({**graph, **look})
+            (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+            want = _python_frame(folder, snapshot, False)
+            if "error" not in want:
+                break
+        cases.append({"folder": str(folder), "snapshot": given, "dither": False})
+        expected.append(want)
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    for n, (got, want, (_look, wanted)) in enumerate(zip(ours["frames"], expected, looks,
+                                                         strict=True)):  # fmt: skip
+        assert "error" not in want, (n, want)
+        assert got.get("unported") == wanted, (n, got.get("unported"))
+        if wanted is None:
+            assert got["sha256"] == hashlib.sha256(want["frame"].tobytes()).hexdigest(), n
+            assert got["boxes"] == want["boxes"], n
+        assert ("failed" in want) == (wanted == dot), (n, want.get("failed"))
+
+
+def test_frames_of_graphs_as_python_draws_them(tmp_path: Path) -> None:
+    # (a graph of a sensor's history or a course published whole, its range its own or the
+    # values' with room, filled or not, smoothed or not, with its grid, background and end
+    # dot; flat or lit: its line's halo under it, worked out at a quarter of the size)
+    # (a curve through NaN points, as a log scale of no finite span makes them: Pillow's C turns
+    # them into ints as the processor does, so Rust leaves it out)
+    undefined = ("graphs through points that are no numbers (a log scale of no finite span)",)
+    drawn = _compare_frames(tmp_path, 0x6A9, 200, _graph_or_more, _graph_snapshot,
+                            undefined=undefined)  # fmt: skip
+    assert drawn > 150

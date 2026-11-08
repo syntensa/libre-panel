@@ -12,6 +12,7 @@ pub mod facets;
 mod finish;
 pub mod formatting;
 mod gauge;
+mod graph;
 pub mod icons;
 mod image;
 mod light;
@@ -29,6 +30,7 @@ mod text;
 pub mod weather_art;
 pub mod widget;
 
+pub use graph::still_range as graph_range;
 pub use piece::{Failed, Piece};
 pub use renderer::{Options, Renderer, Unported};
 pub use snapshot::{Moment, Reading, Snapshot};

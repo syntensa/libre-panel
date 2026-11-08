@@ -353,8 +353,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       added over it; clocks, the weather, countdowns and line icons the lit finish leaves flat,
       as Python leaves them. The frames the same to the bit; with a shadow, or the renderer's
       own glow round what the finish leaves flat, a pixel now and then a level apart, as a
-      card's. The facets' rings and graphs and the lit finish's graphs, weather icons, symbols
-      and downloads: Rust says it does not draw them yet
+      card's. The facets' rings and graphs and the lit finish's downloads: Rust says it does
+      not draw them yet (the lit finish's weather icons, symbols and graphs: below)
 - [x] the facet and acrylic finishes' letters (facet.py, facets.py): each letter of a text of
       one line, from 20 px on, the finish's own: of bright metal that mirrors the sky (the
       palette's accent, else its primary or cpu colour, a third of the way to white) above it
@@ -421,6 +421,29 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       (1,440 of them), and the frames of random themes of them the same to the bit. A symbol
       that moves: Rust says it does not draw it yet in a moving frame. 43 of the app's 99
       themes are drawn by Rust, 41 of them the same to the bit
+- [x] graphs in a still frame (renderer.py's _draw_graph, _curve, _draw_end_dot): the curve
+      of a sensor's history, or of a course a service publishes whole as text (course_of:
+      JSON as Python's json reads it, a gap where a point is no number to draw), across the
+      widget, drawn three times larger and reduced: its background, its grid, its fill fading
+      from its highest point (or a stepped range's top) or flat, the line through its points
+      (Catmull-Rom in Python's order of sums), a gap where a value is none, hanging from the
+      top where it says; its range the widget's, else the values' with a tenth of their span
+      of room (in whole range_steps, from 0 up where none is below it), kept as Python keeps
+      it in a still frame, and the dot at the line's end in it; a graph left out where it has
+      neither a course nor two values of history; the lit finish's line as light (the glow
+      its halo, worked out at a quarter of the size, the line towards white). The range is
+      counted as Python counts it: each end the int or the float it is, the multiples of a
+      whole step exact ints however large, so a range of ints a float does not hold is drawn
+      too; the ranges of 20,000 random graphs the same to the bit, their types and Python's
+      errors too. The frames of 200 random themes of graphs (990 graphs: 584 curves of a
+      history, 241 of them lit, 209 in a range of their own, 55 of a course, 130 end dots)
+      the same to the bit. Values near a float's largest make a span of no finite size: on a
+      log scale every point is NaN. An end dot there fails Python's frame, and Rust makes
+      none; a fill's fade fails the widget, as in Python; a line or a fill drawn through the
+      NaN points gets them from Pillow's C as ints the processor makes of them (the least int
+      on x86, 0 on ARM), so Rust leaves those out. A graph whose own range glides from frame
+      to frame: Rust says it does not draw it yet. 56 of the app's 99 themes are drawn by
+      Rust, 54 of them the same to the bit
 - [ ] the zones on Windows (Python finds them in the tzdata package there, which the Rust
       app does not bring yet: none is found there for now)
 - [ ] the C library's locale where Python's text follows it: format()'s 'n' and what strftime
