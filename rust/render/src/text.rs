@@ -23,9 +23,9 @@ use crate::widget;
 
 /// The theme's font where a widget names none, and the app's where the theme names none.
 pub const DEFAULT_FONT: &str = "builtin:Barlow-Medium";
-const DIGITS: &str = "0123456789";
+pub(crate) const DIGITS: &str = "0123456789";
 
-fn failed(e: lp_text::Error) -> Failed {
+pub(crate) fn failed(e: lp_text::Error) -> Failed {
     Failed(e.to_string())
 }
 
@@ -41,7 +41,7 @@ fn anchor_of(align: &str) -> &'static str {
 /// Where a letter's ink lies in its picture (getbbox: left, top, right, bottom); that it has
 /// none; or, for a finish's letter, that it is not known (all of its picture is laid).
 #[derive(Clone, Copy)]
-enum Ink {
+pub(crate) enum Ink {
     At((usize, usize, usize, usize)),
     Blank,
     Unknown,
@@ -51,14 +51,15 @@ enum Ink {
 pub(crate) type FacetGlyphs = RefCell<HashMap<(usize, char, i64, Style), Option<Rc<Glyph>>>>;
 
 /// A text laid out letter by letter (_Letters): its layer's size, where the layer goes, the
-/// box, and each letter on the layer with where its ink lies in its picture.
-struct Letters {
-    size: (usize, usize),
-    left: i64,
-    y: i64,
-    hit: [i64; 4],
-    glyphs: Vec<(Image, i64, i64)>,
-    inks: Vec<Ink>,
+/// box, and each letter on the layer (None: a finish's blank) with where its ink lies in its
+/// picture.
+pub(crate) struct Letters {
+    pub(crate) size: (usize, usize),
+    pub(crate) left: i64,
+    pub(crate) y: i64,
+    pub(crate) hit: [i64; 4],
+    pub(crate) glyphs: Vec<Option<(Image, i64, i64)>>,
+    pub(crate) inks: Vec<Ink>,
 }
 
 impl Renderer {
@@ -131,7 +132,7 @@ impl Renderer {
     }
 
     /// _fit: the text and the font size that keep within the widget's max_width.
-    fn fit(&self, w: &Dict, text: &str) -> Result<(String, i64)> {
+    pub(crate) fn fit(&self, w: &Dict, text: &str) -> Result<(String, i64)> {
         let size = widget::int(w, "font_size", 24);
         let limit = widget::int(w, "max_width", 0);
         if limit <= 0 || text.is_empty() || text.contains('\n') {
@@ -215,7 +216,13 @@ impl Renderer {
     /// _letters: the text laid out letter by letter, for letter spacing, equal-width digits, a
     /// finish's own letters or a clock's digits that roll or fade (laid out so in a still frame
     /// too); None where it is drawn whole. `size` is the font size the text fits in.
-    fn letters(&self, w: &Dict, text: &str, colour: &str, size: i64) -> Result<Option<Letters>> {
+    pub(crate) fn letters(
+        &self,
+        w: &Dict,
+        text: &str,
+        colour: &str,
+        size: i64,
+    ) -> Result<Option<Letters>> {
         let font = self.font(widget::text(w, "font"), size)?;
         let colour = self.color(Some(colour), 1.0)?;
         let fill = ink(colour.unwrap_or([0, 0, 0, 0]));
@@ -267,19 +274,12 @@ impl Renderer {
             };
             if let Some(style) = lettered {
                 // (the finish's letter, at the pen's fraction of a pixel: `at % 1.0`)
-                match self.facet_glyph(&font, ch, colour, at - at.floor(), style)? {
-                    Some((patch, dx, dy)) => {
-                        glyphs.push((patch, at.floor() as i64 + dx, dy));
-                        inks.push(Ink::Unknown);
-                    }
-                    None => {
-                        glyphs.push((Image::blank(Mode::RGBA, 0, 0), 0, 0));
-                        inks.push(Ink::Blank);
-                    }
-                }
+                let placed = self.facet_glyph(&font, ch, colour, at - at.floor(), style)?;
+                glyphs.push(placed.map(|(patch, dx, dy)| (patch, at.floor() as i64 + dx, dy)));
+                inks.push(Ink::Unknown);
             } else {
                 let (glyph, gx, glyph_ink) = self.glyph(&font, ch, fill, at, margin, lh)?;
-                glyphs.push((glyph, gx, 0));
+                glyphs.push(Some((glyph, gx, 0)));
                 inks.push(glyph_ink);
             }
             pen += advance;
@@ -363,7 +363,10 @@ impl Renderer {
         let (w, h) = letters.size;
         let mut layer = Image::blank(Mode::RGBA, w, h);
         let mut inked: Vec<(i64, i64, i64, i64)> = Vec::new();
-        for ((image, x, y), found) in letters.glyphs.iter().zip(&letters.inks) {
+        for (placed, found) in letters.glyphs.iter().zip(&letters.inks) {
+            let Some((image, x, y)) = placed else {
+                continue; // (a finish's blank)
+            };
             let (x, y) = (*x, *y);
             let found = match found {
                 Ink::At(found) => found,

@@ -30,6 +30,7 @@ use crate::metric::{self, Shown};
 use crate::moon;
 use crate::motion;
 use crate::piece::{Failed, Piece, Result};
+use crate::roll;
 use crate::shapes::{self, Rgba};
 use crate::slot::Slot;
 use crate::snapshot::{need_holds, needs_of, number, Moment, Snapshot};
@@ -404,6 +405,22 @@ impl Renderer {
             .ok_or_else(|| Drawn::Unported("a time in a time zone that Python fails at".into()))
     }
 
+    /// _clock_format: the clock's text at `when`: a hundred characters at most, "--:--" where
+    /// strftime refuses its format, in capitals where it asks.
+    fn clock_format(w: &Dict, when: &Moment) -> std::result::Result<String, Drawn> {
+        let text: String = match lp_i18n::format_date(when, widget::text(w, "format")) {
+            Ok(text) => text.chars().take(100).collect(),
+            Err(lp_i18n::DateError::ValueError(_)) => "--:--".into(),
+            Err(lp_i18n::DateError::Unported(what)) => return Err(Drawn::Unported(what.into())),
+            Err(lp_i18n::DateError::Failed(e)) => return Err(Drawn::Failed(Failed(e))),
+        };
+        Ok(if widget::truthy(w, "uppercase") {
+            lp_py::upper(&text)
+        } else {
+            text
+        })
+    }
+
     /// _glide_s: how long a value takes to a new reading (the theme's animation.smoothing_ms,
     /// or the widget's own glide_ms; the volume's number at once); 0 in a still frame.
     pub(crate) fn glide_s(&self, w: Option<&Dict>) -> f64 {
@@ -759,24 +776,48 @@ impl Renderer {
                     Ok(now) => now,
                     Err(drawn) => return drawn,
                 };
+                let text = match Self::clock_format(&w, &now) {
+                    Ok(text) => text,
+                    Err(drawn) => return drawn,
+                };
+                let colour = widget::text(&w, "color").to_string();
+                let resting = self.text_widget(&w, text.clone(), colour.clone());
+                // (in a moving frame, for digits_seconds after the second turns, what changed
+                // rolls or fades from the text of the second before)
                 let kind = widget::optional(&w, "digits").unwrap_or("jump");
-                let seconds = widget::number(&w, "digits_seconds", 0.42);
-                if self.options.animate && kind != "jump" && 0.0 < seconds && seconds <= 1.0 {
-                    return Drawn::Unported("clocks whose digits roll or fade".into());
-                }
-                // _clock_format: a hundred characters at most; "--:--" where strftime refuses
-                let text: String = match lp_i18n::format_date(&now, widget::text(&w, "format")) {
-                    Ok(text) => text.chars().take(100).collect(),
-                    Err(lp_i18n::DateError::ValueError(_)) => "--:--".into(),
-                    Err(lp_i18n::DateError::Unported(what)) => return Drawn::Unported(what.into()),
-                    Err(lp_i18n::DateError::Failed(e)) => return Drawn::Failed(Failed(e)),
-                };
-                let text = if widget::truthy(&w, "uppercase") {
-                    lp_py::upper(&text)
+                let seconds = widget::number(&w, "digits_seconds", roll::DIGITS_S);
+                let p = f64::from(now.microsecond) / 1e6 / seconds;
+                if resting.is_err()
+                    || kind == "jump"
+                    || !self.options.animate
+                    || !(0.0 < seconds && seconds <= 1.0)
+                    || p >= 1.0
+                {
+                    resting
                 } else {
-                    text
-                };
-                self.text_widget(&w, text, widget::text(&w, "color").to_string())
+                    // (none before the first second of the year 1: Python's OverflowError)
+                    let Some(earlier) = now.second_before() else {
+                        return Drawn::Failed(Failed("date value out of range".into()));
+                    };
+                    let before = match Self::clock_format(&w, &earlier) {
+                        Ok(text) => text,
+                        Err(drawn) => return drawn,
+                    };
+                    if before == text || before.chars().count() != text.chars().count() {
+                        resting
+                    } else {
+                        let e = 1.0 - (1.0 - p).powf(3.0);
+                        match self.changing(&w, &before, &text, &colour, e, kind) {
+                            Ok(None) => resting,
+                            Ok(Some(piece)) => {
+                                // (never kept: it is another one every frame)
+                                self.moving = true;
+                                self.effects(&w, piece).map(Rc::new)
+                            }
+                            Err(e) => Err(e),
+                        }
+                    }
+                }
             }
             "analog" => {
                 let w = w.clone();

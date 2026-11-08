@@ -308,10 +308,10 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       Every code on dates from the year 1 to 9999, random formats in all ten languages, and the
       frames of random themes of clocks the same to the bit, in English and German; a clock
       whose digits roll or fade laid out letter by letter in a still frame too, as Python lays
-      it out (another place's time: with the earth widget, below). Not here yet, and Rust says
-      so: digits that roll or fade as they move, the years before 1000 (Python's own answer
-      for them differs between its releases), %s (the seconds since 1970 in the computer's
-      zone) and, on Windows, %#z and %#Z
+      it out (another place's time: with the earth widget, below; digits that roll or fade as
+      they move: with motion, below). Not here yet, and Rust says so: the years before 1000
+      (Python's own answer for them differs between its releases), %s (the seconds since 1970
+      in the computer's zone) and, on Windows, %#z and %#Z
 - [x] bars (bar widgets) in a still frame: where the reading stands between min and max on
       a linear, square-root or logarithmic scale, in steps of the supersampled grid; drawn
       three times larger and reduced: the track, the filled part in one colour, a gradient
@@ -772,8 +772,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       on the way; values off the panel a moment (back after exactly a pause each glides on,
       after a little more each starts where it is, and so after a frame at the time of the
       one before); a muted volume whose number glides past its value; the app's themes in
-      moving frames: 32 of the 99 drawn by Rust all along, to the bit or (their light) within
-      a level, whether each frame moves on as in Python. The counter-checks put in 44 faults
+      moving frames: drawn by Rust all along to the bit or (their light) within a level,
+      whether each frame moves on as in Python. The counter-checks put in 44 faults
       (the spring's curve, speed, start, pause and idle second, freshness, forgetting; the
       fades' pace, way, freshness and keys; the mix; the metrics' text points, moving and
       settling; the bars' and rings' glide, their colours on the way, the dot; the glides'
@@ -784,6 +784,32 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       graph's history would look at; a gradient's end where a threshold's colour is never
       empty; a threshold's colour as a gradient of itself). A glide_ms past 53 bits (Python
       divides the whole number, Rust would round it first): Rust says it does not draw it yet
+- [x] clocks whose digits roll or fade (the renderer's _draw_clock in a moving frame, with
+      _changing, _digit_band, _moved and _ramp): for digits_seconds after the second turns
+      (0.42 s unless the clock says, up to a second), each letter that changes from the text
+      of the second before rolls (the old one up and out, the new one in from below, by 0.92
+      of the band the digits live in, soft over its edges) or fades where it stands, on its way
+      as 1 - (1 - p)^3; the renderer's own letters moved as their opacity in their colour, a
+      finish's with their colours, a fraction of a row bilinear; the letters that stay where
+      they stand; a text laid out otherwise the second before (another fitted size, width or
+      place) as it stands, and so is it at any other time. In the first second of the year 1
+      Python cannot take a second off: the clock is left out, warned, as there. The tests: 80
+      random themes of clocks (formats of seconds, spacing, digits of one width, a width they
+      fit, any alignment, a finish's letters) frame after frame across their seconds, 495
+      frames to the bit, 240 of them on the way; the edges of the digits' time (0.42 s, half a
+      second, a second and a little less, at the microseconds round their end); texts fitted
+      in other sizes yet laid out alike, of other lengths the ellipsis makes alike, the
+      microseconds of the second before over midnight; the first second of the years; the
+      app's themes in moving frames: 49 of the 99 drawn by Rust all along (32 before). The
+      counter-checks put in 31 faults (the roll's travel and way, the band and its edges, the
+      ramp, the moving of a fraction of a row and whose colours, the fade, the letters that
+      stay, the layouts compared, the clock's way, its digits' time and its edges, the texts'
+      lengths, moving, effects, the year 1, the second before), and the tests catch 28 of
+      them, 3 once cases were added (the fitted sizes, the lengths, the microseconds over
+      midnight); the other three change nothing that is drawn (a ramp's one column resized
+      nearest, which is as it is; a digits' time Rust takes where a clock has none, which the
+      theme always gives; the layouts' places compared beside their sizes, which on a whole
+      pixel are the same where the sizes are)
 - [ ] pictures as Pillow fails at them: lp-decode's errors as Python's exceptions, so that
       where Python catches an OSError and goes on (a picture cut short, a file of no picture)
       Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,

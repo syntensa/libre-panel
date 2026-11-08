@@ -5806,6 +5806,162 @@ def test_a_glide_of_more_milliseconds_than_a_float_holds_rust_leaves_out(tmp_pat
             assert g["moving"] == w["moving"], n
 
 
+ROLLING_FORMATS = ["%H:%M:%S", "%S", "%M:%S", "%-S", "%I:%M:%S %p", "%H:%M", "%T", "%r", "%c",
+                   "%S.%S", "%X", "%H:%M:%S %A", "%-I:%M:%S", "%S %S %S"]  # fmt: skip
+# (how far apart frames come: at once, a 50th of a second, a 25th, a tenth, at the edges of the
+# digits' time, a second and a moment more or less, a minute; in steps of whole microseconds)
+ROLLING_STEPS = [0, 20000, 40000, 100000, 310000, 419999, 420000, 420001, 500000, 999999,
+                 10**6, 1020000, 60 * 10**6]  # fmt: skip
+
+
+def _rolling_clock(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """A clock whose digits roll or fade for digits_seconds after the second turns (or jump, or
+    for no time or more than a second: as they stand), in its letters' spacing, digits of one
+    width, a width it fits, any alignment, a finish's own letters."""
+    clock = _clock(rng, i, size)
+    clock.update(
+        format=rng.choice(ROLLING_FORMATS),
+        digits=rng.choice(["roll", "roll", "fade", "jump"]),
+        digits_seconds=rng.choice([0.42, 0.42, 1, 0.1, 0.9999, 1.5, 0, -1]),
+    )
+    if rng.random() < 0.2:
+        clock["finish"] = rng.choice(["facet", "acrylic"])
+    return clock
+
+
+def _rolling_clock_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _rolling_clock(rng, i, size) if rng.random() < 0.7 else _card_or_text(rng, i, size)
+
+
+def test_clocks_whose_digits_roll_or_fade_as_python_shows_them(tmp_path: Path) -> None:
+    # (one renderer drawing its clocks frame after frame: from a moment of any part of a second,
+    # each a frame of the digits' time and beyond it; what changes on the second rolls (the old
+    # letter up and out, the new one in from below, soft at the edges of the digits' band) or
+    # fades, letter by letter, in their colour, a finish's letters with theirs; what stays where
+    # it stands; another size or width, as it stands)
+    rng = random.Random(0xC10C)
+    cases, expected = [], []
+    for n in range(80):
+        folder = tmp_path / f"t{n}"
+        data = _frame_theme(rng, folder, _rolling_clock_or_more)
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        _, first = _clock_snapshot(rng)
+        when, now = first.now, rng.uniform(1000, 2000)
+        steps, given = [], []
+        for _ in range(rng.randrange(2, 12)):
+            steps.append((Snapshot(readings={}, now=when), now))
+            given.append({"snapshot": {"readings": {}, "images": {}, "now": _moment(when)},
+                          "now": now})  # fmt: skip
+            gap = rng.choice(ROLLING_STEPS)
+            when, now = when + timedelta(microseconds=gap), now + gap / 1e6
+        cases.append({"folder": str(folder), "dither": False, "animate": True, "steps": given})
+        expected.append(_python_moving(folder, steps))
+    drawn, moving = _compare_moving(cases, expected)
+    assert drawn > 350 and moving > 60, (drawn, moving)
+
+
+def test_a_rolling_clock_in_the_first_second_of_the_years_as_python_shows_it(
+    tmp_path: Path,
+) -> None:
+    # (a clock whose digits roll, the frame's time in the first second of the year 1: Python
+    # cannot take a second from it and leaves the clock out, warned; a second later it rolls,
+    # and in the first second again, once its digits' time is over, it stands)
+    folder = tmp_path / "first"
+    folder.mkdir()
+    widgets = [{"type": "clock", "id": "c", "x": 2, "y": 2, "font_size": 14, "format": "%S",
+                "digits": kind, "color": "#ffffff"} for kind in ("roll",)]  # fmt: skip
+    widgets.append({**widgets[0], "id": "f", "y": 20, "digits": "fade"})
+    (folder / "theme.json").write_text(json.dumps({
+        "format": THEME_FORMAT, "name": "first", "display": {"width": 48, "height": 40},
+        "palette": {name: "#808080" for name in PALETTE}, "background": {"color": "#000000"},
+        "widgets": widgets}), encoding="utf-8")  # fmt: skip
+    moments = [
+        datetime(1, 1, 1, 0, 0, 0, 100000),
+        datetime(1, 1, 1, 0, 0, 1, 100000),
+        datetime(1, 1, 1, 0, 0, 0, 900000),
+        datetime(1, 1, 2, 0, 0, 0, 100000),
+    ]
+    renderer = Renderer(load_theme(folder), animate=True, preview=True)
+    cases, expected = [], []
+    for k, when in enumerate(moments):
+        frame, boxes = renderer.render(Snapshot(readings={}, now=when), now=800.0 + k)
+        expected.append((frame, boxes, renderer.moving, list(renderer.warnings)))
+        cases.append({"snapshot": {"readings": {}, "images": {}, "now": _moment(when)},
+                      "now": 800.0 + k})  # fmt: skip
+    [ours] = run([{"op": "render_frame", "fonts_dir": str(fonts.FONT_DIR), "frames": [
+        {"folder": str(folder), "dither": False, "animate": True, "steps": cases}]}])  # fmt: skip
+    for k, (got, (frame, boxes, moving, warnings)) in enumerate(
+        zip(ours["frames"][0]["steps"], expected, strict=True)
+    ):
+        assert got["sha256"] == hashlib.sha256(frame.tobytes()).hexdigest(), k
+        assert (got["boxes"], got["moving"]) == (boxes, moving), k
+        assert got["warnings"] == warnings, k
+    assert expected[0][3] == ["widget 'c' failed: date value out of range",
+                              "widget 'f' failed: date value out of range"]  # fmt: skip
+    assert [e[2] for e in expected] == [False, True, False, True]
+
+
+def test_a_clock_s_digits_at_the_edges_of_their_time_as_python_shows_them(
+    tmp_path: Path,
+) -> None:
+    # (the digits' time of 0.42 s, half a second, a second and a little less, at the moments of
+    # its edges: rolling or fading until just before its end, standing from it on)
+    cases, expected = [], []
+    for n, (seconds, kind) in enumerate([(0.42, "roll"), (0.5, "fade"), (1, "roll"),
+                                         (0.9999, "fade"), (1.0, "fade")]):  # fmt: skip
+        folder = tmp_path / f"t{n}"
+        folder.mkdir()
+        (folder / "theme.json").write_text(json.dumps({
+            "format": THEME_FORMAT, "name": "edges", "display": {"width": 64, "height": 24},
+            "palette": {name: "#808080" for name in PALETTE},
+            "background": {"color": "#000000"}, "widgets": [{
+                "type": "clock", "id": "c", "x": 2, "y": 2, "font_size": 16, "format": "%M:%S",
+                "digits": kind, "digits_seconds": seconds, "color": "#40c0ff"}]}),
+            encoding="utf-8")  # fmt: skip
+        steps, given = [], []
+        for k, micro in enumerate([0, 1, 419999, 420000, 420001, 499999, 500000, 999899,
+                                   999900, 999999]):  # fmt: skip
+            when = datetime(2026, 11, 8, 10, 0, 0, micro)
+            steps.append((Snapshot(readings={}, now=when), 900.0 + k))
+            given.append({"snapshot": {"readings": {}, "images": {}, "now": _moment(when)},
+                          "now": 900.0 + k})  # fmt: skip
+        cases.append({"folder": str(folder), "dither": False, "animate": True, "steps": given})
+        expected.append(_python_moving(folder, steps))
+    drawn, moving = _compare_moving(cases, expected)
+    assert (drawn, moving) == (50, 3 + 6 + 10 + 8 + 10), (drawn, moving)
+
+
+def test_a_rolling_clock_s_texts_fitted_otherwise_or_over_midnight_as_python_shows_them(
+    tmp_path: Path,
+) -> None:
+    # (the second's texts that fit in other sizes, yet lay out alike in the first's: it stands;
+    # of other lengths that the ellipsis makes alike: it stands; the microseconds of the second
+    # before over midnight, as they are: it rolls)
+    clocks = [({"format": "%S", "font_size": 10, "max_width": 7, "fit": "shrink", "tabular": False},
+               datetime(2026, 11, 8, 10, 0, 13, 100000)),
+              ({"format": "%-S", "font_size": 16, "max_width": 4, "fit": "ellipsis"},
+               datetime(2026, 11, 8, 10, 0, 10, 100000)),
+              ({"format": "%H:%M:%S.%f", "font_size": 9},
+               datetime(2026, 11, 9, 0, 0, 0, 100000))]  # fmt: skip
+    cases, expected = [], []
+    for n, (more, when) in enumerate(clocks):
+        folder = tmp_path / f"t{n}"
+        folder.mkdir()
+        widget = {"type": "clock", "id": "c", "x": 2, "y": 2, "digits": "roll",
+                  "color": "#ffffff", **more}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps({
+            "format": THEME_FORMAT, "name": "fit", "display": {"width": 96, "height": 24},
+            "palette": {name: "#808080" for name in PALETTE},
+            "background": {"color": "#000000"}, "widgets": [widget]}),
+            encoding="utf-8")  # fmt: skip
+        steps = [(Snapshot(readings={}, now=when), 700.0)]
+        given = [{"snapshot": {"readings": {}, "images": {}, "now": _moment(when)}, "now": 700.0}]
+        cases.append({"folder": str(folder), "dither": False, "animate": True, "steps": given})
+        expected.append(_python_moving(folder, steps))
+    drawn, moving = _compare_moving(cases, expected)
+    assert (drawn, moving) == (3, 1), (drawn, moving)
+
+
 def test_the_app_s_own_themes_in_moving_frames_as_python_draws_them(tmp_path: Path) -> None:
     # (every theme the app brings, drawn as the panels' loop draws it: frames a 25th of a second
     # apart and more, its readings new between them, at 50 fps; the same to the bit where Rust
@@ -5865,4 +6021,4 @@ def test_the_app_s_own_themes_in_moving_frames_as_python_draws_them(tmp_path: Pa
             assert g["boxes"] == w["boxes"], (folder.name, i)
             assert g["moving"] == w["moving"], (folder.name, i)
         drawn.append(folder.name)
-    assert len(drawn) >= 32, drawn
+    assert len(drawn) >= 49, drawn

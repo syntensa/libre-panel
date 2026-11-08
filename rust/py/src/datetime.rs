@@ -113,6 +113,40 @@ impl DateTime {
             + i64::from(self.microsecond)
     }
 
+    /// datetime - timedelta(seconds=1): None before the first second of the year 1 (Python's
+    /// OverflowError, "date value out of range").
+    pub fn second_before(&self) -> Option<DateTime> {
+        if self.second > 0 {
+            return Some(DateTime {
+                second: self.second - 1,
+                ..*self
+            });
+        }
+        if self.minute > 0 {
+            return Some(DateTime {
+                minute: self.minute - 1,
+                second: 59,
+                ..*self
+            });
+        }
+        if self.hour > 0 {
+            return Some(DateTime {
+                hour: self.hour - 1,
+                minute: 59,
+                second: 59,
+                ..*self
+            });
+        }
+        let day = DateTime::from_ordinal(self.toordinal() - 1)?;
+        Some(DateTime {
+            hour: 23,
+            minute: 59,
+            second: 59,
+            microsecond: self.microsecond,
+            ..day
+        })
+    }
+
     /// datetime - datetime, in microseconds.
     pub fn since(&self, earlier: &DateTime) -> i64 {
         (self.toordinal() - earlier.toordinal()) * 86_400_000_000 + self.time_of_day()
@@ -209,6 +243,35 @@ mod tests {
             assert_eq!(DateTime::date(y, m, d).toordinal(), n);
         }
         assert_eq!(DateTime::from_ordinal(0), None);
+        // (a second before: within the minute, the hour, the day, the year, and none before 1)
+        let at = |y, mo, d, h, mi, s| DateTime {
+            hour: h,
+            minute: mi,
+            second: s,
+            microsecond: 250,
+            ..DateTime::date(y, mo, d)
+        };
+        assert_eq!(
+            at(2024, 3, 1, 0, 0, 0).second_before(),
+            Some(at(2024, 2, 29, 23, 59, 59))
+        );
+        assert_eq!(
+            at(2025, 1, 1, 0, 0, 0).second_before(),
+            Some(at(2024, 12, 31, 23, 59, 59))
+        );
+        assert_eq!(
+            at(2025, 1, 1, 7, 0, 0).second_before(),
+            Some(at(2025, 1, 1, 6, 59, 59))
+        );
+        assert_eq!(
+            at(2025, 1, 1, 7, 3, 0).second_before(),
+            Some(at(2025, 1, 1, 7, 2, 59))
+        );
+        assert_eq!(
+            at(2025, 1, 1, 7, 3, 9).second_before(),
+            Some(at(2025, 1, 1, 7, 3, 8))
+        );
+        assert_eq!(at(1, 1, 1, 0, 0, 0).second_before(), None);
         assert_eq!(DateTime::from_ordinal(3_652_060), None);
     }
 }

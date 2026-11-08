@@ -30,6 +30,7 @@ pub mod np;
 pub mod piece;
 mod rect;
 pub mod renderer;
+mod roll;
 pub mod shapes;
 mod slot;
 pub mod snapshot;
