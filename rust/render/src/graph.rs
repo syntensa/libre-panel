@@ -7,6 +7,7 @@
 //! still frame; the lit finish's line as light (lit.py's LitGraph); the dot at the line's end.
 
 use std::cmp::Ordering;
+use std::collections::HashMap;
 
 use lp_pixels::{chops, Draw, Filter, Image, Mode};
 use lp_py::num as pn;
@@ -237,6 +238,13 @@ pub(crate) fn still_bounds(w: &Dict, numbers: &[f64]) -> Result<Range> {
     if fixed_lo && fixed_hi {
         return Ok((lo, hi));
     }
+    wanted(w, &lo, &hi, fixed_lo, fixed_hi)
+}
+
+/// The range a graph of a range of its own wants for the values' `lo` and `hi`: room above
+/// and below them (none at a fixed end), in whole steps where it takes them.
+fn wanted(w: &Dict, lo: &Value, hi: &Value, fixed_lo: bool, fixed_hi: bool) -> Result<Range> {
+    let (lo, hi) = (lo.clone(), hi.clone());
     let room = py(pn::mul(&py(pn::sub(&hi, &lo))?, &Value::Float(RANGE_ROOM)))?;
     let mut want = (
         if fixed_lo {
@@ -251,11 +259,7 @@ pub(crate) fn still_bounds(w: &Dict, numbers: &[f64]) -> Result<Range> {
         },
     );
     // (widget.get("range_step") or 0)
-    let step = w
-        .get("range_step")
-        .filter(|v| v.truthy())
-        .cloned()
-        .unwrap_or_else(|| Value::int(0));
+    let step = range_step(w);
     if py(pn::gt(&step, &Value::int(0)))? {
         let steps = |v: &Value, up: bool| -> Result<Value> {
             let n = whole_int(&py(pn::true_div(v, &step))?, up)?;
@@ -272,6 +276,202 @@ pub(crate) fn still_bounds(w: &Dict, numbers: &[f64]) -> Result<Range> {
         );
     }
     Ok(want)
+}
+
+/// widget.get("range_step") or 0
+fn range_step(w: &Dict) -> Value {
+    w.get("range_step")
+        .filter(|v| v.truthy())
+        .cloned()
+        .unwrap_or_else(|| Value::int(0))
+}
+
+/// RANGE_GLIDE_S: the range on show reaches a new one at this pace (a time constant)
+const RANGE_GLIDE_S: f64 = 0.6;
+/// RANGE_STEP_GLIDE_S: so a range in whole steps, which changes seldom and then by a step
+const RANGE_STEP_GLIDE_S: f64 = 0.12;
+/// RANGE_STEP_NEAR: such a range is there once this close to the one it glides to, of its span
+const RANGE_STEP_NEAR: f64 = 0.01;
+/// RANGE_NARROW_S: a range narrows once the values have used ...
+const RANGE_NARROW_S: f64 = 3.0;
+/// RANGE_USED: ... less than this share of it for so long
+const RANGE_USED: f64 = 0.6;
+
+/// A graph's own range as it glides (_Range).
+#[derive(Clone, Debug)]
+pub(crate) struct Glide {
+    /// the range drawn last
+    shown: Range,
+    /// the range it glides to
+    target: Range,
+    /// when it was drawn
+    at: f64,
+    /// when the values last used much of the target
+    full: f64,
+    /// the lowest and highest value then: always inside
+    values: Range,
+}
+
+impl Glide {
+    fn new(bounds: Range, now: f64, values: Range) -> Glide {
+        Glide {
+            shown: bounds.clone(),
+            target: bounds,
+            at: now,
+            full: now,
+            values,
+        }
+    }
+}
+
+/// _range_glide: how fast a graph's own range goes to a new one (a time constant).
+fn range_glide(w: &Dict) -> f64 {
+    if w.get("range_step").is_some_and(|v| v.truthy()) {
+        RANGE_STEP_GLIDE_S
+    } else {
+        RANGE_GLIDE_S
+    }
+}
+
+/// a + (b - a) * k, as Python counts.
+fn along(a: &Value, b: &Value, k: &Value) -> Result<Value> {
+    py(pn::add(a, &py(pn::mul(&py(pn::sub(b, a))?, k))?))
+}
+
+/// abs(a - b), as Python counts.
+fn apart(a: &Value, b: &Value) -> Result<Value> {
+    Ok(magnitude(&py(pn::sub(a, b))?))
+}
+
+/// _glided_bounds: the range to draw a graph with at `now`, and whether it still glides. Of a
+/// graph with min and max, those; else the range it keeps in `ranges` by its id: anew (the
+/// values', roomy) where it keeps none, the time went back or the frame is still; else on
+/// from the one drawn last toward the one it glides to, which widens at once where the values
+/// leave it and narrows to theirs once they used little of it for a while; the values always
+/// inside. One in whole steps is there once it is near.
+pub(crate) fn glided_bounds(
+    w: &Dict,
+    numbers: &[f64],
+    now: f64,
+    animate: bool,
+    ranges: &mut HashMap<String, Glide>,
+) -> Result<(Range, bool)> {
+    let (lo, hi) = bounds(w, numbers)?;
+    let (fixed_lo, fixed_hi) = (end(w, "min").is_some(), end(w, "max").is_some());
+    if fixed_lo && fixed_hi {
+        return Ok(((lo, hi), false));
+    }
+    let want = wanted(w, &lo, &hi, fixed_lo, fixed_hi)?;
+    let step = range_step(w);
+    let id = widget::text(w, "id");
+    if !animate || ranges.get(id).is_none_or(|state| now < state.at) {
+        // (still: the values, roomy)
+        ranges.insert(id.to_string(), Glide::new(want.clone(), now, (lo, hi)));
+        return Ok((want, false));
+    }
+    let Some(state) = ranges.get_mut(id) else {
+        return Ok((want, false));
+    };
+    // on to now on the way it was going (a new target takes over from here on) ...
+    let k = Value::Float(1.0 - (-(now - state.at) / range_glide(w)).exp());
+    let shown = (
+        along(&state.shown.0, &state.target.0, &k)?,
+        along(&state.shown.1, &state.target.1, &k)?,
+    );
+    // (the values always inside)
+    let shown = (py(pn::min(&shown.0, &lo))?, py(pn::max(&shown.1, &hi))?);
+    let mut target = state.target.clone(); // ... and where to now
+    if py(pn::lt(&want.0, &target.0))? || py(pn::gt(&want.1, &target.1))? {
+        // (the values leave it: wider at once)
+        target = (
+            py(pn::min(&target.0, &want.0))?,
+            py(pn::max(&target.1, &want.1))?,
+        );
+        state.full = now;
+    } else if at_least(
+        &py(pn::sub(&hi, &lo))?,
+        &py(pn::mul(
+            &Value::Float(RANGE_USED),
+            &py(pn::sub(&target.1, &target.0))?,
+        ))?,
+    ) {
+        state.full = now;
+    } else if now - state.full >= RANGE_NARROW_S {
+        // (little of it used for a while)
+        target = want;
+        state.full = now;
+    }
+    state.target = target.clone();
+    state.shown = shown.clone();
+    state.at = now;
+    state.values = (lo, hi);
+    let span = py(pn::sub(&target.1, &target.0))?;
+    let stepped = py(pn::gt(&step, &Value::int(0)))?;
+    let share = if stepped { RANGE_STEP_NEAR } else { 0.002 };
+    let near = py(pn::mul(&span, &Value::Float(share)))?;
+    let mut shown = shown;
+    if stepped
+        && at_least(&near, &apart(&shown.0, &target.0)?)
+        && at_least(&near, &apart(&shown.1, &target.1)?)
+    {
+        // (there: the strip drawn now is the last of its glide)
+        state.shown = target.clone();
+        shown = target.clone();
+    }
+    let gliding = py(pn::gt(&apart(&shown.0, &target.0)?, &near))?
+        || py(pn::gt(&apart(&shown.1, &target.1)?, &near))?;
+    Ok((shown, gliding))
+}
+
+/// _range_now: a graph's own range at `now`, on its way to the one it glides to; in a still
+/// frame the one it was drawn in.
+pub(crate) fn glide_now(w: &Dict, state: &Glide, now: f64, animate: bool) -> Result<Range> {
+    if !animate {
+        return Ok(state.shown.clone());
+    }
+    let since = if now - state.at > 0.0 {
+        now - state.at
+    } else {
+        0.0
+    };
+    let k = Value::Float(1.0 - (-since / range_glide(w)).exp());
+    let lo = along(&state.shown.0, &state.target.0, &k)?;
+    let hi = along(&state.shown.1, &state.target.1, &k)?;
+    Ok((
+        py(pn::min(&lo, &state.values.0))?,
+        py(pn::max(&hi, &state.values.1))?,
+    ))
+}
+
+/// A frame of glide_ranges: the range a graph is drawn in, whether it glides, and its range at
+/// a later time where one is asked for; or what Python raises.
+pub type GlideStep = std::result::Result<(Range, bool, Option<Range>), String>;
+
+/// glided_bounds for the checks (lp-check's graph_glide): a graph's range drawn frame after
+/// frame, each frame's numbers (at least one) at its time, by one renderer (`animate`: in a
+/// moving frame): its range, whether it glides and _range_now at `later` (where there is
+/// one), or what Python raises.
+pub fn glide_ranges(
+    w: &Dict,
+    frames: &[(Vec<f64>, f64, Option<f64>)],
+    animate: bool,
+) -> Vec<GlideStep> {
+    let mut ranges = HashMap::new();
+    let id = widget::text(w, "id").to_string();
+    frames
+        .iter()
+        .map(|(numbers, now, later)| {
+            let (range, gliding) =
+                glided_bounds(w, numbers, *now, animate, &mut ranges).map_err(|e| e.0)?;
+            let after = match (later, ranges.get(&id)) {
+                (Some(later), Some(state)) if !fixed(w) => {
+                    Some(glide_now(w, state, *later, animate).map_err(|e| e.0)?)
+                }
+                _ => None,
+            };
+            Ok((range, gliding, after))
+        })
+        .collect()
 }
 
 /// still_bounds for the checks (lp-check's graph_range): the range of `numbers` (at least one)
@@ -599,7 +799,7 @@ impl Renderer {
             None
         };
         if range.is_some() {
-            if let Some(kept) = self.range_now(w) {
+            if let Some(kept) = self.range_now(w)? {
                 range = Some(kept);
             }
         }

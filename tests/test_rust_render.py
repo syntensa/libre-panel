@@ -3219,6 +3219,75 @@ def test_ranges_of_graphs_as_python_finds_them() -> None:
     assert sum("failed" in w for w in expected if isinstance(w, dict)) > 100
 
 
+class _GlidingRange(_StillRange):
+    """The renderer's _glided_bounds and _range_now as moving frames take them."""
+
+    animate = True
+    continuous = False
+    RANGE_GLIDE_S, RANGE_STEP_GLIDE_S = Renderer.RANGE_GLIDE_S, Renderer.RANGE_STEP_GLIDE_S
+    RANGE_STEP_NEAR, RANGE_NARROW_S = Renderer.RANGE_STEP_NEAR, Renderer.RANGE_NARROW_S
+    RANGE_USED = Renderer.RANGE_USED
+    _range_glide = Renderer._range_glide
+    _range_now = Renderer._range_now
+
+
+def _range_next(rng: random.Random, numbers: list[float]) -> list[float]:
+    """A graph's numbers a frame later: the same, all of them larger or smaller, a peak come
+    in, the older half gone, or others."""
+    r = rng.random()
+    if r < 0.3:
+        return numbers
+    if r < 0.5:
+        factor = rng.choice([0.5, 0.9, 0.99, 1.01, 1.1, 2.0])
+        moved = [v * factor for v in numbers]
+    elif r < 0.7:
+        moved = [*numbers, rng.choice([numbers[-1] * 3, 1e6, -50.0, 0.0, numbers[-1] + 0.1])]
+    elif r < 0.85:
+        moved = numbers[len(numbers) // 2 :]
+    else:
+        moved = _range_case(rng)[1]
+    return [v for v in moved if math.isfinite(v)] or numbers
+
+
+def test_ranges_of_graphs_as_they_glide_as_python_finds_them() -> None:
+    # (a graph's own range frame after frame: on from the one drawn last toward the one it
+    # glides to at its pace (in whole steps faster, and there once near), wider at once where
+    # the values leave it, narrower once they used little of it for three seconds, anew when
+    # the time goes back; the values always inside; where it is a moment later; its ends to the
+    # bit, an int where Python's is one; and Python's errors; frame after frame in still frames
+    # too, where it is the values' each time)
+    rng = random.Random(0x7A9F)
+    cases, expected = [], []
+    for _ in range(3000):
+        widget, numbers = _range_case(rng)
+        glide, frames, want = _GlidingRange(), [], []
+        glide.animate = rng.random() < 0.85
+        now = rng.uniform(0, 1000)
+        for _ in range(rng.randrange(1, 14)):
+            later = rng.choice([None, now, now + rng.choice([0.01, 0.05, 0.3, 2.0, -1.0])])
+            try:
+                (lo, hi), gliding = glide._glided_bounds(widget, numbers, now)
+                after = None if later is None else glide._range_now(widget, later)
+                later_range = None if after is None else [_typed(v) for v in after]
+                want.append({"range": [_typed(lo), _typed(hi)], "gliding": gliding,
+                             "later": later_range})  # fmt: skip
+            except (ValueError, OverflowError, ZeroDivisionError) as error:
+                want.append({"failed": str(error)})
+            frames.append({"numbers": [_typed(float(v)) for v in numbers], "now": now,
+                           "later": later})  # fmt: skip
+            numbers = _range_next(rng, numbers)
+            now += rng.choice([0, 0.02, 0.04, 0.1, 0.12, 0.5, 1.0, 2.99, 3.0, 3.01, 5.0, -0.5])
+        cases.append({"widget": {k: _typed(v) for k, v in widget.items()}, "frames": frames,
+                      "animate": glide.animate})  # fmt: skip
+        expected.append(want)
+    [ours] = run([{"op": "graph_glide", "cases": cases}])
+    apart = [(c, g, w) for c, g, w in zip(cases, ours, expected, strict=True) if g != w]
+    assert not apart, apart[:2]
+    steps = [s for w in expected for s in w]
+    assert sum(s.get("gliding", False) for s in steps) > 3000
+    assert sum("failed" in s for s in steps) > 1000
+
+
 def test_graphs_through_points_that_are_no_numbers(tmp_path: Path) -> None:
     # (values near a float's largest: a range of no finite span. On a log scale every point is
     # NaN: smoothed, the points stay between the rows; a fill's fade fails on them, as does a
@@ -6614,6 +6683,137 @@ def test_second_hands_at_the_edges_of_their_seconds_as_python_draws_them(tmp_pat
     assert drawn == moving == 2 * (len(frames) + len(seconds)), (drawn, moving)
 
 
+GLIDE_SENSORS = ["cpu.load", "gpu.temp", "net.down", "game.fps"]
+
+
+def _gliding_graph(rng: random.Random, i: int, size: tuple[int, int],
+                   lit: bool = False) -> dict[str, Any]:  # fmt: skip
+    """A graph of a sensor's history whose range is its own or has one end of its own, in
+    whole steps now and then, flat (`lit`: with its glow, flat or lit, as _graph makes it); or
+    something else."""
+    if rng.random() < 0.2:
+        return _card_or_text(rng, i, size)
+    graph = _graph(rng, i, size)
+    graph["sensor"] = rng.choice(GLIDE_SENSORS)
+    graph["min"] = rng.choice([None, None, None, 0, -50, 10.5])
+    graph["max"] = rng.choice([None, None, None, 100, 175])
+    if rng.random() < 0.4:
+        graph["range_step"] = rng.choice([5, 10, 0.5, 25])
+    if not lit:
+        for key in ("glow", "glow_radius", "finish"):
+            graph.pop(key, None)
+    return graph
+
+
+def _glowing_graph(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _gliding_graph(rng, i, size, lit=True)
+
+
+def _histories_after(rng: random.Random, history: dict[str, list[float]]) -> dict[str, list[float]]:
+    """The histories a frame later: now and then a new value at the end (the same, near, a peak,
+    a dip, nothing), the oldest gone past the most kept."""
+    out = {}
+    for key, values in history.items():
+        values = list(values)
+        if rng.random() < 0.6:
+            last = values[-1] if values and math.isfinite(values[-1]) else 50.0
+            values.append(rng.choice([last, last * 1.02, last * 0.97, last + 5, last * 3 + 10,
+                                      0.0, last * 0.2]))  # fmt: skip
+            values = values[-300:]
+        out[key] = values
+    return out
+
+
+def _history_given(history: dict[str, list[float]], moment: datetime) -> dict[str, Any]:
+    numbers = {k: [_typed(float(v)) for v in values] for k, values in history.items()}
+    return {"readings": {}, "images": {}, "now": _moment(moment), "history": numbers}
+
+
+def _gliding_graphs(tmp_path: Path, rng: random.Random, count: int, make: Any,
+                    level: bool = False) -> tuple[int, int]:  # fmt: skip
+    """`count` themes of the graphs `make` makes, each drawn frame after frame by one renderer
+    as the panels' loop draws it, their histories growing, by Rust and by Python:
+    _compare_moving's counts."""
+    cases, expected = [], []
+    for n in range(count):
+        folder = tmp_path / f"t{n}"
+        _frame_theme(rng, folder, make)
+        history = {k: _history(rng) for k in GLIDE_SENSORS if rng.random() < 0.9}
+        moment = datetime(2026, 11, 7, rng.randrange(24), rng.randrange(60), 5)
+        now, fps = rng.uniform(1000, 2000), rng.choice([0, 25, 50])
+        steps, given = [], []
+        for _ in range(rng.randrange(2, 16)):
+            steps.append((Snapshot(readings={}, history=history, now=moment), now))
+            given.append({"snapshot": _history_given(history, moment), "now": now})
+            now += rng.choice([*MOVING_STEPS, 0.3, 0.6, 1.2, 3.0, 3.5])
+            history = _histories_after(rng, history)
+        cases.append({"folder": str(folder), "dither": False, "animate": True, "fps": fps,
+                      "steps": given, "bytes": level})  # fmt: skip
+        expected.append(_python_moving(folder, steps, fps))
+    return _compare_moving(cases, expected, level)
+
+
+def test_graphs_whose_own_range_glides_as_python_draws_them(tmp_path: Path) -> None:
+    # (one renderer drawing its graphs frame after frame as the panels' loop does, their
+    # histories growing: a range of its own gliding from the one drawn last toward the one it
+    # goes to, wider at once where the values leave it, narrower once they used little of it
+    # for a while, in whole steps faster and there once near; an end dot in the range of the
+    # frame; at a frame rate or none, the frames at any distance, back in time too)
+    drawn, moving = _gliding_graphs(tmp_path, random.Random(0x6AA), 60, _gliding_graph)
+    assert drawn > 360 and moving > 140, (drawn, moving)
+
+
+def test_graphs_whose_own_range_glides_with_their_glow_within_a_level(tmp_path: Path) -> None:
+    # (gliding graphs with a glow, flat or lit: their light blurred in floating point, so now
+    # and then a pixel a level apart)
+    drawn, moving = _gliding_graphs(tmp_path, random.Random(0x6AB), 50, _glowing_graph, True)
+    assert drawn > 300 and moving > 90, (drawn, moving)
+
+
+def test_graph_ranges_widening_narrowing_and_in_steps_as_python_draws_them(
+    tmp_path: Path,
+) -> None:
+    # (graphs of a range of their own (min and max none), one in whole steps from 0 up, one up to
+    # 100, two with an end dot: a peak comes in (wider at once), stays a while, leaves the
+    # window (narrower after three seconds of little use); frames a 50th of a second apart
+    # through the glides, a pause, back in time (anew), at two frame rates)
+    folder = tmp_path / "glide"
+    folder.mkdir()
+    graphs = [{"type": "graph", "id": "a", "x": 0, "y": 0, "w": 90, "h": 40, "sensor": "game.fps",
+               "history": 30, "color": "#22d3ee", "end_dot": 2, "min": None, "max": None},
+              {"type": "graph", "id": "b", "x": 0, "y": 44, "w": 90, "h": 40, "sensor": "game.fps",
+               "history": 30, "color": "#f59e0b", "range_step": 25, "end_dot": 1.7, "min": 0,
+               "max": None},
+              {"type": "graph", "id": "c", "x": 0, "y": 88, "w": 90, "h": 40, "sensor": "cpu.load",
+               "history": 30, "color": "#a3e635", "min": None, "max": 100,
+               "fill": True}]  # fmt: skip
+    theme = {"format": THEME_FORMAT, "name": "glide", "display": {"width": 90, "height": 128},
+             "palette": {name: "#808080" for name in PALETTE},
+             "background": {"color": "#101418"}, "widgets": graphs}  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+    moment = datetime(2026, 11, 7, 20, 5, 5)
+    fps_values = [60.0 + (k % 3) for k in range(30)]
+    load = [20.0 + (k % 5) for k in range(30)]
+    times = [700.0 + k / 50 for k in range(40)] + [701.2, 703.0, 704.5, 706.0, 706.02, 702.0,
+                                                    702.02, 708.0]  # fmt: skip
+    steps, given = [], []
+    for k, now in enumerate(times):
+        if k == 5:  # (a peak comes in)
+            fps_values = [*fps_values[1:], 140.0]
+            load = [*load[1:], 95.0]
+        if k == 41:  # (it leaves the window)
+            fps_values = [60.0 + (j % 3) for j in range(30)]
+            load = [20.0 + (j % 5) for j in range(30)]
+        history = {"game.fps": fps_values, "cpu.load": load}
+        steps.append((Snapshot(readings={}, history=history, now=moment), now))
+        given.append({"snapshot": _history_given(history, moment), "now": now})
+    cases = [{"folder": str(folder), "dither": False, "animate": True, "fps": fps,
+              "steps": given} for fps in (0, 50)]  # fmt: skip
+    expected = [_python_moving(folder, steps, fps) for fps in (0, 50)]
+    drawn, moving = _compare_moving(cases, expected)
+    assert drawn == 2 * len(times) and moving > 60, (drawn, moving)
+
+
 def test_the_app_s_own_themes_in_moving_frames_as_python_draws_them(tmp_path: Path) -> None:
     # (every theme the app brings, drawn as the panels' loop draws it: frames a 25th of a second
     # apart and more, its readings new between them, at 50 fps; the same to the bit where Rust
@@ -6674,4 +6874,4 @@ def test_the_app_s_own_themes_in_moving_frames_as_python_draws_them(tmp_path: Pa
             assert g["moving"] == w["moving"], (folder.name, i)
         drawn.append(folder.name)
     # (on Windows Rust does not know the computer's zone: Terra's standing globe is left out)
-    assert len(drawn) >= (79 if sys.platform == "win32" else 80), drawn
+    assert len(drawn) >= (83 if sys.platform == "win32" else 84), drawn

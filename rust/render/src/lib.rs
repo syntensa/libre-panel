@@ -40,6 +40,7 @@ mod text;
 pub mod weather_art;
 pub mod widget;
 
+pub use graph::glide_ranges as graph_glide;
 pub use graph::still_range as graph_range;
 pub use list::forget_fans_run;
 pub use piece::{Failed, Piece};

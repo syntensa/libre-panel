@@ -303,6 +303,65 @@ fn run(case: &Value) -> Result<Value, String> {
             lp_i18n::set_language(lp_i18n::Language::english());
             json!(answers)
         }
+        "graph_glide" => {
+            // a graph's own range frame after frame by one renderer (_glided_bounds, and
+            // _range_now at a later time where a frame has one), of each case's widget (min,
+            // max, range_step, as typed values) and frames (numbers and time): each frame's
+            // range as typed values, whether it glides and the range later, or {"failed": what
+            // Python raises}
+            let typed_out = |v: &lp_py::Value| match v {
+                lp_py::Value::Int(n) => json!({"i": n.to_string()}),
+                lp_py::Value::Float(f) => json!({"f": format!("{:016x}", f.to_bits())}),
+                lp_py::Value::Bool(b) => json!({"b": b}),
+                _ => json!({"n": null}),
+            };
+            let answers: Vec<Value> = case["cases"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|c| {
+                    let mut w = lp_py::Dict::new();
+                    for (k, v) in c["widget"].as_object().into_iter().flatten() {
+                        w.insert(k.clone(), typed(v));
+                    }
+                    let frames: Vec<(Vec<f64>, f64, Option<f64>)> = c["frames"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .map(|f| {
+                            let numbers = f["numbers"]
+                                .as_array()
+                                .into_iter()
+                                .flatten()
+                                .map(|v| match typed(v) {
+                                    lp_py::Value::Float(x) => x,
+                                    _ => f64::NAN,
+                                })
+                                .collect();
+                            (
+                                numbers,
+                                f["now"].as_f64().unwrap_or(0.0),
+                                f["later"].as_f64(),
+                            )
+                        })
+                        .collect();
+                    let animate = c["animate"].as_bool().unwrap_or(true);
+                    let steps: Vec<Value> = lp_render::graph_glide(&w, &frames, animate)
+                        .into_iter()
+                        .map(|step| match step {
+                            Ok((range, gliding, later)) => json!({
+                                "range": [typed_out(&range.0), typed_out(&range.1)],
+                                "gliding": gliding,
+                                "later": later.map(|l| json!([typed_out(&l.0), typed_out(&l.1)])),
+                            }),
+                            Err(e) => json!({"failed": e}),
+                        })
+                        .collect();
+                    json!(steps)
+                })
+                .collect();
+            json!(answers)
+        }
         "graph_range" => {
             // the range a graph is drawn in, in a still frame (_glided_bounds), of each case's
             // widget (min, max, range_step, as typed values) and numbers: its ends as typed

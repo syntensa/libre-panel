@@ -127,9 +127,8 @@ pub struct Renderer {
     /// the look of the weather symbols the person chose (config.toml's symbols: the app sets
     /// it; vivid where it does not, as Python's renderer has it)
     pub symbols: String,
-    /// the range each graph of its own range was drawn in (_ranges: still, the values' with
-    /// room), by id: its end dot lies in it
-    ranges: HashMap<String, graph::Range>,
+    /// each graph's own range as it glides (_ranges), by id: its end dot lies in it
+    ranges: HashMap<String, graph::Glide>,
     /// the slot of every module that shows one card of several, by its id (_slots)
     slots: IndexMap<String, Slot>,
     /// whether this frame's slots have chosen their cards
@@ -496,13 +495,17 @@ impl Renderer {
         }
     }
 
-    /// _range_now in a still frame: the range a graph of its own range was drawn in; None for
-    /// one with min and max, or none drawn yet.
-    pub(crate) fn range_now(&self, w: &Dict) -> Option<graph::Range> {
+    /// _range_now: a graph's own range at the frame's time, on its way to the one it glides
+    /// to (in a still frame the one it was drawn in); None for one with min and max, or none
+    /// drawn yet.
+    pub(crate) fn range_now(&self, w: &Dict) -> Result<Option<graph::Range>> {
         if graph::fixed(w) {
-            return None;
+            return Ok(None);
         }
-        self.ranges.get(widget::text(w, "id")).cloned()
+        let Some(state) = self.ranges.get(widget::text(w, "id")) else {
+            return Ok(None);
+        };
+        graph::glide_now(w, state, self.at, self.options.animate).map(Some)
     }
 
     /// The colour of a widget's colour field (None where it has none).
@@ -1096,18 +1099,14 @@ impl Renderer {
                     let numbers: Vec<f64> = values.iter().flatten().copied().collect();
                     let mut range = None;
                     if !numbers.is_empty() {
-                        let id = widget::text(&w, "id").to_string();
-                        let own = !graph::fixed(&w);
-                        // (a range of its own glides from one frame to the next: motion)
-                        if own && self.options.animate && self.ranges.contains_key(&id) {
-                            return Drawn::Unported("graphs whose own range glides".into());
-                        }
-                        match graph::still_bounds(&w, &numbers) {
-                            Ok(want) => range = Some(want),
+                        // (a range of its own glides from one frame to the next)
+                        let (at, animate) = (self.at, self.options.animate);
+                        match graph::glided_bounds(&w, &numbers, at, animate, &mut self.ranges) {
+                            Ok((bounds, gliding)) => {
+                                range = Some(bounds);
+                                self.moving |= gliding;
+                            }
                             Err(e) => return Drawn::Failed(e),
-                        }
-                        if let (true, Some(want)) = (own, &range) {
-                            self.ranges.insert(id, want.clone());
                         }
                     }
                     if graph::points_undrawable(&w, &values, range.as_ref()) {

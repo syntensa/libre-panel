@@ -443,8 +443,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       none; a fill's fade fails the widget, as in Python; a line or a fill drawn through the
       NaN points gets them from Pillow's C as ints the processor makes of them (the least int
       on x86, 0 on ARM), so Rust leaves those out. A graph whose own range glides from frame
-      to frame: Rust says it does not draw it yet. 56 of the app's 99 themes are drawn by
-      Rust, 54 of them the same to the bit
+      to frame: below. 56 of the app's 99 themes are drawn by Rust, 54 of them the same to the
+      bit
 - [x] lists in a still frame (lists.py's pick, the renderer's _draw_list and its rows, bars,
       columns and cells): the readings a list's lines pick, by key or by pattern as fnmatch
       matches it (translate's sets and ranges, a range running backwards left out; filter
@@ -544,7 +544,7 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       pixel, phase, colour and night (234 pictures), the frames of 160 random themes of moons in
       their own look or the one the person chose, and of 60 of moon and sun modules: the same to
       the bit. A moon of more than 4096 px a side Rust says it does not draw yet (where the
-      panel moves, its halo breathes: below). The counter-checks put in 120 faults, and the tests
+      panel moves, its halo breathes: below). The counter-checks put in 120 faults and the tests
       catch 110; the other 10 change nothing in any picture the tests make (two in numpy's tanh,
       its first step unfused and 1 from 2^127 on, which still give numpy's tanh on every
       float32; the full moon drawn waning, the same polygon; the halo's level among what keeps a
@@ -937,6 +937,32 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       widget stays the same while a renderer draws it), and the hand's box a pixel narrower
       round it or its left edge rounded rather than floored (the box holds all of the hand's
       pixels either way)
+- [x] graphs whose own range glides (the renderer's _glided_bounds, _range_glide and _range_now
+      with its _Range, in a moving frame): a graph without min or max takes its range from
+      the values it shows, with room, and glides there from the range it drew last at a time
+      constant of 0.6 s (in whole range_steps 0.12 s, and there at once within a hundredth of
+      its span); wider at once where the values leave it, narrower to theirs once they have
+      used less than 0.6 of it for three seconds, the values always inside; anew where the
+      time went back; its end dot in the range of the frame. Counted as Python counts it:
+      each end the int or the float it is. The frame moves on while a range glides. The tests:
+      the ranges of 3000 random graphs frame after frame (in moving frames or still ones, the
+      numbers the same, larger or smaller, a peak come in, half of them gone or others, the
+      frames at any distance, back in time too), with the range a moment later: 20,819 steps
+      the same to the bit, 3,370 of them gliding, and Python's errors in 1,635; 60 random
+      themes of graphs of their own range frame after frame, their histories growing, at a
+      frame rate or none: 432 frames to the bit, 179 of them on the way; 50 with their glow,
+      flat or lit: 379 frames within a level, 118 on the way; a peak that comes in, stays and
+      leaves the window, in whole steps from 0 up and up to 100, through the glides, a pause
+      and back in time, at two frame rates: 96 frames to the bit, 78 on the way; the app's
+      themes in moving frames: 84 of the 99 drawn by Rust all along (80 before; 83 on
+      Windows). The counter-checks put in 29 faults (the paces, nearness, the time to narrow
+      and the share used; back in time and still frames; the glide's curve and direction; the
+      values inside below and above; wider downwards, upwards and to what; the times of use,
+      kept and when; the time, values and range kept; the snap in whole steps, the gliding
+      ends; the range without room; the range a moment later at its pace and with the values
+      inside; moving), and the tests catch 28 of them; the other changes nothing a frame
+      shows: the end dot laid in the range drawn last rather than in the range now (it is
+      drawn right after its graph, in the same frame, where the two are one)
 - [ ] pictures as Pillow fails at them: lp-decode's errors as Python's exceptions, so that
       where Python catches an OSError and goes on (a picture cut short, a file of no picture)
       Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,
