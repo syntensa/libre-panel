@@ -6539,9 +6539,11 @@ def test_clocks_whose_second_hand_glides_or_goes_round_as_python_draws_them(
     # that glides to each second as rolling digits do, in the clock's own time or the digits',
     # or goes round; the face with the hour and minute hands kept, the minute hand moving on
     # every five seconds; at rest for the rest of the second; frames at any distance, back in
-    # time too)
+    # time too. On Windows Rust does not know the computer's zone: another place's clocks are
+    # left out)
     drawn, moving = _moving_clocks(tmp_path, random.Random(0xA7A5), 60, _moving_analog_or_more)
-    assert drawn > 400 and moving > 300, (drawn, moving)
+    least = (380, 280) if sys.platform == "win32" else (440, 340)
+    assert drawn > least[0] and moving > least[1], (drawn, moving)
 
 
 def test_clocks_whose_second_hand_moves_with_their_glow_and_shadow_within_a_level(
