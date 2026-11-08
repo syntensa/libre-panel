@@ -629,6 +629,36 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       moving frame: Rust says it does not draw them yet. 93 of the app's 99 themes are drawn
       by Rust, 83 of them the same to the bit (almanac with its analog face, in both its
       shapes, is new, the same to the bit; terra's six, the earth, are left)
+- [x] the earth's picture (render/earth.py's picture, subsolar, _basis, _lookup, _lit, _air,
+      _air_pixels and _spot; sensors/sky.py's _sun_path): a globe lit by the sun where the
+      sunrise equation puts it at a moment, seen from above a place: the day's land and sea,
+      the clouds over them, the night's ground and its cities' lights, the dusk along the line
+      between them, the glint of the sun on the water, the air glowing at the rim of the day
+      side, your place marked; made at twice its size and reduced. The maps read as
+      earth._read reads them, by libjpeg, drafted to the scale that covers the round's width
+      (an eighth, a quarter, a half or whole). In earth.py's own numbers: float32 where its
+      arrays are, the Python floats doubles made float32 as numpy takes them beside an array
+      (and the one product of the clouds' bytes and a Python float, float64 as numpy makes
+      it), numpy's own float32 exp, np.dot's sums as OpenBLAS's sdot makes them, the C
+      library's asinf, atan2f, powf and hypotf. numpy on Linux with AVX-512 takes its float32
+      arcsin, arctan2 and power from SVML (of 20,000 numbers each, 30 % of the arcsines and
+      39 % of the arctangents up to 3 units in the last place apart from the C library's, a
+      tenth to a fifth of the powers 1 unit), and Python's own globe is not the same there as
+      elsewhere: the test asks Python for its globes in a process with numpy's AVX-512 paths
+      off, and as numpy runs here. 88 globes of every size (those where libjpeg reads the maps
+      at another scale among them), at moments of the years round now, seen from anywhere
+      (the poles among them), marked or not (near the rim, where the mark fades, among them),
+      in any colours, with and without the clouds and the lights: the same to the bit as
+      Python's with the C library's float32 functions; as numpy runs on this processor,
+      Python's own globes come out 84 pixels apart from those in the first 80, 12 levels at
+      most, and Rust's the same. The counter-checks put in 51 faults, and the tests catch 48
+      (the places near the rim came of one they missed at first); the other three change
+      nothing the tests' globes show, nor 160 more looked for them, the sun all round: the
+      glint looked for in a band the sun does not reach, and bands of 64 rows (where the sun
+      is below the horizon its glint is far below a level), and the clouds' veil over the
+      glint in float32 (a unit in the last place of the glint at most). The earth widget waits
+      for the computer's own zone (the moment its globe is lit for, and the longitude of the
+      zone): Rust says it does not draw it yet
 - [ ] the zones on Windows: Python finds them in the tzdata package there, and Rust finds
       them where it is told the package is (LP_TZDATA: the tests tell lp-check where
       Python's is). The Rust app does not bring one yet: without it, no key is a zone there

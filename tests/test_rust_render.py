@@ -3577,6 +3577,110 @@ def test_moons_too_large_are_not_drawn_here(tmp_path: Path) -> None:
     assert ours["frames"][0].get("unported") == "moons larger than 4096 px"
 
 
+# -- the earth ---------------------------------------------------------------------------
+
+
+# (a Python that draws the earth with numpy's float32 arcsin, arctan2 and power from the C
+# library: numpy on Linux with AVX-512 takes SVML's, a unit or two in the last place apart)
+_EARTH_PICTURES = """
+import json, sys
+from pathlib import Path
+from libre_panel.render import earth
+cases, out = json.loads(Path(sys.argv[1]).read_text()), Path(sys.argv[2])
+for n, c in enumerate(cases):
+    place = None if c["place"] is None else tuple(c["place"])
+    image = earth.picture(c["size"], c["t"], tuple(c["centre"]), place, tuple(c["air"]),
+                          tuple(c["mark"]), c["clouds"], c["lights"])
+    (out / f"{n}.raw").write_bytes(image.tobytes())
+"""
+
+
+def _avx512() -> list[str]:
+    """numpy's targets of AVX-512 this processor has (SVML's way where it takes them)."""
+    try:
+        from numpy._core._multiarray_umath import __cpu_dispatch__, __cpu_features__
+    except ImportError:  # (numpy before 2)
+        from numpy.core._multiarray_umath import __cpu_dispatch__, __cpu_features__
+    return [f for f in __cpu_dispatch__ if __cpu_features__.get(f) and f not in ("X86_V3",)
+            and (f.startswith("AVX512") or f == "X86_V4")]  # fmt: skip
+
+
+def _earth_pictures(tmp_path: Path, cases: list[dict[str, Any]], libm: bool) -> list[bytes]:
+    """earth.picture of each case by Python, in a process of its own: numpy's float32 functions
+    the C library's (`libm`), else as numpy takes them here."""
+    folder = tmp_path / ("libm" if libm else "here")
+    folder.mkdir()
+    (folder / "cases.json").write_text(json.dumps(cases), encoding="utf-8")
+    env = dict(os.environ)
+    if libm and _avx512():
+        env["NPY_DISABLE_CPU_FEATURES"] = " ".join(_avx512())
+    subprocess.run([sys.executable, "-c", _EARTH_PICTURES, str(folder / "cases.json"),
+                    str(folder)], env=env, check=True)  # fmt: skip
+    return [(folder / f"{n}.raw").read_bytes() for n in range(len(cases))]
+
+
+def _earth_case(rng: random.Random) -> dict[str, Any]:
+    """A globe: of every size, at a moment of the years round now (an equinox, a solstice), seen
+    from above a place anywhere (the poles among them), a place marked or none, in the air's
+    colour and your place's or others, with the clouds and the lights or without them."""
+    # (and the sizes where libjpeg reads the maps at another scale: 1/8, 1/4, 1/2, whole)
+    size = rng.choice([8, 9, 16, 17, 40, 47, 48, 64, 94, 95, 100, 160, 161, 189, 190, 240,
+                       396, 480])  # fmt: skip
+    t = rng.choice([1_760_000_000.0, 1_774_094_400.0, 1_782_000_000.5, 1_766_275_200.0,
+                    rng.uniform(1.6e9, 2.0e9), rng.uniform(1.6e9, 2.0e9)])  # fmt: skip
+    centre = rng.choice([(20.0, 0.0), (20.0, 15.0), (48.1, 11.6), (-33.9, 151.2), (90.0, 0.0),
+                         (-90.0, 45.0), (0.0, 180.0), (0.0, -180.0),
+                         (rng.uniform(-90, 90), rng.uniform(-180, 180))])  # fmt: skip
+    place = rng.choice([None, centre, (rng.uniform(-90, 90), rng.uniform(-180, 180)),
+                        (centre[0] + 60, centre[1]), (89.9, 0.0)])  # fmt: skip
+    return {"size": size, "t": t, "centre": list(centre),
+            "place": None if place is None else list(place),
+            "air": rng.choice([[107, 173, 255], [rng.randrange(256) for _ in range(3)]]),
+            "mark": rng.choice([[255, 210, 122], [rng.randrange(256) for _ in range(3)]]),
+            "clouds": rng.random() < 0.8, "lights": rng.random() < 0.8}  # fmt: skip
+
+
+def _rust_earths(cases: list[dict[str, Any]]) -> list[Any]:
+    """The same pictures by Rust (lp-check's earth_picture: the doubles as their bits)."""
+    asked = [{**c, "t": _bits(c["t"]), "centre": [_bits(v) for v in c["centre"]],
+              "place": None if c["place"] is None else [_bits(v) for v in c["place"]]}
+             for c in cases]  # fmt: skip
+    [got] = run([{"op": "earth_picture", "fonts_dir": str(fonts.FONT_DIR), "cases": asked}])
+    return got["pictures"]
+
+
+def test_the_earth_as_python_draws_it(tmp_path: Path) -> None:
+    # (the globe as earth.picture makes it: the maps drafted by libjpeg to the width the round
+    # needs, the sun where the sunrise equation puts it, the day, the night and its lights, the
+    # clouds, the glint, the dusk, the air at the rim, your place: to the bit where numpy takes
+    # its float32 functions from the C library; where it takes SVML's (AVX-512), as near as
+    # Python's own two ways come to each other)
+    import numpy as np
+
+    rng = random.Random(0xEA27)
+    cases = [_earth_case(rng) for _ in range(80)]
+    # (places near the rim, where the mark fades: 85, 87 and 88 degrees from the middle, the
+    # last hidden; of a small globe and a large one)
+    for size, lon in ((64, 30.0), (396, -120.0)):
+        for away in (85.0, 87.0, 88.0, -86.5):
+            cases.append({**_earth_case(rng), "size": size, "centre": [0.0, lon],
+                          "place": [0.0, lon + away]})  # fmt: skip
+    ours = _rust_earths(cases)
+    wanted = _earth_pictures(tmp_path, cases, libm=True)
+    here = _earth_pictures(tmp_path, cases, libm=False) if _avx512() else wanted
+    apart = most = 0
+    for case, got, want, there in zip(cases, ours, wanted, here, strict=True):
+        assert "error" not in got, (case, got)
+        assert picture(got).tobytes() == want, case
+        size = case["size"]
+        a = np.frombuffer(want, np.uint8).reshape(size, size, 4).astype(int)
+        b = np.frombuffer(there, np.uint8).reshape(size, size, 4).astype(int)
+        far = np.abs(a - b).max(axis=2)
+        assert (far > 0).sum() <= size * size // 2000 + 2, case
+        apart, most = apart + int((far > 0).sum()), max(most, int(far.max()))
+    assert most <= 48, (apart, most)
+
+
 # -- downloads: what loads, its progress, its speed ---------------------------------------------
 
 # numbers a download's state may carry, and what is none: an int past a float's range (Python

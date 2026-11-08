@@ -982,6 +982,41 @@ fn run(case: &Value) -> Result<Value, String> {
             }
             json!({"pictures": out})
         }
+        "earth_picture" => {
+            // earth.picture(size, t, centre, place, air, mark, clouds, lights) of each case:
+            // t and the latitudes and longitudes as the bits of doubles, place null for none
+            let dir = lp_render::earth::maps_dir(std::path::Path::new(
+                case["fonts_dir"].as_str().ok_or("fonts_dir")?,
+            ));
+            let bits = |v: &Value| v.as_u64().map(f64::from_bits).unwrap_or(0.0);
+            let rgb = |v: &Value, or: [u8; 3]| {
+                if v.is_array() {
+                    [0, 1, 2].map(|i| v[i].as_u64().unwrap_or(0).min(255) as u8)
+                } else {
+                    or
+                }
+            };
+            let mut out = Vec::new();
+            for c in case["cases"].as_array().ok_or("cases")? {
+                let place = c["place"].as_array().map(|p| (bits(&p[0]), bits(&p[1])));
+                let look = lp_render::earth::Look {
+                    air: rgb(&c["air"], lp_render::earth::AIR),
+                    mark: rgb(&c["mark"], lp_render::earth::MARK),
+                    clouds: c["clouds"].as_bool().unwrap_or(true),
+                    lights: c["lights"].as_bool().unwrap_or(true),
+                };
+                let centre = (bits(&c["centre"][0]), bits(&c["centre"][1]));
+                let size = c["size"].as_i64().unwrap_or(160);
+                out.push(
+                    match lp_render::earth::picture(&dir, size, bits(&c["t"]), centre, place, look)
+                    {
+                        Ok(image) => value_of(&image),
+                        Err(e) => json!({"error": e.0}),
+                    },
+                );
+            }
+            json!({"pictures": out})
+        }
         "np_random" => {
             // numpy's default_rng(seed) and the draws asked of it in turn, each double's bits
             // in hex: ["normal", n], ["exponential", n], ["power", a, n], ["uniform", lo, hi,
