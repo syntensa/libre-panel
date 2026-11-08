@@ -401,10 +401,26 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       (their mask drawn three times larger and reduced); nothing for a picture the snapshot
       lacks, a clear piece for a widget with none. The frames of random themes of them the
       same to the bit. The theme's own pictures, animated ones, videos and slideshows: Rust
-      says it does not draw them yet. 41 of the app's 99 themes are drawn by Rust, 39 of them
-      the same to the bit; in the two encore themes of 1920 x 720 one pixel of 1.4 million is
-      a level apart here, where the volume's bar glow is blurred (numpy multiplies by the
-      blur's matrices in float32)
+      says it does not draw them yet. In the two encore themes of 1920 x 720, drawn by Rust
+      since, one pixel of 1.4 million is a level apart here, where the volume's bar glow is
+      blurred (numpy multiplies by the blur's matrices in float32)
+- [x] weather symbols in a still frame (symbol widgets, and the lit finish's weather icons
+      from 16 px: symbols.py, weather_art.py): Meteocons' outlines (their paths read as
+      weather_art reads them, the curves cut into twenty in doubles), the sun, its rays and
+      corona, the moon's crescent, the stars, drops, snow crystals, fog's bands and the bolt as
+      weather_art draws them, flat or as frosted glass (lighter at the top, a breath of shade
+      in the floor, an edge of light), worked out in float32 as numpy works it out, with
+      numpy's own float32 exp (its ratio of polynomials, not the C library's: the same to the
+      bit as numpy's on 3.7 million numbers here); each kind of weather's layers, by day and
+      by night, in both looks, laid in their resting places as symbols.compose lays them (the
+      sun's or the moon's light through the cloud in front, its shade on the one behind, the
+      crystals turned); the kind of a weather code as kind_of takes it (int() of it) and day
+      or night as the weather icon decides; clouds and the moon in the widget's colour, the
+      rest in the palette's (light.role_color). The look the person chose: vivid until the app
+      sets it, as in Python's renderer. Still symbols of each kind at 30 sizes from 8 to 300 px
+      (1,440 of them), and the frames of random themes of them the same to the bit. A symbol
+      that moves: Rust says it does not draw it yet in a moving frame. 43 of the app's 99
+      themes are drawn by Rust, 41 of them the same to the bit
 - [ ] the zones on Windows (Python finds them in the tzdata package there, which the Rust
       app does not bring yet: none is found there for now)
 - [ ] the C library's locale where Python's text follows it: format()'s 'n' and what strftime

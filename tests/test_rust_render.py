@@ -377,6 +377,8 @@ def _frame_theme(rng: random.Random, folder: Path, make: Any = None) -> dict[str
     palette = {name: _hex(rng, alpha=rng.random() < 0.2) for name in PALETTE}
     if make is _metric_or_more and rng.random() < 0.6:  # (the colour of a muted volume)
         palette["crit"] = _hex(rng)
+    if make is _symbol_or_more and rng.random() < 0.6:  # (the sun's, rain's, snow's, the ground's)
+        palette.update({name: _hex(rng) for name in rng.sample(SYMBOL_ROLES, 3)})
     background: dict[str, Any] = {"color": rng.choice([_hex(rng), _hex(rng), _hex(rng, True),
                                                        "@accent", "#00000000"])}  # fmt: skip
     if rng.random() < 0.3:
@@ -526,7 +528,7 @@ def test_frames_of_texts_that_just_fit_as_python_fits_them(tmp_path: Path) -> No
 
 def test_frames_beyond_their_widgets_are_not_drawn_here_yet(tmp_path: Path) -> None:
     # (a screen, the panel's look and a finish Rust does not draw yet: the facets' rings, the
-    # lit finish's weather icons; Rust says it does not draw them yet, rather than a frame
+    # lit and the facets' graphs; Rust says it does not draw them yet, rather than a frame
     # without them)
     rng = random.Random(0xB3D)
     cases, wanted = [], []
@@ -539,11 +541,11 @@ def test_frames_beyond_their_widgets_are_not_drawn_here_yet(tmp_path: Path) -> N
         elif beyond == "looks":
             data["look"] = {"grid": rng.choice([True, {}, {"spacing": 12, "major": 0}])}
         else:
-            finished = rng.choice([_icon, _gauge])(rng, 99, (64, 48))
-            if finished["type"] == "icon":
-                finished["icon"] = rng.choice(WEATHER_ICONS)
-            finishes = {"icon": ["lit"], "gauge": ["facet"]}.get(finished["type"])
-            finished["finish"] = rng.choice(finishes or ["lit", "facet"])
+            if rng.random() < 0.5:
+                finished = {**_gauge(rng, 99, (64, 48)), "finish": "facet"}
+            else:
+                finished = {"type": "graph", "id": "g99", "x": 4, "y": 4, "w": 40, "h": 20,
+                            "finish": rng.choice(["lit", "facet"])}  # fmt: skip
             data["widgets"].append(finished)
         (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
         try:
@@ -1481,26 +1483,26 @@ def test_frames_of_lit_texts_and_readings_as_python_draws_them(tmp_path: Path) -
     assert _compare_frames(tmp_path, 0x117, 200, _lit, _lit_snapshot) > 150
 
 
-def test_the_lit_finish_s_own_icons_are_not_drawn_here_yet(tmp_path: Path) -> None:
-    # (the lit finish draws the weather's icons as its symbols, which Rust does not draw yet;
-    # every other icon it leaves a line icon, as Rust draws it)
+def test_the_lit_finish_s_icons_as_python_draws_them(tmp_path: Path) -> None:
+    # (the lit finish draws the weather's icons as their symbols, from 16 px on; every other
+    # icon, and a smaller one, it leaves a line icon)
     names = sorted({*icon_set.ICON_NAMES, *WEATHER_ICONS, "link"})
-    cases = []
-    for n, name in enumerate(names):
+    cases, expected = [], []
+    now = Snapshot(readings={}, now=datetime(2026, 11, 7, 18, 5, 9))
+    for n, (name, size) in enumerate((name, size) for name in names for size in (15, 32)):
         folder = tmp_path / f"t{n}"
         folder.mkdir()
-        icon = {"type": "icon", "id": "i", "x": 4, "y": 4, "icon": name, "size": 32,
+        icon = {"type": "icon", "id": "i", "x": 4, "y": 4, "icon": name, "size": size,
                 "color": "#4ad", "finish": "lit"}  # fmt: skip
         (folder / "theme.json").write_text(json.dumps({
             "format": THEME_FORMAT, "name": "lit", "display": {"width": 40, "height": 40},
             "widgets": [icon]}), encoding="utf-8")  # fmt: skip
-        cases.append({"folder": str(folder), "snapshot": {"readings": {}, "images": {}},
-                      "dither": False})  # fmt: skip
+        cases.append({"folder": str(folder), "snapshot": {"readings": {}, "images": {},
+                      "now": [2026, 11, 7, 18, 5, 9, 0]}, "dither": False})  # fmt: skip
+        expected.append(_python_frame(folder, now, False)["frame"])
     [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
-    frames = dict(zip(names, ours["frames"], strict=True))
-    assert {name for name, got in frames.items() if "unported" in got} == set(WEATHER_ICONS)
-    assert all(frames[name]["unported"] == "finishes" for name in WEATHER_ICONS)
-    assert all("sha256" in got for name, got in frames.items() if name not in WEATHER_ICONS)
+    for case, got, want in zip(cases, ours["frames"], expected, strict=True):
+        assert got.get("sha256") == hashlib.sha256(want.tobytes()).hexdigest(), case["folder"]
 
 
 def test_a_lit_text_s_light_in_float32_as_numpy_works_it_out(tmp_path: Path) -> None:
@@ -1523,23 +1525,24 @@ FLAT_FINISHES = [("lit", "clock"), ("lit", "weather"), ("lit", "countdown"), ("l
 LETTERED_FINISHES = [(finish, kind) for finish in ("facet", "acrylic")
                      for kind in ("text", "metric", "clock", "weather", "countdown")]  # fmt: skip
 OWN_FINISHES = [("lit", "bar"), ("facet", "bar"), ("lit", "gauge")]
-UNDRAWN_FINISHES = [("lit", "graph"), ("lit", "symbol"), ("lit", "downloads"), ("facet", "gauge"),
-                    ("facet", "graph")]  # fmt: skip
+SYMBOL_FINISHES = [("lit", "symbol"), ("lit", "icon")]
+UNDRAWN_FINISHES = [("lit", "graph"), ("lit", "downloads"), ("facet", "gauge"), ("facet", "graph")]
 
 
 def test_each_finish_rust_does_not_draw_yet_is_refused(tmp_path: Path) -> None:
     # (a finish that takes the widget and that Rust does not draw: the whole frame refused,
     # rather than a frame without it; one that does not take it: the widget drawn flat; the
     # facets' letters and bars, the lit bar and ring: their own, the lit ones' halos within a
-    # level)
+    # level; a lit symbol and a lit weather icon: frosted glass, to the bit)
     import numpy as np
 
     makers = {"clock": _clock, "weather": _weather_or_countdown, "rect": _rect, "bar": _bar,
               "gauge": _gauge, "calendar": _calendar, "icon": _icon, "agent": _agent,
-              "sunpath": _sunpath}  # fmt: skip
+              "sunpath": _sunpath, "symbol": _symbol}  # fmt: skip
     rng = random.Random(0xF1)
     cases, wanted = [], []
-    pairs = [*FLAT_FINISHES, *LETTERED_FINISHES, *OWN_FINISHES, *UNDRAWN_FINISHES]
+    pairs = [*FLAT_FINISHES, *LETTERED_FINISHES, *OWN_FINISHES, *SYMBOL_FINISHES,
+             *UNDRAWN_FINISHES]  # fmt: skip
     for n, (finish, kind) in enumerate(pairs):
         widget = makers.get(kind, _text)(rng, 0, (64, 48))
         if kind in ("weather", "countdown"):
@@ -1556,6 +1559,11 @@ def test_each_finish_rust_does_not_draw_yet_is_refused(tmp_path: Path) -> None:
                           background="@surface")  # fmt: skip
             if kind == "gauge":
                 widget.update(y=4, h=40, thickness=8)
+        if (finish, kind) in SYMBOL_FINISHES:  # (a weather's symbol, large enough to be one)
+            widget.update(x=8, y=4, size=40, opacity=1.0, icon="weather", sensor="weather.code")
+            widget.pop("hide_if_missing", None)
+            if kind == "symbol":
+                widget.pop("icon")
         if kind in ("graph", "symbol", "downloads"):
             widget.pop("text", None)
         folder = tmp_path / f"t{n}"
@@ -2005,3 +2013,123 @@ def test_pictures_rust_does_not_draw_yet_are_refused(tmp_path: Path) -> None:
         "slideshows",
         "slideshows",
     ]
+
+
+SYMBOL_CODES: list[Any] = [0, 1, 2, 3, 45, 48, 51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82,
+                           71, 73, 75, 77, 85, 86, 95, 96, 99, 4, 100, -1, 2.7, "61", " 3 ", "x",
+                           None, True, False, math.nan, math.inf, 10**30, "٣"]  # fmt: skip
+SYMBOL_ROLES = ["bg", "base", "text", "tx_1", "warn", "warning", "primary", "cpu"]
+
+
+def _symbol(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """A weather symbol standing: of any kind of weather (a code of each, and what is none), by
+    day or night, flat or lit, in either look, small or large."""
+    w, h = size
+    symbol: dict[str, Any] = {"type": "symbol", "id": f"s{i}", "x": rng.randrange(-20, w),
+                              "y": rng.randrange(-20, h),
+                              "size": rng.choice([4, 8, 12, 16, 24, 40, 64, 100, 120, 128, 160]),
+                              "color": rng.choice([_colour(rng), "@accent", "#ffffff"]),
+                              "moving": rng.random() < 0.5}  # fmt: skip
+    if rng.random() < 0.6:
+        symbol["sensor"] = rng.choice(["weather.code", "weather.hour.3.code", "other.code", "x"])
+    if rng.random() < 0.5:
+        symbol["pack"] = rng.choice(["auto", "classic", "vivid"])
+    if rng.random() < 0.6:
+        symbol["finish"] = rng.choice(["lit", "lit", "facet", "flat"])
+    if rng.random() < 0.15:
+        symbol["opacity"] = rng.choice([0.5, 0.0])
+    return symbol
+
+
+def _lit_weather_icon(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """A weather icon in the lit finish: its weather's symbol, lit, from 16 px on; smaller, its
+    line icon."""
+    icon = _icon(rng, i, size)
+    icon.update(icon=rng.choice(["weather", "weather", *WEATHER_ICONS]),
+                size=rng.choice([8, 15, 16, 17, 24, 40, 64, 121]), finish="lit")  # fmt: skip
+    return icon
+
+
+def _symbol_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    r = rng.random()
+    if r < 0.55:
+        return _symbol(rng, i, size)
+    return _lit_weather_icon(rng, i, size) if r < 0.85 else _card_or_text(rng, i, size)
+
+
+def _symbol_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
+    """The weather the symbols show, of the hour or of now, at an hour of the day or night."""
+    values = {"weather.code": SYMBOL_CODES, "weather.hour.3.code": SYMBOL_CODES,
+              "weather.hour.3.day": [True, False, 0, 1, None, "", "0"],
+              "weather.is_day": [1, 0, None, "0"], "other.code": SYMBOL_CODES}  # fmt: skip
+    readings = {k: rng.choice(v) for k, v in values.items() if rng.random() < 0.8}
+    now = datetime(2026, 11, 7, rng.randrange(24), rng.randrange(60), 5)
+    snapshot = Snapshot(readings={k: Reading(k, v) for k, v in readings.items()}, now=now)
+    moment = [now.year, now.month, now.day, now.hour, now.minute, now.second, 0]
+    given = {"readings": {k: _typed(v) for k, v in readings.items()}, "images": {},
+             "now": moment}  # fmt: skip
+    return given, snapshot
+
+
+def test_frames_of_weather_symbols_as_python_draws_them(tmp_path: Path) -> None:
+    # (a symbol standing, of each kind of weather by day and night, flat or lit as frosted glass,
+    # in either look, its colours the widget's and the palette's; a lit weather icon its
+    # weather's symbol from 16 px on)
+    assert _compare_frames(tmp_path, 0x5D3B, 160, _symbol_or_more, _symbol_snapshot) > 120
+
+
+def test_exp_as_numpy_works_it_out() -> None:
+    # (numpy's float32 exp is its own, never the C library's: a ratio of two polynomials,
+    # fused, a few units in the last place off the true value at most)
+    import numpy as np
+
+    rng = np.random.default_rng(0xE4F)
+    x = np.concatenate([rng.uniform(-110, 90, 150_000), rng.uniform(-1, 1, 30_000),
+                        rng.uniform(-104, -87, 20_000)]).astype(np.float32)  # fmt: skip
+    edges = [0.0, -0.0, 88.72283935546875, 88.7228, -103.97208404541015625, -103.972, 1e-30,
+             -1e-30, 87.3, -87.3, math.inf, -math.inf, math.nan]  # fmt: skip
+    # (where the first step of its numerator, fused, gives another number than unfused: a dozen
+    # of the 1.1 billion float32s between -104 and 89)
+    fused = [0x3EA09998, 0x3EA4B63D, 0x3EB5C2D4, 0x3ED42DD3, 0x3EDD401B, 0x3F80DF72, 0x3F8629C1,
+             0x3FD9987E, 0x3FDEE2CD, 0x401928C5, 0x4045854B, 0x4071E1D1]  # fmt: skip
+    x = np.concatenate(
+        [x, np.array(edges, np.float32), np.array(fused, np.uint32).view(np.float32)]
+    )
+    with np.errstate(over="ignore", under="ignore"):
+        want = np.exp(x)
+    [got] = run([{"op": "np_exp", "bits": x.view(np.uint32).tolist()}])
+    ours = np.array(got["bits"], np.uint32).view(np.float32)
+    same = (ours.view(np.uint32) == want.view(np.uint32)) | (np.isnan(ours) & np.isnan(want))
+    assert same.all(), x[~same][:5]
+
+
+def test_still_weather_symbols_as_python_makes_them() -> None:
+    # (each kind of weather, by day and by night where it has a sky, at sizes from 8 px to past
+    # the second look's largest, in both looks, flat and as frosted glass, the same to the bit;
+    # at 136 and 262 px drops and crystals at rest lie a hair past a whole pixel: not moved)
+    from libre_panel.render import symbols
+
+    rng = random.Random(0x5B01)
+    cases, expected = [], []
+    for kind in symbols.KINDS:
+        for night in (False, True) if kind in ("clear", "mostly", "partly") else (False,):
+            for k in (8, 16, 33, 64, 120, 136, 161, 262):
+                for pack in symbols.PACKS:
+                    for lit in (False, True):
+                        own = (*(rng.randrange(256) for _ in range(3)), rng.choice([255, 180]))
+                        dark = (*(rng.randrange(256) for _ in range(3)), own[3])
+                        sun, rain, snow = [(*(rng.randrange(256) for _ in range(3)), 255)
+                                           for _ in range(3)]  # fmt: skip
+                        colours = {"cloud": own, "moon": own, "dark": dark, "sun": sun,
+                                   "bolt": sun, "rain": rain, "snow": snow}  # fmt: skip
+                        layers, _ = symbols.layers_for(kind, night, k, "lit" if lit else "flat",
+                                                       colours, pack)  # fmt: skip
+                        expected.append(symbols.compose(layers, kind, night, None))
+                        cases.append({"op": "symbol", "kind": kind, "night": night, "k": k,
+                                      "pack": pack, "lit": lit,
+                                      "colours": [own, dark, sun, rain, snow]})  # fmt: skip
+    got = run(cases)
+    apart = [(c["kind"], c["night"], c["k"], c["pack"], c["lit"]) for c, g, want
+             in zip(cases, got, expected, strict=True)
+             if picture(g["image"]).tobytes() != want.tobytes()]  # fmt: skip
+    assert not apart, apart

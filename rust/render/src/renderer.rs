@@ -27,6 +27,7 @@ use crate::piece::{Failed, Piece, Result};
 use crate::shapes::{self, Rgba};
 use crate::snapshot::{need_holds, needs_of, number, Moment, Snapshot};
 use crate::sunpath;
+use crate::symbols;
 use crate::widget;
 
 /// The most pixels one layer may have: what Python could not make either (an absurd size a
@@ -99,6 +100,9 @@ pub struct Renderer {
     pub(crate) world: ([u8; 3], [u8; 3]),
     /// the finishes' letters by font, character, quarter pixel and style, built once
     pub(crate) facet_glyphs: crate::text::FacetGlyphs,
+    /// the look of the weather symbols the person chose (config.toml's symbols: the app sets
+    /// it; vivid where it does not, as Python's renderer has it)
+    pub symbols: String,
 }
 
 impl Renderer {
@@ -129,6 +133,7 @@ impl Renderer {
             fonts: RefCell::new(HashMap::new()),
             world: ([0; 3], [0; 3]),
             facet_glyphs: RefCell::new(HashMap::new()),
+            symbols: crate::symbols::DEFAULT_PACK.to_string(),
         };
         renderer.background = renderer.load_background()?;
         let ground = renderer.color(Some(&renderer.theme.background_color.clone()), 1.0)?;
@@ -442,26 +447,42 @@ impl Renderer {
                 let w = w.clone();
                 let snapshot = self.snapshot.clone().unwrap_or_default();
                 let name = Self::icon_name(&w, &snapshot);
-                let colour = match self.color(Some(widget::text(&w, "color")), 1.0) {
-                    Ok(colour) => colour.unwrap_or([0, 0, 0, 0]),
-                    Err(e) => return Drawn::Failed(e),
-                };
-                let content = Value::List(vec![
-                    name.clone().into(),
-                    Value::List(colour.iter().map(|&c| Value::int(c)).collect()),
-                ]);
-                self.cached(&w, content, |_| {
-                    let (size, stroke) = (
-                        widget::int(&w, "size", 32),
-                        widget::number(&w, "stroke", 2.0),
-                    );
-                    let layer = icons::draw_icon(&name, size, shapes::ink(colour), stroke)?;
-                    Ok(Piece::new(
-                        layer,
-                        widget::int(&w, "x", 0),
-                        widget::int(&w, "y", 0),
-                    ))
-                })
+                // (LitIcon: a weather's icon as its symbol, lit, where it is large enough)
+                let size = widget::int(&w, "size", 32);
+                if finish::of(&w) == Finish::LitIcon
+                    && symbols::SYMBOLS.contains(&name.as_str())
+                    && size >= symbols::MIN_ICON
+                {
+                    let own = match self.colour_of(&w, "color") {
+                        Ok(colour) => colour.unwrap_or([255; 4]),
+                        Err(e) => return Drawn::Failed(e),
+                    };
+                    let content = Value::List(vec![
+                        "lit".into(),
+                        name.clone().into(),
+                        Value::List(own.iter().map(|&c| Value::int(c)).collect()),
+                        self.pack(&w).into(),
+                    ]);
+                    self.cached(&w, content, |r| r.lit_icon_piece(&w, &name))
+                } else {
+                    let colour = match self.color(Some(widget::text(&w, "color")), 1.0) {
+                        Ok(colour) => colour.unwrap_or([0, 0, 0, 0]),
+                        Err(e) => return Drawn::Failed(e),
+                    };
+                    let content = Value::List(vec![
+                        name.clone().into(),
+                        Value::List(colour.iter().map(|&c| Value::int(c)).collect()),
+                    ]);
+                    self.cached(&w, content, |_| {
+                        let stroke = widget::number(&w, "stroke", 2.0);
+                        let layer = icons::draw_icon(&name, size, shapes::ink(colour), stroke)?;
+                        Ok(Piece::new(
+                            layer,
+                            widget::int(&w, "x", 0),
+                            widget::int(&w, "y", 0),
+                        ))
+                    })
+                }
             }
             "weather" => {
                 let w = w.clone();
@@ -693,6 +714,27 @@ impl Renderer {
                     }
                 }
             }
+            "symbol" => {
+                let w = w.clone();
+                if self.options.animate && widget::truthy(&w, "moving") {
+                    return Drawn::Unported("weather symbols that move".into());
+                }
+                let snapshot = self.snapshot.clone().unwrap_or_default();
+                let lit = finish::of(&w) == Finish::LitSymbol;
+                let sensor = widget::text(&w, "sensor");
+                let colours = match self.symbol_colours(&w) {
+                    Ok(c) => format!("{c:?}"),
+                    Err(e) => return Drawn::Failed(e),
+                };
+                let content = Value::List(vec![
+                    symbols::kind_of(&snapshot.value(sensor)).into(),
+                    Value::Bool(symbols::night_at(&snapshot, sensor)),
+                    Value::Bool(lit),
+                    self.pack(&w).into(),
+                    colours.into(),
+                ]);
+                self.cached(&w, content, |r| r.symbol_piece(&w, &snapshot, lit))
+            }
             other => return Drawn::Unported(format!("{other} widgets")),
         };
         match made {
@@ -717,20 +759,9 @@ impl Renderer {
             return icons::link_icon(&kind, &snapshot.value("net.wifi.signal")).to_string();
         }
         if name == "weather" {
+            // (day or night as symbols.night_at tells it: _icon_name tells it the same way)
             let key = sensor.unwrap_or("weather.code");
-            let day = match key.strip_suffix(".code") {
-                Some(stem) => format!("{stem}.day"),
-                None => String::new(),
-            };
-            let mut daylight = snapshot.value(&day);
-            if daylight == Value::None && key == "weather.code" {
-                daylight = snapshot.value("weather.is_day");
-            }
-            let night = if daylight == Value::None {
-                !(6..20).contains(&snapshot.now.hour)
-            } else {
-                !daylight.truthy()
-            };
+            let night = symbols::night_at(snapshot, key);
             return icons::weather_icon_name(&snapshot.value(key), night).to_string();
         }
         name.to_string()

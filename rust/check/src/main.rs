@@ -818,6 +818,40 @@ fn run(case: &Value) -> Result<Value, String> {
                 Some(layer) => json!({"layer": value_of(&layer)}),
             }
         }
+        "np_exp" => {
+            // numpy's float32 exp of each float32 (their bits)
+            let bits: Vec<u64> = case["bits"]
+                .as_array()
+                .ok_or("bits")?
+                .iter()
+                .map(|b| b.as_u64().unwrap_or(0))
+                .collect();
+            let out: Vec<u32> = bits
+                .iter()
+                .map(|&b| lp_render::np::expf(f32::from_bits(b as u32)).to_bits())
+                .collect();
+            json!({"bits": out})
+        }
+        "symbol" => {
+            // a weather symbol standing (render/symbols.py's compose of layers_for, no time):
+            // its kind, night or day, size, colours (cloud, dark, sun, rain, snow), look and
+            // whether it is lit
+            let colours = case["colours"].as_array().ok_or("colours")?;
+            let mut five = [[0i64; 4]; 5];
+            for (i, c) in colours.iter().take(5).enumerate() {
+                let c = ints(c)?;
+                five[i] = [c[0], c[1], c[2], c[3]];
+            }
+            let image = lp_render::symbols::check_symbol(
+                case["kind"].as_str().ok_or("kind")?,
+                case["night"].as_bool().unwrap_or(false),
+                case["k"].as_u64().ok_or("k")? as usize,
+                five,
+                case["pack"].as_str().unwrap_or("vivid"),
+                case["lit"].as_bool().unwrap_or(false),
+            )?;
+            json!({"image": value_of(&image)})
+        }
         "coverage" => {
             let path = case["path"].as_str().unwrap_or_default();
             let index = case["index"].as_i64().unwrap_or(0);
