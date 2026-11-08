@@ -1,15 +1,21 @@
-//! List widgets (render/lists.py's pick, and the renderer's _draw_list, _list_room,
-//! _list_layout, _list_rows, _list_columns, _list_cells, _list_tile, _list_bar and _list_text)
-//! in a still frame: the readings a list's lines pick (by key or pattern, named and sorted), as
-//! rows with bars beside or below their names, as upright bars side by side, or as tiles
-//! filled as high as their values.
+//! List widgets (render/lists.py's pick and used, and the renderer's _draw_list, _list_room,
+//! _list_layout, _list_rows, _list_columns, _list_cells, _list_tile, _list_bar, _list_text and
+//! the fans' _list_fan_grid, _list_fan_places, _list_fan_texts and _list_turning) in a still
+//! frame: the readings a list's lines pick (by key or pattern, named and sorted), as rows with
+//! bars beside or below their names, as upright bars side by side, as tiles filled as high as
+//! their values, or as fans turning beside their names (render/fan.py).
+
+use std::collections::HashSet;
+use std::sync::{Mutex, OnceLock};
 
 use lp_pixels::{chops, Draw, Image, Mode};
 use lp_py::fnmatch;
+use lp_py::num as pn;
 use lp_py::{Dict, Value};
 
 use crate::bar;
 use crate::compose::paste;
+use crate::fan;
 use crate::formatting::{auto_format, safe_format, FormatError};
 use crate::piece::{Failed, Piece, Result};
 use crate::renderer::Renderer;
@@ -28,8 +34,9 @@ struct Entry {
     exclude: bool,
 }
 
-/// A reading a list shows: its name, the reading, and the one beside it to show too.
+/// A reading a list shows: its key, its name, the reading, and the one beside it to show too.
 pub(crate) struct Item {
+    pub key: String,
     pub name: String,
     pub reading: Reading,
     pub detail: Option<Reading>,
@@ -206,6 +213,7 @@ pub(crate) fn pick(w: &Dict, snapshot: &Snapshot) -> Result<Vec<Item>> {
                 snapshot.readings.get(&sibling(key, detail)).cloned()
             };
             items.push(Item {
+                key: key.to_string(),
                 name,
                 reading: reading.clone(),
                 detail: extra,
@@ -243,6 +251,33 @@ pub(crate) fn pick(w: &Dict, snapshot: &Snapshot) -> Result<Vec<Item>> {
         _ => {}
     }
     Ok(items)
+}
+
+/// The fans seen running since the process began, by key (lists._RAN: every panel's).
+fn ran() -> &'static Mutex<HashSet<String>> {
+    static RAN: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    RAN.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+/// No fan seen running yet (as a process that has just begun: a frame that stands alone).
+pub fn forget_fans_run() {
+    if let Ok(mut ran) = ran().lock() {
+        ran.clear();
+    }
+}
+
+/// lists.used: whether a fan of a list is one (hide_unused): it has run since the process
+/// began, or it is the graphics card's (which stands while the card is cool). A mainboard's
+/// header that has read 0 all along has nothing on it.
+pub(crate) fn used(item: &Item) -> bool {
+    let Ok(mut ran) = ran().lock() else {
+        return true;
+    };
+    if item.number().is_none_or(|n| n > 0.0) {
+        ran.insert(item.key.clone());
+        return true;
+    }
+    ran.contains(&item.key) || item.key == "gpu.fan" || item.key.starts_with("fan.gpu")
 }
 
 /// short_names: names without the words they all start with ("Core 1", "Core 2": "1", "2").
@@ -286,6 +321,80 @@ impl Row {
 /// The rows' key, for the piece kept.
 pub(crate) fn rows_key(rows: &[Row]) -> Value {
     Value::List(rows.iter().map(Row::key).collect())
+}
+
+/// What the rows' texts show (their bars' shares left out: a list of fans keeps its names and
+/// numbers while its fans turn on them).
+pub(crate) fn texts_key(rows: &[Row]) -> Value {
+    Value::List(
+        rows.iter()
+            .map(|row| match row.key() {
+                Value::List(mut parts) => {
+                    parts.remove(3);
+                    Value::List(parts)
+                }
+                other => other,
+            })
+            .collect(),
+    )
+}
+
+/// Python's a / b of two ints (correctly rounded, whatever their size).
+fn int_div(a: i64, b: i64) -> Result<f64> {
+    match pn::true_div(&Value::int(a), &Value::int(b)) {
+        Ok(Value::Float(x)) => Ok(x),
+        Ok(other) => Err(Failed(format!("a quotient {other:?}"))),
+        Err(e) => Err(Failed(e.msg)),
+    }
+}
+
+/// -(-a // b) of two ints, b from 1 up: a divided by b, rounded up.
+fn ceil_div(a: i64, b: i64) -> i64 {
+    -(-a).div_euclid(b)
+}
+
+/// _list_fan_grid: fans side by side, as Lumen's (a 50 px fan beside a 26 px number): for
+/// `count` of them the columns and lines (as even as they go: 2 + 2, not 3 + 1), the width and
+/// height of each place, the fan's size, and how many fit at most.
+fn fan_grid(w: &Dict, count: usize) -> Result<(i64, i64, f64, f64, i64, i64)> {
+    let lw = widget::int(w, "w", 240).max(1);
+    let lh = widget::int(w, "h", 160).max(1);
+    let fs = widget::int(w, "font_size", 18).max(6);
+    let size = round_int(fs as f64 * 1.9).max(12);
+    let given = widget::int(w, "columns", 0);
+    let fit = if given > 0 {
+        given
+    } else {
+        lw.div_euclid(size + fs * 5).max(1)
+    };
+    let step = size as f64 + fs as f64 * 0.6;
+    let lines = floordiv(lh as f64 + fs as f64 * 0.6, step).max(1);
+    let most = fit.saturating_mul(lines);
+    let count = (count as i64).min(most).max(1);
+    let used = ceil_div(count, fit);
+    let columns = if given > 0 {
+        fit
+    } else {
+        ceil_div(count, used)
+    };
+    let pitch = py_min(int_div(lh, used)?, step * 1.5);
+    Ok((columns, used, int_div(lw, columns)?, pitch, size, most))
+}
+
+/// _list_fan_places: where each of `count` fans stands (its top left on the list), the lines in
+/// the middle.
+fn fan_places(w: &Dict, count: usize) -> Result<Vec<(f64, f64)>> {
+    let (columns, used, cell_w, pitch, size, _most) = fan_grid(w, count)?;
+    let h = widget::int(w, "h", 160) as f64;
+    let top = (h - pitch * used as f64) / 2.0 + (pitch - size as f64) / 2.0;
+    Ok((0..count as i64)
+        .map(|i| {
+            (
+                i.rem_euclid(columns) as f64 * cell_w,
+                top + i.div_euclid(columns) as f64 * pitch,
+            )
+        })
+        .collect())
 }
 
 /// _rule_color: the colour of the highest rule `value` is above (none: none).
@@ -332,16 +441,16 @@ fn font_size(w: &Dict) -> f64 {
 }
 
 impl Renderer {
-    /// _draw_list in a still frame: the rows the list shows (the bars at their readings), by
-    /// its colour `rules` (sorted).
+    /// _draw_list in a still frame: of the `items` picked, those the list shows, their rows (the
+    /// bars at their readings) by its colour `rules` (sorted), and the top of its range (what a
+    /// fan's ring is a share of).
     pub(crate) fn list_rows(
         &self,
         w: &Dict,
-        snapshot: &Snapshot,
+        mut items: Vec<Item>,
         rules: &[(Value, String)],
-    ) -> Result<Vec<Row>> {
-        let mut items = pick(w, snapshot)?;
-        let room = self.list_room(w, items.len());
+    ) -> Result<(Vec<Item>, Vec<Row>, f64)> {
+        let room = self.list_room(w, items.len())?;
         items.truncate(room);
         let lo = widget::number(w, "min", 0.0);
         let mut hi = widget::number(w, "max", 100.0);
@@ -390,11 +499,11 @@ impl Renderer {
                 rule: rule_colour(number, rules),
             });
         }
-        Ok(rows)
+        Ok((items, rows, hi))
     }
 
     /// _list_room: how many items fit.
-    fn list_room(&self, w: &Dict, count: usize) -> usize {
+    fn list_room(&self, w: &Dict, count: usize) -> Result<usize> {
         let lw = widget::int(w, "w", 240).max(1) as f64;
         let fs = font_size(w);
         let limit = match widget::int(w, "max_items", 0) {
@@ -410,12 +519,14 @@ impl Renderer {
                 );
                 (iw / 12).saturating_mul(ih / 12)
             }
+            // (as many as the grid holds: what it holds is the same whatever the count)
+            "fans" => fan_grid(w, 1)?.5,
             _ => {
                 let (columns, _, per_column, _, _) = list_layout(w, count);
                 columns as i64 * per_column
             }
         };
-        (count as i64).min(limit).min(room).max(0) as usize
+        Ok((count as i64).min(limit).min(room).max(0) as usize)
     }
 
     /// _list_piece: the list drawn, its box the widget's (a margin round it for glyphs that
@@ -451,6 +562,7 @@ impl Renderer {
             match widget::text(w, "style") {
                 "columns" => self.list_columns(&mut inner, w, rows)?,
                 "cells" => self.list_cells(&mut inner, w, rows)?,
+                "fans" => self.list_fan_texts(&mut inner, w, rows)?,
                 _ => self.list_lines(&mut inner, w, rows)?,
             }
         }
@@ -459,6 +571,88 @@ impl Renderer {
         let mut piece = Piece::new(layer, x - margin, y - margin);
         piece.hit = Some([x, y, lw, lh]);
         Ok(piece)
+    }
+
+    /// _list_fan_texts: each fan's name and number beside the place it turns in.
+    fn list_fan_texts(&self, layer: &mut Image, w: &Dict, rows: &[Row]) -> Result<()> {
+        let fs = font_size(w);
+        let (_c, _l, cell_w, _p, size, _r) = fan_grid(w, rows.len())?;
+        let size = size as f64;
+        // (names: small fans' a little larger)
+        let ls = py_max(py_max(6.0, fs * 0.62), py_min(fs * 0.72, 11.0));
+        let block = 0.7 * ls + 0.55 * fs + 0.7 * fs;
+        let width = cell_w - size - fs * 0.65;
+        let places = fan_places(w, rows.len())?;
+        let (muted, label_font, font) = (
+            widget::text(w, "muted"),
+            widget::text(w, "label_font"),
+            widget::text(w, "font"),
+        );
+        let label = widget::truthy(w, "uppercase");
+        for (&(x0, y0), row) in places.iter().zip(rows) {
+            let (x, cap) = (x0 + size + fs * 0.35, y0 + (size - block) / 2.0);
+            let name = self.list_name(w, &row.name);
+            self.list_text(
+                layer,
+                &name,
+                (x, cap),
+                ls,
+                muted,
+                label_font,
+                ("left", width),
+                label,
+            )?;
+            let colour = row.rule.as_deref().unwrap_or(widget::text(w, "color"));
+            let at = (x, cap + 0.7 * ls + 0.55 * fs);
+            self.list_text(
+                layer,
+                &row.text,
+                at,
+                fs,
+                colour,
+                font,
+                ("left", width),
+                false,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// _list_turning in a still frame: the fans of a list of them, each standing as its speed
+    /// shows (fan.Rotor's settle) in its ring (none where the list shows no levels), laid on
+    /// the names and numbers (`piece`).
+    pub(crate) fn list_turning(
+        &self,
+        w: &Dict,
+        piece: &Piece,
+        items: &[Item],
+        max_rpm: f64,
+    ) -> Result<Piece> {
+        let size = fan_grid(w, items.len())?.4;
+        let Some([r, g, b, _]) = self.colour_of(w, "color2")? else {
+            return Err(Failed("'NoneType' object is not subscriptable".into()));
+        };
+        let colour = [r, g, b].map(|v| v.clamp(0, 255) as u8);
+        let ring = widget::truthy(w, "levels");
+        let (ox, oy) = (
+            widget::int(w, "x", 0) - piece.x,
+            widget::int(w, "y", 0) - piece.y,
+        );
+        let dir = fan::pictures_dir(&self.env.fonts_dir);
+        let mut layer = piece.layer.clone();
+        let places = fan_places(w, items.len())?;
+        for (&(x0, y0), item) in places.iter().zip(items) {
+            let key = format!("{}\0{}", widget::text(w, "id"), item.key);
+            let rotor = fan::Rotor::settled(&key, item.number(), max_rpm);
+            let image = fan::picture(&dir, colour, size, &rotor, ring)?;
+            let half = (size - image.width() as i64) as f64 / 2.0;
+            let x = round_int(ox as f64 + x0 + half);
+            let y = round_int(oy as f64 + y0 + (size - image.height() as i64) as f64 / 2.0);
+            paste(&mut layer, &image, x, y, false)?;
+        }
+        let mut turned = piece.clone();
+        turned.layer = layer;
+        Ok(turned)
     }
 
     /// _list_text: text on a list's layer, its capitals' top at `cap_top`, laid where it falls

@@ -787,17 +787,12 @@ impl Renderer {
             }
             "list" => {
                 let w = w.clone();
-                // (fans turning on their names, or left out where they have not run: their
-                // fans are not drawn here yet; bars gliding to a reading: motion)
-                if widget::text(&w, "style") == "fans" {
-                    return Drawn::Unported("lists of fans".into());
-                }
-                if widget::truthy(&w, "hide_unused") {
-                    return Drawn::Unported("lists that leave out the fans not running".into());
-                }
-                let glide = widget::truthy(&w, "smooth") && widget::truthy(&w, "levels");
-                if self.options.animate && glide {
-                    return Drawn::Unported("lists whose bars glide".into());
+                // (bars gliding to a reading: motion; fans turn on their names in a moving
+                // frame, and stand in a still one)
+                let fans = widget::text(&w, "style") == "fans";
+                let glide = widget::truthy(&w, "smooth") && widget::truthy(&w, "levels") && !fans;
+                if self.options.animate && (glide || fans) {
+                    return Drawn::Unported("lists whose bars glide or whose fans turn".into());
                 }
                 if !["min", "max"].iter().all(|k| widget::exact(&w, k)) {
                     return Drawn::Unported("numbers a float does not hold as they are".into());
@@ -806,11 +801,29 @@ impl Renderer {
                     return Drawn::Unported("colour rules above NaN".into());
                 };
                 let snapshot = self.snapshot.clone().unwrap_or_default();
-                let rows = match self.list_rows(&w, &snapshot, &rules) {
-                    Ok(rows) => rows,
+                let mut items = match list::pick(&w, &snapshot) {
+                    Ok(items) => items,
                     Err(e) => return Drawn::Failed(e),
                 };
-                self.cached(&w, list::rows_key(&rows), |r| r.list_piece(&w, &rows))
+                if widget::truthy(&w, "hide_unused") {
+                    // (a mainboard's fan headers with nothing on them)
+                    items.retain(list::used);
+                }
+                let (items, rows, hi) = match self.list_rows(&w, items, &rules) {
+                    Ok(shown) => shown,
+                    Err(e) => return Drawn::Failed(e),
+                };
+                if fans {
+                    // (the names and numbers stay; the fans turn on them)
+                    match self.cached(&w, list::texts_key(&rows), |r| r.list_piece(&w, &rows)) {
+                        Ok(piece) if !items.is_empty() => {
+                            self.list_turning(&w, &piece, &items, hi).map(Rc::new)
+                        }
+                        other => other,
+                    }
+                } else {
+                    self.cached(&w, list::rows_key(&rows), |r| r.list_piece(&w, &rows))
+                }
             }
             "symbol" => {
                 let w = w.clone();

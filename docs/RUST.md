@@ -466,10 +466,32 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       under no key) at every third width from 8 to 400 px, low and tall, and of no width or
       height, to the bit; three lists casting a glow or a shadow, small type among them,
       within a level (their light blurred in floating point, as a card's: 2 pixels of 17.2
-      million a level apart). Lists of fans, and lists that leave out the fans never run
-      (Python keeps the fans seen running from frame to frame): Rust says it does not draw
-      them yet; nor lists whose bars glide in a moving frame. Of the app's own themes no more
-      are drawn yet: the lists in them are of fans
+      million a level apart). Lists whose bars glide in a moving frame: Rust says it does not
+      draw them yet
+- [x] fans in a still frame (lists of fans: the renderer's _list_fan_grid, _list_fan_places,
+      _list_fan_texts and _list_turning; render/fan.py's Rotor.settle, rotor_layers,
+      _coloured, disc_image, blades_image and ring_image): each fan beside its name and
+      number, as many as fit side by side and in lines (as even as they go), standing as a
+      still frame shows it: its blades where its key puts them, blurred into their disc by
+      its speed and dimmed by its light (turning, standing, no reading), in its ring (a groove
+      all round, an arc glowing as far round as its share of the most) or in none. The rotor
+      is the default look's (noctua-g2): its 144 pictures read as numpy reads them (a mean of
+      three channels in single precision, from the first), averaged down to each size as
+      Pillow resizes floats, coloured in the theme's colour and a lighter one. A list that
+      leaves out the fans never run keeps those seen running since the process began, as
+      lists._RAN does, and the graphics card's always. The ring's core (m ** 0.7 in single
+      precision) comes out the same whichever powf a system has: numpy's on this processor
+      (SVML) differs from glibc's in 43 of its 256 levels, and in none of the 8-bit colours
+      or opacities made of them. The rotor's layers at 43 sizes the same to the bit as
+      fan.rotor_layers', 20,000 fans settled to the bit (NaN, infinities and no reading among
+      them), every length of a ring's arc at three sizes and 400 fans at random, laid as the
+      renderer lays them. The frames of 200 random themes of fan lists the same to the bit
+      (and 1,200 more), five lists at every ninth width from 8 to 640 px, low and tall, and
+      of no width or height, to the bit; two with a glow or a shadow within a level; a fan
+      seen running kept from one frame to the next. Fans in a moving frame (they turn), fan
+      widgets, and the looks and colours one may choose for the fans in the app's settings:
+      Rust does not draw them yet (the default's only). 66 of the app's 99 themes are drawn
+      by Rust, 61 of them the same to the bit
 - [ ] the zones on Windows (Python finds them in the tzdata package there, which the Rust
       app does not bring yet: none is found there for now)
 - [ ] the C library's locale where Python's text follows it: format()'s 'n' and what strftime

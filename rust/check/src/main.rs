@@ -895,6 +895,70 @@ fn run(case: &Value) -> Result<Value, String> {
                 .collect();
             json!({"matched": matched, "filtered": filtered})
         }
+        "fan_layers" => {
+            // render/fan.py's rotor_layers of the default look at k px: its float32s
+            let dir = lp_render::fan::pictures_dir(std::path::Path::new(
+                case["fonts_dir"].as_str().ok_or("fonts_dir")?,
+            ));
+            let k = case["k"].as_u64().ok_or("k")? as usize;
+            let layers = lp_render::fan::layers(&dir, k).map_err(|e| e.0)?;
+            let bytes: Vec<u8> = layers
+                .numbers()
+                .iter()
+                .flat_map(|v| v.to_le_bytes())
+                .collect();
+            json!({"k": layers.side(), "data": STANDARD.encode(bytes)})
+        }
+        "fan_rotor" => {
+            // fan.Rotor(key).settle(rpm, max_rpm) of each (numbers as their bits; rpm none for
+            // no reading): where it stands, how fast, how full and bright, and what it shows
+            let bits = |v: &Value| v.as_u64().map(f64::from_bits);
+            let rotors: Vec<Value> = case["cases"]
+                .as_array()
+                .ok_or("cases")?
+                .iter()
+                .map(|c| {
+                    let r = lp_render::fan::Rotor::settled(
+                        c["key"].as_str().unwrap_or(""),
+                        bits(&c["rpm"]),
+                        bits(&c["max_rpm"]).unwrap_or(0.0),
+                    );
+                    json!({
+                        "angle": r.angle.to_bits(), "speed": r.speed.to_bits(),
+                        "ring": r.ring.to_bits(), "light": r.light.to_bits(),
+                        "phase": r.phase(), "blur": r.blur(), "dim": r.dim(), "steps": r.steps(),
+                    })
+                })
+                .collect();
+            json!({"rotors": rotors})
+        }
+        "fan_picture" => {
+            // a fan's picture as the renderer lays it from fan.fan_parts: of a colour and a
+            // size, a rotor standing as given (its numbers as their bits), in its ring or none
+            let dir = lp_render::fan::pictures_dir(std::path::Path::new(
+                case["fonts_dir"].as_str().ok_or("fonts_dir")?,
+            ));
+            let bits = |v: &Value| v.as_u64().map(f64::from_bits).unwrap_or(0.0);
+            let mut out = Vec::new();
+            for c in case["cases"].as_array().ok_or("cases")? {
+                let colour = [0, 1, 2].map(|i| c["colour"][i].as_u64().unwrap_or(0).min(255) as u8);
+                let rotor = lp_render::fan::Rotor {
+                    angle: bits(&c["angle"]),
+                    speed: bits(&c["speed"]),
+                    ring: bits(&c["ring"]),
+                    light: bits(&c["light"]),
+                };
+                let size = c["size"].as_i64().unwrap_or(48);
+                let ring = c["ring_shown"].as_bool().unwrap_or(true);
+                out.push(
+                    match lp_render::fan::picture(&dir, colour, size, &rotor, ring) {
+                        Ok(image) => value_of(&image),
+                        Err(e) => json!({"error": e.0}),
+                    },
+                );
+            }
+            json!({"pictures": out})
+        }
         "np_exp" => {
             // numpy's float32 exp of each float32 (their bits)
             let bits: Vec<u64> = case["bits"]
@@ -1890,6 +1954,11 @@ fn run(case: &Value) -> Result<Value, String> {
                         Ok(r) => r,
                         Err(e) => return json!({"error": e.0}),
                     };
+                    // (each frame as a process's first, no fan seen running before it, unless it
+                    // follows the one before)
+                    if !c["after"].as_bool().unwrap_or(false) {
+                        lp_render::forget_fans_run();
+                    }
                     match renderer.render(snapshot_of(&c["snapshot"])) {
                         Ok((frame, boxes)) => {
                             let sum = Sha256::digest(frame.as_bytes());

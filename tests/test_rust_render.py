@@ -6,6 +6,7 @@ a picture) and their cards."""
 
 from __future__ import annotations
 
+import base64
 import calendar
 import hashlib
 import json
@@ -21,7 +22,7 @@ from rust_check import image, noise, picture, run
 from libre_panel import fonts, i18n
 from libre_panel import icons as icon_set
 from libre_panel.fonts.fallback import cursive
-from libre_panel.render import formatting
+from libre_panel.render import formatting, lists
 from libre_panel.render.countdown import countdown_text
 from libre_panel.render.lit import WEATHER_ICONS
 from libre_panel.render.renderer import Renderer, need_holds
@@ -423,6 +424,7 @@ def _python_frame(folder: Path, snapshot: Snapshot, dither: bool) -> dict[str, A
     except ThemeError as error:
         return {"error": str(error)}
     renderer = Renderer(theme, preview=True, dither=dither)
+    lists._RAN.clear()  # (each frame as a process's first: no fan seen running before it)
     try:
         frame, boxes = renderer.render(snapshot, now=1000.0)
     except Exception as error:  # (a frame Python cannot make: what lies over a widget failed)
@@ -1410,7 +1412,8 @@ def test_the_app_s_own_themes_as_python_draws_them() -> None:
 
     snapshot = dataclasses.replace(demo_snapshot(fixed_time=1_760_000_000.0),
                                    now=datetime(2026, 11, 7, 18, 5, 9, 250))  # fmt: skip
-    readings = {key: {"v": _typed(r.value), "unit": r.unit, "label": r.label}
+    # (each reading with the one it repeats under a friendlier key: a list shows it once)
+    readings = {key: {"v": _typed(r.value), "unit": r.unit, "label": r.label, "origin": r.origin}
                 for key, r in snapshot.readings.items()}  # fmt: skip
     folders = sorted(p.parent for p in THEMES.glob("*/theme.json"))
     # (the histories the themes' graphs draw, their last numbers: none shows more of them)
@@ -1442,7 +1445,7 @@ def test_the_app_s_own_themes_as_python_draws_them() -> None:
         assert got["boxes"] == want["boxes"], folder.name
         drawn.append(folder.name)
     assert len(folders) > 90
-    assert len(drawn) >= 56, drawn
+    assert len(drawn) >= 66, drawn
 
 
 def _lit(
@@ -2510,12 +2513,9 @@ def _list_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
 
 
 def test_lists_rust_does_not_draw_yet(tmp_path: Path) -> None:
-    # (fans turning and the ones never run left out: render/fans, and Python keeps the fans
-    # seen running from frame to frame; ints a float does not hold, rules above NaN)
+    # (ints a float does not hold, rules above NaN)
     rng = random.Random(0x1157)
     looks: list[tuple[dict[str, Any], str]] = [
-        ({"style": "fans"}, "lists of fans"),
-        ({"style": "rows", "hide_unused": True}, "lists that leave out the fans not running"),
         ({"max": 2**53 + 1}, "numbers a float does not hold as they are"),
         ({"color_rules": [{"above": math.nan, "color": "#ff0000"}]}, "colour rules above NaN"),
     ]
@@ -2663,6 +2663,324 @@ def test_lists_with_glow_and_shadow_within_a_level(tmp_path: Path) -> None:
         total += apart.shape[0] * apart.shape[1]
         assert got["boxes"] == want["boxes"], case["folder"]
     assert differ <= total // 10000
+
+
+def _bits(x: float) -> int:
+    """A float's 64 bits, as lp-check takes numbers that JSON cannot hold (NaN, infinities)."""
+    return struct.unpack("<Q", struct.pack("<d", x))[0]
+
+
+def test_a_fan_s_layers_as_python_reads_them() -> None:
+    # (the rotor's grey layers, read from its pictures as fan._plane does (a mean of three
+    # channels in float32, from the first) and averaged down to each size as _reduced does
+    # (Image.resize of mode F, the box filter): every float the same to the bit)
+    import numpy as np
+
+    from libre_panel.render import fan
+
+    sizes = [*range(6, 41), 48, 57, 60, 76, 100, 151, 152, 153]
+    cases = [{"op": "fan_layers", "fonts_dir": str(fonts.FONT_DIR), "k": k} for k in sizes]
+    for k, got in zip(sizes, run(cases), strict=True):
+        want = fan.rotor_layers(k).astype("<f4")
+        ours = np.frombuffer(base64.b64decode(got["data"]), "<f4").reshape(want.shape)
+        assert np.array_equal(ours.view(np.uint32), want.view(np.uint32)), k
+
+
+def test_fans_stand_as_python_settles_them() -> None:
+    # (Rotor.settle in a still frame: where its key puts its blades, its speed (rising as the
+    # 0.7th power of its share, none below 30 rpm or with no range), its ring, its light; of
+    # NaN, infinities, nothing at all; and what they make: its position, blur, dim and arc)
+    from libre_panel.render import fan
+
+    rng = random.Random(0xFA4)
+    cases, wanted = [], []
+    for _ in range(20000):
+        key = "".join(rng.choice("abcfan.1234\0é") for _ in range(rng.randrange(0, 12)))
+        rpm = rng.choice([None, 0.0, 29.9, 30.0, rng.uniform(0, 5000), rng.uniform(0, 5000),
+                          math.nan, math.inf, -5.0, 1e300])  # fmt: skip
+        most = rng.choice([0.0, -1.0, 1e-9, rng.uniform(0, 5000), 2000.0, math.nan, math.inf,
+                           1e300])  # fmt: skip
+        rotor = fan.Rotor(key)
+        rotor.settle(rpm, most)
+        cases.append({"key": key, "rpm": None if rpm is None else _bits(rpm),
+                      "max_rpm": _bits(most)})  # fmt: skip
+        wanted.append({"angle": _bits(rotor.angle), "speed": _bits(rotor.speed),
+                       "ring": _bits(rotor.ring), "light": _bits(rotor.light),
+                       "phase": rotor.phase, "blur": rotor.blur, "dim": rotor.dim,
+                       "steps": round(rotor.ring * fan.RING_STEPS)})  # fmt: skip
+    [got] = run([{"op": "fan_rotor", "cases": cases}])
+    assert got["rotors"] == wanted
+
+
+def test_a_fan_s_picture_as_python_lays_it() -> None:
+    # (its ring (the groove all round, the arc's glow at each of its lengths) or none, its
+    # rotor in the theme's colour and a lighter one, blurred into its disc by its speed and
+    # dimmed by its light, laid as the renderer lays fan.fan_parts: to the bit, at the sizes
+    # lists draw them)
+    from PIL import Image
+
+    from libre_panel.render import fan
+
+    rng = random.Random(0xFA5)
+    cases, wanted = [], []
+    # (every length of the arc, from none to all round, at three sizes; then 400 at random)
+    arcs = [(size, steps / fan.RING_STEPS) for size in (12, 34, 76) for steps in range(121)]
+    for n in range(len(arcs) + 400):
+        size = rng.choice([8, 12, 13, 15, 17, 20, 23, 27, 34, 48, 49, 57, 66, 76, 100])
+        colour = tuple(rng.randrange(256) for _ in range(3))
+        if rng.random() < 0.2:
+            colour = rng.choice([(255, 255, 255), (0, 0, 0), (19, 229, 215)])
+        rotor = fan.Rotor("x")
+        rotor.angle = rng.random()
+        rotor.speed = rng.choice([0.0, 0.22, rng.uniform(0, 1.1), 1.1])
+        rotor.ring = rng.choice([0.0, 1.0, rng.random(), 0.996, 0.004])
+        rotor.light = rng.choice([1.0, 0.5, 0.25])
+        frame = rng.choice(["ring", "none"])
+        if n < len(arcs):
+            (size, rotor.ring), frame = arcs[n], "ring"
+        parts = fan.fan_parts(colour, size, size, rotor, frame)
+        canvas = fan.geometry(size, size)[2]
+        first, at = parts[0]
+        if at == 0 and first.size == (canvas, canvas):  # (as Renderer._laid_fan lays them)
+            laid, rest = first.copy(), parts[1:]
+        else:
+            laid, rest = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0)), parts
+        for part, at in rest:
+            laid.alpha_composite(part, (at, at))
+        cases.append({"colour": list(colour), "size": size, "angle": _bits(rotor.angle),
+                      "speed": _bits(rotor.speed), "ring": _bits(rotor.ring),
+                      "light": _bits(rotor.light), "ring_shown": frame == "ring"})  # fmt: skip
+        wanted.append(laid.tobytes())
+    [got] = run([{"op": "fan_picture", "fonts_dir": str(fonts.FONT_DIR), "cases": cases}])
+    for case, ours, want in zip(cases, got["pictures"], wanted, strict=True):
+        assert picture(ours).tobytes() == want, case
+
+
+# (fans by pattern and by key, named, the graphics card's among them; lines of other readings)
+FAN_ITEMS = ["fan.*", "fan.*", "fan.[0-9]*", "fan.gpu = Card", "gpu.fan", "fan.?", "temp.*",
+             "fan.1 = Front\nfan.2 = Back", "!fan.amd\nfan.*", "fan.cpu*", "*.fan",
+             "fan.gpu*"]  # fmt: skip
+
+
+def _fan_list(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """A list of fans: each standing beside its name and number in its ring (or none), as
+    many as fit in columns and lines, those never run left out where it says."""
+    w, h = size
+    items = "\n".join(rng.choice(FAN_ITEMS) for _ in range(rng.randrange(1, 4)))
+    data: dict[str, Any] = {"type": "list", "id": f"f{i}", "x": rng.randrange(-20, w),
+                            "y": rng.randrange(-20, h), "style": "fans", "items": items,
+                            "w": rng.choice([1, 30, 80, 160, 240, 320, 480]),
+                            "h": rng.choice([1, 12, 40, 60, 100, 200, 400]),
+                            "columns": rng.choice([0, 0, 0, 1, 2, 3, 7]),
+                            "max_items": rng.choice([0, 0, 1, 2, 5, -1]),
+                            "sort": rng.choice(["none", "high", "low", "name"]),
+                            "format": rng.choice(["auto", "", "{value:.0f}", "{value:.0f} {unit}",
+                                                  "{nope}"]),
+                            "font_size": rng.choice([3, 6, 9, 12, 14, 18, 26, 40]),
+                            "uppercase": rng.random() < 0.5, "levels": rng.random() < 0.75,
+                            "hide_unused": rng.random() < 0.4,
+                            "color": _colour(rng), "muted": _colour(rng),
+                            "color2": rng.choice([_colour(rng), _colour(rng), "#ffffff",
+                                                  "#000000", _hex(rng, True)])}  # fmt: skip
+    if rng.random() < 0.5:
+        data["min"], data["max"] = rng.choice([(0, 2000), (0, 3000), (0, 0), (500, 100),
+                                               (0, 1e-9), (0, 40)])  # fmt: skip
+    if rng.random() < 0.3:
+        data["color_rules"] = [{"above": rng.choice([800, 1500, 2200]), "color": _hex(rng)}
+                               for _ in range(rng.randrange(1, 3))]  # fmt: skip
+    if rng.random() < 0.4:
+        data["font"], data["label_font"] = rng.choice(FONTS), rng.choice(FONTS)
+    if rng.random() < 0.15:
+        data["opacity"] = 0.6
+    if rng.random() < 0.15:
+        data["empty"] = "No fans"
+    return data
+
+
+def _fan_list_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    pick = rng.random()
+    if pick < 0.7:
+        return _fan_list(rng, i, size)
+    return _list(rng, i, size) if pick < 0.85 else _card_or_text(rng, i, size)
+
+
+def _fan_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
+    """Fans at every speed a reading gives: none, at rest, below what turns (30 rpm), turning,
+    past the most, not a number, not a number at all; the graphics card's (kept where the ones
+    never run are left out), temperatures among them."""
+    readings: list[Reading] = []
+
+    def add(key: str, value: Any, unit: str = "rpm", label: str = "") -> None:
+        if rng.random() < 0.85:
+            readings.append(Reading(key, value, unit, label))
+
+    def speed() -> Any:
+        return rng.choice([None, 0, 0.0, 12.0, 29.9, 30.0, rng.uniform(30, 3000),
+                           rng.uniform(300, 2400), 1200, 2000.0, 4500.0, math.nan, math.inf,
+                           -3.0, "n/a", True])  # fmt: skip
+
+    for n in rng.sample([1, 2, 3, 4, 7, 10, 11, 20], rng.randrange(0, 8)):
+        add(f"fan.{n}", speed(), "rpm", rng.choice([f"Fan {n}", "", "Front", "CPU Fan", "Pump"]))
+    add("fan.gpu", speed(), "rpm", "")
+    add("fan.gpu1", speed(), "rpm", "GPU 2")
+    add("gpu.fan", speed(), "rpm", "GPU Fan")
+    add("fan.cpu", speed(), "rpm", "CPU")
+    add("fan.amd", speed(), "rpm", "AMD")
+    add("pump.fan", speed(), "rpm", "Pump")
+    add("temp.cpu", rng.uniform(30, 90), "°C", "CPU")
+    add("temp.gpu", rng.uniform(30, 90), "°C", "GPU")
+    rng.shuffle(readings)
+    now = datetime(2026, 11, 8, 6, 5, 9)
+    snapshot = Snapshot(readings={r.key: r for r in readings}, now=now)
+    given = {"readings": {r.key: {"v": _typed(r.value), "unit": r.unit, "label": r.label,
+                                  "origin": r.origin} for r in readings},
+             "images": {}, "now": [2026, 11, 8, 6, 5, 9, 0]}  # fmt: skip
+    return given, snapshot
+
+
+def test_frames_of_fan_lists_as_python_draws_them(tmp_path: Path) -> None:
+    # (each fan as a still frame shows it, Rotor.settle: where its key puts its blades, its
+    # blur and light by its speed, its ring as full; laid on its name and number)
+    assert _compare_frames(tmp_path, 0xFA45, 200, _fan_list_or_more, _fan_snapshot) > 150
+
+
+def _fan_sweep_snapshot() -> tuple[dict[str, Any], Snapshot]:
+    """The fans the fan lists across their widths show, at fixed speeds: one standing (left out
+    where the ones never run are), one repeating another, one of no number, one past the most,
+    one below what turns; a temperature among them."""
+    readings = [
+        Reading("gpu.fan", 1797.36, "rpm", "GPU Fan"),
+        Reading("fan.board.case_1", 811.98, "rpm", "Case fan 1"),
+        Reading("fan.board.case_2", 0.0, "rpm", "Case fan 2"),
+        Reading("fan.board.pump", 2123.86, "rpm", "Pump"),
+        Reading("fan.cpu", 1329.55, "rpm", "CPU fan"),
+        Reading("cpu.fan", 1329.55, "rpm", "CPU fan", "fan.cpu"),
+        Reading("fan.lpc.fan_1", "n/a", "rpm", "Fan #1"),
+        Reading("fan.lpc.fan_2", 4800.0, "rpm", "Fan #2"),
+        Reading("fan.lpc.fan_3", 25.0, "rpm", "Fan #3"),
+        Reading("temp.cpu", 61.5, "°C", "CPU"),
+    ]
+    snapshot = Snapshot(readings={r.key: r for r in readings}, now=datetime(2026, 11, 8, 6, 5, 9))
+    given = {"readings": {r.key: {"v": _typed(r.value), "unit": r.unit, "label": r.label,
+                                  "origin": r.origin} for r in readings},
+             "images": {}, "now": [2026, 11, 8, 6, 5, 9, 0]}  # fmt: skip
+    return given, snapshot
+
+
+# Arena's fans (in rings, at most six, a fixed range), fans without rings, in columns of their
+# own, of the largest type beside a temperature, and many columns of small ones
+FAN_SWEEP: list[dict[str, Any]] = [
+    {"items": "gpu.fan = GPU fan\nfan.*", "font_size": 25, "uppercase": True, "max_items": 6,
+     "min": 0, "max": 3000, "format": "{value:.0f}", "hide_unused": True},
+    {"items": "fan.*", "font_size": 12, "levels": False},
+    {"items": "fan.*\ncpu.fan", "font_size": 6, "columns": 2, "hide_unused": True},
+    {"items": "fan.cpu\nfan.gpu = Card\ntemp.cpu", "font_size": 40, "min": 0, "max": 0},
+    {"items": "fan.*", "font_size": 9, "columns": 7},
+]  # fmt: skip
+
+
+def test_fan_lists_across_their_widths(tmp_path: Path) -> None:
+    # (each list at every ninth width from 8 to 640 px (each one more than the one before),
+    # low and tall: how many fans fit side by side and in lines, how wide their places are and
+    # how much of their names and numbers shows; Python's thresholds, each crossed; and lists
+    # of no width or height, or less)
+    given, snapshot = _fan_sweep_snapshot()
+    cases, expected = [], []
+    sizes = [(w, h) for w in range(8, 641, 9) for h in (40, 132)]
+    for w, h in [*sizes, (-8, 40), (0, 0), (100, 0), (100, -4), (300, 1), (2, 132)]:
+        folder = tmp_path / f"t{w}x{h}"
+        folder.mkdir()
+        widgets, y = [], 4
+        for i, look in enumerate(FAN_SWEEP):
+            widget = {"type": "list", "id": f"f{i}", "x": 4, "y": y, "w": w + i, "h": h,
+                      "style": "fans", "color": "#eef6ff", "muted": "#8ca0b8",
+                      "color2": "#13e5d7", "levels": True, **look}  # fmt: skip
+            widgets.append(widget)
+            y += max(h, 0) + 12
+        data = {"format": THEME_FORMAT, "name": "fans", "display": {"width": 660, "height": y},
+                "palette": {name: "#808080" for name in PALETTE},
+                "background": {"color": "#101418"}, "widgets": widgets}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        cases.append({"folder": str(folder), "snapshot": given, "dither": False})
+        expected.append(_python_frame(folder, snapshot, False))
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    for case, got, want in zip(cases, ours["frames"], expected, strict=True):
+        assert "frame" in want, (case["folder"], want)
+        sha = hashlib.sha256(want["frame"].tobytes()).hexdigest()
+        assert got.get("sha256") == sha, case["folder"]
+        assert got["boxes"] == want["boxes"], case["folder"]
+
+
+def test_fan_lists_with_glow_and_shadow_within_a_level(tmp_path: Path) -> None:
+    # (their names and numbers cast the light, the fans lie on it: blurred in floating point,
+    # as a card's, now and then a pixel a level apart)
+    import numpy as np
+
+    given, snapshot = _fan_sweep_snapshot()
+    looks = [{**FAN_SWEEP[0], "glow": 0.7, "glow_radius": 6},
+             {**FAN_SWEEP[1], "shadow": "#000000a0", "shadow_blur": 4, "opacity": 0.8}]  # fmt: skip
+    cases, expected = [], []
+    for w in range(40, 641, 30):
+        folder = tmp_path / f"t{w}"
+        folder.mkdir()
+        widgets = [{"type": "list", "id": f"f{i}", "x": 24, "y": 24 + i * 180, "w": w, "h": 132,
+                    "style": "fans", "color": "#eef6ff", "muted": "#8ca0b8", "color2": "#13e5d7",
+                    "levels": True, **look} for i, look in enumerate(looks)]  # fmt: skip
+        data = {"format": THEME_FORMAT, "name": "fans", "display": {"width": 690, "height": 380},
+                "palette": {name: "#808080" for name in PALETTE},
+                "background": {"color": "#101418"}, "widgets": widgets}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        dither = w % 60 == 0
+        cases.append({"folder": str(folder), "snapshot": given, "dither": dither, "bytes": True})
+        expected.append(_python_frame(folder, snapshot, dither))
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    differ = total = 0
+    for case, got, want in zip(cases, ours["frames"], expected, strict=True):
+        assert "frame" in want and "frame" in got, (case["folder"], got, want)
+        apart = np.abs(np.asarray(picture(got["frame"]), int) - np.asarray(want["frame"], int))
+        assert apart.max() <= 1, case["folder"]
+        differ += int((apart.max(axis=2) > 0).sum())
+        total += apart.shape[0] * apart.shape[1]
+        assert got["boxes"] == want["boxes"], case["folder"]
+    assert differ <= total // 10000
+
+
+def test_fans_seen_running_stay_in_a_list(tmp_path: Path) -> None:
+    # (a list that leaves out the fans never run keeps one that ran before, standing now, as
+    # Python keeps those it saw running from frame to frame (lists._RAN); a frame of its own
+    # leaves it out)
+    folder = tmp_path / "fans"
+    folder.mkdir()
+    widget = {"type": "list", "id": "f0", "x": 4, "y": 4, "w": 300, "h": 60, "style": "fans",
+              "items": "fan.*", "hide_unused": True, "font_size": 12, "color": "#eef6ff",
+              "muted": "#8ca0b8", "color2": "#13e5d7"}  # fmt: skip
+    data = {"format": THEME_FORMAT, "name": "fans", "display": {"width": 320, "height": 80},
+            "palette": {name: "#808080" for name in PALETTE},
+            "background": {"color": "#101418"}, "widgets": [widget]}  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+
+    def readings(rpm: float) -> tuple[dict[str, Any], Snapshot]:
+        found = [Reading("fan.1", 1200.0, "rpm", "Front"), Reading("fan.3", rpm, "rpm", "Rear")]
+        snapshot = Snapshot(readings={r.key: r for r in found}, now=datetime(2026, 11, 8, 6, 5))
+        given = {"readings": {r.key: {"v": _typed(r.value), "unit": r.unit, "label": r.label}
+                              for r in found},
+                 "images": {}, "now": [2026, 11, 8, 6, 5, 0, 0]}  # fmt: skip
+        return given, snapshot
+
+    frames = [(900.0, False), (0.0, True), (0.0, False)]  # (it ran; it stands after; alone)
+    cases, expected = [], []
+    for rpm, after in frames:
+        given, snapshot = readings(rpm)
+        if not after:
+            lists._RAN.clear()
+        theme = load_theme(folder)
+        frame, boxes = Renderer(theme, preview=True).render(snapshot, now=1000.0)
+        expected.append(frame)
+        cases.append({"folder": str(folder), "snapshot": given, "dither": False, "after": after})
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    for got, want in zip(ours["frames"], expected, strict=True):
+        assert got["sha256"] == hashlib.sha256(want.tobytes()).hexdigest()
+    assert expected[1].tobytes() != expected[2].tobytes()  # (the one that ran shows)
 
 
 def test_frames_of_lists_as_python_draws_them(tmp_path: Path) -> None:
