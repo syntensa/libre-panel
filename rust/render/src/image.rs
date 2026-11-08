@@ -1,17 +1,22 @@
-//! Image widgets (render/renderer.py's _draw_image, _live_image, _fitted, _blurred and _rounded)
-//! in a still frame: a picture a sensor source or a service has (an album cover, a game's logo,
-//! the playing app's icon), fitted into the widget's box (stretched, contained where it says,
-//! or covering it), blurred into a backdrop of its colours, its corners rounded; a widget with
-//! no picture a clear piece of its size. The theme's own pictures, slideshows, animated
-//! pictures and videos: not drawn here yet.
+//! Image widgets (render/renderer.py's _draw_image, _live_image, _asset_image, _slides, _slide,
+//! _animation, _fitted, _blurred and _rounded; render/moving.py's read_animation): a picture a
+//! sensor source or a service has (an album cover, a game's logo, the playing app's icon) or
+//! one of the theme's files (turned as its EXIF says), fitted into the widget's box
+//! (stretched, contained where it says, or covering it), blurred into a backdrop of its
+//! colours, its corners rounded; a widget with no picture a clear piece of its size. A
+//! slideshow of still pictures takes turns by the clock (the frame's time as a timestamp of the
+//! computer's zone), a folder's pictures found as pathlib's glob finds them; an animated
+//! picture (GIF, WebP, APNG) shows its frame of the moment from when it first showed. Videos,
+//! and slideshows with a picture that moves: not drawn here yet.
 
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::rc::Rc;
 
 use lp_pixels::{chops, Draw, Filter, Image, Mode, ALL_CORNERS};
 use lp_py::{Dict, Value};
 
 use crate::piece::{Failed, Piece, Result};
-use crate::renderer::{Renderer, MOST_PIXELS};
+use crate::renderer::{Drawn, Renderer, Unread, MOST_PIXELS, UNREAD};
 use crate::shapes::SUPERSAMPLE;
 use crate::widget;
 
@@ -100,32 +105,6 @@ pub(crate) fn picture_key(name: &str, image: &Image) -> Value {
     ])
 }
 
-/// What an image widget shows in a still frame.
-pub(crate) enum Shown {
-    /// a picture a source or service has, by its name
-    Live(String),
-    /// no picture: a clear piece of the widget's size
-    Clear,
-    /// what Rust does not draw yet
-    Unported(&'static str),
-}
-
-/// _draw_image's choice: the widget's picture, and its slideshow's others.
-pub(crate) fn shown(w: &Dict) -> Shown {
-    if widget::text(w, "slides")
-        .lines()
-        .any(|line| !line.trim().is_empty())
-    {
-        return Shown::Unported("slideshows");
-    }
-    let src = widget::text(w, "src");
-    match src.strip_prefix('@') {
-        Some(name) => Shown::Live(name.to_string()),
-        None if src.is_empty() => Shown::Clear,
-        None => Shown::Unported("pictures from the theme's files"),
-    }
-}
-
 impl Renderer {
     /// _live_image's piece: the picture at (x, y), blurred into a backdrop (fitted as it says,
     /// filling the box), else fitted where the widget has a size, its corners rounded.
@@ -147,12 +126,688 @@ impl Renderer {
         }
         Ok(Piece::new(picture, x, y))
     }
+}
 
-    /// _draw_image's piece of no picture: a clear one of the widget's size (a pixel at least).
-    pub(crate) fn clear_image_piece(&self, w: &Dict) -> Result<Piece> {
-        let (x, y) = (widget::int(w, "x", 0), widget::int(w, "y", 0));
-        let (iw, ih) = sized(widget::int(w, "w", 0).max(1), widget::int(w, "h", 0).max(1))?;
-        Ok(Piece::new(Image::blank(Mode::RGBA, iw, ih), x, y))
+// -- the theme's own pictures -------------------------------------------------------------------
+
+/// moving.VIDEO_SUFFIXES: what is a video (not drawn here yet).
+const VIDEO_SUFFIXES: [&str; 5] = [".mp4", ".webm", ".mov", ".m4v", ".mkv"];
+/// What _slides takes of a folder: pictures and videos.
+const SLIDE_SUFFIXES: [&str; 10] = [
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".webm", ".mov", ".m4v", ".mkv",
+];
+/// The pictures that may move: GIF, WebP and PNG (APNG).
+const MOVING_SUFFIXES: [&str; 3] = [".gif", ".webp", ".png"];
+/// Renderer.IMAGE_BYTES and ANIMATION_BYTES: the pictures kept fitted, the animations' frames.
+pub(crate) const IMAGE_BYTES: usize = 64 << 20;
+pub(crate) const ANIMATION_BYTES: usize = 192 << 20;
+/// moving.FRAMES_BYTES: the frames of one animated picture, at most.
+const FRAMES_BYTES: u128 = 96 << 20;
+/// moving.LEAST_FRAME_S, USUAL_FRAME_S: a frame said to show for less (or 0) shows 0.1 s.
+const LEAST_FRAME_S: f64 = 0.02;
+const USUAL_FRAME_S: f64 = 0.1;
+/// How long a slideshow's folders are not read again (_slides: half a minute).
+const SLIDES_KEPT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// What a widget's picture is kept fitted by: the picture, the widget's size, fit and align.
+pub(crate) type PictureKey = (String, i64, i64, String, String);
+/// What an animation's frames are kept by: that and the widget's blur and radius.
+pub(crate) type AnimationKey = (String, i64, i64, String, String, i64, i64);
+
+fn ends_with_any(rel: &str, suffixes: &[&str]) -> bool {
+    let lower = lp_py::lower(rel);
+    suffixes.iter().any(|s| lower.ends_with(s))
+}
+
+/// moving.is_video.
+pub(crate) fn is_video(rel: &str) -> bool {
+    ends_with_any(rel, &VIDEO_SUFFIXES)
+}
+
+/// Python's float % float (the sign of the divisor).
+fn py_mod(x: f64, m: f64) -> f64 {
+    let r = x % m;
+    if r == 0.0 {
+        0.0f64.copysign(m)
+    } else if (m < 0.0) != (r < 0.0) {
+        r + m
+    } else {
+        r
+    }
+}
+
+/// Python's float // float (float_floor_div: the quotient snapped to the nearest whole).
+fn py_floordiv(x: f64, w: f64) -> f64 {
+    let m = x % w;
+    let mut div = (x - m) / w;
+    if m != 0.0 && (w < 0.0) != (m < 0.0) {
+        div -= 1.0;
+    }
+    if div != 0.0 {
+        let floor = div.floor();
+        if div - floor > 0.5 {
+            floor + 1.0
+        } else {
+            floor
+        }
+    } else {
+        0.0f64.copysign(x / w)
+    }
+}
+
+/// float() of a widget's number as Python takes it (an int past a float's range: its error).
+fn number_of(value: &Value) -> Result<Option<f64>> {
+    Ok(match value {
+        Value::Int(n) => Some(lp_py::num::int_to_float(n).map_err(|e| Failed(e.msg))?),
+        Value::Float(f) => Some(*f),
+        Value::Bool(b) => Some(f64::from(u8::from(*b))),
+        Value::Str(s) => lp_py::float_of_str(s),
+        _ => None,
+    })
+}
+
+/// moving.speed_of: the widget's speed within 0.25 and 4 (1: as made; where float() fails, 1).
+fn speed_of(value: &Value) -> Result<f64> {
+    Ok(match number_of(value)? {
+        Some(speed) if !speed.is_nan() => speed.clamp(0.25, 4.0),
+        _ => 1.0,
+    })
+}
+
+/// PurePath.suffix of a path's last part: from its last dot, where that is neither its first
+/// nor its last character.
+fn suffix(name: &str) -> &str {
+    match name.rfind('.') {
+        Some(i) if i > 0 && i < name.len() - 1 => &name[i..],
+        _ => "",
+    }
+}
+
+/// The parts of a pattern as pathlib's _parse_path takes them: by slashes (on Windows
+/// backslashes too), without empty parts and dots; "" after a closing slash. A part with "**"
+/// that is not "**" alone fails as _make_selector fails at it: all its selectors are made
+/// first, so before any folder is read.
+fn pattern_parts(pattern: &str) -> Result<Vec<String>> {
+    let sep = |c: char| c == '/' || (cfg!(windows) && c == '\\');
+    let drive = cfg!(windows) && pattern.chars().nth(1) == Some(':');
+    if pattern.starts_with(sep) || drive {
+        return Err(Failed("Non-relative patterns are unsupported".into()));
+    }
+    let mut parts: Vec<String> = pattern
+        .split(sep)
+        .filter(|p| !p.is_empty() && *p != ".")
+        .map(str::to_string)
+        .collect();
+    if pattern.ends_with(sep) {
+        parts.push(String::new());
+    }
+    if parts.iter().any(|p| p != "**" && p.contains("**")) {
+        return Err(Failed(
+            "Invalid pattern: '**' can only be an entire path component".into(),
+        ));
+    }
+    Ok(parts)
+}
+
+/// What finding a slideshow's pictures comes to where it finds none: Python's error, or what
+/// Rust does not read yet.
+type Found<T> = std::result::Result<T, Drawn>;
+
+/// A part's match of a name: fnmatch's. On Windows pathlib matches without case
+/// (re.IGNORECASE): as lower() takes it where both are ASCII and the part has no class of
+/// characters; Rust says it does not match others there yet.
+fn part_matches(name: &str, part: &str) -> Found<bool> {
+    let matched = if cfg!(windows) {
+        if !(name.is_ascii() && part.is_ascii() && !part.contains('[')) {
+            return Err(Drawn::Unported(
+                "slideshow patterns of other than ASCII on Windows".into(),
+            ));
+        }
+        lp_py::fnmatch::fnmatchcase(&name.to_ascii_lowercase(), &part.to_ascii_lowercase())
+    } else {
+        lp_py::fnmatch::fnmatchcase(name, part)
+    };
+    matched.map_err(|e| Drawn::Failed(Failed(e.0)))
+}
+
+/// What Rust does not read of a folder yet: a name that is no Unicode (Python's are its
+/// surrogates).
+fn not_unicode() -> Drawn {
+    Drawn::Unported("folders of names that are no Unicode".into())
+}
+
+/// The folders below `path`, itself the first (Path.walk's, top down: no folder a link leads
+/// to).
+fn folders_below(path: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+    out.push(path.to_path_buf());
+    let Ok(entries) = std::fs::read_dir(path) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        if entry.file_type().is_ok_and(|t| t.is_dir()) {
+            folders_below(&entry.path(), out);
+        }
+    }
+}
+
+/// pathlib's selectors (Python 3.12): the paths below `path` that the pattern's `parts`
+/// match, each part against the names of a folder (hidden ones too; a part before others
+/// matches folders only), "**" any folders below, ".." the folder above.
+fn select(
+    path: &std::path::Path,
+    parts: &[String],
+    out: &mut Vec<std::path::PathBuf>,
+) -> Found<()> {
+    let Some((part, rest)) = parts.split_first() else {
+        out.push(path.to_path_buf());
+        return Ok(());
+    };
+    if part.is_empty() {
+        out.push(path.to_path_buf());
+        return Ok(());
+    }
+    if part == "**" {
+        let skip = parts.iter().take_while(|p| *p == "**").count();
+        let child = &parts[skip..];
+        let mut starts = Vec::new();
+        folders_below(path, &mut starts);
+        let mut found = Vec::new();
+        for start in &starts {
+            select(start, child, &mut found)?;
+        }
+        if child.iter().any(|p| p == "**") {
+            // (_DoubleRecursiveWildcardSelector: each path once)
+            let mut seen = std::collections::HashSet::new();
+            found.retain(|p| seen.insert(p.clone()));
+        }
+        out.extend(found);
+        return Ok(());
+    }
+    if part == ".." {
+        return select(&path.join(".."), rest, out);
+    }
+    let Ok(entries) = std::fs::read_dir(path) else {
+        return Ok(());
+    };
+    for entry in entries.flatten() {
+        if !rest.is_empty() && !std::fs::metadata(entry.path()).is_ok_and(|m| m.is_dir()) {
+            continue;
+        }
+        let Some(name) = entry.file_name().to_str().map(str::to_string) else {
+            return Err(not_unicode());
+        };
+        if part_matches(&name, part)? {
+            select(&path.join(&name), rest, out)?;
+        }
+    }
+    Ok(())
+}
+
+/// The relative parts of `path` below `root`, as text (None for a name that is no Unicode).
+fn parts_below(root: &std::path::Path, path: &std::path::Path) -> Option<Vec<String>> {
+    let rel = path.strip_prefix(root).ok()?;
+    rel.components()
+        .map(|c| c.as_os_str().to_str().map(str::to_string))
+        .collect()
+}
+
+/// What reading an animated picture came to.
+pub(crate) enum Read {
+    /// its frames, finished
+    Frames(Animation),
+    /// a picture of one frame: drawn as a still
+    Still,
+    /// its finish failed (Python's raises)
+    Failed(Failed),
+    /// one Rust does not read (UNREAD)
+    Unread,
+}
+
+/// moving.Animation: the frames of an animated picture, finished, and when each one ends.
+pub(crate) struct Animation {
+    pub(crate) frames: Vec<Image>,
+    ends: Vec<f64>,
+}
+
+impl Animation {
+    /// The frame on show `seconds` into the animation, round and round.
+    pub(crate) fn index(&self, seconds: f64) -> usize {
+        let at = py_mod(seconds, *self.ends.last().expect("frames"));
+        self.ends
+            .iter()
+            .position(|&end| at < end)
+            .unwrap_or(self.ends.len() - 1)
+    }
+
+    pub(crate) fn size(&self) -> usize {
+        self.frames.iter().map(|f| f.width() * f.height() * 4).sum()
+    }
+}
+
+/// moving.read_animation: the frames of an animated picture one after the other, each passed
+/// through `finish`, every second one (third ...) kept where all would take more than
+/// FRAMES_BYTES, each showing as long as those it stands for.
+pub(crate) fn read_animation(data: &[u8], finish: &dyn Fn(&Image) -> Result<Image>) -> Read {
+    const ENOUGH: &str = "(enough)";
+    let (mut frames, mut ends) = (Vec::new(), Vec::new());
+    let (mut first, mut every, mut took, mut n) = (None, 1u128, 0.0f64, 0usize);
+    let mut failed = None;
+    let read = lp_decode::each_frame(data, &mut |count, frame| {
+        let stop = || Err(lp_decode::Error(ENOUGH.into()));
+        if n == 0 {
+            if count <= 1 {
+                return stop();
+            }
+            match finish(&frame.image) {
+                Ok(image) => {
+                    let bytes = count as u128 * image.width() as u128 * image.height() as u128 * 4;
+                    every = bytes.div_ceil(FRAMES_BYTES).max(1);
+                    first = Some(image);
+                }
+                Err(e) => {
+                    failed = Some(e);
+                    return stop();
+                }
+            }
+        }
+        let seconds = frame.duration.unwrap_or(0.0) / 1000.0;
+        took += if seconds >= LEAST_FRAME_S {
+            seconds
+        } else {
+            USUAL_FRAME_S
+        };
+        if n as u128 % every == every - 1 || n + 1 == count {
+            let image = match first.take() {
+                Some(image) if n == 0 => image,
+                _ => match finish(&frame.image) {
+                    Ok(image) => image,
+                    Err(e) => {
+                        failed = Some(e);
+                        return stop();
+                    }
+                },
+            };
+            frames.push(image);
+            ends.push(took);
+        }
+        n += 1;
+        Ok(())
+    });
+    if let Some(e) = failed {
+        return Read::Failed(e);
+    }
+    match read {
+        Err(e) if e.0 != ENOUGH => Read::Unread,
+        _ if frames.len() <= 1 => Read::Still,
+        _ => Read::Frames(Animation { frames, ends }),
+    }
+}
+
+impl Renderer {
+    /// _slides: the widget's picture and its slideshow's others (one a line: a picture's name,
+    /// "@" a live one, a pattern a folder's pictures and videos, sorted), folders read every
+    /// half minute.
+    pub(crate) fn slides(&mut self, w: &Dict) -> Found<Vec<String>> {
+        let id = widget::text(w, "id").to_string();
+        if let Some((at, found)) = self.slide_lists.get(&id) {
+            if at.elapsed() < SLIDES_KEPT {
+                return Ok(found.clone());
+            }
+        }
+        let src = widget::text(w, "src");
+        let mut found: Vec<String> = if src.is_empty() {
+            Vec::new()
+        } else {
+            vec![src.to_string()]
+        };
+        let root = self.theme.root.clone();
+        for line in lp_py::splitlines(widget::text(w, "slides")) {
+            let line = lp_py::strip(line);
+            if line.starts_with('@') {
+                found.push(line.to_string());
+                continue;
+            }
+            let Some(root) = root.as_ref().filter(|_| !line.is_empty()) else {
+                continue;
+            };
+            if !line.contains(['*', '?', '[']) {
+                found.push(line.to_string());
+                continue;
+            }
+            let mut matched = Vec::new();
+            let parts = pattern_parts(line).map_err(Drawn::Failed)?;
+            select(root, &parts, &mut matched)?;
+            let mut files: Vec<Vec<String>> = matched
+                .iter()
+                .filter(|p| std::fs::metadata(p).is_ok_and(|m| m.is_file()))
+                .map(|p| parts_below(root, p).ok_or_else(not_unicode))
+                .collect::<Found<_>>()?;
+            // (sorted as paths are: part by part, on Windows without case)
+            if cfg!(windows) {
+                files.sort_by_cached_key(|parts| {
+                    parts.iter().map(|p| lp_py::lower(p)).collect::<Vec<_>>()
+                });
+            } else {
+                files.sort();
+            }
+            for parts in files {
+                let rel = parts.join("/");
+                let name = parts.last().map_or("", String::as_str);
+                if lp_theme::model::resolve_asset(root, &Value::from(rel.as_str())).is_err() {
+                    continue; // (nothing outside the theme folder)
+                }
+                if SLIDE_SUFFIXES.contains(&lp_py::lower(suffix(name)).as_str()) {
+                    found.push(rel);
+                }
+            }
+        }
+        self.slide_lists
+            .insert(id, (std::time::Instant::now(), found.clone()));
+        Ok(found)
+    }
+
+    /// The pictures of each image widget's slideshow as _slides finds them, by widget id; where
+    /// it finds none, ("error", Python's error) or ("unported", what Rust does not read yet).
+    #[allow(clippy::type_complexity)]
+    pub fn image_slides(
+        &mut self,
+    ) -> Vec<(
+        String,
+        std::result::Result<Vec<String>, (&'static str, String)>,
+    )> {
+        let widgets: Vec<Dict> = self
+            .widgets
+            .iter()
+            .filter(|w| widget::text(w, "type") == "image")
+            .cloned()
+            .collect();
+        widgets
+            .iter()
+            .map(|w| {
+                let id = widget::text(w, "id").to_string();
+                let found = self.slides(w).map_err(|drawn| match drawn {
+                    Drawn::Failed(e) => ("error", e.0),
+                    Drawn::Unported(what) => ("unported", what),
+                    Drawn::Piece(_) | Drawn::Nothing => ("error", "no list".into()),
+                });
+                (id, found)
+            })
+            .collect()
+    }
+
+    /// _moving: whether a slideshow's picture moves (a video, a picture of more than one
+    /// frame), kept; one that is not there (or outside the theme) does not. Of one Rust does
+    /// not read it cannot tell (UNREAD).
+    fn moves(&mut self, rel: &str) -> Found<bool> {
+        if let Some(&found) = self.moves.get(rel) {
+            return Ok(found);
+        }
+        let mut found = is_video(rel);
+        if !found && ends_with_any(rel, &MOVING_SUFFIXES) {
+            if let Some(root) = self.theme.root.clone() {
+                if rel.contains('\0') {
+                    return Err(Drawn::Unported(UNREAD.into()));
+                }
+                let data = lp_theme::model::resolve_asset(&root, &Value::from(rel))
+                    .ok()
+                    .and_then(|path| std::fs::read(path).ok());
+                if let Some(data) = data {
+                    let mut told = false;
+                    let _ = lp_decode::each_frame(&data, &mut |count, _| {
+                        (found, told) = (count > 1, true);
+                        Err(lp_decode::Error("(enough)".into()))
+                    });
+                    if !told {
+                        return Err(Drawn::Unported(UNREAD.into()));
+                    }
+                }
+            }
+        }
+        self.moves.insert(rel.to_string(), found);
+        Ok(found)
+    }
+
+    /// _slide for still pictures: they take turns by the clock, `seconds` each, the frame's
+    /// time as a timestamp of the computer's zone (one picture alone shows, though Python takes
+    /// the timestamp all the same: where that fails, so does the widget). A slideshow with one
+    /// that moves: Rust says it does not draw it yet.
+    pub(crate) fn slide(
+        &mut self,
+        w: &Dict,
+        pictures: &[String],
+    ) -> std::result::Result<String, Drawn> {
+        let seconds = match w.get("seconds") {
+            Some(Value::Int(n)) => {
+                let n = n.max(&num_bigint::BigInt::from(1)).clone();
+                lp_py::num::int_to_float(&n).map_err(|e| Drawn::Failed(Failed(e.msg)))?
+            }
+            Some(Value::Float(f)) => f.max(1.0),
+            _ => 10.0,
+        };
+        if pictures.len() == 1 {
+            let now = self.now();
+            return match lp_py::zones::local() {
+                Some(local) => match lp_py::zones::timestamp(local, &now, self.fold()) {
+                    Some(_) => Ok(pictures[0].clone()),
+                    None => Err(Drawn::Failed(Failed(
+                        "the frame's time has no timestamp".into(),
+                    ))),
+                },
+                // (where Python cannot fail at it: datetime's years but their edges, on
+                // Windows the C runtime's localtime from 1970 to 3000)
+                None if (if cfg!(windows) { 1971..=2999 } else { 2..=9998 })
+                    .contains(&now.year) =>
+                {
+                    Ok(pictures[0].clone())
+                }
+                None => Err(Drawn::Unported(
+                    "pictures at the edges of the years without the computer's own time zone"
+                        .into(),
+                )),
+            };
+        }
+        let mut moving = false;
+        for rel in pictures {
+            // (as any() asks: up to the first that moves)
+            if self.moves(rel)? {
+                moving = true;
+                break;
+            }
+        }
+        if moving {
+            return Err(Drawn::Unported(
+                "slideshows with a picture that moves".into(),
+            ));
+        }
+        let Some(local) = lp_py::zones::local() else {
+            return Err(Drawn::Unported(
+                "slideshows without the computer's own time zone".into(),
+            ));
+        };
+        let Some(stamp) = lp_py::zones::timestamp(local, &self.now(), self.fold()) else {
+            return Err(Drawn::Unported(
+                "a slideshow at a time that Python fails at".into(),
+            ));
+        };
+        let turn = py_floordiv(stamp, seconds) as i128;
+        Ok(pictures[turn.rem_euclid(pictures.len() as i128) as usize].clone())
+    }
+
+    /// _asset_image: the theme's picture `rel` fitted to w x h (0: as it is), kept (one that is
+    /// not there too); None where it cannot be read (warned); one Rust does not read: UNREAD.
+    fn asset_image(
+        &self,
+        rel: &str,
+        w: i64,
+        h: i64,
+        fit: &str,
+        align: &str,
+    ) -> Found<Option<Rc<Image>>> {
+        let key: PictureKey = (rel.into(), w, h, fit.into(), align.into());
+        if let Some(found) = self.pictures.borrow_mut().get(&key) {
+            return Ok(found);
+        }
+        let mut image = self
+            .read_picture(rel)
+            .map_err(|Unread| Drawn::Unported(UNREAD.into()))?;
+        if let Some(read) = &image {
+            if w > 0 && h > 0 {
+                let (fw, fh) = sized(w, h).map_err(Drawn::Failed)?;
+                image = Some(fitted(read, fw, fh, fit, align).map_err(Drawn::Failed)?);
+            }
+        }
+        let size = image
+            .as_ref()
+            .map_or(4096, |i| (i.width() * i.height() * 4).max(4096));
+        let image = image.map(Rc::new);
+        self.pictures.borrow_mut().put(key, image.clone(), size);
+        Ok(image)
+    }
+
+    /// _animation: the frames of an animated picture (GIF, WebP, PNG) as the widget shows
+    /// them, kept; None for a still picture or one that cannot be read (drawn as a still).
+    fn animation_of(&mut self, w: &Dict, rel: &str) -> Found<Option<Rc<Animation>>> {
+        let Some(root) = self.theme.root.clone() else {
+            return Ok(None);
+        };
+        if !ends_with_any(rel, &MOVING_SUFFIXES) {
+            return Ok(None);
+        }
+        let (iw, ih) = (widget::int(w, "w", 0), widget::int(w, "h", 0));
+        let (fit, align) = (
+            widget::text(w, "fit").to_string(),
+            widget::text(w, "align").to_string(),
+        );
+        let (blur, radius) = (widget::int(w, "blur", 0), widget::int(w, "radius", 0));
+        let key: AnimationKey = (rel.into(), iw, ih, fit.clone(), align.clone(), blur, radius);
+        if let Some(found) = self.animations.get(&key) {
+            return Ok(found);
+        }
+        // (_finish: blurred into the box, else fitted to it; rounded)
+        let finish = |image: &Image| -> Result<Image> {
+            let mut image = if blur > 0 {
+                blurred(image, blur as f64, iw, ih, &fit, &align)?
+            } else if iw > 0 && ih > 0 {
+                let (fw, fh) = sized(iw, ih)?;
+                fitted(image, fw, fh, &fit, &align)?
+            } else {
+                image.clone()
+            };
+            if radius > 0 {
+                image = rounded(&image, radius)?;
+            }
+            Ok(image)
+        };
+        if rel.contains('\0') {
+            return Err(Drawn::Unported(UNREAD.into()));
+        }
+        let data = lp_theme::model::resolve_asset(&root, &Value::from(rel))
+            .ok()
+            .and_then(|path| std::fs::read(path).ok());
+        let found = match data.map(|data| read_animation(&data, &finish)) {
+            Some(Read::Frames(animation)) => Some(Rc::new(animation)),
+            Some(Read::Failed(e)) => return Err(Drawn::Failed(e)),
+            Some(Read::Unread) => return Err(Drawn::Unported(UNREAD.into())),
+            Some(Read::Still) | None => None,
+        };
+        let size = found.as_ref().map_or(4096, |a| a.size());
+        self.animations.put(key, found.clone(), size);
+        Ok(found)
+    }
+
+    /// _draw_image: the picture on show (the widget's, or its slideshow's turn): a live one, a
+    /// video (Rust says it does not draw it yet), an animated picture's frame of the moment
+    /// (from when it first showed, at its speed), else the theme's picture fitted, blurred and
+    /// rounded (a clear piece of the widget's size where there is none).
+    pub(crate) fn image_widget(&mut self, w: &Dict) -> Drawn {
+        let pictures = match self.slides(w) {
+            Ok(pictures) => pictures,
+            Err(drawn) => return drawn,
+        };
+        let rel = if pictures.is_empty() {
+            String::new()
+        } else {
+            match self.slide(w, &pictures) {
+                Ok(rel) => rel,
+                Err(drawn) => return drawn,
+            }
+        };
+        let made = if let Some(name) = rel.strip_prefix('@') {
+            let Some(content) = self.live_picture(name).map(|p| picture_key(name, p)) else {
+                return Drawn::Nothing;
+            };
+            self.cached(w, content, |r| match r.live_picture(name) {
+                Some(p) => r.live_image_piece(w, p),
+                None => Err(Failed("a picture gone".into())),
+            })
+        } else if is_video(&rel) {
+            return Drawn::Unported("videos".into());
+        } else {
+            let (x, y) = (widget::int(w, "x", 0), widget::int(w, "y", 0));
+            match self.animation_of(w, &rel) {
+                Ok(Some(_)) if self.options.animate => {
+                    // (Python's frame moves on with it: not told here yet)
+                    return Drawn::Unported("animated pictures in a moving frame".into());
+                }
+                Ok(Some(animation)) => {
+                    let id = widget::text(w, "id").to_string();
+                    let at = self.at;
+                    let began = *self.began.entry((id, rel.clone())).or_insert(at);
+                    let speed = match speed_of(w.get("speed").unwrap_or(&Value::int(1))) {
+                        Ok(speed) => speed,
+                        Err(e) => return Drawn::Failed(e),
+                    };
+                    let n = animation.index((at - began) * speed);
+                    let content = Value::List(vec![
+                        rel.as_str().into(),
+                        Value::int(Rc::as_ptr(&animation) as i64),
+                        Value::int(n as i64),
+                    ]);
+                    self.cached(w, content, |_| {
+                        Ok(Piece::new(animation.frames[n].clone(), x, y))
+                    })
+                }
+                Ok(None) => match self.still_image(w, &rel, x, y) {
+                    Ok(piece) => Ok(piece),
+                    Err(drawn) => return drawn,
+                },
+                Err(drawn) => return drawn,
+            }
+        };
+        match made {
+            Ok(piece) => Drawn::Piece(piece),
+            Err(e) => Drawn::Failed(e),
+        }
+    }
+
+    /// _draw_image's still picture: the theme's picture fitted (_asset_image), blurred and
+    /// rounded; none: a clear piece of the widget's size (a pixel at least). The picture is
+    /// read (kept) before its piece is asked for: one Rust does not read leaves the frame to
+    /// Python.
+    fn still_image(&mut self, w: &Dict, rel: &str, x: i64, y: i64) -> Found<Rc<Piece>> {
+        let (iw, ih) = (widget::int(w, "w", 0), widget::int(w, "h", 0));
+        let (fit, align) = (
+            widget::text(w, "fit").to_string(),
+            widget::text(w, "align").to_string(),
+        );
+        let found = self.asset_image(rel, iw, ih, &fit, &align)?;
+        self.cached(w, Value::Str(rel.to_string()), |_| {
+            let Some(image) = found.clone() else {
+                let (cw, ch) = sized(iw.max(1), ih.max(1))?;
+                return Ok(Piece::new(Image::blank(Mode::RGBA, cw, ch), x, y));
+            };
+            let mut image = (*image).clone();
+            let blur = widget::int(w, "blur", 0);
+            if blur > 0 {
+                image = blurred(&image, blur as f64, 0, 0, "stretch", "center")?;
+            }
+            let radius = widget::int(w, "radius", 0);
+            if radius > 0 {
+                image = rounded(&image, radius)?;
+            }
+            Ok(Piece::new(image, x, y))
+        })
+        .map_err(Drawn::Failed)
     }
 }
 

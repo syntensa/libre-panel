@@ -1215,25 +1215,27 @@ pub fn decode(file: &[u8]) -> Result<Picture> {
 
 /// Every frame as the app reads an animation (an APNG's; a PNG's one), each with its
 /// info["duration"] and converted to RGBA.
-pub fn frames(file: &[u8]) -> Result<Vec<Frame>> {
+pub fn each_frame(file: &[u8], each: &mut dyn FnMut(usize, Frame) -> Result<()>) -> Result<()> {
     let mut png = Png::open(file)?;
     png.load()?;
-    let mut out = Vec::new();
     let rgba = |p: &Png| -> Result<lp_pixels::Image> { p.picture().convert(lp_pixels::Mode::RGBA) };
-    out.push(Frame {
+    let count = png.n_frames;
+    let first = Frame {
         duration: png.png.info.duration,
         image: rgba(&png)?,
-    });
-    for n in 1..png.n_frames {
+    };
+    each(count, first)?;
+    for n in 1..count {
         if !png.seek(n)? {
             break;
         }
         let duration = png.png.info.duration;
         png.load()?;
-        out.push(Frame {
+        let frame = Frame {
             duration,
             image: rgba(&png)?,
-        });
+        };
+        each(count, frame)?;
     }
-    Ok(out)
+    Ok(())
 }

@@ -10,6 +10,7 @@ import base64
 import calendar
 import functools
 import hashlib
+import io
 import json
 import math
 import os
@@ -484,9 +485,12 @@ def _python_frame(
 
 # what Rust does not draw where it does not know the computer's zone (on Windows, as yet)
 ZONE_NEEDED = ("another place's time without the computer's own time zone",
-               "the earth without the computer's own time zone")  # fmt: skip
-# (what the frames here may leave out for it: all of that on Windows, none of it elsewhere)
-NOT_HERE = ZONE_NEEDED if sys.platform == "win32" else ()
+               "the earth without the computer's own time zone",
+               "slideshows without the computer's own time zone")  # fmt: skip
+# (what the frames here may leave out for it, and the slideshow patterns Rust does not match
+# without case yet: all of that on Windows, none of it elsewhere)
+NOT_HERE = ((*ZONE_NEEDED, "slideshow patterns of other than ASCII on Windows")
+            if sys.platform == "win32" else ())  # fmt: skip
 
 
 def _compare_frames(
@@ -501,7 +505,8 @@ def _compare_frames(
     when: Any = None,
     place_of: Any = None,
     globes: bool = False,
-    left_out: list[str] | None = None,
+    left_out: list[tuple[int, str]] | None = None,
+    files: Any = None,
 ) -> int:
     """Frames of `count` random themes (of what `make` makes) drawn by both, compared to the
     bit, and their boxes; how many were drawn. Rust may leave out those it says are `undefined`:
@@ -509,8 +514,8 @@ def _compare_frames(
     of the symbols and the moon), where there are any; each at a time `when` tells, where it
     is given; your place where `place_of` gives one; Python's globes as it makes them with the
     C library's float32 functions where they are drawn (`globes`: _exact_globes). What Rust
-    does not draw here (NOT_HERE) it may leave out too; why it left each out, in `left_out`
-    where it is given."""
+    does not draw here (NOT_HERE) it may leave out too; each it left out and why, in
+    `left_out` where it is given. The theme's own files where `files` makes them."""
     rng = random.Random(seed)
     cases, asked = [], []
     try:
@@ -518,6 +523,8 @@ def _compare_frames(
         for n in range(count):
             folder = tmp_path / f"t{n}"
             _frame_theme(rng, folder, make)
+            if files is not None:
+                files(rng, folder)
             given, snapshot = (snapshot_of or _frame_snapshot)(rng)
             dither = rng.random() < 0.3
             cases.append({"folder": str(folder), "snapshot": given, "dither": dither})
@@ -549,7 +556,7 @@ def _compare_frames(
             continue
         if got.get("unported") in undefined + NOT_HERE:
             if left_out is not None:
-                left_out.append(got["unported"])
+                left_out.append((n, got["unported"]))
             continue
         assert "sha256" in got, (n, got)
         frame = want["frame"]
@@ -1204,28 +1211,34 @@ def _zoned_or_earth(rng: random.Random, i: int, size: tuple[int, int]) -> dict[s
     pick = rng.random()
     if pick < 0.1:
         return _earth(rng, i, size)
-    return _zoned(rng, i, size) if pick < 0.4 else _card_or_text(rng, i, size)
+    if pick < 0.2:
+        return _slideshow(rng, i, size)
+    return _zoned(rng, i, size) if pick < 0.45 else _card_or_text(rng, i, size)
 
 
 def test_without_the_computer_s_zone_rust_leaves_out_what_needs_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # (where Rust does not know the computer's zone (on Windows; elsewhere a TZ the C library
-    # reads by a rule of its own, summer time without its rules): a globe and another place's
-    # time Rust says it does not draw, never a frame otherwise than Python's; the computer's own
-    # time and a zone of no such name it draws)
+    # reads by a rule of its own, summer time without its rules): a globe, another place's time
+    # and a slideshow by the clock Rust says it does not draw, never a frame otherwise than
+    # Python's; the computer's own time, a zone of no such name and a slideshow of one picture
+    # it draws)
     if sys.platform != "win32":
         monkeypatch.setenv("TZ", "CET-1CEST")
         time.tzset()
-    left_out: list[str] = []
+    left_out: list[tuple[int, str]] = []
     try:
         drawn = _compare_frames(tmp_path, 0x2E9, 80, _zoned_or_earth, _clock_snapshot,
-                                undefined=ZONE_NEEDED, left_out=left_out)  # fmt: skip
+                                undefined=(*ZONE_NEEDED, UNREAD), left_out=left_out,
+                                files=_theme_files)  # fmt: skip
     finally:
         monkeypatch.undo()
         if sys.platform != "win32":
             time.tzset()
-    assert sorted(set(left_out)) == sorted(ZONE_NEEDED), left_out
+    reasons = {why for _, why in left_out}
+    assert set(ZONE_NEEDED) <= reasons <= {*ZONE_NEEDED, *NOT_HERE, UNREAD}, left_out
+    assert all(why != UNREAD or _unread_in(tmp_path / f"t{n}") for n, why in left_out)
     assert drawn > 10 and len(left_out) > 30, (drawn, len(left_out))
 
 
@@ -2396,14 +2409,17 @@ def _image_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[st
 
 
 def _image_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
-    """The pictures the sources give: of any size and shape, opaque, see-through or grey."""
+    """The pictures the sources give: of any size and shape, opaque, see-through or grey; at a
+    moment of the years round now (the picture on show takes its timestamp)."""
     images, given = {}, {}
     for name in LIVE_PICTURES:
         if rng.random() < 0.85:
             size = (rng.choice([1, 3, 16, 64, 300]), rng.choice([1, 5, 16, 64, 240]))
             picture = noise(rng, rng.choice(["RGB", "RGBA", "L"]), size)
             images[name], given[name] = picture, image(picture)
-    return {"readings": {}, "images": given}, Snapshot(readings={}, images=images)
+    now = _clock_snapshot(rng)[1].now
+    return ({"readings": {}, "images": given, "now": _moment(now)},
+            Snapshot(readings={}, images=images, now=now))  # fmt: skip
 
 
 def test_frames_of_live_pictures_as_python_draws_them(tmp_path: Path) -> None:
@@ -2413,26 +2429,486 @@ def test_frames_of_live_pictures_as_python_draws_them(tmp_path: Path) -> None:
     assert _compare_frames(tmp_path, 0x1AA6E, 160, _image_or_more, _image_snapshot) > 120
 
 
-def test_pictures_rust_does_not_draw_yet_are_refused(tmp_path: Path) -> None:
-    # (the theme's own pictures and a slideshow: Rust says it does not draw them yet)
-    cases = []
-    for n, change in enumerate([{"src": "pictures/cover.png"}, {"slides": "@media.cover"},
-                                {"src": "", "slides": "photos/*.jpg"}]):  # fmt: skip
+# -- the theme's own pictures ---------------------------------------------------------------------
+
+# (the theme's still pictures: PNGs of every mode, one turned as its EXIF says; JPEGs turned
+# so, in colour and grey (its suffix in capitals); a still GIF; one in a folder below, a hidden
+# one, one of a name that is not ASCII)
+THEME_STILLS = ["pics/a.png", "pics/b.png", "pics/c.png", "pics/d.png", "pics/e.jpg",
+                "pics/F.JPG", "pics/g.gif", "pics/sub/h.png", "pics/.i.png",
+                "intl/ä.png"]  # fmt: skip
+# (animated ones: a GIF, a WebP, a PNG, a GIF cut short; frames of their own lengths)
+THEME_MOVING = ["anim/run.gif", "anim/spin.webp", "anim/wave.png", "anim/cut.gif"]
+# (what is no picture to show: not there, a folder; outside the theme, which the theme's picture
+# may not name, a slideshow's may)
+THEME_NONE = ["pics/none.png", "pics"]
+THEME_OUTSIDE = ["../outside.png", "/etc/hostname", "pics/../../outside.png"]
+# (files Rust does not read: not a picture, cut short, a picture cut short where Pillow raises
+# what Python does not catch)
+THEME_UNREAD = ["bad/broken.png", "bad/notes.txt", "bad/half.png", "anim/cut.gif"]
+UNREAD = "pictures Rust does not read"
+# (how long a frame says it shows, in ms: none, less than the least, a few hundredths, more)
+FRAME_MS = [0, 5, 19, 20, 30, 40, 100, 250, 1000]
+
+
+def _picture_size(rng: random.Random) -> tuple[int, int]:
+    return rng.choice([1, 2, 7, 16, 40, 64, 97]), rng.choice([1, 3, 9, 16, 40, 64, 75])
+
+
+def _turned(rng: random.Random) -> bytes:
+    """EXIF of an orientation (1 to 8: upright, mirrored, turned), now and then none."""
+    from PIL import Image
+
+    if rng.random() < 0.2:
+        return b""
+    exif = Image.Exif()
+    exif[0x0112] = rng.randrange(1, 9)
+    return exif.tobytes()
+
+
+def _theme_files(rng: random.Random, folder: Path) -> None:
+    """The theme's own pictures (THEME_STILLS, THEME_MOVING, THEME_UNREAD), of any size; the
+    animated ones of 2 to 5 frames, each to show for its own time; a picture outside the theme
+    beside it."""
+    (folder / "pics" / "sub").mkdir(parents=True)
+    for name in ("anim", "intl", "bad"):
+        (folder / name).mkdir()
+    pics, anim = folder / "pics", folder / "anim"
+    noise(rng, "RGB", _picture_size(rng)).save(pics / "a.png", exif=_turned(rng))
+    noise(rng, "RGBA", _picture_size(rng)).save(pics / "b.png")
+    noise(rng, "L", _picture_size(rng)).save(pics / "c.png")
+    paletted = noise(rng, "RGB", _picture_size(rng)).quantize(rng.choice([2, 16, 256]))
+    paletted.save(pics / "d.png", **({"transparency": 0} if rng.random() < 0.5 else {}))
+    noise(rng, "RGB", _picture_size(rng)).save(pics / "e.jpg", quality=rng.choice([40, 90]),
+                                               exif=_turned(rng))  # fmt: skip
+    noise(rng, "L", _picture_size(rng)).save(pics / "F.JPG", "JPEG", exif=_turned(rng))
+    noise(rng, "RGB", _picture_size(rng)).quantize(64).save(pics / "g.gif")
+    noise(rng, "RGB", _picture_size(rng)).save(pics / "sub" / "h.png")
+    noise(rng, "RGBA", _picture_size(rng)).save(pics / ".i.png")
+    noise(rng, "RGBA", _picture_size(rng)).save(folder / "intl" / "ä.png")
+
+    def frames(modes: list[str]) -> tuple[list[Any], list[int]]:
+        size = _picture_size(rng)
+        count = rng.randrange(2, 6)
+        return ([noise(rng, rng.choice(modes), size) for _ in range(count)],
+                [rng.choice(FRAME_MS) for _ in range(count)])  # fmt: skip
+
+    run, ms = frames(["RGB", "RGBA", "L"])
+    run[0].save(anim / "run.gif", save_all=True, append_images=run[1:], duration=ms, loop=0,
+                disposal=rng.choice([0, 1, 2]))  # fmt: skip
+    spin, ms = frames(["RGB", "RGBA"])
+    spin[0].save(anim / "spin.webp", save_all=True, append_images=spin[1:], duration=ms,
+                 lossless=rng.random() < 0.5)  # fmt: skip
+    wave, ms = frames(["RGB", "RGBA"])
+    wave[0].save(anim / "wave.png", save_all=True, append_images=wave[1:], duration=ms)
+    cut, ms = frames(["RGB"])
+    cut[0].save(anim / "cut.gif", save_all=True, append_images=cut[1:], duration=ms)
+    data = (anim / "cut.gif").read_bytes()
+    (anim / "cut.gif").write_bytes(data[: len(data) * rng.choice([3, 6, 9]) // 10])
+    bad = folder / "bad"
+    (bad / "broken.png").write_bytes(rng.randbytes(rng.randrange(1, 200)))
+    (bad / "notes.txt").write_text("not a picture", encoding="utf-8")
+    half = io.BytesIO()
+    noise(rng, "RGB", (40, 30)).save(half, "PNG")
+    (bad / "half.png").write_bytes(half.getvalue()[: rng.randrange(60, len(half.getvalue()))])
+    if not (folder.parent / "outside.png").exists():
+        noise(rng, "RGB", (8, 8)).save(folder.parent / "outside.png")
+
+
+def _theme_picture(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """A picture of the theme's files (or a source's) in an image widget: as _image makes one,
+    of the theme's pictures (still, animated, none of them)."""
+    widget = _image(rng, i, size)
+    pick = rng.random()
+    if pick < 0.04:
+        widget["src"] = rng.choice(THEME_UNREAD)
+    elif pick < 0.06:
+        widget["src"] = rng.choice(THEME_OUTSIDE)  # (the theme refused as it is read)
+    else:
+        widget["src"] = rng.choice(THEME_STILLS * 3 + THEME_MOVING * 2 + THEME_NONE
+                                   + ["@media.cover", ""])  # fmt: skip
+    widget.pop("slides", None)
+    if rng.random() < 0.2:
+        widget["w"], widget["h"] = 0, 0  # (as it is)
+    if rng.random() < 0.2:
+        widget["speed"] = rng.choice([0.1, 0.25, 0.5, 2, 4, 10])
+    return widget
+
+
+def _theme_picture_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _theme_picture(rng, i, size) if rng.random() < 0.8 else _card_or_text(rng, i, size)
+
+
+def _unread_in(folder: Path) -> bool:
+    """Whether the theme shows a file Rust does not read (THEME_UNREAD), or names one in a
+    slideshow."""
+    widgets = json.loads((folder / "theme.json").read_text(encoding="utf-8"))["widgets"]
+    shown = " ".join(f"{w.get('src', '')} {w.get('slides', '')}" for w in widgets)
+    return any(rel in shown for rel in THEME_UNREAD) or "bad/" in shown
+
+
+def test_frames_of_the_theme_s_pictures_as_python_draws_them(tmp_path: Path) -> None:
+    # (a picture of the theme's folder, upright as its EXIF says, in RGBA, fitted into the
+    # widget's box with LANCZOS (or as it is), blurred, its corners rounded; an animated one's
+    # first frame, finished so; a clear piece of the widget's size for one that is not there,
+    # a folder or outside the theme; one Rust does not read it says it does not draw)
+    left: list[tuple[int, str]] = []
+    drawn = _compare_frames(tmp_path, 0x7E1A, 160, _theme_picture_or_more, _image_snapshot,
+                            undefined=(UNREAD,), left_out=left, files=_theme_files)  # fmt: skip
+    assert all(why == UNREAD and _unread_in(tmp_path / f"t{n}") for n, why in left), left
+    assert drawn > 90 and len(left) > 10, (drawn, len(left))
+
+
+# (slideshow lines: names, a source's, patterns of a folder's still pictures (by suffix, any
+# case, hidden ones, below, above and back, of none), a line of blanks)
+SLIDE_STILLS = ["pics/a.png", "pics/none.png", *THEME_OUTSIDE, "@media.cover", "@game.logo",
+                "pics/*.png", "pics/*.jpg", "pics/*.JPG", "pics/*.[jJ][pP][gG]", "pics/**/*.png",
+                "pics/*", "pics/.*", "pics/?.png", "pics/[a-c].png", "pics/[!a].png",
+                "*/sub/*.png", "pics/sub/../*.gif", "pics/*.PNG", "pics/*.txt", "  pics/*.gif  ",
+                "nothing/*", "", "bad/*.png", "intl/*"]  # fmt: skip
+# (how long each picture shows: less than the least, a second, more, a day, an hour of days)
+SLIDE_SECONDS = [-5, 0, 1, 2, 3, 7, 10, 60, 3600, 86400, 10**6]
+
+
+def _slideshow(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """An image widget showing a slideshow of still pictures, `seconds` each."""
+    widget = _image(rng, i, size)
+    widget["src"] = rng.choice(["", "pics/b.png", "@media.cover", "pics/e.jpg"])
+    lines = rng.sample(SLIDE_STILLS, rng.randrange(1, 5))
+    widget["slides"] = rng.choice(["\n", "\r\n", "\n\n"]).join(lines)
+    widget["seconds"] = rng.choice(SLIDE_SECONDS)
+    return widget
+
+
+def _slideshow_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _slideshow(rng, i, size) if rng.random() < 0.7 else _card_or_text(rng, i, size)
+
+
+def _slide_moment(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
+    """A moment of the computer's clock round now: at random, or at a picture's turn (a
+    second's millionth before it, at it, after it), the pictures the sources give."""
+    import dataclasses
+
+    given, snapshot = _image_snapshot(rng)
+    t = rng.uniform(631152000, 3155760000)
+    if rng.random() < 0.5:
+        every = max(1, rng.choice(SLIDE_SECONDS))
+        t = (t // every) * every + rng.choice([-1e-6, 0, 1e-6, 0.5])
+    now = datetime.fromtimestamp(t)
+    return {**given, "now": _moment(now)}, dataclasses.replace(snapshot, now=now)
+
+
+def test_slideshows_of_still_pictures_as_python_shows_them(tmp_path: Path) -> None:
+    # (still pictures take turns by the clock, `seconds` each: the frame's time as a timestamp
+    # of the computer's zone, floor-divided as floats are; a folder's pictures as pathlib's glob
+    # finds them, sorted; one picture alone shows; of a slideshow with a file Rust does not
+    # read, Rust says it does not draw it)
+    left: list[tuple[int, str]] = []
+    drawn = _compare_frames(tmp_path, 0x511D, 160, _slideshow_or_more, _slide_moment,
+                            undefined=(UNREAD,), left_out=left, files=_theme_files)  # fmt: skip
+    assert all(why in NOT_HERE or _unread_in(tmp_path / f"t{n}") for n, why in left), left
+    # (on Windows, where Rust does not know the computer's zone, slideshows of one picture alone)
+    assert drawn > (8 if sys.platform == "win32" else 85), drawn
+
+
+def test_animated_pictures_frame_after_frame_as_python_shows_them(tmp_path: Path) -> None:
+    # (one renderer showing its animated pictures frame after frame: each from its first frame
+    # when it first shows, then the frame of the moment at its speed, round and round: the same
+    # moment again, a part of a frame, a frame, a round, a minute later; back in time)
+    rng = random.Random(0xA41E)
+    cases, expected, unread = [], [], []
+    for n in range(40):
+        folder = tmp_path / f"t{n}"
+        _frame_theme(rng, folder, _theme_picture)
+        _theme_files(rng, folder)
+        steps: list[tuple[Snapshot, float]] = []
+        given = []
+        now = rng.uniform(0, 10**6)
+        for _ in range(rng.randrange(2, 9)):
+            readings, snapshot = _image_snapshot(random.Random(n))
+            steps.append((snapshot, now))
+            given.append({"snapshot": readings, "now": now})
+            now += rng.choice([0, 0.004, 0.02, 0.05, 0.1, 0.3, 1, 2.5, 60, -0.5])
+        cases.append({"folder": str(folder), "dither": False, "steps": given})
+        unread.append(_unread_in(folder))
+        try:
+            expected.append(_python_steps(folder, steps))
+        except ThemeError:
+            expected.append(None)
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    drawn = 0
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        if want is None:  # (a theme Python does not read: nor does Rust)
+            assert "error" in got, n
+            continue
+        for i, (g, w) in enumerate(zip(got["steps"], want, strict=True)):
+            if "failed" in w:  # (Python's frame fails: Rust makes none)
+                assert "unported" in g, (n, i, g, w)
+                continue
+            if g.get("unported") == UNREAD and unread[n]:
+                continue
+            assert g["sha256"] == hashlib.sha256(w["frame"].tobytes()).hexdigest(), (n, i)
+            assert g["boxes"] == w["boxes"], (n, i)
+            drawn += 1
+    assert drawn > 80, drawn
+
+
+def test_an_animation_of_more_than_its_frames_hold_keeps_every_other(tmp_path: Path) -> None:
+    # (an animated picture whose frames, finished, take more than moving.FRAMES_BYTES: every
+    # second (third ...) kept, each showing as long as those it stands for; the last kept)
+    from PIL import Image
+
+    folder = tmp_path / "big"
+    folder.mkdir()
+    frames = [Image.new("RGB", (1200, 1100), (n * 9, 255 - n * 9, n * 3)) for n in range(25)]
+    frames[0].save(folder / "big.gif", save_all=True, append_images=frames[1:],
+                   duration=[30 + 10 * (n % 3) for n in range(25)], loop=0)  # fmt: skip
+    widget = {"type": "image", "id": "m0", "x": -500, "y": -400, "w": 0, "h": 0,
+              "src": "big.gif"}  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps({
+        "format": THEME_FORMAT, "name": "big", "display": {"width": 64, "height": 48},
+        "widgets": [widget]}), encoding="utf-8")  # fmt: skip
+    moment = datetime(2026, 11, 8, 12, 0)
+    steps = [(Snapshot(readings={}, now=moment), 50.0 + 0.07 * k) for k in range(24)]
+    want = _python_steps(folder, steps)
+    given = [{"snapshot": {"readings": {}, "images": {}, "now": _moment(moment)}, "now": t}
+             for _, t in steps]  # fmt: skip
+    case = {"folder": str(folder), "dither": False, "steps": given}
+    [ours] = run([{"op": "render_frame", "fonts_dir": str(fonts.FONT_DIR), "frames": [case]}])
+    got = ours["frames"][0]["steps"]
+    shas = [hashlib.sha256(w["frame"].tobytes()).hexdigest() for w in want]
+    assert [g["sha256"] for g in got] == shas
+    assert 4 < len(set(shas)) < 25  # (frames of their own, fewer than the picture's)
+
+
+def test_an_animation_at_its_frames_ends_at_any_speed_and_back_in_time(tmp_path: Path) -> None:
+    # (an animation of frames of 100, 200 and 300 ms (a round of 0.6 s) at the speeds a widget
+    # may ask (less than the least, the least, as made, the most, more), at moments exactly at
+    # each frame's end, just before and after, a round later, a minute later, and before it
+    # first showed: the frame of the moment as moving.Animation.index finds it)
+    from PIL import Image
+
+    moment = datetime(2026, 11, 8, 12, 0)
+    times = [0.0, 0.05, 0.1, 0.3, 0.30000000000000004, 0.6, 0.6000000000000001, 0.65, 1.2,
+             60.0, -0.05, -0.1, -0.35, -0.6, -1.0]  # fmt: skip
+    cases, wanted = [], []
+    for n, speed in enumerate([0.1, 0.25, 0.4, 1, 3, 4, 10, -2, 0]):
+        folder = tmp_path / f"s{n}"
+        folder.mkdir()
+        frames = [Image.new("RGB", (8, 8), colour) for colour in ((250, 0, 0), (0, 250, 0),
+                                                                     (0, 0, 250))]  # fmt: skip
+        frames[0].save(folder / "run.gif", save_all=True, append_images=frames[1:],
+                       duration=[100, 200, 300], loop=0)  # fmt: skip
+        widget = {"type": "image", "id": "m0", "x": 0, "y": 0, "w": 8, "h": 8,
+                  "src": "run.gif", "speed": speed}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps({
+            "format": THEME_FORMAT, "name": "run", "display": {"width": 16, "height": 16},
+            "widgets": [widget]}), encoding="utf-8")  # fmt: skip
+        steps = [(Snapshot(readings={}, now=moment), t) for t in times]
+        given = [{"snapshot": {"readings": {}, "images": {}, "now": _moment(moment)}, "now": t}
+                 for t in times]  # fmt: skip
+        cases.append({"folder": str(folder), "dither": False, "steps": given})
+        wanted.append([hashlib.sha256(w["frame"].tobytes()).hexdigest()
+                       for w in _python_steps(folder, steps)])  # fmt: skip
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    for n, (got, want) in enumerate(zip(ours["frames"], wanted, strict=True)):
+        assert [g["sha256"] for g in got["steps"]] == want, n
+    assert all(len(set(want)) == 3 for want in wanted)  # (each frame shows at some moment)
+
+
+def _slide_list_theme(rng: random.Random, folder: Path) -> None:
+    """A theme of image widgets, one a line of SLIDE_LINES (with its picture now and then); its
+    files, links among them where the system makes them (to a picture, to a folder, out of the
+    theme, round to a folder above)."""
+    _theme_files(rng, folder)
+    lines = list(SLIDE_LINES)
+    widgets = []
+    for i, line in enumerate(lines):
+        src = rng.choice(["", "", "pics/a.png", "@media.cover"])
+        widgets.append({"type": "image", "id": f"m{i}", "x": 0, "y": 0, "w": 8, "h": 8,
+                        "src": src, "slides": line})  # fmt: skip
+    widgets.append({"type": "image", "id": "all", "x": 0, "y": 0, "w": 8, "h": 8,
+                    "slides": rng.choice(["\n", "\r\n", "\x0b", " "]).join(lines)})  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps({
+        "format": THEME_FORMAT, "name": "slides", "display": {"width": 32, "height": 32},
+        "widgets": widgets}), encoding="utf-8")  # fmt: skip
+    if sys.platform == "win32":  # (links there need a right of their own)
+        return
+    for link, to in [("pics/link.png", "a.png"), ("pics/linked", "sub"),
+                     ("pics/out.png", "../../outside.png"), ("pics/sub/loop", ".."),
+                     ("anim/gone.gif", "nowhere.gif")]:  # fmt: skip
+        (folder / link).symlink_to(to)
+
+
+# (slideshow lines as _slides reads them: names, a source's, patterns of every kind of part
+# (stars, marks, classes and their negations, hidden names, any case of a suffix), "**" alone,
+# twice, below and at the end, ".." up and out of the theme, links, a closing slash, empty and
+# dotted parts, patterns pathlib refuses (a root, "**" in a part, also where no folder leads))
+SLIDE_LINES = ["pics/a.png", "pics/none.png", "@media.cover", "@", "pics/*.png", "pics/*.jpg",
+               "pics/*.JPG", "pics/*.PNG", "pics/*.[jJ][pP][gG]", "pics/*", "pics/*/", "pics/.*",
+               "pics/?.png", "pics/[a-c].png", "pics/[!a].png", "pics/[", "pics/[]",
+               "pics/**/*.png", "**/*.png", "**", "**/", "**/**/*.gif", "**/sub/**/*.png",
+               "**/*/**/*.png",
+               "*/h.png", "*/*/h.png", "pics/sub/../*.png", "../*.png", "pics/../../*",
+               "../*/pics/*.png", "anim/*", "pics/link*", "pics/linked/*", "pics/*/*.png",
+               "pics/sub/loop/*", "pics/sub/loop/sub/*", "./pics/./*.png", "pics//*.png",
+               "pics\\*.png", "*.txt", "  pics/*.gif  ", "/etc/*", "pics/a**.png",
+               "nowhere/a**b", "**/x**", "pics/*.mp4", "intl/*", "intl/ä.png", "ä*", "*/ä.png",
+               "*/Ä.png"]  # fmt: skip
+
+
+def _python_slides(folder: Path) -> dict[str, Any]:
+    """Each image widget's slideshow as _slides finds it (its error where it raises one)."""
+    renderer = Renderer(load_theme(folder), preview=True)
+    found: dict[str, Any] = {}
+    for widget in renderer.widgets:
+        if widget["type"] == "image":
+            try:
+                found[widget["id"]] = renderer._slides(widget)
+            except Exception as error:  # noqa: BLE001 (where pathlib refuses the pattern)
+                found[widget["id"]] = {"error": str(error)}
+    return found
+
+
+def test_slideshow_pictures_as_python_finds_them(tmp_path: Path) -> None:
+    # (the pictures of a slideshow's lines: a name as it stands, a source's, a pattern's a folder's
+    # pictures and videos as pathlib's glob (Python 3.12) finds them, sorted as paths are, none
+    # outside the theme; where pathlib refuses a pattern, its error)
+    rng = random.Random(0x511E)
+    cases, expected = [], []
+    for n in range(6):
+        # (the theme with a name that is no Unicode apart: patterns of the others go there)
+        folder = tmp_path / ("odd" if n == 5 else "even") / f"t{n}"
+        folder.mkdir(parents=True)
+        _slide_list_theme(rng, folder)
+        if n == 5 and sys.platform != "win32":  # (a name that is no Unicode)
+            with open(os.path.join(os.fsencode(folder / "pics"), b"\xff.png"), "wb") as out:
+                noise(rng, "RGB", (4, 4)).save(out, "PNG")
+        cases.append({"op": "image_slides", "folder": str(folder),
+                      "fonts_dir": str(fonts.FONT_DIR)})  # fmt: skip
+        expected.append(_python_slides(folder))
+    ours = run(cases)
+    lists_found = refused = 0
+    for n, (got, want) in enumerate(zip(ours, expected, strict=True)):
+        assert set(got["slides"]) == set(want), n
+        for key, slides in want.items():
+            mine = got["slides"][key]
+            if isinstance(mine, dict) and "unported" in mine:
+                # (Rust does not read such names yet, nor match without case on Windows all
+                # that pathlib matches)
+                odd = n == 5 and mine["unported"] == "folders of names that are no Unicode"
+                assert odd or mine["unported"] in NOT_HERE, (n, key, mine)
+                refused += 1
+                continue
+            assert mine == slides, (n, key)
+            lists_found += isinstance(slides, list) and len(slides) > 1
+    assert lists_found > 60, lists_found
+    assert refused >= (5 if sys.platform != "win32" else 0), refused
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Rust does not know the computer's zone there")
+def test_a_picture_where_the_frame_s_time_has_no_timestamp_as_python_shows_it(
+    tmp_path: Path, local_zone: Any
+) -> None:
+    # (a picture alone still takes the frame's timestamp: at the edges of the years 1 and 9999,
+    # where the computer's zone moves it past them, Python fails at it and leaves the widget
+    # out, as Rust does; where Rust does not know the zone (a TZ the C library reads by a rule
+    # of its own), it says it does not draw a picture there, and draws it in the years between)
+    rng = random.Random(0x7E1F)
+    edge = "pictures at the edges of the years without the computer's own time zone"
+    moments = [datetime(1, 1, 1), datetime(1, 1, 1, 12), datetime(1, 1, 2, 23, 59, 59),
+               datetime(9999, 12, 31, 23, 59, 59), datetime(9999, 12, 31, 3),
+               datetime(9998, 12, 30), datetime(2026, 11, 8, 12)]  # fmt: skip
+    looks = [{"src": "pics/a.png"}, {"src": "", "slides": "pics/b.png"},
+             {"src": "@media.cover"}, {"src": "anim/run.gif"}]  # fmt: skip
+    drawn = refused = 0
+    for z, tz in enumerate(["Asia/Tokyo", "America/New_York", "UTC", "CET-1CEST"]):
+        local_zone(tz)
+        cases, expected = [], []
+        for n, (now, look) in enumerate((m, lk) for m in moments for lk in looks):
+            folder = tmp_path / f"z{z}t{n}"
+            folder.mkdir()
+            _theme_files(rng, folder)
+            widget = {"type": "image", "id": "m0", "x": 2, "y": 1, "w": 20, "h": 14, **look}
+            (folder / "theme.json").write_text(json.dumps({
+                "format": THEME_FORMAT, "name": "edges", "display": {"width": 24, "height": 16},
+                "widgets": [widget]}), encoding="utf-8")  # fmt: skip
+            given, snapshot = _image_snapshot(rng)
+            given["now"], snapshot.now = _moment(now), now
+            cases.append({"folder": str(folder), "snapshot": given, "dither": False})
+            expected.append(_python_frame(folder, snapshot, False))
+        [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+        for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+            if got.get("unported") == edge:
+                assert tz == "CET-1CEST" and moments[n // len(looks)].year in (1, 9999), n
+                refused += 1
+                continue
+            assert got["sha256"] == hashlib.sha256(want["frame"].tobytes()).hexdigest(), (tz, n)
+            drawn += 1
+    assert drawn > 90 and refused == 5 * len(looks), (drawn, refused)
+
+
+def test_videos_and_slideshows_that_move_rust_does_not_draw_yet(tmp_path: Path) -> None:
+    # (a video, and a slideshow with a picture that moves (an animated one, a video): Rust says
+    # it does not draw them yet, nor a file it does not read (a picture, a slideshow's, the
+    # background's; one named with a NUL, an animation cut short whose first frame is whole),
+    # nor a slideshow with one where the turn is another's; an animated picture alone, a
+    # slideshow of one, of none there, it draws)
+    from PIL import Image
+
+    rng = random.Random(0x7E1D)
+    moves = "slideshows with a picture that moves"
+    # (still pictures by the clock: on Windows, where Rust does not know the computer's zone,
+    # not drawn yet)
+    by_clock = ZONE_NEEDED[2] if sys.platform == "win32" else None
+    looks = [({"src": "clips/a.mp4"}, "videos"),
+             ({"src": "pics/a.png", "slides": "anim/run.gif"}, moves),
+             ({"src": "", "slides": "pics/b.png\nclips/*"}, moves),
+             ({"src": "", "slides": "anim/wave.png\npics/c.png"}, moves),
+             ({"src": "anim/run.gif"}, None), ({"src": "", "slides": "anim/spin.webp"}, None),
+             ({"src": "", "slides": "pics/*.gif"}, None), ({"src": "bad/half.png"}, UNREAD),
+             ({"src": "anim/cut.gif"}, UNREAD), ({"src": "bad/notes.txt"}, UNREAD),
+             ({"src": "pics/a.png", "slides": "bad/broken.png", "seconds": 1, "_at": 2e9}, UNREAD),
+             ({"src": "", "slides": "pics/a\u0000.jpg"}, UNREAD),
+             ({"src": "pics/a.png", "_ground": "bad/half.png"}, UNREAD),
+             ({"src": "anim/cut.gif", "_cut": True}, UNREAD),
+             ({"src": "bad/half.png", "slides": "pics/a.png"}, UNREAD),
+             ({"src": "", "slides": "bad/broken.png"}, UNREAD),
+             ({"src": "pics", "slides": "pics/none.png\n../outside.png"}, by_clock)]  # fmt: skip
+    cases, wanted = [], []
+    for n, (change, why) in enumerate(looks):
         folder = tmp_path / f"t{n}"
         folder.mkdir()
+        _theme_files(rng, folder)
+        (folder / "clips").mkdir()
+        (folder / "clips" / "a.mp4").write_bytes(b"\x00\x00\x00\x18ftypmp42")
+        if change.get("_cut"):  # (four whole frames, cut short in the last)
+            frames = [noise(rng, "RGB", (16, 16)) for _ in range(4)]
+            frames[0].save(folder / "anim" / "cut.gif", save_all=True, append_images=frames[1:],
+                           duration=50)  # fmt: skip
+            data = (folder / "anim" / "cut.gif").read_bytes()
+            (folder / "anim" / "cut.gif").write_bytes(data[: len(data) * 9 // 10])
+            assert Image.open(folder / "anim" / "cut.gif").size == (16, 16)
         widget = {"type": "image", "id": "m0", "x": 0, "y": 0, "w": 20, "h": 20,
-                  "src": "@media.cover", **change}  # fmt: skip
-        (folder / "theme.json").write_text(json.dumps({
-            "format": THEME_FORMAT, "name": "pictures", "display": {"width": 32, "height": 32},
-            "widgets": [widget]}), encoding="utf-8")  # fmt: skip
-        cases.append({"folder": str(folder), "snapshot": {"readings": {}, "images": {}},
-                      "dither": False})  # fmt: skip
+                  **{k: v for k, v in change.items() if not k.startswith("_")}}  # fmt: skip
+        data = {"format": THEME_FORMAT, "name": "pictures",
+                "display": {"width": 32, "height": 32}, "widgets": [widget]}  # fmt: skip
+        if "_ground" in change:
+            data["background"] = {"image": change["_ground"]}
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        given, snapshot = _clock_snapshot(rng)
+        if "_at" in change:  # (the turn of the first picture: seconds from the epoch, even)
+            given, snapshot = _clock_moment(datetime.fromtimestamp(change["_at"]))
+        cases.append({"folder": str(folder), "snapshot": given, "dither": False})
+        # (Python's frames of those Rust leaves out are not asked for: their videos want ffmpeg)
+        wanted.append((why, None if why else _python_frame(folder, snapshot, False)))
     [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
-    assert [frame.get("unported") for frame in ours["frames"]] == [
-        "pictures from the theme's files",
-        "slideshows",
-        "slideshows",
-    ]
+    for n, (got, (why, want)) in enumerate(zip(ours["frames"], wanted, strict=True)):
+        if why is not None:
+            assert got.get("unported") == why, (n, got)
+            continue
+        assert want is not None and "frame" in want, (n, want)
+        assert got["sha256"] == hashlib.sha256(want["frame"].tobytes()).hexdigest(), n
 
 
 SYMBOL_CODES: list[Any] = [0, 1, 2, 3, 45, 48, 51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82,

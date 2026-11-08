@@ -151,18 +151,21 @@ fn header_size(s: &[u8]) -> Option<(u64, u64)> {
     }
 }
 
-/// The animation decoder's frames, each its canvas in RGBA, with its timestamp; the mode
-/// (RGBA, or RGB where there is no alpha) and the EXIF and XMP chunks.
+/// What the animation decoder says of the picture: the mode (RGBA, or RGB where there is no
+/// alpha), its canvas's size and the EXIF and XMP chunks.
 struct Decoded {
     kind: Kind,
     size: (usize, usize),
-    frames: Vec<(Vec<u8>, i32)>,
     exif: Option<Vec<u8>>,
     xmp: Option<Vec<u8>>,
 }
 
-/// WebPImageFile._open, then each frame `get_next` gives (as many as `want`).
-fn read(data: &[u8], want: usize) -> Result<Decoded> {
+/// A frame's canvas in RGBA and its timestamp, and the count of frames the file has.
+type Each<'a> = dyn FnMut(&Decoded, usize, Vec<u8>, i32) -> Result<()> + 'a;
+
+/// WebPImageFile._open, then each frame `get_next` gives (as many as `want`), one after the
+/// other to `each`.
+fn read(data: &[u8], want: usize, each: &mut Each) -> Result<()> {
     if !accepts(data) {
         return error("not a WEBP file");
     }
@@ -190,7 +193,7 @@ fn read(data: &[u8], want: usize) -> Result<Decoded> {
     if dec.is_null() {
         return error("could not create decoder object");
     }
-    let result = (|| -> Result<Decoded> {
+    let result = (|| -> Result<()> {
         // SAFETY: zeroed is a valid WebPAnimInfo; dec is a live decoder
         let mut info: AnimInfo = unsafe { std::mem::zeroed() };
         if unsafe { (lib.info)(dec, &mut info) } == 0 {
@@ -210,10 +213,14 @@ fn read(data: &[u8], want: usize) -> Result<Decoded> {
                 (!bytes.is_empty()).then_some(bytes)
             }
         };
-        let (exif, xmp) = (chunk(b"EXIF"), chunk(b"XMP "));
-        let count = (info.frame_count as usize).min(want);
-        let mut frames = Vec::with_capacity(count);
-        for _ in 0..count {
+        let decoded = Decoded {
+            kind,
+            size,
+            exif: chunk(b"EXIF"),
+            xmp: chunk(b"XMP "),
+        };
+        let all = info.frame_count as usize;
+        for _ in 0..all.min(want) {
             let mut buf: *mut u8 = std::ptr::null_mut();
             let mut timestamp: c_int = 0;
             // SAFETY: dec is live; buf is the decoder's canvas, read before the next call
@@ -221,15 +228,9 @@ fn read(data: &[u8], want: usize) -> Result<Decoded> {
                 return error("failed to read next frame");
             }
             let canvas = unsafe { std::slice::from_raw_parts(buf, size.0 * size.1 * 4) }.to_vec();
-            frames.push((canvas, timestamp));
+            each(&decoded, all, canvas, timestamp)?;
         }
-        Ok(Decoded {
-            kind,
-            size,
-            frames,
-            exif,
-            xmp,
-        })
+        Ok(())
     })();
     // SAFETY: made by WebPAnimDecoderNewInternal, deleted once
     unsafe { (lib.delete)(dec) };
@@ -267,23 +268,33 @@ fn picture(
 
 /// The first frame as Image.open loads it.
 pub(crate) fn decode(data: &[u8]) -> Result<Picture> {
-    let mut d = read(data, 1)?;
-    let Some((canvas, _)) = d.frames.pop() else {
-        return error("failed to read next frame");
-    };
-    Ok(picture(d.kind, d.size, canvas, d.exif, d.xmp))
+    let mut first = None;
+    read(data, 1, &mut |d, _, canvas, _| {
+        first = Some(picture(
+            d.kind,
+            d.size,
+            canvas,
+            d.exif.clone(),
+            d.xmp.clone(),
+        ));
+        Ok(())
+    })?;
+    first.map_or_else(|| error("failed to read next frame"), Ok)
 }
 
-/// Every frame as the app reads an animation. The app reads a frame's duration before the
+/// Every frame as the app reads an animation, one after the other to `each` with the count of
+/// them (n_frames). The app reads a frame's duration before the
 /// frame is loaded, and a WebP's is set only by its loading (seek takes the last one away):
 /// so the first frame's is its own, the later ones' none.
-pub(crate) fn frames(data: &[u8]) -> Result<Vec<Frame>> {
-    let d = read(data, usize::MAX)?;
-    let mut out = Vec::with_capacity(d.frames.len());
-    for (n, (canvas, timestamp)) in d.frames.into_iter().enumerate() {
+pub(crate) fn each_frame(
+    data: &[u8],
+    each: &mut dyn FnMut(usize, Frame) -> Result<()>,
+) -> Result<()> {
+    let mut n = 0;
+    read(data, usize::MAX, &mut |d, count, canvas, timestamp| {
         let image = picture(d.kind, d.size, canvas, None, None).convert(lp_pixels::Mode::RGBA)?;
         let duration = (n == 0).then_some(f64::from(timestamp));
-        out.push(Frame { duration, image });
-    }
-    Ok(out)
+        n += 1;
+        each(count, Frame { duration, image })
+    })
 }

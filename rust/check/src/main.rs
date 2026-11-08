@@ -1017,6 +1017,35 @@ fn run(case: &Value) -> Result<Value, String> {
             }
             json!({"pictures": out})
         }
+        "image_slides" => {
+            // each image widget's slideshow of the theme in "folder" as _slides finds it
+            let env = lp_theme::Env {
+                fonts_dir: case["fonts_dir"].as_str().unwrap_or("").into(),
+            };
+            let folder = std::path::PathBuf::from(case["folder"].as_str().unwrap_or(""));
+            let theme = match lp_theme::load_theme(&folder, &env) {
+                Ok(theme) => theme,
+                Err(e) => return Ok(json!({"error": e.msg})),
+            };
+            let options = lp_render::Options {
+                preview: true,
+                animate: false,
+                dither: false,
+            };
+            let mut renderer = lp_render::Renderer::new(theme, &env, options).map_err(|e| e.0)?;
+            let slides: serde_json::Map<String, Value> = renderer
+                .image_slides()
+                .into_iter()
+                .map(|(id, found)| {
+                    let found = match found {
+                        Ok(list) => json!(list),
+                        Err((kind, what)) => json!({ kind: what }),
+                    };
+                    (id, found)
+                })
+                .collect();
+            json!({"slides": slides})
+        }
         "zones" => {
             // the computer's zone as glibc finds it for a TZ of "tz" (null: unset), and for each
             // case's naive "now" ([y, m, d, h, mi, s, us, fold]): its timestamp and offset

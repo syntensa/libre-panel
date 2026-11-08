@@ -23,6 +23,7 @@ use crate::gauge;
 use crate::graph;
 use crate::icons;
 use crate::image;
+use crate::kept::Kept;
 use crate::list;
 use crate::lit;
 use crate::metric::{self, Shown};
@@ -74,6 +75,14 @@ impl From<Failed> for Unported {
 }
 
 /// A widget's drawing: its piece, or why there is none.
+/// What Rust says of a theme's picture it does not read: one Pillow may read (it knows more
+/// kinds of picture) or fail at otherwise than Python goes on from.
+pub(crate) const UNREAD: &str = "pictures Rust does not read";
+
+/// A theme's picture Rust does not read (UNREAD).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Unread;
+
 pub(crate) enum Drawn {
     Piece(Rc<Piece>),
     /// nothing to draw (Python's None: no piece, no box)
@@ -95,6 +104,8 @@ pub struct Renderer {
     modules: IndexMap<String, Dict>,
     /// the background picture at the theme's size (with its gradient), None for none
     background: Option<Image>,
+    /// whether the background's picture is one Rust does not read (UNREAD)
+    ground_unread: bool,
     /// frames start from an opaque colour: pieces go on with a paste in place, in RGB
     opaque: bool,
     mode: Mode,
@@ -122,10 +133,19 @@ pub struct Renderer {
     /// whether this frame's slots have chosen their cards
     slots_begun: bool,
     /// the time the frame is drawn for (render's `now`: a download's running light)
-    at: f64,
+    pub(crate) at: f64,
     /// your place (latitude, longitude), for the earth: the loop sets it (Python's
     /// renderer.place); None for none
     pub place: Option<(f64, f64)>,
+    /// the theme's pictures fitted (_images), and the animated pictures' frames (_animations)
+    pub(crate) pictures: RefCell<Kept<image::PictureKey, Option<Rc<Image>>>>,
+    pub(crate) animations: Kept<image::AnimationKey, Option<Rc<image::Animation>>>,
+    /// whether a slideshow's picture moves (_moves)
+    pub(crate) moves: HashMap<String, bool>,
+    /// when each animated picture first showed, by widget and picture (_began)
+    pub(crate) began: HashMap<(String, String), f64>,
+    /// each slideshow's pictures, and when its folders were read (_slide_lists)
+    pub(crate) slide_lists: HashMap<String, (std::time::Instant, Vec<String>)>,
 }
 
 impl Renderer {
@@ -147,6 +167,7 @@ impl Renderer {
             module_boxes: expanded.boxes,
             modules,
             background: None,
+            ground_unread: false,
             opaque: false,
             mode: Mode::RGBA,
             switches: IndexMap::new(),
@@ -162,6 +183,11 @@ impl Renderer {
             slots_begun: false,
             at: 0.0,
             place: None,
+            pictures: RefCell::new(Kept::new(image::IMAGE_BYTES)),
+            animations: Kept::new(image::ANIMATION_BYTES),
+            moves: HashMap::new(),
+            began: HashMap::new(),
+            slide_lists: HashMap::new(),
         };
         renderer.slots = renderer.make_slots()?;
         renderer.background = renderer.load_background()?;
@@ -362,25 +388,34 @@ impl Renderer {
         lp_py::format::float_of(&given).map_err(|e| Failed(e.msg))
     }
 
-    /// _read_picture: a picture of the theme's folder, upright (EXIF) and in RGBA; None where it
-    /// cannot be read (warned).
-    fn read_picture(&mut self, rel: &str) -> Option<Image> {
-        let root = self.theme.root.clone()?;
+    /// _read_picture: a picture of the theme's folder, upright (EXIF) and in RGBA; None where
+    /// Python's reading fails as at a file that is not there or cannot be read (a folder, say)
+    /// or one outside the theme: OSError and ThemeError, which it catches (warned). A file
+    /// Rust does not read: Err(UNREAD), as Pillow may read it (it knows more kinds) or fail at
+    /// it otherwise than with an OSError (an IndexError, say, which Python does not catch).
+    pub(crate) fn read_picture(&self, rel: &str) -> std::result::Result<Option<Image>, Unread> {
+        let Some(root) = self.theme.root.clone() else {
+            return Ok(None);
+        };
         if rel.is_empty() {
-            return None;
+            return Ok(None);
+        }
+        if rel.contains('\0') {
+            return Err(Unread); // (a path with a NUL: Python's ValueError, which it does not catch)
         }
         let read = lp_theme::model::resolve_asset(&root, &Value::from(rel))
             .map_err(|e| e.msg.clone())
-            .and_then(|path| std::fs::read(&path).map_err(|e| e.to_string()))
-            .and_then(|data| lp_decode::open(&data, Mode::RGBA).map_err(|e| e.0));
+            .and_then(|path| std::fs::read(&path).map_err(|e| e.to_string()));
         match read {
-            Ok(image) => Some(image),
+            Ok(data) => lp_decode::open(&data, Mode::RGBA)
+                .map(Some)
+                .map_err(|_| Unread),
             Err(e) => {
                 self.warn(format!(
                     "image {} could not be loaded ({e})",
                     lp_py::repr(rel)
                 ));
-                None
+                Ok(None)
             }
         }
     }
@@ -393,8 +428,12 @@ impl Renderer {
         );
         let rel = self.theme.background_image.clone().unwrap_or_default();
         let image = match self.read_picture(&rel) {
-            Some(image) => Some(image.fit((w, h), Filter::Bicubic, 0.0, (0.5, 0.5))?),
-            None => None,
+            Ok(Some(image)) => Some(image.fit((w, h), Filter::Bicubic, 0.0, (0.5, 0.5))?),
+            Ok(None) => None,
+            Err(Unread) => {
+                self.ground_unread = true;
+                None
+            }
         };
         if self.theme.background_gradient.is_none() {
             return Ok(image);
@@ -542,7 +581,7 @@ impl Renderer {
     }
 
     /// The picture a source or a service has under `name`, in the frame's snapshot.
-    fn live_picture(&self, name: &str) -> Option<&Image> {
+    pub(crate) fn live_picture(&self, name: &str) -> Option<&Image> {
         self.snapshot.as_ref()?.images.get(name)
     }
 
@@ -863,22 +902,7 @@ impl Renderer {
             }
             "image" => {
                 let w = w.clone();
-                match image::shown(&w) {
-                    image::Shown::Unported(what) => return Drawn::Unported(what.into()),
-                    image::Shown::Clear => {
-                        self.cached(&w, Value::None, |r| r.clear_image_piece(&w))
-                    }
-                    image::Shown::Live(name) => {
-                        let picture = self.live_picture(&name);
-                        let Some(content) = picture.map(|p| image::picture_key(&name, p)) else {
-                            return Drawn::Nothing;
-                        };
-                        self.cached(&w, content, |r| match r.live_picture(&name) {
-                            Some(p) => r.live_image_piece(&w, p),
-                            None => Err(Failed("a picture gone".into())),
-                        })
-                    }
-                }
+                return self.image_widget(&w);
             }
             "graph" => {
                 let w = w.clone();
@@ -1131,6 +1155,9 @@ impl Renderer {
     fn beyond_widgets(&self) -> Option<&'static str> {
         if self.theme.screen.is_some() {
             return Some("screens");
+        }
+        if self.ground_unread {
+            return Some(UNREAD);
         }
         if widget::truthy(&self.theme.look, "grid") {
             return Some("looks");

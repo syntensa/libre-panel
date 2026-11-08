@@ -19,6 +19,7 @@ mod gauge;
 mod graph;
 pub mod icons;
 mod image;
+mod kept;
 mod light;
 mod list;
 mod lit;

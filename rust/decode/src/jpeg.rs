@@ -820,16 +820,22 @@ fn mp_offsets(h: &Header) -> Option<Vec<usize>> {
 
 /// Every frame as the app reads an animation: a JPEG's one, an MPO's each (MpoImageFile.seek:
 /// the JPEG at each offset of the MP index, opened and decoded anew).
-pub(crate) fn frames(data: &[u8]) -> Result<Vec<Frame>> {
+pub(crate) fn each_frame(
+    data: &[u8],
+    each: &mut dyn FnMut(usize, Frame) -> Result<()>,
+) -> Result<()> {
     let rgba = |p: Picture| p.convert(lp_pixels::Mode::RGBA);
     let first = decode_picture(data, None)?;
     let h = open_at(data, 0)?;
-    let mut out = vec![Frame {
+    let offsets = mp_offsets(&h);
+    let count = offsets.as_ref().map_or(1, Vec::len);
+    let frame = Frame {
         duration: None,
         image: rgba(first)?,
-    }];
-    let Some(offsets) = mp_offsets(&h) else {
-        return Ok(out);
+    };
+    each(count, frame)?;
+    let Some(offsets) = offsets else {
+        return Ok(());
     };
     for &offset in &offsets[1..] {
         if data.get(offset + 2..offset + 4).is_none() {
@@ -859,12 +865,13 @@ pub(crate) fn frames(data: &[u8]) -> Result<Vec<Frame>> {
             xmp_bytes: None,
             l_over_p: false,
         };
-        out.push(Frame {
+        let frame = Frame {
             duration: None,
             image: rgba(picture)?,
-        });
+        };
+        each(count, frame)?;
     }
-    Ok(out)
+    Ok(())
 }
 
 // -- saving -------------------------------------------------------------------------------

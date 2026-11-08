@@ -504,17 +504,29 @@ pub fn thumbnail(
 /// read_animation: each frame's duration and its picture in RGBA): GIF's, APNG's (a PNG's
 /// one).
 pub fn frames(data: &[u8]) -> Result<Vec<Frame>> {
+    let mut out = Vec::new();
+    each_frame(data, &mut |_, frame| {
+        out.push(frame);
+        Ok(())
+    })?;
+    Ok(out)
+}
+
+/// The frames of an animated picture as [`frames`] reads them, one after the other to `each`
+/// with the count of them the file says (n_frames: an APNG may have fewer); an error of
+/// `each` stops the reading. Only one frame is held at a time.
+pub fn each_frame(data: &[u8], each: &mut dyn FnMut(usize, Frame) -> Result<()>) -> Result<()> {
     if data.starts_with(b"\x89PNG\r\n\x1a\n") {
-        return png::frames(data);
+        return png::each_frame(data, each);
     }
     if is_gif(data) {
-        return gif::frames(data);
+        return gif::each_frame(data, each);
     }
     if is_jpeg(data) {
-        return jpeg::frames(data);
+        return jpeg::each_frame(data, each);
     }
     if webp::accepts(data) {
-        return webp::frames(data);
+        return webp::each_frame(data, each);
     }
     error("cannot identify image file")
 }

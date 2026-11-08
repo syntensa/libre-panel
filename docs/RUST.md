@@ -402,8 +402,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       and blurred premultiplied at a fraction of the size, then drawn up), its corners rounded
       (their mask drawn three times larger and reduced); nothing for a picture the snapshot
       lacks, a clear piece for a widget with none. The frames of random themes of them the
-      same to the bit. The theme's own pictures, animated ones, videos and slideshows: Rust
-      says it does not draw them yet. In the two encore themes of 1920 x 720, drawn by Rust
+      same to the bit. The theme's own pictures, animated ones and slideshows: below, after
+      the earth. In the two encore themes of 1920 x 720, drawn by Rust
       since, one pixel of 1.4 million is a level apart here, where the volume's bar glow is
       blurred (numpy multiplies by the blur's matrices in float32)
 - [x] weather symbols in a still frame (symbol widgets, and the lit finish's weather icons
@@ -713,6 +713,47 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       there): Rust says it does not draw them yet. All 99 of the app's themes are drawn by
       Rust on Linux, 89 of them the same to the bit (Terra's six are new, all to the bit); 93
       on Windows
+- [x] the theme's own pictures in image widgets (the renderer's _draw_image, _asset_image,
+      _read_picture, _slides, _slide, _moving and _animation; moving.py's read_animation): a
+      picture of the theme's folder, upright as its EXIF says, in RGBA, fitted (or as it is),
+      blurred and rounded as a live one is; a clear piece of the widget's size for one that is
+      not there, a folder or outside the theme (warned as Python warns); kept fitted within
+      64 MB (render/kept.py's Kept: the least recently used go, the newest stays). A
+      slideshow's pictures as _slides finds them: the widget's, then one a line (a name, a
+      source's, a pattern a folder's pictures and videos as pathlib's glob finds them in
+      Python 3.12: hidden names too, a part before others folders only, "**" the folders
+      below without following links, twice each path once, ".." the folder above; a root or
+      "**" in a part refused as pathlib refuses them, before any folder is read), sorted as
+      paths are, none outside the theme, read again after half a minute. Still pictures take
+      turns by the clock (the frame's time as a timestamp of the computer's zone,
+      floor-divided as floats are); one alone shows, and where its timestamp fails (at the
+      edges of the years) so does the widget, as in Python. An animated picture (GIF, WebP,
+      APNG) shows the frame of the moment from when it first showed, at its speed, round and
+      round: each frame finished as a picture is, every second (third ...) kept where all
+      would take more than 96 MB, each as long as those it stands for (lp-decode gives them
+      one after another: one is held at a time). The tests: 160 random themes of the theme's
+      pictures (105 drawn, all the same to the bit, 34 left out for a file Rust does not
+      read), 160 of slideshows at random moments and at their turns (96 drawn, to the bit), 40
+      of animated pictures frame after frame, a part of a frame to a minute later and back (95
+      frames, to the bit), an animation of frames of its own lengths at each speed a widget may
+      ask, at each frame's end, just before and after it and before it first showed, an
+      animation whose frames hold more than 96 MB, the pictures of 312 slideshows' lines
+      (patterns of every kind of part, links, ".." out of the theme, the errors) as _slides
+      finds them, a picture alone at the edges of the years in four zones (92 frames to the
+      bit). The counter-checks put in 45 faults, and the tests catch them all (3 of them once
+      cases were added: two "**" apart, a moment before an animation first showed, a speed
+      under the least). Rust says it does not draw these yet: videos, slideshows with a
+      picture that moves, animated pictures in a moving frame, a file it does not read (also
+      as the background: one that is there and lp-decode does not decode, as Pillow knows
+      more kinds, or fails at it with what Python does not catch, as with the IndexError of a
+      GIF cut short), folders of names that are no Unicode; where it does not know the
+      computer's zone (on Windows), slideshows by the clock and a picture alone at the edges
+      of the years; on Windows, slideshow patterns of other than ASCII (pathlib matches there
+      without case)
+- [ ] pictures as Pillow fails at them: lp-decode's errors as Python's exceptions, so that
+      where Python catches an OSError and goes on (a picture cut short, a file of no picture)
+      Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,
+      TIFF, ICO ...); names that are no Unicode (R3b)
 - [ ] the zones on Windows: Python finds them in the tzdata package there, and Rust finds
       them where it is told the package is (LP_TZDATA: the tests tell lp-check where
       Python's is). The Rust app does not bring one yet: without it, no key is a zone there.

@@ -1110,20 +1110,20 @@ pub struct Frame {
 
 /// Every frame of a GIF as the app reads an animation (render/moving.py's read_animation):
 /// n_frames, the first frame converted to RGBA, then ImageSequence's frames one after the
-/// other, each with its duration and converted to RGBA.
-pub fn frames(data: &[u8]) -> Result<Vec<Frame>> {
+/// other, each with its duration and converted to RGBA, to `each` with the count of them.
+pub fn each_frame(data: &[u8], each: &mut dyn FnMut(usize, Frame) -> Result<()>) -> Result<()> {
     let (mut gif, first) = Gif::open(data)?;
     let all = gif.rest(&first)?;
-    let mut out = Vec::with_capacity(all.len());
     for (n, h) in all.iter().enumerate() {
         if n > 0 {
             gif.seek(n, h)?;
         }
         gif.load(n, h)?;
-        out.push(Frame {
+        let frame = Frame {
             duration: h.duration.map(f64::from),
             image: gif.rgba()?,
-        });
+        };
+        each(all.len(), frame)?;
     }
-    Ok(out)
+    Ok(())
 }

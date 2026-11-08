@@ -160,9 +160,10 @@ files and messages depend on it, and carry parts of CPython's code in their own 
 float() and int() of a str, format() and str.format (`Python/formatter_unicode.c`,
 `Python/pystrtod.c`), json (`Modules/_json.c`), math.hypot's vector_norm
 (`Modules/mathmodule.c`), the order of a set (`Objects/setobject.c`), dates and their strftime
-(`Modules/_datetimemodule.c`, `Modules/timemodule.c`) and the zones zoneinfo finds. The changes
-made to them, as the licence asks: they are rewritten in Rust, only as far as the app needs
-them. 1. This LICENSE AGREEMENT is between the Python Software Foundation ("PSF"), and the
+(`Modules/_datetimemodule.c`, `Modules/timemodule.c`), the zones zoneinfo finds, fnmatch's
+patterns (`Lib/fnmatch.py`) and, in `rust/render`, pathlib's glob (`Lib/pathlib.py`). The
+changes made to them, as the licence asks: they are rewritten in Rust, only as far as the app
+needs them. 1. This LICENSE AGREEMENT is between the Python Software Foundation ("PSF"), and the
 Individual or Organization ("Licensee") accessing and otherwise using this software ("Python")
 in source or binary form and its associated documentation. 2. Subject to the terms and
 conditions of this License Agreement, PSF hereby grants Licensee a nonexclusive, royalty-free,
