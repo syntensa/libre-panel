@@ -719,6 +719,9 @@ mod tests {
             head
         };
         let close = hongtai::frame(hongtai::CMD_CLOSE, &[]).unwrap();
+        // (the port open before the panel's end is read: with no end of it open, Linux answers a
+        // read of the other end with EIO)
+        let port = SerialPort::open(&name, hongtai::BAUD, false).unwrap();
         let reader = std::thread::spawn(move || {
             let mut seen = Vec::new();
             let mut buf = [0u8; 4096];
@@ -742,7 +745,6 @@ mod tests {
             }
             seen
         });
-        let port = SerialPort::open(&name, hongtai::BAUD, false).unwrap();
         let timing = Timing {
             settle: Duration::from_millis(20),
             ..Timing::PANEL
