@@ -19,7 +19,7 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -1066,6 +1066,179 @@ def test_clocks_in_another_time_zone_are_not_drawn_here_yet(tmp_path: Path) -> N
     assert [got.get("unported") for got in ours["frames"]] == ["clocks in a time zone"] * 4
 
 
+# (the sides of a clock face's box: none, less than the least face, odd and even, about where
+# its marks between the hours show (110 px), the almanacs')
+ANALOG_SIDES = [-4, 0, 7, 8, 9, 31, 64, 109, 110, 111, 160, 201, 396, 402]
+
+
+def _analog(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """A clock face: of every size, square or not, with its face and marks or without them,
+    its hands in the theme's colours or their own, its second hand shown or not, ticking,
+    gliding or going round (a still frame shows them alike); another place's time now and then
+    (Rust says it does not draw it yet)."""
+    w, h = size
+    widget: dict[str, Any] = {
+        "type": "analog", "id": f"a{i}", "x": rng.randrange(-60, w), "y": rng.randrange(-60, h),
+        "w": rng.choice(ANALOG_SIDES), "h": rng.choice(ANALOG_SIDES),
+    }  # fmt: skip
+    if rng.random() < 0.5:
+        widget["h"] = widget["w"]
+    for key in ("color", "color2"):
+        if rng.random() < 0.6:
+            widget[key] = rng.choice([_colour(rng), "@accent", "@text2", _hex(rng, True)])
+    for key in ("face", "marks"):
+        if rng.random() < 0.6:
+            widget[key] = rng.choice([None, _colour(rng), "@surface", "@line", _hex(rng, True)])
+    if rng.random() < 0.4:
+        widget["seconds"] = rng.random() < 0.5
+    if rng.random() < 0.4:
+        widget["hand"] = rng.choice(["tick", "glide", "sweep"])
+    if rng.random() < 0.05:
+        widget["timezone"] = rng.choice(["Asia/Tokyo", "UTC", "Nowhere/Else"])
+    if rng.random() < 0.1:
+        widget["opacity"] = rng.choice([0.5, 0.0, 0.25])
+    return widget
+
+
+def _analog_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _analog(rng, i, size) if rng.random() < 0.75 else _card_or_text(rng, i, size)
+
+
+# (the hands' edges: midnight and noon, a second and a minute before them, a minute's last)
+ANALOG_MOMENTS = [{"hour": 0, "minute": 0, "second": 0},
+                  {"hour": 11, "minute": 59, "second": 59},
+                  {"hour": 12, "minute": 0, "second": 0},
+                  {"hour": 23, "minute": 59, "second": 59},
+                  {"minute": 59}, {"second": 59}, {"second": 0},
+                  {"hour": 6, "minute": 30}]  # fmt: skip
+
+
+def _analog_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
+    """A moment of the years round now, to the microsecond, at the hands' edges now and then."""
+    given, snapshot = _clock_snapshot(rng)
+    if rng.random() < 0.3:
+        now = snapshot.now.replace(**rng.choice(ANALOG_MOMENTS))
+        given, snapshot = _clock_moment(now)
+    return given, snapshot
+
+
+def _clock_moment(now: datetime) -> tuple[dict[str, Any], Snapshot]:
+    return {"readings": {}, "images": {}, "now": _moment(now)}, Snapshot(readings={}, now=now)
+
+
+def test_frames_of_analog_clocks_as_python_draws_them(tmp_path: Path) -> None:
+    # (the face, its rim and its marks (those between the hours from 110 px), the hour and the
+    # minute hands, the second hand and the dot in the middle, drawn three times as large and
+    # reduced as the renderer's _canvas and _down make them)
+    drawn = _compare_frames(tmp_path, 0xA7A1, 300, _analog_or_more, _analog_snapshot,
+                            undefined=("clocks in a time zone",))  # fmt: skip
+    assert drawn > 200, drawn
+
+
+def test_analog_clocks_frame_after_frame_as_python_keeps_them(tmp_path: Path) -> None:
+    # (one renderer drawing its clocks frame after frame: the same moment again, a part of a
+    # second, a second, a minute, an hour or half a day later: each face drawn anew where a
+    # hand moved, kept where none did)
+    rng = random.Random(0xA7A4)
+    cases, expected = [], []
+    for n in range(40):
+        folder = tmp_path / f"t{n}"
+        _frame_theme(rng, folder, _analog)
+        now = _analog_snapshot(rng)[1].now
+        steps: list[tuple[Snapshot, float]] = []
+        given = []
+        for _ in range(rng.randrange(2, 8)):
+            readings, snapshot = _clock_moment(now)
+            steps.append((snapshot, 1000.0))
+            given.append({"snapshot": readings, "now": 1000.0})
+            now += timedelta(seconds=rng.choice([0, 0.4, 1, 1, 5, 59, 60, 3600, 43200]))
+        cases.append({"folder": str(folder), "dither": False, "steps": given})
+        try:
+            expected.append(_python_steps(folder, steps))
+        except ThemeError:
+            expected.append(None)
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR),
+                   "language": "en", "locale": str(i18n.LOCALE_DIR)}])  # fmt: skip
+    drawn = 0
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        if want is None:  # (a theme Python does not read: nor does Rust)
+            assert "error" in got, n
+            continue
+        for i, (g, w) in enumerate(zip(got["steps"], want, strict=True)):
+            if "failed" in w:  # (Python's frame fails: Rust makes none)
+                assert "unported" in g, (n, i, g, w)
+                continue
+            if g.get("unported") == "clocks in a time zone":
+                continue
+            assert g["sha256"] == hashlib.sha256(w["frame"].tobytes()).hexdigest(), (n, i)
+            assert g["boxes"] == w["boxes"], (n, i)
+            drawn += 1
+    assert drawn > 130, drawn
+
+
+def test_analog_clocks_at_every_size(tmp_path: Path) -> None:
+    # (every side from 1 to 140 px, square and not, at times all round the dial: the marks
+    # between the hours from 110 px, the widths of the hands and the marks rounded where they
+    # cross a half)
+    rng = random.Random(0xA7A2)
+    cases, expected = [], []
+    for side in range(1, 141):
+        folder = tmp_path / f"t{side}"
+        folder.mkdir()
+        widgets = [{"type": "analog", "id": "a0", "x": 4, "y": 4, "w": side, "h": side,
+                    "face": "#111821", "marks": "#8a97a8", "color2": "#22d3ee"},
+                   {"type": "analog", "id": "a1", "x": 150, "y": 4, "w": side,
+                    "h": side + side % 7, "face": None, "marks": "#ffffff80",
+                    "seconds": side % 2 == 0}]  # fmt: skip
+        data = {"format": THEME_FORMAT, "name": "clocks", "display": {"width": 300, "height": 160},
+                "palette": {name: "#808080" for name in PALETTE},
+                "background": {"color": "#101418"}, "widgets": widgets}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        given, snapshot = _analog_snapshot(rng)
+        cases.append({"folder": str(folder), "snapshot": given, "dither": side % 5 == 0})
+        expected.append(_python_frame(folder, snapshot, side % 5 == 0))
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    for case, got, want in zip(cases, ours["frames"], expected, strict=True):
+        assert got.get("sha256") == hashlib.sha256(want["frame"].tobytes()).hexdigest(), case
+        assert got["boxes"] == want["boxes"], case["folder"]
+
+
+def test_analog_clocks_with_glow_and_shadow_within_a_level(tmp_path: Path) -> None:
+    # (a clock casts its light as a card does: blurred in floating point, now and then a pixel
+    # a level apart; the almanacs' faces among them)
+    import numpy as np
+
+    looks = [{"glow": 0.15, "face": "#111821", "marks": "#5b6474"},
+             {"shadow": "#000000a0", "shadow_blur": 4, "opacity": 0.8},
+             {"glow": 1, "glow_radius": 6, "face": None, "seconds": False}]  # fmt: skip
+    rng = random.Random(0xA7A3)
+    cases, expected = [], []
+    for n, side in enumerate([24, 64, 110, 160, 240, 396]):
+        folder = tmp_path / f"t{side}"
+        folder.mkdir()
+        widgets = [{"type": "analog", "id": f"a{i}", "x": 30 + i * (side + 40), "y": 30,
+                    "w": side, "h": side, **look} for i, look in enumerate(looks)]  # fmt: skip
+        data = {"format": THEME_FORMAT, "name": "clocks",
+                "display": {"width": 3 * side + 140, "height": side + 60},
+                "palette": {name: "#808080" for name in PALETTE},
+                "background": {"color": "#101418"}, "widgets": widgets}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        given, snapshot = _analog_snapshot(rng)
+        dither = n % 2 == 1
+        cases.append({"folder": str(folder), "snapshot": given, "dither": dither, "bytes": True})
+        expected.append(_python_frame(folder, snapshot, dither))
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    differ = total = 0
+    for case, got, want in zip(cases, ours["frames"], expected, strict=True):
+        assert "frame" in want and "frame" in got, (case["folder"], got, want)
+        apart = np.abs(np.asarray(picture(got["frame"]), int) - np.asarray(want["frame"], int))
+        assert apart.max() <= 1, case["folder"]
+        differ += int((apart.max(axis=2) > 0).sum())
+        total += apart.shape[0] * apart.shape[1]
+        assert got["boxes"] == want["boxes"], case["folder"]
+    assert differ <= total // 10000, differ
+
+
 BAR_SENSORS = ["cpu.load", "gpu.temp", "net.down", "audio.volume", "mem.used"]
 BAR_VALUES = [0, 1, 50, 50.5, 99.99, 100, 150, -5, 33.3333, 1e9, 0.0001, None, "x", True, 7,
               12.5, 66.66666, 0.5]  # fmt: skip
@@ -1497,7 +1670,7 @@ def test_the_app_s_own_themes_as_python_draws_them() -> None:
         assert got["boxes"] == want["boxes"], folder.name
         drawn.append(folder.name)
     assert len(folders) > 90
-    assert len(drawn) >= 91, drawn
+    assert len(drawn) >= 93, drawn
 
 
 def _lit(

@@ -633,6 +633,29 @@ impl Renderer {
                 };
                 self.text_widget(&w, text, widget::text(&w, "color").to_string())
             }
+            "analog" => {
+                let w = w.clone();
+                // (another place's time: the computer's own zone and the other's, not here yet)
+                if !widget::text(&w, "timezone").is_empty() {
+                    return Drawn::Unported("clocks in a time zone".into());
+                }
+                let seconds = widget::truthy(&w, "seconds");
+                let kind = widget::optional(&w, "hand").unwrap_or("tick");
+                if self.options.animate && seconds && kind != "tick" {
+                    return Drawn::Unported("clocks whose second hand glides or goes round".into());
+                }
+                let now = self.now();
+                // (the hour on the dial, the minute and the second, -1 where none is shown)
+                let hands = [
+                    i64::from(now.hour % 12),
+                    i64::from(now.minute),
+                    if seconds { i64::from(now.second) } else { -1 },
+                ];
+                let content = Value::List(hands.iter().map(|&v| Value::int(v)).collect());
+                self.cached(&w, content, |r| {
+                    r.analog_piece(&w, hands[0], hands[1], hands[2])
+                })
+            }
             "calendar" => {
                 let w = w.clone();
                 let now = self.now();

@@ -613,6 +613,22 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       91 of the app's 99 themes are drawn by Rust, 81 of them the same to the bit (Lumen in its
       four shapes is new; its two of a level apart in the glow of their rings and a frame, none
       in their fans)
+- [x] analog clocks in a still frame (the renderer's _draw_analog and _analog_piece): the face
+      and its faint rim, its marks (the quarters', the hours', and from 110 px those between
+      them), the hour and the minute hands with round ends, the second hand (or none) and the
+      dot in the middle, in the theme's colours or their own, drawn three times as large and
+      reduced as _canvas and _down make them, the hands' angles in Python's sums (math.radians
+      is the same times pi/180 as Rust's to_radians); kept by the hands they show. A second
+      hand that ticks, glides or goes round stands alike in a still frame. The frames of 300
+      random themes of clocks of every size, square or not, at moments of the years round now
+      and at the hands' edges (235 drawn, all the same to the bit); every side from 1 to
+      140 px, square and not, to the bit; 40 themes drawn frame after frame a part of a second
+      to half a day apart (150 frames, to the bit); clocks with a glow or a shadow at six sizes
+      within a level (none apart here). The counter-checks put in 27 faults, and the tests
+      catch them all. Another place's time, and a second hand that glides or goes round in a
+      moving frame: Rust says it does not draw them yet. 93 of the app's 99 themes are drawn
+      by Rust, 83 of them the same to the bit (almanac with its analog face, in both its
+      shapes, is new, the same to the bit; terra's six, the earth, are left)
 - [ ] the zones on Windows: Python finds them in the tzdata package there, and Rust finds
       them where it is told the package is (LP_TZDATA: the tests tell lp-check where
       Python's is). The Rust app does not bring one yet: without it, no key is a zone there
