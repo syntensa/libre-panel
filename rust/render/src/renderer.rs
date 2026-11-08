@@ -25,6 +25,7 @@ use crate::image;
 use crate::list;
 use crate::lit;
 use crate::metric::{self, Shown};
+use crate::moon;
 use crate::piece::{Failed, Piece, Result};
 use crate::shapes::{self, Rgba};
 use crate::slot::Slot;
@@ -921,6 +922,27 @@ impl Renderer {
                     colours.into(),
                 ]);
                 self.cached(&w, content, |r| r.symbol_piece(&w, &snapshot, lit))
+            }
+            "moon" => {
+                let w = w.clone();
+                let snapshot = self.snapshot.clone().unwrap_or_default();
+                let Some(phase) = number(&snapshot.value(widget::text(&w, "sensor"))) else {
+                    return Drawn::Nothing;
+                };
+                let phase = lp_py::round_digits(lp_py::num::float_div_mod(phase, 1.0).1, 3);
+                if widget::int(&w, "size", 64) > moon::LARGEST {
+                    return Drawn::Unported("moons larger than 4096 px".into());
+                }
+                if self.pack(&w) == "classic" {
+                    self.cached(&w, Value::Float(phase), |r| r.moon_classic(&w, phase))
+                } else if self.options.animate {
+                    // (its halo breathes where the panel moves: a moving frame)
+                    return Drawn::Unported("moons whose halo breathes".into());
+                } else {
+                    let level = Value::int(moon::halo_level(phase, None));
+                    let content = Value::List(vec![Value::Float(phase), level]);
+                    self.cached(&w, content, |r| r.moon_piece(&w, phase))
+                }
             }
             other => return Drawn::Unported(format!("{other} widgets")),
         };

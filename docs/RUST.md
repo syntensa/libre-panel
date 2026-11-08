@@ -151,7 +151,7 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
 - [x] render/dither.py's numpy: its noise (default_rng's float32s: SeedSequence and PCG64),
       to_u8 and ramp_u8 to the byte, its blur to the bit where it takes its passes, and within
       half a thousandth of a level where it multiplies by their matrices instead
-- [ ] numpy's arithmetic in the rest of render/ (lit, facets, fan, moon, sun path, symbols,
+- [ ] numpy's arithmetic in the rest of render/ (lit, facets, fan, sun path, symbols,
       weather art, globes, start screens): widget by widget, with R4
 
 ### R2 text
@@ -523,6 +523,41 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       on a clock that only goes forward). Slots in a moving frame (changes that roll, fade or
       move, a new track sliding in, the line of light): Rust says it does not draw them yet.
       73 of the app's 99 themes are drawn by Rust, 68 of them the same to the bit
+- [x] moon widgets in a still frame (render/moon.py: face, disc, halo, picture, halo_level and
+      lit_share; the renderer's _draw_moon, _moon_classic and _moon_piece), in both looks. The
+      classic one: a disc in its night colour and its lit side bounded by the terminator, an
+      ellipse, drawn three times its size and averaged down. The vivid one as the moon looks:
+      its face made once as moon.py makes it, from numpy's default_rng(1969) (SeedSequence,
+      PCG64, the ziggurat's normals and exponentials, powers and uniforms: the same doubles to
+      the bit), its noise of grids enlarged bicubic, its seas, craters and rays in float32, or
+      in float64 where moon.py's numbers are numpy's doubles, with the C library's exp, pow,
+      hypot and atan2 where numpy calls them and numpy's own float32 exp; its relief blurred
+      with np.convolve's sums as numpy adds them (the ends by OpenBLAS's sdot: float products
+      summed in a double), and np.gradient. The whole face is the same to the bit as numpy's on
+      a processor without AVX-512 (and with OpenBLAS's Haswell, Zen or Sandy Bridge kernels
+      alike). Lit at its phase, north or south (Lommel-Seeliger's light, the relief along the
+      terminator by numpy's own float32 tanh), with its halo as bright as it is full. The tests'
+      face is made by numpy in a process told to leave AVX-512 unused: where it takes Intel's
+      SVML instead (Linux with AVX-512), 5904 of the face's 262144 albedos are a unit or two in
+      the last place apart, and of 1560 moons drawn here 4 come out a level apart in a pixel.
+      numpy's float32 tanh, and its exp, are the same to the bit on every one of the 2^32
+      float32s, with AVX-512 and without (the tests check 400,000 of them and the edges of the
+      tanh's intervals); the Generator's draws of eleven seeds, the moons of every size from a
+      pixel, phase, colour and night (234 pictures), the frames of 160 random themes of moons in
+      their own look or the one the person chose, and of 60 of moon and sun modules: the same to
+      the bit. A moon of more than 4096 px a side, and one whose halo breathes where the panel
+      moves, Rust says it does not draw yet. The counter-checks put in 120 faults, and the tests
+      catch 110; the other 10 change nothing in any picture the tests make (two in numpy's tanh,
+      its first step unfused and 1 from 2^127 on, which still give numpy's tanh on every
+      float32; the full moon drawn waning, the same polygon; the halo's level among what keeps a
+      still moon, which its phase holds already; a crater's place compared with the sea in
+      doubles, which makes the same face; three that change a draw only at a layer's edge, the
+      tail's edge or where log and log1p of one number round apart, none of which the tests'
+      draws meet; and the C library's float32 tanh in the terminator and its exp in the halo in
+      place of numpy's, 3 and 2 units in the last place apart at most, which no byte of the
+      tests' moons shows). 83 of the app's 99 themes are drawn by Rust, 78 of them the same to
+      the bit (nimbus in its four shapes and the companion screens of almanac and encore are
+      new)
 - [ ] the zones on Windows: Python finds them in the tzdata package there, and Rust finds
       them where it is told the package is (LP_TZDATA: the tests tell lp-check where
       Python's is). The Rust app does not bring one yet: without it, no key is a zone there

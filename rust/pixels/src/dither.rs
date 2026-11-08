@@ -12,6 +12,8 @@
 
 use std::sync::OnceLock;
 
+use crate::random::Pcg64;
+
 /// dither.TILE: the noise's tile, laid side by side.
 pub const TILE: usize = 128;
 
@@ -19,118 +21,6 @@ pub const TILE: usize = 128;
 const PRODUCT_MOST: usize = 640;
 const PRODUCT_STEP: usize = 32;
 const PRODUCT_SHORT: usize = 160;
-
-/// numpy's SeedSequence (bit_generator.pyx): the pool its entropy is mixed into.
-fn seed_sequence(entropy: &[u32], pool_size: usize) -> Vec<u32> {
-    const INIT_A: u32 = 0x43b0_d7e5;
-    const MULT_A: u32 = 0x931e_8875;
-    const MIX_MULT_L: u32 = 0xca01_f9dd;
-    const MIX_MULT_R: u32 = 0x4973_f715;
-    let mut hash_const = INIT_A;
-    let mut hashmix = |value: u32| -> u32 {
-        let mut value = value ^ hash_const;
-        hash_const = hash_const.wrapping_mul(MULT_A);
-        value = value.wrapping_mul(hash_const);
-        value ^ (value >> 16)
-    };
-    let mix = |x: u32, y: u32| -> u32 {
-        let result = MIX_MULT_L
-            .wrapping_mul(x)
-            .wrapping_sub(MIX_MULT_R.wrapping_mul(y));
-        result ^ (result >> 16)
-    };
-    let mut pool: Vec<u32> = (0..pool_size)
-        .map(|i| hashmix(entropy.get(i).copied().unwrap_or(0)))
-        .collect();
-    for src in 0..pool_size {
-        for dst in 0..pool_size {
-            if src != dst {
-                let h = hashmix(pool[src]);
-                pool[dst] = mix(pool[dst], h);
-            }
-        }
-    }
-    for &e in entropy.iter().skip(pool_size) {
-        for slot in pool.iter_mut() {
-            let h = hashmix(e);
-            *slot = mix(*slot, h);
-        }
-    }
-    pool
-}
-
-/// SeedSequence.generate_state(n, np.uint64): 2 n words of 32 bits from the pool, in pairs
-/// (the low one first).
-fn generate_state(pool: &[u32], n: usize) -> Vec<u64> {
-    const INIT_B: u32 = 0x8b51_f9dd;
-    const MULT_B: u32 = 0x58f3_8ded;
-    let mut hash_const = INIT_B;
-    let words: Vec<u32> = (0..2 * n)
-        .map(|i| {
-            let mut v = pool[i % pool.len()] ^ hash_const;
-            hash_const = hash_const.wrapping_mul(MULT_B);
-            v = v.wrapping_mul(hash_const);
-            v ^ (v >> 16)
-        })
-        .collect();
-    words
-        .chunks_exact(2)
-        .map(|w| u64::from(w[0]) | u64::from(w[1]) << 32)
-        .collect()
-}
-
-/// numpy's PCG64 (XSL-RR on a 128-bit LCG), and its next_uint32 (each 64 bits giving two, the
-/// low half first).
-struct Pcg64 {
-    state: u128,
-    inc: u128,
-    half: Option<u32>,
-}
-
-impl Pcg64 {
-    const MULT: u128 = 0x2360_ed05_1fc6_5da4_4385_df64_9fcc_f645;
-
-    /// PCG64(SeedSequence(seed)): pcg64_set_seed with the state's four words.
-    fn new(seed: u32) -> Pcg64 {
-        let pool = seed_sequence(&[seed], 4);
-        let v = generate_state(&pool, 4);
-        let initstate = u128::from(v[0]) << 64 | u128::from(v[1]);
-        let initseq = u128::from(v[2]) << 64 | u128::from(v[3]);
-        let mut rng = Pcg64 {
-            state: 0,
-            inc: initseq << 1 | 1,
-            half: None,
-        };
-        rng.step();
-        rng.state = rng.state.wrapping_add(initstate);
-        rng.step();
-        rng
-    }
-
-    fn step(&mut self) {
-        self.state = self.state.wrapping_mul(Pcg64::MULT).wrapping_add(self.inc);
-    }
-
-    fn next_u64(&mut self) -> u64 {
-        self.step();
-        let s = self.state;
-        (((s >> 64) as u64) ^ (s as u64)).rotate_right((s >> 122) as u32)
-    }
-
-    fn next_u32(&mut self) -> u32 {
-        if let Some(h) = self.half.take() {
-            return h;
-        }
-        let next = self.next_u64();
-        self.half = Some((next >> 32) as u32);
-        next as u32
-    }
-
-    /// next_float: 24 bits of a 32-bit draw, as a float in [0, 1).
-    fn next_f32(&mut self) -> f32 {
-        (self.next_u32() >> 8) as f32 * (1.0 / 16_777_216.0)
-    }
-}
 
 /// dither._tile: rng.random((TILE, TILE), float32) + rng.random(...) - 1, of default_rng(0x11B7E).
 pub fn tile() -> &'static [f32] {

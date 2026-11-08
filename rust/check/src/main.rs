@@ -959,17 +959,140 @@ fn run(case: &Value) -> Result<Value, String> {
             }
             json!({"pictures": out})
         }
-        "np_exp" => {
-            // numpy's float32 exp of each float32 (their bits)
+        "np_random" => {
+            // numpy's default_rng(seed) and the draws asked of it in turn, each double's bits
+            // in hex: ["normal", n], ["exponential", n], ["power", a, n], ["uniform", lo, hi,
+            // n], ["random", n] (a, lo and hi as the bits of doubles in hex)
+            let double = |v: &Value| {
+                f64::from_bits(u64::from_str_radix(v.as_str().unwrap_or("0"), 16).unwrap_or(0))
+            };
+            let programs: Vec<Value> = case["programs"]
+                .as_array()
+                .ok_or("programs")?
+                .iter()
+                .map(|p| {
+                    let seed = p["seed"].as_u64().unwrap_or(0) as u32;
+                    let mut rng = lp_pixels::random::Generator::new(seed);
+                    let mut out = Vec::new();
+                    for draw in p["draws"].as_array().into_iter().flatten() {
+                        let kind = draw[0].as_str().unwrap_or("");
+                        let n = draw
+                            .as_array()
+                            .and_then(|d| d.last())
+                            .and_then(Value::as_u64)
+                            .unwrap_or(0);
+                        for _ in 0..n {
+                            let x = match kind {
+                                "normal" => rng.standard_normal(),
+                                "exponential" => rng.standard_exponential(),
+                                "power" => rng.power(double(&draw[1])),
+                                "uniform" => rng.uniform(double(&draw[1]), double(&draw[2])),
+                                _ => rng.random(),
+                            };
+                            out.push(format!("{:016x}", x.to_bits()));
+                        }
+                    }
+                    Value::from(out)
+                })
+                .collect();
+            json!({"programs": programs})
+        }
+        "moon" => {
+            // render/moon.py's pictures: what is "disc", "halo" or "picture"; a size, a phase, a
+            // colour and a night colour ([r, g, b] or null), mirror, a halo's strength, a time
+            let pictures: Vec<Value> = case["cases"]
+                .as_array()
+                .ok_or("cases")?
+                .iter()
+                .map(|c| {
+                    let rgb = |v: &Value| -> Option<[u8; 3]> {
+                        let a = v.as_array()?;
+                        let b = |i: usize| a.get(i).and_then(Value::as_u64).unwrap_or(0) as u8;
+                        Some([b(0), b(1), b(2)])
+                    };
+                    let size = c["size"].as_u64().unwrap_or(8) as usize;
+                    let phase = c["phase"].as_f64().unwrap_or(0.0);
+                    let colour = rgb(&c["colour"]).unwrap_or([255; 3]);
+                    let night = rgb(&c["night"]);
+                    let mirror = c["mirror"].as_bool().unwrap_or(false);
+                    let image = match c["what"].as_str().unwrap_or("") {
+                        "disc" => lp_render::moon::disc(size, phase, colour, night, mirror),
+                        "halo" => lp_render::moon::halo(
+                            size,
+                            colour,
+                            c["strength"].as_f64().unwrap_or(0.0),
+                        ),
+                        _ => lp_render::moon::picture(
+                            size,
+                            phase,
+                            colour,
+                            night,
+                            mirror,
+                            c["t"].as_f64(),
+                        ),
+                    };
+                    value_of(&image)
+                })
+                .collect();
+            json!({"pictures": pictures})
+        }
+        "moon_face" => {
+            // render/moon.py's face(): albedo and the slopes of the relief, mode-F pictures
+            let face = lp_render::moon::face();
+            let n = lp_render::moon::FACE;
+            let image = |data: &Vec<f32>| {
+                float_value(&lp_pixels::FloatImage {
+                    width: n,
+                    height: n,
+                    data: data.clone(),
+                })
+            };
+            json!({"albedo": image(&face.albedo), "gx": image(&face.gx), "gy": image(&face.gy)})
+        }
+        "np_digest" => {
+            // numpy's float32 exp or tanh of every float32 from `from` on (`count` of them, by
+            // their bits), in blocks of `block`: per block the sum, mod 2^64, of each result's
+            // bits (a NaN as numpy's 0x7fc00000) times an odd weight of its place
+            let f = if case["func"] == "exp" {
+                lp_render::np::expf
+            } else {
+                lp_render::np::tanhf
+            };
+            let from = case["from"].as_u64().unwrap_or(0);
+            let count = case["count"].as_u64().unwrap_or(1 << 32);
+            let block = case["block"].as_u64().unwrap_or(1 << 22).max(1);
+            let mut sums = Vec::new();
+            let mut at = from;
+            while at < from + count {
+                let end = (at + block).min(from + count);
+                let mut sum = 0u64;
+                for b in at..end {
+                    let r = f(f32::from_bits(b as u32));
+                    let bits = u64::from(if r.is_nan() { 0x7fc0_0000 } else { r.to_bits() });
+                    let weight = b.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
+                    sum = sum.wrapping_add(bits.wrapping_mul(weight));
+                }
+                sums.push(format!("{sum:016x}"));
+                at = end;
+            }
+            json!({"sums": sums})
+        }
+        "np_exp" | "np_tanh" => {
+            // numpy's float32 exp or tanh of each float32 (their bits)
             let bits: Vec<u64> = case["bits"]
                 .as_array()
                 .ok_or("bits")?
                 .iter()
                 .map(|b| b.as_u64().unwrap_or(0))
                 .collect();
+            let f = if op == "np_exp" {
+                lp_render::np::expf
+            } else {
+                lp_render::np::tanhf
+            };
             let out: Vec<u32> = bits
                 .iter()
-                .map(|&b| lp_render::np::expf(f32::from_bits(b as u32)).to_bits())
+                .map(|&b| f(f32::from_bits(b as u32)).to_bits())
                 .collect();
             json!({"bits": out})
         }
@@ -1954,6 +2077,11 @@ fn run(case: &Value) -> Result<Value, String> {
                         Ok(r) => r,
                         Err(e) => return json!({"error": e.0}),
                     };
+                    // (the look of the weather symbols and the moon the person chose, as the app
+                    // sets it)
+                    if let Some(look) = c["symbols"].as_str() {
+                        renderer.symbols = look.to_string();
+                    }
                     // (each frame as a process's first, no fan seen running before it, unless it
                     // follows the one before)
                     if !c["after"].as_bool().unwrap_or(false) {

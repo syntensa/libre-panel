@@ -20,6 +20,7 @@ mod light;
 mod list;
 mod lit;
 mod metric;
+pub mod moon;
 pub mod np;
 pub mod piece;
 mod rect;

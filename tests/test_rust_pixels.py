@@ -939,6 +939,45 @@ def _colour_texts(rng: random.Random, count: int) -> list[str]:
     return [one() for _ in range(count)]
 
 
+def test_numpy_s_random_draws_as_numpy_draws_them() -> None:
+    """numpy's default_rng(seed) and the draws the renderer asks of it, in turn: doubles,
+    normals and exponentials (the ziggurat, its wedges and tails), powers and uniforms, each the
+    same double to the bit."""
+    import numpy as np
+
+    rng = random.Random(0x5EED)
+    hexed = lambda x: struct.pack(">d", x).hex()  # noqa: E731
+    programs, expected = [], []
+    for seed in [0, 1, 1969, 0x11B7E, 2**32 - 1, *(rng.randrange(2**32) for _ in range(6))]:
+        draws: list[list[Any]] = []
+        want: list[float] = []
+        generator = np.random.default_rng(seed)
+        for _ in range(8):
+            kind = rng.choice(["normal", "exponential", "power", "uniform", "random"])
+            n = rng.choice([1, 2, 26, 320, 5000])
+            if kind == "normal":
+                draws.append([kind, n])
+                want += generator.standard_normal(n).tolist()
+            elif kind == "exponential":
+                draws.append([kind, n])
+                want += generator.standard_exponential(n).tolist()
+            elif kind == "power":
+                a = rng.choice([0.22, 1.0, 3.5, 0.05])
+                draws.append([kind, hexed(a), n])
+                want += generator.power(a, n).tolist()
+            elif kind == "uniform":
+                lo, hi = rng.choice([(-0.98, 0.98), (0.0, 1.4), (0.0, 2 * math.pi), (5.0, 5.0)])
+                draws.append([kind, hexed(lo), hexed(hi), n])
+                want += generator.uniform(lo, hi, n).tolist()
+            else:
+                draws.append([kind, n])
+                want += generator.random(n).tolist()
+        programs.append({"seed": seed, "draws": draws})
+        expected.append([hexed(x) for x in want])
+    [got] = run([{"op": "np_random", "programs": programs}])
+    assert got["programs"] == expected
+
+
 def test_colours_are_read_and_given_as_imagecolor_does_it() -> None:
     from PIL import ImageColor
 

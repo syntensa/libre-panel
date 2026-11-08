@@ -8,26 +8,65 @@ from __future__ import annotations
 
 import base64
 import calendar
+import functools
 import hashlib
 import json
 import math
+import os
 import random
 import struct
+import subprocess
+import sys
+import tempfile
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import pytest
 from rust_check import image, noise, picture, run
 
 from libre_panel import fonts, i18n
 from libre_panel import icons as icon_set
 from libre_panel.fonts.fallback import cursive
-from libre_panel.render import formatting, lists
+from libre_panel.render import formatting, lists, moon
 from libre_panel.render.countdown import countdown_text
 from libre_panel.render.lit import WEATHER_ICONS
 from libre_panel.render.renderer import Renderer, need_holds
 from libre_panel.sensors.base import Reading, Snapshot
 from libre_panel.theme.model import ThemeError, load_theme
+
+
+@functools.cache
+def _moon_face() -> tuple[Any, Any, Any]:
+    """moon.face() as numpy makes it on a processor without AVX-512 (its own exp for float32,
+    the C library's for the rest; with AVX-512 on Linux it takes Intel's SVML for some, a unit
+    in the last place apart here and there): made in a process told to leave those of its
+    features unused that this one has. Rust's face is that one."""
+    import numpy as np
+    from numpy._core._multiarray_umath import __cpu_features__ as features
+
+    env = dict(os.environ)
+    unused = [name for name in ("X86_V4", "AVX512_ICL", "AVX512_SPR") if features.get(name)]
+    if unused:
+        env["NPY_DISABLE_CPU_FEATURES"] = " ".join(unused)
+    code = ("import sys; import numpy as np; from libre_panel.render import moon; "
+            "a, gx, gy = moon.face(); np.savez(sys.argv[1], albedo=a, gx=gx, gy=gy)")  # fmt: skip
+    with tempfile.TemporaryDirectory() as folder:
+        path = Path(folder) / "face.npz"
+        subprocess.run([sys.executable, "-c", code, str(path)], env=env, check=True, timeout=600)
+        with np.load(path) as made:
+            return made["albedo"], made["gx"], made["gy"]
+
+
+@pytest.fixture(autouse=True)
+def _moon_as_rust_s(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Every moon Python draws here of that face (made when one is first drawn)."""
+    monkeypatch.setattr(moon, "face", _moon_face)
+    moon._disc_kept.cache_clear()
+    yield
+    moon._disc_kept.cache_clear()
+
 
 FLOATS = [0.0, -0.0, 1.0, -1.5, 0.5, 2.5, 0.125, 0.375, 2.675, 1.005, 1e16, 1e-5, 123.456,
           1234567.891, math.nan, -math.nan, math.inf, -math.inf, 1e308, 5e-324, 9.995, 0.05,
@@ -418,12 +457,16 @@ def _frame_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
     return given, snapshot
 
 
-def _python_frame(folder: Path, snapshot: Snapshot, dither: bool) -> dict[str, Any]:
+def _python_frame(
+    folder: Path, snapshot: Snapshot, dither: bool, look: str | None = None
+) -> dict[str, Any]:
     try:
         theme = load_theme(folder)
     except ThemeError as error:
         return {"error": str(error)}
     renderer = Renderer(theme, preview=True, dither=dither)
+    if look is not None:  # (the look of the symbols and the moon the person chose)
+        renderer.symbols = look
     lists._RAN.clear()  # (each frame as a process's first: no fan seen running before it)
     try:
         frame, boxes = renderer.render(snapshot, now=1000.0)
@@ -440,10 +483,12 @@ def _compare_frames(
     snapshot_of: Any = None,
     language: str = "en",
     undefined: tuple[str, ...] = (),
+    looks: tuple[str, ...] = (),
 ) -> int:
     """Frames of `count` random themes (of what `make` makes) drawn by both, compared to the
     bit, and their boxes; how many were drawn. Rust may leave out those it says are `undefined`:
-    where what Python draws is left to the processor."""
+    where what Python draws is left to the processor. Each in one of `looks` (the person's look
+    of the symbols and the moon), where there are any."""
     rng = random.Random(seed)
     cases, expected = [], []
     try:
@@ -454,7 +499,10 @@ def _compare_frames(
             given, snapshot = (snapshot_of or _frame_snapshot)(rng)
             dither = rng.random() < 0.3
             cases.append({"folder": str(folder), "snapshot": given, "dither": dither})
-            expected.append(_python_frame(folder, snapshot, dither))
+            look = rng.choice(looks) if looks else None
+            if look is not None:
+                cases[-1]["symbols"] = look
+            expected.append(_python_frame(folder, snapshot, dither, look))
     finally:
         i18n.set_language("en")
     [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR),
@@ -1445,7 +1493,7 @@ def test_the_app_s_own_themes_as_python_draws_them() -> None:
         assert got["boxes"] == want["boxes"], folder.name
         drawn.append(folder.name)
     assert len(folders) > 90
-    assert len(drawn) >= 73, drawn
+    assert len(drawn) >= 83, drawn
 
 
 def _lit(
@@ -2990,6 +3038,211 @@ def test_frames_of_lists_as_python_draws_them(tmp_path: Path) -> None:
     assert _compare_frames(tmp_path, 0x7157, 200, _list_or_more, _list_snapshot) > 150
 
 
+# -- the moon ----------------------------------------------------------------------------
+
+
+def test_tanh_as_numpy_works_it_out() -> None:
+    # (numpy's float32 tanh is its own, SVML's converted: a polynomial of degree six on each of
+    # 32 intervals of |x|, fused; 1 past the last)
+    import numpy as np
+
+    rng = np.random.default_rng(0x7A4)
+    bits = rng.integers(0, 2**32, 200_000, dtype=np.uint64).astype(np.uint32)
+    x = np.concatenate([bits.view(np.float32), rng.uniform(-12, 12, 150_000).astype(np.float32),
+                        rng.uniform(-0.3, 0.3, 50_000).astype(np.float32)])  # fmt: skip
+    # (each interval's start and the floats either side of it, where |x| changes polynomial)
+    starts = np.array([0x3D400000 + (k << 21) for k in range(32)], np.uint32)
+    edges = np.concatenate([starts - 1, starts, starts + 1, starts | 0x80000000])
+    special = [0.0, -0.0, 1e-30, -1e-30, 9.0, 9.010913, -9.010913, 1e30, math.inf, -math.inf,
+               math.nan]  # fmt: skip
+    x = np.concatenate([x, edges.view(np.float32), np.array(special, np.float32)])
+    want = np.tanh(x)
+    [got] = run([{"op": "np_tanh", "bits": x.view(np.uint32).tolist()}])
+    ours = np.array(got["bits"], np.uint32).view(np.float32)
+    same = (ours.view(np.uint32) == want.view(np.uint32)) | (np.isnan(ours) & np.isnan(want))
+    assert same.all(), x[~same][:5]
+
+
+def test_the_moon_s_face_as_numpy_makes_it() -> None:
+    # (numpy's default_rng(1969) and its draws; noise of bicubic grids; the seas, craters and
+    # rays in float32 or float64 where moon.py's numbers are numpy's doubles, with the C
+    # library's exp, pow, hypot and atan2 or numpy's own exp; np.convolve's sums, the ends as
+    # OpenBLAS adds them; np.gradient: the same to the bit)
+    import numpy as np
+
+    [got] = run([{"op": "moon_face"}])
+    for name, want in zip(("albedo", "gx", "gy"), _moon_face(), strict=True):
+        ours = np.frombuffer(base64.b64decode(got[name]["data"]), "<f4").reshape(want.shape)
+        assert ours.tobytes() == want.astype("<f4").tobytes(), name
+
+
+MOON_PHASES = [0.0, 0.0005, 0.001, 0.004, 0.0041, 0.1, 0.25, 0.36, 0.4995, 0.5, 0.5004, 0.6,
+               0.75, 0.9, 0.996, 0.9961, 0.9995, 0.99999, 1.0, 1.25, -0.2, 3.75, -1e-9, 1e300,
+               0.123456, 0.6666]  # fmt: skip
+
+
+def test_moon_pictures_as_moon_py_makes_them() -> None:
+    # (the disc lit at each phase, north and south, its night side in a colour or a faint
+    # earthshine, at sizes from a pixel up; the halo at each strength; the two together, the
+    # halo breathing at a few moments)
+    import numpy as np
+
+    rng = random.Random(0x300)
+    cases, expected = [], []
+    for size in [1, 2, 3, 5, 8, 9, 13, 24, 31, 64, 100, 127, 200]:
+        for _ in range(6):
+            phase = rng.choice(MOON_PHASES)
+            colour = (rng.randrange(256), rng.randrange(256), rng.randrange(256), 255)
+            night = rng.choice([None, (40, 50, 70, 255), (rng.randrange(256), 0, 255, 255)])
+            mirror = rng.random() < 0.5
+            t = rng.choice([None, None, 0.0, 1.75, 3.5, 1e6 + 0.1])
+            strength = rng.choice([0.0, 0.25, 1 / 3, 0.4, 1.0, 1.5])
+            base = {"size": size, "phase": phase, "colour": list(colour[:3]),
+                    "night": list(night[:3]) if night else None, "mirror": mirror}  # fmt: skip
+            cases += [{**base, "what": "disc"}, {**base, "what": "halo", "strength": strength},
+                      {**base, "what": "picture", "t": t}]  # fmt: skip
+            expected += [moon.disc(size, phase, colour, night, mirror),
+                         moon.halo(size, colour[:3], strength),
+                         moon.picture(size, phase, colour, night, mirror, t)]  # fmt: skip
+    [got] = run([{"op": "moon", "cases": cases}])
+    for case, ours, want in zip(cases, got["pictures"], expected, strict=True):
+        assert ours["size"] == list(want.size), case
+        assert np.array_equal(np.asarray(picture(ours)), np.asarray(want)), case
+
+
+MOON_SENSORS = ["moon.phase", "moon.phase", "other.phase", "nope"]
+
+
+def _moon(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """A moon: of any size, in either look (or the person's), lit in a colour of its own, the
+    palette's or the cover's, its night side in another or none, as seen north or south."""
+    w, h = size
+    widget: dict[str, Any] = {"type": "moon", "id": f"m{i}", "x": rng.randrange(-20, w),
+                              "y": rng.randrange(-20, h),
+                              "size": rng.choice([0, 4, 8, 9, 12, 16, 23, 24, 40, 64, 97, 128]),
+                              "color": rng.choice([_colour(rng), "@accent", "#f2efe6", "@cover"]),
+                              "mirror": rng.random() < 0.4}  # fmt: skip
+    if rng.random() < 0.7:
+        widget["color2"] = rng.choice([_colour(rng), None, "@surface", "#2b3242"])
+    if rng.random() < 0.6:
+        widget["sensor"] = rng.choice(MOON_SENSORS)
+    if rng.random() < 0.7:
+        widget["pack"] = rng.choice(["auto", "classic", "vivid", "classic"])
+    if rng.random() < 0.15:
+        widget["opacity"] = rng.choice([0.5, 0.0])
+    return widget
+
+
+def _moon_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _moon(rng, i, size) if rng.random() < 0.7 else _card_or_text(rng, i, size)
+
+
+def _moon_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
+    """The moon's phase (and another's): any number, what is none, a cover for "@cover"."""
+    readings: dict[str, Any] = {}
+    if rng.random() < 0.9:
+        readings["moon.phase"] = rng.choice([*MOON_PHASES, *MOON_PHASES, 0, 1, 7, True, None,
+                                             "0.5", math.nan, math.inf])  # fmt: skip
+    if rng.random() < 0.5:
+        readings["other.phase"] = rng.random()
+    images = {}
+    if rng.random() < 0.4:
+        side = (rng.randrange(20, 90), rng.randrange(20, 90))
+        images["media.cover"] = noise(rng, rng.choice(["RGB", "RGBA"]), side)
+    snapshot = Snapshot(readings={k: Reading(k, v) for k, v in readings.items()}, images=images)
+    given = {"readings": {k: _typed(v) for k, v in readings.items()},
+             "images": {k: image(v) for k, v in images.items()}}  # fmt: skip
+    return given, snapshot
+
+
+def test_frames_of_moons_as_python_draws_them(tmp_path: Path) -> None:
+    # (a moon standing, in either look: the classic one's disc and its lit side bounded by the
+    # terminator, the vivid one lit as it looks, with its halo as bright as it is full; of any
+    # phase a reading gives, north and south, in its colours or the palette's or the cover's;
+    # the look its own or the one the person chose)
+    looks = ("classic", "vivid")
+    assert _compare_frames(tmp_path, 0x300D, 160, _moon_or_more, _moon_snapshot, looks=looks) > 140
+
+
+def _moon_module_theme(rng: random.Random, folder: Path) -> None:
+    """A theme of moon and sun modules (and others) on a grid, in a look's palette and style,
+    its glow off."""
+    from libre_panel import design
+    from libre_panel.theme import modules
+
+    folder.mkdir()
+    w, h = rng.choice([(480, 320), (320, 240), (800, 480), (480, 128), (240, 320), (160, 128)])
+    look = design.LOOKS[rng.choice(list(design.LOOKS))]
+    style = dict(look["style"])
+    if rng.random() < 0.6:
+        style.update(card=rng.choice(modules.CARDS), radius=rng.randrange(0, 101))
+    style["glow"] = 0.0
+    grid = {"columns": rng.choice([1, 2, 3, 4]), "rows": rng.choice([1, 2, 3]),
+            "gap": rng.choice([0, 8]), "margin": rng.choice([0, 8, 24])}  # fmt: skip
+    widgets = []
+    for i in range(rng.randrange(1, 4)):
+        kind = rng.choice(["moon", "moon", "sun", "text", "clock"])
+        at = {"col": rng.randrange(grid["columns"]), "row": rng.randrange(grid["rows"]),
+              "cols": rng.randrange(1, grid["columns"] + 1),
+              "rows": rng.randrange(1, grid["rows"] + 1)}  # fmt: skip
+        module: dict[str, Any] = {"type": "module", "id": f"m{i}", "module": kind, **at,
+                                  "finish": "flat"}  # fmt: skip
+        if rng.random() < 0.4:
+            module["title"] = rng.choice(["", "Mond", "Tonight"])
+        widgets.append(module)
+    data = {"format": THEME_FORMAT, "name": "moons",
+            "display": {"model": "custom", "width": w, "height": h,
+                        "orientation": "portrait" if h > w else "landscape"},
+            "palette": dict(look["palette"]), "grid": grid, "style": style,
+            "widgets": widgets}  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+
+
+def test_frames_of_moon_modules_as_python_draws_them(tmp_path: Path) -> None:
+    # (the moon module and the sun's, the moon beside or below its name, how much of it is lit
+    # and the days to the next full and new moon; with a place and without, by the demo's
+    # readings at phases of every kind)
+    import dataclasses
+
+    rng = random.Random(0x3010)
+    cases, expected = [], []
+    for n in range(60):
+        folder = tmp_path / f"t{n}"
+        _moon_module_theme(rng, folder)
+        snapshot = dataclasses.replace(_demo(), history={})
+        readings = dict(snapshot.readings)
+        readings["moon.phase"] = Reading("moon.phase", rng.choice(MOON_PHASES), "", "Moon phase")
+        if rng.random() < 0.3:  # (no place: no sun's times, the moon alone)
+            readings = {k: v for k, v in readings.items() if not k.startswith("sun.")}
+        snapshot = dataclasses.replace(snapshot, readings=readings)
+        cases.append({"folder": str(folder), "snapshot": _snapshot_given(snapshot)})
+        expected.append(_python_frame(folder, snapshot, False))
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR),
+                   "language": "en", "locale": str(i18n.LOCALE_DIR)}])  # fmt: skip
+    drawn = 0
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        if "unported" in got:
+            continue
+        assert "frame" in want, (n, got, want)
+        assert got["sha256"] == hashlib.sha256(want["frame"].tobytes()).hexdigest(), n
+        assert got["boxes"] == want["boxes"], n
+        drawn += 1
+    assert drawn > 40
+
+
+def test_moons_too_large_are_not_drawn_here(tmp_path: Path) -> None:
+    # (a moon of more than 4096 px a side, lit at twice that: Rust says it does not draw one)
+    folder = tmp_path / "large"
+    folder.mkdir()
+    data = {"format": THEME_FORMAT, "name": "large", "display": {"width": 64, "height": 48},
+            "widgets": [{"type": "moon", "id": "m", "x": 0, "y": 0, "size": 4097}]}  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+    snapshot = {"readings": {"moon.phase": _typed(0.3)}, "images": {}}
+    [ours] = run([{"op": "render_frame", "frames": [{"folder": str(folder), "snapshot": snapshot}],
+                   "fonts_dir": str(fonts.FONT_DIR)}])  # fmt: skip
+    assert ours["frames"][0].get("unported") == "moons larger than 4096 px"
+
+
 # -- card slots: a module showing one card of several ----------------------------------------
 
 # the cards whose rule is their own (a track, the weather, an agent, a download), the network's,
@@ -3156,7 +3409,7 @@ def _slot_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
 
 # what a slot's card may hold that Rust does not draw yet (it still chooses the card and its
 # frame's colour as Python does: the checks compare those of every frame)
-SLOT_NOT_YET = ("downloads widgets", "moon widgets", "earth widgets", "analog widgets",
+SLOT_NOT_YET = ("downloads widgets", "earth widgets", "analog widgets",
                 "clocks in a time zone")  # fmt: skip
 
 

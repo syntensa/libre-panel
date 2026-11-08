@@ -25,8 +25,10 @@ mod ops;
 mod paste;
 mod point;
 mod quantize;
+pub mod random;
 mod reduce;
 mod resample;
+mod ziggurat;
 
 pub use bands::merge;
 pub use composite::alpha_composite;
