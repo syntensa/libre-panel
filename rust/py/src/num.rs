@@ -200,8 +200,8 @@ pub fn float_div_mod(vx: f64, wx: f64) -> (f64, f64) {
     (floor, rest)
 }
 
-/// CPython's float_rem.
-fn float_rem(vx: f64, wx: f64) -> f64 {
+/// CPython's float_rem: Python's `vx % wx` of floats (the sign of wx, never -0).
+pub fn float_rem(vx: f64, wx: f64) -> f64 {
     let mut rest = vx % wx;
     if rest != 0.0 {
         if (wx < 0.0) != (rest < 0.0) {

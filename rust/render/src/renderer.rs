@@ -157,6 +157,12 @@ pub struct Renderer {
     pub(crate) slide_lists: HashMap<String, (std::time::Instant, Vec<String>)>,
     /// what of a list is drawn now (_list_piece's part): all of it, its text or its levels
     pub(crate) list_part: std::cell::Cell<list::ListPart>,
+    /// how each fan turns in a moving frame (_rotors): a fan widget's by its id, a list's fans
+    /// by the list's id and the item's key
+    rotors: HashMap<String, fan::Turning>,
+    /// where the blades of each sensor's fans stand (beats: Beats.of), by the sensor, the frame
+    /// rate and the blades of the look
+    beats: HashMap<(String, u64, i64), fan::Beat>,
 }
 
 /// VOLUME_GLIDE_MS: the volume's bars and rings, 95 % of a step after about a third of a
@@ -234,6 +240,8 @@ impl Renderer {
             began: HashMap::new(),
             slide_lists: HashMap::new(),
             list_part: std::cell::Cell::new(list::ListPart::All),
+            rotors: HashMap::new(),
+            beats: HashMap::new(),
         };
         renderer.slots = renderer.make_slots()?;
         renderer.background = renderer.load_background()?;
@@ -438,6 +446,32 @@ impl Renderer {
             return 0.0;
         }
         self.theme.smoothing_ms.max(0) as f64 / 1000.0
+    }
+
+    /// A fan in a moving frame (Rotor.advance with beats.of(sensor, fps, blades)): the fan
+    /// `key` of `sensor` at this frame's time with `rpm`; the frame moves on while it turns.
+    pub(crate) fn turned(
+        &mut self,
+        key: &str,
+        sensor: &str,
+        rpm: Option<f64>,
+        max_rpm: f64,
+    ) -> fan::Rotor {
+        // (the frame rate as a key: 0.0 and -0.0 are one, as in Python)
+        let fps = if self.fps == 0.0 { 0.0 } else { self.fps };
+        let beat = self
+            .beats
+            .entry((sensor.to_string(), fps.to_bits(), fan::BLADES))
+            .or_insert_with(|| fan::Beat::new(sensor));
+        let turning = self
+            .rotors
+            .entry(key.to_string())
+            .or_insert_with(|| fan::Turning::new(key));
+        turning.advance(rpm, max_rpm, self.at, fan::BLADES, beat);
+        if turning.rotor.turning() {
+            self.moving = true;
+        }
+        turning.rotor
     }
 
     /// _lead: the time between two planned frames (0: not known).
@@ -1071,9 +1105,6 @@ impl Renderer {
                 // frame, and stand in a still one)
                 let fans = widget::text(&w, "style") == "fans";
                 let glide = widget::truthy(&w, "smooth") && widget::truthy(&w, "levels") && !fans;
-                if self.options.animate && fans {
-                    return Drawn::Unported("lists whose fans turn".into());
-                }
                 if !["min", "max"].iter().all(|k| widget::exact(&w, k)) {
                     return Drawn::Unported("numbers a float does not hold as they are".into());
                 }
@@ -1184,11 +1215,9 @@ impl Renderer {
                     "none" => false,
                     _ => return Drawn::Unported("fans in a square frame".into()),
                 };
-                if self.options.animate {
-                    return Drawn::Unported("fans that turn".into());
-                }
                 let snapshot = self.snapshot.clone().unwrap_or_default();
-                let rpm = number(&snapshot.value(widget::text(&w, "sensor")));
+                let sensor = widget::text(&w, "sensor");
+                let rpm = number(&snapshot.value(sensor));
                 // (an int of the theme's as Python's sums take it, as a float: one past a
                 // float's range fails them where there is a reading to take it to, and is
                 // not looked at where there is none)
@@ -1200,8 +1229,14 @@ impl Renderer {
                     },
                     _ => widget::number(&w, "max_rpm", 3000.0),
                 };
-                // (a still frame shows it as Rotor.settle has it: standing as fast as it runs)
-                let rotor = fan::Rotor::settled(widget::text(&w, "id"), rpm, max_rpm);
+                // (a moving frame turns it, Rotor.advance; a still one shows it as Rotor.settle
+                // has it: standing as fast as it runs)
+                let id = widget::text(&w, "id");
+                let rotor = if self.options.animate {
+                    self.turned(id, sensor, rpm, max_rpm)
+                } else {
+                    fan::Rotor::settled(id, rpm, max_rpm)
+                };
                 let colour = match self.colour_of(&w, "color") {
                     Ok(Some([r, g, b, _])) => [r, g, b].map(|v| v.clamp(0, 255) as u8),
                     Ok(None) => {

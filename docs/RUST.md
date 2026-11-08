@@ -488,9 +488,9 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       renderer lays them. The frames of 200 random themes of fan lists the same to the bit
       (and 1,200 more), five lists at every ninth width from 8 to 640 px, low and tall, and
       of no width or height, to the bit; two with a glow or a shadow within a level; a fan
-      seen running kept from one frame to the next. Fans in a moving frame (they turn), and
-      the looks and colours one may choose for the fans in the app's settings: Rust does not
-      draw them yet (the default's only; fan widgets: below). 66 of the app's 99 themes are
+      seen running kept from one frame to the next. Fans in a moving frame turn: below. The
+      looks and colours one may choose for the fans in the app's settings: Rust does not draw
+      them yet (the default's only; fan widgets: below). 66 of the app's 99 themes are
       drawn by Rust, 61 of them the same to the bit
 - [x] card slots in a still frame (render/slot.py's Slot: begin, wants, _turn, _has, _target,
       _weather, _line_width, _outline, _cut, _frame and overlay; the renderer's _make_slots and
@@ -607,7 +607,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       show: a most past a float's range taken as 0 where there is no reading, which nothing
       then looks at, and another most where the widget gives none, which never happens (the
       theme's table gives every fan its own). The other looks, their own colours and the
-      square frame, and fans that turn in a moving frame: Rust says it does not draw them yet.
+      square frame: Rust says it does not draw them yet (fans that turn in a moving frame:
+      below).
       91 of the app's 99 themes are drawn by Rust, 81 of them the same to the bit (Lumen in its
       four shapes is new; its two of a level apart in the glow of their rings and a frame, none
       in their fans)
@@ -829,7 +830,27 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       list's text lies on none of its bars, Python lays the two apart on the frame, which
       gives the pixels the join gives; turned, it turns them apart (Rust says it does not draw
       turned widgets yet: it will have to turn them so too). Lists whose fans turn in a moving
-      frame: Rust says it does not draw them yet
+      frame: below
+- [x] fans that turn (render/fan.py's Rotor.advance and Beats, the renderer's _draw_fan and
+      _list_turning in a moving frame): a fan widget's rotor and each fan of a list turn with
+      their speed, which follows the reading with inertia (0.45 s, from the frame before, a
+      fifth of a second at most), runs out by friction and stands at 0 RPM; the ring and the
+      light follow alike; the blades stand where the beat of the sensor has them (the same for
+      every fan of the sensor at the panel's frame rate: a fan widget and a list's fan of one
+      sensor in step; a frame a moment back in time taken back by the speed, one further back
+      on another clock), never more than 0.3 of a blade's pitch a frame. The frame moves on
+      while a fan turns. The tests: 60 random themes of fan widgets and lists of fans (of the
+      same sensors now and then, some of them off the panel a while) frame after frame at a
+      frame rate or none, 344 frames to the bit, 267 of them on the way; fans of one sensor at
+      other speeds on its beat, through a pause, frames back in time and further back, a fan
+      that stops and runs out, a reading that goes and comes back, at three frame rates: 180
+      frames to the bit; the app's themes in moving frames: 57 of the 99 drawn by Rust all
+      along (49 before). The counter-checks put in 27 faults (the rotor's time constant, its
+      following, its time between frames and back in time, friction and where it stops, the
+      ring and the light, its first frame, its time kept; the beat's rate, its most step and
+      time, back in time, another clock, its time kept, where it begins, whose it is; moving;
+      the widget and the list standing in a moving frame, a list's rotors by the item alone),
+      and the tests catch all of them
 - [ ] pictures as Pillow fails at them: lp-decode's errors as Python's exceptions, so that
       where Python catches an OSError and goes on (a picture cut short, a file of no picture)
       Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,

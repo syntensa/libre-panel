@@ -671,11 +671,14 @@ impl Renderer {
         Ok(())
     }
 
-    /// _list_turning in a still frame: the fans of a list of them, each standing as its speed
-    /// shows (fan.Rotor's settle) in its ring (none where the list shows no levels), laid on
-    /// the names and numbers (`piece`).
+    /// _list_turning: the fans of a list of them, each turning with its speed in a moving frame
+    /// (fan.Rotor's advance, on the beat of its item's sensor) or standing as its speed shows
+    /// in a still one (its settle), in its ring (none where the list shows no levels), laid on
+    /// the names and numbers (`piece`). (Where they lie apart from each other and on none of
+    /// the names and numbers, Python lays them over the frame apart from the list: the same
+    /// pixels.)
     pub(crate) fn list_turning(
-        &self,
+        &mut self,
         w: &Dict,
         piece: &Piece,
         items: &[Item],
@@ -696,7 +699,11 @@ impl Renderer {
         let places = fan_places(w, items.len())?;
         for (&(x0, y0), item) in places.iter().zip(items) {
             let key = format!("{}\0{}", widget::text(w, "id"), item.key);
-            let rotor = fan::Rotor::settled(&key, item.number(), max_rpm);
+            let rotor = if self.options.animate {
+                self.turned(&key, &item.key, item.number(), max_rpm)
+            } else {
+                fan::Rotor::settled(&key, item.number(), max_rpm)
+            };
             let image = fan::picture(&dir, colour, size, &rotor, ring)?;
             let half = (size - image.width() as i64) as f64 / 2.0;
             let x = round_int(ox as f64 + x0 + half);

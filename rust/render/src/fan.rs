@@ -1,11 +1,14 @@
-//! A list's fans (render/fan.py) in a still frame. Each fan is its rotor in the default look
+//! A list's fans and fan widgets (render/fan.py). Each fan is its rotor in the default look
 //! (noctua-g2: the Blender rotor's grey layers in assets/light3d/fan, read and averaged down as
 //! fan.py's _plane and _reduced do it in numpy), coloured in the theme's colour (_coloured),
 //! blurred into its disc by its speed (disc_image, then Image.blend) and dimmed by its light,
 //! in its ring: a faint groove all round and an arc that glows as far round as its share of the
 //! most (ring_image: ImageDraw's ellipse and arc drawn three times larger and reduced, their
 //! glow blurred). A still frame shows a fan as Rotor.settle has it: where its key puts its
-//! blades, as fast and as bright as its speed shows, its ring as full.
+//! blades, as fast and as bright as its speed shows, its ring as full. In a moving frame it
+//! turns as Rotor.advance has it (Turning): its speed, ring and light follow the reading with
+//! inertia, it runs out and stands at 0 RPM, and its blades stand where the beat of its sensor
+//! has them (Beat, the same for every fan of the sensor at the panel's frame rate).
 //!
 //! The numbers are worked out in single precision in the order numpy works them out (each step
 //! rounded to single precision, none fused): a mean of three channels summed from the first,
@@ -55,6 +58,14 @@ const MIN_TURNS: f64 = 0.22;
 const MAX_TURNS: f64 = 1.1;
 const STANDING_RPM: f64 = 30.0;
 const BLUR: f64 = 0.8;
+/// fan.py's INERTIA_S (the time constant a fan follows its speed with), MAX_STEP (blade
+/// pitches a frame at most: it never seems to turn backwards) and FRICTION (turns a second lost
+/// every second while it runs out).
+const INERTIA_S: f64 = 0.45;
+const MAX_STEP: f64 = 0.3;
+const FRICTION: f64 = 0.35;
+/// The default look's blades (fan_looks' noctua-g2: nine, as the Blender rotor's).
+pub(crate) const BLADES: i64 = 9;
 /// fan.py's LIGHT: how bright a fan shows, running, stopped or without a reading.
 const RUNNING: f64 = 1.0;
 const STOPPED: f64 = 0.5;
@@ -116,25 +127,37 @@ pub struct Rotor {
     pub light: f64,
 }
 
+/// Rotor._targets: the speed (turns a second), the share of the ring and the light a fan shows
+/// for `rpm` (none: no reading).
+fn targets(rpm: Option<f64>, max_rpm: f64) -> (f64, f64, f64) {
+    let speed = turns(rpm, max_rpm);
+    let ring = match rpm {
+        Some(rpm) if max_rpm > 0.0 => py_min(1.0, py_max(0.0, rpm / max_rpm)),
+        _ => 0.0,
+    };
+    let light = match rpm {
+        None => MISSING,
+        Some(_) if speed > 0.0 => RUNNING,
+        Some(_) => STOPPED,
+    };
+    (speed, ring, light)
+}
+
 impl Rotor {
     /// Rotor(key).settle(rpm, max_rpm): the speed's look, standing.
     pub fn settled(key: &str, rpm: Option<f64>, max_rpm: f64) -> Rotor {
-        let speed = turns(rpm, max_rpm);
-        let ring = match rpm {
-            Some(rpm) if max_rpm > 0.0 => py_min(1.0, py_max(0.0, rpm / max_rpm)),
-            _ => 0.0,
-        };
-        let light = match rpm {
-            None => MISSING,
-            Some(_) if speed > 0.0 => RUNNING,
-            Some(_) => STOPPED,
-        };
+        let (speed, ring, light) = targets(rpm, max_rpm);
         Rotor {
             angle: start(key),
             speed,
             ring,
             light,
         }
+    }
+
+    /// Whether it turns.
+    pub fn turning(&self) -> bool {
+        self.speed > 0.0
     }
 
     /// Its position (0 to POSITIONS - 1).
@@ -156,6 +179,115 @@ impl Rotor {
     /// The lengths of its ring's arc (of RING_STEPS).
     pub fn steps(&self) -> i64 {
         round_int(self.ring * RING_STEPS)
+    }
+}
+
+/// fan.Beat: where the blades of a sensor's fans stand, for every fan of it drawn at the same
+/// pace (two panels side by side show it in the same position): each frame adds up the angle
+/// to its planned time; a frame a moment behind another's takes it back by the speed.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Beat {
+    /// in blade pitches (0 to 1), at `at`
+    angle: f64,
+    at: Option<f64>,
+}
+
+impl Beat {
+    /// Beats.of's new one: where the blades of the sensor's fans stand at first.
+    pub fn new(sensor: &str) -> Beat {
+        Beat {
+            angle: start(sensor),
+            at: None,
+        }
+    }
+
+    /// Beat.begin: where the fan stands for a rotor's first frame (the beat begins then, if it
+    /// has not begun).
+    fn begin(&mut self, now: f64) -> f64 {
+        if self.at.is_none() {
+            self.at = Some(now);
+        }
+        self.angle
+    }
+
+    /// Beat.turn: the angle at `now` of a fan that turns `rate` blade pitches a second.
+    fn turn(&mut self, now: f64, rate: f64) -> f64 {
+        // (the first, or on another clock: more than a fifth of a second before the last)
+        let (first, at) = match self.at {
+            None => (true, now),
+            Some(at) => (at - now > 0.2, at),
+        };
+        if first {
+            self.at = Some(now);
+            return self.angle;
+        }
+        if now > at {
+            // (after a pause, as far as a frame of 0.2 s at most, as a rotor)
+            let step = py_min(MAX_STEP, rate * py_min(0.2, now - at));
+            self.angle = lp_py::num::float_rem(self.angle + step, 1.0);
+            self.at = Some(now);
+            return self.angle;
+        }
+        // (a frame drawn for a later time before: back by the speed)
+        lp_py::num::float_rem(self.angle - py_min(MAX_STEP, rate * (at - now)), 1.0)
+    }
+}
+
+/// fan.Rotor in a moving frame: a fan from one frame to the next, as Rotor.advance has it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Turning {
+    /// what it shows
+    pub rotor: Rotor,
+    /// the frame it was drawn for last
+    at: Option<f64>,
+}
+
+impl Turning {
+    /// fan.Rotor(key): standing, where its key puts its blades, as bright as running.
+    pub fn new(key: &str) -> Turning {
+        let rotor = Rotor {
+            angle: start(key),
+            speed: 0.0,
+            ring: 0.0,
+            light: RUNNING,
+        };
+        Turning { rotor, at: None }
+    }
+
+    /// Rotor.advance with its beat: the fan at the frame planned for `now` with `rpm` (none: no
+    /// reading), `blades` blades in its look. Its first frame shows it as it is, where the beat
+    /// stands; then its speed, ring and light follow with inertia (from the frame before, a
+    /// fifth of a second at most), a fan that is to stand runs out, and its blades stand where
+    /// the beat has them at its speed.
+    pub fn advance(
+        &mut self,
+        rpm: Option<f64>,
+        max_rpm: f64,
+        now: f64,
+        blades: i64,
+        beat: &mut Beat,
+    ) {
+        let (speed, ring, light) = targets(rpm, max_rpm);
+        let r = &mut self.rotor;
+        let Some(at) = self.at else {
+            (r.speed, r.ring, r.light, self.at) = (speed, ring, light, Some(now));
+            r.angle = beat.begin(now);
+            return;
+        };
+        let dt = py_max(0.0, py_min(0.2, now - at));
+        self.at = Some(now);
+        let follow = 1.0 - (-dt / INERTIA_S).exp();
+        r.speed += (speed - r.speed) * follow;
+        r.ring += (ring - r.ring) * follow;
+        r.light += (light - r.light) * follow;
+        if speed == 0.0 {
+            // (the exponential alone would creep on for seconds, hardly seen; a fan stops)
+            r.speed = py_max(0.0, r.speed - FRICTION * dt);
+            if r.speed < 0.02 {
+                r.speed = 0.0;
+            }
+        }
+        r.angle = beat.turn(now, r.speed * blades as f64);
     }
 }
 

@@ -6056,6 +6056,107 @@ def test_lists_whose_largest_value_fills_their_bars_glide_as_python_draws_them(
     assert drawn == 240 and moving > 180, (drawn, moving)
 
 
+def _turning_fan(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """Fans that turn in a moving frame: lists of them and fan widgets (of the same sensors now
+    and then, on one beat), some of them off the panel a while (their needs not met)."""
+    pick = rng.random()
+    if pick < 0.1:
+        return _card_or_text(rng, i, size)
+    data = _fan_list(rng, i, size) if pick < 0.5 else _fan(rng, i, size)
+    if rng.random() < 0.2:
+        data["needs"] = rng.choice(["fan.cpu", "!fan.2", "fan.1>1000", "gpu.fan"])
+    return data
+
+
+def _fan_readings_after(rng: random.Random, readings: dict[str, Reading]) -> dict[str, Reading]:
+    """The fans' readings of the next frame: as before, or now and then new speeds for some
+    (none, at rest, below what turns, turning, past the most), a reading gone or back."""
+    out = dict(readings)
+    if rng.random() < 0.5:
+        for key in ["fan.1", "fan.2", "fan.cpu", "gpu.fan", "fan.gpu", "pump.fan"]:
+            if rng.random() < 0.4:
+                value = rng.choice([None, 0, 0.0, 12.0, 30.0, rng.uniform(30, 3000), 1200, 4500.0])
+                if value is None and rng.random() < 0.5:
+                    out.pop(key, None)
+                else:
+                    out[key] = Reading(key, value, "rpm", key.title())
+    return out
+
+
+def _fans_given(readings: dict[str, Reading], now: datetime) -> dict[str, Any]:
+    return {"readings": {k: {"v": _typed(r.value), "unit": r.unit, "label": r.label,
+                             "origin": r.origin} for k, r in readings.items()},
+            "images": {}, "now": _moment(now)}  # fmt: skip
+
+
+def test_fans_that_turn_as_python_turns_them(tmp_path: Path) -> None:
+    # (one renderer drawing its fans frame after frame as the panels' loop does: each turning
+    # with its speed, which follows the reading with inertia, runs out and stands at 0 RPM, its
+    # ring and light following too; its blades where the beat of its sensor has them, the same
+    # for every fan of the sensor; at a frame rate or none, the frames at any distance)
+    rng = random.Random(0xFA4E)
+    cases, expected = [], []
+    for n in range(60):
+        folder = tmp_path / f"t{n}"
+        _frame_theme(rng, folder, _turning_fan)
+        _, first = _fan_snapshot(rng)
+        readings, now, fps = dict(first.readings), rng.uniform(1000, 2000), rng.choice([0, 25, 50])
+        steps, given = [], []
+        for _ in range(rng.randrange(2, 14)):
+            steps.append((Snapshot(readings=readings, now=first.now), now))
+            given.append({"snapshot": _fans_given(readings, first.now), "now": now})
+            now += rng.choice(MOVING_STEPS + [0.02, 0.04, 0.04])
+            readings = _fan_readings_after(rng, readings)
+        cases.append({"folder": str(folder), "dither": False, "animate": True, "fps": fps,
+                      "steps": given})  # fmt: skip
+        expected.append(_python_moving(folder, steps, fps))
+    drawn, moving = _compare_moving(cases, expected)
+    assert drawn > 300 and moving > 200, (drawn, moving)
+
+
+def test_fans_on_one_beat_through_pauses_and_back_in_time_as_python_turns_them(
+    tmp_path: Path,
+) -> None:
+    # (two fan widgets of one sensor at other speeds and a list of it and another, all on the
+    # sensor's beat; one fan off the panel a while; frames a 50th apart, a pause, frames a
+    # moment back in time and further back (another clock), a fan that stops and runs out, one
+    # whose reading goes and comes back)
+    folder = tmp_path / "beat"
+    folder.mkdir()
+    fans = [{"type": "fan", "id": "a", "x": 0, "y": 0, "w": 34, "h": 34, "sensor": "fan.1",
+             "max_rpm": 2000},
+            {"type": "fan", "id": "b", "x": 36, "y": 0, "w": 34, "h": 34, "sensor": "fan.1",
+             "max_rpm": 500, "frame": "none"},
+            {"type": "fan", "id": "c", "x": 72, "y": 0, "w": 34, "h": 34, "sensor": "fan.2",
+             "max_rpm": 3000, "needs": "fan.cpu"},
+            {"type": "list", "id": "l", "x": 0, "y": 36, "w": 108, "h": 40, "style": "fans",
+             "items": "fan.1 = One\nfan.2 = Two", "min": 0, "max": 3000,
+             "font_size": 9}]  # fmt: skip
+    theme = {"format": THEME_FORMAT, "name": "beat", "display": {"width": 108, "height": 78},
+             "palette": {name: "#808080" for name in PALETTE},
+             "background": {"color": "#101418"}, "widgets": fans}  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+    at = datetime(2026, 11, 8, 6, 5, 9)
+    times = [500.0 + k / 50 for k in range(12)] + [501.5, 501.52, 501.47, 501.49, 501.1,
+                                                   501.12, 501.14, 503.0, 502.9]  # fmt: skip
+    times += [503.0 + k / 25 for k in range(1, 40)]
+    steps, given = [], []
+    for k, now in enumerate(times):
+        one = 1200.0 if k < 20 else 0.0 if k < 34 else None if k < 40 else 2400
+        readings = {"fan.2": Reading("fan.2", 800, "rpm", "Two")}
+        if one is not None:
+            readings["fan.1"] = Reading("fan.1", one, "rpm", "One")
+        if not 6 <= k < 16:
+            readings["fan.cpu"] = Reading("fan.cpu", 900, "rpm", "CPU")
+        steps.append((Snapshot(readings=readings, now=at), now))
+        given.append({"snapshot": _fans_given(readings, at), "now": now})
+    cases = [{"folder": str(folder), "dither": False, "animate": True, "fps": fps,
+              "steps": given} for fps in (0, 25, 50)]  # fmt: skip
+    expected = [_python_moving(folder, steps, fps) for fps in (0, 25, 50)]
+    drawn, moving = _compare_moving(cases, expected)
+    assert drawn == 3 * len(times) and moving > 150, (drawn, moving)
+
+
 def test_the_app_s_own_themes_in_moving_frames_as_python_draws_them(tmp_path: Path) -> None:
     # (every theme the app brings, drawn as the panels' loop draws it: frames a 25th of a second
     # apart and more, its readings new between them, at 50 fps; the same to the bit where Rust
@@ -6116,4 +6217,4 @@ def test_the_app_s_own_themes_in_moving_frames_as_python_draws_them(tmp_path: Pa
             assert g["moving"] == w["moving"], (folder.name, i)
         drawn.append(folder.name)
     # (on Windows Rust does not know the computer's zone: Terra's standing globe is left out)
-    assert len(drawn) >= (48 if sys.platform == "win32" else 49), drawn
+    assert len(drawn) >= (56 if sys.platform == "win32" else 57), drawn
