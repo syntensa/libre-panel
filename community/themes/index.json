@@ -44,6 +44,17 @@
       "preview": "gold-time-vertical/preview.png",
       "zip": "gold-time-vertical/gold-time-vertical.zip",
       "sha256": "4d6137250db864a8fc5b01bd478ed3a52676b8f9128f474864bfd9004c61add9"
+    },
+    {
+      "name": "Pragmata",
+      "author": "ardenad, after Sebastian",
+      "description": "A 1920×480 dashboard for horizontal screens, featuring the Pragmata character artwork. A light, clean layout places the art in a rounded frame on the left, with a large clock, seconds and full date on the right. The header shows the active game and its FPS; three gauge cards report CPU, GPU and RAM usage alongside temperature, power, frequency and fan speed. The footer displays network download/up",
+      "sizes": [
+        "1920x480"
+      ],
+      "preview": "pragmata/preview.png",
+      "zip": "pragmata/pragmata.zip",
+      "sha256": "11e7111ee40d32d59d49e96335372fbaf3f7ff74208a75924921ac29d272c5c2"
     }
   ]
 }
