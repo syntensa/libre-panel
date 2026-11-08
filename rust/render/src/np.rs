@@ -4,7 +4,9 @@
 /// FMA3 or with AVX512F takes it, for a single number too, never the C library's expf. The
 /// exponent's whole part rounded off by Cody-Waite in two steps (fused), what is left a ratio
 /// of two Remez polynomials (fused, Horner), scaled by the power of two: a few units in the last
-/// place off the true value at most, exactly as numpy is.
+/// place off the true value at most, exactly as numpy is. The whole part's product and sum as
+/// numpy's builds have them: apart on Linux (GCC builds numpy's C as ISO C11, contracting
+/// nothing), one fused step on Windows (MSVC with /fp:contract): 84 float32s come out apart.
 pub fn expf(x: f32) -> f32 {
     // (numpy's constants as the float32s they are, written as short as they read back)
     const XMAX: f32 = 88.722_84;
@@ -32,7 +34,10 @@ pub fn expf(x: f32) -> f32 {
     if x <= XMIN {
         return 0.0;
     }
+    #[cfg(not(windows))]
     let quadrant = (x * LOG2E + MAGIC) - MAGIC;
+    #[cfg(windows)]
+    let quadrant = x.mul_add(LOG2E, MAGIC) - MAGIC;
     let mut r = quadrant.mul_add(C1, x);
     r = quadrant.mul_add(C2, r);
     r = quadrant.mul_add(0.0, r);

@@ -2988,9 +2988,12 @@ def test_exp_as_numpy_works_it_out() -> None:
     # of the 1.1 billion float32s between -104 and 89)
     fused = [0x3EA09998, 0x3EA4B63D, 0x3EB5C2D4, 0x3ED42DD3, 0x3EDD401B, 0x3F80DF72, 0x3F8629C1,
              0x3FD9987E, 0x3FDEE2CD, 0x401928C5, 0x4045854B, 0x4071E1D1]  # fmt: skip
-    x = np.concatenate(
-        [x, np.array(edges, np.float32), np.array(fused, np.uint32).view(np.float32)]
-    )
+    # (where the whole number of the exponent comes out another, its product and sum one fused
+    # step (numpy's build for Windows) or two (for Linux): 84 of the float32s, a dozen here)
+    builds = [0x3F851592, 0x410AA123, 0x416E7150, 0x42359AC4, 0x4256E029, 0x428B5295,
+              0x42A2E3BC, 0xC073FCE1, 0xC1CA6624, 0xC2145560, 0xC25F3183, 0xC29506D2]  # fmt: skip
+    x = np.concatenate([x, np.array(edges, np.float32),
+                        np.array(fused + builds, np.uint32).view(np.float32)])  # fmt: skip
     with np.errstate(over="ignore", under="ignore"):
         want = np.exp(x)
     [got] = run([{"op": "np_exp", "bits": x.view(np.uint32).tolist()}])

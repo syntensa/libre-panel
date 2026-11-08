@@ -1011,6 +1011,13 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       by Python's floor division (for a divisor of three and an angle from nought the two
       never differ: the quotient, rounded, does not reach the next whole number; 2.1 million
       angles, the neighbours of every multiple of three among them, the same)
+- [x] numpy's own float32 exp as each of its builds has it (np.rs): the whole number of the
+      exponent, its product and its sum two steps where GCC builds numpy for Linux (its C as
+      ISO C11, which contracts nothing) and one fused step where MSVC builds it for Windows
+      (/fp:contract), as the builds' machine code shows: 84 float32s come out apart, each as
+      its build makes it. Rust's exp the same to the bit as numpy's on all 4,294,967,296
+      float32s on Linux, with and without its AVX-512 paths; the tests ask numpy on either
+      system for a dozen of the 84
 - [ ] pictures as Pillow fails at them: lp-decode's errors as Python's exceptions, so that
       where Python catches an OSError and goes on (a picture cut short, a file of no picture)
       Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,
