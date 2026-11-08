@@ -17,6 +17,7 @@ pub mod re;
 pub mod strftime;
 pub mod value;
 pub mod zoneinfo;
+pub mod zones;
 
 pub use value::{Dict, Value};
 

@@ -1017,6 +1017,57 @@ fn run(case: &Value) -> Result<Value, String> {
             }
             json!({"pictures": out})
         }
+        "zones" => {
+            // the computer's zone as glibc finds it for a TZ of "tz" (null: unset), and for each
+            // case's naive "now" ([y, m, d, h, mi, s, us, fold]): its timestamp and offset
+            // (astimezone().utcoffset()), and where "zone" names one, the time there
+            // (astimezone(zone)); for each of "stamps", fromtimestamp's local time and fold.
+            // null where Python raises.
+            let tz = case["tz"].as_str();
+            let Some(local) = lp_py::zones::local_of(tz) else {
+                return Ok(json!({"unknown": true}));
+            };
+            let fields = |t: lp_py::datetime::DateTime| {
+                vec![
+                    t.year,
+                    i64::from(t.month),
+                    i64::from(t.day),
+                    i64::from(t.hour),
+                    i64::from(t.minute),
+                    i64::from(t.second),
+                    i64::from(t.microsecond),
+                ]
+            };
+            let mut out = Vec::new();
+            for c in case["cases"].as_array().ok_or("cases")? {
+                let at = c["now"].as_array().ok_or("now")?;
+                let dt = datetime_of(at);
+                let fold = at.get(7).and_then(Value::as_i64) == Some(1);
+                let mut answer = json!({
+                    "timestamp": lp_py::zones::timestamp(&local, &dt, fold),
+                    "offset": lp_py::zones::utcoffset(&local, &dt, fold),
+                });
+                if let Some(key) = c["zone"].as_str() {
+                    answer["there"] = lp_py::zones::named(key)
+                        .and_then(|zone| lp_py::zones::astimezone(&local, &zone, &dt, fold))
+                        .map_or(Value::Null, |t| json!(fields(t)));
+                }
+                out.push(answer);
+            }
+            let stamps = case["stamps"].as_array().map_or(&[][..], Vec::as_slice);
+            let back: Vec<Value> = stamps
+                .iter()
+                .map(|t| {
+                    let t = t.as_f64().unwrap_or(f64::NAN);
+                    lp_py::zones::fromtimestamp(&local, t).map_or(Value::Null, |(dt, fold)| {
+                        let mut f = fields(dt);
+                        f.push(i64::from(fold));
+                        json!(f)
+                    })
+                })
+                .collect();
+            json!({"answers": out, "local": back})
+        }
         "np_random" => {
             // numpy's default_rng(seed) and the draws asked of it in turn, each double's bits
             // in hex: ["normal", n], ["exponential", n], ["power", a, n], ["uniform", lo, hi,

@@ -10,12 +10,15 @@ import fnmatch
 import hashlib
 import json
 import math
+import os
 import random
 import re
 import string
 import struct
+import subprocess
 import sys
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -515,6 +518,343 @@ def test_time_zones_found_as_zoneinfo_finds_them() -> None:
     keys += ["Europe/Berlin/", "America.Argentina/Cordoba", "__init__.py", "America/Indiana/Knox"]
     [ours] = run([{"op": "py_num", "cases": [], "zones": keys}])
     assert ours["zones"] == [timezones.zone.__wrapped__(k) is not None for k in keys]
+
+
+# -- time zones -----------------------------------------------------------------------------
+
+# (in a process of its own, TZ as asked: the moments where the computer's clocks change, as the
+# C library finds them, and where named zones' change, as zoneinfo finds them, in the years
+# round now and in a few far ones; naive local times about them in both folds, timestamps about
+# them, and random ones; what datetime makes of each: a time's timestamp, its offset
+# (astimezone().utcoffset()), the time in a named zone (astimezone(zone)), a timestamp's local
+# time and fold (fromtimestamp); None where Python raises)
+_ZONE_PROBE = r"""
+import json, random, sys, time
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+ask = json.load(sys.stdin)
+rng = random.Random(ask["seed"])
+EPOCH = datetime(1970, 1, 1)
+FIRST, LAST = -62135596800, 253402300800
+NEAR = (-126230400, 2398291200)  # 1966 to 2046
+FAILS = (OverflowError, ValueError, OSError)
+
+
+def zone(key):  # (timezones.zone)
+    try:
+        return ZoneInfo(key)
+    except (ValueError, KeyError, OSError):
+        return None
+
+
+def fields(d):
+    return [d.year, d.month, d.day, d.hour, d.minute, d.second, d.microsecond]
+
+
+def edges(offset, first, last, step):
+    found, t, o = [], first, offset(first)
+    while t < last:
+        u = min(t + step, last)
+        p = offset(u)
+        if p != o:
+            lo, hi = t, u
+            while hi - lo > 1:
+                mid = (lo + hi) // 2
+                if offset(mid) == o:
+                    lo = mid
+                else:
+                    hi = mid
+            found.append((hi, o, offset(hi)))
+        t, o = u, p
+    return found
+
+
+def changes(offset, step):
+    spans = [(-2524521600, 4417977600)]  # 1890 to 2110
+    for y in (1, 2, 100, 1000, 1600, 1700, 1800, 2400, 5000, 9998, 9999):
+        a = int((datetime(y, 1, 1) - EPOCH).total_seconds())
+        b = int((datetime(y, 12, 31, 23, 59, 59) - EPOCH).total_seconds())
+        spans.append((a, b))
+    return [e for a, b in spans for e in edges(offset, a, b, step)]
+
+
+def chosen(found, near, far):
+    pick = [e for e in found if NEAR[0] <= e[0] < NEAR[1]]
+    rest = [e for e in found if not NEAR[0] <= e[0] < NEAR[1]]
+    return rng.sample(pick, min(near, len(pick))) + rng.sample(rest, min(far, len(rest)))
+
+
+def naive(t):
+    return EPOCH + timedelta(seconds=t) if FIRST <= t < LAST else None
+
+
+def named_offset(z):
+    def offset(t):
+        utc = EPOCH + timedelta(seconds=t)
+        try:
+            there = z.fromutc(utc.replace(tzinfo=z))
+        except FAILS:
+            return None
+        return int((there.replace(tzinfo=None) - utc).total_seconds())
+    return offset
+
+
+cases, stamps = [], []
+keys = ask["keys"]
+
+
+def add(dt, fold, key=None):
+    if key is None and keys:
+        key = keys[len(cases) % len(keys)]
+    cases.append({"now": fields(dt) + [fold], "zone": key})
+
+
+for t_, o1, o2 in chosen(changes(lambda t: time.localtime(t).tm_gmtoff, 86400), 400, 20):
+    for base in sorted({t_ + o1, t_ + o2}):
+        for d in (-3600, -1, 0, 1, 1800, 3600):
+            dt = naive(base + d)
+            if dt is not None:
+                us = rng.choice((0, 0, 0, 1, 500000, 999999))
+                for fold in (0, 1):
+                    add(dt.replace(microsecond=us), fold)
+    for d in (-86400, -3601, -1, -0.5, -1e-7, 0, 1e-7, 0.4999995, 0.5, 1, 3599.9999995, 3600):
+        stamps.append(t_ + d)
+for key in ask["edges_for"]:
+    z = zone(key)
+    if z is None:
+        continue
+    for t_, o1, o2 in chosen(changes(named_offset(z), 2 * 86400), 60, 20):
+        for d in (-3601, -1, 0, 1, 3600):
+            dt = naive(t_ + d)
+            if dt is not None:
+                add(dt, 0, key)
+for y in (1970, 2026, 2038, 2050):  # (new year's, where the local year is not UTC's yet)
+    for at in ((y, 1, 1, 0, 30), (y, 1, 1, 5, 30), (y, 1, 1, 13, 30), (y - 1, 12, 31, 10, 30),
+               (y - 1, 12, 31, 20, 30), (y - 1, 12, 31, 23, 30)):
+        for key in keys or [None]:
+            add(datetime(*at), 0, key)
+for _ in range(200):
+    y = rng.randint(1890, 2110) if rng.random() < 0.7 else rng.randint(1, 9999)
+    dt = datetime(y, rng.randint(1, 12), rng.randint(1, 28), rng.randrange(24),
+                  rng.randrange(60), rng.randrange(60), rng.choice((0, rng.randrange(10**6))))
+    add(dt, rng.randrange(2))
+for dt in (datetime(1, 1, 1), datetime(1, 1, 1, 23, 59, 59), datetime(1, 1, 2),
+           datetime(1, 1, 2, 12), datetime(9999, 12, 31, 23, 59, 59, 999999),
+           datetime(9999, 12, 31), datetime(9999, 12, 30, 12),
+           datetime(1969, 12, 31, 23, 59, 59, 999999), datetime(1970, 1, 1),
+           datetime(2038, 1, 19, 3, 14, 7), datetime(2038, 1, 19, 3, 14, 8),
+           datetime(1901, 12, 13, 20, 45, 52), datetime(1901, 12, 13, 20, 45, 51)):
+    for fold in (0, 1):
+        add(dt, fold)
+for _ in range(200):
+    if rng.random() < 0.3:
+        t = rng.uniform(FIRST - 2 * 86400, LAST + 2 * 86400)
+    else:
+        t = rng.uniform(-2524521600, 4417977600)
+    stamps.append(rng.choice((t, float(int(t)), int(t) + 0.5, int(t) + 0.9999995)))
+for t in (FIRST, FIRST + 1, FIRST + 86399, FIRST + 86400, FIRST + 86401, LAST - 1,
+          LAST - 0.5, LAST - 1e-7, LAST - 86400, LAST - 86401, 0, -1, -0.5, 1e-7,
+          5e-7, -5e-7, 1.5e-6, -1.5e-6, 2.5e-6, -2.5e-6, 3.5e-6):  # (ties of a microsecond)
+    stamps.append(float(t))
+
+answers = []
+for case in cases:
+    *at, fold = case["now"]
+    d = datetime(*at, fold=fold)
+    out = {}
+    try:
+        out["timestamp"] = d.timestamp()
+    except FAILS:
+        out["timestamp"] = None
+    try:
+        out["offset"] = int(d.astimezone().utcoffset().total_seconds())
+    except FAILS:
+        out["offset"] = None
+    if case["zone"] is not None:
+        z = zone(case["zone"])
+        try:
+            out["there"] = None if z is None else fields(d.astimezone(z).replace(tzinfo=None))
+        except FAILS:
+            out["there"] = None
+    answers.append(out)
+local = []
+for t in stamps:
+    try:
+        d = datetime.fromtimestamp(t)
+    except FAILS:
+        local.append(None)
+    else:
+        local.append(fields(d) + [d.fold])
+json.dump({"cases": cases, "answers": answers, "stamps": stamps, "local": local}, sys.stdout)
+"""
+
+
+def _zone_probe(tz: str | None, ask: dict[str, Any], env: dict[str, str]) -> dict[str, Any]:
+    """What Python makes of the probe's moments with TZ `tz` (None: unset)."""
+    env = dict(env)
+    env.pop("TZ", None)
+    if tz is not None:
+        env["TZ"] = tz
+    done = subprocess.run(
+        [sys.executable, "-P", "-c", _ZONE_PROBE],
+        input=json.dumps(ask),
+        capture_output=True,
+        text=True,
+        check=True,
+        env=env,
+        timeout=600,
+    )
+    return json.loads(done.stdout)
+
+
+def _zones_as_python_takes_them(
+    zones: list[str | None], unknown: list[str], keys: list[str], edges: dict[str, list[str]]
+) -> None:
+    """Rust's answers to the probe's moments the same as Python's for each TZ of `zones`, and
+    Rust saying it does not know each of `unknown`."""
+    env = dict(os.environ)
+    asks = [{"seed": i, "keys": keys, "edges_for": edges.get(tz or "", [])}
+            for i, tz in enumerate(zones)]  # fmt: skip
+    with ThreadPoolExecutor(max_workers=min(8, os.cpu_count() or 2)) as pool:
+        probes = list(pool.map(lambda tz, ask: _zone_probe(tz, ask, env), zones, asks))
+    cases = [{"op": "zones", "tz": tz, "cases": p["cases"], "stamps": p["stamps"]}
+             for tz, p in zip(zones, probes, strict=True)]  # fmt: skip
+    cases += [{"op": "zones", "tz": tz, "cases": [], "stamps": []} for tz in unknown]
+    answers = run(cases)
+    for tz, probe, ours in zip(zones, probes, answers[: len(zones)], strict=True):
+        assert "unknown" not in ours, f"TZ={tz!r}"
+        assert len(ours["answers"]) == len(probe["cases"]), f"TZ={tz!r}"
+        apart = [(c["now"], c["zone"], theirs, mine)
+                 for c, theirs, mine in zip(probe["cases"], probe["answers"], ours["answers"],
+                                            strict=True)
+                 if theirs != mine]  # fmt: skip
+        assert not apart, f"TZ={tz!r}: {len(apart)} of {len(probe['cases'])} apart: {apart[:4]}"
+        apart = [(t, theirs, mine)
+                 for t, theirs, mine in zip(probe["stamps"], probe["local"], ours["local"],
+                                            strict=True)
+                 if theirs != mine]  # fmt: skip
+        assert not apart, f"TZ={tz!r}: {len(apart)} timestamps apart: {apart[:4]}"
+    for tz, ours in zip(unknown, answers[len(zones) :], strict=True):
+        assert ours == {"unknown": True}, f"TZ={tz!r}"
+
+
+_NAMED_KEYS = ["Europe/Berlin", "America/New_York", "Australia/Lord_Howe", "Asia/Kolkata",
+               "Pacific/Chatham", "America/Sao_Paulo", "Africa/Casablanca", "Europe/Dublin",
+               "UTC", "Antarctica/Troll", "America/Nuuk", "Pacific/Apia", "Asia/Gaza",
+               "Europe/Moscow", "America/Santiago", "Nope/Zone"]  # fmt: skip
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="the computer's zone as glibc finds it")
+def test_the_computer_s_zone_and_named_zones_as_python_takes_them() -> None:
+    # (files of the system's zones, by name, path and colon; TZ strings, northern and southern,
+    # of every kind of day and time, offsets to a day; what glibc reads as UTC; and as named
+    # zones, with the computer's zone UTC, the moments where they change)
+    zones: list[str | None] = [
+        None, "", ":", "UTC", "Etc/UTC", "Universal", "GMT", "Europe/Berlin", ":Europe/Berlin",
+        "/usr/share/zoneinfo/Europe/Berlin", "America/New_York", "Australia/Lord_Howe",
+        "Asia/Kolkata", "Pacific/Chatham", "America/Sao_Paulo", "Africa/Casablanca",
+        "Europe/Dublin", "America/St_Johns", "Antarctica/Troll", "Pacific/Apia",
+        "Pacific/Kiritimati", "Asia/Tehran", "America/Nuuk", "Asia/Gaza", "Europe/Moscow",
+        "EST5EDT", "WET", "Etc/GMT-14", "Etc/GMT+12", "America/Santiago", "Pacific/Easter",
+        "Asia/Jerusalem", "America/Adak", "Europe/London", "Africa/Cairo", "posixrules",
+        "CET-1CEST,M3.5.0,M10.5.0/3", "EST5EDT,M3.2.0,M11.1.0", "<+0330>-3:30",
+        "AEST-10AEDT,M10.1.0,M4.1.0/3", "NZST-12NZDT,M9.5.0,M4.1.0/3", "XXX3YYY,J60/2,J300/2",
+        "XXX3YYY,J59/2,J300/2",
+        "XXX3YYY,59/2,300/2", "EST5EDT,0/0,J365/25", "<-02>2<-01>,M3.5.0/-1,M10.5.0/0",
+        "IST-1GMT0,M10.5.0,M3.5.0/1", "GMT0BST,M3.5.0/1,M10.5.0", "AAA-14", "AAA+12",
+        "AAA24", "AAA-24", "AAA-23:59:59", "<+00>0<+01>-1,M3.5.0/1,M3.5.0/2",
+        "XXX-1YYY-2:30,M3.5.0/2:30:15,M10.5.0/3:45:59", "XXX3YYY,M2.5.0,M2.1.6",
+        "XXX3YYY,M12.5.6/167,M1.1.0/-167", "UTC0",
+        "Nowhere/Else", "zone.tab", "Europe", "AB-1", "<AB>-1", "CET", "CET-", "<CET>", "123",
+        "CET-x",
+    ]  # fmt: skip
+    # (glibc reads these by rules or leniencies of its own: Rust says it does not know them)
+    unknown = ["CET-1CEST", "CET- 1", "CET-1:75", "CET-+1", "CET-1CEST,M3.5.0,M10.5.0/3,junk",
+               "CET-1,M3.5.0,M10.5.0/3", "CET-1 x", "CET-001", "XXX3YYY,J0060/2,J300/2",
+               "XXX3YYY,M3.05.0,M10.5.0", "XXX3YYY,J+60,J300/2", "XXX3YYY,J0,J300"]  # fmt: skip
+    # (a zone of leap seconds, where there is one: glibc counts them)
+    (unknown if Path("/usr/share/zoneinfo/right/UTC").exists() else zones).append("right/UTC")
+    _zones_as_python_takes_them(zones, unknown, _NAMED_KEYS, {"UTC": _NAMED_KEYS})
+
+
+def _tzif(transitions: list[int], kinds: list[int], types: list[tuple[int, int, int]],
+          footer: bytes = b"", *, version: bytes = b"2", leaps: tuple[tuple[int, int], ...] = (),
+          names: bytes = b"AAA\0BBB\0CCC\0",
+          wide_types: list[tuple[int, int, int]] | None = None) -> bytes:  # fmt: skip
+    """A TZif file: its transitions (UTC seconds) and the type after each, its types (offset,
+    summer flag, name's index; the 64-bit data's its own where given), its names, its leap
+    seconds (moment, correction), and from version 2 on the footer."""
+
+    def block(wide: bool) -> bytes:
+        time = "q" if wide else "l"
+        kinds_of = wide_types if wide and wide_types is not None else types
+        counts = (0, 0, len(leaps), len(transitions), len(kinds_of), len(names))
+        data = b"TZif" + version + bytes(15) + struct.pack(">6l", *counts)
+        data += b"".join(struct.pack(">" + time, t) for t in transitions) + bytes(kinds)
+        data += b"".join(struct.pack(">lBB", *t) for t in kinds_of) + names
+        return data + b"".join(struct.pack(">" + time + "l", *leap) for leap in leaps)
+
+    if version == b"\0":
+        return block(False)
+    return block(False) + block(True) + b"\n" + footer + b"\n"
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="the computer's zone as glibc finds it")
+def test_zone_files_as_glibc_and_zoneinfo_read_them(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # (files where zoneinfo and glibc part: types of summer time alone, a footer that is not
+    # the last type, no transitions with and without a rule, version 1 alone, the rules of the
+    # southern half, of times below zero, of days zero-based (zoneinfo's a day early), of J59
+    # (zoneinfo's a day late in a leap year), of summer time all year and of none, of a change
+    # at new year's (seen from 14 hours east, where the year is not UTC's yet), an offset past
+    # a day; and those glibc reads otherwise than zoneinfo: leap seconds, names that are no
+    # UTF-8, the versions 0 and 1 (its two blocks apart), more after the footer, a summer flag
+    # of 2)
+    t0, t1 = 1_000_000_000, 1_100_000_000
+    files = {
+        "OnlySummer": _tzif([t0], [1], [(7200, 1, 0), (10800, 1, 4)]),
+        "StdAfter": _tzif([t0, t1], [1, 0], [(3600, 0, 0), (10800, 0, 4)], b"<+05>-5"),
+        "NoTrans": _tzif([], [], [(3600, 1, 0), (-3600, 0, 4), (7200, 0, 8)]),
+        "NoTransRule": _tzif([], [], [(0, 0, 0)], b"CET-1CEST,M3.5.0,M10.5.0/3"),
+        "V1": _tzif([t0, t1], [1, 0], [(3600, 0, 0), (7200, 1, 4)], version=b"\0"),
+        "V3": _tzif([t0], [0], [(3600, 0, 0), (7200, 1, 4)], b"<+01>-1<+02>,M3.5.0,M10.5.0/3",
+                    version=b"3"),
+        "Southern": _tzif([t0, t1], [1, 0], [(39600, 0, 0), (43200, 1, 4)],
+                          b"<+11>-11<+12>,M10.1.0,M4.1.0/3"),
+        "NegTimes": _tzif([t0], [0], [(-7200, 0, 0), (-3600, 1, 4)],
+                          b"<-02>2<-01>,M3.5.0/-1,M10.5.0/0"),
+        "Julian": _tzif([t0], [0], [(10800, 0, 0), (14400, 1, 4)], b"<+03>-3<+04>,J60/0,J300/24"),
+        "Zero": _tzif([t0], [0], [(10800, 0, 0), (14400, 1, 4)], b"<+03>-3<+04>,59/0,300/24"),
+        "Julian59": _tzif([t0], [0], [(10800, 0, 0), (14400, 1, 4)],
+                          b"<+03>-3<+04>,J59/0,J300/24"),
+        "NewYear": _tzif([t0], [0], [(3600, 0, 0), (7200, 1, 4)], b"<+01>-1<+02>,J1/0,J365/23"),
+        "AllYear": _tzif([t0], [1], [(-18000, 0, 0), (-14400, 1, 4)], b"EST5EDT,0/0,J365/25"),
+        "Equal": _tzif([t0], [0], [(0, 0, 0), (3600, 1, 4)], b"<+00>0<+01>-1,M3.5.0/1,M3.5.0/2"),
+        "Big": _tzif([t0], [1], [(3600, 0, 0), (90000, 0, 4)]),
+        "DstFirst": _tzif([t0], [0], [(7200, 1, 0), (3600, 0, 4)]),
+    }  # fmt: skip
+    odd = {
+        "Leap": _tzif([t0], [0], [(3600, 0, 0)], b"<+01>-1", leaps=((78796800, 1),)),
+        "BadName": _tzif([t0], [0], [(3600, 0, 0)], b"<+01>-1", names=b"\xff\xfe\0"),
+        "Version0": _tzif([t0], [1], [(3600, 0, 0), (7200, 0, 4)], b"<+05>-5", version=b"0"),
+        "Version1": _tzif([t0], [1], [(3600, 0, 0), (7200, 0, 4)], b"<+05>-5", version=b"1",
+                          wide_types=[(3600, 0, 0), (10800, 0, 4)]),
+        "FooterMore": _tzif([t0], [0], [(3600, 0, 0)], b"<+01>-1\nMORE"),
+        "SummerTwo": _tzif([t0], [0], [(3600, 2, 0)]),
+    }  # fmt: skip
+    root = tmp_path / "zones"
+    (root / "lp").mkdir(parents=True)
+    for name, data in {**files, **odd}.items():
+        (root / "lp" / name).write_bytes(data)
+    monkeypatch.setenv("PYTHONTZPATH", str(root))
+    monkeypatch.setenv("TZDIR", str(root))
+    keys = [f"lp/{name}" for name in {**files, **odd}]
+    zones: list[str | None] = [str(root / "lp" / name) for name in files]
+    zones += ["lp/Southern", "UTC", "/usr/share/zoneinfo/Pacific/Kiritimati"]
+    unknown = [str(root / "lp" / name) for name in odd]
+    _zones_as_python_takes_them(zones, unknown, keys, {"UTC": keys})
 
 
 def _float_bits(text: str) -> str | None:

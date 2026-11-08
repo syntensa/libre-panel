@@ -66,7 +66,7 @@ all of it. It is the reference every Rust piece is checked against:
 
 | Crate | What it is | Python it replaces |
 |---|---|---|
-| py | what Python does that the app's files and messages depend on: its values (ints of any size, dicts in order, ==), their arithmetic and its errors, repr(), json, str's white space, digits, lower() and upper(), re's matching without case, rounding, the division of ints, float() of a str, sum() of floats, splitlines(), casefold(), format() and str.format, the wide characters of East Asian scripts, the zones zoneinfo finds (Python 3.12, Unicode 15.0: the release's) | — (Python's own rules) |
+| py | what Python does that the app's files and messages depend on: its values (ints of any size, dicts in order, ==), their arithmetic and its errors, repr(), json, str's white space, digits, lower() and upper(), re's matching without case, rounding, the division of ints, float() of a str, sum() of floats, splitlines(), casefold(), format() and str.format, the wide characters of East Asian scripts, the zones zoneinfo finds and reads, the computer's own as glibc finds it, and what datetime asks of them (Python 3.12, Unicode 15.0: the release's) | — (Python's own rules) |
 | pixels | Pillow's operations as Libre Panel uses them, to the bit | Pillow, numpy (in render/) |
 | decode | pictures from their files as Pillow decodes them (PNG, GIF, JPEG, WebP) | Image.open, Pillow's decoders |
 | text | letters and their layout as Pillow draws them (FreeType, shaping as libraqm) | fonts/, ImageFont |
@@ -659,9 +659,37 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       glint in float32 (a unit in the last place of the glint at most). The earth widget waits
       for the computer's own zone (the moment its globe is lit for, and the longitude of the
       zone): Rust says it does not draw it yet
+- [x] time zones as Python takes them (lp_py::zones): a zone's file read as zoneinfo reads it
+      (TZif of every version: its transitions and types, past the last transition its
+      footer's POSIX rule; before the first and after the last as CPython's C zoneinfo takes
+      them), the computer's own zone as glibc's tzset finds it (TZ unset: /etc/localtime;
+      empty: UTC; the name of a file, after a colon or not, in TZDIR or as a path; else a TZ
+      string; UTC where glibc reads none); each rule's days as each counts them (zoneinfo's
+      zero-based day a day early and its J59 a day late in a leap year, glibc's years before
+      1970 counted from 1970's); and on them what datetime asks: a naive time's timestamp
+      (local_to_seconds, in either fold), astimezone() and its offset (both folds asked, as
+      local_timezone_from_local asks them: in the gap where the clocks go on, the offset of
+      before it), astimezone(zone), fromtimestamp and its fold, and none where Python raises
+      (at the edges of the years 1 and 9999, an offset of a day). 69 TZ values (the system's
+      zones by name, path and colon, TZ strings of every kind of day and time, north and
+      south, offsets up to a day, and what glibc reads as UTC): 190,436 naive times about the
+      moments their clocks change (13,961 in a gap, 13,533 where the fold picks the other
+      moment), at new year's and at random, and 86,985 timestamps (18,378 of them the second of
+      two moments of one local time); 16 named zones about the moments they change: all as
+      Python's. 22 zone files made for the test, where zoneinfo and glibc part, the same as
+      both. Where glibc would read a TZ value by rules or leniencies of its own (summer time
+      without its rules, which it takes from posixrules; a space or a second sign before an
+      offset; minutes past 59, more digits than POSIX's, more after the rules; leap seconds; a
+      file it reads otherwise than zoneinfo), Rust says it does not know the zone (12 TZ values
+      and 6 files in the tests). The counter-checks put in 42 faults, and the tests catch them
+      all (5 of them once cases were added: J59 in a leap year for both, a version 1 file whose
+      two blocks part, a rule that changes at new year's seen from 14 hours east, and a fault
+      written anew where it changed nothing)
 - [ ] the zones on Windows: Python finds them in the tzdata package there, and Rust finds
       them where it is told the package is (LP_TZDATA: the tests tell lp-check where
-      Python's is). The Rust app does not bring one yet: without it, no key is a zone there
+      Python's is). The Rust app does not bring one yet: without it, no key is a zone there.
+      Nor does Rust know the computer's own zone there: Python takes it from the system (the
+      C runtime's localtime)
 - [ ] the C library's locale where Python's text follows it: format()'s 'n' and what strftime
       writes of a date in English (i18n.format_date: the names, %p, %c) are the C locale's
       unless something in the process sets another. GTK sets the person's when it starts, and
