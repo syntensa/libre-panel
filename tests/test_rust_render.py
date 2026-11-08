@@ -5409,3 +5409,460 @@ def test_card_slots_frames_in_their_cards_colours(tmp_path: Path) -> None:
         assert "slots" in got, n
         colours.add(tuple(want["slots"][0][2]))
     assert len(colours) >= 12  # (the cards' colours, each its own)
+
+
+# -- moving frames: what glides and fades -------------------------------------------------------
+
+
+def _python_moving(folder: Path, steps: list[tuple[Snapshot, float]],
+                   fps: float = 0.0) -> list[dict[str, Any]] | None:  # fmt: skip
+    """Moving frames one after another by one renderer (animate: as the panels' loop draws
+    them), each at its time: the frame, its boxes, whether it moves on; None for a theme Python
+    does not read."""
+    try:
+        renderer = Renderer(load_theme(folder), animate=True, preview=True)
+    except ThemeError:
+        return None
+    renderer.fps = fps
+    lists._RAN.clear()
+    out: list[dict[str, Any]] = []
+    for snapshot, now in steps:
+        try:
+            frame, boxes = renderer.render(snapshot, now=now)
+            out.append({"frame": frame, "boxes": boxes, "moving": renderer.moving})
+        except Exception as error:  # noqa: BLE001 (a frame Python cannot make)
+            out.append({"failed": f"{type(error).__name__}: {error}"})
+    return out
+
+
+def _compare_moving(cases: list[dict[str, Any]], expected: list[list[dict[str, Any]] | None],
+                    level: bool = False) -> tuple[int, int]:  # fmt: skip
+    """Rust's moving frames against Python's, step after step: each to the bit (`level`: within
+    a level, now and then, where light is blurred in floating point), its boxes and whether it
+    moves on. After a frame Rust does not draw, the rest of its steps are left (what moves went
+    on in Python's alone). How many were drawn, and of them how many move on."""
+    import numpy as np
+
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR),
+                   "language": "en", "locale": str(i18n.LOCALE_DIR)}])  # fmt: skip
+    drawn = moving = differ = total = 0
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        if want is None:  # (a theme Python does not read: nor does Rust)
+            assert "error" in got, n
+            continue
+        for i, (g, w) in enumerate(zip(got["steps"], want, strict=True)):
+            if "failed" in w:  # (Python's frame fails: Rust makes none)
+                assert "unported" in g, (n, i, g, w)
+                break
+            if "unported" in g:
+                break
+            if level:
+                apart = np.abs(np.asarray(picture(g["frame"]), int) - np.asarray(w["frame"], int))
+                assert apart.max() <= 1, (n, i)
+                differ += int((apart.max(axis=2) > 0).sum())
+                total += apart.shape[0] * apart.shape[1]
+            else:
+                assert g["sha256"] == hashlib.sha256(w["frame"].tobytes()).hexdigest(), (n, i)
+            assert g["boxes"] == w["boxes"], (n, i)
+            assert g["moving"] == w["moving"], (n, i)
+            drawn += 1
+            moving += w["moving"]
+    assert differ <= total // 10000, (differ, total)
+    return drawn, moving
+
+
+MOVING_SENSORS = ["cpu.load", "gpu.temp", "audio.volume", "mem.used"]
+MOVING_FORMATS = ["{value:.0f}", "{value:.1f}{unit}", "{value:.2f}", "{value}", "{value:.0f}%",
+                  "{value:,.0f}", "{value:.3g}"]  # fmt: skip
+
+
+def _moving_metric(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """A metric whose number glides to a new reading (smooth: the theme's glide or its own
+    glide_ms; the volume's at once unless it has one) and whose colour fades over its
+    thresholds."""
+    metric = _metric(rng, i, size)
+    metric.update(sensor=rng.choice(MOVING_SENSORS), format=rng.choice(MOVING_FORMATS),
+                  smooth=rng.random() < 0.7)  # fmt: skip
+    metric.pop("needs", None)
+    if rng.random() < 0.4:
+        metric["glide_ms"] = rng.choice([0, 1, 100, 250, 1000, 3000])
+    if rng.random() < 0.6:
+        metric["color_rules"] = [
+            {"above": rng.choice([10, 30, 50, 70, 90, 50.5, 50.0]),
+             "color": rng.choice([_colour(rng), "@accent", _hex(rng, True)])}
+            for _ in range(rng.randrange(1, 4))
+        ]  # fmt: skip
+    return metric
+
+
+def _moving_metric_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _moving_metric(rng, i, size) if rng.random() < 0.75 else _card_or_text(rng, i, size)
+
+
+# (how far apart frames come: at once, a 60th, 50th, 25th of a second, a tenth, at the edges of
+# a pause (a quarter of a second) and of an idle second, two seconds, back in time)
+MOVING_STEPS = [0, 1 / 60, 0.02, 0.04, 0.1, 0.2, 0.25, 0.26, 0.5, 1.0, 1.01, 2.0, -0.1]
+
+
+def _moving_readings(rng: random.Random, before: dict[str, Reading]) -> dict[str, Reading]:
+    """The readings of the next frame: each sensor's as before, or a new one now and then (any
+    number from none to past its thresholds, none at all, the same value anew)."""
+    readings = dict(before)
+    for key in MOVING_SENSORS:
+        if key not in readings or rng.random() < 0.35:
+            value = rng.choice([rng.uniform(0, 100), rng.uniform(0, 100), rng.randrange(101),
+                                0, 100, 50.5, 49.9, None, 1e9])  # fmt: skip
+            if value is None and rng.random() < 0.5:
+                readings.pop(key, None)
+            else:
+                readings[key] = Reading(key, value, unit=rng.choice(["", "%", "°C"]))
+    if rng.random() < 0.1:
+        readings["audio.muted"] = Reading("audio.muted", rng.choice([0, 1]))
+    return readings
+
+
+def _moving_given(readings: dict[str, Reading]) -> dict[str, Any]:
+    return {"readings": {k: {"v": _typed(r.value), "unit": r.unit, "label": r.label}
+                         for k, r in readings.items()}, "images": {}}  # fmt: skip
+
+
+def _moving_themes(tmp_path: Path, rng: random.Random, count: int, make: Any,
+                   level: bool = False) -> tuple[int, int]:  # fmt: skip
+    """`count` themes of what `make` makes, each drawn frame after frame by one renderer as the
+    panels' loop draws it (at a frame rate or none, the frames at any distance, the readings new
+    between them now and then), by Rust and by Python: _compare_moving's counts."""
+    from libre_panel.render import lit
+
+    cases, expected = [], []
+    for n in range(count):
+        folder = tmp_path / f"t{n}"
+        data = _frame_theme(rng, folder, make)
+        data["animation"] = {"smoothing_ms": rng.choice([0, 100, 400, 400, 1000, 5000])}
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        fps = rng.choice([0, 25, 30, 50, 60])
+        now, readings = rng.uniform(1000, 2000), _moving_readings(rng, {})
+        steps, given = [], []
+        for _ in range(rng.randrange(2, 14)):
+            steps.append((Snapshot(readings=readings), now))
+            given.append({"snapshot": _moving_given(readings), "now": now})
+            now += rng.choice(MOVING_STEPS)
+            readings = _moving_readings(rng, readings)
+        cases.append({"folder": str(folder), "dither": False, "animate": True, "fps": fps,
+                      "steps": given, "bytes": level})  # fmt: skip
+        lit._PICTURES.clear()  # (a ring's light kept from a theme of another size: see above)
+        expected.append(_python_moving(folder, steps, fps))
+    return _compare_moving(cases, expected, level)
+
+
+def test_moving_frames_of_metrics_as_python_draws_them(tmp_path: Path) -> None:
+    # (one renderer drawing its metrics frame after frame as the panels' loop does: a smooth
+    # number gliding to each new reading along its sensor's spring, its text at the history's
+    # points, standing where it reads the same; a colour fading over its thresholds a step per
+    # 0.18 s, for the bar and the number of a value together; after a pause each as it is)
+    drawn, moving = _moving_themes(tmp_path, random.Random(0x3071), 60, _moving_metric_or_more)
+    assert drawn > 300 and moving > 60, (drawn, moving)
+
+
+def _moving_bar(rng: random.Random, i: int, size: tuple[int, int],
+                lit: bool = False) -> dict[str, Any]:  # fmt: skip
+    """A bar or a ring gliding to each new reading (smooth unless told not to: the theme's
+    glide, its own glide_ms, the volume's a third of a second), its colour fading over its
+    thresholds, a bar's dot at its head on the way with it; flat or facet, or `lit`."""
+    if lit:
+        widget = (_lit_bar if rng.random() < 0.5 else _lit_gauge)(rng, i, size)
+    else:
+        widget = rng.choice([_bar, _bar, _gauge, _gauge, _facet_bar])(rng, i, size)
+    widget["sensor"] = rng.choice(MOVING_SENSORS)
+    if rng.random() < 0.3:
+        widget["smooth"] = rng.random() < 0.5
+    if rng.random() < 0.4:
+        widget["glide_ms"] = rng.choice([0, 1, 100, 250, 1000, 3000])
+    if rng.random() < 0.6:
+        widget["color_rules"] = [
+            {"above": rng.choice([10, 30, 50, 70, 90, 50.5, 50.0, -5]),
+             "color": rng.choice([_colour(rng), "@accent", _hex(rng, True)])}
+            for _ in range(rng.randrange(1, 4))
+        ]  # fmt: skip
+    if "mark" in widget:
+        widget["mark"] = rng.choice(MOVING_SENSORS)
+    if widget["type"] == "bar" and rng.random() < 0.3:
+        widget["end_dot"] = rng.choice([1, 2.5, 4])
+    return widget
+
+
+def _moving_bar_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    if rng.random() < 0.75:
+        return _moving_bar(rng, i, size)
+    return _moving_metric_or_more(rng, i, size)
+
+
+def _moving_lit_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    if rng.random() < 0.8:
+        return _moving_bar(rng, i, size, lit=True)
+    return _moving_metric(rng, i, size)
+
+
+def test_moving_frames_of_bars_and_rings_as_python_draws_them(tmp_path: Path) -> None:
+    # (bars, facet bars and rings frame after frame: each where its gliding value stands, in
+    # steps of the supersampled grid, with the numbers of its sensor; its colour, a gradient's
+    # too, mixed on its way over a threshold; a bar's dot at its gliding head; still once its
+    # value is as good as there)
+    drawn, moving = _moving_themes(tmp_path, random.Random(0xBA60), 60, _moving_bar_or_more)
+    assert drawn > 300 and moving > 80, (drawn, moving)
+
+
+def test_moving_frames_of_lit_bars_and_rings_within_a_level(tmp_path: Path) -> None:
+    # (lit bars and rings frame after frame: their light at the gliding value, in its colour on
+    # the way; blurred in floating point, so now and then a pixel a level apart)
+    drawn, moving = _moving_themes(tmp_path, random.Random(0x1A60), 50, _moving_lit_or_more, True)
+    assert drawn > 200 and moving > 60, (drawn, moving)
+
+
+def test_a_number_glides_and_its_colour_fades_as_python_shows_them(tmp_path: Path) -> None:
+    # (a reading that jumps from 10 to 90 and back, frames a 50th of a second apart for two
+    # seconds: the number on its way at each frame, its colour fading over two thresholds, the
+    # same for numbers of the same rules (50 as 50.0) that are away a while and come back on
+    # the way; at the theme's glide, its own, and at once; a bar with its dot and a
+    # ring of the sensor on the way with the numbers, in their colours on the way, a ring that
+    # is away a while too; moving while on the way)
+    folder = tmp_path / "glide"
+    folder.mkdir()
+    rules = [{"above": 30, "color": "#ff8800"}, {"above": 50, "color": "#ff0000c0"}]
+    twin = [{"above": 30.0, "color": "#ff8800"}, {"above": 50.0, "color": "#ff0000c0"}]
+    twin2 = [{"above": 30.0, "color": "#ff8800"}, {"above": 50, "color": "#ff0000c0"}]
+    twin3 = [{"above": 30, "color": "#ff8800"}, {"above": 50.0, "color": "#ff0000c0"}]
+
+    def metric(i: int, **more: Any) -> dict[str, Any]:
+        return {"type": "metric", "id": f"m{i}", "x": 2, "y": 2 + 14 * i, "w": 60, "h": 12,
+                "sensor": "cpu.load", "format": "{value:.1f}", "color": "#ffffff",
+                "smooth": True, "color_rules": rules, **more}  # fmt: skip
+
+    ring = {"type": "gauge", "sensor": "cpu.load", "w": 30, "h": 30, "thickness": 6,
+            "color": "#ffffff", "color2": "#2080ff"}  # fmt: skip
+    widgets = [metric(0), metric(1, glide_ms=700), metric(2, smooth=False),
+               metric(3, color_rules=twin, needs="cpu.temp"),
+               metric(4, color_rules=twin2, needs="gpu.temp"),
+               metric(5, color_rules=twin3, needs="mem.used"),
+               {"type": "bar", "id": "b4", "x": 66, "y": 4, "w": 56, "h": 8, "sensor": "cpu.load",
+                "color": "#ffffff", "color2": "#2080ff", "color_rules": rules, "end_dot": 2.5},
+               {**ring, "id": "g5", "x": 66, "y": 18, "color_rules": rules},
+               {**ring, "id": "g6", "x": 98, "y": 18, "color_rules": twin, "needs": "cpu.temp"},
+               {**ring, "id": "g7", "x": 66, "y": 50, "glide_ms": 700}]  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps({
+        "format": THEME_FORMAT, "name": "glide", "display": {"width": 128, "height": 84},
+        "palette": {name: "#808080" for name in PALETTE}, "animation": {"smoothing_ms": 400},
+        "background": {"color": "#101418"}, "widgets": widgets}), encoding="utf-8")  # fmt: skip
+    steps, given = [], []
+    for k in range(100):
+        value = 10.0 if k < 5 or k >= 60 else 90.0
+        readings = {"cpu.load": Reading("cpu.load", value)}
+        if not 20 <= k < 40:  # (the twins away a while: back after it, on the fade's way)
+            readings["cpu.temp"] = Reading("cpu.temp", 40)
+        if not 20 <= k < 74:
+            readings["gpu.temp"] = Reading("gpu.temp", 50)
+        if not 20 <= k < 80:
+            readings["mem.used"] = Reading("mem.used", 30)
+        steps.append((Snapshot(readings=readings), 500.0 + k * 0.02))
+        given.append({"snapshot": _moving_given(readings), "now": 500.0 + k * 0.02})
+    for fps in (0, 50):
+        case = {"folder": str(folder), "dither": False, "animate": True, "fps": fps,
+                "steps": given}  # fmt: skip
+        drawn, moving = _compare_moving([case], [_python_moving(folder, steps, fps)])
+        assert drawn == 100 and 40 < moving < 100, (fps, drawn, moving)
+
+
+def test_a_value_off_the_panel_a_moment_glides_on_or_starts_anew_as_python_shows_it(
+    tmp_path: Path,
+) -> None:
+    # (frames a 32nd of a second apart, a reading that jumps from 10 to 90 and two numbers and
+    # rings of their own glide that are off the panel a while on the way: back after exactly a
+    # pause (a quarter of a second) each glides on, back after a little more each starts where
+    # it is; their colours over their thresholds the same; the numbers that stay all along)
+    folder = tmp_path / "away"
+    folder.mkdir()
+
+    def rules(colour: str) -> list[dict[str, Any]]:
+        return [{"above": 30, "color": colour}, {"above": 60, "color": "#ff0000"}]
+
+    def metric(i: int, **more: Any) -> dict[str, Any]:
+        return {"type": "metric", "id": f"m{i}", "x": 2, "y": 2 + 14 * i, "w": 60, "h": 12,
+                "sensor": "cpu.load", "format": "{value:.2f}", "color": "#ffffff",
+                "smooth": True, **more}  # fmt: skip
+
+    widgets = [metric(0, color_rules=rules("#ff8800")),
+               metric(1, glide_ms=700, needs="cpu.temp", color_rules=rules("#00ff88")),
+               metric(2, glide_ms=900, needs="gpu.temp", color_rules=rules("#8800ff")),
+               {"type": "gauge", "id": "g3", "x": 66, "y": 2, "w": 30, "h": 30, "thickness": 6,
+                "sensor": "cpu.load", "color": "#ffffff", "glide_ms": 700, "needs": "cpu.temp",
+                "color_rules": rules("#00ff88")},
+               {"type": "bar", "id": "b4", "x": 66, "y": 40, "w": 56, "h": 8, "sensor": "cpu.load",
+                "color": "#ffffff", "glide_ms": 900, "needs": "gpu.temp",
+                "color_rules": rules("#8800ff")}]  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps({
+        "format": THEME_FORMAT, "name": "away", "display": {"width": 128, "height": 56},
+        "palette": {name: "#808080" for name in PALETTE}, "animation": {"smoothing_ms": 400},
+        "background": {"color": "#101418"}, "widgets": widgets}), encoding="utf-8")  # fmt: skip
+    steps, given = [], []
+    for k in range(40):
+        readings = {"cpu.load": Reading("cpu.load", 10.0 if k < 4 else 90.0)}
+        if not 10 <= k < 18:  # (away 9 frames: back after 0.28125 s)
+            readings["cpu.temp"] = Reading("cpu.temp", 40)
+        if not 10 <= k < 17:  # (away 8 frames: back after 0.25 s, a pause)
+            readings["gpu.temp"] = Reading("gpu.temp", 50)
+        now = 500.0 + k / 32
+        steps.append((Snapshot(readings=readings), now))
+        given.append({"snapshot": _moving_given(readings), "now": now})
+    # (and a frame at the time of the one before, which the number off the panel then missed:
+    # it was last drawn in the frame before that one, half a second ago, and glides on)
+    again, again_given = [], []
+    for cpu, temp, now in [(10.0, True, 600.0), (90.0, True, 600.1), (90.0, False, 600.6),
+                           (90.0, True, 600.6), (90.0, True, 600.64)]:  # fmt: skip
+        readings = {"cpu.load": Reading("cpu.load", cpu)}
+        readings.update({"cpu.temp": Reading("cpu.temp", 40)} if temp else {})
+        readings["gpu.temp"] = Reading("gpu.temp", 50)
+        again.append((Snapshot(readings=readings), now))
+        again_given.append({"snapshot": _moving_given(readings), "now": now})
+    cases = [
+        {"folder": str(folder), "dither": False, "animate": True, "steps": given},
+        {"folder": str(folder), "dither": False, "animate": True, "steps": again_given},
+    ]
+    drawn, moving = _compare_moving(cases, [_python_moving(folder, steps),
+                                            _python_moving(folder, again)])  # fmt: skip
+    assert drawn == 45 and moving > 12, (drawn, moving)
+
+
+def test_a_muted_volume_whose_number_glides_past_its_value_as_python_shows_it(
+    tmp_path: Path,
+) -> None:
+    # (the volume's number with a glide of its own, muted as it glides past a new value: the
+    # word stands for it, its glide goes on, and while it passes its value its colour is not
+    # told it was drawn, so after the muting it fades on or starts anew as in Python)
+    folder = tmp_path / "muted"
+    folder.mkdir()
+    widget = {
+        "type": "metric",
+        "id": "v",
+        "x": 2,
+        "y": 2,
+        "w": 60,
+        "h": 12,
+        "sensor": "audio.volume",
+        "format": "{value:.0f}",
+        "color": "#ffffff",
+        "smooth": True,
+        "glide_ms": 1500,
+        "color_rules": [{"above": 30, "color": "#ff8800"}, {"above": 60, "color": "#ff0000"}],
+    }
+    (folder / "theme.json").write_text(json.dumps({
+        "format": THEME_FORMAT, "name": "muted", "display": {"width": 64, "height": 16},
+        "palette": {name: "#808080" for name in PALETTE}, "background": {"color": "#101418"},
+        "widgets": [widget]}), encoding="utf-8")  # fmt: skip
+    cases, expected = [], []
+    for jump, back, muted in [(200, 6, range(6, 18)), (200, 6, range(5, 15)),
+                              (90, 14, range(14, 26))]:  # fmt: skip
+        steps, given = [], []
+        for k in range(back + 40):
+            volume = 10 if k < 2 else jump if k < back else 65
+            readings = {"audio.volume": Reading("audio.volume", volume),
+                        "audio.muted": Reading("audio.muted", int(k in muted))}  # fmt: skip
+            steps.append((Snapshot(readings=readings), 700.0 + k / 32))
+            given.append({"snapshot": _moving_given(readings), "now": 700.0 + k / 32})
+        cases.append({"folder": str(folder), "dither": False, "animate": True, "steps": given})
+        expected.append(_python_moving(folder, steps))
+    drawn, moving = _compare_moving(cases, expected)
+    assert drawn == 46 + 46 + 54 and moving > 40, (drawn, moving)
+
+
+def test_a_glide_of_more_milliseconds_than_a_float_holds_rust_leaves_out(tmp_path: Path) -> None:
+    # (a glide_ms a float does not hold as it is: Python divides the whole number by 1000, Rust
+    # would round it first; one a float holds glides as in Python)
+    frames, cases = [], []
+    for n, (kind, ms) in enumerate([(k, ms) for k in ("metric", "bar", "gauge")
+                                    for ms in (2**53 + 1, 2**53, 2**52 + 1)]):  # fmt: skip
+        folder = tmp_path / f"t{n}"
+        folder.mkdir()
+        widget = {"type": kind, "id": "w", "x": 2, "y": 2, "w": 40, "h": 12 if kind != "gauge"
+                  else 40, "sensor": "cpu.load", "smooth": True, "glide_ms": ms}  # fmt: skip
+        if kind == "metric":
+            widget["format"] = "{value:.3f}"
+        (folder / "theme.json").write_text(json.dumps({
+            "format": THEME_FORMAT, "name": "far", "display": {"width": 48, "height": 48},
+            "palette": {name: "#808080" for name in PALETTE}, "background": {"color": "#000000"},
+            "widgets": [widget]}), encoding="utf-8")  # fmt: skip
+        steps, given = [], []
+        for k, value in enumerate([10.0, 90.0, 90.0]):
+            readings = {"cpu.load": Reading("cpu.load", value)}
+            steps.append((Snapshot(readings=readings), 700.0 + k))
+            given.append({"snapshot": _moving_given(readings), "now": 700.0 + k})
+        cases.append({"folder": str(folder), "dither": False, "animate": True, "steps": given})
+        frames.append(_python_moving(folder, steps))
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    for n, (got, want) in enumerate(zip(ours["frames"], frames, strict=True)):
+        if n % 3 < 2:  # (2**53 + 1 and 2**53: more than 53 bits)
+            assert got["steps"][0]["unported"] == "numbers a float does not hold as they are", n
+            continue
+        for g, w in zip(got["steps"], want, strict=True):
+            assert g["sha256"] == hashlib.sha256(w["frame"].tobytes()).hexdigest(), n
+            assert g["moving"] == w["moving"], n
+
+
+def test_the_app_s_own_themes_in_moving_frames_as_python_draws_them(tmp_path: Path) -> None:
+    # (every theme the app brings, drawn as the panels' loop draws it: frames a 25th of a second
+    # apart and more, its readings new between them, at 50 fps; the same to the bit where Rust
+    # draws all it holds, a level apart where its light is blurred in floating point, whether it
+    # moves on as Python's; else Rust says what it does not draw yet)
+    import dataclasses
+
+    import numpy as np
+
+    from libre_panel.sensors.demo import demo_snapshot
+
+    first = dataclasses.replace(demo_snapshot(fixed_time=1_760_000_000.0),
+                                now=datetime(2026, 11, 7, 18, 5, 9, 250))  # fmt: skip
+    later = dict(first.readings)
+    for key, reading in first.readings.items():
+        number = reading.value
+        if isinstance(number, (int, float)) and not isinstance(number, bool):
+            later[key] = dataclasses.replace(reading, value=number * 0.7 + 3)
+    snapshots = [first, first, dataclasses.replace(first, readings=later),
+                 dataclasses.replace(first, readings=later)]  # fmt: skip
+    times = [900.0, 900.04, 900.08, 900.6]
+    folders = sorted(p.parent for p in THEMES.glob("*/theme.json"))
+    # (the histories the themes' graphs draw, their last numbers, as for a still frame)
+    graphs = [w for f in folders for w in Renderer(load_theme(f), preview=True).widgets
+              if w["type"] == "graph"]  # fmt: skip
+    drawn_from = sorted({w["sensor"] for w in graphs} & set(first.history))
+    history = {key: [_typed(float(v)) for v in first.history[key][-400:]] for key in drawn_from}
+
+    def given(snapshot: Snapshot) -> dict[str, Any]:
+        readings = {key: {"v": _typed(r.value), "unit": r.unit, "label": r.label,
+                          "origin": r.origin} for key, r in snapshot.readings.items()}  # fmt: skip
+        return {"readings": readings, "images": {k: image(v) for k, v in snapshot.images.items()},
+                "history": history, "now": _moment(snapshot.now)}  # fmt: skip
+
+    soft = {f for f in folders if _soft_light(f)}
+    cases = [{"folder": str(f), "dither": False, "animate": True, "fps": 50, "bytes": f in soft,
+              "steps": [{"snapshot": given(s), "now": t} for s, t in zip(snapshots, times,
+                                                                       strict=True)]}
+             for f in folders]  # fmt: skip
+    steps = list(zip(snapshots, times, strict=True))
+    expected = _exact_globes(tmp_path, lambda: [_python_moving(f, steps, 50) for f in folders])
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR),
+                   "language": "en", "locale": str(i18n.LOCALE_DIR)}])  # fmt: skip
+    drawn = []
+    for folder, got, want in zip(folders, ours["frames"], expected, strict=True):
+        assert want is not None, folder.name
+        if any("unported" in g for g in got["steps"]):
+            continue
+        for i, (g, w) in enumerate(zip(got["steps"], want, strict=True)):
+            assert "frame" in w, (folder.name, i, w.get("failed"))
+            if folder in soft:  # (its light blurred in floating point: within a level)
+                apart = np.abs(np.asarray(picture(g["frame"]), int) - np.asarray(w["frame"], int))
+                assert apart.max() <= 1, (folder.name, i)
+            else:
+                assert g["sha256"] == hashlib.sha256(w["frame"].tobytes()).hexdigest(), (
+                    folder.name, i)  # fmt: skip
+            assert g["boxes"] == w["boxes"], (folder.name, i)
+            assert g["moving"] == w["moving"], (folder.name, i)
+        drawn.append(folder.name)
+    assert len(drawn) >= 32, drawn

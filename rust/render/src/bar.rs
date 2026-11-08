@@ -9,8 +9,9 @@ use lp_pixels::{round_half_even, Draw, Image, Mode, ALL_CORNERS};
 use lp_py::{Dict, Value};
 
 use crate::effects;
+use crate::metric;
 use crate::piece::{Failed, Piece, Result};
-use crate::renderer::{Renderer, MOST_PIXELS};
+use crate::renderer::{spring_key, Renderer, MOST_PIXELS};
 use crate::shapes::{down, ink, lerp, Rgba, SUPERSAMPLE};
 use crate::snapshot::{number, Snapshot};
 use crate::widget;
@@ -93,25 +94,56 @@ impl Renderer {
         Ok((own, self.colour_of(w, "color2")?))
     }
 
-    /// _rule_paint in a still frame: the bar's own colours, or the highest threshold's that
-    /// `value` is above.
+    /// _rule_paint: a bar's or ring's colours for `value`: its own (`color`, and `color2` for a
+    /// gradient along it), the highest threshold's it is above (plain), or in a moving frame on
+    /// the way between two (each colour mixed, as the threshold's colour fades).
     pub(crate) fn rule_paint(
-        &self,
+        &mut self,
         w: &Dict,
         value: Option<f64>,
         rules: &[(Value, String)],
     ) -> Result<Paint> {
-        let step = match value {
-            None => 0,
-            Some(v) => rules
-                .iter()
-                .filter(|(above, _)| lp_py::num::gt(&Value::Float(v), above).unwrap_or(false))
-                .count(),
-        };
-        if step == 0 {
-            return self.paint(w, None);
+        let step = self.rule_step(w, value, rules);
+        let (low, u) = metric::rule_mix(step);
+        // (each colour made, as Python makes them all before it takes one)
+        let mut paints = vec![self.paint(w, None)?];
+        for (_, colour) in rules {
+            paints.push(self.paint(w, Some(colour))?);
         }
-        self.paint(w, Some(&rules[step.min(rules.len()) - 1].1))
+        if u <= 0.0 || low + 1 >= paints.len() {
+            return Ok(paints[low.min(paints.len() - 1)]);
+        }
+        let ((a0, b0), (a1, b1)) = (paints[low], paints[low + 1]);
+        if b0.is_none() && b1.is_none() {
+            return Ok((lerp(a0, a1, u), None));
+        }
+        Ok((
+            lerp(a0, a1, u),
+            Some(lerp(b0.unwrap_or(a0), b1.unwrap_or(a1), u)),
+        ))
+    }
+
+    /// _eased: in a moving frame a smooth bar's, ring's or list bar's value on its way to
+    /// `target` (its sensor's spring, Motion.glide); the target itself once it is as good as
+    /// there (a five-hundredth of its span), or where it does not glide.
+    pub(crate) fn eased(&mut self, w: &Dict, target: Option<f64>) -> Option<f64> {
+        let glide = self.glide_s(Some(w));
+        if glide <= 0.0 || !widget::flag(w, "smooth", false) {
+            return target;
+        }
+        let (key, now, lead) = (spring_key(w), self.at, self.lead());
+        let state = self.motion.glide(&key, target, now, glide, lead);
+        let (Some((value, speed)), Some(target)) = (state, target) else {
+            return target;
+        };
+        // (min and max as floats hold them: their difference rounded once, as Python's)
+        let span = (widget::number(w, "max", 100.0) - widget::number(w, "min", 0.0)).abs();
+        let span = if span == 0.0 { 1.0 } else { span };
+        if (target - value).abs() < span * 0.002 && speed.abs() * glide < span * 0.002 {
+            return Some(target);
+        }
+        self.moving = true;
+        Some(value)
     }
 
     /// _bar_piece: the bar at `frac` in `paint`, drawn three times larger and reduced.
@@ -286,12 +318,12 @@ impl Renderer {
     /// (the middle of its last pixel), placed in quarter pixels, with the widget's glow; none
     /// for an empty bar. The dict its effects come from (its opacity) with it.
     pub(crate) fn bar_dot(
-        &self,
+        &mut self,
         w: &Dict,
         snapshot: &Snapshot,
         rules: &[(Value, String)],
     ) -> Result<Option<Over>> {
-        let value = number(&snapshot.value(widget::text(w, "sensor")));
+        let value = self.eased(w, number(&snapshot.value(widget::text(w, "sensor"))));
         let (lo, hi) = (
             widget::number(w, "min", 0.0),
             widget::number(w, "max", 100.0),

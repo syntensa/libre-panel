@@ -2208,7 +2208,8 @@ fn run(case: &Value) -> Result<Value, String> {
                     };
                     let options = lp_render::Options {
                         preview: true,
-                        animate: false,
+                        // (a moving frame, as the panels' loop draws them, where asked)
+                        animate: c["animate"].as_bool().unwrap_or(false),
                         dither: c["dither"].as_bool().unwrap_or(false),
                     };
                     let mut renderer = match lp_render::Renderer::new(theme, &env, options) {
@@ -2220,10 +2221,12 @@ fn run(case: &Value) -> Result<Value, String> {
                     if let Some(look) = c["symbols"].as_str() {
                         renderer.symbols = look.to_string();
                     }
-                    // (your place, for the earth, as the loop sets it)
+                    // (your place, for the earth, and the panel's frame rate, as the loop sets
+                    // them)
                     if let Some([lat, lon]) = c["place"].as_array().map(Vec::as_slice) {
                         renderer.place = lat.as_f64().zip(lon.as_f64());
                     }
+                    renderer.fps = c["fps"].as_f64().unwrap_or(0.0);
                     // (each frame as a process's first, no fan seen running before it, unless it
                     // follows the one before)
                     if !c["after"].as_bool().unwrap_or(false) {
@@ -2239,7 +2242,8 @@ fn run(case: &Value) -> Result<Value, String> {
                                     boxes.into_iter().map(|(k, b)| (k, json!(b))).collect();
                                 let mut out = json!({"sha256": hex, "size": [frame.width(),
                                     frame.height()], "boxes": boxes,
-                                    "warnings": renderer.warnings()});
+                                    "warnings": renderer.warnings(),
+                                    "moving": renderer.moving});
                                 if bytes {
                                     out["frame"] = value_of(&frame);
                                 }

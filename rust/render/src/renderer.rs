@@ -28,6 +28,7 @@ use crate::list;
 use crate::lit;
 use crate::metric::{self, Shown};
 use crate::moon;
+use crate::motion;
 use crate::piece::{Failed, Piece, Result};
 use crate::shapes::{self, Rgba};
 use crate::slot::Slot;
@@ -137,6 +138,13 @@ pub struct Renderer {
     /// your place (latitude, longitude), for the earth: the loop sets it (Python's
     /// renderer.place); None for none
     pub place: Option<(f64, f64)>,
+    /// what moves from frame to frame (render/motion.py's Motion): the springs of the values
+    /// that glide, the fades of threshold colours
+    pub motion: motion::Motion,
+    /// whether the frame moves on (Python's moving): a value gliding, a colour fading
+    pub moving: bool,
+    /// the panel's frame rate (the loop sets it; 0: not known)
+    pub fps: f64,
     /// the theme's pictures fitted (_images), and the animated pictures' frames (_animations)
     pub(crate) pictures: RefCell<Kept<image::PictureKey, Option<Rc<Image>>>>,
     pub(crate) animations: Kept<image::AnimationKey, Option<Rc<image::Animation>>>,
@@ -146,6 +154,37 @@ pub struct Renderer {
     pub(crate) began: HashMap<(String, String), f64>,
     /// each slideshow's pictures, and when its folders were read (_slide_lists)
     pub(crate) slide_lists: HashMap<String, (std::time::Instant, Vec<String>)>,
+}
+
+/// VOLUME_GLIDE_MS: the volume's bars and rings, 95 % of a step after about a third of a
+/// second.
+const VOLUME_GLIDE_MS: i64 = 320;
+
+/// _own_glide_ms: a widget's own glide (ms): its glide_ms, else the volume's (0 for its number:
+/// at once), else None (the theme's).
+pub(crate) fn own_glide_ms(w: &Dict) -> Option<i64> {
+    let own = widget::int(w, "glide_ms", 0);
+    if own > 0 {
+        return Some(own);
+    }
+    if widget::text(w, "sensor") == metric::VOLUME {
+        return Some(if widget::text(w, "type") == "metric" {
+            0
+        } else {
+            VOLUME_GLIDE_MS
+        });
+    }
+    None
+}
+
+/// _spring: whose glide a widget follows: its sensor's, with the bars, rings and numbers of it;
+/// one with a glide of its own follows one of its own.
+pub(crate) fn spring_key(w: &Dict) -> String {
+    let sensor = widget::text(w, "sensor");
+    match own_glide_ms(w) {
+        Some(own) if own != 0 => format!("{sensor}\0{own}"),
+        _ => sensor.to_string(),
+    }
 }
 
 impl Renderer {
@@ -183,6 +222,9 @@ impl Renderer {
             slots_begun: false,
             at: 0.0,
             place: None,
+            motion: motion::Motion::default(),
+            moving: false,
+            fps: 0.0,
             pictures: RefCell::new(Kept::new(image::IMAGE_BYTES)),
             animations: Kept::new(image::ANIMATION_BYTES),
             moves: HashMap::new(),
@@ -360,6 +402,31 @@ impl Renderer {
         };
         lp_py::zones::astimezone(local, &zone, &now, self.fold())
             .ok_or_else(|| Drawn::Unported("a time in a time zone that Python fails at".into()))
+    }
+
+    /// _glide_s: how long a value takes to a new reading (the theme's animation.smoothing_ms,
+    /// or the widget's own glide_ms; the volume's number at once); 0 in a still frame.
+    pub(crate) fn glide_s(&self, w: Option<&Dict>) -> f64 {
+        if !self.options.animate {
+            return 0.0;
+        }
+        let own = w.map_or(Some(0), own_glide_ms);
+        if let Some(own) = own.filter(|&own| own > 0) {
+            return own as f64 / 1000.0;
+        }
+        if own == Some(0) && w.is_some_and(|w| widget::text(w, "sensor") == metric::VOLUME) {
+            return 0.0;
+        }
+        self.theme.smoothing_ms.max(0) as f64 / 1000.0
+    }
+
+    /// _lead: the time between two planned frames (0: not known).
+    pub(crate) fn lead(&self) -> f64 {
+        if self.fps > 0.0 {
+            1.0 / self.fps
+        } else {
+            0.0
+        }
     }
 
     /// _range_now in a still frame: the range a graph of its own range was drawn in; None for
@@ -803,17 +870,15 @@ impl Renderer {
             }
             "bar" => {
                 let w = w.clone();
-                // (a bar gliding to a new reading, a colour fading: motion, not drawn here yet)
-                if self.options.animate
-                    && (widget::flag(&w, "smooth", true) || metric::has_rules(&w))
+                if !["min", "max", "glide_ms"]
+                    .iter()
+                    .all(|k| widget::exact(&w, k))
                 {
-                    return Drawn::Unported("bars that move".into());
-                }
-                if !["min", "max"].iter().all(|k| widget::exact(&w, k)) {
                     return Drawn::Unported("numbers a float does not hold as they are".into());
                 }
                 let snapshot = self.snapshot.clone().unwrap_or_default();
-                let value = number(&snapshot.value(widget::text(&w, "sensor")));
+                // (in a moving frame on its glide to the reading)
+                let value = self.eased(&w, number(&snapshot.value(widget::text(&w, "sensor"))));
                 let Some(rules) = metric::rules_of(&w) else {
                     return Drawn::Unported("colour rules above NaN".into());
                 };
@@ -844,18 +909,13 @@ impl Renderer {
             }
             "gauge" => {
                 let w = w.clone();
-                // (a ring gliding to a new reading, a colour fading: motion, not drawn here yet)
-                if self.options.animate
-                    && (widget::flag(&w, "smooth", true) || metric::has_rules(&w))
-                {
-                    return Drawn::Unported("gauges that move".into());
-                }
-                let numbers = ["min", "max", "start_angle", "end_angle"];
+                let numbers = ["min", "max", "start_angle", "end_angle", "glide_ms"];
                 if !numbers.iter().all(|k| widget::exact(&w, k)) {
                     return Drawn::Unported("numbers a float does not hold as they are".into());
                 }
                 let snapshot = self.snapshot.clone().unwrap_or_default();
-                let value = number(&snapshot.value(widget::text(&w, "sensor")));
+                // (in a moving frame on its glide to the reading)
+                let value = self.eased(&w, number(&snapshot.value(widget::text(&w, "sensor"))));
                 let Some(rules) = metric::rules_of(&w) else {
                     return Drawn::Unported("colour rules above NaN".into());
                 };
@@ -886,19 +946,25 @@ impl Renderer {
             }
             "metric" => {
                 let w = w.clone();
-                // (a number gliding, a colour fading: motion, not drawn here yet)
-                if self.options.animate
-                    && (widget::flag(&w, "smooth", false) || metric::has_rules(&w))
-                {
-                    return Drawn::Unported("metrics that move".into());
-                }
                 let snapshot = self.snapshot.clone().unwrap_or_default();
+                // (_metric: whether this metric moves, apart from what moved before it)
+                let before = std::mem::replace(&mut self.moving, false);
                 let (text, colour) = match self.metric_text(&w, &snapshot) {
                     Ok(Shown::Text(text, colour)) => (text, colour),
                     Ok(Shown::Unported(what)) => return Drawn::Unported(what.into()),
-                    Err(e) => return Drawn::Failed(e),
+                    Err(e) => {
+                        self.moving = before || self.moving;
+                        return Drawn::Failed(e);
+                    }
                 };
-                self.text_widget(&w, text, colour)
+                let drawn = self.text_widget(&w, text, colour);
+                if !self.moving && drawn.is_ok() {
+                    // (its glide and colour told it was drawn now, as _settled tells them: also
+                    // where it said "Mute" instead)
+                    self.metric_settled(&w, &snapshot);
+                }
+                self.moving = before || self.moving;
+                drawn
             }
             "image" => {
                 let w = w.clone();
@@ -1191,6 +1257,16 @@ impl Renderer {
         }
         let snapshot = snapshot.finite();
         self.snapshot = Some(snapshot.clone());
+        // (Motion.begin: the springs of values long gone go, the others forget old pieces)
+        self.moving = false;
+        let (glide, lead) = (self.glide_s(None), self.lead());
+        let readings = |key: &str| {
+            snapshot
+                .readings
+                .get(key)
+                .and_then(|r| motion::number(&r.value))
+        };
+        self.motion.begin(&readings, now, glide, lead);
         // which card each slot shows
         self.begin_slots(&snapshot, now)?;
         let mut boxes = IndexMap::new();

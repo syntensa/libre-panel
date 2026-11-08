@@ -278,9 +278,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       left out); the sensor texts in the panel's language; the colour of the highest threshold
       the value is above (sorted as sorted() sorts them); the volume's "MUTE" in the palette's
       crit while it is muted. The frames of random themes of them the same to the bit. A number
-      gliding to a new reading and a colour fading to a threshold's are motion
-      (render/motion.py): where the renderer animates them, and where a threshold is NaN, Rust
-      says it does not draw them yet
+      gliding to a new reading and a colour fading to a threshold's are motion (below); where a
+      threshold is NaN, Rust says it does not draw it yet
 - [x] icons (icons.py, icon widgets): every one of the line icons drawn as icons.py draws it
       (four times larger on the grid of 24, lines with curved joints and round caps, rings,
       arcs, the outlines of shapes eroded by a blur, the gap a shape clears, then reduced with
@@ -321,14 +320,14 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       mixer; a thin mark where a second reading stands, a dot at the bar's head placed in
       quarter pixels. The frames of random themes of bars the same to the bit; with a glow
       round the bar and its dot within a level, as a card's. A bar gliding to a new reading and
-      a colour fading to a threshold's are motion: Rust says it does not draw them yet
+      a colour fading to a threshold's are motion (below)
 - [x] ring gauges (gauge widgets) in a still frame: where the reading stands, in steps of the
       supersampled grid along the arc; drawn three times larger and reduced: the track with
       round caps or flat and the ticks across it; the value's arc a mask over the gauge's
       colour, a gradient along the scale (thin wedges round the centre) or a threshold's
       colour. A gauge Python cannot draw (no size, a box the wrong way round) is left out as
       there. The frames of random themes of gauges the same to the bit; with a glow round the
-      ring within a level. A ring gliding and a colour fading are motion, and a bar's or a
+      ring within a level. A ring gliding and a colour fading are motion (below); a bar's or a
       ring's numbers past 53 bits (Python counts with them exactly, a float rounds them): Rust
       says it does not draw them yet
 - [x] calendars (calendar widgets): the month as a grid of days, the week from Monday or
@@ -750,6 +749,41 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       computer's zone (on Windows), slideshows by the clock and a picture alone at the edges
       of the years; on Windows, slideshow patterns of other than ASCII (pathlib matches there
       without case)
+- [x] motion (render/motion.py and the renderer's _glide_s, _spring, _lead, _eased, _rule_step,
+      _rule_mix, _rule_paint, _metric and _settled): in a moving frame (the panels' loop) a
+      smooth value glides to each new reading on its sensor's spring, critically damped (95 % of
+      the way after the theme's smoothing_ms, a widget's own glide_ms, the volume's bars and
+      rings 320 ms behind its number, which follows at once), from the frame
+      before as the frame rate says, the numbers, bars and rings of a sensor together, also
+      into the next theme; one that was off the panel a while (not over a pause between frames)
+      starts where it is. Crossing a threshold fades the colour a step per 0.18 s, the same for
+      every widget of the sensor with the same rules (50 as 50.0), mixed in eighths along a
+      smooth step: a number's text colour, a bar's or ring's colours (a gradient's ends too), a
+      bar's dot at its gliding head. A gliding number's text is made at the histories' points
+      (25 a second) and stands once it reads the same; a bar or ring is there once within a
+      five-hundredth of its span. Whether a frame moves on is told as Python's renderer tells
+      it (the metric that settles told so, as _settled tells it). The tests: one renderer
+      drawing random themes frame after frame at a frame rate or none, the frames at once to
+      two seconds apart and back in time, the readings new between them now and then: 60
+      themes of metrics (all to the bit), 60 of bars, facet bars and rings (to the bit), 50 of
+      lit bars and rings (within a level, their light blurred in floating point); a reading
+      that jumps there and back for two seconds of frames a 50th apart, its numbers, bar, dot
+      and rings at the theme's glide, their own and at once, one away a while that comes back
+      on the way; values off the panel a moment (back after exactly a pause each glides on,
+      after a little more each starts where it is, and so after a frame at the time of the
+      one before); a muted volume whose number glides past its value; the app's themes in
+      moving frames: 32 of the 99 drawn by Rust all along, to the bit or (their light) within
+      a level, whether each frame moves on as in Python. The counter-checks put in 44 faults
+      (the spring's curve, speed, start, pause and idle second, freshness, forgetting; the
+      fades' pace, way, freshness and keys; the mix; the metrics' text points, moving and
+      settling; the bars' and rings' glide, their colours on the way, the dot; the glides'
+      lengths, keys and the frame rate's lead; lp-check's frame rate and moving), and the
+      tests catch 41 of them, 5 once cases were added (a pause, a frame at the time of the one
+      before, numbers of the same rules back on a fade's way, the muted volume); the other
+      three change nothing that is drawn (one old piece of a glide more kept, which only a
+      graph's history would look at; a gradient's end where a threshold's colour is never
+      empty; a threshold's colour as a gradient of itself). A glide_ms past 53 bits (Python
+      divides the whole number, Rust would round it first): Rust says it does not draw it yet
 - [ ] pictures as Pillow fails at them: lp-decode's errors as Python's exceptions, so that
       where Python catches an OSError and goes on (a picture cut short, a file of no picture)
       Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,
