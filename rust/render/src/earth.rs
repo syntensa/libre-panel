@@ -1,10 +1,13 @@
 //! The earth as it stands at a moment (render/earth.py's picture): a globe lit by the sun where
 //! it stands then, the cities' lights on its night side, the clouds, the glint of the sun on the
-//! sea, the air glowing at its rim, a place marked; made at twice its size and reduced.
+//! sea, the air glowing at its rim, a place marked; made at twice its size and reduced. And the
+//! earth that turns (earth.Turning): its map lit whole for a moment, each pixel of the disc
+//! looked up in it at a step of the turn, the air laid over it anew every two degrees.
 //!
 //! In earth.py's own numbers: float32 where its arrays are, and the Python floats doubles, made
 //! float32 where numpy takes them as weak scalars (and the one sum where a Python float meets
-//! an array of bytes, float64 as numpy makes it); numpy's own float32 exp (crate::np); the C
+//! an array of bytes, float64 as numpy makes it); numpy's own float32 exp, sin and cos
+//! (crate::np); the C
 //! library's asinf, atan2f, powf and hypotf, which numpy takes where it has no SVML (numpy on
 //! Linux with AVX-512 takes SVML's, a unit or two in the last place apart: docs/RUST.md says
 //! how near that comes); np.dot's float32 products summed in a double (OpenBLAS's sdot for
@@ -16,7 +19,9 @@ use std::f64::consts::PI;
 use std::path::{Path, PathBuf};
 
 use lp_decode::Kind;
-use lp_pixels::{alpha_composite, Image, Mode};
+use std::rc::Rc;
+
+use lp_pixels::{alpha_composite, Filter, Image, Mode};
 
 use lp_py::{Dict, Value};
 
@@ -590,6 +595,373 @@ pub fn picture(
     Ok(out)
 }
 
+// -- a globe that turns -------------------------------------------------------------------------
+
+/// Turning.AIR_STEP: the degrees the view goes round before its air is laid anew.
+const AIR_STEP: f64 = 2.0;
+
+/// Python's min(a, b) of floats: a, unless b is less (a NaN never is).
+fn py_min(a: f64, b: f64) -> f64 {
+    if b < a {
+        b
+    } else {
+        a
+    }
+}
+
+/// Python's max(a, b) of floats: a, unless b is greater.
+fn py_max(a: f64, b: f64) -> f64 {
+    if b > a {
+        b
+    } else {
+        a
+    }
+}
+
+/// earth.turn_latitude(place): where a turning globe is seen from, above your latitude but at
+/// most 30 degrees from the equator (it turns, and shows no pole); 20 degrees north without a
+/// place.
+pub(crate) fn turn_latitude(place: Option<(f64, f64)>) -> f64 {
+    match place {
+        None => 20.0,
+        Some((lat, _)) => py_max(-30.0, py_min(30.0, lat)),
+    }
+}
+
+/// Image.fromarray(map).resize((w, h), BOX): a map at the size of the turning globe's.
+fn boxed(map: &Map, mode: Mode, w: usize, h: usize) -> Result<Vec<u8>> {
+    let failed = |e: lp_pixels::Error| Failed(e.to_string());
+    let image = Image::from_bytes(mode, map.width, map.height, map.data.clone()).map_err(failed)?;
+    let image = image
+        .resize(w, h, Filter::Box, None, None)
+        .map_err(failed)?;
+    Ok(image.as_bytes().to_vec())
+}
+
+/// earth.Turning: a globe `size` px that turns, seen from latitude `lat`: where each pixel of
+/// its disc finds itself on the map at step 0, its rim's alpha (made once); the map lit for a
+/// moment (lit, the slow part, and use_lit); the air laid anew every AIR_STEP degrees and with
+/// each light; a frame at a step, a pixel at the globe's middle a step.
+pub(crate) struct Turning {
+    size: usize,
+    lat: f64,
+    look: Look,
+    /// the map's round: the disc's at its middle, a pixel there a step of the turn
+    width: usize,
+    /// the disc's pixels, their map's columns at step 0 and rows times the width
+    inside: Vec<u32>,
+    col: Vec<u32>,
+    rowbase: Vec<u32>,
+    /// the rim's pixels and their alpha
+    rim: Vec<u32>,
+    rim_alpha: Vec<u8>,
+    /// the earth lit (RGBA a pixel, the width times half of it), and the sun's direction
+    map: Option<Vec<[u8; 4]>>,
+    sun: Option<[f32; 3]>,
+    /// the moment the map is lit for
+    lit_at: Option<f64>,
+    /// the air laid last, by the twos of degrees it was laid at and the light
+    air_key: Option<(i64, Option<f64>)>,
+    air_layer: Option<Image>,
+}
+
+impl Turning {
+    /// Turning(size, lat, air, mark, clouds, lights): the disc's pixels and where each lies on
+    /// the map, in float32 as numpy works them out (the latitude held within 60 degrees).
+    pub(crate) fn new(size: i64, lat: f64, look: Look) -> Result<Turning> {
+        let size = size.max(8);
+        if size > 8192 {
+            return Err(Failed("a globe too large".into()));
+        }
+        let size = size as usize;
+        let lat = py_max(-60.0, py_min(60.0, lat));
+        let r = size as f64 * SHARE / 2.0;
+        // (the map's round is the disc's at its middle: a pixel there, a step of the turn)
+        let width = ((PI * r).ceil() as usize * 2).max(64);
+        let h = width / 2;
+        let (half, fr) = (weak(size as f64 / 2.0), weak(r));
+        let a = lat.to_radians();
+        let (sin_a, cos_a, less_sin_a) = (weak(a.sin()), weak(a.cos()), weak(-a.sin()));
+        let rim_from = weak(1.0 - 2.0 / r);
+        let (fh, fw) = (h as f32, width as f32);
+        let mut t = Turning {
+            size,
+            lat,
+            look,
+            width,
+            inside: Vec::new(),
+            col: Vec::new(),
+            rowbase: Vec::new(),
+            rim: Vec::new(),
+            rim_alpha: Vec::new(),
+            map: None,
+            sun: None,
+            lit_at: None,
+            air_key: None,
+            air_layer: None,
+        };
+        for i in 0..size {
+            let ys = ((i as f32 + 0.5) - half) / fr;
+            for j in 0..size {
+                let xs = ((j as f32 + 0.5) - half) / fr;
+                let rho2 = xs * xs + ys * ys;
+                if rho2 >= 1.0 || rho2.is_nan() {
+                    continue; // (rho2 < 1.0 is false for NaN too: outside)
+                }
+                let at = (i * size + j) as u32;
+                // (seen from longitude 0: a turn adds to every pixel's longitude)
+                let (x, y) = (xs, -ys);
+                let z = (1.0 - rho2).sqrt();
+                let px = less_sin_a * y + cos_a * z;
+                let pz = cos_a * y + sin_a * z;
+                let lat_px = clip(pz, -1.0, 1.0).asin();
+                let lon_px = x.atan2(px);
+                let row = ((weak(0.5) - lat_px / weak(PI)) * fh) as i32;
+                t.inside.push(at);
+                t.rowbase
+                    .push(row.clamp(0, h as i32 - 1) as u32 * width as u32);
+                let col = ((lon_px / weak(2.0 * PI) + weak(0.5)) * fw) as i32;
+                t.col.push(col.rem_euclid(width as i32) as u32);
+                let rho = rho2.sqrt();
+                if rho > rim_from {
+                    t.rim.push(at);
+                    let alpha = clip((1.0 - rho) * fr + 0.5, 0.0, 1.0);
+                    t.rim_alpha.push((alpha * 255.0 + 0.5) as u8);
+                }
+            }
+        }
+        Ok(t)
+    }
+
+    /// Turning.lit(t): the map lit as the earth is at `t` (RGBA a pixel) and the sun's
+    /// direction: the maps drafted to the round's width and boxed to it and half of it, each
+    /// pixel's sun from its latitude's and longitude's sines and cosines (numpy's own).
+    pub(crate) fn lit(&self, dir: &Path, t: f64) -> Result<(Vec<[u8; 4]>, [f32; 3])> {
+        let (w, h) = (self.width, self.width / 2);
+        let found = maps(dir, w)?;
+        let (lat_s, lon_s) = subsolar(t)?;
+        let sun = point(lat_s, lon_s);
+        let (cos_lon, sin_lon): (Vec<f32>, Vec<f32>) = (0..w)
+            .map(|j| {
+                let lon = ((j as f32 + 0.5) / w as f32 - weak(0.5)) * weak(2.0 * PI);
+                (np::cosf(lon), np::sinf(lon))
+            })
+            .unzip();
+        let day = boxed(&found.day, Mode::RGB, w, h)?;
+        let night = boxed(&found.night, Mode::RGB, w, h)?;
+        let clouds = boxed(&found.clouds, Mode::L, w, h)?;
+        drop(found);
+        let mut out = vec![[0u8, 0, 0, 255]; w * h];
+        for i in 0..h {
+            let lat = (weak(0.5) - (i as f32 + 0.5) / h as f32) * weak(PI);
+            let (cos_lat, sin_lat) = (np::cosf(lat), np::sinf(lat));
+            for j in 0..w {
+                let k = i * w + j;
+                let mut mu = cos_lat * (cos_lon[j] * sun[0] + sin_lon[j] * sun[1]);
+                mu += sin_lat * sun[2];
+                let rgb = lit(
+                    [day[k * 3], day[k * 3 + 1], day[k * 3 + 2]],
+                    [night[k * 3], night[k * 3 + 1], night[k * 3 + 2]],
+                    clouds[k],
+                    mu,
+                    self.look.clouds,
+                    self.look.lights,
+                );
+                for c in 0..3 {
+                    out[k][c] = clip(rgb[c] * 255.0 + 0.5, 0.0, 255.0) as u8;
+                }
+            }
+        }
+        Ok((out, sun))
+    }
+
+    /// Turning.tables(): the disc's pixels, their map's columns at step 0 and rows times the
+    /// width, the rim's pixels (u32 each, little-endian) and their alpha (u8), one after another.
+    fn tables(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        for table in [&self.inside, &self.col, &self.rowbase, &self.rim] {
+            out.extend(table.iter().flat_map(|v| v.to_le_bytes()));
+        }
+        out.extend_from_slice(&self.rim_alpha);
+        out
+    }
+
+    /// Turning.use(t, lit): the map lit for `t` shown from the next frame on.
+    pub(crate) fn use_lit(&mut self, t: f64, (map, sun): (Vec<[u8; 4]>, [f32; 3])) {
+        self.map = Some(map);
+        self.sun = Some(sun);
+        self.lit_at = Some(t);
+        self.air_key = None;
+    }
+
+    /// Turning.longitude(step): the longitude in the middle at `step` (the view goes west, as
+    /// the earth turns east under it).
+    fn longitude(&self, step: i64) -> f64 {
+        let turned = 360.0 * step.rem_euclid(self.width as i64) as f64 / self.width as f64;
+        py_mod(180.0 - turned, 360.0) - 180.0
+    }
+
+    /// Turning.step_at(longitude): the step that has `longitude` in the middle.
+    pub(crate) fn step_at(&self, longitude: f64) -> Result<i64> {
+        let v = -longitude * self.width as f64 / 360.0;
+        if !v.is_finite() {
+            return Err(Failed(if v.is_nan() {
+                "cannot convert float NaN to integer".into()
+            } else {
+                "cannot convert float infinity to integer".into()
+            }));
+        }
+        Ok((v.round_ties_even() as i128).rem_euclid(self.width as i128) as i64)
+    }
+
+    /// Turning.step_of(now, turn_s, offset): the step of the turn at `now` (a pixel at the
+    /// globe's middle a step, a turn in `turn_s` seconds), moved on by `offset`, and when the
+    /// next one is due.
+    pub(crate) fn step_of(&self, now: f64, turn_s: f64, offset: i64) -> Result<(i64, f64)> {
+        let rate = self.width as f64 / py_max(1.0, turn_s);
+        let at = (now * rate).floor();
+        if !at.is_finite() {
+            return Err(Failed(if at.is_nan() {
+                "cannot convert float NaN to integer".into()
+            } else {
+                "cannot convert float infinity to integer".into()
+            }));
+        }
+        if rate == 0.0 {
+            return Err(Failed("float division by zero".into()));
+        }
+        let count = at as i128;
+        let step = (count + i128::from(offset)).rem_euclid(self.width as i128) as i64;
+        Ok((step, (count + 1) as f64 / rate))
+    }
+
+    /// Turning.air_at(step): the air seen from the longitude of `step`, laid anew where the
+    /// twos of degrees or the light moved since it was laid last (from the step it is laid at).
+    fn air_at(&mut self, step: i64) -> Result<()> {
+        let Some(sun) = self.sun else {
+            return Err(Failed("light the map first".into()));
+        };
+        let longitude = self.longitude(step);
+        let key = ((longitude / AIR_STEP).round_ties_even() as i64, self.lit_at);
+        if self.air_key != Some(key) || self.air_layer.is_none() {
+            let view = basis(self.lat, longitude);
+            self.air_layer = Some(air(self.size, &view, sun, self.look.air)?);
+            self.air_key = Some(key);
+        }
+        Ok(())
+    }
+
+    /// Turning.frame(step, place): the globe seen from the longitude of `step`, each pixel of
+    /// the disc the map's at its place (the rim's alpha its own), the air over it and your
+    /// place's mark over that.
+    pub(crate) fn frame(&mut self, step: i64, place: Option<(f64, f64)>) -> Result<Image> {
+        if self.map.is_none() || self.sun.is_none() {
+            return Err(Failed("light the map first".into()));
+        }
+        self.air_at(step)?;
+        let view = basis(self.lat, self.longitude(step));
+        let mark = match place {
+            Some(place) => spot(self.size, &view, place, self.look.mark)?,
+            None => None,
+        };
+        let (Some(map), Some(air)) = (&self.map, &self.air_layer) else {
+            return Err(Failed("light the map first".into()));
+        };
+        let (size, width) = (self.size, self.width);
+        // (westwards: the ground goes east)
+        let shift = width - step.rem_euclid(width as i64) as usize;
+        let mut out = vec![0u8; size * size * 4];
+        for ((&at, &col), &row) in self.inside.iter().zip(&self.col).zip(&self.rowbase) {
+            let mut i = col as usize + shift;
+            if i >= width {
+                i -= width;
+            }
+            let at = at as usize * 4;
+            out[at..at + 4].copy_from_slice(&map[i + row as usize]);
+        }
+        for (&at, &alpha) in self.rim.iter().zip(&self.rim_alpha) {
+            out[at as usize * 4 + 3] = alpha;
+        }
+        let failed = |e: lp_pixels::Error| Failed(e.to_string());
+        let image = Image::from_bytes(Mode::RGBA, size, size, out).map_err(failed)?;
+        let mut image = alpha_composite(&image, air).map_err(failed)?;
+        if let Some((mark, (x0, y0))) = mark {
+            let (w, h) = (mark.width() as i64, mark.height() as i64);
+            image
+                .alpha_composite_at(&mark, (x0, y0), (0, 0, w, h))
+                .map_err(failed)?;
+        }
+        Ok(image)
+    }
+}
+
+/// A call on a turning globe (for lp-check): light its map for a moment, a frame at a step
+/// (your place marked or none), the step at a time (now, turn_s, offset), the step with a
+/// longitude in the middle, the lit map's bytes, the tables' bytes.
+pub enum TurnCall {
+    Light(f64),
+    Frame(i64, Option<(f64, f64)>),
+    StepOf(f64, f64, i64),
+    StepAt(f64),
+    Map,
+    Tables,
+}
+
+/// What a TurnCall gives.
+pub enum TurnAnswer {
+    Lit,
+    Frame(Image),
+    StepOf(i64, f64),
+    StepAt(i64),
+    Bytes(Vec<u8>),
+}
+
+/// earth.Turning(size, lat, *look) and `calls` on it, one after another: its round's width and
+/// each call's answer (or why it failed).
+pub fn turning_calls(
+    dir: &Path,
+    size: i64,
+    lat: f64,
+    look: Look,
+    calls: &[TurnCall],
+) -> Result<(usize, Vec<Result<TurnAnswer>>)> {
+    let mut globe = Turning::new(size, lat, look)?;
+    let answers = calls
+        .iter()
+        .map(|call| match *call {
+            TurnCall::Light(t) => {
+                let lit = globe.lit(dir, t)?;
+                globe.use_lit(t, lit);
+                Ok(TurnAnswer::Lit)
+            }
+            TurnCall::Frame(step, place) => globe.frame(step, place).map(TurnAnswer::Frame),
+            TurnCall::StepOf(now, turn_s, offset) => globe
+                .step_of(now, turn_s, offset)
+                .map(|(step, due)| TurnAnswer::StepOf(step, due)),
+            TurnCall::StepAt(longitude) => globe.step_at(longitude).map(TurnAnswer::StepAt),
+            TurnCall::Map => match &globe.map {
+                Some(map) => Ok(TurnAnswer::Bytes(map.concat())),
+                None => Err(Failed("light the map first".into())),
+            },
+            TurnCall::Tables => Ok(TurnAnswer::Bytes(globe.tables())),
+        })
+        .collect();
+    Ok((globe.width, answers))
+}
+
+/// A globe that turns on show (the renderer's _Globe): what it is (its size, the latitude it
+/// is seen from, its look), the moment it is lit for, the steps it is ahead (it begins with your
+/// place in the middle), the piece it showed last, its step and the moment that was lit for.
+pub(crate) struct Globe {
+    key: (i64, f64, Look),
+    turning: Turning,
+    lit: Option<f64>,
+    offset: i64,
+    piece: Option<Rc<Piece>>,
+    step: Option<i64>,
+    shown: Option<f64>,
+}
+
 // -- the earth widget ---------------------------------------------------------------------------
 
 /// earth.zone_longitude: the longitude of the computer's time zone, its offset from UTC now (as
@@ -604,11 +976,8 @@ impl Renderer {
     /// the wall clock in steps of redraw_s (the moment it is lit for), seen from above your
     /// place (else your time zone's longitude a little north of the equator), your place
     /// marked where the widget asks; drawn again where its day, its view or its look moves.
-    /// A globe that turns in a moving frame: Rust says it does not draw it yet.
+    /// With spin in a moving frame, one that turns (turning_widget).
     pub(crate) fn earth_widget(&mut self, w: &Dict) -> Drawn {
-        if self.options.animate && widget::number(w, "spin", 0.0) > 0.0 {
-            return Drawn::Unported("turning globes".into());
-        }
         let Some(local) = lp_py::zones::local() else {
             return Drawn::Unported("the earth without the computer's own time zone".into());
         };
@@ -640,6 +1009,9 @@ impl Renderer {
             return Drawn::Unported("the earth at a time that Python fails at".into());
         };
         let moment = (stamp / every).floor() * every;
+        if widget::number(w, "spin", 0.0) > 0.0 && self.options.animate {
+            return self.turning_widget(w, local, size, mark, look, moment);
+        }
         // (earth.view_of)
         let centre = match self.place {
             Some(place) => place,
@@ -671,6 +1043,104 @@ impl Renderer {
             Ok(piece) => Drawn::Piece(piece),
             Err(e) => Drawn::Failed(e),
         }
+    }
+
+    /// _draw_earth with spin in a moving frame: a globe that turns, seen from turn_latitude,
+    /// beginning with your place in the middle (else your time zone's longitude), a pixel at
+    /// its middle a step, a turn in spin seconds; its map lit anew for each moment (here and
+    /// now: the panels' loop lights it aside, with the loop), a frame made for each step only,
+    /// and the frame due when the next step is (the renderer's due; it does not move on).
+    fn turning_widget(
+        &mut self,
+        w: &Dict,
+        local: &lp_py::zones::Zone,
+        size: i64,
+        mark: Option<(f64, f64)>,
+        look: Look,
+        moment: f64,
+    ) -> Drawn {
+        let id = widget::text(w, "id").to_string();
+        let spin = widget::number(w, "spin", 0.0);
+        let lat = turn_latitude(self.place);
+        let key = (size, lat, look);
+        if self.earths.get(&id).is_none_or(|g| g.key != key) {
+            let turning = match Turning::new(size, lat, look) {
+                Ok(t) => t,
+                Err(e) => return Drawn::Failed(e),
+            };
+            // (it begins with your place in the middle, or your time zone's longitude)
+            let centre = match self.place {
+                Some(place) => place.1,
+                None => match zone_longitude(local) {
+                    Some(longitude) => longitude,
+                    None => {
+                        return Drawn::Unported("the earth at a time that Python fails at".into())
+                    }
+                },
+            };
+            let offset = match (turning.step_at(centre), turning.step_of(self.at, spin, 0)) {
+                (Ok(begin), Ok((now, _))) => begin - now,
+                (Err(e), _) | (_, Err(e)) => return Drawn::Failed(e),
+            };
+            let globe = Globe {
+                key,
+                turning,
+                lit: None,
+                offset,
+                piece: None,
+                step: None,
+                shown: None,
+            };
+            self.earths.insert(id.clone(), globe);
+        }
+        let Some(mut globe) = self.earths.remove(&id) else {
+            return Drawn::Failed(Failed("a globe not kept".into()));
+        };
+        let made = self.globe_turned(w, &mut globe, spin, mark, moment);
+        self.earths.insert(id, globe);
+        match made {
+            Ok(piece) => Drawn::Piece(piece),
+            Err(e) => Drawn::Failed(e),
+        }
+    }
+
+    /// The turning globe's piece at this frame's step: its map lit for `moment` first where it
+    /// is not, the frame due at the next step, the piece made anew where the step or the light
+    /// moved.
+    fn globe_turned(
+        &mut self,
+        w: &Dict,
+        globe: &mut Globe,
+        spin: f64,
+        mark: Option<(f64, f64)>,
+        moment: f64,
+    ) -> Result<Rc<Piece>> {
+        if globe.lit != Some(moment) {
+            let lit = globe.turning.lit(&maps_dir(&self.env.fonts_dir), moment)?;
+            globe.turning.use_lit(moment, lit);
+            globe.lit = Some(moment);
+        }
+        let (step, due) = globe.turning.step_of(self.at, spin, globe.offset)?;
+        // (_due_at: the soonest that something wants a new frame)
+        self.due = Some(match self.due {
+            Some(at) if due < at => due,
+            Some(at) => at,
+            None => due,
+        });
+        let fresh = globe.step == Some(step) && globe.shown == globe.turning.lit_at;
+        if let (Some(piece), true) = (&globe.piece, fresh) {
+            return Ok(piece.clone());
+        }
+        let image = globe.turning.frame(step, mark)?;
+        let (x, y) = (widget::int(w, "x", 0), widget::int(w, "y", 0));
+        let side = globe.turning.size as i64;
+        let mut piece = Piece::new(image, x, y);
+        piece.hit = Some([x, y, side, side]);
+        let piece = Rc::new(self.effects(w, piece)?);
+        globe.piece = Some(piece.clone());
+        globe.step = Some(step);
+        globe.shown = globe.turning.lit_at;
+        Ok(piece)
     }
 }
 

@@ -166,6 +166,11 @@ pub struct Renderer {
     pub(crate) analog_parts: crate::analog::Faces<Rc<Image>>,
     /// their shadow and glow where the face is not see-through (_analog_halos)
     pub(crate) analog_halos: crate::analog::Faces<Option<(Rc<Image>, i64)>>,
+    /// the globes that turn, by id (_earths)
+    pub(crate) earths: HashMap<String, crate::earth::Globe>,
+    /// when something wants a new frame, not before (Python's due: a turning globe's next
+    /// step); None for nothing
+    pub due: Option<f64>,
 }
 
 /// VOLUME_GLIDE_MS: the volume's bars and rings, 95 % of a step after about a third of a
@@ -247,6 +252,8 @@ impl Renderer {
             beats: HashMap::new(),
             analog_parts: crate::analog::Faces::default(),
             analog_halos: crate::analog::Faces::default(),
+            earths: HashMap::new(),
+            due: None,
         };
         renderer.slots = renderer.make_slots()?;
         renderer.background = renderer.load_background()?;
@@ -1394,6 +1401,7 @@ impl Renderer {
         self.snapshot = Some(snapshot.clone());
         // (Motion.begin: the springs of values long gone go, the others forget old pieces)
         self.moving = false;
+        self.due = None;
         let (glide, lead) = (self.glide_s(None), self.lead());
         let readings = |key: &str| {
             snapshot

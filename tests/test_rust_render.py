@@ -2974,6 +2974,33 @@ def test_frames_of_weather_symbols_as_python_draws_them(tmp_path: Path) -> None:
     assert _compare_frames(tmp_path, 0x5D3B, 160, _symbol_or_more, _symbol_snapshot) > 120
 
 
+def test_sine_and_cosine_as_numpy_works_them_out() -> None:
+    # (numpy's float32 sin and cos are its own where it has AVX2 and FMA3: Cody-Waite's
+    # reduction to a quarter turn and polynomials, fused; the C library's past 117,435.992 and
+    # 71,476.0625; the whole number of quarter turns one fused step, as GCC and MSVC build it)
+    import numpy as np
+
+    rng = np.random.default_rng(0x51C0)
+    x = np.concatenate([rng.uniform(-4, 4, 60_000), rng.uniform(-200, 200, 60_000),
+                        rng.uniform(-1.2e5, 1.2e5, 60_000)]).astype(np.float32)  # fmt: skip
+    edges = [0.0, -0.0, 1e-30, -1e-30, math.pi, -math.pi, math.pi / 2, math.pi / 4, 71476.0625,
+             71476.07, 117435.992, 117436.0, math.inf, -math.inf, math.nan]  # fmt: skip
+    # (where the whole number of quarter turns, its product fused, makes another sine or cosine
+    # than unfused)
+    fused = [0x42782F92, 0x42CDC63A, 0x435669E9, 0x435CB268, 0x4362FAE7, 0x43694366, 0x43890D4F,
+             0x43A2F85A, 0x43CFBCE2, 0x43D60561, 0x43DC4DE0, 0x43E8DEDE]  # fmt: skip
+    x = np.concatenate(
+        [x, np.array(edges, np.float32), np.array(fused, np.uint32).view(np.float32)]
+    )
+    for func in ("sin", "cos"):
+        with np.errstate(invalid="ignore"):
+            want = getattr(np, func)(x)
+        [got] = run([{"op": f"np_{func}", "bits": x.view(np.uint32).tolist()}])
+        ours = np.array(got["bits"], np.uint32).view(np.float32)
+        same = (ours.view(np.uint32) == want.view(np.uint32)) | (np.isnan(ours) & np.isnan(want))
+        assert same.all(), (func, x[~same][:5])
+
+
 def test_exp_as_numpy_works_it_out() -> None:
     # (numpy's float32 exp is its own, never the C library's: a ratio of two polynomials,
     # fused, a few units in the last place off the true value at most)
@@ -4436,14 +4463,170 @@ def test_the_earth_as_python_draws_it(tmp_path: Path) -> None:
     assert most <= 48, (apart, most)
 
 
+_TURNING_GLOBES = """
+import hashlib, json, sys
+from pathlib import Path
+from libre_panel.render import earth
+globes, out = json.loads(Path(sys.argv[1]).read_text()), Path(sys.argv[2])
+answers = []
+for n, g in enumerate(globes):
+    globe = earth.Turning(g["size"], g["lat"], tuple(g["air"]), tuple(g["mark"]), g["clouds"],
+                          g["lights"])
+    said = []
+    for k, c in enumerate(g["calls"]):
+        try:
+            if c[0] == "light":
+                globe.light(c[1])
+                said.append(None)
+            elif c[0] == "frame":
+                image = globe.frame(c[1], None if c[2] is None else tuple(c[2]))
+                (out / f"{n}_{k}.raw").write_bytes(image.tobytes())
+                said.append("frame")
+            elif c[0] == "step_of":
+                said.append(list(globe.step_of(c[1], c[2], c[3])))
+            elif c[0] == "map":
+                if globe.map is None:
+                    raise RuntimeError("light the map first")
+                said.append(hashlib.sha256(globe.map.tobytes()).hexdigest())
+            elif c[0] == "tables":
+                said.append(hashlib.sha256(b"".join(globe.tables())).hexdigest())
+            else:
+                said.append(globe.step_at(c[1]))
+        except Exception as error:
+            said.append({"error": str(error)})
+    answers.append({"width": globe.width, "said": said})
+(out / "answers.json").write_text(json.dumps(answers))
+"""
+
+
+def _turning_case(rng: random.Random) -> dict[str, Any]:
+    """A turning globe and what is asked of it: of every size, seen from any latitude (beyond
+    60 degrees too), in any colours, with the clouds and the lights or without; lit for a
+    moment, its frames at steps a pixel, a few and half a turn on, past its round and before
+    nought, your place marked or not (near the rim among them), lit anew now and then; its
+    steps at times and turns of every length (a turn less than a second, of none, at an
+    infinite time), the step with a longitude in the middle."""
+    size = rng.choice([8, 9, 16, 40, 47, 64, 76, 95, 160, 189, 240, 360])
+    lat = rng.choice([20.0, -30.0, 30.0, 0.0, rng.uniform(-30, 30), 75.0, -61.5,
+                      rng.uniform(-90, 90)])  # fmt: skip
+    width = max(64, 2 * math.ceil(math.pi * max(8, size) * 0.86 / 2))
+    t = rng.choice([1_760_000_000.0, 1_774_094_400.0, 1_766_275_200.0, rng.uniform(1.6e9, 2e9)])
+    calls: list[list[Any]] = [["tables"], ["light", t], ["map"]]
+    step = rng.randrange(width)
+    for _ in range(rng.randrange(3, 9)):
+        place = rng.choice([None, (rng.uniform(-90, 90), rng.uniform(-180, 180)), (lat, 0.0),
+                            (0.0, 85.0), (48.1, 11.6)])  # fmt: skip
+        calls.append(["frame", step, None if place is None else list(place)])
+        step += rng.choice([1, 1, 2, max(1, width // 180), width // 90, width // 2, -1,
+                            width, -width - 3, rng.randrange(width)])  # fmt: skip
+        if rng.random() < 0.15:
+            t += rng.choice([60.0, 600.0, 43_200.0])
+            calls += [["light", t], ["map"]]
+    for _ in range(6):
+        calls.append(["step_of", rng.choice([rng.uniform(0, 1e6), 0.0, 1234.5, -1234.56,
+                                             rng.uniform(-1e5, 0)]),
+                      rng.choice([180, 60, 0.5, 1.0, 1e-3, 86400.0, 3.7, 180.0]),
+                      rng.randrange(-width, width)])  # fmt: skip
+    # (and a longitude halfway between two steps: Python's round goes to the even one)
+    for lon in (rng.uniform(-180, 180), rng.uniform(-180, 180), 0.0, 180.0, -180.0, 11.6,
+                0.5 * 360.0 / width, -3.5 * 360.0 / width, 6.5 * 360.0 / width):  # fmt: skip
+        calls.append(["step_at", lon])
+    return {"size": size, "lat": lat,
+            "air": rng.choice([[107, 173, 255], [rng.randrange(256) for _ in range(3)]]),
+            "mark": rng.choice([[255, 210, 122], [rng.randrange(256) for _ in range(3)]]),
+            "clouds": rng.random() < 0.8, "lights": rng.random() < 0.8,
+            "calls": calls}  # fmt: skip
+
+
+def test_turning_globes_as_python_turns_them(tmp_path: Path) -> None:
+    # (earth.Turning: the disc's pixels and where each lies on the map, the map lit whole for a
+    # moment (drafted by libjpeg, boxed to the round, each pixel's sun from numpy's own float32
+    # sines and cosines), the whole map and a frame at a step with the air laid anew every two
+    # degrees and kept between, your place marked; the steps of the turn at a time and with a
+    # longitude in the middle, and Python's errors: to the bit where numpy takes its float32
+    # functions from the C library)
+    rng = random.Random(0x7A1E)
+    globes = [_turning_case(rng) for _ in range(30)]
+    # (where each pixel of the disc lies on the map, of globes of many sizes seen from many
+    # latitudes: a pixel at a row's or a column's edge comes out as numpy rounds it)
+    for size in [*range(8, 64, 3), *range(64, 700, 37), 1000]:
+        globes.append({**_turning_case(rng), "size": size, "lat": rng.uniform(-60, 60),
+                       "calls": [["tables"]]})  # fmt: skip
+    # (a frame before the map is lit fails as Python's does; steps of no turn, of an endless
+    # time, of a time not a number)
+    globes.append({**_turning_case(rng), "size": 40,
+                   "calls": [["frame", 0, None], ["light", 1_760_000_000.0], ["frame", 3, None],
+                             ["step_of", 1000.0, math.inf, 0], ["step_of", math.inf, 60, 0],
+                             ["step_of", math.nan, 60, 0], ["step_at", math.inf],
+                             ["step_at", math.nan]]})  # fmt: skip
+    folder = tmp_path / "turning"
+    folder.mkdir()
+    (folder / "globes.json").write_text(json.dumps(globes), encoding="utf-8")
+    env = dict(os.environ)
+    if _avx512():
+        env["NPY_DISABLE_CPU_FEATURES"] = " ".join(_avx512())
+    subprocess.run([sys.executable, "-c", _TURNING_GLOBES, str(folder / "globes.json"),
+                    str(folder)], env=env, check=True)  # fmt: skip
+    wanted = json.loads((folder / "answers.json").read_text(encoding="utf-8"))
+
+    def bits(call: list[Any]) -> list[Any]:
+        if call[0] in ("map", "tables"):
+            return call
+        if call[0] in ("light", "step_at"):
+            return [call[0], _bits(call[1])]
+        if call[0] == "frame":
+            return [*call[:2], None if call[2] is None else [_bits(v) for v in call[2]]]
+        return [call[0], _bits(call[1]), _bits(float(call[2])), call[3]]
+
+    asked = [{**g, "lat": _bits(g["lat"]), "calls": [bits(c) for c in g["calls"]]}
+             for g in globes]  # fmt: skip
+    [got] = run([{"op": "turning_globe", "fonts_dir": str(fonts.FONT_DIR), "globes": asked}])
+    frames = 0
+    for n, (g, ours, want) in enumerate(zip(globes, got["globes"], wanted, strict=True)):
+        assert ours["width"] == want["width"], n
+        for k, (call, a, b) in enumerate(zip(g["calls"], ours["answers"], want["said"],
+                                             strict=True)):  # fmt: skip
+            if b == "frame":
+                raw = (folder / f"{n}_{k}.raw").read_bytes()
+                assert picture(a).tobytes() == raw, (n, k, call)
+                frames += 1
+            else:
+                assert a == b, (n, k, call, a, b)
+    assert frames > 100, frames
+
+
 T = TypeVar("T")
+
+
+_TURNING_REPLAY = """
+import json, sys
+from pathlib import Path
+from libre_panel.render import earth
+logs, out = json.loads(Path(sys.argv[1]).read_text()), Path(sys.argv[2])
+for n, log in enumerate(logs):
+    size, lat, air, mark, clouds, lights = log["args"]
+    globe = earth.Turning(size, lat, tuple(air), tuple(mark), clouds, lights)
+    k = 0
+    for call in log["calls"]:
+        if call[0] == "lit":
+            try:
+                globe.use(call[1], globe.lit(call[1]))
+            except Exception:
+                pass
+        else:
+            place = None if call[2] is None else tuple(call[2])
+            (out / f"{n}_{k}.raw").write_bytes(globe.frame(call[1], place).tobytes())
+            k += 1
+"""
 
 
 def _exact_globes(tmp_path: Path, draw: Callable[[], T]) -> T:
     """What `draw` draws, its globes as Python makes them where numpy's float32 functions are
     the C library's: where numpy takes SVML's here (AVX-512), the globes it asks earth.picture
     for are made so in a process of their own, and drawn again with them (the globe itself is
-    test_the_earth_as_python_draws_it's)."""
+    test_the_earth_as_python_draws_it's); and the frames of turning globes: each globe's lights
+    and frames, in their order, made again so in a process of their own (each frame laid on
+    the air the globe kept), and drawn again with them."""
     from PIL import Image
 
     from libre_panel.render import earth
@@ -4451,6 +4634,47 @@ def _exact_globes(tmp_path: Path, draw: Callable[[], T]) -> T:
     if not _avx512():
         return draw()
     real, asked = earth.picture, []
+    turning = earth.Turning
+    init, lit, frame = turning.__init__, turning.lit, turning.frame
+    logs: list[dict[str, Any]] = []
+    made_turns: dict[tuple[int, int], Any] = {}
+    serial = [0]
+
+    def begin(self: Any, *args: Any, **kwargs: Any) -> None:
+        init(self, *args, **kwargs)
+        self._serial, self._frames = serial[0], 0
+        serial[0] += 1
+        if not made_turns:  # (the first time: what each globe does is written down)
+            logs.append({"args": [self.size, self.lat, list(self.air), list(self.mark),
+                                  self.clouds, self.lights], "calls": []})  # fmt: skip
+
+    def lighting(self: Any, t: float) -> Any:
+        if not made_turns:
+            logs[self._serial]["calls"].append(["lit", t])
+        return lit(self, t)
+
+    def framing(self: Any, step: int, place: Any) -> Image.Image:
+        k, self._frames = self._frames, self._frames + 1
+        if made_turns:
+            return made_turns[(self._serial, k)].copy()
+        logs[self._serial]["calls"].append(["frame", step, None if place is None
+                                            else list(place)])  # fmt: skip
+        return Image.new("RGBA", (self.size, self.size))
+
+    turning.__init__, turning.lit, turning.frame = begin, lighting, framing
+    try:
+        return _exact_still_globes(tmp_path, draw, earth, real, asked, logs, made_turns, serial)
+    finally:
+        turning.__init__, turning.lit, turning.frame = init, lit, frame
+
+
+def _exact_still_globes(tmp_path: Path, draw: Callable[[], T], earth: Any, real: Any,
+                        asked: list[Any], logs: list[dict[str, Any]],
+                        made_turns: dict[tuple[int, int], Any],
+                        serial: list[int]) -> T:  # fmt: skip
+    """_exact_globes' two drawings: the first writes down the globes asked for, the second
+    draws with them made where numpy's float32 functions are the C library's."""
+    from PIL import Image
 
     def key(*args: Any) -> tuple[Any, ...]:
         size, t, centre, place, air, mark, clouds, lights = args
@@ -4466,6 +4690,21 @@ def _exact_globes(tmp_path: Path, draw: Callable[[], T]) -> T:
         draw()
     finally:
         earth.picture = real
+    if logs:  # (the turning globes' frames, made again in a process of their own)
+        folder = tmp_path / "turns"
+        folder.mkdir()
+        (folder / "logs.json").write_text(json.dumps(logs), encoding="utf-8")
+        env = dict(os.environ, NPY_DISABLE_CPU_FEATURES=" ".join(_avx512()))
+        subprocess.run([sys.executable, "-c", _TURNING_REPLAY, str(folder / "logs.json"),
+                        str(folder)], env=env, check=True)  # fmt: skip
+        for n, log in enumerate(logs):
+            side = max(8, int(log["args"][0]))
+            frames = [c for c in log["calls"] if c[0] == "frame"]
+            for k in range(len(frames)):
+                raw = (folder / f"{n}_{k}.raw").read_bytes()
+                made_turns[(n, k)] = Image.frombytes("RGBA", (side, side), raw)
+        made_turns.setdefault((-1, -1), None)  # (made: the second drawing takes them)
+        serial[0] = 0
     wanted = list(dict.fromkeys(asked))
     cases = [{"size": k[0], "t": k[1], "centre": list(k[2]),
               "place": None if k[3] is None else list(k[3]), "air": list(k[4]),
@@ -4506,6 +4745,18 @@ def _earth(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
     if rng.random() < 0.1:
         widget["opacity"] = rng.choice([0.5, 0.0, 0.25])
     return widget
+
+
+def _turning_earth(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """A globe that turns in a moving frame: in a turn of any time (less than a second and
+    much more), or one that stands."""
+    widget = _earth(rng, i, size)
+    widget["spin"] = rng.choice([180, 60, 20, 5, 0.5, 1, 1e-3, 86400, 0, -1])
+    return widget
+
+
+def _turning_earth_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _turning_earth(rng, i, size) if rng.random() < 0.6 else _card_or_text(rng, i, size)
 
 
 def _earth_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
@@ -4580,6 +4831,39 @@ def test_the_earth_frame_after_frame_as_python_keeps_it(tmp_path: Path) -> None:
             assert g["boxes"] == w["boxes"], (n, i)
             drawn += 1
     assert drawn > 60, drawn
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Rust does not know the computer's zone there")
+def test_globes_that_turn_as_python_draws_them(tmp_path: Path) -> None:
+    # (one renderer drawing its globes frame after frame as the panels' loop does: those that
+    # turn a step at a time, beginning with your place (or your time zone's longitude) in the
+    # middle, the frame due at the next step (it does not move on), lit anew where the moment
+    # on the wall clock moved; at a frame rate or none, the frames at any distance, back in
+    # time too)
+    rng = random.Random(0xEA30)
+    cases, asked = [], []
+    for n in range(30):
+        folder = tmp_path / f"t{n}"
+        _frame_theme(rng, folder, _turning_earth_or_more)
+        place = _place(rng)
+        now, fps = rng.uniform(1000, 2000), rng.choice([0, 25, 50])
+        moment = _earth_snapshot(rng)[1].now
+        steps, frames = [], []
+        for _ in range(rng.randrange(2, 9)):
+            readings, snapshot = _clock_moment(moment)
+            steps.append((snapshot, now))
+            frames.append({"snapshot": readings, "now": now})
+            gone = rng.choice([*MOVING_STEPS, 0.07, 0.3, 3.7, 60.0])
+            now += gone
+            moment += timedelta(seconds=rng.choice([max(0.0, gone), max(0.0, gone), 20, 600]))
+        cases.append({"folder": str(folder), "dither": False, "animate": True, "fps": fps,
+                      "steps": frames,
+                      **({} if place is None else {"place": list(place)})})  # fmt: skip
+        asked.append((folder, steps, fps, place))
+    expected = _exact_globes(tmp_path, lambda: [_python_moving(*a) for a in asked])
+    drawn, _ = _compare_moving(cases, expected)
+    due = sum(w.get("due") is not None for want in expected if want for w in want)
+    assert drawn > 120 and due > 60, (drawn, due)
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Rust does not know the computer's zone there")
@@ -5763,22 +6047,25 @@ def test_card_slots_frames_in_their_cards_colours(tmp_path: Path) -> None:
 # -- moving frames: what glides and fades -------------------------------------------------------
 
 
-def _python_moving(folder: Path, steps: list[tuple[Snapshot, float]],
-                   fps: float = 0.0) -> list[dict[str, Any]] | None:  # fmt: skip
+def _python_moving(folder: Path, steps: list[tuple[Snapshot, float]], fps: float = 0.0,
+                   place: tuple[float, float] | None = None
+                   ) -> list[dict[str, Any]] | None:  # fmt: skip
     """Moving frames one after another by one renderer (animate: as the panels' loop draws
-    them), each at its time: the frame, its boxes, whether it moves on; None for a theme Python
-    does not read."""
+    them; your place `place`), each at its time: the frame, its boxes, whether it moves on and
+    when it is due again; None for a theme Python does not read."""
     try:
         renderer = Renderer(load_theme(folder), animate=True, preview=True)
     except ThemeError:
         return None
     renderer.fps = fps
+    renderer.place = place
     lists._RAN.clear()
     out: list[dict[str, Any]] = []
     for snapshot, now in steps:
         try:
             frame, boxes = renderer.render(snapshot, now=now)
-            out.append({"frame": frame, "boxes": boxes, "moving": renderer.moving})
+            out.append({"frame": frame, "boxes": boxes, "moving": renderer.moving,
+                        "due": renderer.due})  # fmt: skip
         except Exception as error:  # noqa: BLE001 (a frame Python cannot make)
             out.append({"failed": f"{type(error).__name__}: {error}"})
     return out
@@ -5787,9 +6074,10 @@ def _python_moving(folder: Path, steps: list[tuple[Snapshot, float]],
 def _compare_moving(cases: list[dict[str, Any]], expected: list[list[dict[str, Any]] | None],
                     level: bool = False) -> tuple[int, int]:  # fmt: skip
     """Rust's moving frames against Python's, step after step: each to the bit (`level`: within
-    a level, now and then, where light is blurred in floating point), its boxes and whether it
-    moves on. After a frame Rust does not draw, the rest of its steps are left (what moves went
-    on in Python's alone). How many were drawn, and of them how many move on."""
+    a level, now and then, where light is blurred in floating point), its boxes, whether it
+    moves on and when it is due again. After a frame Rust does not draw, the rest of its steps
+    are left (what moves went on in Python's alone). How many were drawn, and of them how many
+    move on."""
     import numpy as np
 
     [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR),
@@ -5814,6 +6102,7 @@ def _compare_moving(cases: list[dict[str, Any]], expected: list[list[dict[str, A
                 assert g["sha256"] == hashlib.sha256(w["frame"].tobytes()).hexdigest(), (n, i)
             assert g["boxes"] == w["boxes"], (n, i)
             assert g["moving"] == w["moving"], (n, i)
+            assert g["due"] == w["due"], (n, i)
             drawn += 1
             moving += w["moving"]
     assert differ <= total // 10000, (differ, total)
@@ -7030,5 +7319,5 @@ def test_the_app_s_own_themes_in_moving_frames_as_python_draws_them(tmp_path: Pa
             assert g["boxes"] == w["boxes"], (folder.name, i)
             assert g["moving"] == w["moving"], (folder.name, i)
         drawn.append(folder.name)
-    # (on Windows Rust does not know the computer's zone: Terra's standing globe is left out)
-    assert len(drawn) >= (93 if sys.platform == "win32" else 94), drawn
+    # (on Windows Rust does not know the computer's zone: Terra's globes are left out)
+    assert len(drawn) >= (93 if sys.platform == "win32" else 99), drawn

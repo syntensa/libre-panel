@@ -1076,6 +1076,72 @@ fn run(case: &Value) -> Result<Value, String> {
             }
             json!({"pictures": out})
         }
+        "turning_globe" => {
+            // earth.Turning(size, lat, air, mark, clouds, lights) of each globe, and its calls
+            // one after another: ["light", t], ["frame", step, place or null], ["step_of", now,
+            // turn_s, offset], ["step_at", longitude], ["map"], ["tables"] (the SHA-256 of the
+            // lit map's bytes or of the tables'); the doubles as their bits
+            let dir = lp_render::earth::maps_dir(std::path::Path::new(
+                case["fonts_dir"].as_str().ok_or("fonts_dir")?,
+            ));
+            let bits = |v: &Value| v.as_u64().map(f64::from_bits).unwrap_or(0.0);
+            let rgb = |v: &Value| [0, 1, 2].map(|i| v[i].as_u64().unwrap_or(0).min(255) as u8);
+            let mut out = Vec::new();
+            for g in case["globes"].as_array().ok_or("globes")? {
+                use lp_render::earth::{TurnAnswer, TurnCall};
+                let look = lp_render::earth::Look {
+                    air: rgb(&g["air"]),
+                    mark: rgb(&g["mark"]),
+                    clouds: g["clouds"].as_bool().unwrap_or(true),
+                    lights: g["lights"].as_bool().unwrap_or(true),
+                };
+                let calls: Vec<TurnCall> = g["calls"]
+                    .as_array()
+                    .ok_or("calls")?
+                    .iter()
+                    .map(|c| match c[0].as_str() {
+                        Some("light") => TurnCall::Light(bits(&c[1])),
+                        Some("frame") => TurnCall::Frame(
+                            c[1].as_i64().unwrap_or(0),
+                            c[2].as_array().map(|p| (bits(&p[0]), bits(&p[1]))),
+                        ),
+                        Some("step_of") => {
+                            TurnCall::StepOf(bits(&c[1]), bits(&c[2]), c[3].as_i64().unwrap_or(0))
+                        }
+                        Some("map") => TurnCall::Map,
+                        Some("tables") => TurnCall::Tables,
+                        _ => TurnCall::StepAt(bits(&c[1])),
+                    })
+                    .collect();
+                let size = g["size"].as_i64().unwrap_or(160);
+                out.push(
+                    match lp_render::earth::turning_calls(&dir, size, bits(&g["lat"]), look, &calls)
+                    {
+                        Ok((width, answers)) => {
+                            let answers: Vec<Value> = answers
+                                .into_iter()
+                                .map(|a| match a {
+                                    Ok(TurnAnswer::Lit) => json!(null),
+                                    Ok(TurnAnswer::Frame(image)) => value_of(&image),
+                                    Ok(TurnAnswer::StepOf(step, due)) => json!([step, due]),
+                                    Ok(TurnAnswer::StepAt(step)) => json!(step),
+                                    Ok(TurnAnswer::Bytes(bytes)) => {
+                                        let sum = Sha256::digest(&bytes);
+                                        let hex: String =
+                                            sum.iter().map(|b| format!("{b:02x}")).collect();
+                                        json!(hex)
+                                    }
+                                    Err(e) => json!({"error": e.0}),
+                                })
+                                .collect();
+                            json!({"width": width, "answers": answers})
+                        }
+                        Err(e) => json!({"error": e.0}),
+                    },
+                );
+            }
+            json!({"globes": out})
+        }
         "image_slides" => {
             // each image widget's slideshow of the theme in "folder" as _slides finds it
             let env = lp_theme::Env {
@@ -1247,13 +1313,14 @@ fn run(case: &Value) -> Result<Value, String> {
             json!({"albedo": image(&face.albedo), "gx": image(&face.gx), "gy": image(&face.gy)})
         }
         "np_digest" => {
-            // numpy's float32 exp or tanh of every float32 from `from` on (`count` of them, by
-            // their bits), in blocks of `block`: per block the sum, mod 2^64, of each result's
-            // bits (a NaN as numpy's 0x7fc00000) times an odd weight of its place
-            let f = if case["func"] == "exp" {
-                lp_render::np::expf
-            } else {
-                lp_render::np::tanhf
+            // numpy's float32 exp, tanh, sin or cos of every float32 from `from` on (`count` of
+            // them, by their bits), in blocks of `block`: per block the sum, mod 2^64, of each
+            // result's bits (a NaN as numpy's 0x7fc00000) times an odd weight of its place
+            let f = match case["func"].as_str() {
+                Some("exp") => lp_render::np::expf,
+                Some("sin") => lp_render::np::sinf,
+                Some("cos") => lp_render::np::cosf,
+                _ => lp_render::np::tanhf,
             };
             let from = case["from"].as_u64().unwrap_or(0);
             let count = case["count"].as_u64().unwrap_or(1 << 32);
@@ -1274,18 +1341,19 @@ fn run(case: &Value) -> Result<Value, String> {
             }
             json!({"sums": sums})
         }
-        "np_exp" | "np_tanh" => {
-            // numpy's float32 exp or tanh of each float32 (their bits)
+        "np_exp" | "np_tanh" | "np_sin" | "np_cos" => {
+            // numpy's float32 exp, tanh, sin or cos of each float32 (their bits)
             let bits: Vec<u64> = case["bits"]
                 .as_array()
                 .ok_or("bits")?
                 .iter()
                 .map(|b| b.as_u64().unwrap_or(0))
                 .collect();
-            let f = if op == "np_exp" {
-                lp_render::np::expf
-            } else {
-                lp_render::np::tanhf
+            let f = match op {
+                "np_exp" => lp_render::np::expf,
+                "np_sin" => lp_render::np::sinf,
+                "np_cos" => lp_render::np::cosf,
+                _ => lp_render::np::tanhf,
             };
             let out: Vec<u32> = bits
                 .iter()
@@ -2303,7 +2371,7 @@ fn run(case: &Value) -> Result<Value, String> {
                                 let mut out = json!({"sha256": hex, "size": [frame.width(),
                                     frame.height()], "boxes": boxes,
                                     "warnings": renderer.warnings(),
-                                    "moving": renderer.moving});
+                                    "moving": renderer.moving, "due": renderer.due});
                                 if bytes {
                                     out["frame"] = value_of(&frame);
                                 }

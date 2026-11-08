@@ -206,6 +206,73 @@ pub fn tanhf(x: f32) -> f32 {
     f32::from_bits(r.to_bits() | (bits & 0x8000_0000))
 }
 
+/// numpy's float32 sine (loops_trigonometric's simd_sincos_f32): every x86-64 numpy with AVX2
+/// and FMA3 or with AVX-512 takes it, for a single number too, as ARM's does; the C library's
+/// sinf only past 117,435.992, where its reduction would lose too much. The same to the bit as
+/// numpy's on all 4,294,967,296 float32s, with and without its AVX-512 paths.
+pub fn sinf(x: f32) -> f32 {
+    sincos(x, false)
+}
+
+/// numpy's float32 cosine, as its sine: the C library's cosf only past 71,476.0625.
+pub fn cosf(x: f32) -> f32 {
+    sincos(x, true)
+}
+
+/// simd_sincos_f32 for a number: the nearest whole number of quarter turns, Cody-Waite's
+/// reduction to within a quarter turn of it (in three fused steps), then that quarter's
+/// polynomial of the sine or the cosine (fused, Horner), its sign the quarter's.
+fn sincos(x: f32, cos: bool) -> f32 {
+    // (numpy's constants, as the float32s they are)
+    let c = f32::from_bits;
+    let two_over_pi = c(0x3f22_f983);
+    let pio2 = [c(0xbfc9_0fd8), c(0xb4a8_885a), c(0xa7c2_34c4)];
+    // (0x1.8p+23: added and taken away, a float32 rounds to its nearest whole number)
+    let magic = c(0x4b40_0000);
+    let cos_poly = [
+        c(0x37cc_730b),
+        c(0xbab6_036e),
+        c(0x3d2a_aa9e),
+        c(0xbf00_0000),
+        c(0x3f80_0000),
+    ];
+    let sin_poly = [
+        c(0x363e_9dde),
+        c(0xb950_35dd),
+        c(0x3c08_88cd),
+        c(0xbe2a_aaab),
+    ];
+    let most = if cos { c(0x478b_9a08) } else { c(0x47e5_5dff) };
+    if x.is_nan() {
+        return f32::NAN;
+    }
+    if x.abs() > most {
+        return if cos { x.cos() } else { x.sin() };
+    }
+    // (the product and the sum one fused step, as GCC (C++) and MSVC (/fp:contract) build it)
+    let quadrant = x.mul_add(two_over_pi, magic) - magic;
+    let mut r = quadrant.mul_add(pio2[0], x);
+    r = quadrant.mul_add(pio2[1], r);
+    r = quadrant.mul_add(pio2[2], r);
+    let r2 = r * r;
+    let mut cosine = cos_poly[0].mul_add(r2, cos_poly[1]);
+    for k in &cos_poly[2..] {
+        cosine = cosine.mul_add(r2, *k);
+    }
+    let mut sine = sin_poly[0].mul_add(r2, sin_poly[1]);
+    for k in &sin_poly[2..] {
+        sine = sine.mul_add(r2, *k);
+    }
+    sine = sine.mul_add(r2, 0.0).mul_add(r, r);
+    let quarter = quadrant as i32 + i32::from(cos);
+    let v = if quarter & 1 == 0 { sine } else { cosine };
+    if quarter & 2 == 2 {
+        0.0 - v
+    } else {
+        v
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -233,5 +300,35 @@ mod tests {
         assert!(expf(f32::NAN).is_nan());
         assert_eq!(expf(88.722_84), f32::INFINITY);
         assert_eq!(expf(-103.972_084), 0.0);
+    }
+
+    #[test]
+    fn sine_and_cosine_as_numpy_gives_them() {
+        // (np.sin and np.cos of these float32s, their bits: zeros of both signs, a quarter turn
+        // either side, half a turn, far round, the last sine before the C library's)
+        for (x, sine, cosine) in [
+            (0x0000_0000, 0x0000_0000, 0x3F80_0000),
+            (0x8000_0000, 0x8000_0000, 0x3F80_0000),
+            (0x3F00_0000, 0x3EF5_7744, 0x3F60_A940),
+            (0x3F80_0000, 0x3F57_6AA5, 0x3F0A_5140),
+            (0xBF80_0000, 0xBF57_6AA5, 0x3F0A_5140),
+            (0x3F49_0FDB, 0x3F35_04F3, 0x3F35_04F3),
+            (0x3F49_0FDA, 0x3F35_04F3, 0x3F35_04F4),
+            (0x3FC9_0FDB, 0x3F80_0000, 0xB33B_BD2E),
+            (0x4000_0000, 0x3F68_C7B7, 0xBED5_1132),
+            (0x4049_0FDB, 0xB3BB_BD2E, 0xBF80_0000),
+            (0xC049_0FDB, 0x33BB_BD2E, 0xBF80_0000),
+            (0x4096_CBE4, 0xBF80_0000, 0x324C_DE2E),
+            (0x4120_0000, 0xBF0B_44F7, 0xBF56_CD64),
+            (0xC49A_5000, 0xBE14_E299, 0xBF7D_4796),
+            (0x478B_9A00, 0xBF7F_9DD4, 0x3D60_1C54),
+            (0x0DA2_4260, 0x0DA2_4260, 0x3F80_0000),
+        ] {
+            let v = f32::from_bits(x);
+            assert_eq!(sinf(v).to_bits(), sine, "sin {v}");
+            assert_eq!(cosf(v).to_bits(), cosine, "cos {v}");
+        }
+        assert_eq!(sinf(f32::from_bits(0x47C3_5000)).to_bits(), 0x3D12_6D55);
+        assert!(sinf(f32::NAN).is_nan() && cosf(f32::NAN).is_nan());
     }
 }

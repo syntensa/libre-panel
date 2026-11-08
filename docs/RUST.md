@@ -706,9 +706,9 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       counter-checks put in 23 faults (in the zone a clock asks for, its warning, the fold, the
       globe's turning, size, mark, colours, clouds and lights, its step, its view, the zone's
       longitude and its bounds, its box and place, the moment it is kept by, lp-check's fold
-      and place), and the tests catch them all. A globe that turns in a moving frame, and
-      on Windows the earth and another place's time (Rust does not know the computer's zone
-      there): Rust says it does not draw them yet. All 99 of the app's themes are drawn by
+      and place), and the tests catch them all. A globe that turns in a moving frame:
+      below. On Windows the earth and another place's time (Rust does not know the computer's
+      zone there): Rust says it does not draw them yet. All 99 of the app's themes are drawn by
       Rust on Linux, 89 of them the same to the bit (Terra's six are new, all to the bit); 93
       on Windows
 - [x] the theme's own pictures in image widgets (the renderer's _draw_image, _asset_image,
@@ -1018,6 +1018,51 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       its build makes it. Rust's exp the same to the bit as numpy's on all 4,294,967,296
       float32s on Linux, with and without its AVX-512 paths; the tests ask numpy on either
       system for a dozen of the 84
+- [x] globes that turn (the renderer's _draw_earth with spin in a moving frame; earth.Turning:
+      tables, lit, use, air_at, mark_at, picture_of, frame, longitude, step_at and step_of;
+      turn_latitude): a globe seen from above your latitude (within 30 degrees of the equator,
+      20 north without a place), beginning with your place in the middle (else your time
+      zone's longitude), turning a pixel at its middle a step, once in spin seconds (one at
+      least). Where each pixel of its disc lies on the map is worked out once, in float32 as
+      numpy works it out (the C library's asinf and atan2f); the map is lit whole for each
+      moment on the wall clock (the maps drafted by libjpeg and boxed to the round and half of
+      it, each pixel's sun from its latitude's and longitude's sines and cosines); each frame
+      looks the disc up in it at its step, lays the air over it anew every two degrees and
+      keeps it between (as laid from the step it was laid at), and marks your place. A frame
+      is made for each step only, and it is due again when the next step is: the renderer's
+      due, which lp-check gives now and the tests compare for every moving frame (a globe
+      that turns does not move the frame on). The map is lit here and now, as a still frame
+      lights it: the panels' loop lights it aside, in a thread of its own, with the loop.
+      numpy's own float32 sin and cos (np.rs: Cody-Waite's reduction to a quarter turn and its
+      polynomials, the whole number of quarter turns one fused step as both GCC and MSVC
+      build it, the C library's past 117,435.992 and 71,476.0625) the same to the bit as
+      numpy's on all 4,294,967,296 float32s, with and without its AVX-512 paths. The tests:
+      69 turning globes of every size up to 1000 px, seen from any latitude (beyond 60
+      degrees too), lit for moments round the year, their frames at steps a pixel to half a
+      turn on, past the round and before nought, marked or not, lit anew now and then, their
+      whole maps, where their pixels lie, their steps at times (before nought too) and turns
+      of every length, with a longitude in the middle (halfway between two steps too), and
+      Python's errors (a frame before the light, a turn of no time, a time that is no
+      number): 165 frames, 58 maps, 68 tables and 455 steps the same to the bit as Python's
+      with the C library's float32 functions; 30 random themes of globes that turn or stand
+      frame after frame, your place anywhere or none, at a frame rate or none, the frames at
+      any distance, back in time too, the moment on the wall clock moving with them or by a
+      redraw_s and more: 146 frames to the bit, 136 of them due at a next step; the app's
+      themes in moving frames: all 99 drawn by Rust all along (94 before; 93 on Windows,
+      where Rust does not know the computer's zone). The counter-checks put in 41 faults (the
+      air's steps, its key, how it is rounded, where it is laid from, laid every frame; the
+      round's width, at least and rounded; the rim and its alpha; the rows and columns by a
+      reciprocal; the latitude held and the latitude seen from, with and without a place; the
+      longitude's way, the ground's way, the first step's way and halves; the steps
+      truncated, a turn under a second, when the next is due, where the turn begins and which
+      way; the soonest due, kept from the frame before; lit once or every frame, the piece
+      kept through a light, the mark; the sines and cosines of the longitudes and latitudes,
+      the sun's sum, the maps resized, the rows' latitudes; the rim's alpha laid; turning
+      with no spin; numpy's sine: the quarter unfused, the cosine's own reach, its last
+      product, its quarter), and the tests catch 39 of them, 5 once the whole maps, the
+      tables and the halfway longitudes were added; the other two change nothing: the air
+      laid anew with each light is seen to twice in Python (its key holds the light, and a
+      new light lets the key go), and either alone does it
 - [ ] pictures as Pillow fails at them: lp-decode's errors as Python's exceptions, so that
       where Python catches an OSError and goes on (a picture cut short, a file of no picture)
       Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,
