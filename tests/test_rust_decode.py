@@ -1080,3 +1080,445 @@ def test_a_gif_whose_l_is_p_underneath_is_made_small_as_pillow_makes_it():
                                             f"L over P {n} to {size}, filter {resample}, "
                                             f"{target}"))  # fmt: skip
     check(pairs)
+
+
+# -- pictures Pillow fails at, as the renderer reads them -------------------------------------
+
+
+def _ways(path: Path) -> dict[str, list[Any]]:
+    """What becomes of the file at `path` along the renderer's three ways of reading a picture:
+    _read_picture (open, exif_transpose, RGBA: its size), moving.read_animation (the frames it
+    keeps, None for a still) and _moving (n_frames). Each its result, or the class of what
+    Python raises, whether it is an OSError (what the renderer goes on from), and its text
+    (with the file's name as <PATH>)."""
+    from libre_panel.render import moving
+
+    def outcome(read: Any) -> list[Any]:
+        try:
+            return ["ok", read()]
+        except Exception as exc:  # noqa: BLE001 (every class Python raises is compared)
+            text = str(exc).replace(repr(str(path)), "<PATH>")
+            return [type(exc).__name__, isinstance(exc, OSError), text]
+
+    def still() -> list[int]:
+        with Image.open(path) as src:
+            return list(ImageOps.exif_transpose(src).convert("RGBA").size)
+
+    def animation() -> int | None:
+        found = moving.read_animation(path, lambda im: im)
+        return None if found is None else len(found.frames)
+
+    def frames() -> int:
+        with Image.open(path) as found:
+            return getattr(found, "n_frames", 1)
+
+    return {"read": outcome(still), "animation": outcome(animation), "moves": outcome(frames)}
+
+
+def _broken(rng: random.Random, data: bytes, low: int) -> bytes:
+    """Cut short, a few bytes changed or a few put in, from `low` on."""
+    out = bytearray(data)
+    how = rng.randrange(3)
+    if how == 0:
+        return bytes(out[: rng.randrange(low, len(out) + 1)])
+    if how == 1:
+        for _ in range(rng.randint(1, 4)):
+            out[rng.randrange(low, len(out))] = rng.randrange(256)
+        return bytes(out)
+    at = rng.randrange(low, len(out) + 1)
+    out[at:at] = rng.randbytes(rng.randint(1, 8))
+    return bytes(out)
+
+
+def _odd_header(rng: random.Random) -> bytes:
+    """EXIF data Pillow may fail at: no TIFF header, a short one, BigTIFF's, odd tags."""
+    pick = rng.random()
+    if pick < 0.3:
+        return rng.randbytes(rng.randint(0, 12))
+    if pick < 0.5:
+        head = rng.choice([b"MM\x00\x2a", b"II\x2a\x00", b"MM\x00\x2b", b"II\x2b\x00"])
+        return head + rng.randbytes(rng.randint(0, 6))
+    return _odd_exif(rng) if pick < 0.8 else _exif(rng.randint(0, 9), rng.random() < 0.5)
+
+
+def _png_of_exif(rng: random.Random) -> bytes:
+    """A PNG whose EXIF Pillow may fail at: in eXIf, in text chunks named "exif" (bytes in
+    tEXt, text in zTXt and iTXt, empty or not), as a raw profile of hexadecimal that
+    bytes.fromhex may refuse."""
+    blob, pick = _odd_header(rng), rng.random()
+    if pick < 0.3:
+        extra = chunk(b"eXIf", blob)
+    elif pick < 0.45:
+        extra = chunk(b"tEXt", b"exif\0" + blob)
+    elif pick < 0.6:
+        text = rng.choice([b"", b"abc", blob.hex().encode()])
+        extra = chunk(b"zTXt", b"exif\0\0" + zlib.compress(text))
+    elif pick < 0.75:
+        extra = chunk(b"iTXt", b"exif\0\0\0\0\0" + rng.choice([b"", b"x"]))
+    else:
+        hexed = blob.hex()
+        if rng.random() < 0.6:
+            at = rng.randrange(len(hexed) + 1)
+            hexed = hexed[:at] + rng.choice(["g", " ", "z0", "é", "1"]) + hexed[at:]
+        text = f"\nexif\n{len(blob):8}\n{hexed}\n".encode()
+        extra = chunk(b"zTXt", b"Raw profile type exif\0\0" + zlib.compress(text))
+    return make_png(rng, 8, rng.choice([0, 2, 3, 6]), rng.randint(1, 12), rng.randint(1, 12),
+                    interlace=False, before=[extra], after=[])  # fmt: skip
+
+
+def _sized(rng: random.Random) -> tuple[str, bytes]:
+    """A picture whose header says a size beyond Pillow's limit, near it, or of nothing."""
+    big = rng.choice([0, 1, 20000, 65535, 70000, 1 << 20])
+    other = rng.choice([0, 1, 9000, 65535])
+    pick = rng.randrange(4)
+    if pick == 0:
+        data = make_png(rng, 8, 2, rng.randint(1, 9), rng.randint(1, 9), interlace=False,
+                        before=[], after=[])  # fmt: skip
+        head = struct.pack(">II", big, other) + data[24:29]
+        return ".png", data[:8] + chunk(b"IHDR", head) + data[33:]
+    if pick == 1:
+        gif = bytearray(make_gif(rng))
+        gif[6:10] = struct.pack("<HH", min(big, 65535), min(other, 65535))
+        at = gif.find(b",", 13)
+        if at > 0 and rng.random() < 0.5:  # (a frame beyond the screen)
+            gif[at + 5 : at + 9] = struct.pack("<HH", min(big, 65535), min(other, 65535))
+        return ".gif", bytes(gif)
+    if pick == 2:
+        jpeg = bytearray(make_jpeg(rng, "RGB", rng.randint(1, 9), rng.randint(1, 9)))
+        at = next(i for i in range(len(jpeg) - 1) if jpeg[i] == 0xFF and jpeg[i + 1] in
+                  (0xC0, 0xC1, 0xC2))  # fmt: skip
+        jpeg[at + 5 : at + 9] = struct.pack(">HH", min(other, 65535), min(big, 65535))
+        return ".jpg", bytes(jpeg)
+    webp = bytearray(make_webp(rng))
+    if webp[12:16] == b"VP8X":
+        webp[24:27] = struct.pack("<I", max(big - 1, 0))[:3]
+        webp[27:30] = struct.pack("<I", max(other - 1, 0))[:3]
+    return ".webp", bytes(webp)
+
+
+def _mpo(rng: random.Random) -> bytes:
+    """An MPO of two pictures as Pillow writes one."""
+    ims = [Image.open(io.BytesIO(make_jpeg(rng, "RGB", rng.randint(1, 16), rng.randint(1, 16))))
+           for _ in range(2)]  # fmt: skip
+    out = io.BytesIO()
+    ims[0].save(out, "MPO", save_all=True, append_images=ims[1:])
+    return out.getvalue()
+
+
+def _pictures_to_break(rng: random.Random, n: int) -> list[tuple[str, str, bytes]]:
+    """Pictures of each kind broken in each way: (their kind, a name's suffix, the bytes)."""
+    out: list[tuple[str, str, bytes]] = []
+    for i in range(n):
+        kind = i % 11
+        if kind == 0:
+            depth, colour = rng.choice(PNG_KINDS)
+            before, after = _text_chunks(rng)
+            data = make_png(rng, depth, colour, rng.randint(1, 20), rng.randint(1, 20),
+                            interlace=rng.random() < 0.3, before=before, after=after)  # fmt: skip
+            out.append(("png", ".png", _broken(rng, data, 8)))
+        elif kind == 1:
+            depth, colour = rng.choice([(8, 2), (8, 6), (8, 3), (8, 0), (16, 2)])
+            data = make_apng(rng, depth, colour, rng.randint(1, 12), rng.randint(1, 12))
+            out.append(("apng", ".png", _broken(rng, data, 8)))
+        elif kind == 2:
+            data = make_gif(rng, early_end=rng.random() < 0.25)
+            out.append(("gif", ".gif", _broken(rng, data, 6)))
+        elif kind == 3:
+            data = make_jpeg(rng, rng.choice(["L", "RGB", "CMYK"]), rng.randint(1, 40),
+                             rng.randint(1, 30))  # fmt: skip
+            out.append(("jpeg", ".jpg", _broken(rng, data, 2)))
+        elif kind == 4:
+            data = make_webp(rng, frames=rng.choice([1, 1, 3]))
+            out.append(("webp", ".webp", _broken(rng, data, 12)))
+        elif kind == 5:
+            seg = b"Exif\0\0" + _odd_header(rng)
+            app1 = b"\xff\xe1" + struct.pack(">H", len(seg) + 2) + seg
+            jpeg = make_jpeg(rng, "RGB", rng.randint(1, 20), rng.randint(1, 20))
+            data = _with_segments(jpeg, [app1])
+            out.append(("jpeg exif", ".jpg", data))
+        elif kind == 6:
+            out.append(("png exif", ".png", _png_of_exif(rng)))
+        elif kind == 7:
+            im = _webp_frame(rng, "RGB", rng.randint(1, 20), rng.randint(1, 20))
+            webp = io.BytesIO()
+            im.save(webp, "WEBP", exif=b"Exif\0\0" + _odd_header(rng))
+            out.append(("webp exif", ".webp", webp.getvalue()))
+        elif kind == 8:
+            out.append(("sized", *_sized(rng)))
+        elif kind == 9:
+            data = _mpo(rng)
+            out.append(("mpo", ".jpg", data if rng.random() < 0.3 else _broken(rng, data, 2)))
+        else:
+            data = rng.choice([b"", b"hello\n", b"<html>not found</html>", b"\0" * 30])
+            out.append(("no picture", rng.choice([".png", ".gif", ".jpg", ".webp"]), data))
+    return out
+
+
+@needs_libjpeg
+@needs_libwebp
+def test_pictures_pillow_fails_at_fail_as_they_fail_in_python(tmp_path: Path) -> None:
+    """Pictures cut short, with bytes changed or put in, EXIF Pillow cannot read, text where
+    it wants bytes, sizes beyond its limit or of nothing, MP indexes of odd kinds: along each
+    of the renderer's ways of reading a picture, what Pillow reads, or what it raises: its
+    class (the renderer goes on without the picture from an OSError, without the animation
+    from a ValueError too; anything else fails the widget, with its text) and its text. Of a
+    file of none of its kinds (Pillow knows forty more) Rust cannot say: it leaves those to
+    Python."""
+    rng = random.Random(0xB20C)
+    cases, want, kinds = [], [], []
+    for n, (kind, suffix, data) in enumerate(_pictures_to_break(rng, 990)):
+        path = tmp_path / f"picture{n}{suffix}"
+        path.write_bytes(data)
+        want.append(_ways(path))
+        cases.append({"op": "ways", "data": base64.b64encode(data).decode(), "name": "<PATH>"})
+        kinds.append(kind)
+    raised: dict[str, int] = {}
+    for n, (kind, got, theirs) in enumerate(zip(kinds, run(cases), want, strict=True)):
+        for way, expected in theirs.items():
+            have = got[way]
+            if have.get("raised") == "unported":
+                assert kind == "no picture" and expected[0] == "UnidentifiedImageError", (n, way)
+                continue
+            found = ["ok", have["ok"]] if "ok" in have else [have["raised"], have["os"],
+                                                             have["msg"]]  # fmt: skip
+            assert found == expected, (n, kind, way)
+            raised[expected[0]] = raised.get(expected[0], 0) + 1
+    for name, least in [("ok", 1000), ("OSError", 300), ("UnidentifiedImageError", 200),
+                        ("SyntaxError", 40), ("ValueError", 5), ("TypeError", 14),
+                        ("IndexError", 5), ("error", 12),
+                        ("DecompressionBombError", 40)]:  # fmt: skip
+        assert raised.get(name, 0) >= least, (name, raised)
+
+
+# -- failures the random breaks seldom reach, made on purpose ------------------------------------
+
+
+def _chunks_of(png: bytes) -> list[tuple[bytes, bytes]]:
+    """A PNG's chunks after its signature: (type, data) each."""
+    out, at = [], 8
+    while at + 8 <= len(png):
+        (n,) = struct.unpack(">I", png[at : at + 4])
+        out.append((png[at + 4 : at + 8], png[at + 8 : at + 8 + n]))
+        at += 12 + n
+    return out
+
+
+def _png_of(chunks: list[tuple[bytes, bytes]]) -> bytes:
+    return b"\x89PNG\r\n\x1a\n" + b"".join(chunk(kind, data) for kind, data in chunks)
+
+
+def _short_chunk(rng: random.Random, kind: bytes, length: int, after: bool) -> bytes:
+    """A PNG with a `kind` chunk of `length` bytes before its data, or after it."""
+    chunks = _chunks_of(make_png(rng, 8, 2, 5, 4, interlace=False, before=[], after=[]))
+    at = [k for k, _ in chunks].index(b"IDAT") + after
+    chunks.insert(at, (kind, rng.randbytes(length)))
+    return _png_of(chunks)
+
+
+def _broken_data_then(rng: random.Random, kind: bytes, length: int) -> bytes:
+    """A PNG whose data zlib refuses, a `kind` chunk of `length` bytes after it."""
+    chunks = _chunks_of(make_png(rng, 8, 2, 9, 7, interlace=False, before=[], after=[]))
+    at = [k for k, _ in chunks].index(b"IDAT")
+    data = bytearray(chunks[at][1])
+    for i in range(2, len(data) - 4, 3):
+        data[i] ^= 0x5A
+    chunks[at] = (b"IDAT", bytes(data))
+    chunks.insert(at + 1, (kind, b"\x01" * length))
+    return _png_of(chunks)
+
+
+def apng_cut(rng: random.Random, kind: bytes, nth: int, keep: int) -> bytes:
+    """An APNG of three frames as Pillow writes one, its `nth` `kind` chunk cut to `keep`
+    bytes."""
+    frames = [Image.frombytes("RGB", (6, 5), rng.randbytes(90)) for _ in range(3)]
+    out = io.BytesIO()
+    frames[0].save(out, "PNG", save_all=True, append_images=frames[1:], duration=50)
+    chunks = _chunks_of(out.getvalue())
+    at = [i for i, (k, _) in enumerate(chunks) if k == kind][nth]
+    chunks[at] = (kind, chunks[at][1][:keep])
+    return _png_of(chunks)
+
+
+def _gif_image(rng: random.Random, w: int, h: int) -> tuple[bytes, bytes]:
+    """A frame's palette and its image data (the LZW code size, the blocks, their end) as
+    Pillow writes a picture of `w` x `h` of four colours."""
+    im = Image.frombytes("P", (w, h), bytes(rng.randrange(4) for _ in range(w * h)))
+    im.putpalette(list(rng.randbytes(12)))
+    out = io.BytesIO()
+    im.save(out, "GIF")
+    data = out.getvalue()
+    at, palette = 13, b""
+    if data[10] & 0x80:
+        palette, at = data[at : at + (3 << ((data[10] & 7) + 1))], at + (3 << ((data[10] & 7) + 1))
+    while data[at] == 0x21:  # (the extensions)
+        at += 2
+        while data[at]:
+            at += data[at] + 1
+        at += 1
+    if data[at + 9] & 0x80:
+        size = 3 << ((data[at + 9] & 7) + 1)
+        palette, at = data[at + 10 : at + 10 + size], at + size
+    start = at = at + 10
+    at += 1
+    while data[at]:
+        at += data[at] + 1
+    return palette, data[start : at + 1]
+
+
+def gif_grown_without_a_palette(rng: random.Random, *, bits: int | None, cut: bool,
+                                transparent: bool) -> bytes:  # fmt: skip
+    """A GIF of no palette of its screen's: a first frame of a palette of its own, a second of
+    none that grows the screen (load_end then wants a palette: "image has no palette"),
+    transparent or not, of the LZW code size `bits` (its own where None), its data cut short."""
+    palette, first = _gif_image(rng, 4, 4)
+    _, second = _gif_image(rng, 4, 4)
+    if bits is not None:
+        second = bytes([bits]) + second[1:]
+    size = (len(palette) // 3).bit_length() - 2
+    out = b"GIF89a" + struct.pack("<HHBBB", 4, 4, 0, 0, 0)
+    out += b"," + struct.pack("<HHHHB", 0, 0, 4, 4, 0x80 | size) + palette + first
+    if transparent:
+        out += b"\x21\xf9\x04\x01\x01\x00\x00\x00"
+    out += b"," + struct.pack("<HHHHB", 2, 2, 4, 4, 0)
+    return out + (second[:3] if cut else second + b";")
+
+
+def _gif_screen_grown(w: int, h: int, keep: int) -> bytes:
+    """A GIF of a 1 x 1 screen whose first frame says it is `w` x `h`, cut `keep` bytes after
+    its ",": the size Image.open grows to is checked against the bomb's limit before the frame's
+    flags are read."""
+    screen = b"GIF89a" + struct.pack("<HHBBB", 1, 1, 0, 0, 0)
+    frame = b"," + struct.pack("<HHHHB", 0, 0, w, h, 0) + b"\x02\x02\x44\x01\x00;"
+    return screen + frame[:keep]
+
+
+def mpo_of(first: bytes, second: bytes, *, head: bytes = b"II*\x00", quant: int = 2,
+           quant_type: int = 4, entry_type: int = 7, entries: int = 2,
+           formats: tuple[int, int] = (0, 0)) -> bytes:  # fmt: skip
+    """Two JPEGs as an MPO of an MP index made here: its TIFF header `head` (the directory read
+    in the byte order of its first two letters, the entries big-endian only where it is
+    "MM\\0*"), NumberOfImages `quant` of the TIFF type `quant_type`, `entries` MP entries (each
+    picture's format as given) in a value of the type `entry_type`."""
+    order = ">" if head[:2] == b"MM" else "<"
+    entry_order = ">" if head == b"MM\x00\x2a" else "<"
+
+    def tag(number: int, kind: int, count: int, value: bytes) -> bytes:
+        return struct.pack(f"{order}HHI", number, kind, count) + value
+
+    if quant_type in (3, 8):
+        count = struct.pack(f"{order}H", quant) + b"\0\0"
+    elif quant_type == 7:
+        count = b"0002"
+    else:
+        count = struct.pack(f"{order}I", quant)
+
+    def index(second_at: int) -> bytes:
+        sizes = (len(first), len(second))
+        data = b"".join(struct.pack(f"{entry_order}LLLHH",
+                                    (formats[i] << 24) | (0x030000 if i == 0 else 0x010001),
+                                    sizes[i], second_at if i else 0, 0, 0)
+                        for i in range(entries))  # fmt: skip
+        return (head + struct.pack(f"{order}IH", 8, 3) + tag(0xB000, 7, 4, b"0100")
+                + tag(0xB001, quant_type, 1, count)
+                + tag(0xB002, entry_type, 16 * entries, struct.pack(f"{order}I", 50))
+                + struct.pack(f"{order}I", 0) + data)  # fmt: skip
+
+    length = len(index(0))
+    second_at = 2 + 8 + length + len(first) - 2 - 10  # (from the MP header, after "MPF\0")
+    segment = b"\xff\xe2" + struct.pack(">H", 6 + length) + b"MPF\0" + index(second_at)
+    return b"\xff\xd8" + segment + first[2:] + second
+
+
+# (the MP indexes made: of BYTEs and of ASCII, the headers Pillow takes in both byte orders,
+# BigTIFF's, NumberOfImages of none, one, more than its entries and of each type, entries
+# cut short, of other formats)
+MP_INDEXES: list[dict[str, Any]] = [
+    {}, {"entry_type": 1}, {"entry_type": 2}, {"head": b"MM\x00\x2a"}, {"head": b"MM\x2a\x00"},
+    {"head": b"II\x00\x2a"}, {"head": b"MM\x00\x2b"}, {"head": b"II\x2b\x00"}, {"quant": 1},
+    {"quant": 0}, {"quant": 3}, {"quant_type": 13}, {"quant_type": 3}, {"quant_type": 9},
+    {"quant_type": 7}, {"entries": 1}, {"entries": 1, "quant": 1}, {"formats": (1, 0)},
+    {"formats": (0, 4)}, {"formats": (0, 8)}, {"quant": 1, "formats": (0, 1)},
+]  # fmt: skip
+
+
+def _rare_failures(rng: random.Random) -> list[tuple[str, str, bytes]]:
+    """(what each is, its name's suffix, its bytes)"""
+    out: list[tuple[str, str, bytes]] = []
+    for kind, least in [(b"gAMA", 4), (b"cHRM", 32), (b"sRGB", 1), (b"pHYs", 9)]:
+        for length in sorted({0, least - 1}):
+            for after in (False, True):
+                out.append((f"{kind!r} of {length} bytes, after the data {after}", ".png",
+                            _short_chunk(rng, kind, length, after)))  # fmt: skip
+        for length in (least - 1, least):
+            out.append((f"data zlib refuses, then {kind!r} of {length} bytes", ".png",
+                        _broken_data_then(rng, kind, length)))  # fmt: skip
+    for kind, nth, keep in [(b"acTL", 0, 4), (b"fcTL", 0, 20), (b"fcTL", 1, 20), (b"fdAT", 0, 3),
+                            (b"fdAT", 1, 3)]:  # fmt: skip
+        out.append((f"APNG of its {kind!r} {nth} cut to {keep}", ".png",
+                    apng_cut(rng, kind, nth, keep)))  # fmt: skip
+    for bits in (None, 13):
+        for cut in (False, True):
+            for transparent in (False, True):
+                out.append((f"GIF grown without a palette, code size {bits}, cut {cut}, "
+                            f"transparent {transparent}", ".gif",
+                            gif_grown_without_a_palette(rng, bits=bits, cut=cut,
+                                                        transparent=transparent)))  # fmt: skip
+    for w, h in [(65535, 65535), (65535, 1000), (20000, 9000)]:
+        for keep in (8, 9, 10, 99):
+            out.append((f"GIF screen grown to {w}x{h}, {keep} bytes of its frame", ".gif",
+                        _gif_screen_grown(w, h, keep)))  # fmt: skip
+    first = make_jpeg(rng, "RGB", rng.randint(2, 20), rng.randint(2, 20))
+    second = make_jpeg(rng, "RGB", rng.randint(2, 20), rng.randint(2, 20))
+    for kw in MP_INDEXES:
+        out.append((f"MPO of {kw}", ".jpg", mpo_of(first, second, **kw)))
+    return out
+
+
+@needs_libjpeg
+def test_failures_the_random_breaks_seldom_reach_fail_as_in_python(tmp_path: Path) -> None:
+    # (a gAMA, cHRM, sRGB or pHYs too short, before the data (Image.open's ValueError) and
+    # after it (load_end's, raised before what the decoder found); an APNG cut in its acTL,
+    # in a later fcTL or fdAT (no animation: a ValueError); a GIF whose second frame grows the
+    # screen without a palette (load_end's ValueError before the decoder's own error), one
+    # whose screen grows beyond the bomb's limit before its frame's flags are there; MP
+    # indexes of every kind Pillow reads: of BYTEs, in both byte orders and the headers it
+    # takes, BigTIFF's, a NumberOfImages of each type, entries cut short, of other formats)
+    rng = random.Random(0xB20E)
+    cases, want, labels = [], [], []
+    for n, (label, suffix, data) in enumerate(_rare_failures(rng)):
+        path = tmp_path / f"rare{n}{suffix}"
+        path.write_bytes(data)
+        want.append(_ways(path))
+        cases.append({"op": "ways", "data": base64.b64encode(data).decode(), "name": "<PATH>"})
+        labels.append(label)
+    seen: set[str] = set()
+    for label, got, theirs in zip(labels, run(cases), want, strict=True):
+        for way, expected in theirs.items():
+            have = got[way]
+            found = ["ok", have["ok"]] if "ok" in have else [have["raised"], have["os"],
+                                                             have["msg"]]  # fmt: skip
+            assert found == expected, (label, way)
+            seen.add(f"{expected[0]} {expected[-1]}" if expected[0] != "ok" else "ok")
+    for wanted in ["ValueError Truncated gAMA chunk", "ValueError image has no palette",
+                   "ValueError APNG contains truncated fcTL chunk",
+                   "ValueError APNG contains truncated acTL chunk",
+                   "OSError codec configuration error when reading image file"]:  # fmt: skip
+        assert wanted in seen, wanted
+    assert any(s.startswith("DecompressionBombError") for s in seen), seen
+
+
+def test_a_palette_s_transparency_of_one_zero_among_255s_takes_a_newline_after_them() -> None:
+    # (PngStream's _simple_palette is b"^\xff*\x00\xff*$", whose $ allows a newline before
+    # the end: one 0 among 255s and a newline after them is one transparent index; two
+    # newlines, one before, are an alpha for each index)
+    rows = zlib.compress(b"\x00" + bytes(range(6)))
+    palette = bytes(v for i in range(6) for v in (i * 40, 255 - i * 40, 90))
+    pairs = []
+    for trns in [b"\xff\x00\n", b"\x00\n", b"\xff\xff\x00\xff\n", b"\x00\n\n", b"\n\x00",
+                 b"\xff\x00\xff", b"\x00\xff\n\xff", b"\n"]:  # fmt: skip
+        data = _png_of([(b"IHDR", struct.pack(">IIBBBBB", 6, 1, 8, 3, 0, 0, 0)),
+                        (b"PLTE", palette), (b"tRNS", trns), (b"IDAT", rows),
+                        (b"IEND", b"")])  # fmt: skip
+        for mode in ("RGBA", "RGB"):
+            pairs.append(case_of(data, mode, f"tRNS {trns!r} as {mode}"))
+    check(pairs)

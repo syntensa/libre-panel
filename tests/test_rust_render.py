@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, TypeVar
 
 import pytest
-from rust_check import image, noise, picture, run
+from rust_check import image, noise, picture, pillow_libjpeg, pillow_libwebp, run
 
 from libre_panel import fonts, i18n
 from libre_panel import icons as icon_set
@@ -2530,9 +2530,11 @@ THEME_MOVING = ["anim/run.gif", "anim/spin.webp", "anim/wave.png", "anim/cut.gif
 # may not name, a slideshow's may)
 THEME_NONE = ["pics/none.png", "pics"]
 THEME_OUTSIDE = ["../outside.png", "/etc/hostname", "pics/../../outside.png"]
-# (files Rust does not read: not a picture, cut short, a picture cut short where Pillow raises
-# what Python does not catch)
+# (files that are no picture to show: of no kind Rust knows (THEME_UNKNOWN: Pillow knows forty
+# more, so Rust cannot say what becomes of them), pictures cut short, which Rust reads as Python
+# does: without them, saying why)
 THEME_UNREAD = ["bad/broken.png", "bad/notes.txt", "bad/half.png", "anim/cut.gif"]
+THEME_UNKNOWN = ["bad/broken.png", "bad/notes.txt"]
 UNREAD = "pictures Rust does not read"
 # (how long a frame says it shows, in ms: none, less than the least, a few hundredths, more)
 FRAME_MS = [0, 5, 19, 20, 30, 40, 100, 250, 1000]
@@ -2627,11 +2629,11 @@ def _theme_picture_or_more(rng: random.Random, i: int, size: tuple[int, int]) ->
 
 
 def _unread_in(folder: Path) -> bool:
-    """Whether the theme shows a file Rust does not read (THEME_UNREAD), or names one in a
-    slideshow."""
+    """Whether the theme shows a file of a kind Rust does not know (THEME_UNKNOWN), or a
+    slideshow's pattern finds one."""
     widgets = json.loads((folder / "theme.json").read_text(encoding="utf-8"))["widgets"]
     shown = " ".join(f"{w.get('src', '')} {w.get('slides', '')}" for w in widgets)
-    return any(rel in shown for rel in THEME_UNREAD) or "bad/" in shown
+    return any(rel in shown for rel in THEME_UNKNOWN) or "bad/*" in shown
 
 
 def test_frames_of_the_theme_s_pictures_as_python_draws_them(tmp_path: Path) -> None:
@@ -2938,12 +2940,14 @@ def test_a_picture_where_the_frame_s_time_has_no_timestamp_as_python_shows_it(
 
 def test_videos_and_pictures_rust_does_not_draw_yet(tmp_path: Path) -> None:
     # (a video, and a slideshow whose turn is a video's: told of no ffmpeg (the app tells it
-    # where one is: tests/test_rust_video.py), Rust leaves them to Python, nor a file it does
-    # not read (a picture, a slideshow's, the background's; one named with a
-    # NUL, an animation cut short whose first frame is whole), nor a slideshow with one where
-    # the turn is another's; an animated picture alone, a slideshow of one, of none there, a
-    # slideshow with a picture that moves (its first turn a still's, an animated one's), it
-    # draws)
+    # where one is: tests/test_rust_video.py), Rust leaves them to Python, nor a file of a kind
+    # it does not know (a picture, a slideshow's: Pillow knows forty more), nor a slideshow with
+    # one where the turn is another's; an animated picture alone, a slideshow of one, of none
+    # there, a slideshow with a picture that moves (its first turn a still's, an animated
+    # one's), it draws, and a picture cut short (the widget's, a slideshow's, the
+    # background's), one named with a NUL, one not there, an animation cut short whose first
+    # frame is whole as Python does: without them where it goes on, the widget failed where it
+    # fails it, saying why)
     from PIL import Image
 
     rng = random.Random(0x7E1D)
@@ -2953,13 +2957,13 @@ def test_videos_and_pictures_rust_does_not_draw_yet(tmp_path: Path) -> None:
              ({"src": "", "slides": "clips/*\npics/b.png"}, "videos without ffmpeg"),
              ({"src": "", "slides": "anim/wave.png\npics/c.png"}, None),
              ({"src": "anim/run.gif"}, None), ({"src": "", "slides": "anim/spin.webp"}, None),
-             ({"src": "", "slides": "pics/*.gif"}, None), ({"src": "bad/half.png"}, UNREAD),
-             ({"src": "anim/cut.gif"}, UNREAD), ({"src": "bad/notes.txt"}, UNREAD),
+             ({"src": "", "slides": "pics/*.gif"}, None), ({"src": "bad/half.png"}, None),
+             ({"src": "anim/cut.gif"}, None), ({"src": "bad/notes.txt"}, UNREAD),
              ({"src": "pics/a.png", "slides": "bad/broken.png", "seconds": 1, "_at": 2e9}, UNREAD),
-             ({"src": "", "slides": "pics/a\u0000.jpg"}, UNREAD),
-             ({"src": "pics/a.png", "_ground": "bad/half.png"}, UNREAD),
-             ({"src": "anim/cut.gif", "_cut": True}, UNREAD),
-             ({"src": "bad/half.png", "slides": "pics/a.png"}, UNREAD),
+             ({"src": "", "slides": "pics/a\u0000.jpg"}, None),
+             ({"src": "pics/a.png", "_ground": "bad/half.png"}, None),
+             ({"src": "anim/cut.gif", "_cut": True}, None),
+             ({"src": "bad/half.png", "slides": "pics/a.png"}, None),
              ({"src": "", "slides": "bad/broken.png"}, UNREAD),
              ({"src": "pics", "slides": "pics/none.png\n../outside.png"}, None)]  # fmt: skip
     cases, wanted = [], []
@@ -2996,6 +3000,159 @@ def test_videos_and_pictures_rust_does_not_draw_yet(tmp_path: Path) -> None:
             continue
         assert want is not None and "frame" in want, (n, want)
         assert got["sha256"] == hashlib.sha256(want["frame"].tobytes()).hexdigest(), n
+        assert got["warnings"] == want["warnings"], n
+
+
+def _rust_knows(data: bytes) -> bool:
+    """Whether lp-decode reads a file of these bytes as one of its kinds (PNG, GIF, JPEG, WebP):
+    of a file of none, Rust cannot say what Pillow makes of it (it knows forty more)."""
+    webp = data[:4] == b"RIFF" and data[8:15] == b"WEBPVP8" and data[15:16] in (b" ", b"X", b"L")
+    return webp or data.startswith((b"\x89PNG\r\n\x1a\n", b"GIF87a", b"GIF89a", b"\xff\xd8\xff"))
+
+
+def _broken_theme(rng: random.Random, folder: Path, broken: list[tuple[str, str, bytes]]) -> bool:
+    """A theme showing pictures Pillow fails at (`broken`: test_rust_decode's, of each kind,
+    broken in each way): in image widgets, in slideshows of them and of a whole one (by name,
+    by a pattern), now and then as the background (on a gradient, now and then). Whether it
+    names a file of a kind Rust does not know."""
+    (folder / "bad").mkdir(parents=True)
+    (folder / "pics").mkdir()
+    noise(rng, "RGB", _picture_size(rng)).save(folder / "pics" / "a.png")
+    names, unknown = [], set()
+    for k, (_, suffix, data) in enumerate(rng.sample(broken, rng.randint(1, 4))):
+        names.append(f"bad/p{k}{suffix}")
+        (folder / names[-1]).write_bytes(data)
+        if not _rust_knows(data):
+            unknown.add(names[-1])
+    size = rng.choice([(64, 48), (160, 120), (48, 64)])
+    widgets, named = [], set()
+    for i in range(rng.randint(1, 3)):
+        widget = _image(rng, i, size)
+        widget["src"] = rng.choice(names)
+        widget.pop("slides", None)
+        if rng.random() < 0.35:
+            lines = rng.sample([*names, "pics/a.png", "bad/*"], rng.randint(1, 3))
+            widget["src"] = rng.choice(["", widget["src"]])
+            widget["slides"] = "\n".join(lines)
+            widget["seconds"] = rng.choice([1, 2, 7])
+            named |= set(names) if "bad/*" in lines else set(lines)
+        if rng.random() < 0.2:
+            widget["speed"] = rng.choice([0.5, 2])
+        named.add(widget["src"])
+        widgets.append(widget)
+    data: dict[str, Any] = {"format": THEME_FORMAT, "name": "broken",
+                            "display": {"width": size[0], "height": size[1]},
+                            "widgets": widgets}  # fmt: skip
+    if rng.random() < 0.25:
+        data["background"] = {"image": rng.choice(names)}
+        named.add(data["background"]["image"])
+        if rng.random() < 0.3:
+            data["background"]["gradient"] = [_hex(rng), _hex(rng)]
+    (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+    return bool(named & unknown)
+
+
+def _python_broken_frame(folder: Path, snapshot: Snapshot, dither: bool) -> dict[str, Any]:
+    """_python_frame, where the renderer may not be made: what reading the background raised
+    that _read_picture does not catch (Rust's render_frame says it as the theme's error)."""
+    theme = load_theme(folder)
+    try:
+        renderer = Renderer(theme, preview=True, dither=dither)
+    except Exception as error:  # noqa: BLE001 (each class Pillow raises)
+        return {"error": str(error)}
+    try:
+        frame, boxes = renderer.render(snapshot, now=1000.0)
+    except Exception as error:  # noqa: BLE001
+        return {"failed": f"{type(error).__name__}: {error}"}
+    return {"frame": frame, "boxes": boxes, "warnings": list(renderer.warnings)}
+
+
+@pytest.mark.skipif(pillow_libjpeg() is None or not pillow_libwebp(),
+                    reason="Pillow's libjpeg and libwebp as files")  # fmt: skip
+def test_frames_of_pictures_pillow_fails_at_as_python_draws_them(tmp_path: Path) -> None:
+    # (pictures cut short, bytes changed or put in, EXIF Pillow cannot read, sizes beyond its
+    # limit or of nothing, MP indexes of odd kinds: in an image widget, a slideshow, the
+    # background. Where Python goes on (an OSError reading a picture; a ValueError too reading
+    # an animation or whether one moves), Rust goes on, saying the same; where it fails the
+    # widget, Rust fails it, saying the same; where the background fails the renderer, Rust's
+    # is not made either. Of a file of none of its kinds Rust cannot say: it leaves those
+    # frames to Python)
+    from test_rust_decode import _pictures_to_break
+
+    rng = random.Random(0xB20D)
+    broken = _pictures_to_break(rng, 330)
+    cases, expected, unknown = [], [], []
+    for n in range(200):
+        folder = tmp_path / f"t{n}"
+        unknown.append(_broken_theme(rng, folder, broken))
+        given, snapshot = _clock_snapshot(rng)
+        dither = rng.random() < 0.3
+        cases.append({"folder": str(folder), "snapshot": given, "dither": dither, "now": 1000.0})
+        expected.append(_python_broken_frame(folder, snapshot, dither))
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    seen = {"drawn": 0, "not made": 0, "left": 0, "went on": 0, "failed": 0}
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        if "error" in want:
+            assert got.get("error") == want["error"], (n, got, want)
+            seen["not made"] += 1
+            continue
+        if got.get("unported") == UNREAD and unknown[n]:
+            seen["left"] += 1
+            continue
+        assert "frame" in want and "sha256" in got, (n, got, want)
+        assert got["warnings"] == want["warnings"], n
+        assert got["sha256"] == hashlib.sha256(want["frame"].tobytes()).hexdigest(), n
+        assert got["boxes"] == want["boxes"], n
+        seen["drawn"] += 1
+        seen["went on"] += any("could not be loaded" in w for w in want["warnings"])
+        seen["failed"] += any(" failed: " in w for w in want["warnings"])
+    assert seen["drawn"] > 120 and seen["went on"] > 50 and seen["failed"] > 10, seen
+    assert seen["not made"] >= 2 and seen["left"] < 40, seen
+
+
+def test_frames_of_animations_pillow_fails_at_after_their_first_frame(tmp_path: Path) -> None:
+    # (an APNG cut short in a later frame's fcTL or fdAT, a GIF whose second frame grows the
+    # screen without a palette: Python reads no animation of them (a ValueError) and draws the
+    # first frame as a still, saying nothing; a slideshow of a picture and an APNG whose acTL
+    # is cut short (Image.open's ValueError): whether that moves Python takes as no, and draws
+    # the picture at its turn, fails the widget at the APNG's)
+    from test_rust_decode import apng_cut, gif_grown_without_a_palette
+
+    rng = random.Random(0xB20F)
+    files = {"bad/fctl.png": apng_cut(rng, b"fcTL", 1, 20),
+             "bad/fdat.png": apng_cut(rng, b"fdAT", 1, 3),
+             "bad/grown.gif": gif_grown_without_a_palette(rng, bits=None, cut=False,
+                                                          transparent=False),
+             "bad/actl.png": apng_cut(rng, b"acTL", 0, 4)}  # fmt: skip
+    slides = {"src": "", "slides": "pics/a.png\nbad/actl.png", "seconds": 1}
+    looks = [({"src": "bad/fctl.png"}, 0), ({"src": "bad/fdat.png"}, 0),
+             ({"src": "bad/grown.gif"}, 0), (slides, 0), (slides, 1),
+             ({"src": "", "slides": "bad/fctl.png\npics/a.png", "seconds": 1}, 0),
+             ({"src": "", "slides": "pics/a.png\nbad/grown.gif", "seconds": 1}, 1)]  # fmt: skip
+    cases, expected = [], []
+    for n, (look, turn) in enumerate(looks):
+        folder = tmp_path / f"t{n}"
+        (folder / "bad").mkdir(parents=True)
+        (folder / "pics").mkdir()
+        noise(rng, "RGB", (12, 9)).save(folder / "pics" / "a.png")
+        for name, data in files.items():
+            (folder / name).write_bytes(data)
+        widget = {"type": "image", "id": "m0", "x": 1, "y": 2, "w": 20, "h": 16,
+                  "fit": "contain", **look}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps({
+            "format": THEME_FORMAT, "name": "late", "display": {"width": 24, "height": 20},
+            "widgets": [widget]}), encoding="utf-8")  # fmt: skip
+        given, snapshot = _clock_moment(datetime.fromtimestamp(2e9 + turn))
+        cases.append({"folder": str(folder), "snapshot": given, "dither": False, "now": 1000.0})
+        expected.append(_python_broken_frame(folder, snapshot, False))
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        assert "frame" in want and "sha256" in got, (n, got, want)
+        assert got["warnings"] == want["warnings"], n
+        assert got["sha256"] == hashlib.sha256(want["frame"].tobytes()).hexdigest(), n
+        assert got["boxes"] == want["boxes"], n
+    failed = ["widget 'm0' failed: APNG contains truncated acTL chunk"]
+    assert [w["warnings"] for w in expected] == [[], [], [], [], failed, [], []]
 
 
 SYMBOL_CODES: list[Any] = [0, 1, 2, 3, 45, 48, 51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82,
@@ -7715,7 +7872,7 @@ TURNED_FAMILIES: dict[str, tuple[Any, Any, dict[str, Any]]] = {
     "lit": (_lit, _lit_snapshot, {}),
     "lettered": (_lettered, _lettered_snapshot, {}),
     "pictures": (_image_or_more, _image_snapshot, {}),
-    "theme pictures": (_theme_picture_or_more, _image_snapshot,  # (many Rust does not read)
+    "theme pictures": (_theme_picture_or_more, _image_snapshot,  # (some Rust does not read)
                        {"undefined": (UNREAD,), "files": _theme_files, "least": 15}),
     "symbols": (_symbol_or_more, _symbol_snapshot, {}),
     "graphs": (_graph_or_more, _graph_snapshot, {"undefined": GRAPH_UNDEFINED}),
@@ -7984,8 +8141,7 @@ def test_pictures_that_move_frame_after_frame_as_python_shows_them(
             now += rng.choice([0, 0.004, 0.02, 0.05, 0.1, 0.3, 1, 2.5, 7, 60, -0.5, -20])
         cases.append({"folder": str(folder), "dither": False, "steps": given,
                       **({"animate": True, "fps": fps} if animate else {})})  # fmt: skip
-        # (the GIF where it is cut short, by its name or a pattern of its folder)
-        unread.append(_unread_in(folder) or "anim/*" in (folder / "theme.json").read_text())
+        unread.append(_unread_in(folder))
         if animate:
             expected.append(_python_moving(folder, steps, fps))
         else:

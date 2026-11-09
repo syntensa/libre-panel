@@ -810,6 +810,31 @@ fn run(case: &Value) -> Result<Value, String> {
                 json!({"image": value_of(&out)})
             }
         }
+        "ways" => {
+            // a file's bytes along the renderer's three ways of reading a picture: _read_picture
+            // (open, exif_transpose, convert RGBA: the size), read_animation (the frames kept,
+            // null for a still) and _moving (n_frames); each what Python raises where it fails
+            // (its class, whether an OSError, its text for a file of the name "name")
+            let data = STANDARD
+                .decode(case["data"].as_str().unwrap_or(""))
+                .map_err(|err| err.to_string())?;
+            let name = case["name"].as_str().unwrap_or("");
+            let outcome = |found: Result<Value, lp_decode::Error>| match found {
+                Ok(v) => json!({"ok": v}),
+                Err(e) => json!({
+                    "raised": e.raised.name(),
+                    "os": e.raised.is_os_error(),
+                    "msg": e.text(name),
+                }),
+            };
+            let read =
+                lp_decode::open(&data, Mode::RGBA).map(|im| json!([im.width(), im.height()]));
+            json!({
+                "read": outcome(read),
+                "animation": outcome(lp_render::animation_read(&data).map(|n| json!(n))),
+                "moves": outcome(lp_decode::n_frames(&data).map(|n| json!(n))),
+            })
+        }
         "frames" => {
             // an animation's frames as the app reads them: each one's duration and RGBA picture
             let data = STANDARD

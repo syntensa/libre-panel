@@ -10,10 +10,9 @@
 use std::ffi::{c_int, c_void};
 use std::sync::OnceLock;
 
-use crate::{error, Error, Exif, Frame, Kind, Picture, Result};
-
-/// Pillow's MAX_IMAGE_PIXELS twice: a size beyond it is refused as a decompression bomb.
-const BOMB: u64 = 2 * (1024 * 1024 * 1024 / 4 / 3);
+use crate::{
+    bomb_check, opened_check, opening, raise, Error, Exif, Frame, Kind, Picture, Raised, Result,
+};
 
 /// decode.h's and demux.h's interface versions (their major byte must match the library's).
 const DECODER_ABI: c_int = 0x0210;
@@ -121,7 +120,7 @@ fn load() -> std::result::Result<Lib, String> {
 fn lib() -> Result<&'static Lib> {
     LIB.get_or_init(load)
         .as_ref()
-        .map_err(|e| Error(format!("libwebp: {e}")))
+        .map_err(|e| Error::new(Raised::Unported, format!("libwebp: {e}")))
 }
 
 /// _accept: RIFF, WEBP, and one of VP8's three kinds.
@@ -163,16 +162,15 @@ struct Decoded {
 /// A frame's canvas in RGBA and its timestamp, and the count of frames the file has.
 type Each<'a> = dyn FnMut(&Decoded, usize, Vec<u8>, i32) -> Result<()> + 'a;
 
-/// WebPImageFile._open, then each frame `get_next` gives (as many as `want`), one after the
-/// other to `each`.
-fn read(data: &[u8], want: usize, each: &mut Each) -> Result<()> {
+/// WebPImageFile._open (Image.open's: its errors as Image.open takes them, then the size
+/// checked), then each frame `get_next` gives (as many as `want`), one after the other to
+/// `each`; the count of frames the file has.
+fn read(data: &[u8], want: usize, each: &mut Each) -> Result<usize> {
     if !accepts(data) {
-        return error("not a WEBP file");
+        return Err(opening(Error::new(Raised::SyntaxError, "not a WEBP file")));
     }
     if let Some((w, h)) = header_size(&data[..data.len().min(30)]) {
-        if w.max(1) * h.max(1) > BOMB {
-            return error("decompression bomb");
-        }
+        bomb_check(w as i64, h as i64)?;
     }
     let lib = lib()?;
     // SAFETY: zeroed is a valid WebPBitstreamFeatures (all numbers)
@@ -191,15 +189,17 @@ fn read(data: &[u8], want: usize, each: &mut Each) -> Result<()> {
     // SAFETY: the decoder copies nothing it does not own; `data` outlives it (deleted below)
     let dec = unsafe { (lib.new)(&source, std::ptr::null(), DEMUX_ABI) };
     if dec.is_null() {
-        return error("could not create decoder object");
+        return raise(Raised::OSError, "could not create decoder object");
     }
-    let result = (|| -> Result<()> {
+    let result = (|| -> Result<usize> {
         // SAFETY: zeroed is a valid WebPAnimInfo; dec is a live decoder
         let mut info: AnimInfo = unsafe { std::mem::zeroed() };
         if unsafe { (lib.info)(dec, &mut info) } == 0 {
-            return error("could not create decoder object");
+            return raise(Raised::OSError, "could not create decoder object");
         }
         let size = (info.canvas_width as usize, info.canvas_height as usize);
+        // (ImageFile's check of the size the decoder gives, and Image.open's bomb check)
+        opened_check(true, size.0 as i64, size.1 as i64)?;
         let chunk = |name: &[u8; 4]| -> Option<Vec<u8>> {
             // SAFETY: the demuxer is the decoder's, alive with it; the iterator is released
             unsafe {
@@ -225,12 +225,12 @@ fn read(data: &[u8], want: usize, each: &mut Each) -> Result<()> {
             let mut timestamp: c_int = 0;
             // SAFETY: dec is live; buf is the decoder's canvas, read before the next call
             if unsafe { (lib.next)(dec, &mut buf, &mut timestamp) } == 0 || buf.is_null() {
-                return error("failed to read next frame");
+                return raise(Raised::OSError, "failed to read next frame");
             }
             let canvas = unsafe { std::slice::from_raw_parts(buf, size.0 * size.1 * 4) }.to_vec();
             each(&decoded, all, canvas, timestamp)?;
         }
-        Ok(())
+        Ok(all)
     })();
     // SAFETY: made by WebPAnimDecoderNewInternal, deleted once
     unsafe { (lib.delete)(dec) };
@@ -279,7 +279,12 @@ pub(crate) fn decode(data: &[u8]) -> Result<Picture> {
         ));
         Ok(())
     })?;
-    first.map_or_else(|| error("failed to read next frame"), Ok)
+    first.map_or_else(|| raise(Raised::OSError, "failed to read next frame"), Ok)
+}
+
+/// Image.open's count of the frames (n_frames: the decoder's frame_count).
+pub(crate) fn n_frames(data: &[u8]) -> Result<usize> {
+    read(data, 0, &mut |_, _, _, _| Ok(()))
 }
 
 /// Every frame as the app reads an animation, one after the other to `each` with the count of
@@ -297,4 +302,5 @@ pub(crate) fn each_frame(
         n += 1;
         each(count, Frame { duration, image })
     })
+    .map(|_| ())
 }

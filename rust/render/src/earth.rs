@@ -220,8 +220,8 @@ fn read(dir: &Path, name: &str, mode: Mode, width: usize) -> Result<Map> {
     let data = std::fs::read(dir.join(name)).map_err(|e| Failed(e.to_string()))?;
     let kind = if mode == Mode::L { Kind::L } else { Kind::RGB };
     let picture = lp_decode::decode_draft(&data, Some((Some(kind), (width, width / 2))))
-        .map_err(|e| failed(e.0))?;
-    let image = picture.convert(mode).map_err(|e| failed(e.0))?;
+        .map_err(|e| failed(e.msg))?;
+    let image = picture.convert(mode).map_err(|e| failed(e.msg))?;
     let (w, h) = image.size();
     Ok(Map {
         width: w,

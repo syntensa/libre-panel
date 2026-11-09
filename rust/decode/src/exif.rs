@@ -2,7 +2,7 @@
 //! TiffImagePlugin's ImageFileDirectory_v2 on the first directory): the first Orientation tag
 //! (274) of IFD0, its first value; XMP's tiff:Orientation where EXIF has none.
 
-use crate::{error, Result};
+use crate::{bytes_repr, raise, Raised, Result};
 
 /// TiffImagePlugin.PREFIXES: the headers ImageFileDirectory_v2 takes.
 const PREFIXES: [&[u8; 4]; 6] = [
@@ -32,11 +32,17 @@ pub fn orientation(data: &[u8]) -> Result<Option<u32>> {
     }
     let head = &d[..d.len().min(8)];
     if head.len() < 4 || !PREFIXES.iter().any(|p| head[..4] == p[..]) {
-        return error("not a TIFF file (header not valid)");
+        let msg = format!("not a TIFF file (header {} not valid)", bytes_repr(head));
+        return raise(Raised::SyntaxError, msg);
     }
     let big = &head[..2] == b"MM";
-    if head[2] == 43 || head.len() < 8 {
-        return error("unpack requires a buffer of more bytes"); // (struct.error)
+    // (the next directory's place: BigTIFF's eight bytes after the eight read, none; else the
+    // four after the first four)
+    if head[2] == 43 {
+        return raise(Raised::StructError, "unpack requires a buffer of 8 bytes");
+    }
+    if head.len() < 8 {
+        return raise(Raised::StructError, "unpack requires a buffer of 4 bytes");
     }
     let u16_at = |b: &[u8]| -> u16 {
         if big {
@@ -152,20 +158,42 @@ pub fn orientation(data: &[u8]) -> Result<Option<u32>> {
 }
 
 /// The EXIF data of ImageMagick's "Raw profile type exif" text (Image.getexif: its lines from
-/// the fourth on, joined, as hexadecimal; bytes.fromhex skips the spaces between).
+/// the fourth on, joined, as bytes.fromhex reads them: white space skipped between the pairs,
+/// not within one; the place of the first character it cannot take in the ValueError).
 pub fn from_raw_profile(text: &str) -> Result<Vec<u8>> {
     let hex: String = text.split('\n').skip(3).collect();
-    let digits: Vec<u8> = hex.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
-    if !digits.len().is_multiple_of(2) {
-        return error("non-hexadecimal number found in fromhex() arg");
+    let refused = |at: usize| -> Result<Vec<u8>> {
+        let msg = format!("non-hexadecimal number found in fromhex() arg at position {at}");
+        raise(Raised::ValueError, msg)
+    };
+    // (text of more than ASCII: the first character beyond it, counted in characters)
+    if let Some(at) = hex.chars().position(|c| !c.is_ascii()) {
+        return refused(at);
     }
-    digits
-        .chunks_exact(2)
-        .map(|pair| {
-            let s = std::str::from_utf8(pair).map_err(|e| crate::Error(e.to_string()))?;
-            u8::from_str_radix(s, 16).map_err(|e| crate::Error(e.to_string()))
-        })
-        .collect()
+    let b = hex.as_bytes();
+    let space = |c: u8| matches!(c, b' ' | b'\t' | b'\n' | b'\r' | 0x0b | 0x0c);
+    let digit = |c: Option<&u8>| c.and_then(|&c| char::from(c).to_digit(16)).map(|v| v as u8);
+    let mut out = Vec::with_capacity(b.len() / 2);
+    let mut at = 0;
+    while at < b.len() {
+        if space(b[at]) {
+            while at < b.len() && space(b[at]) {
+                at += 1;
+            }
+            if at >= b.len() {
+                break;
+            }
+        }
+        let Some(top) = digit(b.get(at)) else {
+            return refused(at);
+        };
+        let Some(bottom) = digit(b.get(at + 1)) else {
+            return refused(at + 1);
+        };
+        out.push(top << 4 | bottom);
+        at += 2;
+    }
+    Ok(out)
 }
 
 /// XMP's orientation (getexif: the first tiff:Orientation=" or tiff:Orientation> and the digit

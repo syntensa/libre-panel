@@ -13,10 +13,10 @@ use std::ffi::{c_int, c_long, c_uint, c_void};
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::OnceLock;
 
-use crate::{error, Error, Exif, Frame, Kind, Picture, Result};
-
-/// Pillow's MAX_IMAGE_PIXELS twice: a size beyond it is refused as a decompression bomb.
-const BOMB: u64 = 2 * (1024 * 1024 * 1024 / 4 / 3);
+use crate::{
+    bomb_check, index_error, opened_check, opening, raise, unpack_from_error, Error, Exif, Frame,
+    Kind, Picture, Raised, Result,
+};
 
 #[cfg(windows)]
 type Boolean = u8;
@@ -301,7 +301,9 @@ fn lib() -> Result<&'static Lib> {
             .find(|lib| lib.is_ok())
             .unwrap_or_else(|| Err("no libjpeg of the 6.2 interface".into())),
     });
-    found.as_ref().map_err(|e| Error(format!("libjpeg: {e}")))
+    found
+        .as_ref()
+        .map_err(|e| Error::new(Raised::Unported, format!("libjpeg: {e}")))
 }
 
 /// What error_exit unwinds with.
@@ -386,7 +388,13 @@ fn decode(data: &[u8], raw: Raw, scale: u32, size: (usize, usize)) -> Result<Vec
             (lib.create)(&mut *cinfo, 62, std::mem::size_of::<Decompress>());
             created.set(true);
             cinfo.src = &mut *source;
-            let truncated = || error("image file is truncated");
+            // (the data ended first: ImageFile.load's error, with the bytes the decoder was
+            // given and did not take, from where libjpeg went back to)
+            let truncated = |source: &Source| -> Result<()> {
+                let left = source.bytes_in_buffer;
+                let msg = format!("image file is truncated ({left} bytes not processed)");
+                raise(Raised::OSError, msg)
+            };
             let ok = loop {
                 let ok = (lib.read_header)(&mut *cinfo, 0);
                 if ok != JPEG_HEADER_TABLES_ONLY {
@@ -394,7 +402,7 @@ fn decode(data: &[u8], raw: Raw, scale: u32, size: (usize, usize)) -> Result<Vec
                 }
             };
             if ok == JPEG_SUSPENDED {
-                return truncated();
+                return truncated(&source);
             }
             cinfo.out_color_space = match raw {
                 Raw::L => JCS_GRAYSCALE,
@@ -406,13 +414,13 @@ fn decode(data: &[u8], raw: Raw, scale: u32, size: (usize, usize)) -> Result<Vec
                 cinfo.scale_denom = scale;
             }
             if (lib.start)(&mut *cinfo) == 0 {
-                return truncated();
+                return truncated(&source);
             }
             if cinfo.output_width as usize > size.0
                 || cinfo.output_components as usize * cinfo.output_width as usize
                     > size.0 * raw.bytes()
             {
-                return error("broken data stream when reading image file");
+                return broken();
             }
             let stride = size.0 * raw.bytes();
             let given = cinfo.output_components as usize * cinfo.output_width as usize;
@@ -436,7 +444,7 @@ fn decode(data: &[u8], raw: Raw, scale: u32, size: (usize, usize)) -> Result<Vec
                 }
                 let got = (lib.read_scanlines)(&mut *cinfo, at.as_mut_ptr(), want as c_uint);
                 if got == 0 {
-                    return truncated();
+                    return truncated(&source);
                 }
                 if !line.is_empty() {
                     rows[y * stride..(y + 1) * stride].copy_from_slice(&line);
@@ -458,17 +466,24 @@ fn decode(data: &[u8], raw: Raw, scale: u32, size: (usize, usize)) -> Result<Vec
     }
     match run {
         Ok(result) => result.map(|()| rows),
-        Err(payload) if payload.is::<Broken>() => {
-            error("broken data stream when reading image file")
-        }
+        Err(payload) if payload.is::<Broken>() => broken(),
         Err(payload) => panic::resume_unwind(payload),
     }
 }
 
+/// libjpeg's error (IMAGING_CODEC_BROKEN), raised once the decoder is done.
+fn broken<T>() -> Result<T> {
+    raise(
+        Raised::OSError,
+        "broken data stream when reading image file",
+    )
+}
+
+/// i16 (PIL._binary's i16be: struct.unpack_from) of the bytes from `at`.
 fn i16(b: &[u8], at: usize) -> Result<usize> {
     match b.get(at..at + 2) {
         Some(s) => Ok(usize::from(u16::from_be_bytes([s[0], s[1]]))),
-        None => error("unpack requires a buffer of 2 bytes"),
+        None => Err(unpack_from_error(2, at, b.len())),
     }
 }
 
@@ -489,7 +504,10 @@ impl<'a> Reader<'a> {
 
 /// What _open reads of a JPEG (from its tile's offset), and what Pillow keeps of it.
 struct Header {
-    mode: Kind,
+    /// the mode its frame header gives (none: Pillow's mode stays "")
+    mode: Option<Kind>,
+    /// whether it found the scan (else the picture has no tile)
+    scan: bool,
     size: (usize, usize),
     exif: Option<Vec<u8>>,
     xmp: Option<Vec<u8>>,
@@ -501,14 +519,16 @@ struct Header {
     hdr: bool,
 }
 
-/// JpegImageFile._open from `at`: the markers up to the first scan.
+/// JpegImageFile._open from `at`: the markers up to the first scan, with the errors it raises
+/// as they are (Image.open's opening takes most of them as "not this kind": [`opened`]).
 fn open_at(data: &[u8], at: usize) -> Result<Header> {
     let mut r = Reader { data, pos: at };
     if !r.read(3).starts_with(b"\xff\xd8\xff") {
-        return error("not a JPEG file");
+        return raise(Raised::SyntaxError, "not a JPEG file");
     }
     let mut h = Header {
-        mode: Kind::L,
+        mode: None,
+        scan: false,
         size: (0, 0),
         exif: None,
         xmp: None,
@@ -539,7 +559,7 @@ fn open_at(data: &[u8], at: usize) -> Result<Header> {
                 let segment = if n > 0 {
                     let seg = r.read(n as usize);
                     if seg.len() < n as usize {
-                        return error("Truncated File Read");
+                        return raise(Raised::OSError, "Truncated File Read");
                     }
                     seg.to_vec()
                 } else {
@@ -583,26 +603,30 @@ fn open_at(data: &[u8], at: usize) -> Result<Header> {
                         let (w, ht) = (i16(seg, 3)?, i16(seg, 1)?);
                         h.size = (w, ht);
                         if seg[0] != 8 {
-                            return error(format!("cannot handle {}-bit layers", seg[0]));
+                            let msg = format!("cannot handle {}-bit layers", seg[0]);
+                            return raise(Raised::SyntaxError, msg);
                         }
                         let Some(&layers) = seg.get(5) else {
-                            return error("index out of range");
+                            return index_error();
                         };
                         mode = Some(match layers {
                             1 => Kind::L,
                             3 => Kind::RGB,
                             4 => Kind::Cmyk,
-                            n => return error(format!("cannot handle {n}-layer images")),
+                            n => {
+                                let msg = format!("cannot handle {n}-layer images");
+                                return raise(Raised::SyntaxError, msg);
+                            }
                         });
                         if !icc.is_empty() {
                             icc.sort();
                             if icc[0].len() < 14 {
-                                return error("index out of range");
+                                return index_error();
                             }
                             icc.clear();
                         }
                         if (seg.len() - 6) % 3 != 0 {
-                            return error("index out of range");
+                            return index_error();
                         }
                     }
                     0xFFDB => {
@@ -611,7 +635,7 @@ fn open_at(data: &[u8], at: usize) -> Result<Header> {
                         while !t.is_empty() {
                             let length = 1 + if t[0] / 16 == 0 { 64 } else { 128 };
                             if t.len() < length {
-                                return error("bad quantization table marker");
+                                return raise(Raised::SyntaxError, "bad quantization table marker");
                             }
                             t = &t[length..];
                         }
@@ -629,17 +653,25 @@ fn open_at(data: &[u8], at: usize) -> Result<Header> {
         } else if i == 0xFF00 {
             s = r.read(1).to_vec();
         } else {
-            return error("no marker found");
+            return raise(Raised::SyntaxError, "no marker found");
         }
     }
-    let Some(mode) = mode else {
-        return error("cannot load this image");
-    };
-    if !scan {
-        return error("cannot load this image");
-    }
     h.mode = mode;
+    h.scan = scan;
     Ok(h)
+}
+
+/// Image.open of a JPEG (jpeg_factory): _open's errors as Image.open takes them, ImageFile's
+/// check of the mode and size, the MP index read (an MPO's frames' offsets), then the
+/// decompression bomb check.
+fn opened(data: &[u8]) -> Result<(Header, Option<Vec<usize>>)> {
+    let h = open_at(data, 0).map_err(opening)?;
+    if h.mode.is_none() || h.size.0 == 0 || h.size.1 == 0 {
+        opened_check(false, 0, 0)?;
+    }
+    let offsets = mp_offsets(&h);
+    bomb_check(h.size.0 as i64, h.size.1 as i64)?;
+    Ok((h, offsets))
 }
 
 /// APP13's image resources as APP reads them: a struct.error (a short field) ends the reading
@@ -657,7 +689,7 @@ fn photoshop(s: &[u8]) -> Result<()> {
         };
         offset += 2;
         let Some(&name) = s.get(offset) else {
-            return error("index out of range");
+            return index_error();
         };
         offset += 1 + usize::from(name);
         offset += offset & 1;
@@ -694,19 +726,20 @@ pub(crate) fn draft_scale(size: (usize, usize), want: (usize, usize)) -> usize {
 
 /// The size a JPEG opens with (its frame header's), before any draft.
 pub(crate) fn opened_size(data: &[u8]) -> Result<(usize, usize)> {
-    Ok(open_at(data, 0)?.size)
+    Ok(opened(data)?.0.size)
 }
 
 pub(crate) fn decode_picture(
     data: &[u8],
     draft: Option<(Option<Kind>, (usize, usize))>,
 ) -> Result<Picture> {
-    let h = open_at(data, 0)?;
-    let (w, ht) = h.size;
-    if (w.max(1) as u64) * (ht.max(1) as u64) > BOMB {
-        return error("decompression bomb");
+    let (h, _) = opened(data)?;
+    if !h.scan {
+        // (no tile: ImageFile.load)
+        return raise(Raised::OSError, "cannot load this image");
     }
-    let mut kind = h.mode;
+    let (w, ht) = h.size;
+    let mut kind = h.mode.expect("a mode");
     let mut raw = match kind {
         Kind::L => Raw::L,
         Kind::RGB => Raw::Rgb,
@@ -723,11 +756,14 @@ pub(crate) fn decode_picture(
             size = (w.div_ceil(s), ht.div_ceil(s));
             scale = s as u32;
         } else if want.0 == 0 || want.1 == 0 {
-            return error("integer division or modulo by zero");
+            return raise(
+                Raised::ZeroDivisionError,
+                "integer division or modulo by zero",
+            );
         }
     }
     if size.0 == 0 || size.1 == 0 {
-        return error("tile cannot extend outside image");
+        return raise(Raised::ValueError, "tile cannot extend outside image");
     }
     let pixels = decode(data, raw, scale, size)?;
     // (_read_dpi_from_exif reads the EXIF while opening where JFIF gives no density: an
@@ -752,70 +788,177 @@ pub(crate) fn decode_picture(
     })
 }
 
-/// The MP index's image offsets (_getmp; None where Pillow takes the file as a plain JPEG:
-/// no index, one image, an index it cannot read, Ultra HDR).
-fn mp_offsets(h: &Header) -> Option<Vec<usize>> {
-    let (mp, mpoffset) = h.mp.as_ref()?;
-    if h.hdr {
+/// A TIFF directory as tiff_entries reads it: whether big-endian, and each entry's tag, type
+/// and data.
+type Directory = (bool, Vec<(u32, u32, Vec<u8>)>);
+
+/// What ImageFileDirectory_v2.load keeps of a directory of TIFF entries in `data` (from the
+/// offset its header names): each tag's type and data, the first of a tag kept; an entry of a
+/// type Pillow has no loader for, of no data, or whose data would take the sum of the
+/// entries' outside data beyond the data's length skipped (the sum counts the skipped too);
+/// the reading stopped where the data ends first. None where the header is not TIFF's (a
+/// SyntaxError or struct.error: _getmp's "malformed MP Index").
+fn tiff_entries(data: &[u8]) -> Option<Directory> {
+    let head = &data[..data.len().min(8)];
+    let prefixes: [&[u8]; 6] = [
+        b"MM\x00\x2a",
+        b"II\x2a\x00",
+        b"MM\x2a\x00",
+        b"II\x00\x2a",
+        b"MM\x00\x2b",
+        b"II\x2b\x00",
+    ];
+    if head.len() < 4 || !prefixes.iter().any(|p| head[..4] == **p) || head[2] == 43 {
         return None;
     }
-    let head = mp.get(..8)?;
-    let big = head.starts_with(b"MM\x00\x2a");
-    if !(head.starts_with(b"MM\x00\x2a") || head.starts_with(b"II\x2a\x00")) {
+    if head.len() < 8 {
         return None;
     }
-    let u16_at = |b: &[u8], at: usize| -> Option<u32> {
-        let s = b.get(at..at + 2)?;
-        Some(u32::from(if big {
-            u16::from_be_bytes([s[0], s[1]])
+    let big = &head[..2] == b"MM";
+    let u16_at = |b: &[u8]| -> u32 {
+        u32::from(if big {
+            u16::from_be_bytes([b[0], b[1]])
         } else {
-            u16::from_le_bytes([s[0], s[1]])
-        }))
+            u16::from_le_bytes([b[0], b[1]])
+        })
     };
-    let u32_at = |b: &[u8], at: usize| -> Option<u32> {
-        let s = b.get(at..at + 4)?;
-        let a = [s[0], s[1], s[2], s[3]];
-        Some(if big {
+    let u32_at = |b: &[u8]| -> u32 {
+        let a = [b[0], b[1], b[2], b[3]];
+        if big {
             u32::from_be_bytes(a)
         } else {
             u32::from_le_bytes(a)
-        })
-    };
-    let ifd = u32_at(head, 4)? as usize;
-    let count = u16_at(mp, ifd)?;
-    let (mut quant, mut entries) = (None, None);
-    for n in 0..count as usize {
-        let e = mp.get(ifd + 2 + n * 12..ifd + 14 + n * 12)?;
-        let (tag, typ, cnt) = (u16_at(e, 0)?, u16_at(e, 2)?, u32_at(e, 4)?);
-        match (tag, typ) {
-            (0xB001, 4) if cnt == 1 && quant.is_none() => quant = Some(u32_at(e, 8)?),
-            (0xB002, 7) if entries.is_none() => {
-                let off = if cnt > 4 {
-                    u32_at(e, 8)? as usize
-                } else {
-                    ifd + 2 + n * 12 + 8
-                };
-                entries = Some(mp.get(off..off + cnt as usize)?.to_vec());
-            }
-            _ => {}
         }
+    };
+    let mut at = u32_at(&head[4..8]) as usize;
+    let mut entries: Vec<(u32, u32, Vec<u8>)> = Vec::new();
+    let read = |at: usize, n: usize| data.get(at..at.saturating_add(n));
+    let Some(count) = read(at, 2).map(u16_at) else {
+        return Some((big, entries));
+    };
+    at += 2;
+    let mut total = 0u64;
+    for _ in 0..count {
+        let Some(e) = read(at, 12) else {
+            break; // (_ensure_read's OSError: the directory read no further)
+        };
+        at += 12;
+        let (tag, typ, n) = (
+            u16_at(&e[0..2]),
+            u16_at(&e[2..4]),
+            u64::from(u32_at(&e[4..8])),
+        );
+        if entries.iter().any(|(t, _, _)| *t == tag) {
+            continue;
+        }
+        let unit: u64 = match typ {
+            1 | 2 | 6 | 7 => 1,
+            3 | 8 => 2,
+            4 | 9 | 11 | 13 => 4,
+            5 | 10 | 12 | 16 => 8,
+            _ => continue,
+        };
+        let size = n * unit;
+        let value = if size > 4 {
+            total += size;
+            if total > data.len() as u64 {
+                continue; // ("Tag data larger than file")
+            }
+            let offset = u32_at(&e[8..12]) as usize;
+            match read(offset, size as usize) {
+                Some(v) => v.to_vec(),
+                None => break, // (_safe_read's OSError)
+            }
+        } else {
+            e[8..8 + size as usize].to_vec()
+        };
+        if value.is_empty() {
+            continue;
+        }
+        entries.push((tag, typ, value));
     }
-    let quant = quant? as usize;
-    if quant <= 1 {
-        return None;
-    }
-    let entries = entries?;
-    let mut offsets = Vec::with_capacity(quant);
-    for n in 0..quant {
-        let e = entries.get(n * 16..n * 16 + 16)?;
-        let attribute = u32_at(e, 0)?;
-        if (attribute >> 24) & 7 != 0 {
+    Some((big, entries))
+}
+
+/// The MP index's image offsets as Image.open takes them (jpeg_factory, _getmp,
+/// MpoImageFile): None where the file opens as a plain JPEG (no index, one Pillow cannot read,
+/// one whose entries of the images it counts are cut short or name an image of another
+/// format: _getmp's SyntaxError, which jpeg_factory takes so; of no more than one image,
+/// Ultra HDR's).
+fn mp_offsets(h: &Header) -> Option<Vec<usize>> {
+    let (mp, mpoffset) = h.mp.as_ref()?;
+    let (big, entries) = tiff_entries(mp)?;
+    let tag = |t: u32| entries.iter().find(|(tag, _, _)| *tag == t);
+    // NumberOfImages: its first value, where its type gives whole numbers (else range()'s
+    // TypeError: a plain JPEG)
+    let (_, typ, v) = tag(0xB001)?;
+    let int16 = |b: &[u8]| {
+        if big {
+            u16::from_be_bytes([b[0], b[1]])
+        } else {
+            u16::from_le_bytes([b[0], b[1]])
+        }
+    };
+    let int32 = |b: &[u8]| {
+        let a = [b[0], b[1], b[2], b[3]];
+        if big {
+            u32::from_be_bytes(a)
+        } else {
+            u32::from_le_bytes(a)
+        }
+    };
+    let quant: i64 = match typ {
+        3 => i64::from(int16(v)),
+        8 => i64::from(int16(v) as i16),
+        4 | 13 => i64::from(int32(v)),
+        9 => i64::from(int32(v) as i32),
+        6 => i64::from(v[0] as i8),
+        16 => {
+            let w: [u8; 8] = v[..8].try_into().expect("eight bytes");
+            let n = if big {
+                u64::from_be_bytes(w)
+            } else {
+                u64::from_le_bytes(w)
+            };
+            i64::try_from(n).unwrap_or(i64::MAX)
+        }
+        _ => return None,
+    };
+    // MPEntry: bytes (BYTE or UNDEFINED; another type's value is no buffer: a plain JPEG)
+    let raw = match tag(0xB002) {
+        Some((_, 1 | 7, raw)) => raw,
+        _ => return None,
+    };
+    // (each entry read by its own byte order: the header's "MM\0*" alone is big-endian)
+    let entry_big = mp.starts_with(b"MM\x00\x2a");
+    let word = |b: &[u8]| {
+        let a = [b[0], b[1], b[2], b[3]];
+        if entry_big {
+            u32::from_be_bytes(a)
+        } else {
+            u32::from_le_bytes(a)
+        }
+    };
+    let mut offsets = Vec::new();
+    for n in 0..quant.max(0) as u64 {
+        let Some(e) = raw.get(n as usize * 16..n as usize * 16 + 16) else {
+            return None; // (struct.error: "malformed MP Index (bad MP Entry)")
+        };
+        if (word(&e[0..4]) >> 24) & 7 != 0 {
             return None; // ("unsupported picture format in MPO")
         }
-        offsets.push(u32_at(e, 8)? as usize + mpoffset);
+        offsets.push(word(&e[8..12]) as usize + mpoffset);
+    }
+    if quant <= 1 || h.hdr {
+        return None;
     }
     offsets[0] = 0;
     Some(offsets)
+}
+
+/// Image.open's count of the frames: an MPO's (n_frames), a plain JPEG's 1.
+pub(crate) fn n_frames(data: &[u8]) -> Result<usize> {
+    Ok(opened(data)?.1.map_or(1, |offsets| offsets.len()))
 }
 
 /// Every frame as the app reads an animation: a JPEG's one, an MPO's each (MpoImageFile.seek:
@@ -826,8 +969,7 @@ pub(crate) fn each_frame(
 ) -> Result<()> {
     let rgba = |p: Picture| p.convert(lp_pixels::Mode::RGBA);
     let first = decode_picture(data, None)?;
-    let h = open_at(data, 0)?;
-    let offsets = mp_offsets(&h);
+    let (_, offsets) = opened(data)?;
     let count = offsets.as_ref().map_or(1, Vec::len);
     let frame = Frame {
         duration: None,
@@ -839,21 +981,29 @@ pub(crate) fn each_frame(
     };
     for &offset in &offsets[1..] {
         if data.get(offset + 2..offset + 4).is_none() {
-            return error("No data found for frame");
+            return raise(Raised::ValueError, "No data found for frame");
         }
+        // (MpoImageFile.seek: _open of the frame, its errors as they are; a frame without
+        // its own frame header or scan Python reads with the last's, which Rust does not)
         let h = open_at(data, offset)?;
+        let (Some(mode), true) = (h.mode, h.scan) else {
+            return raise(
+                Raised::Unported,
+                "an MPO frame without a frame header or scan",
+            );
+        };
         let (w, ht) = h.size;
-        if (w.max(1) as u64) * (ht.max(1) as u64) > BOMB {
-            return error("decompression bomb");
+        if bomb_check(w as i64, ht as i64).is_err() || w == 0 || ht == 0 {
+            return raise(Raised::Unported, "an MPO frame of no size or too large");
         }
-        let raw = match h.mode {
+        let raw = match mode {
             Kind::L => Raw::L,
             Kind::RGB => Raw::Rgb,
             _ => Raw::CmykI,
         };
         let pixels = decode(&data[offset..], raw, 1, h.size)?;
         let picture = Picture {
-            kind: h.mode,
+            kind: mode,
             width: w,
             height: ht,
             data: pixels,
@@ -921,11 +1071,17 @@ pub fn save(image: &lp_pixels::Image, quality: i64) -> Result<Vec<u8>> {
     let (components, space) = match image.mode() {
         lp_pixels::Mode::L => (1, JCS_GRAYSCALE),
         lp_pixels::Mode::RGB => (3, JCS_RGB),
-        other => return error(format!("cannot write mode {other} as JPEG")),
+        other => {
+            return raise(
+                Raised::OSError,
+                format!("cannot write mode {other} as JPEG"),
+            )
+        }
     };
     let (width, height) = image.size();
     if width == 0 || height == 0 {
-        return error("encoder error -2 when writing image file"); // (libjpeg's empty image)
+        // (libjpeg's empty image)
+        return raise(Raised::OSError, "encoder error -2 when writing image file");
     }
     let lib = lib()?;
     // SAFETY: zeroed is how JPEGENCODERSTATE starts (calloc'd); every pointer is set before use
@@ -989,7 +1145,9 @@ pub fn save(image: &lp_pixels::Image, quality: i64) -> Result<Vec<u8>> {
     }
     match run {
         Ok(()) => Ok(std::mem::take(&mut dest.out)),
-        Err(e) if e.is::<Broken>() => error("encoder error -2 when writing image file"),
+        Err(e) if e.is::<Broken>() => {
+            raise(Raised::OSError, "encoder error -2 when writing image file")
+        }
         Err(e) => panic::resume_unwind(e),
     }
 }

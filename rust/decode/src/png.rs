@@ -13,12 +13,12 @@
 
 use flate2::{Decompress, FlushDecompress, Status};
 
-use crate::{error, Error, Exif, Frame, Kind, Picture, Result, Transparency};
+use crate::{
+    bytes_repr, index_error, opened_check, opening, raise, unpack_from_error, Error, Exif, Frame,
+    Kind, Picture, Raised, Result, Transparency,
+};
 
 const MAGIC: &[u8] = b"\x89PNG\r\n\x1a\n";
-
-/// Image.MAX_IMAGE_PIXELS twice over: where Pillow refuses a picture as a bomb.
-const BOMB: u64 = 2 * (1024 * 1024 * 1024 / 4 / 3);
 
 /// ImageFile's decodermaxblock: what load_read is asked for at a time.
 const MAX_BLOCK: usize = 65536;
@@ -221,14 +221,15 @@ impl<'a> Stream<'a> {
     fn safe_read(&mut self, n: usize) -> Result<&'a [u8]> {
         let s = self.read(n);
         if s.len() < n {
-            return error("Truncated File Read");
+            return raise(Raised::OSError, "Truncated File Read");
         }
         Ok(s)
     }
 
     /// ChunkStream.read: the next chunk's type, where its data begins, its length (a chunk put
-    /// back first). Err for what Python raises as struct.error and SyntaxError.
-    fn head(&mut self) -> std::result::Result<(Vec<u8>, usize, usize), String> {
+    /// back first); struct.error where the file ends before its length, a SyntaxError where its
+    /// type is not four letters, digits or underscores.
+    fn head(&mut self) -> Result<(Vec<u8>, usize, usize)> {
         if let Some((cid, pos, length)) = self.queue.pop() {
             self.at = pos;
             return Ok((cid, pos, length));
@@ -237,12 +238,13 @@ impl<'a> Stream<'a> {
         let cid = s.get(4..).unwrap_or(&[]).to_vec();
         let pos = self.at;
         if s.len() < 4 {
-            return Err("unpack requires a buffer of 4 bytes".into());
+            return Err(unpack_from_error(4, 0, s.len()));
         }
         let length = u32_at(s, 0) as usize;
         let word = |c: &u8| c.is_ascii_alphanumeric() || *c == b'_';
         if cid.len() < 4 || !cid.iter().all(word) {
-            return Err(format!("broken PNG file (chunk {cid:?})"));
+            let msg = format!("broken PNG file (chunk {})", bytes_repr(&cid));
+            return raise(Raised::SyntaxError, msg);
         }
         Ok((cid, pos, length))
     }
@@ -255,10 +257,18 @@ impl<'a> Stream<'a> {
     fn crc(&mut self, cid: &[u8], data: &[u8]) -> Result<()> {
         let s = self.read(4);
         if s.len() < 4 {
-            return error("broken PNG file (incomplete checksum)");
+            let msg = format!(
+                "broken PNG file (incomplete checksum in {})",
+                bytes_repr(cid)
+            );
+            return raise(Raised::SyntaxError, msg);
         }
         if u32_at(s, 0) != crc32(cid, data) {
-            return error("broken PNG file (bad header checksum)");
+            let msg = format!(
+                "broken PNG file (bad header checksum in {})",
+                bytes_repr(cid)
+            );
+            return raise(Raised::SyntaxError, msg);
         }
         Ok(())
     }
@@ -291,10 +301,15 @@ impl<'a> Stream<'a> {
         }
     }
 
+    /// PngStream.check_text_memory.
     fn text_memory(&mut self, n: usize) -> Result<()> {
         self.text_memory += n;
         if self.text_memory > MAX_TEXT_MEMORY {
-            return error("Too much memory used in text chunks");
+            let msg = format!(
+                "Too much memory used in text chunks: {}>MAX_TEXT_MEMORY",
+                self.text_memory
+            );
+            return raise(Raised::ValueError, msg);
         }
         Ok(())
     }
@@ -304,11 +319,7 @@ impl<'a> Stream<'a> {
         let key: String = key.iter().map(|&c| char::from(c)).collect();
         match (key.as_str(), value) {
             ("exif", TextValue::Bytes(v)) => self.info.exif = Some(Exif::Bytes(v)),
-            ("exif", TextValue::Text(v)) => {
-                self.info.exif = Some(Exif::Text {
-                    empty: v.is_empty(),
-                })
-            }
+            ("exif", TextValue::Text(_)) => self.info.exif = Some(Exif::Text),
             ("Raw profile type exif", v) => self.info.raw_exif = Some(v.text()),
             ("XML:com.adobe.xmp", v) => self.info.xmp = Some(v.text()),
             ("interlace", v) => self.info.interlace = !v.is_empty(),
@@ -316,9 +327,8 @@ impl<'a> Stream<'a> {
             ("transparency" | "bbox" | "duration" | "disposal" | "blend", _) => {
                 // (Pillow keeps the text in their place and fails on it later, each in its own
                 // way: refused here)
-                return error(format!(
-                    "a text chunk named {key}, which Pillow reads as its own"
-                ));
+                let msg = format!("a text chunk named {key}, which Pillow reads as its own");
+                return raise(Raised::Unported, msg);
             }
             _ => {}
         }
@@ -331,7 +341,7 @@ impl<'a> Stream<'a> {
             b"IHDR" => {
                 let s = self.safe_read(length)?;
                 if length < 13 {
-                    return error("Truncated IHDR chunk");
+                    return raise(Raised::ValueError, "Truncated IHDR chunk");
                 }
                 self.size = (u64::from(u32_at(s, 0)), u64::from(u32_at(s, 4)));
                 if let Some(mode) = Raw::of(s[8], s[9]) {
@@ -341,7 +351,7 @@ impl<'a> Stream<'a> {
                     self.info.interlace = true;
                 }
                 if s[11] != 0 {
-                    return error("unknown filter category");
+                    return raise(Raised::SyntaxError, "unknown filter category");
                 }
                 s
             }
@@ -371,18 +381,21 @@ impl<'a> Stream<'a> {
                 let i16 = |at: usize| u16_at(s, at);
                 match self.kind() {
                     Some(Kind::P) => {
-                        // _simple_palette: one 0 among 255s
-                        let zeros = s.iter().filter(|&&v| v == 0).count();
+                        // _simple_palette (b"^\xff*\x00\xff*$"): one 0 among 255s, a newline
+                        // after them allowed (as $ allows one before the end)
+                        let body = s.strip_suffix(b"\n").unwrap_or(s);
+                        let zeros = body.iter().filter(|&&v| v == 0).count();
                         self.info.transparency =
-                            Some(if zeros == 1 && s.iter().all(|&v| v == 0 || v == 255) {
-                                Transparency::Index(s.iter().position(|&v| v == 0).unwrap() as u32)
+                            Some(if zeros == 1 && body.iter().all(|&v| v == 0 || v == 255) {
+                                let at = body.iter().position(|&v| v == 0).expect("the 0");
+                                Transparency::Index(at as u32)
                             } else {
                                 Transparency::Alphas(s.to_vec())
                             });
                     }
                     Some(k @ (Kind::Bilevel | Kind::L | Kind::I16 | Kind::RGB)) => {
                         if length < if k == Kind::RGB { 6 } else { 2 } {
-                            return error("Truncated tRNS chunk");
+                            return raise(Raised::ValueError, "Truncated tRNS chunk");
                         }
                         self.info.transparency = Some(match k {
                             Kind::Bilevel => Transparency::Grey(if i16(0) != 0 { 255 } else { 0 }),
@@ -403,7 +416,8 @@ impl<'a> Stream<'a> {
                     _ => 9,
                 };
                 if length < least {
-                    return error("a truncated chunk");
+                    let name = String::from_utf8_lossy(cid);
+                    return raise(Raised::ValueError, format!("Truncated {name} chunk"));
                 }
                 s
             }
@@ -411,13 +425,14 @@ impl<'a> Stream<'a> {
                 let s = self.safe_read(length)?;
                 let i = s.iter().position(|&c| c == 0).map_or(-1, |i| i as i64);
                 let Some(&method) = s.get((i + 1) as usize) else {
-                    return error("index out of range");
+                    return index_error();
                 };
                 if method != 0 {
-                    return error("Unknown compression method in iCCP chunk");
+                    let msg = format!("Unknown compression method {method} in iCCP chunk");
+                    return raise(Raised::SyntaxError, msg);
                 }
                 if let Err(true) = Self::text_inflate(s.get((i + 2) as usize..).unwrap_or(&[])) {
-                    return error("Decompressed data too large for PngImagePlugin.MAX_TEXT_CHUNK");
+                    return too_large();
                 }
                 s
             }
@@ -438,12 +453,14 @@ impl<'a> Stream<'a> {
             b"zTXt" => {
                 let s = self.safe_read(length)?;
                 let (k, v) = split(s);
-                if v.first().copied().unwrap_or(0) != 0 {
-                    return error("Unknown compression method in zTXt chunk");
+                let method = v.first().copied().unwrap_or(0);
+                if method != 0 {
+                    let msg = format!("Unknown compression method {method} in zTXt chunk");
+                    return raise(Raised::SyntaxError, msg);
                 }
                 let v = match Self::text_inflate(v.get(1..).unwrap_or(&[])) {
                     Ok(v) => v,
-                    Err(true) => return error("Decompressed data too large"),
+                    Err(true) => return too_large(),
                     Err(false) => Vec::new(),
                 };
                 if !k.is_empty() {
@@ -467,7 +484,7 @@ impl<'a> Stream<'a> {
             b"acTL" => {
                 let s = self.safe_read(length)?;
                 if length < 8 {
-                    return error("APNG contains truncated acTL chunk");
+                    return raise(Raised::ValueError, "APNG contains truncated acTL chunk");
                 }
                 if self.n_frames.is_some() {
                     self.n_frames = None; // ("Invalid APNG, will use default PNG image")
@@ -482,20 +499,20 @@ impl<'a> Stream<'a> {
             b"fcTL" => {
                 let s = self.safe_read(length)?;
                 if length < 26 {
-                    return error("APNG contains truncated fcTL chunk");
+                    return raise(Raised::ValueError, "APNG contains truncated fcTL chunk");
                 }
                 let seq = u32_at(s, 0);
                 if self
                     .seq_num
                     .map_or(seq != 0, |n| u64::from(n) + 1 != u64::from(seq))
                 {
-                    return error("APNG contains frame sequence errors");
+                    return raise(Raised::SyntaxError, "APNG contains frame sequence errors");
                 }
                 self.seq_num = Some(seq);
                 let (w, h) = (u64::from(u32_at(s, 4)), u64::from(u32_at(s, 8)));
                 let (px, py) = (u64::from(u32_at(s, 12)), u64::from(u32_at(s, 16)));
                 if px + w > self.size.0 || py + h > self.size.1 {
-                    return error("APNG contains invalid frames");
+                    return raise(Raised::SyntaxError, "APNG contains invalid frames");
                 }
                 self.info.bbox = Some((px, py, px + w, py + h));
                 let (num, den) = (u16_at(s, 20), u16_at(s, 22));
@@ -507,7 +524,7 @@ impl<'a> Stream<'a> {
             }
             b"fdAT" => {
                 if length < 4 {
-                    return error("APNG contains truncated fDAT chunk");
+                    return raise(Raised::ValueError, "APNG contains truncated fDAT chunk");
                 }
                 let s = self.safe_read(4)?;
                 let seq = u32_at(s, 0);
@@ -515,7 +532,7 @@ impl<'a> Stream<'a> {
                     .seq_num
                     .is_none_or(|n| u64::from(n) + 1 != u64::from(seq))
                 {
-                    return error("APNG contains frame sequence errors");
+                    return raise(Raised::SyntaxError, "APNG contains frame sequence errors");
                 }
                 self.seq_num = Some(seq);
                 return self.call(b"IDAT", pos + 4, length - 4);
@@ -544,7 +561,7 @@ impl<'a> Stream<'a> {
             }
             match Self::text_inflate(v) {
                 Ok(v) => v,
-                Err(true) => return error("Decompressed data too large"),
+                Err(true) => return too_large(),
                 Err(false) => return Ok(()),
             }
         } else {
@@ -588,6 +605,12 @@ impl TextValue {
             TextValue::Text(t) => t,
         }
     }
+}
+
+/// _safe_zlib_decompress's ValueError: more than MAX_TEXT_CHUNK inflated.
+fn too_large<T>() -> Result<T> {
+    let msg = "Decompressed data too large for PngImagePlugin.MAX_TEXT_CHUNK";
+    raise(Raised::ValueError, msg)
 }
 
 fn latin(b: &[u8]) -> String {
@@ -696,7 +719,7 @@ impl<'a> Png<'a> {
     /// frame sought.
     fn open(file: &'a [u8]) -> Result<Png<'a>> {
         if !file.starts_with(MAGIC) {
-            return error("not a PNG file");
+            return raise(Raised::SyntaxError, "not a PNG file");
         }
         let mut png = Stream {
             file,
@@ -712,7 +735,7 @@ impl<'a> Png<'a> {
             text_memory: 0,
         };
         let (cid, length) = loop {
-            let (cid, pos, length) = png.head().map_err(Error)?;
+            let (cid, pos, length) = png.head()?;
             let data = match png.call(&cid, pos, length)? {
                 Called::Eof => break (cid, length),
                 Called::Read(s) => s,
@@ -720,13 +743,9 @@ impl<'a> Png<'a> {
             };
             png.crc(&cid, &data)?;
         };
-        let Some((kind, raw)) = png.mode else {
-            return error("cannot identify image file (no mode)");
-        };
+        opened_check(png.mode.is_some(), png.size.0 as i64, png.size.1 as i64)?;
+        let (kind, raw) = png.mode.expect("a mode");
         let size = (png.size.0 as usize, png.size.1 as usize);
-        if png.size.0.max(1) * png.size.1.max(1) > BOMB {
-            return error("decompression bomb");
-        }
         let prepare_idat = if cid == b"fdAT" { length - 4 } else { length };
         let mut n_frames = png.n_frames.unwrap_or(1) as usize;
         let apng = png.n_frames.is_some();
@@ -782,7 +801,7 @@ impl<'a> Png<'a> {
         let mut entries = vec![[0u8, 0, 0, 255]; 256];
         if let Some(p) = &self.png.palette {
             if p.len() / 3 > 256 {
-                return error("invalid palette size");
+                return raise(Raised::ValueError, "invalid palette size");
             }
             for (e, rgb) in entries.iter_mut().zip(p.chunks_exact(3)) {
                 e[..3].copy_from_slice(rgb);
@@ -797,7 +816,11 @@ impl<'a> Png<'a> {
     fn load_read(&mut self, n: usize) -> Result<&'a [u8]> {
         while self.idat == 0 {
             self.png.read(4); // (the checksum)
-            let (cid, pos, length) = self.png.head().map_err(Error)?;
+                              // (ImageFile.load takes a struct.error reading as a file cut short)
+            let (cid, pos, length) = self.png.head().map_err(|e| match e.raised {
+                Raised::StructError => Error::new(Raised::OSError, "image file is truncated"),
+                _ => e,
+            })?;
             if !matches!(&cid[..], b"IDAT" | b"DDAT" | b"fdAT") {
                 self.png.push(cid, pos, length);
                 return Ok(&[]);
@@ -821,7 +844,7 @@ impl<'a> Png<'a> {
             return if self.im.is_some() {
                 Ok(())
             } else {
-                error("cannot load this image")
+                raise(Raised::OSError, "cannot load this image")
             };
         };
         // load_prepare
@@ -834,7 +857,10 @@ impl<'a> Png<'a> {
         if interlaced {
             self.interlaced_loads += 1;
             if self.interlaced_loads > 1 {
-                return error("function takes at most 3 arguments"); // (zip_decoder's TypeError)
+                // (zip_decoder given the mode, the raw mode and a 1 for each such load)
+                let given = 2 + self.interlaced_loads;
+                let msg = format!("function takes at most 3 arguments ({given} given)");
+                return raise(Raised::TypeError, msg);
             }
         }
         self.png.at = tile.pos;
@@ -857,7 +883,8 @@ impl<'a> Png<'a> {
         let (x0, y0, x1, y1) = tile.extent;
         let im = self.im.as_ref().expect("the picture");
         if x1 <= x0 || y1 <= y0 || x1 > im.w as u64 || y1 > im.h as u64 {
-            return Err(Fail::Now(Error("tile cannot extend outside image".into())));
+            let e = Error::new(Raised::ValueError, "tile cannot extend outside image");
+            return Err(Fail::Now(e));
         }
         let (xoff, yoff) = (x0 as usize, y0 as usize);
         let (xsize, ysize) = ((x1 - x0) as usize, (y1 - y0) as usize);
@@ -875,11 +902,21 @@ impl<'a> Png<'a> {
         let mut pass = 0usize;
         let mut y = if interlaced { STARTING_ROW[0] } else { 0 };
         let mut row_len = if interlaced { row_len_of(0) } else { bytes };
-        let broken = |what: &str| Fail::After(Error(format!("{what} when reading image file")));
+        let broken = |what: &str| {
+            Fail::After(Error::new(
+                Raised::OSError,
+                format!("{what} when reading image file"),
+            ))
+        };
         loop {
             let s = self.load_read(MAX_BLOCK).map_err(Fail::Now)?;
             if s.is_empty() {
-                return Err(Fail::Now(Error("image file is truncated".into())));
+                // (ZipDecode.c takes all it is given: none left over)
+                let e = Error::new(
+                    Raised::OSError,
+                    "image file is truncated (0 bytes not processed)",
+                );
+                return Err(Fail::Now(e));
             }
             let mut input = s;
             while !input.is_empty() {
@@ -899,7 +936,7 @@ impl<'a> Png<'a> {
                 input = &input[(z.total_in() - before_in) as usize..];
                 let got = last_output + (z.total_out() - before_out) as usize;
                 if status == Status::BufError {
-                    return Err(broken("bad configuration"));
+                    return Err(broken("codec configuration error"));
                 }
                 if got < want {
                     // (more wanted: the rest of this input counts as read, as ZipDecode.c
@@ -1046,7 +1083,7 @@ impl<'a> Png<'a> {
         let prev_has = self.prev.as_ref().is_some_and(|p| p.w * p.h > 0);
         if prev_has && eq(self.blend_op, OP_OVER) {
             let Some((x0, y0, x1, y1)) = self.dispose_extent else {
-                return error("no extent to blend the frame in");
+                return raise(Raised::Unported, "no extent to blend the frame in");
             };
             let b = (x0 as usize, y0 as usize, x1 as usize, y1 as usize);
             let im = self.im.as_ref().expect("the picture");
@@ -1078,13 +1115,13 @@ impl<'a> Png<'a> {
                 match t {
                     Some(Transparency::Alphas(a)) => {
                         if a.len() > 256 {
-                            return error("palette index out of range");
+                            return raise(Raised::ValueError, "palette index out of range");
                         }
                         alphas[..a.len()].copy_from_slice(a);
                     }
                     Some(Transparency::Index(i)) => match alphas.get_mut(*i as usize) {
                         Some(a) => *a = 0,
-                        None => return error("palette index out of range"),
+                        None => return raise(Raised::ValueError, "palette index out of range"),
                     },
                     _ => {}
                 }
@@ -1093,7 +1130,8 @@ impl<'a> Png<'a> {
             (Kind::LA, _) => px.chunks_exact(2).map(|p| p[1]).collect(),
             (Kind::RGBA, _) => px.chunks_exact(4).map(|p| p[3]).collect(),
             (Kind::I16, _) => {
-                return error("an I;16 frame blended over (Pillow's paste misreads it)")
+                let msg = "an I;16 frame blended over (Pillow's paste misreads it)";
+                return raise(Raised::Unported, msg);
             }
             _ => vec![255; count],
         })
@@ -1113,7 +1151,7 @@ impl<'a> Png<'a> {
                 Some(p.crop((b.0 as usize, b.1 as usize, b.2 as usize, b.3 as usize)))
             }
             (op, None) if eq(op, OP_BACKGROUND) || (eq(op, OP_PREVIOUS) && self.prev.is_some()) => {
-                return error("no extent to dispose of");
+                return raise(Raised::Unported, "no extent to dispose of");
             }
             _ => None,
         };
@@ -1141,7 +1179,7 @@ impl<'a> Png<'a> {
             }
             if &cid[..] == b"fcTL" {
                 if frame_start {
-                    return error("APNG missing frame data");
+                    return raise(Raised::SyntaxError, "APNG missing frame data");
                 }
                 frame_start = true;
             }
@@ -1206,9 +1244,14 @@ enum Fail {
     After(Error),
 }
 
+/// Image.open's count of the frames (n_frames).
+pub fn n_frames(file: &[u8]) -> Result<usize> {
+    Ok(Png::open(file).map_err(opening)?.n_frames)
+}
+
 /// The picture's first frame, as Image.open and load give it.
 pub fn decode(file: &[u8]) -> Result<Picture> {
-    let mut png = Png::open(file)?;
+    let mut png = Png::open(file).map_err(opening)?;
     png.load()?;
     Ok(png.picture())
 }
@@ -1216,7 +1259,7 @@ pub fn decode(file: &[u8]) -> Result<Picture> {
 /// Every frame as the app reads an animation (an APNG's; a PNG's one), each with its
 /// info["duration"] and converted to RGBA.
 pub fn each_frame(file: &[u8], each: &mut dyn FnMut(usize, Frame) -> Result<()>) -> Result<()> {
-    let mut png = Png::open(file)?;
+    let mut png = Png::open(file).map_err(opening)?;
     png.load()?;
     let rgba = |p: &Png| -> Result<lp_pixels::Image> { p.picture().convert(lp_pixels::Mode::RGBA) };
     let count = png.n_frames;

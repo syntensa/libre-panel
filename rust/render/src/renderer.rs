@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use indexmap::IndexMap;
+use lp_decode::Raised;
 use lp_pixels::{alpha_composite, dither, Filter, Image, Mode};
 use lp_py::{Dict, Value};
 use lp_text::fallback::FallbackFont;
@@ -82,9 +83,22 @@ impl From<Failed> for Unported {
 /// kinds of picture) or fail at otherwise than Python goes on from.
 pub(crate) const UNREAD: &str = "pictures Rust does not read";
 
-/// A theme's picture Rust does not read (UNREAD).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Unread;
+/// Why a theme's picture is not read as Python reads it: Rust cannot say what Pillow makes of
+/// it (UNREAD), or Python's reading raises what it does not catch (its text: the widget fails).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Unread {
+    Unported,
+    Raised(String),
+}
+
+impl From<Unread> for Drawn {
+    fn from(why: Unread) -> Drawn {
+        match why {
+            Unread::Unported => Drawn::Unported(UNREAD.into()),
+            Unread::Raised(text) => Drawn::Failed(Failed(text)),
+        }
+    }
+}
 
 pub(crate) enum Drawn {
     Piece(Rc<Piece>),
@@ -665,10 +679,10 @@ impl Renderer {
     }
 
     /// _read_picture: a picture of the theme's folder, upright (EXIF) and in RGBA; None where
-    /// Python's reading fails as at a file that is not there or cannot be read (a folder, say)
-    /// or one outside the theme: OSError and ThemeError, which it catches (warned). A file
-    /// Rust does not read: Err(UNREAD), as Pillow may read it (it knows more kinds) or fail at
-    /// it otherwise than with an OSError (an IndexError, say, which Python does not catch).
+    /// Python's reading raises what it catches, an OSError (a file that is not there or
+    /// cannot be read, one Pillow cannot identify or fails at so) or a ThemeError (one outside
+    /// the theme), warned. What else it raises fails the widget (Err: its text); a file Rust
+    /// cannot say Pillow's answer to: Err(UNREAD).
     pub(crate) fn read_picture(&self, rel: &str) -> std::result::Result<Option<Image>, Unread> {
         let Some(root) = self.theme.root.clone() else {
             return Ok(None);
@@ -677,20 +691,36 @@ impl Renderer {
             return Ok(None);
         }
         if rel.contains('\0') {
-            return Err(Unread); // (a path with a NUL: Python's ValueError, which it does not catch)
+            // (resolve_asset's ValueError, which _read_picture does not catch)
+            return Err(Unread::Raised("embedded null byte".into()));
         }
-        let read = lp_theme::model::resolve_asset(&root, &Value::from(rel))
-            .map_err(|e| e.msg.clone())
-            .and_then(|path| std::fs::read(&path).map_err(|e| e.to_string()));
-        match read {
-            Ok(data) => lp_decode::open(&data, Mode::RGBA)
-                .map(Some)
-                .map_err(|_| Unread),
+        let warn = |text: &str| {
+            let rel = lp_py::repr(rel);
+            self.warn(format!("image {rel} could not be loaded ({text})"));
+        };
+        let path = match lp_theme::model::resolve_asset(&root, &Value::from(rel)) {
+            Ok(path) => path,
             Err(e) => {
-                self.warn(format!(
-                    "image {} could not be loaded ({e})",
-                    lp_py::repr(rel)
-                ));
+                warn(&e.msg);
+                return Ok(None);
+            }
+        };
+        let data = match std::fs::read(&path) {
+            Ok(data) => data,
+            Err(e) => {
+                warn(&lp_theme::model::os_error_of(&e, &path).1);
+                return Ok(None);
+            }
+        };
+        match lp_decode::open(&data, Mode::RGBA) {
+            Ok(image) => Ok(Some(image)),
+            Err(e) if e.raised == Raised::Unported => Err(Unread::Unported),
+            Err(e) => {
+                let text = e.text(&lp_py::repr(&path.to_string_lossy()));
+                if !e.raised.is_os_error() {
+                    return Err(Unread::Raised(text));
+                }
+                warn(&text);
                 Ok(None)
             }
         }
@@ -706,10 +736,12 @@ impl Renderer {
         let image = match self.read_picture(&rel) {
             Ok(Some(image)) => Some(image.fit((w, h), Filter::Bicubic, 0.0, (0.5, 0.5))?),
             Ok(None) => None,
-            Err(Unread) => {
+            Err(Unread::Unported) => {
                 self.ground_unread = true;
                 None
             }
+            // (Python's renderer is not made: what it raises)
+            Err(Unread::Raised(text)) => return Err(Failed(text)),
         };
         if self.theme.background_gradient.is_none() {
             return Ok(image);

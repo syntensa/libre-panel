@@ -26,7 +26,7 @@ impl From<lp_pixels::Error> for DeviceError {
 
 impl From<lp_decode::Error> for DeviceError {
     fn from(e: lp_decode::Error) -> DeviceError {
-        DeviceError(e.0)
+        DeviceError(e.msg)
     }
 }
 

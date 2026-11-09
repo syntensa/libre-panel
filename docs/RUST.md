@@ -732,21 +732,19 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       round: each frame finished as a picture is, every second (third ...) kept where all
       would take more than 96 MB, each as long as those it stands for (lp-decode gives them
       one after another: one is held at a time). The tests: 160 random themes of the theme's
-      pictures (105 drawn, all the same to the bit, 34 left out for a file Rust does not
-      read), 160 of slideshows at random moments and at their turns (96 drawn, to the bit), 40
-      of animated pictures frame after frame, a part of a frame to a minute later and back (95
-      frames, to the bit), an animation of frames of its own lengths at each speed a widget may
+      pictures (124 drawn, all the same to the bit, 15 left out for a file of a kind Rust
+      does not know), 160 of slideshows at random moments and at their turns (96 drawn, to the
+      bit), 40 of animated pictures frame after frame, a part of a frame to a minute later and
+      back (122 frames, to the bit), an animation of frames of its own lengths at each speed a widget may
       ask, at each frame's end, just before and after it and before it first showed, an
       animation whose frames hold more than 96 MB, the pictures of 312 slideshows' lines
       (patterns of every kind of part, links, ".." out of the theme, the errors) as _slides
       finds them, a picture alone at the edges of the years in four zones (92 frames to the
       bit). The counter-checks put in 45 faults, and the tests catch them all (3 of them once
       cases were added: two "**" apart, a moment before an animation first showed, a speed
-      under the least). Rust says it does not draw these yet: videos (a slideshow's turn of
-      one too), a file it does not read (also as the background: one that is there and
-      lp-decode does not decode, as Pillow knows more kinds, or fails at it with what Python
-      does not catch, as with the IndexError of a GIF cut short), folders of names that are no
-      Unicode; where it does not know the computer's zone (a TZ glibc reads by rules of its
+      under the least). Rust says it does not draw these yet: videos where it is not told of
+      ffmpeg (a slideshow's turn of one too), a file of a kind lp-decode does not know (also as
+      the background: Pillow knows forty more), folders of names that are no Unicode; where it does not know the computer's zone (a TZ glibc reads by rules of its
       own), slideshows by the clock and a picture alone at the edges of the years; on Windows,
       slideshow patterns of other than ASCII (pathlib matches there without case). Pictures that move in a moving
       frame, and slideshows with them: below
@@ -1448,10 +1446,52 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       degree, a video of 25.02 frames a second, sizes rounded up, the loop's rate 0, blurs
       drawn at a fraction, slideshows that come back to their videos, a video alone
       see-through, with a glow, contained over the theme's picture or taking turns with one)
-- [ ] pictures as Pillow fails at them: lp-decode's errors as Python's exceptions, so that
-      where Python catches an OSError and goes on (a picture cut short, a file of no picture)
-      Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,
-      TIFF, ICO ...); names that are no Unicode (R3b)
+- [x] pictures as Pillow fails at them (lp-decode's errors as the exceptions Pillow 13 raises,
+      the renderer's catches as Python's): each error lp-decode gives carries the class Python
+      would raise and its text, as Image.open, load, ImageOps.exif_transpose, n_frames and
+      moving.read_animation raise them. What a plugin raises while it opens a file Image.open
+      takes as "not this kind" (a SyntaxError, IndexError, TypeError, EOFError, struct.error, a
+      size of nothing) and the file is not identified, its name as repr writes it; then the
+      decompression bomb's limit, from the header's size where Pillow checks it there (a GIF's
+      screen grown to a frame beyond it, a WebP's header); a file ending in the data as
+      ImageFile.load says it ("image file is truncated", with the bytes not processed), the
+      decoders' own errors after load_end as their status says them (and only then: a GIF's
+      palette missing is raised first); PNG's chunks (their type, length and checksum, a tRNS
+      of one 0 among 255s and a newline after them), a JPEG's markers and its MP index as
+      _getmp reads it (in the byte order of the directory's header, the entries big-endian only
+      under "MM\0*"; a NumberOfImages of no whole number, an MPEntry of no bytes, entries cut
+      short or of another format read as a plain JPEG), WebP's decoder; EXIF of no TIFF header,
+      BigTIFF's, text where Pillow wants bytes (an empty one too), a raw profile's hexadecimal
+      as bytes.fromhex refuses it, at its place. Where Python goes on (an OSError reading a
+      picture, a ValueError too reading an animation or whether one moves), Rust goes on
+      without it, saying what Python says ("image 'x' could not be loaded (...)", a file not
+      there as "[Errno 2] No such file or directory: '...'", on Windows the C runtime's errno
+      and text for the system's error, as Python's open has them); what Python does not catch
+      fails the widget, saying the same ("embedded null byte" for a name with a NUL), and the
+      background's fails the renderer, as Python's is not made. A file of none of lp-decode's
+      kinds Rust still leaves to Python. The tests: 990 pictures broken in every way (cut
+      short, bytes changed or put in, EXIF Pillow cannot read, sizes beyond the limit or of
+      nothing, MP indexes of odd kinds, files of no picture) along the renderer's three ways of
+      reading one, against Pillow: the same class and text each time (1613 read, 552 OSErrors,
+      288 files not identified, 84 SyntaxErrors, 84 bombs, 28 TypeErrors, 24 struct.errors, 17
+      ValueErrors, 10 IndexErrors), and 68 made for what the random breaks seldom reach (a
+      gAMA, cHRM, sRGB or pHYs too short before the data and after it, after data zlib refuses;
+      APNGs cut in their acTL, a later fcTL or fdAT; a GIF whose second frame grows the screen
+      without a palette, one whose screen grows beyond the bomb's limit before its frame's
+      flags; MP indexes of every kind Pillow reads); tRNS chunks with newlines, to the pixel;
+      200 themes of them in image widgets, slideshows and as the background, with Python's
+      warnings: 169 frames to the bit (83 going on without a picture, 38 with a widget failed),
+      6 renderers not made, 25 left to Python for a file of no kind Rust knows; 7 of animations
+      Pillow fails at after their first frame, drawn as stills. Of the theme's pictures Rust
+      draws 124 frames instead of 105, of the animations 122 instead of 95. The counter-checks
+      put 57 faults into the new code, and the tests catch all but five that change nothing
+      either shows: a TypeError lp-decode never raises while opening, the place of a first
+      character beyond ASCII (the same in characters and in bytes), the texts of a PNG's
+      checksums (Image.open makes them "cannot identify image file"), an MPO of one picture (a
+      plain JPEG either way). They found twelve gaps the tests have closed since and Rust wrong
+      in one place: an MP entry cut short is a plain JPEG to Pillow, not a file of no kind
+- [ ] the kinds of picture Pillow opens that lp-decode does not (BMP, TIFF, ICO ...); names
+      that are no Unicode (R3b)
 - [x] the computer's own zone on Windows (CPython's _PyTime_localtime, local(),
       local_timezone_from_timestamp and datetime_from_timet_and_us there): Rust asks the C
       runtime's localtime_s of each moment, as Python does (the UCRT's _localtime64_s, which

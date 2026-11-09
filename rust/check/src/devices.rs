@@ -65,7 +65,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
             let quality = case["quality"].as_i64().ok_or("a quality")?;
             match lp_decode::save_jpeg(&image_of(&case["image"])?, quality) {
                 Ok(data) => json!({"data": b64(&data)}),
-                Err(e) => json!({"error": e.0}),
+                Err(e) => json!({"error": e.msg}),
             }
         }
         "dimmed" => {

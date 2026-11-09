@@ -17,7 +17,7 @@ use lp_pixels::{chops, Draw, Filter, Image, Mode, ALL_CORNERS};
 use lp_py::{Dict, Value};
 
 use crate::piece::{Failed, Piece, Result};
-use crate::renderer::{Drawn, Renderer, Unread, MOST_PIXELS, UNREAD};
+use crate::renderer::{Drawn, Renderer, MOST_PIXELS, UNREAD};
 use crate::shapes::SUPERSAMPLE;
 use crate::widget;
 
@@ -366,8 +366,14 @@ pub(crate) enum Read {
     Still,
     /// its finish failed (Python's raises)
     Failed(Failed),
-    /// one Rust does not read (UNREAD)
-    Unread,
+    /// what Pillow raises reading it (or that Rust cannot say: Raised::Unported)
+    Raised(lp_decode::Error),
+}
+
+/// The exceptions _animation and _moving go on from (a picture they take as not moving):
+/// OSError and ValueError.
+fn passed_over(e: &lp_decode::Error) -> bool {
+    e.raised.is_os_error() || e.raised == lp_decode::Raised::ValueError
 }
 
 /// moving.Animation: the frames of an animated picture, finished, and when each one ends.
@@ -401,11 +407,17 @@ impl Animation {
 /// FRAMES_BYTES, each showing as long as those it stands for.
 pub(crate) fn read_animation(data: &[u8], finish: &dyn Fn(&Image) -> Result<Image>) -> Read {
     const ENOUGH: &str = "(enough)";
+    // (Image.open, n_frames: a picture of one frame is a still, its pixels not read)
+    match lp_decode::n_frames(data) {
+        Err(e) => return Read::Raised(e),
+        Ok(count) if count <= 1 => return Read::Still,
+        Ok(_) => {}
+    }
     let (mut frames, mut ends) = (Vec::new(), Vec::new());
     let (mut first, mut every, mut took, mut n) = (None, 1u128, 0.0f64, 0usize);
     let mut failed = None;
     let read = lp_decode::each_frame(data, &mut |count, frame| {
-        let stop = || Err(lp_decode::Error(ENOUGH.into()));
+        let stop = || Err(lp_decode::Error::new(lp_decode::Raised::Unported, ENOUGH));
         if n == 0 {
             if count <= 1 {
                 return stop();
@@ -449,9 +461,20 @@ pub(crate) fn read_animation(data: &[u8], finish: &dyn Fn(&Image) -> Result<Imag
         return Read::Failed(e);
     }
     match read {
-        Err(e) if e.0 != ENOUGH => Read::Unread,
+        Err(e) if e.msg != ENOUGH => Read::Raised(e),
         _ if frames.len() <= 1 => Read::Still,
         _ => Read::Frames(Animation { frames, ends }),
+    }
+}
+
+/// moving.read_animation of a file's bytes, the frames as they are: how many it keeps (None
+/// for a still), or what Pillow raises (Raised::Unported where Rust cannot say).
+pub fn animation_read(data: &[u8]) -> std::result::Result<Option<usize>, lp_decode::Error> {
+    match read_animation(data, &|image| Ok(image.clone())) {
+        Read::Frames(animation) => Ok(Some(animation.frames.len())),
+        Read::Still => Ok(None),
+        Read::Failed(e) => Err(lp_decode::Error::new(lp_decode::Raised::Unported, e.0)),
+        Read::Raised(e) => Err(e),
     }
 }
 
@@ -548,31 +571,29 @@ impl Renderer {
     }
 
     /// _moving: whether a slideshow's picture moves (a video, a picture of more than one
-    /// frame), kept; one that is not there (or outside the theme) does not. Of one Rust does
-    /// not read it cannot tell (UNREAD).
+    /// frame: Image.open's n_frames), kept; one that is not there, outside the theme, or one
+    /// Pillow fails at with an OSError or a ValueError does not. What else Pillow raises fails
+    /// the widget; of one Rust cannot say Pillow's answer to: UNREAD.
     fn moves(&mut self, rel: &str) -> Found<bool> {
         if let Some(&found) = self.moves.get(rel) {
             return Ok(found);
         }
         let mut found = is_video(rel);
         if !found && ends_with_any(rel, &MOVING_SUFFIXES) {
-            if let Some(root) = self.theme.root.clone() {
-                if rel.contains('\0') {
-                    return Err(Drawn::Unported(UNREAD.into()));
-                }
-                let data = lp_theme::model::resolve_asset(&root, &Value::from(rel))
-                    .ok()
-                    .and_then(|path| std::fs::read(path).ok());
-                if let Some(data) = data {
-                    let mut told = false;
-                    let _ = lp_decode::each_frame(&data, &mut |count, _| {
-                        (found, told) = (count > 1, true);
-                        Err(lp_decode::Error("(enough)".into()))
-                    });
-                    if !told {
+            // (a name with a NUL: resolve_asset's ValueError, passed over)
+            let root = self.theme.root.clone().filter(|_| !rel.contains('\0'));
+            let data = root
+                .and_then(|root| lp_theme::model::resolve_asset(&root, &Value::from(rel)).ok())
+                .and_then(|path| std::fs::read(path).ok());
+            if let Some(data) = data {
+                found = match lp_decode::n_frames(&data) {
+                    Ok(count) => count > 1,
+                    Err(e) if passed_over(&e) => false,
+                    Err(e) if e.raised == lp_decode::Raised::Unported => {
                         return Err(Drawn::Unported(UNREAD.into()));
                     }
-                }
+                    Err(e) => return Err(Drawn::Failed(Failed(e.msg))),
+                };
             }
         }
         self.moves.insert(rel.to_string(), found);
@@ -686,7 +707,8 @@ impl Renderer {
                 return Err(Drawn::Unported(NO_FFMPEG.into()));
             };
             if rel.contains('\0') {
-                return Err(Drawn::Unported(UNREAD.into()));
+                // (resolve_asset's ValueError, which _slide_seconds does not catch)
+                return Err(Drawn::Failed(Failed("embedded null byte".into())));
             }
             let root = self.theme.root.clone().unwrap_or_default();
             match lp_theme::model::resolve_asset(&root, &Value::from(rel)) {
@@ -724,9 +746,7 @@ impl Renderer {
         if let Some(found) = self.pictures.borrow_mut().get(&key) {
             return Ok(found);
         }
-        let mut image = self
-            .read_picture(rel)
-            .map_err(|Unread| Drawn::Unported(UNREAD.into()))?;
+        let mut image = self.read_picture(rel).map_err(Drawn::from)?;
         if let Some(read) = &image {
             if w > 0 && h > 0 {
                 let (fw, fh) = sized(w, h).map_err(Drawn::Failed)?;
@@ -775,16 +795,19 @@ impl Renderer {
             }
             Ok(image)
         };
-        if rel.contains('\0') {
-            return Err(Drawn::Unported(UNREAD.into()));
-        }
-        let data = lp_theme::model::resolve_asset(&root, &Value::from(rel))
-            .ok()
+        // (a name with a NUL: resolve_asset's ValueError, passed over: read as a still)
+        let data = (!rel.contains('\0'))
+            .then_some(&root)
+            .and_then(|root| lp_theme::model::resolve_asset(root, &Value::from(rel)).ok())
             .and_then(|path| std::fs::read(path).ok());
         let found = match data.map(|data| read_animation(&data, &finish)) {
             Some(Read::Frames(animation)) => Some(Rc::new(animation)),
             Some(Read::Failed(e)) => return Err(Drawn::Failed(e)),
-            Some(Read::Unread) => return Err(Drawn::Unported(UNREAD.into())),
+            Some(Read::Raised(e)) if passed_over(&e) => None,
+            Some(Read::Raised(e)) if e.raised == lp_decode::Raised::Unported => {
+                return Err(Drawn::Unported(UNREAD.into()));
+            }
+            Some(Read::Raised(e)) => return Err(Drawn::Failed(Failed(e.msg))),
             Some(Read::Still) | None => None,
         };
         let size = found.as_ref().map_or(4096, |a| a.size());
@@ -884,7 +907,8 @@ impl Renderer {
             return Drawn::Unported(NO_FFMPEG.into());
         };
         if rel.contains('\0') {
-            return Drawn::Unported(UNREAD.into());
+            // (resolve_asset's ValueError, which _draw_video does not catch)
+            return Drawn::Failed(Failed("embedded null byte".into()));
         }
         let path = match lp_theme::model::resolve_asset(&root, &Value::from(rel)) {
             Ok(path) => path,

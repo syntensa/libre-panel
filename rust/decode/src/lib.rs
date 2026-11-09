@@ -17,13 +17,84 @@ pub use jpeg::save as save_jpeg;
 use lp_pixels::{thumbnail_size, Filter, Image, Mode};
 use std::fmt;
 
-/// What Pillow would refuse, with its reason.
+/// The class of the exception Python raises where Pillow fails at a picture: what the app's
+/// `except` clauses tell apart (the renderer goes on without a picture where reading it
+/// raises an OSError, without an animation where an OSError or a ValueError; anything else
+/// fails the widget, with the exception's text).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Raised {
+    OSError,
+    /// UnidentifiedImageError, an OSError: no plugin of Pillow's opens the file (Image.open
+    /// takes a SyntaxError, IndexError, TypeError, KeyError, EOFError or struct.error while
+    /// opening one as "not this kind"). Its text names the file: [`Error::text`].
+    Unidentified,
+    SyntaxError,
+    ValueError,
+    EOFError,
+    IndexError,
+    TypeError,
+    /// struct.error
+    StructError,
+    /// Image.DecompressionBombError (an Exception of its own)
+    DecompressionBomb,
+    ZeroDivisionError,
+    /// What Rust does not know Pillow's answer to (a kind of file it does not read, or
+    /// something it does not do as Pillow does): the app's way is Python's there.
+    Unported,
+}
+
+impl Raised {
+    /// The class's name as Python prints it (struct.error's is "error").
+    pub fn name(self) -> &'static str {
+        match self {
+            Raised::OSError => "OSError",
+            Raised::Unidentified => "UnidentifiedImageError",
+            Raised::SyntaxError => "SyntaxError",
+            Raised::ValueError => "ValueError",
+            Raised::EOFError => "EOFError",
+            Raised::IndexError => "IndexError",
+            Raised::TypeError => "TypeError",
+            Raised::StructError => "error",
+            Raised::DecompressionBomb => "DecompressionBombError",
+            Raised::ZeroDivisionError => "ZeroDivisionError",
+            Raised::Unported => "unported",
+        }
+    }
+
+    /// Whether `except OSError` catches it.
+    pub fn is_os_error(self) -> bool {
+        matches!(self, Raised::OSError | Raised::Unidentified)
+    }
+}
+
+/// What Pillow would raise: the exception's class and its text.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Error(pub String);
+pub struct Error {
+    pub raised: Raised,
+    pub msg: String,
+}
+
+impl Error {
+    pub fn new(raised: Raised, msg: impl Into<String>) -> Error {
+        Error {
+            raised,
+            msg: msg.into(),
+        }
+    }
+
+    /// The exception's text, str(exc), for a file Image.open was given by a name whose repr()
+    /// is `file_repr` (UnidentifiedImageError's text says it).
+    pub fn text(&self, file_repr: &str) -> String {
+        match self.raised {
+            Raised::Unidentified => format!("cannot identify image file {file_repr}"),
+            _ => self.msg.clone(),
+        }
+    }
+}
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
+        f.write_str(&self.msg)
     }
 }
 
@@ -31,8 +102,100 @@ impl std::error::Error for Error {}
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub(crate) fn error<T>(text: impl Into<String>) -> Result<T> {
-    Err(Error(text.into()))
+pub(crate) fn raise<T>(raised: Raised, text: impl Into<String>) -> Result<T> {
+    Err(Error::new(raised, text))
+}
+
+/// Python's IndexError of an index beyond a bytes object.
+pub(crate) fn index_error<T>() -> Result<T> {
+    raise(Raised::IndexError, "index out of range")
+}
+
+/// struct.unpack_from's error (PIL._binary's i16 and i32) where the buffer is short.
+pub(crate) fn unpack_from_error(size: usize, offset: usize, len: usize) -> Error {
+    Error::new(
+        Raised::StructError,
+        format!(
+            "unpack_from requires a buffer of at least {} bytes for unpacking {size} bytes at \
+             offset {offset} (actual buffer size is {len})",
+            offset + size
+        ),
+    )
+}
+
+/// Image._decompression_bomb_check: a picture of more than twice MAX_IMAGE_PIXELS (each side
+/// counted as at least 1) is refused.
+pub(crate) fn bomb_check(w: i64, h: i64) -> Result<()> {
+    let pixels = w.max(1) as u128 * h.max(1) as u128;
+    if pixels > u128::from(BOMB_PIXELS) {
+        return raise(
+            Raised::DecompressionBomb,
+            format!(
+                "Image size ({pixels} pixels) exceeds limit of {BOMB_PIXELS} pixels, could be \
+                 decompression bomb DOS attack."
+            ),
+        );
+    }
+    Ok(())
+}
+
+/// Twice Pillow's MAX_IMAGE_PIXELS (int(1024 * 1024 * 1024 // 4 // 3)).
+pub(crate) const BOMB_PIXELS: u64 = 2 * (1024 * 1024 * 1024 / 4 / 3);
+
+/// What Image.open makes of an error raised while a plugin opens the file: the classes
+/// ImageFile takes as "not this kind" (made a SyntaxError) and Image.open goes past to the
+/// next plugin; none of the others opens a PNG, GIF, JPEG or WebP, so the file is
+/// unidentified. The rest it raises as they are.
+pub(crate) fn opening(e: Error) -> Error {
+    match e.raised {
+        Raised::SyntaxError
+        | Raised::IndexError
+        | Raised::TypeError
+        | Raised::EOFError
+        | Raised::StructError => Error::new(Raised::Unidentified, "cannot identify image file"),
+        _ => e,
+    }
+}
+
+/// ImageFile's check once a plugin has opened the file: a mode and a size of at least 1
+/// each, else "not identified by this driver" (a SyntaxError, so: unidentified); then
+/// Image.open's decompression bomb check.
+pub(crate) fn opened_check(mode: bool, w: i64, h: i64) -> Result<()> {
+    if !mode || w <= 0 || h <= 0 {
+        return Err(opening(Error::new(
+            Raised::SyntaxError,
+            "not identified by this driver",
+        )));
+    }
+    bomb_check(w, h)
+}
+
+/// Python's repr of bytes (b'...': its quotes, its escapes), as Pillow's texts have a chunk's
+/// type or a header.
+pub(crate) fn bytes_repr(b: &[u8]) -> String {
+    let quote = if b.contains(&b'\'') && !b.contains(&b'"') {
+        b'"'
+    } else {
+        b'\''
+    };
+    let mut out = String::from("b");
+    out.push(char::from(quote));
+    for &c in b {
+        match c {
+            b'\\' => out.push_str("\\\\"),
+            b'\t' => out.push_str("\\t"),
+            b'\n' => out.push_str("\\n"),
+            b'\r' => out.push_str("\\r"),
+            c if c == quote => {
+                out.push('\\');
+                out.push(char::from(c));
+            }
+            c if !(0x20..0x7f).contains(&c) => out.push_str(&format!("\\x{c:02x}")),
+            c => out.push(char::from(c)),
+        }
+    }
+    out.push(char::from(quote));
+    out
 }
 
 /// The mode Pillow opens a picture in (of those its decoders give the app).
@@ -92,13 +255,11 @@ pub enum Transparency {
 }
 
 /// info["exif"] as Pillow keeps it: bytes (eXIf, or a tEXt chunk named "exif"), or text (a
-/// zTXt or iTXt named so), on which getexif fails unless it is empty.
+/// zTXt or iTXt named so), on which getexif fails, empty or not.
 #[derive(Clone, Debug)]
 pub enum Exif {
     Bytes(Vec<u8>),
-    Text {
-        empty: bool,
-    },
+    Text,
     /// a JPEG's EXIF that _read_dpi_from_exif failed on while opening: getexif gives none
     /// after, and reads no XMP
     Spoilt,
@@ -188,10 +349,13 @@ impl Picture {
     pub fn orientation(&self) -> Result<u32> {
         let exif = match (&self.exif, &self.raw_exif) {
             (Some(Exif::Bytes(e)), _) => Some(e.clone()),
-            (Some(Exif::Text { empty: false }), _) => {
-                return error("startswith first arg must be str"); // (Exif.load of text)
+            (Some(Exif::Text), _) => {
+                // (Exif.load's re.sub of a bytes pattern on text, an empty one too)
+                return raise(
+                    Raised::TypeError,
+                    "cannot use a bytes pattern on a string-like object",
+                );
             }
-            (Some(Exif::Text { empty: true }), _) => None,
             (Some(Exif::Spoilt), _) => return Ok(1),
             (None, Some(raw)) => Some(exif::from_raw_profile(raw)?),
             (None, None) => None,
@@ -224,10 +388,10 @@ impl Picture {
         }
         if self.l_over_p && filter != Filter::Nearest {
             // (asked as of an L, done by the P picture, which has no other filter)
-            return error("image has wrong mode");
+            return raise(Raised::ValueError, "image has wrong mode");
         }
         let (w, h) = (self.width, self.height);
-        let fail = |e: lp_pixels::Error| Error(e.to_string());
+        let fail = |e: lp_pixels::Error| Error::new(Raised::Unported, e.to_string());
         let resize = |mode: Mode, data: Vec<u8>, filter: Filter| -> Result<Image> {
             Image::from_bytes(mode, w, h, data)
                 .and_then(|im| im.resize(to.0, to.1, filter, bounds, gap))
@@ -281,11 +445,14 @@ impl Picture {
     pub fn convert(&self, mode: Mode) -> Result<Image> {
         if self.l_over_p {
             if mode == Mode::RGBA && self.transparency.is_some() {
-                return error("conversion from P to RGBA not supported in convert_transparent");
+                return raise(
+                    Raised::ValueError,
+                    "conversion from P to RGBA not supported in convert_transparent",
+                );
             }
             if mode == Mode::L {
                 // (mode == self.mode: Pillow's copy, which is the P picture)
-                return error("convert(\"L\") gives the picture in P");
+                return raise(Raised::Unported, "convert(\"L\") gives the picture in P");
             }
         }
         self.convert_pixels(mode)
@@ -294,7 +461,7 @@ impl Picture {
     /// Image.convert(mode) as the pixels' own mode does it (a copy's: exif_transpose's).
     fn convert_pixels(&self, mode: Mode) -> Result<Image> {
         if mode == Mode::RGBa {
-            return error("pictures open in RGBA, RGB or L");
+            return raise(Raised::Unported, "pictures open in RGBA, RGB or L");
         }
         let (w, h) = (self.width, self.height);
         let n = w * h;
@@ -388,7 +555,7 @@ impl Picture {
                 }),
             ),
         };
-        Image::from_bytes(mode, w, h, out).map_err(|e| Error(e.to_string()))
+        Image::from_bytes(mode, w, h, out).map_err(|e| Error::new(Raised::Unported, e.to_string()))
     }
 
     /// The palette as a conversion to `mode` reads it: for RGBA with the alphas of its
@@ -407,7 +574,7 @@ impl Picture {
             }
             (Some(Transparency::Alphas(a)), _) => {
                 if a.len() > 256 {
-                    return error("palette index out of range");
+                    return raise(Raised::ValueError, "palette index out of range");
                 }
                 for (entry, &alpha) in palette.iter_mut().zip(a) {
                     entry[3] = alpha;
@@ -415,7 +582,7 @@ impl Picture {
             }
             (Some(Transparency::Index(i)), _) => match palette.get_mut(*i as usize) {
                 Some(entry) => entry[3] = 0,
-                None => return error("palette index out of range"),
+                None => return raise(Raised::ValueError, "palette index out of range"),
             },
             _ => {}
         }
@@ -452,7 +619,13 @@ pub fn decode_draft(data: &[u8], draft: Option<(Option<Kind>, (usize, usize))>) 
     if webp::accepts(data) {
         return webp::decode(data);
     }
-    error("cannot identify image file")
+    unknown()
+}
+
+/// A file of none of the four kinds read here: Pillow may know it (it opens forty more), so
+/// Rust cannot say what becomes of it.
+fn unknown<T>() -> Result<T> {
+    raise(Raised::Unported, "cannot identify image file")
 }
 
 /// Image.thumbnail(size, filter, reducing_gap) on a file just opened, before anything else is
@@ -467,7 +640,7 @@ pub fn thumbnail(
     filter: Filter,
     reducing_gap: Option<f64>,
 ) -> Result<Picture> {
-    let fail = |e: lp_pixels::Error| Error(e.to_string());
+    let fail = |e: lp_pixels::Error| Error::new(Raised::Unported, e.to_string());
     if !is_jpeg(data) {
         let picture = decode(data)?;
         return match thumbnail_size(picture.width, picture.height, size).map_err(fail)? {
@@ -487,7 +660,10 @@ pub fn thumbnail(
     // size itself gives)
     let want = ((size.0 * gap) as i64, (size.1 * gap) as i64);
     if want.0 == 0 || want.1 == 0 {
-        return error("integer division or modulo by zero");
+        return raise(
+            Raised::ZeroDivisionError,
+            "integer division or modulo by zero",
+        );
     }
     let want = if want.0 < 0 || want.1 < 0 {
         opened
@@ -512,6 +688,24 @@ pub fn frames(data: &[u8]) -> Result<Vec<Frame>> {
     Ok(out)
 }
 
+/// Image.open(f).n_frames as the app asks it (getattr(picture, "n_frames", 1)): how many
+/// frames the picture says it has; 1 for a plain JPEG.
+pub fn n_frames(data: &[u8]) -> Result<usize> {
+    if data.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return png::n_frames(data);
+    }
+    if is_gif(data) {
+        return gif::n_frames(data);
+    }
+    if is_jpeg(data) {
+        return jpeg::n_frames(data);
+    }
+    if webp::accepts(data) {
+        return webp::n_frames(data);
+    }
+    unknown()
+}
+
 /// The frames of an animated picture as [`frames`] reads them, one after the other to `each`
 /// with the count of them the file says (n_frames: an APNG may have fewer); an error of
 /// `each` stops the reading. Only one frame is held at a time.
@@ -528,7 +722,7 @@ pub fn each_frame(data: &[u8], each: &mut dyn FnMut(usize, Frame) -> Result<()>)
     if webp::accepts(data) {
         return webp::each_frame(data, each);
     }
-    error("cannot identify image file")
+    unknown()
 }
 
 /// What the app makes of a picture it opens: ImageOps.exif_transpose(picture).convert(mode).

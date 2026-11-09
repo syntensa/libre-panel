@@ -11,11 +11,11 @@
 //! do in Pillow (a first frame in L whose own palette is the grey ramp is shown through the
 //! file's palette, for one).
 
-use crate::{error, Error, Kind, Picture, Result, Transparency};
+use crate::{
+    bomb_check, index_error, opened_check, opening, raise, unpack_from_error, Error, Kind, Picture,
+    Raised, Result, Transparency,
+};
 use lp_pixels::{Image, Mode};
-
-/// Pillow's MAX_IMAGE_PIXELS twice: a size beyond it is refused as a decompression bomb.
-const BOMB_PIXELS: u64 = 2 * (1024 * 1024 * 1024 / 4 / 3);
 
 /// ImageFile's decodermaxblock: how much more of the file the decoder is given each time.
 const MAX_BLOCK: usize = 65536;
@@ -23,28 +23,19 @@ const MAX_BLOCK: usize = 65536;
 /// GifDecode.c's table and history: 4096 entries (codes of 12 bits at most).
 const TABLE: usize = 4096;
 
-/// _decompression_bomb_check: each side counted as at least 1.
-fn bomb_check(w: i64, h: i64) -> Result<()> {
-    let pixels = w.max(1) as u64 * h.max(1) as u64;
-    if pixels > BOMB_PIXELS {
-        return error(format!(
-            "Image size ({pixels} pixels) exceeds limit of {BOMB_PIXELS} pixels, could be \
-             decompression bomb DOS attack."
-        ));
-    }
-    Ok(())
-}
-
-/// Python's IndexError and struct.error where a block is shorter than read.
-fn short<T>() -> Result<T> {
-    error("a block shorter than its fields")
-}
-
-/// i16 (PIL._binary): two bytes, little end first.
+/// i16 (PIL._binary's struct.unpack_from): two bytes, little end first.
 fn i16(b: &[u8], at: usize) -> Result<i64> {
     match b.get(at..at + 2) {
         Some(s) => Ok(i64::from(u16::from_le_bytes([s[0], s[1]]))),
-        None => short(),
+        None => Err(unpack_from_error(2, at, b.len())),
+    }
+}
+
+/// b[at] of Python's bytes: an IndexError beyond it.
+fn byte(b: &[u8], at: usize) -> Result<u8> {
+    match b.get(at) {
+        Some(&v) => Ok(v),
+        None => index_error(),
     }
 }
 
@@ -97,7 +88,7 @@ impl Palette {
     fn from_rgb(raw: &[u8]) -> Result<Palette> {
         let size = raw.len() / 3;
         if size > 256 {
-            return error("invalid palette size");
+            return raise(Raised::ValueError, "invalid palette size");
         }
         let mut palette = Palette::new();
         for (entry, rgb) in palette.entries.iter_mut().zip(raw.chunks_exact(3)) {
@@ -159,7 +150,7 @@ impl Core {
     /// putpalette("RGB", "RGB", raw): a new palette; an L picture becomes P.
     fn putpalette(&mut self, raw: &[u8]) -> Result<()> {
         if !matches!(self.mode, M::L | M::P) {
-            return error("unrecognized image mode");
+            return raise(Raised::ValueError, "unrecognized image mode");
         }
         self.palette = Some(Palette::from_rgb(raw)?);
         self.mode = M::P;
@@ -169,7 +160,7 @@ impl Core {
     fn getpalette(&self) -> Result<Vec<u8>> {
         match &self.palette {
             Some(p) => Ok(p.rgb()),
-            None => error("image has no palette"),
+            None => raise(Raised::ValueError, "image has no palette"),
         }
     }
 
@@ -180,7 +171,7 @@ impl Core {
                 p.entries[usize::from(index)][3] = 0;
                 Ok(())
             }
-            None => error("image has no palette"),
+            None => raise(Raised::ValueError, "image has no palette"),
         }
     }
 
@@ -191,14 +182,14 @@ impl Core {
         let n = self.mode.pixel_size();
         let (mut xsize, mut ysize) = (b.2 - b.0, b.3 - b.1);
         if xsize != src.w as i64 || ysize != src.h as i64 || n != src.mode.pixel_size() {
-            return error("images do not match");
+            return raise(Raised::ValueError, "images do not match");
         }
         if let Some(m) = mask {
             if (m.w, m.h) != (src.w, src.h) {
-                return error("images do not match");
+                return raise(Raised::ValueError, "images do not match");
             }
             if !matches!(m.mode, M::La | M::Rgba) {
-                return error("bad transparency mask");
+                return raise(Raised::ValueError, "bad transparency mask");
             }
         }
         let (mut dx, mut dy, mut sx, mut sy) = (b.0, b.1, 0i64, 0i64);
@@ -279,7 +270,7 @@ impl Core {
         match (self.mode, to) {
             (M::P, M::Rgb | M::Rgba) => {
                 let Some(palette) = &self.palette else {
-                    return error("image has no palette");
+                    return raise(Raised::ValueError, "image has no palette");
                 };
                 let mut entries = *palette.entries;
                 if to == M::Rgb {
@@ -303,11 +294,12 @@ impl Core {
             }
             (from, to) if from == to => px.copy_from_slice(&self.px),
             (from, to) => {
-                return error(format!(
+                let msg = format!(
                     "conversion from {} to {} not supported",
                     from.name(),
                     to.name()
-                ))
+                );
+                return raise(Raised::ValueError, msg);
             }
         }
         Ok(Core {
@@ -322,11 +314,12 @@ impl Core {
     /// ImagingConvertTransparent from L (l2rgb, then rgbT2a): the grey `t` made clear.
     fn convert_transparent(&self, to: M, t: u8) -> Result<Core> {
         if self.mode != M::L || !matches!(to, M::Rgba | M::La) {
-            return error(format!(
+            let msg = format!(
                 "conversion from {} to {} not supported in convert_transparent",
                 self.mode.name(),
                 to.name()
-            ));
+            );
+            return raise(Raised::ValueError, msg);
         }
         let mut px = Vec::with_capacity(self.len() * 4);
         for &v in &self.px {
@@ -380,16 +373,11 @@ fn is_palette_needed(p: &[u8]) -> Result<bool> {
         if usize::from(a) != i / 3 {
             return Ok(true);
         }
-        let Some(&b) = p.get(i + 1) else {
-            return short();
-        };
+        let b = byte(p, i + 1)?;
         if a != b {
             return Ok(true);
         }
-        let Some(&c) = p.get(i + 2) else {
-            return short();
-        };
-        if b != c {
+        if b != byte(p, i + 2)? {
             return Ok(true);
         }
     }
@@ -419,8 +407,10 @@ struct Header {
 }
 
 /// One frame's blocks as _seek reads them, from where the file stands: None where it holds no
-/// more frames (EOFError), an error where Python's reading fails on a short block.
-fn parse(f: &mut File, frame: usize) -> Result<Option<Header>> {
+/// more frames (EOFError), Python's IndexError or struct.error where a block is shorter than
+/// it reads. `grow`: the picture's size, where the frame is read for its picture
+/// (update_image): a frame beyond it grows it, checked as a decompression bomb first.
+fn parse(f: &mut File, frame: usize, grow: Option<&mut (i64, i64)>) -> Result<Option<Header>> {
     let mut s = f.read(1);
     if s.is_empty() || s == b";" {
         return Ok(None);
@@ -445,20 +435,13 @@ fn parse(f: &mut File, frame: usize) -> Result<Option<Header>> {
         if s == b"!" {
             let label = f.read(1);
             let block = f.block();
-            let Some(&label) = label.first() else {
-                return short();
-            };
+            let label = byte(label, 0)?;
             match (label, block) {
                 (249, Some(b)) => {
                     // the graphic control extension
-                    let Some(&flags) = b.first() else {
-                        return short();
-                    };
+                    let flags = byte(b, 0)?;
                     if flags & 1 != 0 {
-                        let Some(&t) = b.get(3) else {
-                            return short();
-                        };
-                        h.transparency = Some(t);
+                        h.transparency = Some(byte(b, 3)?);
                     }
                     h.duration = Some((i16(b, 1)? * 10) as u32);
                     let disposal = (flags & 0b0001_1100) >> 2;
@@ -485,9 +468,15 @@ fn parse(f: &mut File, frame: usize) -> Result<Option<Header>> {
             let d = f.read(9);
             let (x0, y0) = (i16(d, 0)?, i16(d, 2)?);
             h.extent = (x0, y0, x0 + i16(d, 4)?, y0 + i16(d, 6)?);
-            let Some(&flags) = d.get(8) else {
-                return short();
-            };
+            if let Some(size) = grow {
+                let (x1, y1) = (h.extent.2, h.extent.3);
+                if x1 > size.0 || y1 > size.1 {
+                    let grown = (x1.max(size.0), y1.max(size.1));
+                    bomb_check(grown.0, grown.1)?;
+                    *size = grown;
+                }
+            }
+            let flags = byte(d, 8)?;
             h.interlace = flags & 64 != 0;
             if flags & 128 != 0 {
                 let p = f.read(3 << ((flags & 7) + 1));
@@ -497,10 +486,7 @@ fn parse(f: &mut File, frame: usize) -> Result<Option<Header>> {
                     Local::NotNeeded
                 };
             }
-            let Some(&bits) = f.read(1).first() else {
-                return short();
-            };
-            h.bits = bits;
+            h.bits = byte(f.read(1), 0)?;
             h.offset = f.at;
             return Ok(Some(h));
         }
@@ -509,10 +495,12 @@ fn parse(f: &mut File, frame: usize) -> Result<Option<Header>> {
 }
 
 /// GifDecode.c on the file from the frame's data on, into the tile of `im` (one byte a pixel):
-/// done once its last row is written (the rest unread); an error where Pillow's is (a code
-/// beyond the table, a code size beyond 12) and where the file ends first (ImageFile.load's
-/// "image file is truncated"). The file is given to it as ImageFile.load gives it, 64 KB more
-/// each time it returns for more, and it goes on past an end code where there is more.
+/// done once its last row is written (the rest unread). The errors ImageFile.load raises at
+/// once (a tile beyond the picture, the file ending first: "image file is truncated") are
+/// Err; the decoder's own (a code beyond the table, a code size beyond 12, more rows than the
+/// tile's), which it raises once load_end is done, are Ok(Some). The file is given to it as
+/// ImageFile.load gives it, 64 KB more each time it returns for more, and it goes on past an
+/// end code where there is more.
 fn lzw(
     im: &mut Core,
     extent: (i64, i64, i64, i64),
@@ -520,19 +508,28 @@ fn lzw(
     bits: u8,
     interlace: bool,
     transparency: i32,
-) -> Result<()> {
+) -> Result<Option<Error>> {
     let (x0, y0, x1, y1) = extent;
     if x0 < 0 || y0 < 0 || x1 <= x0 || y1 <= y0 || x1 > im.w as i64 || y1 > im.h as i64 {
-        return error("tile cannot extend outside image");
+        return raise(Raised::ValueError, "tile cannot extend outside image");
     }
+    // (GifDecode.c's errors, raised once load_end is done)
+    let codec = |what: &str| {
+        let msg = format!("{what} when reading image file");
+        Ok(Some(Error::new(Raised::OSError, msg)))
+    };
     if bits > 12 {
-        return error("bad configuration");
+        return codec("codec configuration error");
     }
     let (xoff, yoff) = (x0 as usize, y0 as usize);
     let (xsize, ysize) = ((x1 - x0) as usize, (y1 - y0) as usize);
     let stride = im.w;
-    let broken = || error("decoding error");
-    let truncated = || error("image file is truncated");
+    let broken = || codec("broken data stream");
+    // (ImageFile.load where the file ends: the bytes given the decoder that it did not take)
+    let truncated = |left: usize| -> Result<Option<Error>> {
+        let msg = format!("image file is truncated ({left} bytes not processed)");
+        raise(Raised::OSError, msg)
+    };
 
     let clear = 1usize << bits;
     let end = clear + 1;
@@ -573,7 +570,7 @@ fn lzw(
                 } else if ptr >= avail || avail - ptr < usize::from(data[ptr]) + 1 {
                     // (a block is read whole or not at all: the decoder returns for more)
                     if avail == data.len() {
-                        return truncated();
+                        return truncated(avail - ptr);
                     }
                     avail = (avail + MAX_BLOCK).min(data.len());
                 } else {
@@ -593,7 +590,7 @@ fn lzw(
             if c == end {
                 // (the decoder returns, and is given more where the file has more)
                 if avail == data.len() {
-                    return truncated();
+                    return truncated(avail - ptr);
                 }
                 avail = (avail + MAX_BLOCK).min(data.len());
                 continue;
@@ -642,7 +639,7 @@ fn lzw(
             one = true;
         }
         if y >= ysize {
-            return error("buffer overrun when reading image file");
+            return codec("buffer overrun");
         }
         let string = if one {
             std::slice::from_ref(&lastdata)
@@ -681,7 +678,7 @@ fn lzw(
                             y = 1;
                             pass = 0;
                         }
-                        _ => return Ok(()),
+                        _ => return Ok(None),
                     }
                 }
             }
@@ -719,27 +716,22 @@ impl<'a> Gif<'a> {
     fn open(data: &'a [u8]) -> Result<(Gif<'a>, Header)> {
         let s = &data[..data.len().min(13)];
         if !(s.starts_with(b"GIF87a") || s.starts_with(b"GIF89a")) {
-            return error("not a GIF file");
+            return raise(Raised::SyntaxError, "not a GIF file");
         }
-        let size = (i16(s, 6)?, i16(s, 8)?);
-        let Some(&flags) = s.get(10) else {
-            return short();
-        };
+        let mut size = (i16(s, 6)?, i16(s, 8)?);
+        let flags = byte(s, 10)?;
         let mut f = File { data, at: s.len() };
         let (mut background, mut global) = (None, None);
         if flags & 128 != 0 {
-            let Some(&b) = s.get(11) else {
-                return short();
-            };
-            background = Some(b);
+            background = Some(byte(s, 11)?);
             let p = f.read(3 << ((flags & 7) + 1));
             if is_palette_needed(p)? {
                 global = Some(p.to_vec());
             }
         }
         let rewind = f.at;
-        let Some(first) = parse(&mut f, 0)? else {
-            return error("no more images in GIF file");
+        let Some(first) = parse(&mut f, 0, Some(&mut size))? else {
+            return raise(Raised::EOFError, "no more images in GIF file");
         };
         let mut gif = Gif {
             data,
@@ -759,7 +751,8 @@ impl<'a> Gif<'a> {
             tile_transparency: -1,
         };
         gif.seek(0, &first)?;
-        bomb_check(gif.size.0, gif.size.1)?;
+        // (its mode is set: L or P)
+        opened_check(true, gif.size.0, gif.size.1)?;
         Ok((gif, first))
     }
 
@@ -774,7 +767,7 @@ impl<'a> Gif<'a> {
         loop {
             f.at = all[all.len() - 1].offset;
             f.skip_blocks();
-            match parse(&mut f, all.len())? {
+            match parse(&mut f, all.len(), None)? {
                 Some(h) => all.push(h),
                 None => return Ok(all),
             }
@@ -784,7 +777,7 @@ impl<'a> Gif<'a> {
     fn im(&mut self) -> Result<&mut Core> {
         self.im
             .as_mut()
-            .ok_or_else(|| Error("the image is not loaded".into()))
+            .ok_or_else(|| Error::new(Raised::Unported, "the image is not loaded"))
     }
 
     /// _rgb: a palette index's colour in the frame's palette (index 0 for one beyond it), or
@@ -800,7 +793,7 @@ impl<'a> Gif<'a> {
         };
         match p.get(c * 3..c * 3 + 3) {
             Some(s) => Ok([s[0], s[1], s[2]]),
-            None => error("color must be int, or tuple of one, three or four elements"),
+            None => raise(Raised::Unported, "a colour of a short palette"),
         }
     }
 
@@ -967,8 +960,11 @@ impl<'a> Gif<'a> {
         let file = self.data;
         let data = &file[h.offset.min(file.len())..];
         let tile = self.tile_transparency;
-        lzw(self.im()?, h.extent, data, h.bits, h.interlace, tile)?;
-        // (load_end has nothing to do for these)
+        let after = lzw(self.im()?, h.extent, data, h.bits, h.interlace, tile)?;
+        // (load_end has nothing to do for these; then the decoder's error)
+        if let Some(e) = after {
+            return Err(e);
+        }
         self.realize()
     }
 
@@ -980,7 +976,7 @@ impl<'a> Gif<'a> {
         let (w, ht) = (self.size.0 as usize, self.size.1 as usize);
         let (x0, y0, x1, y1) = h.extent;
         if x0 < 0 || y0 < 0 || x1 <= x0 || y1 <= y0 || x1 > self.size.0 || y1 > self.size.1 {
-            return error("tile cannot extend outside image");
+            return raise(Raised::ValueError, "tile cannot extend outside image");
         }
         let (ew, eh) = ((x1 - x0) as usize, (y1 - y0) as usize);
         let mut im = match &self.frame_palette {
@@ -998,7 +994,7 @@ impl<'a> Gif<'a> {
         let file = self.data;
         let data = &file[h.offset.min(file.len())..];
         let whole = (0, 0, ew as i64, eh as i64);
-        lzw(
+        let after = lzw(
             &mut im,
             whole,
             data,
@@ -1006,7 +1002,7 @@ impl<'a> Gif<'a> {
             h.interlace,
             self.tile_transparency,
         )?;
-        // load_end
+        // load_end (what it raises first, the decoder's error after)
         if (prev.w, prev.h) != (w, ht) {
             let mut expanded = if self.frame_transparency.is_some() {
                 Core::fill(M::Rgba, w, ht, [0; 4])
@@ -1031,7 +1027,10 @@ impl<'a> Gif<'a> {
         let masked = matches!(frame.mode, M::La | M::Rgba);
         prev.paste(&frame, h.extent, masked.then_some(&frame))?;
         self.im = Some(prev);
-        Ok(())
+        match after {
+            Some(e) => Err(e),
+            None => Ok(()),
+        }
     }
 
     /// Image.convert("RGBA") of the frame as Python holds it (its mode, info["transparency"]).
@@ -1047,7 +1046,8 @@ impl<'a> Gif<'a> {
             }
             _ => im.convert(M::Rgba)?,
         };
-        Image::from_bytes(Mode::RGBA, out.w, out.h, out.px).map_err(|e| Error(e.to_string()))
+        Image::from_bytes(Mode::RGBA, out.w, out.h, out.px)
+            .map_err(|e| Error::new(Raised::Unported, e.to_string()))
     }
 
     /// The first frame as a picture of its own (ImageOps.exif_transpose's copy: the mode the C
@@ -1056,7 +1056,7 @@ impl<'a> Gif<'a> {
         let im = self
             .im
             .as_ref()
-            .ok_or_else(|| Error("the image is not loaded".into()))?;
+            .ok_or_else(|| Error::new(Raised::Unported, "the image is not loaded"))?;
         let kind = match im.mode {
             M::L => Kind::L,
             M::P => Kind::P,
@@ -1093,9 +1093,15 @@ impl<'a> Gif<'a> {
     }
 }
 
+/// Image.open's count of the frames (n_frames: each frame's blocks read, its data skipped).
+pub(crate) fn n_frames(data: &[u8]) -> Result<usize> {
+    let (gif, first) = Gif::open(data).map_err(opening)?;
+    Ok(gif.rest(&first)?.len())
+}
+
 /// The first frame as Image.open loads a still picture.
 pub(crate) fn decode(data: &[u8]) -> Result<Picture> {
-    let (mut gif, first) = Gif::open(data)?;
+    let (mut gif, first) = Gif::open(data).map_err(opening)?;
     gif.load(0, &first)?;
     gif.picture()
 }
@@ -1112,7 +1118,7 @@ pub struct Frame {
 /// n_frames, the first frame converted to RGBA, then ImageSequence's frames one after the
 /// other, each with its duration and converted to RGBA, to `each` with the count of them.
 pub fn each_frame(data: &[u8], each: &mut dyn FnMut(usize, Frame) -> Result<()>) -> Result<()> {
-    let (mut gif, first) = Gif::open(data)?;
+    let (mut gif, first) = Gif::open(data).map_err(opening)?;
     let all = gif.rest(&first)?;
     for (n, h) in all.iter().enumerate() {
         if n > 0 {

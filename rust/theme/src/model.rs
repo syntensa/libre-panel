@@ -1357,10 +1357,22 @@ pub fn parse_theme(data: &Value, root: Option<&Path>, env: &Env) -> Result<Theme
 /// The OSError Python raises where opening `path` failed so: `[Errno 21] Is a directory:
 /// '/x/theme.json'`, of the class of its errno.
 fn os_error(e: &std::io::Error, path: &Path) -> Error {
+    let (class, msg) = os_error_of(e, path);
+    Error {
+        kind: Kind::Os(class),
+        msg,
+    }
+}
+
+/// The class and the text of the OSError Python's open(path) raises where opening it failed so
+/// (`[Errno 2] No such file or directory: '/x/a.png'`). On Windows, the C runtime's errno for
+/// the system's error, as _wopen sets it, and its text there (a folder opened is "access is
+/// denied" to the system: errno 13).
+pub fn os_error_of(e: &std::io::Error, path: &Path) -> (&'static str, String) {
     let code = e.raw_os_error().unwrap_or(0);
-    // (Windows' "access is denied" is errno 13 to Python's open, as the C runtime maps it)
-    let (errno, text) = if cfg!(windows) && code == 5 {
-        (13, "Permission denied".to_string())
+    let (errno, text) = if cfg!(windows) {
+        let errno = crt_errno(code);
+        (errno, crt_strerror(errno).to_string())
     } else {
         let full = std::io::Error::from_raw_os_error(code).to_string();
         let text = full.split(" (os error").next().unwrap_or(&full).to_string();
@@ -1373,13 +1385,87 @@ fn os_error(e: &std::io::Error, path: &Path) -> Error {
         21 => "IsADirectoryError",
         _ => "OSError",
     };
-    Error {
-        kind: Kind::Os(class),
-        msg: format!(
-            "[Errno {errno}] {text}: {}",
-            lp_py::repr(&path.to_string_lossy())
-        ),
+    let msg = format!(
+        "[Errno {errno}] {text}: {}",
+        lp_py::repr(&path.to_string_lossy())
+    );
+    (class, msg)
+}
+
+/// The Universal C runtime's errno for a Windows error (__acrt_errno_map_os_error: its table,
+/// then the ranges it gives EACCES and ENOEXEC, else EINVAL).
+fn crt_errno(code: i32) -> i32 {
+    match code {
+        2 | 3 | 15 | 18 | 53 | 67 | 161 | 206 => 2, // ENOENT
+        5 | 16 | 19..=36 | 65 | 82 | 83 | 108 | 132 | 158 | 167 => 13, // EACCES
+        4 => 24,                                    // EMFILE
+        6 | 114 | 130 => 9,                         // EBADF
+        7..=9 | 1816 => 12,                         // ENOMEM
+        10 => 7,                                    // E2BIG
+        11 | 188..=202 => 8,                        // ENOEXEC
+        17 => 18,                                   // EXDEV
+        80 | 183 => 17,                             // EEXIST
+        89 | 164 | 215 => 11,                       // EAGAIN
+        109 => 32,                                  // EPIPE
+        112 => 28,                                  // ENOSPC
+        128 | 129 => 10,                            // ECHILD
+        145 => 41,                                  // ENOTEMPTY
+        _ => 22,                                    // EINVAL
     }
+}
+
+/// The C runtime's text of an errno (_sys_errlist), which CPython gives an OSError on Windows.
+fn crt_strerror(errno: i32) -> &'static str {
+    const TEXTS: [&str; 43] = [
+        "No error",
+        "Operation not permitted",
+        "No such file or directory",
+        "No such process",
+        "Interrupted function call",
+        "Input/output error",
+        "No such device or address",
+        "Arg list too long",
+        "Exec format error",
+        "Bad file descriptor",
+        "No child processes",
+        "Resource temporarily unavailable",
+        "Not enough space",
+        "Permission denied",
+        "Bad address",
+        "Unknown error",
+        "Resource device",
+        "File exists",
+        "Improper link",
+        "No such device",
+        "Not a directory",
+        "Is a directory",
+        "Invalid argument",
+        "Too many open files in system",
+        "Too many open files",
+        "Inappropriate I/O control operation",
+        "Unknown error",
+        "File too large",
+        "No space left on device",
+        "Invalid seek",
+        "Read-only file system",
+        "Too many links",
+        "Broken pipe",
+        "Domain error",
+        "Result too large",
+        "Unknown error",
+        "Resource deadlock avoided",
+        "Unknown error",
+        "Filename too long",
+        "No locks available",
+        "Function not implemented",
+        "Directory not empty",
+        "Illegal byte sequence",
+    ];
+    usize::try_from(errno)
+        .ok()
+        .and_then(|i| TEXTS.get(i))
+        .copied()
+        .unwrap_or("Unknown error")
 }
 
 /// load_theme: the theme in `folder`, read as Python reads its theme.json (as text: its line
