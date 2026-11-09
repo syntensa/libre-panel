@@ -1305,6 +1305,38 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       same, Pillow taking no more of a radius than half of the box's height, the groove's; and
       a glow's reach of a pixel less for each of the blur's three passes is still all of it,
       Pillow's box blur of radius r reaching ceil(r) a pass at most
+- [x] the transitions from one screen to the next (render/overlays.py's fade and slide,
+      render/transitions.py's tube and entrance, render/handovers.py's wipe, iris, blinds,
+      dissolve, the slides from each side, zoom, the line of light, glitch, tiles and shatter;
+      a cut is none): each made by its name for a switch, with the parameters a service passed
+      (an entrance's title, text, logo and kind; one whose kind is no key does not start), the
+      new theme's colours and the app's language, its duration and what a switch and toasts
+      do while it plays; each of its frames of the old screen, the new one and how far it has
+      gone to the bit, what it keeps kept as Python keeps it (a map or a strip of light for
+      the frame's size, the logo or the title in big letters with its halo, the text typed in
+      below it, the pieces of each old frame), and where Python's raises (a fade of frames of
+      other modes) Rust's fails too. Python's random.Random in lp-py for the squares, the
+      faults and the pieces (the Mersenne Twister seeded with an int as CPython seeds it, and
+      random(), uniform(), randrange() and getrandbits(), the same numbers). The main loop
+      plays them with R5. The tests: 120 themes of other colours, sizes (1x1 to 1920x480,
+      either way round) and languages, with up to three switches each (their old frame now
+      and then another), at times on their way, at their ends and past them; and six
+      scenarios for what those seldom meet: the entrance at each turn of its timeline in every
+      kind, on another size and on a panel narrower than its band; every transition at its
+      start, its end and where the line of light is almost at its brightest, a shatter whose
+      old frame changes; the maps and the strip of light kept for a size: 1375 frames to the
+      bit; and random's draws of 132 seeds. The counter-checks put 110 faults into
+      transitions.rs and 10 into random.rs: the tests catch 107 and 8 (squares, the early
+      light of an entrance's edges, the music's track joined to its text, the room a narrow
+      panel leaves and the line almost at its brightest once their scenarios were added; the
+      old and new frames of the tests had been one and the same picture, seeds a few apart
+      making the same noise, until the seeds were spread). The other five change nothing: a
+      map's value at the very edge of its soft band is 255 whether it is taken as inside or
+      worked out (the ramp gives 255 there); the text that types in from 1.25 s is none until
+      1.3 s; a halo's margin of 50u instead of 60u loses nothing, its light being none that far
+      from the picture even of an opaque logo, at every size (measured); the lowest bit of the
+      Mersenne Twister's first tempering mask meets the zeros its shift brings in; and of the
+      first word of its seeded state only the top bit is ever used (as its authors' note says)
 - [ ] pictures as Pillow fails at them: lp-decode's errors as Python's exceptions, so that
       where Python catches an OSError and goes on (a picture cut short, a file of no picture)
       Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,
@@ -1331,8 +1363,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       checked on a desktop with PyGObject. lp-py keeps to the C locale for now
 - [ ] the renderer's frame, widget by widget (texts, clocks, gauges, rings, bars, lists, graphs
       and their strips, fans, images, videos, icons, weather, globes, moon, sun path, slots,
-      cards, notices), effects (glow, lit finish, dither), motion, transitions, start screens;
-      each theme's frames to the bit
+      cards, notices), effects (glow, lit finish, dither), motion, start screens; each theme's
+      frames to the bit
 
 ### R5 the panels' loop
 - [ ] the main loop (frames driven by change, pacing), the engine in the same process, panels

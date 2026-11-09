@@ -13,6 +13,7 @@ pub mod format;
 pub mod json;
 pub mod math;
 pub mod num;
+pub mod random;
 pub mod re;
 pub mod strftime;
 pub mod value;

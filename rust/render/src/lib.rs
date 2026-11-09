@@ -41,6 +41,7 @@ pub mod snapshot;
 mod sunpath;
 pub mod symbols;
 mod text;
+pub mod transitions;
 pub mod turn;
 pub mod weather_art;
 pub mod widget;

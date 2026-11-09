@@ -95,6 +95,11 @@ pub(crate) fn clamp(u: f64) -> f64 {
     u.clamp(0.0, 1.0)
 }
 
+/// phase: 0 before `start`, 1 after `end`, straight in between.
+pub(crate) fn phase(s: f64, start: f64, end: f64) -> f64 {
+    clamp((s - start) / (end - start))
+}
+
 /// smooth: the smooth step of `u` clamped.
 pub(crate) fn smooth(u: f64) -> f64 {
     let u = clamp(u);
@@ -169,7 +174,12 @@ fn profile(height: usize, core: f64, halo: f64, share: f64) -> Result<Image> {
 
 /// add_light: `colour` added through `mask` (L, 255 all of it) at (x, y) onto `image` (RGB),
 /// only where the mask lies.
-fn add_light(image: &mut Image, (x, y): (i64, i64), mask: &Image, colour: [i64; 3]) -> Result<()> {
+pub(crate) fn add_light(
+    image: &mut Image,
+    (x, y): (i64, i64),
+    mask: &Image,
+    colour: [i64; 3],
+) -> Result<()> {
     let (iw, ih) = (image.width() as i64, image.height() as i64);
     let (mw, mh) = (mask.width() as i64, mask.height() as i64);
     let (x0, y0, x1, y1) = (x.max(0), y.max(0), iw.min(x + mw), ih.min(y + mh));

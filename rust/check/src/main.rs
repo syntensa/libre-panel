@@ -1289,6 +1289,46 @@ fn run(case: &Value) -> Result<Value, String> {
                 .collect();
             json!({"answers": out, "local": back})
         }
+        "py_random" => {
+            // Python's random.Random(seed) and the draws asked of it in turn: ["random", n],
+            // ["uniform", a, b, n] (a and b the bits of doubles in hex), ["randrange", stop,
+            // n] (null where Python raises), ["getrandbits", k, n]; doubles as their bits
+            let double = |v: &Value| {
+                f64::from_bits(u64::from_str_radix(v.as_str().unwrap_or("0"), 16).unwrap_or(0))
+            };
+            let hex = |x: f64| Value::from(format!("{:016x}", x.to_bits()));
+            let programs: Vec<Value> = case["programs"]
+                .as_array()
+                .ok_or("programs")?
+                .iter()
+                .map(|p| {
+                    let mut rng = lp_py::random::Random::new(p["seed"].as_i64().unwrap_or(0));
+                    let mut out = Vec::new();
+                    for draw in p["draws"].as_array().into_iter().flatten() {
+                        let kind = draw[0].as_str().unwrap_or("");
+                        let n = draw
+                            .as_array()
+                            .and_then(|d| d.last())
+                            .and_then(Value::as_u64)
+                            .unwrap_or(0);
+                        for _ in 0..n {
+                            out.push(match kind {
+                                "uniform" => hex(rng.uniform(double(&draw[1]), double(&draw[2]))),
+                                "randrange" => {
+                                    json!(rng.randrange(draw[1].as_i64().unwrap_or(0)))
+                                }
+                                "getrandbits" => {
+                                    json!(rng.getrandbits(draw[1].as_u64().unwrap_or(0) as u32))
+                                }
+                                _ => hex(rng.random()),
+                            });
+                        }
+                    }
+                    Value::from(out)
+                })
+                .collect();
+            json!({"programs": programs})
+        }
         "np_random" => {
             // numpy's default_rng(seed) and the draws asked of it in turn, each double's bits
             // in hex: ["normal", n], ["exponential", n], ["power", a, n], ["uniform", lo, hi,
@@ -2537,6 +2577,93 @@ fn run(case: &Value) -> Result<Value, String> {
                 .collect();
             json!({"grounds": grounds, "ramps": ramps})
         }
+        "transition" => {
+            // overlays.transition((name, params), RenderContext(renderer)) of a theme's
+            // renderer, made anew for each of the case's switches, and the frames it draws: each
+            // step an old frame and a new one (frames of noise, as the tests make them; the same
+            // old spec is the same frame), and how far it has gone (a double's bits)
+            use lp_render::transitions::Transition;
+            let env = lp_theme::Env {
+                fonts_dir: case["fonts_dir"].as_str().unwrap_or("").into(),
+            };
+            let locale = std::path::PathBuf::from(case["locale"].as_str().unwrap_or(""));
+            lp_i18n::set_language(lp_i18n::Language::load(
+                &locale,
+                case["language"].as_str().unwrap_or("en"),
+            )?);
+            let bits = |x: f64| format!("{:016x}", x.to_bits());
+            let float_in = |v: &Value| {
+                f64::from_bits(u64::from_str_radix(v.as_str().unwrap_or("0"), 16).unwrap_or(0))
+            };
+            let theme = lp_theme::load_theme(
+                std::path::Path::new(case["theme"].as_str().unwrap_or("")),
+                &env,
+            )
+            .map_err(|e| e.msg)?;
+            let options = lp_render::Options {
+                preview: true,
+                animate: false,
+                dither: false,
+            };
+            let mut renderer = lp_render::Renderer::new(theme, &env, options).map_err(|e| e.0)?;
+            // (the pictures services published: a logo by its key)
+            let mut snapshot = lp_render::snapshot::Snapshot::default();
+            for (key, picture) in case["images"].as_object().into_iter().flatten() {
+                snapshot.images.insert(key.clone(), image_of(picture)?);
+            }
+            renderer.set_snapshot(snapshot);
+            let mut olds: Vec<(String, Image)> = Vec::new();
+            let mut answers = Vec::new();
+            for spec in case["switches"].as_array().into_iter().flatten() {
+                let params: lp_py::Dict = spec["params"]
+                    .as_object()
+                    .map(|m| m.iter().map(|(k, v)| (k.clone(), typed(v))).collect())
+                    .unwrap_or_default();
+                let name = spec["name"].as_str().unwrap_or("");
+                let Some(mut made) = Transition::new(name, &params, &renderer) else {
+                    answers.push(json!({"made": false}));
+                    continue;
+                };
+                let mut steps = Vec::new();
+                for step in spec["steps"].as_array().into_iter().flatten() {
+                    let key = step[0].to_string();
+                    let at = match olds.iter().position(|(k, _)| *k == key) {
+                        Some(at) => at,
+                        None => {
+                            olds.push((key, noise_frame(&step[0])));
+                            olds.len() - 1
+                        }
+                    };
+                    let new = noise_frame(&step[1]);
+                    let t = float_in(&step[2]);
+                    steps.push(
+                        match made.frame(&olds[at].1, at as u64, &new, t, &renderer) {
+                            Ok(out) => json!({
+                                "size": [out.width(), out.height()],
+                                "mode": out.mode().name(),
+                                "sha256": Sha256::digest(out.as_bytes())
+                                    .iter()
+                                    .map(|b| format!("{b:02x}"))
+                                    .collect::<String>(),
+                            }),
+                            Err(_) => json!({"error": true}),
+                        },
+                    );
+                }
+                answers.push(json!({
+                    "made": true,
+                    "name": made.name,
+                    "duration": bits(made.duration),
+                    "switch": made.switch,
+                    "on_switch": [made.on_switch(false), made.on_switch(true)],
+                    "toasts": made.toasts,
+                    "from_shown": made.from_shown,
+                    "steps": steps,
+                }));
+            }
+            lp_i18n::set_language(lp_i18n::Language::english());
+            json!({"switches": answers})
+        }
         "toasts" => {
             // render/overlays.py's ToastLayer led through a script, step by step: a renderer of
             // one of the themes' folders (the first makes the layer), toasts that arrive, the
@@ -3185,6 +3312,23 @@ fn font_call<F: lp_text::text::TextFace>(
 
 /// A value as the tests give it with its type: `{"f": bits in hex}`, `{"i": decimal}`,
 /// `{"s": text}`, `{"b": bool}`, `{"l": [...]}`; anything else None.
+/// A frame of noise as the tests make it: each byte the top 8 of the low 32 bits of its index
+/// times 2654435761 plus the seed.
+fn noise_frame(spec: &Value) -> Image {
+    let w = spec["size"][0].as_u64().unwrap_or(1) as usize;
+    let h = spec["size"][1].as_u64().unwrap_or(1) as usize;
+    let mode = spec["mode"]
+        .as_str()
+        .and_then(Mode::from_name)
+        .unwrap_or(Mode::RGB);
+    let seed = spec["seed"].as_u64().unwrap_or(0);
+    let n = w * h * mode.bands();
+    let data: Vec<u8> = (0..n as u64)
+        .map(|i| ((i.wrapping_mul(2654435761).wrapping_add(seed) & 0xFFFF_FFFF) >> 24) as u8)
+        .collect();
+    Image::from_bytes(mode, w, h, data).expect("a frame of its size")
+}
+
 fn typed(v: &Value) -> lp_py::Value {
     if let Some(h) = v["f"].as_str() {
         lp_py::Value::Float(f64::from_bits(u64::from_str_radix(h, 16).unwrap_or(0)))

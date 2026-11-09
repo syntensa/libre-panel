@@ -300,6 +300,51 @@ def test_floats_are_formatted_as_python_s_g() -> None:
     assert ours["general"] == [format(v, f".{p}g") for v, p in general]
 
 
+def test_random_draws_as_python_s_random_draws_them() -> None:
+    """random.Random(seed) of ints small and large, either sign, and its random(), uniform(),
+    randrange() (an empty range too) and getrandbits(), each in turn from the same state."""
+    rng = random.Random(0x7A7D)
+    seeds = [0, 1, -1, 2, 40, 0x5EED, 0xB10C, 2**31, 2**32 - 1, 2**32, 2**40 + 7, -(2**63) + 1]
+    seeds += [2**63 - 1] + [rng.randrange(-(2**63) + 1, 2**63) for _ in range(40)]
+    seeds += [rng.randrange(2**32) for _ in range(40)] + [rng.randrange(1000) for _ in range(40)]
+    hexed = lambda v: struct.pack("<d", v)[::-1].hex()  # noqa: E731
+    stops = [0, -3, 1, 2, 255, 256, 257, 1920, 2**40, 2**62 + 1]
+    programs, want = [], []
+    for seed in seeds:
+        draws: list[list[Any]] = []
+        for _ in range(rng.randrange(1, 6)):
+            kind = rng.choice(["random", "uniform", "randrange", "getrandbits"])
+            n = rng.randrange(1, 800)
+            if kind == "uniform":
+                a, b = rng.uniform(-100, 100), rng.choice([rng.uniform(-100, 100), 1e300, 0.0])
+                draws.append(["uniform", hexed(a), hexed(b), n])
+            elif kind == "randrange":
+                draws.append(["randrange", rng.choice(stops), n])
+            elif kind == "getrandbits":
+                draws.append(["getrandbits", rng.choice([0, 1, 9, 31, 32, 33, 40, 63, 64]), n])
+            else:
+                draws.append(["random", n])
+        programs.append({"seed": seed, "draws": draws})
+        theirs, ours = random.Random(seed), []
+        for draw in draws:
+            for _ in range(draw[-1]):
+                if draw[0] == "uniform":
+                    a, b = (struct.unpack(">d", bytes.fromhex(v))[0] for v in draw[1:3])
+                    ours.append(hexed(theirs.uniform(a, b)))
+                elif draw[0] == "randrange":
+                    try:
+                        ours.append(theirs.randrange(draw[1]))
+                    except ValueError:
+                        ours.append(None)
+                elif draw[0] == "getrandbits":
+                    ours.append(theirs.getrandbits(draw[1]))
+                else:
+                    ours.append(hexed(theirs.random()))
+        want.append(ours)
+    [got] = run([{"op": "py_random", "programs": programs}])
+    assert got["programs"] == want
+
+
 def test_hypot_is_python_s_own() -> None:
     rng = random.Random(0x4799)
     specials = [
