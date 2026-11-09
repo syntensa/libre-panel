@@ -7819,3 +7819,40 @@ def test_slideshows_whose_rounds_count_near_a_whole_as_python_counts_them(tmp_pa
         expected.append(_python_moving(folder, steps))
     drawn, moving = _compare_moving(cases, expected)
     assert drawn == 16 and moving == 12, (drawn, moving)
+
+
+def test_downloads_whose_light_runs_frame_after_frame_as_python_draws_them(tmp_path: Path) -> None:
+    # (a download of a size not known, its stretch of light running to and fro in its groove
+    # frame after frame as the panels' loop draws it, flat or lit: where it is at each frame's
+    # time; the frame moves on while it runs, not while it stands (a share shown, or paused);
+    # the download going on in another state now and then; frames a part of a second to a minute
+    # apart, and back in time)
+    rng = random.Random(0xD0A3)
+    cases, expected = [], []
+    for n in range(80):
+        folder = tmp_path / f"t{n}"
+        _frame_theme(rng, folder, _download_or_more)
+
+        def state() -> dict[str, Reading]:
+            made = _download_state(rng, wild=0.1)
+            if rng.random() < 0.6:  # (a size not known: the light runs)
+                made.pop("total", None)
+            return {"downloads": Reading("downloads", json.dumps(made))}
+
+        readings = state()
+        now = rng.choice([1000.0, rng.uniform(0, 1e5), 1.7e9 + rng.random()])
+        fps = rng.choice([0, 25, 50])
+        steps, given = [], []
+        for _ in range(rng.randrange(2, 10)):
+            steps.append((Snapshot(readings=readings), now))
+            given.append({"snapshot": {"readings": {k: _typed(r.value)
+                                                    for k, r in readings.items()}},
+                          "now": now})  # fmt: skip
+            now += rng.choice([0.02, 0.04, 0.1, 0.3, 0.6, 1.2, 5, 60, -0.3])
+            if rng.random() < 0.2:
+                readings = state()
+        cases.append({"folder": str(folder), "dither": False, "animate": True, "fps": fps,
+                      "steps": given})  # fmt: skip
+        expected.append(_python_moving(folder, steps, fps))
+    drawn, moving = _compare_moving(cases, expected)
+    assert drawn > 300 and moving > 100, (drawn, moving)

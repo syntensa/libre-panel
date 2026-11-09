@@ -590,9 +590,9 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       alphas tried); a curve kept from its top, which it never reaches; a flat pill's corners a
       pixel smaller and one of a pixel, which Pillow joins the same or never draws; the
       stretch's place kept where no light runs, where it is 0; and the bar's glow kept before
-      the stretch's, where the bar has none. A download whose light runs in a moving frame: Rust
-      says it does not draw it yet. 87 of the app's 99 themes are drawn by Rust, 79 of them the
-      same to the bit (lumen-pair in its four shapes is new)
+      the stretch's, where the bar has none. A download whose light runs in a moving frame:
+      below. 87 of the app's 99 themes are drawn by Rust, 79 of them the same to the bit
+      (lumen-pair in its four shapes is new)
 - [x] fan widgets in a still frame (the renderer's _draw_fan and _laid_fan; fan.Choices'
       for_widget, with none of the person's choices; render/fan.py's geometry, fan_parts and
       Rotor.settle): a rotor of the default look in its ring or in none, in the theme's colour
@@ -1154,6 +1154,15 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       only shows where a slideshow's folder is read again (each half minute of the clock) with
       fewer pictures in it than the turn had come to, which these tests do not do (without it
       Rust would index past the end). A video in a slideshow: Rust does not draw videos yet
+- [x] downloads whose light runs in a moving frame (download.draw's renderer.moving): a
+      download of a size not known, its stretch of light running to and fro in its groove,
+      moves the frame on while it runs (not while it stands: a share shown, or paused), each
+      frame showing it where it is at the frame's time, as a still frame does. The tests: 80
+      random themes of download cards, flat and lit, frame after frame at a frame rate or none,
+      the download going on in another state now and then, a part of a second to a minute
+      apart and back in time: 424 frames to the bit, 250 of them on the way. The counter-checks
+      put in 3 faults (the frame not moving on, moving on while the light stands, the light
+      running while paused), and the tests catch them all
 - [ ] pictures as Pillow fails at them: lp-decode's errors as Python's exceptions, so that
       where Python catches an OSError and goes on (a picture cut short, a file of no picture)
       Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,

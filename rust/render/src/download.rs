@@ -816,7 +816,7 @@ impl Renderer {
 
     /// download.draw: the download card of the state the widget names (its progress light in
     /// its groove with the lit finish), at the frame's time; where nothing downloads, its
-    /// `empty` text or nothing. Unported where its light runs in a moving frame.
+    /// `empty` text or nothing. A moving frame moves on while its light runs to and fro.
     pub(crate) fn download(&mut self, w: &Dict, lit: bool, snapshot: &Snapshot, now: f64) -> Drawn {
         let state = match snapshot.state(widget::text(w, "state")) {
             Ok(Some(Value::Dict(state))) => state,
@@ -833,7 +833,8 @@ impl Renderer {
         let (length, thick) = (2.max(round(x1 - x0)), 2.max(round(y1 - y0)));
         let running = r.share.is_none() && r.phase != "paused";
         if running && self.options.animate {
-            return Drawn::Unported("downloads whose light runs to and fro".into());
+            // (a moving frame moves on with its light)
+            self.moving = true;
         }
         let run = if running {
             0.5 - 0.5 * (2.0 * PI * now / RUN).cos()
