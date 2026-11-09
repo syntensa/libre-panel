@@ -2609,8 +2609,9 @@ fn run(case: &Value) -> Result<Value, String> {
             let mut renderers: Vec<lp_render::Renderer> = Vec::new();
             for folder in &folders {
                 let theme = lp_theme::load_theme(folder, &env).map_err(|e| e.msg)?;
+                // (a preview unless the case says the panel: the volume's level glides there)
                 let options = lp_render::Options {
-                    preview: true,
+                    preview: case["preview"].as_bool().unwrap_or(true),
                     animate: false,
                     dither: false,
                 };

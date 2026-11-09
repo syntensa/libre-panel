@@ -17,6 +17,7 @@ use num_traits::ToPrimitive;
 use crate::band::BandStyle;
 use crate::icons;
 use crate::light;
+use crate::looks::{self, Look};
 use crate::piece::{Failed, Result};
 use crate::renderer::Renderer;
 
@@ -30,9 +31,6 @@ const SHOWN_BY: [(&str, &[&str]); 3] = [
     ("music", &["media.title"]),
     ("agent", &["ai.claude.state", "ai.codex.state"]),
 ];
-
-/// The volume's looks the notices service may choose (volume_looks.VOLUME_LOOKS).
-const VOLUME_LOOKS: [&str; 4] = ["bar", "levels", "ring", "big"];
 
 /// What a theme or a message asks of the toasts that is not here yet.
 #[derive(Clone, Debug, PartialEq)]
@@ -151,6 +149,8 @@ pub(crate) struct Context {
     pub(crate) palette: Dict,
     pub(crate) model: Option<&'static PanelModel>,
     pub(crate) id: u64,
+    /// an editor's preview or a picture, not the panel (context.preview)
+    pub(crate) preview: bool,
 }
 
 /// The toast on show: the toast, when it began, and the toast it replaced with that one's age
@@ -205,6 +205,8 @@ pub struct ToastLayer {
     /// where the last draw drew (x0, y0, x1, y1), else None
     pub drawn_box: Option<[i64; 4]>,
     style: Option<Style>,
+    /// the volume's looks in use (render/volume_looks.py), by name, in the order they came
+    looks: Vec<(String, Look)>,
     settings: Option<Settings>,
     size: Option<(i64, i64)>,
     context: Context,
@@ -230,12 +232,14 @@ impl ToastLayer {
             ends: 0.0,
             drawn_box: None,
             style: None,
+            looks: Vec::new(),
             settings: None,
             size: None,
             context: Context {
                 palette: Dict::new(),
                 model: None,
                 id: 0,
+                preview: false,
             },
             contexts: 0,
             off: HashSet::new(),
@@ -269,8 +273,12 @@ impl ToastLayer {
             palette: theme.palette.clone(),
             model: find_model(&theme.model),
             id: self.contexts,
+            preview: renderer.options.preview,
         };
         let anchor = settings.anchor.clone();
+        for (_, look) in &mut self.looks {
+            look.anchor = anchor.clone(); // (they keep the glide of the volume)
+        }
         let name = settings.style.clone();
         self.settings = Some(settings);
         self.size = Some(size);
@@ -327,17 +335,16 @@ impl ToastLayer {
             .expect("a toast layer has its theme's settings")
     }
 
-    /// The style that draws `toast` (style_of): the theme's; the volume in the look the notices
-    /// service chose (its payload's "look") is not here yet.
-    fn style_of(&self, toast: &Toast) -> std::result::Result<(), Unported> {
-        if toast.kind == "volume" {
-            if let Some(Value::Str(look)) = toast.payload.get("look") {
-                if VOLUME_LOOKS.contains(&look.as_str()) {
-                    return Err(Unported(format!("the volume's look {}", lp_py::repr(look))));
-                }
-            }
+    /// style_of: the look the notices service chose for the volume (its payload's "look"),
+    /// where it chose one; else the theme's style draws the toast.
+    fn look_of(toast: &Toast) -> Option<&'static str> {
+        if toast.kind != "volume" {
+            return None;
         }
-        Ok(())
+        match toast.payload.get("look") {
+            Some(Value::Str(look)) => looks::NAMES.iter().copied().find(|name| name == look),
+            _ => None,
+        }
     }
 
     pub fn add(&mut self, toasts: impl IntoIterator<Item = Rc<Toast>>) {
@@ -359,7 +366,7 @@ impl ToastLayer {
         if self.suppressed.contains(&current.toast.kind) {
             return true; // (it goes on unseen)
         }
-        !matches!(self.style, Some(Style::Band(_)))
+        Self::look_of(&current.toast).is_some() || !matches!(self.style, Some(Style::Band(_)))
     }
 
     /// set_aside: a transition begins that the toast on show must not cover: it leaves now and
@@ -393,6 +400,9 @@ impl ToastLayer {
     pub fn advance(&mut self, now: f64, hold: bool) -> std::result::Result<(), Unported> {
         if self.current.is_some() && now >= self.ends {
             self.current = None;
+            for (_, look) in &mut self.looks {
+                look.forget(); // (what they kept to draw it quickly)
+            }
         }
         let mut arrived = std::mem::take(&mut self.inbox);
         if hold || self.settings().queue {
@@ -419,8 +429,7 @@ impl ToastLayer {
         if toast.seconds.is_some() {
             return Ok(Some(toast));
         }
-        self.style_of(&toast)?;
-        // (the card's hold_s: the theme's hold time; max(0.0, seconds))
+        // (the styles' hold_s: the theme's hold time; max(0.0, seconds))
         let seconds = light::py_max(0.0, self.settings().seconds);
         let mut replaced = Toast::clone(&toast);
         replaced.seconds = Some(seconds);
@@ -520,8 +529,11 @@ impl ToastLayer {
         now: f64,
         previous: Option<(Rc<Toast>, f64)>,
     ) -> std::result::Result<(), Unported> {
-        self.style_of(&toast)?;
         let lifetime = match &mut self.style {
+            // (a look's: its hold time and the time it takes to leave)
+            _ if Self::look_of(&toast).is_some() => {
+                toast.seconds.unwrap_or(f64::NAN) + looks::LEAVE_S
+            }
             // (the band's: where it begins of the one it continues)
             Some(Style::Band(band)) => {
                 band.lifetime(&toast, previous.as_ref().map(|(t, age)| (t, *age)))
@@ -553,7 +565,6 @@ impl ToastLayer {
             self.start(current.toast, now, None)?;
             return Ok(None);
         }
-        self.style_of(&current.toast)?;
         Ok(Some((current.toast, now - current.began, current.previous)))
     }
 
@@ -579,8 +590,20 @@ impl ToastLayer {
             return Ok(None);
         };
         let replaced = previous.as_ref().map(|(t, a)| (t, *a));
-        let drawn = match &mut self.style {
-            Some(Style::Card(card)) => card
+        let anchor = self.settings().anchor.clone();
+        let drawn = match (Self::look_of(&toast), &mut self.style) {
+            (Some(name), _) => look_in(&mut self.looks, name, &anchor)
+                .draw(
+                    frame,
+                    &toast,
+                    age,
+                    previous.is_some(),
+                    now,
+                    &self.context,
+                    renderer,
+                )
+                .map(|drawn| drawn.map(|(d, bounds)| (d, Some(bounds)))),
+            (None, Some(Style::Card(card))) => card
                 .draw(
                     frame,
                     &toast,
@@ -590,10 +613,10 @@ impl ToastLayer {
                     renderer,
                 )
                 .map(|(drawn, bounds)| Some((drawn, Some(bounds)))),
-            Some(Style::Band(band)) => band
+            (None, Some(Style::Band(band))) => band
                 .draw(frame, &toast, age, replaced, &self.context, renderer)
                 .map(|drawn| drawn.map(|d| (d, None))),
-            None => Ok(None),
+            (None, None) => Ok(None),
         };
         match drawn {
             Ok(Some((drawn, bounds))) => {
@@ -623,8 +646,20 @@ impl ToastLayer {
             return Ok(None);
         };
         let replaced = previous.as_ref().map(|(t, a)| (t, *a));
-        let laid = match &mut self.style {
-            Some(Style::Card(card)) => card
+        let anchor = self.settings().anchor.clone();
+        let laid = match (Self::look_of(&toast), &mut self.style) {
+            (Some(name), _) => look_in(&mut self.looks, name, &anchor)
+                .layer(
+                    size,
+                    &toast,
+                    age,
+                    previous.is_some(),
+                    now,
+                    &self.context,
+                    renderer,
+                )
+                .map(|laid| laid.map(|(picture, x, y)| Over::Layer(picture, x, y))),
+            (None, Some(Style::Card(card))) => card
                 .layer(
                     size,
                     &toast,
@@ -634,13 +669,13 @@ impl ToastLayer {
                     renderer,
                 )
                 .map(|(picture, x, y)| Some(Over::Layer(picture, x, y))),
-            Some(Style::Band(band)) => {
+            (None, Some(Style::Band(band))) => {
                 let (w, h) = (size.0.max(0) as usize, size.1.max(0) as usize);
                 let composed = Image::new(Mode::RGB, w, h, &[0, 0, 0]);
                 band.draw(&composed, &toast, age, replaced, &self.context, renderer)
                     .map(|drawn| drawn.map(Over::Frame))
             }
-            None => Ok(None),
+            (None, None) => Ok(None),
         };
         match laid {
             Ok(laid) => {
@@ -660,7 +695,21 @@ impl ToastLayer {
 
     pub fn close(&mut self) {
         self.style = None;
+        self.looks.clear();
     }
+}
+
+/// The look `name` of those in use, made where it is not yet (with the theme's anchor).
+fn look_in<'a>(looks: &'a mut Vec<(String, Look)>, name: &str, anchor: &str) -> &'a mut Look {
+    let at = match looks.iter().position(|(n, _)| n == name) {
+        Some(at) => at,
+        None => {
+            let look = Look::new(name, anchor).expect("one of the looks");
+            looks.push((name.to_string(), look));
+            looks.len() - 1
+        }
+    };
+    &mut looks[at].1
 }
 
 /// faded: `picture` (RGBA) with the alpha a toast style lays it through while it shows `shown`
@@ -675,7 +724,7 @@ pub(crate) fn faded(picture: &Rc<Image>, shown: f64) -> Result<Rc<Image>> {
 }
 
 /// The alpha of `picture` times `shown`, each value cut to a whole number (int(a * shown)).
-fn through(picture: &Image, shown: f64) -> Result<Image> {
+pub(crate) fn through(picture: &Image, shown: f64) -> Result<Image> {
     let lut: Vec<i64> = (0..256).map(|a| (f64::from(a) * shown) as i64).collect();
     Ok(picture.getchannel(3)?.point(&lut)?)
 }

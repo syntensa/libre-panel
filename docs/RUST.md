@@ -1218,9 +1218,9 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       the toast out, as in Python), a payload's colour (a palette name, the cover's, Pillow's
       names, three numbers as int() takes them, else the level's), the icon, the text cut to
       120 letters and to its room with "…" (a text that FreeType cannot lay out leaves the
-      toast out), the strips the panel's bezel hides, the anchor, the fade and the slide. The
-      volume's looks and a plugin's style are not here yet: where a message asks for one,
-      Rust says so and draws nothing in Python's stead. The tests: 160
+      toast out), the strips the panel's bezel hides, the anchor, the fade and the slide. A
+      plugin's style comes with the plugins (R11): until then a theme that names one gets the
+      card, as Python's does where the plugin is not installed. The tests: 160
       layers through scripts of up to 34 steps and two scenarios the scripts seldom meet by
       chance (a text of 121 narrow letters on the 9.2" bar, the card at the same size in a theme
       of other colours): 332 frames with a toast on them compared to the bit, and every step's
@@ -1273,6 +1273,38 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       leaves the frame as it is; a bar beside the text is 560u wide at least, so its steps are
       cut by its width only where 8u is below 3 px, and then 7u is too; no face of the band is
       smaller than 7 px; and the bloom's strengths are 0.6 and 0.54 alone
+- [x] the volume's looks (render/volume_looks.py), the look the notices service chose for
+      every screen and named in the message: a bar along the bottom edge, levels as on a mixer
+      (the loudest in the warning colour), a ring, and a large number in the middle; the
+      speaker or its muted sign, the number, the groove filled to the level with its glow,
+      drawn three times larger and made smaller as Pillow up to 12 does it (premultiplied,
+      across, then down); fading and sliding in, by the theme's anchor or a look's own place,
+      clear of the bezel; changed in place while the volume turns, its level gliding on the
+      panel's clock (a preview shows where it ends), and the picture made again only where what
+      it shows changes (its number, muted, the level to three places or the levels lit, the
+      size, the theme), as Python keeps it; a look's lifetime and its leaving, the looks kept
+      through themes of the same style (their glide goes on) and forgotten with their toast.
+      Over a frame the engine composes, a look is one more layer. Python makes a picture anew
+      only where it changed since the one before, and its tests hold that to the picture made
+      whole: here each is made whole, the same pixels. The tests: 100 layers of the volume in
+      its looks, half of them on the panel, its level gliding on a clock both sides read the
+      same, and seven scenarios (each look by a bezel, coming, turning and muted, and on a
+      square frame by it, which Python takes as standing; a look named by a message of another
+      kind, which the card draws; numbers too long for their cards; the volume turning in each
+      look on the panel, drawn out of turn and late in its glide, then again once gone, and of
+      a progress that is no number; a look as the theme changes to one of the same style in
+      other colours and another place, and to one of another style while it glides; the same
+      volume again once its toast is gone, in a colour of its own, which the key of the
+      picture leaves out): 943 frames to the bit, and the looks in the toasts' other tests
+      too. The counter-checks put 81 faults into looks.rs and the toast layer's part of it,
+      and the tests catch 78 of them (a progress of no number, a picture kept for another
+      theme, the level to three places, a new volume's level at once and not gliding on from
+      the last one's, squares, other kinds and the forgetting once their scenarios were added);
+      the other three change nothing: the levels also ask for a level above nothing, which the
+      lowest of them, at 1/32, asks for anyway; a groove's corners a pixel rounder are the
+      same, Pillow taking no more of a radius than half of the box's height, the groove's; and
+      a glow's reach of a pixel less for each of the blur's three passes is still all of it,
+      Pillow's box blur of radius r reaching ceil(r) a pass at most
 - [ ] pictures as Pillow fails at them: lp-decode's errors as Python's exceptions, so that
       where Python catches an OSError and goes on (a picture cut short, a file of no picture)
       Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,
@@ -1299,8 +1331,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       checked on a desktop with PyGObject. lp-py keeps to the C locale for now
 - [ ] the renderer's frame, widget by widget (texts, clocks, gauges, rings, bars, lists, graphs
       and their strips, fans, images, videos, icons, weather, globes, moon, sun path, slots,
-      cards, notices), effects (glow, lit finish, dither), motion, transitions, the volume's
-      looks, start screens; each theme's frames to the bit
+      cards, notices), effects (glow, lit finish, dither), motion, transitions, start screens;
+      each theme's frames to the bit
 
 ### R5 the panels' loop
 - [ ] the main loop (frames driven by change, pacing), the engine in the same process, panels

@@ -4,7 +4,8 @@ the clock going on, transitions holding or hiding them, toasts set aside, themes
 each step's state and every frame drawn with the toast on show, to the bit: the built-in card
 with its stripe, icon and text, fading and sliding in by its anchor, clear of the bezel; and
 the band (render/band.py), rolling in from its edge of light, with its title, tile, pictures
-and bar, changing in place and rolling down over the one before."""
+and bar, changing in place and rolling down over the one before; and the volume in the looks
+of render/volume_looks.py, its level gliding on the panel's clock."""
 
 from __future__ import annotations
 
@@ -13,6 +14,7 @@ import json
 import random
 import struct
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
@@ -21,6 +23,7 @@ from rust_check import image, run
 
 from libre_panel import fonts
 from libre_panel.plugins.host import Toast
+from libre_panel.render import volume_looks
 from libre_panel.render.overlays import ToastLayer
 from libre_panel.render.renderer import Renderer
 from libre_panel.render.scene import Scene, SceneFrame
@@ -42,6 +45,10 @@ FONTS = ["", "builtin:Barlow-Bold", "builtin:BarlowCondensed-SemiBold",
 ROLE_NAMES = ["card", "panel", "surface", "surf_1", "bg2", "text", "tx_1", "accent", "primary",
               "cpu", "warn", "warning", "crit", "error", "danger", "krit"]  # fmt: skip
 KINDS = ["", "", "volume", "music", "agent", "update", "game", "x"]
+# the volume's looks a message may name (and two that are none)
+LOOKS: list[Any] = ["bar", "levels", "ring", "big", "nope", 3]
+# what the volume's message says: its number, muted, and texts no look expects
+NUMBERS = ["42", "7", "100", "0", "Muted", "Stumm", "１２", "99 %", "1234567890" * 3]
 LEVELS = ["info", "info", "warning", "error", "debug", ""]
 ICONS = [None, None, "cpu", "music", "volume", "mute", "weather", "agent", "mic_off", "nope", ""]
 TEXTS = ["Volume 40 %", "Now playing: Song – Artist", "日本語のテキスト", "😀 done",
@@ -150,17 +157,22 @@ def _theme(rng: random.Random, folder: Path, n: int, band: bool = False) -> dict
     return data
 
 
-def _toast_of(rng: random.Random, n: int, band: bool = False) -> dict[str, Any]:
+def _toast_of(
+    rng: random.Random, n: int, band: bool = False, looks: bool = False
+) -> dict[str, Any]:
     """A toast as a service sends it, with its number in its payload ("n": what the steps
     name it by, as replace() keeps the payload). With `band`, more often what the band draws
-    besides the text, and often the volume turning (one key again and again: in place)."""
+    besides the text, and often the volume turning (one key again and again: in place). With
+    `looks`, mostly the volume in one of its looks, its number, muted now and then."""
     payload: dict[str, Any] = {"n": n}
     colour = rng.choice(COLOURS)
     if colour is not None or rng.random() < 0.1:
         payload["color"] = colour
-    kind = rng.choice(KINDS)
-    if kind == "volume" and rng.random() < 0.08:  # (the volume's looks are not here yet)
-        payload["look"] = rng.choice(["bar", "levels", "ring", "big", "nope", 3])
+    kind = "volume" if looks and rng.random() < 0.5 else rng.choice(KINDS)
+    if kind == "volume" and rng.random() < (0.85 if looks else 0.08):  # (in a look)
+        payload["look"] = rng.choice(LOOKS)
+    if looks and kind == "volume" and rng.random() < 0.25:  # (muted: as Python's truth says)
+        payload["muted"] = rng.choice([True, 1, "yes", 0, "", None, [0]])
     # what the band draws besides the text: a title, a bar, a picture and the badge on it
     for key, choices in (("label", ["Now playing", "Volume", "ß straße", 5, "x" * 80, "", 0,
                                      [1, 2], True, "Ärger über ÖL"]),
@@ -180,9 +192,12 @@ def _toast_of(rng: random.Random, n: int, band: bool = False) -> dict[str, Any]:
     seconds = None
     if rng.random() < 0.35:
         seconds = rng.choice([0.0, 0.3, 2.0, 7.5, -1.0, 1e-9, 0.25, float("inf"), float("nan")])
-    return {"text": rng.choice(TEXTS), "icon": rng.choice(ICONS), "level": rng.choice(LEVELS),
-            "seconds": seconds, "kind": kind, "rank": rng.choice([0, 0, 0, 1, 2, 5, -1, 10**6]),
-            "payload": payload, "key": rng.choice(["", "", "", "k1", "k2"])}  # fmt: skip
+    toast = {"text": rng.choice(TEXTS), "icon": rng.choice(ICONS), "level": rng.choice(LEVELS),
+             "seconds": seconds, "kind": kind, "rank": rng.choice([0, 0, 0, 1, 2, 5, -1, 10**6]),
+             "payload": payload, "key": rng.choice(["", "", "", "k1", "k2"])}  # fmt: skip
+    if looks and kind == "volume" and rng.random() < 0.7:  # (its number, as the volume says it)
+        toast["text"] = rng.choice(NUMBERS)
+    return toast
 
 
 def _turned(n: int, share: float) -> dict[str, Any]:
@@ -208,7 +223,7 @@ def _wire(toast: dict[str, Any]) -> dict[str, Any]:
 
 
 def _script(
-    rng: random.Random, themes: list[dict[str, Any]], band: bool = False
+    rng: random.Random, themes: list[dict[str, Any]], band: bool = False, looks: bool = False
 ) -> list[list[Any]]:
     """Steps of the layer's life: toasts arriving, the clock going on in steps fine enough to
     see the fades, frames drawn (of the theme's size, now and then of another), the toast laid
@@ -219,25 +234,35 @@ def _script(
     size = _size(themes[0])
     n = 0
     for _ in range(rng.randrange(6, 34)):
-        if band and rng.random() < 0.05:  # (the volume turning, each in place: its bar glides
-            # on from where it stood, drawn out of turn too, a frame and then one before it)
+        if (band or looks) and rng.random() < 0.05:  # (the volume turning, each in place: its
+            # bar glides on from where it stood, drawn out of turn too, a frame and then one
+            # before it; with `looks`, in one look, now and then another or muted)
+            look = rng.choice(LOOKS[:4]) if looks else None
             for _ in range(rng.randrange(2, 4)):
-                script.append(["add", [_turned(n, round(rng.random(), 2))]])
+                toast = _turned(n, round(rng.random(), 2))
+                if looks:
+                    toast["payload"]["look"] = look if rng.random() < 0.85 else rng.choice(LOOKS)
+                    if rng.random() < 0.15:
+                        toast["payload"]["muted"], toast["text"] = True, "Muted"
+                script.append(["add", [toast]])
                 n += 1
                 now += rng.choice([0.0, 0.02, 0.05])
                 script.append(["advance", {"f": _bits(now)}, False])
                 for at in rng.choice([[0.05, 0.02], [0.0, 0.09, 0.03], [0.12], [0.03, 0.0]]):
                     spec = {"size": list(size), "mode": "RGB", "seed": rng.randrange(2**32)}
                     script.append(["draw", {"f": _bits(now + at)}, False, spec])
+                    if looks and rng.random() < 0.3:
+                        script.append(["laid", {"f": _bits(now + at)}, False, list(size)])
             continue
         pick = rng.random()
         if pick < 0.03:  # (a burst, each with a key of its own: the queue fills to its 20)
-            toasts = [{**_toast_of(rng, n + k), "key": f"b{n + k}"} for k in range(25)]
+            toasts = [{**_toast_of(rng, n + k, looks=looks), "key": f"b{n + k}"}
+                      for k in range(25)]  # fmt: skip
             n += len(toasts)
             script.append(["add", toasts])
         elif pick < 0.25:
             counts = [1, 1, 1, 2] if band else [1, 1, 1, 2, 3, 22]
-            toasts = [_toast_of(rng, n + k, band) for k in range(rng.choice(counts))]
+            toasts = [_toast_of(rng, n + k, band, looks) for k in range(rng.choice(counts))]
             n += len(toasts)
             script.append(["add", toasts])
         elif pick < 0.5:
@@ -293,13 +318,17 @@ PICTURES = {"media.cover": {"size": [120, 90], "mode": "RGB", "seed": 7},
             "app.icon": {"size": [48, 48], "mode": "RGBA", "seed": 11}}  # fmt: skip
 
 
-def _python(folders: list[Path], script: list[list[Any]]) -> list[Any]:
-    """Each step's answer from Python's ToastLayer, as lp-check gives Rust's."""
+def _python(folders: list[Path], script: list[list[Any]], preview: bool = True) -> list[Any]:
+    """Each step's answer from Python's ToastLayer, as lp-check gives Rust's. Not a `preview`:
+    the panel, where the volume's level glides on the clock (time.monotonic: the step's)."""
     renderers = [Renderer(load_theme(folder), preview=True) for folder in folders]
     for renderer in renderers:  # (the readings it last drew of: their pictures)
         renderer.snapshot = Snapshot(images={k: _noise(v) for k, v in PICTURES.items()})
+        renderer.preview = preview  # (what the toasts' styles see of it: context.preview)
     layer: ToastLayer | None = None
     on, steps = 0, []
+    clock = [0.0]
+    real_time, volume_looks.time = volume_looks.time, SimpleNamespace(monotonic=lambda: clock[0])
 
     def named(toast: Any) -> Any:
         return toast.payload.get("n")
@@ -308,6 +337,8 @@ def _python(folders: list[Path], script: list[list[Any]]) -> list[Any]:
         for step in script:
             what = step[0]
             out: Any = None
+            if what in ("draw", "laid"):
+                clock[0] = _float(step[1])
             if what == "renderer":
                 on = step[1]
                 if layer is None:
@@ -362,6 +393,7 @@ def _python(folders: list[Path], script: list[list[Any]]) -> list[Any]:
                        else [named(showing[0]), _bits(showing[1])]}  # fmt: skip
             steps.append(out)
     finally:
+        volume_looks.time = real_time
         if layer is not None:
             layer.close()
         for renderer in renderers:
@@ -369,22 +401,14 @@ def _python(folders: list[Path], script: list[list[Any]]) -> list[Any]:
     return steps
 
 
-def _asks_for_more(themes: list[dict[str, Any]], script: list[list[Any]], at: int) -> bool:
-    """Whether step `at` asks for what Rust's toasts do not do yet: the volume in one of its
-    looks."""
-    arrived = [t for s in script[:at] if s[0] == "add" for t in s[1]]
-    return any(t["kind"] == "volume" and t["payload"].get("look") in ("bar", "levels", "ring",
-                                                                          "big")
-               for t in arrived)  # fmt: skip
-
-
 def _compare(
-    tmp_path: Path, seed: int, count: int, band: bool = False, scenarios: Any = ()
-) -> tuple[int, int]:
+    tmp_path: Path, seed: int, count: int, band: bool = False, scenarios: Any = (),
+    looks: bool = False,
+) -> int:  # fmt: skip
     """`count` layers led through scripts, in Rust and in Python, and then `scenarios`' own:
-    the steps alike up to where Rust says what it does not do yet (and only there where it is
-    so). How many frames were drawn with a toast on them, and how many layers went to their
-    end. With `band`, all in the band."""
+    every step alike. How many frames were drawn with a toast on them. With `band`, all in
+    the band; with `looks`, mostly the volume in its looks, half of them on the panel (not a
+    preview), where its level glides."""
     rng = random.Random(seed)
     cases, asked = [], []
     for n in range(count):
@@ -393,12 +417,14 @@ def _compare(
             folder = tmp_path / f"t{n}_{k}"
             themes.append(_theme(rng, folder, n, band))
             folders.append(folder)
-        script = _script(rng, themes, band)
+        script = _script(rng, themes, band, looks)
+        preview = not (looks and rng.random() < 0.5)
         wired = [[s[0], [_wire(t) for t in s[1]]] if s[0] == "add" else s for s in script]
-        cases.append({"themes": [str(f) for f in folders], "script": wired})
-        asked.append((folders, themes, script))
+        cases.append({"themes": [str(f) for f in folders], "script": wired, "preview": preview})
+        asked.append((folders, themes, script, preview))
     for n, scenario in enumerate(scenarios):
-        themes, script = scenario()
+        themes, script, *panel = scenario()
+        preview = not panel
         folders = []
         for k, data in enumerate(themes):
             folder = tmp_path / f"s{n}_{k}"
@@ -406,25 +432,22 @@ def _compare(
             (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
             folders.append(folder)
         wired = [[s[0], [_wire(t) for t in s[1]]] if s[0] == "add" else s for s in script]
-        cases.append({"themes": [str(f) for f in folders], "script": wired})
-        asked.append((folders, themes, script))
+        cases.append({"themes": [str(f) for f in folders], "script": wired, "preview": preview})
+        asked.append((folders, themes, script, preview))
     pictures = {key: image(_noise(spec)) for key, spec in PICTURES.items()}
     answers = run([{"op": "toasts", "fonts_dir": str(fonts.FONT_DIR), "images": pictures, **case}
                    for case in cases])  # fmt: skip
-    drawn = whole = 0
-    for n, (got, (folders, themes, script)) in enumerate(zip(answers, asked, strict=True)):
-        want = _python(folders, script)
+    drawn = 0
+    for n, (got, (folders, _, script, preview)) in enumerate(zip(answers, asked, strict=True)):
+        want = _python(folders, script, preview)
         steps = got["steps"]
-        if got["unported"] is not None:
-            assert _asks_for_more(themes, script, len(steps)), (n, got["unported"])
-        else:
-            whole += 1
-            assert len(steps) == len(want), n
-        for k, (mine, theirs) in enumerate(zip(steps, want, strict=False)):
+        assert got["unported"] is None, (n, got["unported"])
+        assert len(steps) == len(want), n
+        for k, (mine, theirs) in enumerate(zip(steps, want, strict=True)):
             assert mine == theirs, (n, k, script[k][0], mine, theirs)
             if script[k][0] in ("draw", "laid") and (theirs.get("sha256") or theirs.get("picture")):
                 drawn += 1
-    return drawn, whole
+    return drawn
 
 
 # -- scenarios: what the scripts by chance seldom meet, every time ---------------------------
@@ -543,16 +566,157 @@ def _bars_where_they_just_fit() -> tuple[list[dict[str, Any]], list[list[Any]]]:
     ]  # fmt: skip
 
 
+def _volume(n: int, text: str, look: Any, share: Any, **payload: Any) -> dict[str, Any]:
+    """The volume's message in `look`, `share` of the way up."""
+    return _toast(n, text, kind="volume", payload={"look": look, "progress": share, **payload})
+
+
+def _each_look_by_a_bezel() -> tuple[list[dict[str, Any]], list[list[Any]]]:
+    """Each look on a panel whose bezel hides a strip: the volume coming, turning in place and
+    muted, drawn over a frame and laid over a frame of layers."""
+    theme = _plain((1, 1), {})
+    theme["display"] = {"model": "turing-9.2-usb", "orientation": "landscape"}
+    size, script = _size(theme), [["renderer", 0]]
+    for i, look in enumerate(LOOKS[:4]):
+        t, n = 10.0 * i, 3 * i
+        script += [
+            ["add", [_volume(n, "42", look, 0.42)]], ["advance", _at(t), False],
+            _drawn_at(t + 0.1, size), ["laid", _at(t + 0.1), False, list(size)],
+            ["add", [_volume(n + 1, "64", look, 0.64)]], ["advance", _at(t + 0.2), False],
+            _drawn_at(t + 0.3, size, 2),
+            ["add", [_volume(n + 2, "Muted", look, 0.64, muted=True)]],
+            ["advance", _at(t + 0.4), False], _drawn_at(t + 0.5, size, 3),
+            ["laid", _at(t + 0.5), False, list(size)], ["advance", _at(t + 9.0), False],
+        ]  # fmt: skip
+    return [theme], script
+
+
+def _each_look_on_a_square_frame_by_a_bezel() -> tuple[list[dict[str, Any]], list[list[Any]]]:
+    """Each look at the top right of a square frame by the 9.2" bar's bezel, which Python takes
+    as standing (portrait: the strips clear at its sides, not the one at its top)."""
+    theme = _plain((1, 1), {"anchor": "top-right"})
+    theme["display"] = {"model": "turing-9.2-usb", "orientation": "landscape"}
+    size, script = (480, 480), [["renderer", 0]]
+    for i, look in enumerate(LOOKS[:4]):
+        t = 10.0 * i
+        script += [
+            ["add", [_volume(i, "42", look, 0.42)]], ["advance", _at(t), False],
+            _drawn_at(t + 0.5, size), ["laid", _at(t + 0.5), False, list(size)],
+            ["advance", _at(t + 9.0), False],
+        ]  # fmt: skip
+    return [theme], script
+
+
+def _the_same_volume_again_in_its_own_colour() -> tuple[list[dict[str, Any]], list[list[Any]]]:
+    """Each look showing the volume, and once that is gone the same again in a colour of its
+    own (the payload's, which the key of the picture leaves out): the look forgot the picture
+    with the toast it showed, so it makes it anew, in that colour."""
+    size, script = (800, 480), [["renderer", 0]]
+    for i, look in enumerate(LOOKS[:4]):
+        t, n = 10.0 * i, 2 * i
+        script += [
+            ["add", [_volume(n, "42", look, 0.42)]], ["advance", _at(t), False],
+            _drawn_at(t + 0.5, size), ["advance", _at(t + 6.0), False],
+            ["add", [_volume(n + 1, "42", look, 0.42, color="#ff3300")]],
+            ["advance", _at(t + 6.1), False], _drawn_at(t + 6.6, size, 2),
+            ["laid", _at(t + 6.6), False, list(size)], ["advance", _at(t + 9.5), False],
+        ]  # fmt: skip
+    return [_plain(size, {})], script
+
+
+def _a_look_named_by_another_kind() -> tuple[list[dict[str, Any]], list[list[Any]]]:
+    """A message of another kind than the volume's that names a look in its payload: the
+    theme's card draws it."""
+    size = (800, 480)
+    return [_plain(size, {})], [
+        ["renderer", 0], ["add", [_toast(0, "42", payload={"look": "ring", "progress": 0.42})]],
+        ["advance", _at(0.0), False], _drawn_at(0.5, size), ["laid", _at(0.5), False, list(size)],
+    ]  # fmt: skip
+
+
+def _a_number_too_long_for_its_look() -> tuple[list[dict[str, Any]], list[list[Any]]]:
+    """The large look and the bar with a number longer than their cards: the speaker beyond
+    the card's left edge, the bar's groove of no length."""
+    size = (480, 320)
+    return [_plain(size, {})], [
+        ["renderer", 0], ["add", [_volume(0, "1234567890" * 3, "big", 0.5)]],
+        ["advance", _at(0.0), False], _drawn_at(0.4, size), ["laid", _at(0.4), False, list(size)],
+        ["add", [_volume(1, "1234567890" * 3, "bar", 0.5)]], ["advance", _at(0.5), False],
+        _drawn_at(0.9, size, 2),
+    ]  # fmt: skip
+
+
+def _the_volume_turning_on_the_panel() -> tuple[list[dict[str, Any]], list[list[Any]], str]:
+    """The volume turning in each look on the panel (not a preview): its level glides on the
+    clock from where it stood to the new one, drawn out of turn too and late in its glide (at
+    0.796 and 0.7995: one at two places, two at three); then muted; and once that is gone, the
+    volume again in the same look, its level where it is to be at once, then of a progress
+    that is no number."""
+    size, script = (800, 480), [["renderer", 0]]
+    for i, look in enumerate(LOOKS[:4]):
+        t, n = 10.0 * i, 5 * i
+        script += [
+            ["add", [_volume(n, "20", look, 0.2)]], ["advance", _at(t), False],
+            _drawn_at(t + 0.05, size), ["add", [_volume(n + 1, "80", look, 0.8)]],
+            ["advance", _at(t + 0.1), False], _drawn_at(t + 0.12, size, 2),
+            _drawn_at(t + 0.18, size, 3), _drawn_at(t + 0.14, size, 4),
+            ["laid", _at(t + 0.2), False, list(size)], _drawn_at(t + 0.25, size, 5),
+            _drawn_at(t + 0.265, size, 6), _drawn_at(t + 0.3, size, 7),
+            ["add", [_volume(n + 2, "Muted", look, 0.8, muted=True)]],
+            ["advance", _at(t + 0.35), False], _drawn_at(t + 0.4, size, 8),
+            _drawn_at(t + 0.6, size, 9), ["advance", _at(t + 6.0), False],
+            ["add", [_volume(n + 3, "35", look, 0.35)]], ["advance", _at(t + 6.1), False],
+            _drawn_at(t + 6.15, size, 10),
+            ["add", [_volume(n + 4, "?", look, "abc")]], ["advance", _at(t + 6.2), False],
+            _drawn_at(t + 6.25, size, 11), _drawn_at(t + 6.45, size, 12),
+            ["advance", _at(t + 9.5), False],
+        ]  # fmt: skip
+    return [_plain(size, {})], script, "on the panel"
+
+
+def _a_look_in_another_theme() -> tuple[list[dict[str, Any]], list[list[Any]], str]:
+    """The volume in each look on the panel as the theme changes to one of the same style at
+    the same size, of other colours, that puts it elsewhere: the look goes on there in the new
+    colours (its number as it was), its level gliding on; then, while it glides, to a theme of
+    another style: the look begins anew there."""
+    size = (800, 480)
+    one = _plain(size, {"anchor": "top-left"}, palette={"card": "#203040", "accent": "#00ff88"})
+    two = _plain(size, {"anchor": "bottom-right"},
+                 palette={"card": "#402010", "accent": "#ff0088"})  # fmt: skip
+    band = _plain(size, {"style": "band", "anchor": "bottom"})
+    script: list[list[Any]] = []
+    for i, look in enumerate(LOOKS[:4]):
+        t, n = 10.0 * i, 3 * i
+        script += [
+            ["renderer", 0], ["add", [_volume(n, "80", look, 0.8)]], ["advance", _at(t), False],
+            _drawn_at(t + 0.5, size), ["renderer", 1], _drawn_at(t + 0.6, size, 2),
+            ["laid", _at(t + 0.6), False, list(size)],
+            ["add", [_volume(n + 1, "30", look, 0.3)]], ["advance", _at(t + 1.0), False],
+            _drawn_at(t + 1.02, size, 3), ["renderer", 2], _drawn_at(t + 1.06, size, 4),
+            ["renderer", 0], _drawn_at(t + 1.1, size, 5), ["advance", _at(t + 9.0), False],
+        ]  # fmt: skip
+    return [one, two, band], script, "on the panel"
+
+
 CARD_SCENARIOS = [_cut_on_a_wide_card, _a_card_in_another_theme]
+LOOK_SCENARIOS = [_each_look_by_a_bezel, _each_look_on_a_square_frame_by_a_bezel,
+                  _a_look_named_by_another_kind, _a_number_too_long_for_its_look,
+                  _the_volume_turning_on_the_panel, _a_look_in_another_theme,
+                  _the_same_volume_again_in_its_own_colour]  # fmt: skip
 BAND_SCENARIOS = [_a_band_in_another_place, _a_change_at_its_end, _a_band_gone_at_its_end,
                   _bars_where_they_just_fit]  # fmt: skip
 
 
 def test_toasts_as_python_shows_them(tmp_path: Path) -> None:
-    drawn, whole = _compare(tmp_path, 0x7057, 160, scenarios=CARD_SCENARIOS)
-    assert drawn > 290 and whole > 135, (drawn, whole)  # (332 and 151 when written)
+    drawn = _compare(tmp_path, 0x7057, 160, scenarios=CARD_SCENARIOS)
+    assert drawn > 310, drawn  # (352 when written)
 
 
 def test_bands_as_python_shows_them(tmp_path: Path) -> None:
-    drawn, whole = _compare(tmp_path, 0xBA4D, 120, band=True, scenarios=BAND_SCENARIOS)
-    assert drawn > 700 and whole > 105, (drawn, whole)  # (797 and 120 when written)
+    drawn = _compare(tmp_path, 0xBA4D, 120, band=True, scenarios=BAND_SCENARIOS)
+    assert drawn > 730, drawn  # (820 when written)
+
+
+def test_volume_looks_as_python_shows_them(tmp_path: Path) -> None:
+    drawn = _compare(tmp_path, 0x100C, 100, scenarios=LOOK_SCENARIOS, looks=True)
+    assert drawn > 840, drawn  # (943 when written)

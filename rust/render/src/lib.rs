@@ -25,6 +25,7 @@ mod kept;
 mod light;
 mod list;
 mod lit;
+mod looks;
 mod metric;
 pub mod moon;
 pub mod motion;
