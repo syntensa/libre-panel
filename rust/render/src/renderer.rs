@@ -36,6 +36,7 @@ use crate::slot::{OnShow, Slot};
 use crate::snapshot::{need_holds, needs_of, number, Moment, Snapshot};
 use crate::sunpath;
 use crate::symbols;
+use crate::turn::{self, Turn};
 use crate::widget;
 
 /// The most pixels one layer may have: what Python could not make either (an absurd size a
@@ -173,6 +174,18 @@ pub struct Renderer {
     /// when something wants a new frame, not before (Python's due: a turning globe's next
     /// step); None for nothing
     pub due: Option<f64>,
+    /// the pieces of turned widgets, turned, by id: as they were and how they were turned
+    /// (_turned): a piece turned as it was the frame before is that frame's again
+    turned: HashMap<String, (Rc<Piece>, Turn, Rc<Piece>)>,
+    /// what goes over a widget's piece as pieces of their own, by its id, by name (_over: a
+    /// list's fans, its names and numbers over its gliding bars)
+    pub(crate) over: HashMap<String, Vec<(String, Rc<Piece>)>>,
+    /// where the bars of a list's levels lie as they are drawn (_Levels.boxes), and those of the
+    /// levels just drawn (in their layer; None where they say nothing: cells, no rows)
+    pub(crate) bars_laid: RefCell<Vec<list::Corners>>,
+    pub(crate) bars_drawn: RefCell<Option<Vec<list::Corners>>>,
+    /// each list's levels with where their bars lie (their layer's info["bars"])
+    level_bars: HashMap<String, (Rc<Piece>, Vec<list::Corners>)>,
 }
 
 /// VOLUME_GLIDE_MS: the volume's bars and rings, 95 % of a step after about a third of a
@@ -257,6 +270,11 @@ impl Renderer {
             analog_halos: crate::analog::Faces::default(),
             earths: HashMap::new(),
             due: None,
+            turned: HashMap::new(),
+            over: HashMap::new(),
+            bars_laid: RefCell::new(Vec::new()),
+            bars_drawn: RefCell::new(None),
+            level_bars: HashMap::new(),
         };
         renderer.slots = renderer.make_slots()?;
         renderer.background = renderer.load_background()?;
@@ -1185,17 +1203,15 @@ impl Renderer {
                 if fans {
                     // (the names and numbers stay; the fans turn on them)
                     match self.cached(&w, list::texts_key(&rows), |r| r.list_piece(&w, &rows)) {
-                        Ok(piece) if !items.is_empty() => {
-                            self.list_turning(&w, &piece, &items, hi).map(Rc::new)
-                        }
+                        Ok(piece) if !items.is_empty() => self.list_turning(&w, &piece, &items, hi),
                         other => other,
                     }
                 } else if !(glide && self.options.animate) {
                     self.cached(&w, list::rows_key(&rows), |r| r.list_piece(&w, &rows))
                 } else {
                     // gliding bars: drawn anew while they move, on their own; the text stays as
-                    // it is, laid over them (where it meets no bar, Python lays it over the
-                    // frame apart from them: the same pixels)
+                    // it is, laid over them: over the frame apart from them where it meets no
+                    // bar, else on them
                     let text = self.cached(&w, list::texts_key(&rows), |r| {
                         r.list_part_piece(&w, &rows, list::ListPart::Text)
                     });
@@ -1203,13 +1219,37 @@ impl Renderer {
                         Ok(text) => text,
                         Err(e) => return Drawn::Failed(e),
                     };
+                    let wid = widget::text(&w, "id").to_string();
                     let mut apart = w.clone();
-                    let id = format!("{}\0levels", widget::text(&w, "id"));
-                    apart.insert("id".into(), id.into());
-                    self.cached(&apart, list::rows_key(&rows), |r| {
+                    apart.insert("id".into(), format!("{wid}\0levels").into());
+                    self.bars_drawn.borrow_mut().take();
+                    let levels = match self.cached(&apart, list::rows_key(&rows), |r| {
                         r.list_part_piece(&w, &rows, list::ListPart::Levels)
-                    })
-                    .and_then(|levels| Ok(Rc::new(list::joined(&levels, &text)?)))
+                    }) {
+                        Ok(levels) => levels,
+                        Err(e) => return Drawn::Failed(e),
+                    };
+                    let drawn = self.bars_drawn.borrow_mut().take();
+                    if let Some(bars) = drawn {
+                        self.level_bars.insert(wid.clone(), (levels.clone(), bars));
+                    }
+                    let bars = self
+                        .level_bars
+                        .get(&wid)
+                        .filter(|(kept, _)| Rc::ptr_eq(kept, &levels))
+                        .map(|(_, bars)| bars.as_slice());
+                    let apart = !w.contains_key("_card")
+                        && match list::text_apart(&w, &levels, &text, bars) {
+                            Ok(apart) => apart,
+                            Err(e) => return Drawn::Failed(e),
+                        };
+                    if apart {
+                        // (laid over the bars by the frame)
+                        self.over.insert(wid, vec![("text".to_string(), text)]);
+                        Ok(levels)
+                    } else {
+                        list::joined(&levels, &text).map(Rc::new)
+                    }
                 }
             }
             "symbol" => {
@@ -1445,6 +1485,8 @@ impl Renderer {
         self.begin_slots(&snapshot, now)?;
         let mut boxes = IndexMap::new();
         let mut pieces: Pieces = Vec::new();
+        // the turned widgets' turns, and the turned modules' ("<id>/")
+        let mut turns: IndexMap<String, Turn> = IndexMap::new();
         let mut gone: HashMap<String, bool> = HashMap::new();
         let widgets = self.widgets.clone();
         for w in &widgets {
@@ -1525,12 +1567,14 @@ impl Renderer {
                 }
                 _ => piece,
             };
-            // (a module's parts turn with the module)
-            let owner = module.as_ref().unwrap_or(w);
-            if widget::number(owner, "rotate", 0.0) % 360.0 != 0.0 {
-                return Err(Unported("turned widgets".into()));
-            }
             pieces.push((id.clone(), piece.clone()));
+            if let Some(turn) = self.turn_of(w, module.as_ref(), &piece)? {
+                turns.insert(id.clone(), turn);
+                if let Some(module) = &module {
+                    // (and its frame and line of light, over its cards)
+                    turns.insert(format!("{}/", widget::text(module, "id")), turn);
+                }
+            }
             if in_slot {
                 // (what lies over a bar or a graph is laid for widgets in no slot alone)
             } else if widget::text(w, "type") == "bar" {
@@ -1568,6 +1612,12 @@ impl Renderer {
                     pieces.push((format!("{id}\0dot"), made));
                 }
             }
+            if !in_slot {
+                // (a list's fans, its names and numbers over its gliding bars)
+                for (name, top) in self.over.remove(&id).unwrap_or_default() {
+                    pieces.push((format!("{id}\0{name}"), top));
+                }
+            }
             if let Some(module) = &module {
                 let mid = widget::text(module, "id").to_string();
                 if let Some(b) = self.module_boxes.get(&mid) {
@@ -1587,8 +1637,99 @@ impl Renderer {
             .try_for_each(|slot| slot.overlay(&self.theme, &mut pieces));
         self.slots = slots;
         laid.map_err(|Failed(e)| Unported(format!("a card slot's frame failed: {e}")))?;
+        if !turns.is_empty() || !self.turned.is_empty() {
+            self.turn_pieces(&mut pieces, &turns, &mut boxes)?;
+        }
         let canvas = self.compose(&pieces)?;
         Ok((compose::as_rgb(&canvas)?, boxes))
+    }
+
+    /// _turn: how far a widget is turned (`rotate`, degrees clockwise) and about which point:
+    /// a module's parts about the middle of the module; a text about the point it is aligned
+    /// at, halfway down its line (its box follows its letters: a value that changes would move
+    /// it); anything else about the middle of its box. None for one that is not turned.
+    fn turn_of(
+        &self,
+        w: &Dict,
+        module: Option<&Dict>,
+        piece: &Piece,
+    ) -> std::result::Result<Option<Turn>, Unported> {
+        let owner = module.unwrap_or(w);
+        let angle = turn::py_mod(widget::number(owner, "rotate", 0.0), 360.0);
+        if angle == 0.0 {
+            return Ok(None);
+        }
+        let middle =
+            |[x, y, w, h]: [i64; 4]| (x as f64 + w as f64 / 2.0, y as f64 + h as f64 / 2.0);
+        if let Some(module) = module {
+            let id = widget::text(module, "id");
+            let Some(&bounds) = self.module_boxes.get(id) else {
+                return Err(Unported(format!("a module of no box: {}", lp_py::repr(id))));
+            };
+            return Ok(Some((angle, middle(bounds))));
+        }
+        if w.contains_key("font_size") && w.contains_key("align") && !w.contains_key("w") {
+            let size = widget::int(w, "font_size", 0);
+            let font = self
+                .font(widget::text(w, "font"), size)
+                .map_err(|Failed(e)| Unported(format!("a turned text's font: {e}")))?;
+            let (ascent, descent) = font.font.getmetrics();
+            let line = match ascent + descent {
+                0 => widget::number(w, "font_size", 0.0),
+                line => line as f64,
+            };
+            let (x, y) = (widget::number(w, "x", 0.0), widget::number(w, "y", 0.0));
+            return Ok(Some((angle, (x, y + line / 2.0))));
+        }
+        Ok(Some((angle, middle(piece.bounds()))))
+    }
+
+    /// _turn_pieces: the pieces of the turned widgets turned, with what lies over them (a bar's
+    /// mark and dot, a list's fans) and a module's parts with its frame, and their boxes in the
+    /// editor. A piece turned as it was the frame before is that frame's again.
+    fn turn_pieces(
+        &mut self,
+        pieces: &mut Pieces,
+        turns: &IndexMap<String, Turn>,
+        boxes: &mut IndexMap<String, [i64; 4]>,
+    ) -> std::result::Result<(), Unported> {
+        let before = std::mem::take(&mut self.turned);
+        for (wid, piece) in pieces.iter_mut() {
+            let base = wid.split('\0').next().unwrap_or_default();
+            let owner = base.split('/').next().unwrap_or_default();
+            let Some(&turn) = turns.get(base).or_else(|| turns.get(&format!("{owner}/"))) else {
+                continue;
+            };
+            let turned = match before.get(wid.as_str()) {
+                Some((was, how, turned)) if Rc::ptr_eq(was, piece) && *how == turn => {
+                    turned.clone()
+                }
+                _ => Rc::new(turn::turned(piece, turn).map_err(|Failed(e)| {
+                    Unported(format!(
+                        "widget {} could not be turned: {e}",
+                        lp_py::repr(wid)
+                    ))
+                })?),
+            };
+            self.turned
+                .insert(wid.clone(), (piece.clone(), turn, turned.clone()));
+            if let (Some(bounds), Some(hit)) = (boxes.get_mut(wid.as_str()), turned.hit) {
+                *bounds = hit;
+            }
+            *piece = turned;
+        }
+        for (key, &turn) in turns {
+            // a module: around all of it
+            if let Some(id) = key.strip_suffix('/') {
+                if boxes.contains_key(id) {
+                    let Some(&bounds) = self.module_boxes.get(id) else {
+                        return Err(Unported(format!("a module of no box: {}", lp_py::repr(id))));
+                    };
+                    boxes.insert(id.to_string(), turn::bounds(bounds, turn));
+                }
+            }
+        }
+        Ok(())
     }
 
     /// _compose (the first frame, or keep_static off: the whole of it from the ground up).

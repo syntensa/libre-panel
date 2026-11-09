@@ -1076,6 +1076,41 @@ fn run(case: &Value) -> Result<Value, String> {
             }
             json!({"pictures": out})
         }
+        "turned" => {
+            // the renderer's turns (render/renderer.py's _turned_point and _turned_box, and a
+            // rotate's angle as float(rotate) % 360 makes it): each point [x, y, angle, cx, cy]
+            // turned, each box [x, y, w, h, angle, cx, cy] turned, each angle; the doubles as
+            // their bits
+            use lp_render::turn;
+            let bits = |v: &Value| v.as_u64().map(f64::from_bits).unwrap_or(f64::NAN);
+            let turn_of =
+                |c: &Value, at: usize| (bits(&c[at]), (bits(&c[at + 1]), bits(&c[at + 2])));
+            let points: Vec<Value> = case["points"]
+                .as_array()
+                .ok_or("points")?
+                .iter()
+                .map(|c| {
+                    let (x, y) = turn::point((bits(&c[0]), bits(&c[1])), turn_of(c, 2));
+                    json!([x.to_bits(), y.to_bits()])
+                })
+                .collect();
+            let boxes: Vec<Value> = case["boxes"]
+                .as_array()
+                .ok_or("boxes")?
+                .iter()
+                .map(|c| {
+                    let b = [0, 1, 2, 3].map(|i| c[i].as_i64().unwrap_or(0));
+                    json!(turn::bounds(b, turn_of(c, 4)))
+                })
+                .collect();
+            let angles: Vec<Value> = case["angles"]
+                .as_array()
+                .ok_or("angles")?
+                .iter()
+                .map(|a| json!(turn::py_mod(bits(a), 360.0).to_bits()))
+                .collect();
+            json!({"points": points, "boxes": boxes, "angles": angles})
+        }
         "turning_globe" => {
             // earth.Turning(size, lat, air, mark, clouds, lights) of each globe, and its calls
             // one after another: ["light", t], ["frame", step, place or null], ["step_of", now,

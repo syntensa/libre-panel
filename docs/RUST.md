@@ -488,7 +488,10 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       renderer lays them. The frames of 200 random themes of fan lists the same to the bit
       (and 1,200 more), five lists at every ninth width from 8 to 640 px, low and tall, and
       of no width or height, to the bit; two with a glow or a shadow within a level; a fan
-      seen running kept from one frame to the next. Fans in a moving frame turn: below. The
+      seen running kept from one frame to the next. Where the fans lie apart from each other
+      and on none of the names and numbers, they go over the list as pieces of their own, cut
+      as they lie on it, as Python lays them (the same pixels; turned, they turn apart: turned
+      widgets, below). Fans in a moving frame turn: below. The
       looks and colours one may choose for the fans in the app's settings: Rust does not draw
       them yet (the default's only; fan widgets: below). 66 of the app's 99 themes are
       drawn by Rust, 61 of them the same to the bit
@@ -826,10 +829,10 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       was added (the span of a list whose largest value fills its bars); the other changes
       nothing that is drawn (the levels left out where the two parts are not laid alike, which
       they always are: both the list's box with its margin, under the same effects). Where a
-      list's text lies on none of its bars, Python lays the two apart on the frame, which
-      gives the pixels the join gives; turned, it turns them apart (Rust says it does not draw
-      turned widgets yet: it will have to turn them so too). Lists whose fans turn in a moving
-      frame: below
+      list's text lies on none of its bars (where they lie is noted as they are drawn, as
+      _Levels notes it), the two are laid apart on the frame, as Python lays them, which gives
+      the pixels the join gives; turned, they turn apart (turned widgets: below). Lists whose
+      fans turn in a moving frame: below
 - [x] fans that turn (render/fan.py's Rotor.advance and Beats, the renderer's _draw_fan and
       _list_turning in a moving frame): a fan widget's rotor and each fan of a list turn with
       their speed, which follows the reading with inertia (0.45 s, from the frame before, a
@@ -1085,6 +1088,50 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       that card's parts; and with two slots or more the first frame moves on whichever was
       warmed last (every slot but that one has been begun again by the warm-up of those after
       it)
+- [x] turned widgets (the renderer's _turn and _turn_pieces; Turn, _turned_point,
+      _turned_box, _turned_image and _turned): a widget turned by its `rotate` (degrees
+      clockwise, as float(rotate) % 360 makes it: -1e-20 is a whole turn) about the middle of
+      its box, a text about the point it is aligned at halfway down its line (its font's
+      ascent and descent), a module's parts about the middle of the module; a quarter turn and
+      its multiples pixel for pixel, any other angle smoothly (Pillow's bicubic rotate, all of
+      the layer kept), each piece where its middle turns to; its box in the editor the box
+      round it turned (the corners rounded to six places: a quarter turn's sines are not quite
+      1 and 0), a module's round all of it; a frosted piece's mask turned with it and its box
+      where that now lies; its light and a slot's line of light turned too. What lies over a
+      widget turns with it: a bar's mark and dot, a graph's end dot, a slot's frame, its line
+      of light and the card that goes, and what Python lays apart over a list (its fans where
+      they lie apart from each other and on none of its names and numbers, its names and
+      numbers over its gliding bars where they lie on none of them), which Rust now lays
+      apart as Python does: turned apart and turned joined are not the same pixels. A piece
+      turned as it was the frame before is that frame's again. The tests: 20,000 points and
+      20,000 boxes turned to the bit, and the angles of 2,000 rotates; 22 kinds of widget
+      (texts, metrics, icons, weather, clocks, analog clocks, bars, gauges, calendars, agents,
+      the sun's way, the lit finish, lettering, live and theme pictures, symbols, graphs,
+      lists, fan lists, fans, moons, downloads), 40 random themes of each, most of their
+      widgets turned a quarter, a half or a whole turn either way, by other angles and by a
+      hair off none or off a whole turn: 809 frames to the bit; 120 themes of modules and card
+      slots turned: 120 frames to the bit; 90 themes frame after frame (gliding lists, turning
+      fans, slots changing cards): 435 frames to the bit, 213 of them on the way; 100 fan
+      lists whose fans touch edge to edge, turned: to the bit; 120 themes of lists whose
+      letters crowd their bars, gliding and turned, now and then faded: 345 frames to the bit,
+      196 of them on the way. Python turned 1,682 pieces a quarter turn in them and 3,668
+      smoothly, 33 frosted, 57 with their light, 7 lines of light, 267 fans and 50 lists'
+      texts laid apart. The counter-checks put in 37 faults (the point turned the other way,
+      its radians rounded otherwise, the box's corners unrounded or its edge floored, a
+      quarter turned the other way, smooth turns bilinear or cut to their size, the middle and
+      the place rounded otherwise, a frosted piece's box, its light and a line of light, the
+      angle by Rust's remainder, a module's parts about their own middles, a text about the
+      foot of its line or a larger line, the boxes and a module's box as they were, what lies
+      over a widget or a module's frame not turned with it, the turned pieces kept for others;
+      a list's fans laid apart on their text, in a card or touching, cut from their corners,
+      its text laid apart where its bars are not known, under an opacity, on its bars, with
+      the bars' boxes off by the margin or not cut to the room, cells said to have bars), and
+      the tests catch 32 of them, 4 once the turns were compared to the bit and touching fans
+      and crowded lists were added; the other five change nothing a frame shows: no kind of
+      widget has a font size, an alignment and a width together; the turn of a piece never
+      changes (the same piece, the same box); Pillow turns a half turn by transposing too; a
+      list's text is drawn within its room, so beyond it the text is clear; and Python lays no
+      letter of a list on a bar (none of 1,500 crowded lists did)
 - [ ] pictures as Pillow fails at them: lp-decode's errors as Python's exceptions, so that
       where Python catches an OSError and goes on (a picture cut short, a file of no picture)
       Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,

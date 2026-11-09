@@ -6,6 +6,7 @@
 //! their values, or as fans turning beside their names (render/fan.py).
 
 use std::collections::HashSet;
+use std::rc::Rc;
 use std::sync::{Mutex, OnceLock};
 
 use lp_pixels::{chops, Draw, Image, Mode};
@@ -449,6 +450,97 @@ pub(crate) enum ListPart {
     Levels,
 }
 
+/// A box by its corners: (x0, y0, x1, y1).
+pub(crate) type Corners = (i64, i64, i64, i64);
+
+/// _within: the part of `layer` that `image` at (x, y) covers (as paste lays it): its corners,
+/// None where it covers none of it.
+fn within(layer: &Image, image: &Image, x: i64, y: i64) -> Option<Corners> {
+    let (x0, y0) = (x.max(0), y.max(0));
+    let x1 = (x + image.width() as i64).min(layer.width() as i64);
+    let y1 = (y + image.height() as i64).min(layer.height() as i64);
+    (x1 > x0 && y1 > y0).then_some((x0, y0, x1, y1))
+}
+
+/// Whether nothing of `layer` (RGBA) shows in the box (x0, y0, x1, y1): alpha.crop(box).getbbox()
+/// is None.
+fn clear_in(layer: &Image, (x0, y0, x1, y1): Corners) -> Result<bool> {
+    if layer.mode() != Mode::RGBA {
+        return Err(Failed("band not found".into()));
+    }
+    Ok(layer.crop(x0, y0, x1, y1).getbbox(true).is_none())
+}
+
+/// _fans_apart: whether the fans (their pictures at their places on `layer`) lie apart from each
+/// other and on nothing of the layer (the names and numbers).
+fn fans_apart(layer: &Image, fans: &[(Image, i64, i64)]) -> Result<bool> {
+    let shown: Vec<_> = fans
+        .iter()
+        .filter_map(|(image, x, y)| within(layer, image, *x, *y))
+        .collect();
+    let apart = shown.iter().enumerate().all(|(i, a)| {
+        shown[i + 1..]
+            .iter()
+            .all(|b| a.2 <= b.0 || b.2 <= a.0 || a.3 <= b.1 || b.3 <= a.1)
+    });
+    if !apart {
+        return Ok(false);
+    }
+    for &place in &shown {
+        if !clear_in(layer, place)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+/// _fan_pieces: the fans as pieces over the list (`piece`), each cut as it lies on it, by name.
+fn fan_pieces(piece: &Piece, fans: &[(Image, i64, i64)]) -> Vec<(String, Rc<Piece>)> {
+    let mut out = Vec::new();
+    for (i, (image, x, y)) in fans.iter().enumerate() {
+        let Some((x0, y0, x1, y1)) = within(&piece.layer, image, *x, *y) else {
+            continue;
+        };
+        let part = image.crop(x0 - x, y0 - y, x1 - x, y1 - y);
+        let fan = Piece::new(part, piece.x + x0, piece.y + y0);
+        out.push((format!("fan{i}"), Rc::new(fan)));
+    }
+    out
+}
+
+/// _text_apart: whether a list's names and numbers (`text`) lie on none of its bars (`bars`:
+/// where they lie in the layer of its `levels`, None where it does not say): then the bars laid
+/// on the frame and the text over them give the pixels the two joined give. Not with effects
+/// (a halo reaches past the bars) or where the two are not laid alike.
+pub(crate) fn text_apart(
+    w: &Dict,
+    levels: &Piece,
+    text: &Piece,
+    bars: Option<&[Corners]>,
+) -> Result<bool> {
+    if text.layer.mode() != Mode::RGBA {
+        return Ok(false);
+    }
+    if widget::truthy(w, "glow") || widget::truthy(w, "shadow") || widget::truthy(w, "clip") {
+        return Ok(false);
+    }
+    if widget::number(w, "opacity", 1.0) < 0.999 {
+        return Ok(false);
+    }
+    if (levels.x, levels.y, levels.layer.size()) != (text.x, text.y, text.layer.size()) {
+        return Ok(false);
+    }
+    let Some(bars) = bars else {
+        return Ok(false);
+    };
+    for &place in bars {
+        if !clear_in(&text.layer, place)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 /// _joined: two pieces of a widget as one, `above` laid on `below` (the place of both).
 pub(crate) fn joined(below: &Piece, above: &Piece) -> Result<Piece> {
     let (bw, bh) = (below.layer.width() as i64, below.layer.height() as i64);
@@ -475,8 +567,23 @@ impl Renderer {
     /// _list_piece of `part`: the list's text alone or its levels alone (or all of it).
     pub(crate) fn list_part_piece(&self, w: &Dict, rows: &[Row], part: ListPart) -> Result<Piece> {
         self.list_part.set(part);
+        self.bars_laid.borrow_mut().clear();
         let made = self.list_piece(w, rows);
         self.list_part.set(ListPart::All);
+        let laid = std::mem::take(&mut *self.bars_laid.borrow_mut());
+        // (the levels of rows and columns: where their bars lie, in the piece's layer, for
+        // text_apart: _Levels.boxes, the layer's info["bars"])
+        if made.is_ok()
+            && part == ListPart::Levels
+            && !rows.is_empty()
+            && widget::text(w, "style") != "cells"
+        {
+            let margin = (widget::int(w, "font_size", 18).div_euclid(3)).max(2);
+            let boxes = laid
+                .into_iter()
+                .map(|(x0, y0, x1, y1)| (x0 + margin, y0 + margin, x1 + margin, y1 + margin));
+            *self.bars_drawn.borrow_mut() = Some(boxes.collect());
+        }
         made
     }
 
@@ -674,16 +781,15 @@ impl Renderer {
     /// _list_turning: the fans of a list of them, each turning with its speed in a moving frame
     /// (fan.Rotor's advance, on the beat of its item's sensor) or standing as its speed shows
     /// in a still one (its settle), in its ring (none where the list shows no levels), laid on
-    /// the names and numbers (`piece`). (Where they lie apart from each other and on none of
-    /// the names and numbers, Python lays them over the frame apart from the list: the same
-    /// pixels.)
+    /// the names and numbers (`piece`): over it as pieces of their own (`over`) where they lie
+    /// apart from each other and on none of the names and numbers.
     pub(crate) fn list_turning(
         &mut self,
         w: &Dict,
-        piece: &Piece,
+        piece: &Rc<Piece>,
         items: &[Item],
         max_rpm: f64,
-    ) -> Result<Piece> {
+    ) -> Result<Rc<Piece>> {
         let size = fan_grid(w, items.len())?.4;
         let Some([r, g, b, _]) = self.colour_of(w, "color2")? else {
             return Err(Failed("'NoneType' object is not subscriptable".into()));
@@ -695,7 +801,7 @@ impl Renderer {
             widget::int(w, "y", 0) - piece.y,
         );
         let dir = fan::pictures_dir(&self.env.fonts_dir);
-        let mut layer = piece.layer.clone();
+        let mut fans = Vec::new();
         let places = fan_places(w, items.len())?;
         for (&(x0, y0), item) in places.iter().zip(items) {
             let key = format!("{}\0{}", widget::text(w, "id"), item.key);
@@ -708,11 +814,23 @@ impl Renderer {
             let half = (size - image.width() as i64) as f64 / 2.0;
             let x = round_int(ox as f64 + x0 + half);
             let y = round_int(oy as f64 + y0 + (size - image.height() as i64) as f64 / 2.0);
-            paste(&mut layer, &image, x, y, false)?;
+            fans.push((image, x, y));
         }
-        let mut turned = piece.clone();
+        // (where they lie apart from each other and on none of the names and numbers, they go
+        // over the list as pieces of their own, the list as it is: the pixels they give laid
+        // on it; a turned list turns them apart)
+        if !w.contains_key("_card") && fans_apart(&piece.layer, &fans)? {
+            let over = fan_pieces(piece, &fans);
+            self.over.insert(widget::text(w, "id").to_string(), over);
+            return Ok(piece.clone());
+        }
+        let mut layer = piece.layer.clone();
+        for (image, x, y) in &fans {
+            paste(&mut layer, image, *x, *y, false)?;
+        }
+        let mut turned = (**piece).clone();
         turned.layer = layer;
-        Ok(turned)
+        Ok(Rc::new(turned))
     }
 
     /// _list_text: text on a list's layer, its capitals' top at `cap_top`, laid where it falls
@@ -816,6 +934,15 @@ impl Renderer {
         );
         let paint = self.paint(&piece, rule)?;
         let made = self.bar_piece(&piece, frac, paint)?;
+        if self.list_part.get() == ListPart::Levels {
+            // (where it lies, all of it whatever its share: _Levels.put_bar's box)
+            let (x0, y0) = (bx.max(0), by.max(0));
+            let x1 = (bx + made.layer.width() as i64).min(layer.width() as i64);
+            let y1 = (by + made.layer.height() as i64).min(layer.height() as i64);
+            if x1 > x0 && y1 > y0 {
+                self.bars_laid.borrow_mut().push((x0, y0, x1, y1));
+            }
+        }
         paste(layer, &made.layer, bx, by, false)
     }
 

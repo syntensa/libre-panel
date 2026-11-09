@@ -7397,3 +7397,298 @@ def test_the_app_s_own_themes_in_moving_frames_as_python_draws_them(tmp_path: Pa
         drawn.append(folder.name)
     # (on Windows Rust does not know the computer's zone: Terra's globes are left out)
     assert len(drawn) >= (93 if sys.platform == "win32" else 99), drawn
+
+
+# -- turned widgets ---------------------------------------------------------------------------
+
+# (a quarter turn and its multiples either way, a whole turn either way, angles of every other
+# kind, a hair off none and off a whole turn: -1e-20 % 360 is a whole turn, 360.0)
+TURNS: list[float] = [90, 180, 270, -90, -180, -270, 360, -360, 45, 30.5, -12.25, 359.99, 0.3,
+                      1e-7, -1e-20, 135, 225.5, 315, 89.9, 1, -1, 7.5, 0]  # fmt: skip
+
+
+def _bits(x: float) -> int:
+    return struct.unpack("<Q", struct.pack("<d", x))[0]
+
+
+def test_points_and_boxes_turned_as_python_turns_them() -> None:
+    # (the renderer's turns to the bit: a point turned about another (math.radians, the C
+    # library's cosine and sine, as Python takes them), the box round a box turned (its corners
+    # rounded to six places, floored and ceiled), a rotate's angle as float(rotate) % 360 makes
+    # it, every angle of TURNS and any other, about whole, half and any other points)
+    from libre_panel.render.renderer import _turned_box, _turned_point
+
+    rng = random.Random(0x7E2F)
+
+    def angle() -> float:
+        pick = rng.random()
+        if pick < 0.4:
+            return float(rng.choice(TURNS)) % 360
+        if pick < 0.5:
+            return float(rng.randrange(0, 360))
+        return rng.uniform(0, 360)
+
+    def spot() -> float:
+        pick = rng.random()
+        if pick < 0.3:
+            return float(rng.randrange(-600, 2400))
+        if pick < 0.6:
+            return rng.randrange(-1200, 4800) / 2
+        return rng.uniform(-600, 2400)
+
+    points = [[spot(), spot(), angle(), spot(), spot()] for _ in range(20000)]
+    boxes = [[rng.randrange(-500, 2000), rng.randrange(-500, 2000), rng.randrange(0, 1000),
+              rng.randrange(0, 1000), angle(), spot(), spot()] for _ in range(20000)]  # fmt: skip
+    angles = [*map(float, TURNS), -0.0, 5e-324, -5e-324, 1e-300, -1e-300, 359.99999999999994,
+              -359.99999999999994, 720.0, -720.5, 1e17, -1e17, 0.1, -0.1]  # fmt: skip
+    angles += [rng.uniform(-360, 360) for _ in range(2000)]
+    case = {"op": "turned", "points": [[_bits(v) for v in p] for p in points],
+            "boxes": [[*b[:4], *map(_bits, b[4:])] for b in boxes],
+            "angles": [_bits(a) for a in angles]}  # fmt: skip
+    [ours] = run([case])
+    for p, got in zip(points, ours["points"], strict=True):
+        want = _turned_point((p[0], p[1]), (p[2], (p[3], p[4])))
+        assert got == [_bits(want[0]), _bits(want[1])], p
+    for b, got in zip(boxes, ours["boxes"], strict=True):
+        assert got == _turned_box(b[:4], (b[4], (b[5], b[6]))), b
+    for a, got in zip(angles, ours["angles"], strict=True):
+        assert got == _bits(a % 360), a
+
+
+def _turning(make: Any) -> Callable[[random.Random, int, tuple[int, int]], dict[str, Any]]:
+    """`make`'s widgets, most of them turned (rotate: TURNS)."""
+
+    def made(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+        widget = make(rng, i, size)
+        if rng.random() < 0.75:
+            widget["rotate"] = rng.choice(TURNS)
+        return widget
+
+    return made
+
+
+GRAPH_UNDEFINED = ("graphs through points that are no numbers (a log scale of no finite span)",)
+TURNED_FAMILIES: dict[str, tuple[Any, Any, dict[str, Any]]] = {
+    "texts": (_card_or_text, None, {}),
+    "metrics": (_metric_or_more, _metric_snapshot, {}),
+    "icons": (_icon_or_more, _icon_snapshot, {}),
+    "weather": (_weather_or_countdown, _weather_snapshot, {}),
+    "clocks": (_clock_or_more, _clock_snapshot, {}),
+    "analog clocks": (_analog_or_more, _analog_snapshot, {}),
+    "bars": (_bar_or_more, _bar_snapshot, {}),
+    "gauges": (_gauge_or_more, _bar_snapshot, {}),
+    "calendars": (_calendar_or_more, _calendar_snapshot, {}),
+    "agents": (_agent_or_more, _agent_snapshot, {}),
+    "sun's ways": (_sunpath_or_more, _sunpath_snapshot, {}),
+    "lit": (_lit, _lit_snapshot, {}),
+    "lettered": (_lettered, _lettered_snapshot, {}),
+    "pictures": (_image_or_more, _image_snapshot, {}),
+    "theme pictures": (_theme_picture_or_more, _image_snapshot,  # (many Rust does not read)
+                       {"undefined": (UNREAD,), "files": _theme_files, "least": 15}),
+    "symbols": (_symbol_or_more, _symbol_snapshot, {}),
+    "graphs": (_graph_or_more, _graph_snapshot, {"undefined": GRAPH_UNDEFINED}),
+    "lists": (_list_or_more, _list_snapshot, {}),
+    "fan lists": (_fan_list_or_more, _fan_snapshot, {}),
+    "fans": (_fan_or_more, _fan_widget_snapshot, {"undefined": FAN_UNDRAWN}),
+    "moons": (_moon_or_more, _moon_snapshot, {"looks": ("classic", "vivid")}),
+    "downloads": (_download_or_more, _download_snapshot, {"when": _download_time}),
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("family", list(TURNED_FAMILIES))
+def test_turned_widgets_as_python_draws_them(tmp_path: Path, family: str) -> None:
+    # (every kind of widget turned, clockwise: about the middle of its box, a text about the
+    # point it is aligned at halfway down its line; a quarter turn and its multiples pixel for
+    # pixel, any other angle smoothly, all of it kept; its box in the editor the box round it
+    # turned, a frosted one's backdrop turned with it and its box where that now lies, its light
+    # turned too; what lies over it turned with it: a bar's mark and dot, a graph's end dot, a
+    # list's fans laid apart over it)
+    make, snapshot_of, more = TURNED_FAMILIES[family]
+    more = dict(more)
+    least = more.pop("least", 25)
+    seed = int(hashlib.sha256(family.encode()).hexdigest()[:8], 16)
+    drawn = _compare_frames(tmp_path, seed, 40, _turning(make), snapshot_of, **more)
+    assert drawn > least, drawn
+
+
+def _turned_modules(rng: random.Random, folder: Path) -> None:
+    """The theme in `folder` with most of its modules turned (rotate: TURNS)."""
+    path = folder / "theme.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    for widget in data["widgets"]:
+        if widget["type"] == "module" and rng.random() < 0.75:
+            widget["rotate"] = rng.choice(TURNS)
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
+def test_turned_modules_and_card_slots_as_python_draws_them(tmp_path: Path) -> None:
+    # (a module turned as a whole about its middle: each of its parts, a slot's card on show and
+    # its frame over it; the module's box in the editor the box round it turned)
+    rng = random.Random(0x7E2D)
+    cases, expected = [], []
+    for n in range(120):
+        folder = tmp_path / f"t{n}"
+        _slot_theme(rng, folder)
+        _turned_modules(rng, folder)
+        given, snapshot = _slot_snapshot(rng)
+        dither = rng.random() < 0.2
+        cases.append({"folder": str(folder), "snapshot": given, "dither": dither})
+        renderer = Renderer(load_theme(folder), preview=True, dither=dither)
+        lists._RAN.clear()
+        try:
+            frame, boxes = renderer.render(snapshot, now=1000.0)
+            expected.append({"frame": frame, "boxes": boxes, "slots": _slots_of(renderer)})
+        except Exception as error:  # noqa: BLE001 (a frame Python cannot make)
+            expected.append({"failed": f"{type(error).__name__}: {error}"})
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    drawn = sum(
+        _compare_slot_frames(got, want, n)
+        for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True))
+    )
+    assert drawn > 60, drawn
+
+
+def test_turned_widgets_frame_after_frame_as_python_draws_them(tmp_path: Path) -> None:
+    # (one renderer drawing turned widgets frame after frame as the panels' loop does: lists
+    # whose bars glide, their names and numbers laid apart over them where they meet no bar;
+    # fans that turn, a list's laid apart over it; card slots changing cards, the old one, the
+    # line of light and the frame turned with the module; a piece turned as it was the frame
+    # before is that frame's again)
+    import dataclasses
+
+    rng = random.Random(0x7E2E)
+    kinds = ["playback", "music", "forecast", "weather", "net", "date", "clock", "text", "ring",
+             "stat"]  # fmt: skip
+    cases, expected = [], []
+    for n in range(90):
+        folder = tmp_path / f"t{n}"
+        family = n % 3
+        now, fps = rng.uniform(1000, 2000), rng.choice([0, 25, 50])
+        steps: list[tuple[Snapshot, float]] = []
+        given: list[dict[str, Any]] = []
+        count = rng.randrange(2, 10)
+        if family == 2:  # card slots
+            _slot_theme(rng, folder, cards=kinds, moving=True)
+            _turned_modules(rng, folder)
+            snapshot = dataclasses.replace(_demo(), history={})
+            for _ in range(count):
+                steps.append((snapshot, now))
+                now += rng.choice([0.02, 0.04, 0.1, 0.3, 1.0, 0, -0.1])
+                readings = _slot_readings_after(rng, dict(snapshot.readings))
+                snapshot = dataclasses.replace(snapshot, readings=readings)
+            given = [{"snapshot": _snapshot_given(s), "now": t} for s, t in steps]
+        else:
+            make = _gliding_list_or_more if family == 0 else _turning_fan
+            data = _frame_theme(rng, folder, _turning(make))
+            if family == 0:
+                data["animation"] = {"smoothing_ms": rng.choice([0, 100, 400, 400, 1000])}
+                (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+            _, first = (_list_snapshot if family == 0 else _fan_snapshot)(rng)
+            readings = dict(first.readings)
+            after = _list_readings_after if family == 0 else _fan_readings_after
+            for _ in range(count):
+                steps.append((Snapshot(readings=readings, now=first.now), now))
+                given.append({"snapshot": _fans_given(readings, first.now), "now": now})
+                now += rng.choice(MOVING_STEPS + [0.02, 0.04])
+                readings = after(rng, readings)
+        cases.append({"folder": str(folder), "dither": False, "animate": True, "fps": fps,
+                      "steps": given})  # fmt: skip
+        expected.append(_python_moving(folder, steps, fps))
+    drawn, moving = _compare_moving(cases, expected)
+    assert drawn > 250 and moving > 100, (drawn, moving)
+
+
+def test_turned_fan_lists_whose_fans_touch_as_python_draws_them(tmp_path: Path) -> None:
+    # (fans whose pictures touch, edge to edge, and lie on none of the names and numbers: laid
+    # apart over their list as Python lays them, and so turned apart, each about the list's
+    # middle; those that overlap a pixel laid on the list and turned with it)
+    from libre_panel.render import fan as fan_shapes
+
+    cases, asked = [], []
+    n = 0
+    for fs in (6, 7, 9, 12):
+        size = max(12, round(fs * 1.9))
+        canvas = fan_shapes.geometry(size, size)[2]
+        for columns, w, h in ((1, canvas, 2 * canvas), (1, canvas, 3 * canvas),
+                              (1, canvas + 1, 2 * canvas), (2, 2 * canvas, canvas),
+                              (3, 3 * canvas - 1, canvas)):  # fmt: skip
+            for count, angle in ((2, 30.5), (3, 90), (4, 200.25), (6, 333.3), (3, 45)):
+                folder = tmp_path / f"t{n}"
+                folder.mkdir()
+                n += 1
+                widget = {"type": "list", "id": "l", "x": 6, "y": 5, "w": w, "h": h,
+                          "style": "fans", "font_size": fs, "columns": columns, "levels": True,
+                          "items": "\n".join(f"fan.{k}" for k in range(1, count + 1)),
+                          "color": "#40c0ff", "muted": "#203040", "color2": "#ff8800",
+                          "rotate": angle}  # fmt: skip
+                side = max(w, h) * 2 + 12
+                theme = {"format": THEME_FORMAT, "name": "touching",
+                         "display": {"width": side, "height": side},
+                         "palette": {name: "#808080" for name in PALETTE},
+                         "background": {"color": "#101418"}, "widgets": [widget]}  # fmt: skip
+                (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+                readings = {f"fan.{k}": Reading(f"fan.{k}", 450.0 * k, "rpm", f"Fan {k}")
+                            for k in range(1, count + 1)}  # fmt: skip
+                snapshot = Snapshot(readings=readings)
+                cases.append({"folder": str(folder), "snapshot": _snapshot_given(snapshot),
+                              "dither": False, "now": 1000.0})  # fmt: skip
+                asked.append(_python_frame(folder, snapshot, False))
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    drawn = 0
+    for i, (got, want) in enumerate(zip(ours["frames"], asked, strict=True)):
+        assert "frame" in want, (i, want)
+        assert got["sha256"] == hashlib.sha256(want["frame"].tobytes()).hexdigest(), i
+        assert got["boxes"] == want["boxes"], i
+        drawn += 1
+    assert drawn == 100, drawn
+
+
+def _crowded_list(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """A list whose bars glide, its names and numbers crowded on them: tall letters, small
+    rows, narrow columns (now and then a letter comes within a pixel or two of a bar); now and
+    then faded (laid joined)."""
+    names = ["Core 1", "Tgpyq", "ÜÖÄ", "Ⅻ", "gggg", "Fan", "Ångström"]
+    count = rng.randrange(1, 9)
+    w, h = size
+    faded = {"opacity": rng.choice([0.6, 0.85, 0.998])} if rng.random() < 0.3 else {}
+    return {**faded, "type": "list", "id": f"l{i}", "x": rng.randrange(0, max(1, w // 3)),
+            "y": rng.randrange(0, max(1, h // 3)), "w": rng.choice([20, 40, 60, 100, 200]),
+            "h": rng.choice([8, 12, 20, 30, 50, 80]),
+            "style": rng.choice(["rows", "bars", "columns"]),
+            "items": "\n".join(f"core.{k} = {rng.choice(names)}" for k in range(1, count + 1)),
+            "font_size": rng.choice([6, 8, 10, 12, 16, 20, 26, 40]),
+            "columns": rng.choice([0, 0, 1, 2, 3]), "levels": True,
+            "uppercase": rng.random() < 0.5,
+            "format": rng.choice(["{value:.0f}%", "{value:,.1f} gy", "{value}"]),
+            "color": _colour(rng), "muted": _colour(rng), "color2": _colour(rng),
+            "rotate": rng.choice([30.5, 45, 89.9, 135, 200.25, 333.3, 90, 180])}  # fmt: skip
+
+
+def test_turned_lists_whose_text_comes_near_their_bars_as_python_draws_them(
+    tmp_path: Path,
+) -> None:
+    # (lists whose bars glide, turned, their names and numbers crowded on their bars: laid
+    # apart from the bars where no letter lies in the box of a bar, as Python lays them, a
+    # letter now and then within a pixel or two of one, where turned apart and turned joined
+    # are not the same pixels)
+    rng = random.Random(0x7E30)
+    cases, expected = [], []
+    for n in range(120):
+        folder = tmp_path / f"t{n}"
+        data = _frame_theme(rng, folder, _crowded_list)
+        data["animation"] = {"smoothing_ms": 400}
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        count = 9
+        readings = {f"core.{k}": Reading(f"core.{k}", rng.uniform(0, 100), "%", f"Core {k}")
+                    for k in range(1, count + 1)}  # fmt: skip
+        now, steps, given = rng.uniform(1000, 2000), [], []
+        for _ in range(3):
+            steps.append((Snapshot(readings=readings), now))
+            given.append({"snapshot": _moving_given(readings), "now": now})
+            now += rng.choice([0.04, 0.1, 0.2])
+            readings = {k: Reading(k, rng.uniform(0, 100), "%", r.label)
+                        for k, r in readings.items()}  # fmt: skip
+        cases.append({"folder": str(folder), "dither": False, "animate": True, "steps": given})
+        expected.append(_python_moving(folder, steps))
+    drawn, moving = _compare_moving(cases, expected)
+    assert drawn > 250 and moving > 100, (drawn, moving)
