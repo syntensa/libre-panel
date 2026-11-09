@@ -2638,6 +2638,52 @@ fn run(case: &Value) -> Result<Value, String> {
                         }
                     })
                     .collect(),
+                "asset" => items
+                    .iter()
+                    .map(|r| {
+                        // a theme's video as the renderer finds it ("root", "rel": the path
+                        // resolve_asset gives), its first frame made while a feed of it plays
+                        // where "feed" (as a panel's first frame of it is), and what ffmpeg
+                        // said making it
+                        let root = std::path::PathBuf::from(r["root"].as_str().unwrap_or(""));
+                        let rel = lp_py::Value::from(r["rel"].as_str().unwrap_or(""));
+                        let path = match lp_theme::model::resolve_asset(&root, &rel) {
+                            Ok(path) => path,
+                            Err(e) => return json!({"error": e.msg}),
+                        };
+                        let once = video::Reading {
+                            once: true,
+                            ..reading(r)
+                        };
+                        let feed = r["feed"].as_bool().unwrap_or(false).then(|| {
+                            let feed = video::VideoFeed::new(&ffmpeg, &path, reading(r));
+                            feed.frame(None);
+                            feed
+                        });
+                        let command = video::video_command(&ffmpeg, &path, &once);
+                        let made = std::process::Command::new(&command[0])
+                            .args(&command[1..])
+                            .stdin(std::process::Stdio::null())
+                            .output();
+                        drop(feed);
+                        let size = once.w * once.h * 4;
+                        match made {
+                            Ok(made) => json!({
+                                "path": path.to_string_lossy(),
+                                "first": (made.stdout.len() >= size).then(|| {
+                                    Sha256::digest(&made.stdout[..size])
+                                        .iter()
+                                        .map(|b| format!("{b:02x}"))
+                                        .collect::<String>()
+                                }),
+                                "said": String::from_utf8_lossy(&made.stderr).into_owned(),
+                            }),
+                            Err(e) => {
+                                json!({"path": path.to_string_lossy(), "spawn": e.to_string()})
+                            }
+                        }
+                    })
+                    .collect(),
                 _ => items
                     .iter()
                     .map(|f| {

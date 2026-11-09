@@ -20,13 +20,13 @@ from typing import Any
 from unittest import mock
 
 import pytest
-from rust_check import run
+from rust_check import picture, run
 
 from libre_panel import fonts
 from libre_panel.render import moving
 from libre_panel.render.renderer import Renderer
 from libre_panel.sensors.base import Snapshot
-from libre_panel.theme.model import THEME_FORMAT, load_theme
+from libre_panel.theme.model import THEME_FORMAT, load_theme, resolve_asset
 
 FFMPEG = shutil.which("ffmpeg")
 needs_ffmpeg = pytest.mark.skipif(FFMPEG is None, reason="ffmpeg is not installed")
@@ -205,14 +205,35 @@ def test_videos_and_their_first_frames_as_python_reads_them(tmp_path: Path) -> N
     want_first = [_digest(moving.first_frame(FFMPEG, Path(f["path"]), f["w"], f["h"], f["fit"],
                                              start=f["start"]))
                   for f in firsts]  # fmt: skip
+    # (a theme's video as the renderer finds it: its path resolved, its first frame made while a
+    # feed of it plays, as a panel's first frame of it is)
+    assets, want_assets = [], []
+    for rel in ("a.mp4", "b.mkv", "e.mp4"):
+        for feed in (False, True):
+            assets.append({"root": str(tmp_path), "rel": rel, "w": 175, "h": 99, "fit": "contain",
+                           "fps": 30, "feed": feed})  # fmt: skip
+            path = resolve_asset(tmp_path, rel)
+            playing = moving.VideoFeed(FFMPEG, path, 175, 99, "contain", fps=30) if feed else None
+            try:
+                if playing is not None:
+                    playing.frame()
+                first = _digest(moving.first_frame(FFMPEG, path, 175, 99, "contain"))
+            finally:
+                if playing is not None:
+                    playing.close()
+            want_assets.append([str(path), first])
     got = run([
         {"op": "video", "kind": "info", "ffmpeg": FFMPEG, "items": [str(p) for p in videos]},
         {"op": "video", "kind": "first", "ffmpeg": FFMPEG, "items": firsts},
+        {"op": "video", "kind": "asset", "ffmpeg": FFMPEG, "items": assets},
     ])  # fmt: skip
     assert got[0]["made"] == want_info
     assert got[1]["made"] == want_first
+    found = [[a.get("path"), a.get("first")] for a in got[2]["made"]]
+    assert found == want_assets, got[2]["made"]  # (what ffmpeg said where they differ)
     assert want_info[5]["size"] == [48, 64]  # (turned: upright)
     assert sum(1 for d in want_first if d) > 30 and None in want_first
+    assert all(first for _path, first in want_assets)
 
 
 def _settle(feed: moving.VideoFeed) -> None:
@@ -379,6 +400,29 @@ def _theme(folder: Path, rng: random.Random, videos: list[str]) -> list[str]:
     return shown
 
 
+def _difference(got: dict[str, Any], want: dict[str, Any]) -> dict[str, Any]:
+    """What differs between Rust's step and Python's: their boxes and warnings, and where both
+    frames are there, the pixels that differ (how many, their box, the first few)."""
+    out: dict[str, Any] = {"boxes": (got["boxes"], want["boxes"]),
+                           "warnings": (got["warnings"], want["warnings"]),
+                           "moving": (got["moving"], want["moving"])}  # fmt: skip
+    if "frame" in got and "frame" in want:
+        ours, theirs = picture(got["frame"]), want["frame"]
+        if ours.size != theirs.size or ours.mode != theirs.mode:
+            out["frames"] = ((ours.mode, ours.size), (theirs.mode, theirs.size))
+            return out
+        a, b = ours.tobytes(), theirs.tobytes()
+        n = len(ours.getbands())
+        places = [k // n for k in range(0, len(a), n) if a[k : k + n] != b[k : k + n]]
+        xs, ys = [p % ours.width for p in places], [p // ours.width for p in places]
+        out["pixels"] = len(places)
+        if places:
+            out["box"] = (min(xs), min(ys), max(xs), max(ys))
+            out["first"] = [(p % ours.width, p // ours.width, a[p * n : p * n + n].hex(),
+                             b[p * n : p * n + n].hex()) for p in places[:4]]  # fmt: skip
+    return out
+
+
 def _python_frames(folder: Path, case: dict[str, Any]) -> list[dict[str, Any]]:
     renderer = Renderer(load_theme(folder), preview=case["preview"], animate=case["animate"])
     renderer._ffmpeg = FFMPEG
@@ -392,6 +436,8 @@ def _python_frames(folder: Path, case: dict[str, Any]) -> list[dict[str, Any]]:
             out.append({"sha256": _digest(frame), "boxes": boxes, "moving": renderer.moving,
                         "full_video": None if full is None else [full[0], full[1], full[2]],
                         "warnings": list(renderer.warnings)})  # fmt: skip
+            if case.get("bytes"):  # (the frame itself, to say where it differs)
+                out[-1]["frame"] = frame.copy()
             for feed in renderer._feeds.values():
                 _settle(feed)
     finally:
@@ -437,19 +483,21 @@ def test_frames_with_videos_as_python_draws_them(tmp_path: Path) -> None:
         case = {"folder": str(folder), "preview": n % 7 == 3, "animate": n % 5 != 4,
                 "dither": False, "steps": steps, "ffmpeg": FFMPEG,
                 "video_fps": rng.choice([None, 0, 4, 24, 30, 60]),
-                "video_keys": rng.random() < 0.15}  # fmt: skip
+                "video_keys": rng.random() < 0.15,
+                "bytes": n < 3}  # fmt: skip
         cases.append(case)
         want.append(_python_frames(folder, case))
     [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
-    drawn, alone = 0, 0
+    drawn, alone, differ = 0, 0, []
     for n, (got, theirs) in enumerate(zip(ours["frames"], want, strict=True)):
         for i, (g, w) in enumerate(zip(got["steps"], theirs, strict=True)):
             assert "unported" not in g, (n, i, g)
-            assert g["sha256"] == w["sha256"], (n, i)
-            assert g["boxes"] == w["boxes"], (n, i)
-            assert g["moving"] == w["moving"] and g["warnings"] == w["warnings"], (n, i)
-            assert g["full_video"] == w["full_video"], (n, i)
+            same = [g[k] == w[k] for k in ("sha256", "boxes", "moving", "warnings", "full_video")]
+            if not all(same):
+                differ.append((n, i, same, _difference(g, w)))
+                continue
             drawn += 1
             alone += w["full_video"] is not None
+    assert not differ, (len(differ), differ[:8])
     played = len({w["sha256"] for theirs in want for w in theirs})  # (frames that differ)
     assert drawn > 150 and alone > 5 and played > 80, (drawn, alone, played)
