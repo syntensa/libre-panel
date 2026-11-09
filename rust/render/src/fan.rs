@@ -467,13 +467,9 @@ fn plane(dir: &Path, name: &str) -> Result<(usize, Vec<f32>, Vec<f32>)> {
     Ok((w, grey, alpha))
 }
 
-/// The rotor's pictures read once (a process reads them once, whatever the size it draws).
-fn pictures(dir: &Path) -> Result<Arc<Pictures>> {
-    static READ: OnceLock<Mutex<HashMap<PathBuf, Arc<Pictures>>>> = OnceLock::new();
-    let read = READ.get_or_init(|| Mutex::new(HashMap::new()));
-    if let Some(found) = read.lock().ok().and_then(|r| r.get(dir).cloned()) {
-        return Ok(found);
-    }
+/// The rotor's pictures, read for the layers of a size as fan.rotor_layers reads them (not
+/// kept: the layers made of them are).
+fn pictures(dir: &Path) -> Result<Pictures> {
     let mut side = 0;
     let mut planes = Vec::with_capacity(POSITIONS);
     for p in 0..POSITIONS {
@@ -484,11 +480,7 @@ fn pictures(dir: &Path) -> Result<Arc<Pictures>> {
         side = s;
         planes.push(layers);
     }
-    let made = Arc::new(Pictures { side, planes });
-    if let Ok(mut read) = read.lock() {
-        read.insert(dir.to_path_buf(), made.clone());
-    }
-    Ok(made)
+    Ok(Pictures { side, planes })
 }
 
 /// One set of pictures (`name` with "shape", "core" and "gloss" for its {}) as _reduced takes
