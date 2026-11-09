@@ -200,7 +200,7 @@ def test_sources_say_what_and_where_and_list_the_files_hashes(tmp_path):
         "https://github.com/FFmpeg/FFmpeg/tree/29e619e767cde9045a75c29bc9a8278ae7b3a98b" in sources
     )
     assert (
-        "https://github.com/BtbN/FFmpeg-Builds/tree/6c9aec5fc9a72ec3abedd1fa84db141fa18cf52b"
+        "https://github.com/FFmpeg-Builds/FFmpeg-Builds/tree/6c9aec5fc9a72ec3abedd1fa84db141fa18cf52b"
         in sources
     )
     assert "https://github.com/GameTechDev/PresentMon/tree/" in sources

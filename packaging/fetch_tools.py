@@ -95,12 +95,15 @@ class Tool:
 
 FFMPEG_TAG = "autobuild-2026-09-30-13-08"  # FFmpeg-Builds' last build of September 2026
 FFMPEG_BUILD = "ffmpeg-n8.1.3-9-g29e619e767"  # FFmpeg release 8.1.3 and nine more commits
-FFMPEG_URL = f"https://github.com/BtbN/FFmpeg-Builds/releases/download/{FFMPEG_TAG}/{FFMPEG_BUILD}"
+# (the project moved from BtbN/FFmpeg-Builds; GitHub's way there from the old name failed)
+FFMPEG_URL = (
+    f"https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/{FFMPEG_TAG}/{FFMPEG_BUILD}"
+)
 FFMPEG_SOURCE = (
     "FFmpeg: https://github.com/FFmpeg/FFmpeg/tree/29e619e767cde9045a75c29bc9a8278ae7b3a98b "
     "(release/8.1: tag n8.1.3 and nine more commits)",
     "The build recipe, with every library in it and its version (scripts.d): "
-    "https://github.com/BtbN/FFmpeg-Builds/tree/6c9aec5fc9a72ec3abedd1fa84db141fa18cf52b "
+    "https://github.com/FFmpeg-Builds/FFmpeg-Builds/tree/6c9aec5fc9a72ec3abedd1fa84db141fa18cf52b "
     f"(tag {FFMPEG_TAG})",
     "x264, the GPL library that does the encoding: https://code.videolan.org/videolan/x264 "
     "(commit 0480cb05fa188d37ae87e8f4fd8f1aea3711f7ee)",

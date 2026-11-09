@@ -337,7 +337,7 @@ SHA-256 and says where each one's source code is; the licence texts are in
   - FFmpeg: <https://github.com/FFmpeg/FFmpeg>, commit
     `29e619e767cde9045a75c29bc9a8278ae7b3a98b` (branch release/8.1).
   - The build recipe, which names every library in the build with its version or
-    commit (folder `scripts.d`): <https://github.com/BtbN/FFmpeg-Builds>, commit
+    commit (folder `scripts.d`): <https://github.com/FFmpeg-Builds/FFmpeg-Builds>, commit
     `6c9aec5fc9a72ec3abedd1fa84db141fa18cf52b` (tag `autobuild-2026-09-30-13-08`).
   - x264, which does the encoding: <https://code.videolan.org/videolan/x264>,
     commit `0480cb05fa188d37ae87e8f4fd8f1aea3711f7ee`.
