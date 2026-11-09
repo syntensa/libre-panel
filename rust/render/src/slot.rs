@@ -339,6 +339,8 @@ pub(crate) struct Slot {
     /// the card that rolls up, and the planned time its change began
     leaving: Option<usize>,
     since: f64,
+    /// a card drawn for the warm-up, whatever the rules say (pinned)
+    pub(crate) pinned: Option<usize>,
     /// what the leaving card showed last, by part; what the card on show shows
     frozen: IndexMap<String, Rc<Piece>>,
     last: IndexMap<String, Rc<Piece>>,
@@ -414,6 +416,7 @@ impl Slot {
             slide,
             panel: (theme.width, theme.height),
             leaving: None,
+            pinned: None,
             since: 0.0,
             frozen: IndexMap::new(),
             last: IndexMap::new(),
@@ -612,6 +615,13 @@ impl Slot {
         now: f64,
         animate: bool,
     ) -> std::result::Result<bool, String> {
+        if let Some(card) = self.pinned {
+            // (the warm-up draws each card once, without a change)
+            (self.shown, self.leaving) = (card, None);
+            self.still();
+            (self.track, self.sliding, self.shift) = (None, None, None);
+            return Ok(false);
+        }
         if self.leaving.is_some() && now - self.since >= self.change {
             (self.leaving, self.frozen) = (None, IndexMap::new());
         }
@@ -651,6 +661,22 @@ impl Slot {
         }
         moving |= self.slide_track(snapshot, now, animate);
         Ok(moving)
+    }
+
+    /// settle: forget what the warm-up showed: the first frame decides the card, with no
+    /// change.
+    pub fn settle(&mut self) {
+        self.pinned = None;
+        (self.shown, self.started, self.leaving, self.turn_at) = (0, false, None, None);
+        (self.last, self.frozen) = (IndexMap::new(), IndexMap::new());
+        self.still();
+        (self.track, self.sliding, self.shift) = (None, None, None);
+        (self.from, self.to, self.colour) = (None, None, None);
+    }
+
+    /// How many cards the slot shows in turn.
+    pub fn cards(&self) -> usize {
+        self.kinds.len()
     }
 
     /// _move: where the change has got to at `p` (0 to 1) of its time.

@@ -863,8 +863,9 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       its parts were then. A new track on the playback card on show slides in from the right
       as the old one moves out (`slide` seconds). The frame's colour reaches the card's over
       0.55 s. The frame moves on while any of that is on its way. Changes chosen at random
-      (Python's random module picks them) and a panel's first moving frame, which draws every
-      card once first (not in a preview): Rust says it does not draw them yet. The tests: a
+      (Python's random module picks them): Rust says it does not draw them yet. A panel's
+      first moving frame, which draws every card once first (not in a preview): below. The
+      tests: a
       slot of a track's card and the weather's changing each way at a frame rate and none,
       frames a 25th of a second apart through the change and back in time within it, the
       track back and another sliding in: 768 frames to the bit, 594 of them on the way; 80
@@ -1063,6 +1064,27 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       tables and the halfway longitudes were added; the other two change nothing: the air
       laid anew with each light is seen to twice in Python (its key holds the light, and a
       new light lets the key go), and either alone does it
+- [x] card slots warmed up for a panel (the renderer's _warm_slots, Slot.pinned and settle): a
+      panel's renderer (not a preview's) draws every card of every slot once before its first
+      moving frame, slot after slot, each card pinned on show without a change; each slot then
+      forgets what it showed, and the frame is drawn from there (a slot warmed before another
+      is begun again by the frames of those after it, as in Python). Those frames go; what
+      they made stays: the cards' pieces, and the springs of what they show, so that a card
+      that first shows the frame after glides on from there. lp-check draws a panel's frames
+      where asked. The tests: 50 random themes of slots of every kind of card, a panel's frames
+      one after another, at a frame rate or none, the frames a moment to a second apart, and
+      back in time: 334 frames to the bit, 177 of them on the way; a slot showing a track, its
+      ring card drawn only in the warm-up and shown the frame after it as the track stops and
+      the load leaps, alone or beside another slot, its change of each way, at a frame rate and
+      none: 72 frames to the bit. The counter-checks put in 11 faults (no warm-up, one in a
+      preview too, no settling, the first card alone, the slots the other way; a pinned slot's
+      colour faded, its track kept; settling that keeps the slot begun, its card, what it
+      showed or its colour), and the tests catch 5 of them, one once the ring card's edge case
+      was added; the other six change nothing a frame shows: settling forgets a pinned slot's
+      colour and its track anyway; the first frame chooses each slot's card anew and shows
+      that card's parts; and with two slots or more the first frame moves on whichever was
+      warmed last (every slot but that one has been begun again by the warm-up of those after
+      it)
 - [ ] pictures as Pillow fails at them: lp-decode's errors as Python's exceptions, so that
       where Python catches an OSError and goes on (a picture cut short, a file of no picture)
       Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,

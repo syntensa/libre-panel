@@ -5669,6 +5669,81 @@ def test_card_slots_moving_from_card_to_card_as_python_draws_them(tmp_path: Path
     assert drawn > 700 and moving > 250, (drawn, moving)
 
 
+def test_card_slots_warmed_up_for_a_panel_as_python_draws_them(tmp_path: Path) -> None:
+    # (a panel's renderer, not a preview's: its first moving frame draws every card of every
+    # slot once first, whichever is on show, each slot then forgetting what it showed (those
+    # warmed before it are begun again by the slots after it), and draws on from there: the
+    # cards each slot shows, its changes, a new track sliding in, as the panels' loop draws
+    # them; at a frame rate or none, the frames a moment to a second apart, and back in time)
+    import dataclasses
+
+    rng = random.Random(0x5111)
+    kinds = ["playback", "music", "forecast", "weather", "net", "date", "clock", "text", "ring",
+             "stat"]  # fmt: skip
+    cases, expected = [], []
+    for n in range(50):
+        folder = tmp_path / f"t{n}"
+        _slot_theme(rng, folder, cards=kinds, moving=True)
+        snapshot = dataclasses.replace(_demo(), history={})
+        now, fps = rng.uniform(1000, 2000), rng.choice([0, 25, 50])
+        steps: list[tuple[Snapshot, float]] = []
+        for _ in range(rng.randrange(2, 12)):
+            steps.append((snapshot, now))
+            now += rng.choice([0.02, 0.04, 0.1, 0.3, 1.0, 0, -0.1])
+            readings = _slot_readings_after(rng, dict(snapshot.readings))
+            snapshot = dataclasses.replace(snapshot, readings=readings)
+        given = [{"snapshot": _snapshot_given(s), "now": t} for s, t in steps]
+        cases.append({"folder": str(folder), "dither": False, "animate": True, "fps": fps,
+                      "preview": False, "steps": given})  # fmt: skip
+        expected.append(_python_moving(folder, steps, fps, preview=False))
+    drawn, moving = _compare_moving(cases, expected)
+    assert drawn > 250 and moving > 60, (drawn, moving)
+
+
+def test_card_slots_warmed_up_at_their_edges_as_python_draws_them(tmp_path: Path) -> None:
+    # (a panel's slot showing a track, its ring card drawn only in the warm-up, then shown the
+    # frame after it as the track stops and the load leaps: its ring and number glide from where
+    # the warm-up left them; one slot alone, or two side by side (the one warmed first begun
+    # again by the other's warm-up); its change of each way, at a frame rate and none)
+    import dataclasses
+
+    snapshot = dataclasses.replace(_demo(), history={})
+    first = dict(snapshot.readings)
+    first.update({"media.title": Reading("media.title", "Midnight Drive"),
+                  "media.playing": Reading("media.playing", 1),
+                  "cpu.load": Reading("cpu.load", 10.0)})  # fmt: skip
+    then = dict(first)
+    then.update({"media.title": Reading("media.title", ""),
+                 "media.playing": Reading("media.playing", 0),
+                 "cpu.load": Reading("cpu.load", 90.0)})  # fmt: skip
+    steps = [(dataclasses.replace(snapshot, readings=first), 1000.0)]
+    steps += [(dataclasses.replace(snapshot, readings=then), t)
+              for t in (1000.04, 1000.08, 1000.3, 1000.7, 1001.5)]  # fmt: skip
+    cases, expected = [], []
+    for n, (transition, fps, two) in enumerate(
+        (t, fps, two) for t in ("fade", "light", "cut") for fps in (0, 50) for two in (False, True)
+    ):
+        folder = tmp_path / f"t{n}"
+        folder.mkdir()
+        slot = {"type": "module", "id": "s0", "col": 0, "row": 0, "cols": 1, "rows": 1,
+                "module": "cards", "items": "playback\nring", "transition": transition,
+                "change": 0.6, "hold": 0}  # fmt: skip
+        widgets = [slot]
+        if two:
+            widgets.append({**slot, "id": "s1", "col": 1, "items": "playback\nstat\nring"})
+        data = {"format": THEME_FORMAT, "name": "warm", "display": {"width": 480, "height": 320},
+                "palette": {name: "#808080" for name in PALETTE},
+                "background": {"color": "#101418"}, "widgets": widgets,
+                "grid": {"columns": 2 if two else 1, "rows": 1, "gap": 0, "margin": 0}}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        given = [{"snapshot": _snapshot_given(s), "now": t} for s, t in steps]
+        cases.append({"folder": str(folder), "dither": False, "animate": True, "fps": fps,
+                      "preview": False, "steps": given})  # fmt: skip
+        expected.append(_python_moving(folder, steps, fps, preview=False))
+    drawn, moving = _compare_moving(cases, expected)
+    assert drawn == 72 and moving > 30, (drawn, moving)
+
+
 def test_card_slots_change_every_way_as_python_draws_them(tmp_path: Path) -> None:
     # (a slot of a track's card and the weather's, its change of each way: the track stops and
     # the weather shows, frames a 25th of a second apart through the change, one back in time
@@ -6048,13 +6123,14 @@ def test_card_slots_frames_in_their_cards_colours(tmp_path: Path) -> None:
 
 
 def _python_moving(folder: Path, steps: list[tuple[Snapshot, float]], fps: float = 0.0,
-                   place: tuple[float, float] | None = None
-                   ) -> list[dict[str, Any]] | None:  # fmt: skip
+                   place: tuple[float, float] | None = None,
+                   preview: bool = True) -> list[dict[str, Any]] | None:  # fmt: skip
     """Moving frames one after another by one renderer (animate: as the panels' loop draws
-    them; your place `place`), each at its time: the frame, its boxes, whether it moves on and
-    when it is due again; None for a theme Python does not read."""
+    them; your place `place`; a panel's frames, not a preview's, where not `preview`), each at
+    its time: the frame, its boxes, whether it moves on and when it is due again; None for a
+    theme Python does not read."""
     try:
-        renderer = Renderer(load_theme(folder), animate=True, preview=True)
+        renderer = Renderer(load_theme(folder), animate=True, preview=preview)
     except ThemeError:
         return None
     renderer.fps = fps

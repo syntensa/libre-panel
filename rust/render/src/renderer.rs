@@ -133,6 +133,8 @@ pub struct Renderer {
     slots: IndexMap<String, Slot>,
     /// whether this frame's slots have chosen their cards
     slots_begun: bool,
+    /// whether their cards have been drawn once (_slots_warm)
+    slots_warm: bool,
     /// the time the frame is drawn for (render's `now`: a download's running light)
     pub(crate) at: f64,
     /// your place (latitude, longitude), for the earth: the loop sets it (Python's
@@ -237,6 +239,7 @@ impl Renderer {
             ranges: HashMap::new(),
             slots: IndexMap::new(),
             slots_begun: false,
+            slots_warm: false,
             at: 0.0,
             place: None,
             motion: motion::Motion::default(),
@@ -302,6 +305,9 @@ impl Renderer {
                     break;
                 }
             }
+            if slot.pinned.is_some() {
+                continue; // (drawn for the warm-up: its frame's colour as it was)
+            }
             let own = match slot.module.get("color") {
                 Some(v) if v.truthy() => match self.color(Some(&v.str()), 1.0) {
                     Ok(Some(c)) => Some([c[0], c[1], c[2]]),
@@ -323,6 +329,26 @@ impl Renderer {
         self.slots = slots;
         self.slots_begun = begun.is_ok();
         begun
+    }
+
+    /// _warm_slots: every card of every slot drawn once, whichever is on show, so that the first
+    /// change finds its pieces made; each slot then forgets what it showed (the frames drawn on
+    /// the way go, what they made stays).
+    fn warm_slots(&mut self, snapshot: &Snapshot, now: f64) -> std::result::Result<(), Unported> {
+        let ids: Vec<String> = self.slots.keys().cloned().collect();
+        for id in ids {
+            let cards = self.slots[&id].cards();
+            for card in 0..cards {
+                if let Some(slot) = self.slots.get_mut(&id) {
+                    slot.pinned = Some(card);
+                }
+                self.render(snapshot.clone(), now)?;
+            }
+            if let Some(slot) = self.slots.get_mut(&id) {
+                slot.settle();
+            }
+        }
+        Ok(())
     }
 
     /// What each slot shows in the frame drawn last, by its id: the card on show, the frame's
@@ -1393,11 +1419,16 @@ impl Renderer {
         if let Some(what) = self.beyond_widgets() {
             return Err(Unported(what.into()));
         }
-        if !self.slots.is_empty() && self.options.animate && !self.options.preview {
-            // (a panel's first moving frame draws every card of every slot once first)
-            return Err(Unported("card slots warmed up for a panel".into()));
-        }
         let snapshot = snapshot.finite();
+        if !self.slots.is_empty()
+            && self.options.animate
+            && !self.options.preview
+            && !self.slots_warm
+        {
+            // (once, with a panel's first moving frame)
+            self.slots_warm = true;
+            self.warm_slots(&snapshot, now)?;
+        }
         self.snapshot = Some(snapshot.clone());
         // (Motion.begin: the springs of values long gone go, the others forget old pieces)
         self.moving = false;

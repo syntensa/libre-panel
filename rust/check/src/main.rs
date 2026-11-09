@@ -2335,7 +2335,8 @@ fn run(case: &Value) -> Result<Value, String> {
                         Err(e) => return json!({"error": e.msg}),
                     };
                     let options = lp_render::Options {
-                        preview: true,
+                        // (an editor's preview, unless a panel's frame is asked for)
+                        preview: c["preview"].as_bool().unwrap_or(true),
                         // (a moving frame, as the panels' loop draws them, where asked)
                         animate: c["animate"].as_bool().unwrap_or(false),
                         dither: c["dither"].as_bool().unwrap_or(false),
