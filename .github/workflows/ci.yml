@@ -36,6 +36,15 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: pip install -e ".[dev,usb,tray]"
+      # (what fetch_tools.py downloaded in a run before: it takes a file kept there only where
+      # it is the one it pins, else downloads it again; GitHub's release files answered 504
+      # for longer than it asks again, and failed every job that downloads them)
+      - name: The downloads a run before kept
+        id: tools-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ runner.temp }}/tools-cache
+          key: tools-${{ runner.os }}-${{ hashFiles('packaging/fetch_tools.py') }}
       - name: ffmpeg for the video mode tests
         # The FFmpeg build the downloads carry (packaging/fetch_tools.py: pinned, from its
         # project's releases on GitHub, checked, asked again when a server fails), on Windows
@@ -43,7 +52,7 @@ jobs:
         # half an hour to install ffmpeg, both before a test had run.
         shell: bash
         run: |
-          python packaging/fetch_tools.py "$RUNNER_TEMP/tools"
+          python packaging/fetch_tools.py "$RUNNER_TEMP/tools" --cache "$RUNNER_TEMP/tools-cache"
           if [ "$RUNNER_OS" = "Windows" ]; then
             cygpath -w "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
           else
@@ -51,6 +60,12 @@ jobs:
           fi
           export PATH="$RUNNER_TEMP/tools:$PATH"
           ffmpeg -hide_banner -encoders | grep libx264
+      - name: Kept for the runs after
+        if: steps.tools-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/tools-cache
+          key: tools-${{ runner.os }}-${{ hashFiles('packaging/fetch_tools.py') }}
       - run: pytest -q -rs --durations=20
       - name: The stacks of a test that hung
         if: failure()
@@ -119,15 +134,27 @@ jobs:
             echo "LIBRE_PANEL_ENGINE=$PWD/$built" >> "$GITHUB_ENV"
           fi
       - run: pip install -e ".[dev,usb]"
+      - name: The downloads a run before kept
+        id: tools-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ runner.temp }}/tools-cache
+          key: tools-${{ runner.os }}-${{ hashFiles('packaging/fetch_tools.py') }}
       - name: ffmpeg (decodes what the engine made)
         shell: bash
         run: |
-          python packaging/fetch_tools.py "$RUNNER_TEMP/tools"
+          python packaging/fetch_tools.py "$RUNNER_TEMP/tools" --cache "$RUNNER_TEMP/tools-cache"
           if [ "$RUNNER_OS" = "Windows" ]; then
             cygpath -w "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
           else
             echo "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
           fi
+      - name: Kept for the runs after
+        if: steps.tools-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/tools-cache
+          key: tools-${{ runner.os }}-${{ hashFiles('packaging/fetch_tools.py') }}
       - name: The version of MSYS2's libx264
         if: runner.os == 'Windows'
         shell: msys2 {0}
@@ -205,6 +232,39 @@ jobs:
       # Windows' Pillow has libjpeg-turbo and libwebp built in, where Linux's has them as files
       # for lp-check to load: here they are built as Pillow's wheel has them (the same
       # versions, MSVC, libjpeg-turbo's SIMD), so the JPEG and WebP comparisons run here too
+      # (their sources as a run before kept them, each taken only where it is the pinned one,
+      # else downloaded again; the key names the versions, so new ones are kept anew)
+      - name: The libraries' sources a run before kept (Windows)
+        if: runner.os == 'Windows'
+        id: libs-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ runner.temp }}/libs-cache
+          key: libs-${{ runner.os }}-libjpeg-turbo-3.2.0-libwebp-1.6.0
+      - name: The sources of libjpeg-turbo 3.2.0 and libwebp 1.6.0 (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/libs" "$RUNNER_TEMP/libs-cache" && cd "$RUNNER_TEMP/libs"
+          get() {  # (file, its SHA-256, where it is)
+            if ! (cd ../libs-cache && echo "$2  $1" | sha256sum -c --status 2> /dev/null); then
+              curl -sSfL --retry 6 --retry-delay 20 -o "../libs-cache/$1" "$3"
+            else
+              echo "kept from a run before: $1"
+            fi
+            cp "../libs-cache/$1" "$1"
+            echo "$2  $1" | sha256sum -c
+          }
+          get jpeg.tar.gz 6f30092cef9fb839779646608f4ee14ae3cbac989c47fa05e841b0841f09878e \
+            https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.2.0/libjpeg-turbo-3.2.0.tar.gz
+          get webp.tar.gz e4ab7009bf0629fd11982d4c2aa83964cf244cffba7347ecd39019a9e38c4564 \
+            https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.6.0.tar.gz
+      - name: Kept for the runs after (Windows)
+        if: runner.os == 'Windows' && steps.libs-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/libs-cache
+          key: libs-${{ runner.os }}-libjpeg-turbo-3.2.0-libwebp-1.6.0
       - name: libjpeg-turbo 3.2.0 and libwebp 1.6.0 for the comparisons (Windows)
         if: runner.os == 'Windows'
         shell: bash
@@ -212,11 +272,7 @@ jobs:
           python -c "from PIL import features as f; print('Pillow has libjpeg-turbo', f.version_feature('libjpeg_turbo'), 'and libwebp', f.version_module('webp'))"
           choco install nasm -y --no-progress > /dev/null
           export PATH="$PATH:/c/Program Files/NASM"
-          mkdir -p "$RUNNER_TEMP/libs" && cd "$RUNNER_TEMP/libs"
-          curl -sSfL --retry 6 --retry-delay 20 -o jpeg.tar.gz https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.2.0/libjpeg-turbo-3.2.0.tar.gz
-          curl -sSfL --retry 6 --retry-delay 20 -o webp.tar.gz https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.6.0.tar.gz
-          printf '%s  %s\n' 6f30092cef9fb839779646608f4ee14ae3cbac989c47fa05e841b0841f09878e jpeg.tar.gz \
-            e4ab7009bf0629fd11982d4c2aa83964cf244cffba7347ecd39019a9e38c4564 webp.tar.gz | sha256sum -c
+          cd "$RUNNER_TEMP/libs"
           tar -xzf jpeg.tar.gz && tar -xzf webp.tar.gz
           # (CMake builds with the newest Visual Studio the runner has, and says which)
           cmake -S libjpeg-turbo-3.2.0 -B jpeg -A x64 \

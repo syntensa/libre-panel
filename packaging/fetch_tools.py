@@ -1,6 +1,7 @@
 """Fetch the programs that the downloads carry next to Libre Panel, for the build.
 
     python packaging/fetch_tools.py [FOLDER] [--platform windows|linux] [--archive-dir DIR]
+                                    [--cache DIR]
 
 The programs are not part of the repository. This downloads the pinned files over HTTPS,
 checks every download against the SHA-256 recorded below, takes out only the program Libre
@@ -24,7 +25,10 @@ alone, when anything does not match.
     (NOTICE.md).
 
 ``--archive-dir`` reads the files (named like the end of their address) from a folder instead
-of the internet, for builds without a network; they are checked all the same.
+of the internet, for builds without a network; they are checked all the same. ``--cache`` keeps
+what was downloaded in a folder (named so too) and takes a file from there the next time where
+it is the one the table pins (its SHA-256), else downloads it again: CI keeps the folder
+between runs, so a server that fails for an hour does not fail them.
 
 The licences were read before these were pinned; see NOTICE.md. To move to other versions,
 read their licences again, change the table and run ``--print-pins``: it prints the SHA-256 of
@@ -421,6 +425,35 @@ def _from_net(tool: Tool) -> bytes:
     return download(tool.url)
 
 
+def _cached(cache: Path, get: Callable[[Tool], bytes]) -> Callable[[Tool], bytes]:
+    """``get`` with what it gives kept in ``cache`` (named like the end of the address): a file
+    there that is the one the table pins is read instead; only such a file is kept."""
+
+    def read(tool: Tool) -> bytes:
+        path = cache / tool.filename
+        try:
+            kept = path.read_bytes()
+        except OSError:
+            kept = b""
+        if kept and sha256(kept) == tool.sha256:
+            print(f"kept from a run before: {tool.filename}", flush=True)
+            return kept
+        if kept:
+            print(f"{path} is not the pinned file: taken again", flush=True)
+        data = get(tool)
+        if sha256(data) == tool.sha256:  # (a wrong one fails in _take, and is not kept)
+            part = path.with_name(path.name + ".part")
+            try:
+                cache.mkdir(parents=True, exist_ok=True)
+                part.write_bytes(data)
+                part.replace(path)
+            except OSError as exc:  # (a cache that cannot be written fails nothing)
+                print(f"{path} cannot be kept: {exc}", flush=True)
+        return data
+
+    return read
+
+
 def _from_folder(archive_dir: Path) -> Callable[[Tool], bytes]:
     def read(tool: Tool) -> bytes:
         path = archive_dir / tool.filename
@@ -445,6 +478,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("folder", nargs="?", type=Path, default=DEFAULT_FOLDER)
     parser.add_argument("--platform", choices=PLATFORMS, help="of the download (default: this)")
     parser.add_argument("--archive-dir", type=Path, help="read the files from here, not the net")
+    parser.add_argument("--cache", type=Path, help="keep the downloads here, and take them again")
     parser.add_argument(
         "--print-pins", action="store_true", help="print the hashes of the downloads, nothing else"
     )
@@ -455,6 +489,8 @@ def main(argv: list[str] | None = None) -> int:
             print("\n".join(pins(source, TOOLS)))
             return 0
         platform = args.platform or default_platform()
+        if args.cache:  # (not for --print-pins: that asks what the addresses give now)
+            source = _cached(args.cache, source)
         lines = fetch(args.folder, platform, source, TOOLS, LICENSES)
     except (FetchError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)

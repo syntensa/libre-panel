@@ -161,6 +161,9 @@ program out of ffmpeg's archive (it holds ffprobe, ffplay and documentation too)
 ffmpeg is the GPL build with libx264 and without the non-free parts, with its licence text. The
 spec copies the result next to the program as `tools`; `libre_panel/bundled.py` is where the
 app looks, before the `PATH` (`video.ffmpeg` and `[sensors.presentmon] path` still win).
+CI's jobs run it with `--cache`, in a folder GitHub keeps between runs: a file a run before
+downloaded is taken again where it is the one the table pins (its SHA-256), else downloaded
+anew, so a release page that fails for a while fails no tests. The release downloads them all.
 
 `packaging/check_tools.py` proves it on the PyInstaller folder, on what the Windows setup
 installed and on the files of the AppImage: every file listed in `tools/SOURCES.txt` is the one
