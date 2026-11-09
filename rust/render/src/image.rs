@@ -382,6 +382,11 @@ impl Animation {
     pub(crate) fn size(&self) -> usize {
         self.frames.iter().map(|f| f.width() * f.height() * 4).sum()
     }
+
+    /// The seconds of one round (Animation.length).
+    pub(crate) fn length(&self) -> f64 {
+        *self.ends.last().expect("frames")
+    }
 }
 
 /// moving.read_animation: the frames of an animated picture one after the other, each passed
@@ -567,10 +572,10 @@ impl Renderer {
         Ok(found)
     }
 
-    /// _slide for still pictures: they take turns by the clock, `seconds` each, the frame's
-    /// time as a timestamp of the computer's zone (one picture alone shows, though Python takes
-    /// the timestamp all the same: where that fails, so does the widget). A slideshow with one
-    /// that moves: Rust says it does not draw it yet.
+    /// _slide: still pictures take turns by the clock, `seconds` each, the frame's time as a
+    /// timestamp of the computer's zone (one picture alone shows, though Python takes the
+    /// timestamp all the same: where that fails, so does the widget); a slideshow with one that
+    /// moves: slide_moving.
     pub(crate) fn slide(
         &mut self,
         w: &Dict,
@@ -615,9 +620,7 @@ impl Renderer {
             }
         }
         if moving {
-            return Err(Drawn::Unported(
-                "slideshows with a picture that moves".into(),
-            ));
+            return self.slide_moving(w, pictures, seconds);
         }
         let Some(local) = lp_py::zones::local() else {
             return Err(Drawn::Unported(
@@ -631,6 +634,56 @@ impl Renderer {
         };
         let turn = py_floordiv(stamp, seconds) as i128;
         Ok(pictures[turn.rem_euclid(pictures.len() as i128) as usize].clone())
+    }
+
+    /// _slide of a slideshow with a picture that moves (a video, an animated picture): each
+    /// that moves plays whole rounds, as many as take `seconds` at least, and begins at its
+    /// first frame; a still one shows `seconds`; each in turn, by the frame's time (render's
+    /// `now`). A video's: Rust does not draw videos.
+    fn slide_moving(
+        &mut self,
+        w: &Dict,
+        pictures: &[String],
+        seconds: f64,
+    ) -> std::result::Result<String, Drawn> {
+        let id = widget::text(w, "id").to_string();
+        let now = self.at;
+        let (mut index, began, ends) = self.shows.get(&id).copied().unwrap_or((-1, now, now));
+        let count = pictures.len() as i64;
+        if index < 0 || now >= ends || now < began || index >= count {
+            index = (index + 1).rem_euclid(count);
+            let rel = pictures[index as usize].clone();
+            let lasts = self.slide_seconds(w, &rel, seconds)?;
+            self.shows.insert(id.clone(), (index, now, now + lasts));
+            // (an animated picture: from its first frame)
+            self.began.insert((id, rel), now);
+        }
+        Ok(pictures[index as usize].clone())
+    }
+
+    /// _slide_seconds: how long a picture of a slideshow shows: `seconds`; one that moves
+    /// whole rounds, as many as take that long at least (at its speed).
+    fn slide_seconds(&mut self, w: &Dict, rel: &str, seconds: f64) -> Found<f64> {
+        if !self.moves(rel)? || self.theme.root.is_none() {
+            return Ok(seconds);
+        }
+        let speed = speed_of(w.get("speed").unwrap_or(&Value::int(1))).map_err(Drawn::Failed)?;
+        if is_video(rel) {
+            return Err(Drawn::Unported("videos".into()));
+        }
+        let length = match self.animation_of(w, rel)? {
+            Some(animation) => animation.length(),
+            None => 0.0,
+        };
+        if length == 0.0 {
+            return Ok(seconds);
+        }
+        let length = length / speed;
+        Ok(if length < seconds {
+            (seconds / length - 1e-6).ceil() * length
+        } else {
+            length
+        })
     }
 
     /// _asset_image: the theme's picture `rel` fitted to w x h (0: as it is), kept (one that is
@@ -745,11 +798,8 @@ impl Renderer {
         } else {
             let (x, y) = (widget::int(w, "x", 0), widget::int(w, "y", 0));
             match self.animation_of(w, &rel) {
-                Ok(Some(_)) if self.options.animate => {
-                    // (Python's frame moves on with it: not told here yet)
-                    return Drawn::Unported("animated pictures in a moving frame".into());
-                }
                 Ok(Some(animation)) => {
+                    // (the frame of the moment, from its first; a moving frame moves on)
                     let id = widget::text(w, "id").to_string();
                     let at = self.at;
                     let began = *self.began.entry((id, rel.clone())).or_insert(at);
@@ -758,6 +808,9 @@ impl Renderer {
                         Err(e) => return Drawn::Failed(e),
                     };
                     let n = animation.index((at - began) * speed);
+                    if self.options.animate {
+                        self.moving = true;
+                    }
                     let content = Value::List(vec![
                         rel.as_str().into(),
                         Value::int(Rc::as_ptr(&animation) as i64),

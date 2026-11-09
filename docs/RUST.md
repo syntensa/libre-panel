@@ -743,14 +743,14 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       finds them, a picture alone at the edges of the years in four zones (92 frames to the
       bit). The counter-checks put in 45 faults, and the tests catch them all (3 of them once
       cases were added: two "**" apart, a moment before an animation first showed, a speed
-      under the least). Rust says it does not draw these yet: videos, slideshows with a
-      picture that moves, animated pictures in a moving frame, a file it does not read (also
-      as the background: one that is there and lp-decode does not decode, as Pillow knows
-      more kinds, or fails at it with what Python does not catch, as with the IndexError of a
-      GIF cut short), folders of names that are no Unicode; where it does not know the
-      computer's zone (on Windows), slideshows by the clock and a picture alone at the edges
-      of the years; on Windows, slideshow patterns of other than ASCII (pathlib matches there
-      without case)
+      under the least). Rust says it does not draw these yet: videos (a slideshow's turn of
+      one too), a file it does not read (also as the background: one that is there and
+      lp-decode does not decode, as Pillow knows more kinds, or fails at it with what Python
+      does not catch, as with the IndexError of a GIF cut short), folders of names that are no
+      Unicode; where it does not know the computer's zone (on Windows), slideshows by the
+      clock and a picture alone at the edges of the years; on Windows, slideshow patterns of
+      other than ASCII (pathlib matches there without case). Pictures that move in a moving
+      frame, and slideshows with them: below
 - [x] motion (render/motion.py and the renderer's _glide_s, _spring, _lead, _eased, _rule_step,
       _rule_mix, _rule_paint, _metric and _settled): in a moving frame (the panels' loop) a
       smooth value glides to each new reading on its sensor's spring, critically damped (95 % of
@@ -1132,6 +1132,28 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       changes (the same piece, the same box); Pillow turns a half turn by transposing too; a
       list's text is drawn within its room, so beyond it the text is clear; and Python lays no
       letter of a list on a bar (none of 1,500 crowded lists did)
+- [x] pictures that move in a moving frame, and slideshows with them (the renderer's
+      _draw_image, _slide, _slide_seconds and _moving; moving.Animation.length): an animated
+      picture shows the frame of the moment from its first at its speed, round and round,
+      and a moving frame moves on with it; a slideshow with a picture that moves shows its
+      pictures in turn by the frame's time, each that moves for whole rounds at its speed, as
+      many as take its `seconds` at least (seconds / length - 1e-6, rounded up: 7 s of rounds
+      of 0.056 s are 125 of them, not 126), each still one for its seconds, and each from its
+      start; a frame back in time goes on to the next. The tests: 50 random themes of animated
+      pictures and slideshows with them (stills, animations, patterns of their folder) frame
+      after frame, a moment to a minute apart and back in time, in moving frames (241 frames
+      to the bit, 184 of them on the way) and in still ones (288 frames to the bit); in them a
+      slideshow showed its first picture 279 times, the next 419 times, the next after a
+      frame back in time 231 times; four slideshows whose rounds come a hair over a whole
+      number of them, at four speeds (16 frames to the bit). The counter-checks put in 10
+      faults (the frame not moving on with an animation; a slideshow's turn ending a moment
+      later, held back in time, the same picture again, an animation not from its first
+      frame, its rounds counted without the tolerance, the speed the other way, its seconds
+      alone, the length of a first frame alone; one past the last of fewer pictures), and the
+      tests catch 9 of them, 1 once the rounds that come a hair over were added; the other
+      only shows where a slideshow's folder is read again (each half minute of the clock) with
+      fewer pictures in it than the turn had come to, which these tests do not do (without it
+      Rust would index past the end). A video in a slideshow: Rust does not draw videos yet
 - [ ] pictures as Pillow fails at them: lp-decode's errors as Python's exceptions, so that
       where Python catches an OSError and goes on (a picture cut short, a file of no picture)
       Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,

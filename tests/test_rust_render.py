@@ -2848,23 +2848,24 @@ def test_a_picture_where_the_frame_s_time_has_no_timestamp_as_python_shows_it(
     assert drawn > 90 and refused == 5 * len(looks), (drawn, refused)
 
 
-def test_videos_and_slideshows_that_move_rust_does_not_draw_yet(tmp_path: Path) -> None:
-    # (a video, and a slideshow with a picture that moves (an animated one, a video): Rust says
-    # it does not draw them yet, nor a file it does not read (a picture, a slideshow's, the
-    # background's; one named with a NUL, an animation cut short whose first frame is whole),
-    # nor a slideshow with one where the turn is another's; an animated picture alone, a
-    # slideshow of one, of none there, it draws)
+def test_videos_and_pictures_rust_does_not_draw_yet(tmp_path: Path) -> None:
+    # (a video, and a slideshow whose turn is a video's: Rust says it does not draw them yet,
+    # nor a file it does not read (a picture, a slideshow's, the background's; one named with a
+    # NUL, an animation cut short whose first frame is whole), nor a slideshow with one where
+    # the turn is another's; an animated picture alone, a slideshow of one, of none there, a
+    # slideshow with a picture that moves (its first turn a still's, an animated one's), it
+    # draws)
     from PIL import Image
 
     rng = random.Random(0x7E1D)
-    moves = "slideshows with a picture that moves"
     # (still pictures by the clock: on Windows, where Rust does not know the computer's zone,
     # not drawn yet)
     by_clock = ZONE_NEEDED[2] if sys.platform == "win32" else None
     looks = [({"src": "clips/a.mp4"}, "videos"),
-             ({"src": "pics/a.png", "slides": "anim/run.gif"}, moves),
-             ({"src": "", "slides": "pics/b.png\nclips/*"}, moves),
-             ({"src": "", "slides": "anim/wave.png\npics/c.png"}, moves),
+             ({"src": "pics/a.png", "slides": "anim/run.gif"}, None),
+             ({"src": "", "slides": "pics/b.png\nclips/*"}, None),
+             ({"src": "", "slides": "clips/*\npics/b.png"}, "videos"),
+             ({"src": "", "slides": "anim/wave.png\npics/c.png"}, None),
              ({"src": "anim/run.gif"}, None), ({"src": "", "slides": "anim/spin.webp"}, None),
              ({"src": "", "slides": "pics/*.gif"}, None), ({"src": "bad/half.png"}, UNREAD),
              ({"src": "anim/cut.gif"}, UNREAD), ({"src": "bad/notes.txt"}, UNREAD),
@@ -7692,3 +7693,127 @@ def test_turned_lists_whose_text_comes_near_their_bars_as_python_draws_them(
         expected.append(_python_moving(folder, steps))
     drawn, moving = _compare_moving(cases, expected)
     assert drawn > 250 and moving > 100, (drawn, moving)
+
+
+# -- pictures that move in a moving frame -----------------------------------------------------
+
+# (a slideshow's lines with pictures that move: animated ones alone, in a folder's pattern,
+# beside stills, the GIF cut short, none there)
+SLIDE_MOVING = [*THEME_MOVING[:3], "anim/*", "anim/*.gif", "pics/a.png", "pics/*.png",
+                "pics/none.png", "anim/cut.gif", "@media.cover", "pics/g.gif"]  # fmt: skip
+
+
+def _moving_slideshow(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """An image widget showing a slideshow with pictures that move (or an animated picture),
+    `seconds` each (the animated ones whole rounds, at their speed)."""
+    widget = _theme_picture(rng, i, size)
+    if rng.random() < 0.75:
+        widget["src"] = rng.choice(["", "", "pics/b.png", "anim/run.gif"])
+        lines = rng.sample(SLIDE_MOVING, rng.randrange(1, 5))
+        widget["slides"] = "\n".join(lines)
+        widget["seconds"] = rng.choice([0, 1, 2, 3, 0.5, 2.5, 10, 60])
+        if rng.random() < 0.4:
+            widget["speed"] = rng.choice([0.25, 0.5, 2, 4, 10, 0.1])
+    return widget
+
+
+def _moving_slideshow_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _moving_slideshow(rng, i, size) if rng.random() < 0.8 else _card_or_text(rng, i, size)
+
+
+@pytest.mark.parametrize("animate", [True, False])
+def test_pictures_that_move_frame_after_frame_as_python_shows_them(
+    tmp_path: Path, animate: bool
+) -> None:
+    # (one renderer showing animated pictures and slideshows with pictures that move frame
+    # after frame, in moving frames (the frame moves on with them) and in still ones: each
+    # picture from its first frame when it first shows, then the frame of the moment at its
+    # speed, round and round; a slideshow's picture that moves playing whole rounds, as many as
+    # take its seconds at least, a still one its seconds, then the next from its start; the
+    # same moment again, a part of a frame, a frame, a round, a minute later; back in time)
+    rng = random.Random(0xA42E if animate else 0xA42F)
+    cases, expected, unread = [], [], []
+    for n in range(50):
+        folder = tmp_path / f"t{n}"
+        _frame_theme(rng, folder, _moving_slideshow_or_more)
+        _theme_files(rng, folder)
+        if rng.random() < 0.8:  # (most whole, of frames of their own lengths, for the patterns)
+            size = _picture_size(rng)
+            whole = [noise(rng, "RGB", size) for _ in range(rng.randrange(2, 6))]
+            whole[0].save(folder / "anim" / "cut.gif", save_all=True, append_images=whole[1:],
+                          duration=[rng.choice(FRAME_MS) for _ in whole], loop=0)  # fmt: skip
+        steps: list[tuple[Snapshot, float]] = []
+        given = []
+        now = rng.uniform(1000, 10**6)
+        fps = rng.choice([0, 25, 50])
+        for _ in range(rng.randrange(2, 12)):
+            readings, snapshot = _image_snapshot(random.Random(n))
+            steps.append((snapshot, now))
+            given.append({"snapshot": readings, "now": now})
+            now += rng.choice([0, 0.004, 0.02, 0.05, 0.1, 0.3, 1, 2.5, 7, 60, -0.5, -20])
+        cases.append({"folder": str(folder), "dither": False, "steps": given,
+                      **({"animate": True, "fps": fps} if animate else {})})  # fmt: skip
+        # (the GIF where it is cut short, by its name or a pattern of its folder)
+        unread.append(_unread_in(folder) or "anim/*" in (folder / "theme.json").read_text())
+        if animate:
+            expected.append(_python_moving(folder, steps, fps))
+        else:
+            try:
+                expected.append(_python_steps(folder, steps))
+            except ThemeError:
+                expected.append(None)
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    drawn = moving = 0
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        if want is None:  # (a theme Python does not read: nor does Rust)
+            assert "error" in got, n
+            continue
+        for i, (g, w) in enumerate(zip(got["steps"], want, strict=True)):
+            if "failed" in w:  # (Python's frame fails: Rust makes none)
+                assert "unported" in g, (n, i, g, w)
+                break
+            if "unported" in g:  # (a file Rust does not read: what moves goes on in Python's)
+                assert g["unported"] == UNREAD and unread[n], (n, i, g)
+                break
+            assert g["sha256"] == hashlib.sha256(w["frame"].tobytes()).hexdigest(), (n, i)
+            assert g["boxes"] == w["boxes"], (n, i)
+            if animate:
+                assert g["moving"] == w["moving"], (n, i)
+                assert g["due"] == w["due"], (n, i)
+                moving += w["moving"]
+            drawn += 1
+    assert drawn > 200, drawn
+    assert not animate or moving > 80, moving
+
+
+def test_slideshows_whose_rounds_count_near_a_whole_as_python_counts_them(tmp_path: Path) -> None:
+    # (an animation whose rounds make a slideshow's seconds a hair over a whole number of them,
+    # as floats divide: 7 s of 0.026 + 0.030 s rounds are 125.00000000000001 of them, which
+    # Python takes for 125, not 126: the next picture shows from 7.000000000000001 s on; at its
+    # speed too; a moment back in time, the animation again from its start)
+    cases, expected = [], []
+    rng = random.Random(0x5110E)
+    for n, (ms, speed, seconds) in enumerate([((26, 30), 1, 7), ((22, 20), 1.5, 7),
+                                              ((36, 20), 2, 7), ((26, 30), 4, 7)]):  # fmt: skip
+        folder = tmp_path / f"t{n}"
+        (folder / "anim").mkdir(parents=True)
+        (folder / "pics").mkdir()
+        frames = [noise(rng, "RGB", (12, 10)) for _ in ms]
+        frames[0].save(folder / "anim" / "tick.png", save_all=True, append_images=frames[1:],
+                       duration=list(ms))  # fmt: skip
+        noise(rng, "RGB", (12, 10)).save(folder / "pics" / "still.png")
+        widget = {"type": "image", "id": "m0", "x": 1, "y": 1, "w": 12, "h": 10, "src": "",
+                  "slides": "anim/tick.png\npics/still.png", "seconds": seconds,
+                  "speed": speed}  # fmt: skip
+        theme = {"format": THEME_FORMAT, "name": "rounds", "display": {"width": 20, "height": 16},
+                 "background": {"color": "#101418"}, "widgets": [widget]}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+        length = sum(m / 1000 for m in ms) / speed
+        shows = math.ceil(seconds / length - 1e-6) * length  # (the tick's turn ends)
+        times = [1000.0, 1000.0 + shows / 2, 1000.0 + shows + (length / 2), 1000.0 + shows + 0.001]
+        steps = [(Snapshot(), t) for t in times]
+        given = [{"snapshot": _snapshot_given(Snapshot()), "now": t} for t in times]
+        cases.append({"folder": str(folder), "dither": False, "animate": True, "steps": given})
+        expected.append(_python_moving(folder, steps))
+    drawn, moving = _compare_moving(cases, expected)
+    assert drawn == 16 and moving == 12, (drawn, moving)

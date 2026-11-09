@@ -155,6 +155,9 @@ pub struct Renderer {
     pub(crate) moves: HashMap<String, bool>,
     /// when each animated picture first showed, by widget and picture (_began)
     pub(crate) began: HashMap<(String, String), f64>,
+    /// what each slideshow with a picture that moves shows (_shows): the picture's place in
+    /// it, when it began and when it ends
+    pub(crate) shows: HashMap<String, (i64, f64, f64)>,
     /// each slideshow's pictures, and when its folders were read (_slide_lists)
     pub(crate) slide_lists: HashMap<String, (std::time::Instant, Vec<String>)>,
     /// what of a list is drawn now (_list_piece's part): all of it, its text or its levels
@@ -262,6 +265,7 @@ impl Renderer {
             animations: Kept::new(image::ANIMATION_BYTES),
             moves: HashMap::new(),
             began: HashMap::new(),
+            shows: HashMap::new(),
             slide_lists: HashMap::new(),
             list_part: std::cell::Cell::new(list::ListPart::All),
             rotors: HashMap::new(),
