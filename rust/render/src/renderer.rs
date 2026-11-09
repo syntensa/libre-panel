@@ -692,7 +692,7 @@ impl Renderer {
         }
         if rel.contains('\0') {
             // (resolve_asset's ValueError, which _read_picture does not catch)
-            return Err(Unread::Raised("embedded null byte".into()));
+            return Err(Unread::Raised(lp_theme::model::NUL_IN_PATH.into()));
         }
         let warn = |text: &str| {
             let rel = lp_py::repr(rel);

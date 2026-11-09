@@ -15,6 +15,7 @@ import shutil
 import struct
 import subprocess
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from unittest import mock
@@ -423,6 +424,13 @@ def _difference(got: dict[str, Any], want: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+# (the moment the frames are drawn at, given to both: Python's snapshot would else take the time
+# it is made at, Rust's the first moment of 1970, which a picture alone takes the timestamp of
+# and Windows' C runtime has none for)
+MOMENT = datetime(2026, 11, 8, 12, 0)
+SNAPSHOT = {"readings": {}, "images": {}, "now": [2026, 11, 8, 12, 0, 0, 0, 0]}
+
+
 def _python_frames(folder: Path, case: dict[str, Any]) -> list[dict[str, Any]]:
     renderer = Renderer(load_theme(folder), preview=case["preview"], animate=case["animate"])
     renderer._ffmpeg = FFMPEG
@@ -431,7 +439,7 @@ def _python_frames(folder: Path, case: dict[str, Any]) -> list[dict[str, Any]]:
     out = []
     try:
         for step in case["steps"]:
-            frame, boxes = renderer.render(Snapshot(), now=step["now"])
+            frame, boxes = renderer.render(Snapshot(now=MOMENT), now=step["now"])
             full = renderer.full_video
             out.append({"sha256": _digest(frame), "boxes": boxes, "moving": renderer.moving,
                         "full_video": None if full is None else [full[0], full[1], full[2]],
@@ -463,22 +471,22 @@ def test_frames_with_videos_as_python_draws_them(tmp_path: Path) -> None:
         if n < 30:
             _theme(folder, rng, names)
             for _ in range(rng.randrange(3, 12)):
-                steps.append({"snapshot": {}, "now": at})
+                steps.append({"snapshot": SNAPSHOT, "now": at})
                 at += rng.choice([0, 1 / 30, 1 / 24, 0.05, 0.1, 0.5, 1.1, 3.0])
         elif n < 36:  # (a slideshow, round its videos and back to the first)
             _slideshow(folder, rng, names)
             for _ in range(24):
-                steps.append({"snapshot": {}, "now": at})
+                steps.append({"snapshot": SNAPSHOT, "now": at})
                 at += rng.choice([0.2, 0.3, 0.45, 0.6])
         elif n < 38:  # (each video at its own size)
             _own_sizes(folder, [(110, 70), (61, 45)][n - 36], names)
             for _ in range(3):
-                steps.append({"snapshot": {}, "now": at})
+                steps.append({"snapshot": SNAPSHOT, "now": at})
                 at += 0.1
         else:  # (a video alone, then a still picture)
             _alone_then_still(folder, names[n - 38])
             for _ in range(12):
-                steps.append({"snapshot": {}, "now": at})
+                steps.append({"snapshot": SNAPSHOT, "now": at})
                 at += 0.4
         case = {"folder": str(folder), "preview": n % 7 == 3, "animate": n % 5 != 4,
                 "dither": False, "steps": steps, "ffmpeg": FFMPEG,

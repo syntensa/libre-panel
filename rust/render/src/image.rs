@@ -708,7 +708,7 @@ impl Renderer {
             };
             if rel.contains('\0') {
                 // (resolve_asset's ValueError, which _slide_seconds does not catch)
-                return Err(Drawn::Failed(Failed("embedded null byte".into())));
+                return Err(Drawn::Failed(Failed(lp_theme::model::NUL_IN_PATH.into())));
             }
             let root = self.theme.root.clone().unwrap_or_default();
             match lp_theme::model::resolve_asset(&root, &Value::from(rel)) {
@@ -908,7 +908,7 @@ impl Renderer {
         };
         if rel.contains('\0') {
             // (resolve_asset's ValueError, which _draw_video does not catch)
-            return Drawn::Failed(Failed("embedded null byte".into()));
+            return Drawn::Failed(Failed(lp_theme::model::NUL_IN_PATH.into()));
         }
         let path = match lp_theme::model::resolve_asset(&root, &Value::from(rel)) {
             Ok(path) => path,

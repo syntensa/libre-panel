@@ -1467,7 +1467,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       without it, saying what Python says ("image 'x' could not be loaded (...)", a file not
       there as "[Errno 2] No such file or directory: '...'", on Windows the C runtime's errno
       and text for the system's error, as Python's open has them); what Python does not catch
-      fails the widget, saying the same ("embedded null byte" for a name with a NUL), and the
+      fails the widget, saying the same (for a name with a NUL what CPython 3.12 says now, "lstat: embedded null character in path",
+"stat: ..." on Windows), and the
       background's fails the renderer, as Python's is not made. A file of none of lp-decode's
       kinds Rust still leaves to Python. The tests: 990 pictures broken in every way (cut
       short, bytes changed or put in, EXIF Pillow cannot read, sizes beyond the limit or of

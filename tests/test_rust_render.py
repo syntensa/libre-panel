@@ -541,6 +541,16 @@ def _frame_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
     return given, snapshot
 
 
+# (the text of the ValueError resolve_asset raises for a name with a NUL, as CPython 3.12 words
+# it now and Rust says it: its older releases said "embedded null byte")
+NUL_IN_PATH = ("stat" if sys.platform == "win32" else "lstat") + ": embedded null character in path"
+
+
+def _today_s(warnings: list[str]) -> list[str]:
+    """Python's warnings, a widget failed at a name with a NUL as CPython 3.12 says it now."""
+    return [w.replace("failed: embedded null byte", f"failed: {NUL_IN_PATH}") for w in warnings]
+
+
 def _python_frame(
     folder: Path,
     snapshot: Snapshot,
@@ -565,7 +575,7 @@ def _python_frame(
         frame, boxes = renderer.render(snapshot, now=now)
     except Exception as error:  # (a frame Python cannot make: what lies over a widget failed)
         return {"failed": f"{type(error).__name__}: {error}"}
-    return {"frame": frame, "boxes": boxes, "warnings": list(renderer.warnings)}
+    return {"frame": frame, "boxes": boxes, "warnings": _today_s(renderer.warnings)}
 
 
 # what Rust does not draw where it does not know the computer's zone (a TZ the C library reads
@@ -3064,7 +3074,7 @@ def _python_broken_frame(folder: Path, snapshot: Snapshot, dither: bool) -> dict
         frame, boxes = renderer.render(snapshot, now=1000.0)
     except Exception as error:  # noqa: BLE001
         return {"failed": f"{type(error).__name__}: {error}"}
-    return {"frame": frame, "boxes": boxes, "warnings": list(renderer.warnings)}
+    return {"frame": frame, "boxes": boxes, "warnings": _today_s(renderer.warnings)}
 
 
 @pytest.mark.skipif(pillow_libjpeg() is None or not pillow_libwebp(),

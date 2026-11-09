@@ -1364,6 +1364,15 @@ fn os_error(e: &std::io::Error, path: &Path) -> Error {
     }
 }
 
+/// The text of the ValueError Python's resolve_asset raises for a name with a NUL in it
+/// (Path.resolve's os.lstat, os.stat on Windows), as CPython 3.12 words it now (its older
+/// releases said "embedded null byte").
+pub const NUL_IN_PATH: &str = if cfg!(windows) {
+    "stat: embedded null character in path"
+} else {
+    "lstat: embedded null character in path"
+};
+
 /// The class and the text of the OSError Python's open(path) raises where opening it failed so
 /// (`[Errno 2] No such file or directory: '/x/a.png'`). On Windows, the C runtime's errno for
 /// the system's error, as _wopen sets it, and its text there (a folder opened is "access is
