@@ -978,12 +978,14 @@ fn run(case: &Value) -> Result<Value, String> {
             json!({"matched": matched, "filtered": filtered})
         }
         "fan_layers" => {
-            // render/fan.py's rotor_layers of the default look at k px: its float32s
+            // render/fan.py's rotor_layers of a look (none named: the default) at k px: its
+            // float32s
             let dir = lp_render::fan::pictures_dir(std::path::Path::new(
                 case["fonts_dir"].as_str().ok_or("fonts_dir")?,
             ));
             let k = case["k"].as_u64().ok_or("k")? as usize;
-            let layers = lp_render::fan::layers(&dir, k).map_err(|e| e.0)?;
+            let look = lp_render::fan_looks::look(case["look"].as_str().unwrap_or(""));
+            let layers = lp_render::fan::layers(&dir, look, k).map_err(|e| e.0)?;
             let bytes: Vec<u8> = layers
                 .numbers()
                 .iter()
@@ -1016,7 +1018,9 @@ fn run(case: &Value) -> Result<Value, String> {
         }
         "fan_picture" => {
             // a fan's picture as the renderer lays it from fan.fan_parts: of a colour and a
-            // size, a rotor standing as given (its numbers as their bits), in its ring or none
+            // size, a rotor standing as given (its numbers as their bits), in its frame (ring,
+            // square or none; ring_shown: a ring or none), of its look (none named: the
+            // default) in the theme's colour or its own (paint "own")
             let dir = lp_render::fan::pictures_dir(std::path::Path::new(
                 case["fonts_dir"].as_str().ok_or("fonts_dir")?,
             ));
@@ -1031,9 +1035,17 @@ fn run(case: &Value) -> Result<Value, String> {
                     light: bits(&c["light"]),
                 };
                 let size = c["size"].as_i64().unwrap_or(48);
-                let ring = c["ring_shown"].as_bool().unwrap_or(true);
+                let frame = match c["frame"].as_str() {
+                    Some(name) => lp_render::fan::Frame::named(name),
+                    None if c["ring_shown"].as_bool().unwrap_or(true) => {
+                        lp_render::fan::Frame::Ring
+                    }
+                    None => lp_render::fan::Frame::Bare,
+                };
+                let look = lp_render::fan_looks::look(c["look"].as_str().unwrap_or(""));
+                let own = c["paint"].as_str() == Some("own");
                 out.push(
-                    match lp_render::fan::picture(&dir, colour, size, &rotor, ring) {
+                    match lp_render::fan::picture(&dir, colour, size, &rotor, frame, look, own) {
                         Ok(image) => value_of(&image),
                         Err(e) => json!({"error": e.0}),
                     },
@@ -1075,6 +1087,26 @@ fn run(case: &Value) -> Result<Value, String> {
                 );
             }
             json!({"pictures": out})
+        }
+        "fan_look_layers" => {
+            // render/fan_looks.py's rotor(look, size, angle) of each case with an angle (its bits),
+            // frame(look, size) of each without: the planes' float32s, little-endian, in base64
+            let out: Vec<Value> = case["cases"]
+                .as_array()
+                .ok_or("cases")?
+                .iter()
+                .map(|c| {
+                    let look = lp_render::fan_looks::look(c["look"].as_str().unwrap_or(""));
+                    let size = c["size"].as_u64().unwrap_or(1) as usize;
+                    let planes = match c["angle"].as_u64() {
+                        Some(bits) => lp_render::fan_looks::rotor(look, size, f64::from_bits(bits)),
+                        None => lp_render::fan_looks::frame(look, size),
+                    };
+                    let bytes: Vec<u8> = planes.iter().flat_map(|v| v.to_le_bytes()).collect();
+                    json!(STANDARD.encode(bytes))
+                })
+                .collect();
+            json!({"layers": out})
         }
         "turned" => {
             // the renderer's turns (render/renderer.py's _turned_point and _turned_box, and a
@@ -2391,6 +2423,29 @@ fn run(case: &Value) -> Result<Value, String> {
                         renderer.place = lat.as_f64().zip(lon.as_f64());
                     }
                     renderer.fps = c["fps"].as_f64().unwrap_or(0.0);
+                    // (what the person chose for the fans, as the app sets it: a look and paint
+                    // for all, and for some by their sensor)
+                    if let Some(chosen) = c["fan_choices"].as_object() {
+                        let text = |key: &str| chosen[key].as_str().unwrap_or("").to_string();
+                        let by = |key: &str| -> std::collections::HashMap<String, String> {
+                            chosen[key]
+                                .as_object()
+                                .map(|m| {
+                                    m.iter()
+                                        .map(|(k, v)| {
+                                            (k.clone(), v.as_str().unwrap_or("").to_string())
+                                        })
+                                        .collect()
+                                })
+                                .unwrap_or_default()
+                        };
+                        renderer.fan_choices = lp_render::fan::Choices {
+                            look: text("look"),
+                            paint: text("paint"),
+                            looks: by("looks"),
+                            paints: by("paints"),
+                        };
+                    }
                     // (each frame as a process's first, no fan seen running before it, unless it
                     // follows the one before)
                     if !c["after"].as_bool().unwrap_or(false) {

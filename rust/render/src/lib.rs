@@ -13,6 +13,7 @@ pub mod earth;
 pub mod effects;
 pub mod facets;
 pub mod fan;
+pub mod fan_looks;
 mod finish;
 pub mod formatting;
 mod gauge;

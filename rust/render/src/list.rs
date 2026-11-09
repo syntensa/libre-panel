@@ -795,7 +795,12 @@ impl Renderer {
             return Err(Failed("'NoneType' object is not subscriptable".into()));
         };
         let colour = [r, g, b].map(|v| v.clamp(0, 255) as u8);
-        let ring = widget::truthy(w, "levels");
+        // (its ring where it shows levels)
+        let frame = if widget::truthy(w, "levels") {
+            fan::Frame::Ring
+        } else {
+            fan::Frame::Bare
+        };
         let (ox, oy) = (
             widget::int(w, "x", 0) - piece.x,
             widget::int(w, "y", 0) - piece.y,
@@ -805,12 +810,15 @@ impl Renderer {
         let places = fan_places(w, items.len())?;
         for (&(x0, y0), item) in places.iter().zip(items) {
             let key = format!("{}\0{}", widget::text(w, "id"), item.key);
+            // (the look and paint the person chose for its sensor or all, else Noctua's G2 in
+            // the theme's colour: fan_choices.for_widget of a widget of its sensor alone)
+            let (look, own) = self.fan_choices.for_widget(&item.key, "auto", "auto");
             let rotor = if self.options.animate {
-                self.turned(&key, &item.key, item.number(), max_rpm)
+                self.turned(&key, &item.key, look.blades, item.number(), max_rpm)
             } else {
                 fan::Rotor::settled(&key, item.number(), max_rpm)
             };
-            let image = fan::picture(&dir, colour, size, &rotor, ring)?;
+            let image = fan::picture(&dir, colour, size, &rotor, frame, look, own)?;
             let half = (size - image.width() as i64) as f64 / 2.0;
             let x = round_int(ox as f64 + x0 + half);
             let y = round_int(oy as f64 + y0 + (size - image.height() as i64) as f64 / 2.0);

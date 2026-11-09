@@ -141,6 +141,10 @@ pub struct Renderer {
     /// your place (latitude, longitude), for the earth: the loop sets it (Python's
     /// renderer.place); None for none
     pub place: Option<(f64, f64)>,
+    /// what the person chose for the fans (config.toml's [hardware]: the app sets it, Python's
+    /// renderer.fan_choices); none chosen: the widgets' own, else Noctua's G2 in the theme's
+    /// colour
+    pub fan_choices: fan::Choices,
     /// what moves from frame to frame (render/motion.py's Motion): the springs of the values
     /// that glide, the fades of threshold colours
     pub motion: motion::Motion,
@@ -258,6 +262,7 @@ impl Renderer {
             slots_warm: false,
             at: 0.0,
             place: None,
+            fan_choices: fan::Choices::default(),
             motion: motion::Motion::default(),
             moving: false,
             fps: 0.0,
@@ -516,11 +521,13 @@ impl Renderer {
     }
 
     /// A fan in a moving frame (Rotor.advance with beats.of(sensor, fps, blades)): the fan
-    /// `key` of `sensor` at this frame's time with `rpm`; the frame moves on while it turns.
+    /// `key` of `sensor`, its look of `blades` blades, at this frame's time with `rpm`; the frame
+    /// moves on while it turns.
     pub(crate) fn turned(
         &mut self,
         key: &str,
         sensor: &str,
+        blades: i64,
         rpm: Option<f64>,
         max_rpm: f64,
     ) -> fan::Rotor {
@@ -528,13 +535,13 @@ impl Renderer {
         let fps = if self.fps == 0.0 { 0.0 } else { self.fps };
         let beat = self
             .beats
-            .entry((sensor.to_string(), fps.to_bits(), fan::BLADES))
+            .entry((sensor.to_string(), fps.to_bits(), blades))
             .or_insert_with(|| fan::Beat::new(sensor));
         let turning = self
             .rotors
             .entry(key.to_string())
             .or_insert_with(|| fan::Turning::new(key));
-        turning.advance(rpm, max_rpm, self.at, fan::BLADES, beat);
+        turning.advance(rpm, max_rpm, self.at, blades, beat);
         if turning.rotor.turning() {
             self.moving = true;
         }
@@ -1313,25 +1320,16 @@ impl Renderer {
             }
             "fan" => {
                 let w = w.clone();
-                // (fan_choices.for_widget with none of the person's choices: the widget's look
-                // and paint, else Noctua's G2 in the theme's colour)
-                let look = match widget::text(&w, "look") {
-                    "auto" => fan::DEFAULT_LOOK,
-                    other => other,
-                };
-                if look != fan::DEFAULT_LOOK {
-                    return Drawn::Unported("fans of other looks".into());
-                }
-                if widget::text(&w, "paint") == "own" {
-                    return Drawn::Unported("fans in their look's own colours".into());
-                }
-                let ring = match widget::text(&w, "frame") {
-                    "ring" => true,
-                    "none" => false,
-                    _ => return Drawn::Unported("fans in a square frame".into()),
-                };
                 let snapshot = self.snapshot.clone().unwrap_or_default();
                 let sensor = widget::text(&w, "sensor");
+                // (the widget's look and paint, else the person's for its sensor or all, else
+                // Noctua's G2 in the theme's colour: fan_choices.for_widget)
+                let (look, own) = self.fan_choices.for_widget(
+                    sensor,
+                    widget::text(&w, "look"),
+                    widget::text(&w, "paint"),
+                );
+                let frame = fan::Frame::named(widget::text(&w, "frame"));
                 let rpm = number(&snapshot.value(sensor));
                 // (an int of the theme's as Python's sums take it, as a float: one past a
                 // float's range fails them where there is a reading to take it to, and is
@@ -1348,7 +1346,7 @@ impl Renderer {
                 // has it: standing as fast as it runs)
                 let id = widget::text(&w, "id");
                 let rotor = if self.options.animate {
-                    self.turned(id, sensor, rpm, max_rpm)
+                    self.turned(id, sensor, look.blades, rpm, max_rpm)
                 } else {
                     fan::Rotor::settled(id, rpm, max_rpm)
                 };
@@ -1371,12 +1369,15 @@ impl Renderer {
                     Value::int(rotor.blur()),
                     Value::int(rotor.dim()),
                     Value::int(rotor.steps()),
-                    Value::Bool(ring),
+                    Value::int(rotor.shades()),
+                    Value::Str(format!("{frame:?}")),
+                    Value::Str(look.name.to_string()),
+                    Value::Bool(own),
                 ]);
                 let dir = fan::pictures_dir(&self.env.fonts_dir);
                 self.cached(&w, content, |_| {
-                    // (its ring as it is, the rotor over it, the square in the middle of its box)
-                    let image = fan::picture(&dir, colour, size, &rotor, ring)?;
+                    // (its frame, the rotor over it, the square in the middle of its box)
+                    let image = fan::picture(&dir, colour, size, &rotor, frame, look, own)?;
                     let at = (
                         x + (fw - canvas).div_euclid(2),
                         y + (fh - canvas).div_euclid(2),

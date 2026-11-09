@@ -1,10 +1,12 @@
-//! A list's fans and fan widgets (render/fan.py). Each fan is its rotor in the default look
-//! (noctua-g2: the Blender rotor's grey layers in assets/light3d/fan, read and averaged down as
-//! fan.py's _plane and _reduced do it in numpy), coloured in the theme's colour (_coloured),
-//! blurred into its disc by its speed (disc_image, then Image.blend) and dimmed by its light,
-//! in its ring: a faint groove all round and an arc that glows as far round as its share of the
-//! most (ring_image: ImageDraw's ellipse and arc drawn three times larger and reduced, their
-//! glow blurred). A still frame shows a fan as Rotor.settle has it: where its key puts its
+//! A list's fans and fan widgets (render/fan.py). Each fan is its rotor in its look (noctua-g2:
+//! the Blender rotor's grey layers in assets/light3d/fan, read and averaged down as fan.py's
+//! _plane and _reduced do it in numpy; the others drawn from their shape, render/fan_looks.rs),
+//! coloured in the theme's colour or the look's own (_coloured), blurred into its disc by its
+//! speed (disc_image, then Image.blend) and dimmed by its light, in its frame: a ring, a faint
+//! groove all round and an arc that glows as far round as its share of the most (ring_image:
+//! ImageDraw's ellipse and arc drawn three times larger and reduced, their glow blurred), a
+//! lit square frame, brighter the faster it runs (frame_image: the Blender frame's layers, or
+//! the look's own drawn one), or none. A still frame shows a fan as Rotor.settle has it: where its
 //! blades, as fast and as bright as its speed shows, its ring as full. In a moving frame it
 //! turns as Rotor.advance has it (Turning): its speed, ring and light follow the reading with
 //! inertia, it runs out and stands at 0 RPM, and its blades stand where the beat of its sensor
@@ -23,9 +25,10 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use lp_pixels::{alpha_composite, chops, Draw, Filter, FloatImage, Image, Mode};
 
+use crate::fan_looks::{self, Look};
 use crate::piece::{Failed, Result};
 
-/// fan_looks.DEFAULT: the look of a fan that names none, and the one Rust draws.
+/// fan_looks.DEFAULT: the look of a fan that names none.
 pub(crate) const DEFAULT_LOOK: &str = "noctua-g2";
 /// fan.py's POSITIONS: rotor pictures over one blade's pitch.
 pub(crate) const POSITIONS: usize = 48;
@@ -64,14 +67,38 @@ const BLUR: f64 = 0.8;
 const INERTIA_S: f64 = 0.45;
 const MAX_STEP: f64 = 0.3;
 const FRICTION: f64 = 0.35;
-/// The default look's blades (fan_looks' noctua-g2: nine, as the Blender rotor's).
-pub(crate) const BLADES: i64 = 9;
 /// fan.py's LIGHT: how bright a fan shows, running, stopped or without a reading.
 const RUNNING: f64 = 1.0;
 const STOPPED: f64 = 0.5;
 const MISSING: f64 = 0.25;
 /// The side of the rotor's pictures (px) and the largest rotor drawn from them.
 const MOST_SIDE: usize = 1024;
+/// fan.py's LAYER_BYTES: the bytes of the rotors' layers kept, and of the frames' apart (the
+/// least recently used go, the newest always stays, as render/kept.py's Kept keeps them).
+const LAYER_BYTES: usize = 24 << 20;
+
+/// Kept.get: the value kept by `key`, now the most recently used.
+fn kept<K: PartialEq, V: Clone>(made: &Mutex<Vec<(K, V, usize)>>, key: &K) -> Option<V> {
+    let mut made = made.lock().ok()?;
+    let at = made.iter().position(|(k, _, _)| k == key)?;
+    let entry = made.remove(at);
+    let value = entry.1.clone();
+    made.push(entry);
+    Some(value)
+}
+
+/// Kept.put with LAYER_BYTES: `value` (of `bytes`) kept as the newest; the least recently used
+/// go while more than that is kept.
+fn keep<K, V>(made: &Mutex<Vec<(K, V, usize)>>, key: K, value: V, bytes: usize) {
+    let Ok(mut made) = made.lock() else {
+        return;
+    };
+    made.push((key, value, bytes));
+    let mut total: usize = made.iter().map(|(_, _, n)| n).sum();
+    while total > LAYER_BYTES && made.len() > 1 {
+        total -= made.remove(0).2;
+    }
+}
 
 /// Python's max(a, b) of floats: `a` unless `b` is greater.
 fn py_max(a: f64, b: f64) -> f64 {
@@ -179,6 +206,11 @@ impl Rotor {
     /// The lengths of its ring's arc (of RING_STEPS).
     pub fn steps(&self) -> i64 {
         round_int(self.ring * RING_STEPS)
+    }
+
+    /// How far its square frame is lit (of SHADES).
+    pub fn shades(&self) -> i64 {
+        round_int(self.ring * SHADES as f64)
     }
 }
 
@@ -303,14 +335,80 @@ fn rotor_size(size: i64) -> i64 {
     round_int(size as f64 * LAYER_SIZE / FAN_SIZE).max(6)
 }
 
-/// fan.colours for the default look in the theme's colours: `colour`, and a lighter one of it
-/// for the hub.
-fn colours(colour: [u8; 3]) -> ([u8; 3], [u8; 3]) {
+/// fan.colours: the colours a fan's rotor (or its square `frame`) is painted in: the look's own
+/// (`own`: Noctua's brown and beige), else the theme's `colour` with a lighter one of it for the
+/// hub, the sticker or the frame's pads.
+fn colours(look: &Look, own: bool, colour: [u8; 3], frame: bool) -> ([u8; 3], [u8; 3]) {
+    if own {
+        return if frame {
+            (look.frame_color, look.pad_color)
+        } else {
+            (look.blade_color, look.hub_color)
+        };
+    }
     let lighter = colour.map(|v| {
         let v = f64::from(v);
         round_int(v + (255.0 - v) * 0.45).clamp(0, 255) as u8
     });
     (colour, lighter)
+}
+
+/// fan.Choices: what the person chose for the fans ([hardware] in config.toml): a look and
+/// colours for all, and for some fans by their sensor ("" or none: nothing chosen). A widget's
+/// own look and colours come first; "auto" takes these.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Choices {
+    pub look: String,
+    pub paint: String,
+    pub looks: HashMap<String, String>,
+    pub paints: HashMap<String, String>,
+}
+
+impl Choices {
+    /// Choices.for_widget: the look of a fan of `sensor` whose widget names `look` and `paint`
+    /// ("auto" or a look not known: the person's for the sensor, else for all, else Noctua's
+    /// G2; a paint but "theme" and "own": likewise, else the theme's), and whether it is in the
+    /// look's own colours.
+    pub fn for_widget(&self, sensor: &str, look: &str, paint: &str) -> (&'static Look, bool) {
+        let chosen = |by: &HashMap<String, String>, all: &str, none: &'static str| -> String {
+            [by.get(sensor).map(String::as_str).unwrap_or(""), all]
+                .into_iter()
+                .find(|v| !v.is_empty())
+                .unwrap_or(none)
+                .to_string()
+        };
+        let look = if look != "auto" && fan_looks::LOOKS.iter().any(|l| l.name == look) {
+            look.to_string()
+        } else {
+            chosen(&self.looks, &self.look, DEFAULT_LOOK)
+        };
+        let paint = if paint == "theme" || paint == "own" {
+            paint.to_string()
+        } else {
+            chosen(&self.paints, &self.paint, "theme")
+        };
+        (fan_looks::look(&look), paint == "own")
+    }
+}
+
+/// The frame round a fan (its widget's frame): the ring that shows the load, the lit square
+/// frame, or none.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Frame {
+    Ring,
+    Square,
+    Bare,
+}
+
+impl Frame {
+    /// The frame a widget names (any but "ring" and "square": none).
+    pub fn named(name: &str) -> Frame {
+        match name {
+            "ring" => Frame::Ring,
+            "square" => Frame::Square,
+            _ => Frame::Bare,
+        }
+    }
 }
 
 /// The rotor's grey layers as its pictures have them (fan.py's _plane, and what _reduced makes
@@ -321,10 +419,19 @@ struct Pictures {
     planes: Vec<[Vec<f32>; 4]>,
 }
 
-/// The layers made at each size asked for lately, the newest last.
-type MadeLayers = Mutex<Vec<((PathBuf, usize), Arc<Layers>)>>;
-/// The discs made lately (a rotor's of a size, in a pair of colours), the newest last.
-type MadeDiscs = Mutex<Vec<((PathBuf, usize, [u8; 3], [u8; 3]), Arc<Vec<u8>>)>>;
+/// The layers made of each look at each size asked for lately, the most recently used last,
+/// with their bytes.
+type MadeLayers = Mutex<Vec<((PathBuf, &'static str, usize), Arc<Layers>, usize)>>;
+/// The discs made lately (a look's rotor of a size, in a pair of colours), the newest last.
+type MadeDiscs = Mutex<
+    Vec<(
+        (PathBuf, &'static str, usize, [u8; 3], [u8; 3]),
+        Arc<Vec<u8>>,
+    )>,
+>;
+/// The square frames' layers made lately (the Blender frame's, "", or a drawn look's, at a
+/// size), the most recently used last, with their bytes.
+type MadeFrames = Mutex<Vec<((PathBuf, &'static str, usize), Arc<Vec<f32>>, usize)>>;
 
 /// The rotor's layers at a size: `k` x `k` pixels, its five layers (shape, core and gloss times
 /// alpha, alpha, and where a second colour goes) at each position, position after position,
@@ -367,27 +474,15 @@ fn pictures(dir: &Path) -> Result<Arc<Pictures>> {
     if let Some(found) = read.lock().ok().and_then(|r| r.get(dir).cloned()) {
         return Ok(found);
     }
-    let floor = CORE_FLOOR as f32;
-    let span = (1.0 - CORE_FLOOR) as f32;
     let mut side = 0;
     let mut planes = Vec::with_capacity(POSITIONS);
     for p in 0..POSITIONS {
-        let (s, shape, alpha) = plane(dir, &format!("rotor_shape_{p:02}.png"))?;
-        let (s1, core, _) = plane(dir, &format!("rotor_core_{p:02}.png"))?;
-        let (s2, gloss, _) = plane(dir, &format!("rotor_gloss_{p:02}.png"))?;
-        if s1 != s || s2 != s || (side != 0 && s != side) {
+        let (s, layers) = picture_planes(dir, &format!("rotor_{{}}_{p:02}.png"))?;
+        if side != 0 && s != side {
             return Err(Failed("the fan's pictures of sizes apart".into()));
         }
         side = s;
-        // (_reduced: the core from its darkest grey up, from 0 to 1; each layer times alpha)
-        let core: Vec<f32> = core
-            .iter()
-            .zip(&alpha)
-            .map(|(&c, &a)| ((c - floor) / span).clamp(0.0, 1.0) * a)
-            .collect();
-        let shape: Vec<f32> = shape.iter().zip(&alpha).map(|(&s, &a)| s * a).collect();
-        let gloss: Vec<f32> = gloss.iter().zip(&alpha).map(|(&g, &a)| g * a).collect();
-        planes.push([shape, core, gloss, alpha]);
+        planes.push(layers);
     }
     let made = Arc::new(Pictures { side, planes });
     if let Ok(mut read) = read.lock() {
@@ -396,50 +491,96 @@ fn pictures(dir: &Path) -> Result<Arc<Pictures>> {
     Ok(made)
 }
 
-/// fan.rotor_layers of the default look at `k` px: each layer averaged down from the
-/// pictures' size (Image.resize of mode F with the box filter: edges do not darken), kept for
-/// the last few sizes asked for.
-pub fn layers(dir: &Path, k: usize) -> Result<Arc<Layers>> {
+/// One set of pictures (`name` with "shape", "core" and "gloss" for its {}) as _reduced takes
+/// them before it averages them down: their side, and their shape, core and gloss times alpha
+/// (the core from its darkest grey up, from 0 to 1), and alpha (the shape's).
+fn picture_planes(dir: &Path, name: &str) -> Result<(usize, [Vec<f32>; 4])> {
+    let floor = CORE_FLOOR as f32;
+    let span = (1.0 - CORE_FLOOR) as f32;
+    let (s, shape, alpha) = plane(dir, &name.replace("{}", "shape"))?;
+    let (s1, core, _) = plane(dir, &name.replace("{}", "core"))?;
+    let (s2, gloss, _) = plane(dir, &name.replace("{}", "gloss"))?;
+    if s1 != s || s2 != s {
+        return Err(Failed("the fan's pictures of sizes apart".into()));
+    }
+    let core: Vec<f32> = core
+        .iter()
+        .zip(&alpha)
+        .map(|(&c, &a)| ((c - floor) / span).clamp(0.0, 1.0) * a)
+        .collect();
+    let shape: Vec<f32> = shape.iter().zip(&alpha).map(|(&s, &a)| s * a).collect();
+    let gloss: Vec<f32> = gloss.iter().zip(&alpha).map(|(&g, &a)| g * a).collect();
+    Ok((s, [shape, core, gloss, alpha]))
+}
+
+/// _reduced's layers of one set of pictures at `k` px: each averaged down from their `side`
+/// (Image.resize of mode F with the box filter: edges do not darken), then the part where a
+/// second colour goes (none: the Blender layers are of one colour).
+fn reduced(side: usize, layers: &[Vec<f32>; 4], k: usize, planes: &mut Vec<f32>) -> Result<()> {
+    for layer in layers {
+        if side == k {
+            planes.extend_from_slice(layer);
+        } else {
+            let full = FloatImage::from_vec(side, side, layer.clone())
+                .map_err(|e| Failed(e.to_string()))?;
+            let small = full
+                .resize(k, k, Filter::Box, None)
+                .map_err(|e| Failed(e.to_string()))?;
+            planes.extend_from_slice(&small.data);
+        }
+    }
+    planes.extend(std::iter::repeat_n(0.0f32, k * k));
+    Ok(())
+}
+
+/// fan.rotor_layers of `look` at `k` px: the Blender rotor's, each layer averaged down from the
+/// pictures' size, or the look's own drawn at each position (fan_looks.rotor, the positions
+/// drawn side by side on the processor's cores: each is drawn alone, the same numbers in any
+/// order); kept as fan.py keeps them (LAYER_BYTES).
+pub fn layers(dir: &Path, look: &'static Look, k: usize) -> Result<Arc<Layers>> {
     static MADE: OnceLock<MadeLayers> = OnceLock::new();
     let made = MADE.get_or_init(|| Mutex::new(Vec::new()));
-    let key = (dir.to_path_buf(), k);
-    if let Some(found) = made
-        .lock()
-        .ok()
-        .and_then(|m| m.iter().find(|(at, _)| *at == key).map(|(_, l)| l.clone()))
-    {
+    let key = (dir.to_path_buf(), look.name, k);
+    if let Some(found) = kept(made, &key) {
         return Ok(found);
     }
     if k == 0 || k > MOST_SIDE {
         return Err(Failed(format!("a rotor of {k} px")));
     }
-    let pictures = pictures(dir)?;
-    let side = pictures.side;
-    let kk = k * k;
-    let mut planes = Vec::with_capacity(POSITIONS * 5 * kk);
-    for position in &pictures.planes {
-        for layer in position {
-            if side == k {
-                planes.extend_from_slice(layer);
-            } else {
-                let full = FloatImage::from_vec(side, side, layer.clone())
-                    .map_err(|e| Failed(e.to_string()))?;
-                let small = full
-                    .resize(k, k, Filter::Box, None)
-                    .map_err(|e| Failed(e.to_string()))?;
-                planes.extend_from_slice(&small.data);
-            }
+    let mut planes = Vec::with_capacity(POSITIONS * fan_looks::PLANES * k * k);
+    if look.drawn {
+        let angles = fan_looks::angles(look, POSITIONS);
+        let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
+        let share = angles.len().div_ceil(cores.clamp(1, 8));
+        let drawn = std::thread::scope(|scope| {
+            let workers: Vec<_> = angles
+                .chunks(share)
+                .map(|some| {
+                    scope.spawn(move || {
+                        some.iter()
+                            .map(|&angle| fan_looks::rotor(look, k, angle))
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect();
+            workers
+                .into_iter()
+                .map(|worker| worker.join())
+                .collect::<std::result::Result<Vec<_>, _>>()
+        })
+        .map_err(|_| Failed(format!("the rotor of {} failed", look.name)))?;
+        for position in drawn.into_iter().flatten() {
+            planes.extend(position);
         }
-        // (the part where a second colour goes: none in this look)
-        planes.extend(std::iter::repeat_n(0.0f32, kk));
+    } else {
+        let pictures = pictures(dir)?;
+        for position in &pictures.planes {
+            reduced(pictures.side, position, k, &mut planes)?;
+        }
     }
+    let bytes = planes.len() * 4;
     let layers = Arc::new(Layers { k, planes });
-    if let Ok(mut made) = made.lock() {
-        if made.len() >= 8 {
-            made.remove(0);
-        }
-        made.push((key, layers.clone()));
-    }
+    keep(made, key, layers.clone(), bytes);
     Ok(layers)
 }
 
@@ -457,38 +598,9 @@ impl Layers {
     /// fan._coloured of position `phase`: its grey layers as RGBA in `colour`, and in `second`
     /// where its fifth layer says so (where the two differ).
     fn coloured(&self, phase: usize, colour: [u8; 3], second: [u8; 3]) -> Vec<u8> {
-        let kk = self.k * self.k;
-        let base = (phase % POSITIONS) * 5 * kk;
-        let plane = |i: usize| &self.planes[base + i * kk..base + (i + 1) * kk];
-        let (shape, core, gloss, alpha, part) = (plane(0), plane(1), plane(2), plane(3), plane(4));
-        let main = colour.map(|v| f32::from(v) / 255.0);
-        let other = second.map(|v| f32::from(v) / 255.0);
-        let (ambient, diffuse) = (AMBIENT as f32, DIFFUSE as f32);
-        let (flat, edge, shine) = ((1.0 - CORE) as f32, CORE as f32, GLOSS as f32);
-        let mut out = vec![0u8; kk * 4];
-        for (i, px) in out.chunks_exact_mut(4).enumerate() {
-            let a = alpha[i];
-            let safe = a.max(1e-6);
-            let shade = (shape[i] / safe).clamp(0.0, 1.0);
-            let dark = (core[i] / safe).clamp(0.0, 1.0);
-            let lit = (gloss[i] / safe).clamp(0.0, 1.0);
-            let c = if second != colour {
-                let p = (part[i] / safe).clamp(0.0, 1.0);
-                [0, 1, 2].map(|j| main[j] * (1.0 - p) + other[j] * p)
-            } else {
-                main
-            };
-            let (light, depth) = (ambient + diffuse * shade, flat + edge * dark);
-            let rgb = c.map(|v| v * light * depth);
-            // (the hue kept: a pastel does not wash out)
-            let top = 1.0f32.max(rgb[0].max(rgb[1]).max(rgb[2]));
-            for (o, v) in px.iter_mut().zip(rgb) {
-                let v = (v / top + shine * lit).clamp(0.0, 1.0);
-                *o = (v * 255.0 + 0.5).clamp(0.0, 255.0) as u8;
-            }
-            px[3] = (a.clamp(0.0, 1.0) * 255.0 + 0.5).clamp(0.0, 255.0) as u8;
-        }
-        out
+        let size = fan_looks::PLANES * self.k * self.k;
+        let base = (phase % POSITIONS) * size;
+        coloured(&self.planes[base..base + size], colour, second)
     }
 
     /// fan.disc_image: the rotor blurred into a disc, the mean over all its positions, each
@@ -531,12 +643,55 @@ impl Layers {
     }
 }
 
-/// fan.disc_image of the rotor's `layers` (read from `dir`) in its colours, kept for the last
-/// few asked for (as fan.py keeps its pictures: the fans of a list share theirs).
-fn disc(dir: &Path, layers: &Layers, colour: [u8; 3], second: [u8; 3]) -> Arc<Vec<u8>> {
+/// fan._coloured of one set of grey layers (shape, core and gloss times alpha, alpha, and the
+/// part where the second colour goes times alpha): RGBA in `colour`, and in `second` where its
+/// fifth layer says so (where the two differ).
+fn coloured(planes: &[f32], colour: [u8; 3], second: [u8; 3]) -> Vec<u8> {
+    let kk = planes.len() / fan_looks::PLANES;
+    let plane = |i: usize| &planes[i * kk..(i + 1) * kk];
+    let (shape, core, gloss, alpha, part) = (plane(0), plane(1), plane(2), plane(3), plane(4));
+    let main = colour.map(|v| f32::from(v) / 255.0);
+    let other = second.map(|v| f32::from(v) / 255.0);
+    let (ambient, diffuse) = (AMBIENT as f32, DIFFUSE as f32);
+    let (flat, edge, shine) = ((1.0 - CORE) as f32, CORE as f32, GLOSS as f32);
+    let mut out = vec![0u8; kk * 4];
+    for (i, px) in out.chunks_exact_mut(4).enumerate() {
+        let a = alpha[i];
+        let safe = a.max(1e-6);
+        let shade = (shape[i] / safe).clamp(0.0, 1.0);
+        let dark = (core[i] / safe).clamp(0.0, 1.0);
+        let lit = (gloss[i] / safe).clamp(0.0, 1.0);
+        let c = if second != colour {
+            let p = (part[i] / safe).clamp(0.0, 1.0);
+            [0, 1, 2].map(|j| main[j] * (1.0 - p) + other[j] * p)
+        } else {
+            main
+        };
+        let (light, depth) = (ambient + diffuse * shade, flat + edge * dark);
+        let rgb = c.map(|v| v * light * depth);
+        // (the hue kept: a pastel does not wash out)
+        let top = 1.0f32.max(rgb[0].max(rgb[1]).max(rgb[2]));
+        for (o, v) in px.iter_mut().zip(rgb) {
+            let v = (v / top + shine * lit).clamp(0.0, 1.0);
+            *o = (v * 255.0 + 0.5).clamp(0.0, 255.0) as u8;
+        }
+        px[3] = (a.clamp(0.0, 1.0) * 255.0 + 0.5).clamp(0.0, 255.0) as u8;
+    }
+    out
+}
+
+/// fan.disc_image of the rotor's `layers` (of `look`, read from `dir`) in its colours, kept for
+/// the last few asked for (as fan.py keeps its pictures: the fans of a list share theirs).
+fn disc(
+    dir: &Path,
+    look: &'static Look,
+    layers: &Layers,
+    colour: [u8; 3],
+    second: [u8; 3],
+) -> Arc<Vec<u8>> {
     static MADE: OnceLock<MadeDiscs> = OnceLock::new();
     let made = MADE.get_or_init(|| Mutex::new(Vec::new()));
-    let key = (dir.to_path_buf(), layers.side(), colour, second);
+    let key = (dir.to_path_buf(), look.name, layers.side(), colour, second);
     if let Some(found) = made
         .lock()
         .ok()
@@ -554,10 +709,11 @@ fn disc(dir: &Path, layers: &Layers, colour: [u8; 3], second: [u8; 3]) -> Arc<Ve
     disc
 }
 
-/// fan.blades_image: the rotor at `phase` in its colours, blurred into its disc by `blur` and
-/// dimmed by `dim` (steps of SHADES).
+/// fan.blades_image: the rotor (of `look`) at `phase` in its colours, blurred into its disc by
+/// `blur` and dimmed by `dim` (steps of SHADES).
 fn blades(
     dir: &Path,
+    look: &'static Look,
     layers: &Layers,
     colours: ([u8; 3], [u8; 3]),
     phase: usize,
@@ -570,7 +726,7 @@ fn blades(
     let mut image = Image::from_bytes(Mode::RGBA, k, k, layers.coloured(phase, colour, second))
         .map_err(failed)?;
     if blur != 0 {
-        let disc = disc(dir, layers, colour, second);
+        let disc = disc(dir, look, layers, colour, second);
         let disc = Image::from_bytes(Mode::RGBA, k, k, disc.to_vec()).map_err(failed)?;
         // (Image.blend's alpha, in single precision as Pillow's C takes it)
         let alpha = (BLUR * blur as f64 / SHADES as f64) as f32;
@@ -670,30 +826,94 @@ fn ring(colour: [u8; 3], size: i64, steps: i64, canvas: usize) -> Result<Image> 
     alpha_composite(&image, &arc).map_err(failed)
 }
 
-/// A fan's picture as the renderer lays it from fan.fan_parts (_laid_fan): its ring (where it
-/// has one: `ring` false is a fan of no frame) as it is, its rotor over it; `size` px with the
-/// room its glow takes round it.
+/// fan.frame_layers: the square frame's layers at `size` px, like a rotor's: the Blender
+/// frame's (its pictures beside the rotor's, averaged down), or the look's own drawn one (a
+/// drawn look's, or any look's in its own colours: `own`); kept as fan.py keeps them
+/// (LAYER_BYTES).
+fn frame_layers(dir: &Path, look: &'static Look, own: bool, size: usize) -> Result<Arc<Vec<f32>>> {
+    static MADE: OnceLock<MadeFrames> = OnceLock::new();
+    let made = MADE.get_or_init(|| Mutex::new(Vec::new()));
+    let drawn = look.drawn || own;
+    let key = (dir.to_path_buf(), if drawn { look.name } else { "" }, size);
+    if let Some(found) = kept(made, &key) {
+        return Ok(found);
+    }
+    if size == 0 || size > MOST_SIDE {
+        return Err(Failed(format!("a fan's frame of {size} px")));
+    }
+    let layers = if drawn {
+        fan_looks::frame(look, size)
+    } else {
+        let (side, planes) = picture_planes(dir, "frame_{}.png")?;
+        let mut layers = Vec::with_capacity(fan_looks::PLANES * size * size);
+        reduced(side, &planes, size, &mut layers)?;
+        layers
+    };
+    let bytes = layers.len() * 4;
+    let layers = Arc::new(layers);
+    keep(made, key, layers.clone(), bytes);
+    Ok(layers)
+}
+
+/// fan.frame_image: the lit square frame of a fan of `size` px, brighter the faster it runs
+/// (`steps` of SHADES): its gloss and its colours (rounded as Python rounds) times that.
+fn frame_image(
+    dir: &Path,
+    colour: [u8; 3],
+    size: usize,
+    steps: i64,
+    look: &'static Look,
+    own: bool,
+) -> Result<Image> {
+    // (the idle frame is dark, a fast one as bright as the blades)
+    let bright = 0.58 + 0.42 * steps as f64 / SHADES as f64;
+    let mut layers = frame_layers(dir, look, own, size)?.to_vec();
+    let kk = size * size;
+    // (the gloss follows the brightness: float32 times it, as numpy takes a Python float)
+    let times = bright as f32;
+    for gloss in &mut layers[2 * kk..3 * kk] {
+        *gloss *= times;
+    }
+    let (main, second) = colours(look, own, colour, true);
+    let scale = |c: [u8; 3]| c.map(|v| round_int(f64::from(v) * bright).clamp(0, 255) as u8);
+    let rgba = coloured(&layers, scale(main), scale(second));
+    Image::from_bytes(Mode::RGBA, size, size, rgba).map_err(|e| Failed(e.to_string()))
+}
+
+/// A fan's picture as the renderer lays it from fan.fan_parts (_laid_fan): its frame (the ring
+/// as it is, or the square in the middle, or none) and its rotor of `look` over it, in the
+/// theme's `colour` or the look's own (`own`); `size` px with the room its glow takes round it.
 pub fn picture(
     dir: &Path,
     colour: [u8; 3],
     size: i64,
     rotor: &Rotor,
-    ring_shown: bool,
+    frame: Frame,
+    look: &'static Look,
+    own: bool,
 ) -> Result<Image> {
     let failed = |e: lp_pixels::Error| Failed(e.to_string());
     let (size, _margin, canvas) = geometry(size, size);
     let k = rotor_size(size);
     let (side, canvas_px) = (k as usize, canvas as usize);
-    let mut laid = if ring_shown {
-        ring(colour, size, rotor.steps(), canvas_px)?
-    } else {
-        Image::blank(Mode::RGBA, canvas_px, canvas_px)
+    let mut laid = match frame {
+        Frame::Ring => ring(colour, size, rotor.steps(), canvas_px)?,
+        Frame::Square => {
+            let square = frame_image(dir, colour, size as usize, rotor.shades(), look, own)?;
+            let mut laid = Image::blank(Mode::RGBA, canvas_px, canvas_px);
+            let at = (canvas - size).div_euclid(2);
+            laid.alpha_composite_at(&square, (at, at), (0, 0, size, size))
+                .map_err(failed)?;
+            laid
+        }
+        Frame::Bare => Image::blank(Mode::RGBA, canvas_px, canvas_px),
     };
-    let layers = layers(dir, side)?;
+    let layers = layers(dir, look, side)?;
     let rotor_picture = blades(
         dir,
+        look,
         &layers,
-        colours(colour),
+        colours(look, own, colour, false),
         rotor.phase(),
         rotor.blur(),
         rotor.dim(),
@@ -733,6 +953,19 @@ mod tests {
         assert_eq!(geometry(4, 4), (8, 2, 12));
         assert_eq!(rotor_size(48), 38);
         assert_eq!(rotor_size(4), 6);
-        assert_eq!(colours([0, 100, 255]), ([0, 100, 255], [115, 170, 255]));
+        let g2 = fan_looks::look(DEFAULT_LOOK);
+        assert_eq!(
+            colours(g2, false, [0, 100, 255], false),
+            ([0, 100, 255], [115, 170, 255])
+        );
+        // (the look's own: Noctua's brown blades in a beige frame with brown pads)
+        assert_eq!(
+            colours(g2, true, [0, 100, 255], false),
+            ([104, 70, 54], [104, 70, 54])
+        );
+        assert_eq!(
+            colours(g2, true, [0, 100, 255], true),
+            ([212, 192, 164], [104, 70, 54])
+        );
     }
 }

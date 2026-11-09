@@ -492,9 +492,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       and on none of the names and numbers, they go over the list as pieces of their own, cut
       as they lie on it, as Python lays them (the same pixels; turned, they turn apart: turned
       widgets, below). Fans in a moving frame turn: below. The
-      looks and colours one may choose for the fans in the app's settings: Rust does not draw
-      them yet (the default's only; fan widgets: below). 66 of the app's 99 themes are
-      drawn by Rust, 61 of them the same to the bit
+      looks and colours one may choose for the fans in the app's settings: below (fans of
+      every look). 66 of the app's 99 themes are drawn by Rust, 61 of them the same to the bit
 - [x] card slots in a still frame (render/slot.py's Slot: begin, wants, _turn, _has, _target,
       _weather, _line_width, _outline, _cut, _frame and overlay; the renderer's _make_slots and
       its frame loop): which card a slot shows, the first whose rule holds or that has
@@ -609,9 +608,9 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       put in 19 faults, and the tests catch 17; the other two change nothing a picture can
       show: a most past a float's range taken as 0 where there is no reading, which nothing
       then looks at, and another most where the widget gives none, which never happens (the
-      theme's table gives every fan its own). The other looks, their own colours and the
-      square frame: Rust says it does not draw them yet (fans that turn in a moving frame:
-      below).
+      theme's table gives every fan its own). The other looks, their own colours, the square
+      frame and what the person chose for the fans: below, as fans that turn in a moving
+      frame.
       91 of the app's 99 themes are drawn by Rust, 81 of them the same to the bit (Lumen in its
       four shapes is new; its two of a level apart in the glow of their rings and a frame, none
       in their fans)
@@ -1163,6 +1162,50 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       apart and back in time: 424 frames to the bit, 250 of them on the way. The counter-checks
       put in 3 faults (the frame not moving on, moving on while the light stands, the light
       running while paused), and the tests catch them all
+- [x] fans of every look, in their own colours, in the square frame and in what the person
+      chose for them (render/fan_looks.py's Look, LOOKS, look, angles, rotor and frame;
+      render/fan.py's Choices.for_widget, colours, rotor_layers of the drawn looks,
+      frame_layers, frame_image and fan_parts' square): the rotors of noctua-a12x25,
+      noctua-a14 and libre drawn from their shape at each of the 48 positions over a blade's
+      pitch as numpy draws them, every pixel worked out from 3 x 3, each step in single
+      precision where numpy works in it and in double where its types take it there (a
+      float64 scalar or array among them: np.radians(1), the light), numpy's own exp for
+      float32 (np.rs) and the C library's atan2f, powf and pow, as numpy takes them on a
+      processor without AVX-512; the square frame of the default look from its Blender
+      pictures, averaged down as the rotor's, and a look's own drawn one (Noctua's pads round
+      their screw holes, Libre Panel's lit ring) for a drawn look or one in its own colours,
+      brighter the faster the fan runs (0.58 to 1 in 8 steps of its ring, its gloss and its
+      colours with it, rounded as Python rounds); a look's own colours (Noctua's brown blades
+      and beige sticker in a beige frame with brown pads; Libre Panel's white blades with a
+      cyan hub ring), else the theme's and a lighter one; each look turning on the beat of its
+      sensor for its own blades (9, 7 or 6). A widget's look and paint come first; "auto", and
+      the fans of a list, take what the person chose for the sensor, else for all, else
+      Noctua's G2 in the theme's colour. The tests: every layer of every look at 14 sizes from
+      1 px up, at its positions and at angles of every kind (none, a hair over, a million
+      round), every float32 the same to the bit as numpy's (drawn in a process of its own
+      that leaves AVX-512 unused, as the moon's face is; with numpy's AVX-512 paths 281 of 375
+      cases tried came out apart); the rotor's layers of the drawn looks at 10 sizes; 672 fans of
+      every look, paint and frame, every brightness of the square, laid to the bit; the
+      frames of 300 random themes of fan widgets of every look, paint and frame (289 drawn,
+      all the same to the bit; 216 before); 60 drawn frame after frame as their readings
+      change; 60 turning in moving frames (448 frames to the bit, 330 of them on the way; 344
+      and 267 before); 200 themes of fan widgets and lists in what a person chose for them
+      (186 drawn to the bit), and 40 of them frame after frame in moving frames (223 frames
+      to the bit, 169 on the way). Rust draws a look's 48 positions side by side on the
+      processor's cores (each alone: the same numbers), and keeps the rotors' layers and the
+      frames' as fan.py does, 24 MB of each at most, the least recently used going first. The
+      counter-checks put in 36 faults (each look's own colours swapped or one for both, the
+      frame's brightness, its gloss not brighter, its colours rounded otherwise, a Blender frame
+      for a look's own, the frames, the rotors and the discs kept without their look, the
+      square a pixel off or lit by the ring, the drawn looks as the Blender rotor, every own
+      frame Libre Panel's, the square drawn as none, nine blades or one beat for every look,
+      every widget in the default look or the theme's colours, numbers of the looks a hair off
+      (the gloss, the sticker, the round tips, the grooves, the ridge, the pads, the lit ring,
+      the corners), the edges of the hub's ring and of the screw holes, the person's choice for
+      all or by sensor left out or put first, a widget's "theme" taken for "auto", the lists'
+      fans or a widget without the person's choice), and the tests catch them all, the last
+      two edges once the least sizes where a pixel lies on them were added: a rotor of 339 px
+      and a frame of 510 px (none smaller has one, of 1,024 sizes searched)
 - [ ] pictures as Pillow fails at them: lp-decode's errors as Python's exceptions, so that
       where Python catches an OSError and goes on (a picture cut short, a file of no picture)
       Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,

@@ -70,6 +70,88 @@ def _moon_as_rust_s(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     moon._disc_kept.cache_clear()
 
 
+_DRAWN_LOOKS = """
+import json, struct, sys
+import numpy as np
+from libre_panel.render import fan, fan_looks
+for n, (name, size, what) in enumerate(json.loads(open(sys.argv[1]).read())):
+    look = fan_looks.look(name)
+    if what == "frame":
+        made = fan_looks.frame(look, size)
+    elif what == "all":
+        made = np.stack([fan_looks.rotor(look, size, a)
+                         for a in fan_looks.angles(look, fan.POSITIONS)])
+    else:
+        made = fan_looks.rotor(look, size, struct.unpack("<d", struct.pack("<Q", what))[0])
+    np.save(f"{sys.argv[2]}/{n}.npy", made)
+"""
+# what the looks' rotors and frames were drawn as, by (look, size, "all" / "frame" / an angle's
+# bits): numpy's on a processor without AVX-512 (as _moon_face's)
+_LOOKS_DRAWN: dict[tuple[str, int, Any], Any] = {}
+# (the rotors' and frames' sizes the fans of FAN_SIDES have)
+_LOOK_SIZES = (6, 7, 10, 13, 18, 27, 37, 38, 39, 45, 52, 60, 79, 120)
+_FRAME_SIZES = (8, 9, 12, 13, 17, 23, 34, 47, 48, 49, 57, 66, 76, 100, 151)
+
+
+def _draw_looks(asked: list[tuple[str, int, Any]]) -> None:
+    """fan_looks.rotor (at all its positions: "all"; at an angle: its bits) and fan_looks.frame
+    ("frame") of each asked for that is not drawn yet, as numpy draws them on a processor
+    without AVX-512 (its own exp for float32, the C library's for the rest, as _moon_face has
+    it), in a process of its own told to leave those features unused: Rust's are those."""
+    import numpy as np
+
+    asked = [key for key in dict.fromkeys(asked) if key not in _LOOKS_DRAWN]
+    if not asked:
+        return
+    env = dict(os.environ)
+    if _avx512():
+        env["NPY_DISABLE_CPU_FEATURES"] = " ".join(_avx512())
+    with tempfile.TemporaryDirectory() as folder:
+        (Path(folder) / "asked.json").write_text(json.dumps(asked), encoding="utf-8")
+        subprocess.run([sys.executable, "-c", _DRAWN_LOOKS, str(Path(folder) / "asked.json"),
+                        folder], env=env, check=True, timeout=900)  # fmt: skip
+        for n, key in enumerate(asked):
+            _LOOKS_DRAWN[key] = np.load(Path(folder) / f"{n}.npy")
+
+
+def _rotor_drawn(look_: Any, size: int, angle: float) -> Any:
+    """fan_looks.rotor as Rust's (_draw_looks): the look at all its positions drawn at once (and
+    at the sizes the fans here have, when one is first asked for)."""
+    from libre_panel.render import fan, fan_looks
+
+    angles = fan_looks.angles(look_, fan.POSITIONS)
+    if angle not in angles:
+        key = (look_.name, size, _bits(angle))
+        _draw_looks([key])
+        return _LOOKS_DRAWN[key].copy()
+    if (look_.name, size, "all") not in _LOOKS_DRAWN:
+        _draw_looks([(look_.name, k, "all") for k in (size, *_LOOK_SIZES)])
+    return _LOOKS_DRAWN[(look_.name, size, "all")][angles.index(angle)].copy()
+
+
+def _frame_drawn(look_: Any, size: int) -> Any:
+    """fan_looks.frame as Rust's (_draw_looks; at the sizes the fans here have, when one is
+    first asked for)."""
+    if (look_.name, size, "frame") not in _LOOKS_DRAWN:
+        _draw_looks([(look_.name, s, "frame") for s in (size, *_FRAME_SIZES)])
+    return _LOOKS_DRAWN[(look_.name, size, "frame")].copy()
+
+
+@pytest.fixture(autouse=True)
+def _fan_looks_as_rust_s(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Every rotor and square frame of a look Python draws here drawn as Rust's (none kept from
+    before)."""
+    from libre_panel.render import fan, fan_looks
+
+    monkeypatch.setattr(fan_looks, "rotor", _rotor_drawn)
+    monkeypatch.setattr(fan_looks, "frame", _frame_drawn)
+    for kept in (fan._layers, fan._frames, fan._images):
+        kept.clear()
+    yield
+    for kept in (fan._layers, fan._frames, fan._images):
+        kept.clear()
+
+
 FLOATS = [0.0, -0.0, 1.0, -1.5, 0.5, 2.5, 0.125, 0.375, 2.675, 1.005, 1e16, 1e-5, 123.456,
           1234567.891, math.nan, -math.nan, math.inf, -math.inf, 1e308, 5e-324, 9.995, 0.05,
           999.95, 1e22, 1e-7, 12345678901234567890.0, 0.1 + 0.2, 100.0, 99.95, 1023.5, 1048576.0,
@@ -466,6 +548,7 @@ def _python_frame(
     look: str | None = None,
     now: float = 1000.0,
     place: tuple[float, float] | None = None,
+    fans: Any = None,
 ) -> dict[str, Any]:
     try:
         theme = load_theme(folder)
@@ -475,6 +558,8 @@ def _python_frame(
     if look is not None:  # (the look of the symbols and the moon the person chose)
         renderer.symbols = look
     renderer.place = place  # (your place, for the earth, as the loop sets it)
+    if fans is not None:  # (what the person chose for the fans, as the app sets it)
+        renderer.fan_choices = fans
     lists._RAN.clear()  # (each frame as a process's first: no fan seen running before it)
     try:
         frame, boxes = renderer.render(snapshot, now=now)
@@ -507,6 +592,7 @@ def _compare_frames(
     globes: bool = False,
     left_out: list[tuple[int, str]] | None = None,
     files: Any = None,
+    fans_of: Any = None,
 ) -> int:
     """Frames of `count` random themes (of what `make` makes) drawn by both, compared to the
     bit, and their boxes; how many were drawn. Rust may leave out those it says are `undefined`:
@@ -515,7 +601,8 @@ def _compare_frames(
     is given; your place where `place_of` gives one; Python's globes as it makes them with the
     C library's float32 functions where they are drawn (`globes`: _exact_globes). What Rust
     does not draw here (NOT_HERE) it may leave out too; each it left out and why, in
-    `left_out` where it is given. The theme's own files where `files` makes them."""
+    `left_out` where it is given. The theme's own files where `files` makes them; what the
+    person chose for the fans where `fans_of` gives it."""
     rng = random.Random(seed)
     cases, asked = [], []
     try:
@@ -536,7 +623,10 @@ def _compare_frames(
             place = None if place_of is None else place_of(rng)
             if place is not None:
                 cases[-1]["place"] = list(place)
-            asked.append((folder, snapshot, dither, look, now, place))
+            fans = None if fans_of is None else fans_of(rng)
+            if fans is not None:
+                cases[-1]["fan_choices"] = _choices_given(fans)
+            asked.append((folder, snapshot, dither, look, now, place, fans))
 
         def draw() -> list[dict[str, Any]]:
             return [_python_frame(*frame) for frame in asked]
@@ -3773,6 +3863,106 @@ def test_a_fan_s_picture_as_python_lays_it() -> None:
         assert picture(ours).tobytes() == want, case
 
 
+FAN_LOOKS = ("noctua-g2", "noctua-a12x25", "noctua-a14", "libre")
+
+
+def test_the_looks_drawn_as_numpy_draws_them() -> None:
+    # (fan_looks.rotor and fan_looks.frame of every look, the default's among them (drawn as
+    # the others where it is in its own colours), at the smallest sizes and larger, at each
+    # blade's positions and at angles of every kind: every float32 of every layer the same to
+    # the bit as numpy's, its float32 and float64 steps as numpy takes them)
+    import numpy as np
+
+    rng = random.Random(0xFA60)
+    asked = []
+    for name in FAN_LOOKS:
+        for size in [1, 2, 3, 4, 5, 8, 11, 16, 25, 38, 47, 64, 95, rng.randrange(6, 130)]:
+            asked.append((name, size, "frame"))
+            blades = {"libre": 6, "noctua-a14": 7}.get(name, 9)
+            for angle in [360 / blades * rng.randrange(48) / 48, rng.uniform(-720, 720),
+                          rng.choice([0.0, -0.0, 1e-9, 359.999, 1e6, -1e-300])]:  # fmt: skip
+                asked.append((name, size, _bits(angle)))
+    # (and the least sizes where a pixel's centre lies on an edge: of Libre Panel's hub ring, a
+    # rotor of 339 px; of a screw hole of Noctua's pads, a frame of 510 px)
+    asked += [("libre", 339, _bits(12.5)), ("noctua-a14", 510, "frame")]
+    _draw_looks(asked)
+    cases = [{"look": name, "size": size, **({} if what == "frame" else {"angle": what})}
+             for name, size, what in asked]  # fmt: skip
+    [got] = run([{"op": "fan_look_layers", "cases": cases}])
+    for key, ours in zip(asked, got["layers"], strict=True):
+        want = _LOOKS_DRAWN[key].astype("<f4")
+        found = np.frombuffer(base64.b64decode(ours), "<f4").reshape(want.shape)
+        assert np.array_equal(found.view(np.uint32), want.view(np.uint32)), key
+
+
+def test_a_fan_s_layers_of_each_look_as_python_draws_them() -> None:
+    # (rotor_layers of the drawn looks: each look's rotor at every position over its blade's
+    # pitch, at the sizes the fans here have and more: every float the same to the bit)
+    import numpy as np
+
+    from libre_panel.render import fan
+
+    sizes = [6, 7, 10, 13, 18, 27, 38, 45, 60, 79]
+    looks = FAN_LOOKS[1:]
+    _draw_looks([(name, k, "all") for name in looks for k in sizes])
+    cases = [{"op": "fan_layers", "fonts_dir": str(fonts.FONT_DIR), "k": k, "look": name}
+             for name in looks for k in sizes]  # fmt: skip
+    for case, got in zip(cases, run(cases), strict=True):
+        want = fan.rotor_layers(case["k"], case["look"]).astype("<f4")
+        ours = np.frombuffer(base64.b64decode(got["data"]), "<f4").reshape(want.shape)
+        assert np.array_equal(ours.view(np.uint32), want.view(np.uint32)), case
+
+
+def test_a_fan_of_each_look_as_python_lays_it() -> None:
+    # (a fan of every look in the theme's colours or its own, in its ring, its lit square frame
+    # (the Blender frame, or the look's own drawn one, at each of its brightnesses) or none, its
+    # rotor at every speed and light: laid as the renderer lays fan.fan_parts, to the bit)
+    from PIL import Image
+
+    from libre_panel.render import fan
+
+    rng = random.Random(0xFA61)
+    sizes = [8, 12, 13, 17, 23, 34, 48, 49, 57, 76, 100]
+    _draw_looks([(name, fan.rotor_size(size), "all") for name in FAN_LOOKS[1:] for size in sizes]
+                + [(name, size, "frame") for name in FAN_LOOKS for size in sizes])  # fmt: skip
+    cases, wanted = [], []
+    # (every brightness of the square frame of every look, its own colours and the theme's;
+    # then 600 at random)
+    shades = [(name, paint, k / fan.SHADES) for name in FAN_LOOKS for paint in ("theme", "own")
+              for k in range(fan.SHADES + 1)]  # fmt: skip
+    for n in range(len(shades) + 600):
+        size = rng.choice(sizes)
+        colour = tuple(rng.randrange(256) for _ in range(3))
+        if rng.random() < 0.2:
+            colour = rng.choice([(255, 255, 255), (0, 0, 0), (19, 229, 215), (104, 70, 54)])
+        rotor = fan.Rotor("x")
+        rotor.angle = rng.random()
+        rotor.speed = rng.choice([0.0, 0.22, rng.uniform(0, 1.1), 1.1])
+        rotor.ring = rng.choice([0.0, 1.0, rng.random(), 0.0625, 0.9375, 0.004])
+        rotor.light = rng.choice([1.0, 0.5, 0.25])
+        frame = rng.choice(["ring", "square", "square", "none"])
+        look, paint = rng.choice(FAN_LOOKS), rng.choice(["theme", "own"])
+        if n < len(shades):
+            (look, paint, rotor.ring), frame = shades[n], "square"
+        parts = fan.fan_parts(colour, size, size, rotor, frame, look, paint)
+        canvas = fan.geometry(size, size)[2]
+        first, at = parts[0]
+        if at == 0 and first.size == (canvas, canvas):  # (as Renderer._laid_fan lays them)
+            laid, rest = first.copy(), parts[1:]
+        else:
+            laid, rest = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0)), parts
+        for part, at in rest:
+            laid.alpha_composite(part, (at, at))
+        cases.append({"colour": list(colour), "size": size, "angle": _bits(rotor.angle),
+                      "speed": _bits(rotor.speed), "ring": _bits(rotor.ring),
+                      "light": _bits(rotor.light), "frame": frame, "look": look,
+                      "paint": paint})  # fmt: skip
+        wanted.append(laid.tobytes())
+    [got] = run([{"op": "fan_picture", "fonts_dir": str(fonts.FONT_DIR), "cases": cases}])
+    for case, ours, want in zip(cases, got["pictures"], wanted, strict=True):
+        assert picture(ours).tobytes() == want, case
+
+
 # (fans by pattern and by key, named, the graphics card's among them; lines of other readings)
 FAN_ITEMS = ["fan.*", "fan.*", "fan.[0-9]*", "fan.gpu = Card", "gpu.fan", "fan.?", "temp.*",
              "fan.1 = Front\nfan.2 = Back", "!fan.amd\nfan.*", "fan.cpu*", "*.fan",
@@ -4000,17 +4190,15 @@ def test_fans_seen_running_stay_in_a_list(tmp_path: Path) -> None:
     assert expected[1].tobytes() != expected[2].tobytes()  # (the one that ran shows)
 
 
-# (what Rust says it does not draw of fans yet: the other looks, their own colours, the square)
-FAN_UNDRAWN = ("fans of other looks", "fans in their look's own colours", "fans in a square frame")
 # (the sides of a fan's box: none, less than the least fan, odd and even, the lists' sizes)
 FAN_SIDES = [-6, 0, 1, 5, 7, 8, 9, 12, 13, 17, 23, 34, 47, 48, 49, 57, 66, 76, 100, 151]
 
 
 def _fan(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
     """A fan: of every size, square or not (the fan and its glow in the middle of its box, a
-    pixel more to one side where the room is odd), in its ring or none, in the theme's colour
-    or one of its own, at a most of its own (past a float's range among them); the other looks,
-    their own colours and the square frame now and then (Rust says it does not draw them)."""
+    pixel more to one side where the room is odd), in its ring, its lit square frame or none,
+    of every look, in the theme's colour, one of its own or the look's own, at a most of its own
+    (past a float's range among them)."""
     w, h = size
     widget: dict[str, Any] = {
         "type": "fan", "id": rng.choice([f"f{i}", f"fan-{i}", f"Lüfter {i}", f"gpu.fan.{i}"]),
@@ -4028,20 +4216,39 @@ def _fan(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
     if rng.random() < 0.6:
         widget["color"] = rng.choice([_colour(rng), _colour(rng), "@accent", "@text2",
                                       _hex(rng, True)])  # fmt: skip
+    if rng.random() < 0.6:
+        widget["frame"] = rng.choice(["ring", "square", "square", "none"])
+    if rng.random() < 0.6:
+        widget["look"] = rng.choice(["auto", "noctua-g2", "noctua-a12x25", "noctua-a14", "libre"])
     if rng.random() < 0.5:
-        widget["frame"] = rng.choice(["ring", "none"])
-    if rng.random() < 0.4:
-        widget["look"] = rng.choice(["auto", "noctua-g2"])
-    if rng.random() < 0.4:
-        widget["paint"] = rng.choice(["auto", "theme"])
-    if rng.random() < 0.06:  # (what Rust does not draw yet, and says so)
-        key, value = rng.choice([("frame", "square"), ("look", "noctua-a12x25"),
-                                 ("look", "noctua-a14"), ("look", "libre"),
-                                 ("paint", "own")])  # fmt: skip
-        widget[key] = value
+        widget["paint"] = rng.choice(["auto", "theme", "own"])
     if rng.random() < 0.1:
         widget["opacity"] = rng.choice([0.5, 0.0, 0.25])
     return widget
+
+
+# (the sensors of the fans here: the widgets' and the lists')
+FAN_SENSORS = ["gpu.fan", "fan.1", "fan.2", "fan.3", "fan.cpu", "fan.gpu", "fan.gpu1", "fan.amd",
+               "pump.fan", "temp.cpu"]  # fmt: skip
+
+
+def _fan_choices(rng: random.Random) -> Any:
+    """What a person may choose for the fans (fan.Choices, config.toml's [hardware]): a look and
+    colours for all or none, and for some fans by their sensor (none chosen among them)."""
+    from libre_panel.render import fan
+
+    looks, paints = ["", *FAN_LOOKS], ["", "theme", "own"]
+    return fan.Choices(
+        rng.choice(looks), rng.choice(paints),
+        {key: rng.choice(looks) for key in rng.sample(FAN_SENSORS, rng.randrange(0, 6))},
+        {key: rng.choice(paints) for key in rng.sample(FAN_SENSORS, rng.randrange(0, 6))},
+    )  # fmt: skip
+
+
+def _choices_given(choices: Any) -> dict[str, Any]:
+    """fan.Choices as lp-check takes it."""
+    return {"look": choices.look, "paint": choices.paint, "looks": dict(choices.looks),
+            "paints": dict(choices.paints)}  # fmt: skip
 
 
 def _fan_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
@@ -4064,9 +4271,8 @@ def _fan_widget_snapshot(rng: random.Random) -> tuple[dict[str, Any], Snapshot]:
 def test_frames_of_fans_as_python_draws_them(tmp_path: Path) -> None:
     # (each fan as a still frame shows it, Rotor.settle: where its id puts its blades, its blur
     # and light by its speed, its ring as full; laid in the middle of its box, with its effects)
-    drawn = _compare_frames(tmp_path, 0xFA46, 300, _fan_or_more, _fan_widget_snapshot,
-                            undefined=FAN_UNDRAWN)  # fmt: skip
-    assert drawn > 190, drawn
+    drawn = _compare_frames(tmp_path, 0xFA46, 300, _fan_or_more, _fan_widget_snapshot)
+    assert drawn > 270, drawn  # (289)
 
 
 def test_fans_frame_after_frame_as_python_keeps_them(tmp_path: Path) -> None:
@@ -4098,8 +4304,6 @@ def test_fans_frame_after_frame_as_python_keeps_them(tmp_path: Path) -> None:
         for i, (g, w) in enumerate(zip(got["steps"], want, strict=True)):
             if "failed" in w:  # (Python's frame fails: Rust makes none)
                 assert "unported" in g, (n, i, g, w)
-                continue
-            if g.get("unported") in FAN_UNDRAWN:
                 continue
             assert g["sha256"] == hashlib.sha256(w["frame"].tobytes()).hexdigest(), (n, i)
             assert g["boxes"] == w["boxes"], (n, i)
@@ -6124,18 +6328,20 @@ def test_card_slots_frames_in_their_cards_colours(tmp_path: Path) -> None:
 
 
 def _python_moving(folder: Path, steps: list[tuple[Snapshot, float]], fps: float = 0.0,
-                   place: tuple[float, float] | None = None,
-                   preview: bool = True) -> list[dict[str, Any]] | None:  # fmt: skip
+                   place: tuple[float, float] | None = None, preview: bool = True,
+                   fans: Any = None) -> list[dict[str, Any]] | None:  # fmt: skip
     """Moving frames one after another by one renderer (animate: as the panels' loop draws
-    them; your place `place`; a panel's frames, not a preview's, where not `preview`), each at
-    its time: the frame, its boxes, whether it moves on and when it is due again; None for a
-    theme Python does not read."""
+    them; your place `place`; a panel's frames, not a preview's, where not `preview`; what the
+    person chose for the fans, `fans`, where given), each at its time: the frame, its boxes,
+    whether it moves on and when it is due again; None for a theme Python does not read."""
     try:
         renderer = Renderer(load_theme(folder), animate=True, preview=preview)
     except ThemeError:
         return None
     renderer.fps = fps
     renderer.place = place
+    if fans is not None:
+        renderer.fan_choices = fans
     lists._RAN.clear()
     out: list[dict[str, Any]] = []
     for snapshot, now in steps:
@@ -6826,7 +7032,40 @@ def test_fans_that_turn_as_python_turns_them(tmp_path: Path) -> None:
                       "steps": given})  # fmt: skip
         expected.append(_python_moving(folder, steps, fps))
     drawn, moving = _compare_moving(cases, expected)
-    assert drawn > 300 and moving > 200, (drawn, moving)
+    assert drawn > 420 and moving > 300, (drawn, moving)  # (448 and 330)
+
+
+def test_fans_in_what_the_person_chose_as_python_draws_them(tmp_path: Path) -> None:
+    # (fan widgets of every look, paint and frame ("auto" ones among them) and lists of fans,
+    # in what a person chose for the fans: a look and colours for all, and for some fans by
+    # their sensor, or none; each as a still frame shows it, to the bit)
+    drawn = _compare_frames(tmp_path, 0xFA62, 200, _turning_fan, _fan_widget_snapshot,
+                            fans_of=_fan_choices)  # fmt: skip
+    assert drawn > 170, drawn  # (186)
+
+
+def test_fans_in_what_the_person_chose_turning_as_python_turns_them(tmp_path: Path) -> None:
+    # (the same frame after frame in a moving frame: each fan turning on the beat of its sensor
+    # for the blades of its look, the widget's or the one the person chose)
+    rng = random.Random(0xFA63)
+    cases, expected = [], []
+    for n in range(40):
+        folder = tmp_path / f"t{n}"
+        _frame_theme(rng, folder, _turning_fan)
+        choices = _fan_choices(rng)
+        _, first = _fan_snapshot(rng)
+        readings, now, fps = dict(first.readings), rng.uniform(1000, 2000), rng.choice([0, 25, 50])
+        steps, given = [], []
+        for _ in range(rng.randrange(2, 10)):
+            steps.append((Snapshot(readings=readings, now=first.now), now))
+            given.append({"snapshot": _fans_given(readings, first.now), "now": now})
+            now += rng.choice(MOVING_STEPS + [0.02, 0.04, 0.04])
+            readings = _fan_readings_after(rng, readings)
+        cases.append({"folder": str(folder), "dither": False, "animate": True, "fps": fps,
+                      "steps": given, "fan_choices": _choices_given(choices)})  # fmt: skip
+        expected.append(_python_moving(folder, steps, fps, fans=choices))
+    drawn, moving = _compare_moving(cases, expected)
+    assert drawn > 200 and moving > 150, (drawn, moving)  # (223 and 169)
 
 
 def test_fans_on_one_beat_through_pauses_and_back_in_time_as_python_turns_them(
@@ -7490,7 +7729,7 @@ TURNED_FAMILIES: dict[str, tuple[Any, Any, dict[str, Any]]] = {
     "graphs": (_graph_or_more, _graph_snapshot, {"undefined": GRAPH_UNDEFINED}),
     "lists": (_list_or_more, _list_snapshot, {}),
     "fan lists": (_fan_list_or_more, _fan_snapshot, {}),
-    "fans": (_fan_or_more, _fan_widget_snapshot, {"undefined": FAN_UNDRAWN}),
+    "fans": (_fan_or_more, _fan_widget_snapshot, {}),
     "moons": (_moon_or_more, _moon_snapshot, {"looks": ("classic", "vivid")}),
     "downloads": (_download_or_more, _download_snapshot, {"when": _download_time}),
 }  # fmt: skip
