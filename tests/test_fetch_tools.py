@@ -485,10 +485,13 @@ def test_a_missing_file_is_not_asked_for_again_and_a_dead_server_is_given_up_on(
         raise TimeoutError("timed out")
 
     calls.clear()
+    pauses = []
     monkeypatch.setattr(fetch_tools.urllib.request, "urlopen", dead)
+    monkeypatch.setattr(fetch_tools.time, "sleep", pauses.append)
     with pytest.raises(fetch_tools.FetchError, match="cannot be read: timed out"):
         fetch_tools.download("https://x/a")
-    assert len(calls) == 3
+    # (asked six times over more than two minutes: a release server's 504 can last that long)
+    assert len(calls) == 6 and pauses == [5.0, 10.0, 20.0, 40.0, 60.0]
 
 
 # -- the command -------------------------------------------------------------------------------

@@ -186,9 +186,11 @@ class FetchError(Exception):
     """Something is not as pinned; the message says what."""
 
 
-def download(url: str, attempts: int = 3) -> bytes:
+def download(url: str, attempts: int = 6) -> bytes:
     """The bytes at an https address (a redirect to anything else is refused). A server error
-    or a broken connection is tried again, a few times; a missing file is not."""
+    or a broken connection is tried again, waiting longer each time, for two minutes and more
+    (GitHub's release files once answered 504 for longer than half a minute); a missing file
+    is not."""
     if not url.startswith("https://"):
         raise FetchError(f"{url} is not an https address")
     request = urllib.request.Request(url, headers={"User-Agent": "libre-panel-build"})
@@ -206,7 +208,7 @@ def download(url: str, attempts: int = 3) -> bytes:
         except (OSError, http.client.HTTPException) as exc:
             if attempt == attempts:
                 raise FetchError(f"{url} cannot be read: {exc}") from exc
-        time.sleep(5.0 * attempt)
+        time.sleep(min(60.0, 5.0 * 2 ** (attempt - 1)))  # 5, 10, 20, 40, 60 s
     raise AssertionError("unreachable")  # the loop returns or raises
 
 
