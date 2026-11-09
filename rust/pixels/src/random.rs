@@ -224,4 +224,47 @@ impl Generator {
     pub fn uniform(&mut self, low: f64, high: f64) -> f64 {
         low + (high - low) * self.bits.next_f64()
     }
+
+    /// random_pareto: expm1 of a standard exponential over `a` (the C library's expm1).
+    pub fn pareto(&mut self, a: f64) -> f64 {
+        (self.standard_exponential() / a).exp_m1()
+    }
+
+    /// random(dtype=np.float32): 24 bits of a 32-bit draw, a float in [0, 1).
+    pub fn random_f32(&mut self) -> f32 {
+        self.bits.next_f32()
+    }
+
+    /// integers(low, high) of int64, `high` left out (random_bounded_uint64_fill): `low`
+    /// and a draw of 0 to high - low - 1, by Lemire's method on 32 bits for a range of up to
+    /// 2^32 (each 32-bit draw half of a 64-bit one, as next_uint32 keeps them); None for a
+    /// wider range (not in Rust yet) and an empty one (numpy's ValueError).
+    pub fn integers(&mut self, low: i64, high: i64) -> Option<i64> {
+        let closed = high.checked_sub(1)?.checked_sub(low)?;
+        if closed < 0 {
+            return None;
+        }
+        let rng = closed as u64;
+        if rng == 0 {
+            return Some(low);
+        }
+        if rng > 0xFFFF_FFFF {
+            return None;
+        }
+        if rng == 0xFFFF_FFFF {
+            return Some(low.wrapping_add(i64::from(self.bits.next_u32())));
+        }
+        let rng = rng as u32;
+        let excl = rng + 1;
+        let mut m = u64::from(self.bits.next_u32()) * u64::from(excl);
+        let mut leftover = m as u32;
+        if leftover < excl {
+            let threshold = (u32::MAX - rng) % excl;
+            while leftover < threshold {
+                m = u64::from(self.bits.next_u32()) * u64::from(excl);
+                leftover = m as u32;
+            }
+        }
+        Some(low.wrapping_add((m >> 32) as i64))
+    }
 }

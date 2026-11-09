@@ -1332,10 +1332,13 @@ fn run(case: &Value) -> Result<Value, String> {
         "np_random" => {
             // numpy's default_rng(seed) and the draws asked of it in turn, each double's bits
             // in hex: ["normal", n], ["exponential", n], ["power", a, n], ["uniform", lo, hi,
-            // n], ["random", n] (a, lo and hi as the bits of doubles in hex)
+            // n], ["pareto", a, n], ["random", n] (a, lo and hi as the bits of doubles in hex);
+            // a float32's bits in hex: ["float32", n]; integers in [lo, hi) in decimal (or
+            // "none", a range Rust does not draw from): ["integers", lo, hi, n]
             let double = |v: &Value| {
                 f64::from_bits(u64::from_str_radix(v.as_str().unwrap_or("0"), 16).unwrap_or(0))
             };
+            let bits = |x: f64| format!("{:016x}", x.to_bits());
             let programs: Vec<Value> = case["programs"]
                 .as_array()
                 .ok_or("programs")?
@@ -1351,15 +1354,21 @@ fn run(case: &Value) -> Result<Value, String> {
                             .and_then(|d| d.last())
                             .and_then(Value::as_u64)
                             .unwrap_or(0);
+                        let whole = |at: usize| draw[at].as_i64().unwrap_or(0);
                         for _ in 0..n {
-                            let x = match kind {
-                                "normal" => rng.standard_normal(),
-                                "exponential" => rng.standard_exponential(),
-                                "power" => rng.power(double(&draw[1])),
-                                "uniform" => rng.uniform(double(&draw[1]), double(&draw[2])),
-                                _ => rng.random(),
-                            };
-                            out.push(format!("{:016x}", x.to_bits()));
+                            out.push(match kind {
+                                "normal" => bits(rng.standard_normal()),
+                                "exponential" => bits(rng.standard_exponential()),
+                                "power" => bits(rng.power(double(&draw[1]))),
+                                "uniform" => bits(rng.uniform(double(&draw[1]), double(&draw[2]))),
+                                "pareto" => bits(rng.pareto(double(&draw[1]))),
+                                "float32" => format!("{:08x}", rng.random_f32().to_bits()),
+                                "integers" => match rng.integers(whole(1), whole(2)) {
+                                    Some(v) => v.to_string(),
+                                    None => "none".into(),
+                                },
+                                _ => bits(rng.random()),
+                            });
                         }
                     }
                     Value::from(out)
@@ -2612,6 +2621,111 @@ fn run(case: &Value) -> Result<Value, String> {
                 kept.push(edge.kept());
             }
             json!({"steps": steps, "kept": kept})
+        }
+        "boot" => {
+            // render/bootscreen.py's pictures for a panel model of the catalog, in a look and
+            // an orientation: its boot logo ("logo", at a scale), its standby clip ("clip",
+            // `count` pictures or the look's own number, at a scale), or the picture at a point
+            // of the clip ("picture"; none: the logo); each picture's size and bytes' digest
+            use lp_render::boot;
+            let id = case["model"].as_str().unwrap_or("");
+            let env = lp_theme::Env {
+                fonts_dir: case["fonts_dir"].as_str().unwrap_or("").into(),
+            };
+            let orientation = case["orientation"].as_str().unwrap_or("landscape");
+            let design = case["design"].as_str().unwrap_or("");
+            let scale = case["scale"].as_f64().unwrap_or(1.0);
+            let shown = |image: &Image| {
+                json!({
+                    "size": [image.width(), image.height()],
+                    "sha256": Sha256::digest(image.as_bytes())
+                        .iter()
+                        .map(|b| format!("{b:02x}"))
+                        .collect::<String>(),
+                })
+            };
+            // (a model of the catalog with other hidden strips, where the case gives them:
+            // native top, right, bottom, left, and the portrait's own)
+            let edges = |v: &Value| -> Option<[i64; 4]> {
+                let v = v.as_array()?;
+                Some([0, 1, 2, 3].map(|i| v.get(i).and_then(Value::as_i64).unwrap_or(0)))
+            };
+            let found = lp_devices::models::MODELS.iter().find(|m| m.id == id);
+            let edged = found.map(|m| lp_devices::models::PanelModel {
+                hidden: edges(&case["hidden"]).unwrap_or(m.hidden),
+                portrait_clear: if case["hidden"].is_null() {
+                    m.portrait_clear
+                } else {
+                    edges(&case["clear"])
+                },
+                ..*m
+            });
+            match edged.as_ref() {
+                None => json!({"error": format!("no model {id:?}")}),
+                Some(model) => {
+                    // (the floats of a look's canvases, a zero's sign aside: their digests)
+                    let mut canvases: Vec<String> = Vec::new();
+                    let made = match case["kind"].as_str().unwrap_or("") {
+                        // a look made once for the room at the scale, its still and pictures
+                        // of its clip at the phases (with the dither at the panel's size), and
+                        // the canvases they are finished from
+                        "look" => {
+                            let room = boot::room(model, orientation, scale);
+                            let phases: Vec<f64> = case["phases"]
+                                .as_array()
+                                .into_iter()
+                                .flatten()
+                                .filter_map(Value::as_f64)
+                                .collect();
+                            boot::Look::new(design, &room, &env).and_then(|look| {
+                                let ending = boot::Ending::new(&room, scale == 1.0);
+                                let mut made = Vec::new();
+                                let drawn =
+                                    std::iter::once(None).chain(phases.into_iter().map(Some));
+                                for phase in drawn {
+                                    let canvas = match phase {
+                                        None => look.still()?,
+                                        Some(p) => look.frame(p)?,
+                                    };
+                                    let mut digest = Sha256::new();
+                                    for v in &canvas.data {
+                                        digest.update((v + 0.0).to_le_bytes());
+                                    }
+                                    canvases.push(
+                                        digest
+                                            .finalize()
+                                            .iter()
+                                            .map(|b| format!("{b:02x}"))
+                                            .collect(),
+                                    );
+                                    made.push(boot::finish(&canvas, &room, &ending)?);
+                                }
+                                Ok(made)
+                            })
+                        }
+                        "logo" => boot::boot_logo(&env, model, orientation, design, scale)
+                            .map(|image| vec![image]),
+                        "clip" => {
+                            let count = case["count"].as_u64().map(|n| n as usize);
+                            boot::standby_frames(&env, model, count, orientation, design, scale)
+                        }
+                        _ => {
+                            boot::picture(&env, model, case["phase"].as_f64(), orientation, design)
+                                .map(|image| vec![image])
+                        }
+                    };
+                    match made {
+                        Ok(pictures) if canvases.is_empty() => {
+                            json!({"pictures": pictures.iter().map(shown).collect::<Vec<_>>()})
+                        }
+                        Ok(pictures) => json!({
+                            "pictures": pictures.iter().map(shown).collect::<Vec<_>>(),
+                            "canvases": canvases,
+                        }),
+                        Err(e) => json!({"error": e.0}),
+                    }
+                }
+            }
         }
         "transition" => {
             // overlays.transition((name, params), RenderContext(renderer)) of a theme's

@@ -941,39 +941,68 @@ def _colour_texts(rng: random.Random, count: int) -> list[str]:
 
 def test_numpy_s_random_draws_as_numpy_draws_them() -> None:
     """numpy's default_rng(seed) and the draws the renderer asks of it, in turn: doubles,
-    normals and exponentials (the ziggurat, its wedges and tails), powers and uniforms, each the
-    same double to the bit."""
+    normals and exponentials (the ziggurat, its wedges and tails), powers, uniforms and Pareto's,
+    each the same double to the bit; float32s and integers, each of them half of a 64-bit draw
+    as numpy keeps the other half for the next (whatever is drawn between), the integers by
+    Lemire's method, its draws thrown away again where a range is wide (and none where it is
+    a power of two) and the range of all 32 bits among them."""
     import numpy as np
 
     rng = random.Random(0x5EED)
     hexed = lambda x: struct.pack(">d", x).hex()  # noqa: E731
+    kinds = ["normal", "exponential", "power", "uniform", "random", "pareto", "float32"]
+    # (the widest: draws thrown away about every other time, all of 32 bits, 2**32 - 1 of them;
+    # powers of two, where Lemire's method throws none away)
+    wide = [(0, 2**31 + 1), (-5, 2**32 - 5), (-(2**31), 2**31 - 1), (0, 2**31), (-(2**29), 3 << 29)]
+    ranges = [(1, 4), (1, 3), (0, 1000), (7, 8), *wide]
     programs, expected = [], []
-    for seed in [0, 1, 1969, 0x11B7E, 2**32 - 1, *(rng.randrange(2**32) for _ in range(6))]:
+    for seed in [0, 1, 1969, 0x11B7E, 2**32 - 1, *(rng.randrange(2**32) for _ in range(9))]:
         draws: list[list[Any]] = []
-        want: list[float] = []
+        want: list[str] = []
         generator = np.random.default_rng(seed)
-        for _ in range(8):
-            kind = rng.choice(["normal", "exponential", "power", "uniform", "random"])
-            n = rng.choice([1, 2, 26, 320, 5000])
+        for _ in range(10):
+            kind = rng.choice([*kinds, "integers", "integers"])
+            n = rng.choice([1, 2, 3, 26, 320, 5000])
             if kind == "normal":
                 draws.append([kind, n])
-                want += generator.standard_normal(n).tolist()
+                want += map(hexed, generator.standard_normal(n).tolist())
             elif kind == "exponential":
                 draws.append([kind, n])
-                want += generator.standard_exponential(n).tolist()
+                want += map(hexed, generator.standard_exponential(n).tolist())
             elif kind == "power":
                 a = rng.choice([0.22, 1.0, 3.5, 0.05])
                 draws.append([kind, hexed(a), n])
-                want += generator.power(a, n).tolist()
+                want += map(hexed, generator.power(a, n).tolist())
             elif kind == "uniform":
                 lo, hi = rng.choice([(-0.98, 0.98), (0.0, 1.4), (0.0, 2 * math.pi), (5.0, 5.0)])
                 draws.append([kind, hexed(lo), hexed(hi), n])
-                want += generator.uniform(lo, hi, n).tolist()
+                want += map(hexed, generator.uniform(lo, hi, n).tolist())
+            elif kind == "pareto":
+                a = rng.choice([2.6, 1.0, 0.5, 7.0])
+                draws.append([kind, hexed(a), n])
+                want += map(hexed, generator.pareto(a, n).tolist())
+            elif kind == "float32":
+                draws.append([kind, n])
+                singles = generator.random(n, np.float32).tolist()
+                want += [struct.pack(">f", x).hex() for x in singles]
+            elif kind == "integers":
+                lo, hi = rng.choice(ranges)
+                draws.append([kind, lo, hi, n])
+                want += map(str, generator.integers(lo, hi, n).tolist())
             else:
                 draws.append([kind, n])
-                want += generator.random(n).tolist()
+                want += map(hexed, generator.random(n).tolist())
         programs.append({"seed": seed, "draws": draws})
-        expected.append([hexed(x) for x in want])
+        expected.append(want)
+    # (and every range in turn, a double drawn between)
+    generator = np.random.default_rng(0x1E31)
+    draws, want = [], []
+    for lo, hi in ranges:
+        draws += [["integers", lo, hi, 40], ["random", 1]]
+        want += map(str, generator.integers(lo, hi, 40).tolist())
+        want += map(hexed, generator.random(1).tolist())
+    programs.append({"seed": 0x1E31, "draws": draws})
+    expected.append(want)
     [got] = run([{"op": "np_random", "programs": programs}])
     assert got["programs"] == expected
 

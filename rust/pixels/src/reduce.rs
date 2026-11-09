@@ -60,11 +60,45 @@ impl Image {
         let bands = self.bands();
         let mut out = Image::blank(self.mode, w, h);
         let mut sums = vec![0u32; bands];
+        // (the multiplier of a block's count, worked out again only where the count is another:
+        // the last column's and row's blocks)
+        let mut known = (0u32, 0u32);
+        if bands == 1 {
+            // (a row of sums for each row of blocks, each row of the picture added to it in
+            // one go: the same sums, as whole numbers add up alike in any order)
+            let mut acc = vec![0u32; w];
+            for oy in 0..h {
+                let (fy, ty) = (y0 + oy * yscale, (y0 + (oy + 1) * yscale).min(y1));
+                acc.fill(0);
+                for y in fy..ty {
+                    let row = &self.data[y * self.width + x0..y * self.width + x1];
+                    for (a, block) in acc.iter_mut().zip(row.chunks(xscale)) {
+                        *a += block.iter().map(|&v| u32::from(v)).sum::<u32>();
+                    }
+                }
+                for (ox, &sum) in acc.iter().enumerate() {
+                    let across = (x0 + (ox + 1) * xscale).min(x1) - (x0 + ox * xscale);
+                    let count = (across * (ty - fy)) as u32;
+                    if known.0 != count {
+                        known = (count, multiplier(count));
+                    }
+                    let s = count / 2 + sum;
+                    out.data[oy * w + ox] =
+                        ((u64::from(s) * u64::from(known.1)) as u32 >> 24) as u8;
+                }
+            }
+            return Ok(out);
+        }
         for oy in 0..h {
             let (fy, ty) = (y0 + oy * yscale, (y0 + (oy + 1) * yscale).min(y1));
             for ox in 0..w {
                 let (fx, tx) = (x0 + ox * xscale, (x0 + (ox + 1) * xscale).min(x1));
                 let count = ((tx - fx) * (ty - fy)) as u32;
+                if known.0 != count {
+                    known = (count, multiplier(count));
+                }
+                let m = u64::from(known.1);
+                let at = (oy * w + ox) * bands;
                 sums.fill(count / 2);
                 for y in fy..ty {
                     let row =
@@ -75,10 +109,8 @@ impl Image {
                         }
                     }
                 }
-                let m = multiplier(count);
-                let at = (oy * w + ox) * bands;
                 for (o, &s) in out.data[at..at + bands].iter_mut().zip(&sums) {
-                    *o = ((u64::from(s) * u64::from(m)) as u32 >> 24) as u8;
+                    *o = ((u64::from(s) * m) as u32 >> 24) as u8;
                 }
             }
         }

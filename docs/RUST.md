@@ -152,7 +152,7 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       to_u8 and ramp_u8 to the byte, its blur to the bit where it takes its passes, and within
       half a thousandth of a level where it multiplies by their matrices instead
 - [ ] numpy's arithmetic in the rest of render/ (lit, facets, fan, sun path, symbols,
-      weather art, globes, start screens): widget by widget, with R4
+      weather art, globes): widget by widget, with R4
 
 ### R2 text
 - [x] FreeType glyphs as Pillow renders them (the same FreeType, loaded where the app runs):
@@ -1351,6 +1351,64 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       63 times). The counter-checks put 25 faults into alarm.rs, and the tests catch all of
       them (the masks kept once the edge is over, which no picture shows, once the test
       counted the masks)
+- [x] the panel's own screens (render/bootscreen.py, render/bootlooks.py and the mark of
+      branding.py): the boot logo and the standby clip of any panel of the catalog, in
+      landscape or upright, at its size and smaller for the app (without the dither there), in
+      each of the seven looks: Libre Panel's own (the dark gradient with Lumen's dots, the name
+      in two colours, the mark with its glow breathing in the clip, the line of light or its
+      dashes with a wave of light running along them; laid out in the room the bezel and the
+      quiet ends leave: beside each other on a bar, the name under the mark on a broad panel or
+      a bar on end, smaller in a round one's circle), Aurora's curtains with their shimmering
+      rays and faint stars, Pulse's heartbeat on a monitor's grid with the light sweeping along
+      it, Circuit's traces running into a chip with the mark, Night's stars twinkling over the
+      horizon's glow and the milky way, with a crescent moon, Levels' equaliser and Dark's
+      faint mark. In bootscreen.py's and bootlooks.py's own numbers: float32 where their arrays
+      are, the Python floats made float32 where numpy takes them as weak scalars and the sums
+      in doubles where a numpy float64 meets them (np.add.at's and += too); the box blurs'
+      running sums in doubles as np.cumsum makes them, a wide blur done at a fraction of the
+      size by Pillow's resampling of float pictures, the shapes drawn three times larger and
+      reduced, and the pictures of mode F the traces and the cells are told apart by; numpy's
+      own float32 exp, sin and cos, the C library's powf, hypotf and the doubles' sin, cos, exp
+      and pow; numpy's default_rng for each room's chances (uniforms, integers by Lemire's
+      method, pareto, choice) and the dither, once for a size as Python keeps it; Python 3.12's
+      compensated sum of floats where it adds up a trace's length (lp-py's). The tests: every
+      panel of the catalog in both orientations, its logo in Libre Panel's own look at its size
+      and as the app draws it 960 px wide, a picture of its clip at a point of the loop (its
+      ends and past them among them), four pictures of the clip of a panel of each size and
+      shape, two whole clips, far smaller logos and clips (rooms of 8 px a side among them) and
+      a look there is not; each look for every room of the catalog, at the panel's size and as
+      the app draws it 960 px wide (a look's choices change from one room to the next: Pulse's
+      beats on the bars of 11" and 11.3", the blur of Aurora's stars on the 5.2", 8" and
+      12.3", two of its stars on one pixel on the 6.86" on end), and for a bar, a round panel,
+      a bar on end and rooms chosen by chance at other scales, its still and pictures of its
+      clip, its logo and a clip as the app asks for them; and panels as though their bezels hid
+      other strips, of each side another: 753 pictures of Libre Panel's own look and 1200 of
+      the others to the bit, and 1340 canvases of the looks to the bit of their floats before
+      they are made pictures, as numpy draws them with its AVX-512 paths left unused (with
+      them, 2 of 212 logos and pictures of the catalog in Libre Panel's own look come out a
+      pixel apart here, by a level); the draws of numpy the looks take besides those of the
+      renderer (Pareto's, float32s, integers by Lemire's method: wide ranges, whose draws it
+      throws away again, ranges of a power of two and of all 32 bits) against numpy's own. The
+      tests deal their cases out to as many processes of Python and of lp-check as there are
+      cores. lp-pixels' reduce now adds up a picture of one band a row at a time and works out
+      the multiplier once for each count of a block: the same bytes, and a 1920 x 480 panel's
+      whole clip of 44 pictures in 1.6 s instead of Python's 3.6 s here; each look on such a
+      bar (made, its logo and a picture of its clip) 1.2 to 2.1 times as fast as Python's
+      (Night 1.24 s instead of 1.71, Aurora 0.26 instead of 0.56). The counter-checks put 225
+      faults into boot.rs, bootlooks.rs, branding.rs and the new parts of random.rs and
+      reduce.rs (the looks' colours, sizes, places, times and chances, the blurs and glows,
+      the dither, the ends, the layout), and the tests catch all of them but six that change
+      no picture: a gradient's step as i times 1/(h - 1) or as i/(h - 1), the same float32 at
+      every height to 4096; a bound of the line under the name on a broad panel that the
+      name, at least 4.54 times as wide as its size, always passes; Pulse's grid 0.8 or 1.2
+      times as wide as its scale, drawn at twice the size, where both are 2 px; the floor of
+      Levels' bars in the logo (0.08 or 0.1), which no bar comes down to (0.24 at the
+      lowest); the box round what glows from a thousandth up or from a hundredth, the same
+      696 canvases of the catalog either way (what lies between is at the edges of what is
+      lit, and the box reaches beyond the blur); and a trace's length added up without
+      Python's compensation, a unit in the last place apart at most, which the picture of the
+      places, of float32s, does not keep. They found four gaps the tests have closed since
+      (the rooms each look is drawn for, numpy's integers in a range of a power of two)
 - [ ] pictures as Pillow fails at them: lp-decode's errors as Python's exceptions, so that
       where Python catches an OSError and goes on (a picture cut short, a file of no picture)
       Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,
@@ -1377,8 +1435,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       checked on a desktop with PyGObject. lp-py keeps to the C locale for now
 - [ ] the renderer's frame, widget by widget (texts, clocks, gauges, rings, bars, lists, graphs
       and their strips, fans, images, videos, icons, weather, globes, moon, sun path, slots,
-      cards, notices), effects (glow, lit finish, dither), motion, start screens; each theme's
-      frames to the bit
+      cards, notices), effects (glow, lit finish, dither), motion; each theme's frames to the
+      bit
 
 ### R5 the panels' loop
 - [ ] the main loop (frames driven by change, pacing), the engine in the same process, panels
