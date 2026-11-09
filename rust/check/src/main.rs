@@ -2577,6 +2577,42 @@ fn run(case: &Value) -> Result<Value, String> {
                 .collect();
             json!({"grounds": grounds, "ramps": ramps})
         }
+        "alarm" => {
+            // render/alarm.py's AlarmEdge led through a script: the alarm's reading on a frame
+            // (follow), whether the edge shows, and frames drawn with it (frames of noise, as
+            // the tests make them): the frame as it was, a new one, or an error where Python's
+            // raises (a colour Pillow cannot read); and after each step how many masks it keeps
+            let float_in = |v: &Value| {
+                f64::from_bits(u64::from_str_radix(v.as_str().unwrap_or("0"), 16).unwrap_or(0))
+            };
+            let mut edge = lp_render::alarm::AlarmEdge::new();
+            let (mut steps, mut kept) = (Vec::new(), Vec::new());
+            for step in case["script"].as_array().into_iter().flatten() {
+                steps.push(match step[0].as_str().unwrap_or("") {
+                    "follow" => {
+                        edge.follow(step[1].as_bool().unwrap_or(false), float_in(&step[2]));
+                        Value::Null
+                    }
+                    "showing" => json!(edge.showing(float_in(&step[1]))),
+                    _ => {
+                        let frame = noise_frame(&step[1]);
+                        let still = step[4].as_bool().unwrap_or(false);
+                        match edge.draw(&frame, float_in(&step[2]), step[3].as_str(), still) {
+                            Ok(None) => json!({"same": true}),
+                            Ok(Some(out)) => json!({
+                                "sha256": Sha256::digest(out.as_bytes())
+                                    .iter()
+                                    .map(|b| format!("{b:02x}"))
+                                    .collect::<String>(),
+                            }),
+                            Err(_) => json!({"error": true}),
+                        }
+                    }
+                });
+                kept.push(edge.kept());
+            }
+            json!({"steps": steps, "kept": kept})
+        }
         "transition" => {
             // overlays.transition((name, params), RenderContext(renderer)) of a theme's
             // renderer, made anew for each of the case's switches, and the frames it draws: each

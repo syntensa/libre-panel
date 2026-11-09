@@ -1337,6 +1337,20 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       from the picture even of an opaque logo, at every size (measured); the lowest bit of the
       Mersenne Twister's first tempering mask meets the zeros its shift brings in; and of the
       first word of its seeded state only the top bit is ever used (as its authors' note says)
+- [x] the alarm's edge on every panel (render/alarm.py): red round the picture for 3 s from
+      the moment the notices service's alarm turns on, pulsing (strong at once, softer and
+      strong again once a second) or still on a calm panel, in the theme's crit colour or the
+      alarm's own, in 12 strengths each made once for a size and forgotten when it is over; the
+      frame as it was while it does not show, and Python's error for a colour Pillow cannot
+      read. The main loop draws it over each frame with R5. The tests: 150 scripts of the
+      alarm going on and off, frames drawn while it shows and after (of sizes from 1x1 to
+      1920x480 in RGB, RGBA and L, another size now and then, the clock put back) and whether
+      it shows; and a whole pulse drawn every 1/20 s, then the alarm on again while it shows,
+      off, and on once it ended: 930 frames with the edge to the bit, 1159 left as they were
+      and 90 refused alike, and after every step as many masks kept as Python keeps (forgotten
+      63 times). The counter-checks put 25 faults into alarm.rs, and the tests catch all of
+      them (the masks kept once the edge is over, which no picture shows, once the test
+      counted the masks)
 - [ ] pictures as Pillow fails at them: lp-decode's errors as Python's exceptions, so that
       where Python catches an OSError and goes on (a picture cut short, a file of no picture)
       Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,
