@@ -11,6 +11,7 @@
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::rc::Rc;
+use std::sync::Arc;
 
 use lp_pixels::{chops, Draw, Filter, Image, Mode, ALL_CORNERS};
 use lp_py::{Dict, Value};
@@ -153,6 +154,12 @@ const SLIDES_KEPT: std::time::Duration = std::time::Duration::from_secs(30);
 pub(crate) type PictureKey = (String, i64, i64, String, String);
 /// What an animation's frames are kept by: that and the widget's blur and radius.
 pub(crate) type AnimationKey = (String, i64, i64, String, String, i64, i64);
+/// Why Rust leaves a frame with a video to Python: it was told of no ffmpeg (the app finds it
+/// as devices/h264.find_ffmpeg does; without it, Python's warns and draws none).
+const NO_FFMPEG: &str = "videos without ffmpeg";
+/// What a video is played by (a feed of its own): the video, the widget's size and fit, its
+/// speed (a double's bits), its frames a second and whether its keyframes alone.
+pub(crate) type VideoKey = (String, usize, usize, String, u64, u32, bool);
 
 fn ends_with_any(rel: &str, suffixes: &[&str]) -> bool {
     let lower = lp_py::lower(rel);
@@ -207,7 +214,7 @@ fn number_of(value: &Value) -> Result<Option<f64>> {
 }
 
 /// moving.speed_of: the widget's speed within 0.25 and 4 (1: as made; where float() fails, 1).
-fn speed_of(value: &Value) -> Result<f64> {
+pub(crate) fn speed_of(value: &Value) -> Result<f64> {
     Ok(match number_of(value)? {
         Some(speed) if !speed.is_nan() => speed.clamp(0.25, 4.0),
         _ => 1.0,
@@ -655,7 +662,12 @@ impl Renderer {
             let rel = pictures[index as usize].clone();
             let lasts = self.slide_seconds(w, &rel, seconds)?;
             self.shows.insert(id.clone(), (index, now, now + lasts));
-            // (an animated picture: from its first frame)
+            // (an animated picture: from its first frame; a video: from its start)
+            for (key, feed) in &self.feeds {
+                if key.0 == rel {
+                    feed.from_start();
+                }
+            }
             self.began.insert((id, rel), now);
         }
         Ok(pictures[index as usize].clone())
@@ -668,12 +680,24 @@ impl Renderer {
             return Ok(seconds);
         }
         let speed = speed_of(w.get("speed").unwrap_or(&Value::int(1))).map_err(Drawn::Failed)?;
-        if is_video(rel) {
-            return Err(Drawn::Unported("videos".into()));
-        }
-        let length = match self.animation_of(w, rel)? {
-            Some(animation) => animation.length(),
-            None => 0.0,
+        let length = if is_video(rel) {
+            // (a video's length as ffmpeg reads it from the file; none where it cannot tell)
+            let Some(ffmpeg) = self.ffmpeg.clone() else {
+                return Err(Drawn::Unported(NO_FFMPEG.into()));
+            };
+            if rel.contains('\0') {
+                return Err(Drawn::Unported(UNREAD.into()));
+            }
+            let root = self.theme.root.clone().unwrap_or_default();
+            match lp_theme::model::resolve_asset(&root, &Value::from(rel)) {
+                Ok(path) => self.video_info(rel, &ffmpeg, &path)?.length.unwrap_or(0.0),
+                Err(_) => 0.0,
+            }
+        } else {
+            match self.animation_of(w, rel)? {
+                Some(animation) => animation.length(),
+                None => 0.0,
+            }
         };
         if length == 0.0 {
             return Ok(seconds);
@@ -794,7 +818,7 @@ impl Renderer {
                 None => Err(Failed("a picture gone".into())),
             })
         } else if is_video(&rel) {
-            return Drawn::Unported("videos".into());
+            return self.draw_video(w, &rel);
         } else {
             let (x, y) = (widget::int(w, "x", 0), widget::int(w, "y", 0));
             match self.animation_of(w, &rel) {
@@ -827,6 +851,183 @@ impl Renderer {
                 Err(drawn) => return drawn,
             }
         };
+        match made {
+            Ok(piece) => Drawn::Piece(piece),
+            Err(e) => Drawn::Failed(e),
+        }
+    }
+
+    /// _video_info: what ffmpeg says of a video, kept by its name; Python's error where its
+    /// reading raises (a turn too large).
+    fn video_info(
+        &mut self,
+        rel: &str,
+        ffmpeg: &std::path::Path,
+        path: &std::path::Path,
+    ) -> Found<crate::video::VideoInfo> {
+        if let Some(&found) = self.video_infos.get(rel) {
+            return Ok(found);
+        }
+        let found = crate::video::video_info(ffmpeg, path).map_err(|e| Drawn::Failed(Failed(e)))?;
+        self.video_infos.insert(rel.to_string(), found);
+        Ok(found)
+    }
+
+    /// _draw_video: a video, round and round: its frame of the moment (video::VideoFeed); in a
+    /// preview or until the first one comes, its first frame. Without a size of its own (0, as
+    /// a picture added in Design starts) at the video's, within the theme's.
+    fn draw_video(&mut self, w: &Dict, rel: &str) -> Drawn {
+        let Some(root) = self.theme.root.clone() else {
+            return Drawn::Nothing;
+        };
+        let Some(ffmpeg) = self.ffmpeg.clone() else {
+            return Drawn::Unported(NO_FFMPEG.into());
+        };
+        if rel.contains('\0') {
+            return Drawn::Unported(UNREAD.into());
+        }
+        let path = match lp_theme::model::resolve_asset(&root, &Value::from(rel)) {
+            Ok(path) => path,
+            Err(e) => {
+                self.warn(format!("video {}: {}", lp_py::repr(rel), e.msg));
+                return Drawn::Nothing;
+            }
+        };
+        let (x, y) = (widget::int(w, "x", 0), widget::int(w, "y", 0));
+        let (mut iw, mut ih) = (widget::int(w, "w", 0), widget::int(w, "h", 0));
+        let mut w = w.clone();
+        if iw <= 0 || ih <= 0 {
+            let own = match self.video_info(rel, &ffmpeg, &path) {
+                Ok(info) => info.size,
+                Err(drawn) => return drawn,
+            };
+            let Some((ow, oh)) = own else {
+                self.warn(format!("video {}: ffmpeg cannot read it", lp_py::repr(rel)));
+                return Drawn::Nothing;
+            };
+            let (tw, th) = (self.theme.width as f64, self.theme.height as f64);
+            let room = 1.0f64.min(tw / ow as f64).min(th / oh as f64);
+            iw = 1.max(lp_py::round(ow as f64 * room) as i64);
+            ih = 1.max(lp_py::round(oh as f64 * room) as i64);
+            w.insert("w".into(), Value::int(iw));
+            w.insert("h".into(), Value::int(ih));
+        }
+        let (vw, vh) = match sized(iw, ih) {
+            Ok(size) => size,
+            Err(e) => return Drawn::Failed(e),
+        };
+        let fit = widget::text(&w, "fit").to_string();
+        let speed = match speed_of(w.get("speed").unwrap_or(&Value::int(1))) {
+            Ok(speed) => speed,
+            Err(e) => return Drawn::Failed(e),
+        };
+        let id = widget::text(&w, "id").to_string();
+        self.video_drawn = Some((id, path.clone(), w.clone(), [x, y, iw, ih]));
+        let mut rate = self
+            .video_fps
+            .filter(|&f| f != 0)
+            .unwrap_or(crate::video::VIDEO_FPS);
+        if !self.options.preview {
+            let own = match self.video_info(rel, &ffmpeg, &path) {
+                Ok(info) => info.fps,
+                Err(drawn) => return drawn,
+            };
+            if let Some(own) = own {
+                // no faster than the video's own: no frame twice (29.97 is 30)
+                if !own.is_finite() {
+                    return Drawn::Failed(Failed(
+                        "cannot convert float infinity to integer".into(),
+                    ));
+                }
+                let most = 1.0f64.max((own - 0.05).ceil());
+                if most < f64::from(rate) {
+                    rate = most as u32;
+                }
+            }
+        }
+        let keys = self.video_keys;
+        let key: VideoKey = (
+            rel.to_string(),
+            vw,
+            vh,
+            fit.clone(),
+            speed.to_bits(),
+            rate,
+            keys,
+        );
+        let mut shown: Option<(Arc<Image>, i64)> = None;
+        if !self.options.preview {
+            let feed = self.feeds.entry(key.clone()).or_insert_with(|| {
+                let reading = crate::video::Reading {
+                    w: vw,
+                    h: vh,
+                    fit: fit.clone(),
+                    fps: rate,
+                    once: false,
+                    speed,
+                    start: 0.0,
+                    rounds: true,
+                    keys,
+                };
+                crate::video::VideoFeed::new(&ffmpeg, &path, reading)
+            });
+            let (count, frame) = feed.frame(Some(self.at));
+            shown = frame.map(|f| (f.picture, count));
+            if self.options.animate {
+                self.moving = true;
+            }
+        }
+        if shown.is_none() {
+            // (a preview, or the video has not begun yet: its first frame, kept)
+            let pkey: PictureKey = (rel.to_string(), iw, ih, fit.clone(), "first".into());
+            let kept = self.pictures.borrow_mut().get(&pkey);
+            let poster = match kept {
+                Some(poster) => poster,
+                None => {
+                    let poster =
+                        crate::video::first_frame(&ffmpeg, &path, vw, vh, &fit, 0.0).map(Rc::new);
+                    self.pictures
+                        .borrow_mut()
+                        .put(pkey, poster.clone(), vw * vh * 4);
+                    poster
+                }
+            };
+            shown = poster.map(|p| (Arc::new((*p).clone()), -1));
+        }
+        let Some((frame, count)) = shown else {
+            return Drawn::Nothing;
+        };
+        // (ffmpeg fitted it already: as it is, unless blurred or rounded)
+        let (blur, radius) = (widget::int(&w, "blur", 0), widget::int(&w, "radius", 0));
+        let same = frame.size() == (vw, vh) && blur == 0 && radius == 0;
+        let content = Value::List(vec![
+            rel.into(),
+            Value::int(vw as i64),
+            Value::int(vh as i64),
+            fit.as_str().into(),
+            Value::Float(speed),
+            Value::int(i64::from(rate)),
+            Value::Bool(keys),
+            Value::int(count),
+            Value::int(Arc::as_ptr(&frame) as i64),
+        ]);
+        let align = widget::text(&w, "align").to_string();
+        let made = self.cached(&w, content, |_| {
+            if same {
+                return Ok(Piece::new((*frame).clone(), x, y));
+            }
+            // (_finish of the widget fitted "stretch": blurred into the box, else stretched to
+            // it; rounded)
+            let mut image = if blur > 0 {
+                blurred(&frame, blur as f64, iw, ih, "stretch", &align)?
+            } else {
+                fitted(&frame, vw, vh, "stretch", &align)?
+            };
+            if radius > 0 {
+                image = rounded(&image, radius)?;
+            }
+            Ok(Piece::new(image, x, y))
+        });
         match made {
             Ok(piece) => Drawn::Piece(piece),
             Err(e) => Drawn::Failed(e),

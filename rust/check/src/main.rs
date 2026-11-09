@@ -2500,6 +2500,14 @@ fn run(case: &Value) -> Result<Value, String> {
                     if !c["after"].as_bool().unwrap_or(false) {
                         lp_render::forget_fans_run();
                     }
+                    // (the videos: where ffmpeg is, the frames a second the loop asks for and
+                    // their keyframes alone, as the app sets them; and, between frames, each
+                    // video's frames ahead decoded, so what a frame shows does not depend on how
+                    // fast ffmpeg is)
+                    let videos = c["ffmpeg"].as_str().is_some();
+                    renderer.ffmpeg = c["ffmpeg"].as_str().map(std::path::PathBuf::from);
+                    renderer.video_fps = c["video_fps"].as_u64().map(|f| f as u32);
+                    renderer.video_keys = c["video_keys"].as_bool().unwrap_or(false);
                     let bytes = c["bytes"].as_bool() == Some(true);
                     let mut frame_at = |snapshot: &Value, now: f64| {
                         let mut out = match renderer.render(snapshot_of(snapshot), now) {
@@ -2527,6 +2535,16 @@ fn run(case: &Value) -> Result<Value, String> {
                                 .map(|(id, card, colour, width)| json!([id, card, colour, width]))
                                 .collect();
                         }
+                        if videos {
+                            // (the frame one video alone: its file, fit and speed)
+                            out["full_video"] = match &renderer.full_video {
+                                Some((path, fit, speed)) => {
+                                    json!([path.to_string_lossy(), fit, speed])
+                                }
+                                None => Value::Null,
+                            };
+                            renderer.settle_videos(std::time::Duration::from_secs(10));
+                        }
                         out
                     };
                     // (frames one after another by the one renderer, each at its time: what the
@@ -2543,6 +2561,110 @@ fn run(case: &Value) -> Result<Value, String> {
                 .collect();
             lp_i18n::set_language(lp_i18n::Language::english());
             json!({"frames": frames})
+        }
+        "video" => {
+            // render/moving.py's videos: ffmpeg's commands ("commands": each reading's), what
+            // `ffmpeg -i` says read ("said": texts of bytes as latin-1; "info": of files), the
+            // first frames ("first") and a feed played step by step ("feed": its frame of each
+            // moment, its frames ahead decoded before the next step; closed, from its start)
+            use lp_render::video;
+            let ffmpeg = std::path::PathBuf::from(case["ffmpeg"].as_str().unwrap_or("ffmpeg"));
+            let bits = |x: f64| format!("{:016x}", x.to_bits());
+            let reading = |r: &Value| video::Reading {
+                w: r["w"].as_u64().unwrap_or(0) as usize,
+                h: r["h"].as_u64().unwrap_or(0) as usize,
+                fit: r["fit"].as_str().unwrap_or("").into(),
+                fps: r["fps"].as_u64().unwrap_or(u64::from(video::VIDEO_FPS)) as u32,
+                once: r["once"].as_bool().unwrap_or(false),
+                speed: r["speed"].as_f64().unwrap_or(1.0),
+                start: r["start"].as_f64().unwrap_or(0.0),
+                rounds: r["rounds"].as_bool().unwrap_or(true),
+                keys: r["keys"].as_bool().unwrap_or(false),
+            };
+            let info = |found: Result<video::VideoInfo, String>| match found {
+                Ok(i) => json!({
+                    "length": i.length.map(bits),
+                    "size": i.size.map(|(w, h)| json!([w, h])),
+                    "fps": i.fps.map(bits),
+                }),
+                Err(e) => json!({"error": e}),
+            };
+            let digest = |image: &Image| {
+                Sha256::digest(image.as_bytes())
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<String>()
+            };
+            let items = case["items"].as_array().cloned().unwrap_or_default();
+            let made: Vec<Value> = match case["kind"].as_str().unwrap_or("") {
+                "commands" => items
+                    .iter()
+                    .map(|r| {
+                        let path = std::path::Path::new(r["path"].as_str().unwrap_or(""));
+                        let command = video::video_command(&ffmpeg, path, &reading(r));
+                        json!(command
+                            .iter()
+                            .map(|a| a.to_string_lossy().into_owned())
+                            .collect::<Vec<_>>())
+                    })
+                    .collect(),
+                "said" => items
+                    .iter()
+                    .map(|t| {
+                        let said: Vec<u8> = t
+                            .as_str()
+                            .unwrap_or("")
+                            .chars()
+                            .map(|c| c as u32 as u8)
+                            .collect();
+                        info(video::read_said(&said))
+                    })
+                    .collect(),
+                "info" => items
+                    .iter()
+                    .map(|p| {
+                        let path = std::path::Path::new(p.as_str().unwrap_or(""));
+                        info(video::video_info(&ffmpeg, path))
+                    })
+                    .collect(),
+                "first" => items
+                    .iter()
+                    .map(|r| {
+                        let path = std::path::Path::new(r["path"].as_str().unwrap_or(""));
+                        let r = reading(r);
+                        match video::first_frame(&ffmpeg, path, r.w, r.h, &r.fit, r.start) {
+                            Some(image) => json!(digest(&image)),
+                            None => Value::Null,
+                        }
+                    })
+                    .collect(),
+                _ => items
+                    .iter()
+                    .map(|f| {
+                        let path = std::path::Path::new(f["path"].as_str().unwrap_or(""));
+                        let feed = video::VideoFeed::new(&ffmpeg, path, reading(f));
+                        let settle = || feed.settle(std::time::Duration::from_secs(10));
+                        let mut out = Vec::new();
+                        for step in f["steps"].as_array().into_iter().flatten() {
+                            match step[0].as_str().unwrap_or("") {
+                                "frame" => {
+                                    let (count, frame) = feed.frame(step[1].as_f64());
+                                    out.push(match frame {
+                                        Some(f) => json!([count, digest(&f.picture), f.solid]),
+                                        None => json!([count, null, null]),
+                                    });
+                                }
+                                "close" => feed.close(),
+                                "from_start" => feed.from_start(),
+                                _ => out.push(json!(feed.ended())),
+                            }
+                            settle();
+                        }
+                        json!(out)
+                    })
+                    .collect(),
+            };
+            json!({"made": made})
         }
         "render_ramps" => {
             // the float32s of gradients: the background's line (_gradient_ground) and a card's

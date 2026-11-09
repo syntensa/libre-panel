@@ -193,6 +193,25 @@ pub struct Renderer {
     pub(crate) bars_drawn: RefCell<Option<Vec<list::Corners>>>,
     /// each list's levels with where their bars lie (their layer's info["bars"])
     level_bars: HashMap<String, (Rc<Piece>, Vec<list::Corners>)>,
+    /// where ffmpeg is, for the videos (the app finds it as devices/h264.find_ffmpeg does);
+    /// None: Rust leaves a frame with a video to Python
+    pub ffmpeg: Option<std::path::PathBuf>,
+    /// the frames a second a video is decoded at: the panel's (the loop sets it, as Python's
+    /// renderer.video_fps); None or 0: moving.VIDEO_FPS
+    pub video_fps: Option<u32>,
+    /// videos decoded at their keyframes alone (the app's picture of a video the panel takes
+    /// from its file: renderer.video_keys)
+    pub video_keys: bool,
+    /// the videos playing, by what they are read as (_feeds), and what ffmpeg says of each
+    /// (_video_infos)
+    pub(crate) feeds: HashMap<image::VideoKey, crate::video::VideoFeed>,
+    pub(crate) video_infos: HashMap<String, crate::video::VideoInfo>,
+    /// the video of this frame (_video_drawn): its widget's id, its file, the widget and its
+    /// box
+    pub(crate) video_drawn: Option<(String, std::path::PathBuf, Dict, [i64; 4])>,
+    /// the video of this frame where the frame is that video alone (full_video): its file, how
+    /// it is fitted and its speed; [video] direct has the panel take it from its file then
+    pub full_video: Option<(std::path::PathBuf, String, f64)>,
 }
 
 /// VOLUME_GLIDE_MS: the volume's bars and rings, 95 % of a step after about a third of a
@@ -284,6 +303,13 @@ impl Renderer {
             bars_laid: RefCell::new(Vec::new()),
             bars_drawn: RefCell::new(None),
             level_bars: HashMap::new(),
+            ffmpeg: None,
+            video_fps: None,
+            video_keys: false,
+            feeds: HashMap::new(),
+            video_infos: HashMap::new(),
+            video_drawn: None,
+            full_video: None,
         };
         renderer.slots = renderer.make_slots()?;
         renderer.background = renderer.load_background()?;
@@ -1529,6 +1555,7 @@ impl Renderer {
         // (Motion.begin: the springs of values long gone go, the others forget old pieces)
         self.moving = false;
         self.due = None;
+        self.video_drawn = None;
         let (glide, lead) = (self.glide_s(None), self.lead());
         let readings = |key: &str| {
             snapshot
@@ -1696,8 +1723,63 @@ impl Renderer {
         if !turns.is_empty() || !self.turned.is_empty() {
             self.turn_pieces(&mut pieces, &turns, &mut boxes)?;
         }
+        self.full_video = self.whole_video(&pieces, &turns);
         let canvas = self.compose(&pieces)?;
         Ok((compose::as_rgb(&canvas)?, boxes))
+    }
+
+    /// _whole_video: the video of this frame (its file, how it is fitted, its speed) where the
+    /// frame is that video alone: drawn edge to edge across the theme and nothing else with it
+    /// (a turn, a rounded or blurred corner, an effect, a picture behind one that is
+    /// contained); None otherwise. (A screen's picture and a look's grid, which leave the frame
+    /// to Python here, are no such frame either.)
+    fn whole_video(
+        &self,
+        pieces: &Pieces,
+        turns: &IndexMap<String, Turn>,
+    ) -> Option<(std::path::PathBuf, String, f64)> {
+        let (id, path, w, bounds) = self.video_drawn.as_ref()?;
+        if !turns.is_empty() {
+            return None;
+        }
+        let whole = [0, 0, self.theme.width, self.theme.height];
+        if pieces.len() != 1 || &pieces[0].0 != id || *bounds != whole {
+            return None;
+        }
+        if widget::truthy(w, "radius")
+            || widget::truthy(w, "blur")
+            || widget::truthy(w, "glow")
+            || widget::truthy(w, "shadow")
+        {
+            return None;
+        }
+        let opacity = w.get("opacity").cloned().unwrap_or(Value::int(1));
+        if opacity != Value::int(1)
+            || (widget::text(w, "fit") == "contain"
+                && self
+                    .theme
+                    .background_image
+                    .as_deref()
+                    .is_some_and(|name| !name.is_empty()))
+        {
+            return None;
+        }
+        let speed = image::speed_of(w.get("speed").unwrap_or(&Value::int(1))).ok()?;
+        Some((path.clone(), widget::text(w, "fit").to_string(), speed))
+    }
+
+    /// close: the videos' ffmpeg stopped (a replaced renderer: Python's close lets go of its
+    /// feeds; what else it lets go of, Rust has no part of yet).
+    pub fn close(&mut self) {
+        self.feeds.clear();
+    }
+
+    /// For the comparisons: each video's thread with its frames ahead (or no more to come), so
+    /// that the next frame does not depend on how fast ffmpeg is.
+    pub fn settle_videos(&self, timeout: std::time::Duration) {
+        for feed in self.feeds.values() {
+            feed.settle(timeout);
+        }
     }
 
     /// _turn: how far a widget is turned (`rotate`, degrees clockwise) and about which point:

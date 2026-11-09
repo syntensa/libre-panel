@@ -2937,8 +2937,9 @@ def test_a_picture_where_the_frame_s_time_has_no_timestamp_as_python_shows_it(
 
 
 def test_videos_and_pictures_rust_does_not_draw_yet(tmp_path: Path) -> None:
-    # (a video, and a slideshow whose turn is a video's: Rust says it does not draw them yet,
-    # nor a file it does not read (a picture, a slideshow's, the background's; one named with a
+    # (a video, and a slideshow whose turn is a video's: told of no ffmpeg (the app tells it
+    # where one is: tests/test_rust_video.py), Rust leaves them to Python, nor a file it does
+    # not read (a picture, a slideshow's, the background's; one named with a
     # NUL, an animation cut short whose first frame is whole), nor a slideshow with one where
     # the turn is another's; an animated picture alone, a slideshow of one, of none there, a
     # slideshow with a picture that moves (its first turn a still's, an animated one's), it
@@ -2946,10 +2947,10 @@ def test_videos_and_pictures_rust_does_not_draw_yet(tmp_path: Path) -> None:
     from PIL import Image
 
     rng = random.Random(0x7E1D)
-    looks = [({"src": "clips/a.mp4"}, "videos"),
+    looks = [({"src": "clips/a.mp4"}, "videos without ffmpeg"),
              ({"src": "pics/a.png", "slides": "anim/run.gif"}, None),
              ({"src": "", "slides": "pics/b.png\nclips/*"}, None),
-             ({"src": "", "slides": "clips/*\npics/b.png"}, "videos"),
+             ({"src": "", "slides": "clips/*\npics/b.png"}, "videos without ffmpeg"),
              ({"src": "", "slides": "anim/wave.png\npics/c.png"}, None),
              ({"src": "anim/run.gif"}, None), ({"src": "", "slides": "anim/spin.webp"}, None),
              ({"src": "", "slides": "pics/*.gif"}, None), ({"src": "bad/half.png"}, UNREAD),

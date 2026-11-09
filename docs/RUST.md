@@ -1409,6 +1409,45 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       Python's compensation, a unit in the last place apart at most, which the picture of the
       places, of float32s, does not keep. They found four gaps the tests have closed since
       (the rooms each look is drawn for, numpy's integers in a range of a power of two)
+- [x] videos (render/moving.py's half for them and the renderer's _draw_video, in
+      render/video.rs): a video in an image widget, round and round at its own pace or
+      faster or slower, as ffmpeg decodes it into frames of the widget's size, fitted as the
+      widget says. ffmpeg's command as Python's to the letter (the fit's filter, the frames a
+      second, its speed written as %g writes it, its start to the thousandth, round and round
+      or to its end, its first frame alone, its keyframes alone); what `ffmpeg -i` says of a
+      video read as moving.video_info's patterns read it (the first of each from the left, \d
+      and \s of bytes, its size turned upright where a turn says so, a turn too large to round
+      failing as Python's does); its first frame in a preview and until the clip's first
+      comes, kept with the theme's pictures; a feed that plays it in a thread of its own, three
+      frames ahead, and gives the frame of the moment each frame of the panel is drawn for
+      (none twice, none passed over at the video's own rate; on from the frame it has after a
+      pause), stops ffmpeg after five seconds unasked, starts it again a while after it failed,
+      plays a slideshow's video from its start and keeps the last frame of one played to its
+      end; a video's frames laid as they are where it has no transparency (the same pixels);
+      no more frames a second than the video's own; a video of no size of its own at its own,
+      within the theme's; and the frame that is one video alone, which the panel then takes
+      from its file (full_video). Rust draws videos where the app tells its renderer where
+      ffmpeg is (Python's finds it as devices/h264.find_ffmpeg does: R6); without one, a frame
+      with a video stays Python's. The tests: 600 commands; 30,000 texts like ffmpeg's (its
+      own cut and mended here and there, lines of them, texts of the patterns' pieces, turns
+      of half a degree); videos of other sizes, shapes, rates and kinds (29.97 and 25.02
+      frames a second, turned, with their sound first, of keyframes a second apart, a file of
+      no video, one not there) and 54 of their first frames; 36 feeds asked at their moments,
+      between them, late, after a pause, back in time, closed and asked again, from their
+      start, to their end; 40 themes of video widgets frame after frame as the loop draws them
+      and as a preview shows them (fitted, blurred, rounded, of no size of their own, faster
+      and slower, at the frames a second the loop asks for, in slideshows that come back to
+      their videos, one alone across the theme, see-through, with a glow or a shadow,
+      contained over the theme's picture or taking turns with a still picture): to the bit,
+      both waiting between frames for each video's frames ahead, so that what a frame shows
+      does not depend on how fast ffmpeg is. The counter-checks put 49 faults into video.rs and
+      the renderer's videos, and the tests catch all of them but three that change no frame: a
+      first frame or a last one cut short (ffmpeg writes its frames whole or none at all), and
+      a preview's frames a second held to the video's own (a preview shows the first frame
+      whatever the rate). They found eleven gaps the tests have closed since (turns of half a
+      degree, a video of 25.02 frames a second, sizes rounded up, the loop's rate 0, blurs
+      drawn at a fraction, slideshows that come back to their videos, a video alone
+      see-through, with a glow, contained over the theme's picture or taking turns with one)
 - [ ] pictures as Pillow fails at them: lp-decode's errors as Python's exceptions, so that
       where Python catches an OSError and goes on (a picture cut short, a file of no picture)
       Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,

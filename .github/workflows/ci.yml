@@ -219,6 +219,29 @@ jobs:
           cargo build --release
       # (the Pillow they are compared with: docs/RUST.md; a new one changes nothing unseen)
       - run: pip install -e ".[dev]" pillow==13.0.0
+      # (the FFmpeg the downloads carry, as the other jobs fetch it, for the videos' comparisons:
+      # both read the same video with the same ffmpeg)
+      - name: The downloads a run before kept
+        id: tools-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ runner.temp }}/tools-cache
+          key: tools-${{ runner.os }}-${{ hashFiles('packaging/fetch_tools.py') }}
+      - name: ffmpeg for the video comparisons
+        shell: bash
+        run: |
+          python packaging/fetch_tools.py "$RUNNER_TEMP/tools" --cache "$RUNNER_TEMP/tools-cache"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cygpath -w "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
+          else
+            echo "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
+          fi
+      - name: Kept for the runs after
+        if: steps.tools-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/tools-cache
+          key: tools-${{ runner.os }}-${{ hashFiles('packaging/fetch_tools.py') }}
       # FriBiDi, which Pillow's libraqm and lp-check load from the system, and fonts of every
       # kind the text comparisons draw with (tests/test_rust_text.py: OpenType, a collection,
       # Type 1, CJK, Thai, Devanagari, colour emoji), so that none of them is skipped here
@@ -292,7 +315,7 @@ jobs:
           echo "LP_LIBWEBP=$(cygpath -w "$PWD/webp/Release/libwebp.dll")" >> "$GITHUB_ENV"
           echo "LP_LIBWEBPDEMUX=$(cygpath -w "$PWD/webp/Release/libwebpdemux.dll")" >> "$GITHUB_ENV"
       - name: The crates against the Python app
-        run: python -m pytest -q --durations=20 tests/test_rust_py.py tests/test_rust_pixels.py tests/test_rust_decode.py tests/test_rust_text.py tests/test_rust_theme.py tests/test_rust_modules.py tests/test_rust_render.py tests/test_rust_toasts.py tests/test_rust_transitions.py tests/test_rust_alarm.py tests/test_rust_boot.py tests/test_rust_devices.py
+        run: python -m pytest -q --durations=20 tests/test_rust_py.py tests/test_rust_pixels.py tests/test_rust_decode.py tests/test_rust_text.py tests/test_rust_theme.py tests/test_rust_modules.py tests/test_rust_render.py tests/test_rust_toasts.py tests/test_rust_transitions.py tests/test_rust_alarm.py tests/test_rust_boot.py tests/test_rust_video.py tests/test_rust_devices.py
       # lp-panel, for a panel's owner to try the panel with the driver in Rust (the MAJESTY
       # 9.16"'s first): with the libjpeg it saves its pictures with, and their licences
       - name: lp-panel to try a panel with (Windows)
