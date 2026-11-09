@@ -1206,6 +1206,37 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       fans or a widget without the person's choice), and the tests catch them all, the last
       two edges once the least sizes where a pixel lies on them were added: a rotor of 339 px
       and a frame of 510 px (none smaller has one, of 1,024 sizes searched)
+- [x] toasts (render/overlays.py's ToastLayer and its built-in card, CardStyle): the messages
+      of services as Python decides which shows (one with the key of the one on show replaces
+      it in place, the waiting ones of a key collapse to the newest, ranks with the theme's
+      queue and without it, 20 waiting at most, the kinds the theme switches off and those a
+      theme shows itself: SHOWN_BY, of what its widgets read; while a transition plays they
+      wait, one is set aside or hidden by it and starts again after it; the theme's hold time
+      and the card's lifetime), and the card as Python draws it over a frame (RGB or RGBA) or
+      lays it over a frame the engine composes: its colours of the theme's roles as the palette
+      writes them (the card's to its seventh letter, so a colour Pillow then cannot read leaves
+      the toast out, as in Python), a payload's colour (a palette name, the cover's, Pillow's
+      names, three numbers as int() takes them, else the level's), the icon, the text cut to
+      120 letters and to its room with "…" (a text that FreeType cannot lay out leaves the
+      toast out), the strips the panel's bezel hides, the anchor, the fade and the slide. The
+      band, the volume's looks and a plugin's style are not here yet: where a theme or a
+      message asks for one, Rust says so and draws nothing in Python's stead. The tests: 160
+      layers through scripts of up to 34 steps (434 frames with a toast on them compared to the
+      bit, and every step's queue, times and state alike). The counter-checks put in 57 faults
+      (the supersampling, the fade's and the leave's times, a toast replaced in place rolling in
+      anew, the card kept for another theme, the card's unit, pads, stripe, gap, room, edge
+      and accent, a payload's colour read otherwise (a bool, a float rounded, a text, two
+      numbers), a level's accent, the icon's stroke and place, the text's start, anchor and
+      reduction, the margin, the bezel's strips turned or of a square taken for a landscape,
+      the slide, the queue's order, its 20, its ranks with and without the queue, the end a
+      moment late, no time to leave, a toast set aside to the end, one unseen shown, a hidden
+      one keeping what it replaced, the kinds left out, the keys, the roles' names and the
+      Libre look's colours, two letters left of a cut text, a picture's need) and the tests
+      catch 56, the 120 letters, the text's start and the queue's 20 once texts that just fit,
+      letters whose ink begins left of them and bursts of 25 waiting toasts were added. The
+      57th, waiting toasts of a key collapsed without the others dropped, changes nothing: no
+      two waiting toasts share a key (one with the key of the one on show replaces it in
+      place, and one set aside was alone with its key)
 - [ ] pictures as Pillow fails at them: lp-decode's errors as Python's exceptions, so that
       where Python catches an OSError and goes on (a picture cut short, a file of no picture)
       Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,
@@ -1232,8 +1263,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       checked on a desktop with PyGObject. lp-py keeps to the C locale for now
 - [ ] the renderer's frame, widget by widget (texts, clocks, gauges, rings, bars, lists, graphs
       and their strips, fans, images, videos, icons, weather, globes, moon, sun path, slots,
-      cards, notices), effects (glow, lit finish, dither), motion, transitions, toasts, start
-      screens; each theme's frames to the bit
+      cards, notices), effects (glow, lit finish, dither), motion, transitions, the toasts'
+      band and the volume's looks, start screens; each theme's frames to the bit
 
 ### R5 the panels' loop
 - [ ] the main loop (frames driven by change, pacing), the engine in the same process, panels

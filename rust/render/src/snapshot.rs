@@ -227,6 +227,17 @@ fn compare(body: &str) -> Option<Compare<'_>> {
     })
 }
 
+/// need_key: the sensor a condition of `needs` reads: "!gpu.load" and "media.playing=1" read
+/// gpu.load and media.playing; "@media.cover" (a picture) media.cover.
+pub fn need_key(need: &str) -> &str {
+    let need = lp_py::strip(lp_py::strip(need).trim_start_matches('!'));
+    let key = match compare(need) {
+        Some(found) => lp_py::strip(found.key),
+        None => need,
+    };
+    key.trim_start_matches('@')
+}
+
 /// need_holds: whether one condition of `needs` holds (a switch of the theme aside: the
 /// renderer's own). A reading that has a value (`gpu.load`), none (`!gpu.load`; a state that
 /// is `null` has none), a picture a source has (`@media.app_icon`), or compares so

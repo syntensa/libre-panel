@@ -1,43 +1,87 @@
-//! Light over a frame (render/light.py): the theme colours it takes (ROLES, role_color, mix),
-//! the curves that time it (clamp, smooth, ease_in, ease_out) and a glowing line (add_line:
-//! a core burning towards white in a halo of its colour, added onto the picture).
+//! Light over a frame (render/light.py): the theme colours it takes (ROLES, role_value,
+//! role_color, mix), the curves that time it (clamp, smooth, ease_in, ease_out), a glowing line
+//! (add_line: a core burning towards white in a halo of its colour, added onto the picture) and
+//! a text cut to its room (ellipsize).
 
 use lp_pixels::{chops, merge, Filter, Image, Mode};
 use lp_py::{Dict, Value};
+use lp_text::fallback::FallbackFont;
+use lp_text::text::TextFace;
 
 use crate::piece::{Failed, Result};
 
 /// The Libre look's palette (libre_panel.design), where a theme has none of a role's names.
+const LIBRE_CARD: &str = "#111822";
 const LIBRE_BG: &str = "#0A0E13";
 const LIBRE_TEXT: &str = "#E8EEF4";
+const LIBRE_MUTED: &str = "#93A1B2";
+const LIBRE_TRACK: &str = "#18212C";
+const LIBRE_RULE: &str = "#1F2A36";
 const LIBRE_ACCENT: &str = "#2EE6D6";
 const LIBRE_WARN: &str = "#F5C46B";
+const LIBRE_CRIT: &str = "#F87171";
 
 /// ROLES: the palette names themes use for a role (the first one a theme has wins), and the
 /// colour where a theme has none of them.
 fn role(name: &str) -> (&'static [&'static str], &'static str) {
     match name {
+        "card" => (&["card", "panel", "surface", "surf_1", "bg2"], LIBRE_CARD),
         "ground" => (&["bg", "base"], LIBRE_BG),
         "text" => (&["text", "tx_1"], LIBRE_TEXT),
+        "muted" => (&["text3", "tx_3", "muted", "dim"], LIBRE_MUTED),
+        "track" => (&["track", "edge", "line", "rule_soft"], LIBRE_TRACK),
+        "rule" => (&["rule", "line", "edge", "dim"], LIBRE_RULE),
+        "void" => (&["void"], "#000000"),
         "info" => (&["accent", "primary", "cpu"], LIBRE_ACCENT),
         "warning" => (&["warn", "warning"], LIBRE_WARN),
+        "error" => (&["crit", "error", "danger", "krit"], LIBRE_CRIT),
         _ => (&[], "#000000"),
     }
 }
 
-/// role_color: the theme's colour for a role as RGB: the first of its names the palette has
-/// (and not empty), else the Libre look's; a colour Pillow cannot read, the Libre look's.
-pub(crate) fn role_colour(palette: &Dict, name: &str) -> [i64; 3] {
+/// role_value: the theme's colour for a role as the palette writes it: the first of its names
+/// the palette has (and not empty), else the Libre look's.
+pub(crate) fn role_value(palette: &Dict, name: &str) -> String {
     let (names, fallback) = role(name);
-    let given = names.iter().find_map(|n| match palette.get(*n) {
-        Some(Value::Str(s)) if !s.is_empty() => Some(s.as_str()),
-        _ => None,
-    });
-    let rgb = given
-        .and_then(|v| lp_pixels::colour::getrgb(v).ok())
-        .or_else(|| lp_pixels::colour::getrgb(fallback).ok())
+    names
+        .iter()
+        .find_map(|n| match palette.get(*n) {
+            Some(Value::Str(s)) if !s.is_empty() => Some(s.clone()),
+            _ => None,
+        })
+        .unwrap_or_else(|| fallback.to_string())
+}
+
+/// role_color: the theme's colour for a role as RGB (role_value); a colour Pillow cannot read,
+/// the Libre look's.
+pub(crate) fn role_colour(palette: &Dict, name: &str) -> [i64; 3] {
+    let rgb = lp_pixels::colour::getrgb(&role_value(palette, name))
+        .or_else(|_| lp_pixels::colour::getrgb(role(name).1))
         .unwrap_or_default();
     [0, 1, 2].map(|i| rgb.get(i).copied().unwrap_or(0))
+}
+
+/// ellipsize: `text` as it is where `font` draws it within `room` px, else cut so that it, with
+/// "…" after it, does (at least one letter stays). The font measures what it draws: the runs of
+/// a system font that stands in for a missing glyph count at their own width.
+pub(crate) fn ellipsize(text: &str, font: &FallbackFont, room: f64) -> Result<String> {
+    let length = |t: &str| {
+        font.getlength(t, "", None, None, None)
+            .map_err(|e| Failed(e.to_string()))
+    };
+    if length(text)? <= room {
+        return Ok(text.to_string());
+    }
+    let mut letters: Vec<char> = text.chars().collect();
+    // (str.rstrip: the white space of every script)
+    let trimmed = |letters: &[char]| -> String {
+        let s: String = letters.iter().collect();
+        s.trim_end_matches(lp_py::isspace).to_string()
+    };
+    while letters.len() > 1 && length(&(trimmed(&letters) + "…"))? > room {
+        letters.pop();
+    }
+    Ok(trimmed(&letters) + "…")
 }
 
 /// mix: `a` over `b` by `share` (0: all `b`, 1: all `a`), each channel rounded as Python's
@@ -68,7 +112,7 @@ pub(crate) fn ease_in(u: f64) -> f64 {
 }
 
 /// Python's max(a, b) of floats: `a` unless `b` is greater.
-fn py_max(a: f64, b: f64) -> f64 {
+pub(crate) fn py_max(a: f64, b: f64) -> f64 {
     if b > a {
         b
     } else {
@@ -77,7 +121,7 @@ fn py_max(a: f64, b: f64) -> f64 {
 }
 
 /// Python's min(a, b) of floats: `a` unless `b` is less.
-fn py_min(a: f64, b: f64) -> f64 {
+pub(crate) fn py_min(a: f64, b: f64) -> f64 {
     if b < a {
         b
     } else {

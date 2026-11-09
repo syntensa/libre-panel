@@ -404,6 +404,45 @@ impl Renderer {
         self.warnings.borrow().clone()
     }
 
+    /// _reads: the sensor keys (and patterns) the widgets read: their sensors, marks and fine
+    /// courses, what their conditions read (a switch of the theme is none), a weather widget's
+    /// field, a list's items and the pictures an image widget takes from a source.
+    pub fn reads(&self) -> std::collections::HashSet<String> {
+        let mut keys = std::collections::HashSet::new();
+        for w in &self.widgets {
+            for field in ["sensor", "mark", "trace"] {
+                let key = widget::text(w, field);
+                if !key.is_empty() {
+                    keys.insert(key.to_string());
+                }
+            }
+            for need in widget::text(w, "needs").split(',') {
+                let need = crate::snapshot::need_key(need);
+                if !need.is_empty() && !need.starts_with(SWITCH) {
+                    keys.insert(need.to_string());
+                }
+            }
+            match widget::text(w, "type") {
+                "weather" => {
+                    keys.insert(format!("weather.{}", widget::text(w, "field")));
+                }
+                "list" => keys.extend(list::read_keys(widget::text(w, "items"))),
+                "image" => {
+                    // (_live_pictures: "@media.cover" as its src or on a line of its slides)
+                    let slides = lp_py::splitlines(widget::text(w, "slides"));
+                    for name in std::iter::once(widget::text(w, "src")).chain(slides) {
+                        let name = lp_py::strip(name);
+                        if let Some(key) = name.strip_prefix('@').filter(|k| !k.is_empty()) {
+                            keys.insert(key.to_string());
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        keys
+    }
+
     // -- resources -------------------------------------------------------------------------
 
     /// color: a colour of the theme (a palette entry after "@", the cover's colour) as RGBA,

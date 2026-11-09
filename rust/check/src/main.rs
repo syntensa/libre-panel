@@ -2537,6 +2537,177 @@ fn run(case: &Value) -> Result<Value, String> {
                 .collect();
             json!({"grounds": grounds, "ramps": ramps})
         }
+        "toasts" => {
+            // render/overlays.py's ToastLayer led through a script, step by step: a renderer of
+            // one of the themes' folders (the first makes the layer), toasts that arrive, the
+            // clock going on (with transitions holding them), frames drawn with the toast on
+            // show (each a frame of noise, as the tests make it) or the toast laid over a frame
+            // the engine composes, the toast set aside, and what the layer holds; until the
+            // script ends or asks for what is not here yet (unported)
+            use lp_render::overlays::{Toast, ToastLayer, Unported};
+            use std::rc::Rc;
+            let env = lp_theme::Env {
+                fonts_dir: case["fonts_dir"].as_str().unwrap_or("").into(),
+            };
+            let bits = |x: f64| format!("{:016x}", x.to_bits());
+            let float_in = |v: &Value| match v["f"].as_str() {
+                Some(h) => f64::from_bits(u64::from_str_radix(h, 16).unwrap_or(0)),
+                None => v.as_f64().unwrap_or(0.0),
+            };
+            let sha = |im: &Image| -> String {
+                Sha256::digest(im.as_bytes())
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect()
+            };
+            let toast_of = |t: &Value| -> Rc<Toast> {
+                let text = |key: &str| t[key].as_str().unwrap_or("").to_string();
+                let payload = t["payload"]
+                    .as_object()
+                    .map(|m| m.iter().map(|(k, v)| (k.clone(), typed(v))).collect())
+                    .unwrap_or_default();
+                Rc::new(Toast {
+                    text: text("text"),
+                    icon: t["icon"].as_str().map(str::to_string),
+                    level: t["level"].as_str().unwrap_or("info").to_string(),
+                    seconds: (!t["seconds"].is_null()).then(|| float_in(&t["seconds"])),
+                    kind: text("kind"),
+                    rank: t["rank"].as_i64().unwrap_or(0),
+                    payload,
+                    service: text("service"),
+                    key: text("key"),
+                })
+            };
+            let id = |t: &Toast| match t.payload.get("n") {
+                Some(lp_py::Value::Int(n)) => json!(n.to_string().parse::<i64>().unwrap_or(-1)),
+                _ => Value::Null,
+            };
+            let noise = |spec: &Value| -> Image {
+                // (bytes of a multiplicative hash: index times 2654435761 plus the seed, its
+                // top 8 of 32 bits)
+                let w = spec["size"][0].as_u64().unwrap_or(1) as usize;
+                let h = spec["size"][1].as_u64().unwrap_or(1) as usize;
+                let mode = spec["mode"]
+                    .as_str()
+                    .and_then(Mode::from_name)
+                    .unwrap_or(Mode::RGB);
+                let seed = spec["seed"].as_u64().unwrap_or(0);
+                let n = w * h * mode.bands();
+                let data: Vec<u8> = (0..n as u64)
+                    .map(|i| {
+                        ((i.wrapping_mul(2654435761).wrapping_add(seed) & 0xFFFF_FFFF) >> 24) as u8
+                    })
+                    .collect();
+                Image::from_bytes(mode, w, h, data).expect("a frame of its size")
+            };
+            let folders: Vec<std::path::PathBuf> = case["themes"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|f| f.as_str().unwrap_or("").into())
+                .collect();
+            let mut renderers: Vec<lp_render::Renderer> = Vec::new();
+            for folder in &folders {
+                let theme = lp_theme::load_theme(folder, &env).map_err(|e| e.msg)?;
+                let options = lp_render::Options {
+                    preview: true,
+                    animate: false,
+                    dither: false,
+                };
+                renderers.push(lp_render::Renderer::new(theme, &env, options).map_err(|e| e.0)?);
+            }
+            let mut layer: Option<ToastLayer> = None;
+            let mut on = 0usize; // (the renderer set last)
+            let mut steps: Vec<Value> = Vec::new();
+            let mut unported: Option<String> = None;
+            for step in case["script"].as_array().into_iter().flatten() {
+                let renderer = |i: usize| renderers.get(i).ok_or("no such theme");
+                let done: Result<Value, Unported> = (|| {
+                    Ok(match step[0].as_str().unwrap_or("") {
+                        "renderer" => {
+                            on = step[1].as_u64().unwrap_or(0) as usize;
+                            let r = renderer(on).map_err(|e| Unported(e.into()))?;
+                            match &mut layer {
+                                None => layer = Some(ToastLayer::new(r)?),
+                                Some(l) => l.set_renderer(r)?,
+                            }
+                            Value::Null
+                        }
+                        "add" => {
+                            let toasts = step[1].as_array().into_iter().flatten().map(toast_of);
+                            layer
+                                .as_mut()
+                                .expect("a layer")
+                                .add(toasts.collect::<Vec<_>>());
+                            Value::Null
+                        }
+                        "advance" => {
+                            let hold = step[2].as_bool().unwrap_or(false);
+                            layer
+                                .as_mut()
+                                .expect("a layer")
+                                .advance(float_in(&step[1]), hold)?;
+                            Value::Null
+                        }
+                        "draw" => {
+                            let frame = noise(&step[3]);
+                            let r = renderer(on).map_err(|e| Unported(e.into()))?;
+                            let l = layer.as_mut().expect("a layer");
+                            let hidden = step[2].as_bool().unwrap_or(false);
+                            let drawn = l.draw(&frame, float_in(&step[1]), hidden, r)?;
+                            json!({"sha256": drawn.as_ref().map(sha), "box": l.drawn_box})
+                        }
+                        "laid" => {
+                            let size = (
+                                step[3][0].as_i64().unwrap_or(1),
+                                step[3][1].as_i64().unwrap_or(1),
+                            );
+                            let r = renderer(on).map_err(|e| Unported(e.into()))?;
+                            let l = layer.as_mut().expect("a layer");
+                            let hidden = step[2].as_bool().unwrap_or(false);
+                            let laid = l.laid(size, float_in(&step[1]), hidden, r)?;
+                            let picture = laid.as_ref().map(|(p, x, y)| {
+                                json!({"sha256": sha(p), "size": [p.width(), p.height()],
+                                    "mode": p.mode().name(), "x": x, "y": y})
+                            });
+                            json!({"picture": picture, "box": l.drawn_box})
+                        }
+                        "set_aside" => {
+                            layer.as_mut().expect("a layer").set_aside();
+                            Value::Null
+                        }
+                        "state" => {
+                            let l = layer.as_ref().expect("a layer");
+                            let now = float_in(&step[1]);
+                            let current = l.current().map(|(t, began, previous)| {
+                                json!({"id": id(&t), "began": bits(began),
+                                    "seconds": t.seconds.map(bits),
+                                    "previous": previous.map(|(p, age)| json!([id(&p), bits(age)]))})
+                            });
+                            json!({
+                                "current": current,
+                                "ends": bits(l.ends),
+                                "queue": l.queue.iter().map(|t| id(t)).collect::<Vec<_>>(),
+                                "inbox": l.inbox.len(),
+                                "active": l.active(),
+                                "layered": l.layered(),
+                                "showing": l.showing(now).map(|(t, age)| json!([id(&t), bits(age)])),
+                            })
+                        }
+                        other => return Err(Unported(format!("no step {other}"))),
+                    })
+                })();
+                match done {
+                    Ok(out) => steps.push(out),
+                    Err(Unported(what)) => {
+                        unported = Some(what);
+                        break;
+                    }
+                }
+            }
+            let log = layer.as_ref().map(|l| l.log.clone()).unwrap_or_default();
+            json!({"steps": steps, "unported": unported, "log": log})
+        }
         "render_needs" => {
             // need_holds of each condition over each snapshot (its readings typed, the keys of
             // its pictures, its time)

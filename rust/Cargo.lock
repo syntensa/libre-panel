@@ -199,6 +199,7 @@ version = "0.1.0"
 dependencies = [
  "indexmap",
  "lp-decode",
+ "lp-devices",
  "lp-i18n",
  "lp-pixels",
  "lp-py",

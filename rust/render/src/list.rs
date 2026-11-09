@@ -77,6 +77,14 @@ fn parse_items(text: &str) -> Vec<Entry> {
     entries
 }
 
+/// read_keys: the keys and patterns a list reads (for the sources that read on demand).
+pub(crate) fn read_keys(text: &str) -> impl Iterator<Item = String> {
+    parse_items(text)
+        .into_iter()
+        .filter(|e| !e.exclude)
+        .map(|e| e.pattern)
+}
+
 /// A part of _natural's key: a run of digits as its number, the text between as it is.
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 enum Part {

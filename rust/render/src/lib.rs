@@ -28,6 +28,7 @@ mod metric;
 pub mod moon;
 pub mod motion;
 pub mod np;
+pub mod overlays;
 pub mod piece;
 mod rect;
 pub mod renderer;
