@@ -2544,7 +2544,7 @@ fn run(case: &Value) -> Result<Value, String> {
             // show (each a frame of noise, as the tests make it) or the toast laid over a frame
             // the engine composes, the toast set aside, and what the layer holds; until the
             // script ends or asks for what is not here yet (unported)
-            use lp_render::overlays::{Toast, ToastLayer, Unported};
+            use lp_render::overlays::{Over, Toast, ToastLayer, Unported};
             use std::rc::Rc;
             let env = lp_theme::Env {
                 fonts_dir: case["fonts_dir"].as_str().unwrap_or("").into(),
@@ -2614,7 +2614,15 @@ fn run(case: &Value) -> Result<Value, String> {
                     animate: false,
                     dither: false,
                 };
-                renderers.push(lp_render::Renderer::new(theme, &env, options).map_err(|e| e.0)?);
+                let mut renderer =
+                    lp_render::Renderer::new(theme, &env, options).map_err(|e| e.0)?;
+                // (the pictures a band's message names: a cover, an app's icon)
+                let mut snapshot = lp_render::snapshot::Snapshot::default();
+                for (key, picture) in case["images"].as_object().into_iter().flatten() {
+                    snapshot.images.insert(key.clone(), image_of(picture)?);
+                }
+                renderer.set_snapshot(snapshot);
+                renderers.push(renderer);
             }
             let mut layer: Option<ToastLayer> = None;
             let mut on = 0usize; // (the renderer set last)
@@ -2666,9 +2674,13 @@ fn run(case: &Value) -> Result<Value, String> {
                             let l = layer.as_mut().expect("a layer");
                             let hidden = step[2].as_bool().unwrap_or(false);
                             let laid = l.laid(size, float_in(&step[1]), hidden, r)?;
-                            let picture = laid.as_ref().map(|(p, x, y)| {
-                                json!({"sha256": sha(p), "size": [p.width(), p.height()],
-                                    "mode": p.mode().name(), "x": x, "y": y})
+                            let picture = laid.as_ref().map(|over| match over {
+                                Over::Layer(p, x, y) => {
+                                    json!({"sha256": sha(p), "size": [p.width(), p.height()],
+                                        "mode": p.mode().name(), "x": x, "y": y})
+                                }
+                                // (a style that lays none drew the frame itself: the band)
+                                Over::Frame(f) => json!({"sha256": sha(f)}),
                             });
                             json!({"picture": picture, "box": l.drawn_box})
                         }

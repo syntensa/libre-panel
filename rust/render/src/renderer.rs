@@ -404,6 +404,18 @@ impl Renderer {
         self.warnings.borrow().clone()
     }
 
+    /// context.image: a picture a service or a source published, as of the readings the frame
+    /// was last drawn of; None for none.
+    pub(crate) fn image(&self, key: &str) -> Option<&Image> {
+        self.snapshot.as_ref()?.images.get(key)
+    }
+
+    /// The readings what is drawn over the frame takes its pictures of, as a frame drawn of
+    /// them leaves them (renderer.snapshot).
+    pub fn set_snapshot(&mut self, snapshot: Snapshot) {
+        self.snapshot = Some(snapshot);
+    }
+
     /// _reads: the sensor keys (and patterns) the widgets read: their sensors, marks and fine
     /// courses, what their conditions read (a switch of the theme is none), a weather widget's
     /// field, a list's items and the pictures an image widget takes from a source.

@@ -129,6 +129,18 @@ pub(crate) fn py_min(a: f64, b: f64) -> f64 {
     }
 }
 
+/// An int of a float as `how` makes it (round, floor, ceil); an error where Python's raises
+/// (NaN, infinity), the most an i64 holds for a larger one (all that is asked of it here).
+pub(crate) fn whole(x: f64, how: fn(f64) -> f64) -> Result<i64> {
+    if x.is_nan() {
+        return Err(Failed("cannot convert float NaN to integer".into()));
+    }
+    if x.is_infinite() {
+        return Err(Failed("cannot convert float infinity to integer".into()));
+    }
+    Ok(how(x) as i64)
+}
+
 /// Python's round(x) of a float, as an int.
 fn round_int(x: f64) -> i64 {
     lp_py::round(x) as i64
@@ -226,11 +238,15 @@ pub(crate) fn add_line(
     if strength <= 0.004 || x1 - x0 < 1.0 {
         return Ok(());
     }
-    let half = round_int(32.0 * look.unit).max(3);
-    let top = round_int(y) - half;
-    let (a, b) = (top.max(0), (image.height() as i64).min(top + 2 * half));
-    let xa = (x0.floor() as i64).max(0);
-    let xb = (image.width() as i64).min(x1.ceil() as i64);
+    // (round(), math.floor() and math.ceil() of NaN or infinity raise in Python)
+    let half = whole(32.0 * look.unit, f64::round_ties_even)?.max(3);
+    let top = whole(y, f64::round_ties_even)?.saturating_sub(half);
+    let (a, b) = (
+        top.max(0),
+        (image.height() as i64).min(top.saturating_add(2 * half)),
+    );
+    let xa = whole(x0, f64::floor)?.max(0);
+    let xb = (image.width() as i64).min(whole(x1, f64::ceil)?);
     if b <= a || xb <= xa {
         return Ok(());
     }
@@ -246,4 +262,163 @@ pub(crate) fn add_line(
     };
     let sum = chops::add(&image.crop(xa, a, xb, b), &light, 1.0, 0).map_err(failed)?;
     image.paste(&sum, xa, a, None).map_err(failed)
+}
+
+/// The light's own white (WHITE): what a line's core burns towards.
+pub(crate) const WHITE: [i64; 3] = [234, 240, 248];
+
+/// scaled: `mask` with each value times `strength` (as round() rounds), as it is from 0.999.
+pub(crate) fn scaled(mask: Image, strength: f64) -> Result<Image> {
+    if strength >= 0.999 {
+        return Ok(mask);
+    }
+    mask.point_with(|v| f64::from(v) * strength).map_err(failed)
+}
+
+/// bloom: `layer` blurred into a soft glow, worked out at 1/`scale` of its size (much cheaper,
+/// and it looks the same), at `strength`.
+pub(crate) fn bloom(layer: &Image, radius: f64, strength: f64, scale: usize) -> Result<Image> {
+    let (w, h) = (layer.width(), layer.height());
+    let small = layer
+        .resize(
+            (w / scale).max(1),
+            (h / scale).max(1),
+            Filter::Bilinear,
+            None,
+            None,
+        )
+        .map_err(failed)?;
+    let r = py_max(0.3, radius) as f32;
+    let soft = small.gaussian_blur(r, r).map_err(failed)?;
+    let wide = soft
+        .resize(w, h, Filter::Bilinear, None, None)
+        .map_err(failed)?;
+    scaled(wide, strength)
+}
+
+/// paste_top: the top `rows` rows of `layer` at (x, y) on `image`; a part row is blended in by
+/// its share, so an edge that moves slowly glides instead of stepping.
+pub(crate) fn paste_top(image: &mut Image, layer: &Image, x: i64, y: i64, rows: f64) -> Result<()> {
+    let (lw, lh) = (layer.width() as i64, layer.height() as i64);
+    let rows = py_max(0.0, py_min(lh as f64, rows));
+    let whole = rows as i64; // (int(): rows is not below 0)
+    if whole > 0 {
+        image
+            .paste(&layer.crop(0, 0, lw, whole), x, y, None)
+            .map_err(failed)?;
+    }
+    let part = rows - whole as f64;
+    if part > 1.0 / 64.0 && whole < lh {
+        let under = image.crop(x, y + whole, x + lw, y + whole + 1);
+        let line = layer
+            .crop(0, whole, lw, whole + 1)
+            .convert(under.mode())
+            .map_err(failed)?;
+        let blended = chops::blend(&under, &line, part as f32).map_err(failed)?;
+        image.paste(&blended, x, y + whole, None).map_err(failed)?;
+    }
+    Ok(())
+}
+
+/// The built-in faces made, by file and size.
+type Faces = std::cell::RefCell<Vec<((std::path::PathBuf, i64), std::rc::Rc<FallbackFont>)>>;
+
+thread_local! {
+    /// face's: the built-in faces made, by file and size (lru_cache of 48)
+    static FACES: Faces = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// face: a built-in face ("Barlow-Bold") of its own, at `size` (6 at least).
+pub(crate) fn face(
+    env: &lp_theme::Env,
+    name: &str,
+    size: i64,
+) -> Result<std::rc::Rc<FallbackFont>> {
+    let size = size.max(6);
+    let path = env
+        .builtin_font_path(&format!("builtin:{name}"))
+        .ok_or_else(|| Failed(format!("cannot open resource: the face {name}")))?;
+    let key = (path, size);
+    if let Some(found) = FACES.with(|f| {
+        f.borrow()
+            .iter()
+            .find(|(k, _)| *k == key)
+            .map(|(_, font)| font.clone())
+    }) {
+        return Ok(found);
+    }
+    let font = std::rc::Rc::new(
+        FallbackFont::open(&key.0, size as f64, 0, None).map_err(|e| Failed(e.to_string()))?,
+    );
+    FACES.with(|f| {
+        let mut faces = f.borrow_mut();
+        if faces.len() >= 48 {
+            faces.remove(0);
+        }
+        faces.push((key, font.clone()));
+    });
+    Ok(font)
+}
+
+/// font.getlength(text), as Pillow measures it.
+pub(crate) fn length(font: &FallbackFont, text: &str) -> Result<f64> {
+    font.getlength(text, "", None, None, None)
+        .map_err(|e| Failed(e.to_string()))
+}
+
+/// tracked_width: the width of `text` letter-spaced by `tracking`.
+pub(crate) fn tracked_width(font: &FallbackFont, text: &str, tracking: f64) -> Result<f64> {
+    let mut lengths = Vec::new();
+    for ch in text.chars() {
+        lengths.push(length(font, &ch.to_string())?);
+    }
+    let gaps = text.chars().count().saturating_sub(1) as f64;
+    Ok(lp_py::sum_floats(lengths) + tracking * gaps)
+}
+
+/// draw_tracked: letter-spaced text with its baseline at (x, y), letter by letter.
+pub(crate) fn draw_tracked(
+    image: &mut Image,
+    (x, y): (f64, f64),
+    text: &str,
+    font: &FallbackFont,
+    ink: [u8; 4],
+    tracking: f64,
+) -> Result<()> {
+    let mode = image.mode().name();
+    let mut x = x;
+    for ch in text.chars() {
+        let letter = ch.to_string();
+        let written = lp_text::text::Text::new(&letter, font, mode);
+        lp_text::text::draw(image, (x, y), &written, ink, None, Some("ls"), "left")
+            .map_err(|e| Failed(e.to_string()))?;
+        x += length(font, &letter)? + tracking;
+    }
+    Ok(())
+}
+
+/// fitted_text: `text` in the face `name` at the largest of `sizes` that fits `width`, else
+/// cut with "…" at the smallest.
+pub(crate) fn fitted_text(
+    env: &lp_theme::Env,
+    text: &str,
+    name: &str,
+    sizes: &[i64],
+    width: f64,
+) -> Result<(String, std::rc::Rc<FallbackFont>)> {
+    let smallest = *sizes.last().ok_or_else(|| Failed("no sizes".into()))?;
+    let mut font = face(env, name, smallest)?;
+    for &size in sizes {
+        font = face(env, name, size)?;
+        if length(&font, text)? <= width {
+            return Ok((text.to_string(), font));
+        }
+    }
+    let mut letters: Vec<char> = text.chars().collect();
+    let joined = |letters: &[char]| letters.iter().collect::<String>();
+    while letters.len() > 1 && length(&font, &(joined(&letters) + "…"))? > width {
+        letters.pop();
+    }
+    let cut = joined(&letters);
+    Ok((cut.trim_end_matches(lp_py::isspace).to_string() + "…", font))
 }

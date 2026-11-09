@@ -1219,10 +1219,12 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       names, three numbers as int() takes them, else the level's), the icon, the text cut to
       120 letters and to its room with "…" (a text that FreeType cannot lay out leaves the
       toast out), the strips the panel's bezel hides, the anchor, the fade and the slide. The
-      band, the volume's looks and a plugin's style are not here yet: where a theme or a
-      message asks for one, Rust says so and draws nothing in Python's stead. The tests: 160
-      layers through scripts of up to 34 steps (434 frames with a toast on them compared to the
-      bit, and every step's queue, times and state alike). The counter-checks put in 57 faults
+      volume's looks and a plugin's style are not here yet: where a message asks for one,
+      Rust says so and draws nothing in Python's stead. The tests: 160
+      layers through scripts of up to 34 steps and two scenarios the scripts seldom meet by
+      chance (a text of 121 narrow letters on the 9.2" bar, the card at the same size in a theme
+      of other colours): 332 frames with a toast on them compared to the bit, and every step's
+      queue, times and state alike. The counter-checks put in 57 faults
       (the supersampling, the fade's and the leave's times, a toast replaced in place rolling in
       anew, the card kept for another theme, the card's unit, pads, stripe, gap, room, edge
       and accent, a payload's colour read otherwise (a bool, a float rounded, a text, two
@@ -1232,11 +1234,45 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       moment late, no time to leave, a toast set aside to the end, one unseen shown, a hidden
       one keeping what it replaced, the kinds left out, the keys, the roles' names and the
       Libre look's colours, two letters left of a cut text, a picture's need) and the tests
-      catch 56, the 120 letters, the text's start and the queue's 20 once texts that just fit,
-      letters whose ink begins left of them and bursts of 25 waiting toasts were added. The
-      57th, waiting toasts of a key collapsed without the others dropped, changes nothing: no
+      catch 56, the text's start and the queue's 20 once letters whose ink begins left of them
+      and bursts of 25 waiting toasts were added, the 120 letters and the card kept for another
+      theme for good once the two scenarios were. The 57th, waiting toasts of a key collapsed without the others dropped, changes nothing: no
       two waiting toasts share a key (one with the key of the one on show replaces it in
       place, and one set aside was alone with its key)
+- [x] the toasts' band (render/band.py's BandStyle, after SPUR II's notices): the edge of light
+      that ignites from the centre, the band rolling down from it and up into it, the edge
+      glowing on, each toast's run as Python keeps it (where in its life it begins of the one
+      it replaced: rolling on, standing, rolling back up from the height it reached; the same
+      key going on with its bar, another rolling down inside the open band), the theme's
+      roll_in and roll_out (0 to 10 s; one float() cannot take: the card, as Python's band
+      fails to start), the layout by the frame's shorter side and the bezel, SPUR's raster and
+      lit frame (bloom: a quarter's Gaussian blur), the title letter-spaced and haloed, the
+      tile with the picture a source published, its badge or the icon, the text in the largest
+      size that fits, the bar beside it (rising levels for the volume, segments) or a line
+      under it with its knob, gliding to its value on time; Python's caches by bytes where
+      what they keep decides what shows (a toast's band kept while its cover changes), and
+      Python's errors (round() and floor() of NaN) where they leave the toast out. Over a frame
+      the engine composes it draws the frame (it lays no layer: `layered` says so). The tests:
+      the toasts' test with the band in four themes of ten, and 120 layers all in the band with
+      four scenarios of their own: 797 frames with it to the bit, laid over a frame of layers
+      too (its rolling in and out, 51 bands rolling over the one before, 201 bars of the three
+      forms, the volume turning in place with its bar gliding and drawn out of turn, titles,
+      pictures with the badge on their corner, badges and icons; the scenarios: a band in a
+      theme that puts it elsewhere, a change drawn at the very end of its 0.26 s, a band gone at
+      its very end as the next arrives, bars on panels just too narrow for them beside the text,
+      864 px without a tile and 1000 with one, and on one so flat that its width cuts their
+      steps). The counter-checks put in 96 faults (the glow and the times, the shares of the
+      rolling, the layout's parts, the bar beside the text or under it and its steps, a run's
+      start, end and change, the glide, the edge's light, the line's look, the title, the tile
+      and its badge, the bars' forms, the bloom, the tracking, the text cut to fit, the anchor
+      kept, the lifetime) and the tests catch 92, the glide with the clock gone back, the
+      badge's pad, the bar beside the text and its steps cut by the width once the volume
+      turning, pictures with badges and those panels were added, the end of a change, a band
+      gone at its end and the anchor kept once the scenarios were. The other 4 change nothing:
+      where the band has no height its edge's light is 1 or 0.85, never near the 0.01 that
+      leaves the frame as it is; a bar beside the text is 560u wide at least, so its steps are
+      cut by its width only where 8u is below 3 px, and then 7u is too; no face of the band is
+      smaller than 7 px; and the bloom's strengths are 0.6 and 0.54 alone
 - [ ] pictures as Pillow fails at them: lp-decode's errors as Python's exceptions, so that
       where Python catches an OSError and goes on (a picture cut short, a file of no picture)
       Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,
@@ -1263,8 +1299,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       checked on a desktop with PyGObject. lp-py keeps to the C locale for now
 - [ ] the renderer's frame, widget by widget (texts, clocks, gauges, rings, bars, lists, graphs
       and their strips, fans, images, videos, icons, weather, globes, moon, sun path, slots,
-      cards, notices), effects (glow, lit finish, dither), motion, transitions, the toasts'
-      band and the volume's looks, start screens; each theme's frames to the bit
+      cards, notices), effects (glow, lit finish, dither), motion, transitions, the volume's
+      looks, start screens; each theme's frames to the bit
 
 ### R5 the panels' loop
 - [ ] the main loop (frames driven by change, pacing), the engine in the same process, panels

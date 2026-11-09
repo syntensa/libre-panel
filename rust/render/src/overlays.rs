@@ -1,8 +1,8 @@
 //! What is drawn over a finished frame (render/overlays.py): toasts, the short messages of
 //! services, with their queue, ranks, keys and holds (ToastLayer), in the theme's toast style:
-//! the built-in card (CardStyle) so far. Where a theme or a message asks for what is not here
-//! yet (the band, the volume's looks), the layer says so (Unported) instead of drawing
-//! something else.
+//! the built-in card (CardStyle) or the band (band.rs). Where a message asks for what is not
+//! here yet (the volume's looks), the layer says so (Unported) instead of drawing something
+//! else.
 
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -14,6 +14,7 @@ use lp_text::fallback::FallbackFont;
 use lp_text::text::{draw as draw_text, Text, TextFace};
 use num_traits::ToPrimitive;
 
+use crate::band::BandStyle;
 use crate::icons;
 use crate::light;
 use crate::piece::{Failed, Result};
@@ -146,10 +147,10 @@ impl Settings {
 /// What a style gets from the renderer (plugins/render.py's RenderContext): the theme's palette
 /// and panel model as they were when it came, and which context this is (a style keeps what it
 /// drew for one context only). Its fonts and colours are the renderer's.
-struct Context {
-    palette: Dict,
-    model: Option<&'static PanelModel>,
-    id: u64,
+pub(crate) struct Context {
+    pub(crate) palette: Dict,
+    pub(crate) model: Option<&'static PanelModel>,
+    pub(crate) id: u64,
 }
 
 /// The toast on show: the toast, when it began, and the toast it replaced with that one's age
@@ -161,9 +162,22 @@ struct Current {
     previous: Option<(Rc<Toast>, f64)>,
 }
 
+/// The toast on show as it is drawn: the toast, its age, the one it replaced and that one's age.
+type Shown = (Rc<Toast>, f64, Option<(Rc<Toast>, f64)>);
+
 /// The styles toasts are drawn in.
 enum Style {
     Card(CardStyle),
+    Band(Box<BandStyle>),
+}
+
+/// The toast on show over a frame the engine composes (ToastLayer.draw of a SceneFrame).
+pub enum Over {
+    /// one more layer: the toast's picture, laid through its alpha, and where it goes
+    Layer(Rc<Image>, i64, i64),
+    /// a style that lays none drew the frame with the toast itself (the band; the main loop
+    /// then sends the frame whole: `layered`)
+    Frame(Image),
 }
 
 /// Shows toasts in the theme's toast style (the built-in card unless the theme names another).
@@ -261,21 +275,49 @@ impl ToastLayer {
         self.settings = Some(settings);
         self.size = Some(size);
         if same {
-            if let Some(Style::Card(card)) = &mut self.style {
-                card.anchor = anchor;
-                return Ok(());
+            match &mut self.style {
+                Some(Style::Card(card)) => {
+                    card.anchor = anchor;
+                    return Ok(());
+                }
+                Some(Style::Band(band)) => {
+                    band.anchor = anchor;
+                    return Ok(());
+                }
+                None => {}
             }
         }
         self.close();
-        match name.as_str() {
-            "" | "card" => {}
-            "band" => return Err(Unported("the band style".into())),
-            other => self.log.push(format!(
-                "toast style {} is not installed; using the built-in card",
-                lp_py::repr(other)
-            )),
-        }
-        self.style = Some(Style::Card(CardStyle { anchor, card: None }));
+        let card = || {
+            Style::Card(CardStyle {
+                anchor: anchor.clone(),
+                card: None,
+            })
+        };
+        let style = match name.as_str() {
+            "" | "card" => card(),
+            "band" => {
+                let options = self.settings().options.clone();
+                match BandStyle::new(&anchor, &options) {
+                    Some(band) => Style::Band(Box::new(band)),
+                    None => {
+                        // (an option float() cannot take: the style fails to start)
+                        self.log.push(
+                            "toast style 'band' failed to start; using the built-in card".into(),
+                        );
+                        card()
+                    }
+                }
+            }
+            other => {
+                self.log.push(format!(
+                    "toast style {} is not installed; using the built-in card",
+                    lp_py::repr(other)
+                ));
+                card()
+            }
+        };
+        self.style = Some(style);
         Ok(())
     }
 
@@ -308,9 +350,16 @@ impl ToastLayer {
     }
 
     /// layered: whether the frame may go as its layers with what shows of the toasts: no toast
-    /// shows, or its style lays it as one picture through its alpha (the card does: `laid`).
+    /// shows, or its style lays it as one picture through its alpha (the card does: `laid`; the
+    /// band does not).
     pub fn layered(&self) -> bool {
-        true
+        let Some(current) = &self.current else {
+            return true;
+        };
+        if self.suppressed.contains(&current.toast.kind) {
+            return true; // (it goes on unseen)
+        }
+        !matches!(self.style, Some(Style::Band(_)))
     }
 
     /// set_aside: a transition begins that the toast on show must not cover: it leaves now and
@@ -472,8 +521,15 @@ impl ToastLayer {
         previous: Option<(Rc<Toast>, f64)>,
     ) -> std::result::Result<(), Unported> {
         self.style_of(&toast)?;
-        // (the card's lifetime: its hold time and the time it takes to leave)
-        self.ends = now + (toast.seconds.unwrap_or(f64::NAN) + CardStyle::LEAVE_S);
+        let lifetime = match &mut self.style {
+            // (the band's: where it begins of the one it continues)
+            Some(Style::Band(band)) => {
+                band.lifetime(&toast, previous.as_ref().map(|(t, age)| (t, *age)))
+            }
+            // (the card's: its hold time and the time it takes to leave)
+            _ => toast.seconds.unwrap_or(f64::NAN) + CardStyle::LEAVE_S,
+        };
+        self.ends = now + lifetime;
         self.current = Some(Current {
             toast,
             began: now,
@@ -482,13 +538,10 @@ impl ToastLayer {
         Ok(())
     }
 
-    /// What `draw` and `laid` do first: whether the toast on show is drawn now, and what of it.
+    /// What `draw` and `laid` do first: whether the toast on show is drawn now, and what of it
+    /// (the toast, its age, the one it replaced with that one's age then).
     #[allow(clippy::type_complexity)]
-    fn on_show(
-        &mut self,
-        now: f64,
-        hidden: bool,
-    ) -> std::result::Result<Option<(Rc<Toast>, f64, bool)>, Unported> {
+    fn on_show(&mut self, now: f64, hidden: bool) -> std::result::Result<Option<Shown>, Unported> {
         self.drawn_box = None;
         let Some(current) = self.current.clone() else {
             return Ok(None);
@@ -501,11 +554,7 @@ impl ToastLayer {
             return Ok(None);
         }
         self.style_of(&current.toast)?;
-        Ok(Some((
-            current.toast,
-            now - current.began,
-            current.previous.is_some(),
-        )))
+        Ok(Some((current.toast, now - current.began, current.previous)))
     }
 
     /// A failure of the style: the frame goes on without the toast, and it is told once.
@@ -518,7 +567,7 @@ impl ToastLayer {
 
     /// draw: the frame with the toast on show drawn on it, None where it is the frame as it is.
     /// `hidden`: a transition that hides toasts plays; the toast on show starts again after
-    /// it. `drawn_box`: where it drew.
+    /// it. `drawn_box`: where it drew, where its style says so (the card).
     pub fn draw(
         &mut self,
         frame: &Image,
@@ -529,14 +578,29 @@ impl ToastLayer {
         let Some((toast, age, previous)) = self.on_show(now, hidden)? else {
             return Ok(None);
         };
-        let Some(Style::Card(card)) = &mut self.style else {
-            return Ok(None);
+        let replaced = previous.as_ref().map(|(t, a)| (t, *a));
+        let drawn = match &mut self.style {
+            Some(Style::Card(card)) => card
+                .draw(
+                    frame,
+                    &toast,
+                    age,
+                    previous.is_some(),
+                    &self.context,
+                    renderer,
+                )
+                .map(|(drawn, bounds)| Some((drawn, Some(bounds)))),
+            Some(Style::Band(band)) => band
+                .draw(frame, &toast, age, replaced, &self.context, renderer)
+                .map(|drawn| drawn.map(|d| (d, None))),
+            None => Ok(None),
         };
-        match card.draw(frame, &toast, age, previous, &self.context, renderer) {
-            Ok((drawn, bounds)) => {
-                self.drawn_box = Some(bounds);
+        match drawn {
+            Ok(Some((drawn, bounds))) => {
+                self.drawn_box = bounds;
                 Ok(Some(drawn))
             }
+            Ok(None) => Ok(None),
             Err(e) => {
                 self.failure(e);
                 Ok(None)
@@ -544,31 +608,48 @@ impl ToastLayer {
         }
     }
 
-    /// The toast on show as it lies over a frame of `size` that the engine composes
-    /// (ToastLayer.draw of a SceneFrame): its picture, laid through its alpha, and where it goes;
-    /// None where nothing shows. The same picture while it shows whole.
+    /// The toast on show over a frame of `size` that the engine composes (ToastLayer.draw of a
+    /// SceneFrame): the card's picture, laid through its alpha, and where it goes (the same
+    /// picture while it shows whole); the band drawn on the frame composed (its ground, black);
+    /// None where nothing shows.
     pub fn laid(
         &mut self,
         size: (i64, i64),
         now: f64,
         hidden: bool,
         renderer: &Renderer,
-    ) -> std::result::Result<Option<(Rc<Image>, i64, i64)>, Unported> {
+    ) -> std::result::Result<Option<Over>, Unported> {
         let Some((toast, age, previous)) = self.on_show(now, hidden)? else {
             return Ok(None);
         };
-        let Some(Style::Card(card)) = &mut self.style else {
-            return Ok(None);
+        let replaced = previous.as_ref().map(|(t, a)| (t, *a));
+        let laid = match &mut self.style {
+            Some(Style::Card(card)) => card
+                .layer(
+                    size,
+                    &toast,
+                    age,
+                    previous.is_some(),
+                    &self.context,
+                    renderer,
+                )
+                .map(|(picture, x, y)| Some(Over::Layer(picture, x, y))),
+            Some(Style::Band(band)) => {
+                let (w, h) = (size.0.max(0) as usize, size.1.max(0) as usize);
+                let composed = Image::new(Mode::RGB, w, h, &[0, 0, 0]);
+                band.draw(&composed, &toast, age, replaced, &self.context, renderer)
+                    .map(|drawn| drawn.map(Over::Frame))
+            }
+            None => Ok(None),
         };
-        match card.layer(size, &toast, age, previous, &self.context, renderer) {
-            Ok((picture, x, y)) => {
-                self.drawn_box = Some([
-                    x,
-                    y,
-                    x + picture.width() as i64,
-                    y + picture.height() as i64,
-                ]);
-                Ok(Some((picture, x, y)))
+        match laid {
+            Ok(laid) => {
+                if let Some(Over::Layer(picture, x, y)) = &laid {
+                    let (x, y) = (*x, *y);
+                    let (w, h) = (picture.width() as i64, picture.height() as i64);
+                    self.drawn_box = Some([x, y, x + w, y + h]);
+                }
+                Ok(laid)
             }
             Err(e) => {
                 self.failure(e);
@@ -625,7 +706,7 @@ fn channel(value: &Value) -> Option<i64> {
 /// accent_color: a toast's accent: its payload's "color" ("#rrggbb", "@name", the cover's,
 /// or three numbers), else its level's, which is also what a colour nobody can read is taken
 /// for.
-fn accent_colour(renderer: &Renderer, palette: &Dict, toast: &Toast) -> [i64; 3] {
+pub(crate) fn accent_colour(renderer: &Renderer, palette: &Dict, toast: &Toast) -> [i64; 3] {
     match toast.payload.get("color") {
         Some(Value::Str(colour)) if !colour.is_empty() => {
             if let Ok(Some([r, g, b, _])) = renderer.color(Some(colour), 1.0) {

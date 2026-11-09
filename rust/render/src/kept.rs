@@ -31,6 +31,16 @@ impl<K: Hash + Eq + Clone, V: Clone> Kept<K, V> {
         Some(item.0.clone())
     }
 
+    /// get(key, valid=...): the value of `key` where it serves (`valid`), now the most recently
+    /// used; one that does not serve stays where it is.
+    pub(crate) fn get_if(&mut self, key: &K, valid: impl Fn(&V) -> bool) -> Option<V> {
+        let serves = self.items.get(key).is_some_and(|item| valid(&item.0));
+        if !serves {
+            return None;
+        }
+        self.get(key)
+    }
+
     /// Keep `value` as the newest, `size` bytes; the least recently used go while more than
     /// the budget is kept.
     pub(crate) fn put(&mut self, key: K, value: V, size: usize) {

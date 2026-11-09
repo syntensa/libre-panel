@@ -3,6 +3,7 @@
 
 mod agent;
 mod analog;
+mod band;
 mod bar;
 mod calendar;
 pub mod compose;
