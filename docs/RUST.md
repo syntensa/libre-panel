@@ -66,7 +66,7 @@ all of it. It is the reference every Rust piece is checked against:
 
 | Crate | What it is | Python it replaces |
 |---|---|---|
-| py | what Python does that the app's files and messages depend on: its values (ints of any size, dicts in order, ==), their arithmetic and its errors, repr(), json, str's white space, digits, lower() and upper(), re's matching without case, rounding, the division of ints, float() of a str, sum() of floats, splitlines(), casefold(), format() and str.format, the wide characters of East Asian scripts, the zones zoneinfo finds and reads, the computer's own as glibc finds it, and what datetime asks of them (Python 3.12, Unicode 15.0: the release's) | — (Python's own rules) |
+| py | what Python does that the app's files and messages depend on: its values (ints of any size, dicts in order, ==), their arithmetic and its errors, repr(), json, str's white space, digits, lower() and upper(), re's matching without case, rounding, the division of ints, float() of a str, sum() of floats, splitlines(), casefold(), format() and str.format, the wide characters of East Asian scripts, the zones zoneinfo finds and reads, the computer's own as glibc finds it, what datetime asks of them, TOML as tomllib reads it and a file's text as open() reads it (Python 3.12, Unicode 15.0: the release's) | — (Python's own rules) |
 | pixels | Pillow's operations as Libre Panel uses them, to the bit | Pillow, numpy (in render/) |
 | decode | pictures from their files as Pillow decodes them (PNG, GIF, JPEG, WebP) | Image.open, Pillow's decoders |
 | text | letters and their layout as Pillow draws them (FreeType, shaping as libraqm) | fonts/, ImageFont |
@@ -1561,6 +1561,15 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       tests (Playwright) against the Rust app
 - [ ] the window (wry, tao), the tray icon, the command line, autostart, single instance,
       updates, languages, the log, light mode
+- [x] TOML as Python's tomllib reads it (lp-py): every value (ints of any size, floats to
+      the bit with -nan's sign, dates, times and their offsets), tables, inline tables and
+      arrays of tables with what may be said twice, every error in tomllib's words with its
+      line and column, the 4300 digits Python's int() takes, and how deep a file may nest
+      before Python gives up (its 1000 frames, counted as tomllib's functions call each
+      other, from where the caller stands). A file's text as open() reads it: UTF-8 strictly,
+      the error in Python's words, `\r\n` and `\r` as one new line. The tests: generated
+      texts beside tomllib itself, value by value and message by message, and nesting
+      at both sides of the end, from six depths of the caller
 - [ ] config.toml and its folders; the panel a config is for (theme/defaults.py's
       panel_model: the configured model, the one a display reports, a TURZX panel on the USB
       bus) and the theme of its normal page

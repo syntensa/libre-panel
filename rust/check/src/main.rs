@@ -1797,6 +1797,46 @@ fn run(case: &Value) -> Result<Value, String> {
             json!({"results": results, "floats": floats, "general": general,
                 "max_depth": lp_py::json::MAX_DEPTH})
         }
+        "toml" => {
+            // each text read as tomllib.loads reads it; each file's bytes as
+            // Path.read_text(encoding="utf-8") and then tomllib.loads read them; `frame`: how
+            // deep Python's call of loads is
+            let frame = case["frame"]
+                .as_u64()
+                .map_or(lp_py::toml::LOADS_FRAME, |f| f as usize);
+            let loaded = |text: &str| match lp_py::toml::loads_at(text, frame) {
+                Ok(table) => {
+                    let mut ok = serde_json::Map::new();
+                    ok.insert("ok".into(), toml_value(&lp_py::toml::Toml::Table(table)));
+                    Value::Object(ok)
+                }
+                Err(e) => json!({"error": e.msg, "kind": match e.kind {
+                    lp_py::toml::ErrorKind::Decode => "decode",
+                    lp_py::toml::ErrorKind::Value => "value",
+                    lp_py::toml::ErrorKind::Recursion => "recursion",
+                }}),
+            };
+            let results: Vec<Value> = case["texts"]
+                .as_array()
+                .map(|all| {
+                    all.iter()
+                        .map(|t| loaded(t.as_str().unwrap_or_default()))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let mut files = Vec::new();
+            for file in case["files"].as_array().into_iter().flatten() {
+                let bytes = STANDARD
+                    .decode(file.as_str().ok_or("files")?)
+                    .map_err(|e| e.to_string())?;
+                files.push(match lp_py::codecs::read_text(&bytes) {
+                    Ok(text) => loaded(&text),
+                    Err(e) => json!({"error": e.to_string(), "kind": "unicode",
+                        "start": e.start, "end": e.end, "reason": e.reason}),
+                });
+            }
+            json!({"results": results, "files": files})
+        }
         "theme" | "parse_theme" | "widget" => {
             // a theme read from its folder, or from its data, or one widget, as theme/model.py
             // reads them: what comes of it as JSON text (json.dumps), its warnings; or the error
@@ -3455,6 +3495,45 @@ fn run(case: &Value) -> Result<Value, String> {
         }
         other => return Err(format!("no op {other}")),
     })
+}
+
+/// A value of tomllib's with nothing lost: its type beside it, an int in digits, a float by its
+/// bits, a table's keys in their order.
+fn toml_value(v: &lp_py::toml::Toml) -> Value {
+    use lp_py::toml::Toml;
+    match v {
+        Toml::Bool(b) => json!(["bool", b]),
+        Toml::Int(i) => json!(["int", i.to_string()]),
+        Toml::Float(f) => json!(["float", format!("{:016x}", f.to_bits())]),
+        Toml::Str(s) => json!(["str", s]),
+        // (made by hand: json! would copy what is inside once more at every level)
+        Toml::Array(items) => Value::Array(vec![
+            Value::from("list"),
+            Value::Array(items.iter().map(toml_value).collect()),
+        ]),
+        Toml::Table(table) => Value::Array(vec![
+            Value::from("dict"),
+            Value::Array(
+                table
+                    .iter()
+                    .map(|(k, v)| Value::Array(vec![Value::from(k.as_str()), toml_value(v)]))
+                    .collect(),
+            ),
+        ]),
+        Toml::Date(d) => json!(["date", d.year, d.month, d.day]),
+        Toml::Time(t) => json!(["time", t.hour, t.minute, t.second, t.microsecond]),
+        Toml::DateTime(d, t, offset) => json!([
+            "datetime",
+            d.year,
+            d.month,
+            d.day,
+            t.hour,
+            t.minute,
+            t.second,
+            t.microsecond,
+            offset
+        ]),
+    }
 }
 
 fn text_error(e: lp_text::Error) -> Value {

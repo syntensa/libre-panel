@@ -5,6 +5,7 @@ point where the Unicode database is the release's (Python 3.12: Unicode 15.0).""
 
 from __future__ import annotations
 
+import base64
 import calendar
 import fnmatch
 import hashlib
@@ -17,9 +18,11 @@ import string
 import struct
 import subprocess
 import sys
+import tomllib
 import unicodedata
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -1154,3 +1157,356 @@ def test_fnmatch_as_python_matches() -> None:
     assert ["error" if isinstance(g, dict) else g for g in got["matched"]] == wanted
     assert got["filtered"] == [fnmatch.filter(files, p) for p in globs]
     assert sum(w is True for w in wanted) > 20000
+
+
+_TOML_KEYS = ["a", "a", "b", "b", "c", "a1", "-", "_", "1", "true", "inf", "1979-05-27", "é",
+              '"a"', "'b'", '"a b"', '""', "''", '"\\u00e9"', '"a.b"', "'c'"]  # fmt: skip
+_TOML_NUMBERS = ["0", "+0", "-0", "1", "42", "-17", "1_000", "0x1F", "0xdead_beef", "0o17",
+                 "0b1011", "1.5", "-0.0", "+1.0e10", "1e5", "1E-2", "6.02_3e2_3", "inf", "-inf",
+                 "+inf", "nan", "+nan", "-nan", "01", "1__2", "_1", "1_", "0x", "0X1F", "+0x1",
+                 "1.", ".5", "1.e5", "1e", "0b2", "0o8", "1e400", "-1e400", "1e-400", "9" * 30,
+                 "0x_1", "0xg", "0b", "0o", "1_.5", "1._5", "1e_5", "1e+_5", "00", "-01", "0e0",
+                 "0.0e-0", "1.5.5", "1e5e5", "infinity", "NaN", "Inf", "1e+05", "-0x1", "0_0",
+                 "true", "false", "True", "truefalse", "tru"]  # fmt: skip
+_TOML_PIECES = ["a", "b", " ", "\t", "é", "😀", "#", "'", "=", "[", "]", "{", ",", "\\b", "\\t",
+                "\\n", "\\f", "\\r", '\\"', "\\\\", "\\u00e9", "\\U0001F600", "\\u0000",
+                "\\uFFFF", "\\U0010FFFF"]  # fmt: skip
+_TOML_BAD_PIECES = ["\\x", "\\uD800", "\\uDFFF", "\\U00110000", "\\u12", "\\U0001F60", "\\ ",
+                    "\\e", "\x01", "\x7f", "\\", "\\u", "\\uGGGG", "\x00", "\x1f"]  # fmt: skip
+
+
+_TOML_PLAIN = ["1", '"s"', "true", "1.5", "[]", "{}", "1979-05-27", "07:32:00", "0001-01-01",
+               "9999-12-31T23:59:59.999999Z", "1979-05-27 07:32:00.5-08:00", "2024-02-29t00:00:00",
+               "1979-05-27T00:32:00.1234567+23:59", "2100-12-31 23:59:59z", "23:59:59.000001",
+               "2000-01-01T12:00:00-00:00", "1979-05-27T07:32:00+05:30", "'s'", "-inf"]  # fmt: skip
+
+
+def _toml_string(rng: random.Random) -> str:
+    kind = rng.randrange(4)
+    pieces = [rng.choice(_TOML_PIECES) for _ in range(rng.randrange(0, 7))]
+    if rng.random() < 0.08:
+        pieces.insert(rng.randrange(len(pieces) + 1), rng.choice(_TOML_BAD_PIECES))
+    if kind == 0:
+        return '"' + "".join(pieces) + '"'
+    if kind == 1:
+        return "'" + "".join(p for p in pieces if p != "'") + "'"
+    for _ in range(rng.randrange(0, 4)):
+        more = ["\n", "\n", "\r\n", '"', '""', "'", "''", "\\\n", "\\  \n  \n\t", "\\ \t x", "\r",
+                "\\\t\n", "\\\t \n \t", "\\\tx", "\\\t"]  # fmt: skip
+        pieces.insert(rng.randrange(len(pieces) + 1), rng.choice(more))
+    quotes = '"""' if kind == 2 else "'''"
+    start = rng.choice(["", "", "\n", "\r\n"])
+    end = rng.choice(["", "", "", quotes[0], quotes[0] * 2, quotes[0] * 3])
+    return quotes + start + "".join(pieces) + end + quotes
+
+
+def _toml_moment(rng: random.Random) -> str:
+    def clock() -> str:
+        hour, minute = rng.choice([0, 7, 23, 23, 24]), rng.choice([0, 32, 59, 59, 60])
+        text = f"{hour:02d}:{minute:02d}:{rng.choice([0, 1, 59, 59, 60]):02d}"
+        return text + rng.choice(["", "", ".5", ".123456", ".1234567891", ".", ".999999999"])
+
+    if rng.random() < 0.2:
+        return clock()
+    year, month = rng.choice([0, 1, 1979, 2024, 2100, 9999]), rng.choice([0, 1, 2, 2, 12, 13])
+    text = f"{year:04d}-{month:02d}-{rng.choice([0, 1, 28, 29, 30, 31, 32]):02d}"
+    if rng.random() < 0.25:
+        return text
+    text += rng.choice(["T", "T", "t", " ", "  ", "", "\t"]) + clock()
+    offsets = ["", "", "Z", "z", "+00:00", "-00:00", "-08:00", "+23:59", "+24:00", "+05:60",
+               "+0530", "+5:30", " Z", "-12:34"]  # fmt: skip
+    return text + rng.choice(offsets)
+
+
+def _toml_key(rng: random.Random) -> str:
+    parts = [rng.choice(_TOML_KEYS) for _ in range(rng.choice([1, 1, 1, 2, 2, 3]))]
+    return rng.choice([".", ".", ".", " . ", ". ", "\t."]).join(parts)
+
+
+def _toml_space(rng: random.Random, lines: bool) -> str:
+    plain = ["", "", "", " ", "\t", "  "]
+    more = ["\n", "\n  ", "# c\n", " # é\n\n", "\r\n", "#\n#\n"]
+    return rng.choice(plain + more if lines else plain)
+
+
+def _toml_value(rng: random.Random, depth: int = 0) -> str:
+    kind = rng.randrange(12 if depth < 4 else 8)
+    if kind < 3:
+        return _toml_string(rng)
+    if kind < 5:
+        if rng.random() < 0.5:
+            return rng.choice(_TOML_NUMBERS)
+        digits = "".join(rng.choice("0123456789_") for _ in range(rng.randrange(1, 8)))
+        text = rng.choice(["", "", "+", "-"]) + digits
+        if rng.random() < 0.5:
+            text += "." + "".join(rng.choice("0123456789_") for _ in range(rng.randrange(0, 5)))
+        if rng.random() < 0.3:
+            text += rng.choice("eE") + rng.choice(["", "+", "-"]) + str(rng.randrange(0, 400))
+        return text
+    if kind < 7:
+        return _toml_moment(rng)
+    if kind == 7:
+        return rng.choice(["true", "false", "", "x", "[", "{", "]", "}", '"', "'", "null"])
+    if kind < 10:
+        text = "[" + _toml_space(rng, True)
+        count = rng.randrange(0, 4)
+        for n in range(count):
+            text += _toml_value(rng, depth + 1) + _toml_space(rng, True)
+            if n + 1 < count or rng.random() < 0.3:
+                text += rng.choice([",", ",", ",", ",", ",,", ""]) + _toml_space(rng, True)
+        return text + "]"
+    text = "{" + _toml_space(rng, False)
+    count = rng.randrange(0, 4)
+    for n in range(count):
+        text += _toml_key(rng) + _toml_space(rng, False) + "=" + _toml_space(rng, False)
+        text += _toml_value(rng, depth + 1) + _toml_space(rng, False)
+        if n + 1 < count or rng.random() < 0.06:
+            text += rng.choice([",", ",", ",", ",", "\n", ""]) + _toml_space(rng, False)
+    return text + "}"
+
+
+def _toml_text(rng: random.Random) -> str:
+    text = ""
+    for _ in range(rng.randrange(0, 9)):
+        kind = rng.randrange(10)
+        line = _toml_space(rng, False)
+        if kind < 5:
+            line += _toml_key(rng) + _toml_space(rng, False) + "=" + _toml_space(rng, False)
+            line += _toml_value(rng)
+        elif kind < 7:
+            line += "[" + _toml_space(rng, False) + _toml_key(rng) + _toml_space(rng, False) + "]"
+        elif kind == 7:
+            line += "[[" + _toml_space(rng, False) + _toml_key(rng) + "]" + rng.choice("]]]] ")
+        elif kind == 8:
+            line += rng.choice(["", "# a comment", "#", "# \x01", "#\té", "# \x7f"])
+        else:
+            line += rng.choice(["x", "=", "= 1", "a", "a =", "[", "[[", "[a", "[[a]", "[]", "[[]]",
+                                "a.=1", ".a=1", "a..b=1", "a b=1", "[a]]", "[[a]] x",
+                                "a=1 b=2"])  # fmt: skip
+        line += rng.choice(["", "", "", " ", "\t", " # c", "# c", " x"])
+        text += line + rng.choice(["\n", "\n", "\n", "\n", "\r\n", "\r\n", "\n\n", "\r", ""])
+    return text
+
+
+def _toml_tables(rng: random.Random) -> str:
+    """A document of little else than tables: few names, so that they meet."""
+
+    def key() -> str:
+        return ".".join(rng.choice("abc") for _ in range(rng.choice([1, 1, 2, 2, 3])))
+
+    def value(depth: int = 0) -> str:
+        kind = rng.randrange(9 if depth < 3 else 4)
+        if kind < 4:
+            return rng.choice(_TOML_PLAIN)
+        if kind < 6:
+            return "[" + ", ".join(value(depth + 1) for _ in range(rng.randrange(1, 3))) + "]"
+        pairs = [f"{key()} = {value(depth + 1)}" for _ in range(rng.randrange(1, 4))]
+        return "{" + ", ".join(pairs) + "}"
+
+    lines = []
+    for _ in range(rng.randrange(1, 9)):
+        kind = rng.randrange(8)
+        if kind < 4:
+            lines.append(f"{key()} = {value()}")
+        elif kind < 6:
+            lines.append(f"[{key()}]")
+        else:
+            lines.append(f"[[{key()}]]")
+    return "\n".join(lines) + "\n"
+
+
+def _toml_broken(rng: random.Random, text: str) -> str:
+    for _ in range(rng.randrange(1, 3)):
+        at, kind = rng.randrange(len(text) + 1), rng.randrange(4)
+        if kind == 0:
+            text = text[:at] + text[at + 1 :]
+        elif kind == 1:
+            text = text[:at] + rng.choice("\"'[]{}=.,#\\\n\r \t0_-+:eTZxa\x01é") + text[at:]
+        elif kind == 2:
+            text = text[:at]
+        else:
+            text = text[:at] + text[at : at + 1] * 2 + text[at + 1 :]
+    return text
+
+
+def _digits(value: int) -> str:
+    """str(value), however long it is."""
+    sign, value, parts = "-" if value < 0 else "", abs(value), []
+    while value >= 10**4000:
+        value, low = divmod(value, 10**4000)
+        parts.append(f"{low:04000d}")
+    return sign + "".join(reversed([*parts, str(value)]))
+
+
+def _toml_plain(value: object) -> list[Any]:
+    """A value of tomllib's as lp-check writes its own: nothing lost."""
+    if isinstance(value, bool):
+        return ["bool", value]
+    if isinstance(value, int):
+        return ["int", _digits(value)]
+    if isinstance(value, float):
+        return ["float", struct.pack(">d", value).hex()]
+    if isinstance(value, str):
+        return ["str", value]
+    if isinstance(value, list):
+        return ["list", [_toml_plain(item) for item in value]]
+    if isinstance(value, dict):
+        return ["dict", [[key, _toml_plain(item)] for key, item in value.items()]]
+    if isinstance(value, datetime):
+        offset = value.utcoffset()
+        minutes = None if offset is None else offset // timedelta(minutes=1)
+        return ["datetime", value.year, value.month, value.day, value.hour, value.minute,
+                value.second, value.microsecond, minutes]  # fmt: skip
+    if isinstance(value, date):
+        return ["date", value.year, value.month, value.day]
+    assert isinstance(value, time) and value.tzinfo is None, value
+    return ["time", value.hour, value.minute, value.second, value.microsecond]
+
+
+def _python_toml(text: str, deeper: int = 0) -> tuple[dict[str, Any], int]:
+    """What tomllib makes of a text, and how deep its loads() was called."""
+    if deeper:
+        return _python_toml(text, deeper - 1)
+    frame, depth = sys._getframe(), 1
+    while (frame := frame.f_back) is not None:  # type: ignore[assignment]
+        depth += 1
+    try:
+        return {"ok": _toml_plain(tomllib.loads(text))}, depth + 1
+    except tomllib.TOMLDecodeError as error:
+        return {"error": str(error), "kind": "decode"}, depth + 1
+    except RecursionError as error:
+        return {"error": str(error), "kind": "recursion"}, depth + 1
+    except ValueError as error:
+        return {"error": str(error), "kind": "value"}, depth + 1
+
+
+@pytest.mark.skipif(
+    sys.version_info[:2] != (3, 12), reason="the release's tomllib is Python 3.12's"
+)
+def test_toml_is_read_as_python_s_tomllib_reads_it() -> None:
+    rng = random.Random(0x7031)
+    texts = [_toml_text(rng) for _ in range(6000)]
+    texts += [_toml_broken(rng, text) for text in texts[:6000]]
+    texts += [f"a = {_toml_value(rng)}" for _ in range(6000)]
+    texts += [_toml_tables(rng) for _ in range(12000)]
+    texts += [f"a = {number}{end}" for number in _TOML_NUMBERS for end in ("", "\n", " # c", "x")]
+    # white space of every kind, where TOML allows a blank or a tab
+    places = ["a{s}=1", "a={s}1", "a=1{s}", "{s}a=1", "[{s}a]", "[a{s}]", "a=[{s}1]", "a=[1{s},2]",
+              "a=[1,{s}2]", "a={{s}b=1}", "a={b=1{s}}", "a={b{s}=1,c=2}", "a.{s}b=1", "a{s}.b=1",
+              "a=1{s}#c", "a=1#c{s}", '"a"{s}=1', "[[a{s}]]", "[a]{s}", "a=1979-05-27{s}07:32:00",
+              'a="""\\{s}\n b"""', 'a="""\\\n{s}b"""', "a=1\n{s}\nb=2",
+              "a=[1 #c{s}\n]"]  # fmt: skip
+    spaces = [" ", "\t", "\u00a0", "\x0b", "\x0c", "\u3000", "\u2028", "\u0085", "\r", "\ufeff",
+              "\u2003", "\x1f", "\x00"]  # fmt: skip
+    texts += [place.replace("{s}", space) for place in places for space in spaces]
+    texts += ["", " ", "\n", "﻿a=1", "a=1\r", "a=1\rb=2", "a=" + "1" * 4300, "a=-" + "1" * 4301,
+              "a=" + "1_" * 4300 + "1", "a=" + "1_" * 4299 + "1", "a=+" + "1" * 5000,
+              "a=0x" + "f" * 5000, "a=0b" + "1" * 9000, "a=" + "1" * 5000 + ".0",
+              "a=" + "1" * 5000 + "e1", "a=0o" + "7" * 6000]  # fmt: skip
+    # the files the app's own tests and docs hold
+    root = Path(__file__).resolve().parent.parent
+    files = sorted(p for p in root.rglob("*.toml") if "target" not in p.parts)
+    texts += [path.read_text(encoding="utf-8") for path in files]
+    wanted, frames = zip(*(_python_toml(text) for text in texts), strict=True)
+    assert len(set(frames)) == 1
+    [ours] = run([{"op": "toml", "texts": texts, "frame": frames[0]}])
+    for text, mine, want in zip(texts, ours["results"], wanted, strict=True):
+        assert mine == want, repr(text)
+    kinds = [want.get("kind", "ok") for want in wanted]
+    assert kinds.count("ok") > 8000 and kinds.count("decode") > 12000 and kinds.count("value") == 3
+    assert len({want["error"].split(" (at ")[0] for want in wanted if "error" in want}) > 40
+    assert files
+
+
+@pytest.mark.skipif(
+    sys.version_info[:2] != (3, 12), reason="the release's tomllib is Python 3.12's"
+)
+def test_toml_nests_as_deep_as_python_s_tomllib_reads_it() -> None:
+    # (Python reads a nested value by calling itself, and gives up where its own stack is full:
+    # how deep depends on how deep the call of loads() is. A level of arrays costs two calls,
+    # of tables in a line three, of both five: so from six depths of the call, that every
+    # count of calls left comes up. Every depth around the end, with what needs most calls at
+    # the bottom: nothing, a text with an escape, a comment, a zone, a mistake to report)
+    def nested(open_: str, close: str, inside: str) -> Callable[[int], str]:
+        return lambda n: "a=" + open_ * n + inside + close * n
+
+    insides = ["", "1", "true", '"\\u0041"', '"""\\\n \\u0041"""', "'a'", "1979-05-27T07:32:00",
+               "1979-05-27T07:32:00+01:00", "1979-05-27T07:32:00Z", "1979-05-27", "07:32:00", "x",
+               "1979-02-30", "#c\n", "1#c\n", "{}", "{a=1}"]  # fmt: skip
+    arrays = [nested("[", "]", inside) for inside in insides]
+    arrays += [lambda n: "a=" + "[" * n, lambda n: "a=" + "[" * n + "1" + "]" * (n - 1) + "x"]
+    tables = [nested("{a=", "}", inside) for inside in ("1", "{}", "1,a=2", "[]", "x", "07:32:00")]
+    tables += [nested("{a.b.c=", "}", "1"), nested('{"a"=', "}", "1")]
+    both = [nested("[{a=", "}]", inside) for inside in ("1", '"\\U00000041"', "[]", "#c\n")]
+    zones = sys.modules["tomllib._re"].cached_tz  # (Python keeps the zones it once made)
+    texts: dict[int, list[str]] = {}
+    wanted: dict[int, list[dict[str, Any]]] = {}
+    for deeper in range(6):
+        frame = _python_toml("", deeper)[1]
+        room = 1000 - frame
+        texts[frame], wanted[frame] = [], []
+        for step, before, families in ((2, 12, arrays), (3, 8, tables), (5, 6, both)):
+            for family in families:
+                kinds = set()
+                for n in range(room // step - before, room // step + 3):
+                    zones.cache_clear()
+                    want, at = _python_toml(family(n), deeper)
+                    assert at == frame
+                    texts[frame].append(family(n))
+                    wanted[frame].append(want)
+                    kinds.add(want.get("kind") == "recursion")
+                assert kinds == {False, True}, family(1)  # both sides of the end
+        for text in ("[" * 3000, "a=" + "[" * 3000, "a={a=" * 3000):
+            texts[frame].append(text)
+            wanted[frame].append(_python_toml(text, deeper)[0])
+    assert len(texts) == 6
+    ours = run([{"op": "toml", "texts": texts[frame], "frame": frame} for frame in texts])
+    for frame, mine in zip(texts, ours, strict=True):
+        for text, got, want in zip(texts[frame], mine["results"], wanted[frame], strict=True):
+            assert got == want, (frame, len(text), text[:8], text[len(text) // 2 - 20 :][:40])
+    kinds = [want.get("kind", "ok") for wants in wanted.values() for want in wants]
+    assert kinds.count("ok") > 1000 and kinds.count("decode") > 150
+    assert kinds.count("recursion") > 400
+
+
+def test_a_file_s_text_as_python_reads_it(tmp_path: Path) -> None:
+    # (read_text(encoding="utf-8"): what is not UTF-8 refused with the place it starts at, the
+    # ends of lines made one kind, a byte order mark left in)
+    rng = random.Random(0xF11E)
+    pieces = [b"a", b"=", b"1", b"\n", b"\r\n", b"\r", b" ", "é".encode(), "😀".encode(),
+              b"\xef\xbb\xbf", b'"', b"#"]  # fmt: skip
+    bad = [b"\xff", b"\xc0\x80", b"\xe2\x82", b"\xed\xa0\x80", b"\xf4\x90\x80\x80", b"\x80",
+           b"\xf0\x9f", b"\xc3", b"\xe9", b"\xf8\x88\x80\x80\x80", b"\xe0\x80\x80",
+           b"\xf0\x9f\x98"]  # fmt: skip
+    files = [b"", b"\xef\xbb\xbfa=1\n", b"a=1\r\nb=2\rc=3\n", b"a='\r'\n", b'a="""\r\n"""']
+    for _ in range(1500):
+        body = [rng.choice(pieces) for _ in range(rng.randrange(0, 12))]
+        for _ in range(rng.choice([0, 0, 1, 1, 2])):
+            body.insert(rng.randrange(len(body) + 1), rng.choice(bad))
+        files.append(b"".join(body))
+    files += [rng.randbytes(rng.randrange(1, 9)) for _ in range(1500)]
+    wanted: list[dict[str, Any]] = []
+    frames = set()
+    path = tmp_path / "config.toml"
+    for content in files:
+        path.write_bytes(content)
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as error:
+            wanted.append({"error": str(error), "kind": "unicode", "start": error.start,
+                           "end": error.end, "reason": error.reason})  # fmt: skip
+            continue
+        want, frame = _python_toml(text)
+        wanted.append(want)
+        frames.add(frame)
+    assert len(frames) == 1
+    encoded = [base64.b64encode(content).decode("ascii") for content in files]
+    [ours] = run([{"op": "toml", "files": encoded, "frame": frames.pop()}])
+    if sys.version_info[:2] != (3, 12):  # another tomllib: what is not text is refused alike
+        pairs = zip(ours["files"], wanted, strict=True)
+        assert all(mine == want for mine, want in pairs if want.get("kind") == "unicode")
+        return
+    for content, mine, want in zip(files, ours["files"], wanted, strict=True):
+        assert mine == want, content
+    kinds = [want.get("kind", "ok") for want in wanted]
+    assert kinds.count("unicode") > 1500 and kinds.count("ok") > 100 and kinds.count("decode") > 300

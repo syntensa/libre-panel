@@ -7,6 +7,7 @@
 
 use unicode_general_category::{get_general_category, GeneralCategory as G};
 
+pub mod codecs;
 pub mod datetime;
 pub mod fnmatch;
 pub mod format;
@@ -16,6 +17,7 @@ pub mod num;
 pub mod random;
 pub mod re;
 pub mod strftime;
+pub mod toml;
 pub mod value;
 pub mod zoneinfo;
 pub mod zones;

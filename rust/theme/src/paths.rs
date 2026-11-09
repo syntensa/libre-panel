@@ -178,37 +178,5 @@ fn strip_verbatim(path: PathBuf) -> PathBuf {
 /// read_text(encoding="utf-8"): the file's text, its line ends ("\r\n", "\r") made "\n"; Err:
 /// UnicodeDecodeError's message where it is not UTF-8.
 pub fn read_text(bytes: &[u8]) -> std::result::Result<String, String> {
-    let text = match std::str::from_utf8(bytes) {
-        Ok(text) => text,
-        Err(e) => {
-            let start = e.valid_up_to();
-            let (end, reason) = match e.error_len() {
-                None => (bytes.len(), "unexpected end of data"),
-                Some(n) => {
-                    let lead = bytes[start];
-                    let starts = matches!(lead, 0xC2..=0xF4);
-                    (
-                        start + n,
-                        if starts {
-                            "invalid continuation byte"
-                        } else {
-                            "invalid start byte"
-                        },
-                    )
-                }
-            };
-            return Err(if end - start == 1 {
-                format!(
-                    "'utf-8' codec can't decode byte 0x{:02x} in position {start}: {reason}",
-                    bytes[start]
-                )
-            } else {
-                format!(
-                    "'utf-8' codec can't decode bytes in position {start}-{}: {reason}",
-                    end - 1
-                )
-            });
-        }
-    };
-    Ok(text.replace("\r\n", "\n").replace('\r', "\n"))
+    lp_py::codecs::read_text(bytes).map_err(|e| e.to_string())
 }
