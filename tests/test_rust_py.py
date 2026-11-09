@@ -589,6 +589,13 @@ def naive(t):
     return EPOCH + timedelta(seconds=t) if FIRST <= t < LAST else None
 
 
+def own_offset(t):  # (None where the C library's localtime fails: Windows' before 1970)
+    try:
+        return time.localtime(t).tm_gmtoff
+    except FAILS:
+        return None
+
+
 def named_offset(z):
     def offset(t):
         utc = EPOCH + timedelta(seconds=t)
@@ -610,8 +617,8 @@ def add(dt, fold, key=None):
     cases.append({"now": fields(dt) + [fold], "zone": key})
 
 
-for t_, o1, o2 in chosen(changes(lambda t: time.localtime(t).tm_gmtoff, 86400), 400, 20):
-    for base in sorted({t_ + o1, t_ + o2}):
+for t_, o1, o2 in chosen(changes(own_offset, 86400), 400, 20):
+    for base in sorted({t_ + (o1 or 0), t_ + (o2 or 0)}):
         for d in (-3600, -1, 0, 1, 1800, 3600):
             dt = naive(base + d)
             if dt is not None:
@@ -723,20 +730,25 @@ def _zones_as_python_takes_them(
     cases += [{"op": "zones", "tz": tz, "cases": [], "stamps": []} for tz in unknown]
     answers = run(cases)
     for tz, probe, ours in zip(zones, probes, answers[: len(zones)], strict=True):
-        assert "unknown" not in ours, f"TZ={tz!r}"
-        assert len(ours["answers"]) == len(probe["cases"]), f"TZ={tz!r}"
-        apart = [(c["now"], c["zone"], theirs, mine)
-                 for c, theirs, mine in zip(probe["cases"], probe["answers"], ours["answers"],
-                                            strict=True)
-                 if theirs != mine]  # fmt: skip
-        assert not apart, f"TZ={tz!r}: {len(apart)} of {len(probe['cases'])} apart: {apart[:4]}"
-        apart = [(t, theirs, mine)
-                 for t, theirs, mine in zip(probe["stamps"], probe["local"], ours["local"],
-                                            strict=True)
-                 if theirs != mine]  # fmt: skip
-        assert not apart, f"TZ={tz!r}: {len(apart)} timestamps apart: {apart[:4]}"
+        _the_same_answers(tz, probe, ours)
     for tz, ours in zip(unknown, answers[len(zones) :], strict=True):
         assert ours == {"unknown": True}, f"TZ={tz!r}"
+
+
+def _the_same_answers(tz: str | None, probe: dict[str, Any], ours: dict[str, Any]) -> None:
+    """Rust's answers to the probe's moments with TZ `tz` the same as Python's."""
+    assert "unknown" not in ours, f"TZ={tz!r}"
+    assert len(ours["answers"]) == len(probe["cases"]), f"TZ={tz!r}"
+    apart = [(c["now"], c["zone"], theirs, mine)
+             for c, theirs, mine in zip(probe["cases"], probe["answers"], ours["answers"],
+                                        strict=True)
+             if theirs != mine]  # fmt: skip
+    assert not apart, f"TZ={tz!r}: {len(apart)} of {len(probe['cases'])} apart: {apart[:4]}"
+    apart = [(t, theirs, mine)
+             for t, theirs, mine in zip(probe["stamps"], probe["local"], ours["local"],
+                                        strict=True)
+             if theirs != mine]  # fmt: skip
+    assert not apart, f"TZ={tz!r}: {len(apart)} timestamps apart: {apart[:4]}"
 
 
 _NAMED_KEYS = ["Europe/Berlin", "America/New_York", "Australia/Lord_Howe", "Asia/Kolkata",
@@ -776,6 +788,33 @@ def test_the_computer_s_zone_and_named_zones_as_python_takes_them() -> None:
     # (a zone of leap seconds, where there is one: glibc counts them)
     (unknown if Path("/usr/share/zoneinfo/right/UTC").exists() else zones).append("right/UTC")
     _zones_as_python_takes_them(zones, unknown, _NAMED_KEYS, {"UTC": _NAMED_KEYS})
+
+
+# (TZ as the C runtime (the UCRT) reads it on Windows: unset or empty, the system's zone; a name
+# and its offset, of summer time by the runtime's own rules, half an hour's, to a day either
+# way; a POSIX rule it takes no rules of; what it makes of nonsense)
+WINDOWS_TZ: list[str | None] = [None, "", "PST8PDT", "CET-1CEST", "EST5EDT", "IST-5:30", "GMT0",
+                                "UTC", "XYZ-14", "ABC+12DEF", "AAA-23:59:59", "NZST-12NZDT",
+                                "CET-1CEST,M3.5.0,M10.5.0/3", "X", "nonsense"]  # fmt: skip
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the computer's zone as the C runtime has it")
+def test_the_computer_s_zone_as_the_c_runtime_takes_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    # (Python on Windows asks the C runtime's localtime_s of each moment, and so does Rust, each
+    # with TZ as it began: every timestamp, offset and time in another zone the same, the
+    # moments before 1970 and after 3000 it fails at, the folds looked for from a day after
+    # 1970 on)
+    env = dict(os.environ)
+    for n, tz in enumerate(WINDOWS_TZ):
+        probe = _zone_probe(tz, {"seed": n, "keys": _NAMED_KEYS, "edges_for": []}, env)
+        with monkeypatch.context() as m:
+            if tz is None:
+                m.delenv("TZ", raising=False)
+            else:
+                m.setenv("TZ", tz)
+            [ours] = run([{"op": "zones", "tz": tz, "cases": probe["cases"],
+                           "stamps": probe["stamps"]}])  # fmt: skip
+        _the_same_answers(tz, probe, ours)
 
 
 def _tzif(transitions: list[int], kinds: list[int], types: list[tuple[int, int, int]],

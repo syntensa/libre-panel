@@ -568,14 +568,14 @@ def _python_frame(
     return {"frame": frame, "boxes": boxes, "warnings": list(renderer.warnings)}
 
 
-# what Rust does not draw where it does not know the computer's zone (on Windows, as yet)
+# what Rust does not draw where it does not know the computer's zone (a TZ the C library reads
+# by rules of its own: test_without_the_computer_s_zone_rust_leaves_out_what_needs_it)
 ZONE_NEEDED = ("another place's time without the computer's own time zone",
                "the earth without the computer's own time zone",
                "slideshows without the computer's own time zone")  # fmt: skip
-# (what the frames here may leave out for it, and the slideshow patterns Rust does not match
-# without case yet: all of that on Windows, none of it elsewhere)
-NOT_HERE = ((*ZONE_NEEDED, "slideshow patterns of other than ASCII on Windows")
-            if sys.platform == "win32" else ())  # fmt: skip
+# (what the frames here may leave out: the slideshow patterns Rust does not match without case
+# yet, on Windows; none elsewhere)
+NOT_HERE = ("slideshow patterns of other than ASCII on Windows",) if sys.platform == "win32" else ()
 
 
 def _compare_frames(
@@ -1252,7 +1252,7 @@ LOCAL_ZONES = ["Europe/Berlin", "Australia/Lord_Howe", "America/St_Johns", "Paci
                "CET-1CEST,M3.5.0,M10.5.0/3"]  # fmt: skip
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Rust does not know the computer's zone there")
+@pytest.mark.skipif(sys.platform == "win32", reason="the computer's zone set by TZ and tzset")
 def test_clocks_in_another_time_zone_as_python_shows_them(tmp_path: Path,
                                                          local_zone: Any) -> None:  # fmt: skip
     # (the frame's time in another zone: through the computer's zone (its fold where the clocks
@@ -1273,7 +1273,6 @@ def _zone_warnings(warnings: list[str]) -> list[str]:
     return [w for w in warnings if w.startswith("unknown time zone")]
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Rust does not know the computer's zone there")
 def test_clocks_of_no_zone_warn_as_python_warns(tmp_path: Path) -> None:
     # (a zone of no such name, a key Python refuses: the computer's own time, and the warning;
     # none for a zone that is, nor for none)
@@ -1306,17 +1305,16 @@ def _zoned_or_earth(rng: random.Random, i: int, size: tuple[int, int]) -> dict[s
     return _zoned(rng, i, size) if pick < 0.45 else _card_or_text(rng, i, size)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="the C runtime's zone: Rust's is the same")
 def test_without_the_computer_s_zone_rust_leaves_out_what_needs_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # (where Rust does not know the computer's zone (on Windows; elsewhere a TZ the C library
-    # reads by a rule of its own, summer time without its rules): a globe, another place's time
-    # and a slideshow by the clock Rust says it does not draw, never a frame otherwise than
-    # Python's; the computer's own time, a zone of no such name and a slideshow of one picture
-    # it draws)
-    if sys.platform != "win32":
-        monkeypatch.setenv("TZ", "CET-1CEST")
-        time.tzset()
+    # (where Rust does not know the computer's zone (a TZ the C library reads by a rule of its
+    # own, summer time without its rules): a globe, another place's time and a slideshow by the
+    # clock Rust says it does not draw, never a frame otherwise than Python's; the computer's
+    # own time, a zone of no such name and a slideshow of one picture it draws)
+    monkeypatch.setenv("TZ", "CET-1CEST")
+    time.tzset()
     left_out: list[tuple[int, str]] = []
     try:
         drawn = _compare_frames(tmp_path, 0x2E9, 80, _zoned_or_earth, _clock_snapshot,
@@ -1324,8 +1322,7 @@ def test_without_the_computer_s_zone_rust_leaves_out_what_needs_it(
                                 files=_theme_files)  # fmt: skip
     finally:
         monkeypatch.undo()
-        if sys.platform != "win32":
-            time.tzset()
+        time.tzset()
     reasons = {why for _, why in left_out}
     assert set(ZONE_NEEDED) <= reasons <= {*ZONE_NEEDED, *NOT_HERE, UNREAD}, left_out
     assert all(why != UNREAD or _unread_in(tmp_path / f"t{n}") for n, why in left_out)
@@ -1935,7 +1932,7 @@ def test_the_app_s_own_themes_as_python_draws_them(tmp_path: Path) -> None:
         assert got["boxes"] == want["boxes"], folder.name
         drawn.append(folder.name)
     assert len(folders) > 90
-    # (on Windows Rust does not know the computer's zone: the earth's themes, Terra's, wait)
+    # (Windows' least from before Rust knew the computer's zone there, when Terra's waited)
     assert len(drawn) >= (93 if sys.platform == "win32" else 99), drawn
 
 
@@ -2697,7 +2694,8 @@ def test_slideshows_of_still_pictures_as_python_shows_them(tmp_path: Path) -> No
     drawn = _compare_frames(tmp_path, 0x511D, 160, _slideshow_or_more, _slide_moment,
                             undefined=(UNREAD,), left_out=left, files=_theme_files)  # fmt: skip
     assert all(why in NOT_HERE or _unread_in(tmp_path / f"t{n}") for n, why in left), left
-    # (on Windows, where Rust does not know the computer's zone, slideshows of one picture alone)
+    # (on Windows fewer: the patterns Rust does not match without case yet, and its least from
+    # before Rust knew the computer's zone there, when slideshows of one picture alone were drawn)
     assert drawn > (8 if sys.platform == "win32" else 85), drawn
 
 
@@ -2896,7 +2894,7 @@ def test_slideshow_pictures_as_python_finds_them(tmp_path: Path) -> None:
     assert refused >= (5 if sys.platform != "win32" else 0), refused
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Rust does not know the computer's zone there")
+@pytest.mark.skipif(sys.platform == "win32", reason="the computer's zone set by TZ and tzset")
 def test_a_picture_where_the_frame_s_time_has_no_timestamp_as_python_shows_it(
     tmp_path: Path, local_zone: Any
 ) -> None:
@@ -2948,9 +2946,6 @@ def test_videos_and_pictures_rust_does_not_draw_yet(tmp_path: Path) -> None:
     from PIL import Image
 
     rng = random.Random(0x7E1D)
-    # (still pictures by the clock: on Windows, where Rust does not know the computer's zone,
-    # not drawn yet)
-    by_clock = ZONE_NEEDED[2] if sys.platform == "win32" else None
     looks = [({"src": "clips/a.mp4"}, "videos"),
              ({"src": "pics/a.png", "slides": "anim/run.gif"}, None),
              ({"src": "", "slides": "pics/b.png\nclips/*"}, None),
@@ -2965,7 +2960,7 @@ def test_videos_and_pictures_rust_does_not_draw_yet(tmp_path: Path) -> None:
              ({"src": "anim/cut.gif", "_cut": True}, UNREAD),
              ({"src": "bad/half.png", "slides": "pics/a.png"}, UNREAD),
              ({"src": "", "slides": "bad/broken.png"}, UNREAD),
-             ({"src": "pics", "slides": "pics/none.png\n../outside.png"}, by_clock)]  # fmt: skip
+             ({"src": "pics", "slides": "pics/none.png\n../outside.png"}, None)]  # fmt: skip
     cases, wanted = [], []
     for n, (change, why) in enumerate(looks):
         folder = tmp_path / f"t{n}"
@@ -4980,7 +4975,6 @@ def _place(rng: random.Random) -> tuple[float, float] | None:
                        (rng.uniform(-90, 90), rng.uniform(-180, 180))])  # fmt: skip
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Rust does not know the computer's zone there")
 def test_frames_of_the_earth_as_python_draws_them(tmp_path: Path) -> None:
     # (the globe lit for the frame's moment on the wall clock, in steps of redraw_s, seen from
     # above your place or else your time zone's longitude a little north, your place marked
@@ -4990,7 +4984,6 @@ def test_frames_of_the_earth_as_python_draws_them(tmp_path: Path) -> None:
     assert drawn > 45, drawn
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Rust does not know the computer's zone there")
 def test_the_earth_frame_after_frame_as_python_keeps_it(tmp_path: Path) -> None:
     # (one renderer drawing its globes frame after frame: the same moment again, a part of a
     # step of redraw_s, a step, a minute, an hour, a day later: each globe lit anew where its
@@ -5038,7 +5031,6 @@ def test_the_earth_frame_after_frame_as_python_keeps_it(tmp_path: Path) -> None:
     assert drawn > 60, drawn
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Rust does not know the computer's zone there")
 def test_globes_that_turn_as_python_draws_them(tmp_path: Path) -> None:
     # (one renderer drawing its globes frame after frame as the panels' loop does: those that
     # turn a step at a time, beginning with your place (or your time zone's longitude) in the
@@ -5071,7 +5063,6 @@ def test_globes_that_turn_as_python_draws_them(tmp_path: Path) -> None:
     assert drawn > 120 and due > 60, (drawn, due)
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Rust does not know the computer's zone there")
 def test_the_earth_with_glow_and_shadow_within_a_level(tmp_path: Path) -> None:
     # (a globe casts its light as a card does: blurred in floating point, now and then a pixel
     # a level apart)
@@ -5103,7 +5094,7 @@ def test_the_earth_with_glow_and_shadow_within_a_level(tmp_path: Path) -> None:
         assert got["boxes"] == want["boxes"], case["folder"]
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Rust does not know the computer's zone there")
+@pytest.mark.skipif(sys.platform == "win32", reason="the computer's zone set by TZ and tzset")
 def test_the_earth_in_the_computer_s_zone_as_python_draws_it(tmp_path: Path,
                                                              local_zone: Any) -> None:  # fmt: skip
     # (the moment a globe is lit for, the frame's time as a timestamp of the computer's zone,
@@ -7260,8 +7251,8 @@ def test_clocks_whose_second_hand_glides_or_goes_round_as_python_draws_them(
     # that glides to each second as rolling digits do, in the clock's own time or the digits',
     # or goes round; the face with the hour and minute hands kept, the minute hand moving on
     # every five seconds; at rest for the rest of the second; frames at any distance, back in
-    # time too. On Windows Rust does not know the computer's zone: another place's clocks are
-    # left out)
+    # time too. Windows' least from before Rust knew the computer's zone there, when another
+    # place's clocks were left out)
     drawn, moving = _moving_clocks(tmp_path, random.Random(0xA7A5), 60, _moving_analog_or_more)
     least = (380, 280) if sys.platform == "win32" else (440, 340)
     assert drawn > least[0] and moving > least[1], (drawn, moving)
@@ -7635,7 +7626,7 @@ def test_the_app_s_own_themes_in_moving_frames_as_python_draws_them(tmp_path: Pa
             assert g["boxes"] == w["boxes"], (folder.name, i)
             assert g["moving"] == w["moving"], (folder.name, i)
         drawn.append(folder.name)
-    # (on Windows Rust does not know the computer's zone: Terra's globes are left out)
+    # (Windows' least from before Rust knew the computer's zone there, when Terra's waited)
     assert len(drawn) >= (93 if sys.platform == "win32" else 99), drawn
 
 

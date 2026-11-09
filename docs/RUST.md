@@ -746,9 +746,9 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       one too), a file it does not read (also as the background: one that is there and
       lp-decode does not decode, as Pillow knows more kinds, or fails at it with what Python
       does not catch, as with the IndexError of a GIF cut short), folders of names that are no
-      Unicode; where it does not know the computer's zone (on Windows), slideshows by the
-      clock and a picture alone at the edges of the years; on Windows, slideshow patterns of
-      other than ASCII (pathlib matches there without case). Pictures that move in a moving
+      Unicode; where it does not know the computer's zone (a TZ glibc reads by rules of its
+      own), slideshows by the clock and a picture alone at the edges of the years; on Windows,
+      slideshow patterns of other than ASCII (pathlib matches there without case). Pictures that move in a moving
       frame, and slideshows with them: below
 - [x] motion (render/motion.py and the renderer's _glide_s, _spring, _lead, _eased, _rule_step,
       _rule_mix, _rule_paint, _metric and _settled): in a moving frame (the panels' loop) a
@@ -1051,8 +1051,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       frame after frame, your place anywhere or none, at a frame rate or none, the frames at
       any distance, back in time too, the moment on the wall clock moving with them or by a
       redraw_s and more: 146 frames to the bit, 136 of them due at a next step; the app's
-      themes in moving frames: all 99 drawn by Rust all along (94 before; 93 on Windows,
-      where Rust does not know the computer's zone). The counter-checks put in 41 faults (the
+      themes in moving frames: all 99 drawn by Rust all along (94 before; 93 on Windows, where
+      Rust did not know the computer's zone then: below). The counter-checks put in 41 faults (the
       air's steps, its key, how it is rounded, where it is laid from, laid every frame; the
       round's width, at least and rounded; the rim and its alpha; the rows and columns by a
       reciprocal; the latitude held and the latitude seen from, with and without a place; the
@@ -1210,11 +1210,21 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       where Python catches an OSError and goes on (a picture cut short, a file of no picture)
       Rust goes on with it; the kinds of picture Pillow opens that lp-decode does not (BMP,
       TIFF, ICO ...); names that are no Unicode (R3b)
-- [ ] the zones on Windows: Python finds them in the tzdata package there, and Rust finds
+- [x] the computer's own zone on Windows (CPython's _PyTime_localtime, local(),
+      local_timezone_from_timestamp and datetime_from_timet_and_us there): Rust asks the C
+      runtime's localtime_s of each moment, as Python does (the UCRT's _localtime64_s, which
+      reads TZ, else the system's zone, by rules of its own), so a naive time's timestamp,
+      astimezone() and its offset, astimezone(zone) and fromtimestamp come of the same function;
+      where it fails (a moment before 1970 or after 3000) Python raises OSError and Rust has
+      none, and a fold is looked for only from a day after 1970 on, as CPython does there.
+      The globes, the slideshows by the clock and the clocks of other places Rust draws on
+      Windows now. The tests: on Windows, the zone probe's moments (the computer's changes
+      found as Python finds them, both folds, the gaps, 1970 and 3000, 16 named zones) with TZ
+      unset and 14 TZ values of the C runtime's kind, as Python takes them; the globes' and
+      the other places' frames there
+- [ ] the named zones on Windows: Python finds them in the tzdata package there, and Rust finds
       them where it is told the package is (LP_TZDATA: the tests tell lp-check where
-      Python's is). The Rust app does not bring one yet: without it, no key is a zone there.
-      Nor does Rust know the computer's own zone there: Python takes it from the system (the
-      C runtime's localtime)
+      Python's is). The Rust app does not bring one yet: without it, no key is a zone there
 - [ ] the C library's locale where Python's text follows it: format()'s 'n' and what strftime
       writes of a date in English (i18n.format_date: the names, %p, %c) are the C locale's
       unless something in the process sets another. GTK sets the person's when it starts, and

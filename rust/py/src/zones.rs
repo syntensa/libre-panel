@@ -12,8 +12,9 @@
 //! otherwise than Rust knows (leap seconds, a TZ string of summer time without its rules, one
 //! glibc reads by its leniencies), says it does not know it.
 //!
-//! On Windows Python takes the computer's zone from the system (the C runtime's localtime);
-//! Rust does not know it there yet: [`local`] is None.
+//! On Windows Python takes the computer's zone from the C runtime's localtime (the UCRT's
+//! localtime_s, which reads TZ, else the system's zone, by rules of its own), and so does Rust:
+//! the computer's zone there is the C runtime's own ([`Zone::system`]), each moment asked of it.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -74,6 +75,8 @@ pub struct Zone {
     /// whether the C library reads the zone as Rust does: a TZ string, or a file without leap
     /// seconds whose header, types and footer it takes as zoneinfo does
     glibc: bool,
+    /// the C runtime's own (Windows): each moment's offset asked of its localtime
+    system: bool,
 }
 
 // -- the days of a year ------------------------------------------------------------------------
@@ -474,6 +477,7 @@ impl Zone {
             types,
             rule,
             glibc,
+            system: false,
         })
     }
 
@@ -485,12 +489,36 @@ impl Zone {
             types: Vec::new(),
             rule: Some(posix_rule(spec)?),
             glibc: true,
+            system: false,
         })
     }
 
     /// UTC: no offset, ever.
     pub fn utc() -> Zone {
         Zone::from_posix("UTC0").expect("UTC0")
+    }
+
+    /// The computer's zone as the C runtime has it (on Windows: the UCRT's localtime_s, as
+    /// Python's _PyTime_localtime asks it), each moment asked of it.
+    pub fn system() -> Zone {
+        Zone {
+            transitions: Vec::new(),
+            after: Vec::new(),
+            types: Vec::new(),
+            rule: None,
+            glibc: true,
+            system: true,
+        }
+    }
+
+    /// The offset of the zone at the UTC moment `ts` (seconds), as the C library's localtime
+    /// gives it: None where it fails (the C runtime's on Windows, for a moment before 1970 or
+    /// after 3000: Python raises OSError there).
+    pub fn offset(&self, ts: i64) -> Option<i64> {
+        if self.system {
+            return crt::offset(ts);
+        }
+        Some(self.localtime(ts))
     }
 
     /// The first type of standard time (else the first): what both take before the first
@@ -523,7 +551,8 @@ impl Zone {
         self.types[self.after[idx - 1]].offset
     }
 
-    /// glibc's localtime: the offset of the zone at the UTC moment `ts` (seconds).
+    /// glibc's localtime: the offset of the zone at the UTC moment `ts` (seconds); of a zone
+    /// read as glibc reads it (the C runtime's own answers [`Zone::offset`]).
     pub fn localtime(&self, ts: i64) -> i64 {
         let n = self.transitions.len();
         if self.types.is_empty() {
@@ -568,8 +597,13 @@ fn local_file(path: &Path) -> Option<Option<Zone>> {
 /// TZ UTC; a file of its name (a leading colon dropped; a relative name in TZDIR), else the TZ
 /// string it is; unset, /etc/localtime; UTC where none of these is read. None where glibc would
 /// take more than Rust knows (a file of leap seconds, a TZ string naming summer time without its
-/// rules, or one glibc reads by its leniencies).
+/// rules, or one glibc reads by its leniencies). On Windows the C runtime's own, which reads TZ
+/// itself ([`Zone::system`]).
 pub fn local_of(tz: Option<&str>) -> Option<Zone> {
+    if cfg!(windows) {
+        // (the C runtime reads TZ itself, from the environment the process began with)
+        return Some(Zone::system());
+    }
     let Some(tz) = tz else {
         return local_file(Path::new("/etc/localtime")).unwrap_or_else(|| Some(Zone::utc()));
     };
@@ -628,18 +662,75 @@ pub fn named(key: &str) -> Option<Zone> {
     zone
 }
 
-/// The computer's zone, as the C library finds it (once): None on Windows, or where Rust does
-/// not know it.
+/// The computer's zone, as the C library finds it (once): on Windows the C runtime's own (it
+/// reads TZ itself); None where Rust does not know it.
 pub fn local() -> Option<&'static Zone> {
     static ZONE: OnceLock<Option<Zone>> = OnceLock::new();
     ZONE.get_or_init(|| {
         if cfg!(windows) {
-            return None;
+            return Some(Zone::system());
         }
         let tz = std::env::var("TZ").ok();
         local_of(tz.as_deref())
     })
     .as_ref()
+}
+
+/// The C runtime's localtime, on Windows: the UCRT's localtime_s (_localtime64_s), the one
+/// CPython's _PyTime_localtime calls there.
+#[cfg(windows)]
+mod crt {
+    use crate::datetime::DateTime;
+
+    /// The C runtime's struct tm.
+    #[repr(C)]
+    #[derive(Default)]
+    struct Tm {
+        tm_sec: i32,
+        tm_min: i32,
+        tm_hour: i32,
+        tm_mday: i32,
+        tm_mon: i32,
+        tm_year: i32,
+        tm_wday: i32,
+        tm_yday: i32,
+        tm_isdst: i32,
+    }
+
+    extern "C" {
+        fn _localtime64_s(tm: *mut Tm, time: *const i64) -> i32;
+    }
+
+    /// The offset of the computer's local time at the moment `t` (seconds from 1970), as
+    /// CPython's local() and local_timezone_from_timestamp take it of localtime_s (its local
+    /// time, as UTC, less the moment); None where localtime_s fails.
+    pub(super) fn offset(t: i64) -> Option<i64> {
+        let mut tm = Tm::default();
+        // SAFETY: localtime_s reads the time and writes the struct it is given, both alive here
+        let failed = unsafe { _localtime64_s(&mut tm, &t) };
+        if failed != 0 {
+            return None;
+        }
+        let (Ok(month), Ok(day)) = (u32::try_from(tm.tm_mon + 1), u32::try_from(tm.tm_mday)) else {
+            return None;
+        };
+        let local = DateTime {
+            hour: u32::try_from(tm.tm_hour).ok()?,
+            minute: u32::try_from(tm.tm_min).ok()?,
+            second: u32::try_from(tm.tm_sec).ok()?,
+            ..DateTime::date(i64::from(tm.tm_year) + 1900, month, day)
+        };
+        Some(super::naive_seconds(&local) - t)
+    }
+}
+
+/// Elsewhere the C library's own zone is read as glibc reads it ([`local_of`]): none is asked
+/// of the C runtime.
+#[cfg(not(windows))]
+mod crt {
+    pub(super) fn offset(_t: i64) -> Option<i64> {
+        None
+    }
 }
 
 // -- what datetime asks -------------------------------------------------------------------------
@@ -674,7 +765,7 @@ fn in_years(t: i64) -> bool {
 /// CPython's local(u): the local time of the UTC moment `u` as naive seconds; None where its
 /// year is not datetime's (Python raises).
 fn local_seconds(zone: &Zone, u: i64) -> Option<i64> {
-    Some(u.checked_add(zone.localtime(u))?).filter(|&t| in_years(t))
+    Some(u.checked_add(zone.offset(u)?)?).filter(|&t| in_years(t))
 }
 
 /// CPython's local_to_seconds (seconds from 1970): the UTC moment of a naive local time in
@@ -728,7 +819,7 @@ fn own_offset(local: &Zone, dt: &DateTime, fold: bool) -> Option<i64> {
     if other != seconds && (other > seconds) == fold {
         seconds = other;
     }
-    let offset = local.localtime(seconds);
+    let offset = local.offset(seconds)?;
     (offset.abs() < 86400).then_some(offset)
 }
 
@@ -736,7 +827,7 @@ fn own_offset(local: &Zone, dt: &DateTime, fold: bool) -> Option<i64> {
 /// offset at it is UTC, and the offset there is the result's.
 pub fn utcoffset(local: &Zone, dt: &DateTime, fold: bool) -> Option<i64> {
     let utc = naive_seconds(dt) - own_offset(local, dt, fold)?;
-    let offset = local.localtime(utc);
+    let offset = local.offset(utc)?;
     (in_years(utc) && offset.abs() < 86400 && in_years(utc + offset)).then_some(offset)
 }
 
@@ -797,6 +888,11 @@ pub fn now_offset(local: &Zone) -> Option<i64> {
 /// datetime_from_timet_and_us: the local time of whole seconds and microseconds, and its fold.
 fn local_moment(local: &Zone, secs: i64, us: u32) -> Option<(DateTime, bool)> {
     let own = local_seconds(local, secs)?;
+    // (CPython on Windows: no fold looked for where the moment a day before is not after 1970,
+    // which the C runtime's localtime fails at)
+    if local.system && secs - MAX_FOLD_SECONDS <= 0 {
+        return Some((naive_of(own, us)?, false));
+    }
     // (datetime_from_timet_and_us: a moment a day before, and the change between)
     let probe = local_seconds(local, secs - MAX_FOLD_SECONDS)?;
     let transition = own - probe - MAX_FOLD_SECONDS;
