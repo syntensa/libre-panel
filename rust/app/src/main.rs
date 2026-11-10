@@ -21,6 +21,7 @@ mod services;
 mod settings;
 mod switch;
 mod system;
+mod updates;
 
 use std::path::PathBuf;
 use std::process::ExitCode;

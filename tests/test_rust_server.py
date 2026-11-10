@@ -84,8 +84,11 @@ def servers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
     theirs = editor.make_server(0, homes[0] / "config.toml", token=TOKEN)
     serving = threading.Thread(target=theirs.serve_forever, daemon=True)
     serving.start()
+    # GitHub's answer on the releases, the same file for both (the update check's)
+    releases = tmp_path / "releases.json"
+    theirs.editor_state.updates.fetch = lambda: json.loads(releases.read_text(encoding="utf-8"))
     env = {**os.environ, "LIBRE_PANEL_HOME": str(homes[1]), "LIBRE_PANEL_DATA": str(DATA),
-           **_libraries()}  # fmt: skip
+           "LP_RELEASES_FILE": str(releases), **_libraries()}  # fmt: skip
     command = [str(_program()), "editor", "--port", "0"]
     ours = subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             encoding="utf-8")  # fmt: skip
@@ -717,3 +720,81 @@ def test_the_news_are_told_and_closed_as_news_py_does(servers: Any) -> None:
         (home / "news.json").write_text('{"first": 5}', encoding="utf-8")
     theirs, ours = ask(_get("/api/news", WITH))
     assert json.loads(ours[2]) == json.loads(theirs[2]) == {"first": "older", "seen": ""}
+
+
+def _release(tag: str, **more: Any) -> dict[str, Any]:
+    files = f"https://github.com/syntensa/libre-panel/releases/download/{tag}/"
+    names = [f"libre-panel-{tag}-windows-x64-setup.exe", f"libre-panel-{tag}-linux-x64.tar.gz",
+             "SHA256SUMS", f"libre-panel-{tag}-x86_64.AppImage"]  # fmt: skip
+    assets = [{"name": n, "browser_download_url": files + n, "size": 1000 + i}
+              for i, n in enumerate(names)]  # fmt: skip
+    page = f"https://github.com/syntensa/libre-panel/releases/tag/{tag}"
+    return {"tag_name": tag, "html_url": page,
+            "body": "What is new:\nmore.\n\nThe rest. ä", "published_at": "2026-11-01T10:00:00Z",
+            "draft": False, "prerelease": False, "assets": assets, **more}  # fmt: skip
+
+
+def test_the_update_check_is_told_as_updates_py_tells_it(servers: Any) -> None:
+    """Whether a newer version is out: GitHub's answer (the same for both) picked as
+    updates.py picks it (drafts never, pre-releases only of the running one's minor version,
+    the highest), what Start shows of it, updates.json, a card closed ("later"), nothing asked
+    while check_updates is off. The moments of the asks are not compared."""
+    ask, homes = servers
+    releases = homes[0].parent / "releases.json"
+    sums = "https://github.com/syntensa/libre-panel/releases/download/v0.8.2/SHA256SUMS"
+    answers = [
+        [_release("v0.8.1"), _release("v0.8.2rc1", prerelease=True), _release("v0.9.0rc1"),
+         _release("v9.0.0", draft=True), _release("0.8.0")],
+        [_release("v0.8.1rc3", prerelease=True), _release("v0.8.1rc1"), {"tag_name": 5}, 5],
+        [_release("v0.8.1rc3", html_url="http://example.com/x"), _release("v0.7.9")],
+        [_release("vnope"), _release("0.8.1.1rc2", body="  \n\nlater\n\n" + "x" * 900)],
+        _release("v1.0.0"), _release("v0.8.0"), _release("v0.9.0", prerelease=True), [], {},
+        _release("v0.8.2", assets=[{"name": "../x", "browser_download_url": "https://x"},
+                                   {"name": "SHA256SUMS", "browser_download_url": sums}]),
+        "nothing",
+    ]  # fmt: skip
+
+    def both(request: str | bytes, what: Any) -> Any:
+        theirs, ours = ask(request)
+        assert ours[0] == theirs[0], what
+        told = [json.loads(body) for _, _, body in (theirs, ours)]
+        for one in told:
+            if isinstance(one.get("asked"), float):
+                one["asked"] = "a moment"
+            if one.get("error") and "answer named no release" not in one["error"]:
+                one["error"] = "an error"
+        assert told[1] == told[0], what
+        kept = []
+        for home in homes:
+            path = home / "updates.json"
+            data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+            if data and "asked" in data:
+                data["asked"] = "a moment"
+                if data["error"] and "answer named no release" not in data["error"]:
+                    data["error"] = "an error"
+            kept.append(data)
+        assert kept[1] == kept[0], what
+        return told[0]
+
+    for check in ("", "check_updates = false\n", "check_updates = true\n"):
+        for home in homes:
+            (home / "config.toml").write_text(check + 'theme = "slate"\n', encoding="utf-8")
+            (home / "updates.json").unlink(missing_ok=True)
+        releases.write_text(json.dumps(answers[0]), encoding="utf-8")
+        told = both(_get("/api/update", WITH), check)
+        assert (told["latest"] is not None) is ("true" in check), told
+    seen = set()
+    for answer in answers:
+        releases.write_text(json.dumps(answer), encoding="utf-8")
+        told = both(_get("/api/update?now=1", WITH), answer)
+        seen.add(((told["latest"] or {}).get("version"), told["newer"]))
+        both(_get("/api/update", WITH), answer)  # (asked a moment ago: not asked again)
+    assert len(seen) > 5
+    releases.unlink()
+    both(_get("/api/update?now", WITH), "no answer")
+    for later in ("0.9.0", "v1.0", "nope", "", 5, None):
+        both(_post("/api/update", {"later": later}), later)
+    both(_post("/api/update", []), "no table")
+    for home in homes:
+        (home / "updates.json").write_text("[1]", encoding="utf-8")
+    both(_get("/api/update", WITH), "a file of no table")

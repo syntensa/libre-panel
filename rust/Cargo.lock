@@ -386,6 +386,7 @@ dependencies = [
  "lp-config",
  "lp-devices",
  "lp-i18n",
+ "lp-net",
  "lp-pixels",
  "lp-py",
  "lp-render",

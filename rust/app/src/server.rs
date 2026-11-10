@@ -49,6 +49,8 @@ pub struct State {
     restart: crate::settings::Restart,
     /// whom Start tells what is new (news.rs)
     news: crate::news::News,
+    /// whether a newer version is out (updates.rs)
+    updates: crate::updates::Updates,
 }
 
 impl State {
@@ -216,6 +218,10 @@ const ROUTES: &[Route] = &[
     private("GET", "/api/news", |s, x, _, _| {
         x.json(&s.news.state(), 200)
     }),
+    private("GET", "/api/update", |s, x, _, u| {
+        let at_once = crate::http::parse_qs(&u.query).contains_key("now");
+        x.json(&s.updates.state(check_updates(s), at_once), 200)
+    }),
     private("GET", "/api/panel", |s, x, _, _| {
         settings(s, x, |told| told.panel())
     }),
@@ -248,6 +254,7 @@ const ROUTES: &[Route] = &[
         settings_with(s, x, |told, asked| told.set_sequence(asked))
     }),
     private("POST", "/api/news", |s, x, _, _| see_news(s, x)),
+    private("POST", "/api/update", |s, x, _, _| update_later(s, x)),
     private("POST", "/api/scenes", |s, x, _, _| {
         settings_with(s, x, |told, asked| told.set_scene(asked))
     }),
@@ -282,6 +289,27 @@ fn settings_with(
     match method(&settings_of(state), &payload) {
         Ok(told) => exchange.json(&told, 200),
         Err(refused) => exchange.error(&refused.message, refused.status, ""),
+    }
+}
+
+/// config.toml's check_updates; None where it cannot be read (nothing is asked).
+fn check_updates(state: &State) -> Option<bool> {
+    let config = lp_config::load_config(&state.config_file, lp_config::platform()).ok()?;
+    config.check_updates
+}
+
+/// _update_later: `{"later": "0.7.0"}`: the card of that version was closed (updates.rs).
+fn update_later(state: &State, exchange: &mut Exchange) {
+    let Some(payload) = exchange.read_json(MAX_JSON) else {
+        return;
+    };
+    let later = match &payload {
+        Value::Dict(payload) => payload.get("later").and_then(Value::as_str).unwrap_or(""),
+        _ => "",
+    };
+    match state.updates.later(later, check_updates(state)) {
+        Ok(told) => exchange.json(&told, 200),
+        Err(why) => exchange.error(&why, 400, ""),
     }
 }
 
@@ -969,6 +997,7 @@ impl EditorServer {
             None => access::new_token()?,
         };
         let news = crate::news::News::new(&config_file);
+        let updates = crate::updates::Updates::new(&config_file);
         Ok(EditorServer {
             port: listener.local_addr()?.port(),
             token,
@@ -981,6 +1010,7 @@ impl EditorServer {
                 live: Mutex::new(None),
                 restart: crate::settings::Restart::default(),
                 news,
+                updates,
             }),
             listener: Some(listener),
             stop: Arc::default(),

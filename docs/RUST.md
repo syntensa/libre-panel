@@ -1940,6 +1940,11 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       Start's card of what is new (`/api/news`, news.json beside config.toml). The program
       says Libre Panel's version, read from `src/libre_panel/__init__.py` as it is built
       (`rust/py/build.rs`, `lp_py::VERSION`).
+      Whether a newer version is out (`/api/update`, `rust/app/src/updates.rs`): GitHub asked
+      at most once a day where check_updates is on, the release picked as updates.py picks
+      it (drafts never, pre-releases only of the running one's minor version), what Start
+      shows of it, updates.json, a card closed. (The update itself, "Update to", comes with
+      the program's downloads.)
       `libre-panel editor` serves alone, `start` with
       the panel, and writes its address where a later start finds it. 120 requests to
       Python's server and to this one compared: the status, the headers and the body, byte

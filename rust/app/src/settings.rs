@@ -508,7 +508,7 @@ fn known_transitions() -> Vec<&'static str> {
 
 /// Whether the program is a download's (not one built in its source tree): what Python
 /// calls frozen.
-fn packaged() -> bool {
+pub fn packaged() -> bool {
     let Ok(program) = std::env::current_exe() else {
         return false;
     };
