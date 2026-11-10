@@ -740,6 +740,22 @@ impl Source for System {
         "psutil"
     }
 
+    /// The threads that read the programs and the ping get the time of their first round
+    /// (a host that does not answer takes its two seconds).
+    fn wait_ready(&mut self, seconds: f64) {
+        let end = Instant::now() + Duration::from_secs_f64(seconds);
+        let waiting = |runs: &AtomicBool, held: &Mutex<Readings>| {
+            runs.load(Ordering::SeqCst) && held.lock().is_ok_and(|held| held.is_empty())
+        };
+        let shared = &self.background;
+        while Instant::now() < end
+            && (waiting(&shared.proc_runs, &shared.proc)
+                || waiting(&shared.ping_runs, &shared.ping))
+        {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
     fn read(&mut self, out: &mut Readings) {
         if let Some((busy, whole)) = system::cpu_times() {
             let load = match self.cpu {
