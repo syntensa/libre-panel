@@ -1520,8 +1520,23 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       bit
 
 ### R5 the panels' loop
-- [ ] the main loop (frames driven by change, pacing), the engine in the same process, panels
-      beside each other, game mode and the alarm's frames, videos (ffmpeg)
+- [x] `libre-panel`, the program of Rust (rust/app), running: it finds the app's files
+      (LIBRE_PANEL_DATA, `share/libre-panel` beside it, the source tree), reads config.toml
+      and reads it again when it changes, shows the theme that is due (the screens in turn as
+      sequence.py's Rotation follows them, config.toml's, the panel's own) in its version for
+      the panel, laid out on the panel's frames and dressed as the person chose (accent, light
+      colours, the cards' opacity, the cards, the switches, the fans' looks), takes the
+      readings at the theme's pace and keeps their histories, draws each frame and shows it:
+      on a panel of the Hongtai family or the MAJESTY found on a serial port, else into the
+      PNG file (devices/virtual.py: beside it first, then in its place). At the frame rate
+      while something moves, at rest otherwise; the brightness by the night's times; upside
+      down where the panel is mounted so; a panel that fails opened again. `run`, `render`
+      (one frame), `themes`, `models`, `ports`, `config`. The tests: the program run on a
+      settings folder of its own
+- [ ] the rest of the main loop: what a service shows (modes, pages, toasts, the alarm's
+      frames), transitions between themes, panels beside each other, the engine in the same
+      process, videos (ffmpeg), the first panel's look on the others, the sun's times for the
+      night
 
 ### R6 devices
 - [x] the Hongtai / Jungle Leopard family (devices/hongtai.py, lp-devices) on a link of its
@@ -1549,7 +1564,11 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
 - [ ] Windows: processor (with PawnIO for its registers), graphics cards (NVAPI/NVML, ADLX,
       Intel), memory, storage (SMART), network, mainboard chips and fans; HWiNFO, RTSS,
       PresentMon, MangoHud
-- [ ] the history (rings of numbers), demo values; the .NET service goes
+- [x] the first source (rust/app's sensors): the computer's own on Linux as
+      sensors/psutil_provider.py names them (the processor's load, clock, threads and
+      temperature, the memory, the system's disk, the network's and the disks' rates, the
+      uptime), each number's history for the graphs (600), and readings made up (`--demo`)
+- [ ] the history as a ring, demo.py's values; the .NET service goes
 
 ### R8 services
 - [ ] game mode, notices, AI activity (Claude Code, Codex), downloads, memory and its store,
@@ -1579,8 +1598,12 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       config (for_panel), a file that is missing, a folder, no UTF-8 or no TOML. The tests:
       every setting given every kind of value, some 11 000 texts, and 1500 of several
       settings at once, beside config.py on Linux, Windows and macOS, in English and German
-- [ ] config.toml written (the commented default, a setting changed in place), its folders
-      (config_dir, portable, the user's themes, the log); the panel a config is for
+- [x] config.toml's folders (lp-config's dirs: config_dir with LIBRE_PANEL_HOME, a portable
+      copy's `data`, the user's own folder on each system; the user's themes, the log), the
+      panel's brightness by the time of day (night_now, brightness_now) and the screens in
+      turn on the clock (sequence.py's position and Rotation)
+- [ ] config.toml written (the commented default, a setting changed in place); the panel a
+      config is for
       (theme/defaults.py's panel_model: the configured model, the one a display reports, a
       TURZX panel on the USB bus) and the theme of its normal page
 - [ ] community themes as one file (theme/share.py): the zip read as Python's zipfile reads it

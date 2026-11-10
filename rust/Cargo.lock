@@ -128,6 +128,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "libre-panel"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "indexmap",
+ "libc",
+ "lp-config",
+ "lp-devices",
+ "lp-i18n",
+ "lp-pixels",
+ "lp-py",
+ "lp-render",
+ "lp-text",
+ "lp-theme",
+]
+
+[[package]]
 name = "lp-check"
 version = "0.1.0"
 dependencies = [

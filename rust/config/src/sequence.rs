@@ -93,3 +93,82 @@ pub fn parse_steps(raw: &Toml, at: &str) -> Result<Vec<Step>, Error> {
         .map(|(n, entry)| parse_step(entry, &format!("{at}[{n}]")))
         .collect()
 }
+
+/// Where a sequence stands: its step (by index), that step's theme and the seconds left of
+/// it (Position).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Position {
+    pub index: usize,
+    pub theme: String,
+    pub left_s: f64,
+}
+
+/// position: the step `elapsed` seconds after the sequence began, going round. None without
+/// steps.
+pub fn position(steps: &[Step], elapsed: f64) -> Option<Position> {
+    let total: i64 = steps.iter().map(|step| step.seconds).sum();
+    if total <= 0 {
+        return None;
+    }
+    let mut at = elapsed.rem_euclid(total as f64);
+    for (index, step) in steps.iter().enumerate() {
+        let seconds = step.seconds as f64;
+        if at < seconds {
+            return Some(Position {
+                index,
+                theme: step.theme.clone(),
+                left_s: seconds - at,
+            });
+        }
+        at -= seconds;
+    }
+    // (rounding at the very end of a round)
+    let last = steps.len() - 1;
+    Some(Position {
+        index: last,
+        theme: steps[last].theme.clone(),
+        left_s: 0.0,
+    })
+}
+
+/// Follows a sequence on the clock (Rotation): it begins with the first step when it is first
+/// asked, and again whenever the steps change. While a switch to new steps is made ready, the
+/// steps before are asked too: they go on where they were, until they have not been asked for
+/// a while.
+#[derive(Clone, Debug, Default)]
+pub struct Rotation {
+    steps: Vec<Step>,
+    began: f64,
+    /// the steps before, when they began and when they were last asked
+    before: Option<(Vec<Step>, f64, f64)>,
+}
+
+impl Rotation {
+    pub const FORGET_S: f64 = 60.0;
+
+    /// where: the step to show at `now` (the loop's clock), or None without steps.
+    pub fn at(&mut self, steps: &[Step], now: f64) -> Option<Position> {
+        if steps.is_empty() {
+            return None;
+        }
+        let began = if steps == self.steps.as_slice() {
+            self.began
+        } else {
+            match &self.before {
+                Some((old, began, asked)) if old == steps && now - asked < Self::FORGET_S => {
+                    let began = *began;
+                    self.before = Some((steps.to_vec(), began, now));
+                    began
+                }
+                _ => {
+                    self.before = (!self.steps.is_empty())
+                        .then(|| (std::mem::take(&mut self.steps), self.began, now));
+                    self.steps = steps.to_vec();
+                    self.began = now;
+                    now
+                }
+            }
+        };
+        position(steps, (now - began).max(0.0))
+    }
+}

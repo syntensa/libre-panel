@@ -5,7 +5,9 @@
 //! The same file is read by the Python app, so a setting means here what it means there: the
 //! tests (tests/test_rust_config.py) hold every field and every message against config.py.
 
+pub mod dirs;
 pub mod hotkeys;
+pub mod night;
 pub mod sequence;
 
 use std::path::{Path, PathBuf};

@@ -1,0 +1,27 @@
+[package]
+name = "libre-panel"
+description = "Libre Panel: the program that shows a theme's frames on a panel"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "libre-panel"
+path = "src/main.rs"
+
+[dependencies]
+lp-py = { path = "../py" }
+lp-pixels = { path = "../pixels" }
+lp-text = { path = "../text" }
+lp-i18n = { path = "../i18n" }
+lp-theme = { path = "../theme" }
+lp-config = { path = "../config" }
+lp-render = { path = "../render" }
+lp-devices = { path = "../devices" }
+indexmap = "2"
+flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
