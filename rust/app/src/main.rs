@@ -11,6 +11,7 @@ mod drawings;
 mod editing;
 mod fan_names;
 mod hardware;
+mod history;
 mod home;
 mod hotkeys;
 mod http;

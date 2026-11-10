@@ -1402,3 +1402,66 @@ def test_the_hardware_settings_are_as_server_py_has_them(
         assert ours == theirs, payload
         configs = [(side / "config.toml").read_text("utf-8") for side in homes]
         assert configs[1] == configs[0], payload
+
+
+def test_the_history_is_as_server_py_has_it(servers: Any) -> None:
+    """What the memory kept over a day, a week and a month: the course in its steps, the
+    summary, the rounds and the games, the energy and its cost; no database, one of another
+    make, and a span that is none."""
+    import sqlite3
+    import time
+
+    from libre_panel.services.memory_store import SCHEMA
+
+    ask, homes = servers
+
+    def answers(query: str) -> list[Any]:
+        found, since = [], []
+        for status, headers, body in ask(_get(f"/api/history{query}", WITH)):
+            told = json.loads(body) if body.startswith(b"{") else body
+            if isinstance(told, dict) and "since" in told:
+                since.append(told.pop("since"))  # (the second each server asked at)
+            found.append((status, headers.get("Content-Type"), told))
+        assert not since or 0 <= since[1] - since[0] <= 1, since
+        return found
+
+    theirs, ours = answers("")
+    assert ours == theirs and theirs[2]["found"] is False
+    now = int(time.time())
+    for side in homes:
+        folder = side / "plugins-data" / "memory"
+        folder.mkdir(parents=True)
+        con = sqlite3.connect(folder / "memory.db")
+        con.executescript(SCHEMA)
+        for n in range(0, 3000, 7):
+            ts = (now - 600 - n * 60) // 60 * 60
+            con.execute(
+                "INSERT INTO minutes (ts, samples, mode, cpu_temp, gpu_temp, cpu_load,"
+                " cpu_power, cpu_temp_max, gpu_power_max) VALUES (?, 60, ?, ?, ?, ?, ?, ?, ?)",
+                [ts, "game" if n % 3 else "desk", 40 + n % 17 / 3, None if n % 5 else 55,
+                 n % 100, 30.25 + n % 7, 60 + n % 11, 120.5],
+            )  # fmt: skip
+        for n, game in enumerate(("Starfall", "Starfall", None, "Quay", "Quay", "Quay")):
+            started = now - 3600 * (n + 1) - n * 86400 * 4
+            con.execute(
+                "INSERT INTO sessions (id, game, started, duration_s, fps_s, fps_mean,"
+                " fps_p01, fps_low_mean, cpu_temp_max, gpu_temp_max) VALUES"
+                " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [started * 1000, game, started, 600 + n * 30, 500, 90.04 + n, 50.5,
+                 None if n % 2 else 61.25, 80 + n, None],
+            )  # fmt: skip
+        con.commit()
+        con.close()
+        with (side / "config.toml").open("a", encoding="utf-8") as config:
+            config.write('[services]\nenabled = ["memory", "power"]\n[services.power]\n'
+                         'price = "0.31"\nrest_w = 45\ncurrency = "CHF"\n')  # fmt: skip
+    for query in ("", "?span=day", "?span=week", "?span=month", "?span=year", "?span="):
+        theirs, ours = answers(query)
+        assert ours == theirs, query
+    for side in homes:
+        con = sqlite3.connect(side / "plugins-data" / "memory" / "memory.db")
+        con.execute("DROP TABLE sessions")
+        con.commit()
+        con.close()
+    theirs, ours = answers("?span=week")
+    assert ours == theirs and "error" in theirs[2]

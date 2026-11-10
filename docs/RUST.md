@@ -2001,6 +2001,10 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       one write. The fans go by these names on the panel too (`rust/app/src/fan_names.rs`:
       the user's own, else FanControl's, else the sensor's), and the main loop follows
       `[hardware]` when config.toml changes.
+      History (`/api/history`, `rust/app/src/history.rs`): what the memory service kept over
+      a day, a week or a month, read from its database beside the writer: the course in
+      steps, the summary, the last rounds and the games most played, and the span's energy
+      and its cost where the power service prices it.
       `libre-panel editor` serves alone, `start` with
       the panel, and writes its address where a later start finds it. 120 requests to
       Python's server and to this one compared: the status, the headers and the body, byte

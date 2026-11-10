@@ -302,6 +302,7 @@ const ROUTES: &[Route] = &[
             .is_some_and(|asked| asked != "0" && asked != "false");
         hardware_answer(s, x, refresh);
     }),
+    private("GET", "/api/history", |s, x, _, u| history(s, x, u)),
     private("GET", "/api/logs", |_, x, _, u| {
         let query = crate::http::parse_qs(&u.query);
         let level = query.get("level").and_then(|asked| asked.first());
@@ -494,6 +495,44 @@ fn see_news(state: &State, exchange: &mut Exchange) {
         Ok(told) => exchange.json(&told, 200),
         Err(why) => exchange.error(&why, 400, ""),
     }
+}
+
+/// `GET /api/history?span=day` (week, month): what the memory kept, for History, whether the
+/// memory service is switched on, and the span's energy and its cost where the power service
+/// prices it.
+fn history(state: &State, exchange: &mut Exchange, url: &Url) {
+    let query = crate::http::parse_qs(&url.query);
+    let span = crate::http::first(&query, "span");
+    let span = if span.is_empty() { "day" } else { span };
+    let config = match lp_config::load_config(&state.config_file, lp_config::platform()) {
+        Ok(config) => config,
+        Err(why) => return exchange.error(&why.msg, 409, ""),
+    };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0.0, |d| d.as_secs_f64());
+    let path = crate::history::database(&config);
+    let mut found = match crate::history::history(&path, span, now) {
+        Ok(found) => found,
+        Err(crate::history::Refused::Span(why)) => return exchange.error(why, 400, ""),
+        Err(crate::history::Refused::Failed(why)) => return unanswered(&why),
+    };
+    let enabled = |name: &str| config.services.enabled.iter().any(|on| on == name);
+    let power = match enabled("power") {
+        true => {
+            let summary = match found.get("summary") {
+                Some(Value::Dict(d)) => d.clone(),
+                _ => Dict::new(),
+            };
+            let none = lp_py::toml::Table::new();
+            let options = config.services.options.get("power").unwrap_or(&none);
+            crate::history::energy(&summary, options)
+        }
+        false => Value::None,
+    };
+    found.insert("memory".into(), Value::Bool(enabled("memory")));
+    found.insert("power".into(), power);
+    exchange.json(&Value::Dict(found), 200);
 }
 
 /// The Settings' hardware: the parts' names, the fans this computer reads now, their looks.

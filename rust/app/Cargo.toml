@@ -29,6 +29,8 @@ lp-net = { path = "../net" }
 flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
 # the token of the app's server (access.rs)
 getrandom = "0.2"
+# the memory's database, read for History (history.rs)
+rusqlite = { version = "0.32", features = ["bundled"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
