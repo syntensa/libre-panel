@@ -2734,6 +2734,138 @@ fn cooling(case: &Value) -> Result<Value, String> {
     Ok(json!({"cases": cases}))
 }
 
+/// The readers of a case: what its step says is there.
+struct MadeUpDevices {
+    drives: indexmap::IndexMap<String, lp_py::Dict>,
+    storage: indexmap::IndexMap<String, lp_py::Dict>,
+    controllers: indexmap::IndexMap<i64, lp_py::Dict>,
+    usb: indexmap::IndexMap<String, lp_py::Dict>,
+}
+
+impl lp_services::devices::Readers for MadeUpDevices {
+    fn drives(&self) -> indexmap::IndexMap<String, lp_py::Dict> {
+        self.drives.clone()
+    }
+
+    fn storage(&self) -> indexmap::IndexMap<String, lp_py::Dict> {
+        self.storage.clone()
+    }
+
+    fn controllers(&self) -> indexmap::IndexMap<i64, lp_py::Dict> {
+        self.controllers.clone()
+    }
+
+    fn usb(
+        &self,
+        _ignore: &std::collections::HashSet<String>,
+    ) -> indexmap::IndexMap<String, lp_py::Dict> {
+        self.usb.clone()
+    }
+}
+
+/// devices: the ids the `usb_ignore` option names, sizes in words, what a drive's
+/// descriptors say, which devices are top-level USB devices and which are told about, and
+/// for each watcher of options its events over the steps `[now, when Windows last told,
+/// hurry, drives, controllers, USB devices, storage]`, each with its message.
+fn devices(case: &Value) -> Result<Value, String> {
+    use lp_services::devices::{describe, parse_ignored, size_text, Watcher, Watching};
+    use lp_services::devices_windows::{keep_usb, parse_device, parse_temperature, top_level};
+    let locale = std::path::PathBuf::from(case["locale"].as_str().unwrap_or(""));
+    let code = case["language"].as_str().unwrap_or("en");
+    lp_i18n::set_language(lp_i18n::Language::load(&locale, code)?);
+    let how = lp_py::json::Dumps::default();
+    let dumped = |table: &lp_py::Dict| lp_py::json::dumps(&lp_py::Value::Dict(table.clone()), &how);
+    let list = |value: &Value| match loaded(value) {
+        lp_py::Value::List(items) => items,
+        _ => Vec::new(),
+    };
+    let tables = |value: &Value| -> indexmap::IndexMap<String, lp_py::Dict> {
+        let lp_py::Value::Dict(found) = loaded(value) else {
+            return indexmap::IndexMap::new();
+        };
+        let tables = found.into_iter().filter_map(|(key, entry)| match entry {
+            lp_py::Value::Dict(entry) => Some((key, entry)),
+            _ => None,
+        });
+        tables.collect()
+    };
+    let ignored: Vec<Value> = (case["ignored"].as_array().into_iter().flatten())
+        .map(|raw| {
+            let mut notes = Vec::new();
+            let found = parse_ignored(&list(raw), &mut |note| notes.push(note));
+            let mut found: Vec<String> = found.into_iter().collect();
+            found.sort();
+            json!([found, notes])
+        })
+        .collect();
+    let sizes: Vec<Value> = (case["sizes"].as_array().into_iter().flatten())
+        .map(|size| json!(size_text(size.as_f64().unwrap_or(0.0))))
+        .collect();
+    let raw: Vec<Value> = (case["raw"].as_array().into_iter().flatten())
+        .map(|raw| {
+            let bytes = bytes_of(raw);
+            let (bus, name) = parse_device(&bytes);
+            let (temp, warn, crit) = parse_temperature(&bytes);
+            json!([bus, name, temp, warn, crit])
+        })
+        .collect();
+    let idents: Vec<Value> = (case["idents"].as_array().into_iter().flatten())
+        .map(|ident| json!(top_level(ident.as_str().unwrap_or("")).map(|(v, p)| [v, p])))
+        .collect();
+    let kept: Vec<Value> = (case["usb"].as_array().into_iter().flatten())
+        .map(|pair| {
+            let lp_py::Value::Dict(entry) = loaded(&pair[0]) else {
+                return Value::Null;
+            };
+            json!(keep_usb(&entry, &strings(&pair[1]).into_iter().collect()))
+        })
+        .collect();
+    let mut watchers = Vec::new();
+    for watcher in case["watchers"].as_array().into_iter().flatten() {
+        let lp_py::Value::Dict(options) = loaded(&watcher["options"]) else {
+            return Err("options that are no table".into());
+        };
+        let mut watches = Watcher::new(Watching::of(&options), std::collections::HashSet::new());
+        watches.events = watcher["events"].as_bool() == Some(true);
+        let mut steps = Vec::new();
+        for step in watcher["steps"].as_array().into_iter().flatten() {
+            if let Some(told) = step[1].as_f64() {
+                watches.last_notice = told;
+            }
+            if step[2].as_bool() == Some(true) {
+                watches.hurry();
+            }
+            let controllers = tables(&step[4]).into_iter();
+            let readers = MadeUpDevices {
+                drives: tables(&step[3]),
+                controllers: controllers
+                    .filter_map(|(slot, entry)| Some((slot.parse().ok()?, entry)))
+                    .collect(),
+                usb: tables(&step[5]),
+                storage: tables(&step[6]),
+            };
+            let events = watches.step(step[0].as_f64().unwrap_or(0.0), &readers);
+            let told: Vec<Value> = events
+                .iter()
+                .map(|event| {
+                    let toast = describe(event);
+                    json!([event.what, event.key, dumped(&event.data), {
+                        "kind": toast.kind, "rank": toast.rank, "key": toast.key,
+                        "text": toast.text, "icon": toast.icon, "seconds": toast.seconds,
+                        "level": toast.level, "payload": dumped(&toast.payload),
+                    }])
+                })
+                .collect();
+            steps.push(json!([told, watches.pause()]));
+        }
+        watchers.push(json!(steps));
+    }
+    Ok(json!({
+        "ignored": ignored, "sizes": sizes, "raw": raw, "idents": idents, "usb": kept,
+        "watchers": watchers,
+    }))
+}
+
 pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "regex" => regex(case),
@@ -2767,6 +2899,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "downloads" => downloads(case)?,
         "memory" => memory(case)?,
         "cooling" => cooling(case)?,
+        "devices" => devices(case)?,
         "autopilot" => autopilot(case)?,
         "mangohud" => mangohud(case)?,
         "media" => media(case),

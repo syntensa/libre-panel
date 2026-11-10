@@ -1874,7 +1874,15 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
   findings, the table) and the report in words, kept per question until FanControl's
   settings change. 48 databases compared with Python in two languages; in the app, the
   service starts and names the file it reads.
-- [ ] devices
+- [x] devices (services/devices.py and devices_windows.py; lp-services' devices and
+  devices_windows): a message when a drive, a USB device or a controller comes or goes,
+  when a controller's battery runs low, a drive is nearly full or an SSD runs hot; what is
+  there at the start and four changes at once are taken in silently, a stick is told once.
+  On Windows the drives and their descriptors, XInput's controllers, the USB devices of the
+  system's table and its notices when a device comes or goes (nothing is opened for data).
+  400 watchers of what comes and goes, with their messages, the descriptors and the ids
+  compared with Python in two languages; in the app, the service starts, and on Windows it
+  asks the system.
 
 ### R9 the app
 - [ ] the server and every route of its API, the same JSON

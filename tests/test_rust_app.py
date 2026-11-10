@@ -1972,3 +1972,30 @@ def test_the_cooling_analysis_starts_and_names_the_file_it_reads(tmp_path: Path)
     reads = tmp_path / "plugins-data" / "memory" / "memory.db"
     assert f"cooling analysis: reads {reads}" in said, said
     assert "limits[2]: needs a reading and a maximum" in said, said
+
+
+def test_the_devices_are_looked_at_where_windows_tells_them(tmp_path: Path) -> None:
+    """`devices` among the services: on Windows it asks the system for the drives, the
+    controllers, the USB devices and the storage (what is there at the start is taken in
+    silently); elsewhere it says that it works on Windows only."""
+    (tmp_path / "config.toml").write_text(
+        'theme = "slate"\nfps = 2\nrefresh_ms = 200\n[device]\ndriver = "virtual"\n'
+        'output = "panel.png"\n[sensors]\nproviders = []\n[services]\nenabled = ["devices"]\n'
+        '[services.devices]\nusb_ignore = ["1a86:7523", "nothing"]\n',
+        encoding="utf-8",
+    )
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries()}  # fmt: skip
+    with subprocess.Popen([str(_program()), "run"], env=env, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        time.sleep(5)
+        alive = program.poll() is None
+        if os.name == "nt":
+            program.terminate()
+        else:
+            program.send_signal(signal.SIGINT)
+        said = program.communicate(timeout=30)[1]
+    assert alive and "panicked" not in said, said
+    assert "service 'devices' started" in said, said
+    assert "usb_ignore: 'nothing' is no USB id" in said, said
+    assert ("devices: this works on Windows only" in said) == (os.name != "nt"), said

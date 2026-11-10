@@ -3033,3 +3033,200 @@ def test_the_cooling_is_judged_as_cooling_py_judges_it(tmp_path: Any) -> None:
             assert set(got) == set(want)
             Path(case["database"]).unlink()
     assert all(count >= 2 for count in seen.values()), seen
+
+
+def test_devices_are_told_as_devices_py_tells_them() -> None:
+    """services/devices.py and devices_windows.py: the ids of `usb_ignore`, sizes in words,
+    what a drive's descriptors say, the USB devices that are told about, and a watcher's
+    events over what comes and goes (drives, controllers and their batteries, USB devices
+    that settle, a drive nearly full, an SSD that runs hot; four changes at once taken in
+    silently), each with its message."""
+    import struct
+    from types import SimpleNamespace
+
+    from libre_panel import i18n
+    from libre_panel.services import devices
+    from libre_panel.services import devices_windows as windows
+
+    rng = random.Random(0xDE71CE5)
+    ignored = [rng.sample(["1a86:7523", " 05AC:12a8 ", "1a867523", "zzzz:0000", 5, "", None,
+                           "12345:6789", "ABCD:EF01\n", "abcd:ef0g"], rng.randrange(6))
+               for _ in range(60)]  # fmt: skip
+    sizes = [0, 5e5, 999_999_999, 1e9, 9.99e9, 1e10, 2.98e10, 512 * 10**9, 1e12, 2.5e13, 123456789]
+    sizes += [rng.uniform(0, 3e12) for _ in range(60)]
+
+    def descriptor() -> bytes:
+        kind = rng.randrange(3)
+        if kind == 0:  # STORAGE_DEVICE_DESCRIPTOR
+            maker, product = rng.choice([b"Samsung ", b"", b" WD\xff"]), rng.choice([b"T7 ", b""])
+            head = struct.pack("<IIBBBBIIIII", 40, 40 + len(maker) + len(product) + 2, 0, 0, 1,
+                               0, rng.choice([0, 36, 400]), 36 + len(maker) + 1,
+                               rng.choice([0, 99]), rng.choice([7, 12, 13, 17, 11]), 0)  # fmt: skip
+            return head + maker + b"\0" + product + rng.choice([b"\0", b""])
+        if kind == 1:  # STORAGE_TEMPERATURE_DATA_DESCRIPTOR
+            count = rng.randrange(4)
+            head = struct.pack("<IIhhHH", 40, 24 + 16 * count, rng.choice([0, 85, 200, -5]),
+                               rng.choice([0, 70, 150]), count, 0) + bytes(8)  # fmt: skip
+            infos = b"".join(struct.pack("<HhhhII", n, rng.choice([-50, 35, 62, 149, 150]),
+                                         0, 0, 0, 0) for n in range(count))  # fmt: skip
+            return (head + infos)[: rng.choice([1000, 1000, 39, 44])]
+        return bytes(rng.randrange(256) for _ in range(rng.randrange(80)))
+
+    raw = [descriptor() for _ in range(300)]
+    idents = ["USB\\VID_1A86&PID_7523\\5&1c2", "usb\\vid_05ac&pid_12A8\\0001",
+              "USB\\VID_1A86&PID_7523&MI_00\\6&2", "USB\\VID_1A86&PID_752\\x", "USB\\ROOT_HUB30\\4",
+              "USB\\VID_1A86&PID_7523\\", "USB\\VID_1A86&PID_7523\\a\\b", "", "HID\\VID_1&PID_2\\1",
+              "USB\\VID_GGGG&PID_0000\\1", "USB\\VID_1A86&PID_7523\\x\n"]  # fmt: skip
+    usb = []
+    for _ in range(200):
+        entry = {
+            "vid": rng.choice(["1A86", "05AC"]),
+            "pid": rng.choice(["7523", "12A8"]),
+            "name": rng.choice(["USB Hub", "Generic hub", "iPhone", "", None, "CH340"]),
+            "klass": rng.choice(["USB", "usb", "Ports", "", None]),
+            "service": rng.choice(["usbhub3", "USBSTOR", "usbser", "xboxgip", "", None]),
+        }
+        for key in rng.sample(["name", "klass", "service"], rng.randrange(2)):
+            del entry[key]
+        usb.append([json.dumps(entry), rng.sample(["1A86:7523", "05AC:12A8", "0000:0000"],
+                                                  rng.randrange(3))])  # fmt: skip
+
+    def watcher_case() -> dict[str, Any]:
+        options = {"drives": rng.random() < 0.9, "usb": rng.random() < 0.9,
+                   "controllers": rng.random() < 0.9, "storage": rng.random() < 0.9,
+                   "min_free_gb": rng.choice([25.0, 0, 100]),
+                   "min_free_percent": rng.choice([5.0, 0, 50]),
+                   "ssd_warn_c": rng.choice([0.0, 0.0, 60, -1])}  # fmt: skip
+        drives: dict[str, Any] = {}
+        pads: dict[str, Any] = {}
+        sticks: dict[str, Any] = {}
+        disks: dict[str, Any] = {"C": {"name": "SSD 980", "free": 300e9, "total": 1000 * 10**9,
+                                       "temp": 40.0, "warn": 70.0, "crit": 85.0}}  # fmt: skip
+        now, steps, told = rng.uniform(0, 100), [], None
+        for _ in range(rng.randrange(1, 90)):
+            now += rng.choice([0.1, 0.25, 0.25, 0.5, 1, 1, 2.5, 5, 70])
+            roll = rng.random()
+            if roll < 0.12:
+                letter = rng.choice("EFGHIJ")
+                if letter in drives:
+                    del drives[letter]
+                else:
+                    total = rng.choice([0, 32 * 10**9, 2 * 10**12])
+                    drives[letter] = {"name": rng.choice(["SanDisk Ultra", ""]),
+                                      "label": rng.choice(["STICK", ""]),
+                                      "free": int(total * rng.random()), "total": total,
+                                      "bus": rng.choice(["USB", "SD"])}  # fmt: skip
+            elif roll < 0.15:
+                drives = {letter: {"name": "", "label": "", "free": 1, "total": 2, "bus": "USB"}
+                          for letter in rng.sample("KLMNOP", 5)}  # fmt: skip
+            elif roll < 0.3:
+                slot = str(rng.randrange(4))
+                if slot in pads and rng.random() < 0.4:
+                    del pads[slot]
+                else:
+                    pads[slot] = {"wireless": rng.random() < 0.5,
+                                  "battery": rng.choice([1, 2, 3, 3, 0, 255, None]),
+                                  "level": rng.choice([0, 1, 2, 3, None])}  # fmt: skip
+            elif roll < 0.45:
+                key = (
+                    f"USB\\VID_{rng.choice(['05AC', '1A86', '046D'])}&PID_0001\\{rng.randrange(3)}"
+                )
+                if key in sticks:
+                    del sticks[key]
+                else:
+                    sticks[key] = {"vid": key[8:12], "pid": "0001",
+                                   "name": rng.choice(["iPhone", "Receiver", ""]),
+                                   "klass": "USB", "service": "x"}  # fmt: skip
+            elif roll < 0.47:
+                sticks = {
+                    f"USB\\VID_0000&PID_000{n}\\1": {"vid": "0000", "pid": f"000{n}", "name": "x"}
+                    for n in range(5)
+                }
+            elif roll < 0.65:
+                letter = rng.choice("CD")
+                if letter in disks and rng.random() < 0.15:
+                    del disks[letter]
+                else:
+                    total = rng.choice([1000 * 10**9, 250 * 10**9, 0])
+                    disks[letter] = {"name": rng.choice(["SSD 980", "", None]),
+                                     "free": rng.choice([1e9, 9e9, 30e9, 300e9]), "total": total,
+                                     "temp": rng.choice([None, 40.0, 64, 71.5, 80, 86, 95]),
+                                     "warn": rng.choice([None, 70.0, 0]),
+                                     "crit": rng.choice([None, 85.0, 0])}  # fmt: skip
+            if rng.random() < 0.2:
+                told = now - rng.choice([0, 0.5, 1.5])
+            steps.append([now, told, rng.random() < 0.15, json.dumps(drives), json.dumps(pads),
+                          json.dumps(sticks), json.dumps(disks)])  # fmt: skip
+        return {"options": json.dumps(options), "events": rng.random() < 0.5, "steps": steps}
+
+    seen: dict[str, int] = dict.fromkeys(
+        ("drive-in", "drive-out", "controller-in", "controller-out", "controller-low", "usb-in",
+         "usb-out", "space", "heat", "busy", "error", "progress", "phone"), 0)  # fmt: skip
+    for language, count in (("en", 300), ("ru", 100)):
+        watchers = [watcher_case() for _ in range(count)]
+        theirs: dict[str, list[Any]] = {
+            "ignored": [], "sizes": [devices.size_text(size) for size in sizes], "raw": [],
+            "idents": [], "usb": [], "watchers": [],
+        }  # fmt: skip
+        for given in ignored:
+            notes: list[str] = []
+            found = devices.parse_ignored(given, notes.append)
+            theirs["ignored"].append([sorted(found), notes])
+        for blob in raw:
+            theirs["raw"].append([*windows.parse_device(blob), *windows.parse_temperature(blob)])
+        for ident in idents:
+            match = windows._TOP_LEVEL.match(ident)
+            theirs["idents"].append(match and [match.group(1).upper(), match.group(2).upper()])
+        theirs["usb"] = [windows.keep_usb(json.loads(entry), ignore) for entry, ignore in usb]
+        i18n.set_language(language)
+        try:
+            for case in watchers:
+                events: list[Any] = []
+                step: list[Any] = []
+                readers = SimpleNamespace(
+                    drives=lambda step=step: json.loads(step[3]),
+                    controllers=lambda step=step: {
+                        int(slot): pad for slot, pad in json.loads(step[4]).items()},
+                    usb=lambda ignore, step=step: json.loads(step[5]),
+                    storage=lambda step=step: json.loads(step[6]),
+                )  # fmt: skip
+                watcher = devices.Watcher(readers, json.loads(case["options"]), events.append)
+                watcher.events = case["events"]
+                steps = []
+                for given in case["steps"]:
+                    step[:] = given
+                    if given[1] is not None:
+                        watcher.last_notice = given[1]
+                    if given[2]:
+                        watcher.hurry()
+                    events.clear()
+                    watcher.step(given[0])
+                    told = []
+                    for event in events:
+                        said = devices.describe(event)
+                        told.append([event.what, event.key, json.dumps(event.data), {
+                            "kind": said["kind"], "rank": said["rank"], "key": said["key"],
+                            "text": said["text"], "icon": said["icon"],
+                            "seconds": said["seconds"], "level": said.get("level", "info"),
+                            "payload": json.dumps(said["payload"])}])  # fmt: skip
+                        seen[event.what] += 1
+                        seen["error"] += said.get("level") == "error"
+                        seen["progress"] += "progress" in said["payload"]
+                        seen["phone"] += said["icon"] == "phone"
+                    steps.append([told, watcher.pause])
+                    seen["busy"] += watcher.pause < 1
+                theirs["watchers"].append(steps)
+        finally:
+            i18n.set_language("en")
+        [ours] = run([{"op": "devices", "locale": str(i18n.LOCALE_DIR), "language": language,
+                       "ignored": [json.dumps(given) for given in ignored], "sizes": sizes,
+                       "raw": [blob.hex() for blob in raw], "idents": idents, "usb": usb,
+                       "watchers": watchers}])  # fmt: skip
+        assert "watchers" in ours, ours
+        for key in ("ignored", "sizes", "raw", "idents", "usb"):
+            for n, (want, got) in enumerate(zip(theirs[key], ours[key], strict=True)):
+                assert got == want, (key, n)
+        for case, want, got in zip(watchers, theirs["watchers"], ours["watchers"], strict=True):
+            for given, a, b in zip(case["steps"], want, got, strict=True):
+                assert b == a, (case["options"], case["events"], given[0])
+    assert all(count >= 5 for count in seen.values()), seen

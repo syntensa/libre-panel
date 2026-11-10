@@ -10,6 +10,8 @@ pub mod cooling;
 pub mod cooling_advice;
 pub mod cooling_data;
 pub mod cooling_text;
+pub mod devices;
+pub mod devices_windows;
 pub mod downloads;
 pub mod fancontrol;
 pub mod game;
