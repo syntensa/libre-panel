@@ -577,9 +577,12 @@ def test_a_linux_pcs_sensors_are_those_of_the_python_sources(tmp_path: Path) -> 
         linux.close()
         provider.close()
     assert done.returncode == 0, done.stderr
-    ours = {line[:40].strip(): (line[56:61].strip(), line[62:])
-            for line in _lines(done)}  # fmt: skip
-    assert ours == {key: (r.unit, r.label) for key, r in wanted.items()}
+    # (a value longer than its column, as a processor's long name, moves the rest along:
+    # each line ends in its unit and its label)
+    ours = {line[:40].strip(): line for line in _lines(done)}
+    assert sorted(ours) == sorted(wanted)
+    for key, r in wanted.items():
+        assert ours[key].endswith(f" {r.unit:<5} {r.label}"), (key, ours[key])
 
 
 @pytest.mark.skipif(os.name == "nt", reason="a machine laid out as Linux has it")
