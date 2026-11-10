@@ -1909,6 +1909,378 @@ fn notices(case: &Value) -> Result<Value, String> {
     Ok(json!({"runs": runs}))
 }
 
+/// paths: each `[windows, path, more]` as os.path and pathlib take it: its root's parts,
+/// normpath, normcase of it, the join with `more`, and the Path of it (its text, name,
+/// suffix, anchor, whether it is absolute, its text joined with `more`).
+fn service_paths(case: &Value) -> Value {
+    use lp_services::paths;
+    let text = |value: &Value| value.as_str().unwrap_or("").to_string();
+    let set: std::collections::HashMap<String, String> = (case["env"].as_object().into_iter())
+        .flatten()
+        .map(|(name, value)| (name.clone(), text(value)))
+        .collect();
+    let env = |name: &str| set.get(name).cloned();
+    let homes = paths::Homes {
+        env: &env,
+        user: &paths::user_home,
+    };
+    let rows: Vec<Value> = (case["paths"].as_array().into_iter().flatten())
+        .map(|row| {
+            let (windows, path, more) =
+                (row[0].as_bool() == Some(true), text(&row[1]), text(&row[2]));
+            let (drive, root, rest) = paths::splitroot(windows, &path);
+            let made = paths::Path::new(windows, &path);
+            json!([
+                [drive, root, rest],
+                paths::normpath(windows, &path),
+                paths::folded(windows, &path),
+                paths::join(windows, &path, &more),
+                [
+                    made.text(),
+                    made.name(),
+                    made.suffix(),
+                    made.anchor(),
+                    made.is_absolute(),
+                    made.join(&more).text(),
+                    made.tail
+                ],
+                paths::bare(&path),
+                paths::expanduser(windows, &path, &homes),
+                paths::expandvars(windows, &path, &env)
+            ])
+        })
+        .collect();
+    json!({"paths": rows})
+}
+
+/// A registry made up of rows `[hive, view, key, {name: value}, [names of its keys]]`.
+fn made_up_registry(rows: &Value) -> lp_services::registry::MadeUp {
+    use lp_services::registry::{Entry, Hive, MadeUp, View};
+    let mut registry = MadeUp::default();
+    for row in rows.as_array().into_iter().flatten() {
+        let hive = match row[0].as_str() {
+            Some("HKCU") => Hive::CurrentUser,
+            _ => Hive::LocalMachine,
+        };
+        let view = match row[1].as_str() {
+            Some("wide") => View::Wide,
+            Some("narrow") => View::Narrow,
+            _ => View::Own,
+        };
+        let values = (row[3].as_object().into_iter().flatten())
+            .map(|(name, value)| {
+                let entry = match value {
+                    Value::String(text) => Entry::Text(text.clone()),
+                    Value::Number(number) => Entry::Number(number.as_u64().unwrap_or(0)),
+                    _ => Entry::Other,
+                };
+                (name.clone(), entry)
+            })
+            .collect();
+        let names = (row[4].as_array().into_iter().flatten())
+            .map(|name| name.as_str().unwrap_or("").to_string())
+            .collect();
+        let key = row[2].as_str().unwrap_or("").to_lowercase();
+        registry.keys.insert((hive, view, key), (values, names));
+    }
+    registry
+}
+
+/// The places of a case: `windows`, `home`, `env` and `registry`.
+fn made_up_places(case: &Value) -> lp_services::steam::Places {
+    let env: std::collections::HashMap<String, String> = (case["env"].as_object().into_iter())
+        .flatten()
+        .map(|(name, value)| (name.clone(), value.as_str().unwrap_or("").to_string()))
+        .collect();
+    lp_services::steam::Places {
+        windows: case["windows"].as_bool() == Some(true),
+        home: case["home"].as_str().unwrap_or("").to_string(),
+        env: Box::new(move |name| env.get(name).cloned()),
+        registry: Some(Box::new(made_up_registry(&case["registry"]))),
+    }
+}
+
+/// steam: what parse_vdf makes of each text, and each library's steps `[now, what, ...]`:
+/// its games, the game of a path, Steam's folder, a game's logo.
+fn steam(case: &Value) -> Value {
+    use lp_services::steam::{parse_vdf, Library, SteamGame};
+    use sha2::{Digest, Sha256};
+    use std::sync::{Arc, Mutex};
+    let text = |value: &Value| value.as_str().unwrap_or("").to_string();
+    let how = lp_py::json::Dumps::default();
+    let vdf: Vec<Value> = (case["vdf"].as_array().into_iter().flatten())
+        .map(|given| {
+            json!(lp_py::json::dumps(
+                &lp_py::Value::Dict(parse_vdf(&text(given))),
+                &how
+            ))
+        })
+        .collect();
+    let game = |game: &SteamGame| json!([game.appid, game.name, game.folder.text()]);
+    let mut libraries = Vec::new();
+    for library in case["libraries"].as_array().into_iter().flatten() {
+        let now = Arc::new(Mutex::new(0.0f64));
+        let clock = Arc::clone(&now);
+        let ignore = match loaded(&library["ignore"]) {
+            lp_py::Value::List(ignore) => ignore,
+            _ => Vec::new(),
+        };
+        let mut steam = Library::new(
+            &text(&library["given"]),
+            &ignore,
+            Box::new(move || clock.lock().map_or(0.0, |now| *now)),
+            made_up_places(library),
+        );
+        let mut steps = Vec::new();
+        for step in library["steps"].as_array().into_iter().flatten() {
+            if let Ok(mut now) = now.lock() {
+                *now = step[0].as_f64().unwrap_or(0.0);
+            }
+            steps.push(match step[1].as_str().unwrap_or("") {
+                "games" => json!(steam.games().iter().map(game).collect::<Vec<_>>()),
+                "match" => json!(steam.match_path(&text(&step[2])).as_ref().map(game)),
+                "root" => json!(steam.root().map(|root| root.text())),
+                _ => json!(steam.logo(&text(&step[2])).map(|logo| {
+                    let sum = format!("{:x}", Sha256::digest(logo.as_bytes()));
+                    json!([logo.width(), logo.height(), sum])
+                })),
+            });
+        }
+        libraries.push(json!({"steps": steps, "notes": steam.notes}));
+    }
+    json!({"vdf": vdf, "libraries": libraries})
+}
+
+/// launchers: each computer's launchers' games (or that their lists are odd) and the steps
+/// `[now, what, ...]` of a catalog of them and of the folders named: its games, the game of
+/// a path.
+fn launchers(case: &Value) -> Value {
+    use lp_services::launchers::{launcher_games, Catalog, InstalledGame};
+    use lp_services::paths::{Path, HERE};
+    use std::sync::{Arc, Mutex};
+    let text = |value: &Value| value.as_str().unwrap_or("").to_string();
+    let game = |game: &InstalledGame| json!([game.source, game.key, game.name, game.folder.text()]);
+    let list = |value: &Value| match loaded(value) {
+        lp_py::Value::List(list) => list,
+        _ => Vec::new(),
+    };
+    let mut computers = Vec::new();
+    for computer in case["computers"].as_array().into_iter().flatten() {
+        let drives: Vec<Path> = (computer["drives"].as_array().into_iter().flatten())
+            .map(|drive| Path::new(HERE, &text(drive)))
+            .collect();
+        let read = match launcher_games(&made_up_places(computer), &drives) {
+            Ok(games) => json!(games.iter().map(game).collect::<Vec<_>>()),
+            Err(_) => json!("odd"),
+        };
+        let now = Arc::new(Mutex::new(0.0f64));
+        let clock = Arc::clone(&now);
+        let places = made_up_places(computer);
+        let mut catalog = Catalog::new(
+            &list(&computer["named"]),
+            &list(&computer["ignore"]),
+            computer["launchers"].as_bool() == Some(true),
+            Box::new(move || clock.lock().map_or(0.0, |now| *now)),
+            Some(Box::new(move || launcher_games(&places, &drives))),
+            made_up_places(computer),
+        );
+        let mut steps = Vec::new();
+        for step in computer["steps"].as_array().into_iter().flatten() {
+            if let Ok(mut now) = now.lock() {
+                *now = step[0].as_f64().unwrap_or(0.0);
+            }
+            steps.push(match step[1].as_str().unwrap_or("") {
+                "games" => json!(catalog.games().iter().map(game).collect::<Vec<_>>()),
+                _ => json!(catalog.match_path(&text(&step[2])).as_ref().map(game)),
+            });
+        }
+        computers.push(json!({
+            "read": read,
+            "wanted": catalog.wanted(),
+            "steps": steps,
+            "notes": catalog.notes,
+        }));
+    }
+    json!({"computers": computers})
+}
+
+/// machine: the programs that run on this computer, how long those of `pids` have run, how
+/// long the system has been up, what is in front; and whether the microphone is in use by
+/// each registry made up.
+fn machine(case: &Value) -> Value {
+    use lp_services::machine::{microphone_in_use, Computer, Machine};
+    let computer = Computer;
+    let programs: Vec<Value> = (computer.programs().iter())
+        .map(|program| json!([program.name, program.pid, program.path]))
+        .collect();
+    let running: Vec<Value> = (case["pids"].as_array().into_iter().flatten())
+        .map(|pid| json!(computer.running_s(pid.as_i64().unwrap_or(-1))))
+        .collect();
+    let microphones: Vec<Value> = (case["microphones"].as_array().into_iter().flatten())
+        .map(|rows| json!(microphone_in_use(&made_up_registry(rows))))
+        .collect();
+    json!({
+        "programs": programs,
+        "running": running,
+        "uptime": computer.uptime_s(),
+        "front": [computer.has_foreground(), computer.foreground_pid(), computer.foreground_name()],
+        "microphones": microphones,
+    })
+}
+
+/// The programs that run, the process in front, and how long processes have run.
+type Running = (Vec<lp_services::machine::Program>, i64, Vec<(i64, f64)>);
+
+/// What a made-up computer runs: its programs, the window in front, how long each has run.
+#[derive(Default)]
+struct MadeUpComputer {
+    has_foreground: bool,
+    state: std::sync::Mutex<Running>,
+}
+
+impl lp_services::machine::Machine for MadeUpComputer {
+    fn has_foreground(&self) -> bool {
+        self.has_foreground
+    }
+    fn programs(&self) -> Vec<lp_services::machine::Program> {
+        self.state
+            .lock()
+            .map(|state| state.0.clone())
+            .unwrap_or_default()
+    }
+    fn foreground_pid(&self) -> Option<i64> {
+        match self.has_foreground {
+            true => self.state.lock().ok().map(|state| state.1),
+            false => None,
+        }
+    }
+    fn running_s(&self, pid: i64) -> Option<f64> {
+        let state = self.state.lock().ok()?;
+        state
+            .2
+            .iter()
+            .find(|(of, _)| *of == pid)
+            .map(|(_, age)| *age)
+    }
+    fn uptime_s(&self) -> Option<f64> {
+        None
+    }
+}
+
+/// game: each service's steps `[now, what, ...]` on a made-up computer (a look for a game
+/// with the programs that run, a tick, the wait for a sample, a sample): what each asks of
+/// the host, how long the worker would sleep, and the service's status.
+fn game(case: &Value) -> Result<Value, String> {
+    use lp_services::game::{core_of, Action};
+    use lp_services::machine::Program;
+    use sha2::{Digest, Sha256};
+    use std::sync::{Arc, Mutex};
+    let locale = std::path::PathBuf::from(case["locale"].as_str().unwrap_or(""));
+    let code = case["language"].as_str().unwrap_or("en");
+    lp_i18n::set_language(lp_i18n::Language::load(&locale, code)?);
+    let text = |value: &Value| value.as_str().unwrap_or("").to_string();
+    let how = lp_py::json::Dumps::default();
+    let dumped = |table: &lp_py::Dict| lp_py::json::dumps(&lp_py::Value::Dict(table.clone()), &how);
+    let mut services = Vec::new();
+    for service in case["services"].as_array().into_iter().flatten() {
+        let lp_py::Value::Dict(options) = loaded(&service["options"]) else {
+            return Err("options that are no table".into());
+        };
+        let now = Arc::new(Mutex::new(0.0f64));
+        let clock = || -> Box<dyn Fn() -> f64 + Send + Sync> {
+            let now = Arc::clone(&now);
+            Box::new(move || now.lock().map_or(0.0, |now| *now))
+        };
+        let computer = Arc::new(MadeUpComputer {
+            has_foreground: service["has_foreground"].as_bool() == Some(true),
+            ..MadeUpComputer::default()
+        });
+        let mut reports = Vec::new();
+        let mut core = core_of(
+            &options,
+            computer.clone(),
+            &clock,
+            &|| made_up_places(service),
+            &mut |line| reports.push(line),
+        );
+        let mut steps = Vec::new();
+        for step in service["steps"].as_array().into_iter().flatten() {
+            let at = step[0].as_f64().unwrap_or(0.0);
+            if let Ok(mut now) = now.lock() {
+                *now = at;
+            }
+            let mut out = Vec::new();
+            match step[1].as_str().unwrap_or("") {
+                "detect" => {
+                    if let Ok(mut state) = computer.state.lock() {
+                        state.0 = (step[2].as_array().into_iter().flatten())
+                            .map(|row| Program {
+                                name: text(&row[0]),
+                                pid: row[1].as_i64().unwrap_or(0),
+                                path: text(&row[2]),
+                            })
+                            .collect();
+                        state.1 = step[3].as_i64().unwrap_or(0);
+                        state.2 = (step[4].as_array().into_iter().flatten())
+                            .map(|row| {
+                                (row[0].as_i64().unwrap_or(0), row[1].as_f64().unwrap_or(0.0))
+                            })
+                            .collect();
+                    }
+                    out = core.detect(at);
+                }
+                "tick" => core.tick(at, &mut out),
+                "advance" => core.advance(at, &mut out),
+                _ => core.sample(step[2].as_bool() == Some(true), &mut out),
+            }
+            let acts: Vec<Value> = out
+                .iter()
+                .map(|action| match action {
+                    Action::Publish(key, value, unit, label) => {
+                        json!(["publish", key, plain(value), unit, label])
+                    }
+                    Action::Logo(logo) => json!([
+                        "logo",
+                        logo.as_ref().map(|logo| {
+                            let sum = format!("{:x}", Sha256::digest(logo.as_bytes()));
+                            json!([logo.width(), logo.height(), sum])
+                        })
+                    ]),
+                    Action::Mode(mode, transition) => json!([
+                        "mode",
+                        mode,
+                        transition.as_ref().map(|transition| json!([
+                            transition.name,
+                            transition.params.as_ref().map(dumped)
+                        ]))
+                    ]),
+                    Action::Tell(toast) => json!([
+                        "tell",
+                        toast.text,
+                        toast.icon,
+                        toast.level,
+                        toast.seconds,
+                        toast.kind,
+                        toast.rank,
+                        toast.key,
+                        dumped(&toast.payload)
+                    ]),
+                    Action::Note(line) => json!(["note", line]),
+                    Action::Target(program) => json!(["target", program]),
+                })
+                .collect();
+            steps.push(json!({
+                "acts": acts,
+                "wait": core.wait(at, at + 0.7),
+                "status": dumped(&core.status()),
+            }));
+        }
+        services.push(json!({"reports": reports, "poll": core.poll_s(), "steps": steps}));
+    }
+    lp_i18n::set_language(lp_i18n::Language::english());
+    Ok(json!({"services": services}))
+}
+
 pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "regex" => regex(case),
@@ -1934,6 +2306,11 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "power" => power(case)?,
         "agents" => agents(case)?,
         "notices" => notices(case)?,
+        "service_paths" => service_paths(case),
+        "steam" => steam(case),
+        "launchers" => launchers(case),
+        "machine" => machine(case),
+        "game" => game(case)?,
         "mangohud" => mangohud(case)?,
         "media" => media(case),
         "appicon" => appicon(case),

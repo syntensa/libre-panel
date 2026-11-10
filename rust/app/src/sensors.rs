@@ -178,6 +178,9 @@ impl Source for PresentMon {
     }
 
     fn read(&mut self, out: &mut Readings) {
+        // (the game the `game` service found: its frames are the ones that count)
+        self.0
+            .set_target(lp_sensors::presentmon::target().as_deref());
         out.extend(self.0.read());
     }
 
@@ -222,6 +225,8 @@ impl Source for Rtss {
     }
 
     fn read(&mut self, out: &mut Readings) {
+        self.0
+            .set_target(lp_sensors::presentmon::target().as_deref());
         out.extend(self.0.read());
     }
 

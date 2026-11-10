@@ -55,6 +55,23 @@ pub static SESSION_ENDING: AtomicBool = AtomicBool::new(false);
 /// download carries (its `tools` folder), PATH, or Intel's folder under Program Files. With
 /// the highest rights only one from a safe place: a named one elsewhere is passed over for
 /// the others (and said in `notes`).
+/// The game the `game` service found, as the file name PresentMon reports it. Kept here so
+/// that a source made after the game was found knows it too.
+static TARGET: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// set_target: say which program is the game, as the `game` service finds it: only its
+/// frames count from now on. None takes it back (the program with the most frames counts).
+pub fn set_target(exe: Option<&str>) {
+    if let Ok(mut target) = TARGET.lock() {
+        *target = exe.filter(|exe| !exe.is_empty()).map(lp_py::lower);
+    }
+}
+
+/// target: the game the `game` service found (`set_target`), lower case; None for none.
+pub fn target() -> Option<String> {
+    TARGET.lock().ok().and_then(|target| target.clone())
+}
+
 pub fn find_presentmon(path: &str, notes: &mut Vec<String>) -> Option<PathBuf> {
     use lp_devices::rights;
     let mut passed = Vec::new();

@@ -836,3 +836,1061 @@ def test_notices_come_when_notices_py_sends_them() -> None:
             assert all(count > 20 for count in seen.values()), seen
         finally:
             i18n.set_language("en")
+
+
+def test_paths_are_taken_as_os_path_and_pathlib_take_them() -> None:
+    """lp-services' paths: splitroot, normpath, normcase and join of ntpath and posixpath,
+    and what pathlib makes of a path (its text, name, suffix, anchor, parts; joined with
+    another), for Windows' paths and the others' on every system."""
+    import ntpath
+    import posixpath
+    import sys
+    from pathlib import PurePosixPath, PureWindowsPath
+
+    rng = random.Random(0x9A785)
+    pieces = [
+        "",
+        ".",
+        "..",
+        "a",
+        "Games",
+        "Steam Apps",
+        "x.exe",
+        ".hidden",
+        "b.tar.gz",
+        "C:",
+        "c:",
+        "D:",
+        "$",
+        "?",
+        "UNC",
+        "unc",
+        "server",
+        "share",
+        "Ä ö",
+        "end.",
+        " ",
+    ]
+    seps = ["/", "/", "\\", "\\", "//", "\\\\", "/./", "\\..\\"]
+
+    def made() -> str:
+        text = rng.choice(["", "", "/", "\\", "//", "\\\\", "C:", "c:\\", "D:/", "\\\\?\\",
+                           "//?/UNC/", "\\\\.\\", "///", ' "'])  # fmt: skip
+        for _ in range(rng.randrange(6)):
+            text += rng.choice(pieces) + rng.choice(seps + [""])
+        return text
+
+    rows = [[rng.random() < 0.5, made(), made()] for _ in range(6000)]
+    marks = [
+        "~",
+        "~/",
+        "~root",
+        "~nobody-such",
+        "~me",
+        "~you\\",
+        "$HOME",
+        "${HOME}",
+        "$NONE",
+        "${NONE}",
+        "%USERPROFILE%",
+        "%NONE%",
+        "%",
+        "$$",
+        "%%",
+        "'",
+        "$A-B",
+        "${A B}",
+        "$",
+    ]
+    for _ in range(3000):
+        text = "".join(rng.choice(marks + pieces + seps) for _ in range(rng.randrange(1, 6)))
+        rows.append([rng.random() < 0.5, text, ""])
+    envs = [{"HOME": "/home/me/", "USERPROFILE": "C:\\Users\\me", "USERNAME": "me", "A": "1",
+             "A-B": "dash", "A B": "space"},
+            {"HOMEPATH": "\\Users\\you", "HOMEDRIVE": "D:", "USERNAME": "you"},
+            {"HOMEPATH": "home", "USERNAME": "other", "HOME": ""}, {}]  # fmt: skip
+    rows = [[*row, rng.randrange(len(envs))] for row in rows]
+    answers = [run([{"op": "service_paths", "env": env,
+                     "paths": [row[:3] for row in rows if row[3] == n]}])[0]["paths"]
+               for n, env in enumerate(envs)]  # fmt: skip
+    places = [0] * len(envs)
+    ours = {"paths": []}
+    for row in rows:
+        ours["paths"].append(answers[row[3]][places[row[3]]])
+        places[row[3]] += 1
+    rows_env = [envs[row[3]] for row in rows]
+    rows = [row[:3] for row in rows]
+    import os
+
+    seen = {"drive": 0, "unc": 0, "back": 0, "absolute": 0, "replaced": 0, "home": 0, "set": 0}
+    real = os.environ
+    for (windows, path, more), env, got in zip(rows, rows_env, ours["paths"], strict=True):
+        flavour, pure = (ntpath, PureWindowsPath) if windows else (posixpath, PurePosixPath)
+        whole = pure(path)
+        if windows and sys.platform != "win32":
+            folded = ntpath.normpath(path).replace("/", "\\").lower()
+        else:
+            folded = flavour.normcase(flavour.normpath(path))
+        want = [
+            list(flavour.splitroot(path)), flavour.normpath(path), folded,
+            flavour.join(path, more),
+            [str(whole), whole.name, whole.suffix, whole.anchor, whole.is_absolute(),
+             str(whole / more), list(whole.parts[1:] if whole.anchor else whole.parts)],
+            path.strip().strip('"'),
+        ]  # fmt: skip
+        os.environ = env  # type: ignore[assignment]  # noqa: B003 - ntpath reads it itself
+        try:
+            want += [flavour.expanduser(path), flavour.expandvars(path)]
+        finally:
+            os.environ = real  # noqa: B003
+        assert got == want, (windows, path, more, env)
+        seen["home"] += want[-2] != path
+        seen["set"] += want[-1] != path
+        seen["drive"] += bool(windows and whole.drive[1:] == ":")
+        seen["unc"] += whole.drive.startswith("\\\\")
+        seen["back"] += ".." in path and ".." not in flavour.normpath(path)
+        seen["absolute"] += whole.is_absolute()
+        seen["replaced"] += bool(more) and str(whole / more) == str(pure(more))
+    assert all(count > 100 for count in seen.values()), seen
+
+
+class _Keys:
+    """``winreg`` over rows ``[hive, view, key, {name: value}, [names of its keys]]``, the
+    rows lp-check's made-up registry takes."""
+
+    HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE = "HKCU", "HKLM"
+    KEY_READ, KEY_WOW64_64KEY, KEY_WOW64_32KEY = 0x20019, 0x100, 0x200
+
+    class Key:
+        def __init__(self, hive: str, view: str, path: str) -> None:
+            self.hive, self.view, self.path = hive, view, path
+
+        def __enter__(self) -> Any:
+            return self
+
+        def __exit__(self, *_: Any) -> bool:
+            return False
+
+    def __init__(self, rows: list[list[Any]]) -> None:
+        self.rows = {(hive, view, key.lower()): (values, keys)
+                     for hive, view, key, values, keys in rows}  # fmt: skip
+
+    def OpenKey(self, key: Any, sub: str, reserved: int = 0, access: int = 0x20019) -> Any:  # noqa: N802
+        if isinstance(key, str):
+            view = ("wide" if access & self.KEY_WOW64_64KEY
+                    else "narrow" if access & self.KEY_WOW64_32KEY else "own")  # fmt: skip
+            opened = self.Key(key, view, sub)
+        else:
+            opened = self.Key(key.hive, key.view, f"{key.path}\\{sub}")
+        if (opened.hive, opened.view, opened.path.lower()) not in self.rows:
+            raise FileNotFoundError(sub)
+        return opened
+
+    def _row(self, key: Any) -> Any:
+        return self.rows[key.hive, key.view, key.path.lower()]
+
+    def EnumKey(self, key: Any, index: int) -> str:  # noqa: N802
+        names = self._row(key)[1]
+        if index >= len(names):
+            raise OSError("no more keys")
+        return names[index]
+
+    def QueryValueEx(self, key: Any, name: str) -> tuple[Any, int]:  # noqa: N802
+        values = self._row(key)[0]
+        if name not in values:
+            raise FileNotFoundError(name)
+        return values[name], 1
+
+
+def _vdf(table: dict[str, Any], depth: int = 0) -> str:
+    tabs = "\t" * depth
+    lines = []
+    for key, value in table.items():
+        if isinstance(value, dict):
+            lines += [f'{tabs}"{key}"', tabs + "{", _vdf(value, depth + 1), tabs + "}"]
+        else:
+            lines.append(f'{tabs}"{key}"\t\t"{value}"')
+    return "\n".join(lines)
+
+
+def test_steams_games_and_logos_are_found_as_steam_py_finds_them(
+    tmp_path: Any, monkeypatch: Any, caplog: Any
+) -> None:
+    """services/steam.py: Steam's text format, its folder (named, in the registry, under the
+    program folders or the home folder), its libraries and the games in their manifests
+    without the tools and those ignored, the game of a program's path, and a game's logo
+    from the cache (the newest, cut out; else the header picture)."""
+    import hashlib
+    import os
+    from pathlib import Path
+
+    from PIL import Image
+
+    from libre_panel.services import steam
+
+    rng = random.Random(0x57EA)
+    words = [
+        '"a"',
+        '"B c"',
+        '"x\\ty"',
+        '"q\\"r"',
+        '"n\\\\"',
+        "{",
+        "}",
+        "{",
+        "}",
+        "// note",
+        "\n",
+        "\t",
+        " ",
+        '"',
+        "\\",
+        "bare",
+        '"Ä"',
+        '"1"',
+        '"path"',
+        '"\\\n"',
+        "/",
+        "\r\n",
+    ]
+    texts = ["".join(rng.choice(words) + rng.choice(["", " ", "\n"])
+                     for _ in range(rng.randrange(40))) for _ in range(1500)]  # fmt: skip
+    texts += [_vdf({"AppState": {"appid": "440", "Name": "Team ™ Fortress", "x": {"Y": {}}}})]
+
+    def picture(path: Path, size: tuple[int, int], box: Any, when: float) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.suffix == ".png":
+            made = Image.new("RGBA", size, (0, 0, 0, 0))
+            if box:
+                made.paste((200, 40, rng.randrange(256), 255), box)
+        else:
+            made = Image.new("RGB", size, (rng.randrange(256), 90, 30))
+        made.save(path)
+        os.utime(path, (when, when))
+
+    tools = ["Proton 9.0", "Steamworks Shared", "SteamLinuxRuntime_sniper", "wallpaper_engine"]
+    titles = ["Half-Life™ 2", "Portal  2 ®", "Dota 2", "Größe", "Ignored Game", "Stray©"]
+    libraries_ = []
+    for n in range(120):
+        base = tmp_path / str(n)
+        kind = rng.choice(["home", "home", "given", "wrong", "registry", "folders", "none"])
+        root = base / "home" / ".local" / "share" / "Steam"
+        if kind == "folders":
+            root = base / "pf" / "Steam"
+        other = base / "D" / "SteamLibrary"
+        places = [root] + ([other] if rng.random() < 0.7 else [])
+        apps = {}
+        for library in places:
+            (library / "steamapps" / "common").mkdir(parents=True)
+            for _ in range(rng.randrange(5)):
+                appid = str(rng.randrange(1, 4000))
+                title = rng.choice(titles + tools)
+                folder = rng.choice([title, title.replace(" ", "_"), f"game{appid}"])
+                state = {"appid": appid, "name": title, "installdir": folder}
+                drop = rng.choice([None, None, None, "name", "installdir", "appid"])
+                state.pop(drop, None)
+                name = rng.choice(
+                    [f"appmanifest_{appid}.acf"] * 6
+                    + [f"Appmanifest_{appid}.acf", f"appmanifest_{appid}.txt"]
+                )
+                text = _vdf({rng.choice(["AppState", "appstate"]): state})
+                if rng.random() < 0.08:
+                    text = rng.choice(["", '"AppState" "none"', "{{{", text[: len(text) // 2]])
+                (library / "steamapps" / name).write_text(text, encoding="utf-8")
+                apps[appid] = library / "steamapps" / "common" / folder
+            if rng.random() < 0.2:
+                (library / "steamapps" / "appmanifest_dir.acf").mkdir()
+        listed: dict[str, Any] = {"contentstatsid": "77", "0": {"path": str(root)}}
+        if rng.random() < 0.8:
+            listed["1"] = rng.choice(
+                [
+                    {"path": str(other)},
+                    str(other),
+                    {"path": str(other) + "/"},
+                    {"path": f"{root}/../Steam"},
+                    {"path": "relative/lib"},
+                    {"label": "none"},
+                    {"path": str(base / "missing")},
+                ]
+            )
+        listed["x2"] = str(other)
+        (root / "steamapps" / "libraryfolders.vdf").write_text(
+            _vdf({"libraryfolders": listed}), encoding="utf-8"
+        )
+        cache = root / "appcache" / "librarycache"
+        logos = sorted(apps)[:3] + ["12x"]
+        for appid in logos:
+            when = 1.7e9
+            for where in rng.sample([f"{appid}/aaa/logo.png", f"{appid}/bbb/logo.png",
+                                     f"{appid}/logo.png", f"{appid}_logo.png",
+                                     f"{appid}/ccc/header.jpg", f"{appid}_header.jpg",
+                                     f"{appid}/header.png"], rng.randrange(6)):  # fmt: skip
+                when += rng.choice([-500, 300, 900])
+                box = rng.choice([(5, 4, 30, 15), (0, 0, 40, 20), None])
+                picture(cache / where, (40, 20), box, when)
+                if rng.random() < 0.15:
+                    (cache / where).write_bytes(b"no picture")
+                    os.utime(cache / where, (when, when))
+        case: dict[str, Any] = {
+            "given": {"given": str(root), "wrong": str(base / "D")}.get(kind, ""),
+            "ignore": json.dumps(rng.choice([[], ["ignored game", " Dota 2 "], [5, "", "game7"]])),
+            "windows": kind in ("registry", "folders"),
+            "home": str(base / ("home" if kind == "home" else "elsewhere")),
+            "env": {}, "registry": [],
+        }  # fmt: skip
+        if kind == "registry":
+            case["registry"] = [["HKCU", "own", r"Software\Valve\Steam",
+                                 {"SteamPath": str(root).replace(os.sep, "/")}, []]]  # fmt: skip
+        if kind == "folders":
+            case["env"] = {"ProgramFiles(x86)": str(base / "nowhere"),
+                           "ProgramFiles": str(base / "pf")}  # fmt: skip
+        now, steps = rng.uniform(0, 500), []
+        for _ in range(rng.randrange(4, 30)):
+            now += rng.choice([0, 1, 30, 130])
+            what = rng.choice(["games", "root", "match", "match", "match", "logo", "logo"])
+            if what == "match":
+                folder = rng.choice(
+                    [
+                        *apps.values(),
+                        root / "steamapps" / "common",
+                        base / "D" / "x",
+                        other / "steamapps" / "common" / "none",
+                    ]
+                )
+                path = rng.choice([str(folder / "bin" / "game.exe"), str(folder), "",
+                                   str(folder / ".." / folder.name / "a.exe"), str(folder).upper(),
+                                   str(folder) + "/"])  # fmt: skip
+                steps.append([now, what, path])
+            elif what == "logo":
+                steps.append([now, what, rng.choice([*logos, *apps, "1"])])
+            else:
+                steps.append([now, what])
+        libraries_.append(case | {"steps": steps})
+
+    [ours] = run([{"op": "steam", "vdf": texts, "libraries": libraries_}])
+    assert ours["vdf"] == [json.dumps(steam.parse_vdf(text)) for text in texts]
+
+    def shown(game: Any) -> Any:
+        return game and [game.appid, game.name, str(game.folder)]
+
+    find_root = steam.find_root
+    seen = {"games": 0, "two": 0, "match": 0, "cut": 0, "header": 0, "note": 0, "none": 0}
+    for case, got in zip(libraries_, ours["libraries"], strict=True):
+        for name in steam.WINDOWS_STEAM_FOLDERS:
+            monkeypatch.delenv(name, raising=False)
+        for name, value in case["env"].items():
+            monkeypatch.setenv(name, value)
+        platform = "win32" if case["windows"] else "linux"
+        monkeypatch.setattr(
+            steam,
+            "find_root",
+            lambda given="", case=case, platform=platform: find_root(
+                given, platform=platform, home=Path(case["home"]), winreg=_Keys(case["registry"])
+            ),
+        )
+        clock = [0.0]
+        library = steam.Library(case["given"], json.loads(case["ignore"]), lambda c=clock: c[0])
+        caplog.clear()
+        with caplog.at_level("WARNING", logger="libre_panel.services.steam"):
+            for (now, what, *more), found in zip(case["steps"], got["steps"], strict=True):
+                clock[0] = now
+                if what == "games":
+                    want: Any = [shown(game) for game in library.games()]
+                    seen["games"] += len(want)
+                    seen["two"] += len({game[2].split("steamapps")[0] for game in want}) > 1
+                elif what == "match":
+                    want = shown(library.match(more[0]))
+                    seen["match"] += want is not None
+                elif what == "root":
+                    library.games()
+                    want = library.root and str(library.root)
+                    seen["none"] += want is None
+                else:
+                    logo = library.logo(more[0])
+                    want = logo and [*logo.size, hashlib.sha256(logo.tobytes()).hexdigest()]
+                    seen["cut"] += bool(logo) and logo.size != (40, 20)
+                    seen["header"] += bool(logo) and logo.getextrema()[3] == (255, 255)
+                assert found == want, (case, now, what, more)
+        assert got["notes"] == [record.getMessage() for record in caplog.records], case
+        seen["note"] += len(got["notes"])
+    assert all(count > 5 for count in seen.values()), seen
+
+
+def test_the_launchers_games_are_found_as_launchers_py_finds_them(
+    tmp_path: Any, monkeypatch: Any, caplog: Any
+) -> None:
+    """services/launchers.py: Epic's manifests, GOG, EA, Battle.net, Rockstar and Ubisoft
+    from the registry, Amazon's and Lutris's databases, the Xbox app's folders, Heroic's
+    lists and the folders named; a catalog of them (the innermost folder's game, folders too
+    wide, names ignored, the launchers off, a list that is odd)."""
+    import os
+    import sqlite3
+    from pathlib import Path
+
+    from libre_panel.services import launchers
+
+    rng = random.Random(0x1A04C)
+    uninstall, ubisoft = launchers.UNINSTALL, launchers.UBISOFT
+
+    def folder(path: Path, *programs: str) -> str:
+        path.mkdir(parents=True, exist_ok=True)
+        for name in programs:
+            (path / name).write_bytes(b"MZ")
+        return str(path)
+
+    def write(path: Path, value: Any) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        text = value if isinstance(value, str) else json.dumps(value)
+        path.write_bytes((b"\xef\xbb\xbf" if rng.random() < 0.3 else b"") + text.encode())
+
+    def database(path: Path, table: str, columns: str, rows: list[tuple[Any, ...]]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(path) as made:
+            made.execute(f"CREATE TABLE {table} ({columns})")
+            made.executemany(f"INSERT INTO {table} VALUES ({','.join('?' * len(rows[0]))})", rows)
+        made.close()
+
+    odd = [[1], 5, "x", None, {"InstallationList": None}, {"InstallationList": 7}]
+    computers = []
+    for n in range(140):
+        base = tmp_path / str(n)
+        home, games = base / "home" / "me", base / "Games"
+        windows = rng.random() < 0.5
+        env: dict[str, str] = {"GAMES": str(games), "HOME": str(home), "USERPROFILE": str(home)}
+        registry: list[list[Any]] = []
+        drives: list[str] = []
+        if windows:
+            programdata, local, roaming = base / "ProgramData", base / "Local", base / "Roaming"
+            env |= {"PROGRAMDATA": str(programdata), "LOCALAPPDATA": str(local),
+                    "APPDATA": str(roaming)}  # fmt: skip
+            if rng.random() < 0.1:
+                del env["APPDATA"]
+                roaming = home / "AppData" / "Roaming"
+            epic = programdata / "Epic"
+            listed = [
+                {"AppName": "Fortnite", "InstallLocation": folder(games / "Fortnite")},
+                {"AppName": None, "InstallLocation": ""},
+                "x",
+                {"InstallLocation": 5},
+            ]
+            kind = rng.random()
+            if kind < 0.7:
+                write(
+                    epic / "UnrealEngineLauncher" / "LauncherInstalled.dat",
+                    {"InstallationList": rng.choice([listed, listed, [], "abc", {"a": 1}])},
+                )
+            elif kind < 0.8:
+                write(epic / "UnrealEngineLauncher" / "LauncherInstalled.dat", rng.choice(odd))
+            for m in range(rng.randrange(5)):
+                app = rng.choice(["Fortnite", "Rocket", "ue plugin", "Addon", "", None])
+                where = rng.choice([folder(games / f"epic{m}", "game.exe"), str(games / "gone"),
+                                    "", None, f' "{folder(games / "quoted")}" '])  # fmt: skip
+                item: dict[str, Any] = {
+                    "AppName": app,
+                    "InstallLocation": where,
+                    "DisplayName": rng.choice(["Rocket League®", "", None, 5]),
+                }
+                item["AppCategories"] = rng.choice([
+                    ["public", "games"], ["addons"], ["addons", "addons/launchable"], ["plugins"],
+                    None, "games", "addons", {"plugins/engine": 1}, [], ["games", 5]])  # fmt: skip
+                if rng.random() < 0.3:
+                    item["CompatibleApps"] = rng.choice([["UE_5.3"], ["x"], [5], None, "UE_", {}])
+                if rng.random() < 0.2:
+                    item["TechnicalType"] = rng.choice(["games", "plugins/engine,x", None])
+                if rng.random() < 0.04:
+                    item[rng.choice(["AppCategories", "CompatibleApps", "InstallLocation"])] = 7
+                name = rng.choice([f"m{m}.item", f"M{m}.ITEM", f"m{m}.json", f".m{m}.item"])
+                write(epic / "EpicGamesLauncher" / "Data" / "Manifests" / name,
+                      rng.choice([item] * 8 + [[item], "{broken"]))  # fmt: skip
+            programs: dict[str, dict[str, dict[str, Any]]] = {"wide": {}, "narrow": {}, "own": {}}
+            for _ in range(rng.randrange(9)):
+                view = rng.choice(["wide", "wide", "narrow", "own"])
+                number = str(rng.randrange(1000, 1020))
+                place = folder(games / f"prog{number}")
+                kind_of = rng.choice(["gog", "gog", "ea", "bnet", "rockstar", "uplay", "other"])
+                if kind_of == "gog":
+                    key = rng.choice([f"{number}_is1", f"{number}_is1", f"x{number}_is1", "_is1"])
+                    values = {"DisplayName": rng.choice(["Witcher  3", ""]),
+                              "Publisher": rng.choice(["GOG.com", "GOG.com", "gog"]),
+                              "InstallLocation": rng.choice([place, place, ""])}  # fmt: skip
+                    if rng.random() < 0.5:
+                        root = rng.choice([number, "", None, "999", 999, int(number)])
+                        write(
+                            Path(place) / f"goggame-{number}.info",
+                            rng.choice([{"rootGameId": root}, {"rootGameId": root}, {}, [1]]),
+                        )
+                elif kind_of == "ea":
+                    key = f"{{EA-{number}}}"
+                    values = {"DisplayName": rng.choice(["Battlefield™", "EA app", "Origin Helper",
+                                                         "EA AntiCheat"]),
+                              "Publisher": "Electronic Arts", "InstallLocation": place}  # fmt: skip
+                elif kind_of == "bnet":
+                    key = rng.choice(["World of Warcraft", "Battle.net", "Diablo IV Beta"])
+                    uid = rng.choice(["wow", "battle.net", "fenris", "WoW_classic"])
+                    line = rng.choice(
+                        [
+                            f'"C:\\PF\\Battle.net\\Battle.net.exe" --lang=enUS --uid={uid} '
+                            '--displayname="x"',
+                            f"battle.NET --UID={uid}",
+                            f"Battle.net.exe --uid=a --uid={uid}",
+                            "Battle.net.exe",
+                            f"x\nBattle.net --uid={uid}",
+                        ]
+                    )
+                    values = {"DisplayName": key, "InstallLocation": rng.choice([place, place, ""]),
+                              "UninstallString": line}  # fmt: skip
+                elif kind_of == "rockstar":
+                    key = f"{{R-{number}}}"
+                    title = rng.choice(["gta5", "GTA5", "rdr2", "launcher", ' "bully" '])
+                    line = rng.choice(
+                        [
+                            f'"C:\\R\\Launcher.exe" -enableFullMode -uninstall={title}',
+                            f"UNINSTALL.EXE x uninstall={title}",
+                            f"uninstall={title}",
+                        ]
+                    )
+                    values = {"DisplayName": "Grand Theft Auto V", "InstallLocation": place,
+                              "UninstallString": line}  # fmt: skip
+                elif kind_of == "uplay":
+                    key = f"Uplay Install {number}"
+                    values = {"DisplayName": rng.choice(["Anno 1800", ""])}
+                else:
+                    key, values = f"prog{number}", {"DisplayName": "Tool", "InstallLocation": place,
+                                                    "Size": 5, "Zero": 0}  # fmt: skip
+                programs[view][key] = values
+            for view, entries in programs.items():
+                hive = "HKCU" if view == "own" else "HKLM"
+                if entries or rng.random() < 0.5:
+                    registry.append([hive, view, uninstall, {}, list(entries)])
+                registry += [[hive, view, f"{uninstall}\\{key}", values, []]
+                             for key, values in entries.items()]  # fmt: skip
+            for view in ("wide", "narrow"):
+                numbers = [str(rng.randrange(1000, 1020)) for _ in range(rng.randrange(3))]
+                if numbers:
+                    registry.append(["HKLM", view, ubisoft, {}, numbers])
+                for number in dict.fromkeys(numbers):
+                    place = folder(games / f"ubi{number}").replace(os.sep, "/")
+                    values = {"InstallDir": rng.choice([place + "/", place, ""])}
+                    registry.append(["HKLM", view, f"{ubisoft}\\{number}", values, []])
+            if rng.random() < 0.5:
+                database(
+                    local / "Amazon Games" / "Data" / "Games" / "Sql" / "GameInstallInfo.sqlite",
+                    "DbSet",
+                    "Id, ProductTitle, InstallDirectory, Installed",
+                    [
+                        ("amzn1", "New World", folder(games / "NewWorld"), 1),
+                        ("amzn2", None, folder(games / "Lost Ark"), 1),
+                        ("amzn3", "Gone", folder(games / "gone3"), 0),
+                        (5, 7.5, "", 1),
+                    ],
+                )
+            drive = base / "X"
+            for name in rng.sample(["Forza", "Halo", ".hidden", "file.txt"], rng.randrange(4)):
+                (
+                    folder(drive / "XboxGames")
+                    and name != "file.txt"
+                    and folder(drive / "XboxGames" / name)
+                )
+                if name == "file.txt":
+                    (drive / "XboxGames" / name).write_text("x")
+            drives = [str(drive), str(base / "nodrive")]
+            heroic = roaming / "heroic"
+        else:
+            config = home / ".config"
+            if rng.random() < 0.4:
+                config = base / "xdg"
+                env["XDG_CONFIG_HOME"] = str(config)
+            if rng.random() < 0.2:
+                env["XDG_DATA_HOME"] = rng.choice(["", str(base / "data")])
+            data = Path(env.get("XDG_DATA_HOME") or home / ".local" / "share")
+            if rng.random() < 0.6:
+                database(
+                    rng.choice([data, home / ".var/app/net.lutris.Lutris/data"])
+                    / "lutris"
+                    / "pga.db",
+                    "games",
+                    "slug, name, directory, runner, installed",
+                    [
+                        ("celeste", "Celeste", folder(games / "celeste"), "linux", 1),
+                        (None, None, folder(games / "noname"), "wine", 1),
+                        ("cs", "CS", folder(games / "cs"), "steam", 1),
+                        ("gone", "Gone", folder(games / "gone4"), "wine", 0),
+                        ("nodir", "No dir", "", "wine", 1),
+                        ("null", "Null", None, None, 1),
+                    ],
+                )
+            heroic = rng.choice(
+                [config / "heroic", home / ".var/app/com.heroicgameslauncher.hgl/config/heroic"]
+            )
+        if rng.random() < 0.6:
+            write(
+                heroic / "legendaryConfig" / "legendary" / "installed.json",
+                rng.choice(
+                    [
+                        {
+                            "Sugar": {
+                                "title": "Rocket League",
+                                "install_path": folder(games / "rl"),
+                            },
+                            "Dlc": {
+                                "title": "DLC",
+                                "install_path": folder(games / "rl"),
+                                "is_dlc": True,
+                            },
+                            "Odd": 5,
+                            "None": {"title": None, "install_path": None},
+                        },
+                        [1],
+                        "{broken",
+                    ]
+                ),
+            )
+        if rng.random() < 0.6:
+            write(
+                heroic / "gog_store" / "installed.json",
+                rng.choice(
+                    [
+                        {
+                            "installed": [
+                                {"appName": "1207", "install_path": folder(games / "gog1")},
+                                {"install_path": folder(games / "gog2")},
+                                5,
+                                {
+                                    "appName": "9",
+                                    "install_path": folder(games / "gog1"),
+                                    "is_dlc": 1,
+                                },
+                            ]
+                        },
+                        {"installed": rng.choice([None, 5, "abc", {"a": 1}, []])},
+                        {},
+                        [1],
+                    ]
+                ),
+            )
+        if rng.random() < 0.6:
+            write(
+                heroic / "nile_config" / "nile" / "installed.json",
+                rng.choice(
+                    [
+                        [
+                            {"id": "amzn-1", "path": folder(games / "nile1")},
+                            {"path": folder(games / "nile2")},
+                            {"id": "none"},
+                            "x",
+                        ],
+                        {"id": 1},
+                    ]
+                ),
+            )
+        mine = base / "MyGames"
+        folder(mine / "Own Game", "run.EXE")
+        folder(mine / "Pack" / "Inner One", "a.sh")
+        folder(mine / "Pack" / "Inner Two")
+        folder(mine / "Pack" / ".cache")
+        (mine / "Pack" / "readme.txt").write_text("x")
+        folder(home, *(["start.sh"] if rng.random() < 0.3 else []))
+        folder(home / "Homegame")
+        named = rng.sample(
+            [
+                str(mine / "Own Game"),
+                str(mine / "Pack"),
+                f' "{mine / "Pack"}" ',
+                str(base / "missing"),
+                "",
+                5,
+                "$GAMES",
+                "${GAMES}/rl",
+                "~",
+                "~/Homegame",
+                str(games),
+            ],
+            rng.randrange(5),
+        )
+        ignore = rng.choice([[], [], ["inner one", " ROCKET LEAGUE "], ["celeste", 5, ""]])
+        now, steps = rng.uniform(0, 300), []
+        spots = [games / name for name in os.listdir(games)] if games.is_dir() else []
+        spots += [mine / "Own Game", mine / "Pack" / "Inner One", mine / "Pack", home, base]
+        for _ in range(rng.randrange(3, 25)):
+            now += rng.choice([0, 1, 60, 130])
+            if rng.random() < 0.3:
+                steps.append([now, "games"])
+            else:
+                spot = rng.choice(spots)
+                steps.append(
+                    [
+                        now,
+                        "match",
+                        rng.choice(
+                            [
+                                str(spot / "bin" / "x.exe"),
+                                str(spot),
+                                "",
+                                str(spot) + "x",
+                                str(spot / ".." / spot.name),
+                            ]
+                        ),
+                    ]
+                )
+        computers.append(
+            {
+                "windows": windows,
+                "home": str(home),
+                "env": env,
+                "registry": registry,
+                "drives": drives,
+                "named": json.dumps(named),
+                "ignore": json.dumps(ignore),
+                "launchers": rng.random() < 0.85,
+                "steps": steps,
+            }
+        )
+
+    [ours] = run([{"op": "launchers", "computers": computers}])
+    assert "computers" in ours, ours
+
+    def shown(game: Any) -> Any:
+        return game and [game.source, game.key, game.name, str(game.folder)]
+
+    seen = {
+        key: 0
+        for key in (
+            "epic",
+            "gog",
+            "ea",
+            "battlenet",
+            "rockstar",
+            "ubisoft",
+            "amazon",
+            "xbox",
+            "lutris",
+            "folder",
+            "odd",
+            "match",
+            "note",
+            "ignored",
+        )
+    }
+    for case, got in zip(computers, ours["computers"], strict=True):
+        for name in ("PROGRAMDATA", "LOCALAPPDATA", "APPDATA", "XDG_CONFIG_HOME", "XDG_DATA_HOME"):
+            monkeypatch.delenv(name, raising=False)
+        for name, value in case["env"].items():
+            monkeypatch.setenv(name, value)
+        monkeypatch.setattr(
+            launchers, "_drives", lambda case=case: [Path(d) for d in case["drives"]]
+        )
+
+        def read(case: Any = case) -> Any:
+            return launchers.launcher_games(
+                "win32" if case["windows"] else "linux", Path(case["home"]), _Keys(case["registry"])
+            )
+
+        try:
+            want: Any = [shown(game) for game in read()]
+            for game in want:
+                seen[game[0]] += 1
+        except Exception:  # noqa: BLE001 - whatever an odd list raises
+            want = "odd"
+            seen["odd"] += 1
+        assert got["read"] == want, case
+        clock = [0.0]
+        catalog = launchers.Catalog(json.loads(case["named"]), json.loads(case["ignore"]),
+                                    case["launchers"], lambda c=clock: c[0], read,
+                                    Path(case["home"]))  # fmt: skip
+        assert got["wanted"] == catalog.wanted
+        caplog.clear()
+        with caplog.at_level("INFO", logger="libre_panel.services.launchers"):
+            for (now, what, *more), found in zip(case["steps"], got["steps"], strict=True):
+                clock[0] = now
+                if what == "games":
+                    want = [shown(game) for game in catalog.games()]
+                    seen["folder"] += sum(game[0] == "folder" for game in want)
+                    seen["ignored"] += bool(json.loads(case["ignore"])) and len(want) > 0
+                else:
+                    want = shown(catalog.match(more[0]))
+                    seen["match"] += want is not None
+                assert found == want, (case, now, what, more)
+        assert got["notes"] == [record.getMessage() for record in caplog.records], case
+        seen["note"] += len(got["notes"])
+    assert all(count > 5 for count in seen.values()), seen
+
+
+def test_the_computers_programs_are_those_machine_py_names(tmp_path: Any) -> None:
+    """services/machine.py: the programs that run (their names, where they lie; a Windows
+    program under Wine by its process's name and the folder it works in; a name the kernel
+    cut), how long one has run, how long the system has been up; and whether the registry
+    says a program records."""
+    import os
+    import shutil
+    import subprocess
+    import sys
+    import time
+
+    from libre_panel.services import machine
+
+    spawned = [subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])]
+    special = {}
+    sleep = shutil.which("sleep")
+    if sys.platform.startswith("linux") and sleep:
+        for name in ("wine-preloader-x", "A-Very-Long-Program-Name.x86_64", "Short"):
+            copy = tmp_path / name
+            shutil.copy(sleep, copy)
+            work = tmp_path / f"work {name}"
+            work.mkdir()
+            spawned.append(subprocess.Popen([str(copy), "60"], cwd=work))
+            special[name] = spawned[-1].pid
+    key = machine.MICROPHONE_KEY
+    microphones = [
+        [],
+        [
+            ["HKCU", "own", key, {}, ["App_1", "NonPackaged"]],
+            ["HKCU", "own", f"{key}\\App_1", {"LastUsedTimeStart": 5, "LastUsedTimeStop": 9}, []],
+            ["HKCU", "own", f"{key}\\NonPackaged", {}, ["C:#x.exe", "C:#y.exe"]],
+            ["HKCU", "own", f"{key}\\NonPackaged\\C:#x.exe", {"LastUsedTimeStart": 5}, []],
+            [
+                "HKCU",
+                "own",
+                f"{key}\\NonPackaged\\C:#y.exe",
+                {"LastUsedTimeStart": 7, "LastUsedTimeStop": 0},
+                [],
+            ],
+        ],
+        [
+            ["HKCU", "own", key, {}, ["App_1", "App_2", "Gone"]],
+            ["HKCU", "own", f"{key}\\App_1", {"LastUsedTimeStart": 0, "LastUsedTimeStop": 0}, []],
+            ["HKCU", "own", f"{key}\\App_2", {"LastUsedTimeStart": 3, "LastUsedTimeStop": 0}, []],
+        ],
+        [
+            ["HKCU", "own", key, {}, ["NonPackaged", "App"]],
+            [
+                "HKCU",
+                "own",
+                f"{key}\\NonPackaged",
+                {"LastUsedTimeStart": 3, "LastUsedTimeStop": 0},
+                [],
+            ],
+            ["HKCU", "own", f"{key}\\App", {"LastUsedTimeStart": 3, "LastUsedTimeStop": 4}, []],
+        ],
+        [
+            ["HKLM", "own", key, {}, ["App"]],
+            ["HKLM", "own", f"{key}\\App", {"LastUsedTimeStart": 3, "LastUsedTimeStop": 0}, []],
+        ],
+    ]
+    try:
+        time.sleep(0.5)  # (the programs are there, under their own names)
+        pids = [os.getpid(), *(child.pid for child in spawned), 2**30]
+        [ours] = run([{"op": "machine", "pids": pids, "microphones": microphones}])
+        theirs = machine.Machine()
+        want = {program.pid: program for program in theirs.programs()}
+        running = [theirs.running_s(pid) for pid in pids]
+        uptime = theirs.uptime_s()
+    finally:
+        for child in spawned:
+            child.kill()
+            child.wait()
+    got = {pid: (name, path) for name, pid, path in ours["programs"]}
+    assert len(got) == len(ours["programs"]) and len(got) > 3
+    assert [pid for _, pid, _ in ours["programs"]] == sorted(got)
+    for pid in pids[:-1]:
+        assert got[pid] == (want[pid].name, want[pid].path), pid
+    # every program both saw is the same one (but the two that looked: each other's child)
+    same = [pid for pid in got if pid in want and got[pid] == (want[pid].name, want[pid].path)]
+    assert len(same) >= len(set(got) & set(want)) - 3, sorted(set(got) & set(want) - set(same))
+    if special:
+        work = str(tmp_path / "work wine-preloader-x")
+        assert got[special["wine-preloader-x"]] == ("wine-preloader-x", work)
+        long = "a-very-long-program-name.x86_64"
+        assert got[special[long.replace("a-very-long-p", "A-Very-Long-P")
+                           .replace("rogram-name", "rogram-Name")]][0] == long  # fmt: skip
+        assert got[special["Short"]] == ("short", str(tmp_path / "Short"))
+    for mine, other in zip(ours["running"], running, strict=True):
+        assert (mine is None) == (other is None)
+        assert mine is None or abs(mine - other) < 2.0, (mine, other)
+    assert ours["running"][-1] is None and ours["running"][1] < 30
+    assert abs(ours["uptime"] - uptime) < 3.0
+    assert ours["front"][0] == theirs.has_foreground
+    assert (ours["front"][1] is None) == (theirs.foreground_pid() is None)
+    assert ours["microphones"] == [machine.microphone_in_use_windows(_Keys(rows))
+                                   for rows in microphones]  # fmt: skip
+    assert ours["microphones"] == [False, True, True, False, False]
+
+
+def test_game_mode_follows_the_games_as_game_py_follows_them(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
+    """services/game.py: a game found by the list of programs, by Steam's library or by a
+    folder named (with a window in front once, where that can be told), kept for a while
+    after its program ended; the name, the logo and the time played it publishes, the mode
+    it switches to and back (waiting for a sample with the logo, with the entrance or a
+    message), and how long its worker sleeps."""
+    import hashlib
+    from types import SimpleNamespace
+
+    from fake_system import FakeMachine, make_library
+    from PIL import Image
+
+    from libre_panel import i18n
+    from libre_panel.sensors import presentmon
+    from libre_panel.sensors.base import Snapshot
+    from libre_panel.services import game
+    from libre_panel.services.machine import Program
+
+    root = make_library(tmp_path / "Steam", ("440", "Team Fortress 2", "Team Fortress 2"),
+                        ("620", "Portal 2", "Portal 2"), ("1", "Proton 9", "Proton 9"))  # fmt: skip
+    cache = root / "appcache" / "librarycache"
+    (cache / "440").mkdir(parents=True)
+    logo = Image.new("RGBA", (30, 12), (0, 0, 0, 0))
+    logo.paste((250, 180, 20, 255), (4, 2, 26, 10))
+    logo.save(cache / "440" / "logo.png")
+    mine = tmp_path / "MyGames"
+    (mine / "Celeste").mkdir(parents=True)
+    (mine / "Hades").mkdir()
+    common = root / "steamapps" / "common"
+    places = [("hl2.exe", common / "Team Fortress 2" / "hl2.exe"),
+              ("launcher.exe", common / "Team Fortress 2" / "bin" / "launcher.exe"),
+              ("portal2.exe", common / "Portal 2" / "portal2.exe"),
+              ("proton", common / "Proton 9" / "proton"),
+              ("celeste.exe", mine / "Celeste" / "Celeste.exe"),
+              ("hades", mine / "Hades" / "x64" / "Hades"),
+              ("game.exe", tmp_path / "elsewhere" / "game.exe"), ("tool.exe", ""),
+              ("notepad.exe", tmp_path / "Windows" / "notepad.exe")]  # fmt: skip
+    defaults = {name: default for name, (_, default) in game.Game.options.items()}
+
+    for language in ("en", "de"):
+        i18n.set_language(language)
+        try:
+            rng = random.Random(0x6A3E)
+            services = []
+            for _ in range(250):
+                options = defaults | {
+                    "programs": rng.choice([[], ["game.exe", "Tool.EXE = My Tool"],
+                                            ["tool.exe", 5, " = x", "hades=", "Portal2.exe"]]),
+                    "steam": rng.random() < 0.8,
+                    "steam_path": rng.choice([str(root)] * 5 + [str(tmp_path / "nowhere")]),
+                    "launchers": False,
+                    "folders": rng.choice([[], [str(mine)], [str(mine)]]),
+                    "ignore": rng.choice([[], [], ["portal 2"], ["celeste"]]),
+                    "automatic": rng.random() < 0.9, "force": rng.random() < 0.1,
+                    "entrance": rng.random() < 0.6, "logo": rng.random() < 0.8,
+                    "linger_s": rng.choice([6.0, 0, 2]), "poll_s": rng.choice([2.0, 0.1, 100]),
+                }  # fmt: skip
+                pids = {name: 100 + n for n, (name, _) in enumerate(places)}
+                now, steps = rng.uniform(0, 500), []
+                running: list[str] = []
+                for _ in range(rng.randrange(2, 50)):
+                    now += rng.choice([0.05, 0.3, 0.3, 0.7, 1.0, 1.5, 3.0, 8.0])
+                    what = rng.choice(
+                        ["detect"] * 5 + ["tick"] * 2 + ["advance"] * 2 + ["sample"] * 4
+                    )
+                    if what == "detect":
+                        if rng.random() < 0.4:
+                            running = rng.sample([name for name, _ in places], rng.randrange(5))
+                        if rng.random() < 0.1:
+                            pids[rng.choice(list(pids))] += 50  # (it started anew)
+                        rows = [[name, pids[name], str(dict(places)[name])] for name in running]
+                        front = rng.choice([0, 0, *(pids[name] for name in running)])
+                        ages = [[pids[name], rng.choice([12.5, 400.25, 0.0])]
+                                for name in running if rng.random() < 0.5]  # fmt: skip
+                        steps.append([now, what, rows, front, ages])
+                    elif what == "sample":
+                        steps.append([now, what, rng.random() < 0.6])
+                    else:
+                        steps.append([now, what])
+                services.append({"options": json.dumps(options), "home": str(tmp_path / "home"),
+                                 "has_foreground": rng.random() < 0.6, "windows": False,
+                                 "env": {}, "registry": [], "steps": steps})  # fmt: skip
+            [ours] = run([{"op": "game", "locale": str(i18n.LOCALE_DIR), "language": language,
+                           "services": services}])  # fmt: skip
+            assert "services" in ours, ours
+
+            monkeypatch.setenv("HOME", str(tmp_path / "home"))
+            monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))
+            seen = {key: 0 for key in ("logo", "entrance", "waited", "late", "told", "ended",
+                                       "gone", "listed", "steam", "folder", "forced", "other",
+                                       "report", "front")}  # fmt: skip
+            for case, got in zip(services, ours["services"], strict=True):
+                options = json.loads(case["options"])
+                clock = [0.0]
+                acts: list[list[Any]] = []
+                reports: list[str] = []
+
+                def pictured(image: Any) -> Any:
+                    return image and [*image.size, hashlib.sha256(image.tobytes()).hexdigest()]
+
+                def set_mode(mode: Any, transition: Any = None, acts: Any = acts) -> None:
+                    if transition is not None:
+                        params = dict(transition[1])
+                        if "logo" in params:
+                            params["logo"] = game.LOGO
+                        transition = [transition[0], json.dumps(params)]
+                    acts.append(["mode", mode, transition])
+
+                def notify(text: str, acts: Any = acts, **how: Any) -> None:
+                    acts.append(["tell", text, how["icon"], how.get("level", "info"),
+                                 how["seconds"], how["kind"], how["rank"], how["key"],
+                                 json.dumps(how["payload"])])  # fmt: skip
+
+                host = SimpleNamespace(
+                    log=SimpleNamespace(
+                        info=lambda text, *more, acts=acts: acts.append(["note", text % more]),
+                        warning=lambda _, text, reports=reports: reports.append(text)),
+                    publish=lambda key, value, unit, label, acts=acts: acts.append(
+                        ["publish", key, value, unit, label]),
+                    publish_image=lambda key, image, acts=acts: acts.append(
+                        ["logo", pictured(image)]),
+                    set_mode=set_mode, notify=notify, want=lambda *_: None, on=lambda *_: None,
+                )  # fmt: skip
+                monkeypatch.setattr(
+                    presentmon, "set_target", lambda exe, acts=acts: acts.append(["target", exe])
+                )
+                machine = FakeMachine(case["has_foreground"])
+                service = game.Game(host, options, machine=machine, clock=lambda c=clock: c[0])
+                assert got["reports"] == reports and got["poll"] == service.poll_s, options
+                seen["report"] += len(reports)
+                for (now, what, *more), found in zip(case["steps"], got["steps"], strict=True):
+                    clock[0] = now
+                    acts.clear()
+                    waiting = service.waiting is not None
+                    if what == "detect":
+                        rows, machine.front, ages = more
+                        machine.running = [Program(*row) for row in rows]
+                        machine.ages = dict(ages)
+                        service.detect()
+                        key = service.found.key if service.found else None
+                        if any(act[0] == "note" and act[1].startswith("game: ") for act in acts):
+                            seen[
+                                "forced"
+                                if key == ""
+                                else "steam"
+                                if key.startswith("steam:")
+                                else "folder"
+                                if key.startswith("folder:")
+                                else "listed"
+                            ] += 1
+                            seen["front"] += case["has_foreground"] and ":" in key
+                    elif what == "tick":
+                        service.tick()
+                    elif what == "advance":
+                        service.advance()
+                        seen["late"] += waiting and service.waiting is None
+                    else:
+                        images = {game.LOGO: "logo"} if more[0] else {}
+                        service.on_sample(Snapshot(images=images))
+                        seen["waited"] += waiting and service.waiting is None
+                    assert found["acts"] == acts, (options, case["steps"], now)
+                    due = now + 0.7
+                    wait = game.TICK_S if service.waiting is not None else max(0.01, due - now)
+                    if service.since is not None:
+                        wait = min(wait, max(0.01, 1.0 - (now - service.since) % 1.0))
+                    assert found["wait"] == wait, (options, now)
+                    assert found["status"] == json.dumps(service.status())
+                    for act in acts:
+                        seen["logo"] += act[0] == "logo" and act[1] is not None
+                        seen["entrance"] += act[0] == "mode" and act[2] is not None
+                        seen["told"] += act[0] == "tell"
+                        seen["ended"] += act == ["note", "game over"]
+                        seen["gone"] += act == ["note", "game gone before the mode began"]
+                        seen["other"] += act[0] == "target" and len(acts) == 1
+            assert all(count > 2 for count in seen.values()), seen
+        finally:
+            i18n.set_language("en")

@@ -1828,7 +1828,20 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       hold, the panel back from a restart; what is wrong with the options and the readings
       it asks for. 250 runs of looks compared with Python in two languages; in the app, the
       volume's message when it moves and a warning with the alarm
-- [ ] game mode, downloads, memory and its store, cooling, autopilot, devices
+- [x] game mode (services/game.py with machine.py, steam.py and launchers.py; lp-services'
+      game, machine, steam, launchers, registry and paths): the programs that run and the
+      window in front (as psutil names them; on Windows from the system's list of
+      processes), Steam's folder, libraries, games and logos, the games of Epic, GOG, EA,
+      Battle.net, Rockstar, Ubisoft, Amazon (its database through SQLite), Xbox, Heroic and
+      Lutris and of the folders named, the game found among them (the list of programs,
+      Steam, the others; a window in front once; kept while it lingers), its name, logo and
+      time played, the mode with its entrance or message, and PresentMon's and RTSS's
+      target. Paths are taken as os.path and pathlib take them (ntpath and posixpath on
+      every system). 9,000 paths, 1,500 texts of Steam's format with 120 libraries, 140
+      computers of launchers, this computer's programs against psutil and 250 services of
+      steps (two languages) compared with Python; in the app, a program from the list
+      starts and ends, and the panel follows it into `[modes.game]` and back
+- [ ] downloads, memory with its store and the round report, cooling, autopilot, devices
 
 ### R9 the app
 - [ ] the server and every route of its API, the same JSON

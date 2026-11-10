@@ -1662,3 +1662,83 @@ def test_notices_say_the_volume_and_a_sensor_past_its_limit(tmp_path: Path) -> N
     assert any(other > 500 for at, other in others if at > 9.3), others[-40:]
     if os.name != "nt":  # (ended at once on Windows: what it said last may be lost)
         assert "alarm: CPU 95 °C" in said, said
+
+
+@pytest.mark.skipif(os.name == "nt", reason="a stand-in game copied from the shell's sleep")
+def test_game_mode_comes_with_a_game_and_goes_with_it(tmp_path: Path) -> None:
+    """`game` among the services: a program from its list starts, and the panel shows the
+    theme of `[modes.game]`; some seconds after it ended, config.toml's theme is back."""
+    import shutil
+
+    sleep = shutil.which("sleep")
+    if sleep is None:
+        pytest.skip("no sleep to stand in for a game")
+    for name, colour in (("red", "#DC1E1E"), ("blue", "#1E1EDC")):
+        folder = tmp_path / "themes" / name
+        folder.mkdir(parents=True)
+        theme = {"format": "libre-panel-theme/1", "name": name.title(),
+                 "display": {"model": "turing-5", "orientation": "landscape", "width": 800,
+                             "height": 480},
+                 "palette": {"bg": colour}, "font": "builtin:Barlow-Medium",
+                 "background": {"color": "@bg", "image": None}, "refresh_ms": 200,
+                 "widgets": []}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+    (tmp_path / "config.toml").write_text(
+        'theme = "red"\nfps = 10\n[device]\ndriver = "virtual"\noutput = "panel.png"\n'
+        '[sensors]\nproviders = []\n[services]\nenabled = ["game"]\n'
+        '[services.game]\nprograms = ["MyGame.bin = My Game"]\nsteam = false\n'
+        "launchers = false\npoll_s = 0.3\nlinger_s = 1.0\nentrance = false\n"
+        '[transitions]\ndefault = "cut"\n[modes.game]\ntheme = "blue"\n',
+        encoding="utf-8",
+    )
+    stand_in = tmp_path / "MyGame.bin"
+    shutil.copy(sleep, stand_in)
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries()}  # fmt: skip
+    colours = {(220, 30, 30): "red", (30, 30, 220): "blue"}
+    seen: list[tuple[float, str]] = []
+
+    def look(began: float) -> str:
+        try:
+            with Image.open(tmp_path / "panel.png") as frame:
+                counted = frame.convert("RGB").getcolors(1 << 16) or []
+        except (OSError, SyntaxError, ValueError):
+            return ""  # (not there yet, or being put in its place)
+        most, colour = max(counted, default=(0, None))
+        whole = most > 0.9 * sum(count for count, _ in counted)
+        shown = colours.get(colour, "other") if whole else "other"
+        seen.append((time.monotonic() - began, shown))
+        return shown
+
+    def wait_for(colour: str, began: float, seconds: float) -> bool:
+        until = time.monotonic() + seconds
+        while time.monotonic() < until:
+            if look(began) == colour:
+                return True
+            time.sleep(0.05)
+        return False
+
+    with subprocess.Popen([str(_program()), "run"], env=env, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        began = time.monotonic()
+        game = None
+        try:
+            assert wait_for("red", began, 10), seen[-20:]
+            time.sleep(1.0)
+            assert look(began) == "red", seen[-20:]
+            game = subprocess.Popen([str(stand_in), "60"])
+            there = wait_for("blue", began, 10)
+            game.kill()
+            game.wait()
+            ended = time.monotonic()
+            back = there and wait_for("red", began, 10)
+            took = time.monotonic() - ended
+        finally:
+            if game is not None and game.poll() is None:
+                game.kill()
+            program.send_signal(signal.SIGINT)
+            said = program.communicate(timeout=30)[1]
+    assert "service 'game' started" in said, said
+    assert there, (seen[-20:], said)
+    assert back and took > 0.5, (took, seen[-20:], said)
+    assert "game: My Game" in said and "game over" in said, said

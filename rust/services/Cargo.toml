@@ -13,7 +13,28 @@ lp-render = { path = "../render" }
 lp-pixels = { path = "../pixels" }
 lp-i18n = { path = "../i18n" }
 lp-devices = { path = "../devices" }
+lp-decode = { path = "../decode" }
+lp-sensors = { path = "../sensors" }
 indexmap = "2"
 num-bigint = "0.4"
 sha2 = "0.10"
 getrandom = "0.2"
+# the databases of Amazon Games and Lutris (read only)
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+[target.'cfg(windows)'.dependencies]
+# the registry (the launchers' games, Steam's folder), the programs that run and the window
+# in front
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Wdk_System_SystemInformation",
+    "Win32_System_Registry",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Threading",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_SystemInformation",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
