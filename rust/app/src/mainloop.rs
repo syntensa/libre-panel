@@ -462,6 +462,7 @@ impl MainLoop {
                     // cheap sources follow on every frame, not only with the readings
                     let streams = self.panel.as_ref().is_some_and(|panel| panel.streams());
                     last.readings.extend(self.hub.fresh(streams));
+                    self.hub.refresh_images(&mut last.images, false, streams);
                 }
                 Snapshot { now, fold, ..last }
             }

@@ -487,6 +487,25 @@ pub fn upper(text: &str) -> String {
     out
 }
 
+mod titles;
+
+/// str.capitalize(): the first character in its title case (ß becomes Ss, ǆ becomes ǅ), the
+/// others in lower case.
+pub fn capitalize(text: &str) -> String {
+    let Some(first) = text.chars().next() else {
+        return String::new();
+    };
+    let alone = first.to_string();
+    let mut out = match titles::TITLES.binary_search_by_key(&u32::from(first), |&(from, _)| from) {
+        Ok(i) => titles::TITLES[i].1.to_string(),
+        Err(_) => upper(&alone),
+    };
+    // (the others as lower() makes them in the whole text: a last sigma is a final one)
+    let whole = lower(text);
+    out.push_str(whole.strip_prefix(lower(&alone).as_str()).unwrap_or(""));
+    out
+}
+
 #[path = "fold.rs"]
 mod fold;
 

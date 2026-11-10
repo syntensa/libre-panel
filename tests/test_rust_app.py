@@ -712,3 +712,66 @@ def test_a_games_frames_come_from_mangohuds_log_as_it_grows(tmp_path: Path) -> N
     assert ours["game.frametime"][:2] == ("10.00", "ms")  # (not the 999 ms logged before)
     assert ours["game.fps"] == ("100.00", "fps", "Frames per second")
     assert "mangohud: reading the log of Stray" in done.stderr
+
+
+@pytest.mark.skipif(os.name == "nt", reason="stand-in tools written for the shell")
+def test_what_plays_is_read_from_playerctl_or_else_from_busctl(tmp_path: Path) -> None:
+    """The media source is on without being named: what plays as playerctl says it, and where
+    that is not installed as busctl gives the players of the session's D-Bus (the one that
+    plays, not the one that is paused); read only while something shows media.*."""
+    from libre_panel.sensors import media
+
+    tools = tmp_path / "bin"
+    tools.mkdir()
+    line = "\x1f".join(["Playing", "Daft Punk", "Voyager", "Discovery", "61500000",
+                        "227000000", "", "spotify"])  # fmt: skip
+    (tools / "playerctl").write_text(
+        f'#!/bin/sh\n[ "$1" = "metadata" ] && printf \'%s\\n\' "{line}"\n', encoding="utf-8"
+    )
+    (tools / "playerctl").chmod(0o755)
+    (tmp_path / "config.toml").write_text('[sensors]\nproviders = ["nope"]\n', encoding="utf-8")
+
+    def listed(done: subprocess.CompletedProcess[str]) -> dict[str, tuple[str, str, str]]:
+        assert done.returncode == 0, done.stderr
+        return {line[:40].strip(): (line[41:55].strip(), line[56:61].strip(), line[62:])
+                for line in _lines(done) if line.startswith("media.")}  # fmt: skip
+
+    ours = listed(_run(tmp_path, "sensors", PATH=str(tools), LP_SENSORS_WANT="media.title"))
+    wanted = media.parse_playerctl(line + "\n", 0.0).readings(0.0)
+    assert list(ours) == sorted(wanted)
+    for key in ("media.title", "media.artist", "media.album", "media.source", "media.state",
+                "media.playing", "media.duration"):  # fmt: skip
+        r = wanted[key]
+        value = f"{r.value:.2f}" if isinstance(r.value, float) else str(r.value)
+        assert ours[key] == (value, r.unit, r.label), key
+    assert 61.5 < float(ours["media.position"][0]) < 66.0  # (it moved on since it was asked)
+    assert listed(_run(tmp_path, "sensors", PATH=str(tools))) == {}
+
+    def player(status: str, title: str) -> str:
+        properties = {
+            "PlaybackStatus": {"type": "s", "data": status},
+            "Position": {"type": "x", "data": 5_000_000},
+            "Metadata": {"type": "a{sv}", "data": {
+                "xesam:title": {"type": "s", "data": title},
+                "xesam:artist": {"type": "as", "data": ["Air", "Beck"]},
+                "mpris:length": {"type": "x", "data": 300_000_000},
+            }},
+        }  # fmt: skip
+        return json.dumps({"type": "a{sv}", "data": [properties]})
+
+    names = {"type": "as", "data": [["org.freedesktop.DBus", "org.mpris.MediaPlayer2.vlc",
+                                     "org.mpris.MediaPlayer2.firefox.instance_1"]]}  # fmt: skip
+    (tools / "playerctl").unlink()
+    (tools / "busctl").write_text(
+        "#!/bin/sh\n"
+        f"case \"$*\" in\n*ListNames*) printf '%s\\n' '{json.dumps(names)}';;\n"
+        f"*MediaPlayer2.vlc*) printf '%s\\n' '{player('Paused', 'Quiet')}';;\n"
+        f"*firefox*) printf '%s\\n' '{player('Playing', 'Loud')}';;\nesac\n",
+        encoding="utf-8",
+    )
+    (tools / "busctl").chmod(0o755)
+    ours = listed(_run(tmp_path, "sensors", PATH=str(tools), LP_SENSORS_WANT="media.title"))
+    assert ours["media.title"] == ("Loud", "", "Title")
+    assert ours["media.artist"] == ("Air, Beck", "", "Artist")
+    assert ours["media.source"] == ("Firefox", "", "Player")
+    assert ours["media.duration"] == ("300.00", "s", "Length")

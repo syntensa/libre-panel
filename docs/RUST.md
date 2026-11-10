@@ -1708,6 +1708,20 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       proxy, an answer of 400 and above an error with its status, the first bytes up to a
       limit. Through ureq and rustls (their licences go into the downloads' list of crates
       with R11). Run against a web server of the test's own; an https address by hand
+- [x] what is playing (sensors/media.py; lp-sensors' media and media_windows): title,
+      artist, album, player, state, position, length and the cover. On Linux from playerctl,
+      else from the session's D-Bus with busctl (the one that plays, else one paused); on
+      Windows from the system's media controls through WinRT (the `windows` crate), by their
+      events: a new session, track or playback looked at at once, a timeline event only for
+      a seek, a slow poll as the safety net, the cover read when the track changes (compiled
+      for Windows, not yet run there). A thread that runs while a theme reads media.*; read
+      on every frame, the position moving on with the frame's time; the cover from its
+      bytes, a file, a file:// or a web address made a picture of at most 512 pixels as
+      Pillow's thumbnail makes it, handed to the frame when it changes. Always on. 800
+      tracks, 1500 lines of playerctl, 1200 answers of busctl and 24 covers compared with
+      Python; the program run against stand-ins of both tools. Open: the player's icon
+      (media.app_icon, appicon.py), covers in formats lp-decode does not read (BMP)
+- [x] str.capitalize in lp-py (the first character's title case, Unicode 15.0)
 - [ ] HWiNFO, RTSS, the other sources; Linux's hint of what system-setup brings
 - [ ] the history as a ring, demo.py's values; the .NET service goes
 

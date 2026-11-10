@@ -53,6 +53,14 @@ pub trait Source {
     fn overrides(&self) -> &'static [&'static str] {
         &[]
     }
+    /// The pictures the source holds now, by their keys (an album's cover).
+    fn images(&self) -> IndexMap<String, lp_pixels::Image> {
+        IndexMap::new()
+    }
+    /// Which pictures `images` gives: 0 for none, else a number that changes with them.
+    fn images_state(&self) -> u64 {
+        0
+    }
 }
 
 /// The volume and the mute of the default output device, and the microphone's
@@ -205,6 +213,37 @@ impl Source for MangoHud {
     }
 }
 
+/// What is playing, and its cover (sensors/media.py).
+struct Media(lp_sensors::media::MediaSource);
+
+impl Source for Media {
+    fn name(&self) -> &'static str {
+        "media"
+    }
+
+    fn read(&mut self, out: &mut Readings) {
+        out.extend(self.0.read());
+    }
+
+    fn notes(&mut self) -> Vec<String> {
+        self.0.notes()
+    }
+
+    // News shows in the next frame (a new song, play or pause), and the position moves on
+    // at each frame's time: reading is a copy of the track the thread keeps.
+    fn every_frame(&self) -> Every {
+        Every::Frame
+    }
+
+    fn images(&self) -> IndexMap<String, lp_pixels::Image> {
+        self.0.images()
+    }
+
+    fn images_state(&self) -> u64 {
+        self.0.images_state()
+    }
+}
+
 /// The sun and the moon (sensors/sky.py).
 struct Sky(lp_sensors::sky::SkySource);
 
@@ -297,6 +336,8 @@ pub struct Hub {
     notes: Vec<String>,
     /// which source each key of the last snapshot came from
     owners: IndexMap<String, usize>,
+    /// each source's pictures as they were last taken: their state and their keys
+    pictures: Vec<(u64, Vec<String>)>,
 }
 
 impl Hub {
@@ -307,6 +348,43 @@ impl Hub {
             wanted: Wanted::default(),
             notes: Vec::new(),
             owners: IndexMap::new(),
+            pictures: Vec::new(),
+        }
+    }
+
+    /// The pictures of the sources laid into `images` where they changed since they were last
+    /// taken (a new cover with its new title, not a second later), and taken out where a
+    /// source has one no more. With `all` every source's, else those of the sources that
+    /// follow on every frame (without `video` not those that do so only in video mode).
+    pub fn refresh_images(
+        &mut self,
+        images: &mut IndexMap<String, lp_pixels::Image>,
+        all: bool,
+        video: bool,
+    ) {
+        self.pictures.resize(self.sources.len(), (0, Vec::new()));
+        for (n, source) in self.sources.iter().enumerate() {
+            let follows = match source.every_frame() {
+                Every::No => false,
+                Every::Video => video,
+                Every::Frame => true,
+            };
+            let state = source.images_state();
+            if !(all || follows) || state == self.pictures[n].0 {
+                continue;
+            }
+            for key in std::mem::take(&mut self.pictures[n].1) {
+                images.shift_remove(&key);
+            }
+            let found = if state == 0 {
+                IndexMap::new()
+            } else {
+                source.images()
+            };
+            self.pictures[n] = (state, found.keys().cloned().collect());
+            for (key, image) in found {
+                images.entry(key).or_insert(image);
+            }
         }
     }
 
@@ -437,6 +515,9 @@ impl Hub {
                     }
                     "hardware" => sources.push(Box::new(Hardware::of(config))),
                     "mangohud" => sources.push(Box::new(MangoHud::of(sensors, &wanted))),
+                    "media" => sources.push(Box::new(Media(lp_sensors::media::MediaSource::new(
+                        wanted.clone(),
+                    )))),
                     "sky" => {
                         let table = sensors.options.get(name);
                         let number = |key: &str| match table.and_then(|t| t.get(key)) {
@@ -449,6 +530,12 @@ impl Hub {
                     }
                     other => missing.push(other.to_string()),
                 }
+            }
+            if !sensors.providers.iter().any(|name| name == "media") {
+                // idle until a theme shows what is playing
+                sources.push(Box::new(Media(lp_sensors::media::MediaSource::new(
+                    wanted.clone(),
+                ))));
             }
             if !sensors.providers.iter().any(|name| name == "sky") {
                 // the sun for the weather's place (if set), the moon everywhere
@@ -507,6 +594,10 @@ impl Hub {
                 series.push_back(number);
             }
         }
+        // (every picture anew: the snapshot begins without any)
+        let mut images = IndexMap::new();
+        self.pictures.clear();
+        self.refresh_images(&mut images, true, true);
         Snapshot {
             history: self
                 .history
@@ -516,7 +607,7 @@ impl Hub {
             readings,
             now,
             fold,
-            images: IndexMap::new(),
+            images,
         }
     }
 }

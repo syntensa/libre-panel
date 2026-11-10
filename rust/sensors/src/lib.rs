@@ -13,6 +13,9 @@ pub mod lhm;
 pub mod linux;
 pub mod load;
 pub mod mangohud;
+pub mod media;
+#[cfg(windows)]
+pub mod media_windows;
 pub mod netlink;
 pub mod nvml;
 pub mod presentmon;

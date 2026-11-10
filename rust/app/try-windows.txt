@@ -47,8 +47,9 @@ What it does not do yet
   the memory, the sun and the moon) and what LibreHardwareMonitor reads through Libre
   Panel's sensor service (or its own web server): temperatures, power, fans, the graphics
   card; and a game's frame rate through PresentMon (tools\PresentMon.exe), which needs
-  administrator rights or the "Performance Log Users" group. Music, weather and the AI
-  activity are missing: their places stay empty. Which program is the game is not found
+  administrator rights or the "Performance Log Users" group; and what is playing, with
+  its cover, from Windows' media controls. Weather and the AI activity are missing: their
+  places stay empty. Which program is the game is not found
   yet: the one that shows the most frames counts.
 - One panel; no pages (game, music), no notices, no transitions between themes, no videos
   in themes, no app window and no tray icon.

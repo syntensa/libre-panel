@@ -1309,3 +1309,149 @@ def test_mangohuds_logs_are_found_and_read_as_python_reads_them(
             rounds.append([ms if math.isfinite(ms) else repr(ms) for ms in reader.frames()])
         assert got == {"app": reader.app, "rounds": rounds}, log["path"]
     assert sum(len(frames) for got in ours["logs"] for frames in got["rounds"]) > 500
+
+
+def test_what_plays_is_read_as_the_media_source_reads_it(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """sensors/media.py: a track's readings as time goes on, a player's name, what
+    playerctl's line and busctl's answer say plays, and a cover from its bytes, a file or
+    the web as the picture the source shows."""
+    import hashlib
+    import http.server
+    import io
+    import threading
+
+    from PIL import Image
+
+    from libre_panel.sensors import media
+
+    rng = random.Random(0x3ED1A)
+
+    def track_list(track: media.Track | None) -> list[Any] | None:
+        if track is None:
+            return None
+        return [track.state, track.title, track.artist, track.album, track.position,
+                track.duration, track.cover, track.source, track.at, track.app_id]  # fmt: skip
+
+    words = ["Song", "", "Ünï cödé", "a, b", "Daft Punk", "0", " ", "ǆungla", "ß", "x" * 40]
+    tracks = []
+    for _ in range(800):
+        track = [rng.choice(["playing", "paused", "stopped", "Playing", "", "ǆ"]),
+                 rng.choice(words), rng.choice(words), rng.choice(words),
+                 rng.choice([None, 0.0, 12.25, 200.0, 1e9, -3.0]),
+                 rng.choice([None, 0.0, 180.0, 200.0, 0.5]), rng.choice(words),
+                 rng.choice([0.0, 10.0, 99.5])]  # fmt: skip
+        tracks.append([track, rng.choice([0.0, 10.0, 11.5, 250.0, 5.0])])
+    names = ["Spotify.exe", "Microsoft.ZuneMusic_8wekyb3d8bbwe!App", "C:\\Apps\\foo.bar\\VLC.EXE",
+             "", "chrome", "com.squirrel.Teams.Teams", "a_b!c!d", "x.exe.exe", ".exe", "exe",
+             "MSEdge", "308046B0AF4A39CB", "ünï.EXE", "a\\b_c.d!e"]  # fmt: skip
+    fields = ["Playing", "Paused", "Stopped", "playing", "", "Artist", "Title", "Album", "0",
+              "183000000", "12345678", "-5", "1_000", "x", "file:///tmp/a.png", "spotify",
+              "firefox.instance_1_23", "9" * 30, " 42 ", "٣"]  # fmt: skip
+    playerctl = []
+    for _ in range(1500):
+        count = rng.choice([8, 8, 8, 8, 7, 9, 1])
+        line = "\x1f".join(rng.choice(fields) for _ in range(count))
+        playerctl.append(line + rng.choice(["", "\n", "\n\n", " "]))
+
+    def typed(value: Any) -> Any:
+        return {"type": rng.choice(["s", "x", "as", "v"]), "data": value}
+
+    def loose(value: Any) -> Any:
+        return rng.choice([value, typed(value), typed(typed(value))])
+
+    mpris = []
+    for _ in range(1200):
+        metadata = {}
+        for key in rng.sample(["xesam:title", "xesam:artist", "xesam:album", "mpris:length",
+                               "mpris:artUrl", "xesam:url"], rng.randrange(0, 7)):  # fmt: skip
+            metadata[key] = loose(rng.choice([
+                "Text", "", ["A", "", "B"], [], ["Solo"], 183000000, 0, 12.5, True, None,
+                {"type": "s"}, [1, None, "x", {"a": 1}], "file:///c.jpg", -7, 2**70,
+            ]))  # fmt: skip
+        properties = {}
+        if rng.random() < 0.9:
+            properties["Metadata"] = loose(rng.choice([metadata, metadata, metadata, "no", None]))
+        if rng.random() < 0.9:
+            properties["PlaybackStatus"] = loose(rng.choice(["Playing", "Paused", "Stopped", "",
+                                                             None, 5, "PLAYING"]))  # fmt: skip
+        if rng.random() < 0.8:
+            properties["Position"] = loose(rng.choice([0, 61500000, 1.5e6, True, "7", None, -1]))
+        reply = rng.choice([{"type": "a{sv}", "data": [properties]}] * 6 + [
+            {"data": []}, {"data": "text"}, {"data": [7]}, [properties], {"type": "x"}, None,
+            {"data": {"0": properties}},
+        ])  # fmt: skip
+        name = rng.choice(["spotify", "firefox.i1", "", "VLC.x.y", "σΑΣ.b"])
+        name = rng.choice(["org.mpris.MediaPlayer2." + name, "vlc"])
+        mpris.append([json.dumps(reply), name])
+
+    def picture(mode: str, size: tuple[int, int], kind: str) -> bytes:
+        image = Image.effect_noise(size, 60).convert(mode)
+        if mode in ("RGB", "RGBA"):
+            image = Image.merge(mode, [image.getchannel(0).rotate(90 * n).resize(size)
+                                       for n in range(len(mode))])  # fmt: skip
+        out = io.BytesIO()
+        image.save(out, kind)
+        return out.getvalue()
+
+    pictures = [picture("RGB", (800, 600), "JPEG"), picture("RGB", (2400, 1300), "JPEG"),
+                picture("RGBA", (100, 40), "PNG"), picture("L", (513, 512), "PNG"),
+                picture("P", (640, 640), "GIF"), picture("RGB", (1, 1), "PNG"),
+                picture("L", (3000, 20), "JPEG"), picture("RGB", (700, 512), "WEBP")]  # fmt: skip
+    files = []
+    for n, data in enumerate(pictures[:4]):
+        (tmp_path / f"cover {n}.img").write_bytes(data)
+        files.append(tmp_path / f"cover {n}.img")
+    (tmp_path / "big.img").write_bytes(pictures[0] + bytes(media.MAX_COVER))
+    (tmp_path / "broken.img").write_bytes(pictures[0][:300])
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802 - the handler's name for GET
+            body = pictures[2] if self.path == "/cover.png" else b""
+            self.send_response(200 if body else 404)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args: object) -> None:
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    web = f"http://127.0.0.1:{server.server_port}"
+    for name in ("NO_PROXY", "no_proxy"):  # (this computer's own server is asked directly)
+        monkeypatch.setenv(name, "127.0.0.1,localhost")
+    places = [str(files[0]), files[1].as_uri(), files[2].as_uri() + "?x=1#y", str(files[3]),
+              str(tmp_path / "big.img"), str(tmp_path / "broken.img"), str(tmp_path / "none.img"),
+              str(tmp_path), "", "file://", f"{web}/cover.png", f"{web}/nothing",
+              "http://127.0.0.1:1/x.png"]  # fmt: skip
+    covers: list[Any] = [*pictures, b"", b"not a picture", pictures[0][:500], *places]
+    try:
+        sent = [{"bytes": base64.b64encode(c).decode()} if isinstance(c, bytes) else {"place": c}
+                for c in covers]  # fmt: skip
+        [ours] = run([{"op": "media", "tracks": tracks, "names": names, "playerctl": playerctl,
+                       "mpris": mpris, "covers": sent}])  # fmt: skip
+        shown = []
+        for cover in covers:
+            image = media.load_cover(cover)
+            shown.append(None if image is None else
+                         [*image.size, hashlib.sha256(image.tobytes()).hexdigest()])  # fmt: skip
+            assert image is None or image.mode == "RGBA"
+    finally:
+        server.shutdown()
+    for (t, now), got in zip(tracks, ours["readings"], strict=True):
+        track = media.Track(t[0], t[1], t[2], t[3], t[4], t[5], None, t[6], t[7])
+        wanted = [[key, r.value, r.unit, r.label] for key, r in track.readings(now).items()]
+        assert got == wanted, (t, now)
+        for (_, value, *_), (_, said, *_) in zip(got, wanted, strict=True):
+            assert type(value) is type(said)
+    assert ours["names"] == [media._app_name(name) for name in names]
+    assert ours["playerctl"] == [track_list(media.parse_playerctl(t, 12.5)) for t in playerctl]
+    assert sum(1 for track in ours["playerctl"] if track) > 150
+    wanted = [track_list(media.parse_mpris(json.loads(reply), name, 12.5))
+              for reply, name in mpris]  # fmt: skip
+    assert ours["mpris"] == wanted
+    assert sum(1 for track in wanted if track) > 80
+    assert ours["covers"] == shown
+    assert sum(1 for cover in shown if cover) == 13  # (8 pictures, 4 files, 1 from the web)

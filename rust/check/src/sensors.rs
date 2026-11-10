@@ -880,6 +880,106 @@ fn mangohud(case: &Value) -> Result<Value, String> {
     Ok(json!({"configs": configs, "folders": folders, "names": names, "logs": logs}))
 }
 
+fn track_json(track: Option<lp_sensors::media::Track>) -> Value {
+    use lp_sensors::media::Cover;
+    match track {
+        None => Value::Null,
+        Some(t) => json!([
+            t.state,
+            t.title,
+            t.artist,
+            t.album,
+            t.position,
+            t.duration,
+            match t.cover {
+                Some(Cover::Place(place)) => json!(place),
+                _ => Value::Null,
+            },
+            t.source,
+            t.at,
+            t.app_id
+        ]),
+    }
+}
+
+/// media: each track's readings at a time, each player's name, what playerctl's and busctl's
+/// answers say plays, and each cover (a file or web address, or base64 of the picture) as
+/// the picture the source makes of it: its size and its bytes' SHA-256, null for none.
+fn media(case: &Value) -> Value {
+    use base64::engine::general_purpose::STANDARD;
+    use base64::Engine;
+    use lp_sensors::media as m;
+    use sha2::{Digest, Sha256};
+    let list = |key: &str| case[key].as_array().cloned().unwrap_or_default();
+    let text = |value: &Value| value.as_str().unwrap_or("").to_string();
+    let readings: Vec<Value> = list("tracks")
+        .iter()
+        .map(|one| {
+            let t = &one[0];
+            let track = m::Track {
+                state: text(&t[0]),
+                title: text(&t[1]),
+                artist: text(&t[2]),
+                album: text(&t[3]),
+                position: t[4].as_f64(),
+                duration: t[5].as_f64(),
+                cover: None,
+                source: text(&t[6]),
+                at: t[7].as_f64().unwrap_or(0.0),
+                app_id: String::new(),
+            };
+            let found = track.readings(one[1].as_f64().unwrap_or(0.0));
+            json!(found
+                .iter()
+                .map(|(key, r)| {
+                    let value = match &r.value {
+                        lp_py::Value::Float(f) => json!(f),
+                        lp_py::Value::Int(n) => json!(n.to_string().parse::<i64>().ok()),
+                        other => json!(other.str()),
+                    };
+                    json!([key, value, r.unit, r.label])
+                })
+                .collect::<Vec<_>>())
+        })
+        .collect();
+    let names: Vec<Value> = list("names")
+        .iter()
+        .map(|n| json!(m::app_name(&text(n))))
+        .collect();
+    let playerctl: Vec<Value> = list("playerctl")
+        .iter()
+        .map(|one| track_json(m::parse_playerctl(&text(one), 12.5)))
+        .collect();
+    let mpris: Vec<Value> = list("mpris")
+        .iter()
+        .map(|one| {
+            let reply = lp_py::json::loads(&text(&one[0])).ok();
+            track_json(reply.and_then(|reply| m::parse_mpris(&reply, &text(&one[1]), 12.5)))
+        })
+        .collect();
+    let covers: Vec<Value> = list("covers")
+        .iter()
+        .map(|one| {
+            let cover = match one["bytes"].as_str() {
+                Some(data) => m::Cover::Picture(std::sync::Arc::new(
+                    STANDARD.decode(data).unwrap_or_default(),
+                )),
+                None => m::Cover::Place(text(&one["place"])),
+            };
+            match m::load_cover(&cover) {
+                None => Value::Null,
+                Some(picture) => {
+                    let hash = Sha256::digest(picture.as_bytes());
+                    let hex: String = hash.iter().map(|byte| format!("{byte:02x}")).collect();
+                    json!([picture.width(), picture.height(), hex])
+                }
+            }
+        })
+        .collect();
+    json!({"readings": readings, "names": names, "playerctl": playerctl, "mpris": mpris,
+           "covers": covers})
+}
+
 pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "regex" => regex(case),
@@ -895,6 +995,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "hardware" => hardware(case),
         "sky" => sky(case)?,
         "mangohud" => mangohud(case)?,
+        "media" => media(case),
         "linux_source" => linux_source(case)?,
         _ => return Err(format!("no such op: {op}")),
     })
