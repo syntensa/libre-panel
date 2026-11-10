@@ -1737,7 +1737,14 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       datetime.fromisoformat does (dates, ISO weeks, times with and without colons,
       fractions, offsets). Compared with Python on made-up answers in four languages; the app
       asks a server of the test's own
-- [ ] HWiNFO, RTSS, the other sources; Linux's hint of what system-setup brings
+- [x] Home Assistant and JSON (sensors/homeassistant.py, sensors/json_source.py; lp-sensors'
+      homeassistant and jsonsource): the entities the patterns name with their numbers, texts
+      and numeric attributes, asked for with the token; addresses and files that hold JSON,
+      a field's path into the answer or every value three levels deep (100 at most), each
+      source in a thread of its own, the last values kept three rounds. Compared with Python
+      on 600 sets of states and 500 entries with their answers; the app asks a server of the
+      test's own. `~user` in a file's path is not looked up
+- [ ] HWiNFO, RTSS, MQTT, NUT, the calendar; Linux's hint of what system-setup brings
 - [ ] the history as a ring, demo.py's values; the .NET service goes
 
 ### R8 services

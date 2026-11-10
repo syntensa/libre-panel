@@ -1147,6 +1147,55 @@ fn weather(case: &Value) -> Result<Value, String> {
     Ok(json!({"urls": urls, "answers": answers, "iso": iso}))
 }
 
+/// web_sources: Home Assistant's readings of each [states, patterns], and for each [entry,
+/// answers] of the JSON source what the entry describes and the readings of each answer;
+/// {"error": ...} where Python raises.
+fn web_sources(case: &Value) -> Result<Value, String> {
+    use lp_sensors::{homeassistant, jsonsource};
+    let loads = |text: &Value| {
+        lp_py::json::loads(text.as_str().unwrap_or("")).map_err(|why| why.to_string())
+    };
+    let rows = |readings: Result<lp_sensors::lhm::Readings, String>| match readings {
+        Ok(readings) => json!(readings
+            .iter()
+            .map(|(key, r)| json!([key, plain(&r.value), r.unit, r.label]))
+            .collect::<Vec<_>>()),
+        Err(why) => json!({"error": why}),
+    };
+    let mut states = Vec::new();
+    for case in case["states"].as_array().into_iter().flatten() {
+        let patterns = strings(&case[1]);
+        states.push(match loads(&case[0])? {
+            lp_py::Value::List(list) => rows(homeassistant::readings_from_states(&list, &patterns)),
+            _ => return Err("states that are no list".into()),
+        });
+    }
+    let mut sources = Vec::new();
+    for case in case["json"].as_array().into_iter().flatten() {
+        let lp_py::Value::Dict(entry) = loads(&case[0])? else {
+            return Err("an entry that is no table".into());
+        };
+        sources.push(match jsonsource::Source::of(&entry) {
+            Err(why) => json!({"error": why}),
+            Ok(source) => {
+                let mut answers = Vec::new();
+                for answer in case[1].as_array().into_iter().flatten() {
+                    answers.push(rows(source.readings(&loads(answer)?)));
+                }
+                let pairs = |map: &indexmap::IndexMap<String, String>| -> Vec<Value> {
+                    map.iter().map(|(key, value)| json!([key, value])).collect()
+                };
+                json!({
+                    "name": source.name, "url": source.url, "file": source.file,
+                    "fields": pairs(&source.fields), "units": pairs(&source.units),
+                    "headers": pairs(&source.headers), "answers": answers,
+                })
+            }
+        });
+    }
+    Ok(json!({"states": states, "json": sources}))
+}
+
 pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "regex" => regex(case),
@@ -1162,6 +1211,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "hardware" => hardware(case),
         "sky" => sky(case)?,
         "weather" => weather(case)?,
+        "web_sources" => web_sources(case)?,
         "mangohud" => mangohud(case)?,
         "media" => media(case),
         "appicon" => appicon(case),

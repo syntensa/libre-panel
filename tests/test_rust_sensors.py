@@ -1816,3 +1816,122 @@ def test_the_weather_is_read_as_open_meteo_py_reads_it(language: str) -> None:
         else:
             assert got[1] * 10**6 + got[2] == at.utcoffset() // timedelta(microseconds=1), text
     assert valid > 500
+
+
+def _made_up_json(rng: random.Random, depth: int = 0) -> Any:
+    """A value as an address may answer it: tables and lists in one another, numbers, texts."""
+    kind = rng.random()
+    if depth < 5 and kind < 0.3:
+        keys = ["cpu", "temp", "a", "b", "c", "0", "1", "name", "My Value!", "größe", "", "__x__",
+                "a.b", "x" * 50, "items", "²", "list"]  # fmt: skip
+        if rng.random() < 0.03:
+            keys = [f"k{n}" for n in range(130)]
+            return {key: _made_up_json(rng, 5) for key in keys}
+        count = rng.randrange(0, 7)
+        return {key: _made_up_json(rng, depth + 1) for key in rng.sample(keys, count)}
+    if depth < 5 and kind < 0.5:
+        if rng.random() < 0.03:
+            return [_made_up_json(rng, 5) for _ in range(120)]
+        return [_made_up_json(rng, depth + 1) for _ in range(rng.randrange(0, 5))]
+    return rng.choice([True, False, None, 0, 7, -3, 2.5, 1e300, "text", "", "x" * 300, "21.5",
+                       rng.random(), rng.randrange(-1000, 1000), 2**70,
+                       10**400 if rng.random() < 0.05 else 1])  # fmt: skip
+
+
+def test_home_assistant_and_json_answers_are_read_as_python_reads_them() -> None:
+    """sensors/homeassistant.py and sensors/json_source.py: the entities a pattern names
+    with their numbers, texts and attributes; what an entry of `sources` describes or why it
+    is none, a field's path into an answer, and every value of an answer without fields, to
+    the limits; an error where Python raises."""
+    from libre_panel.sensors import homeassistant, json_source
+
+    rng = random.Random(0x4A50)
+    ids = ["sensor.living_room_temperature", "sensor.kitchen", "binary_sensor.door",
+           "climate.hall", "light.kitchen", "", None, 5, "Sensor.Upper"]  # fmt: skip
+    raw = ["21.5", "on", "unavailable", " Unknown ", "NONE", "", None, True, False, 5, 2.5,
+           10**400, -(10**400), "1_000", "٣", [1], {"a": 1}, "1e400", " 7 ", "nan"]  # fmt: skip
+    pattern_sets = [["sensor.*", "binary_sensor.*"], ["*"], ["climate.*", "light.kitchen"],
+                    ["sensor.[lk]*"], [], ["*.kitchen"], ["[!s]*"]]  # fmt: skip
+    cases = []
+    for _ in range(600):
+        states: list[Any] = []
+        for _ in range(rng.randrange(0, 8)):
+            state: dict[str, Any] = {"state": rng.choice(raw)}
+            if rng.random() < 0.95:
+                state["entity_id"] = rng.choice(ids)
+            attributes: Any = {}
+            names = ["friendly_name", "unit_of_measurement", "icon", "min_temp", "brightness",
+                     "current_temperature", "device_class", "mode", "list", "flag"]  # fmt: skip
+            for key in rng.sample(names, rng.randrange(0, 6)):
+                attributes[key] = rng.choice(["Living room", "°C", "", None, 5, 21.5, True,
+                                              10**400, [1, 2], {"a": 1}, "heat"])  # fmt: skip
+            if rng.random() < 0.9:
+                state["attributes"] = attributes
+            if rng.random() < 0.03:
+                state["attributes"] = rng.choice([None, [], [1], "text", 0, 5])
+            states.append(state if rng.random() < 0.985 else rng.choice([None, "x", [1], 5]))
+        cases.append((states, rng.choice(pattern_sets)))
+
+    paths = ["cpu", "a.b", "a.b[0].c", "a.b.0.c", "list[2]", "[0]", "a..b", "items[²]", "items.²",
+             "items.٣", "list[٣]", "0", "list.1.name", "a[0][1]", "", ".", "a[x]", "a[1", "a.-1",
+             "temp.0", "name", "c[12345678901234567890]"]  # fmt: skip
+    sources = []
+    for _ in range(500):
+        entry: dict[str, Any] = {}
+        for key, values in {
+            "name": ["nas", "My NAS!", "", None, 5, "é" * 50, "__", "a" * 60, 2.5, True],
+            "url": ["http://nas.local/api", "ftp://nas", " https://y/z ", "", None, 5, "HTTP://X"],
+            "file": ["/tmp/values.json", "", " ~/v.json ", None, 7],
+            "fields": [{}, None, [1], "x", {"cpu": rng.choice(paths), "My Temp!": rng.choice(paths),
+                                           "n": 5, "t": True, "l": [1, "a"], "f": 2.50,
+                                           "same!": "a", "same?": rng.choice(paths)}],
+            "units": [{}, None, {"cpu": "%", "My Temp!": "°C", "n": 5, "0": "W", "a": None}, [2]],
+            "headers": [{}, None, {"Authorization": "Bearer x", "X-N": 5, "x": None}, "h"],
+        }.items():  # fmt: skip
+            if rng.random() < 0.8:
+                entry[key] = rng.choice(values)
+        sources.append((entry, [_made_up_json(rng, rng.choice([0, 0, 4])) for _ in range(6)]))
+
+    [ours] = run([{"op": "web_sources",
+                   "states": [[json.dumps(states), patterns] for states, patterns in cases],
+                   "json": [[json.dumps(entry), [json.dumps(answer) for answer in answers]]
+                            for entry, answers in sources]}])  # fmt: skip
+
+    def rows(readings: dict[str, Any]) -> list[list[Any]]:
+        return [[key, {"float": repr(r.value)} if isinstance(r.value, float) else r.value,
+                 r.unit, r.label] for key, r in readings.items()]  # fmt: skip
+
+    def tried(make: Any) -> Any:
+        try:
+            return rows(make())
+        except Exception:  # noqa: BLE001 - whatever Python raises, Rust says an error
+            return "error"
+
+    def said(got: Any) -> Any:
+        return "error" if isinstance(got, dict) and "error" in got else got
+
+    seen = {"error": 0, "readings": 0, "attribute": 0, "no source": 0, "limit": 0}
+    for (states, patterns), got in zip(cases, ours["states"], strict=True):
+        want = tried(lambda s=states, p=patterns: homeassistant.readings_from_states(s, p))
+        assert said(got) == want, (states, patterns)
+        seen["error" if want == "error" else "readings"] += 1
+        seen["attribute"] += want != "error" and any(row[0].count(".") > 2 for row in want)
+    for (entry, answers), got in zip(sources, ours["json"], strict=True):
+        try:
+            source = json_source.Source(entry)
+        except ValueError as exc:
+            assert got == {"error": str(exc)}, entry
+            seen["no source"] += 1
+            continue
+        assert "error" not in got, (entry, got)
+        described = (source.name, source.url, source.file, [list(p) for p in source.fields.items()],
+                     [list(p) for p in source.units.items()],
+                     [list(p) for p in source.headers.items()])  # fmt: skip
+        assert (got["name"], got["url"], got["file"], got["fields"], got["units"],
+                got["headers"]) == described, entry  # fmt: skip
+        for answer, read in zip(answers, got["answers"], strict=True):
+            want = tried(lambda a=answer, s=source: s.readings(a))
+            assert said(read) == want, (entry, answer)
+            seen["error" if want == "error" else "readings"] += 1
+            seen["limit"] += want != "error" and len(want) == json_source.MAX_VALUES
+    assert all(count > 5 for count in seen.values()), seen

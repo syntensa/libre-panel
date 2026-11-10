@@ -913,3 +913,108 @@ def test_the_weather_comes_from_the_forecast_of_the_place(tmp_path: Path) -> Non
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_home_assistant_and_json_sources_are_asked_and_read(tmp_path: Path) -> None:
+    """`homeassistant` and `json` among the sources: Home Assistant's states are asked for
+    with the token, each JSON source at its address (with its headers) or in its file; the
+    readings are those sensors/homeassistant.py and sensors/json_source.py make of the
+    answers, and a source that cannot be is said."""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    from libre_panel.sensors import homeassistant, json_source
+
+    states = [
+        {"entity_id": "sensor.living_room", "state": "21.5",
+         "attributes": {"friendly_name": "Living room", "unit_of_measurement": "°C"}},
+        {"entity_id": "binary_sensor.door", "state": "on", "attributes": {}},
+        {"entity_id": "climate.hall", "state": "heat",
+         "attributes": {"friendly_name": "Hall", "current_temperature": 19.5, "min_temp": 7,
+                        "preset": "eco"}},
+        {"entity_id": "light.kitchen", "state": "off", "attributes": {"brightness": 0}},
+    ]  # fmt: skip
+    nas = {"cpu": {"total": 12.5, "cores": [1, 2]}, "sensors": [{"value": 1}, {"value": 48}],
+           "host": "nas", "up": True}  # fmt: skip
+    values = {"power": 230, "note": "fine", "deep": {"a": {"b": {"c": 1}}}}
+    asked: list[tuple[str, str, str]] = []
+
+    class Answers(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            headers = self.headers
+            asked.append((self.path, headers.get("Authorization", ""), headers.get("X-Key", "")))
+            body = json.dumps(states if self.path == "/api/states" else nas).encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args: Any) -> None:
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Answers)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        base = f"http://127.0.0.1:{server.server_address[1]}"
+        file = tmp_path / "values.json"
+        file.write_bytes(b"\xef\xbb\xbf" + json.dumps(values).encode())
+        entries = [
+            {"name": "nas", "url": f"{base}/nas", "headers": {"X-Key": "abc"},
+             "fields": {"cpu": "cpu.total", "temp": "sensors[1].value", "host": "host",
+                        "gone": "nothing.here"},
+             "units": {"cpu": "%", "temp": "°C", "host": "?"}},
+            {"name": "My file", "file": file.as_posix()},
+            {"name": "bad", "url": "ftp://nope"},
+        ]  # fmt: skip
+
+        def toml(value: Any) -> str:
+            if isinstance(value, str):
+                return json.dumps(value)
+            return (
+                "{ "
+                + ", ".join(f"{json.dumps(k)} = {json.dumps(v)}" for k, v in value.items())
+                + " }"
+            )
+
+        tables = "".join(
+            "[[sensors.json.sources]]\n"
+            + "".join(f"{key} = {toml(value)}\n" for key, value in entry.items())
+            for entry in entries
+        )
+        (tmp_path / "config.toml").write_text(
+            '[sensors]\nproviders = ["homeassistant", "json"]\n'
+            f'[sensors.homeassistant]\nurl = "{base}/"\ntoken = "secret-token"\n'
+            'entities = ["sensor.*", "climate.*"]\n'
+            f"[sensors.json]\nupdate_s = 5\n{tables}",
+            encoding="utf-8",
+        )
+        done = _run(tmp_path, "sensors", NO_PROXY="127.0.0.1", no_proxy="127.0.0.1")
+        assert done.returncode == 0, done.stderr
+        assert sorted(set(asked)) == [("/api/states", "Bearer secret-token", ""),
+                                      ("/nas", "", "abc")]  # fmt: skip
+        wanted = homeassistant.readings_from_states(states, ["sensor.*", "climate.*"])
+        for entry, data in zip(entries[:2], (nas, values), strict=True):
+            wanted.update(json_source.Source(entry).readings(data))
+        listed = [line for line in done.stdout.splitlines() if line.startswith(("ha.", "json."))]
+        ours = {line[:40].strip(): line[41:] for line in listed}
+        assert sorted(ours) == sorted(wanted) and len(ours) == 9
+        for key, rest in ours.items():  # (the value, its unit, its label)
+            reading = wanted[key]
+            value = reading.value
+            text = f"{value:.2f}" if isinstance(value, float) else str(value)
+            assert rest.lstrip().startswith(text), key
+            assert rest.endswith(f" {reading.unit:<5} {reading.label}"), key
+        assert "json: json source 'bad': the url must start with http://" in done.stderr
+
+        (tmp_path / "config.toml").write_text(
+            '[sensors]\nproviders = ["homeassistant", "json"]\n'
+            '[sensors.homeassistant]\npoll_seconds = "often"\n[sensors.json]\nsources = [5]\n',
+            encoding="utf-8",
+        )
+        done = _run(tmp_path, "sensors", NO_PROXY="127.0.0.1", no_proxy="127.0.0.1")
+        assert done.returncode == 0, done.stderr
+        assert "ha." not in done.stdout and "json." not in done.stdout
+        assert 'sensor source "homeassistant" not started' in done.stderr
+        assert "json: sources[1] is no table, left out" in done.stderr
+    finally:
+        server.shutdown()
+        server.server_close()

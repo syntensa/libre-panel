@@ -265,6 +265,137 @@ impl Source for Weather {
     }
 }
 
+/// What the program names itself to the servers it asks.
+const AGENT: &str = concat!("libre-panel/", env!("CARGO_PKG_VERSION"));
+
+/// A value of config.toml as Python has it (dates and times as their texts).
+fn value_of(toml: &Toml) -> lp_py::Value {
+    use lp_py::Value;
+    let clock = |time: &lp_py::toml::Time| {
+        let mut text = format!("{:02}:{:02}:{:02}", time.hour, time.minute, time.second);
+        if time.microsecond != 0 {
+            text.push_str(&format!(".{:06}", time.microsecond));
+        }
+        text
+    };
+    let day =
+        |date: &lp_py::toml::Date| format!("{:04}-{:02}-{:02}", date.year, date.month, date.day);
+    match toml {
+        Toml::Bool(on) => Value::Bool(*on),
+        Toml::Int(n) => Value::Int(n.clone()),
+        Toml::Float(f) => Value::Float(*f),
+        Toml::Str(text) => Value::Str(text.clone()),
+        Toml::Array(list) => Value::List(list.iter().map(value_of).collect()),
+        Toml::Table(table) => Value::Dict(
+            table
+                .iter()
+                .map(|(key, value)| (key.clone(), value_of(value)))
+                .collect(),
+        ),
+        Toml::Date(date) => Value::Str(day(date)),
+        Toml::Time(time) => Value::Str(clock(time)),
+        Toml::DateTime(date, time, offset) => {
+            let mut text = format!("{} {}", day(date), clock(time));
+            if let Some(minutes) = offset {
+                let sign = if *minutes < 0 { '-' } else { '+' };
+                let minutes = minutes.abs();
+                text.push_str(&format!("{sign}{:02}:{:02}", minutes / 60, minutes % 60));
+            }
+            Value::Str(text)
+        }
+    }
+}
+
+/// `float(table.get(key, fallback))`; why it is no number.
+fn seconds_of(table: Option<&Table>, key: &str, fallback: f64) -> Result<f64, String> {
+    let number = match table.and_then(|table| table.get(key)) {
+        None => Some(fallback),
+        Some(Toml::Float(f)) => Some(*f),
+        Some(Toml::Int(n)) => lp_py::num::int_to_float(n).ok(),
+        Some(Toml::Bool(on)) => Some(f64::from(u8::from(*on))),
+        Some(Toml::Str(text)) => lp_py::float_of_str(text),
+        Some(_) => None,
+    };
+    number.ok_or_else(|| format!("{key} is no number"))
+}
+
+/// Home Assistant's entities (sensors/homeassistant.py).
+struct HomeAssistant(lp_sensors::homeassistant::HomeAssistantSource);
+
+impl Source for HomeAssistant {
+    fn name(&self) -> &'static str {
+        "homeassistant"
+    }
+
+    fn read(&mut self, out: &mut Readings) {
+        out.extend(self.0.read());
+    }
+
+    fn notes(&mut self) -> Vec<String> {
+        self.0.notes()
+    }
+
+    fn wait_ready(&mut self, seconds: f64) {
+        self.0.wait_ready(seconds);
+    }
+}
+
+/// Values from addresses and files that hold JSON (sensors/json_source.py).
+struct Json(lp_sensors::jsonsource::JsonSource);
+
+impl Source for Json {
+    fn name(&self) -> &'static str {
+        "json"
+    }
+
+    fn read(&mut self, out: &mut Readings) {
+        out.extend(self.0.read());
+    }
+
+    fn notes(&mut self) -> Vec<String> {
+        self.0.notes()
+    }
+
+    fn wait_ready(&mut self, seconds: f64) {
+        self.0.wait_ready(seconds);
+    }
+}
+
+/// The source `name` (homeassistant, json) as its table of config.toml sets it up; why it
+/// could not be.
+fn web_source(name: &str, table: Option<&Table>) -> Result<Box<dyn Source>, String> {
+    let get = |key: &str| table.and_then(|table| table.get(key));
+    if name == "json" {
+        let every = seconds_of(table, "update_s", 30.0)?;
+        let entries = match get("sources") {
+            Some(Toml::Array(list)) => list.iter().map(value_of).collect(),
+            Some(Toml::Table(keys)) => keys.keys().cloned().map(lp_py::Value::Str).collect(),
+            _ => Vec::new(),
+        };
+        let source = lp_sensors::jsonsource::JsonSource::new(&entries, every, AGENT);
+        return Ok(Box::new(Json(source)));
+    }
+    let mut options = lp_sensors::homeassistant::Options::default();
+    if let Some(url) = get("url") {
+        options.url = value_of(url).str();
+    }
+    if let Some(token) = get("token") {
+        options.token = value_of(token).str();
+    }
+    match get("entities") {
+        None => {}
+        Some(Toml::Str(one)) => options.entities = vec![one.clone()],
+        Some(Toml::Array(list)) => {
+            options.entities = list.iter().map(|entity| value_of(entity).str()).collect();
+        }
+        Some(Toml::Table(keys)) => options.entities = keys.keys().cloned().collect(),
+        Some(_) => return Err("entities is no list".into()),
+    }
+    options.poll_seconds = seconds_of(table, "poll_seconds", 10.0)?;
+    let source = lp_sensors::homeassistant::HomeAssistantSource::new(options, AGENT);
+    Ok(Box::new(HomeAssistant(source)))
+}
+
 /// The sun and the moon (sensors/sky.py).
 struct Sky(lp_sensors::sky::SkySource);
 
@@ -535,6 +666,16 @@ impl Hub {
                         notes.extend(said);
                     }
                     "hardware" => sources.push(Box::new(Hardware::of(config))),
+                    "homeassistant" | "json" => {
+                        let table = sensors.options.get(name);
+                        match web_source(name, table) {
+                            Ok(source) => sources.push(source),
+                            // (a misconfigured source must not stop the panel)
+                            Err(why) => {
+                                notes.push(format!("sensor source {name:?} not started: {why}"));
+                            }
+                        }
+                    }
                     "mangohud" => sources.push(Box::new(MangoHud::of(sensors, &wanted))),
                     "media" => sources.push(Box::new(Media(lp_sensors::media::MediaSource::new(
                         wanted.clone(),
@@ -566,7 +707,7 @@ impl Hub {
                     longitude,
                     config.weather.units == "imperial",
                     u64::try_from(&config.weather.update_minutes).unwrap_or(5),
-                    concat!("libre-panel/", env!("CARGO_PKG_VERSION")),
+                    AGENT,
                 ))));
             }
             if !sensors.providers.iter().any(|name| name == "media") {
