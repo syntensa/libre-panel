@@ -12,6 +12,7 @@ import struct
 import sys
 from typing import Any
 
+import pytest
 from rust_check import run
 
 from libre_panel.sensors import hwnames, lhm_service
@@ -957,6 +958,7 @@ class _MadeUpNvml:
         return self._number(handle, "clock" if clock == 0 else "memory_clock", ref)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="folders laid out as Linux names them")
 def test_a_linux_pcs_sensors_are_read_as_the_linux_source_reads_them(tmp_path: Any) -> None:
     """sensors/linux.py with hwmon.py, rapl.py, gpus.py and nvml.py: machines laid out in
     folders (chips, thermal zones, energy counters, graphics cards, NVIDIA's library as a
