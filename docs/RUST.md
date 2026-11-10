@@ -1921,8 +1921,15 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       copy's `data`, the user's own folder on each system; the user's themes, the log), the
       panel's brightness by the time of day (night_now, brightness_now) and the screens in
       turn on the clock (sequence.py's position and Rotation)
-- [ ] config.toml written (the commented default, a setting changed in place); the panel a
-      config is for
+- [x] config.toml written (lp-config's edit: config.py's edit_config, set_active_theme,
+      set_brightness, the commented default; lp-config's scenes: scenes.py): a setting set in
+      place or under its commented line, taken out, arrays of tables replaced with the
+      comments above their blocks, the settings that are no more taken along; the new text
+      has to read as what was asked for and load as a configuration, else nothing is written
+      ("please edit it by hand"); one write at a time, through a file beside it. Scenes put
+      on, the next one, kept and taken out. 800 files of many layouts with their steps
+      compared with Python: what each step gives or its error, and the file's bytes
+- [ ] the panel a config is for
       (theme/defaults.py's panel_model: the configured model, the one a display reports, a
       TURZX panel on the USB bus) and the theme of its normal page
 - [ ] community themes as one file (theme/share.py): the zip read as Python's zipfile reads it

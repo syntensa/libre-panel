@@ -329,3 +329,209 @@ def test_configs_on_each_platform_and_in_each_language(
             mine["error"]["msg"] = theirs["error"]["msg"] = ""  # (the system's own words)
         assert mine == theirs, path.name
     assert "ok" in loaded[0][0] and loaded[0][0]["ok"][1][-2][1] is not None  # (its stamp)
+
+
+EDITED = """\
+# my panel
+theme = "terra"   # the look
+fps = 5
+light_mode = true
+
+[device]
+driver = "virtual"
+  brightness = 80 # indented
+output = "panel.png"
+
+[weather]
+# units = "metric" or "imperial"
+location = "Berlin # not a comment"
+update_minutes = 15
+
+[services]
+enabled = [
+  "game",   # in the array ] [
+  "timer",
+]
+
+[services.game]
+theme = "arena"
+
+[services.agents]
+cloud = "x"
+
+[[scenes]]
+name = "Work"
+themes = ["terra", ""]
+
+# about Film
+# (two lines)
+[[scenes]]
+name = "Film"
+themes = ["lumen"]
+
+[hotkeys]
+pause = "Ctrl+Alt+P"
+"""
+EDITED_OTHERS = [
+    "",
+    "theme = 'terra'",
+    'theme = """\nterra"""\nfps = 5\n',
+    "device.brightness = 50\n",
+    '"theme" = "terra"\n',
+    'scenes = [{ name = "A", themes = ["terra"] }]\nscene = "A"\n',
+    "[device]\nbrightness = 50\n[weather]\n",
+    "[ device ] # the panel\nbrightness = 50\n\n\n[[panels]]\ntheme = 'lumen'\n# last\n",
+    "theme = 'ü'\n# ö\n[[scenes]]\nname = 'ä'\nthemes = []\n[weather]\nunits = 'metric'\n",
+    "[[scenes]]\nname = 'A'\nthemes = ['terra']\n[sequence]\non = true\n"
+    "[[sequence.steps]]\ntheme = 'terra'\nseconds = 30\n",
+    "fps = \n",
+    "device.brightness = 50\ntheme = 'terra'\n",
+    '"fps" = 5\n"theme" = "terra"\n[weather]\n"units" = "metric"\n',
+    "services = { enabled = ['game'] }\n",
+    "theme = 'terra'\n[[services.autopilot.rules]]\nwhen = 'game'\ntheme = 'arena'\n"
+    "[services.autopilot]\nevery_s = 2\n",
+]
+
+
+def _edit_step(rng: random.Random) -> list[Any]:
+    scenes = rng.choice([
+        [], [{"name": "A", "themes": ["terra"]}],
+        [{"name": "A", "themes": ["terra", ""]}, {"name": "B c", "themes": []}],
+        [{"name": "A", "themes": ["terra"]}, {"name": "A", "themes": []}],
+    ])  # fmt: skip
+    rules = rng.choice([[], [{"when": "game", "theme": "arena", "n": 2, "on": True,
+                              "for": {"a b": [1.5, "x"]}}]])  # fmt: skip
+    edits = [
+        [["value", "theme", rng.choice(["terra", "lumen", "a # b", 'q"uote\\', "ü\x7f", 5])]],
+        [["value", "fps", rng.choice([1, 5, 30, 99, 2.5, True])]],
+        [["value", "device.brightness", rng.choice([0, 55, 100, 101])]],
+        [["value", "services.enabled", rng.choice([[], ["game"], ["timer", "game"], [1]])]],
+        [["value", "services.game.theme", "arena"], ["value", "theme", "terra"]],
+        [["value", "weather.units", rng.choice(["metric", "imperial", "x"])]],
+        [["value", "weather.update_minutes", 30], ["unset", "weather.location"]],
+        [["unset", rng.choice(["theme", "fps", "device.brightness", "weather.units", "scene",
+                               "services.enabled", "nothing.here", "hotkeys.pause"])]],
+        [["tables", "scenes", scenes]],
+        [["tables", "scenes", scenes], ["value", "scene", "A"]],
+        [["tables", "services.autopilot.rules", rules]],
+        [["tables", "panels", rng.choice([[], [{"theme": "lumen"}]])], ["value", "fps", 7]],
+        [["value", "theme.x", 1]],
+        [["value", "hotkeys.pause", rng.choice(["Ctrl+Alt+P", "p", "Ctrl+Alt+O"])]],
+        [["value", "device.x", {"a": 1, "b c": {}}]],
+    ]  # fmt: skip
+    others = [
+        ["theme", rng.choice(["lumen", "terra", ""])],
+        ["brightness", rng.choice([0, 40, 100, 300])],
+        ["state"], ["put_on", rng.choice(["A", "Work", "Film", "", "nope"])], ["next"],
+        ["save", rng.choice(["New  one", "A", "", " x" * 30, "Work"])],
+        ["delete", rng.choice(["A", "Work", "nope"])],
+    ]  # fmt: skip
+    return ["edit", rng.choice(edits)] if rng.random() < 0.6 else rng.choice(others)
+
+
+def _edit_text(rng: random.Random) -> str | None:
+    roll = rng.random()
+    if roll < 0.08:
+        return None  # (no file yet: the default one is written first)
+    if roll < 0.25:
+        return config.default_config_toml()
+    if roll < 0.5:
+        return rng.choice(EDITED_OTHERS)
+    lines = EDITED.split("\n")
+    for _ in range(rng.randrange(4)):
+        at = rng.randrange(len(lines))
+        kind = rng.randrange(5)
+        if kind == 0:
+            del lines[at]
+        elif kind == 1:
+            lines.insert(at, rng.choice(["", "# fps = 30", "   ", "#theme = 'x'", "[colors]"]))
+        elif kind == 2:
+            lines[at] = "\t" + lines[at]
+        elif kind == 3:
+            lines[at] = lines[at] + rng.choice(["  # why", " ", "\t"])
+        else:
+            lines[at], lines[at - 1] = lines[at - 1], lines[at]
+    text = "\n".join(lines)
+    return text.rstrip("\n") if rng.random() < 0.1 else text
+
+
+def test_config_toml_is_changed_as_config_py_changes_it(tmp_path: Path) -> None:
+    """config.py's edit_config, set_active_theme and set_brightness and scenes.py: a setting
+    set or taken out, arrays of tables replaced, scenes put on, kept and taken out, in files
+    of many layouts (the default one, indented keys, comments, values over several lines,
+    settings that are no more, layouts that are refused): what each step gives or its error,
+    and the file's bytes after it."""
+    from libre_panel import scenes
+
+    rng = random.Random(0xED17)
+
+    def taken(step: list[Any], path: Path) -> Any:
+        kind = step[0]
+        if kind == "edit":
+            changes = [(c[0], c[1], c[2] if len(c) > 2 else None) for c in step[1]]
+            config.edit_config(*changes, path=path)
+        elif kind == "theme":
+            config.set_active_theme(step[1], path)
+        elif kind == "brightness":
+            config.set_brightness(step[1], path)
+        elif kind == "next":
+            return scenes.next_one(path)
+        else:
+            how = {"state": scenes.state, "put_on": scenes.put_on, "save": scenes.save,
+                   "delete": scenes.delete}[kind]  # fmt: skip
+            state = how(*step[1:], path)
+            return [[[list(pair) for pair in scene.items()] for scene in state["scenes"]],
+                    state["on"]]  # fmt: skip
+        return None
+
+    files, theirs = [], []
+    for number in range(800):
+        text = _edit_text(rng)
+        steps = [_edit_step(rng) for _ in range(rng.randrange(1, 6))]
+        paths = []
+        for side in ("py", "rs"):
+            path = tmp_path / side / str(number) / "config.toml"
+            path.parent.parent.mkdir(exist_ok=True)
+            if text is not None or rng.random() < 0.5:
+                path.parent.mkdir(exist_ok=True)
+            if text is not None:
+                path.write_bytes(text.encode("utf-8"))
+            paths.append(path)
+        rng.random()  # (the folder's draw, once for each side: keep the sides alike)
+        if text is None and paths[0].parent.exists() != paths[1].parent.exists():
+            for path in paths:
+                path.parent.mkdir(exist_ok=True)
+        done = []
+        for step in steps:
+            try:
+                answer: Any = {"ok": taken(step, paths[0])}
+            except Exception as error:
+                answer = {"error": {"type": type(error).__name__, "msg": str(error)}}
+            after = paths[0].read_bytes().hex() if paths[0].exists() else None
+            done.append([answer, after])
+        theirs.append(done)
+        files.append({"path": str(paths[1]), "steps": steps})
+    platforms = ["linux", "win32", "darwin"]
+    case = {"op": "config_edit", "platform": sys.platform, "language": "en", "files": files,
+            "locale": str(i18n.LOCALE_DIR), "defaults": platforms}  # fmt: skip
+    [ours] = run([case])
+    assert "files" in ours, ours
+    assert ours["defaults"] == [config.default_config_toml(name) for name in platforms]
+    seen = dict.fromkeys(("ok", "by hand", "ConfigError", "state", "changed"), 0)
+    for number, (want, got) in enumerate(zip(theirs, ours["files"], strict=True)):
+        py, rs = str(tmp_path / "py" / str(number)), str(tmp_path / "rs" / str(number))
+        before = None
+        for step, a, b in zip(files[number]["steps"], want, got, strict=True):
+            for answer, folder in ((a[0], py), (b[0], rs)):
+                if "error" in answer:
+                    answer["error"]["msg"] = answer["error"]["msg"].replace(folder, "<folder>")
+                    if answer["error"]["type"] != "ConfigError":
+                        answer["error"]["msg"] = ""  # (the system's own words)
+            assert b == a, (number, step, files[number]["path"])
+            seen["ok"] += "ok" in a[0]
+            seen["state"] += isinstance(a[0].get("ok"), list)
+            seen["by hand"] += "by hand" in a[0].get("error", {}).get("msg", "")
+            seen["ConfigError"] += a[0].get("error", {}).get("type") == "ConfigError"
+            seen["changed"] += a[1] != before
+            before = a[1]
+    assert all(count >= 10 for count in seen.values()), seen

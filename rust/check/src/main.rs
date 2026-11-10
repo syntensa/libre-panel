@@ -1801,6 +1801,7 @@ fn run(case: &Value) -> Result<Value, String> {
                 "max_depth": lp_py::json::MAX_DEPTH})
         }
         "config" => config::run(case)?,
+        "config_edit" => config::edit(case)?,
         "regex" | "hwnames" | "lhm_readings" | "lhm_tree" | "sensor_protocol" | "lhm_hints"
         | "load_math" | "netlink" | "audio" | "game_frames" | "hardware" | "linux_source"
         | "sky" | "weather" | "web_sources" | "nut" | "mqtt" | "calendar" | "shared_memory"

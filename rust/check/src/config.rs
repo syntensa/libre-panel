@@ -356,3 +356,106 @@ pub fn run(case: &Value) -> Result<Value, String> {
         "defaults": config(&Config::new(None, platform)),
     }))
 }
+
+/// A value of a test's change as TOML: whole numbers as ints, others as floats.
+fn toml_of(value: &Value) -> lp_py::toml::Toml {
+    use lp_py::toml::Toml;
+    match value {
+        Value::Bool(on) => Toml::Bool(*on),
+        Value::Number(number) => match number.as_i64() {
+            Some(whole) => Toml::Int(whole.into()),
+            None => Toml::Float(number.as_f64().unwrap_or(0.0)),
+        },
+        Value::String(text) => Toml::Str(text.clone()),
+        Value::Array(items) => Toml::Array(items.iter().map(toml_of).collect()),
+        Value::Object(table) => Toml::Table(table_of(table)),
+        Value::Null => Toml::Date(lp_py::toml::Date {
+            year: 2000,
+            month: 1,
+            day: 1,
+        }),
+    }
+}
+
+fn table_of(table: &serde_json::Map<String, Value>) -> lp_py::toml::Table {
+    let pairs = table.iter().map(|(key, item)| (key.clone(), toml_of(item)));
+    pairs.collect()
+}
+
+fn json_of(value: &lp_py::toml::Toml) -> Value {
+    use lp_py::toml::Toml;
+    match value {
+        Toml::Str(text) => json!(text),
+        Toml::Array(items) => items.iter().map(json_of).collect(),
+        Toml::Table(table) => table.iter().map(|(k, v)| json!([k, json_of(v)])).collect(),
+        other => json!(format!("{other:?}")),
+    }
+}
+
+/// config.toml changed as config.py's edit_config and scenes.py change it: `files`, each a
+/// path and the steps taken on it; after each step, what it gave (or its error) and the
+/// file's bytes. `defaults`: default_config_toml on each of these platforms.
+pub fn edit(case: &Value) -> Result<Value, String> {
+    use lp_config::edit::{self, Change};
+    use lp_config::scenes;
+    let platform = case["platform"].as_str().unwrap_or("linux");
+    let locale = std::path::PathBuf::from(case["locale"].as_str().unwrap_or(""));
+    lp_i18n::set_language(lp_i18n::Language::load(
+        &locale,
+        case["language"].as_str().unwrap_or("en"),
+    )?);
+    let text = |value: &Value| value.as_str().unwrap_or("").to_string();
+    let change = |given: &Value| match given[0].as_str() {
+        Some("value") => Change::Value(text(&given[1]), toml_of(&given[2])),
+        Some("unset") => Change::Unset(text(&given[1])),
+        _ => {
+            let tables = given[2].as_array().into_iter().flatten();
+            let tables = tables.filter_map(Value::as_object).map(table_of);
+            Change::Tables(text(&given[1]), tables.collect())
+        }
+    };
+    let state = |state: scenes::State| {
+        let scenes: Vec<Value> = (state.scenes.iter())
+            .map(|scene| json_of(&lp_py::toml::Toml::Table(scene.clone())))
+            .collect();
+        json!({"ok": [scenes, state.on]})
+    };
+    let mut files = Vec::new();
+    for file in case["files"].as_array().into_iter().flatten() {
+        let path = std::path::PathBuf::from(text(&file["path"]));
+        let mut steps = Vec::new();
+        for step in file["steps"].as_array().into_iter().flatten() {
+            let name = step[1].as_str().unwrap_or("");
+            let done = match step[0].as_str().unwrap_or("") {
+                "edit" => {
+                    let changes: Vec<Change> =
+                        (step[1].as_array().into_iter().flatten().map(change)).collect();
+                    edit::edit_config(&changes, &path, platform).map(|()| json!({"ok": null}))
+                }
+                "theme" => {
+                    edit::set_active_theme(name, &path, platform).map(|()| json!({"ok": null}))
+                }
+                "brightness" => {
+                    let percent = step[1].as_i64().unwrap_or(0);
+                    edit::set_brightness(percent, &path, platform).map(|()| json!({"ok": null}))
+                }
+                "state" => scenes::state(&path, platform).map(state),
+                "put_on" => scenes::put_on(name, &path, platform).map(state),
+                "next" => scenes::next_one(&path, platform).map(|name| json!({"ok": name})),
+                "save" => scenes::save(name, &path, platform).map(state),
+                "delete" => scenes::delete(name, &path, platform).map(state),
+                other => return Err(format!("no step {other}")),
+            };
+            let done = done.unwrap_or_else(|e| failed(e.class, &e.msg));
+            let bytes = std::fs::read(&path).ok();
+            let bytes = bytes.map(|b| b.iter().map(|b| format!("{b:02x}")).collect::<String>());
+            steps.push(json!([done, bytes]));
+        }
+        files.push(Value::Array(steps));
+    }
+    let defaults: Vec<Value> = (case["defaults"].as_array().into_iter().flatten())
+        .map(|platform| json!(edit::default_config_toml(platform.as_str().unwrap_or(""))))
+        .collect();
+    lp_i18n::set_language(lp_i18n::Language::english());
+    Ok(json!({"files": files, "defaults": defaults}))
+}

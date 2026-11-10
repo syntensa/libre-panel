@@ -6,8 +6,10 @@
 //! tests (tests/test_rust_config.py) hold every field and every message against config.py.
 
 pub mod dirs;
+pub mod edit;
 pub mod hotkeys;
 pub mod night;
+pub mod scenes;
 pub mod sequence;
 
 use std::path::{Path, PathBuf};
