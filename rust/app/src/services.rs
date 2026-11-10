@@ -23,6 +23,7 @@ pub fn parts() -> IndexMap<&'static str, Part> {
     parts.insert("autopilot", lp_services::autopilot::part());
     parts.insert("downloads", lp_services::downloads::part());
     parts.insert("game", lp_services::game::part());
+    parts.insert("memory", lp_services::memory::part());
     parts.insert("notices", lp_services::notices::part());
     parts.insert("power", lp_services::power::part());
     parts.insert("timer", lp_services::timer::part());

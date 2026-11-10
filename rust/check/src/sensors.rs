@@ -2461,6 +2461,225 @@ fn downloads(case: &Value) -> Result<Value, String> {
     Ok(json!({"folders": folders, "trackers": trackers}))
 }
 
+/// The bytes a case gives as hex digits.
+fn bytes_of(digits: &Value) -> Vec<u8> {
+    let digits = digits.as_str().unwrap_or("").as_bytes();
+    let pairs = digits
+        .chunks(2)
+        .filter_map(|pair| std::str::from_utf8(pair).ok());
+    pairs
+        .filter_map(|pair| u8::from_str_radix(pair, 16).ok())
+        .collect()
+}
+
+/// memory: FanControl's files as fancontrol.py reads them (the state, its mark, the curves
+/// with what they command, the fans, their names, what changed against another file), the
+/// places it looks in, a watch's finds over changes to its file, and for each service of
+/// options its samples `[at, readings, tell the round, tell the sensors]` recorded into the
+/// database named, with the reports built on the way.
+fn memory(case: &Value) -> Result<Value, String> {
+    use lp_render::snapshot::{Reading, Snapshot};
+    use lp_services::fancontrol as fc;
+    use lp_services::memory::{OnReport, Reader, Recorder, Settings, Stamp};
+    use lp_services::memory_store::Store;
+    use lp_services::paths::{Path, HERE};
+    use lp_services::round_report;
+    use std::sync::{Arc, Mutex};
+    let locale = std::path::PathBuf::from(case["locale"].as_str().unwrap_or(""));
+    let code = case["language"].as_str().unwrap_or("en");
+    lp_i18n::set_language(lp_i18n::Language::load(&locale, code)?);
+    let text = |value: &Value| value.as_str().unwrap_or("").to_string();
+    let how = lp_py::json::Dumps::default();
+    let dumped = |value: lp_py::Value| lp_py::json::dumps(&value, &how);
+    let number = |value: Option<f64>| value.map_or(lp_py::Value::None, lp_py::Value::Float);
+    let word = |value: Option<&String>| match value {
+        Some(text) => lp_py::Value::Str(text.clone()),
+        None => lp_py::Value::None,
+    };
+    let mut files = Vec::new();
+    for file in case["files"].as_array().into_iter().flatten() {
+        let Some(section) = fc::section_of(&bytes_of(&file["file"])) else {
+            files.push(Value::Null);
+            continue;
+        };
+        let state = fc::state_of(&section);
+        let (curves, fans) = fc::curves_and_fans(&state);
+        let floats = |key: &str| -> Vec<f64> {
+            let given = file[key].as_array().into_iter().flatten();
+            given.filter_map(Value::as_f64).collect()
+        };
+        let curves: Vec<lp_py::Value> = (curves.values())
+            .map(|curve| {
+                let points = curve.points.iter().map(|(temp, duty)| {
+                    lp_py::Value::List(vec![number(Some(*temp)), number(Some(*duty))])
+                });
+                let duties = floats("temps")
+                    .into_iter()
+                    .map(|t| number(Some(curve.duty_at(t))));
+                let temps = floats("duties")
+                    .into_iter()
+                    .map(|d| number(curve.temp_at(d)));
+                lp_py::Value::List(vec![
+                    lp_py::Value::Str(curve.name.clone()),
+                    lp_py::Value::List(points.collect()),
+                    word(curve.source.as_ref()),
+                    lp_py::Value::List(curve.mix.iter().map(|n| word(Some(n))).collect()),
+                    lp_py::Value::Dict(curve.hysteresis.clone()),
+                    lp_py::Value::Str(curve.device().into()),
+                    lp_py::Value::List(duties.collect()),
+                    lp_py::Value::List(temps.collect()),
+                ])
+            })
+            .collect();
+        let fans: Vec<lp_py::Value> = (fans.values())
+            .map(|fan| {
+                lp_py::Value::List(vec![
+                    lp_py::Value::Str(fan.name.clone()),
+                    lp_py::Value::Str(fan.curve.clone()),
+                    number(fan.minimum),
+                    word(fan.sensor.as_ref()),
+                ])
+            })
+            .collect();
+        let (names, mut hidden) = fc::names_and_hidden(&section);
+        hidden.sort();
+        let changes = fc::section_of(&bytes_of(&file["other"]))
+            .map(|other| fc::changes(&fc::state_of(&other), &state));
+        files.push(json!({
+            "state": fc::state_text(&state),
+            "mark": fc::fingerprint(&state),
+            "curves": dumped(lp_py::Value::List(curves)),
+            "fans": dumped(lp_py::Value::List(fans)),
+            "names": names.iter().collect::<Vec<_>>(),
+            "hidden": hidden,
+            "changes": changes.map(|changes| dumped(lp_py::Value::List(changes))),
+        }));
+    }
+    let places: Vec<Value> = (case["places"].as_array().into_iter().flatten())
+        .map(|given| {
+            let places = made_up_places(given);
+            let home = Path::new(HERE, &places.home);
+            let found = fc::default_paths(&*places.env, &home);
+            json!(found.iter().map(Path::text).collect::<Vec<_>>())
+        })
+        .collect();
+    let mut watches = Vec::new();
+    for watch in case["watches"].as_array().into_iter().flatten() {
+        for change in watch["before"].as_array().into_iter().flatten() {
+            change_files(change)?;
+        }
+        let mut follows = fc::Watch::new(&text(&watch["given"]), made_up_places(watch));
+        let mut found = Vec::new();
+        for step in watch["steps"].as_array().into_iter().flatten() {
+            for change in step[1].as_array().into_iter().flatten() {
+                change_files(change)?;
+            }
+            found.push(match follows.poll(step[0].as_f64().unwrap_or(0.0)) {
+                Ok(Some(section)) => json!(fc::fingerprint(&fc::state_of(&section))),
+                Ok(None) => Value::Null,
+                Err(why) => json!({"error": why}),
+            });
+        }
+        let path = follows.path.as_ref().map(Path::text);
+        watches.push(json!({"found": found, "notes": follows.notes, "path": path}));
+    }
+    let mut services = Vec::new();
+    for service in case["services"].as_array().into_iter().flatten() {
+        let lp_py::Value::Dict(options) = loaded(&service["options"]) else {
+            return Err("options that are no table".into());
+        };
+        let mut notes = Vec::new();
+        let settings = Settings::from_options(&options, &mut |note| notes.push(note));
+        let store = Arc::new(Store::new(std::path::Path::new(&text(
+            &service["database"],
+        ))));
+        store.start();
+        let reports: Arc<Mutex<Vec<Value>>> = Arc::default();
+        let told = Arc::clone(&reports);
+        let readings_of = |told: round_report::Told| {
+            let rows = told.into_iter().map(|(key, (value, unit, label))| {
+                let texts = [key, unit, label].map(lp_py::Value::Str);
+                let [key, unit, label] = texts;
+                lp_py::Value::List(vec![key, value, unit, label])
+            });
+            lp_py::json::dumps(
+                &lp_py::Value::List(rows.collect()),
+                &lp_py::json::Dumps::default(),
+            )
+        };
+        let on_report: OnReport = Arc::new(move |report, stamp| {
+            let readings = match round_report::readings(&report) {
+                Ok(readings) => json!(readings_of(readings)),
+                Err(why) => json!({"error": why}),
+            };
+            let report =
+                lp_py::json::dumps(&lp_py::Value::Dict(report), &lp_py::json::Dumps::default());
+            if let Ok(mut told) = told.lock() {
+                told.push(json!([report, readings, stamp]));
+            }
+        });
+        let stamps = Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let counted = Arc::clone(&stamps);
+        let stamp: Stamp =
+            Arc::new(move || counted.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
+        let mut recorder = Recorder::new(Arc::clone(&store), &settings, Some(on_report), stamp);
+        let mut reader = Reader::new(&settings);
+        let pairs = |value: &Value| -> indexmap::IndexMap<String, String> {
+            let pairs = value.as_object().into_iter().flatten();
+            pairs
+                .map(|(key, value)| (key.clone(), text(value)))
+                .collect()
+        };
+        reader.names = pairs(&service["names"]);
+        reader.sources = pairs(&service["sources"]);
+        reader.hidden = strings(&service["hidden"]);
+        let (mut rounds, mut sensors) = (Vec::new(), Vec::new());
+        for step in service["steps"].as_array().into_iter().flatten() {
+            let at = step[0].as_f64().unwrap_or(0.0);
+            let mut snapshot = Snapshot::default();
+            if let lp_py::Value::List(rows) = loaded(&step[1]) {
+                for row in rows {
+                    let lp_py::Value::List(row) = row else {
+                        continue;
+                    };
+                    let part = |n: usize| row.get(n).map(lp_py::Value::str).unwrap_or_default();
+                    let reading = Reading {
+                        unit: part(2),
+                        label: part(3),
+                        origin: part(4),
+                        ..Reading::of(row.get(1).cloned().unwrap_or(lp_py::Value::None))
+                    };
+                    snapshot.readings.insert(part(0), reading);
+                }
+            }
+            if recorder.due(at) {
+                let sample = reader.read(&snapshot, at);
+                recorder.add(&sample);
+            }
+            if step[2].as_bool() == Some(true) {
+                let told = recorder
+                    .running()
+                    .map(|game| readings_of(round_report::session_readings(&game.totals(at))));
+                rounds.push(json!(told));
+            }
+            if step[3].as_bool() == Some(true) {
+                let found = reader.sensors(&snapshot.readings);
+                sensors.push(json!(fc::state_text(&found)));
+            }
+        }
+        recorder.close(service["close"].as_f64().unwrap_or(0.0));
+        store.stop(30.0);
+        let reports = reports
+            .lock()
+            .map_or_else(|_| Vec::new(), |told| told.clone());
+        services.push(json!({
+            "notes": notes, "reports": reports, "rounds": rounds, "sensors": sensors,
+            "written": store.written(), "error": store.error(),
+        }));
+    }
+    Ok(json!({"files": files, "places": places, "watches": watches, "services": services}))
+}
+
 pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "regex" => regex(case),
@@ -2492,6 +2711,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "machine" => machine(case),
         "game" => game(case)?,
         "downloads" => downloads(case)?,
+        "memory" => memory(case)?,
         "autopilot" => autopilot(case)?,
         "mangohud" => mangohud(case)?,
         "media" => media(case),

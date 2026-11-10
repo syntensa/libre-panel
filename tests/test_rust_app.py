@@ -1868,3 +1868,82 @@ def test_a_browsers_download_is_on_the_panel_while_it_loads(tmp_path: Path) -> N
     assert not set(done) & set(loading)
     after = [frame for at, frame in seen if at > 16.0]
     assert after and all(frame == before[-1] for frame in after), len(after)
+
+
+def test_the_memory_keeps_a_round_and_shows_its_report(tmp_path: Path) -> None:
+    """`memory` among the services: while a game is told (here by the test's script), its
+    round is recorded; when it ends, the report's theme shows for `report_seconds`, then
+    config.toml's is back; the database holds the round and the minute."""
+    import sqlite3
+
+    for name, colour in (("red", "#DC1E1E"), ("blue", "#1E1EDC")):
+        folder = tmp_path / "themes" / name
+        folder.mkdir(parents=True)
+        theme = {"format": "libre-panel-theme/1", "name": name.title(),
+                 "display": {"model": "turing-5", "orientation": "landscape", "width": 800,
+                             "height": 480},
+                 "palette": {"bg": colour}, "font": "builtin:Barlow-Medium",
+                 "background": {"color": "@bg", "image": None}, "refresh_ms": 200,
+                 "widgets": []}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+    (tmp_path / "config.toml").write_text(
+        'theme = "red"\nfps = 10\n[device]\ndriver = "virtual"\noutput = "panel.png"\n'
+        '[sensors]\nproviders = []\n[services]\nenabled = ["memory"]\n'
+        '[services.memory]\nreport_minutes = 0\nreport_seconds = 3\nreport_theme = "blue"\n'
+        'report_transition = ""\n',
+        encoding="utf-8",
+    )
+    script = tmp_path / "script.json"
+    script.write_text(json.dumps([
+        [0.2, "publish", "cpu.temp", 55.0, "°C", "CPU"],
+        [1.0, "publish", "game.name", "Doom", "", "Game"],
+        [1.0, "publish", "game.app", "Doom.exe", "", "Program"],
+        [1.0, "publish", "game.fps", 100.0, "fps", "FPS"],
+        [3.0, "publish", "game.fps", 140.0, "fps", "FPS"],
+        [5.5, "unpublish", "game.name"],
+    ]), encoding="utf-8")  # fmt: skip
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries(), "LP_HOST_SCRIPT": str(script)}  # fmt: skip
+    colours = {(220, 30, 30): "red", (30, 30, 220): "blue"}
+    seen: list[tuple[float, str]] = []
+    with subprocess.Popen([str(_program()), "run"], env=env, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        began = time.monotonic()
+        try:
+            while time.monotonic() < began + 13.5:
+                try:
+                    with Image.open(tmp_path / "panel.png") as frame:
+                        counted = frame.convert("RGB").getcolors(1 << 16) or []
+                    most, colour = max(counted, default=(0, None))
+                    if most > 0.9 * sum(count for count, _ in counted):
+                        seen.append((time.monotonic() - began, colours.get(colour, "other")))
+                except (OSError, SyntaxError, ValueError):
+                    pass  # (not there yet, or being put in its place)
+                time.sleep(0.05)
+        finally:
+            if os.name == "nt":
+                program.terminate()
+            else:
+                program.send_signal(signal.SIGINT)
+            said = program.communicate(timeout=30)[1]
+    assert "service 'memory' started" in said, said
+    assert seen and all(shown == "red" for at, shown in seen if at < 5.4), seen[:40]
+    assert any(shown == "blue" for at, shown in seen if 7.2 < at < 9.0), seen
+    assert all(shown == "red" for at, shown in seen if at > 12.0), seen[-40:]
+    assert any(at > 12.0 for at, _ in seen), seen[-5:]
+    connection = sqlite3.connect(tmp_path / "plugins-data" / "memory" / "memory.db")
+    try:
+        rounds = connection.execute(
+            "SELECT game, program, closed, fps_s, fps_mean, cpu_temp_max FROM sessions"
+        ).fetchall()
+        minutes = connection.execute("SELECT samples, cpu_temp, mode FROM minutes").fetchall()
+        cooling = connection.execute("SELECT mode, game, cpu_temp FROM cooling").fetchall()
+    finally:
+        connection.close()
+    [(game, program, closed, fps_s, fps_mean, warmest)] = rounds
+    assert (game, program, closed, warmest) == ("Doom", "doom", 1, 55.0), rounds
+    assert 3 <= fps_s <= 6 and 100.0 < fps_mean < 140.0, rounds
+    assert ("game", "Doom", 55.0) in cooling and ("normal", None, 55.0) in cooling, cooling
+    if os.name != "nt":  # (ended at once on Windows: the minute under way is not written)
+        assert minutes and all(row[1] == 55.0 for row in minutes), minutes
+        assert "round report: Doom, 0 min, 1" in said, said

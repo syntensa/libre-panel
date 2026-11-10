@@ -2280,3 +2280,541 @@ def test_downloads_are_followed_as_downloads_py_follows_them(tmp_path: Any, monk
                     seen["unknown"] += state["source"] == "steam" and state["total"] is None
                     seen["App"] += state["name"] != "Portal" and state["source"] == "steam"
         assert all(count >= 3 for count in seen.values()), seen
+
+
+def _fancontrol_file(rng: random.Random) -> bytes:
+    """A file as FanControl keeps one, or something else under that name."""
+    sensors = ["/amdcpu/0/temperature/2", "/gpu-nvidia/0/temperature/0",
+               "/lpc/nct6798d/temperature/1", "/intelcpu/0/temperature/0", "", 5, None]  # fmt: skip
+    outputs = ["/lpc/nct6798d/control/0", "/lpc/nct6798d/control/1", "/gpu-nvidia/0/control/1",
+               "/lpc/nct6798d/control/12\n", "weird", None, 5, ""]  # fmt: skip
+
+    def curve() -> Any:
+        if rng.random() < 0.05:
+            return rng.choice([5, "x", None])
+        points = [f"{rng.choice([20, 30, 45.5, 60, 60, 80])},{rng.choice([0, 20, 37.5, 55, 100])}"
+                  for _ in range(rng.randrange(6))]  # fmt: skip
+        points += rng.sample(["x", "40", 7, "50,abc", " 45 , 60 ", "1e1,2e1", ",", "inf,100"],
+                             rng.randrange(3))  # fmt: skip
+        rng.shuffle(points)
+        found: dict[str, Any] = {
+            "Points": rng.choice([points, points, None, "x"]),
+            "SelectedTempSource": rng.choice(
+                [{"Identifier": rng.choice(sensors)}, None, 5, {}]),
+            "SelectedFanCurves": rng.choice(
+                [None, [], [{"Name": "CPU"}, {"Name": ""}, 5, {"Name": 7}, {}]]),
+            "SelectedMixFunction": rng.choice([0, 1, None]),
+            "HysteresisConfig": rng.choice([{"Up": 2, "Down": rng.choice([3, 4.5])}, 5, None]),
+        }  # fmt: skip
+        if rng.random() < 0.9:
+            found["Name"] = rng.choice(["CPU", "GPU", "Case", "Mix", "", " ", "Über"])
+        for key in rng.sample(sorted(found), rng.randrange(3)):
+            del found[key]
+        return found
+
+    def control() -> Any:
+        if rng.random() < 0.05:
+            return rng.choice([5, "x", None])
+        found = {
+            "NickName": rng.choice(["Front", "Rear", "", None, "  Pump ", 5]),
+            "Identifier": rng.choice(outputs),
+            "Enable": rng.choice([True, True, False, None, 1]),
+            "IsHidden": rng.choice([True, False, False, None]),
+            "SelectedFanCurve": rng.choice([{"Name": "CPU"}, {"Name": "GPU"}, None, {"Name": ""},
+                                            {"Name": 5}, 5]),
+            "MinimumPercent": rng.choice([20, 20.5, True, "x", None]),
+            "SelectedOffset": rng.choice([0, 5]),
+            "Window": rng.randrange(1000),
+        }  # fmt: skip
+        for key in rng.sample(sorted(found), rng.randrange(3)):
+            del found[key]
+        return found
+
+    section: Any = {"FanCurves": [curve() for _ in range(rng.randrange(5))],
+                    "Controls": [control() for _ in range(rng.randrange(5))],
+                    "Other": 5}  # fmt: skip
+    if rng.random() < 0.1:
+        section = rng.choice([5, [], None, {"FanCurves": 5, "Controls": "x"}, {}])
+    whole: Any = {"FanControl": section, "Version": 1}
+    if rng.random() < 0.06:
+        whole = rng.choice([[section], "x", {"Other": section}])
+    raw = json.dumps(whole, ensure_ascii=rng.random() < 0.5).encode()
+    kind = rng.random()
+    if kind < 0.3:
+        raw = b"\xef\xbb\xbf" + raw
+    elif kind < 0.34:
+        raw = raw[: len(raw) // 2]
+    elif kind < 0.37:
+        raw = b"\xff" + raw
+    return raw
+
+
+def test_the_memory_keeps_what_memory_py_keeps(tmp_path: Any, monkeypatch) -> None:
+    """services/fancontrol.py (a file's state and mark, its curves with what they command,
+    the fans, their names, what changed, the usual places, a watch over a file that
+    changes), services/memory.py (the options, a sample of the readings, the minutes, the
+    games, the cooling state as it moves, what is forgotten) into the database of
+    memory_store.py, and services/round_report.py (a round against the earlier ones of its
+    program, as a state and as readings; a round under way)."""
+    import itertools
+    import shutil
+    import sqlite3
+    from pathlib import Path
+
+    from libre_panel import i18n
+    from libre_panel.sensors.base import Reading, Snapshot
+    from libre_panel.services import fancontrol, memory, memory_store, round_report
+
+    rng = random.Random(0x3E3071)
+    temps, duties = [10, 30.0, 45.5, 60, 61, 100], [0, 20, 37.5, 55, 99.5, 100]
+    files = [
+        {
+            "file": _fancontrol_file(rng).hex(),
+            "other": _fancontrol_file(rng).hex(),
+            "temps": temps,
+            "duties": duties,
+        }
+        for _ in range(400)
+    ]
+    places = [
+        {"home": home, "env": dict(rng.sample(sorted(env.items()), rng.randrange(4)))}
+        for home in ("/home/u", "/")
+        for _ in range(6)
+        for env in [
+            {
+                "ProgramFiles(x86)": "/pf86",
+                "ProgramFiles": "/pf",
+                "LOCALAPPDATA": rng.choice(["/local", ""]),
+            }
+        ]
+    ]
+
+    def watch_case(number: int) -> dict[str, Any]:
+        root = tmp_path / f"w{number}"
+        usual = root / "Documents" / "FanControl" / "Configurations"
+        given = rng.choice(
+            [
+                "",
+                str(root / "fc.json"),
+                "~/fc.json",
+                "~nobody_such_user/fc.json",
+                str(root / "missing.json"),
+            ]
+        )
+        file = usual / "userConfig.json" if not given else root / "fc.json"
+        now, steps, there = rng.uniform(0, 100), [], False
+        for step in range(rng.randrange(1, 14)):
+            now += rng.choice([1, 10, 31, 31, 40])
+            changes: list[list[Any]] = []
+            roll = rng.random()
+            if roll < 0.5:
+                raw = _fancontrol_file(rng) + b" " * step  # (another size every time)
+                changes.append(["write", str(file), raw.hex()])
+                there = True
+            elif roll < 0.6 and there:
+                changes.append(["remove", str(file)])
+                there = False
+            steps.append([now, changes])
+        return {
+            "given": given,
+            "steps": steps,
+            "root": str(root),
+            "home": str(root),
+            "env": {"HOME": str(root)},
+            "before": [["mkdir", str(usual)]],
+        }
+
+    cpu, card, other = "/amdcpu/0/temperature/2", "/gpu-nvidia/0", "/gpu-amd/1"
+    sensors = [
+        ("cpu.load", "%", "CPU", ""),
+        ("gpu.load", "%", "GPU", ""),
+        ("cpu.temp", "°C", "CPU", f"lhm:{cpu}"),
+        ("gpu.temp", "°C", "GPU", f"lhm:{card}/temperature/0"),
+        ("temp.gpu1.junction", "°C", "Junction", f"lhm:{other}/temperature/3"),
+        ("temp.gpu.hotspot", "°C", "GPU Hot Spot", f"lhm:{card}/temperature/1"),
+        ("temp.gpu.hot_spot2", "°C", "Second", ""),
+        ("cpu.power", "W", "", ""),
+        ("gpu.power", "W", "", ""),
+        ("cpu.freq", "MHz", "", ""),
+        ("gpu.freq", "MHz", "", ""),
+        ("mem.used", "GB", "", ""),
+        ("net.down", "B/s", "", ""),
+        ("net.up", "B/s", "", ""),
+        ("audio.volume", "%", "", ""),
+        ("power.watts", "W", "", ""),
+        ("fan.cpu", "RPM", "CPU Fan", "lhm:/lpc/nct/fan/0"),
+        ("fan.case", "RPM", "", "lhm:/lpc/nct/fan/1"),
+        ("fan.x", "RPM", "CPU Fan", ""),
+        ("fan.hidden", "RPM", "Hidden", "lhm:/lpc/nct/fan/5"),
+        ("lhm:/lpc/nct/control/0", "%", "", ""),
+        ("lhm:/lpc/nct/control/1", "%", "", ""),
+        (f"lhm:{cpu}", "°C", "", ""),
+        ("temp.board.system", "°C", "Board", ""),
+        ("temp.nvme.0", "°C", "SSD", "lhm:/nvme/0/temperature/0"),
+        ("temp.nvme.1", "°C", "", ""),
+    ]
+
+    def service_case(number: int) -> dict[str, Any]:
+        options = dict(memory.Memory.options)
+        options = {key: default for key, (_kind, default) in options.items()}
+        options.update(
+            keep_days=rng.choice([730.0, 0, 0.5]),
+            cooling=rng.random() < 0.85,
+            cooling_days=rng.choice([180.0, 0, 0.5]),
+            music=rng.random() < 0.8,
+            temperatures=rng.choice(
+                [
+                    [],
+                    ["temp.board.system", "temp.nvme.*", "temp.none"],
+                    ["temp.[bn]*", " ", 5, " temp.nvme.1 "],
+                ]
+            ),
+            fps_levels=rng.choice(
+                [[60, 90, 120, 144, 165], [60, 60, -1, "x", 30.5, True], [], [120.0]]
+            ),
+            report=rng.random() < 0.9,
+            report_minutes=rng.choice([0, 0.05, 0.05, 3]),
+            report_compare=rng.choice([1, 3, 10, 0]),
+            report_seconds=rng.choice([30.0, 0]),
+        )
+        state = {key: rng.uniform(20, 80) for key, *_ in sensors}
+        there = [row for row in sensors if rng.random() < 0.9]
+        rng.shuffle(there)
+        game: dict[str, Any] = {}
+        now, steps, left = rng.uniform(1.7e9, 1.8e9), [], 0
+        for _ in range(rng.randrange(1, 500)):
+            now += (
+                rng.choice([1, 1, 1, 1, 1, 1, 0.5, 2, 7, 65, 65]) if rng.random() < 0.995 else 90000
+            )
+            rows: list[list[Any]] = []
+            for key, unit, label, origin in there:
+                if rng.random() < 0.03:
+                    continue
+                if rng.random() < 0.5:
+                    state[key] += rng.choice([-25, -3, -0.5, 0.5, 3, 25, 50])
+                value: Any = state[key]
+                odd = rng.random()
+                if odd < 0.02:
+                    value = rng.choice([None, "x", True, float("inf"), 0, int(value)])
+                rows.append([key, value, unit, label, origin])
+            if left == 0 and rng.random() < 0.04:
+                left = rng.choice([2, 5, 30, 130, 260])
+                game = {
+                    "game.name": rng.choice(["Doom", "Doom", "Quake", ""]),
+                    "game.app": rng.choice(["Doom.EXE ", "doom.exe", "quake", 5, None]),
+                }
+            if left:
+                left -= 1
+                rows += [
+                    [key, value, "", "", ""] for key, value in game.items() if value is not None
+                ]
+                frames = {
+                    "game.fps": rng.choice([30, 59.5, 60, 100.5, 144, 200, 0, None, -5]),
+                    "game.low": rng.choice([20.5, 45, None, 0]),
+                    "game.frametime": rng.choice([6.9, 16.6, None]),
+                    "game.limiter": rng.choice(["cpu", "gpu", "gpu", "cap", "x", None, 5]),
+                    "game.fps_avg": rng.choice([88.5, None]),
+                    "game.fps_1low": 61.5,
+                    "game.fps_01low": rng.choice([40.5, 0]),
+                    "game.frametime_avg": 11.3,
+                    "game.frametime_max": rng.choice([33.3, 80]),
+                }
+                if rng.random() < 0.9:
+                    rows += [[k, v, "", "", ""] for k, v in frames.items() if rng.random() < 0.9]
+            if rng.random() < 0.7:
+                rows.append(
+                    [
+                        "gpu.mem.used",
+                        rng.choice([2048, 6000.5, 8, None]),
+                        rng.choice(["MB", "MB", "GB", "MiB", "", "B", "x"]),
+                        "",
+                        "",
+                    ]
+                )
+            if rng.random() < 0.7:
+                rows.append(
+                    [
+                        "weather.temperature",
+                        rng.choice([-3.5, 21, 70, None]),
+                        rng.choice(["°C", "°C", "°F"]),
+                        "",
+                        "",
+                    ]
+                )
+            if rng.random() < 0.8:
+                rows.append(
+                    rng.choice(
+                        [
+                            ["media.state", rng.choice(["Playing", "Paused", 5]), "", "", ""],
+                            ["media.playing", rng.choice([1, 0, None]), "", "", ""],
+                        ]
+                    )
+                )
+            if rng.random() < 0.7:
+                rows.append(["cpu.name", rng.choice(["Ryzen 9", 5]), "", "", ""])
+            steps.append([now, json.dumps(rows), rng.random() < 0.15, rng.random() < 0.03])
+        return {
+            "options": json.dumps(options),
+            "steps": steps,
+            "close": now + rng.choice([0, 1, 30]),
+            "database": str(tmp_path / f"rust{number}.db"),
+            "theirs": str(tmp_path / f"py{number}.db"),
+            "names": rng.choice([{}, {"/lpc/nct/fan/0": "Tower", "/lpc/nct/fan/1": "Tower"}]),
+            "hidden": rng.choice([[], ["/lpc/nct/fan/5"]]),
+            "sources": rng.choice([{}, {"CPU": cpu, "Case": "/lpc/nct/temperature/9"}]),
+        }
+
+    def told(readings: dict[str, Any]) -> str:
+        return json.dumps([[key, *reading] for key, reading in readings.items()])
+
+    seen = {
+        "file": 0,
+        "unread": 0,
+        "curve": 0,
+        "fan": 0,
+        "changes": 0,
+        "watch": 0,
+        "watch-error": 0,
+        "report": 0,
+        "compared": 0,
+        "levels": 0,
+        "round": 0,
+        "sensors": 0,
+        "minutes": 0,
+        "sessions": 0,
+        "cooling": 0,
+        "course": 0,
+        "notes": 0,
+        "fans": 0,
+        "temps": 0,
+        "sources": 0,
+        "outside": 0,
+        "music": 0,
+        "hotspot": 0,
+    }
+    for language, count in (("en", 30), ("ru", 10)):
+        watches = [watch_case(n) for n in range(40)]
+        services = [service_case(n) for n in range(count)]
+        theirs: dict[str, list[Any]] = {"files": [], "places": [], "watches": [], "services": []}
+        i18n.set_language(language)
+        try:
+            for case in files:
+                path = tmp_path / "file.json"
+                path.write_bytes(bytes.fromhex(case["file"]))
+                section = fancontrol.read_section(path)
+                path.write_bytes(bytes.fromhex(case["other"]))
+                before = fancontrol.read_section(path)
+                if section is None:
+                    theirs["files"].append(None)
+                    continue
+                state = fancontrol.state_of(section)
+                curves, fans = fancontrol.curves_and_fans(state)
+                names, hidden = fancontrol.names_and_hidden(section)
+                changed = None
+                if before is not None:
+                    changed = json.dumps(fancontrol.changes(fancontrol.state_of(before), state))
+                theirs["files"].append(
+                    {
+                        "state": json.dumps(state, sort_keys=True, ensure_ascii=False),
+                        "mark": fancontrol.fingerprint(state),
+                        "curves": json.dumps(
+                            [
+                                [
+                                    c.name,
+                                    [list(p) for p in c.points],
+                                    c.source,
+                                    list(c.mix),
+                                    dict(c.hysteresis),
+                                    c.device,
+                                    [c.duty_at(t) for t in temps],
+                                    [c.temp_at(d) for d in duties],
+                                ]
+                                for c in curves.values()
+                            ]
+                        ),
+                        "fans": json.dumps(
+                            [[f.name, f.curve, f.minimum, f.sensor] for f in fans.values()]
+                        ),
+                        "names": [list(pair) for pair in names.items()],
+                        "hidden": sorted(hidden),
+                        "changes": changed,
+                    }
+                )
+            for case in places:
+                found = fancontrol.default_paths(case["env"], Path(case["home"]))
+                theirs["places"].append([str(path) for path in found])
+            for case in watches:
+                monkeypatch.setenv("HOME", case["home"])
+                for change in case["before"]:
+                    _change_files(change)
+                watch = fancontrol.Watch(case["given"])
+                found = []
+                for now, changes in case["steps"]:
+                    for change in changes:
+                        _change_files(change)
+                    try:
+                        section = watch.poll(now)
+                    except RuntimeError as exc:
+                        found.append({"error": f"RuntimeError: {exc}"})
+                        continue
+                    found.append(
+                        None
+                        if section is None
+                        else fancontrol.fingerprint(fancontrol.state_of(section))
+                    )
+                theirs["watches"].append(
+                    {"found": found, "path": str(watch.path) if watch.path else None}
+                )
+                shutil.rmtree(case["root"])
+            for case in services:
+                notes: list[str] = []
+                settings = memory.Settings.from_options(json.loads(case["options"]), notes.append)
+                store = memory_store.Store(case["theirs"])
+                store.start()
+                reports: list[Any] = []
+                stamps = itertools.count()
+                recorder = memory.Recorder(
+                    store,
+                    settings,
+                    lambda report, stamp, reports=reports: reports.append(
+                        [json.dumps(report), told(round_report.readings(report)), stamp]
+                    ),
+                    lambda stamps=stamps: next(stamps),
+                )
+                reader = memory.Reader(settings)
+                reader.names, reader.hidden = dict(case["names"]), set(case["hidden"])
+                reader.sources = dict(case["sources"])
+                rounds, named = [], []
+                for at, rows, tell_round, tell_sensors in case["steps"]:
+                    snapshot = Snapshot(
+                        readings={
+                            row[0]: Reading(row[0], row[1], row[2], row[3], origin=row[4])
+                            for row in json.loads(rows)
+                        }
+                    )
+                    if recorder.due(at):
+                        recorder.add(reader.read(snapshot, at))
+                    if tell_round:
+                        game = recorder.running
+                        rounds.append(
+                            None
+                            if game is None
+                            else told(round_report.session_readings(game.totals(at)))
+                        )
+                    if tell_sensors:
+                        named.append(
+                            json.dumps(
+                                reader.sensors(snapshot.readings),
+                                sort_keys=True,
+                                ensure_ascii=False,
+                            )
+                        )
+                recorder.close(case["close"])
+                store.stop(30)
+                theirs["services"].append(
+                    {
+                        "notes": notes,
+                        "reports": reports,
+                        "rounds": rounds,
+                        "sensors": named,
+                        "written": store.written,
+                        "error": store.error,
+                    }
+                )
+        finally:
+            i18n.set_language("en")
+        [ours] = run(
+            [
+                {
+                    "op": "memory",
+                    "locale": str(i18n.LOCALE_DIR),
+                    "language": language,
+                    "files": files,
+                    "places": places,
+                    "watches": watches,
+                    "services": services,
+                }
+            ]
+        )
+        assert "services" in ours, ours
+        for case in watches:
+            shutil.rmtree(case["root"])
+        for case, want, got in zip(files, theirs["files"], ours["files"], strict=True):
+            assert got == want, bytes.fromhex(case["file"])
+            seen["unread"] += want is None
+            if want is not None:
+                seen["file"] += 1
+                seen["curve"] += want["curves"] != "[]"
+                seen["fan"] += want["fans"] != "[]"
+                seen["changes"] += want["changes"] not in (None, "[]")
+        assert ours["places"] == theirs["places"]
+        for case, want, got in zip(watches, theirs["watches"], ours["watches"], strict=True):
+            assert (got["found"], got["path"]) == (want["found"], want["path"]), case
+            seen["watch"] += sum(isinstance(found, str) for found in want["found"])
+            seen["watch-error"] += sum(isinstance(found, dict) for found in want["found"])
+        for case, want, got in zip(services, theirs["services"], ours["services"], strict=True):
+            assert got == want, (
+                case["options"],
+                [
+                    (key, a, b)
+                    for key in want
+                    if isinstance(want[key], list)
+                    for a, b in zip(want[key], got[key], strict=False)
+                    if a != b
+                ][:1],
+                {key: (want[key], got[key]) for key in ("written", "error")},
+            )
+            tables = []
+            for path in (case["theirs"], case["database"]):
+                connection = sqlite3.connect(path)
+                try:
+                    names = [
+                        row[0]
+                        for row in connection.execute(
+                            "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
+                        )
+                    ]
+                    tables.append(
+                        {
+                            name: connection.execute(f"SELECT * FROM {name} ORDER BY 1").fetchall()
+                            for name in names
+                        }
+                    )
+                    tables[-1]["schema"] = connection.execute(
+                        "SELECT name, sql FROM sqlite_master ORDER BY name"
+                    ).fetchall()
+                finally:
+                    connection.close()
+            for name in tables[0]:
+                assert tables[1][name] == tables[0][name], (
+                    name,
+                    case["options"],
+                    [
+                        (a, b)
+                        for a, b in zip(tables[0][name], tables[1][name], strict=False)
+                        if a != b
+                    ][:1],
+                )
+            assert set(tables[1]) == set(tables[0])
+            for path in (case["theirs"], case["database"]):
+                for end in ("", "-wal", "-shm"):
+                    Path(path + end).unlink(missing_ok=True)
+            seen["notes"] += len(want["notes"])
+            seen["report"] += len(want["reports"])
+            for report, _readings, _stamp in want["reports"]:
+                comparison = json.loads(report)["comparison"]
+                seen["compared"] += comparison["count"] > 0
+                seen["levels"] += comparison["levels"] is not None
+            seen["round"] += sum(said is not None for said in want["rounds"])
+            seen["sensors"] += sum('"panel": "gpu_hotspot"' in text for text in want["sensors"])
+            seen["minutes"] += len(tables[0]["minutes"])
+            seen["sessions"] += len(tables[0]["sessions"])
+            seen["cooling"] += len(tables[0]["cooling"])
+            seen["course"] += sum(row[-1] is not None for row in tables[0]["sessions"])
+            seen["fans"] += sum(row[-2] is not None for row in tables[0]["cooling"])
+            seen["temps"] += sum(row[-3] is not None for row in tables[0]["cooling"])
+            seen["sources"] += sum(row[-1] is not None for row in tables[0]["cooling"])
+            seen["outside"] += sum(row[-2] is not None for row in tables[0]["minutes"])
+            seen["music"] += sum(bool(row[-3]) for row in tables[0]["minutes"])
+            seen["hotspot"] += sum(row[8] is not None for row in tables[0]["minutes"])
+    assert all(count >= 5 for count in seen.values()), seen

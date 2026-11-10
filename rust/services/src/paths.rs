@@ -274,6 +274,22 @@ impl Path {
         format!("{}{}", self.drive, self.root)
     }
 
+    /// `path.expanduser()`: a first part `~` or `~name` as that user's home folder; none where
+    /// Python raises (the folder cannot be told).
+    pub fn expanduser(&self, homes: &Homes) -> Option<Path> {
+        let first = self.tail.first().filter(|first| first.starts_with('~'));
+        let Some(first) = first.filter(|_| self.anchor().is_empty()) else {
+            return Some(self.clone());
+        };
+        let home = expanduser(self.windows, first, homes);
+        if home.starts_with('~') {
+            return None;
+        }
+        let mut found = Path::new(self.windows, &home);
+        found.tail.extend(self.tail[1..].iter().cloned());
+        Some(found)
+    }
+
     /// `path.is_absolute()`.
     pub fn is_absolute(&self) -> bool {
         match self.windows {

@@ -1854,7 +1854,17 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
   small, the download that matters most with its speed's history, and the Downloads and
   Pictures folders as the Windows shell or `xdg-user-dir` knows them. One comparison test
   with Python's tracker over the same files, and a run of the app with a download module.
-- [ ] memory with its store and the round report, cooling, devices
+- [x] memory (services/memory.py, memory_store.py, round_report.py and fancontrol.py;
+  lp-services' memory, memory_store, round_report, fancontrol): a sample of the readings a
+  second, the minutes, the games with what their frames came to and the course of their
+  temperatures, the cooling state when it moves, what is forgotten, into one SQLite file in
+  WAL mode written by one thread from a bounded queue; the round report against the earlier
+  rounds of the program, as the state `report` and as readings, with its theme for a while;
+  FanControl's file read only (its state and mark, the curves and what they command, the
+  fans and their names, what changed, the watch over the file). 800 files of FanControl, 80
+  watches and 40 services of samples compared with Python, the databases row for row with
+  their schema; in the app, a round is recorded and its report shown.
+- [ ] cooling, devices
 
 ### R9 the app
 - [ ] the server and every route of its API, the same JSON

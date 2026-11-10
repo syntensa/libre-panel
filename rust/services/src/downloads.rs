@@ -510,22 +510,12 @@ impl Tracker {
 
     /// `Path(folder).expanduser()`.
     fn given_folder(&self) -> Result<Path, String> {
-        let given = Path::new(HERE, &self.folder_given);
-        let first = given.tail.first().filter(|first| first.starts_with('~'));
-        let Some(first) = first.filter(|_| given.anchor().is_empty()) else {
-            return Ok(given);
-        };
         let homes = paths::Homes {
             env: &*self.places.env,
             user: &paths::user_home,
         };
-        let home = paths::expanduser(HERE, first, &homes);
-        if home.starts_with('~') {
-            return Err("RuntimeError: Could not determine home directory.".into());
-        }
-        let mut found = Path::new(HERE, &home);
-        found.tail.extend(given.tail[1..].iter().cloned());
-        Ok(found)
+        (Path::new(HERE, &self.folder_given).expanduser(&homes))
+            .ok_or_else(|| "RuntimeError: Could not determine home directory.".to_string())
     }
 
     // -- Steam -------------------------------------------------------------------------------
