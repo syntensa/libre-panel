@@ -1976,11 +1976,18 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       (`/api/themes/{theme}/version`: laid out from the version for the nearest shape, or
       scaled into it), `rust/app/src/editing.rs`. What Python's server does not catch is
       logged and left unanswered, as there.
+      Design's and Look's picture (`/api/render`, `rust/app/src/drawings.rs`: the theme as
+      the editor holds it, the demo's readings and pictures, live ones over them where asked,
+      each test message of the Control page on it in the theme's toast style; its boxes,
+      warnings, grid and modules' boxes), the modules drawn for the library
+      (`/api/module-previews`), the starting layouts of a grid (`/api/templates`), a module's
+      parts as plain widgets (`/api/detach`) and a theme adapted to another panel
+      (`/api/adapt`).
       `libre-panel editor` serves alone, `start` with
       the panel, and writes its address where a later start finds it. 120 requests to
       Python's server and to this one compared: the status, the headers and the body, byte
       for byte; a run of the program controlled through its server until `quit` ends it.
-      Still to come: every other route (the editor's pictures and previews, the
+      Still to come: every other route (the looks' and presets' previews, the
       Settings' unlock, hardware, the Player, plugins' pages, …)
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app

@@ -1191,3 +1191,93 @@ def test_themes_are_saved_and_made_for_a_size_as_server_py_does(servers: Any) ->
     theirs, ours = ask(_post("/api/themes/import", {"theme": theme}))  # (JSON: saved)
     assert ours[0] == theirs[0] == "HTTP/1.0 200 OK"
     assert _tree(homes[1] / "themes" / "import") == _tree(homes[0] / "themes" / "import")
+
+
+def _same_pictures(theirs: str, ours: str, what: Any) -> None:
+    """Two PNGs (base64) of one size, a level apart at most where light is blurred in floating
+    point (numpy's BLAS), and at few pixels."""
+    import base64
+    from io import BytesIO
+
+    import numpy as np
+    from PIL import Image
+
+    pictures = [Image.open(BytesIO(base64.b64decode(p))) for p in (theirs, ours)]
+    assert pictures[1].size == pictures[0].size, what
+    apart = np.abs(np.asarray(pictures[1].convert("RGB"), int)
+                   - np.asarray(pictures[0].convert("RGB"), int))  # fmt: skip
+    assert apart.max() <= 1, what
+    far = (apart.max(axis=2) > 0).sum()
+    assert far <= max(2, apart.shape[0] * apart.shape[1] // 10000), (what, far)
+
+
+def test_the_editors_pictures_are_drawn_as_drawings_py_draws_them(servers: Any) -> None:
+    """Design's picture of a theme (its boxes, warnings, grid and modules' boxes), with each
+    test message on it; a notice that is none, a theme that is none, a body that is no dict.
+    The modules drawn for the library, the starting layouts of a grid, a module's parts as
+    plain widgets, a theme adapted to another panel; and what they refuse."""
+    ask, homes = servers
+    slate = json.loads((DATA / "themes" / "slate" / "theme.json").read_text("utf-8"))
+    lumen = json.loads((DATA / "themes" / "lumen" / "theme.json").read_text("utf-8"))
+    module = next(w["id"] for w in lumen["widgets"] if w.get("type") == "module")
+    # (what the demo's readings do not move: both servers draw "now", a moment apart)
+    still = {**slate, "widgets": [w for w in slate["widgets"]
+                                  if w["type"] in ("rect", "text", "icon", "clock")]}  # fmt: skip
+    grid = {**lumen, "widgets": [
+        {"type": "module", "id": "c", "module": "text", "col": 0, "row": 0, "cols": 2,
+         "text": "Libre"},
+        {"type": "module", "id": "d", "module": "date", "col": 2, "row": 0},
+        {"type": "module", "id": "t", "module": "text", "col": 0, "row": 1, "text": "Hi"},
+    ]}  # fmt: skip
+    cases: list[tuple[str, Any]] = [
+        ("/api/render", {"theme": still, "base": "slate"}),
+        ("/api/render", {"theme": grid, "base": "lumen"}),
+        ("/api/render", {"theme": still, "base": "../x"}),
+        *[("/api/render", {"theme": grid, "base": "lumen", "notice": n, "look": look})
+          for n in ("volume", "music", "warning", "panel", "device", "game")
+          for look in ("", "ring")],
+        ("/api/render", {"theme": slate, "notice": "nope"}),
+        ("/api/render", {"theme": slate, "notice": 5}),
+        ("/api/render", {"theme": {"format": "libre-panel-theme/1", "display": {"width": 1}}}),
+        ("/api/render", ["theme"]),
+        ("/api/module-previews", {}),
+        ("/api/module-previews", {"palette": lumen.get("palette"), "style": lumen.get("style")}),
+        ("/api/templates", {"width": 800, "height": 480}),
+        ("/api/templates", {"width": "320", "height": 240.7, "model": "turing-3.5"}),
+        ("/api/templates", {"width": 1920, "height": 480, "model": 5}),
+        ("/api/templates", {"height": 480}),
+        ("/api/templates", {"width": None, "height": 480}),
+        ("/api/templates", {"width": "x", "height": 480}),
+        ("/api/templates", [1]),
+        ("/api/templates", "text"),
+        ("/api/detach", {"theme": lumen, "base": "lumen", "id": module}),
+        ("/api/detach", {"theme": lumen, "id": "nothing"}),
+        ("/api/detach", {"theme": lumen, "id": None}),
+        ("/api/detach", {"theme": None}),
+        ("/api/adapt", {"theme": slate, "width": 480, "height": 320}),
+        ("/api/adapt", {"theme": slate, "model": "turing-3.5", "orientation": "portrait"}),
+        ("/api/adapt", {"theme": lumen, "mode": "layout", "width": "1280", "height": 0}),
+        ("/api/adapt", {"theme": slate, "width": "x", "height": 1}),
+        ("/api/adapt", {"theme": None}),
+        ("/api/adapt", 7),
+    ]  # fmt: skip
+    for path, payload in cases:
+        for _ in range(2):  # (once more where a minute turned between the two)
+            theirs, ours = ask(_post(path, payload))
+            if theirs == ("", {}, b""):  # (an exception the server does not catch: no answer)
+                assert ours == theirs, (path, ours)
+                break
+            assert ours[0] == theirs[0], (path, ours, theirs[0])
+            told = [json.loads(body) for _, _, body in (theirs, ours)]
+            pictures = [t.pop("png", None) for t in told]
+            previews = [t.pop("previews", None) for t in told]
+            if told[1] != told[0]:
+                continue
+            if pictures[0] is not None:
+                _same_pictures(pictures[0], pictures[1], (path, payload))
+            if previews[0] is not None:
+                assert previews[1].keys() == previews[0].keys()
+                for kind in previews[0]:
+                    _same_pictures(previews[0][kind], previews[1][kind], kind)
+            break
+        assert told[1] == told[0], path

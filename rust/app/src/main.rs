@@ -7,6 +7,7 @@ mod autostart;
 mod background;
 mod company;
 mod display;
+mod drawings;
 mod editing;
 mod home;
 mod hotkeys;

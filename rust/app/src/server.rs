@@ -293,6 +293,45 @@ const ROUTES: &[Route] = &[
             false => import_theme(s, x, u),
         }
     }),
+    private("POST", "/api/render", |s, x, _, _| render(s, x)),
+    private("POST", "/api/module-previews", |s, x, _, _| {
+        drawing(s, x, |payload, _, env, config| {
+            let get = |key: &str| match payload {
+                Value::Dict(d) => Ok(d.get(key).cloned().unwrap_or(Value::None)),
+                other => Err(crate::drawings::Refused::Failed(format!(
+                    "AttributeError: '{}' object has no attribute 'get'",
+                    other.type_name()
+                ))),
+            };
+            let previews = crate::drawings::module_previews(
+                &get("palette")?,
+                &get("style")?,
+                &config.symbols,
+                env,
+            )?;
+            let mut told = Dict::new();
+            told.insert("previews".into(), previews);
+            Ok(Value::Dict(told))
+        })
+    }),
+    private("POST", "/api/templates", |s, x, _, _| {
+        drawing(s, x, |payload, _, _, _| crate::drawings::templates(payload))
+    }),
+    private("POST", "/api/detach", |s, x, _, _| {
+        drawing(s, x, |payload, state, env, _| {
+            let base = match payload {
+                Value::Dict(d) => d.get("base").cloned(),
+                _ => None,
+            };
+            let root = base_folder(state, base.as_ref());
+            crate::drawings::detach(payload, root.as_deref(), env)
+        })
+    }),
+    private("POST", "/api/adapt", |s, x, _, _| {
+        drawing(s, x, |payload, _, env, _| {
+            crate::drawings::adapt(payload, env)
+        })
+    }),
     private("POST", "/api/themes/{theme}/version", |s, x, m, _| {
         edit(s, x, |payload, places, env| {
             crate::editing::make_version(m[0], payload, places, env)
@@ -629,6 +668,84 @@ fn unanswered(why: &str) {
 fn save_theme(state: &State, exchange: &mut Exchange, theme_id: &str) {
     edit(state, exchange, |payload, places, env| {
         crate::editing::save(theme_id, payload, places, env)
+    })
+}
+
+/// _base_folder: the folder of the theme a page names as the one whose pictures and fonts an
+/// unsaved theme takes (None for a name that is none or a theme that is not there).
+fn base_folder(state: &State, base: Option<&Value>) -> Option<PathBuf> {
+    let Some(Value::Str(name)) = base else {
+        return None;
+    };
+    if !lp_theme::model::valid_theme_name(name) {
+        return None;
+    }
+    lp_theme::versions::find_theme(name, &state.home.places()).ok()
+}
+
+/// The config.toml's choices the editor's pictures show, as the panel does (its defaults where
+/// it does not read).
+fn chosen(state: &State) -> lp_config::Config {
+    lp_config::load_config(&state.config_file, lp_config::platform())
+        .unwrap_or_else(|_| lp_config::Config::new(None, lp_config::platform()))
+}
+
+/// A drawing route of the editor's (drawings.rs) with the request's JSON.
+fn drawing(
+    state: &State,
+    exchange: &mut Exchange,
+    route: impl FnOnce(
+        &Value,
+        &State,
+        &lp_theme::Env,
+        &lp_config::Config,
+    ) -> Result<Value, crate::drawings::Refused>,
+) {
+    let Some(payload) = exchange.read_json(MAX_JSON) else {
+        return;
+    };
+    let env = lp_theme::Env {
+        fonts_dir: state.home.fonts(),
+    };
+    match route(&payload, state, &env, &chosen(state)) {
+        Ok(told) => exchange.json(&told, 200),
+        Err(crate::drawings::Refused::Said(why)) => exchange.error(&why, 400, ""),
+        Err(crate::drawings::Refused::Failed(why)) => unanswered(&why),
+    }
+}
+
+/// _render: Design's and Look's picture of the theme it is given (drawings.rs), live readings
+/// over the demo's where it asks for them.
+fn render(state: &State, exchange: &mut Exchange) {
+    drawing(state, exchange, |payload, state, env, config| {
+        let get = |key: &str| match payload {
+            Value::Dict(d) => Ok(d.get(key).cloned().unwrap_or(Value::None)),
+            other => Err(crate::drawings::Refused::Failed(format!(
+                "AttributeError: '{}' object has no attribute 'get'",
+                other.type_name()
+            ))),
+        };
+        let root = base_folder(state, Some(&get("base")?));
+        let live = match get("live")?.truthy() {
+            true => live_snapshot(state).map(|current| {
+                let history = current
+                    .history
+                    .into_iter()
+                    .filter(|(_, values)| values.len() > 1)
+                    .collect();
+                (current.readings, history)
+            }),
+            false => None,
+        };
+        crate::drawings::render(
+            &get("theme")?,
+            root.as_deref(),
+            config,
+            live,
+            &get("notice")?,
+            &get("look")?,
+            env,
+        )
     })
 }
 
