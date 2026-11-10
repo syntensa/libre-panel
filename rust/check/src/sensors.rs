@@ -823,6 +823,63 @@ fn sky(case: &Value) -> Result<Value, String> {
     Ok(json!({"moments": moments}))
 }
 
+/// mangohud: the folder each MangoHud.conf names (a home and an environment), the newest log
+/// of each folder at a time, the program of each log's name, and the frame times read from
+/// each log as its chunks (base64) are written.
+fn mangohud(case: &Value) -> Result<Value, String> {
+    use base64::engine::general_purpose::STANDARD;
+    use base64::Engine;
+    use lp_sensors::mangohud as mh;
+    use std::io::Write;
+    use std::path::Path;
+    let list = |key: &str| case[key].as_array().cloned().unwrap_or_default();
+    let text = |value: &Value| value.as_str().unwrap_or("").to_string();
+    let configs: Vec<Value> = list("configs")
+        .iter()
+        .map(|one| {
+            let env = |name: &str| one["env"][name].as_str().map(str::to_string);
+            let folder = mh::config_folder(Path::new(&text(&one["home"])), &env);
+            json!(folder.to_string_lossy())
+        })
+        .collect();
+    let folders: Vec<Value> = list("folders")
+        .iter()
+        .map(|one| {
+            let found = mh::newest_log(Path::new(&text(&one[0])), one[1].as_f64().unwrap_or(0.0));
+            json!(found.map(|path| path.to_string_lossy().into_owned()))
+        })
+        .collect();
+    let names: Vec<Value> = list("names")
+        .iter()
+        .map(|name| json!(mh::app_of(Path::new(&text(name)))))
+        .collect();
+    let mut logs = Vec::new();
+    for one in list("logs") {
+        let path = text(&one["path"]);
+        std::fs::write(&path, b"").map_err(|e| e.to_string())?;
+        let mut reader = mh::LogReader::new(Path::new(&path));
+        let mut rounds = Vec::new();
+        for chunk in one["chunks"].as_array().into_iter().flatten() {
+            let data = STANDARD
+                .decode(chunk.as_str().unwrap_or(""))
+                .unwrap_or_default();
+            let mut file = std::fs::OpenOptions::new()
+                .append(true)
+                .open(&path)
+                .map_err(|e| e.to_string())?;
+            file.write_all(&data).map_err(|e| e.to_string())?;
+            // (a number JSON has not, as Python's str names it)
+            let frames = reader.frames().into_iter().map(|ms| match ms.is_finite() {
+                true => json!(ms),
+                false => json!(lp_py::float_repr(ms)),
+            });
+            rounds.push(json!(frames.collect::<Vec<_>>()));
+        }
+        logs.push(json!({"app": reader.app, "rounds": rounds}));
+    }
+    Ok(json!({"configs": configs, "folders": folders, "names": names, "logs": logs}))
+}
+
 pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "regex" => regex(case),
@@ -837,6 +894,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "game_frames" => frames(case),
         "hardware" => hardware(case),
         "sky" => sky(case)?,
+        "mangohud" => mangohud(case)?,
         "linux_source" => linux_source(case)?,
         _ => return Err(format!("no such op: {op}")),
     })

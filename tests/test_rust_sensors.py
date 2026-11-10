@@ -6,7 +6,9 @@ Rust app has them."""
 from __future__ import annotations
 
 import base64
+import itertools
 import json
+import math
 import random
 import struct
 import sys
@@ -1206,3 +1208,104 @@ def test_the_sun_and_the_moon_are_computed_as_sky_computes_them(
         monkeypatch.undo()
         if sys.platform != "win32":
             time.tzset()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="MangoHud is Linux's")
+def test_mangohuds_logs_are_found_and_read_as_python_reads_them(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """sensors/mangohud.py: the folder MangoHud.conf names, the newest log of a folder, the
+    program of a log's name, and the frame times of a log as it grows."""
+    import os
+    from pathlib import Path
+
+    from libre_panel.sensors import mangohud
+
+    rng = random.Random(0x3A9)
+    conf_lines = ["output_folder=/games/logs", "output_folder = $LOGS/mango ", "fps_limit=60",
+                  "# output_folder=/no", "output_folder=", "output_folder=~/logs",
+                  "output_folder=~",
+                  "output_folder=${LOGS}x/$NOPE/${NOPE}/$", "autostart_log=1", "no equals sign",
+                  " output_folder\t=\t/tabs/logs", "output_folder=$LOGS${LOGS}$1a",
+                  "output_folder=${LOGS", "output_folder=a=b"]  # fmt: skip
+    configs = []
+    for n in range(200):
+        home = tmp_path / f"home{n}"
+        env = {"HOME": str(home)}
+        base = home / ".config"
+        if rng.random() < 0.4:
+            base = tmp_path / f"xdg{n}"
+            env["XDG_CONFIG_HOME"] = rng.choice([str(base), str(base), ""])
+            if not env["XDG_CONFIG_HOME"]:
+                base = home / ".config"
+        if rng.random() < 0.5:
+            env["LOGS"] = rng.choice(["/var/logs", "", "relative dir"])
+        if rng.random() < 0.9:
+            (base / "MangoHud").mkdir(parents=True)
+            lines = [rng.choice(conf_lines) for _ in range(rng.randrange(0, 4))]
+            (base / "MangoHud" / "MangoHud.conf").write_bytes(
+                rng.choice(["\n", "\r\n"]).join(lines).encode() + rng.choice([b"", b"\n\xff"])
+            )
+        configs.append({"home": str(home), "env": env})
+    stamp = "_2026-10-21_19-04-33"
+    log_names = [f"Cyberpunk2077{stamp}.csv", "My Game_v2_2026-01-02_03-04-05.csv",
+                 f"Cyberpunk2077{stamp}_summary.csv", "notes.csv", f"{stamp}.csv",
+                 f"a_b{stamp}.csv", f"x{stamp}.CSV", "x_26-10-21_19-04-33.csv",
+                 f"game{stamp}.csv.bak", f"Ünï{stamp}.csv"]  # fmt: skip
+    now = 1_800_000_000.0
+    folders = []
+    for n in range(150):
+        folder = tmp_path / f"logs{n}"
+        folder.mkdir()
+        for name in rng.sample(log_names, rng.randrange(0, 6)):
+            (folder / name).write_text("x", encoding="utf-8")
+            changed = now - rng.choice([0.0, 1.5, 9.99, 10.0, 10.01, 300.0, -2.0, 4.25])
+            os.utime(folder / name, (changed, changed))
+        folders.append([str(folder), now])
+    folders.append([str(tmp_path / "no such folder"), now])
+    cells = ["16.6", "8.33", " 7.5 ", "", "abc", "1e1", "0", "-3", "1_0.5", "٣", "33.3", "4.0"]
+    logs = []
+    for n in range(120):
+        header = rng.choice(["fps,frametime,cpu_load", "FPS, FrameTime ,x", "frametime", "a,b",
+                             "os,cpu,gpu\nLinux,Ryzen,Radeon\nfps,frametime,cpu_load"])  # fmt: skip
+        rows = [header] + [
+            ",".join(rng.choice(cells) for _ in range(rng.randrange(0, 4)))
+            for _ in range(rng.randrange(0, 40))
+        ]
+        data = rng.choice(["\n", "\r\n"]).join(rows).encode() + rng.choice([b"", b"\n"])
+        if rng.random() < 0.1:
+            data += b"9" * 6000 + b"\n5.5,6.5,7.5\n"
+        if rng.random() < 0.1:
+            data = data.replace(b"1", b"\xff", 2)
+        cuts = sorted(rng.randrange(0, len(data) + 1) for _ in range(rng.randrange(0, 5)))
+        chunks = [data[a:b] for a, b in itertools.pairwise([0, *cuts, len(data)])]
+        logs.append({"path": str(tmp_path / f"log{n}_2026-10-21_19-04-33.csv"), "chunks": chunks})
+    names = [str(tmp_path / name) for name in log_names]
+
+    sent = [{**log, "chunks": [base64.b64encode(c).decode() for c in log["chunks"]]}
+            for log in logs]  # fmt: skip
+    [ours] = run([{"op": "mangohud", "configs": configs, "folders": folders, "names": names,
+                   "logs": sent}])  # fmt: skip
+    for config, got in zip(configs, ours["configs"], strict=True):
+        with monkeypatch.context() as patch:
+            for name in ("XDG_CONFIG_HOME", "LOGS", "NOPE"):
+                patch.delenv(name, raising=False)
+            for name, value in config["env"].items():
+                patch.setenv(name, value)
+            assert got == str(mangohud.config_folder(Path(config["home"]))), config
+    assert len(set(ours["configs"])) > 12
+    wanted = [mangohud.newest_log(Path(folder), at) for folder, at in folders]
+    assert ours["folders"] == [None if path is None else str(path) for path in wanted]
+    assert sum(1 for path in wanted if path) > 40
+    assert ours["names"] == [mangohud.app_of(Path(name)) for name in names]
+    for log, got in zip(logs, ours["logs"], strict=True):
+        path = Path(log["path"])
+        path.write_bytes(b"")
+        reader = mangohud.LogReader(path)
+        rounds = []
+        for chunk in log["chunks"]:
+            with path.open("ab") as file:
+                file.write(chunk)
+            rounds.append([ms if math.isfinite(ms) else repr(ms) for ms in reader.frames()])
+        assert got == {"app": reader.app, "rounds": rounds}, log["path"]
+    assert sum(len(frames) for got in ours["logs"] for frames in got["rounds"]) > 500

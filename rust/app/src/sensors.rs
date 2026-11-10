@@ -178,6 +178,33 @@ impl Source for PresentMon {
     }
 }
 
+/// Frames per second of the game from MangoHud's log (sensors/mangohud.py).
+struct MangoHud(lp_sensors::mangohud::MangoHudSource);
+
+impl MangoHud {
+    fn of(sensors: &lp_config::SensorsConfig, wanted: &Wanted) -> MangoHud {
+        let folder = text(sensors.options.get("mangohud"), "folder");
+        MangoHud(lp_sensors::mangohud::MangoHudSource::new(
+            folder,
+            wanted.clone(),
+        ))
+    }
+}
+
+impl Source for MangoHud {
+    fn name(&self) -> &'static str {
+        "mangohud"
+    }
+
+    fn read(&mut self, out: &mut Readings) {
+        out.extend(self.0.read());
+    }
+
+    fn notes(&mut self) -> Vec<String> {
+        self.0.notes()
+    }
+}
+
 /// The sun and the moon (sensors/sky.py).
 struct Sky(lp_sensors::sky::SkySource);
 
@@ -409,6 +436,7 @@ impl Hub {
                         notes.extend(said);
                     }
                     "hardware" => sources.push(Box::new(Hardware::of(config))),
+                    "mangohud" => sources.push(Box::new(MangoHud::of(sensors, &wanted))),
                     "sky" => {
                         let table = sensors.options.get(name);
                         let number = |key: &str| match table.and_then(|t| t.get(key)) {
@@ -426,6 +454,10 @@ impl Hub {
                 // the sun for the weather's place (if set), the moon everywhere
                 let place = config.weather.latitude.zip(config.weather.longitude);
                 sources.push(Box::new(Sky(lp_sensors::sky::SkySource::new(place))));
+            }
+            if cfg!(target_os = "linux") && !sensors.providers.iter().any(|n| n == "mangohud") {
+                // a game's frame rate from MangoHud's log, read only while a theme shows it
+                sources.push(Box::new(MangoHud::of(sensors, &wanted)));
             }
             if !sensors.providers.iter().any(|name| name == "hardware") {
                 sources.push(Box::new(Hardware::of(config))); // the names of this PC

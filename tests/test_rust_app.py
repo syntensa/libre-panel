@@ -675,3 +675,40 @@ def test_the_sun_and_the_moon_are_always_there(tmp_path: Path) -> None:
                 for r in (before[key], after[key])]  # fmt: skip
         if key != "sun.elevation":  # (it moves by the second)
             assert value in said, key
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="MangoHud is Linux's")
+def test_a_games_frames_come_from_mangohuds_log_as_it_grows(tmp_path: Path) -> None:
+    """The MangoHud source is on without being named: the newest log of the folder
+    `[sensors.mangohud]` names is read while something shows game.*, from where it was when
+    the reading began."""
+    folder = tmp_path / "mangologs"
+    folder.mkdir()
+    log = folder / "Stray_2026-10-21_19-04-33.csv"
+    log.write_text("os,cpu\nLinux,Ryzen\nfps,frametime,cpu_load\n100,999.0,5\n", encoding="utf-8")
+    (tmp_path / "config.toml").write_text(
+        f'[sensors]\nproviders = ["nope"]\n[sensors.mangohud]\nfolder = "{folder}"\n',
+        encoding="utf-8",
+    )
+    stop = threading.Event()
+
+    def game() -> None:
+        with log.open("a", encoding="utf-8") as file:
+            while not stop.wait(0.01):
+                file.write("100,10.0,5\n")
+                file.flush()
+
+    writer = threading.Thread(target=game)
+    writer.start()
+    try:
+        done = _run(tmp_path, "sensors", LP_SENSORS_WANT="game.fps")
+    finally:
+        stop.set()
+        writer.join()
+    assert done.returncode == 0, done.stderr
+    ours = {line[:40].strip(): (line[41:55].strip(), line[56:61].strip(), line[62:])
+            for line in _lines(done)}  # fmt: skip
+    assert ours["game.app"][0] == "Stray"
+    assert ours["game.frametime"][:2] == ("10.00", "ms")  # (not the 999 ms logged before)
+    assert ours["game.fps"] == ("100.00", "fps", "Frames per second")
+    assert "mangohud: reading the log of Stray" in done.stderr

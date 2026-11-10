@@ -1697,7 +1697,13 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       and age, the sun's rise, noon, set, height and daylight for the place of `[weather]`,
       in the computer's local time; always on. 4000 moments of a century at places from pole
       to pole compared with Python in five zones, each value and its type
-- [ ] HWiNFO, RTSS, MangoHud, the other sources; Linux's hint of what system-setup brings
+- [x] a game's frames on Linux (sensors/mangohud.py, lp-sensors' mangohud): the folder
+      MangoHud.conf names, the newest log written in the last seconds, its rows read as they
+      are written from where the reading began, counted by the same counter as PresentMon's
+      (as samples); a thread that runs while a theme reads game.*; always on where Linux is.
+      200 configurations, 150 folders and 120 logs written in pieces compared with Python,
+      the program run against a log that grows
+- [ ] HWiNFO, RTSS, the other sources; Linux's hint of what system-setup brings
 - [ ] the history as a ring, demo.py's values; the .NET service goes
 
 ### R8 services

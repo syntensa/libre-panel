@@ -12,6 +12,7 @@ pub mod hwnames;
 pub mod lhm;
 pub mod linux;
 pub mod load;
+pub mod mangohud;
 pub mod netlink;
 pub mod nvml;
 pub mod presentmon;

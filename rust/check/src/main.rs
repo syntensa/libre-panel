@@ -1803,7 +1803,7 @@ fn run(case: &Value) -> Result<Value, String> {
         "config" => config::run(case)?,
         "regex" | "hwnames" | "lhm_readings" | "lhm_tree" | "sensor_protocol" | "lhm_hints"
         | "load_math" | "netlink" | "audio" | "game_frames" | "hardware" | "linux_source"
-        | "sky" => sensors::run(op, case)?,
+        | "sky" | "mangohud" => sensors::run(op, case)?,
         "toml" => {
             // each text read as tomllib.loads reads it; each file's bytes as
             // Path.read_text(encoding="utf-8") and then tomllib.loads read them; `frame`: how
