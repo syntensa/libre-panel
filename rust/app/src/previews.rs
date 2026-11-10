@@ -92,6 +92,92 @@ impl Previews {
     }
 }
 
+/// panel_sizes: every size of a panel Libre Panel drives, landscape, and on end for a bar (as
+/// the catalogue's models have them): `size`, `shape` ("rect", "round") and the `panels`,
+/// from tall to long.
+pub fn panel_sizes() -> Vec<((i64, i64), &'static str, Vec<String>)> {
+    let mut found: IndexMap<(i64, i64, &'static str), Vec<String>> = IndexMap::new();
+    for model in lp_devices::models::MODELS.iter() {
+        let ways: &[&str] = match lp_theme::defaults::is_bar(Some(model)) {
+            true => &["landscape", "portrait"],
+            false => &["landscape"],
+        };
+        for way in ways {
+            let (w, h) = model.size(way);
+            found
+                .entry((w, h, model.shape))
+                .or_default()
+                .push(model.label());
+        }
+    }
+    let mut ordered: Vec<_> = found.into_iter().collect();
+    ordered.sort_by(|a, b| {
+        let ratio = |((w, h, _), _): &((i64, i64, &str), Vec<String>)| *w as f64 / *h as f64;
+        ratio(a).total_cmp(&ratio(b))
+    });
+    ordered
+        .into_iter()
+        .map(|((w, h, shape), mut names)| {
+            names.sort_by(|a, b| a.chars().cmp(b.chars()));
+            names.dedup();
+            ((w, h), shape, names)
+        })
+        .collect()
+}
+
+/// _theme_sizes: how the theme comes on every panel size (Design → the theme's menu → Every
+/// panel size): `version` the one shown there, `how` "made" for it, "laid_out" from `from`
+/// (its version for the nearest shape), or "scaled" into it. Refused::Theme where there is
+/// no such theme.
+pub fn theme_sizes(
+    theme_id: &str,
+    env: &lp_theme::Env,
+    places: &versions::Places,
+) -> Result<lp_py::Value, Refused> {
+    use lp_py::{Dict, Value};
+    versions::find_theme(theme_id, places).map_err(|_| Refused::Theme("not found".into()))?;
+    let mut out = Vec::new();
+    for ((w, h), shape, panels) in panel_sizes() {
+        let way = if h > w { "portrait" } else { "landscape" };
+        let version = versions::theme_for(theme_id, way, Some((w, h)), places);
+        let loaded = versions::find_theme(&version, places)
+            .and_then(|folder| lp_theme::load_theme(&folder, env));
+        let Ok(theme) = loaded else {
+            continue;
+        };
+        let fitted =
+            lp_theme::adapt::laid_out_anew(&theme, Some((w, h)), "custom", &places.builtin, env)
+                .map_err(|e| Refused::Drawing(e.msg))?;
+        let (how, source) = match fitted {
+            Some(fitted) => {
+                let name = fitted.root.as_deref().and_then(Path::file_name);
+                let source = name.map_or(version.clone(), |n| n.to_string_lossy().into_owned());
+                ("laid_out", source)
+            }
+            None if (theme.width, theme.height) == (w, h) => ("made", version.clone()),
+            None => ("scaled", version.clone()),
+        };
+        let mut entry = Dict::new();
+        entry.insert(
+            "size".into(),
+            Value::List(vec![Value::int(w), Value::int(h)]),
+        );
+        entry.insert("shape".into(), Value::Str(shape.into()));
+        entry.insert(
+            "panels".into(),
+            Value::List(panels.into_iter().map(Value::Str).collect()),
+        );
+        entry.insert("version".into(), Value::Str(version));
+        entry.insert("how".into(), Value::Str(how.into()));
+        entry.insert("from".into(), Value::Str(source));
+        out.push(Value::Dict(entry));
+    }
+    let mut told = Dict::new();
+    told.insert("theme".into(), Value::Str(theme_id.into()));
+    told.insert("sizes".into(), Value::List(out));
+    Ok(Value::Dict(told))
+}
+
 /// _size_of: `"960x320"`: a panel's size (None for anything else).
 pub fn size_of(text: &str) -> Option<(i64, i64)> {
     let (w, h) = text.split_once('x')?;

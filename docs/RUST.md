@@ -1959,12 +1959,14 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       demo's readings and pictures at a fixed moment; kept, 48 of them, until the theme or a
       choice changes; drawn two at a time; none drawn for a browser that left. Compared with
       Python's to the pixel, the themes' light within a level where it is blurred in floating
-      point (as in the renderer's own comparisons).
+      point (as in the renderer's own comparisons). How a theme comes on every panel size
+      (`/api/themes/{theme}/sizes`: made for it, laid out from its version for the nearest
+      shape, or scaled into it).
       `libre-panel editor` serves alone, `start` with
       the panel, and writes its address where a later start finds it. 120 requests to
       Python's server and to this one compared: the status, the headers and the body, byte
       for byte; a run of the program controlled through its server until `quit` ends it.
-      Still to come: every other route (the themes' versions per size, saving, the
+      Still to come: every other route (a theme's version made for a size, saving, the
       Settings' unlock, hardware, the Player, plugins' pages, …)
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app

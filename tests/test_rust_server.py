@@ -983,3 +983,22 @@ def test_the_pictures_of_the_themes_are_drawn_as_server_py_draws_them(servers: A
             encoding="utf-8",
         )
     compare()
+
+
+def test_the_themes_on_every_panel_size_are_told_as_server_py_tells_them(servers: Any) -> None:
+    """Every panel size and how a theme comes on it: made for it, laid out from its version
+    for the nearest shape, or scaled into it; the app's themes, one's own (with versions for
+    more than one size and with one), a theme that is not there or cannot be read."""
+    ask, homes = servers
+    for home in homes:  # (one's own with a version for a second size)
+        for name in ("contrast", "contrast-480x480"):
+            shutil.copytree(
+                DATA / "themes" / name, home / "themes" / name.replace("contrast", "own")
+            )
+    for theme in ("slate", "lumen", "arena", "terra", "contrast", "mine", "own", "own-480x480",
+                  "broken", "list", "nothing", "Bad%20Name"):  # fmt: skip
+        theirs, ours = ask(_get(f"/api/themes/{theme}/sizes", WITH))
+        assert ours[0] == theirs[0], theme
+        assert json.loads(ours[2]) == json.loads(theirs[2]), theme
+    told = json.loads(ask(_get("/api/themes/lumen/sizes", WITH))[0][2])
+    assert {entry["how"] for entry in told["sizes"]} >= {"made", "laid_out"}, told

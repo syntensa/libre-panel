@@ -199,8 +199,15 @@ const ROUTES: &[Route] = &[
     private("GET", "/api/themes/{theme}/export", |_, x, _, _| {
         not_found(x)
     }),
-    private("GET", "/api/themes/{theme}/sizes", |_, x, _, _| {
-        not_found(x)
+    private("GET", "/api/themes/{theme}/sizes", |s, x, m, _| {
+        let env = lp_theme::Env {
+            fonts_dir: s.home.fonts(),
+        };
+        match crate::previews::theme_sizes(m[0], &env, &s.home.places()) {
+            Ok(told) => x.json(&told, 200),
+            Err(crate::previews::Refused::Theme(_)) => not_found(x),
+            Err(crate::previews::Refused::Drawing(why)) => x.error(&why, 500, ""),
+        }
     }),
     private("GET", "/api/readings", |s, x, _, u| readings(s, x, u)),
     private("GET", "/api/settings", |s, x, _, _| {

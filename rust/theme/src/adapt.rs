@@ -736,14 +736,25 @@ pub fn laid_out(
     builtin: &Path,
     env: &Env,
 ) -> Result<Theme> {
+    Ok(laid_out_anew(theme, size, model, builtin, env)?.unwrap_or_else(|| theme.clone()))
+}
+
+/// The same, None where `theme` is shown as it is (Python's `laid_out(...) is theme`).
+pub fn laid_out_anew(
+    theme: &Theme,
+    size: Option<(i64, i64)>,
+    model: &str,
+    builtin: &Path,
+    env: &Env,
+) -> Result<Option<Theme>> {
     let Some(size) = size else {
-        return Ok(theme.clone());
+        return Ok(None);
     };
     if (theme.width, theme.height) == size {
-        return Ok(theme.clone());
+        return Ok(None);
     }
     let Some(folder) = theme.root.as_deref() else {
-        return Ok(theme.clone());
+        return Ok(None);
     };
     let own = match (
         crate::paths::resolve(folder),
@@ -751,18 +762,18 @@ pub fn laid_out(
     ) {
         (Ok(f), Ok(b)) => py_parent(&f) != b,
         (Err(e), _) | (_, Err(e)) if !matches!(e.kind, Kind::Os(_)) => return Err(e),
-        _ => return Ok(theme.clone()),
+        _ => return Ok(None),
     };
     if own && versions_of(folder)?.len() < 2 {
-        return Ok(theme.clone());
+        return Ok(None);
     }
     let Some(name) = nearest_version(folder, size)? else {
-        return Ok(theme.clone());
+        return Ok(None);
     };
     let made = py_parent(folder).join(&name);
     let file = made.join(THEME_FILENAME);
     if std::fs::metadata(&file).is_err() {
-        return Ok(theme.clone());
+        return Ok(None);
     }
     match laid_out_data(&file, size.0, size.1, model, env).and_then(|data| {
         // (through JSON text and back, as the app keeps it)
@@ -773,7 +784,7 @@ pub fn laid_out(
         })?;
         parse_theme(&data, Some(&made), env)
     }) {
-        Ok(laid) => Ok(laid),
+        Ok(laid) => Ok(Some(laid)),
         // (OSError, ValueError, ThemeError: the theme as it is)
         Err(e)
             if matches!(
@@ -781,7 +792,7 @@ pub fn laid_out(
                 Kind::Os(_) | Kind::Value | Kind::Theme | Kind::UnicodeDecode
             ) =>
         {
-            Ok(theme.clone())
+            Ok(None)
         }
         Err(e) => Err(e),
     }
