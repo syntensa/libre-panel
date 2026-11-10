@@ -1002,3 +1002,149 @@ def test_the_themes_on_every_panel_size_are_told_as_server_py_tells_them(servers
         assert json.loads(ours[2]) == json.loads(theirs[2]), theme
     told = json.loads(ask(_get("/api/themes/lumen/sizes", WITH))[0][2])
     assert {entry["how"] for entry in told["sizes"]} >= {"made", "laid_out"}, told
+
+
+def _zip_of(files: dict[str, bytes], **options: Any) -> bytes:
+    """A zip of ``files`` as zipfile writes it (``options``: per name, a ZipInfo's own)."""
+    import io
+    import zipfile
+
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as archive:
+        for name, body in files.items():
+            info = zipfile.ZipInfo(name, (2024, 1, 2, 3, 4, 6))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            for key, value in options.get(name, {}).items():
+                setattr(info, key, value)
+            archive.writestr(info, body)
+    return out.getvalue()
+
+
+def _unzipped(data: bytes) -> list[tuple[str, int, int, Any, bytes]]:
+    """What a zip holds: each file's name, attributes, packing, time (not theme.json's: the
+    moment it was made) and bytes."""
+    import io
+    import zipfile
+
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        return [(i.filename, i.external_attr, i.compress_type,
+                 None if i.filename.endswith("theme.json") else i.date_time, archive.read(i))
+                for i in archive.infolist()]  # fmt: skip
+
+
+def _tree(folder: Path) -> list[tuple[str, bytes]]:
+    return sorted((p.relative_to(folder).as_posix(), p.read_bytes())
+                  for p in folder.rglob("*") if p.is_file())  # fmt: skip
+
+
+def test_themes_are_shared_and_taken_in_as_share_py_does(servers: Any) -> None:
+    """A theme as a .zip to give to someone: its theme.json without the person's folders and
+    whole paths in its pictures' lists, the pictures and fonts it names (by a pattern too),
+    nothing else, no link out; one that is not there. A shared theme taken in: under the
+    folder's name, the file's or the theme's, a number after one that is taken, only the
+    files it names; refused as share.py refuses it (no zip, too much, paths that leave it, a
+    link, a password, files of other kinds or not what they say, no theme.json, one that does
+    not read or is no theme, a damaged entry)."""
+    import zipfile
+
+    ask, homes = servers
+    png = (
+        (DATA / "themes" / "lumen" / "preview.png").read_bytes()
+        if (DATA / "themes" / "lumen" / "preview.png").exists()
+        else b"\x89PNG\r\n\x1a\n" + b"x" * 64
+    )
+    for home in homes:
+        own = home / "themes" / "pics"
+        (own / "photos").mkdir(parents=True)
+        (own / "photos" / "a.png").write_bytes(png)
+        (own / "photos" / "b.png").write_bytes(png + b"b")
+        (own / "back.jpg").write_bytes(b"\xff\xd8\xff" + b"j" * 40)
+        (own / "unused.png").write_bytes(png)
+        (own / "font.ttf").write_bytes(b"\x00\x01\x00\x00font")
+        os.utime(own / "back.jpg", (1_600_000_000, 1_600_000_000))
+        (own / "linked.png").symlink_to(own / "photos" / "a.png")
+        theme = json.loads((DATA / "themes" / "slate" / "theme.json").read_text("utf-8"))
+        theme["name"] = "Pics"
+        theme["background"] = {"color": "#000000", "image": "back.jpg"}
+        theme["widgets"] += [
+            {"type": "image", "id": "show", "x": 0, "y": 0, "w": 50, "h": 50,
+             "slides": f"photos/*.png\nlinked.png\n/etc/x.png\nC:/x.png\n{home}/mine.png\n"
+                       "../out.png\n@cover"},
+            {"type": "text", "id": "t", "x": 0, "y": 0, "text": f"at {home} here",
+             "font": "font.ttf"},
+        ]  # fmt: skip
+        (own / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+    for theme in ("pics", "slate", "mine", "nothing", "broken"):
+        theirs, ours = ask(_get(f"/api/themes/{theme}/export", WITH))
+        assert ours[0] == theirs[0], theme
+        if theirs[1]["Content-Type"] != "application/zip":
+            told = [
+                json.loads(body.replace(str(home).encode(), b"<home>"))
+                for home, (_, _, body) in zip(homes, (theirs, ours), strict=True)
+            ]
+            assert told[1] == told[0], theme
+            continue
+        assert ours[1]["Content-Disposition"] == theirs[1]["Content-Disposition"], theme
+        assert _unzipped(ours[2]) == _unzipped(theirs[2]), theme
+    held = _unzipped(ask(_get("/api/themes/pics/export", WITH))[0][2])
+    assert [h[0] for h in held] == [
+        "pics/theme.json",
+        "pics/back.jpg",
+        "pics/font.ttf",
+        "pics/photos/a.png",
+        "pics/photos/b.png",
+    ], held
+    # taken in: each a zip as zipfile writes it, the answer and the folder put in place
+    form = {"format": "libre-panel-theme/1"}
+    tiny = json.dumps({**form, "display": {"width": 1}}).encode()  # (a theme that is none)
+    good = json.dumps({**form, "name": "Shared One", "display": {"width": 480, "height": 320},
+                       "background": {"color": "#000000", "image": "assets/back.png"},
+                       "widgets": []}).encode()  # fmt: skip
+    cases: list[tuple[str, bytes]] = [
+        ("shared.zip", _zip_of({"folder/theme.json": good, "folder/assets/back.png": png,
+                                "folder/assets/spare.png": png, "folder/.DS_Store": b"x",
+                                "__MACOSX/folder/._x": b"x", "folder/sub/": b""})),
+        ("shared.zip", _zip_of({"folder/theme.json": good, "folder/assets/back.png": png})),
+        ("My Theme.ZIP", _zip_of({"theme.json": good, "assets/back.png": png})),
+        ("", _zip_of({"theme.json": good, "assets/back.png": png})),
+        ("x.zip", b"not a zip at all"),
+        ("x.zip", _zip_of({"../theme.json": good})),
+        ("x.zip", _zip_of({"a/theme.json": good, "a/C:x.png": png})),
+        ("x.zip", _zip_of({"a/theme.json": good, "a\\b.png": png})),
+        ("x.zip", _zip_of({"a/theme.json": good, "a/l.png": b"x"},
+                          **{"a/l.png": {"external_attr": 0o120777 << 16}})),
+        ("x.zip", _zip_of({"a/theme.json": good, "a/run.exe": b"MZ"})),
+        ("x.zip", _zip_of({"a/theme.json": good, "b/x.png": png})),
+        ("x.zip", _zip_of({"a/x.png": png})),
+        ("x.zip", _zip_of({"a/theme.json": b"{nope"})),
+        ("x.zip", _zip_of({"a/theme.json": b"\xff\xfe"})),
+        ("x.zip", _zip_of({"a/theme.json": tiny})),
+        ("x.zip", _zip_of({"a/theme.json": good, "a/assets/back.png": b"GIF89a fake"})),
+        ("x.zip", _zip_of({"a/theme.json": good, "a/assets/back.png": png})[:-30]),
+        ("x.zip", _zip_of({f"a/{n}.png": png for n in range(1001)})),
+    ]  # fmt: skip
+    damaged = bytearray(_zip_of({"a/theme.json": good, "a/assets/back.png": png * 4}))
+    damaged[damaged.find(b"assets/back.png") + 20] ^= 0xFF
+    cases.append(("x.zip", bytes(damaged)))
+    locked = bytearray(_zip_of({"a/theme.json": good, "a/p.png": png}))
+    at = locked.rfind(b"PK\x01\x02")  # (zipfile writes no password: the flag set after)
+    locked[at + 8] |= 1
+    cases.append(("x.zip", bytes(locked)))
+    stored = _zip_of(
+        {"a/theme.json": good, "a/assets/back.png": png},
+        **{"a/assets/back.png": {"compress_type": zipfile.ZIP_STORED}},
+    )
+    cases.append(("x.zip", stored))
+    for name, data in cases:
+        head = (f"POST /api/themes/import?name={name.replace(' ', '%20')} HTTP/1.1\r\n"
+                "Host: {host}\r\nX-Libre-Panel: {token}\r\nContent-Type: application/zip\r\n"
+                f"Content-Length: {len(data)}\r\n\r\n").encode()  # fmt: skip
+        theirs, ours = ask(head + data)
+        told = [json.loads(body) for _, _, body in (theirs, ours)]
+        assert (ours[0], told[1]) == (theirs[0], told[0]), name
+        if "id" in told[0]:
+            trees = [_tree(home / "themes" / told[0]["id"]) for home in homes]
+            assert trees[1] == trees[0], name
+    for home in homes:
+        assert not [p for p in (home / "themes").iterdir() if p.name.startswith(".import-")]
+    assert {p.name for p in (homes[0] / "themes").iterdir()} >= {"folder", "folder-2", "a"}

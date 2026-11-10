@@ -21,9 +21,11 @@ mod sensors;
 mod server;
 mod services;
 mod settings;
+mod share;
 mod switch;
 mod system;
 mod updates;
+mod zip;
 
 use std::path::PathBuf;
 use std::process::ExitCode;

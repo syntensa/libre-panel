@@ -25,6 +25,8 @@ lp-services = { path = "../services" }
 indexmap = "2"
 num-bigint = "0.4"
 lp-net = { path = "../net" }
+# shared themes' zips (zip.rs)
+flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
 # the token of the app's server (access.rs)
 getrandom = "0.2"
 

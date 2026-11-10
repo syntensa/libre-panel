@@ -1962,6 +1962,15 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       point (as in the renderer's own comparisons). How a theme comes on every panel size
       (`/api/themes/{theme}/sizes`: made for it, laid out from its version for the nearest
       shape, or scaled into it).
+      A theme shared (`/api/themes/{theme}/export`, `/api/themes/import`,
+      `rust/app/src/share.rs`): the .zip as share.py makes it (its theme.json without the
+      person's folders and the whole paths in its pictures' lists, the pictures and fonts it
+      names, by a pattern too, none through a link), and one taken in as share.py takes it
+      (checked before anything is written: its size, paths, links, passwords, kinds and first
+      bytes, its theme.json; put in place under a free name, only the files it names). The
+      zips are read and written as Python's zipfile does (`rust/app/src/zip.rs`: its end
+      records, ZIP64's too, names in code page 437 or UTF-8, stored and deflated files, the
+      CRC, its errors); bzip2 and LZMA, which no file manager writes, are not read yet.
       `libre-panel editor` serves alone, `start` with
       the panel, and writes its address where a later start finds it. 120 requests to
       Python's server and to this one compared: the status, the headers and the body, byte

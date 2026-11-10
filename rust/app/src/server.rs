@@ -196,8 +196,8 @@ const ROUTES: &[Route] = &[
     picture("GET", "/api/themes/{theme}/preview", |s, x, m, u| {
         theme_preview(s, x, m[0], u)
     }),
-    private("GET", "/api/themes/{theme}/export", |_, x, _, _| {
-        not_found(x)
+    private("GET", "/api/themes/{theme}/export", |s, x, m, _| {
+        export_theme(s, x, m[0])
     }),
     private("GET", "/api/themes/{theme}/sizes", |s, x, m, _| {
         let env = lp_theme::Env {
@@ -281,6 +281,18 @@ const ROUTES: &[Route] = &[
     }),
     private("POST", "/api/scenes", |s, x, _, _| {
         settings_with(s, x, |told, asked| told.set_scene(asked))
+    }),
+    private("POST", "/api/themes/import", |s, x, _, u| {
+        // (a theme named "import" saved: its body is JSON, an import's a zip; saving comes
+        // with the editor's routes)
+        let json = x
+            .header("Content-Type")
+            .unwrap_or("")
+            .starts_with("application/json");
+        match json {
+            true => not_found(x),
+            false => import_theme(s, x, u),
+        }
     }),
 ];
 
@@ -574,6 +586,65 @@ fn asset_file(state: &State, exchange: &mut Exchange, theme_id: &str, rel: &str)
     match found {
         Some((body, kind)) => exchange.send(200, &body, kind, ""),
         None => not_found(exchange),
+    }
+}
+
+/// What sharing a theme came to, as the server answers it.
+fn refused(exchange: &mut Exchange, refused: crate::share::Refused) {
+    use crate::share::Refused;
+    match refused {
+        Refused::Share(why) => exchange.error(&why, 400, ""),
+        Refused::Theme(why) => exchange.error(&why, 404, ""),
+        Refused::Os(why) => exchange.error(&why, 409, ""),
+        Refused::Failed(why) => exchange.error(&why, 500, ""),
+    }
+}
+
+/// _export_theme: a theme as one .zip to give to someone (share.rs).
+fn export_theme(state: &State, exchange: &mut Exchange, theme_id: &str) {
+    let env = lp_theme::Env {
+        fonts_dir: state.home.fonts(),
+    };
+    match crate::share::export_theme(theme_id, &state.home.places(), &env) {
+        Ok((data, filename)) => exchange.send(200, &data, "application/zip", &filename),
+        Err(why) => refused(exchange, why),
+    }
+}
+
+/// _import_theme: `POST /api/themes/import` with a shared theme's .zip as the body (`?name=`
+/// the file's name): put in the person's themes folder under a name of its own, answered
+/// with `{id, name, files}`.
+fn import_theme(state: &State, exchange: &mut Exchange, url: &Url) {
+    let too_large = lp_i18n::t_format(
+        "The file is larger than {size} MB: a shared theme may be at most that.",
+        &[(
+            "size",
+            Value::int((crate::share::MAX_ZIP / (1024 * 1024)) as i64),
+        )],
+    )
+    .unwrap_or_else(|why| why.msg);
+    let Some(data) = exchange.read_body(crate::share::MAX_ZIP, &too_large) else {
+        return;
+    };
+    let query = crate::http::parse_qs(&url.query);
+    let name = query
+        .get("name")
+        .and_then(|v| v.first())
+        .cloned()
+        .unwrap_or_default();
+    let env = lp_theme::Env {
+        fonts_dir: state.home.fonts(),
+    };
+    let places = state.home.places();
+    match crate::share::import_theme(&data, &places.user, &places, &env, &name, "") {
+        Ok(done) => {
+            let mut told = Dict::new();
+            told.insert("id".into(), Value::Str(done.id));
+            told.insert("name".into(), Value::Str(done.name));
+            told.insert("files".into(), Value::int(done.files as i64));
+            exchange.json(&Value::Dict(told), 200);
+        }
+        Err(why) => refused(exchange, why),
     }
 }
 

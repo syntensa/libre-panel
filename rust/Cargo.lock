@@ -380,6 +380,7 @@ dependencies = [
 name = "libre-panel"
 version = "0.1.0"
 dependencies = [
+ "flate2",
  "getrandom",
  "indexmap",
  "libc",
