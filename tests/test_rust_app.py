@@ -1294,3 +1294,49 @@ def test_the_next_events_come_from_calendars(tmp_path: Path) -> None:
     finally:
         server.shutdown()
         server.server_close()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="a memory shared by its name is Windows'")
+def test_a_games_frames_come_from_the_memory_rtss_shares(tmp_path: Path) -> None:
+    """`rtss` among the sources: the memory of the name `[sensors.rtss] mapping` gives (here
+    one the test shares as RTSS does) is opened and read while something shows game.*; the
+    program whose entry goes on is the game, its last frame's time the frame time."""
+    import mmap
+    import struct
+
+    def memory(time1: int) -> bytes:
+        entry = struct.pack("<I260s5I", 4242, b"C:\\Games\\Witcher 3\\bin\\witcher3.exe", 0,
+                            time1 - 1000, time1, 100, 10_000)  # fmt: skip
+        idle = struct.pack("<I260s5I", 77, b"C:\\Windows\\idle.exe", 0, 5, 6, 1, 50_000)
+        header = struct.pack("<5I", 0x52545353, 0x00020007, 300, 32, 3) + b"\0" * 12
+        return header + entry.ljust(300, b"\0") + b"\0" * 300 + idle.ljust(300, b"\0")
+
+    name = f"LibrePanelTestRTSS{os.getpid()}"
+    shared = mmap.mmap(-1, 4096, tagname=name)
+    shared[: len(memory(0))] = memory(1000)
+    (tmp_path / "config.toml").write_text(
+        f'[sensors]\nproviders = ["rtss"]\n[sensors.rtss]\nmapping = "{name}"\n', encoding="utf-8"
+    )
+    stop = threading.Event()
+
+    def game() -> None:
+        time1 = 1000
+        while not stop.wait(0.02):
+            time1 += 20
+            shared[: len(memory(0))] = memory(time1)
+
+    writer = threading.Thread(target=game)
+    writer.start()
+    try:
+        done = _run(tmp_path, "sensors", LP_SENSORS_WANT="game.fps")
+    finally:
+        stop.set()
+        writer.join()
+        shared.close()
+    assert done.returncode == 0, done.stderr
+    ours = {line[:40].strip(): (line[41:55].strip(), line[56:61].strip(), line[62:])
+            for line in _lines(done)}  # fmt: skip
+    assert ours["game.app"][0].startswith("witcher3")
+    assert ours["game.frametime"][:2] == ("10.00", "ms")
+    assert ours["game.fps"] == ("100.00", "fps", "Frames per second")
+    assert "rtss: reading RivaTuner's frame rates" in done.stderr

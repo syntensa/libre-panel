@@ -1341,6 +1341,52 @@ fn calendar(case: &Value) -> Result<Value, String> {
     Ok(json!({"cases": found}))
 }
 
+/// shared_memory: for each run of RTSS's memory (base64) at its moments, the programs of
+/// each look and the readings after the last; for each of HWiNFO's memories its sensors and
+/// their readings (null where it is not HWiNFO's); {"error": ...} where a memory ends early.
+fn shared_memory(case: &Value) -> Result<Value, String> {
+    use base64::engine::general_purpose::STANDARD;
+    use base64::Engine;
+    use lp_sensors::shm::Bytes;
+    use lp_sensors::{hwinfo, rtss};
+    let memory = |text: &Value| -> Result<Bytes, String> {
+        let data = STANDARD.decode(text.as_str().unwrap_or(""));
+        Ok(Bytes(data.map_err(|why| why.to_string())?))
+    };
+    let mut runs = Vec::new();
+    for run in case["rtss"].as_array().into_iter().flatten() {
+        let mut counter = lp_sensors::frames::FrameCounter::new(false);
+        let mut seen = rtss::Seen::default();
+        let mut looks = Vec::new();
+        let mut last = 0.0;
+        for look in run.as_array().into_iter().flatten() {
+            let open = memory(&look[0])?;
+            last = look[1].as_f64().unwrap_or(0.0);
+            looks.push(match rtss::entries(&open) {
+                Err(why) => json!({"error": why}),
+                Ok(found) => json!(found
+                    .iter()
+                    .map(|e| json!([e.pid, e.app, e.time0, e.time1, e.frames, e.frame_us]))
+                    .collect::<Vec<_>>()),
+            });
+            let _ = seen.poll(&open, last, &mut counter);
+        }
+        runs.push(json!([looks, readings_rows(&counter.readings(last))]));
+    }
+    let mut memories = Vec::new();
+    for data in case["hwinfo"].as_array().into_iter().flatten() {
+        memories.push(match hwinfo::sensors_of(&memory(data)?) {
+            Err(why) => json!({"error": why}),
+            Ok(None) => Value::Null,
+            Ok(Some(sensors)) => json!([
+                sensors.iter().map(sensor_row).collect::<Vec<_>>(),
+                readings_rows(&hwinfo::readings_of(&sensors)),
+            ]),
+        });
+    }
+    Ok(json!({"rtss": runs, "hwinfo": memories}))
+}
+
 pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "regex" => regex(case),
@@ -1360,6 +1406,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "nut" => nut(case)?,
         "mqtt" => mqtt(case)?,
         "calendar" => calendar(case)?,
+        "shared_memory" => shared_memory(case)?,
         "mangohud" => mangohud(case)?,
         "media" => media(case),
         "appicon" => appicon(case),

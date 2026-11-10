@@ -213,6 +213,36 @@ impl Source for MangoHud {
     }
 }
 
+/// Frames per second of the game from RivaTuner's shared memory (sensors/rtss.py).
+struct Rtss(lp_sensors::rtss::RtssSource);
+
+impl Source for Rtss {
+    fn name(&self) -> &'static str {
+        "rtss"
+    }
+
+    fn read(&mut self, out: &mut Readings) {
+        out.extend(self.0.read());
+    }
+
+    fn notes(&mut self) -> Vec<String> {
+        self.0.notes()
+    }
+}
+
+/// What HWiNFO shares of its sensors (sensors/hwinfo.py).
+struct Hwinfo(lp_sensors::hwinfo::HwinfoSource);
+
+impl Source for Hwinfo {
+    fn name(&self) -> &'static str {
+        "hwinfo"
+    }
+
+    fn read(&mut self, out: &mut Readings) {
+        out.extend(self.0.read());
+    }
+}
+
 /// What is playing, and its cover (sensors/media.py).
 struct Media(lp_sensors::media::MediaSource);
 
@@ -830,6 +860,16 @@ impl Hub {
                         }
                     }
                     "mangohud" => sources.push(Box::new(MangoHud::of(sensors, &wanted))),
+                    "rtss" => {
+                        let mapping = text(sensors.options.get("rtss"), "mapping");
+                        sources.push(Box::new(Rtss(lp_sensors::rtss::RtssSource::new(
+                            mapping,
+                            wanted.clone(),
+                        ))));
+                    }
+                    "hwinfo" => {
+                        sources.push(Box::new(Hwinfo(lp_sensors::hwinfo::HwinfoSource::new())));
+                    }
                     "media" => sources.push(Box::new(Media(lp_sensors::media::MediaSource::new(
                         wanted.clone(),
                     )))),

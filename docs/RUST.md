@@ -1766,7 +1766,16 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       (zones::to_local). 6000 made-up calendars compared with Python in five zones and three
       languages; the app reads a file and asks a server of the test's own. A calendar that
       is not loaded is said by its number and the kind of failure, never by its address
-- [ ] HWiNFO, RTSS; Linux's hint of what system-setup brings
+- [x] RTSS and HWiNFO (sensors/rtss.py, sensors/hwinfo.py; lp-sensors' shm, rtss, hwinfo):
+      a memory another program shares, opened by its name and only read; RTSS's programs
+      look after look as samples of the game's frames (while something shows game.*);
+      HWiNFO's sensors and readings as LibreHardwareMonitor's records and keys, read when
+      HWiNFO has polled anew, once a second at most. 150 runs of RTSS's memory and 800 of
+      HWiNFO's (names of both kinds, versions 1 and 2, cut short, another program's)
+      compared with Python; on Windows the app reads a memory the test shares as RTSS does.
+      HWiNFO's own memory is not yet read on a PC that runs it
+- [ ] Linux's hint of what system-setup brings; the app's Sensors page says what each source
+      does (RTSS runs, HWiNFO shares)
 - [ ] the history as a ring, demo.py's values; the .NET service goes
 
 ### R8 services

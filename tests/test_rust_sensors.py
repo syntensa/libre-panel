@@ -2232,3 +2232,185 @@ def test_calendars_are_read_as_calendar_py_reads_them(
         monkeypatch.undo()
         if sys.platform != "win32":
             time.tzset()
+
+
+class _SharedBytes:
+    """Bytes as a shared memory that Windows' mapping gives: nothing beyond its end."""
+
+    def __init__(self, data: bytes) -> None:
+        self.data = data
+
+    def read(self, offset: int, size: int) -> bytes:
+        if offset < 0 or offset + size > len(self.data):
+            raise ValueError("beyond the memory")
+        return self.data[offset : offset + size]
+
+    def close(self) -> None:
+        pass
+
+
+def test_rtss_and_hwinfo_memories_are_read_as_python_reads_them() -> None:
+    """sensors/rtss.py and sensors/hwinfo.py: the programs RTSS's memory names look after
+    look and the frame rates their samples come to; HWiNFO's sensors and readings (names
+    of both kinds, version 1 and 2, memory and rates in their units) as
+    LibreHardwareMonitor's keys; memories that are another program's, off, or cut short."""
+    from libre_panel.sensors import hwinfo, rtss
+
+    rng = random.Random(0x4755)
+    b64 = base64.b64encode
+
+    def rtss_memory(
+        programs: list[Any], size: int = 300, signature: int = rtss.SIGNATURE,
+        version: int = 0x00020007,
+    ) -> bytes:  # fmt: skip
+        data = struct.pack("<5I", signature, version, size, 32, len(programs)) + b"\0" * 12
+        for pid, path, time0, time1, frames, frame_us in programs:
+            entry = struct.pack("<I260s5I", pid, path, 0, time0, time1, frames, frame_us)
+            data += entry.ljust(size, b"\0")
+        return data
+
+    paths = [b"C:\\Games\\Witcher 3\\bin\\witcher3.exe", b"D:/Steam/cs2.exe", b"game.exe",
+             b"C:\\Jeux\\caf\xe9.exe", b"", b"C:\\dir\\", b"dwm.exe",
+             b"C:\\x\\Elden Ring.exe"]  # fmt: skip
+    runs = []
+    for _ in range(150):
+        programs = [[rng.choice([0, 100, 200, 300, 4000]), rng.choice(paths),
+                     rng.randrange(10**6), rng.randrange(10**6), rng.randrange(200),
+                     rng.choice([0, 6944, 16667, 33333, 8333])]
+                    for _ in range(rng.randrange(0, 5))]  # fmt: skip
+        now = rng.uniform(0, 100)
+        looks = []
+        for _ in range(rng.randrange(1, 60)):
+            now += rng.choice([0.1, 0.1, 0.1, 0.5, 3.0])
+            for program in programs:
+                if rng.random() < 0.7:  # (its period went on, or a frame came)
+                    program[3] += 1000
+                    program[5] = rng.choice([program[5], 6944, 16667, 0, 20000])
+            kind = rng.random()
+            memory = rtss_memory([tuple(p) for p in programs])
+            if kind < 0.03:
+                memory = rtss_memory([tuple(p) for p in programs], signature=0x1234)
+            elif kind < 0.06:
+                memory = rtss_memory([tuple(p) for p in programs], version=0x00010005)
+            elif kind < 0.09:
+                memory = memory[: rng.randrange(len(memory))]
+            elif kind < 0.12:
+                memory = rtss_memory([tuple(p) for p in programs], size=200)
+            looks.append((memory, now))
+        runs.append(looks)
+
+    names = ["CPU [#0]: AMD Ryzen 9 7950X: Enhanced", "CPU [#0]: AMD Ryzen 9 7950X",
+             "GPU [#0]: NVIDIA GeForce RTX 4090", "GPU [#1]: Intel UHD Graphics: extra: more",
+             "ASUS ROG STRIX X670E (Nuvoton NCT6798D)", "S.M.A.R.T.: Samsung SSD 990 PRO",
+             "Drive: WDC WD40", "System", "Memory Timings", "Network: Intel I225-V",
+             "Battery: BAT0",
+             "Windows Hardware Errors (WHEA)", "", "CPU [#0]:", "DIMM [#1]: G.Skill", "drive:",
+             "GPU [#٣]: Arc A770", "Gr\xf6\xdfe \x80 \x81"]  # fmt: skip
+    labels = ["CPU (Tctl/Tdie)", "CPU Package", "Total CPU Usage", "CPU Package Power", "CPU PPT",
+              "Core Clocks (avg)", "GPU Temperature", "GPU Hot Spot Temperature", "GPU Core Load",
+              "GPU Memory Usage", "Total Board Power (TBP)", "GPU Power", "GPU Clock", "GPU Fan1",
+              "GPU Memory Allocated", "Chassis1", "CPU", "Core 0 Clock", "Read Rate", "Vcore", "",
+              "Drive Temperature", "T_Sensor", "Pump Fan"]  # fmt: skip
+    units = ["°C", "MB", "GB", "KB/s", "mb/s", "GB/s", "RPM", "%", "W", "MHz", "", " mb ", "V", "A"]
+
+    def name_bytes(text: str, utf: bool = False) -> bytes:
+        return text.encode("utf-8" if utf else "latin-1", "replace")
+
+    def hwinfo_memory() -> bytes:
+        version = rng.choice([1, 2, 2])
+        s_size = rng.choice([264, 264 + 128, 300])
+        r_size = rng.choice([316, 316 + 144, 400])
+        sensors = b""
+        count = rng.randrange(1, 7)
+        for n in range(count):
+            original = rng.choice(names[:3] if rng.random() < 0.5 else names)
+            own = rng.choice([*names, "", "", "", ""])
+            record = struct.pack("<II128s128s", n, 0, name_bytes(original), name_bytes(own))
+            if s_size >= 264 + 128:
+                utf = rng.choice(["", "", "CPU [#0]: Größe", own])
+                record += struct.pack("<128s", name_bytes(utf, utf=True))
+            sensors += record.ljust(s_size, b"\0")
+        readings = b""
+        r_count = rng.randrange(0, 30)
+        for n in range(r_count):
+            value = rng.choice([rng.uniform(0, 100), 42.0, 0.0, float("nan"), float("inf"), -5.5,
+                                3500.0, 1e12])  # fmt: skip
+            kind_no = rng.choice([1, 1, 2, 3, 3, 4, 5, 6, 7, 8, 8, 8, 0, 9])
+            label, own = rng.choice(labels), rng.choice([*labels, "", ""])
+            if rng.random() < 0.4:  # (what LibreHardwareMonitor's keys are made from)
+                kind_no, label = rng.choice([(1, "CPU (Tctl/Tdie)"), (1, "GPU Temperature"),
+                                             (7, "GPU Core Load"), (7, "Total CPU Usage"),
+                                             (5, "GPU Power"), (3, "GPU Fan1")])  # fmt: skip
+                own = ""
+            record = struct.pack("<III128s128s16s4d", kind_no,
+                                 rng.choice([*range(count), count, 99]), n, name_bytes(label),
+                                 name_bytes(own), name_bytes(rng.choice(units)), value, 0.0,
+                                 100.0, 50.0)  # fmt: skip
+            if r_size >= 316 + 144:
+                utf_label = name_bytes(rng.choice(["", "", "Lüfter"]), True)
+                utf_unit = name_bytes(rng.choice(["", "", "°C", "MB"]), True)
+                record += struct.pack("<128s16s", utf_label, utf_unit)
+            readings += record.ljust(r_size, b"\0")
+        signature, s_at = hwinfo.SIGNATURE, 44 + rng.choice([0, 0, 20])
+        r_at = s_at + len(sensors)
+        s_said, r_said = count, r_count
+        kind = rng.random()
+        if kind < 0.04:
+            signature = rng.choice([hwinfo.STOPPED, 0])
+        elif kind < 0.08:
+            s_said = rng.choice([0, 20000])
+        elif kind < 0.11:
+            r_said = rng.choice([20000, r_count + 3])
+        elif kind < 0.14:
+            s_size = 100
+        elif kind < 0.17:
+            r_at += 10**6
+        header = struct.pack("<IIIqIIIIII", signature, version, 5, rng.randrange(10**9), s_at,
+                             s_size, s_said, r_at, r_size, r_said)  # fmt: skip
+        memory = header.ljust(s_at, b"\0") + sensors + readings
+        return memory[: rng.randrange(len(memory))] if kind > 0.96 else memory
+
+    memories = [hwinfo_memory() for _ in range(800)]
+    [ours] = run([{"op": "shared_memory",
+                   "rtss": [[[b64(memory).decode(), now] for memory, now in looks]
+                            for looks in runs],
+                   "hwinfo": [b64(memory).decode() for memory in memories]}])  # fmt: skip
+
+    seen = {"error": 0, "programs": 0, "frames": 0, "none": 0, "sensors": 0, "keys": 0}
+    for looks, (found, readings) in zip(runs, ours["rtss"], strict=True):
+        provider = rtss.RTSSProvider(opener=lambda _name: None, clock=lambda: 0.0)
+        for (memory, now), got in zip(looks, found, strict=True):
+            try:
+                wanted = [[e.pid, e.app, e.time0, e.time1, e.frames, e.frame_us]
+                          for e in rtss.entries(_SharedBytes(memory))]  # fmt: skip
+                assert got == wanted, memory
+                seen["programs"] += len(wanted)
+            except (ValueError, struct.error):
+                assert "error" in got, memory
+                seen["error"] += 1
+            try:
+                provider.poll(_SharedBytes(memory), now)
+            except (ValueError, struct.error):
+                pass
+        wanted = _readings(provider._counter.readings(looks[-1][1]))
+        assert readings == wanted, looks
+        seen["frames"] += any(row[0] == "game.fps" for row in wanted)
+    for memory, got in zip(memories, ours["hwinfo"], strict=True):
+        try:
+            sensors = hwinfo.sensors_of(_SharedBytes(memory))
+        except (ValueError, struct.error):
+            assert isinstance(got, dict) and "error" in got, memory
+            seen["error"] += 1
+            continue
+        if sensors is None:
+            assert got is None, memory
+            seen["none"] += 1
+            continue
+        assert got is not None and "error" not in got, memory
+        assert got[0] == [[s.sensor_id, s.hardware_id, s.hardware_name, s.sensor_type, s.label,
+                           _hex(s.value), s.unit] for s in sensors], memory  # fmt: skip
+        readings = hwinfo.readings_of(sensors)
+        assert got[1] == _readings(readings), memory
+        seen["sensors"] += len(sensors)
+        seen["keys"] += any(key in readings for key in ("cpu.temp", "gpu.temp", "gpu.load"))
+    assert all(count > 30 for count in seen.values()), list(seen.items())
