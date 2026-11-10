@@ -109,33 +109,6 @@ fn share(part: f64, whole: f64) -> f64 {
     lp_py::round_digits(part / whole * 100.0, 1)
 }
 
-/// link_readings: how the PC is connected, as readings: `net.link` ("LAN", "Wi-Fi"),
-/// `net.link.kind` ("lan", "wlan"), `net.link.speed` (Mbit/s), `net.wifi.signal` (%) and
-/// `net.link.text` ("Wi-Fi · 866 Mbit/s").
-pub fn link_readings(link: Option<&netlink::Link>) -> Readings {
-    let mut out = Readings::new();
-    let Some(link) = link else {
-        return out;
-    };
-    let said = if link.kind == netlink::WLAN {
-        lp_i18n::t("Wi-Fi")
-    } else {
-        lp_i18n::t("LAN")
-    };
-    put_text(&mut out, "net.link", &said, "Connection");
-    put_text(&mut out, "net.link.kind", link.kind, "Connection kind");
-    let mut text = said.clone();
-    if let Some(speed) = link.speed.filter(|speed| *speed != 0.0) {
-        put(&mut out, "net.link.speed", speed, "Mbit/s", "Link speed");
-        text = format!("{said} · {}", netlink::speed_text(speed));
-    }
-    put_text(&mut out, "net.link.text", &text, "Connection");
-    if let Some(signal) = link.signal {
-        put(&mut out, "net.wifi.signal", signal, "%", "Wi-Fi signal");
-    }
-    out
-}
-
 /// 'chrome.exe' -> 'chrome'.
 fn program_name(name: &str) -> &str {
     if lp_py::lower(name).ends_with(".exe") {
@@ -551,7 +524,7 @@ impl System {
                 .link_at
                 .is_none_or(|at| at.elapsed().as_secs_f64() >= LINK_EVERY_S)
             {
-                self.link = link_readings(netlink::read().as_ref());
+                self.link = netlink::link_readings(netlink::read().as_ref());
                 self.link_at = Some(Instant::now());
             }
             out.extend(self.link.clone());

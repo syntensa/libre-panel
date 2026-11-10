@@ -26,6 +26,52 @@ pub struct Link {
     pub name: String,
 }
 
+/// link_readings: how the PC is connected, as readings: `net.link` ("LAN", "Wi-Fi"),
+/// `net.link.kind` ("lan", "wlan"), `net.link.speed` (Mbit/s), `net.wifi.signal` (%) and
+/// `net.link.text` ("Wi-Fi · 866 Mbit/s").
+pub fn link_readings(link: Option<&Link>) -> crate::lhm::Readings {
+    use lp_py::Value;
+    use lp_render::Reading;
+    let mut out = crate::lhm::Readings::new();
+    let Some(link) = link else {
+        return out;
+    };
+    let mut put = |key: &str, value: Value, unit: &str, label: &str| {
+        let reading = Reading {
+            unit: unit.to_string(),
+            label: label.to_string(),
+            ..Reading::of(value)
+        };
+        out.insert(key.to_string(), reading);
+    };
+    let said = match link.kind == WLAN {
+        true => lp_i18n::t("Wi-Fi"),
+        false => lp_i18n::t("LAN"),
+    };
+    put("net.link", Value::Str(said.clone()), "", "Connection");
+    put(
+        "net.link.kind",
+        Value::Str(link.kind.to_string()),
+        "",
+        "Connection kind",
+    );
+    let mut text = said.clone();
+    if let Some(speed) = link.speed.filter(|speed| *speed != 0.0) {
+        put(
+            "net.link.speed",
+            Value::Float(speed),
+            "Mbit/s",
+            "Link speed",
+        );
+        text = format!("{said} · {}", speed_text(speed));
+    }
+    put("net.link.text", Value::Str(text), "", "Connection");
+    if let Some(signal) = link.signal {
+        put("net.wifi.signal", Value::Float(signal), "%", "Wi-Fi signal");
+    }
+    out
+}
+
 /// speed_text: a link's speed as one says it: 866 Mbit/s, 2.5 Gbit/s.
 pub fn speed_text(mbit: f64) -> String {
     if mbit >= 1000.0 {

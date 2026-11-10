@@ -3503,3 +3503,64 @@ def test_the_waveshare_display_is_fed_as_waveshare_py_feeds_it() -> None:
             for n, (want, got) in enumerate(zip(theirs[key], ours[key], strict=True)):
                 assert got == want, (key, n, want, got)
     assert all(count >= 5 for count in seen.values()), seen
+
+
+def test_the_demo_is_made_up_as_demo_py_makes_it_up() -> None:
+    """sensors/demo.py's demo_snapshot at fixed times: every reading in its order (the waves,
+    the drives and programs, the sun, the song, the appointments, the forecast, the report of a
+    round, a round under way, a download) with its unit, label and the reading it repeats, and
+    the history of each wave; a first round's report too."""
+    import math
+
+    from libre_panel import i18n
+    from libre_panel.sensors import demo
+
+    def plain(value: Any) -> Any:
+        return {"float": repr(value)} if isinstance(value, float) else value
+
+    rng = random.Random(0xDE30)
+    times = [0.0, 1.0, 1_700_000_000.0, 1_794_330_061.5, 86399.999, 951_782_400.25]
+    times += [rng.uniform(1.6e9, 1.9e9) for _ in range(12)]
+    samples = 40
+    for language in ("en", "de"):
+        i18n.set_language(language)
+        try:
+            theirs = []
+            for t in times:
+                snapshot = demo.demo_snapshot(t, samples)
+                readings = [[key, plain(r.value), r.unit, r.label, r.origin]
+                            for key, r in snapshot.readings.items()]  # fmt: skip
+                history = [[key, [repr(v) for v in values]]
+                           for key, values in snapshot.history.items()]  # fmt: skip
+                first = [[key, plain(r.value), r.unit, r.label]
+                         for key, r in demo.demo_report(t, 0).items()]  # fmt: skip
+                theirs.append({"readings": readings, "history": history, "first": first})
+        finally:
+            i18n.set_language("en")
+        [ours] = run([{"op": "demo", "locale": str(i18n.LOCALE_DIR), "language": language,
+                       "times": times, "samples": samples}])  # fmt: skip
+        assert "snapshots" in ours, ours
+        for t, want, got in zip(times, theirs, ours["snapshots"], strict=True):
+            assert [r[0] for r in got["readings"]] == [r[0] for r in want["readings"]], t
+            for a, b in zip(want["readings"], got["readings"], strict=True):
+                assert b == a, (t, a[0])
+            assert got["first"] == want["first"], t
+            assert [h[0] for h in got["history"]] == [h[0] for h in want["history"]], t
+            for (key, a), (_, b) in zip(want["history"], got["history"], strict=True):
+                # (numpy's sine may differ from the C library's in its last bit)
+                for x, y in zip(a, b, strict=True):
+                    assert math.isclose(float(x), float(y), rel_tol=1e-15, abs_tol=1e-12), (t, key)
+            assert len(want["readings"]) > 400
+    # the pictures of a preview: the album's cover, the player's icon, the game's logo
+    import hashlib
+
+    from libre_panel.fonts import FONT_DIR
+
+    [ours] = run([{"op": "demo", "locale": str(i18n.LOCALE_DIR), "language": "en", "times": [],
+                   "fonts": str(FONT_DIR)}])  # fmt: skip
+    pictures = demo.DemoProvider().images()
+    assert ours["pictures"] == [
+        [key, image.mode, *image.size, hashlib.sha256(image.tobytes()).hexdigest()]
+        for key, image in pictures.items()
+    ]
+    assert len(pictures) == 3

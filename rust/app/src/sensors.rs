@@ -5,7 +5,6 @@
 //! temperature (system.rs reads them from the system).
 
 use std::collections::VecDeque;
-use std::time::Instant;
 
 use indexmap::IndexMap;
 use lp_py::toml::{Table, Toml};
@@ -681,17 +680,6 @@ fn text<'a>(table: Option<&'a Table>, key: &str) -> &'a str {
     }
 }
 
-fn put(out: &mut Readings, key: &str, value: f64, unit: &str, label: &str) {
-    out.insert(
-        key.to_string(),
-        Reading {
-            unit: unit.to_string(),
-            label: label.to_string(),
-            ..Reading::of(Value::Float(value))
-        },
-    );
-}
-
 /// Collects the readings of all sources and keeps each number's history for the graphs
 /// (SensorHub). A source earlier in the list wins where two have the same key.
 pub struct Hub {
@@ -1020,17 +1008,13 @@ impl Hub {
     }
 }
 
-/// Readings made up, moving slowly, for a look at a theme without a computer's own
-/// (`--demo`).
-pub struct Demo {
-    began: Instant,
-}
+/// Readings made up of the time alone, for a look at a theme without a computer's own
+/// (`--demo`): the demo's (sensors/demo.py's DemoProvider, lp-services' demo).
+pub struct Demo;
 
 impl Demo {
     pub fn new() -> Demo {
-        Demo {
-            began: Instant::now(),
-        }
+        Demo
     }
 }
 
@@ -1040,67 +1024,10 @@ impl Source for Demo {
     }
 
     fn read(&mut self, out: &mut Readings) {
-        let t = self.began.elapsed().as_secs_f64();
-        let wave = |period: f64, low: f64, high: f64| {
-            low + (high - low) * (0.5 + 0.5 * (t * std::f64::consts::TAU / period).sin())
-        };
-        put(out, "cpu.load", wave(23.0, 8.0, 74.0), "%", "CPU load");
-        put(
-            out,
-            "cpu.temp",
-            wave(41.0, 44.0, 71.0),
-            "°C",
-            "CPU temperature",
-        );
-        put(
-            out,
-            "cpu.freq",
-            wave(17.0, 2800.0, 4900.0),
-            "MHz",
-            "CPU clock",
-        );
-        put(out, "cpu.cores", 16.0, "", "CPU threads");
-        put(out, "gpu.load", wave(31.0, 3.0, 96.0), "%", "GPU load");
-        put(
-            out,
-            "gpu.temp",
-            wave(53.0, 41.0, 76.0),
-            "°C",
-            "GPU temperature",
-        );
-        put(out, "mem.load", wave(67.0, 38.0, 61.0), "%", "Memory usage");
-        put(
-            out,
-            "mem.used",
-            wave(67.0, 12.1, 19.6),
-            "GiB",
-            "Memory used",
-        );
-        put(out, "mem.total", 32.0, "GiB", "Memory total");
-        put(
-            out,
-            "mem.free",
-            32.0 - wave(67.0, 12.1, 19.6),
-            "GiB",
-            "Memory free",
-        );
-        put(out, "disk.load", 57.3, "%", "Disk usage");
-        put(out, "disk.used", 533.0, "GiB", "Disk used");
-        put(out, "disk.total", 931.0, "GiB", "Disk total");
-        put(
-            out,
-            "net.down",
-            wave(13.0, 2.0e4, 4.8e7),
-            "B/s",
-            "Network download",
-        );
-        put(
-            out,
-            "net.up",
-            wave(19.0, 8.0e3, 6.0e6),
-            "B/s",
-            "Network upload",
-        );
-        put(out, "sys.uptime", 93_784.0 + t, "s", "Uptime");
+        let since = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
+        let t = since.map_or(0.0, |since| since.as_secs_f64());
+        let utc = lp_py::zones::Zone::utc();
+        let zone = lp_py::zones::local().unwrap_or(&utc);
+        out.extend(lp_services::demo::read(t, zone));
     }
 }

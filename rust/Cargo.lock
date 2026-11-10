@@ -567,6 +567,7 @@ dependencies = [
  "lp-py",
  "lp-render",
  "lp-sensors",
+ "lp-text",
  "num-bigint",
  "rusqlite",
  "sha2",

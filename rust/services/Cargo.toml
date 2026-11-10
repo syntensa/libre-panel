@@ -11,6 +11,7 @@ publish.workspace = true
 lp-py = { path = "../py" }
 lp-render = { path = "../render" }
 lp-pixels = { path = "../pixels" }
+lp-text = { path = "../text" }
 lp-i18n = { path = "../i18n" }
 lp-devices = { path = "../devices" }
 lp-decode = { path = "../decode" }

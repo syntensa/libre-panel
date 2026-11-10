@@ -1807,7 +1807,7 @@ fn run(case: &Value) -> Result<Value, String> {
         | "sky" | "weather" | "web_sources" | "nut" | "mqtt" | "calendar" | "shared_memory"
         | "services_host" | "timer" | "power" | "agents" | "notices" | "service_paths"
         | "steam" | "launchers" | "machine" | "game" | "autopilot" | "downloads" | "memory"
-        | "cooling" | "devices" | "waveshare" | "mangohud" | "media" | "appicon" => {
+        | "cooling" | "devices" | "waveshare" | "demo" | "mangohud" | "media" | "appicon" => {
             sensors::run(op, case)?
         }
         "toml" => {

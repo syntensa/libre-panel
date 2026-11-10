@@ -1776,7 +1776,15 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       HWiNFO's own memory is not yet read on a PC that runs it
 - [ ] Linux's hint of what system-setup brings; the app's Sensors page says what each source
       does (RTSS runs, HWiNFO shares)
-- [ ] the history as a ring, demo.py's values; the .NET service goes
+- [x] demo.py's values (lp-services' demo): every reading a theme can show, made up of the
+      time alone (the waves, the drives and programs, the sun, a song, appointments, a
+      forecast, the agents, a round's report, a round under way, a download), the history
+      for the graphs, and the pictures of a preview (an album's cover, a player's icon, a
+      game's logo). `--demo` shows them. At 18 times in two languages, each of the more
+      than 400 readings in its order with its unit, label and the reading it repeats as
+      Python has it (the history to the last bit but numpy's sine), and the three pictures
+      pixel for pixel
+- [ ] the history as a ring; the .NET service goes
 
 ### R8 services
 - [x] the host between the services and the main loop (plugins/host.py; rust/services,

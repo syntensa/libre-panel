@@ -2767,6 +2767,50 @@ impl lp_services::devices::Readers for MadeUpDevices {
 /// descriptors say, which devices are top-level USB devices and which are told about, and
 /// for each watcher of options its events over the steps `[now, when Windows last told,
 /// hurry, drives, controllers, USB devices, storage]`, each with its message.
+/// The demo's snapshot (sensors/demo.py's demo_snapshot) at each of `times`, with `samples`
+/// of history: every reading in its order (key, value, unit, label, the reading it
+/// repeats), and each key's history.
+fn demo(case: &Value) -> Result<Value, String> {
+    let locale = std::path::PathBuf::from(case["locale"].as_str().unwrap_or(""));
+    let code = case["language"].as_str().unwrap_or("en");
+    lp_i18n::set_language(lp_i18n::Language::load(&locale, code)?);
+    let zone = lp_py::zones::local().ok_or("no zone of the computer")?;
+    let samples = case["samples"].as_u64().unwrap_or(10) as usize;
+    let mut out = Vec::new();
+    for t in case["times"].as_array().into_iter().flatten() {
+        let t = t.as_f64().unwrap_or(0.0);
+        let snapshot = lp_services::demo::demo_snapshot(t, samples, zone)?;
+        let readings: Vec<Value> = (snapshot.readings.iter())
+            .map(|(key, r)| json!([key, plain(&r.value), r.unit, r.label, r.origin]))
+            .collect();
+        let history: Vec<Value> = (snapshot.history.iter())
+            .map(|(key, values)| {
+                let values: Vec<String> = values.iter().map(|v| lp_py::float_repr(*v)).collect();
+                json!([key, values])
+            })
+            .collect();
+        let first = lp_services::demo::demo_report(t, 0)?;
+        let first: Vec<Value> = (first.iter())
+            .map(|(key, r)| json!([key, plain(&r.value), r.unit, r.label]))
+            .collect();
+        out.push(json!({"readings": readings, "history": history, "first": first}));
+    }
+    lp_i18n::set_language(lp_i18n::Language::english());
+    // the pictures of a preview: each one's mode, size and pixels (their SHA-256)
+    let mut pictures = Vec::new();
+    if let Some(fonts) = case["fonts"].as_str() {
+        use sha2::{Digest, Sha256};
+        for (key, image) in lp_services::demo::pictures(std::path::Path::new(fonts))? {
+            let sum: String = (Sha256::digest(image.as_bytes()).iter())
+                .map(|byte| format!("{byte:02x}"))
+                .collect();
+            let (width, height) = image.size();
+            pictures.push(json!([key, image.mode().name(), width, height, sum]));
+        }
+    }
+    Ok(json!({"snapshots": out, "pictures": pictures}))
+}
+
 /// A display the test makes up: it answers each command with the next of the payloads the
 /// case has for it (none left: silence), a piece at a time, after some noise.
 struct MadeUpDisplay {
@@ -3134,6 +3178,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "cooling" => cooling(case)?,
         "devices" => devices(case)?,
         "waveshare" => waveshare(case)?,
+        "demo" => demo(case)?,
         "autopilot" => autopilot(case)?,
         "mangohud" => mangohud(case)?,
         "media" => media(case),
