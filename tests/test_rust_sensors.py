@@ -732,7 +732,9 @@ def test_the_computers_parts_are_named_as_hardware_names_them(tmp_path: Any) -> 
         (drm / "renderD128").mkdir()
         (drm / "version").write_text("drm 1.1.0", encoding="utf-8")
         for slot in rng.sample(slots, rng.randrange(0, len(slots) + 1)):
-            gpu = nvidia / rng.choice([slot.lower(), slot, "0"])
+            named = rng.choice([slot.lower(), slot, "0"])
+            # (a slot's name has colons, which a folder on Windows cannot have)
+            gpu = nvidia / ("0" if sys.platform == "win32" else named)
             gpu.mkdir(parents=True, exist_ok=True)
             (gpu / "information").write_text(
                 rng.choice([

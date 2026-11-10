@@ -422,16 +422,15 @@ def test_the_computer_s_own_readings_are_those_of_the_python_source(tmp_path: Pa
     finally:
         provider.close()
     assert done.returncode == 0, done.stderr
-    ours = {}
-    for line in done.stdout.splitlines():
-        key, value = line[:40].strip(), line[41:55].strip()
-        ours[key] = (value, line[56:61].strip(), line[62:])
+    ours = {line[:40].strip(): line[41:] for line in done.stdout.splitlines()}
     assert sorted(ours) == sorted(wanted), set(ours) ^ set(wanted)
     still = ("cpu.cores", "mem.total", "disk.total", "net.ip", "cpu.name", "gpu.name", "mem.name",
              "mem.speed")  # fmt: skip
     for key, reading in wanted.items():
-        value, unit, label = ours[key]
-        assert (unit, label) == (reading.unit, reading.label), key
+        # (a value wider than its column moves the unit and the label to the right)
+        end = f" {reading.unit:<5} {reading.label}"
+        assert ours[key].endswith(end), (key, ours[key])
+        value = ours[key][: -len(end)].strip()
         if key in still or (key.startswith("disk.") and key.endswith((".name", ".total"))):
             said = reading.value
             assert value == (f"{said:.2f}" if isinstance(said, float) else str(said)), key
