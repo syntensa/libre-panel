@@ -1261,6 +1261,14 @@ impl Turzx {
         }
     }
 
+    /// The video's bit rate cap in force, Mbit/s (0: none, or no video).
+    pub fn bit_rate(&self) -> f64 {
+        match self {
+            Turzx::Video(panel) => panel.bit_rate,
+            Turzx::Stills(_) => 0.0,
+        }
+    }
+
     pub fn close(&mut self) {
         match self {
             Turzx::Video(panel) => panel.close(),

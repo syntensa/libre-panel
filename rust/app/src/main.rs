@@ -21,6 +21,7 @@ mod hotkeys;
 mod http;
 mod logs;
 mod mainloop;
+mod meter;
 mod modes;
 mod news;
 mod notify;

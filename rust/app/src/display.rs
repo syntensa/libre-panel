@@ -314,6 +314,23 @@ impl Display {
         }
     }
 
+    /// What the panel's driver counted since it was opened (none for the PNG file).
+    pub fn counters(&self) -> lp_devices::base::Counters {
+        match &self.panel {
+            Panel::File { .. } => lp_devices::base::Counters::default(),
+            Panel::Hongtai { display, .. } => display.counters(),
+            Panel::Turzx(panel) => panel.counters(),
+        }
+    }
+
+    /// The video's bit rate cap in force, Mbit/s (0: no video).
+    pub fn bit_rate(&self) -> f64 {
+        match &self.panel {
+            Panel::Turzx(panel) => panel.bit_rate(),
+            _ => 0.0,
+        }
+    }
+
     /// What the panel's driver noted for the log since it was last asked.
     pub fn notes(&mut self) -> Vec<String> {
         let mut notes = std::mem::take(&mut self.notes);

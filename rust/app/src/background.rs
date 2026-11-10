@@ -293,6 +293,9 @@ impl PanelService {
         told.insert("target".into(), Value::Str(status.target));
         told.insert("default_theme".into(), Value::Str(status.default_theme));
         told.insert("mode".into(), status.mode.map_or(Value::None, Value::Str));
+        // numbers of the last seconds (meter.rs); none while it does not run
+        let stats = status.stats.filter(|_| running).unwrap_or_default();
+        told.insert("stats".into(), Value::Dict(stats));
         // the panels beside this one ([[panels]]), by their place there, while it runs
         let mut more: Vec<(usize, RunStatus)> = (status.more.iter())
             .map(|(n, each)| (*n, each.lock().map(|s| s.clone()).unwrap_or_default()))
@@ -310,7 +313,8 @@ impl PanelService {
                 entry.insert("detail".into(), Value::Str(detail));
                 entry.insert("target".into(), Value::Str(each.target));
                 entry.insert("theme".into(), Value::Str(each.theme));
-                entry.insert("fps".into(), Value::None);
+                let fps = each.stats.and_then(|stats| stats.get("fps").cloned());
+                entry.insert("fps".into(), fps.unwrap_or(Value::None));
                 entry.insert("model".into(), Value::Str(each.model));
                 let size = each.size.map_or(Value::None, |(width, height)| {
                     Value::List(vec![Value::int(width), Value::int(height)])

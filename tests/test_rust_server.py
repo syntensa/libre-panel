@@ -360,6 +360,10 @@ def test_the_live_picture_is_the_frame_on_each_panel_as_control_py_makes_it(
             answers = {query: asked(query) for query in (
                 "panel=1", "panel=1&format=PNG&w=400", "panel=2&w=1920", "panel=2&w=100",
                 "panel=3", "panel=1&format=gif")}  # fmt: skip
+            time.sleep(2.5)  # (the meter's numbers, made once a second)
+            request = _get("/api/plugins/control/panel", WITH)
+            request = request.replace("{host}", f"localhost:{port}").replace("{token}", token)
+            panel = json.loads(_asked(port, request.encode())[2])["panel"]
         finally:
             program.send_signal(signal.SIGINT) if os.name == "posix" else program.terminate()
             said = program.communicate(timeout=30)[1]
@@ -379,6 +383,21 @@ def test_the_live_picture_is_the_frame_on_each_panel_as_control_py_makes_it(
         else:  # (the same pixels; zlib's stream is not the one of Pillow's wheel)
             with Image.open(io.BytesIO(body)) as ours, Image.open(io.BytesIO(made)) as theirs:
                 assert ours.mode == theirs.mode and ours.tobytes() == theirs.tobytes(), query
+    # the meter's numbers as meter.py makes them, for a PNG file at 2 frames a second
+    from libre_panel.app import RunStatus
+    from libre_panel.meter import Meter
+
+    status = RunStatus()
+    meter = Meter(status, 0.0)
+    meter.drew(0.01)
+    meter.tick(1.0, 2, False)
+    stats = panel["stats"]
+    assert list(stats) == list(status.stats), stats
+    assert {k for k, v in stats.items() if v is None} == {
+        k for k, v in status.stats.items() if v is None}, stats  # fmt: skip
+    assert stats["target_fps"] == 2 and stats["streaming"] is False and stats["fps"] > 0
+    assert isinstance(stats["uptime_s"], int) and stats["render_ms"] > 0
+    assert [more["index"] for more in panel["more"]] == [0] and panel["more"][0]["fps"] > 0
     assert answers["panel=3"][0].split()[1] == "404"
     assert json.loads(answers["panel=3"][2]) == {"error": "no picture yet"}
     assert answers["panel=1&format=gif"][0].split()[1] == "400"

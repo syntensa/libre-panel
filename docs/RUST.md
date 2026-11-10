@@ -1561,6 +1561,14 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       RivaTuner, HWiNFO, LibreHardwareMonitor's mode, rights and driver) with its rows, as
       control.py lists them. The tests: the Linux PC's sources against those of the Python
       app's hub
+- [x] the meter (meter.py): the frame rate drawn over the last five seconds, the planned one,
+      the drawing time (median and peak of the last 120 frames), the data rate, the video
+      link's blocks, queue, bit rate, waits and drops, the link's errors and the panel's
+      restarts, counted on across a replug, made once a second into `/api/panel`'s `stats`
+      and each panel's `fps` in `more`. The tests: the keys and what is not known as meter.py
+      has them, for two panels into PNG files
+- [ ] the meter's `encoder` (h264.py's settings and feed_text, which the engine's stream is
+      not told yet) and `ffmpeg_restarts`
 - [ ] the rest of the main loop: the engine in the same process, videos (ffmpeg), the first
       panel's look on the others (same_look), the scene across the panels, the fans in step on
       every panel, the meter's numbers (`stats`, a panel's `fps`), the sun's times for the

@@ -92,6 +92,8 @@ pub struct RunStatus {
     pub live_asked: Option<Instant>,
     /// the sensor sources the loop reads (the first panel's), for the app's pages
     pub hub: Option<Arc<Mutex<Hub>>>,
+    /// the meter's numbers of the last seconds (None before the first second is over)
+    pub stats: Option<lp_py::Dict>,
     /// the loops of the panels beside the first, by their place in `[[panels]]`
     pub more: IndexMap<usize, Arc<Mutex<RunStatus>>>,
 }
@@ -140,6 +142,10 @@ pub struct MainLoop {
     more: Option<More>,
     /// when a companion was last seen showing beside the first panel
     paired_at: Option<f64>,
+    /// frame rate, drawing time, data rate, the video link, faults; and what the drivers
+    /// counted in this run
+    meter: crate::meter::Meter,
+    counted: crate::meter::Counted,
     panel: Option<Display>,
     /// how often the panel failed in a row, and when it is tried again
     failures: u32,
@@ -368,6 +374,8 @@ impl MainLoop {
             beside: None,
             more: None,
             paired_at: None,
+            meter: crate::meter::Meter::new(began.elapsed().as_secs_f64(), &Default::default()),
+            counted: Default::default(),
             panel: None,
             failures: 0,
             retry_at: 0.0,
@@ -626,6 +634,8 @@ impl MainLoop {
     fn close_panel(&mut self) {
         if let Some(mut panel) = self.panel.take() {
             panel.close();
+            self.counted.follow(panel.counters(), panel.bit_rate());
+            self.counted.closed();
             for note in panel.notes() {
                 say(&note); // (its last words: what it sent)
             }
@@ -1151,6 +1161,7 @@ impl MainLoop {
             }
         }
 
+        let drawing = self.clock();
         let drawn = renderer
             .render(snapshot, started)
             .map_err(|e| format!("not drawn by this build yet: {}", e.0))
@@ -1160,6 +1171,9 @@ impl MainLoop {
                 self.keep_shown(&frame);
                 self.turned(frame)
             });
+        if drawn.is_ok() {
+            self.meter.drew(self.clock() - drawing);
+        }
         let (mut moving, due) = (renderer.moving, renderer.due);
         moving |= self.blend.is_some()
             || self.toasts.as_ref().is_some_and(ToastLayer::active)
@@ -1213,8 +1227,16 @@ impl MainLoop {
             for note in panel.notes() {
                 say(&note);
             }
+            self.counted.follow(panel.counters(), panel.bit_rate());
         }
         self.follow_link(false);
+        let streams = self.panel.as_ref().is_some_and(Display::streams);
+        let fps = self.fps();
+        if let Some(stats) = self.meter.tick(started, fps, streams, &self.counted) {
+            if let Ok(mut status) = self.status.lock() {
+                status.stats = Some(stats);
+            }
+        }
         if let Some(more) = &mut self.more {
             more.follow(&self.config);
         }
