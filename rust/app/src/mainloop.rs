@@ -153,7 +153,7 @@ fn say(message: &str) {
 
 /// accent_of: the colour config.toml's `accent` stands for: None for the themes' own (and for
 /// the system's, which this build does not read yet).
-fn accent_of(choice: &str) -> Option<String> {
+pub fn accent_of(choice: &str) -> Option<String> {
     let hex = choice.len() == 7
         && choice.starts_with('#')
         && choice[1..].chars().all(|c| c.is_ascii_hexdigit());

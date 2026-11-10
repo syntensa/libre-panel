@@ -15,6 +15,7 @@ mod modes;
 mod news;
 mod osinfo;
 mod pages;
+mod previews;
 mod psutil;
 mod sensors;
 mod server;

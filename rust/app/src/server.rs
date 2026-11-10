@@ -51,6 +51,8 @@ pub struct State {
     news: crate::news::News,
     /// whether a newer version is out (updates.rs)
     updates: crate::updates::Updates,
+    /// the pictures of the themes kept (previews.rs)
+    previews: crate::previews::Previews,
 }
 
 impl State {
@@ -191,8 +193,8 @@ const ROUTES: &[Route] = &[
         asset_file(s, x, m[0], m[1])
     }),
     // (not in this build yet: kept from the route of a theme by its name)
-    picture("GET", "/api/themes/{theme}/preview", |_, x, _, _| {
-        not_found(x)
+    picture("GET", "/api/themes/{theme}/preview", |s, x, m, u| {
+        theme_preview(s, x, m[0], u)
     }),
     private("GET", "/api/themes/{theme}/export", |_, x, _, _| {
         not_found(x)
@@ -565,6 +567,67 @@ fn asset_file(state: &State, exchange: &mut Exchange, theme_id: &str, rel: &str)
     match found {
         Some((body, kind)) => exchange.send(200, &body, kind, ""),
         None => not_found(exchange),
+    }
+}
+
+/// _theme_preview: a saved theme as a picture (`?w=` its width), for lists of themes; with
+/// `?size=WxH` as a panel of that size shows it (Design's sizes). The pictures are kept until
+/// the theme or a choice changes.
+fn theme_preview(state: &State, exchange: &mut Exchange, theme_id: &str, url: &Url) {
+    let query = crate::http::parse_qs(&url.query);
+    let first = |name: &str| query.get(name).and_then(|values| values.first()).cloned();
+    let width = first("w").map_or(Some(480.into()), |w| lp_py::int_of_str(&w));
+    let width = width.map_or(480, |w| {
+        let w = w.clamp(64.into(), 1920.into());
+        usize::try_from(w).unwrap_or(480)
+    });
+    let size = crate::previews::size_of(&first("size").unwrap_or_default());
+    let places = state.home.places();
+    let found = lp_theme::versions::find_theme(theme_id, &places)
+        .ok()
+        .and_then(|folder| {
+            let file = folder.join(lp_theme::tables::THEME_FILENAME);
+            let stamp = std::fs::metadata(&file).and_then(|m| m.modified()).ok()?;
+            Some((folder, stamp))
+        });
+    let Some((folder, stamp)) = found else {
+        return not_found(exchange);
+    };
+    let config = lp_config::load_config(&state.config_file, lp_config::platform())
+        .unwrap_or_else(|_| lp_config::Config::new(None, lp_config::platform()));
+    let asked = crate::previews::Asked {
+        folder: &folder,
+        size,
+        width,
+        accent: crate::mainloop::accent_of(&config.accent),
+        symbols: config.symbols.clone(),
+        chosen: crate::previews::chosen_switches(&config, theme_id),
+        cards: config.cards.clone(),
+        card_opacity: config.card_opacity,
+        light: config.light_colours,
+    };
+    let key = format!(
+        "{theme_id}\0{stamp:?}\0{width}\0{}\0{}\0{:?}\0{:?}\0{:?}\0{}\0{size:?}\0{}",
+        lp_i18n::language().code(),
+        asked.symbols,
+        asked.chosen,
+        asked.accent,
+        asked.cards,
+        asked.card_opacity,
+        asked.light,
+    );
+    let env = lp_theme::Env {
+        fonts_dir: state.home.fonts(),
+    };
+    let gone = || exchange.client_gone();
+    let drawn = state.previews.picture(&key, gone, || {
+        crate::previews::theme_preview(&asked, &env, &places)
+    });
+    match drawn {
+        None => {}
+        Some(Ok(png)) => exchange.send(200, &png, "image/png", ""),
+        Some(Err(crate::previews::Refused::Theme(why))) => exchange.error(&why, 404, ""),
+        Some(Err(crate::previews::Refused::Drawing(why))) => exchange.error(&why, 500, ""),
     }
 }
 
@@ -1026,6 +1089,7 @@ impl EditorServer {
                 restart: crate::settings::Restart::default(),
                 news,
                 updates,
+                previews: crate::previews::Previews::default(),
             }),
             listener: Some(listener),
             stop: Arc::default(),

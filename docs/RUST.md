@@ -1953,11 +1953,18 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       The report of a panel for the form on GitHub (`/api/report`: this computer, the panel
       found, what is plugged in by its USB ids), the place search (`/api/location`,
       Open-Meteo's), a folder shown (`/api/open`).
+      The themes' pictures for the lists (`/api/themes/{theme}/preview`,
+      `rust/app/src/previews.rs`): a width asked, on a panel's size (laid out or scaled into
+      it), with the person's accent, light colours, see-through cards, cards and switches, the
+      demo's readings and pictures at a fixed moment; kept, 48 of them, until the theme or a
+      choice changes; drawn two at a time; none drawn for a browser that left. Compared with
+      Python's to the pixel, the themes' light within a level where it is blurred in floating
+      point (as in the renderer's own comparisons).
       `libre-panel editor` serves alone, `start` with
       the panel, and writes its address where a later start finds it. 120 requests to
       Python's server and to this one compared: the status, the headers and the body, byte
       for byte; a run of the program controlled through its server until `quit` ends it.
-      Still to come: every other route (the themes' pictures and versions, saving, the
+      Still to come: every other route (the themes' versions per size, saving, the
       Settings' unlock, hardware, the Player, plugins' pages, …)
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app

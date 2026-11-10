@@ -198,6 +198,21 @@ fn latin(bytes: &[u8]) -> String {
 }
 
 impl Exchange {
+    /// _client_gone: whether the client closed this request's connection (a page it left, a
+    /// picture it no longer needs): then there is nobody to answer. A client that is still
+    /// there has sent nothing more.
+    pub fn client_gone(&self) -> bool {
+        if self.writer.set_nonblocking(true).is_err() {
+            return true;
+        }
+        let mut byte = [0u8; 1];
+        let gone = match self.writer.peek(&mut byte) {
+            Ok(n) => n == 0,
+            Err(e) => e.kind() != std::io::ErrorKind::WouldBlock,
+        };
+        gone || self.writer.set_nonblocking(false).is_err()
+    }
+
     /// handle_one_request up to the method: the request read; None where it was answered
     /// already (an error of http.server's own) or there is none.
     pub fn read(stream: TcpStream, software: &str) -> Option<Exchange> {

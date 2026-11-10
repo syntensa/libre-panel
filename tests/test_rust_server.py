@@ -31,12 +31,14 @@ pytestmark = pytest.mark.skipif(
 TOKEN = "t" * 43
 
 
-def _asked(port: int, request: bytes) -> tuple[str, dict[str, str], bytes]:
+def _asked(port: int, request: bytes, done: bool = True) -> tuple[str, dict[str, str], bytes]:
     """What the server on ``port`` answers to ``request``: its status line, its headers (but
-    for the server's name and the date) and its body."""
-    with socket.create_connection(("127.0.0.1", port), timeout=20) as link:
+    for the server's name and the date) and its body. ``done``: the request's end said by
+    closing the way there (else it stays open, as a browser's that waits for a picture)."""
+    with socket.create_connection(("127.0.0.1", port), timeout=60) as link:
         link.sendall(request)
-        link.shutdown(socket.SHUT_WR)
+        if done:
+            link.shutdown(socket.SHUT_WR)
         answer = b""
         while chunk := link.recv(65536):
             answer += chunk
@@ -122,12 +124,12 @@ def servers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
         port, token = int(address.split(":")[2].split("/")[0]), address.split("#token=")[1]
         sides = ((theirs.server_address[1], TOKEN), (port, token))
 
-        def ask(request: str | bytes) -> list[tuple[str, dict[str, str], bytes]]:
+        def ask(request: str | bytes, done: bool = True) -> list[tuple[str, dict[str, str], bytes]]:
             answers = []
             for port, token in sides:
                 text = request if isinstance(request, bytes) else request.encode("utf-8")
                 text = text.replace(b"{host}", f"127.0.0.1:{port}".encode())
-                answers.append(_asked(port, text.replace(b"{token}", token.encode())))
+                answers.append(_asked(port, text.replace(b"{token}", token.encode()), done))
             return answers
 
         yield ask, homes
@@ -928,3 +930,56 @@ def test_the_report_the_place_search_and_the_folders_are_as_settings_py_has_them
     for payload in ({"folder": "logs"}, {"folder": "config"}, {"folder": "other"}, {}, []):
         theirs, ours = ask(_post("/api/open", payload))
         assert (ours[0], json.loads(ours[2])) == (theirs[0], json.loads(theirs[2])), payload
+
+
+def test_the_pictures_of_the_themes_are_drawn_as_server_py_draws_them(servers: Any) -> None:
+    """A saved theme as a picture for the lists, a width asked or not, on a panel's size or
+    not, with the person's accent, cards, switches, see-through cards and light colours; a
+    theme that is not there or cannot be read."""
+    from io import BytesIO
+
+    import numpy as np
+    from PIL import Image
+
+    ask, homes = servers
+    requests = [
+        "/api/themes/slate/preview", "/api/themes/lumen/preview?w=320",
+        "/api/themes/terra/preview?w=10", "/api/themes/arena/preview?w=x",
+        "/api/themes/mine/preview?w=2000&size=800x480",
+        "/api/themes/lumen/preview?size=1920x480", "/api/themes/slate/preview?size=480x480",
+        "/api/themes/almanac/preview?w=+300&size=12x5", "/api/themes/nothing/preview",
+        "/api/themes/broken/preview", "/api/themes/list/preview",
+    ]  # fmt: skip
+
+    def compare() -> None:
+        for path in requests:
+            theirs, ours = ask(_get(path, WITH), done=False)
+            assert ours[0] == theirs[0], path
+            if theirs[1].get("Content-Type") != "image/png":
+                told = [
+                    json.loads(body.replace(json.dumps(str(home))[1:-1].encode(), b"<home>"))
+                    for home, (_, _, body) in zip(homes, (theirs, ours), strict=True)
+                ]
+                assert told[1] == told[0], path
+                continue
+            pictures = [Image.open(BytesIO(body)) for _, _, body in (theirs, ours)]
+            assert pictures[1].mode == pictures[0].mode == "RGB", path
+            assert pictures[1].size == pictures[0].size, path
+            # (the themes' light blurred in floating point, as numpy's BLAS adds it: now and
+            # then a pixel a level apart, as in the renderer's own comparisons)
+            apart = np.abs(np.asarray(pictures[1], int) - np.asarray(pictures[0], int))
+            assert apart.max() <= 1, path
+            far = (apart.max(axis=2) > 0).sum()
+            assert far <= max(2, apart.shape[0] * apart.shape[1] // 10000), (path, far)
+
+    compare()
+    # (a browser that left: nobody to draw for, nothing answered)
+    assert ask(_get("/api/themes/encore/preview", WITH)) == [("", {}, b"")] * 2
+    for home in homes:
+        (home / "config.toml").write_text(
+            'accent = "#ff8800"\ncard_opacity = 40\nlight_colours = true\n'
+            'cards = ["forecast", "music"]\nsymbols = "classic"\n'
+            "[switches.'*']\nseconds = false\n[switches.lumen]\nseconds = true\n",
+            encoding="utf-8",
+        )
+    compare()
