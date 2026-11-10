@@ -1703,6 +1703,11 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       (as samples); a thread that runs while a theme reads game.*; always on where Linux is.
       200 configurations, 150 folders and 120 logs written in pieces compared with Python,
       the program run against a log that grows
+- [x] a web client (rust/net, lp-net): a file from an http or https address as urllib
+      fetches one: the certificates the system trusts, redirects followed, the environment's
+      proxy, an answer of 400 and above an error with its status, the first bytes up to a
+      limit. Through ureq and rustls (their licences go into the downloads' list of crates
+      with R11). Run against a web server of the test's own; an https address by hand
 - [ ] HWiNFO, RTSS, the other sources; Linux's hint of what system-setup brings
 - [ ] the history as a ring, demo.py's values; the .NET service goes
 
