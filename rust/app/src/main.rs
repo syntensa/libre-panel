@@ -3,6 +3,7 @@
 //! panel, or writes them to a PNG file.
 
 mod access;
+mod ai;
 mod autostart;
 mod background;
 mod backup;

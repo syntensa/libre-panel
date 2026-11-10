@@ -8,6 +8,7 @@ import importlib.util
 import json
 import logging
 import os
+import re
 import shutil
 import signal
 import socket
@@ -1557,3 +1558,68 @@ def test_a_backup_is_made_and_put_back_as_backup_py_does(
     if not elevated():
         kept = (homes[1] / "config.toml.before-restore").read_text("utf-8")
         assert kept == 'theme = "terra"\n'
+
+
+def test_ai_activity_comes_in_as_server_py_takes_it(servers: Any) -> None:
+    """Hook events and the status line of Claude Code and Codex: with the AI key (header or
+    address), not without it or while AI activity is off, an agent named, a JSON object; the
+    status line answered with the line it shows. Settings' view of the two, and what Libre
+    Panel would add to their settings (shown, not written)."""
+    ask, homes = servers
+
+    def both(request: str | bytes) -> None:
+        theirs, ours = ask(request)
+        assert ours == theirs, request
+
+    def hook(path: str, body: str, *headers: str) -> bytes:
+        lines = [f"POST {path} HTTP/1.1", "Host: {host}", *headers,
+                 f"Content-Length: {len(body.encode())}"]  # fmt: skip
+        return "\r\n".join(lines).encode() + b"\r\n\r\n" + body.encode()
+
+    both(hook("/api/ai/hook?agent=claude&key=k", "{}"))  # (off)
+    for side in homes:
+        (side / "ai.json").write_text('{"key": "k"}', encoding="utf-8")
+        with (side / "config.toml").open("a", encoding="utf-8") as config:
+            config.write('[services]\nenabled = ["agents"]\n')
+    event = json.dumps({"hook_event_name": "PreToolUse", "session_id": "s1", "tool_name": "Bash",
+                        "cwd": "/x/project"})  # fmt: skip
+    status = json.dumps({"model": {"display_name": "Opus"}, "session_id": "s1",
+                         "context_window": {"used_percentage": 42.4}})  # fmt: skip
+    for request in (
+        hook("/api/ai/hook?agent=claude", "{}"),
+        hook("/api/ai/hook?agent=claude&key=wrong", "{}"),
+        hook("/api/ai/hook?agent=claude", "{}", "X-Libre-Panel-AI: wrong"),
+        hook("/api/ai/hook?agent=nobody&key=k", "{}"),
+        hook("/api/ai/hook?agent=claude&key=k", "[1]"),
+        hook("/api/ai/hook?agent=claude&key=k", "{nope"),
+        hook("/api/ai/hook?agent=claude&key=k", ""),
+        hook("/api/ai/hook?agent=claude", event, "X-Libre-Panel-AI: k"),
+        hook("/api/ai/hook?agent=codex&key=k", event),
+        hook("/api/ai/status?agent=claude&key=k", status),
+        hook("/api/ai/status?agent=codex&key=k", "{}"),
+        hook("/api/ai/hook?agent=claude", "{}", WITH),
+    ):  # fmt: skip
+        both(request)
+
+    def plain(told: dict[str, Any]) -> dict[str, Any]:
+        for agent in ("claude", "codex"):
+            entry = told[agent]
+            entry["heard"] = entry["heard"] is not None  # (seconds ago: when each was asked)
+            entry["usage"]["ago"] = entry["usage"]["ago"] is not None
+        return told
+
+    theirs, ours = (plain(json.loads(body)) for _, _, body in ask(_get("/api/ai/setup", WITH)))
+    ours["port"] = theirs["port"]  # (each server's own)
+    assert ours == theirs
+    for payload in (
+        {"agent": "claude", "action": "preview"},
+        {"agent": "claude", "action": "preview", "status_line": True},
+        {"agent": "codex", "action": "preview"},
+        {"agent": "claude", "action": "nope"}, {"agent": "x", "action": "preview"}, [1],
+    ):  # fmt: skip
+        theirs, ours = ask(_post("/api/ai/setup", payload))
+        # (each server's own port in the hooks it would add)
+        said = [
+            re.sub(rb"127\.0\.0\.1:\d+", b"127.0.0.1:PORT", body) for *_, body in (theirs, ours)
+        ]
+        assert theirs[0] == ours[0] and said[1] == said[0], payload

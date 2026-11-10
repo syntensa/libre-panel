@@ -53,6 +53,8 @@ pub struct State {
     updates: crate::updates::Updates,
     /// the pictures of the themes kept (previews.rs)
     previews: crate::previews::Previews,
+    /// the port the server listens on (what the AI hooks call)
+    port: u16,
 }
 
 impl State {
@@ -135,6 +137,8 @@ struct Route {
     public: bool,
     /// an <img> asks for it and cannot send the header: the token may be in the query
     picture: bool,
+    /// another program's notice: its own key stands for the token, checked by the route
+    notice: bool,
 }
 
 const fn public(method: &'static str, template: &'static str, handle: Handle) -> Route {
@@ -144,6 +148,7 @@ const fn public(method: &'static str, template: &'static str, handle: Handle) ->
         handle,
         public: true,
         picture: false,
+        notice: false,
     }
 }
 
@@ -154,6 +159,7 @@ const fn private(method: &'static str, template: &'static str, handle: Handle) -
         handle,
         public: false,
         picture: false,
+        notice: false,
     }
 }
 
@@ -164,6 +170,18 @@ const fn picture(method: &'static str, template: &'static str, handle: Handle) -
         handle,
         public: false,
         picture: true,
+        notice: false,
+    }
+}
+
+const fn notice(method: &'static str, template: &'static str, handle: Handle) -> Route {
+    Route {
+        method,
+        template,
+        handle,
+        public: false,
+        picture: false,
+        notice: true,
     }
 }
 
@@ -303,6 +321,33 @@ const ROUTES: &[Route] = &[
         hardware_answer(s, x, refresh);
     }),
     private("GET", "/api/history", |s, x, _, u| history(s, x, u)),
+    // a notice from another program: with its own key instead of the token
+    notice("POST", "/api/ai/hook", |s, x, _, u| ai_in(s, x, u, "hook")),
+    notice("POST", "/api/ai/status", |s, x, _, u| {
+        ai_in(s, x, u, "status")
+    }),
+    private(
+        "GET",
+        "/api/ai/setup",
+        |s, x, _, _| match lp_config::load_config(&s.config_file, lp_config::platform()) {
+            Ok(config) => x.json(&crate::ai::setup_state(&config, s.port), 200),
+            Err(why) => x.error(&why.msg, 409, ""),
+        },
+    ),
+    private("POST", "/api/ai/setup", |s, x, _, _| {
+        let config = match lp_config::load_config(&s.config_file, lp_config::platform()) {
+            Ok(config) => config,
+            Err(why) => return x.error(&why.msg, 409, ""),
+        };
+        let Some(payload) = x.read_json(MAX_JSON) else {
+            return;
+        };
+        match crate::ai::set_up(&config, &payload, s.port) {
+            Ok(told) => x.json(&told, 200),
+            Err(crate::ai::Refused::Said(why, status)) => x.error(&why, status, ""),
+            Err(crate::ai::Refused::Failed(why)) => unanswered(&why),
+        }
+    }),
     picture("GET", "/api/backup/file", |s, x, _, _| {
         // (the person's settings and own themes in one zip, to keep)
         let themes = lp_config::dirs::user_themes_dir();
@@ -514,6 +559,43 @@ fn see_news(state: &State, exchange: &mut Exchange) {
         Ok(told) => exchange.json(&told, 200),
         Err(why) => exchange.error(&why, 400, ""),
     }
+}
+
+/// `POST /api/ai/hook` and `/api/ai/status`: a hook event of Claude Code or Codex, or Claude
+/// Code's status line, only while AI activity is on and with the AI key (`?key=` or the
+/// header). The status line is answered with the line it shows.
+fn ai_in(state: &State, exchange: &mut Exchange, url: &Url, kind: &str) {
+    let query = crate::http::parse_qs(&url.query);
+    let config = match lp_config::load_config(&state.config_file, lp_config::platform()) {
+        Ok(config) => config,
+        Err(why) => return exchange.error(&why.msg, 409, ""),
+    };
+    let given = match exchange.header(lp_services::agents_setup::HEADER) {
+        Some(header) => header.to_string(),
+        None => crate::http::first(&query, "key").to_string(),
+    };
+    let agent = crate::http::first(&query, "agent");
+    let agent = match crate::ai::admitted(&config, Some(&given), agent) {
+        Ok(agent) => agent,
+        Err(crate::ai::Refused::Said(why, status)) => return exchange.error(&why, status, ""),
+        Err(crate::ai::Refused::Failed(why)) => return unanswered(&why),
+    };
+    let max = lp_services::agents_setup::MAX_BODY as u64;
+    let Some(body) = exchange.read_body(max, "request too large") else {
+        return;
+    };
+    let data = match crate::ai::event(&body) {
+        Ok(data) => data,
+        Err(crate::ai::Refused::Said(why, status)) => return exchange.error(&why, status, ""),
+        Err(crate::ai::Refused::Failed(why)) => return unanswered(&why),
+    };
+    let board = lp_services::agents::board();
+    if kind == "hook" {
+        board.hook(&agent, &data);
+        return exchange.send(204, b"", "text/plain", "");
+    }
+    let line = board.status(&agent, &data);
+    exchange.send(200, line.as_bytes(), "text/plain; charset=utf-8", "");
 }
 
 /// `POST /api/backup`: a backup (the zip's bytes) put in place: its config.toml and its
@@ -1495,7 +1577,9 @@ fn serve(state: &State, token: &str, hosts: &[String; 2], exchange: &mut Exchang
         (route.method == exchange.method).then_some(())?;
         Some((route, matched(&parts_of(route.template), &url.path)?))
     });
-    let open = found.as_ref().is_some_and(|(route, _)| route.public);
+    let open = found
+        .as_ref()
+        .is_some_and(|(route, _)| route.public || route.notice);
     if !open {
         let mut given = exchange.header(access::HEADER).map(str::to_string);
         if given.is_none() && found.as_ref().is_some_and(|(route, _)| route.picture) {
@@ -1567,10 +1651,12 @@ impl EditorServer {
         };
         let news = crate::news::News::new(&config_file);
         let updates = crate::updates::Updates::new(&config_file);
+        let port = listener.local_addr()?.port();
         Ok(EditorServer {
-            port: listener.local_addr()?.port(),
+            port,
             token,
             state: Arc::new(State {
+                port,
                 home,
                 config_file,
                 controls,

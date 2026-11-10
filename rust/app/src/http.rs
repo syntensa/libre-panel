@@ -22,6 +22,7 @@ const CONTENT_SECURITY: &str =
 pub fn status_words(status: u16) -> (&'static str, &'static str) {
     match status {
         200 => ("OK", "Request fulfilled, document follows"),
+        204 => ("No Content", "Request fulfilled, nothing follows"),
         301 => ("Moved Permanently", "Object moved permanently -- see URI list"),
         400 => ("Bad Request", "Bad request syntax or unsupported method"),
         403 => ("Forbidden", "Request forbidden -- authorization will not help"),

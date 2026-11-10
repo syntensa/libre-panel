@@ -2009,6 +2009,12 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       settings and own themes in one zip, and a backup put back after every check backup.py
       makes, the config.toml before it kept; refused while the app runs with administrator
       rights.
+      AI activity's ways in (`/api/ai/hook`, `/api/ai/status`, `rust/app/src/ai.rs`): hook
+      events and the status line of Claude Code and Codex with the AI key instead of the
+      token, into the same board the panel shows; and Settings' view of the two
+      (`/api/ai/setup`: their programs, settings files, Libre Panel's part in them, when they
+      were last heard, where the plan's usage came from) with Libre Panel's part shown,
+      added (a copy kept) or taken out.
       `libre-panel editor` serves alone, `start` with
       the panel, and writes its address where a later start finds it. 120 requests to
       Python's server and to this one compared: the status, the headers and the body, byte
