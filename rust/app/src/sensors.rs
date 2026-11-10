@@ -8,7 +8,6 @@ use std::collections::VecDeque;
 use std::time::Instant;
 
 use indexmap::IndexMap;
-use lp_config::SensorsConfig;
 use lp_py::toml::{Table, Toml};
 use lp_py::Value;
 use lp_render::{Moment, Reading, Snapshot};
@@ -48,6 +47,11 @@ pub trait Source {
     /// Whether its readings follow on every frame.
     fn every_frame(&self) -> Every {
         Every::No
+    }
+    /// Keys this source gives even when a source earlier in the list has them too: for what
+    /// the user said outright, or what is surely right.
+    fn overrides(&self) -> &'static [&'static str] {
+        &[]
     }
 }
 
@@ -174,6 +178,43 @@ impl Source for PresentMon {
     }
 }
 
+/// The names of the processor, the graphics card and the memory, and the memory's speed
+/// (sensors/hardware.py): always on, and what the user named under `[hardware]` instead.
+struct Hardware(lp_sensors::hardware::HardwareSource);
+
+impl Hardware {
+    fn of(config: &lp_config::Config) -> Hardware {
+        let card = match config.sensors.options.get("librehardwaremonitor") {
+            Some(table) => match table.get("gpu") {
+                Some(Toml::Str(card)) => card.as_str(),
+                _ => "",
+            },
+            None => "",
+        };
+        let hardware = &config.hardware;
+        let custom = [
+            hardware.cpu_name.as_str(),
+            hardware.gpu_name.as_str(),
+            hardware.memory_name.as_str(),
+        ];
+        Hardware(lp_sensors::hardware::HardwareSource::new(custom, card))
+    }
+}
+
+impl Source for Hardware {
+    fn name(&self) -> &'static str {
+        "hardware"
+    }
+
+    fn read(&mut self, out: &mut Readings) {
+        out.extend(self.0.read());
+    }
+
+    fn overrides(&self) -> &'static [&'static str] {
+        &lp_sensors::hardware::NAME_KEYS
+    }
+}
+
 fn put(out: &mut Readings, key: &str, value: f64, unit: &str, label: &str) {
     out.insert(
         key.to_string(),
@@ -266,7 +307,8 @@ impl Hub {
 
     /// The sources config.toml names, as far as this build has them; the names of those it
     /// has not.
-    pub fn of(sensors: &SensorsConfig, demo: bool) -> (Hub, Vec<String>) {
+    pub fn of(config: &lp_config::Config, demo: bool) -> (Hub, Vec<String>) {
+        let sensors = &config.sensors;
         let mut sources: Vec<Box<dyn Source>> = Vec::new();
         let mut missing = Vec::new();
         let mut notes = Vec::new();
@@ -300,8 +342,12 @@ impl Hub {
                         sources.push(Box::new(source));
                         notes.extend(said);
                     }
+                    "hardware" => sources.push(Box::new(Hardware::of(config))),
                     other => missing.push(other.to_string()),
                 }
+            }
+            if !sensors.providers.iter().any(|name| name == "hardware") {
+                sources.push(Box::new(Hardware::of(config))); // the names of this PC
             }
         }
         let hub = Hub {
@@ -325,8 +371,9 @@ impl Hub {
         for (n, source) in self.sources.iter_mut().enumerate() {
             let mut found = Readings::new();
             source.read(&mut found);
+            let overrides = source.overrides();
             for (key, reading) in found {
-                if !readings.contains_key(&key) {
+                if !readings.contains_key(&key) || overrides.contains(&key.as_str()) {
                     owners.insert(key.clone(), n);
                     readings.insert(key, reading);
                 }

@@ -540,6 +540,137 @@ fn frames(case: &Value) -> Value {
     json!({"runs": runs, "rounds": rounds, "tables": tables, "limits": limits})
 }
 
+/// hardware: the processor's name of each cpuinfo file, the cards of each tree of folders,
+/// the memory modules of each table (base64) and folder of entries, each made-up computer
+/// described, and int() of texts.
+fn hardware(case: &Value) -> Value {
+    use base64::engine::general_purpose::STANDARD;
+    use base64::Engine;
+    use lp_sensors::hardware as hw;
+    use lp_sensors::smbios;
+    use std::path::{Path, PathBuf};
+    let list = |key: &str| case[key].as_array().cloned().unwrap_or_default();
+    let path = |value: &Value| PathBuf::from(value.as_str().unwrap_or(""));
+    let module = |m: &smbios::Module| json!([m.megabytes, m.kind, m.speed, m.maker]);
+    let cpus: Vec<Value> = list("cpuinfo")
+        .iter()
+        .map(|file| json!(hw::linux_cpu_name(&path(file))))
+        .collect();
+    let trees: Vec<Value> = list("trees")
+        .iter()
+        .map(|tree| {
+            let ids: Vec<PathBuf> = tree["pci_ids"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(path)
+                .collect();
+            let found = hw::linux_adapters(
+                &path(&tree["drm"]),
+                &path(&tree["nvidia"]),
+                &ids,
+                &path(&tree["amdgpu_ids"]),
+            );
+            json!(found
+                .iter()
+                .map(|a| json!([a.name, a.memory, a.discrete, a.slot]))
+                .collect::<Vec<_>>())
+        })
+        .collect();
+    let tables: Vec<Value> = list("tables")
+        .iter()
+        .map(|table| {
+            let data = STANDARD
+                .decode(table.as_str().unwrap_or(""))
+                .unwrap_or_default();
+            json!(smbios::memory_modules(&data)
+                .iter()
+                .map(module)
+                .collect::<Vec<_>>())
+        })
+        .collect();
+    let entries: Vec<Value> = list("entries")
+        .iter()
+        .map(|folder| {
+            let data = smbios::linux_table(Path::new(folder.as_str().unwrap_or("")));
+            json!(smbios::memory_modules(&data)
+                .iter()
+                .map(module)
+                .collect::<Vec<_>>())
+        })
+        .collect();
+    let founds: Vec<Value> = list("founds")
+        .iter()
+        .map(|one| {
+            let text = |value: &Value| value.as_str().unwrap_or("").to_string();
+            let found = hw::Found {
+                cpu: text(&one["cpu"]),
+                adapters: one["adapters"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .map(|a| hw::Adapter {
+                        name: text(&a[0]),
+                        memory: a[1].as_u64().unwrap_or(0),
+                        discrete: a[2].as_bool().unwrap_or(false),
+                        slot: String::new(),
+                    })
+                    .collect(),
+                modules: one["modules"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .map(|m| smbios::Module {
+                        megabytes: m[0].as_u64().unwrap_or(0) as u32,
+                        kind: text(&m[1]),
+                        speed: m[2].as_u64().unwrap_or(0) as u16,
+                        maker: text(&m[3]),
+                    })
+                    .collect(),
+                memory: one["memory"].as_u64().unwrap_or(0),
+            };
+            let prefer = text(&one["prefer"]);
+            let custom = [
+                text(&one["custom"][0]),
+                text(&one["custom"][1]),
+                text(&one["custom"][2]),
+            ];
+            let picked = hw::pick_adapter(&found.adapters, &prefer)
+                .and_then(|best| found.adapters.iter().position(|a| std::ptr::eq(a, best)));
+            let source = hw::HardwareSource::of(
+                &found,
+                [custom[0].as_str(), custom[1].as_str(), custom[2].as_str()],
+                &prefer,
+            );
+            let readings: Vec<Value> = source
+                .read()
+                .iter()
+                .map(|(key, r)| {
+                    let value = match &r.value {
+                        lp_py::Value::Float(f) => json!(f),
+                        other => json!(other.str()),
+                    };
+                    json!([key, value, r.unit, r.label])
+                })
+                .collect();
+            json!({"names": hw::describe(&found, &prefer), "speed": hw::memory_speed(&found),
+                   "picked": picked, "readings": readings})
+        })
+        .collect();
+    let ints: Vec<Value> = list("ints")
+        .iter()
+        .map(|one| {
+            let n = lp_sensors::sysfs::int_of(
+                one[0].as_str().unwrap_or(""),
+                one[1].as_u64().unwrap_or(10) as u32,
+            );
+            json!(n.map(|n| n.to_string()))
+        })
+        .collect();
+    json!({"cpus": cpus, "trees": trees, "tables": tables, "entries": entries,
+           "founds": founds, "ints": ints})
+}
+
 pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "regex" => regex(case),
@@ -552,6 +683,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "netlink" => netlink(case),
         "audio" => audio(case),
         "game_frames" => frames(case),
+        "hardware" => hardware(case),
         _ => return Err(format!("no such op: {op}")),
     })
 }

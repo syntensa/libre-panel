@@ -206,7 +206,7 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
                 None => Home::find()?.config_file(),
             };
             let config = lp_config::load_config(&file, lp_config::platform()).map_err(|e| e.msg)?;
-            let (mut hub, missing) = sensors::Hub::of(&config.sensors, asked.demo);
+            let (mut hub, missing) = sensors::Hub::of(&config, asked.demo);
             // Some sources read only while a theme shows their keys: asked for as a theme
             // would, so they are listed ("lhm:*" is every sensor of LibreHardwareMonitor).
             let mut keys = ["cpu.load", "gpu.load", "audio.*", "lhm:*", "temp.*"]

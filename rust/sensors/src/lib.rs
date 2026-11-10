@@ -4,6 +4,7 @@
 
 pub mod audio;
 pub mod frames;
+pub mod hardware;
 pub mod hints;
 pub mod hwnames;
 pub mod lhm;
@@ -13,6 +14,8 @@ pub mod presentmon;
 pub mod protocol;
 pub mod provider;
 pub mod service;
+pub mod smbios;
+pub mod sysfs;
 pub mod topology;
 #[cfg(windows)]
 pub mod winlink;

@@ -1674,6 +1674,14 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       runs, in a Windows job that ends it with the program, not started while Windows ends
       the session. The program run against a stand-in PresentMon; the Windows calls (the
       job, the session's release) not yet run on a Windows PC
+- [x] the names of the computer's parts (sensors/hardware.py and smbios.py, lp-sensors'
+      hardware and smbios): the processor from /proc/cpuinfo or Windows' registry, the
+      graphics card from /sys/class/drm (the NVIDIA driver's name, AMD's list, pci.ids) or
+      the registry's display adapters, the memory from the SMBIOS table's modules or its
+      size; tidied, the user's own under `[hardware]` instead, the memory's speed; always
+      on, and its names win over another source's. Compared with Python on 300 cpuinfo
+      files, 120 trees of cards, 400 tables, 600 computers made up, and on the computer the
+      tests run on; the Windows calls not yet run on a Windows PC
 - [ ] HWiNFO, RTSS, MangoHud, the other sources; Linux's hint of what system-setup brings
 - [ ] the history as a ring, demo.py's values; the .NET service goes
 

@@ -100,7 +100,7 @@ impl MainLoop {
         let config_file = asked.config.clone().unwrap_or_else(|| home.config_file());
         let config =
             lp_config::load_config(&config_file, lp_config::platform()).map_err(|e| e.msg)?;
-        let (hub, missing) = Hub::of(&config.sensors, asked.demo);
+        let (hub, missing) = Hub::of(&config, asked.demo);
         say(&format!("readings from: {}", hub.names().join(", ")));
         if !missing.is_empty() {
             say(&format!(
@@ -174,7 +174,7 @@ impl MainLoop {
                     self.close_panel();
                 }
                 if fresh.sensors != self.config.sensors {
-                    let (hub, _) = Hub::of(&fresh.sensors, self.asked.demo);
+                    let (hub, _) = Hub::of(&fresh, self.asked.demo);
                     self.hub = hub;
                     if let Some(renderer) = &self.renderer {
                         self.hub.want(renderer.reads());

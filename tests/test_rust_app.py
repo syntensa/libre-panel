@@ -62,6 +62,28 @@ def _run(home: Path, *args: str, **more: str) -> subprocess.CompletedProcess[str
                           encoding="utf-8", timeout=120, check=False)  # fmt: skip
 
 
+def _named(readings: dict, cpu: str = "", prefer: str = "") -> dict:
+    """``readings`` with the names of this computer's parts as the Python app adds them
+    (sensors/hardware.py, always on): its names win, ``cpu`` is `[hardware] cpu_name`."""
+    from libre_panel.sensors import hardware
+
+    # (the tests' computer is empty, conftest.py: this one asks the real one, as the program does)
+    parts = (hardware.windows_cpu_name, hardware.windows_adapters, hardware.windows_modules)
+    if sys.platform != "win32":
+        parts = (hardware.linux_cpu_name, hardware.linux_adapters, hardware.linux_modules)
+    provider = hardware.HardwareProvider()
+    provider._found = hardware.Found(
+        hardware._try(parts[0], "") or hardware._try(hardware._last_resort, ""),
+        tuple(hardware._try(parts[1], [])),
+        tuple(hardware._try(parts[2], [])),
+        hardware._try(hardware._visible_memory, 0),
+    )
+    provider._custom, provider._prefer = {**provider._custom, "cpu": cpu}, prefer
+    names = provider._make()
+    return {**readings, **{k: r for k, r in names.items()
+                           if k not in readings or k in provider.overrides}}  # fmt: skip
+
+
 # (letters want FreeType, loaded where the program runs: Pillow's own, which its Windows
 # wheels have built in; docs/RUST.md, R2)
 draws = pytest.mark.skipif(pillow_libfreetype() is None, reason="needs Pillow's FreeType")
@@ -351,21 +373,22 @@ def test_it_lists_librehardwaremonitor_s_readings_as_the_python_app_names_them(
         (tmp_path / "config.toml").write_text(
             '[sensors]\nproviders = ["librehardwaremonitor"]\n[sensors.librehardwaremonitor]\n'
             f'mode = "webserver"\nurl = "http://127.0.0.1:{server.server_port}/data.json"\n'
-            "poll_seconds = 0.2\n",
+            'poll_seconds = 0.2\n[hardware]\ncpu_name = "My own processor"\n',
             encoding="utf-8",
         )
         done = _run(tmp_path, "sensors")
     finally:
         server.shutdown()
     assert done.returncode == 0, done.stderr
-    readings = lhm.readings_from_tree(tree)
+    # (the names of this computer's parts win over LibreHardwareMonitor's, and the user's own)
+    readings = _named(lhm.readings_from_tree(tree), cpu="My own processor")
     lines = []
     for key in sorted(readings):
         r = readings[key]
         value = f"{r.value:.2f}" if isinstance(r.value, float) else str(r.value)
         lines.append(f"{key:<40} {value:>14} {r.unit:<5} {r.label}")
     assert done.stdout.splitlines() == lines
-    assert any(line.startswith("cpu.name") and "Ryzen 7 7800X3D" in line for line in lines)
+    assert any(line.startswith("cpu.name") and "My own processor" in line for line in lines)
     assert any(line.startswith("mem.temp") for line in lines)
 
 
@@ -395,7 +418,7 @@ def test_the_computer_s_own_readings_are_those_of_the_python_source(tmp_path: Pa
     try:
         provider.read()
         done = _run(tmp_path, "sensors")
-        wanted = provider.read()
+        wanted = _named(provider.read())
     finally:
         provider.close()
     assert done.returncode == 0, done.stderr
@@ -404,7 +427,8 @@ def test_the_computer_s_own_readings_are_those_of_the_python_source(tmp_path: Pa
         key, value = line[:40].strip(), line[41:55].strip()
         ours[key] = (value, line[56:61].strip(), line[62:])
     assert sorted(ours) == sorted(wanted), set(ours) ^ set(wanted)
-    still = ("cpu.cores", "mem.total", "disk.total", "net.ip")
+    still = ("cpu.cores", "mem.total", "disk.total", "net.ip", "cpu.name", "gpu.name", "mem.name",
+             "mem.speed")  # fmt: skip
     for key, reading in wanted.items():
         value, unit, label = ours[key]
         assert (unit, label) == (reading.unit, reading.label), key
@@ -472,6 +496,7 @@ def test_the_volume_is_read_from_the_tool_on_the_path(tmp_path: Path) -> None:
     assert done.returncode == 0, done.stderr
     ours = {line[:40].strip(): (line[41:55].strip(), line[56:61].strip(), line[62:])
             for line in done.stdout.splitlines()}  # fmt: skip
+    ours = {key: said for key, said in ours.items() if key.startswith("audio.")}
     assert ours == {
         "audio.volume": ("37.00", "%", "Volume"), "audio.muted": ("0", "", "Muted"),
         "audio.mic.volume": ("80.00", "%", "Microphone level"),

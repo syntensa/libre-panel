@@ -653,3 +653,236 @@ def test_a_game_s_frames_are_counted_as_presentmon_py_counts_them() -> None:
     for (waits, mean), got in zip(limits, ours["limits"], strict=True):
         assert got == pm.limited_by([tuple(w) for w in waits], mean), (waits, mean)
     assert {"cpu", "gpu", "cap", None} == set(ours["limits"])
+
+
+def test_the_computers_parts_are_named_as_hardware_names_them(tmp_path: Any) -> None:
+    """sensors/hardware.py and smbios.py: the processor of /proc/cpuinfo, the cards of
+    /sys/class/drm by the NVIDIA driver, AMD's list and pci.ids, the memory modules of the
+    SMBIOS table, and what the source makes of them."""
+    from pathlib import Path
+
+    from libre_panel.sensors import hardware, smbios
+
+    rng = random.Random(0x4A)
+    cpu_lines = [
+        "processor\t: 0", "model name\t: AMD Ryzen 7 7800X3D 8-Core Processor", "model name : ",
+        "model name\t: ARMv7 Processor rev 4 (v7l)", "model name: ARM", "model name: Armada 370",
+        "model name: ARMv8", "model name: armx", "model name: ARM_1", "Model\t\t: Raspberry Pi 4",
+        "Hardware\t: BCM2835", "Processor\t: AArch64 Processor rev 4", "cpu model\t: MIPS 24Kc",
+        "cpu\t\t: POWER9, altivec supported", "Model Name\t: Loongson-3A5000", "flags : a:b: c",
+        "no colon here", "", ": lonely", "model name\t: Intel(R) Core(TM) i7-12700K",
+        "Model : \xa0Banana Pi ", "cpu : é\x85ü",
+    ]  # fmt: skip
+    cpuinfo = []
+    for n in range(300):
+        file = tmp_path / f"cpuinfo{n}"
+        lines = [rng.choice(cpu_lines) for _ in range(rng.randrange(0, 9))]
+        data = rng.choice(["\n", "\n", "\r\n", "\r"]).join(lines).encode()
+        if rng.random() < 0.1:
+            data = data.replace(b"o", b"\xff\xc3", 1)
+        if n % 40 != 39:  # (one in forty is not there)
+            file.write_bytes(data)
+        cpuinfo.append(str(file))
+
+    pci_text = (
+        "# a comment\n\n1002  Advanced Micro Devices, Inc. [AMD/ATI]\n"
+        "\t744c  Navi 31 [Radeon RX 7900 XT/7900 XTX/7900 GRE/7900M]\n"
+        "\t\t1da2 e471  NITRO+ RX 7900 XTX Vapor-X\n\t73bf  Navi 21 [Radeon RX 6800/6800 XT]\n"
+        "\t15bf  Phoenix1\n10DE  NVIDIA Corporation\n\t2786  AD104 [GeForce RTX 4070]\n"
+        "\t1c82  GP107 [GeForce GTX 1050 Ti] [rev a1]\n\t0000  [] Odd [ [x] y\n"
+        "8086  Intel Corporation\n\t56a0  DG2 [Arc A770]\n\t4680  AlderLake-S GT1\r\n"
+        "10020 Not a vendor\n\t744c  Wrong block\nC 03  Display controller\n\t00  VGA\n"
+    )
+    amd_text = (
+        "# List of AMDGPU IDs\n1.0.0\n744C,\tC8,\tAMD Radeon RX 7900 XTX\n"
+        "744C,\tCC,\tAMD Radeon RX 7900 XT\n73BF, C1, AMD Radeon RX 6800 XT\nzz, 00, Nothing\n"
+        "0x15BF,0xC1,AMD Radeon 780M, with a comma\n#744C,\t00,\tA comment\n"
+    )
+    ids = [("0x1002", "0x744c", "0xc8"), ("0x1002", "0x744c", "0x00"), ("0x1002", "0x73bf", "0xc1"),
+           ("0x1002", "0x15bf", "0xc1"), ("0x10de", "0x2786", "0xa1"), ("0x10de", "0x1c82", "a1"),
+           ("0x10DE", "0x0000", ""), ("0x8086", "0x56a0", "0x08"), ("0x8086", "0x4680", "0x0c"),
+           ("0x8086", "0x9999", "0x00"), ("0x1234", "0x1111", "0x02"), ("nope", "0x1", "0x0"),
+           ("1002", "744C", "c8"), (" 0x10de\n", "0x_27_86", "")]  # fmt: skip
+    trees = []
+    for n in range(120):
+        root = tmp_path / f"tree{n}"
+        drm, nvidia = root / "drm", root / "nvidia"
+        drm.mkdir(parents=True)
+        slots = []
+        for number in rng.sample(range(12), rng.randrange(0, 4)):
+            vendor, product, revision = rng.choice(ids)
+            device = drm / f"card{number}" / "device"
+            device.mkdir(parents=True)
+            (drm / f"card{number}-DP-1").mkdir()
+            slot = f"0000:{rng.randrange(1, 9):02X}:00.0"
+            slots.append(slot)
+            (device / "vendor").write_text(vendor + "\n", encoding="utf-8")
+            if rng.random() < 0.95:
+                (device / "device").write_text(product + "\n", encoding="utf-8")
+            if revision or rng.random() < 0.5:
+                (device / "revision").write_text(revision + "\n", encoding="utf-8")
+            if rng.random() < 0.8:
+                (device / "uevent").write_text(
+                    f"DRIVER=amdgpu\nPCI_ID=1002:744C\nPCI_SLOT_NAME={slot}\n", encoding="utf-8"
+                )
+            if rng.random() < 0.5:
+                (device / "mem_info_vram_total").write_text(
+                    rng.choice(["25753026560\n", "0\n", "x\n", "8_589_934_592"]), encoding="utf-8"
+                )
+        (drm / "renderD128").mkdir()
+        (drm / "version").write_text("drm 1.1.0", encoding="utf-8")
+        for slot in rng.sample(slots, rng.randrange(0, len(slots) + 1)):
+            gpu = nvidia / rng.choice([slot.lower(), slot, "0"])
+            gpu.mkdir(parents=True, exist_ok=True)
+            (gpu / "information").write_text(
+                rng.choice([
+                    f"Model: \t\t NVIDIA GeForce RTX 4070\nIRQ: \t 125\nBus Location: \t {slot}\n",
+                    "Model: \t\t GeForce GTX 1050 Ti\nBus Type: \t PCIe\n",
+                    "IRQ: 1\nModel:\n", f"Bus Location: {slot}\rModel: Quadro\x0bP400\n",
+                ]), encoding="utf-8",
+            )  # fmt: skip
+        pci = [root / "hwdata.ids", root / "misc.ids"]
+        if rng.random() < 0.8:
+            pci[rng.randrange(2)].write_text(pci_text, encoding="utf-8", newline="")
+        if rng.random() < 0.3:
+            pci[0].write_text("1002  AMD\n\t15bf  First file\n", encoding="utf-8")
+        if rng.random() < 0.7:
+            (root / "amdgpu.ids").write_text(amd_text, encoding="utf-8")
+        trees.append({"drm": str(drm), "nvidia": str(nvidia), "pci_ids": [str(p) for p in pci],
+                      "amdgpu_ids": str(root / "amdgpu.ids")})  # fmt: skip
+
+    def structure(kind: int, body: bytes, texts: list[bytes]) -> bytes:
+        fixed = bytes([kind, len(body) + 4, 0, 0]) + body
+        return fixed + (b"\0".join(texts) + b"\0\0" if texts else b"\0\0")
+
+    def slot_body() -> tuple[bytes, list[bytes]]:
+        body = bytearray(rng.choice([0x11, 0x13, 0x17, 0x1C, 0x1E, 0x24, 0x58]))
+        for at in range(len(body)):
+            body[at] = rng.choice([0, 0, 0, rng.randrange(256)])
+        if len(body) >= 0x0A:
+            size = rng.choice([0, 0xFFFF, 0x7FFF, 8192, 16384, 0x8000 | 4096, 0x8400, 512, 1])
+            struct.pack_into("<H", body, 0x08, size)
+        if len(body) >= 0x0F:
+            body[0x0E] = rng.choice([0x1A, 0x22, 0x18, 0x1F, 0x23, 0x02, 0x1A, 0x22])
+            struct.pack_into("<H", body, 0x0F, rng.choice([0x80, 0x1000, 0x4080, 0]))
+        if len(body) >= 0x13:
+            struct.pack_into("<H", body, 0x11, rng.choice([0, 0xFFFF, 3200, 5600, 6000]))
+        if len(body) >= 0x14:
+            body[0x13] = rng.randrange(0, 5)
+        if len(body) >= 0x1C:
+            struct.pack_into("<I", body, 0x18, rng.choice([32768, 0x80000000 | 65536, 0]))
+        if len(body) >= 0x1E:
+            struct.pack_into("<H", body, 0x1C, rng.choice([0, 0xFFFF, 3000, 5200]))
+        texts = [rng.choice([b"Kingston", b"G.Skill Intl", b" Corsair ", b"859B", b"\xffSK\xc3",
+                             b"Unknown", b"Micron Technology"])
+                 for _ in range(rng.randrange(0, 4))]  # fmt: skip
+        return bytes(body), texts
+
+    tables = []
+    for _ in range(400):
+        table = b""
+        for _ in range(rng.randrange(0, 6)):
+            if rng.random() < 0.7:
+                table += structure(17, *slot_body())
+            else:
+                table += structure(rng.choice([0, 1, 16, 19, 127]), bytes(rng.randrange(0, 20)),
+                                   [b"x"] * rng.randrange(0, 3))  # fmt: skip
+        if rng.random() < 0.15:
+            table = table[: rng.randrange(0, len(table) + 1)]
+        tables.append(table)
+    entries = []
+    for n in range(40):
+        folder = tmp_path / f"entries{n}"
+        for number in rng.sample(range(14), rng.randrange(0, 5)):
+            (folder / f"17-{number}").mkdir(parents=True)
+            if rng.random() < 0.9:
+                (folder / f"17-{number}" / "raw").write_bytes(structure(17, *slot_body()))
+        (folder / "0-0").mkdir(parents=True)
+        (folder / "0-0" / "raw").write_bytes(structure(0, b"\x01\x02", [b"BIOS"]))
+        entries.append(str(folder))
+
+    card_names = ["NVIDIA GeForce RTX 4070", "AMD Radeon RX 7900 XTX", "Arc A770", "",
+                  "Intel(R) UHD Graphics 770", "Radeon 780M", "GeForce GTX 1050 Ti",
+                  "nvidia quadro"]  # fmt: skip
+    founds, python_founds = [], []
+    for _ in range(600):
+        adapters = [(rng.choice(card_names), rng.choice([0, 0, 2**31, 2**33, 2**34]),
+                     rng.random() < 0.3) for _ in range(rng.randrange(0, 4))]  # fmt: skip
+        kinds = rng.choice([["DDR5"], ["DDR4"], [""], ["DDR5", "DDR5", "DDR4"], ["", "DDR4"]])
+        modules = [(rng.choice([8192, 16384, 32768, 4096]), rng.choice(kinds),
+                    rng.choice([0, 5600, 6000, 3200]),
+                    rng.choice(["Kingston", "G.Skill Intl", "Kingston Technology", "", "859B"]))
+                   for _ in range(rng.choice([0, 0, 1, 2, 2, 4]))]  # fmt: skip
+        counts = sorted((sum(1 for m in modules if m[1] == k) for k in {m[1] for m in modules}
+                         if k), reverse=True)  # fmt: skip
+        if len(counts) > 1 and counts[0] == counts[1]:
+            modules = modules[:1]  # (of kinds as frequent as each other Python takes any)
+        case = {
+            "cpu": rng.choice(NAMES), "adapters": adapters, "modules": modules,
+            "memory": rng.choice([0, 0, 2**34, 31 * 2**30, 67_000_000_000]),
+            "prefer": rng.choice(["", "", "radeon", " RTX ", "nvidia", "nothing", "770"]),
+            "custom": [rng.choice(["", "", "My CPU"]), rng.choice(["", "", " "]),
+                       rng.choice(["", "64 GB of mine"])],
+        }  # fmt: skip
+        founds.append(case)
+        python_founds.append(hardware.Found(
+            case["cpu"], tuple(hardware.Adapter(*a) for a in adapters),
+            tuple(smbios.Module(*m) for m in modules), case["memory"],
+        ))  # fmt: skip
+    digits = "0123456789abcdefABCDEFxX_+- \t\n٣"
+    texts = ["0x1002", "1002", " 0x10DE\n", "-0x1f", "+12", "1_000", "_1", "1_", "1__0", "0x_1f",
+             "0x", "", " ", "x1", "0X1F", "٣٤", "1f", "0b11", "0o7", "0x-1", "--1", "1 2",
+             "0_x1"]  # fmt: skip
+    ints = [[text, base] for base in (10, 16) for text in texts]
+    ints += [["".join(rng.choice(digits) for _ in range(rng.randrange(1, 7))), rng.choice([10, 16])]
+             for _ in range(3000)]  # fmt: skip
+
+    [ours] = run([{"op": "hardware", "cpuinfo": cpuinfo, "trees": trees, "entries": entries,
+                   "tables": [base64.b64encode(t).decode() for t in tables],
+                   "founds": founds, "ints": ints}])  # fmt: skip
+
+    def cpu_name(file: str) -> str | None:
+        try:
+            return hardware.linux_cpu_name(Path(file))
+        except OSError:
+            return None
+
+    assert ours["cpus"] == [cpu_name(file) for file in cpuinfo]
+    assert len({name for name in ours["cpus"]}) > 12
+    theirs = [
+        [[a.name, a.memory, a.discrete, a.slot] for a in hardware.linux_adapters(
+            Path(t["drm"]), Path(t["nvidia"]), [Path(p) for p in t["pci_ids"]],
+            Path(t["amdgpu_ids"]))]
+        for t in trees
+    ]  # fmt: skip
+    assert ours["trees"] == theirs
+    assert len({a[0] for cards in theirs for a in cards}) > 8
+
+    def modules_of(found: list[Any]) -> list[list[Any]]:
+        return [[m.megabytes, m.kind, m.speed, m.maker] for m in found]
+
+    assert ours["tables"] == [modules_of(smbios.memory_modules(t)) for t in tables]
+    assert sum(1 for found in ours["tables"] if found) > 100
+    assert ours["entries"] == [
+        modules_of(smbios.memory_modules(smbios.linux_table(Path(folder)))) for folder in entries
+    ]
+    provider = hardware.HardwareProvider()
+    for case, found, got in zip(founds, python_founds, ours["founds"], strict=True):
+        names = hardware.describe(found, case["prefer"])
+        assert got["names"] == [names["cpu"], names["gpu"], names["memory"]], case
+        assert got["speed"] == hardware.memory_speed(found)
+        picked = hardware.pick_adapter(found.adapters, case["prefer"])
+        assert got["picked"] == (None if picked is None else found.adapters.index(picked))
+        provider._found, provider._prefer = found, case["prefer"]
+        provider._custom = dict(zip(hardware.PARTS, case["custom"], strict=True))
+        readings = provider._make()
+        assert got["readings"] == [[key, r.value, r.unit, r.label] for key, r in readings.items()]
+
+    def number(text: str, base: int) -> str | None:
+        try:
+            return str(int(text, base))
+        except ValueError:
+            return None
+
+    assert ours["ints"] == [number(text, base) for text, base in ints]
+    assert sum(1 for n in ours["ints"] if n is not None) > 500

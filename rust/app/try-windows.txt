@@ -43,7 +43,8 @@ What it does not do yet
 -----------------------
 - Readings: what Windows itself tells (the processor's and the graphics card's load, every
   core, the clock, memory, drives, network with its link, the programs that use the most,
-  ping, battery, uptime, the volume) and what LibreHardwareMonitor reads through Libre
+  ping, battery, uptime, the volume, the names of the processor, the graphics card and
+  the memory) and what LibreHardwareMonitor reads through Libre
   Panel's sensor service (or its own web server): temperatures, power, fans, the graphics
   card; and a game's frame rate through PresentMon (tools\PresentMon.exe), which needs
   administrator rights or the "Performance Log Users" group. Music, weather and the AI
