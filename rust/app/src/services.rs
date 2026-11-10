@@ -29,6 +29,7 @@ pub fn parts() -> IndexMap<&'static str, Part> {
     parts.insert("notices", lp_services::notices::part());
     parts.insert("power", lp_services::power::part());
     parts.insert("timer", lp_services::timer::part());
+    parts.insert("waveshare", lp_services::waveshare::part());
     if std::env::var_os(SCRIPT_ENV).is_some() {
         parts.insert(
             "script",

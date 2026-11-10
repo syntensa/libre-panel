@@ -1999,3 +1999,28 @@ def test_the_devices_are_looked_at_where_windows_tells_them(tmp_path: Path) -> N
     assert "service 'devices' started" in said, said
     assert "usb_ignore: 'nothing' is no USB id" in said, said
     assert ("devices: this works on Windows only" in said) == (os.name != "nt"), said
+
+
+def test_the_waveshare_display_is_looked_for_and_its_absence_said_once(tmp_path: Path) -> None:
+    """`waveshare` among the services: with no display on a port, it says once that none is
+    connected, and goes on looking."""
+    (tmp_path / "config.toml").write_text(
+        'theme = "slate"\nfps = 2\nrefresh_ms = 200\n[device]\ndriver = "virtual"\n'
+        'output = "panel.png"\n[sensors]\nproviders = []\n[services]\nenabled = ["waveshare"]\n'
+        '[services.waveshare]\nbrightness = 50\nflip = "normal"\n',
+        encoding="utf-8",
+    )
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries()}  # fmt: skip
+    with subprocess.Popen([str(_program()), "run"], env=env, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        time.sleep(7)
+        alive = program.poll() is None
+        if os.name == "nt":
+            program.terminate()
+        else:
+            program.send_signal(signal.SIGINT)
+        said = program.communicate(timeout=30)[1]
+    assert alive and "panicked" not in said, said
+    assert "service 'waveshare' started" in said, said
+    assert said.count("Waveshare USB monitor: no Waveshare USB monitor is connected") == 1, said

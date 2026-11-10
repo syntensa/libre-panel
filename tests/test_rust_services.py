@@ -3230,3 +3230,276 @@ def test_devices_are_told_as_devices_py_tells_them() -> None:
             for given, a, b in zip(case["steps"], want, got, strict=True):
                 assert b == a, (case["options"], case["events"], given[0])
     assert all(count >= 5 for count in seen.values()), seen
+
+
+class _MadeUpDisplay:
+    """A display the test makes up: it answers each command with the next of the payloads the
+    case has for it (none left: silence), a piece at a time, after some noise."""
+
+    def __init__(self, case: dict[str, Any], written: list[str]) -> None:
+        from libre_panel.devices import waveshare
+
+        self.answers = {int(k): [bytes.fromhex(p) for p in v] for k, v in case["answers"].items()}
+        self.noise, self.piece = bytes.fromhex(case["noise"]), case["piece"]
+        self.waiting, self.written, self.seen = bytearray(), written, waveshare.Frames()
+        self.frame = waveshare.frame
+
+    def write(self, data: bytes) -> None:
+        self.written.append(data.hex())
+        for asked in self.seen.feed(data):
+            left = self.answers.get(asked.command)
+            if left:
+                self.waiting += self.noise + self.frame(asked.command, left.pop(0), 2)
+
+    def read(self, size: int) -> bytes:
+        count = min(size, self.piece, len(self.waiting))
+        data = bytes(self.waiting[:count])
+        del self.waiting[:count]
+        return data
+
+    def close(self) -> None:
+        pass
+
+
+def test_the_waveshare_display_is_fed_as_waveshare_py_feeds_it() -> None:
+    """devices/waveshare.py and services/waveshare.py: frames, Qt's maps written and read back,
+    frames found in what a port gives piece by piece, the ports the display may be on, the
+    values of a snapshot under the display's keys, what stands in the way, and whole sessions
+    with a display the test makes up (the handshake, version, brightness, the picture turned,
+    the themes on the card, a theme shown, themes in turn, values until it falls silent): the
+    bytes written and what the service says of itself."""
+    import logging
+    from datetime import datetime
+    from types import SimpleNamespace
+
+    from libre_panel import i18n
+    from libre_panel.devices import waveshare as device
+    from libre_panel.devices.base import DeviceError
+    from libre_panel.services import waveshare as service
+
+    rng = random.Random(0x5AFE5A)
+    words = ["Cpu_Temp", "Cpu温度", "canvas_flip", "a", "", "Z", "ａ", "😀x", "é", "week", "0"]
+    texts = ["", "75%", "31℃", "Mon", "x" * 40, "😀", "1", "ß"]
+
+    def a_map() -> list[list[str]]:
+        keys = rng.sample(words, rng.randrange(len(words)))
+        return [[key, rng.choice(texts)] for key in keys]
+
+    def a_payload() -> bytes:
+        roll = rng.random()
+        whole = device.qmap(dict(a_map()))
+        if roll < 0.4:
+            return whole
+        if roll < 0.5:
+            return whole[: rng.randrange(len(whole) + 1)] + bytes(rng.randrange(3))
+        if roll < 0.6:  # (null strings)
+            return b"\0\0\0\x01\xff\xff\xff\xff" + rng.choice(
+                [b"\xff\xff\xff\xff", b"\0\0\0\x02\0a"]
+            )
+        if roll < 0.7:
+            return rng.choice([b"128", b"", b"\xff\xfe", b"\0\0\0\x01\0\0\0\x02\xd8\0\0\0\0\0"])
+        return bytes(rng.randrange(256) for _ in range(rng.randrange(24)))
+
+    frames = [[rng.choice([0, 1, 2, 3, 4, 8, 9, 10, 77]), a_payload().hex(), rng.choice([0, 2])]
+              for _ in range(80)]  # fmt: skip
+    maps = [a_map() for _ in range(120)]
+    payloads = [a_payload().hex() for _ in range(300)]
+
+    def a_feed() -> list[str]:
+        stream = bytearray()
+        for _ in range(rng.randrange(1, 6)):
+            stream += bytes(rng.randrange(256) for _ in range(rng.choice([0, 0, 3, 30])))
+            whole = bytearray(device.frame(rng.randrange(11), a_payload(), rng.choice([0, 2])))
+            roll = rng.random()
+            if roll < 0.15:
+                whole[-1] ^= 1  # (the CRC does not fit, or the head is broken)
+            elif roll < 0.25:
+                whole[30:34] = b"\xff\xff\xff\x7f"
+            elif roll < 0.3:
+                whole = whole[: rng.randrange(len(whole))]
+            stream += whole
+        pieces = []
+        while stream:
+            count = rng.choice([1, 5, 21, 22, 40, 4096])
+            pieces.append(bytes(stream[:count]).hex())
+            del stream[:count]
+        return pieces
+
+    feeds = [a_feed() for _ in range(200)]
+    names = ["/data/theme/480x480/Space Suit.Theme", "Space.Theme", "/a/b", "", "x.Theme/",
+             ".Theme", "/data/theme/a.theme", "ä/ö.Theme"]  # fmt: skip
+    products = (None, "Virtual Serial Port", " Virtual Serial Port\n", "Hub", "")
+    ids = [[vid, pid, product] for vid in (0x1D6B, 0x1234, 0x303A, None)
+           for pid in (0x0104, 0x5678, None) for product in products]  # fmt: skip
+    reasons = ["COM5: Access is denied.", "/dev/ttyACM0 is busy: wsmonitor has it open",
+               "[Errno 11] Resource temporarily unavailable", "[Errno 13] Permission denied: 'x'",
+               "COM5: the display did not answer", "no Waveshare USB monitor is connected", "",
+               "BUSY", "İ did not answer"]  # fmt: skip
+
+    def readings() -> dict[str, Any]:
+        number = [0, 1, 99, 42.5, 2.5, -0.4, 0.05, 99.95, 1e17, 123456.789, True, False, None,
+                  "text", "", 102400, 102399.9, 1023.9]  # fmt: skip
+        keys = [key[2] for key in service.KEYS] + [
+            "fan.cpu", "fan.board.CPU_FAN", "fan.cpu.percent", "fan.lpc.pump", "fan.1",
+            "fan.pump.percent", "fan.Pumpe", "disk.load", "disk.1.load", "disk.3.load",
+            "disk.8.load", "other"]  # fmt: skip
+        found = {key: rng.choice(number) for key in rng.sample(keys, rng.randrange(len(keys)))}
+        for key in ("cpu.name", "gpu.name", "mem.name", "weather.description"):
+            if key in found and rng.random() < 0.7:
+                found[key] = rng.choice(["Ryzen 7", "", "RTX 4070 ℃", 5])
+        return found
+
+    def snapshot_of(found: dict[str, Any] | None) -> Any:
+        if found is None:
+            return None
+        table = {key: SimpleNamespace(value=value) for key, value in found.items()}
+        return SimpleNamespace(readings=table, value=lambda key: found.get(key))
+
+    def a_moment() -> list[int]:
+        return [rng.randrange(1999, 2040), rng.randrange(1, 13), rng.randrange(1, 29),
+                rng.randrange(24), rng.randrange(60), rng.randrange(60)]  # fmt: skip
+
+    valued = [[rng.choice([None, readings(), readings()]), a_moment(), rng.random() < 0.5]
+              for _ in range(150)]  # fmt: skip
+    on_card = ["/data/theme/480x480/Space Suit.Theme", "/data/theme/480x480/alpha.Theme",
+               "/data/theme/480x480/Beta.Theme"]  # fmt: skip
+
+    def a_session() -> dict[str, Any]:
+        about = rng.choice([
+            {"screen_w": "480", "screen_h": "480", "screen_inch": "2.8"}, {}, {"screen_w": "480"},
+        ])  # fmt: skip
+        listed = {path: "sum" for path in rng.sample(on_card, rng.randrange(4))}
+        listed.update(rng.choice([{}, {"version": "1"}, {"/data/theme/x.txt": "1"}]))
+        answers: dict[str, list[str]] = {
+            "0": [rng.choice([device.qmap(about), b"", b"hello"]).hex()] * rng.choice([1, 1, 1, 0]),
+            "8": [rng.choice([device.qmap({"versionV2": "2.1"}), b"V1.0", b"",
+                              device.qmap({"other": "1"})]).hex()] * rng.choice([1, 1, 0]),
+            "4": [b"128".hex()] * rng.choice([1, 1, 1, 0]),
+            "9": [b"".hex()] * rng.choice([0, 1, 2, 5, 5]),
+            "3": [rng.choice([device.qmap(listed), b"", b"no"]).hex()] * rng.choice([1, 1, 0]),
+            "2": [b"".hex()] * rng.choice([0, 1, 3, 3]),
+            "1": [b"".hex()] * rng.randrange(5),
+        }  # fmt: skip
+        options = {
+            "port": rng.choice(["", " COM7 "]), "brightness": rng.choice([0, 0, 1, 50, 100, 250]),
+            "flip": rng.choice(["", "normal", "upside-down", " upside-down ", "sideways"]),
+            "units": rng.random() < 0.5, "every_s": rng.choice([1.0, 0.1]),
+            "theme": rng.choice(["", on_card[0], " " + on_card[1], "/data/theme/gone.Theme"]),
+            "rotate": rng.choice([[], on_card[:2], on_card + [" ", "/data/theme/gone.Theme"],
+                                  on_card[:1]]),
+            "rotate_min": rng.choice([0, 0.0, 5, -1]),
+        }  # fmt: skip
+        return {"options": json.dumps(options), "answers": answers,
+                "noise": rng.choice(["", "", "00ff41413535"]), "piece": rng.choice([4096, 7, 1]),
+                "rotate_s": rng.choice([None, None, 1e-9]), "readings": json.dumps(readings()),
+                "now": a_moment()}  # fmt: skip
+
+    connects = [
+        {"port": "COM7", "answers": {"0": [device.qmap({"screen_w": "480"}).hex()]}, "noise": "",
+         "piece": 4096, "fails": None},
+        {"port": "COM7", "answers": {"0": [""]}, "noise": "0102", "piece": 3, "fails": None},
+        {"port": "/dev/ttyACM9", "answers": {}, "noise": "", "piece": 1, "fails": "is busy"},
+    ]  # fmt: skip
+
+    class Notes(logging.Handler):
+        def __init__(self) -> None:
+            super().__init__()
+            self.lines: list[str] = []
+
+        def emit(self, record: logging.LogRecord) -> None:
+            self.lines.append(record.getMessage())
+
+    seen = dict.fromkeys(("connected", "theme", "turn", "themes", "silent"), 0)
+    for language in ("en", "de"):
+        sessions = [a_session() for _ in range(150)]
+        theirs: dict[str, list[Any]] = {
+            "frames": [device.frame(c, bytes.fromhex(p), k).hex() for c, p, k in frames],
+            "maps": [device.qmap(dict(pairs)).hex() for pairs in maps],
+            "payloads": [], "feeds": [], "names": [device.theme_name(path) for path in names],
+            "ids": [device._is_display(SimpleNamespace(vid=v, pid=p, product=product))
+                    for v, p, product in ids],
+            "kinds": [service.kind_of(reason) for reason in reasons],
+            "values": [], "sessions": [], "connects": [],
+        }  # fmt: skip
+        for payload in payloads:
+            data = bytes.fromhex(payload)
+            try:
+                read: Any = [list(pair) for pair in device.read_qmap(data).items()]
+            except ValueError:
+                read = None
+            said = device.answer_of(data)
+            said = [list(pair) for pair in said.items()] if isinstance(said, dict) else said
+            theirs["payloads"].append([read, said])
+        for pieces in feeds:
+            found = device.Frames()
+            got = [[f.kind, f.command, f.payload.hex()] for piece in pieces
+                   for f in found.feed(bytes.fromhex(piece))]  # fmt: skip
+            theirs["feeds"].append([got, found.skipped])
+        notes = Notes()
+        logger = logging.getLogger(service.__name__)
+        level = logger.level
+        logger.addHandler(notes)
+        logger.setLevel(logging.INFO)
+        i18n.set_language(language)
+        try:
+            for found, moment, units in valued:
+                said = service.values(snapshot_of(found), datetime(*moment), units)
+                theirs["values"].append([list(pair) for pair in said.items()])
+            for case in sessions:
+                written: list[str] = []
+                ticks = iter(range(1, 10**9))
+                link = device.Link(
+                    _MadeUpDisplay(case, written), lambda ticks=ticks: next(ticks) / 2
+                )
+                host = SimpleNamespace(snapshot=lambda case=case: snapshot_of(
+                    json.loads(case["readings"])))  # fmt: skip
+                feeder = service.Waveshare(host, json.loads(case["options"]),
+                                           now=lambda case=case: datetime(*case["now"]),
+                                           pick=lambda paths: paths[0])  # fmt: skip
+                feeder.every = 0.0
+                if case["rotate_s"] is not None:
+                    feeder.rotate_s = case["rotate_s"]
+                notes.lines.clear()
+                about: Any = None
+                try:
+                    about = link.hello()
+                    feeder._feed(link, "COM7", about)
+                    ended = None
+                except DeviceError as exc:
+                    ended = str(exc)
+                state = feeder.summary()
+                seen["connected"] += state["state"] == "connected"
+                seen["silent"] += about is None
+                seen["theme"] += bool(state.get("theme"))
+                seen["themes"] += bool(state.get("themes"))
+                seen["turn"] += sum("theme" in line for line in notes.lines) > 1
+                theirs["sessions"].append([
+                    about if about is None else [list(pair) for pair in about.items()], ended,
+                    json.dumps(state), written, list(notes.lines)])  # fmt: skip
+            for case in connects:
+
+                def opener(port: str, case: dict[str, Any] = case) -> Any:
+                    if case["fails"]:
+                        raise DeviceError(f"{port} {case['fails']}")
+                    return _MadeUpDisplay(case, [])
+
+                try:
+                    _, port, about = device.connect(case["port"], opener)
+                    theirs["connects"].append([port, [list(pair) for pair in about.items()]])
+                except DeviceError as exc:
+                    theirs["connects"].append(str(exc))
+        finally:
+            i18n.set_language("en")
+            logger.removeHandler(notes)
+            logger.setLevel(level)
+        [ours] = run([{"op": "waveshare", "locale": str(i18n.LOCALE_DIR), "language": language,
+                       "frames": frames, "maps": maps, "payloads": payloads, "feeds": feeds,
+                       "names": names, "ids": ids, "reasons": reasons,
+                       "values": [[json.dumps(found), moment, units]
+                                  for found, moment, units in valued],
+                       "sessions": sessions, "connects": connects}])  # fmt: skip
+        assert "sessions" in ours, ours
+        for key in theirs:
+            for n, (want, got) in enumerate(zip(theirs[key], ours[key], strict=True)):
+                assert got == want, (key, n, want, got)
+    assert all(count >= 5 for count in seen.values()), seen

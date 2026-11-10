@@ -1587,7 +1587,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       PNG and JPEG stills, a hung decoder restarted and the video started anew
 - [ ] TURZX: the engine in the same process (no pipe), frames as their layers (the engine
       composing them), videos and the screen through ffmpeg into the panel's stream
-- [ ] Waveshare, udisp, BeadaPanel, NZXT Kraken, the other serial panels, the panel as a
+- [ ] udisp (Waveshare's AIDA64 firmware; its own firmware is fed by the waveshare service,
+      R8), BeadaPanel, NZXT Kraken, the other serial panels, the panel as a
       monitor (Windows' virtual display driver, X11, Wayland)
 
 ### R7 sensors
@@ -1883,6 +1884,15 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
   400 watchers of what comes and goes, with their messages, the descriptors and the ids
   compared with Python in two languages; in the app, the service starts, and on Windows it
   asks the system.
+- [x] waveshare (services/waveshare.py and devices/waveshare.py; lp-services' waveshare and
+  lp-devices' waveshare): Libre Panel's readings in the themes a Waveshare USB monitor draws
+  on its own card, under the display's English and Chinese keys, with the brightness, the
+  picture turned, a theme of the card shown and themes in turn; nothing is written on the
+  card. The frames and Qt's maps, the frames found in what a port gives piece by piece, the
+  values of 150 snapshots and 300 sessions with a made-up display (the bytes written, what
+  the service says of itself, its log) compared with Python in two languages; in the app,
+  the service starts and says once that no display is connected. The serial port gained its
+  waits, its lock and the USB device's product name for it.
 
 ### R9 the app
 - [ ] the server and every route of its API, the same JSON

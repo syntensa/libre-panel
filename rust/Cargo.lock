@@ -458,6 +458,7 @@ name = "lp-devices"
 version = "0.1.0"
 dependencies = [
  "flate2",
+ "indexmap",
  "libc",
  "lp-decode",
  "lp-i18n",

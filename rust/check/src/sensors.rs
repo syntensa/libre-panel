@@ -2767,6 +2767,239 @@ impl lp_services::devices::Readers for MadeUpDevices {
 /// descriptors say, which devices are top-level USB devices and which are told about, and
 /// for each watcher of options its events over the steps `[now, when Windows last told,
 /// hurry, drives, controllers, USB devices, storage]`, each with its message.
+/// A display the test makes up: it answers each command with the next of the payloads the
+/// case has for it (none left: silence), a piece at a time, after some noise.
+struct MadeUpDisplay {
+    answers: std::collections::HashMap<u32, std::collections::VecDeque<Vec<u8>>>,
+    noise: Vec<u8>,
+    piece: usize,
+    waiting: std::collections::VecDeque<u8>,
+    written: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    seen: lp_devices::waveshare::Frames,
+}
+
+impl MadeUpDisplay {
+    fn of(case: &Value, written: &std::sync::Arc<std::sync::Mutex<Vec<String>>>) -> Self {
+        let answers = case["answers"].as_object().into_iter().flatten();
+        MadeUpDisplay {
+            answers: answers
+                .map(|(command, payloads)| {
+                    let payloads = payloads.as_array().into_iter().flatten();
+                    (
+                        command.parse().unwrap_or(99),
+                        payloads.map(bytes_of).collect(),
+                    )
+                })
+                .collect(),
+            noise: bytes_of(&case["noise"]),
+            piece: case["piece"].as_u64().unwrap_or(4096) as usize,
+            waiting: std::collections::VecDeque::new(),
+            written: std::sync::Arc::clone(written),
+            seen: lp_devices::waveshare::Frames::default(),
+        }
+    }
+}
+
+impl lp_devices::link::Link for MadeUpDisplay {
+    fn write(&mut self, data: &[u8]) -> lp_devices::base::Result<()> {
+        use lp_devices::waveshare::{frame, ANSWER};
+        if let Ok(mut written) = self.written.lock() {
+            written.push(data.iter().map(|b| format!("{b:02x}")).collect());
+        }
+        for asked in self.seen.feed(data) {
+            let answer = self
+                .answers
+                .get_mut(&asked.command)
+                .and_then(|left| left.pop_front());
+            if let Some(payload) = answer {
+                self.waiting.extend(&self.noise);
+                self.waiting.extend(frame(asked.command, &payload, ANSWER));
+            }
+        }
+        Ok(())
+    }
+
+    fn read(&mut self, size: usize) -> lp_devices::base::Result<Vec<u8>> {
+        let count = size.min(self.piece).min(self.waiting.len());
+        Ok(self.waiting.drain(..count).collect())
+    }
+
+    fn drain_input(&mut self) {}
+
+    fn close(&mut self) {}
+}
+
+/// The Waveshare display's protocol and its service (devices/waveshare.py,
+/// services/waveshare.py).
+fn waveshare(case: &Value) -> Result<Value, String> {
+    use lp_devices::waveshare::{
+        answer_of, connect, frame, is_display, qmap, read_qmap, theme_name, Display, Frames, Said,
+    };
+    use lp_render::snapshot::{Reading, Snapshot};
+    use lp_services::waveshare::{kind_of, values, Around, Feeder, Settings};
+    use std::sync::{Arc, Mutex};
+    let locale = std::path::PathBuf::from(case["locale"].as_str().unwrap_or(""));
+    let code = case["language"].as_str().unwrap_or("en");
+    lp_i18n::set_language(lp_i18n::Language::load(&locale, code)?);
+    let hex = |data: &[u8]| -> String { data.iter().map(|b| format!("{b:02x}")).collect() };
+    let texts = |value: &Value| -> indexmap::IndexMap<String, String> {
+        let pairs = value.as_array().into_iter().flatten();
+        pairs
+            .map(|pair| {
+                (
+                    pair[0].as_str().unwrap_or("").to_string(),
+                    pair[1].as_str().unwrap_or("").to_string(),
+                )
+            })
+            .collect()
+    };
+    let told = |map: &lp_devices::waveshare::Told| -> Value {
+        map.iter().map(|(key, value)| json!([key, value])).collect()
+    };
+    let snapshot_of = |value: &Value| -> Option<Snapshot> {
+        let lp_py::Value::Dict(readings) = loaded(value) else {
+            return None;
+        };
+        let mut snapshot = Snapshot::default();
+        for (key, value) in readings {
+            snapshot.readings.insert(key, Reading::of(value));
+        }
+        Some(snapshot)
+    };
+    let moment = |value: &Value| {
+        let part = |n: usize| value[n].as_u64().unwrap_or(1) as u32;
+        lp_py::datetime::DateTime {
+            hour: part(3),
+            minute: part(4),
+            second: part(5),
+            ..lp_py::datetime::DateTime::date(i64::from(part(0)), part(1), part(2))
+        }
+    };
+    let frames: Vec<Value> = (case["frames"].as_array().into_iter().flatten())
+        .map(|f| {
+            let command = f[0].as_u64().unwrap_or(0) as u32;
+            json!(hex(&frame(
+                command,
+                &bytes_of(&f[1]),
+                f[2].as_u64().unwrap_or(0) as u32
+            )))
+        })
+        .collect();
+    let maps: Vec<Value> = (case["maps"].as_array().into_iter().flatten())
+        .map(|map| json!(hex(&qmap(&texts(map)))))
+        .collect();
+    let payloads: Vec<Value> = (case["payloads"].as_array().into_iter().flatten())
+        .map(|payload| {
+            let payload = bytes_of(payload);
+            let said = match answer_of(&payload) {
+                Said::Map(map) => told(&map),
+                Said::Text(text) => json!(text),
+                Said::Nothing => Value::Null,
+            };
+            json!([read_qmap(&payload).ok().map(|map| told(&map)), said])
+        })
+        .collect();
+    let feeds: Vec<Value> = (case["feeds"].as_array().into_iter().flatten())
+        .map(|pieces| {
+            let mut frames = Frames::default();
+            let found: Vec<Value> = (pieces.as_array().into_iter().flatten())
+                .flat_map(|piece| frames.feed(&bytes_of(piece)))
+                .map(|f| json!([f.kind, f.command, hex(&f.payload)]))
+                .collect();
+            json!([found, frames.skipped])
+        })
+        .collect();
+    let names: Vec<Value> = (strings(&case["names"]).iter())
+        .map(|path| json!(theme_name(path)))
+        .collect();
+    let ids: Vec<Value> = (case["ids"].as_array().into_iter().flatten())
+        .map(|id| {
+            let word = |n: usize| id[n].as_u64().map(|word| word as u16);
+            json!(is_display(word(0), word(1), id[2].as_str()))
+        })
+        .collect();
+    let kinds: Vec<Value> = (strings(&case["reasons"]).iter())
+        .map(|reason| json!(kind_of(reason)))
+        .collect();
+    let mut sent = Vec::new();
+    for entry in case["values"].as_array().into_iter().flatten() {
+        let snapshot = snapshot_of(&entry[0]);
+        let units = entry[2].as_bool() == Some(true);
+        let found = values(snapshot.as_ref(), &moment(&entry[1]), units)?;
+        sent.push(found.iter().map(|(k, v)| json!([k, v])).collect::<Value>());
+    }
+    let mut sessions = Vec::new();
+    for session in case["sessions"].as_array().into_iter().flatten() {
+        let lp_py::Value::Dict(options) = loaded(&session["options"]) else {
+            return Err("options that are no table".into());
+        };
+        let mut settings = Settings::of(&options);
+        settings.every = 0.0;
+        if let Some(seconds) = session["rotate_s"].as_f64() {
+            settings.rotate_s = seconds;
+        }
+        let feeder = Feeder::new(settings);
+        let written = Arc::new(Mutex::new(Vec::new()));
+        let ticks = std::cell::Cell::new(0.0);
+        let mut time = 0.0;
+        let clock = Box::new(move || {
+            time += 0.5;
+            time
+        });
+        let port = MadeUpDisplay::of(session, &written);
+        let mut display = Display::with_clock(Box::new(port), clock);
+        let about = display.hello().map_err(|why| why.0);
+        let snapshot = snapshot_of(&session["readings"]).map(Arc::new);
+        let notes = std::cell::RefCell::new(Vec::new());
+        let around = Around {
+            snapshot: &|| snapshot.clone(),
+            now: &|| moment(&session["now"]),
+            pick: &|_| 0,
+            clock: &|| {
+                ticks.set(ticks.get() + 1.0);
+                ticks.get()
+            },
+            ended: &|| false,
+            wait: &|_| {},
+            note: &|text| notes.borrow_mut().push(text.to_string()),
+        };
+        let ended = match &about {
+            Ok(about) => (feeder.feed(&mut display, "COM7", about, &around).err()).map(|why| why.0),
+            Err(why) => Some(why.clone()),
+        };
+        let how = lp_py::json::Dumps::default();
+        let state = lp_py::json::dumps(&lp_py::Value::Dict(feeder.summary()), &how);
+        let written = written.lock().map(|w| w.clone()).unwrap_or_default();
+        sessions.push(json!([
+            about.ok().map(|a| told(&a)),
+            ended,
+            state,
+            written,
+            notes.into_inner()
+        ]));
+    }
+    let mut connects = Vec::new();
+    for entry in case["connects"].as_array().into_iter().flatten() {
+        let written = Arc::new(Mutex::new(Vec::new()));
+        let opener = |device: &str| -> lp_devices::base::Result<Box<dyn lp_devices::link::Link>> {
+            match entry["fails"].as_str() {
+                Some(why) => Err(lp_devices::base::DeviceError(format!("{device} {why}"))),
+                None => Ok(Box::new(MadeUpDisplay::of(entry, &written))),
+            }
+        };
+        connects.push(
+            match connect(entry["port"].as_str().unwrap_or(""), &opener) {
+                Ok((_, port, about)) => json!([port, told(&about)]),
+                Err(why) => json!(why.0),
+            },
+        );
+    }
+    Ok(json!({
+        "frames": frames, "maps": maps, "payloads": payloads, "feeds": feeds, "names": names,
+        "ids": ids, "kinds": kinds, "values": sent, "sessions": sessions, "connects": connects,
+    }))
+}
+
 fn devices(case: &Value) -> Result<Value, String> {
     use lp_services::devices::{describe, parse_ignored, size_text, Watcher, Watching};
     use lp_services::devices_windows::{keep_usb, parse_device, parse_temperature, top_level};
@@ -2900,6 +3133,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "memory" => memory(case)?,
         "cooling" => cooling(case)?,
         "devices" => devices(case)?,
+        "waveshare" => waveshare(case)?,
         "autopilot" => autopilot(case)?,
         "mangohud" => mangohud(case)?,
         "media" => media(case),

@@ -38,6 +38,35 @@ impl SerialPort {
     pub fn device(&self) -> &str {
         &self.device
     }
+
+    /// How long a read waits for what it asks, and a write for room (pyserial's `timeout` and
+    /// `write_timeout`).
+    pub fn set_waits(
+        &mut self,
+        read: std::time::Duration,
+        write: std::time::Duration,
+    ) -> Result<()> {
+        self.port
+            .set_waits(read, write)
+            .map_err(|e| DeviceError(format!("cannot set up {}: {e}", self.device)))
+    }
+
+    /// pyserial's `exclusive=True`: no other program that asks for the port gets it while
+    /// this one has it (Windows opens a port for one program anyway).
+    pub fn lock(&self) -> Result<()> {
+        self.port.lock().map_err(|e| {
+            DeviceError(format!(
+                "Could not exclusively lock port {}: {e}",
+                self.device
+            ))
+        })
+    }
+}
+
+/// The name a USB device behind a serial port gives itself (pyserial's `product`), where the
+/// system tells it (Linux).
+pub fn product_of(device: &str) -> Option<String> {
+    imp::product(device)
 }
 
 impl Link for SerialPort {
@@ -84,6 +113,8 @@ mod imp {
 
     pub struct Port {
         fd: libc::c_int,
+        read_wait: std::time::Duration,
+        write_wait: std::time::Duration,
     }
 
     fn os_error() -> io::Error {
@@ -128,9 +159,30 @@ mod imp {
             if fd < 0 {
                 return Err(os_error());
             }
-            let port = Port { fd };
+            let port = Port {
+                fd,
+                read_wait: READ_WAIT,
+                write_wait: WRITE_WAIT,
+            };
             port.configure(baud, rtscts)?;
             Ok(port)
+        }
+
+        pub fn set_waits(
+            &mut self,
+            read: std::time::Duration,
+            write: std::time::Duration,
+        ) -> io::Result<()> {
+            (self.read_wait, self.write_wait) = (read, write);
+            Ok(())
+        }
+
+        pub fn lock(&self) -> io::Result<()> {
+            // SAFETY: the Port's descriptor
+            match unsafe { libc::flock(self.fd, libc::LOCK_EX | libc::LOCK_NB) } {
+                0 => Ok(()),
+                _ => Err(os_error()),
+            }
         }
 
         /// pyserial's _reconfigure_port: raw, 8N1, its speed, no flow control unless asked,
@@ -226,7 +278,7 @@ mod imp {
         }
 
         pub fn read(&mut self, size: usize) -> io::Result<Vec<u8>> {
-            let until = Instant::now() + READ_WAIT;
+            let until = Instant::now() + self.read_wait;
             let mut out = Vec::with_capacity(size);
             while out.len() < size {
                 if !self.wait(libc::POLLIN, until)? {
@@ -251,7 +303,7 @@ mod imp {
         }
 
         pub fn write(&mut self, data: &[u8]) -> io::Result<()> {
-            let until = Instant::now() + WRITE_WAIT;
+            let until = Instant::now() + self.write_wait;
             let mut sent = 0;
             while sent < data.len() {
                 // SAFETY: from the data, its length left
@@ -299,6 +351,27 @@ mod imp {
         std::fs::read_to_string(path)
             .ok()
             .map(|s| s.trim_end_matches(['\n', '\r']).to_string())
+    }
+
+    /// The USB device behind a tty, in sysfs (pyserial's list_ports_linux).
+    fn usb_device(name: &str) -> Option<std::path::PathBuf> {
+        let device = std::path::Path::new("/sys/class/tty")
+            .join(name)
+            .join("device");
+        let device_path = std::fs::canonicalize(device).ok()?;
+        let subsystem = std::fs::canonicalize(device_path.join("subsystem")).ok()?;
+        let interface = match subsystem.file_name()?.to_str()? {
+            "usb-serial" => device_path.parent()?.to_path_buf(),
+            "usb" => device_path,
+            _ => return None,
+        };
+        Some(interface.parent()?.to_path_buf())
+    }
+
+    /// The name the USB device behind `device` gives itself.
+    pub fn product(device: &str) -> Option<String> {
+        let name = std::path::Path::new(device).file_name()?.to_str()?;
+        line(&usb_device(name)?.join("product"))
     }
 
     /// pyserial's list_ports_linux: the ttys of /dev it looks at, a USB device's ids from sysfs.
@@ -430,6 +503,29 @@ mod imp {
             let port = Port { handle };
             port.configure(baud, rtscts)?;
             Ok(port)
+        }
+
+        pub fn set_waits(
+            &mut self,
+            read: std::time::Duration,
+            write: std::time::Duration,
+        ) -> io::Result<()> {
+            let timeouts = COMMTIMEOUTS {
+                ReadIntervalTimeout: 0,
+                ReadTotalTimeoutMultiplier: 0,
+                ReadTotalTimeoutConstant: read.as_millis() as u32,
+                WriteTotalTimeoutMultiplier: 0,
+                WriteTotalTimeoutConstant: write.as_millis() as u32,
+            };
+            // SAFETY: the Port's handle and a structure of its own
+            match unsafe { SetCommTimeouts(self.handle, &timeouts) } {
+                0 => Err(io::Error::last_os_error()),
+                _ => Ok(()),
+            }
+        }
+
+        pub fn lock(&self) -> io::Result<()> {
+            Ok(()) // (opened for this program alone)
         }
 
         /// pyserial's _reconfigure_port: its buffers, the timeouts of a read (a second at most
@@ -570,6 +666,11 @@ mod imp {
             .filter(|s| !s.contains('&') && upper.starts_with("USB\\"))
             .map(str::to_string);
         (hex("VID_"), hex("PID_"), serial)
+    }
+
+    /// (Windows does not tell the name a device gives itself with its port.)
+    pub fn product(_device: &str) -> Option<String> {
+        None
     }
 
     /// The present ports of the class of ports (COM, not LPT), with their USB ids.

@@ -17,3 +17,4 @@ pub mod serial;
 mod table;
 pub mod turzx;
 pub mod usb;
+pub mod waveshare;

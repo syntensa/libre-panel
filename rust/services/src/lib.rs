@@ -28,3 +28,4 @@ pub mod registry;
 pub mod round_report;
 pub mod steam;
 pub mod timer;
+pub mod waveshare;
