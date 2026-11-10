@@ -22,6 +22,17 @@ const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
 
 pub type Readings = IndexMap<String, Reading>;
 
+/// When a source's readings follow on every frame, not only with each snapshot.
+#[derive(Clone, Copy, PartialEq)]
+pub enum Every {
+    No,
+    /// its reading is cheap and its values must follow at once
+    Frame,
+    /// on every frame only where the panel shows video; without it each changed value would
+    /// be one more picture sent
+    Video,
+}
+
 /// Something readings come from (SensorProvider).
 pub trait Source {
     fn name(&self) -> &'static str;
@@ -36,6 +47,32 @@ pub trait Source {
     /// How LibreHardwareMonitor is read, where the source is the one that reads it.
     fn lhm_status(&self) -> Option<lp_sensors::service::LhmStatus> {
         None
+    }
+    /// Whether its readings follow on every frame.
+    fn every_frame(&self) -> Every {
+        Every::No
+    }
+}
+
+/// The processor's, its cores' and the graphics card's load, ten times a second
+/// (sensors/load.py).
+struct Load(lp_sensors::load::LoadSource);
+
+impl Source for Load {
+    fn name(&self) -> &'static str {
+        "load"
+    }
+
+    fn read(&mut self, out: &mut Readings) {
+        out.extend(self.0.read());
+    }
+
+    fn notes(&mut self) -> Vec<String> {
+        self.0.notes()
+    }
+
+    fn every_frame(&self) -> Every {
+        Every::Video
     }
 }
 
@@ -93,6 +130,12 @@ impl Source for Lhm {
     fn lhm_status(&self) -> Option<lp_sensors::service::LhmStatus> {
         Some(self.0.status())
     }
+
+    // A new reading shows in the next frame, not at the next snapshot: three clocks of a
+    // second each (the service, its client, the snapshot) made it late and uneven.
+    fn every_frame(&self) -> Every {
+        Every::Frame
+    }
 }
 
 fn put(out: &mut Readings, key: &str, value: f64, unit: &str, label: &str) {
@@ -122,6 +165,8 @@ pub struct Hub {
     /// the keys the theme on show reads: a source may read only what is shown
     wanted: Wanted,
     notes: Vec<String>,
+    /// which source each key of the last snapshot came from
+    owners: IndexMap<String, usize>,
 }
 
 impl Hub {
@@ -131,7 +176,37 @@ impl Hub {
             history: IndexMap::new(),
             wanted: Wanted::default(),
             notes: Vec::new(),
+            owners: IndexMap::new(),
         }
+    }
+
+    /// fresh: between snapshots, the latest values of the sources that follow on every frame,
+    /// for the keys they supplied (or that nobody supplied); no history. Without `video`
+    /// those that follow on every frame only in video mode are left out.
+    pub fn fresh(&mut self, video: bool) -> Readings {
+        let mut readings = Readings::new();
+        for (n, source) in self.sources.iter_mut().enumerate() {
+            match source.every_frame() {
+                Every::No => continue,
+                Every::Video if !video => continue,
+                _ => {}
+            }
+            let mut found = Readings::new();
+            source.read(&mut found);
+            for (key, reading) in found {
+                if self.owners.get(&key).is_none_or(|owner| *owner == n) {
+                    readings.entry(key).or_insert(reading);
+                }
+            }
+        }
+        readings
+    }
+
+    /// Whether any source wants to be read on every frame.
+    pub fn every_frame(&self) -> bool {
+        self.sources
+            .iter()
+            .any(|source| source.every_frame() != Every::No)
     }
 
     /// The keys (and patterns) the theme on show reads.
@@ -174,6 +249,9 @@ impl Hub {
             for name in &sensors.providers {
                 match name.as_str() {
                     "psutil" => sources.push(Box::new(System::new())),
+                    "load" => sources.push(Box::new(Load(lp_sensors::load::LoadSource::new(
+                        wanted.clone(),
+                    )))),
                     "librehardwaremonitor" => {
                         let (source, said) = Lhm::new(sensors.options.get(name), &wanted);
                         sources.push(Box::new(source));
@@ -200,13 +278,18 @@ impl Hub {
     /// histories, at the moment `now`.
     pub fn snapshot(&mut self, now: Moment, fold: bool) -> Snapshot {
         let mut readings = Readings::new();
-        for source in &mut self.sources {
+        let mut owners = IndexMap::new();
+        for (n, source) in self.sources.iter_mut().enumerate() {
             let mut found = Readings::new();
             source.read(&mut found);
             for (key, reading) in found {
-                readings.entry(key).or_insert(reading);
+                if !readings.contains_key(&key) {
+                    owners.insert(key.clone(), n);
+                    readings.insert(key, reading);
+                }
             }
         }
+        self.owners = owners;
         for (key, reading) in &readings {
             let number = match &reading.value {
                 Value::Float(f) => Some(*f),

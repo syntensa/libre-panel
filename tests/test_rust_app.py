@@ -12,6 +12,7 @@ import json
 import os
 import signal
 import subprocess
+import sys
 import threading
 import time
 from collections.abc import Iterator
@@ -366,3 +367,15 @@ def test_it_lists_librehardwaremonitor_s_readings_as_the_python_app_names_them(
     assert done.stdout.splitlines() == lines
     assert any(line.startswith("cpu.name") and "Ryzen 7 7800X3D" in line for line in lines)
     assert any(line.startswith("mem.temp") for line in lines)
+
+
+@pytest.mark.skipif(not sys.platform.startswith(("linux", "win")), reason="no load source")
+def test_the_load_source_measures_the_processor(tmp_path: Path) -> None:
+    """`[sensors] providers = ["load"]`: the processor's load, measured by the source's own
+    thread while something reads it (`sensors` asks for it as a theme would)."""
+    (tmp_path / "config.toml").write_text('[sensors]\nproviders = ["load"]\n', encoding="utf-8")
+    done = _run(tmp_path, "sensors")
+    assert done.returncode == 0, done.stderr
+    [line] = [line for line in done.stdout.splitlines() if line.startswith("cpu.load ")]
+    key, value, unit, *label = line.split()
+    assert 0.0 <= float(value) <= 100.0 and unit == "%" and label == ["CPU", "load"]

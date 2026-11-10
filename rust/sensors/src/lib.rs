@@ -5,8 +5,10 @@
 pub mod hints;
 pub mod hwnames;
 pub mod lhm;
+pub mod load;
 pub mod protocol;
 pub mod provider;
 pub mod service;
+pub mod topology;
 #[cfg(windows)]
 pub mod winlink;

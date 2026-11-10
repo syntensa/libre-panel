@@ -41,7 +41,8 @@ What to look at
 
 What it does not do yet
 -----------------------
-- Readings: the processor's load and clock, memory, disk, network and uptime, and what
+- Readings: the processor's and the graphics card's load (ten times a second), the
+  processor's clock, memory, disk, network and uptime, and what
   LibreHardwareMonitor reads through Libre Panel's sensor service (or its own web server):
   temperatures, power, fans, the graphics card. A game's frame rate, music, weather and
   the AI activity are missing: their places stay empty.

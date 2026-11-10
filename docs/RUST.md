@@ -1632,6 +1632,18 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       command line, which `libre-panel sensors` says; user_hint, the sentence in the
       person's language for the tray and the pages; ring0_steps): every way it may be read
       and fail, with and without readings, in English and German, the same words
+- [x] the load source (sensors/load.py, lp-sensors' load): the processor's load from
+      GetSystemTimes on Windows and from the kernel's times on Linux as psutil's
+      cpu_percent counts them, every core's over the last 0.3 s, every physical core's as
+      the mean of its threads (topology.py: Windows' records of the cores, sysfs), and on
+      Windows the graphics card's from the counters Task Manager shows (PDH: the card with
+      the most dedicated memory in use, its busiest 3D engine); ten times a second in a
+      thread that runs while a theme reads one of them, and read on every frame where the
+      panel shows video (the hub's readings of every frame, with LibreHardwareMonitor's).
+      The numbers compared with Python (300 samples, 300 sets of counters, 60 runs of the
+      cores' times, 200 of Windows' records, 40 folders as sysfs has them); the Windows
+      calls not yet run on a Windows PC. Linux's graphics card (the kernel's counter, NVML)
+      comes with the source `linux`
 - [ ] HWiNFO, RTSS, PresentMon, MangoHud, the other sources; Linux's hint of what
       system-setup brings
 - [ ] the history as a ring, demo.py's values; the .NET service goes

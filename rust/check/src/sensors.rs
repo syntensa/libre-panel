@@ -313,6 +313,82 @@ fn lhm_hints(case: &Value) -> Result<Value, String> {
     Ok(json!(out))
 }
 
+fn named(value: &Value) -> Vec<(String, f64)> {
+    value
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|pair| {
+            (
+                pair[0].as_str().unwrap_or("").to_string(),
+                pair[1].as_f64().unwrap_or(0.0),
+            )
+        })
+        .collect()
+}
+
+/// load_math: what the load source's numbers mean: the load between two samples of the
+/// system's times, the card picked by its memory in use and its load of its engines, the
+/// cores' loads over a run of samples, a core's busy and whole time; and the cores told by
+/// Windows' records (base64), by a folder as sysfs has it, and checked.
+fn load_math(case: &Value) -> Value {
+    use base64::engine::general_purpose::STANDARD;
+    use base64::Engine;
+    use lp_sensors::{load, topology};
+    let list = |key: &str| case[key].as_array().cloned().unwrap_or_default();
+    let triple = |v: &Value| {
+        v.as_array().map(|t| {
+            let n = |i: usize| t[i].as_u64().unwrap_or(0);
+            (n(0), n(1), n(2))
+        })
+    };
+    let pairs = |v: &Value| -> Vec<(f64, f64)> {
+        v.as_array()
+            .into_iter()
+            .flatten()
+            .map(|p| (p[0].as_f64().unwrap_or(0.0), p[1].as_f64().unwrap_or(0.0)))
+            .collect()
+    };
+    let cores = |found: Option<Vec<Vec<usize>>>| json!(found);
+    json!({
+        "cpu": list("cpu").iter().map(|c| load::cpu_load(triple(&c[0]), triple(&c[1])).map(float))
+            .collect::<Vec<_>>(),
+        "adapters": list("memory").iter().map(|m| load::pick_adapter(&named(m)))
+            .collect::<Vec<_>>(),
+        "loads": list("engines").iter()
+            .map(|e| float(load::adapter_load(e[0].as_str().unwrap_or(""), &named(&e[1]))))
+            .collect::<Vec<_>>(),
+        "cores": list("runs").iter().map(|run| {
+            let samples = run.as_array().cloned().unwrap_or_default();
+            let mut cores = load::Cores::new(samples[0][0].as_f64().unwrap_or(0.0),
+                pairs(&samples[0][1]));
+            samples[1..].iter().map(|sample| {
+                cores.read(sample[0].as_f64().unwrap_or(0.0), pairs(&sample[1]))
+                    .map(|loads| loads.into_iter().map(float).collect::<Vec<_>>())
+            }).collect::<Vec<_>>()
+        }).collect::<Vec<_>>(),
+        "busy": list("times").iter().map(|times| {
+            let times: Vec<f64> = times.as_array().into_iter().flatten()
+                .filter_map(Value::as_f64).collect();
+            let (busy, total) = load::busy_of(&times);
+            json!([float(busy), float(total)])
+        }).collect::<Vec<_>>(),
+        "records": strings(&case["records"]).iter().map(|raw| {
+            cores(topology::parse_processor_cores(&STANDARD.decode(raw).unwrap_or_default()))
+        }).collect::<Vec<_>>(),
+        "sysfs": strings(&case["sysfs"]).iter()
+            .map(|root| cores(topology::linux_cores(std::path::Path::new(root))))
+            .collect::<Vec<_>>(),
+        "checked": list("checked").iter().map(|c| {
+            let given = c[0].as_array().map(|all| all.iter().map(|core| {
+                core.as_array().into_iter().flatten()
+                    .filter_map(|t| t.as_u64().map(|t| t as usize)).collect()
+            }).collect());
+            cores(topology::checked(given, c[1].as_u64().unwrap_or(0) as usize))
+        }).collect::<Vec<_>>(),
+    })
+}
+
 pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "regex" => regex(case),
@@ -321,6 +397,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "lhm_tree" => lhm_tree(case),
         "sensor_protocol" => sensor_protocol(case),
         "lhm_hints" => lhm_hints(case)?,
+        "load_math" => load_math(case),
         _ => return Err(format!("no such op: {op}")),
     })
 }

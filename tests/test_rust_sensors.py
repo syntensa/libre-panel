@@ -345,3 +345,127 @@ def test_the_hints_say_what_librehardwaremonitor_py_says() -> None:
         finally:
             i18n.set_language("en")
     assert len(said) > 12  # (every sentence, in both languages, and none)
+
+
+def test_loads_and_cores_are_worked_out_as_load_py_and_topology_py_do(tmp_path: Any) -> None:
+    from collections import namedtuple
+
+    from libre_panel.sensors import load, topology
+
+    rng = random.Random(0x10AD)
+    # the load between two samples of the system's times
+    cpu: list[list[Any]] = [[None, [1, 2, 3]], [[1, 2, 3], None], [[5, 9, 9], [5, 9, 9]]]
+    for _ in range(300):
+        before = [rng.randrange(10**9) for _ in range(3)]
+        after = [n + rng.randrange(0, 10**6) for n in before]
+        if rng.random() < 0.2:
+            after[rng.randrange(3)] = before[0] - rng.randrange(10)
+        cpu.append([before, after])
+    # the cards by their memory in use, and a card's load of its engines
+    luids = ["luid_0x00000000_0x0000D2E4", "luid_0x00000000_0x00011111", "luid_0x0_0x2"]
+
+    def instances(count: int) -> list[list[Any]]:
+        made = []
+        for _ in range(count):
+            name = rng.choice([f"pid_{rng.randrange(9000)}_", ""]) + rng.choice(luids)
+            name += rng.choice(["_phys_0", "_phys_1", ""])
+            name += rng.choice([f"_eng_{rng.randrange(4)}_engtype_3D", ""])
+            made.append([rng.choice([name, name, "none", ""]), rng.choice([0.0, 1.5, 250.0,
+                         rng.uniform(0, 99), float(rng.randrange(2**30))])])  # fmt: skip
+        return made
+
+    memory = [instances(rng.randrange(0, 9)) for _ in range(300)]
+    engines = [[rng.choice(luids), instances(rng.randrange(0, 20))] for _ in range(300)]
+    # the cores' loads over runs of samples: unevenly apart, a core coming and going
+    Times = namedtuple("Times", "user nice system idle iowait irq softirq steal guest guest_nice")
+    runs, lines = [], []
+    for _ in range(60):
+        count, now, run_ = rng.randrange(1, 9), rng.uniform(0, 100), []
+        state = [[rng.uniform(0, 1000) for _ in range(10)] for _ in range(count)]
+        for _ in range(rng.randrange(2, 14)):
+            if rng.random() < 0.1:
+                state = state[:-1] or [[1.0] * 10] if rng.random() < 0.5 else [*state, [2.0] * 10]
+            for times in state:
+                for n in range(10):
+                    times[n] += rng.choice([0.0, rng.uniform(0, 0.2)])
+            run_.append([now, [list(times) for times in state]])
+            lines += [list(times) for times in state]
+            now += rng.choice([0.05, 0.1, 0.11, 0.3, 0.31, 0.7])
+        runs.append(run_)
+    busy = [[_hex(v) for v in load._busy(Times(*times))] for times in lines]
+    wanted_runs = []
+    for run_ in runs:
+        clock = iter([now for now, _ in run_])
+        sampled = iter([[Times(*times) for times in sample] for _, sample in run_])
+        cores = load._Cores(times=lambda sampled=sampled: next(sampled),
+                            clock=lambda clock=clock: next(clock))  # fmt: skip
+        got = [cores.read() for _ in run_[1:]]
+        wanted_runs.append([loads and [_hex(v) for v in loads] for loads in got])
+    sent = [[[now, [list(load._busy(Times(*t))) for t in sample]] for now, sample in run_]
+            for run_ in runs]  # fmt: skip
+
+    # the cores as Windows writes them, as sysfs has them, and checked
+    def record(relation: int, masks: list[tuple[int, int]], short: int = 0) -> bytes:
+        body = struct.pack("<BB20xH", 0, 0, len(masks))
+        body += b"".join(struct.pack("<QH6x", mask, group) for mask, group in masks)
+        body = body[: len(body) - short]
+        return struct.pack("<II", relation, 8 + len(body)) + body
+
+    records = [b"", b"\x00" * 7, struct.pack("<II", 0, 4), struct.pack("<II", 0, 400)]
+    for _ in range(200):
+        raw = b""
+        for _ in range(rng.randrange(0, 12)):
+            masks = [(rng.choice([1, 3, 0b1100, 1 << 63, rng.getrandbits(64), 0]),
+                      rng.randrange(3)) for _ in range(rng.randrange(0, 3))]  # fmt: skip
+            raw += record(rng.choice([0, 0, 0, 1, 3]), masks, rng.choice([0, 0, 0, 0, 5]))
+        records.append(raw + rng.choice([b"", b"\x01\x02\x03"]))
+    roots = []
+    for n in range(40):
+        root = tmp_path / f"cpu{n}"
+        root.mkdir()
+        for number in rng.sample(range(20), rng.randrange(0, 12)):
+            folder = root / rng.choice([f"cpu{number}", f"cpu{number}", f"cpu0{number}"])
+            (folder / "topology").mkdir(parents=True, exist_ok=True)
+            if rng.random() < 0.85:
+                (folder / "topology" / "physical_package_id").write_text(f"{number % 2}\n")
+                (folder / "topology" / "core_id").write_text(f" {number // 2 % 4}\n")
+        for other in ("cpufreq", "cpuidle", "cpu1x", "online"):
+            (root / other).mkdir(exist_ok=True)
+        roots.append(root)
+    checks = [[None, 4], [[], 0], [[[0], [1]], 2], [[[0, 1], [2, 3]], 4], [[[2, 3], [0, 1]], 4],
+              [[[0, 1], [2]], 4], [[[0, 1], [1, 2]], 3], [[[0, 2], [1]], 3]]  # fmt: skip
+    for _ in range(200):
+        threads = rng.randrange(1, 12)
+        order = rng.sample(range(threads), threads)
+        made = [order[i : i + rng.choice([1, 2, 2, 4])] for i in range(0, threads, 2)]
+        checks.append([[sorted(core) for core in made], rng.choice([threads, threads, 3])])
+    [ours] = run([{
+        "op": "load_math", "cpu": cpu, "memory": memory, "engines": engines, "runs": sent,
+        "times": lines, "records": [base64.b64encode(r).decode() for r in records],
+        "sysfs": [str(root) for root in roots], "checked": checks,
+    }])  # fmt: skip
+    for (before, after), got in zip(cpu, ours["cpu"], strict=True):
+        want = load.cpu_load(before and tuple(before), after and tuple(after))
+        assert got == (None if want is None else _hex(want)), (before, after)
+    for found, got in zip(memory, ours["adapters"], strict=True):
+        assert got == load.pick_adapter([tuple(i) for i in found]), found
+    for (adapter, found), got in zip(engines, ours["loads"], strict=True):
+        assert got == _hex(load.adapter_load(adapter, [tuple(i) for i in found])), found
+    assert ours["busy"] == busy
+    assert ours["cores"] == wanted_runs
+    assert sum(loads is None for run_ in wanted_runs for loads in run_) > 5  # (cores went)
+
+    def cores_of(raw: bytes) -> Any:
+        try:
+            return topology.parse_processor_cores(raw)
+        except struct.error:  # (a record cut short: no cores are told)
+            return None
+
+    assert ours["records"] == [cores_of(raw) for raw in records]
+    for root, got in zip(roots, ours["sysfs"], strict=True):
+        # (the folder's own order of its threads, which Python's glob and Rust both take)
+        want = topology._linux_cores(root)
+        assert sorted(got or []) == sorted(want or []) and (got is None) == (want is None), root
+    for (cores, threads), got in zip(checks, ours["checked"], strict=True):
+        assert got == topology.checked(cores, threads), (cores, threads)
+    assert sum(got is not None for got in ours["checked"]) > 20

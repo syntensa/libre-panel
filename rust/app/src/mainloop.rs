@@ -457,7 +457,14 @@ impl MainLoop {
         } / 1000.0;
         let (now, fold) = moment();
         let snapshot = match self.snapshot.take() {
-            Some(last) if started < self.next_sample => Snapshot { now, fold, ..last },
+            Some(mut last) if started < self.next_sample => {
+                if self.hub.every_frame() {
+                    // cheap sources follow on every frame, not only with the readings
+                    let streams = self.panel.as_ref().is_some_and(|panel| panel.streams());
+                    last.readings.extend(self.hub.fresh(streams));
+                }
+                Snapshot { now, fold, ..last }
+            }
             _ => {
                 self.next_sample = started + every;
                 let snapshot = self.hub.snapshot(now, fold);
