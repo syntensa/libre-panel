@@ -178,6 +178,19 @@ impl Source for PresentMon {
     }
 }
 
+/// Temperatures, fans, power and the graphics card of a Linux PC (sensors/linux.py).
+struct Linux(lp_sensors::linux::LinuxSource);
+
+impl Source for Linux {
+    fn name(&self) -> &'static str {
+        "linux"
+    }
+
+    fn read(&mut self, out: &mut Readings) {
+        out.extend(self.0.read());
+    }
+}
+
 /// The names of the processor, the graphics card and the memory, and the memory's speed
 /// (sensors/hardware.py): always on, and what the user named under `[hardware]` instead.
 struct Hardware(lp_sensors::hardware::HardwareSource);
@@ -212,6 +225,14 @@ impl Source for Hardware {
 
     fn overrides(&self) -> &'static [&'static str] {
         &lp_sensors::hardware::NAME_KEYS
+    }
+}
+
+/// A text of a source's table in config.toml, stripped; "" where there is none.
+fn text<'a>(table: Option<&'a Table>, key: &str) -> &'a str {
+    match table.and_then(|table| table.get(key)) {
+        Some(Toml::Str(text)) => lp_py::strip(text),
+        _ => "",
     }
 }
 
@@ -313,18 +334,50 @@ impl Hub {
         let mut missing = Vec::new();
         let mut notes = Vec::new();
         let wanted = Wanted::default();
+        // `gpu` under `[sensors.linux]` (or, as everywhere else, under
+        // `[sensors.librehardwaremonitor]`) picks the card by a part of its name
+        let card = match text(sensors.options.get("linux"), "gpu") {
+            "" => text(sensors.options.get("librehardwaremonitor"), "gpu"),
+            card => card,
+        }
+        .to_string();
         if demo {
             sources.push(Box::new(Demo::new()));
         } else {
             for name in &sensors.providers {
                 match name.as_str() {
-                    "psutil" => sources.push(Box::new(crate::psutil::System::new(
-                        sensors.options.get(name),
+                    "psutil" => {
+                        let mut source =
+                            crate::psutil::System::new(sensors.options.get(name), wanted.clone());
+                        // the Linux source reads the kernel's chips: psutil leaves them
+                        source.hwmon = !sensors.providers.iter().any(|name| name == "linux");
+                        sources.push(Box::new(source));
+                    }
+                    "load" => sources.push(Box::new(Load(lp_sensors::load::LoadSource::of_card(
                         wanted.clone(),
-                    ))),
-                    "load" => sources.push(Box::new(Load(lp_sensors::load::LoadSource::new(
-                        wanted.clone(),
+                        &card,
                     )))),
+                    "linux" => {
+                        let nvidia = match text(sensors.options.get("linux"), "nvidia") {
+                            "" => "auto",
+                            nvidia => nvidia,
+                        };
+                        // (the tests' own: a machine laid out in a folder)
+                        let source = match std::env::var_os("LP_LINUX_ROOT") {
+                            None => {
+                                lp_sensors::linux::LinuxSource::new(&card, nvidia, wanted.clone())
+                            }
+                            Some(root) => lp_sensors::linux::LinuxSource::at(
+                                std::path::Path::new(&root),
+                                &card,
+                                nvidia,
+                                wanted.clone(),
+                                Box::new(|| None),
+                                Box::new(Vec::new),
+                            ),
+                        };
+                        sources.push(Box::new(Linux(source)));
+                    }
                     "audio" => sources.push(Box::new(Audio(lp_sensors::audio::AudioSource::new(
                         wanted.clone(),
                     )))),

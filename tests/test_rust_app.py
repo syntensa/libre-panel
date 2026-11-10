@@ -62,6 +62,9 @@ def _run(home: Path, *args: str, **more: str) -> subprocess.CompletedProcess[str
                           encoding="utf-8", timeout=120, check=False)  # fmt: skip
 
 
+NAMES = ("cpu.name", "gpu.name", "mem.name", "mem.speed")  # what sensors/hardware.py gives
+
+
 def _named(readings: dict, cpu: str = "", prefer: str = "") -> dict:
     """``readings`` with the names of this computer's parts as the Python app adds them
     (sensors/hardware.py, always on): its names win, ``cpu`` is `[hardware] cpu_name`."""
@@ -540,3 +543,83 @@ def test_a_games_frames_come_from_the_presentmon_named(tmp_path: Path) -> None:
     done = _run(tmp_path, "sensors")
     assert done.returncode == 0 and not (tmp_path / "started").exists()
     assert not any(key.startswith("game.") for key in done.stdout.split())
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="the kernel's own files")
+def test_a_linux_pcs_sensors_are_those_of_the_python_sources(tmp_path: Path) -> None:
+    """`[sensors] providers = ["linux", "psutil", ...]`: the keys, units and labels the Linux
+    source and the psutil source give together on this computer (the chips' temperatures and
+    fans from the Linux source alone, as the Python app has it)."""
+    pytest.importorskip("psutil")
+    from libre_panel.sensors.linux import LinuxProvider
+    from libre_panel.sensors.psutil_provider import PsutilProvider
+
+    (tmp_path / "config.toml").write_text(
+        '[sensors]\nproviders = ["linux", "psutil", "nope"]\n', encoding="utf-8"
+    )
+    linux, provider = LinuxProvider({}), PsutilProvider({})
+    provider.hwmon = False
+    try:
+        linux.read(), provider.read()
+        done = _run(tmp_path, "sensors")
+        time.sleep(0.3)  # (a power needs two readings of its counter, a while apart)
+        wanted = _named({**provider.read(), **linux.read()})
+    finally:
+        linux.close()
+        provider.close()
+    assert done.returncode == 0, done.stderr
+    ours = {line[:40].strip(): (line[56:61].strip(), line[62:])
+            for line in done.stdout.splitlines()}  # fmt: skip
+    assert ours == {key: (r.unit, r.label) for key, r in wanted.items()}
+
+
+@pytest.mark.skipif(os.name == "nt", reason="a machine laid out as Linux has it")
+def test_a_machine_laid_out_in_a_folder_is_read_as_the_python_source_reads_it(
+    tmp_path: Path,
+) -> None:
+    """The Linux source in the program: a processor's chip, the mainboard's fans, a drive and
+    an AMD card with its hwmon chip, read from a folder; every reading as sensors/linux.py
+    gives it."""
+    from libre_panel.sensors.linux import LinuxProvider
+
+    root = tmp_path / "pc"
+    hwmon, card = "sys/class/hwmon/", "sys/class/drm/card1/device/"
+    files = {
+        hwmon + "hwmon0/name": "k10temp", hwmon + "hwmon0/temp1_input": "61500",
+        hwmon + "hwmon0/temp1_label": "Tctl", hwmon + "hwmon1/name": "nct6798",
+        hwmon + "hwmon1/fan1_input": "840", hwmon + "hwmon1/fan2_input": "1320",
+        hwmon + "hwmon1/fan2_label": "CPU Fan", hwmon + "hwmon1/temp1_input": "0",
+        hwmon + "hwmon2/name": "nvme", hwmon + "hwmon2/temp1_input": "38850",
+        hwmon + "hwmon2/temp1_label": "Composite",
+        hwmon + "hwmon2/device/model": "Samsung SSD 990 PRO 2TB",
+        hwmon + "hwmon3/name": "amdgpu", hwmon + "hwmon3/temp1_input": "54000",
+        hwmon + "hwmon3/temp1_label": "edge", hwmon + "hwmon3/temp2_input": "66000",
+        hwmon + "hwmon3/temp2_label": "junction", hwmon + "hwmon3/fan1_input": "912",
+        hwmon + "hwmon3/pwm1": "97", hwmon + "hwmon3/power1_average": "187000000",
+        hwmon + "hwmon3/freq1_input": "2400000000", hwmon + "hwmon3/freq1_label": "sclk",
+        card + "vendor": "0x1002", card + "device": "0x744c",
+        card + "uevent": "DRIVER=amdgpu\nPCI_SLOT_NAME=0000:03:00.0",
+        card + "gpu_busy_percent": "37", card + "mem_info_vram_total": str(24 * 2**30),
+        card + "mem_info_vram_used": str(3 * 2**30), card + "hwmon/hwmon3/name": "amdgpu",
+    }  # fmt: skip
+    for name, text in files.items():
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        (root / name).write_text(text + "\n", encoding="utf-8")
+    (tmp_path / "config.toml").write_text(
+        '[sensors]\nproviders = ["linux", "hardware"]\n', encoding="utf-8"
+    )
+    done = _run(tmp_path, "sensors", LP_LINUX_ROOT=str(root))
+    assert done.returncode == 0, done.stderr
+    provider = LinuxProvider({}, root=root)
+    try:
+        wanted = provider.read()
+    finally:
+        provider.close()
+    lines = []
+    for key in sorted(wanted):
+        r = wanted[key]
+        lines.append(f"{key:<40} {r.value:>14.2f} {r.unit:<5} {r.label}")
+    ours = [line for line in done.stdout.splitlines() if not line.startswith(NAMES)]
+    assert ours == lines
+    assert {"cpu.temp", "gpu.temp", "gpu.hotspot", "gpu.load", "gpu.power", "gpu.mem.used",
+            "fan.lpc.fan_2", "temp.nvme.composite"} <= set(wanted)  # fmt: skip

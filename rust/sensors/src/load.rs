@@ -14,8 +14,9 @@
 //! - `gpu.load` (Windows, any vendor): the performance counters that Task Manager shows, read
 //!   through PDH. There is one 3D engine counter per process and engine; they are summed per
 //!   engine, and the card's load is its busiest engine. The card is the one with the most
-//!   dedicated memory in use, chosen again every minute. (Linux's, from the kernel and NVML,
-//!   comes with the source `linux`.)
+//!   dedicated memory in use, chosen again every minute.
+//! - `gpu.load` (Linux): AMD's own counter in sysfs (`gpu_busy_percent`) and NVIDIA's
+//!   library, for the card `gpu.name` names; a card that is powered down is not asked.
 //!
 //! The thread runs only while a theme on show reads one of the keys, and ends when the
 //! source closes. Where a key cannot be measured it is simply missing and the next source
@@ -536,19 +537,86 @@ mod pdh {
     }
 }
 
+/// The load of the graphics card in use: AMD's counter, or NVIDIA's library for the card. A
+/// card that is powered down (a laptop's second one) is not asked: that would switch it on.
+pub struct LinuxGpu {
+    card: crate::gpus::Card,
+    device: Option<crate::nvml::Device>,
+}
+
+impl LinuxGpu {
+    /// The card's load now, in percent.
+    pub fn load(&self) -> Option<f64> {
+        if crate::gpus::suspended(&self.card) {
+            return None;
+        }
+        match &self.device {
+            Some(device) => device.utilization(),
+            None => crate::gpus::busy_percent(&self.card),
+        }
+    }
+}
+
+impl Sampler for LinuxGpu {
+    fn read(&mut self) -> Option<Sample> {
+        self.load().map(Sample::One)
+    }
+}
+
+/// The sampler for the card `gpu.name` names (`prefer`: a part of the name picks another),
+/// or none where no card tells its load: Intel's, the open drivers, a PC without.
+pub fn linux_gpu(
+    root: &std::path::Path,
+    adapters: &[crate::hardware::Adapter],
+    prefer: &str,
+    library: impl FnOnce() -> Option<Arc<crate::nvml::Nvml>>,
+) -> Option<LinuxGpu> {
+    use crate::gpus;
+    let cards = gpus::find_cards(root);
+    let card = gpus::primary(&cards, adapters, prefer)?.clone();
+    if gpus::suspended(&card) {
+        return None;
+    }
+    if card.vendor == gpus::NVIDIA && card.driver == "nvidia" {
+        let library = library()?;
+        let by_slot = match card.slot.as_str() {
+            "" => None,
+            slot => library.by_slot(slot),
+        };
+        let device = by_slot.or_else(|| library.by_index(0))?;
+        return Some(LinuxGpu {
+            card,
+            device: Some(device),
+        });
+    }
+    let counted = card.driver == "amdgpu" && card.device().join("gpu_busy_percent").exists();
+    counted.then_some(LinuxGpu { card, device: None })
+}
+
 /// A new sampler for `key`: none where this machine cannot have one, an error where it should
 /// and does not.
-fn open(key: &str) -> Result<Option<Box<dyn Sampler>>, String> {
+fn open(key: &str, prefer: &str) -> Result<Option<Box<dyn Sampler>>, String> {
     Ok(Some(match key {
         "cpu.load" => Box::new(CpuSampler::new()?),
         CORES => Box::new(CoreSampler::new()?),
         _ => {
             #[cfg(windows)]
             {
+                let _ = prefer;
                 Box::new(pdh::Gpu::new()?)
             }
-            #[cfg(not(windows))]
+            #[cfg(target_os = "linux")]
             {
+                let adapters = &crate::hardware::scan().adapters;
+                let root = std::path::Path::new("/");
+                match linux_gpu(root, adapters, prefer, crate::nvml::shared) {
+                    Some(sampler) => Box::new(sampler),
+                    None => return Ok(None),
+                }
+            }
+            #[cfg(not(any(windows, target_os = "linux")))]
+            {
+                let _ = prefer;
                 return Ok(None);
             }
         }
@@ -582,6 +650,8 @@ struct Shared {
     changed: Condvar,
     notes: Mutex<Vec<String>>,
     wanted: Wanted,
+    /// a part of the name of the graphics card to measure (Linux)
+    prefer: String,
 }
 
 impl Shared {
@@ -675,7 +745,7 @@ fn run(shared: &Shared) {
                 continue;
             }
             let Some(sampler) = samplers.get_mut(key) else {
-                match open(key) {
+                match open(key, &shared.prefer) {
                     // (it has nothing to compare with yet)
                     Ok(Some(sampler)) => {
                         samplers.insert(key, sampler);
@@ -730,6 +800,12 @@ pub struct LoadSource {
 
 impl LoadSource {
     pub fn new(wanted: Wanted) -> LoadSource {
+        LoadSource::of_card(wanted, "")
+    }
+
+    /// The card the `gpu.*` readings come from is the one `[sensors.linux] gpu` (or, as
+    /// everywhere, `[sensors.librehardwaremonitor] gpu`) names; the load is that card's.
+    pub fn of_card(wanted: Wanted, prefer: &str) -> LoadSource {
         LoadSource {
             shared: Arc::new(Shared {
                 values: Mutex::new(IndexMap::new()),
@@ -737,6 +813,7 @@ impl LoadSource {
                 changed: Condvar::new(),
                 notes: Mutex::new(Vec::new()),
                 wanted,
+                prefer: prefer.to_string(),
             }),
             thread: None,
         }

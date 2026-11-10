@@ -671,6 +671,126 @@ fn hardware(case: &Value) -> Value {
            "founds": founds, "ints": ints})
 }
 
+/// A stand-in for NVIDIA's library: the cards a case describes, each with the values it
+/// gives (those it has not are refused, as a card without a fan refuses).
+struct MadeUpNvml(Vec<Value>);
+
+impl MadeUpNvml {
+    fn number(&self, card: usize, key: &str) -> Option<u32> {
+        self.0.get(card.wrapping_sub(1))?[key]
+            .as_u64()
+            .map(|n| n as u32)
+    }
+}
+
+impl lp_sensors::nvml::Api for MadeUpNvml {
+    fn init(&self) -> Option<i32> {
+        Some(0)
+    }
+    fn shutdown(&self) {}
+    fn count(&self) -> u32 {
+        self.0.len() as u32
+    }
+    fn handle_by_slot(&self, slot: &str) -> Option<usize> {
+        let found = self
+            .0
+            .iter()
+            .position(|card| card["slot"].as_str() == Some(slot));
+        found.map(|n| n + 1)
+    }
+    fn handle_by_index(&self, index: u32) -> Option<usize> {
+        ((index as usize) < self.0.len()).then_some(index as usize + 1)
+    }
+    fn temperature(&self, card: usize) -> Option<u32> {
+        self.number(card, "temp")
+    }
+    fn fan_speed(&self, card: usize) -> Option<u32> {
+        self.number(card, "fan")
+    }
+    fn fan_rpm(&self, card: usize) -> Option<u32> {
+        self.number(card, "rpm")
+    }
+    fn power(&self, card: usize) -> Option<u32> {
+        self.number(card, "power")
+    }
+    fn utilization(&self, card: usize) -> Option<(u32, u32)> {
+        Some((self.number(card, "busy")?, 0))
+    }
+    fn memory(&self, card: usize) -> Option<(u64, u64, u64)> {
+        let memory = &self.0.get(card.wrapping_sub(1))?["memory"];
+        Some((
+            memory[0].as_u64()?,
+            memory[1].as_u64()?,
+            memory[2].as_u64()?,
+        ))
+    }
+    fn clock(&self, card: usize, kind: i32) -> Option<u32> {
+        self.number(card, if kind == 0 { "clock" } else { "memory_clock" })
+    }
+}
+
+/// linux_source: each machine laid out in a folder read by the Linux source at each step's
+/// time, after the step's files were written: the readings in their order, and at the end
+/// what the source says of itself.
+fn linux_source(case: &Value) -> Result<Value, String> {
+    use lp_sensors::linux::LinuxSource;
+    use lp_sensors::service::Wanted;
+    let text = |value: &Value| value.as_str().unwrap_or("").to_string();
+    let mut out = Vec::new();
+    for machine in case["machines"].as_array().into_iter().flatten() {
+        let wanted = Wanted::default();
+        wanted.set(machine["wanted"].as_array().into_iter().flatten().map(text));
+        let adapters: Vec<lp_sensors::hardware::Adapter> = machine["adapters"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|a| lp_sensors::hardware::Adapter {
+                name: text(&a[0]),
+                memory: a[1].as_u64().unwrap_or(0),
+                discrete: a[2].as_bool().unwrap_or(false),
+                slot: text(&a[3]),
+            })
+            .collect();
+        let cards = machine["nvml"].as_array().cloned();
+        let library = cards.map(|cards| lp_sensors::nvml::Nvml::of(Box::new(MadeUpNvml(cards))));
+        let mut source = LinuxSource::at(
+            std::path::Path::new(machine["root"].as_str().unwrap_or("")),
+            machine["prefer"].as_str().unwrap_or(""),
+            machine["nvidia"].as_str().unwrap_or("auto"),
+            wanted,
+            Box::new(move || library.clone()),
+            Box::new(move || adapters.clone()),
+        );
+        let mut steps = Vec::new();
+        for step in machine["steps"].as_array().into_iter().flatten() {
+            for write in step["writes"].as_array().into_iter().flatten() {
+                let file = std::path::PathBuf::from(text(&write[0]));
+                if let Some(folder) = file.parent() {
+                    std::fs::create_dir_all(folder).map_err(|e| e.to_string())?;
+                }
+                std::fs::write(&file, text(&write[1])).map_err(|e| e.to_string())?;
+            }
+            let readings = source.read_at(step["now"].as_f64().unwrap_or(0.0));
+            steps.push(json!(readings
+                .iter()
+                .map(|(key, r)| {
+                    let value = match &r.value {
+                        lp_py::Value::Float(f) => json!(f),
+                        other => json!(other.str()),
+                    };
+                    json!([key, value, r.unit, r.label, r.origin])
+                })
+                .collect::<Vec<_>>()));
+        }
+        let status = source.status();
+        out.push(
+            json!({"steps": steps, "status": [status.chips, status.temperatures,
+            status.fans, status.graphics, status.nvml, status.cpu_power]}),
+        );
+    }
+    Ok(json!({"machines": out}))
+}
+
 pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "regex" => regex(case),
@@ -684,6 +804,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "audio" => audio(case),
         "game_frames" => frames(case),
         "hardware" => hardware(case),
+        "linux_source" => linux_source(case)?,
         _ => return Err(format!("no such op: {op}")),
     })
 }

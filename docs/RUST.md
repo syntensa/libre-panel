@@ -1682,6 +1682,17 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       on, and its names win over another source's. Compared with Python on 300 cpuinfo
       files, 120 trees of cards, 400 tables, 600 computers made up, and on the computer the
       tests run on; the Windows calls not yet run on a Windows PC
+- [x] the Linux source (sensors/linux.py with hwmon.py, rapl.py, gpus.py and nvml.py; lp-sensors'
+      linux, hwmon, rapl, gpus, nvml): every chip's temperatures and fans under the keys the
+      psutil source gave them (the mainboard's fans as Windows names them), cpu.temp and
+      mem.temp, the processor's power from RAPL, amd_energy or a chip, the graphics card from
+      its hwmon chip, amdgpu's files, Intel's clock or NVIDIA's library (loaded from the
+      driver, each call that fails left out); drives and memory modules read by a thread of
+      their own, a card that sleeps left alone, a rescan every ten seconds. The load source's
+      gpu.load on Linux from the same. 240 machines laid out in folders read at six times
+      after the same changes, each reading compared with Python, NVIDIA's library a stand-in
+      on both sides; the program run on a machine laid out in a folder. NVIDIA's real library
+      not yet called
 - [ ] HWiNFO, RTSS, MangoHud, the other sources; Linux's hint of what system-setup brings
 - [ ] the history as a ring, demo.py's values; the .NET service goes
 

@@ -889,3 +889,269 @@ def test_the_computers_parts_are_named_as_hardware_names_them(tmp_path: Any) -> 
 
     assert ours["ints"] == [number(text, base) for text, base in ints]
     assert sum(1 for n in ours["ints"] if n is not None) > 500
+
+
+class _MadeUpNvml:
+    """A stand-in for NVIDIA's library with the functions sensors/nvml.py calls: the cards a
+    case describes, each with the values it gives (those it has not are refused)."""
+
+    def __init__(self, cards: list[dict[str, Any]]) -> None:
+        self.cards = cards
+
+    def _value(self, handle: Any, key: str) -> Any:
+        return self.cards[handle.value - 1].get(key)
+
+    def _number(self, handle: Any, key: str, ref: Any, field: str = "value") -> int:
+        value = self._value(handle, key)
+        if value is None:
+            return 1
+        setattr(ref._obj, field, value)
+        return 0
+
+    def nvmlInit_v2(self) -> int:  # noqa: N802 - the library's names
+        return 0
+
+    def nvmlShutdown(self) -> int:  # noqa: N802
+        return 0
+
+    def nvmlDeviceGetCount_v2(self, ref: Any) -> int:  # noqa: N802
+        ref._obj.value = len(self.cards)
+        return 0
+
+    def nvmlDeviceGetHandleByPciBusId_v2(self, slot: bytes, ref: Any) -> int:  # noqa: N802
+        for n, card in enumerate(self.cards):
+            if card["slot"] == slot.decode():
+                ref._obj.value = n + 1
+                return 0
+        return 1
+
+    def nvmlDeviceGetHandleByIndex_v2(self, index: Any, ref: Any) -> int:  # noqa: N802
+        if index.value >= len(self.cards):
+            return 1
+        ref._obj.value = index.value + 1
+        return 0
+
+    def nvmlDeviceGetTemperature(self, handle: Any, sensor: int, ref: Any) -> int:  # noqa: N802
+        return self._number(handle, "temp", ref)
+
+    def nvmlDeviceGetFanSpeed(self, handle: Any, ref: Any) -> int:  # noqa: N802
+        return self._number(handle, "fan", ref)
+
+    def nvmlDeviceGetFanSpeedRPM(self, handle: Any, ref: Any) -> int:  # noqa: N802
+        return self._number(handle, "rpm", ref, "speed")
+
+    def nvmlDeviceGetPowerUsage(self, handle: Any, ref: Any) -> int:  # noqa: N802
+        return self._number(handle, "power", ref)
+
+    def nvmlDeviceGetUtilizationRates(self, handle: Any, ref: Any) -> int:  # noqa: N802
+        return self._number(handle, "busy", ref, "gpu")
+
+    def nvmlDeviceGetMemoryInfo(self, handle: Any, ref: Any) -> int:  # noqa: N802
+        memory = self._value(handle, "memory")
+        if memory is None:
+            return 1
+        ref._obj.total, ref._obj.free, ref._obj.used = memory
+        return 0
+
+    def nvmlDeviceGetClockInfo(self, handle: Any, clock: int, ref: Any) -> int:  # noqa: N802
+        return self._number(handle, "clock" if clock == 0 else "memory_clock", ref)
+
+
+def test_a_linux_pcs_sensors_are_read_as_the_linux_source_reads_them(tmp_path: Any) -> None:
+    """sensors/linux.py with hwmon.py, rapl.py, gpus.py and nvml.py: machines laid out in
+    folders (chips, thermal zones, energy counters, graphics cards, NVIDIA's library as a
+    stand-in), read at the same times after the same changes."""
+    from pathlib import Path
+
+    from libre_panel.sensors import base, hardware, nvml
+    from libre_panel.sensors.linux import LinuxProvider
+
+    rng = random.Random(0x11B)
+    chip_names = ["k10temp", "coretemp", "zenpower", "nct6798", "it8689", "nvme", "nvme",
+                  "drivetemp", "spd5118", "jc42", "amdgpu", "i915", "xe", "asus_ec_sensors",
+                  "amd_energy", "fam15h_power", "acpitz", "iwlwifi_1", "nouveau", "w83627ehf",
+                  "My Chip", "cpu_thermal"]  # fmt: skip
+    labels = ["Tctl", "Tdie", "Package id 0", "Core 0", "edge", "junction", "mem", "Composite",
+              "Sensor 1", "", "", "CPU Fan", "sclk", "mclk", "Esocket0", "esocket1", "GPU",
+              "hot spot", "PKG", "vram"]  # fmt: skip
+    machines = []
+    for n in range(240):
+        root = tmp_path / f"pc{n}"
+        hw = root / "sys/class/hwmon"
+        hw.mkdir(parents=True)
+        files: list[Path] = []  # files of fast chips, whose numbers change between readings
+        counters: list[Path] = []
+        folders = rng.sample(range(13), rng.randrange(0, 7))
+        for number in folders:
+            chip = hw / f"hwmon{number}"
+            chip.mkdir()
+            name = rng.choice(chip_names)
+            if rng.random() < 0.95:
+                (chip / "name").write_text(name + "\n", encoding="utf-8")
+            base_folder = chip / "device" if rng.random() < 0.1 else chip
+            base_folder.mkdir(exist_ok=True)
+            slow = name in ("nvme", "drivetemp", "spd5118", "jc42")
+            for _ in range(rng.randrange(0, 7)):
+                kind = rng.choice(["temp", "temp", "temp", "fan", "fan", "pwm", "power", "energy",
+                                   "freq"])  # fmt: skip
+                at = rng.randrange(1, 12)
+                suffix = {"pwm": "", "power": rng.choice(["_average", "_input"])}.get(
+                    kind, "_input"
+                )
+                file = base_folder / f"{kind}{at}{suffix}"
+                value = {"temp": rng.choice([41500, 67250, 0, -70000, 250000, 30000]),
+                         "fan": rng.choice([0, 840, 1320]), "pwm": rng.randrange(256),
+                         "power": rng.choice([48_700_000, 0]), "energy": rng.randrange(10**9),
+                         "freq": rng.choice([2_400_000_000, 96_000_000])}[kind]  # fmt: skip
+                file.write_text(rng.choice([f"{value}\n", f"{value}\n", "\n", "junk\n"]),
+                                encoding="utf-8")  # fmt: skip
+                if rng.random() < 0.6:
+                    (base_folder / f"{kind}{at}_label").write_text(
+                        rng.choice(labels) + "\n", encoding="utf-8"
+                    )
+                if kind == "energy":
+                    counters.append(file)
+                elif not slow:
+                    files.append(file)
+            (base_folder / "temp1_crit").write_text("95000\n", encoding="utf-8")
+            (base_folder / "fan1").write_text("7\n", encoding="utf-8")
+            if name in ("nvme", "drivetemp") and rng.random() < 0.7:
+                model = rng.choice([chip / "device" / "model", chip / "model"])
+                model.parent.mkdir(exist_ok=True)
+                model.write_text("Samsung SSD 990 PRO 2TB  \n", encoding="utf-8")
+        (hw / "hwmonx").mkdir()
+        for zone in rng.sample(range(4), rng.randrange(0, 3)):
+            folder = root / "sys/class/thermal" / f"thermal_zone{zone}"
+            folder.mkdir(parents=True)
+            (folder / "type").write_text(rng.choice(["x86_pkg_temp", "acpitz", ""]) + "\n")
+            if rng.random() < 0.9:
+                (folder / "temp").write_text("52000\n", encoding="utf-8")
+                files.append(folder / "temp")
+        for zone in rng.sample(["intel-rapl:0", "intel-rapl:1", "intel-rapl:0:0",
+                                "intel-rapl-mmio:0", "dtpm"], rng.randrange(0, 4)):  # fmt: skip
+            folder = root / "sys/class/powercap" / zone
+            folder.mkdir(parents=True)
+            (folder / "name").write_text(rng.choice(["package-0", "package-0", "core", "psys"]))
+            if rng.random() < 0.9:
+                (folder / "energy_uj").write_text(f"{rng.randrange(10**9)}\n", encoding="utf-8")
+                counters.append(folder / "energy_uj")
+            if rng.random() < 0.7:
+                (folder / "max_energy_range_uj").write_text("262143328850\n", encoding="utf-8")
+        adapters, library = [], []
+        for number in rng.sample(range(4), rng.choice([0, 1, 1, 1, 2])):
+            card = root / "sys/class/drm" / f"card{number}"
+            device = card / "device"
+            (device / "power").mkdir(parents=True)
+            (root / "sys/class/drm" / f"card{number}-HDMI-A-1").mkdir()
+            vendor, driver = rng.choice([("0x1002", "amdgpu"), ("0x10de", "nvidia"),
+                                         ("0x1002", "amdgpu"), ("0x10de", "nvidia"),
+                                         ("0x10de", "nouveau"), ("0x8086", "i915"),
+                                         ("0x8086", "xe"), ("0x1234", "")])  # fmt: skip
+            slot = f"0000:0{number + 1}:00.0"
+            (device / "vendor").write_text(vendor + "\n", encoding="utf-8")
+            if rng.random() < 0.95:
+                (device / "device").write_text("0x744c\n", encoding="utf-8")
+            uevent = f"DRIVER={driver}\nPCI_ID=1002:744C\n"
+            if rng.random() < 0.85:
+                uevent += f"PCI_SLOT_NAME={slot.upper()}\n"
+            (device / "uevent").write_text(uevent, encoding="utf-8")
+            (device / "power" / "runtime_status").write_text(
+                rng.choice(["active"] * 6 + ["suspended"]) + "\n", encoding="utf-8"
+            )
+            if rng.random() < 0.6:
+                total = rng.choice([0, 8 * 2**30, 24 * 2**30])
+                (device / "mem_info_vram_total").write_text(f"{total}\n", encoding="utf-8")
+                (device / "mem_info_vram_used").write_text(f"{3 * 2**29 + 12345}\n")
+            if rng.random() < 0.3:
+                (card / "lmem_total_bytes").write_text(f"{16 * 2**30}\n", encoding="utf-8")
+            if rng.random() < 0.6:
+                (device / "gpu_busy_percent").write_text(rng.choice(["37\n", "140\n", "-3\n"]))
+                files.append(device / "gpu_busy_percent")
+            if rng.random() < 0.4:
+                clock = card / rng.choice(["gt_cur_freq_mhz", "gt/gt0/rps_cur_freq_mhz",
+                                           "device/tile0/gt0/freq0/cur_freq"])  # fmt: skip
+                clock.parent.mkdir(parents=True, exist_ok=True)
+                clock.write_text("1150\n", encoding="utf-8")
+            if folders and rng.random() < 0.7:
+                (device / "hwmon" / f"hwmon{rng.choice(folders)}").mkdir(parents=True)
+            if rng.random() < 0.5:
+                adapters.append([rng.choice(["Radeon RX 7900 XTX", "GeForce RTX 4070", "Arc"]),
+                                 rng.choice([0, 2**33]), rng.random() < 0.3, slot])  # fmt: skip
+            if driver == "nvidia" and rng.random() < 0.8:
+                values = {"slot": rng.choice([slot, slot, "0000:0f:00.0"]), "temp": 54,
+                          "fan": 38, "rpm": 1240, "power": 187_340, "busy": 71,
+                          "memory": [12 * 2**30, 9 * 2**30, 3 * 2**30 + 777], "clock": 2610,
+                          "memory_clock": 10501}  # fmt: skip
+                for key in rng.sample(list(values)[1:], rng.randrange(0, 3)):
+                    del values[key]
+                if rng.random() < 0.1:
+                    values["memory"] = [0, 0, 0]
+                library.append(values)
+        steps = []
+        for now in (0.0, 0.1, 1.5, 3.0, 13.5, 14.5):
+            writes = []
+            for file in rng.sample(files, rng.randrange(0, len(files) + 1)):
+                writes.append([str(file), f"{rng.choice([30000, 45250, 71000, 1500, 0, 88])}\n"])
+            for file in counters:
+                if rng.random() < 0.8:
+                    writes.append([str(file), rng.choice([f"{rng.randrange(10**9)}\n", "x\n"])])
+            if now == 13.5 and rng.random() < 0.5:  # (a chip that appears: found by the rescan)
+                writes += [[str(hw / "hwmon99" / "name"), "k10temp\n"],
+                           [str(hw / "hwmon99" / "temp1_input"), "49125\n"],
+                           [str(hw / "hwmon99" / "temp1_label"), "Tctl\n"]]  # fmt: skip
+            steps.append({"now": now, "writes": writes})
+        machines.append({
+            "root": str(root), "prefer": rng.choice(["", "", "radeon", "RTX", "nothing"]),
+            "nvidia": rng.choice(["auto", "auto", "auto", "off", " OFF "]),
+            "wanted": rng.choice([[], ["temp.*"], ["temp.drivetemp.0"], ["cpu.load"]]),
+            "adapters": adapters, "nvml": rng.choice([library, library, None]), "steps": steps,
+        })  # fmt: skip
+
+    # (the steps write files as they go: what each was before is put back for Python's turn)
+    before = {file: Path(file).read_bytes() if Path(file).exists() else None
+              for machine in machines for step in machine["steps"]
+              for file, _ in step["writes"]}  # fmt: skip
+    [ours] = run([{"op": "linux_source", "machines": machines}])
+    for file, data in before.items():
+        if data is None:
+            Path(file).unlink(missing_ok=True)
+        else:
+            Path(file).write_bytes(data)
+    seen: dict[str, int] = {}
+    for machine, got in zip(machines, ours["machines"], strict=True):
+        hwmon99 = Path(machine["root"]) / "sys/class/hwmon/hwmon99"
+        if hwmon99.is_dir():
+            hwmon99.rmdir()
+        times = [0.0]
+        cards = machine["nvml"]
+        provider = LinuxProvider(
+            {"gpu": machine["prefer"], "nvidia": machine["nvidia"]},
+            root=Path(machine["root"]),
+            clock=lambda times=times: times[0],
+            opener=lambda cards=cards: None if cards is None else nvml.Nvml(_MadeUpNvml(cards)),
+        )
+        named = [hardware.Adapter(*adapter) for adapter in machine["adapters"]]
+        provider._adapters = lambda named=named: named  # type: ignore[method-assign]
+        base.want(provider, set(machine["wanted"]))
+        try:
+            for step, said in zip(machine["steps"], got["steps"], strict=True):
+                for file, text in step["writes"]:
+                    Path(file).parent.mkdir(parents=True, exist_ok=True)
+                    Path(file).write_text(text, encoding="utf-8")
+                times[0] = step["now"]
+                readings = provider.read()
+                wanted = [[key, r.value, r.unit, r.label, r.origin]
+                          for key, r in readings.items()]  # fmt: skip
+                assert said == wanted, (machine["root"], step["now"])
+                for key in readings:
+                    seen[key] = seen.get(key, 0) + 1
+            status = provider.status()
+            assert got["status"] == [status["chips"], status["temperatures"], status["fans"],
+                                     status["graphics"], status["nvidia driver"] == "NVML",
+                                     status["cpu power"]]  # fmt: skip
+        finally:
+            provider.close()
+    for key in ("cpu.temp", "mem.temp", "cpu.power", "gpu.temp", "gpu.load", "gpu.power",
+                "gpu.mem.used", "gpu.freq", "gpu.fan", "gpu.fan.percent", "temp.nvidia.gpu",
+                "fan.lpc.fan_1"):  # fmt: skip
+        assert seen.get(key, 0) > 2, (key, sorted(seen))
