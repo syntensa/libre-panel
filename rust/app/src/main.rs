@@ -5,6 +5,8 @@
 mod display;
 mod home;
 mod mainloop;
+mod osinfo;
+mod psutil;
 mod sensors;
 mod system;
 
@@ -207,7 +209,14 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
             let (mut hub, missing) = sensors::Hub::of(&config.sensors, asked.demo);
             // Some sources read only while a theme shows their keys: asked for as a theme
             // would, so they are listed ("lhm:*" is every sensor of LibreHardwareMonitor).
-            hub.want(["cpu.load", "gpu.load", "audio.*", "lhm:*", "temp.*"].map(String::from));
+            let mut keys = ["cpu.load", "gpu.load", "audio.*", "lhm:*", "temp.*"]
+                .map(String::from)
+                .to_vec();
+            // (the tests' own: more keys asked for, as a theme that shows them would)
+            if let Ok(more) = std::env::var("LP_SENSORS_WANT") {
+                keys.extend(more.split(',').map(str::to_string));
+            }
+            hub.want(keys);
             let moment = lp_render::Moment::date(1970, 1, 1);
             hub.snapshot(moment, false);
             // (rate counters and pollers need time)

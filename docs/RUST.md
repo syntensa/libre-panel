@@ -1596,13 +1596,24 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
 - [ ] Windows: processor (with PawnIO for its registers), graphics cards (NVAPI/NVML, ADLX,
       Intel), memory, storage (SMART), network, mainboard chips and fans; HWiNFO, RTSS,
       PresentMon, MangoHud
-- [x] the first source (rust/app's sensors and system): the computer's own as
-      sensors/psutil_provider.py names them (the processor's load, clock, threads and
-      temperature, the memory, the system's disk, the network's and the disks' rates, the
-      uptime), on Linux from the kernel's files, on Windows from its API (GetSystemTimes,
-      GlobalMemoryStatusEx, GetDiskFreeSpaceEx, each adapter's and each drive's counters,
-      the processor's clock; not yet run on a Windows PC), each number's history for the
-      graphs (600), and readings made up (`--demo`)
+- [x] the computer's own readings (sensors/psutil_provider.py; rust/app's psutil, system and
+      osinfo), without psutil: the processor's load, clock and threads and every core's
+      load, the memory and the swap, the system's disk and every drive a user thinks of
+      (the system's first; Fedora Atomic's /sysroot), the network's and the disks' rates,
+      the address, what was received and sent today, how the PC is connected (netlink.py:
+      LAN or Wi-Fi, its speed and signal), the chips' temperatures and fans as psutil reads
+      hwmon (their keys numbered as hwmon.py numbers them, the processor's and the card's
+      own among them), the battery, the uptime, and, in threads that run only while a theme
+      shows them, the programs that use the most processor time and memory and the time a
+      connection to up to four hosts takes with the share of tries lost. On Linux from the
+      kernel's files; on Windows from its API (GetSystemTimes, NtQuerySystemInformation's
+      processors and programs, GlobalMemoryStatusEx, the page file's counter, the drives'
+      letters and volumes, each adapter's and each drive's counters, GetBestInterface and
+      the WLAN service, GetSystemPowerStatus; not yet run on a Windows PC). Run beside the
+      Python source on the same computer: the same keys, units and labels, the same values
+      where they stand still; programs, ping and link against a listener
+      (tests/test_rust_app.py). Each number's history for the graphs (600), and readings
+      made up (`--demo`)
 - [x] LibreHardwareMonitor through the sensor service (rust/sensors, lp-sensors): the
       protocol's client side (sensorservice/protocol.py: the framing, the two requests, every
       check of an answer, in its words), the pipe (winpipe.py's connection with overlapped

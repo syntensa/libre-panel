@@ -379,3 +379,74 @@ def test_the_load_source_measures_the_processor(tmp_path: Path) -> None:
     [line] = [line for line in done.stdout.splitlines() if line.startswith("cpu.load ")]
     key, value, unit, *label = line.split()
     assert 0.0 <= float(value) <= 100.0 and unit == "%" and label == ["CPU", "load"]
+
+
+def test_the_computer_s_own_readings_are_those_of_the_python_source(tmp_path: Path) -> None:
+    """`[sensors] providers = ["psutil", ...]`: the same keys, units and labels as
+    sensors/psutil_provider.py gives on this computer, and the same values where they stand
+    still (the drives, the memory in all, the threads, the address)."""
+    pytest.importorskip("psutil")
+    from libre_panel.sensors.psutil_provider import PsutilProvider
+
+    (tmp_path / "config.toml").write_text(
+        '[sensors]\nproviders = ["psutil", "nope"]\n', encoding="utf-8"
+    )
+    provider = PsutilProvider({})
+    try:
+        provider.read()
+        done = _run(tmp_path, "sensors")
+        wanted = provider.read()
+    finally:
+        provider.close()
+    assert done.returncode == 0, done.stderr
+    ours = {}
+    for line in done.stdout.splitlines():
+        key, value = line[:40].strip(), line[41:55].strip()
+        ours[key] = (value, line[56:61].strip(), line[62:])
+    assert sorted(ours) == sorted(wanted), set(ours) ^ set(wanted)
+    still = ("cpu.cores", "mem.total", "disk.total", "net.ip")
+    for key, reading in wanted.items():
+        value, unit, label = ours[key]
+        assert (unit, label) == (reading.unit, reading.label), key
+        if key in still or (key.startswith("disk.") and key.endswith((".name", ".total"))):
+            said = reading.value
+            assert value == (f"{said:.2f}" if isinstance(said, float) else str(said)), key
+    assert {"cpu.core.1.load", "disk.1.name", "net.today.down", "sys.uptime"} <= set(ours)
+
+
+def test_programs_ping_and_link_are_read_while_a_theme_shows_them(tmp_path: Path) -> None:
+    """What the psutil source reads only while something shows it: the programs that use the
+    most processor time and memory, the time a connection to a host takes, how the PC is
+    connected; under the keys sensors/psutil_provider.py gives them."""
+    import socket
+
+    with socket.socket() as server:
+        server.bind(("127.0.0.1", 0))
+        server.listen(8)
+        port = server.getsockname()[1]
+        (tmp_path / "config.toml").write_text(
+            '[sensors]\nproviders = ["psutil", "nope"]\n[sensors.psutil]\n'
+            f'ping = ["127.0.0.1:{port}", "127.0.0.1:1", "[::1]"]\n',
+            encoding="utf-8",
+        )
+        done = _run(tmp_path, "sensors", LP_SENSORS_WANT="proc.*,net.ping*,net.link*")
+    assert done.returncode == 0, done.stderr
+    ours = {line[:40].strip(): (line[41:55].strip(), line[56:61].strip(), line[62:])
+            for line in done.stdout.splitlines()}  # fmt: skip
+    assert ours["net.ping.host"] == ("127.0.0.1", "", "Ping host")
+    value, unit, label = ours["net.ping"]
+    assert 0.0 <= float(value) < 2000.0 and (unit, label) == ("ms", "Ping 127.0.0.1")
+    assert ours["net.ping.lost"] == ("0", "%", "Ping lost")
+    # (nothing listens on port 1: no answer, all of its tries lost)
+    assert ours["net.ping.2"] == ("None", "ms", "Ping")
+    assert ours["net.ping.2.lost"] == ("100", "%", "Ping lost")
+    assert ours["net.ping.3.host"] == ("::1", "", "Ping host")
+    for sort in ("cpu", "mem"):
+        name, unit, label = ours[f"proc.{sort}.1.name"]
+        assert name and unit == "" and label == name
+        value, unit, label = ours[f"proc.{sort}.1.value"]
+        assert 0.0 <= float(value) and (unit, label) == ("%", name)
+    assert float(ours["proc.mem.1.value"][0]) >= float(ours["proc.mem.2.value"][0])
+    if "net.link" in ours:  # (a default route: how the PC is connected)
+        assert ours["net.link.kind"][0] in ("lan", "wlan")
+        assert ours["net.link.text"][0].startswith(ours["net.link"][0])

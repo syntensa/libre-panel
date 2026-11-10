@@ -41,11 +41,12 @@ What to look at
 
 What it does not do yet
 -----------------------
-- Readings: the processor's and the graphics card's load (ten times a second), the
-  processor's clock, memory, disk, network and uptime, and what
-  LibreHardwareMonitor reads through Libre Panel's sensor service (or its own web server):
-  temperatures, power, fans, the graphics card. A game's frame rate, music, weather and
-  the AI activity are missing: their places stay empty.
+- Readings: what Windows itself tells (the processor's and the graphics card's load, every
+  core, the clock, memory, drives, network with its link, the programs that use the most,
+  ping, battery, uptime) and what LibreHardwareMonitor reads through Libre Panel's sensor
+  service (or its own web server): temperatures, power, fans, the graphics card. The
+  volume, a game's frame rate, music, weather and the AI activity are missing: their
+  places stay empty.
 - One panel; no pages (game, music), no notices, no transitions between themes, no videos
   in themes, no app window and no tray icon.
 - Panels other than TURZX USB and the Hongtai family: config.toml's `driver = "virtual"`

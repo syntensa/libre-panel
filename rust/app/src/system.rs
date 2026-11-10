@@ -101,68 +101,6 @@ mod imp {
         (!clocks.is_empty()).then(|| clocks.iter().sum::<f64>() / clocks.len() as f64)
     }
 
-    /// The processor's temperature: the first of the chips that measure it, its package's where
-    /// it names one (the provider's _CPU_CHIPS and _CPU_LABELS).
-    pub fn cpu_temp() -> Option<f64> {
-        const CHIPS: [&str; 5] = ["coretemp", "k10temp", "zenpower", "cpu_thermal", "acpitz"];
-        const LABELS: [&str; 3] = ["Package id 0", "Tctl", "Tdie"];
-        let mut chips: Vec<(String, std::path::PathBuf)> = std::fs::read_dir("/sys/class/hwmon")
-            .ok()?
-            .flatten()
-            .filter_map(|entry| {
-                let name = std::fs::read_to_string(entry.path().join("name")).ok()?;
-                Some((name.trim().to_string(), entry.path()))
-            })
-            .collect();
-        chips.sort();
-        for wanted in CHIPS {
-            let Some((_, folder)) = chips.iter().find(|(name, _)| name == wanted) else {
-                continue;
-            };
-            let mut inputs: Vec<(String, f64)> = Vec::new();
-            let mut names: Vec<String> = std::fs::read_dir(folder)
-                .ok()?
-                .flatten()
-                .filter_map(|entry| entry.file_name().into_string().ok())
-                .filter(|name| name.starts_with("temp") && name.ends_with("_input"))
-                .collect();
-            names.sort();
-            for name in names {
-                let read = |file: &str| std::fs::read_to_string(folder.join(file)).ok();
-                let Some(value) = read(&name).and_then(|text| text.trim().parse::<f64>().ok())
-                else {
-                    continue;
-                };
-                let label = read(&name.replace("_input", "_label")).unwrap_or_default();
-                inputs.push((label.trim().to_string(), value / 1000.0));
-            }
-            if inputs.is_empty() {
-                continue;
-            }
-            let chosen = LABELS
-                .iter()
-                .find_map(|label| inputs.iter().find(|(name, _)| name == label))
-                .unwrap_or(&inputs[0]);
-            return Some(chosen.1);
-        }
-        None
-    }
-
-    /// The system's disk: its bytes used and in all, and the share used of what a user may use
-    /// (psutil's disk_usage).
-    pub fn disk_usage() -> Option<(f64, f64, f64)> {
-        let path = std::ffi::CString::new("/").ok()?;
-        let mut stat: libc::statvfs = unsafe { std::mem::zeroed() };
-        if unsafe { libc::statvfs(path.as_ptr(), &mut stat) } != 0 {
-            return None;
-        }
-        let block = stat.f_frsize as f64;
-        let total = stat.f_blocks as f64 * block;
-        let used = total - stat.f_bfree as f64 * block;
-        let for_user = used + stat.f_bavail as f64 * block;
-        Some((used, total, crate::sensors::percent(used, for_user)))
-    }
-
     /// How long the computer runs, in seconds.
     pub fn uptime() -> Option<f64> {
         file("/proc/uptime")?
@@ -183,7 +121,7 @@ mod imp {
         GetAdaptersAddresses, GetIfEntry2, IP_ADAPTER_ADDRESSES_LH, MIB_IF_ROW2,
     };
     use windows_sys::Win32::Storage::FileSystem::{
-        CreateFileW, GetDiskFreeSpaceExW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
+        CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
     };
     use windows_sys::Win32::System::Ioctl::{DISK_PERFORMANCE, IOCTL_DISK_PERFORMANCE};
     use windows_sys::Win32::System::Power::CallNtPowerInformation;
@@ -331,30 +269,6 @@ mod imp {
             )
         };
         (status == 0 && said[0].current_mhz > 0).then(|| f64::from(said[0].current_mhz))
-    }
-
-    /// The processor's temperature: Windows tells none without a driver (the sensor
-    /// service's LibreHardwareMonitor has it).
-    pub fn cpu_temp() -> Option<f64> {
-        None
-    }
-
-    /// The system's disk: its bytes used and in all, and the share used.
-    pub fn disk_usage() -> Option<(f64, f64, f64)> {
-        let drive = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".to_string());
-        let path: Vec<u16> = format!("{drive}\\\0").encode_utf16().collect();
-        let (mut for_caller, mut total, mut free) = (0u64, 0u64, 0u64);
-        if unsafe { GetDiskFreeSpaceExW(path.as_ptr(), &mut for_caller, &mut total, &mut free) }
-            == 0
-        {
-            return None;
-        }
-        let used = total.saturating_sub(free) as f64;
-        Some((
-            used,
-            total as f64,
-            crate::sensors::percent(used, total as f64),
-        ))
     }
 
     /// How long the computer runs, in seconds.

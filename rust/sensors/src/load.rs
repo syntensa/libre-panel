@@ -310,6 +310,12 @@ mod system {
     }
 }
 
+/// Each thread's (busy, total) time now, as psutil's times of it count; none where the
+/// system does not tell.
+pub fn core_times() -> Option<Vec<(f64, f64)>> {
+    system::cores()
+}
+
 /// The processor's load between two calls.
 struct CpuSampler {
     #[cfg(windows)]

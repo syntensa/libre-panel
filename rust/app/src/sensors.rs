@@ -14,11 +14,8 @@ use lp_py::Value;
 use lp_render::{Moment, Reading, Snapshot};
 use lp_sensors::service::Wanted;
 
-use crate::system;
-
 /// the numbers a sensor's history holds (a graph's ten minutes)
 pub const HISTORY_LENGTH: usize = 600;
-const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
 
 pub type Readings = IndexMap<String, Reading>;
 
@@ -149,14 +146,6 @@ fn put(out: &mut Readings, key: &str, value: f64, unit: &str, label: &str) {
     );
 }
 
-/// round(x, 1) of a share in percent, as psutil gives it.
-pub(crate) fn percent(part: f64, whole: f64) -> f64 {
-    if whole <= 0.0 {
-        return 0.0;
-    }
-    (part / whole * 1000.0).round() / 10.0
-}
-
 /// Collects the readings of all sources and keeps each number's history for the graphs
 /// (SensorHub). A source earlier in the list wins where two have the same key.
 pub struct Hub {
@@ -248,7 +237,10 @@ impl Hub {
         } else {
             for name in &sensors.providers {
                 match name.as_str() {
-                    "psutil" => sources.push(Box::new(System::new())),
+                    "psutil" => sources.push(Box::new(crate::psutil::System::new(
+                        sensors.options.get(name),
+                        wanted.clone(),
+                    ))),
                     "load" => sources.push(Box::new(Load(lp_sensors::load::LoadSource::new(
                         wanted.clone(),
                     )))),
@@ -400,103 +392,5 @@ impl Source for Demo {
             "Network upload",
         );
         put(out, "sys.uptime", 93_784.0 + t, "s", "Uptime");
-    }
-}
-
-/// The computer's own readings (PsutilProvider), read from the kernel's files on Linux.
-pub struct System {
-    /// the processor's busy and whole time when they were last read
-    cpu: Option<(f64, f64)>,
-    /// the bytes received and sent, read and written, and when
-    rates: Option<(Instant, [f64; 4])>,
-}
-
-impl System {
-    pub fn new() -> System {
-        let mut system = System {
-            cpu: None,
-            rates: None,
-        };
-        system.cpu = system::cpu_times(); // (the counter primed: the first reading is since now)
-        system
-    }
-}
-
-impl Source for System {
-    fn name(&self) -> &'static str {
-        "psutil"
-    }
-
-    fn read(&mut self, out: &mut Readings) {
-        if let Some((busy, whole)) = system::cpu_times() {
-            let load = match self.cpu {
-                Some((busy0, whole0)) => percent(busy - busy0, whole - whole0),
-                None => 0.0,
-            };
-            self.cpu = Some((busy, whole));
-            put(out, "cpu.load", load.clamp(0.0, 100.0), "%", "CPU load");
-        }
-        if let Some(clock) = system::cpu_freq() {
-            put(out, "cpu.freq", clock, "MHz", "CPU clock");
-        }
-        let threads = std::thread::available_parallelism().map_or(0, |n| n.get());
-        put(out, "cpu.cores", threads as f64, "", "CPU threads");
-
-        let mem = system::meminfo();
-        let of = |name: &str| mem.get(name).copied().unwrap_or(0.0);
-        if of("MemTotal") > 0.0 {
-            let (total, free) = (of("MemTotal"), of("MemAvailable"));
-            put(
-                out,
-                "mem.load",
-                percent(total - free, total),
-                "%",
-                "Memory usage",
-            );
-            put(out, "mem.used", (total - free) / GIB, "GiB", "Memory used");
-            put(out, "mem.total", total / GIB, "GiB", "Memory total");
-            put(out, "mem.free", free / GIB, "GiB", "Memory free");
-            if mem.contains_key("SwapTotal") {
-                let swap = percent(of("SwapTotal") - of("SwapFree"), of("SwapTotal"));
-                put(out, "swap.load", swap, "%", "Swap usage");
-            }
-        }
-        if let Some((used, total, load)) = system::disk_usage() {
-            put(out, "disk.load", load, "%", "Disk usage");
-            put(out, "disk.used", used / GIB, "GiB", "Disk used");
-            put(out, "disk.total", total / GIB, "GiB", "Disk total");
-        }
-
-        let now = Instant::now();
-        let (net, disk) = (system::net_bytes(), system::disk_bytes());
-        let counters = [
-            net.map_or(f64::NAN, |n| n.0),
-            net.map_or(f64::NAN, |n| n.1),
-            disk.map_or(f64::NAN, |d| d.0),
-            disk.map_or(f64::NAN, |d| d.1),
-        ];
-        if let Some((then, before)) = self.rates {
-            let dt = now.duration_since(then).as_secs_f64().max(1e-3);
-            let keys = [
-                ("net.down", "Network download"),
-                ("net.up", "Network upload"),
-                ("disk.read", "Disk read"),
-                ("disk.write", "Disk write"),
-            ];
-            for (n, (key, label)) in keys.iter().enumerate() {
-                let rate = (counters[n] - before[n]) / dt;
-                if rate.is_finite() {
-                    put(out, key, rate.max(0.0), "B/s", label);
-                }
-            }
-        }
-        self.rates = Some((now, counters));
-
-        if let Some(temp) = system::cpu_temp() {
-            put(out, "cpu.temp", temp, "°C", "CPU temperature");
-        }
-        if let Some(uptime) = system::uptime() {
-            put(out, "sys.uptime", uptime, "s", "Uptime");
-        }
     }
 }
