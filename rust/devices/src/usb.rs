@@ -57,6 +57,15 @@ pub fn list() -> Vec<Found> {
         .collect()
 }
 
+/// The ids (vendor, product) of every USB device on the bus, as the system lists them; none
+/// where it cannot list.
+pub fn all_ids() -> Vec<(u16, u16)> {
+    match nusb::list_devices().wait() {
+        Ok(devices) => devices.map(|d| (d.vendor_id(), d.product_id())).collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
 /// UsbTransport.present: whether a panel with this product id is on the bus.
 pub fn present(pid: u16) -> bool {
     list().iter().any(|device| device.pid == pid)

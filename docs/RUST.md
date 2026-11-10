@@ -1950,12 +1950,15 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       desktop entry), switched on and off as autostart.py does it, and the language; the
       command line's `autostart enable|disable|status [--elevated]`. The program takes
       `[--config FILE] tray --background`, the start at login the Python app wrote.
+      The report of a panel for the form on GitHub (`/api/report`: this computer, the panel
+      found, what is plugged in by its USB ids), the place search (`/api/location`,
+      Open-Meteo's), a folder shown (`/api/open`).
       `libre-panel editor` serves alone, `start` with
       the panel, and writes its address where a later start finds it. 120 requests to
       Python's server and to this one compared: the status, the headers and the body, byte
       for byte; a run of the program controlled through its server until `quit` ends it.
       Still to come: every other route (the themes' pictures and versions, saving, the
-      Settings' unlock, report, place search and folders, hardware, the Player, plugins' pages, …)
+      Settings' unlock, hardware, the Player, plugins' pages, …)
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app
 - [ ] the window (wry, tao), the tray icon, the command line, autostart, single instance,

@@ -96,7 +96,7 @@ pub fn describe_weather_code(code: &Value) -> String {
 }
 
 /// urllib.parse.quote_plus of `text`.
-fn quote_plus(text: &str) -> String {
+pub fn quote_plus(text: &str) -> String {
     let mut out = String::new();
     for byte in text.bytes() {
         match byte {
@@ -362,6 +362,72 @@ fn rain_readings(data: &Dict, local_now: &DateTime) -> Readings {
         reading(Value::Str(text), "", "Rain"),
     );
     out
+}
+
+/// Open-Meteo's search of places by their names.
+pub const GEOCODING_URL: &str = "https://geocoding-api.open-meteo.com/v1/search";
+
+/// A place of the search: its name, region and country, and where it is.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Place {
+    pub name: String,
+    pub region: String,
+    pub country: String,
+    pub latitude: Value,
+    pub longitude: Value,
+}
+
+/// geocode: places of that name (open_meteo.geocode); why there are none where the search
+/// could not be reached.
+pub fn geocode(
+    name: &str,
+    count: usize,
+    language: &str,
+    agent: &str,
+) -> Result<Vec<Place>, String> {
+    // (the tests' own: a search of their own)
+    let base = std::env::var("LP_GEOCODING_URL").unwrap_or_else(|_| GEOCODING_URL.to_string());
+    let url = format!(
+        "{base}?name={}&count={count}&language={}&format=json",
+        quote_plus(name),
+        quote_plus(language)
+    );
+    let data = lp_net::get(&url, &[("User-Agent", agent)], 10.0, 16 << 20)
+        .map_err(|why| why.to_string())?;
+    let data = String::from_utf8(data).map_err(|why| why.to_string())?;
+    // (an answer that is nothing, an empty list among them, names no place)
+    let answer = match lp_py::json::loads(&data).map_err(|why| why.to_string())? {
+        Value::Dict(answer) => answer,
+        other if !other.truthy() => Dict::new(),
+        other => {
+            return Err(format!(
+                "the answer is no table but a {}",
+                other.type_name()
+            ))
+        }
+    };
+    let text = |found: &Dict, key: &str| match found.get(key) {
+        Some(Value::Str(text)) => text.clone(),
+        Some(other) => lp_py::format::str_of(other),
+        None => String::new(),
+    };
+    let results = match answer.get("results") {
+        Some(Value::List(results)) => results.clone(),
+        _ => Vec::new(),
+    };
+    Ok(results
+        .iter()
+        .filter_map(|found| match found {
+            Value::Dict(found) => Some(Place {
+                name: text(found, "name"),
+                region: text(found, "admin1"),
+                country: text(found, "country"),
+                latitude: found.get("latitude").cloned().unwrap_or(Value::None),
+                longitude: found.get("longitude").cloned().unwrap_or(Value::None),
+            }),
+            _ => None,
+        })
+        .collect())
 }
 
 /// The answer at `url`, as JSON: a dict, or why there is none.

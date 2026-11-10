@@ -225,6 +225,9 @@ const ROUTES: &[Route] = &[
     private("GET", "/api/system", |s, x, _, _| {
         settings(s, x, |told| told.system())
     }),
+    private("GET", "/api/report", |s, x, _, _| {
+        settings(s, x, |told| told.report())
+    }),
     private("GET", "/api/panel", |s, x, _, _| {
         settings(s, x, |told| told.panel())
     }),
@@ -260,6 +263,12 @@ const ROUTES: &[Route] = &[
     private("POST", "/api/update", |s, x, _, _| update_later(s, x)),
     private("POST", "/api/system", |s, x, _, _| {
         settings_with(s, x, |told, asked| told.set_system(asked))
+    }),
+    private("POST", "/api/location", |s, x, _, _| {
+        settings_with(s, x, |told, asked| told.search_place(asked))
+    }),
+    private("POST", "/api/open", |s, x, _, _| {
+        settings_with(s, x, |told, asked| told.open_folder(asked))
     }),
     private("POST", "/api/scenes", |s, x, _, _| {
         settings_with(s, x, |told, asked| told.set_scene(asked))

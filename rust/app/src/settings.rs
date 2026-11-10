@@ -1266,6 +1266,117 @@ impl Settings<'_> {
         Ok(scenes_told(&done))
     }
 
+    // -- the place ------------------------------------------------------------------------
+
+    /// `{"query": "name"}`: places of that name from Open-Meteo's search. The text typed goes
+    /// there, nothing else, and only when the person asks.
+    pub fn search_place(&self, payload: &Value) -> Answer<Value> {
+        let query = match payload {
+            Value::Dict(payload) => payload.get("query").and_then(Value::as_str),
+            _ => None,
+        };
+        let query = query.map(lp_py::strip).filter(|query| {
+            let length = query.chars().count();
+            (2..=100).contains(&length)
+        });
+        let Some(query) = query else {
+            return Err(bad("expected a name of 2 to 100 characters"));
+        };
+        let agent = format!("libre-panel/{}", lp_py::VERSION);
+        let language = lp_i18n::language().code().to_string();
+        let found = lp_sensors::weather::geocode(query, 6, &language, &agent).map_err(|why| {
+            let said = lp_i18n::t_format(
+                "Could not reach the place search ({error}).",
+                &[("error", text(&why))],
+            );
+            refusal(said.unwrap_or_else(|why| why.msg), 502)
+        })?;
+        let mut places = Vec::new();
+        for place in found {
+            let number = |v: &Value| matches!(v, Value::Int(_) | Value::Float(_));
+            if !number(&place.latitude) || !number(&place.longitude) {
+                continue;
+            }
+            let parts = [&place.name, &place.region, &place.country];
+            let label: Vec<&str> = parts
+                .iter()
+                .filter(|p| !p.is_empty())
+                .map(|p| p.as_str())
+                .collect();
+            // a kilometre is plenty for the weather and the sun, and it is all that is kept
+            let rounded = |v: &Value| match v {
+                Value::Int(_) => v.clone(),
+                _ => Value::Float(lp_py::round_digits(v.to_f64().unwrap_or(0.0), 2)),
+            };
+            places.push(dict([
+                ("name", Value::Str(label.join(", "))),
+                ("latitude", rounded(&place.latitude)),
+                ("longitude", rounded(&place.longitude)),
+            ]));
+        }
+        Ok(dict([("places", Value::List(places))]))
+    }
+
+    /// `{"folder": "config"}` (or `themes`, `logs`): show it in the file manager.
+    pub fn open_folder(&self, payload: &Value) -> Answer<Value> {
+        let name = match payload {
+            Value::Dict(payload) => payload.get("folder").and_then(Value::as_str),
+            _ => None,
+        };
+        let Some((name, folder)) = folders()
+            .into_iter()
+            .find(|(known, _)| Some(*known) == name)
+        else {
+            return Err(bad("folder is one of config, themes, logs"));
+        };
+        std::fs::create_dir_all(&folder)
+            .and_then(|()| open_path(&folder))
+            .map_err(|why| refusal(why.to_string(), 501))?;
+        Ok(dict([("opened", text(name))]))
+    }
+
+    /// What a report of a panel says of this computer, for the form on GitHub: Libre
+    /// Panel's version, the system, the panel found and what is plugged in that could be
+    /// one, by its USB ids. The bus is only looked at: nothing is sent to a panel.
+    pub fn report(&self) -> Answer<Value> {
+        let config = self.config()?;
+        let product = find_panel(&config).map_or(String::new(), |found| found.model.label());
+        let (system, release, machine) = platform();
+        let mut lines = vec![
+            format!(
+                "Libre Panel {}, {system} {release} ({machine})",
+                lp_py::VERSION
+            ),
+            format!(
+                "Panel found: {}",
+                if product.is_empty() { "none" } else { &product }
+            ),
+        ];
+        // (what the owner's A/B found, for a model whose range is not known yet)
+        if config.device.video_range != "auto" {
+            lines.push(format!("Video range: {}", config.device.video_range));
+        }
+        lines.extend(connected_devices());
+        let report = lines.join("\n");
+        let quote = lp_sensors::weather::quote_plus;
+        let fields = match product.is_empty() {
+            true => format!("devices={}", quote(&report)),
+            false => format!("product={}&devices={}", quote(&product), quote(&report)),
+        };
+        Ok(dict([
+            ("text", Value::Str(report)),
+            ("product", Value::Str(product)),
+            (
+                "form",
+                Value::Str(format!(
+                    "{PROJECT_URL}/issues/new?template=panel_support.yml&{fields}"
+                )),
+            ),
+            // how a terminal is opened, for the doctor
+            ("platform", text(lp_config::platform())),
+        ]))
+    }
+
     // -- about ----------------------------------------------------------------------------
 
     pub fn about(&self) -> Answer<Value> {
@@ -1527,6 +1638,124 @@ fn expanduser(path: &str) -> std::path::PathBuf {
             crate::autostart::user_home().join(rest)
         }
         _ => std::path::PathBuf::from(path),
+    }
+}
+
+/// open_path: show a file or folder with the system's default program (Windows, or
+/// xdg-open).
+pub fn open_path(path: &Path) -> std::io::Result<()> {
+    if cfg!(windows) {
+        std::process::Command::new("explorer")
+            .arg(path)
+            .spawn()
+            .map(drop)
+    } else if lp_devices::rights::which("xdg-open", &mut Vec::new()).is_some() {
+        std::process::Command::new("xdg-open")
+            .arg(path)
+            .spawn()
+            .map(drop)
+    } else {
+        Err(std::io::Error::other(lp_i18n::t(
+            "Opening a file or folder is not supported on this system: no xdg-open.",
+        )))
+    }
+}
+
+/// platform.system(), .release() and .machine().
+fn platform() -> (String, String, String) {
+    #[cfg(unix)]
+    {
+        // SAFETY: uname fills the struct it is given.
+        let mut name: libc::utsname = unsafe { std::mem::zeroed() };
+        if unsafe { libc::uname(&mut name) } == 0 {
+            let field = |chars: &[libc::c_char]| {
+                let bytes: Vec<u8> = chars
+                    .iter()
+                    .take_while(|c| **c != 0)
+                    .map(|c| *c as u8)
+                    .collect();
+                String::from_utf8_lossy(&bytes).into_owned()
+            };
+            return (
+                field(&name.sysname),
+                field(&name.release),
+                field(&name.machine),
+            );
+        }
+        (String::new(), String::new(), String::new())
+    }
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::System::SystemInformation::OSVERSIONINFOW;
+        #[link(name = "ntdll")]
+        extern "system" {
+            fn RtlGetVersion(info: *mut OSVERSIONINFOW) -> i32;
+        }
+        // SAFETY: the struct is given its size, as RtlGetVersion asks.
+        let mut info: OSVERSIONINFOW = unsafe { std::mem::zeroed() };
+        info.dwOSVersionInfoSize = std::mem::size_of::<OSVERSIONINFOW>() as u32;
+        unsafe { RtlGetVersion(&mut info) };
+        let release = match (info.dwMajorVersion, info.dwBuildNumber) {
+            (10, build) if build >= 22000 => "11".to_string(),
+            (major, _) => major.to_string(),
+        };
+        let machine = std::env::var("PROCESSOR_ARCHITECTURE").unwrap_or_default();
+        ("Windows".to_string(), release, machine)
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        (String::new(), String::new(), String::new())
+    }
+}
+
+/// connected_devices: what is plugged in that could be a panel, a line each, without serial
+/// numbers: the USB serial ports with their ids and the plain USB panels, and the models each
+/// could be. Only the system's lists are read; no port is opened.
+fn connected_devices() -> Vec<String> {
+    let models = |vid: u16, pid: u16| {
+        let found = lp_devices::models::models_for_usb(vid, pid, None);
+        let ids: Vec<&str> = found.iter().map(|m| m.id).collect();
+        match ids.is_empty() {
+            true => String::new(),
+            false => format!("  -> {}", ids.join(" / ")),
+        }
+    };
+    let mut lines = Vec::new();
+    for port in lp_devices::serial::ports() {
+        // a port without USB ids (a mainboard's, Bluetooth) is no panel
+        let (Some(vid), Some(pid)) = (port.vid, port.pid) else {
+            continue;
+        };
+        let about = lp_devices::serial::product_of(&port.device).unwrap_or("n/a".into());
+        lines.push(format!(
+            "{}  {vid:04x}:{pid:04x}  {about}{}",
+            port.device,
+            models(vid, pid)
+        ));
+    }
+    // the plain USB panels by their vendors, and the catalog's other USB screens by their ids
+    const VENDORS: [u16; 3] = [0x1CBE, 0x43A8, 0x345F];
+    let all = lp_devices::usb::all_ids();
+    let mut products: Vec<(u16, u16)> = (lp_devices::models::MODELS.iter())
+        .filter(|m| m.protocol.starts_with("usb"))
+        .flat_map(|m| m.usb_ids.iter().copied())
+        .filter(|(vid, _)| !VENDORS.contains(vid))
+        .collect();
+    products.sort_unstable();
+    products.dedup();
+    for vendor in VENDORS {
+        for (vid, pid) in all.iter().filter(|(vid, _)| *vid == vendor) {
+            lines.push(format!("usb  {vid:04x}:{pid:04x}{}", models(*vid, *pid)));
+        }
+    }
+    for wanted in products {
+        for (vid, pid) in all.iter().filter(|ids| **ids == wanted) {
+            lines.push(format!("usb  {vid:04x}:{pid:04x}{}", models(*vid, *pid)));
+        }
+    }
+    match lines.is_empty() {
+        true => vec!["Nothing plugged in looks like a panel.".to_string()],
+        false => lines,
     }
 }
 

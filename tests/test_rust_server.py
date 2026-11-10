@@ -13,6 +13,7 @@ import subprocess
 import sys
 import threading
 from collections.abc import Iterator
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,7 @@ from test_rust_app import DATA, _libraries, _program
 
 from libre_panel import i18n
 from libre_panel.editor import server as editor
+from libre_panel.weather import open_meteo
 
 pytestmark = pytest.mark.skipif(
     sys.version_info[:2] != (3, 12), reason="the release's http.server is Python 3.12's"
@@ -84,11 +86,31 @@ def servers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
     theirs = editor.make_server(0, homes[0] / "config.toml", token=TOKEN)
     serving = threading.Thread(target=theirs.serve_forever, daemon=True)
     serving.start()
+    # Open-Meteo's place search as the tests make it up: its answer, the same for both
+    places = tmp_path / "places.json"
+    places.write_text("{}", encoding="utf-8")
+
+    class Search(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            body = places.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args: Any) -> None:
+            pass
+
+    search = ThreadingHTTPServer(("127.0.0.1", 0), Search)
+    threading.Thread(target=search.serve_forever, daemon=True).start()
+    search_url = f"http://127.0.0.1:{search.server_address[1]}/search"
+    monkeypatch.setattr(open_meteo, "GEOCODING_URL", search_url)
     # GitHub's answer on the releases, the same file for both (the update check's)
     releases = tmp_path / "releases.json"
     theirs.editor_state.updates.fetch = lambda: json.loads(releases.read_text(encoding="utf-8"))
     env = {**os.environ, "LIBRE_PANEL_HOME": str(homes[1]), "LIBRE_PANEL_DATA": str(DATA),
            "LP_RELEASES_FILE": str(releases), "XDG_CONFIG_HOME": str(homes[1] / "xdg"),
+           "LP_GEOCODING_URL": search_url,
            **_libraries()}  # fmt: skip
     command = [str(_program()), "editor", "--port", "0"]
     ours = subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -114,6 +136,7 @@ def servers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
         theirs.shutdown()
         theirs.server_close()
         theirs.editor_state.close()
+        search.shutdown()
         if os.name == "nt":
             ours.terminate()
         else:
@@ -864,3 +887,44 @@ def test_starting_with_the_system_is_told_and_set_as_settings_py_does(
     command = [str(_program()), "tray", "--background"]
     exec_line = f"Exec={autostart.desktop_exec(command)}"
     assert exec_line in entries[1].read_text(encoding="utf-8").splitlines()
+
+
+def test_the_report_the_place_search_and_the_folders_are_as_settings_py_has_them(
+    servers: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The report of a panel for the form on GitHub (this computer, the panel found, what is
+    plugged in); the place search refused in the same words, or unreachable (the tests'
+    network has no Open-Meteo); a folder shown, or why it cannot be."""
+    ask, homes = servers
+    places = homes[0].parent / "places.json"
+    # (the tests' stand-in for pyusb has no backend: the bus as the program sees it here)
+    from libre_panel.devices import base
+
+    monkeypatch.setattr(base, "list_usb_devices", lambda: [])
+    theirs, ours = (json.loads(body) for _, _, body in ask(_get("/api/report", WITH)))
+    assert ours == theirs and "Libre Panel" in ours["text"]
+    for home in homes:
+        (home / "config.toml").write_text('[device]\nvideo_range = "full"\n', encoding="utf-8")
+    theirs, ours = (json.loads(body) for _, _, body in ask(_get("/api/report", WITH)))
+    assert ours == theirs and "Video range: full" in ours["text"]
+    for payload in ({"query": "x"}, {"query": "  x  "}, {"query": "x" * 101}, {"query": 5}, {},
+                    []):  # fmt: skip
+        theirs, ours = ask(_post("/api/location", payload))
+        assert (ours[0], json.loads(ours[2])) == (theirs[0], json.loads(theirs[2])), payload
+    found = {"results": [
+        {"name": "Berlin", "admin1": "Land Berlin", "country": "Deutschland",
+         "latitude": 52.52437, "longitude": 13.41053},
+        {"name": "Berlin", "admin1": "", "country": "USA", "latitude": 44, "longitude": -71.18},
+        {"name": "Nirgends", "latitude": "52", "longitude": 1.0},
+        {"name": "Nur Name", "latitude": 1.005, "longitude": -0.125},
+    ]}  # fmt: skip
+    for answer in (found, {}, {"results": None}, [], "not json"):
+        places.write_text(json.dumps(answer) if answer != "not json" else answer, "utf-8")
+        for query in ("Berlin", " " + "x" * 100 + " "):
+            theirs, ours = ask(_post("/api/location", {"query": query}))
+            assert ours[0] == theirs[0], (answer, query)
+            if theirs[0] == "HTTP/1.0 200 OK":
+                assert json.loads(ours[2]) == json.loads(theirs[2]), (answer, query)
+    for payload in ({"folder": "logs"}, {"folder": "config"}, {"folder": "other"}, {}, []):
+        theirs, ours = ask(_post("/api/open", payload))
+        assert (ours[0], json.loads(ours[2])) == (theirs[0], json.loads(theirs[2])), payload
