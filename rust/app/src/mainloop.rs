@@ -23,10 +23,10 @@ use lp_render::alarm::AlarmEdge;
 use lp_render::overlays::ToastLayer;
 use lp_render::{Moment, Options, Renderer, Snapshot};
 use lp_services::host::{Delivery, Event, PluginHost, LEFT_OUT, NO_PANEL, OFF_IN_THEME};
-use lp_services::manager::Manager;
 use lp_theme::versions::{self, Places};
 use lp_theme::{Env, Theme};
 
+use crate::company::Company;
 use crate::display::{Display, Failed};
 use crate::home::Home;
 use crate::modes::{self, PageSwitch};
@@ -51,6 +51,16 @@ struct Judged {
     connected: bool,
     off: HashSet<String>,
     left_out: HashSet<String>,
+}
+
+/// What the loop does now (app.py's RunStatus, as far as this build has it).
+#[derive(Clone, Debug, Default)]
+pub struct RunStatus {
+    /// "starting", "waiting" (for the panel) or "showing"
+    pub state: &'static str,
+    /// the theme on show
+    pub theme: String,
+    pub frames: u64,
 }
 
 /// What the loop was started with (the command line's).
@@ -94,11 +104,12 @@ pub struct MainLoop {
     brightness: Option<i64>,
     began: Instant,
     pub frames: u64,
-    /// the services' host, and the services that run
+    /// the services' host, and the services that run (the loop's own: stopped with it)
     host: Arc<PluginHost>,
-    manager: Manager,
-    /// the services config.toml enables that this build lacks, as they were last said
-    lacking: Vec<String>,
+    company: Arc<Company>,
+    owns: bool,
+    /// what the loop does now, for who asks from another thread
+    status: Arc<Mutex<RunStatus>>,
     pages: PageSwitch,
     /// the readings asked of the sources: the theme's, the services' and the pages'
     wants: BTreeSet<String>,
@@ -147,12 +158,31 @@ fn moment() -> (Moment, bool) {
 }
 
 impl MainLoop {
+    /// A loop with services of its own, which end with it.
     pub fn new(home: Home, asked: Asked) -> Result<MainLoop, String> {
+        MainLoop::with(home, asked, Company::new(), true, Arc::default())
+    }
+
+    /// A loop in the `company` of the background app: its services go on when the loop ends
+    /// (unless it `owns` them).
+    pub fn with(
+        home: Home,
+        asked: Asked,
+        company: Arc<Company>,
+        owns: bool,
+        status: Arc<Mutex<RunStatus>>,
+    ) -> Result<MainLoop, String> {
         let config_file = asked.config.clone().unwrap_or_else(|| home.config_file());
         let config =
             lp_config::load_config(&config_file, lp_config::platform()).map_err(|e| e.msg)?;
-        let began = Instant::now();
-        let host = PluginHost::new(Box::new(move || began.elapsed().as_secs_f64()));
+        let began = company.began;
+        let host = Arc::clone(&company.host);
+        if let Ok(mut status) = status.lock() {
+            *status = RunStatus {
+                state: "starting",
+                ..RunStatus::default()
+            };
+        }
         let (mut hub, missing) = Hub::of(&config, asked.demo);
         hub.add(Box::new(crate::sensors::Services(Arc::clone(&host))));
         say(&format!("readings from: {}", hub.names().join(", ")));
@@ -183,7 +213,6 @@ impl MainLoop {
         host.set_themes(Some(Box::new(move |name| {
             versions::find_theme(name, &themes).is_ok()
         })));
-        let manager = Manager::new(&host, crate::services::parts());
         let mut made = MainLoop {
             env: Env {
                 fonts_dir: home.fonts(),
@@ -209,8 +238,9 @@ impl MainLoop {
             began,
             frames: 0,
             host,
-            manager,
-            lacking: Vec::new(),
+            company,
+            owns,
+            status,
             pages: PageSwitch::new(),
             wants: BTreeSet::new(),
             theme_reads: BTreeSet::new(),
@@ -249,35 +279,9 @@ impl MainLoop {
         }
     }
 
-    /// The services config.toml enables, started, stopped or started anew as it says; those
-    /// this build does not have yet are said once.
+    /// The services (and what else the company has) brought in line with config.toml.
     fn follow_services(&mut self) {
-        let parts = crate::services::parts();
-        let mut enabled: Vec<String> = Vec::new();
-        let mut lacking = Vec::new();
-        for name in &self.config.services.enabled {
-            match parts.contains_key(name.as_str()) {
-                true => enabled.push(name.clone()),
-                false => lacking.push(name.clone()),
-            }
-        }
-        if parts.contains_key("script") {
-            enabled.push("script".into()); // (the tests' own)
-        }
-        if lacking != self.lacking {
-            if !lacking.is_empty() {
-                say(&format!(
-                    "services not in this build yet: {}",
-                    lacking.join(", ")
-                ));
-            }
-            self.lacking = lacking;
-        }
-        self.manager
-            .apply(&enabled, &crate::services::options_of(&self.config));
-        for note in self.manager.notes() {
-            say(&note);
-        }
+        self.company.follow(&self.config);
     }
 
     /// The readings the sources are asked for: those the theme on show reads, those the
@@ -721,6 +725,9 @@ impl MainLoop {
         let there = self.ensure_panel(started);
         self.follow_link(restarting);
         if !there {
+            if let Ok(mut status) = self.status.lock() {
+                status.state = "waiting";
+            }
             return Duration::from_millis(250);
         }
         let name = self.theme_name(started);
@@ -878,6 +885,11 @@ impl MainLoop {
                 match shown {
                     Ok(found) => {
                         self.frames += 1;
+                        if let Ok(mut status) = self.status.lock() {
+                            status.state = "showing";
+                            status.frames = self.frames;
+                            status.theme.clone_from(&self.shown);
+                        }
                         if found {
                             // (a panel took over from the PNG file: drawn for it from now on)
                             self.had_panel = true;
@@ -920,8 +932,9 @@ impl MainLoop {
         Duration::from_secs_f64((interval - (self.clock() - started)).max(0.0))
     }
 
-    /// The loop, until `stop` is set or the frames asked for are shown.
-    pub fn run(&mut self, stop: &AtomicBool) {
+    /// The loop, until `stop` is set or the frames asked for are shown. `quitting`: whether
+    /// Libre Panel ends with it (the panel may go dark), asked when it ends.
+    pub fn run(&mut self, stop: &AtomicBool, quitting: &dyn Fn() -> bool) {
         while !stop.load(Ordering::Relaxed) {
             let mut wait = self.step();
             if self
@@ -938,24 +951,28 @@ impl MainLoop {
                 wait -= nap;
             }
         }
-        self.close();
+        self.close(quitting());
     }
 
-    /// The panel let go: dark where config.toml says so.
-    pub fn close(&mut self) {
-        self.manager.stop();
-        for note in self.manager.notes() {
-            say(&note);
+    /// The panel let go: dark where config.toml says so and Libre Panel is `quitting`.
+    pub fn close(&mut self, quitting: bool) {
+        if self.owns {
+            self.company.stop_services();
         }
         self.host.set_judge(None);
-        self.host.close();
+        if self.owns {
+            self.company.close();
+        }
+        if let Ok(mut status) = self.status.lock() {
+            *status = RunStatus::default();
+        }
         if let Some(toasts) = &mut self.toasts {
             toasts.close();
         }
         if let Some(renderer) = &mut self.renderer {
             renderer.close();
         }
-        if self.config.device.dark_on_quit {
+        if quitting && self.config.device.dark_on_quit {
             if let Some(panel) = &mut self.panel {
                 let _ = panel.set_brightness(0);
             }

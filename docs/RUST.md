@@ -1900,6 +1900,20 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       tests (Playwright) against the Rust app
 - [ ] the window (wry, tao), the tray icon, the command line, autostart, single instance,
       updates, languages, the log, light mode
+- [x] the background app (service.py's PanelService and BackgroundApp, as far as there is no
+      window yet; `libre-panel start`): the panel's loop in a thread that is paused, resumed
+      and started anew, with the services and the shortcuts beside it, which go on while the
+      panel is paused; a config.toml that is wrong when the loop starts is said and waited
+      for; the panel goes dark only when Libre Panel quits. What a shortcut does: the panel
+      paused and resumed, the brightness a step up or down in config.toml, the next scene,
+      the microphone muted, and the services hear of it (the timer); opening the app waits
+      for the window. A run of the program taken through them by its controls
+- [x] keyboard shortcuts for the whole PC (hotkeys.py; the app's hotkeys): Windows registers
+      them (RegisterHotKey, a message loop of their own), the X server grabs them on Linux
+      (the X11 protocol itself through x11rb, no libX11; with Caps and Num Lock on and off),
+      Wayland is told apart; one another program has is said, not taken; held again only
+      when they change. An X server of the test's own (Xvfb): a pressed shortcut arrives,
+      typing does not, a taken one and a key the keyboard lacks are said, and all is let go
 - [x] TOML as Python's tomllib reads it (lp-py): every value (ints of any size, floats to
       the bit with -nan's sign, dates, times and their offsets), tables, inline tables and
       arrays of tables with what may be said twice, every error in tomllib's words with its

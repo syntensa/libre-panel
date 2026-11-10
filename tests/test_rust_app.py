@@ -2024,3 +2024,89 @@ def test_the_waveshare_display_is_looked_for_and_its_absence_said_once(tmp_path:
     assert alive and "panicked" not in said, said
     assert "service 'waveshare' started" in said, said
     assert said.count("Waveshare USB monitor: no Waveshare USB monitor is connected") == 1, said
+
+
+def test_the_background_app_follows_its_shortcuts(tmp_path: Path) -> None:
+    """`libre-panel start`: the panel's loop beside the services and the keyboard shortcuts.
+    A shortcut pauses the panel (its frames stop) and resumes it, turns the brightness down a
+    step in config.toml and puts the next scene on; the state says what the panel does, the
+    brightness and the shortcuts that are held; a config.toml that is wrong when the panel
+    starts is said and waited for."""
+    config = tmp_path / "config.toml"
+    config.write_text(
+        'theme = "slate"\nfps = 2\nrefresh_ms = 200\n[device]\ndriver = "virtual"\n'
+        'output = "panel.png"\nbrightness = 50 # half\n[sensors]\nproviders = []\n'
+        '[services]\nenabled = ["timer"]\n[hotkeys]\npause = "Ctrl+Alt+Shift+F22"\n'
+        '[[scenes]]\nname = "Work"\nthemes = ["slate"]\n[[scenes]]\nname = "Film"\n'
+        'themes = ["slate"]\n',
+        encoding="utf-8",
+    )
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           "LIBRE_PANEL_CONTROL": "stdin", **_libraries()}  # fmt: skip
+    picture = tmp_path / "panel.png"
+
+    def until(done: Any, seconds: float = 20.0) -> bool:
+        end = time.monotonic() + seconds
+        while time.monotonic() < end:
+            if done():
+                return True
+            time.sleep(0.1)
+        return bool(done())
+
+    with subprocess.Popen([str(_program()), "start"], env=env, stdin=subprocess.PIPE,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        assert program.stdin is not None and program.stdout is not None
+
+        def told(*lines: str) -> dict[str, Any]:
+            for line in (*lines, "state"):
+                program.stdin.write(line + "\n")
+            program.stdin.flush()
+            return json.loads(program.stdout.readline())
+
+        try:
+            assert until(picture.exists)
+            assert until(lambda: told()["panel"]["state"] == "showing")
+            state = told()
+            assert state["brightness"] == 50 and state["panel"]["theme"] == "slate"
+            keys = state["hotkeys"]
+            assert keys["supported"] or keys["why"]
+            assert until(lambda: "pause" in told()["hotkeys"]["keys"])
+            assert told()["hotkeys"]["keys"]["pause"]["combo"] == "Ctrl+Alt+Shift+F22"
+            # paused: the frames stop, the services go on
+            state = told("shortcut pause")
+            assert state["panel"]["state"] == "paused"
+            stamp = picture.stat().st_mtime_ns
+            time.sleep(1.5)
+            assert picture.stat().st_mtime_ns == stamp
+            assert told("shortcut brightness_down")["brightness"] == 40
+            assert "brightness = 40 # half" in config.read_text(encoding="utf-8")
+            # the keys pressed: the panel runs again
+            assert told("press pause")["panel"]["state"] in ("paused", "starting", "showing")
+            assert until(lambda: told()["panel"]["state"] == "showing")
+            assert until(lambda: picture.stat().st_mtime_ns != stamp)
+            told("shortcut next_scene")
+            assert 'scene = "Work"' in config.read_text(encoding="utf-8")
+            told("shortcut next_scene", "shortcut timer", "shortcut open")
+            good = config.read_text(encoding="utf-8")
+            assert 'scene = "Film"' in good
+            # a config that is wrong when the panel starts: said, and waited for
+            told("pause")
+            config.write_text(good.replace("fps = 2", "fps = 2000"), encoding="utf-8")
+            told("resume")
+            assert until(lambda: told()["panel"]["state"] == "error")
+            assert "fps" in told()["panel"]["detail"]
+            assert told("shortcut brightness_up")["brightness"] is None
+            config.write_text(good, encoding="utf-8")
+            assert until(lambda: told()["panel"]["state"] == "showing")
+            alive = program.poll() is None
+        finally:
+            if os.name == "nt":
+                program.terminate()
+            else:
+                program.send_signal(signal.SIGINT)
+            said = program.communicate(timeout=30)[1]
+    assert alive and "panicked" not in said, said
+    assert "shortcut: pause" in said and "scene: Work" in said and "scene: Film" in said, said
+    assert "service 'timer' started" in said and "the shortcut for brightness_up failed" in said
+    assert "panel stopped: " in said and "(waiting for the config or theme to change)" in said

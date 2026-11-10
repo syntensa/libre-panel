@@ -2,8 +2,11 @@
 //! config.toml, draws the theme's frames of the computer's readings and shows them on the
 //! panel, or writes them to a PNG file.
 
+mod background;
+mod company;
 mod display;
 mod home;
+mod hotkeys;
 mod mainloop;
 mod modes;
 mod osinfo;
@@ -27,6 +30,8 @@ const USAGE: &str = "\
 Libre Panel
 
   libre-panel run [options]     show the theme on the panel until stopped (Ctrl+C)
+  libre-panel start [options]   the same as a background app: with the keyboard shortcuts
+                                of config.toml, the panel paused and resumed by them
   libre-panel render [options]  draw one frame into a PNG file (--output, else frame.png)
   libre-panel sensors           the readings and their keys (--check-service: whether the
                                 sensor service answers, on Windows)
@@ -279,7 +284,33 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
             lp_text::set_locale_from_environment();
             lp_text::fallback::set_language(Box::new(|| lp_i18n::language().code().to_string()));
             follow_signals();
-            MainLoop::new(Home::find()?, asked)?.run(&STOP);
+            MainLoop::new(Home::find()?, asked)?.run(&STOP, &|| true);
+        }
+        "start" => {
+            let asked = asked(args)?;
+            lp_text::set_locale_from_environment();
+            lp_text::fallback::set_language(Box::new(|| lp_i18n::language().code().to_string()));
+            follow_signals();
+            let app = background::BackgroundApp::new(Home::find()?, asked.clone());
+            app.start();
+            // (the tests' own: the controls by lines on the standard input)
+            if std::env::var_os("LIBRE_PANEL_CONTROL").is_some_and(|how| how == "stdin") {
+                app.follow_input();
+            }
+            let shown = |app: &background::BackgroundApp| {
+                let frames = app
+                    .panel
+                    .state()
+                    .get("frames")
+                    .and_then(lp_py::Value::to_f64);
+                asked
+                    .frames
+                    .is_some_and(|asked| frames.is_some_and(|f| f >= asked as f64))
+            };
+            while !STOP.load(std::sync::atomic::Ordering::Relaxed) && !shown(&app) {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            app.shutdown();
         }
         other => return Err(format!("unknown command {other}\n\n{USAGE}")),
     }
