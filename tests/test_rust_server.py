@@ -542,6 +542,43 @@ def test_a_theme_that_is_gone_leaves_the_panel_lit_and_is_said_as_app_py_says_it
     assert later["theme"] == own and later["frames"] > first["frames"], later
 
 
+def test_one_libre_panel_drives_the_panel_and_a_second_start_names_the_first(
+    tmp_path: Path,
+) -> None:
+    """instance.py's lock: while the background app runs, a second start says where its app
+    is (the address with the token) and ends, and `run` is refused with the words cli.py
+    has; the lock file holds the first one's process number."""
+    (tmp_path / "config.toml").write_text(
+        'theme = "slate"\nfps = 2\nlanguage = "en"\n[device]\ndriver = "virtual"\n'
+        'output = "panel.png"\n[sensors]\nproviders = []\n',
+        encoding="utf-8",
+    )
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries()}  # fmt: skip
+    with subprocess.Popen([str(_program()), "start", "--port", "0", "--no-browser"], env=env,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        try:
+            assert program.stdout is not None
+            address = program.stdout.readline().split(" running at ")[1].split()[0]
+            second = subprocess.run([str(_program()), "start", "--no-browser"], env=env,
+                                    capture_output=True, encoding="utf-8", timeout=60)  # fmt: skip
+            third = subprocess.run([str(_program()), "run"], env=env, capture_output=True,
+                                   encoding="utf-8", timeout=60)  # fmt: skip
+            lock = (tmp_path / "libre-panel.lock").read_text(encoding="utf-8")
+        finally:
+            program.send_signal(signal.SIGINT) if os.name == "posix" else program.terminate()
+            program.communicate(timeout=30)
+    said = i18n.t("Libre Panel is already running. Theme editor: {url}", url=address)
+    assert second.returncode == 0 and second.stdout == said + "\n", second
+    refused = i18n.t(
+        "Libre Panel is already running and drives the panel (look for its tray icon, or stop "
+        "`libre-panel run`/`start` in the other terminal)"
+    )
+    assert third.returncode != 0 and refused in third.stderr, third
+    assert lock == str(program.pid)
+
+
 def test_the_themes_are_listed_and_read_as_server_py_reads_them(servers: Any) -> None:
     """The themes that are installed (the app's and the person's own: one with files, one
     that cannot be read, one of an odd shape), a theme by its name with what is said of it,

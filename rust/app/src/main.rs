@@ -19,6 +19,7 @@ mod history;
 mod home;
 mod hotkeys;
 mod http;
+mod instance;
 mod logs;
 mod mainloop;
 mod meter;
@@ -322,7 +323,15 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
             lp_text::set_locale_from_environment();
             lp_text::fallback::set_language(Box::new(|| lp_i18n::language().code().to_string()));
             follow_signals();
-            MainLoop::new(Home::find()?, asked)?.run(&STOP, &|| true);
+            let home = Home::find()?;
+            // (one Libre Panel at a panel; a frame into a file takes none)
+            let _lock = match command {
+                "run" => Some(
+                    instance::InstanceLock::acquire(&home.settings).map_err(|why| why.message())?,
+                ),
+                _ => None,
+            };
+            MainLoop::new(home, asked)?.run(&STOP, &|| true);
         }
         "editor" => {
             let asked = asked(args)?;
@@ -347,8 +356,9 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
             // (the start at login: `tray --background`, as the Python app wrote it too)
             let args: Vec<String> = args
                 .iter()
-                .filter(|arg| {
-                    !(command == "tray" && ["--background", "--no-icon"].contains(&arg.as_str()))
+                .filter(|arg| match command {
+                    "tray" => !["--background", "--no-icon"].contains(&arg.as_str()),
+                    _ => arg.as_str() != "--no-browser",
                 })
                 .cloned()
                 .collect();
@@ -362,7 +372,44 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
             lp_text::set_locale_from_environment();
             lp_text::fallback::set_language(Box::new(|| lp_i18n::language().code().to_string()));
             follow_signals();
-            let app = background::BackgroundApp::new(Home::find()?, asked.clone());
+            let home = Home::find()?;
+            // (the app's window opens where the start asks for it: `start`, or `tray` without
+            // --background)
+            let open_editor = match command {
+                "start" => !args_given.iter().any(|arg| arg == "--no-browser"),
+                _ => !args_given.iter().any(|arg| arg == "--background"),
+            };
+            let _lock = match instance::InstanceLock::acquire(&home.settings) {
+                Ok(lock) => lock,
+                Err(instance::NotLocked::Running(why)) => {
+                    // a second click while the first start is still on its way: its app is
+                    // there in a moment
+                    let wait = if open_editor {
+                        instance::STARTING_S
+                    } else {
+                        0.0
+                    };
+                    let Some(url) = instance::editor_of_running_app(&home.settings, wait) else {
+                        return Err(why);
+                    };
+                    let port = url
+                        .rsplit(':')
+                        .next()
+                        .and_then(|rest| rest.trim_end_matches('/').parse::<u16>().ok());
+                    let token = access::read_token(&home.settings, port);
+                    let address = access::with_token(&url, token.as_deref());
+                    println!(
+                        "{}",
+                        t_with(
+                            "Libre Panel is already running. Theme editor: {url}",
+                            &[("url", &address)]
+                        )
+                    );
+                    return Ok(());
+                }
+                Err(why) => return Err(why.message()),
+            };
+            let app = background::BackgroundApp::new(home, asked.clone());
             if let Some(address) = app.start() {
                 println!("Libre Panel theme editor running at {address}  (Ctrl+C to stop)");
             }

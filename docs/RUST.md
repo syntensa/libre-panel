@@ -2077,8 +2077,14 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       Settings' unlock, hardware, the Player, plugins' pages, …)
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app
-- [ ] the window (wry, tao), the tray icon, the command line, autostart, single instance,
-      updates, languages, the log, light mode
+- [x] one Libre Panel at a panel (instance.py): the system's lock on libre-panel.lock in the
+      settings folder (flock; on Windows the first byte, as msvcrt.locking takes it) with the
+      process's number in it, held by `run`, `start` and `tray`; a second start says where
+      the running app is (its address with the token, waiting for one that is starting
+      where it opens the window) and ends, `run` is refused with cli.py's words. The tests:
+      a second start and a run beside the background app
+- [ ] the window (wry, tao), the tray icon, the command line, autostart, updates,
+      languages, the log, light mode
 - [x] the background app (service.py's PanelService and BackgroundApp, as far as there is no
       window yet; `libre-panel start`): the panel's loop in a thread that is paused, resumed
       and started anew, with the services and the shortcuts beside it, which go on while the
