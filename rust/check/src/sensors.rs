@@ -791,6 +791,38 @@ fn linux_source(case: &Value) -> Result<Value, String> {
     Ok(json!({"machines": out}))
 }
 
+/// sky: the sun's and the moon's readings at each [time, latitude, longitude] (the place
+/// null for none) in the computer's zone; null where the clock has no such time.
+fn sky(case: &Value) -> Result<Value, String> {
+    let zone = lp_py::zones::local().ok_or("no zone of the computer")?;
+    let moments: Vec<Value> = case["moments"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|moment| {
+            let place = match (moment[1].as_f64(), moment[2].as_f64()) {
+                (Some(latitude), Some(longitude)) => Some((latitude, longitude)),
+                _ => None,
+            };
+            let found =
+                lp_sensors::sky::sky_readings(zone, moment[0].as_f64().unwrap_or(0.0), place);
+            json!(found.map(|readings| readings
+                .iter()
+                .map(|(key, r)| {
+                    let value = match &r.value {
+                        lp_py::Value::Float(f) => json!(f),
+                        lp_py::Value::Int(n) => json!(n.to_string().parse::<i64>().ok()),
+                        lp_py::Value::None => Value::Null,
+                        other => json!(other.str()),
+                    };
+                    json!([key, value, r.unit, r.label])
+                })
+                .collect::<Vec<_>>()))
+        })
+        .collect();
+    Ok(json!({"moments": moments}))
+}
+
 pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "regex" => regex(case),
@@ -804,6 +836,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "audio" => audio(case),
         "game_frames" => frames(case),
         "hardware" => hardware(case),
+        "sky" => sky(case)?,
         "linux_source" => linux_source(case)?,
         _ => return Err(format!("no such op: {op}")),
     })

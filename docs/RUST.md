@@ -1693,6 +1693,10 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       after the same changes, each reading compared with Python, NVIDIA's library a stand-in
       on both sides; the program run on a machine laid out in a folder. NVIDIA's real library
       not yet called
+- [x] the sun and the moon (sensors/sky.py, lp-sensors' sky): the moon's phase, light, name
+      and age, the sun's rise, noon, set, height and daylight for the place of `[weather]`,
+      in the computer's local time; always on. 4000 moments of a century at places from pole
+      to pole compared with Python in five zones, each value and its type
 - [ ] HWiNFO, RTSS, MangoHud, the other sources; Linux's hint of what system-setup brings
 - [ ] the history as a ring, demo.py's values; the .NET service goes
 

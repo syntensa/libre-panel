@@ -19,6 +19,7 @@ pub mod protocol;
 pub mod provider;
 pub mod rapl;
 pub mod service;
+pub mod sky;
 pub mod smbios;
 pub mod sysfs;
 pub mod topology;

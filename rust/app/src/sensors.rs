@@ -178,6 +178,19 @@ impl Source for PresentMon {
     }
 }
 
+/// The sun and the moon (sensors/sky.py).
+struct Sky(lp_sensors::sky::SkySource);
+
+impl Source for Sky {
+    fn name(&self) -> &'static str {
+        "sky"
+    }
+
+    fn read(&mut self, out: &mut Readings) {
+        out.extend(self.0.read());
+    }
+}
+
 /// Temperatures, fans, power and the graphics card of a Linux PC (sensors/linux.py).
 struct Linux(lp_sensors::linux::LinuxSource);
 
@@ -396,8 +409,23 @@ impl Hub {
                         notes.extend(said);
                     }
                     "hardware" => sources.push(Box::new(Hardware::of(config))),
+                    "sky" => {
+                        let table = sensors.options.get(name);
+                        let number = |key: &str| match table.and_then(|t| t.get(key)) {
+                            Some(Toml::Float(f)) => Some(*f),
+                            Some(Toml::Int(n)) => lp_py::num::int_to_float(n).ok(),
+                            _ => None,
+                        };
+                        let place = number("latitude").zip(number("longitude"));
+                        sources.push(Box::new(Sky(lp_sensors::sky::SkySource::new(place))));
+                    }
                     other => missing.push(other.to_string()),
                 }
+            }
+            if !sensors.providers.iter().any(|name| name == "sky") {
+                // the sun for the weather's place (if set), the moon everywhere
+                let place = config.weather.latitude.zip(config.weather.longitude);
+                sources.push(Box::new(Sky(lp_sensors::sky::SkySource::new(place))));
             }
             if !sensors.providers.iter().any(|name| name == "hardware") {
                 sources.push(Box::new(Hardware::of(config))); // the names of this PC

@@ -10,6 +10,7 @@ import json
 import random
 import struct
 import sys
+import time
 from typing import Any
 
 import pytest
@@ -1157,3 +1158,51 @@ def test_a_linux_pcs_sensors_are_read_as_the_linux_source_reads_them(tmp_path: A
                 "gpu.mem.used", "gpu.freq", "gpu.fan", "gpu.fan.percent", "temp.nvidia.gpu",
                 "fan.lpc.fan_1"):  # fmt: skip
         assert seen.get(key, 0) > 2, (key, sorted(seen))
+
+
+@pytest.mark.parametrize(
+    "zone", [None, "Europe/Berlin", "America/St_Johns", "Pacific/Kiritimati", "Antarctica/Troll"]
+)
+def test_the_sun_and_the_moon_are_computed_as_sky_computes_them(
+    zone: str | None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """sensors/sky.py: the moon's phase and the sun's times at moments of a century, at
+    places from pole to pole (polar nights and midnight suns among them) and with none, in
+    the computer's zone and in others."""
+    from libre_panel.sensors import sky
+
+    if zone is not None:
+        if sys.platform == "win32":
+            pytest.skip("the computer's zone set by TZ and tzset")
+        monkeypatch.setenv("TZ", zone)
+        time.tzset()
+    try:
+        rng = random.Random(0x5C1)
+        places = [(52.52, 13.405), (-33.87, 151.21), (78.22, 15.65), (-77.85, 166.67), (0.0, 0.0),
+                  (90.0, 0.0), (-90.0, 45.0), (64.15, -21.94), (35.68, 139.69), (69.65, 18.96),
+                  (89.9999, 179.9999), (66.5622, 25.0), (-66.5622, -180.0)]  # fmt: skip
+        moments = []
+        for _ in range(4000):
+            place = rng.choice([*places, (rng.uniform(-90, 90), rng.uniform(-180, 180)), None,
+                                (None, 13.4)])  # fmt: skip
+            t = rng.choice([rng.uniform(0, 4.1e9),
+                            float(rng.randrange(1_700_000_000, 1_900_000_000)),
+                            rng.randrange(1_750_000_000, 1_800_000_000) + 0.5])  # fmt: skip
+            moments.append([t, *(place or (None, None))])
+        [ours] = run([{"op": "sky", "moments": moments}])
+        seen: set[str] = set()
+        for (t, latitude, longitude), got in zip(moments, ours["moments"], strict=True):
+            wanted = sky.sky_readings(t, latitude, longitude)
+            assert got == [[key, r.value, r.unit, r.label] for key, r in wanted.items()], (
+                t, latitude, longitude,
+            )  # fmt: skip
+            for (key, value, *_), reading in zip(got, wanted.values(), strict=True):
+                assert type(value) is type(reading.value), key
+                seen.add(key)
+            if wanted.get("sun.daylight") is not None and "sun.rise" not in wanted:
+                seen.add(f"always {wanted['sun.up'].value}")
+        assert seen >= {"moon.name", "sun.next_rise", "sun.progress", "always 0", "always 1"}
+    finally:
+        monkeypatch.undo()
+        if sys.platform != "win32":
+            time.tzset()

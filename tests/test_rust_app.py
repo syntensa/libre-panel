@@ -65,6 +65,12 @@ def _run(home: Path, *args: str, **more: str) -> subprocess.CompletedProcess[str
 NAMES = ("cpu.name", "gpu.name", "mem.name", "mem.speed")  # what sensors/hardware.py gives
 
 
+def _lines(done: subprocess.CompletedProcess[str]) -> list[str]:
+    """What `sensors` listed, without the sky's readings (always on, and a test of their
+    own)."""
+    return [line for line in done.stdout.splitlines() if not line.startswith(("moon.", "sun."))]
+
+
 def _named(readings: dict, cpu: str = "", prefer: str = "") -> dict:
     """``readings`` with the names of this computer's parts as the Python app adds them
     (sensors/hardware.py, always on): its names win, ``cpu`` is `[hardware] cpu_name`."""
@@ -390,7 +396,7 @@ def test_it_lists_librehardwaremonitor_s_readings_as_the_python_app_names_them(
         r = readings[key]
         value = f"{r.value:.2f}" if isinstance(r.value, float) else str(r.value)
         lines.append(f"{key:<40} {value:>14} {r.unit:<5} {r.label}")
-    assert done.stdout.splitlines() == lines
+    assert _lines(done) == lines
     assert any(line.startswith("cpu.name") and "My own processor" in line for line in lines)
     assert any(line.startswith("mem.temp") for line in lines)
 
@@ -402,7 +408,7 @@ def test_the_load_source_measures_the_processor(tmp_path: Path) -> None:
     (tmp_path / "config.toml").write_text('[sensors]\nproviders = ["load"]\n', encoding="utf-8")
     done = _run(tmp_path, "sensors")
     assert done.returncode == 0, done.stderr
-    [line] = [line for line in done.stdout.splitlines() if line.startswith("cpu.load ")]
+    [line] = [line for line in _lines(done) if line.startswith("cpu.load ")]
     key, value, unit, *label = line.split()
     assert 0.0 <= float(value) <= 100.0 and unit == "%" and label == ["CPU", "load"]
 
@@ -425,7 +431,7 @@ def test_the_computer_s_own_readings_are_those_of_the_python_source(tmp_path: Pa
     finally:
         provider.close()
     assert done.returncode == 0, done.stderr
-    ours = {line[:40].strip(): line[41:] for line in done.stdout.splitlines()}
+    ours = {line[:40].strip(): line[41:] for line in _lines(done)}
     assert sorted(ours) == sorted(wanted), set(ours) ^ set(wanted)
     still = ("cpu.cores", "mem.total", "disk.total", "net.ip", "cpu.name", "gpu.name", "mem.name",
              "mem.speed")  # fmt: skip
@@ -458,7 +464,7 @@ def test_programs_ping_and_link_are_read_while_a_theme_shows_them(tmp_path: Path
         done = _run(tmp_path, "sensors", LP_SENSORS_WANT="proc.*,net.ping*,net.link*")
     assert done.returncode == 0, done.stderr
     ours = {line[:40].strip(): (line[41:55].strip(), line[56:61].strip(), line[62:])
-            for line in done.stdout.splitlines()}  # fmt: skip
+            for line in _lines(done)}  # fmt: skip
     assert ours["net.ping.host"] == ("127.0.0.1", "", "Ping host")
     value, unit, label = ours["net.ping"]
     assert 0.0 <= float(value) < 2000.0 and (unit, label) == ("ms", "Ping 127.0.0.1")
@@ -497,7 +503,7 @@ def test_the_volume_is_read_from_the_tool_on_the_path(tmp_path: Path) -> None:
     done = _run(tmp_path, "sensors", PATH=path, LP_SENSORS_WANT="audio.mic.*")
     assert done.returncode == 0, done.stderr
     ours = {line[:40].strip(): (line[41:55].strip(), line[56:61].strip(), line[62:])
-            for line in done.stdout.splitlines()}  # fmt: skip
+            for line in _lines(done)}  # fmt: skip
     ours = {key: said for key, said in ours.items() if key.startswith("audio.")}
     assert ours == {
         "audio.volume": ("37.00", "%", "Volume"), "audio.muted": ("0", "", "Muted"),
@@ -528,7 +534,7 @@ def test_a_games_frames_come_from_the_presentmon_named(tmp_path: Path) -> None:
     done = _run(tmp_path, "sensors", LP_SENSORS_WANT="game.fps")
     assert done.returncode == 0, done.stderr
     ours = {line[:40].strip(): (line[41:55].strip(), line[56:61].strip(), line[62:])
-            for line in done.stdout.splitlines()}  # fmt: skip
+            for line in _lines(done)}  # fmt: skip
     assert ours["game.fps"] == ("100.00", "fps", "Frames per second"), ours
     assert ours["game.frametime"][:2] == ("10.00", "ms")
     assert ours["game.app"][0] == "Game"
@@ -572,7 +578,7 @@ def test_a_linux_pcs_sensors_are_those_of_the_python_sources(tmp_path: Path) -> 
         provider.close()
     assert done.returncode == 0, done.stderr
     ours = {line[:40].strip(): (line[56:61].strip(), line[62:])
-            for line in done.stdout.splitlines()}  # fmt: skip
+            for line in _lines(done)}  # fmt: skip
     assert ours == {key: (r.unit, r.label) for key, r in wanted.items()}
 
 
@@ -622,7 +628,31 @@ def test_a_machine_laid_out_in_a_folder_is_read_as_the_python_source_reads_it(
     for key in sorted(wanted):
         r = wanted[key]
         lines.append(f"{key:<40} {r.value:>14.2f} {r.unit:<5} {r.label}")
-    ours = [line for line in done.stdout.splitlines() if not line.startswith(NAMES)]
+    ours = [line for line in _lines(done) if not line.startswith(NAMES)]
     assert ours == lines
     assert {"cpu.temp", "gpu.temp", "gpu.hotspot", "gpu.load", "gpu.power", "gpu.mem.used",
             "fan.lpc.fan_2", "temp.nvme.composite"} <= set(wanted)  # fmt: skip
+
+
+def test_the_sun_and_the_moon_are_always_there(tmp_path: Path) -> None:
+    """The sky's source is on without being named: the moon everywhere, the sun for the
+    place `[weather]` has; the readings sensors/sky.py gives at that moment."""
+    from libre_panel.sensors import sky
+
+    (tmp_path / "config.toml").write_text(
+        '[sensors]\nproviders = ["nope"]\n[weather]\nlatitude = 52.52\nlongitude = 13.405\n',
+        encoding="utf-8",
+    )
+    before = sky.sky_readings(time.time(), 52.52, 13.405)
+    done = _run(tmp_path, "sensors")
+    after = sky.sky_readings(time.time(), 52.52, 13.405)
+    assert done.returncode == 0, done.stderr
+    ours = {line[:40].strip(): (line[41:55].strip(), line[56:61].strip(), line[62:])
+            for line in done.stdout.splitlines() if line.startswith(("moon.", "sun."))}  # fmt: skip
+    assert list(ours) == sorted(before) and {"sun.rise", "sun.set", "moon.phase"} <= set(ours)
+    for key, (value, unit, label) in ours.items():
+        assert (unit, label) == (before[key].unit, before[key].label), key
+        said = [f"{r.value:.2f}" if isinstance(r.value, float) else str(r.value)
+                for r in (before[key], after[key])]  # fmt: skip
+        if key != "sun.elevation":  # (it moves by the second)
+            assert value in said, key
