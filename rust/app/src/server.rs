@@ -326,6 +326,18 @@ const ROUTES: &[Route] = &[
     notice("POST", "/api/ai/status", |s, x, _, u| {
         ai_in(s, x, u, "status")
     }),
+    notice("GET", "/api/notify", |s, x, _, u| {
+        outside_notice(s, x, u, false)
+    }),
+    notice("POST", "/api/notify", |s, x, _, u| {
+        outside_notice(s, x, u, true)
+    }),
+    private("GET", "/api/notify-key", |s, x, _, _| {
+        notify_key(s, x, false)
+    }),
+    private("POST", "/api/notify-key", |s, x, _, _| {
+        notify_key(s, x, true)
+    }),
     private(
         "GET",
         "/api/ai/setup",
@@ -561,6 +573,70 @@ fn see_news(state: &State, exchange: &mut Exchange) {
     }
 }
 
+/// `/api/notify`: a notice from another program, only where `allow_notify` is on and with the
+/// notify key (the header, or `?key=`); `text`, `title`, `seconds`, `icon` and `level` in the
+/// address or, posted, as JSON.
+fn outside_notice(state: &State, exchange: &mut Exchange, url: &Url, posted: bool) {
+    let config = match lp_config::load_config(&state.config_file, lp_config::platform()) {
+        Ok(config) => config,
+        Err(why) => return exchange.error(&why.msg, 409, ""),
+    };
+    if !config.allow_notify {
+        let why =
+            t("Notices from other programs are switched off (Settings → Game mode and more).");
+        return exchange.error(&why, 403, "");
+    }
+    let mut params: Dict = crate::http::parse_qs(&url.query)
+        .into_iter()
+        .filter_map(|(name, values)| Some((name, Value::Str(values.into_iter().next()?))))
+        .collect();
+    let given = match exchange.header(crate::notify::HEADER) {
+        Some(header) if !header.is_empty() => header.to_string(),
+        _ => params.get("key").map(Value::str).unwrap_or_default(),
+    };
+    params.shift_remove("key");
+    if !access::matches(Some(&given), &crate::notify::read_key()) {
+        return exchange.error(&t("The notify key is missing or wrong."), 403, "");
+    }
+    if posted && exchange.header("Content-Length").unwrap_or("0") != "0" {
+        let Some(body) = exchange.read_json(MAX_JSON) else {
+            return;
+        };
+        let Value::Dict(body) = body else {
+            return exchange.error("expected {\"text\": \"...\"}", 400, "");
+        };
+        params.extend(body);
+    }
+    let toast = match crate::notify::notice(&params) {
+        Ok(toast) => toast,
+        Err(why) => return exchange.error(&why, 400, ""),
+    };
+    let delivery = match state.controls.upgrade() {
+        Some(app) => app.notify(toast),
+        None => lp_services::host::Delivery {
+            shown: false,
+            reason: lp_services::host::NO_PANEL.into(),
+        },
+    };
+    let mut told = Dict::new();
+    told.insert("shown".into(), Value::Bool(delivery.shown));
+    told.insert("reason".into(), Value::Str(delivery.reason));
+    exchange.json(&Value::Dict(told), 200);
+}
+
+/// `/api/notify-key`: for Settings, the notify key (`POST`: a new one), the address that shows
+/// a notice and the command that does.
+fn notify_key(state: &State, exchange: &mut Exchange, renew: bool) {
+    let config = match lp_config::load_config(&state.config_file, lp_config::platform()) {
+        Ok(config) => config,
+        Err(why) => return exchange.error(&why.msg, 409, ""),
+    };
+    match crate::notify::key_state(&config, state.port, renew) {
+        Ok(told) => exchange.json(&told, 200),
+        Err(why) => unanswered(&why),
+    }
+}
+
 /// `POST /api/ai/hook` and `/api/ai/status`: a hook event of Claude Code or Codex, or Claude
 /// Code's status line, only while AI activity is on and with the AI key (`?key=` or the
 /// header). The status line is answered with the line it shows.
@@ -571,8 +647,8 @@ fn ai_in(state: &State, exchange: &mut Exchange, url: &Url, kind: &str) {
         Err(why) => return exchange.error(&why.msg, 409, ""),
     };
     let given = match exchange.header(lp_services::agents_setup::HEADER) {
-        Some(header) => header.to_string(),
-        None => crate::http::first(&query, "key").to_string(),
+        Some(header) if !header.is_empty() => header.to_string(),
+        _ => crate::http::first(&query, "key").to_string(),
     };
     let agent = crate::http::first(&query, "agent");
     let agent = match crate::ai::admitted(&config, Some(&given), agent) {

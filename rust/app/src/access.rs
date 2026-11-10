@@ -44,7 +44,7 @@ fn is_token(text: &str) -> bool {
 }
 
 /// secrets.token_urlsafe: so many random bytes in the characters of an address.
-fn token_urlsafe(bytes: usize) -> std::io::Result<String> {
+pub fn token_urlsafe(bytes: usize) -> std::io::Result<String> {
     const LETTERS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     let mut random = vec![0u8; bytes];
     getrandom::getrandom(&mut random).map_err(|why| std::io::Error::other(why.to_string()))?;

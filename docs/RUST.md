@@ -2015,6 +2015,10 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       (`/api/ai/setup`: their programs, settings files, Libre Panel's part in them, when they
       were last heard, where the plan's usage came from) with Libre Panel's part shown,
       added (a copy kept) or taken out.
+      Notices of other programs (`/api/notify`, `rust/app/src/notify.rs`): with the notify
+      key, where `allow_notify` is on, checked as notify.py checks them and put on the
+      running panel as the app's own toasts; Settings' key, address and command
+      (`/api/notify-key`).
       `libre-panel editor` serves alone, `start` with
       the panel, and writes its address where a later start finds it. 120 requests to
       Python's server and to this one compared: the status, the headers and the body, byte

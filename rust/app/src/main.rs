@@ -21,6 +21,7 @@ mod logs;
 mod mainloop;
 mod modes;
 mod news;
+mod notify;
 mod osinfo;
 mod pages;
 mod previews;

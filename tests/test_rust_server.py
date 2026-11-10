@@ -1623,3 +1623,59 @@ def test_ai_activity_comes_in_as_server_py_takes_it(servers: Any) -> None:
             re.sub(rb"127\.0\.0\.1:\d+", b"127.0.0.1:PORT", body) for *_, body in (theirs, ours)
         ]
         assert theirs[0] == ours[0] and said[1] == said[0], payload
+
+
+def test_notices_of_other_programs_come_in_as_server_py_takes_them(servers: Any) -> None:
+    """A notice from another program: refused while switched off and without the notify key
+    (header or address); its text, title, seconds, icon and level in the address or posted,
+    checked as notify.py checks them; without a panel it is not shown. Settings' notify key,
+    its address and command, and a new key."""
+    from libre_panel.icons import ICON_NAMES
+
+    ask, homes = servers
+
+    def both(request: str | bytes) -> None:
+        theirs, ours = ask(request)
+        assert ours == theirs, request
+
+    both(_get("/api/notify?key=nk&text=Hi"))  # (switched off)
+    for side in homes:
+        (side / "notify.json").write_text('{"key": "nk"}', encoding="utf-8")
+        text = (side / "config.toml").read_text("utf-8")
+        (side / "config.toml").write_text("allow_notify = true\n" + text, encoding="utf-8")
+    long = "x" * 161
+    for query in (
+        "text=Hi", "key=wrong&text=Hi", "key=nk", "key=nk&text=%20%20", f"key=nk&text={long}",
+        "key=nk&text=Hello%20%0A%20there&title=T&seconds=3&level=warning",
+        f"key=nk&text=Hi&icon={ICON_NAMES[0]}", "key=nk&text=Hi&icon=nope",
+        "key=nk&text=Hi&seconds=0.5", "key=nk&text=Hi&seconds=x", "key=nk&text=Hi&seconds=nan",
+        "key=nk&text=Hi&level=bad", f"key=nk&text=Hi&title={'t' * 41}",
+    ):  # fmt: skip
+        both(_get(f"/api/notify?{query}"))
+    both(_get("/api/notify?text=Hi", "X-Libre-Panel-Notify: nk"))
+    both(_get("/api/notify?text=Hi&key=wrong", "X-Libre-Panel-Notify: nk"))
+    for payload in ({"text": "Posted", "seconds": 2}, [1], {"text": 5}, {"title": None},
+                    {"text": "a", "seconds": True, "icon": "", "level": None}):  # fmt: skip
+        body = json.dumps(payload)
+        both(_get("/api/notify?key=nk", "Content-Type: application/json",
+                  f"Content-Length: {len(body)}", method="POST", body=body))  # fmt: skip
+    both(_get("/api/notify?key=nk&text=Hi", "Content-Length: 0", method="POST"))
+
+    def keyed(request: str) -> list[Any]:
+        found = []
+        for _, _, body in ask(request):
+            told = json.loads(body)
+            for name in ("address",):
+                if name in told:
+                    told[name] = re.sub(r"127\.0\.0\.1:\d+", "127.0.0.1:PORT", told[name])
+            found.append(told)
+        return found
+
+    theirs, ours = keyed(_get("/api/notify-key", WITH))
+    assert ours == theirs and theirs["key"] == "nk"
+    theirs, ours = keyed(_get("/api/notify-key", WITH, "Content-Length: 0", method="POST"))
+    assert ours["key"] != "nk" and len(ours["key"]) == len(theirs["key"])
+    for told in (theirs, ours):
+        told["address"] = told["address"].replace(told["key"], "KEY")
+        told["key"] = "KEY"
+    assert ours == theirs

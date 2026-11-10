@@ -589,6 +589,12 @@ impl BackgroundApp {
     }
 
     /// snapshot: what the app shows of the panel and its controls.
+    /// A short message on the panel from the app's server (a page, another program's
+    /// notice): whether it will show, or why not.
+    pub fn notify(&self, toast: lp_render::overlays::Toast) -> lp_services::host::Delivery {
+        lp_services::host::ServiceHost::new(&self.company.host, "editor").notify(toast)
+    }
+
     pub fn snapshot(&self) -> Dict {
         let mut told = Dict::new();
         told.insert("panel".into(), Value::Dict(self.panel.state()));
