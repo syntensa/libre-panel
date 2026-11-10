@@ -16,6 +16,7 @@ mod psutil;
 mod sensors;
 mod server;
 mod services;
+mod settings;
 mod switch;
 mod system;
 

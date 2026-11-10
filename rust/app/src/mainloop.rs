@@ -61,7 +61,12 @@ pub struct RunStatus {
     /// the theme on show
     pub theme: String,
     pub frames: u64,
+    /// which run of the loop this is, counted from 1 (0: none runs)
+    pub run: u64,
 }
+
+/// the runs of the loop so far
+static RUNS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// What the loop was started with (the command line's).
 #[derive(Clone, Debug, Default)]
@@ -182,6 +187,7 @@ impl MainLoop {
         if let Ok(mut status) = status.lock() {
             *status = RunStatus {
                 state: "starting",
+                run: RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1,
                 ..RunStatus::default()
             };
         }

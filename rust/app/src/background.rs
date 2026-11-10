@@ -195,6 +195,11 @@ impl PanelService {
         self.halt();
     }
 
+    /// Which run of the loop this is (0: none runs): a new start makes the sensors anew.
+    pub fn run(&self) -> u64 {
+        self.status.lock().map_or(0, |status| status.run)
+    }
+
     /// state: what the panel does: `state` ("paused", "error", "stopped", or the loop's:
     /// "starting", "waiting", "showing"), the error's `detail`, the `theme` on show and the
     /// `frames` shown.

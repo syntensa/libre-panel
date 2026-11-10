@@ -1917,12 +1917,19 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       turned, quit); the readings for the pickers (the panel's own in the background app,
       a hub of the server's own otherwise, the demo's where the computer gives none, each
       marked a sample or not, with the history asked for) and every key a theme can show.
+      The Settings (editor/settings.py, `rust/app/src/settings.rs`): config.toml with the
+      defaults filled in and what there is to choose from (sources, drivers, the services
+      and their options, transitions); settings written by their rules in one change to
+      the file, or refused in Python's words (the panels beside the first, the JSON
+      sources, the switches, the services' options, what names a program while Libre Panel
+      has the highest rights); the scenes; what About says. 150 writes compared, and the
+      two config.toml files after each.
       `libre-panel editor` serves alone, `start` with
       the panel, and writes its address where a later start finds it. 120 requests to
       Python's server and to this one compared: the status, the headers and the body, byte
       for byte; a run of the program controlled through its server until `quit` ends it.
-      Still to come: every other route (the themes' pictures and versions, saving,
-      settings, hardware, the Player, plugins' pages, …)
+      Still to come: every other route (the themes' pictures and versions, saving, the
+      Settings' panel, system, unlock, report, place search and folders, hardware, the Player, plugins' pages, …)
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app
 - [ ] the window (wry, tao), the tray icon, the command line, autostart, single instance,

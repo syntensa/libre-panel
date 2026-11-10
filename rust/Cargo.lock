@@ -393,6 +393,7 @@ dependencies = [
  "lp-services",
  "lp-text",
  "lp-theme",
+ "num-bigint",
  "windows-sys 0.61.2",
  "x11rb",
 ]

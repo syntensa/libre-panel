@@ -457,14 +457,16 @@ impl Exchange {
     }
 
     /// _read_json: the request's body as JSON; None (and the error answered) where it is
-    /// none.
+    /// none, None too (and nothing answered) where it says null.
     pub fn read_json(&mut self, limit: u64) -> Option<Value> {
         let body = self.read_body(limit, "request too large")?;
         let read = (String::from_utf8(body).ok()).and_then(|text| lp_py::json::loads(&text).ok());
         if read.is_none() {
             self.error("invalid JSON", 400, "");
         }
-        read
+        // (a body that says null is None to Python's routes as a body that is none is: they
+        // answer nothing)
+        read.filter(|value| !matches!(value, Value::None))
     }
 }
 

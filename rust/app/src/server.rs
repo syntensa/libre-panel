@@ -22,6 +22,7 @@ use crate::access;
 use crate::background::BackgroundApp;
 use crate::home::Home;
 use crate::http::{urlparse, Exchange, Url};
+use crate::settings::{Answer, Settings};
 
 /// the port the app's server takes where it is free
 pub const PORT: u16 = 8765;
@@ -44,6 +45,8 @@ pub struct State {
     last_request: Mutex<Option<f64>>,
     /// how the server's own hub of sensors is asked (a server without a background app)
     live: Mutex<Option<std::sync::mpsc::Sender<Reply>>>,
+    /// settings the panel loop takes in when it restarts
+    restart: crate::settings::Restart,
 }
 
 impl State {
@@ -194,6 +197,15 @@ const ROUTES: &[Route] = &[
         not_found(x)
     }),
     private("GET", "/api/readings", |s, x, _, u| readings(s, x, u)),
+    private("GET", "/api/settings", |s, x, _, _| {
+        settings(s, x, |told| told.read())
+    }),
+    private("GET", "/api/about", |s, x, _, _| {
+        settings(s, x, |told| told.about())
+    }),
+    private("GET", "/api/scenes", |s, x, _, _| {
+        settings(s, x, |told| told.scenes())
+    }),
     private("GET", "/api/themes/{theme+}", |s, x, m, _| {
         get_theme(s, x, m[0])
     }),
@@ -204,7 +216,45 @@ const ROUTES: &[Route] = &[
     private("GET", "/api/app", |s, x, _, _| app_state(s, x)),
     // -- writing -----------------------------------------------------------------------------------
     private("POST", "/api/app", |s, x, _, _| app_action(s, x)),
+    private("POST", "/api/settings", |s, x, _, _| {
+        settings_with(s, x, |told, asked| told.write(asked))
+    }),
+    private("POST", "/api/scenes", |s, x, _, _| {
+        settings_with(s, x, |told, asked| told.set_scene(asked))
+    }),
 ];
+
+fn settings_of(state: &State) -> Settings<'_> {
+    Settings {
+        home: &state.home,
+        config_file: &state.config_file,
+        controls: state.controls.upgrade(),
+        restart: &state.restart,
+    }
+}
+
+/// _settings: a route of the Settings (settings.rs): its answer, or why it is refused.
+fn settings(state: &State, exchange: &mut Exchange, method: fn(&Settings) -> Answer<Value>) {
+    match method(&settings_of(state)) {
+        Ok(told) => exchange.json(&told, 200),
+        Err(refused) => exchange.error(&refused.message, refused.status, ""),
+    }
+}
+
+/// A route of the Settings that takes what the request says.
+fn settings_with(
+    state: &State,
+    exchange: &mut Exchange,
+    method: fn(&Settings, &Value) -> Answer<Value>,
+) {
+    let Some(payload) = exchange.read_json(MAX_JSON) else {
+        return;
+    };
+    match method(&settings_of(state), &payload) {
+        Ok(told) => exchange.json(&told, 200),
+        Err(refused) => exchange.error(&refused.message, refused.status, ""),
+    }
+}
 
 fn not_found(exchange: &mut Exchange) {
     exchange.error("not found", 404, "");
@@ -884,6 +934,7 @@ impl EditorServer {
                 began: Instant::now(),
                 last_request: Mutex::new(None),
                 live: Mutex::new(None),
+                restart: crate::settings::Restart::default(),
             }),
             listener: Some(listener),
             stop: Arc::default(),

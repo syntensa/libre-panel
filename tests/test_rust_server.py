@@ -355,3 +355,183 @@ def test_the_readings_and_the_sensors_are_told_as_server_py_tells_them(servers: 
     theirs, ours = told(_get("/api/sensors", WITH))
     assert ours == theirs and len(ours) > 400
     assert {"media.cover", "game.name", "cpu.load"} <= {entry["key"] for entry in ours}
+
+
+def _post(path: str, payload: Any) -> bytes:
+    body = json.dumps(payload).encode("utf-8")
+    lines = [f"POST {path} HTTP/1.1", "Host: {host}", WITH, "Content-Type: application/json",
+             f"Content-Length: {len(body)}"]  # fmt: skip
+    return "\r\n".join(lines).encode("utf-8") + b"\r\n\r\n" + body
+
+
+# fmt: off
+SETTINGS = (  # what is written, a request each: what is refused leaves the file as it is
+    {"device.brightness": 70, "refresh_ms": 500, "device.rotate": 180},
+    {"refresh_ms": None, "device.at": [10, -20], "across": "  a picture.png "},
+    {"device.at": None, "across": None, "device.orientation": "portrait"},
+    {"device.brightness": 101}, {"device.brightness": True}, {"device.brightness": 7.0},
+    {"device.brightness": None}, {"device.rotate": 90}, {"device.rotate": 180.0},
+    {"device.model": "auto"}, {"device.model": "nothing"}, {"device.model": 5},
+    {"device.driver": "turzx"}, {"device.driver": "other"}, {"device.motion": "calm"},
+    {"device.still": "gif"}, {"device.video_range": "full"}, {"device.jpeg": "4:2:0"},
+    {"device.jpeg_quality": 49}, {"device.jpeg_quality": 95},
+    {"device.night": True, "device.night_from": "7:30", "device.night_to": "sunrise"},
+    {"device.night_from": "25:00"}, {"device.night_to": 7}, {"device.dark_on_quit": 1},
+    {"device.at": [1]}, {"device.at": [1, 2.5]}, {"device.at": [0, 5001]}, {"device.at": "x"},
+    {"device.at": []}, {"device.output": " "}, {"device.output": "out.png"},
+    {"device.port": "COM3"}, {"device.port": "x" * 65}, {"device.port": "a\x00b"},
+    {"video.mode": "on", "video.fps": 30, "video.device_fps": 120, "video.crf": 18},
+    {"video.fps": 61}, {"video.preset": "medium"}, {"video.preset": "slowest"},
+    {"video.keyframe_s": 2}, {"video.keyframe_s": 0.5}, {"video.keyframe_s": "2"},
+    {"video.maxrate": " 2M "}, {"video.maxrate": "1500k"}, {"video.maxrate": "2.5M"},
+    {"video.maxrate": "2G"}, {"video.maxrate": ".5M"}, {"video.maxrate": 2},
+    {"video.profile": "high", "video.encoder": "native", "video.engine_encoder": "card"},
+    {"video.pixels": "rgb", "video.direct": True, "video.rest": False},
+    {"video.local_clip": "clip.mp4", "video.clip_asked": True, "video.ffmpeg": "ffmpeg"},
+    {"video.engine_sends": False, "video.engine_layers": "no"},
+    {"check_updates": True, "allow_notify": True, "symbols": "classic"},
+    {"symbols": "other"}, {"cards": ["ai for 5m", "date", "playback"]}, {"cards": []},
+    {"cards": ["ai", "ai"]}, {"cards": ["nothing"]}, {"cards": "ai"}, {"cards": [1]},
+    {"cards": ["ai for long"]}, {"cards": None}, {"card_order": "turns"},
+    {"card_transition": "wipe"}, {"card_transition": "tube"}, {"accent": "#e0457b"},
+    {"accent": "system"}, {"accent": "red"}, {"accent": ""}, {"accent": "#E0457B1"},
+    {"card_opacity": 0}, {"card_opacity": 0.0}, {"card_opacity": False}, {"card_opacity": 39},
+    {"card_opacity": 80}, {"light_colours": True, "graph_steps": True},
+    {"hotkeys.enabled": False, "hotkeys.pause": "ctrl+alt+p", "hotkeys.timer": "Ctrl+Alt+T"},
+    {"hotkeys.open": "Ctrl+Alt+P"}, {"hotkeys.open": "p"}, {"hotkeys.open": ""},
+    {"hotkeys.pause": "Ctrl+Alt+P"}, {"hotkeys.pause": None}, {"hotkeys.other": "Ctrl+Alt+O"},
+    {"hotkeys.enabled": None},
+    {"sensors.providers": ["psutil", "load", "psutil"]}, {"sensors.providers": ["psutil"]},
+    {"sensors.providers": []}, {"sensors.providers": ["nothing"]}, {"sensors.providers": "x"},
+    {"sensors.librehardwaremonitor.mode": "webserver",
+     "sensors.librehardwaremonitor.url": "http://127.0.0.1:9/data.json"},
+    {"sensors.librehardwaremonitor.url": "ftp://x"}, {"sensors.json.update_s": 1},
+    {"sensors.json.update_s": 60},
+    {"sensors.json.sources": [
+        {"name": "home", "where": "http://127.0.0.1:9/a.json", "fields": {" t ": " a.b "},
+         "units": {"t": "°C"}},
+        {"name": "file_1", "where": "values.json", "fields": {}, "units": None}]},
+    {"sensors.json.sources": [{"name": "a b", "where": "x"}]},
+    {"sensors.json.sources": [{"name": "a", "where": "x"}, {"name": "a", "where": "y"}]},
+    {"sensors.json.sources": [{"name": "a"}]}, {"sensors.json.sources": [{"where": "x"}]},
+    {"sensors.json.sources": [5]}, {"sensors.json.sources": {}},
+    {"sensors.json.sources": [{"name": "a", "where": "x", "fields": {"": "v"}}]},
+    {"sensors.json.sources": [{"name": "a", "where": "x", "fields": [1]}]},
+    {"sensors.json.sources": []},
+    {"weather.enabled": True}, {"weather.latitude": 52.52}, {"weather.longitude": 181},
+    {"weather.latitude": 52.52, "weather.longitude": 13, "weather.place": " Berlin ",
+     "weather.enabled": True, "weather.units": "imperial", "weather.update_minutes": 30},
+    {"weather.latitude": None}, {"weather.latitude": None, "weather.longitude": None},
+    {"weather.enabled": False, "weather.latitude": None, "weather.longitude": None,
+     "weather.place": None},
+    {"weather.update_minutes": 4}, {"weather.units": None},
+    {"transitions.default": "tube", "transitions.speed": "slow", "transitions.game": "",
+     "transitions.media": "random", "transitions.random": ["fade", "cut", "fade"]},
+    {"transitions.default": ""}, {"transitions.speed": "slower"}, {"transitions.other": "cut"},
+    {"transitions.random": []}, {"transitions.random": ["nothing"]}, {"transitions.game": 5},
+    {"switches.glow": True, "switches.lumen.glow": False}, {"switches.glow": None},
+    {"switches.Glow": True}, {"switches.a.b.c": True}, {"switches.glow": "on"},
+    {"switches.": True},
+    {"services.timer.minutes": 5}, {"services.timer.nothing": 5}, {"services.nothing.x": 5},
+    {"services.timer": 5}, {"services.timer.minutes": None}, {"services.timer.minutes": "5"},
+    {"services.game.games": ["a.exe", 5, 1.5, True]}, {"services.game.games": [["a"]]},
+    {"services.game.games": [None]}, {"services.cooling.database": "cooling.db"},
+    {"services.notices.sound": True}, {"services.power.idle_minutes": 2.5},
+    {"panels": [{"theme": "slate", "on": False, "model": "auto", "brightness": 40,
+                 "video": {"mode": "auto", "local_clip": "", "clip_asked": True},
+                 "at": [100, 0], "follow": None, "output": "libre-panel-frame-2.png"},
+                {"theme": "", "driver": "virtual", "follow": True, "brightness_offset": -10,
+                 "alarm_theme": "lumen-companion", "game_theme": "arena", "at": None}]},
+    {"panels": [{"video": {"mode": "fast"}}]}, {"panels": [{"video": {"other": 1}}]},
+    {"panels": [{"video": []}]}, {"panels": [{"nothing": 1}]}, {"panels": [{"beside": []}]},
+    {"panels": [{"brightness": 101}]}, {"panels": [{"brightness_offset": 51}]},
+    {"panels": [{"follow": 1}]}, {"panels": [{"model": None}]}, {"panels": [5]},
+    {"panels": [{}, {}, {}, {}]}, {"panels": {}}, {"panels": [{"night_from": "sunset"}]},
+    {"panels": []},
+    {"nothing": 1}, {"device.nothing": 1}, {"theme": "slate"}, {"language": "en"},
+    {"device.brightness": 55, "device.rotate": 90},  # (one refused: none written)
+)
+OTHER = ([], {}, {"set": {}}, {"set": []}, {"set": 5}, 5, "set",
+         {"set": {f"switches.s{n}": True for n in range(61)}})  # fmt: skip
+SCENES = (
+    {"action": "save", "name": "Work"}, {"action": "save", "name": " Play "},
+    {"action": "on", "name": "Work"}, {"action": "on", "name": "nothing"},
+    {"action": "on"}, {"action": "save", "name": ""}, {"action": "save", "name": "x" * 41},
+    {"action": "delete", "name": "Play"}, {"action": "delete", "name": "Play"},
+    {"action": "off", "name": "Work"}, {"action": "on", "name": 5}, {"name": "Work"}, [], 5,
+    {"action": "on", "name": "Work"},
+)
+# fmt: on
+
+
+def _with_rights() -> bool:
+    """Whether the tests run with administrator rights (a CI runner on Windows) or as root (a
+    container): the program sees that, whatever the tests make Python believe."""
+    if sys.platform == "win32":
+        import ctypes
+
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    return os.geteuid() == 0
+
+
+def test_the_settings_are_read_and_written_as_settings_py_does(
+    servers: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The app's Settings: config.toml with the defaults filled in and what there is to choose
+    from; each setting written by its rule, or refused in the same words; the panels beside
+    the first, the JSON sources, the switches and the services' options; the scenes kept,
+    put on and taken out; what the About page says. After each request the two config.toml
+    files hold the same. With the highest rights the settings that name a program or a file
+    are refused, by both."""
+    from libre_panel.editor import access
+
+    ask, homes = servers
+    monkeypatch.setattr(access, "elevated", _with_rights)
+
+    def both(request: str | bytes, what: Any) -> Any:
+        theirs, ours = ask(request)
+        told = []
+        for home, (status, headers, body) in zip(homes, (theirs, ours), strict=True):
+            assert headers["Content-Type"] == "application/json", what
+            text = body.decode("utf-8").replace(json.dumps(str(home))[1:-1], "HOME")
+            told.append((status, json.loads(text)))
+        assert told[1] == told[0], what
+        files = [(home / "config.toml").read_text(encoding="utf-8") for home in homes]
+        assert files[1] == files[0], what
+        return told[0]
+
+    status, read = both(_get("/api/settings", WITH), "read")
+    assert status == "HTTP/1.0 200 OK" and len(read["catalog"]["services"]) == 11
+    assert read["config"]["device"]["driver"] == "virtual" and read["restart"] == []
+    written = 0
+    for changes in SETTINGS:
+        status, told = both(_post("/api/settings", {"set": changes}), changes)
+        written += status == "HTTP/1.0 200 OK"
+        assert ("error" in told) is (status != "HTTP/1.0 200 OK"), changes
+    assert 40 < written < len(SETTINGS) - 50
+    for payload in OTHER:
+        assert both(_post("/api/settings", payload), payload)[0] == "HTTP/1.0 400 Bad Request"
+    # (a body that says null is no body to Python's routes: nothing is answered)
+    theirs, ours = ask(_post("/api/settings", None))
+    assert ours == theirs == ("", {}, b"")
+    status, read = both(_get("/api/settings", WITH), "read again")
+    assert read["restart"] and read["config"]["panels"] == []
+    for payload in SCENES:
+        both(_post("/api/scenes", payload), payload)
+    status, scenes = both(_get("/api/scenes", WITH), "scenes")
+    assert [scene["name"] for scene in scenes["scenes"]] == ["Work"] and scenes["on"] == "Work"
+    # a scene is on: the panels written anew take it off
+    both(_post("/api/settings", {"set": {"panels": [{"theme": "slate"}]}}), "panels")
+    assert both(_get("/api/scenes", WITH), "scenes")[1]["on"] == ""
+    # a config.toml that cannot be read
+    for home in homes:
+        (home / "config.toml").write_text("theme = 5\n", encoding="utf-8")
+    for request in (_get("/api/settings", WITH), _get("/api/scenes", WITH),
+                    _post("/api/settings", {"set": {"refresh_ms": 500}}),
+                    _post("/api/scenes", {"action": "on", "name": ""})):  # fmt: skip
+        assert both(request, request)[0] in ("HTTP/1.0 409 Conflict", "HTTP/1.0 400 Bad Request")
+    theirs, ours = (json.loads(body) for _, _, body in ask(_get("/api/about", WITH)))
+    for home, about in zip(homes, (theirs, ours), strict=True):
+        assert about.pop("version") and about["folders"]["config"] == str(home)
+        about["folders"] = {k: v.replace(str(home), "HOME") for k, v in about["folders"].items()}
+    assert ours == theirs and "Pillow" in ours["notice"]
