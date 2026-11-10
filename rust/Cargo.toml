@@ -2,7 +2,7 @@
 # against the Python app it replaces.
 [workspace]
 resolver = "2"
-members = ["py", "pixels", "decode", "text", "devices", "i18n", "theme", "render", "check"]
+members = ["py", "pixels", "decode", "text", "devices", "i18n", "theme", "config", "render", "check"]
 
 [workspace.package]
 version = "0.1.0"

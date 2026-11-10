@@ -129,6 +129,69 @@ pub fn t(text: &str) -> String {
     language().t(text)
 }
 
+/// What `t(text, **values)` raises where a message cannot take its values: the exception's
+/// class (ValueError, KeyError ...) and its message (`str(e)`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FormatError {
+    pub class: &'static str,
+    pub msg: String,
+}
+
+impl Language {
+    /// t(text, **values): the translation with its `{name}` placeholders filled from
+    /// `values`. With no values the message stays as it is, braces and all.
+    pub fn t_format(&self, text: &str, values: &[(&str, Value)]) -> Result<String, FormatError> {
+        use lp_py::format::{FmtError, Kind};
+        let message = self.t(text);
+        if values.is_empty() {
+            return Ok(message);
+        }
+        // (a name the values do not have is no error of the formatter's own classes: kept here)
+        let missing = std::cell::RefCell::new(None);
+        let get_field = |name: &str| {
+            if let Some((_, value)) = values.iter().find(|(given, _)| *given == name) {
+                return Ok(value.clone());
+            }
+            let numbered = !name.is_empty() && name.chars().all(|c| lp_py::decimal(c).is_some());
+            *missing.borrow_mut() = Some(match lp_py::int_of_str(name) {
+                Some(index) if numbered => FormatError {
+                    class: "IndexError",
+                    msg: format!(
+                        "Replacement index {index} out of range for positional args tuple"
+                    ),
+                },
+                _ if name.contains(['.', '[']) => FormatError {
+                    class: "Unsupported",
+                    msg: format!("a part of a value in a message: {name}"),
+                },
+                _ => FormatError {
+                    class: "KeyError",
+                    msg: lp_py::repr(name),
+                },
+            });
+            Err(FmtError {
+                kind: Kind::Value,
+                msg: String::new(),
+            })
+        };
+        lp_py::format::vformat(&message, &get_field, &lp_py::format::format).map_err(|e| {
+            missing.take().unwrap_or(FormatError {
+                class: match e.kind {
+                    Kind::Value => "ValueError",
+                    Kind::Type => "TypeError",
+                    Kind::Overflow => "OverflowError",
+                },
+                msg: e.msg,
+            })
+        })
+    }
+}
+
+/// t(text, **values) in the language of this process.
+pub fn t_format(text: &str, values: &[(&str, Value)]) -> Result<String, FormatError> {
+    language().t_format(text, values)
+}
+
 /// _windows_language: the name of the user's Windows language (`GetUserDefaultUILanguage`) as
 /// Python's locale.windows_locale names it ("" for one it does not know).
 pub fn windows_name(id: u32) -> &'static str {

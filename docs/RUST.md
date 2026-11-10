@@ -71,6 +71,7 @@ all of it. It is the reference every Rust piece is checked against:
 | decode | pictures from their files as Pillow decodes them (PNG, GIF, JPEG, WebP) | Image.open, Pillow's decoders |
 | text | letters and their layout as Pillow draws them (FreeType, shaping as libraqm) | fonts/, ImageFont |
 | i18n | the app's languages: its texts and the fields' names in each, the system's language | i18n.py |
+| config | config.toml as the app reads it: every setting, its defaults and its errors | config.py, sequence.py, hotkeys.py |
 | theme | themes: reading, checking, versions per shape, adapting, the modules and cards laid out | theme/ |
 | render | the renderer and every widget, effect, motion and transition | render/ |
 | devices | TURZX (from the engine), Hongtai and the MAJESTY, Waveshare, udisp, BeadaPanel, NZXT, virtual, monitor | devices/ |
@@ -1570,9 +1571,18 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       the error in Python's words, `\r\n` and `\r` as one new line. The tests: generated
       texts beside tomllib itself, value by value and message by message, and nesting
       at both sides of the end, from six depths of the caller
-- [ ] config.toml and its folders; the panel a config is for (theme/defaults.py's
-      panel_model: the configured model, the one a display reports, a TURZX panel on the USB
-      bus) and the theme of its normal page
+- [x] config.toml read (lp-config: config.py's parse_config and load_config): every setting
+      of every section with its defaults and its error in config.py's words (the panels
+      beside the first, scenes, screens in turn, the cards and their times, the shortcuts as
+      hotkeys.py reads them, in the app's language), the errors Python lets through as they
+      are (an int too large for a float, int()'s 4300 digits), each further panel's own
+      config (for_panel), a file that is missing, a folder, no UTF-8 or no TOML. The tests:
+      every setting given every kind of value, some 11 000 texts, and 1500 of several
+      settings at once, beside config.py on Linux, Windows and macOS, in English and German
+- [ ] config.toml written (the commented default, a setting changed in place), its folders
+      (config_dir, portable, the user's themes, the log); the panel a config is for
+      (theme/defaults.py's panel_model: the configured model, the one a display reports, a
+      TURZX panel on the USB bus) and the theme of its normal page
 - [ ] community themes as one file (theme/share.py): the zip read as Python's zipfile reads it
       (every entry, name, method and damage) and written as it writes it, every check of an
       import in its words, the files a theme names, what is scrubbed from it

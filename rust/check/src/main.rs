@@ -8,6 +8,7 @@
 
 use std::io::{self, BufRead, BufWriter, Write};
 
+mod config;
 mod devices;
 
 use base64::engine::general_purpose::STANDARD;
@@ -1797,6 +1798,7 @@ fn run(case: &Value) -> Result<Value, String> {
             json!({"results": results, "floats": floats, "general": general,
                 "max_depth": lp_py::json::MAX_DEPTH})
         }
+        "config" => config::run(case)?,
         "toml" => {
             // each text read as tomllib.loads reads it; each file's bytes as
             // Path.read_text(encoding="utf-8") and then tomllib.loads read them; `frame`: how

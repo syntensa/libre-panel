@@ -1,0 +1,17 @@
+[package]
+name = "lp-config"
+description = "Libre Panel's config.toml as config.py reads and checks it"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+lp-py = { path = "../py" }
+lp-devices = { path = "../devices" }
+lp-i18n = { path = "../i18n" }
+lp-theme = { path = "../theme" }
+indexmap = "2"
+num-bigint = "0.4"
+num-traits = "0.2"
