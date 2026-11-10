@@ -19,6 +19,7 @@ pub const SCRIPT_ENV: &str = "LP_HOST_SCRIPT";
 /// The services of this build.
 pub fn parts() -> IndexMap<&'static str, Part> {
     let mut parts = IndexMap::new();
+    parts.insert("agents", lp_services::agents_service::part());
     parts.insert("power", lp_services::power::part());
     parts.insert("timer", lp_services::timer::part());
     if std::env::var_os(SCRIPT_ENV).is_some() {
@@ -37,7 +38,8 @@ pub fn parts() -> IndexMap<&'static str, Part> {
 /// start: `["publish", key, value, unit, label]`, `["state", key, value]`, `["unpublish",
 /// key]`, `["want", key, ...]`, `["theme", name or null, transition or null, priority, mode
 /// ("*": every)]`, `["mode", name or null, transition or null]`, `["notify", text, kind,
-/// rank, seconds or null]`, `["shortcut", action]` (a keyboard shortcut pressed).
+/// rank, seconds or null]`, `["shortcut", action]` (a keyboard shortcut pressed), `["hook",
+/// agent, event]` and `["status", agent, data]` (an AI agent's hook and status line).
 struct Script {
     host: ServiceHost,
     stop: Arc<AtomicBool>,
@@ -90,6 +92,10 @@ fn follow(host: &ServiceHost, step: &[Value]) -> Result<(), String> {
             let action = key.to_string();
             host.hub()
                 .emit(lp_services::host::Event::Shortcut { action }, false);
+        }
+        "hook" => lp_services::agents::board().hook(key, step.get(3).unwrap_or(&Value::None)),
+        "status" => {
+            lp_services::agents::board().status(key, step.get(3).unwrap_or(&Value::None));
         }
         "notify" => {
             let toast = Toast {

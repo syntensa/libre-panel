@@ -1495,3 +1495,111 @@ def test_power_is_counted_and_kept(tmp_path: Path) -> None:
     assert kept["day"] == time.strftime("%Y-%m-%d") and kept["month"] == time.strftime("%Y-%m")
     # 3600 W for some three seconds: about a watt hour a second
     assert 1.5 < kept["today_wh"] < 4.5 and kept["month_wh"] == kept["today_wh"], kept
+
+
+@pytest.mark.skipif(os.name == "nt", reason="stand-in programs written for the shell")
+def test_ai_activity_comes_from_the_board_and_the_agents_programs(tmp_path: Path) -> None:
+    """`agents` among the services: what an agent's status line and hooks say (here the
+    test's script) and, while the theme shows `ai.*`, the plan's usage the programs on the
+    PATH answer with: Claude Code asked headless with its own reports off, Codex's
+    app-server asked for its limits."""
+    folder = tmp_path / "themes" / "red"
+    folder.mkdir(parents=True)
+
+    def bar(row: int, sensor: str, colour: str) -> dict[str, object]:
+        return {"type": "bar", "id": f"bar{row}", "x": 0, "y": row * 60, "w": 800, "h": 40,
+                "sensor": sensor, "color": colour, "background": "#000000",
+                "radius": 0}  # fmt: skip
+
+    theme = {"format": "libre-panel-theme/1", "name": "Red",
+             "display": {"model": "turing-5", "orientation": "landscape", "width": 800,
+                         "height": 480},
+             "palette": {"bg": "#DC1E1E"}, "font": "builtin:Barlow-Medium",
+             "background": {"color": "@bg", "image": None}, "refresh_ms": 200,
+             "widgets": [bar(0, "ai.claude.five_hour", "#00FF00"),
+                         bar(1, "ai.codex.week", "#0000FF"),
+                         bar(2, "ai.claude.context", "#FFFF00")]}  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+    (tmp_path / "config.toml").write_text(
+        'theme = "red"\nfps = 10\n[device]\ndriver = "virtual"\noutput = "panel.png"\n'
+        '[sensors]\nproviders = []\n[services]\nenabled = ["agents"]\n',
+        encoding="utf-8",
+    )
+    tools = tmp_path / "bin"
+    tools.mkdir()
+    usage = {"type": "control_response",
+             "response": {"request_id": "libre-panel-usage", "subtype": "success",
+                          "response": {"rate_limits_available": True, "rate_limits": {
+                              "five_hour": {"utilization": 62.5,
+                                            "resets_at": "2099-01-01T00:00:00Z"}}}}}  # fmt: skip
+    limits = {"id": 2, "result": {"rateLimits": {"secondary": {
+        "usedPercent": 40, "windowDurationMins": 10080, "resetsAt": 4070908800}}}}  # fmt: skip
+    (tools / "claude").write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = "--version" ]; then echo "2.1.300 (Claude Code)"; exit 0; fi\n'
+        f'echo "$@" > "{tmp_path}/claude.args"\n'
+        'echo "$DISABLE_TELEMETRY-$CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC" '
+        f'> "{tmp_path}/claude.env"\n'
+        f'read line\necho "$line" > "{tmp_path}/claude.in"\n'
+        """echo '{"type": "system", "subtype": "init"}'\n"""
+        f"echo '{json.dumps(usage)}'\nsleep 20\n",
+        encoding="utf-8",
+    )
+    (tools / "codex").write_text(
+        "#!/bin/sh\n"
+        f'echo "$@" > "{tmp_path}/codex.args"\n'
+        "while read line; do\n"
+        '  case "$line" in\n'
+        """    *'"id": 1'*) echo '{"id": 1, "result": {}}';;\n"""
+        f"""    *'"id": 2'*) echo '{json.dumps(limits)}';;\n"""
+        """    *'"id": 3'*) echo '{"id": 3, "result": {"dailyUsageBuckets": []}}';;\n"""
+        "  esac\ndone\n",
+        encoding="utf-8",
+    )
+    for tool in ("claude", "codex"):
+        (tools / tool).chmod(0o755)
+    script = tmp_path / "script.json"
+    script.write_text(json.dumps([
+        [0.5, "status", "claude", {"session_id": "s", "context_window": {"used_percentage": 25}}],
+        [0.6, "hook", "claude", {"hook_event_name": "PreToolUse", "session_id": "s"}],
+    ]), encoding="utf-8")  # fmt: skip
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries(), "LP_HOST_SCRIPT": str(script),
+           "PATH": f"{tools}{os.pathsep}{os.environ.get('PATH', '')}",
+           "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "DISABLE_TELEMETRY": "0"}  # fmt: skip
+    colours = {bytes((0, 255, 0)): 500, bytes((0, 0, 255)): 320, bytes((255, 255, 0)): 200}
+    counts: dict[bytes, int] = {}
+    with subprocess.Popen([str(_program()), "run"], env=env, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        began = time.monotonic()
+        try:
+            while time.monotonic() < began + 20:
+                try:
+                    with Image.open(tmp_path / "panel.png") as frame:
+                        data = frame.convert("RGB").tobytes()
+                    dots = [data[at : at + 3] for at in range(0, len(data), 3)]
+                    counts = {colour: dots.count(colour) for colour in colours}
+                except (OSError, SyntaxError, ValueError):
+                    pass  # (not there yet, or being put in its place)
+                if counts and all(abs(counts[c] - columns * 40) <= 80
+                                  for c, columns in colours.items()):  # fmt: skip
+                    break
+                time.sleep(0.1)
+        finally:
+            program.send_signal(signal.SIGINT)
+            said = program.communicate(timeout=30)[1]
+    assert "service 'agents' started" in said, said
+    # each bar as long as its share: 62.5 % of the 5 hours, 40 % of the week, a quarter of
+    # the context window
+    assert {c: round(n / 40) for c, n in counts.items()} == colours, (counts, said)
+    assert "AI activity: the first word from claude (statusLine)" in said, said
+    assert (tmp_path / "claude.args").read_text() == (
+        "--safe-mode --no-session-persistence -p --input-format stream-json --output-format "
+        "stream-json --verbose\n"
+    )
+    assert json.loads((tmp_path / "claude.in").read_text()) == {
+        "type": "control_request", "request_id": "libre-panel-usage",
+        "request": {"subtype": "get_usage", "skip_behaviors": True}}  # fmt: skip
+    # (its own reports off, and without the switch that would keep it from asking)
+    assert (tmp_path / "claude.env").read_text() == "1-\n"
+    assert (tmp_path / "codex.args").read_text() == "app-server\n"

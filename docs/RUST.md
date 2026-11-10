@@ -1809,8 +1809,19 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       service's folder (`plugins-data/power/power.json`) every minute and at the end. 300
       runs of samples compared with Python; in the app, counted from a reading of the
       test's and kept at the end
-- [ ] game mode, notices, AI activity (Claude Code, Codex), downloads, memory and its store,
-      cooling, autopilot, devices
+- [x] AI activity (agents.py and services/agents.py, lp-services' agents): the board the
+      agents' hooks and Claude Code's status line write to and its readings `ai.*` (the
+      state over the sessions, the sessions one by one, the cost of the day, the plan's
+      usage), the notice when a session begins to wait, the plan's usage asked of the
+      programs in the background while a theme shows `ai.*` (Claude Code headless with its
+      own reports off, Codex's app-server), the hooks and the status line in the agents'
+      settings (added, taken out, found; the file kept beside it) and the AI key. 250 boards
+      of steps, 400 answers of the programs and 400 settings compared with Python; in the
+      app, a status line and stand-in programs on the PATH fill a theme's bars. The
+      address the hooks post to (`/api/ai/`) comes with the server (R9). The main loop now
+      tells the sources and the services what the theme on show reads (it told only what
+      the pages read)
+- [ ] game mode, notices, downloads, memory and its store, cooling, autopilot, devices
 
 ### R9 the app
 - [ ] the server and every route of its API, the same JSON

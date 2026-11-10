@@ -171,6 +171,8 @@ struct State {
     listeners: IndexMap<&'static str, Vec<(Option<String>, Callback)>>,
     /// the readings each service reads
     wants: IndexMap<String, BTreeSet<String>>,
+    /// the keys (or patterns) the themes on show read
+    shown: BTreeSet<String>,
     /// the newest sample and fresh not yet delivered
     newest: IndexMap<&'static str, Event>,
     sampler_stop: bool,
@@ -279,6 +281,22 @@ impl PluginHost {
     /// Every key (or pattern) a service reads.
     pub fn wanted(&self) -> BTreeSet<String> {
         self.with(|state| state.wants.values().flatten().cloned().collect())
+    }
+
+    /// What the themes on show read (the main loop says it).
+    pub fn set_shown(&self, keys: BTreeSet<String>) {
+        self.with(|state| state.shown = keys);
+    }
+
+    /// wanted: whether a theme on show reads a key starting with `prefix` (or a pattern such
+    /// as `net.*` that takes it in).
+    pub fn shows(&self, prefix: &str) -> bool {
+        self.with(|state| {
+            state.shown.iter().any(|key| {
+                let head = key.split(['*', '?', '[']).next().unwrap_or("");
+                key.starts_with(prefix) || (head != key && prefix.starts_with(head))
+            })
+        })
     }
 
     pub fn unpublish(&self, key: &str) {

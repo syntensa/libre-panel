@@ -102,6 +102,8 @@ pub struct MainLoop {
     pages: PageSwitch,
     /// the readings asked of the sources: the theme's, the services' and the pages'
     wants: BTreeSet<String>,
+    /// what the themes on show read, as the services' host was told
+    theme_reads: BTreeSet<String>,
     toasts: Option<ToastLayer>,
     judged: Arc<Mutex<Judged>>,
     alarm: AlarmEdge,
@@ -207,6 +209,7 @@ impl MainLoop {
             lacking: Vec::new(),
             pages: PageSwitch::new(),
             wants: BTreeSet::new(),
+            theme_reads: BTreeSet::new(),
             toasts: None,
             judged,
             alarm: AlarmEdge::new(),
@@ -275,11 +278,16 @@ impl MainLoop {
 
     /// The readings the sources are asked for: those the theme on show reads, those the
     /// services want and those the pages read.
-    fn rewant(&mut self) {
+    fn rewant(&mut self, renderer: &Renderer) {
         let mut wants: BTreeSet<String> = self.host.wanted();
-        wants.extend(self.pages.reads.iter().map(|key| (*key).to_string()));
-        if let Some(renderer) = &self.renderer {
-            wants.extend(renderer.reads());
+        let mut shown: BTreeSet<String> = (self.pages.reads.iter())
+            .map(|key| (*key).to_string())
+            .collect();
+        shown.extend(renderer.reads());
+        wants.extend(shown.iter().cloned());
+        if shown != self.theme_reads {
+            self.host.set_shown(shown.clone());
+            self.theme_reads = shown;
         }
         if wants != self.wants {
             self.hub.want(wants.iter().cloned());
@@ -818,7 +826,7 @@ impl MainLoop {
             }
         };
         self.snapshot = Some(snapshot.clone());
-        self.rewant();
+        self.rewant(&renderer);
 
         // the messages (while the panel is away they wait at the host, the newest), and the
         // alarm's edge

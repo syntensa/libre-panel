@@ -491,11 +491,15 @@ dependencies = [
 name = "lp-services"
 version = "0.1.0"
 dependencies = [
+ "getrandom",
  "indexmap",
+ "lp-devices",
  "lp-i18n",
  "lp-pixels",
  "lp-py",
  "lp-render",
+ "num-bigint",
+ "sha2",
 ]
 
 [[package]]

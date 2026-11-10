@@ -12,4 +12,8 @@ lp-py = { path = "../py" }
 lp-render = { path = "../render" }
 lp-pixels = { path = "../pixels" }
 lp-i18n = { path = "../i18n" }
+lp-devices = { path = "../devices" }
 indexmap = "2"
+num-bigint = "0.4"
+sha2 = "0.10"
+getrandom = "0.2"

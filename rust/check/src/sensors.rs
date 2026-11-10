@@ -1622,6 +1622,213 @@ fn power(case: &Value) -> Result<Value, String> {
     Ok(json!({"runs": runs}))
 }
 
+/// A JSON text as Python's value (none for one that is no JSON).
+fn loaded(text: &Value) -> lp_py::Value {
+    lp_py::json::loads(text.as_str().unwrap_or("null")).unwrap_or(lp_py::Value::None)
+}
+
+fn number_or_null(value: Option<f64>) -> Value {
+    value.map_or(
+        Value::Null,
+        |value| json!({"float": lp_py::float_repr(value)}),
+    )
+}
+
+/// agents: each board's steps `[now, what, ...]` and what they give; what the programs'
+/// answers hold; and the agents' settings with and without Libre Panel's hooks.
+fn agents(case: &Value) -> Result<Value, String> {
+    use lp_services::agents::Board;
+    use lp_services::agents_service::{look, Options};
+    use lp_services::{agents_setup as setup, agents_usage as usage};
+    use std::sync::{Arc, Mutex};
+    let text = |value: &Value| value.as_str().unwrap_or("").to_string();
+    let float = |value: &Value| match value {
+        Value::Null => None,
+        Value::String(text) => lp_py::float_of_str(text),
+        other => other.as_f64(),
+    };
+    let mut boards = Vec::new();
+    for steps in case["boards"].as_array().into_iter().flatten() {
+        let now = Arc::new(Mutex::new(0.0f64));
+        let clock = Arc::clone(&now);
+        let board = Board::new(Box::new(move || clock.lock().map_or(0.0, |now| *now)));
+        let mut states = std::collections::HashMap::new();
+        let mut out = Vec::new();
+        for step in steps.as_array().into_iter().flatten() {
+            if let Ok(mut now) = now.lock() {
+                *now = step[0].as_f64().unwrap_or(0.0);
+            }
+            let agent = text(&step[2]);
+            let rows = |rows: Vec<(String, lp_py::Value)>| {
+                json!(rows
+                    .iter()
+                    .map(|(key, value)| json!([key, plain(value)]))
+                    .collect::<Vec<_>>())
+            };
+            out.push(match step[1].as_str().unwrap_or("") {
+                "hook" => {
+                    board.hook(&agent, &loaded(&step[3]));
+                    Value::Null
+                }
+                "status" => json!(board.status(&agent, &loaded(&step[3]))),
+                "quota" => {
+                    let (used, resets) = (float(&step[4]).unwrap_or(0.0), float(&step[5]));
+                    board.quota(&agent, &text(&step[3]), used, resets, &text(&step[6]));
+                    Value::Null
+                }
+                "tokens" => {
+                    board.tokens(&agent, float(&step[3]), float(&step[4]));
+                    Value::Null
+                }
+                "failed" => {
+                    board.usage_failed(&agent, &text(&step[3]), &text(&step[4]), &text(&step[5]));
+                    Value::Null
+                }
+                "readings" => rows(board.readings()),
+                "usage" => match board.usage(&agent) {
+                    Some(usage) => json!([
+                        usage.source,
+                        number_or_null(usage.ago),
+                        usage.error,
+                        usage.reason,
+                        usage.version
+                    ]),
+                    None => Value::Null,
+                },
+                "heard" => {
+                    let (ago, what) = board.last_heard(&agent);
+                    json!([number_or_null(ago), what])
+                }
+                "state" => {
+                    let (state, tool, since) = board.state(&agent);
+                    json!([state, tool, number_or_null(Some(since))])
+                }
+                "look" => {
+                    let on = |n: usize| step[n].as_bool().unwrap_or(false);
+                    let options = Options {
+                        claude_usage: true,
+                        codex_usage: true,
+                        task: on(2),
+                        notice: on(3),
+                    };
+                    let (shown, waiting) = look(board.readings(), &options, &mut states);
+                    let waiting: Vec<Value> = waiting
+                        .iter()
+                        .map(|waiting| json!([waiting.agent, waiting.task]))
+                        .collect();
+                    json!({"published": rows(shown), "waiting": waiting, "notes": board.notes()})
+                }
+                other => return Err(format!("no such step: {other}")),
+            });
+        }
+        boards.push(json!(out));
+    }
+    let lines = |value: &Value| -> Vec<String> {
+        value.as_array().into_iter().flatten().map(text).collect()
+    };
+    let failed = |why: usage::UsageError| json!({"err": [why.text, why.reason, why.version]});
+    let quotas = |quotas: &usage::Quotas| -> Vec<Value> {
+        quotas
+            .iter()
+            .map(|(window, (used, resets))| {
+                json!([window, number_or_null(Some(*used)), number_or_null(*resets)])
+            })
+            .collect()
+    };
+    let mut answers = Vec::new();
+    for answer in case["answers"].as_array().into_iter().flatten() {
+        let said = lines(&answer[1]);
+        let said = said.iter().map(String::as_str);
+        answers.push(match answer[0].as_str().unwrap_or("") {
+            "claude" => {
+                match usage::claude_usage_reply(said).and_then(|d| usage::claude_quotas(&d)) {
+                    Ok(found) => json!({"ok": quotas(&found)}),
+                    Err(why) => failed(why),
+                }
+            }
+            _ => match usage::codex_reply(said) {
+                Ok((found, used)) => {
+                    let tokens = used.map(|used| {
+                        let (day, week) =
+                            usage::codex_tokens(&used, &text(&answer[2]), &text(&answer[3]));
+                        json!([number_or_null(Some(day)), number_or_null(Some(week))])
+                    });
+                    json!({"ok": quotas(&found), "tokens": tokens})
+                }
+                Err(why) => failed(why),
+            },
+        });
+    }
+    let versions: Vec<Value> = (case["versions"].as_array().into_iter().flatten())
+        .map(|said| json!(usage::version_of(&text(said))))
+        .collect();
+    let environment = usage::claude_environment(
+        (case["environment"].as_array().into_iter().flatten())
+            .map(|pair| (text(&pair[0]), text(&pair[1]))),
+    );
+    let table = |value: &Value| match loaded(value) {
+        lp_py::Value::Dict(table) => table,
+        _ => lp_py::Dict::new(),
+    };
+    let written = |made: Result<lp_py::Dict, String>| match made {
+        Ok(made) => {
+            let how = lp_py::json::Dumps::default();
+            json!({"ok": lp_py::json::dumps(&lp_py::Value::Dict(made), &how)})
+        }
+        Err(why) => json!({"err": why}),
+    };
+    let mut settings = Vec::new();
+    for item in case["settings"].as_array().into_iter().flatten() {
+        let given = table(&item[0]);
+        let (port, secret) = (text(&item[1]), text(&item[2]));
+        let events = lines(&item[4]);
+        let events: Vec<&str> = events.iter().map(String::as_str).collect();
+        let there = setup::installed(&given);
+        settings.push(json!({
+            "with": written(setup::with_hooks(&given, &events, &text(&item[5]))),
+            "without": written(Ok(setup::without_ours(&given))),
+            "installed": [there.hooks, there.status_line, there.other_status_line, there.port],
+            "claude": written(setup::claude_plan(
+                &given, &port, &secret, item[3].as_bool().unwrap_or(false))),
+            "codex": written(setup::codex_plan(&given, &port, &secret)),
+        }));
+    }
+    let mut files = Vec::new();
+    for item in case["files"].as_array().into_iter().flatten() {
+        let path = std::path::PathBuf::from(text(&item[0]));
+        let read = setup::read_settings(&path);
+        let before = read.is_ok();
+        let kept = match read {
+            Ok(read) => written(Ok(read)),
+            Err(why) => json!({"err": why}),
+        };
+        let copy = match (before, setup::write_settings(&path, &table(&item[1]))) {
+            (false, _) => Value::Null,
+            (true, Ok(copy)) => json!(copy.map(|copy| copy.to_string_lossy().into_owned())),
+            (true, Err(why)) => return Err(why.to_string()),
+        };
+        files.push(json!([kept, copy]));
+    }
+    let mut keys = Vec::new();
+    for folder in case["keys"].as_array().into_iter().flatten() {
+        let folder = std::path::PathBuf::from(text(folder));
+        let read = setup::read_key(&folder);
+        let made = setup::key(&folder, true).map_err(|why| why.to_string())?;
+        keys.push(json!([read, made, setup::key(&folder, false).ok()]));
+    }
+    Ok(json!({
+        "boards": boards,
+        "answers": answers,
+        "versions": versions,
+        "environment": environment,
+        "settings": settings,
+        "files": files,
+        "keys": keys,
+        "requests": [usage::claude_request(), usage::codex_requests()],
+        "commands": [setup::hook_command("8765", "codex", "k"), setup::status_command("1", "s")],
+    }))
+}
+
 pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "regex" => regex(case),
@@ -1645,6 +1852,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "services_host" => services_host(case)?,
         "timer" => timer(case)?,
         "power" => power(case)?,
+        "agents" => agents(case)?,
         "mangohud" => mangohud(case)?,
         "media" => media(case),
         "appicon" => appicon(case),
