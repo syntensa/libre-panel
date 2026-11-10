@@ -53,6 +53,11 @@ pub trait Source: Send {
     fn overrides(&self) -> &'static [&'static str] {
         &[]
     }
+    /// status: what the source says about itself (how it reads, what keeps it from reading), as
+    /// the app's Control page lists it; None for a source that says nothing.
+    fn status(&self) -> Option<lp_py::Dict> {
+        None
+    }
     /// The pictures the source holds now, by their keys (an album's cover).
     fn images(&self) -> IndexMap<String, lp_pixels::Image> {
         IndexMap::new()
@@ -141,9 +146,40 @@ impl Lhm {
     }
 }
 
+/// A dict of `(key, value)` in order.
+fn told(pairs: Vec<(&str, Value)>) -> lp_py::Dict {
+    pairs.into_iter().map(|(k, v)| (k.to_string(), v)).collect()
+}
+
+fn text_or_none(text: Option<String>) -> Value {
+    text.map_or(Value::None, Value::Str)
+}
+
+fn bool_or_none(flag: Option<bool>) -> Value {
+    flag.map_or(Value::None, Value::Bool)
+}
+
+/// LhmStatus as dataclasses.asdict gives it, without what the pages do not show (its rounds'
+/// timing and the service's memory).
+pub fn lhm_status_dict(status: &lp_sensors::service::LhmStatus) -> lp_py::Dict {
+    told(vec![
+        ("mode", Value::Str(status.mode.clone())),
+        ("elevated", bool_or_none(status.elevated)),
+        ("ring0", bool_or_none(status.ring0)),
+        ("pawnio", text_or_none(status.pawnio.clone())),
+        ("error", Value::Str(status.error.clone())),
+        ("service", Value::Str(status.service.clone())),
+        ("version", Value::Str(status.version.clone())),
+    ])
+}
+
 impl Source for Lhm {
     fn name(&self) -> &'static str {
         "librehardwaremonitor"
+    }
+
+    fn status(&self) -> Option<lp_py::Dict> {
+        Some(lhm_status_dict(&self.0.status()))
     }
 
     fn read(&mut self, out: &mut Readings) {
@@ -224,6 +260,14 @@ impl Source for Rtss {
         "rtss"
     }
 
+    fn status(&self) -> Option<lp_py::Dict> {
+        let runs = self.0.status().map(|runs| match runs {
+            true => "runs".to_string(),
+            false => "not running".to_string(),
+        });
+        Some(told(vec![("rivatuner", text_or_none(runs))]))
+    }
+
     fn read(&mut self, out: &mut Readings) {
         self.0
             .set_target(lp_sensors::presentmon::target().as_deref());
@@ -243,6 +287,13 @@ impl Source for Hwinfo {
         "hwinfo"
     }
 
+    fn status(&self) -> Option<lp_py::Dict> {
+        Some(told(vec![
+            ("state", Value::Str(self.0.state.into())),
+            ("readings", Value::int(self.0.count() as i64)),
+        ]))
+    }
+
     fn read(&mut self, out: &mut Readings) {
         out.extend(self.0.read());
     }
@@ -254,6 +305,15 @@ struct Media(lp_sensors::media::MediaSource);
 impl Source for Media {
     fn name(&self) -> &'static str {
         "media"
+    }
+
+    fn status(&self) -> Option<lp_py::Dict> {
+        let status = self.0.status();
+        Some(told(vec![
+            ("read with", text_or_none(status.read_with)),
+            ("now", text_or_none(status.now)),
+            ("error", text_or_none(status.error)),
+        ]))
     }
 
     fn read(&mut self, out: &mut Readings) {
@@ -632,6 +692,22 @@ impl Source for Linux {
         "linux"
     }
 
+    fn status(&self) -> Option<lp_py::Dict> {
+        let status = self.0.status();
+        let nvml = status.nvml.then(|| "NVML".to_string());
+        Some(told(vec![
+            ("chips", Value::int(status.chips as i64)),
+            ("temperatures", Value::int(status.temperatures as i64)),
+            ("fans", Value::int(status.fans as i64)),
+            ("graphics", text_or_none(status.graphics)),
+            ("nvidia driver", text_or_none(nvml)),
+            (
+                "cpu power",
+                text_or_none(status.cpu_power.map(str::to_string)),
+            ),
+        ]))
+    }
+
     fn read(&mut self, out: &mut Readings) {
         out.extend(self.0.read());
     }
@@ -679,6 +755,14 @@ fn text<'a>(table: Option<&'a Table>, key: &str) -> &'a str {
     match table.and_then(|table| table.get(key)) {
         Some(Toml::Str(text)) => lp_py::strip(text),
         _ => "",
+    }
+}
+
+impl std::fmt::Debug for Hub {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Hub")
+            .field("sources", &self.names())
+            .finish_non_exhaustive()
     }
 }
 
@@ -856,6 +940,17 @@ impl Hub {
         self.sources.iter().find_map(|source| source.lhm_status())
     }
 
+    /// sources: each source the panel reads, the first that has a reading winning: its name,
+    /// how many readings of the last snapshot came from it and what it says of itself.
+    pub fn sources(&self) -> Vec<(&'static str, usize, Option<lp_py::Dict>)> {
+        (self.sources.iter().enumerate())
+            .map(|(n, source)| {
+                let count = self.owners.values().filter(|owner| **owner == n).count();
+                (source.name(), count, source.status())
+            })
+            .collect()
+    }
+
     /// What the sources noted for the log since they were last asked.
     pub fn notes(&mut self) -> Vec<String> {
         let mut notes = std::mem::take(&mut self.notes);
@@ -989,16 +1084,16 @@ impl Hub {
                     &AGENT,
                 ))));
             }
+            if !sensors.providers.iter().any(|name| name == "sky") {
+                // the sun for the weather's place (if set), the moon everywhere
+                let place = config.weather.latitude.zip(config.weather.longitude);
+                sources.push(Box::new(Sky(lp_sensors::sky::SkySource::new(place))));
+            }
             if !sensors.providers.iter().any(|name| name == "media") {
                 // idle until a theme shows what is playing
                 sources.push(Box::new(Media(lp_sensors::media::MediaSource::new(
                     wanted.clone(),
                 ))));
-            }
-            if !sensors.providers.iter().any(|name| name == "sky") {
-                // the sun for the weather's place (if set), the moon everywhere
-                let place = config.weather.latitude.zip(config.weather.longitude);
-                sources.push(Box::new(Sky(lp_sensors::sky::SkySource::new(place))));
             }
             if cfg!(target_os = "linux") && !sensors.providers.iter().any(|n| n == "mangohud") {
                 // a game's frame rate from MangoHud's log, read only while a theme shows it

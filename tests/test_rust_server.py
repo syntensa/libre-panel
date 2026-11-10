@@ -385,6 +385,81 @@ def test_the_live_picture_is_the_frame_on_each_panel_as_control_py_makes_it(
     assert json.loads(answers["panel=1&format=gif"][2]) == {"error": "format is jpeg or png"}
 
 
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="the Linux source")
+def test_controls_sources_are_those_the_panel_reads_as_control_py_lists_them(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Control's sources (`/api/plugins/control/sources`) while the panel runs: each source of
+    config.toml and those always there, in the Python app's order, with what it says of
+    itself and its rows, as control.py lists the sources of the Python app's hub; the numbers
+    of readings of the sources whose readings do not come and go."""
+    import time
+    from types import SimpleNamespace
+
+    from libre_panel.app import build_hub
+    from libre_panel.config import load_config
+    from libre_panel.pages import control
+    from libre_panel.plugins import pages
+    from libre_panel.plugins.host import PluginHost
+
+    config = tmp_path / "config.toml"
+    config.write_text(
+        'theme = "slate"\nfps = 2\nlanguage = "en"\n[device]\ndriver = "virtual"\n'
+        'output = "panel.png"\n[sensors]\nproviders = ["linux", "psutil"]\n',
+        encoding="utf-8",
+    )
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries()}  # fmt: skip
+    with subprocess.Popen([str(_program()), "start", "--port", "0"], env=env,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        try:
+            assert program.stdout is not None
+            address = program.stdout.readline().split(" running at ")[1].split()[0]
+            port, token = int(address.split(":")[2].split("/")[0]), address.split("#token=")[1]
+
+            def asked(route: str) -> Any:
+                request = _get(f"/api/plugins/control/{route}", WITH)
+                request = request.replace("{host}", f"localhost:{port}")
+                return json.loads(_asked(port, request.replace("{token}", token).encode())[2])
+
+            end = time.monotonic() + 20
+            while asked("panel")["panel"]["state"] != "showing" and time.monotonic() < end:
+                time.sleep(0.1)
+            time.sleep(1.5)  # (a few snapshots taken)
+            ours = asked("sources")
+        finally:
+            program.send_signal(signal.SIGINT) if os.name == "posix" else program.terminate()
+            said = program.communicate(timeout=30)[1]
+    assert "panicked" not in said, said
+    # (the tests' computer is empty, conftest.py: here it is the real one, as the program's)
+    spec = importlib.util.find_spec("libre_panel.sensors.hardware")
+    assert spec is not None and spec.loader is not None
+    fresh = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fresh)
+    monkeypatch.setattr(hardware, "_scan_machine", fresh._scan_machine)
+    hub = build_hub(load_config(config))
+    hub.providers.append(PluginHost().provider())
+    try:
+        hub.snapshot()
+        time.sleep(0.3)
+        hub.snapshot()
+        listed = [{"name": p.name, "readings": hub.readings_from(p),
+                   "status": pages._status_of(p)} for p in hub.providers]  # fmt: skip
+    finally:
+        hub.close()
+    context = SimpleNamespace(status=lambda: {"hint": ""}, sources=lambda: listed,
+                              background=True)  # fmt: skip
+    theirs = {"background": True, "sources": control.Control._sources(SimpleNamespace(
+        context=context))}  # fmt: skip
+    # (the Linux source's and psutil's numbers: whether there are any; the drives' and the
+    # rates' readings come with rounds of their own)
+    for each in (*ours["sources"], *theirs["sources"]):
+        if each["name"] in ("linux", "psutil"):
+            each["readings"] = bool(each["readings"])
+    assert ours == theirs
+
+
 def test_the_themes_are_listed_and_read_as_server_py_reads_them(servers: Any) -> None:
     """The themes that are installed (the app's and the person's own: one with files, one
     that cannot be read, one of an odd shape), a theme by its name with what is said of it,

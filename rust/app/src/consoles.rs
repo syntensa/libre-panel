@@ -548,10 +548,123 @@ fn control_services(config: Option<&lp_config::Config>, context: &Context) -> Va
     )
 }
 
-/// The sensor sources the panel reads, as far as the main loop tells them (none yet: they
-/// come with the main loop's status).
-fn control_sources(_context: &Context) -> Value {
-    Value::List(Vec::new())
+fn yes_no(value: Option<bool>) -> String {
+    match value {
+        None => t("unknown"),
+        Some(true) => t("yes"),
+        Some(false) => t("no"),
+    }
+}
+
+/// lhm_rows: how LibreHardwareMonitor is read and what keeps the CPU's sensors out of reach.
+fn lhm_rows(status: &Dict) -> Vec<Value> {
+    let get = |key: &str| status.get(key).cloned().unwrap_or(Value::None);
+    let flag = |key: &str| match get(key) {
+        Value::Bool(flag) => Some(flag),
+        _ => None,
+    };
+    let row =
+        |label: String, value: String| Value::List(vec![Value::Str(label), Value::Str(value)]);
+    let mode = get("mode");
+    let mode = mode.as_str().unwrap_or("");
+    let names = [
+        ("service", "sensor service"),
+        ("inprocess", "inside Libre Panel"),
+    ];
+    let named = names.iter().find(|(key, _)| *key == mode);
+    let shown = named.map_or_else(|| t("web server"), |(_, name)| t(name));
+    let mut rows = vec![row(t("Mode"), shown)];
+    if named.is_some() {
+        if mode == "inprocess" {
+            rows.push(row(t("Administrator"), yes_no(flag("elevated"))));
+        }
+        let reach = match flag("ring0") {
+            None => t("unknown"),
+            Some(true) => t("reachable"),
+            Some(false) => t("out of reach"),
+        };
+        let driver = match get("pawnio") {
+            Value::Str(version) if !version.is_empty() => version,
+            Value::Str(_) => t("unknown"),
+            _ => t("not installed"),
+        };
+        rows.push(row(t("CPU sensors"), reach));
+        rows.push(row(t("PawnIO driver"), driver));
+    }
+    for (key, label) in [("service", "Sensor service"), ("error", "Error")] {
+        let value = get(key);
+        if value.truthy() {
+            rows.push(row(
+                t(label),
+                value.as_str().unwrap_or_default().to_string(),
+            ));
+        }
+    }
+    rows
+}
+
+/// str() of a value a source says of itself.
+fn as_text(value: &Value) -> String {
+    match value {
+        Value::Str(text) => text.clone(),
+        Value::Bool(true) => "True".into(),
+        Value::Bool(false) => "False".into(),
+        Value::Int(n) => n.to_string(),
+        other => lp_py::json::dumps(other, &lp_py::json::Dumps::default()),
+    }
+}
+
+/// _sources: the sensor sources the panel reads, the first that has a reading winning: each
+/// with its readings, what it says of itself, as rows, the hint the tray shows for
+/// LibreHardwareMonitor and whether something is the matter.
+fn control_sources(context: &Context) -> Value {
+    let Some(app) = &context.app else {
+        return Value::List(Vec::new());
+    };
+    let panel = app.panel.state();
+    let found = app
+        .panel
+        .sources()
+        .into_iter()
+        .map(|(name, readings, status)| {
+            let (mut rows, mut hint) = (Vec::new(), Value::None);
+            match &status {
+                Some(status) if name == "librehardwaremonitor" => {
+                    rows = lhm_rows(status);
+                    hint = panel
+                        .get("hint")
+                        .filter(|hint| hint.truthy())
+                        .cloned()
+                        .unwrap_or(Value::None);
+                }
+                Some(status) => {
+                    rows = (status.iter())
+                        .filter(|(_, value)| !matches!(value, Value::None))
+                        .map(|(key, value)| {
+                            let label = Value::Str(key.replace('_', " "));
+                            Value::List(vec![label, Value::Str(as_text(value))])
+                        })
+                        .collect();
+                }
+                None => {}
+            }
+            let error = status.as_ref().and_then(|status| status.get("error"));
+            let problem = hint.truthy() || error.is_some_and(Value::truthy);
+            Value::Dict(
+                [
+                    ("name", Value::Str(name.into())),
+                    ("readings", Value::int(readings as i64)),
+                    ("status", status.map_or(Value::None, Value::Dict)),
+                    ("details", Value::List(rows)),
+                    ("hint", hint),
+                    ("problem", Value::Bool(problem)),
+                ]
+                .into_iter()
+                .map(|(key, value)| (key.to_string(), value))
+                .collect(),
+            )
+        });
+    Value::List(found.collect())
 }
 
 fn control(

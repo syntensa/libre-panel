@@ -90,6 +90,8 @@ pub struct RunStatus {
     /// kept while the live picture was asked for a moment ago (`live_asked`)
     pub shown: Option<Arc<Image>>,
     pub live_asked: Option<Instant>,
+    /// the sensor sources the loop reads (the first panel's), for the app's pages
+    pub hub: Option<Arc<Mutex<Hub>>>,
     /// the loops of the panels beside the first, by their place in `[[panels]]`
     pub more: IndexMap<usize, Arc<Mutex<RunStatus>>>,
 }
@@ -292,6 +294,9 @@ impl MainLoop {
                 Arc::clone(&status),
             )
         });
+        if let Ok(mut status) = status.lock() {
+            status.hub = Some(Arc::clone(&hub));
+        }
         let mut made = MainLoop::made(home, asked, config_file, config, hub, host, company, owns);
         made.status = status;
         made.judged = judged;

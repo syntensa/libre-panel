@@ -222,6 +222,24 @@ impl PanelService {
         }
     }
 
+    /// sources: the sensor sources the panel reads, the first that has a reading winning: each
+    /// one's name, how many readings of the last snapshot came from it and what it says of
+    /// itself. None before the loop runs.
+    pub fn sources(&self) -> Vec<(&'static str, usize, Option<Dict>)> {
+        let hub = self
+            .status
+            .lock()
+            .ok()
+            .and_then(|status| status.hub.clone());
+        let Some(hub) = hub else {
+            return Vec::new();
+        };
+        let hub = hub
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        hub.sources()
+    }
+
     /// Which run of the loop this is (0: none runs): a new start makes the sensors anew.
     pub fn run(&self) -> u64 {
         self.status.lock().map_or(0, |status| status.run)

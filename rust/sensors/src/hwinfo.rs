@@ -324,6 +324,11 @@ impl HwinfoSource {
         HwinfoSource::with(Box::new(|| crate::shm::open(MAPPING)))
     }
 
+    /// How many readings HWiNFO gave in the last round.
+    pub fn count(&self) -> usize {
+        self.readings.len()
+    }
+
     /// As `new`, the memory opened by `opener`.
     pub fn with(opener: Opener) -> HwinfoSource {
         HwinfoSource {

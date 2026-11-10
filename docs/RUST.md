@@ -1554,6 +1554,13 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       the picture was asked for in the last 10 s (a copy of it each frame then); the first
       ask waits for the next frame. The tests: both panels as JPEGs and a PNG, compared with
       encode() of the frames they wrote
+- [x] Control's sources (`sources`): each source the panel reads in the Python app's order
+      (config.toml's, then the weather, the sky, what plays, MangoHud's log, the PC's names,
+      the services' readings), how many readings of the last snapshot came from it and what
+      it says of itself (the Linux source's chips and power, what plays and how it is read,
+      RivaTuner, HWiNFO, LibreHardwareMonitor's mode, rights and driver) with its rows, as
+      control.py lists them. The tests: the Linux PC's sources against those of the Python
+      app's hub
 - [ ] the rest of the main loop: the engine in the same process, videos (ffmpeg), the first
       panel's look on the others (same_look), the scene across the panels, the fans in step on
       every panel, the meter's numbers (`stats`, a panel's `fps`), the sun's times for the
