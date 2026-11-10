@@ -1465,3 +1465,95 @@ def test_the_history_is_as_server_py_has_it(servers: Any) -> None:
         con.close()
     theirs, ours = answers("?span=week")
     assert ours == theirs and "error" in theirs[2]
+
+
+def test_a_backup_is_made_and_put_back_as_backup_py_does(
+    servers: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The settings and own themes in one zip (no hidden files, no links, nothing that is made
+    again by itself); a backup put in place with the config.toml before it kept; refused as
+    backup.py refuses it (no zip, no manifest or another kind, paths it does not hold, a
+    config.toml that does not read), and nothing written then."""
+    import io
+    import zipfile
+
+    from libre_panel.editor import access
+
+    def elevated() -> bool:  # (as the Rust program finds it: root here, an administrator in CI)
+        if sys.platform == "win32":
+            from libre_panel.autostart import is_admin
+
+            return is_admin()
+        return os.geteuid() == 0
+
+    monkeypatch.setattr(access, "elevated", elevated)
+    ask, homes = servers
+    for side in homes:
+        mine = side / "themes" / "mine"
+        (mine / ".hidden").write_bytes(b"x")
+        (mine / "layer.npz").write_bytes(b"x")
+        (mine / "__pycache__").mkdir()
+        (mine / "__pycache__" / "a.txt").write_bytes(b"x")
+        (mine / "Zed.txt").write_bytes(b"z")
+        if os.name != "nt":  # (a link needs rights there)
+            os.symlink(mine / "notes.txt", mine / "link.txt")
+    answers = ask(_get("/api/backup/file", WITH))
+    zips = []
+    for status, headers, body in answers:
+        assert status.startswith("HTTP/1.0 200"), status
+        zips.append([(n, a, c, t, b) for n, a, c, t, b in _unzipped(body)])
+        made = {k: v for k, v in headers.items() if k != "Content-Length"}
+        assert made == {k: v for k, v in answers[0][1].items() if k != "Content-Length"}
+    for theirs_file, ours_file in zip(*zips, strict=True):
+        name, attributes, packing, _, body = theirs_file
+        assert ours_file[:3] == (name, attributes, packing), name
+        if name == "libre-panel-backup.json":
+            theirs_said, ours_said = json.loads(body), json.loads(ours_file[4])
+            assert theirs_said.pop("made")[:10] == ours_said.pop("made")[:10]
+            assert ours_said == theirs_said
+            assert ours_file[4].count(b"\n") == body.count(b"\n")
+        else:
+            assert ours_file[4] == body, name
+    backup = answers[0][2]
+
+    def manifest(**changes: Any) -> bytes:
+        return json.dumps({"kind": "libre-panel-backup", **changes}).encode()
+
+    def restore(data: bytes) -> None:
+        lines = ["POST /api/backup HTTP/1.1", "Host: {host}", WITH,
+                 "Content-Type: application/zip", f"Content-Length: {len(data)}"]  # fmt: skip
+        theirs, ours = ask("\r\n".join(lines).encode() + b"\r\n\r\n" + data)
+        assert ours == theirs, theirs
+        assert _tree(homes[1]) == _tree(homes[0])
+
+    for data in (
+        b"nope",
+        _zip_of({"a.txt": b"x"}),
+        _zip_of({"libre-panel-backup.json": b"[1]"}),
+        _zip_of({"libre-panel-backup.json": manifest(kind="other")}),
+        _zip_of({"libre-panel-backup.json": manifest(), "themes/../x/y": b"x"}),
+        _zip_of({"libre-panel-backup.json": manifest(), "themes/a/b:c": b"x"}),
+        _zip_of({"libre-panel-backup.json": manifest(), "other/a/b": b"x"}),
+        _zip_of({"libre-panel-backup.json": manifest(), "themes/Bad Name/b": b"x"}),
+        _zip_of({"libre-panel-backup.json": manifest(), "themes/a\\b/c": b"x"}),
+        _zip_of({"libre-panel-backup.json": manifest(), "config.toml": b"theme = \xff"}),
+        _zip_of({"libre-panel-backup.json": manifest(), "config.toml": b"theme = "}),
+        _zip_of({"libre-panel-backup.json": manifest(), "config.toml": b"fps = -3\n"}),
+        _zip_of({"libre-panel-backup.json": "﻿".encode() + manifest(),
+                 "themes/new/./theme.json": b"{}", "themes/new//sub/x.png": b"p"}),
+        backup,
+    ):  # fmt: skip
+        restore(data)
+    # (a theme folder of a name no theme has is no file a backup holds: without it, it is put
+    # back, the config.toml before it kept)
+    for side in homes:
+        shutil.rmtree(side / "themes" / "Bad Name")
+    backup = ask(_get("/api/backup/file", WITH))[0][2]
+    with zipfile.ZipFile(io.BytesIO(backup)) as archive:
+        assert "config.toml" in archive.namelist()
+    (homes[0] / "config.toml").write_text('theme = "terra"\n', encoding="utf-8")
+    (homes[1] / "config.toml").write_text('theme = "terra"\n', encoding="utf-8")
+    restore(backup)
+    if not elevated():
+        kept = (homes[1] / "config.toml.before-restore").read_text("utf-8")
+        assert kept == 'theme = "terra"\n'

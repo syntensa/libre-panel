@@ -5,6 +5,7 @@
 mod access;
 mod autostart;
 mod background;
+mod backup;
 mod company;
 mod display;
 mod drawings;

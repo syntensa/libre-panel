@@ -633,6 +633,11 @@ pub fn edited_text(
     Ok(text)
 }
 
+/// _write: config.toml's text written beside it and put in its place.
+pub fn write_text(path: &Path, text: &str) -> Result<()> {
+    write(path, text)
+}
+
 fn write(path: &Path, text: &str) -> Result<()> {
     let mut name = path.file_name().unwrap_or_default().to_os_string();
     name.push(".tmp");

@@ -303,6 +303,24 @@ const ROUTES: &[Route] = &[
         hardware_answer(s, x, refresh);
     }),
     private("GET", "/api/history", |s, x, _, u| history(s, x, u)),
+    picture("GET", "/api/backup/file", |s, x, _, _| {
+        // (the person's settings and own themes in one zip, to keep)
+        let themes = lp_config::dirs::user_themes_dir();
+        match crate::backup::make_backup(&s.config_file, &themes) {
+            Ok(data) => {
+                let at = crate::share::local_time(crate::share::now());
+                let name = format!(
+                    "libre-panel-backup-{:04}-{:02}-{:02}.zip",
+                    at[0], at[1], at[2]
+                );
+                x.send(200, &data, "application/zip", &name);
+            }
+            Err(crate::backup::Refused::Os(why) | crate::backup::Refused::Backup(why)) => {
+                x.error(&why, 409, "");
+            }
+            Err(crate::backup::Refused::Failed(why)) => unanswered(&why),
+        }
+    }),
     private("GET", "/api/logs", |_, x, _, u| {
         let query = crate::http::parse_qs(&u.query);
         let level = query.get("level").and_then(|asked| asked.first());
@@ -334,6 +352,7 @@ const ROUTES: &[Route] = &[
     }),
     private("POST", "/api/news", |s, x, _, _| see_news(s, x)),
     private("POST", "/api/logs", |_, x, _, _| set_verbose(x)),
+    private("POST", "/api/backup", |s, x, _, _| restore_backup(s, x)),
     private("POST", "/api/hardware", |s, x, _, _| {
         let Some(payload) = x.read_json(MAX_JSON) else {
             return;
@@ -497,6 +516,34 @@ fn see_news(state: &State, exchange: &mut Exchange) {
     }
 }
 
+/// `POST /api/backup`: a backup (the zip's bytes) put in place: its config.toml and its
+/// themes. Refused while Libre Panel runs with administrator rights: config.toml may name
+/// programs it would start with them.
+fn restore_backup(state: &State, exchange: &mut Exchange) {
+    if crate::access::elevated() {
+        let why = lp_i18n::t(
+            "While Libre Panel runs with administrator rights, a backup is not restored here: \
+             its config.toml may name programs that would be started with those rights.",
+        );
+        return exchange.error(&why, 403, "");
+    }
+    let Some(data) = exchange.read_body(crate::backup::MAX_TOTAL, "request too large") else {
+        return;
+    };
+    let themes = lp_config::dirs::user_themes_dir();
+    match crate::backup::restore_backup(&data, &state.config_file, &themes) {
+        Ok(done) => {
+            if let Some(app) = state.controls.upgrade() {
+                app.follow_config(); // (the services take the restored settings)
+            }
+            exchange.json(&done, 200);
+        }
+        Err(crate::backup::Refused::Backup(why)) => exchange.error(&why, 400, ""),
+        Err(crate::backup::Refused::Os(why)) => exchange.error(&why, 409, ""),
+        Err(crate::backup::Refused::Failed(why)) => unanswered(&why),
+    }
+}
+
 /// `GET /api/history?span=day` (week, month): what the memory kept, for History, whether the
 /// memory service is switched on, and the span's energy and its cost where the power service
 /// prices it.
@@ -607,7 +654,7 @@ fn not_found(exchange: &mut Exchange) {
 }
 
 /// Path(name).suffix
-fn suffix(name: &str) -> &str {
+pub(crate) fn suffix(name: &str) -> &str {
     let last = name.rsplit('/').next().unwrap_or(name);
     match last.rfind('.') {
         Some(dot) if dot > 0 && dot + 1 < last.len() => &last[dot..],

@@ -370,7 +370,7 @@ fn scrubbed(value: &Value, private: &[String], pictures: bool) -> Value {
 }
 
 /// time.localtime(seconds)[:6].
-fn local_time(seconds: f64) -> [u32; 6] {
+pub fn local_time(seconds: f64) -> [u32; 6] {
     let utc = lp_py::zones::Zone::utc();
     let zone = lp_py::zones::local().unwrap_or(&utc);
     match lp_py::zones::fromtimestamp(zone, seconds.floor()) {
@@ -386,14 +386,14 @@ fn local_time(seconds: f64) -> [u32; 6] {
     }
 }
 
-fn now() -> f64 {
+pub fn now() -> f64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0.0, |d| d.as_secs_f64())
 }
 
 /// The bits of st_mode Python's ZipInfo.from_file keeps (on Windows those os.stat makes up).
-fn file_mode(meta: &std::fs::Metadata) -> u32 {
+pub fn file_mode(meta: &std::fs::Metadata) -> u32 {
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;

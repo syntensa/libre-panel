@@ -2005,6 +2005,10 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       a day, a week or a month, read from its database beside the writer: the course in
       steps, the summary, the last rounds and the games most played, and the span's energy
       and its cost where the power service prices it.
+      The backup (`/api/backup/file`, `POST /api/backup`, `rust/app/src/backup.rs`): the
+      settings and own themes in one zip, and a backup put back after every check backup.py
+      makes, the config.toml before it kept; refused while the app runs with administrator
+      rights.
       `libre-panel editor` serves alone, `start` with
       the panel, and writes its address where a later start finds it. 120 requests to
       Python's server and to this one compared: the status, the headers and the body, byte
