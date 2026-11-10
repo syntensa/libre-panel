@@ -2053,10 +2053,11 @@ def test_the_background_app_follows_its_shortcuts(tmp_path: Path) -> None:
             time.sleep(0.1)
         return bool(done())
 
-    with subprocess.Popen([str(_program()), "start"], env=env, stdin=subprocess.PIPE,
-                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    with subprocess.Popen([str(_program()), "start", "--port", "0"], env=env,
+                          stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           encoding="utf-8") as program:  # fmt: skip
         assert program.stdin is not None and program.stdout is not None
+        assert " running at http://127.0.0.1:" in program.stdout.readline()  # (the app's server)
 
         def told(*lines: str) -> dict[str, Any]:
             for line in (*lines, "state"):

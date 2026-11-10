@@ -13,10 +13,15 @@ use lp_i18n::t;
 use lp_py::{Dict, Value};
 use lp_services::host::Event;
 
+use crate::access;
 use crate::company::Company;
 use crate::home::Home;
 use crate::hotkeys::{self, Hotkeys, BRIGHTNESS_STEP};
 use crate::mainloop::{Asked, MainLoop, RunStatus};
+use crate::server::EditorServer;
+
+/// in the settings folder: what the running app says of itself (its pid, its address)
+const INSTANCE_FILENAME: &str = "instance.json";
 
 fn say(message: &str) {
     eprintln!("libre-panel: {message}");
@@ -275,10 +280,18 @@ fn held(config: &Config) -> indexmap::IndexMap<String, String> {
 
 /// The panel loop with the services and the shortcuts, and their controls (BackgroundApp).
 pub struct BackgroundApp {
+    home: Home,
     config_file: PathBuf,
+    /// the port asked for the app's server (another is used if it is taken)
+    port: u16,
     company: Arc<Company>,
     pub panel: PanelService,
     pub hotkeys: Arc<Hotkeys>,
+    /// the app's server, while it serves
+    editor: Mutex<Option<EditorServer>>,
+    own: Weak<BackgroundApp>,
+    /// set when the app is asked to quit
+    pub quit_requested: AtomicBool,
 }
 
 impl BackgroundApp {
@@ -302,9 +315,14 @@ impl BackgroundApp {
             })));
             BackgroundApp {
                 config_file,
-                panel: PanelService::new(home, asked, Arc::clone(&company)),
+                port: asked.port.unwrap_or(crate::server::PORT),
+                panel: PanelService::new(home.clone(), asked, Arc::clone(&company)),
+                home,
                 company,
                 hotkeys,
+                editor: Mutex::new(None),
+                own: app.clone(),
+                quit_requested: AtomicBool::new(false),
             }
         })
     }
@@ -313,13 +331,96 @@ impl BackgroundApp {
         lp_config::load_config(&self.config_file, lp_config::platform())
     }
 
-    pub fn start(&self) {
+    /// _check_folders: with the highest rights Libre Panel runs what config.toml and the
+    /// plugins name: the log says so when other users can change them.
+    fn check_folders(&self) {
+        if !access::elevated() {
+            return;
+        }
+        let mut folders = vec![self.home.settings.clone()];
+        let beside = std::fs::canonicalize(&self.config_file).ok();
+        if let Some(folder) = beside.as_deref().and_then(std::path::Path::parent) {
+            if !folders.iter().any(|known| known == folder) {
+                folders.push(folder.to_path_buf());
+            }
+        }
+        for folder in folders {
+            let why = access::folder_risk(&folder, None);
+            if !why.is_empty() {
+                say(&format!(
+                    "Libre Panel runs with administrator rights and runs what the settings and \
+                     plugins in {} name, but {why}: any user who can change them can run a \
+                     program with those rights",
+                    folder.display()
+                ));
+            }
+        }
+    }
+
+    /// start: the services, the shortcuts, the panel and the app's server; the server's
+    /// address with its token (None where it did not start).
+    pub fn start(&self) -> Option<String> {
+        self.check_folders();
         match self.config() {
             Ok(config) => self.company.follow(&config),
             // (they start once the config is fixed)
             Err(why) => say(&format!("services not started: {}", why.msg)),
         }
         self.panel.start();
+        self.start_editor()
+    }
+
+    fn instance_file(&self) -> PathBuf {
+        self.home.settings.join(INSTANCE_FILENAME)
+    }
+
+    /// EditorService.start and _write_instance: the app's server on its port (any free one
+    /// where that is taken), its token where the programs of this user find it, and its
+    /// address in the settings folder for those that start later.
+    fn start_editor(&self) -> Option<String> {
+        let mut editor = self.editor.lock().ok()?;
+        if editor.is_none() {
+            let made = EditorServer::make_near(self.port, &self.home, &self.config_file, &self.own);
+            let mut server = match made.and_then(|mut server| server.serve().map(|()| server)) {
+                Ok(server) => server,
+                Err(why) => {
+                    say(&format!("the app's server did not start: {why}"));
+                    return None;
+                }
+            };
+            access::publish(&self.home.settings, &server.token, server.port);
+            say(&format!("theme editor at {}", server.url()));
+            let mut told = Dict::new();
+            told.insert("pid".into(), Value::int(i64::from(std::process::id())));
+            told.insert("editor".into(), Value::Str(server.url()));
+            let text = lp_py::json::dumps(&Value::Dict(told), &lp_py::json::Dumps::default());
+            let written = std::fs::create_dir_all(&self.home.settings)
+                .and_then(|()| std::fs::write(self.instance_file(), text));
+            if let Err(why) = written {
+                server.shutdown();
+                say(&format!("the app's address could not be written: {why}"));
+                return None;
+            }
+            *editor = Some(server);
+        }
+        editor.as_ref().map(EditorServer::address)
+    }
+
+    fn stop_editor(&self) {
+        let server = self.editor.lock().ok().and_then(|mut editor| editor.take());
+        if let Some(mut server) = server {
+            access::forget(&self.home.settings, &server.token);
+            server.shutdown();
+        }
+        // (the address of this run only: a later run may have written its own)
+        let written = std::fs::read_to_string(self.instance_file()).ok();
+        let ours = written.and_then(|text| match lp_py::json::loads(&text).ok()? {
+            Value::Dict(told) => told.get("pid").and_then(Value::to_f64),
+            _ => None,
+        });
+        if ours == Some(f64::from(std::process::id())) {
+            let _ = std::fs::remove_file(self.instance_file());
+        }
     }
 
     /// follow_config: bring the services and the shortcuts in line with config.toml now. The
@@ -337,7 +438,62 @@ impl BackgroundApp {
         self.company.set_also(None);
         self.company.stop_services();
         self.panel.stop();
+        self.stop_editor();
         self.company.close();
+    }
+
+    /// upside_down: whether the panel's picture is turned round; None where config.toml
+    /// cannot be read.
+    pub fn upside_down(&self) -> Option<bool> {
+        self.config().ok().map(|config| config.device.rotate == 180)
+    }
+
+    /// act: one control action from the app; the new snapshot.
+    pub fn act(&self, action: &str, value: &Value) -> Result<Dict, String> {
+        let platform = lp_config::platform();
+        match action {
+            "pause" => self.panel.pause(),
+            "resume" => self.panel.resume(),
+            // the panels opened anew, for one that hangs
+            "restart" => self.panel.restart()?,
+            "brightness" => match value {
+                Value::Int(_) => {
+                    let percent = value.to_f64().unwrap_or(-1.0);
+                    let whole = (0.0..=100.0).contains(&percent).then_some(percent as i64);
+                    self.set_brightness(whole.unwrap_or(-1))?;
+                }
+                _ => return Err("brightness must be a whole number".into()),
+            },
+            "upside_down" => match value {
+                Value::Bool(on) => {
+                    let turned = lp_py::toml::Toml::Int(if *on { 180 } else { 0 }.into());
+                    lp_config::edit::set_config_value(
+                        "device.rotate",
+                        turned,
+                        &self.config_file,
+                        platform,
+                    )
+                    .map_err(|why| why.msg)?;
+                }
+                _ => return Err("upside_down must be true or false".into()),
+            },
+            "autostart" | "identify" | "show_transition" => {
+                return Err(format!("{action} is not in this build yet"));
+            }
+            "quit" => {
+                // (the request is answered first; the server stops as part of quitting)
+                let app = self.own.clone();
+                let thread = std::thread::Builder::new().name("quit".into());
+                let _ = thread.spawn(move || {
+                    std::thread::sleep(Duration::from_millis(300));
+                    if let Some(app) = app.upgrade() {
+                        app.quit_requested.store(true, Ordering::Relaxed);
+                    }
+                });
+            }
+            other => return Err(format!("unknown action {}", lp_py::repr(other))),
+        }
+        Ok(self.snapshot())
     }
 
     /// The panel's brightness as config.toml has it; None where the file cannot be read.
@@ -408,6 +564,9 @@ impl BackgroundApp {
         told.insert("panel".into(), Value::Dict(self.panel.state()));
         let brightness = self.brightness().map_or(Value::None, Value::int);
         told.insert("brightness".into(), brightness);
+        let turned = self.upside_down().map_or(Value::None, Value::Bool);
+        told.insert("upside_down".into(), turned);
+        told.insert("can_quit".into(), Value::Bool(true));
         told.insert("hotkeys".into(), Value::Dict(self.hotkeys.state()));
         told
     }

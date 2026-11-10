@@ -2,16 +2,19 @@
 //! config.toml, draws the theme's frames of the computer's readings and shows them on the
 //! panel, or writes them to a PNG file.
 
+mod access;
 mod background;
 mod company;
 mod display;
 mod home;
 mod hotkeys;
+mod http;
 mod mainloop;
 mod modes;
 mod osinfo;
 mod psutil;
 mod sensors;
+mod server;
 mod services;
 mod switch;
 mod system;
@@ -33,6 +36,8 @@ Libre Panel
   libre-panel start [options]   the same as a background app: with the keyboard shortcuts
                                 of config.toml, the panel paused and resumed by them
   libre-panel render [options]  draw one frame into a PNG file (--output, else frame.png)
+  libre-panel editor [options]  the app's server alone (its address, with the token, is
+                                printed)
   libre-panel sensors           the readings and their keys (--check-service: whether the
                                 sensor service answers, on Windows)
   libre-panel themes            the themes that are installed
@@ -47,6 +52,7 @@ Options:
   --demo           readings made up instead of the computer's
   --output FILE    frames into this PNG file instead of the panel
   --frames N       end after N frames
+  --port N         the port of the app's server (8765; another if it is taken)
 ";
 
 /// between the two readings of `sensors`
@@ -135,6 +141,13 @@ fn asked(args: &[String]) -> Result<Asked, String> {
                     frames
                         .parse()
                         .map_err(|_| format!("--frames: {frames:?} is no number"))?,
+                );
+            }
+            "--port" => {
+                let port = value("--port")?;
+                asked.port = Some(
+                    port.parse()
+                        .map_err(|_| format!("--port: {port:?} is no port"))?,
                 );
             }
             "--demo" => asked.demo = true,
@@ -286,13 +299,32 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
             follow_signals();
             MainLoop::new(Home::find()?, asked)?.run(&STOP, &|| true);
         }
+        "editor" => {
+            let asked = asked(args)?;
+            follow_signals();
+            let home = Home::find()?;
+            let file = asked.config.clone().unwrap_or_else(|| home.config_file());
+            // (the app's language as config.toml sets it; a file that cannot be read: the
+            // system's)
+            let setting = lp_config::load_config(&file, lp_config::platform())
+                .map_or_else(|_| "auto".to_string(), |config| config.language);
+            let env = |name: &str| std::env::var(name).unwrap_or_default();
+            let code = lp_i18n::resolve(Some(&setting), || lp_i18n::system_language(&env, None));
+            match lp_i18n::Language::load(&home.locale(), &code) {
+                Ok(language) => lp_i18n::set_language(language),
+                Err(why) => eprintln!("libre-panel: language {code}: {why}"),
+            }
+            server::serve_until(asked.port.unwrap_or(server::PORT), &home, &file, &STOP)?;
+        }
         "start" => {
             let asked = asked(args)?;
             lp_text::set_locale_from_environment();
             lp_text::fallback::set_language(Box::new(|| lp_i18n::language().code().to_string()));
             follow_signals();
             let app = background::BackgroundApp::new(Home::find()?, asked.clone());
-            app.start();
+            if let Some(address) = app.start() {
+                println!("Libre Panel theme editor running at {address}  (Ctrl+C to stop)");
+            }
             // (the tests' own: the controls by lines on the standard input)
             if std::env::var_os("LIBRE_PANEL_CONTROL").is_some_and(|how| how == "stdin") {
                 app.follow_input();
@@ -307,7 +339,11 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
                     .frames
                     .is_some_and(|asked| frames.is_some_and(|f| f >= asked as f64))
             };
-            while !STOP.load(std::sync::atomic::Ordering::Relaxed) && !shown(&app) {
+            let quit = |app: &background::BackgroundApp| {
+                app.quit_requested
+                    .load(std::sync::atomic::Ordering::Relaxed)
+            };
+            while !STOP.load(std::sync::atomic::Ordering::Relaxed) && !shown(&app) && !quit(&app) {
                 std::thread::sleep(std::time::Duration::from_millis(50));
             }
             app.shutdown();

@@ -23,6 +23,8 @@ lp-devices = { path = "../devices" }
 lp-sensors = { path = "../sensors" }
 lp-services = { path = "../services" }
 indexmap = "2"
+# the token of the app's server (access.rs)
+getrandom = "0.2"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

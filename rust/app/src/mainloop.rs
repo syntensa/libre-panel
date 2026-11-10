@@ -76,6 +76,8 @@ pub struct Asked {
     pub output: Option<PathBuf>,
     /// so many frames, then the loop ends (None: until it is stopped)
     pub frames: Option<u64>,
+    /// the port of the app's server (None: its usual one)
+    pub port: Option<u16>,
 }
 
 pub struct MainLoop {
