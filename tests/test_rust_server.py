@@ -308,6 +308,83 @@ def test_the_background_app_is_controlled_through_its_server(tmp_path: Path) -> 
     assert not (tmp_path / "instance.json").exists() and not kept.exists()
 
 
+def test_the_live_picture_is_the_frame_on_each_panel_as_control_py_makes_it(
+    tmp_path: Path,
+) -> None:
+    """Control's live picture (`/api/plugins/control/live`): the frame on the first panel and
+    on the one beside it, as a JPEG of the width asked for (the bytes control.py's encode()
+    makes of the same frame) or a PNG (its pixels); none for a panel that is not there, and a
+    format it does not make refused."""
+    import io
+    import time
+
+    from PIL import Image
+
+    from libre_panel.pages import control
+
+    for name, colour in (("red", "#DC1E1E"), ("blue", "#1E1EDC")):
+        folder = tmp_path / "themes" / name
+        folder.mkdir(parents=True)
+        theme = {"format": "libre-panel-theme/1", "name": name.title(),
+                 "display": {"model": "turing-5", "orientation": "landscape", "width": 800,
+                             "height": 480},
+                 "palette": {"bg": colour}, "font": "builtin:Barlow-Medium",
+                 "background": {"color": "@bg", "image": None}, "refresh_ms": 1000,
+                 "widgets": [{"type": "text", "x": 40, "y": 40, "text": name.upper(),
+                              "size": 90, "color": "#FFFFFF"}]}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+    (tmp_path / "config.toml").write_text(
+        'theme = "red"\nfps = 2\nlanguage = "en"\n[device]\ndriver = "virtual"\n'
+        'output = "panel.png"\n[sensors]\nproviders = []\n'
+        '[[panels]]\ntheme = "blue"\ndriver = "virtual"\noutput = "beside.png"\n',
+        encoding="utf-8",
+    )
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries()}  # fmt: skip
+    with subprocess.Popen([str(_program()), "start", "--port", "0"], env=env,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        try:
+            assert program.stdout is not None
+            address = program.stdout.readline().split(" running at ")[1].split()[0]
+            port, token = int(address.split(":")[2].split("/")[0]), address.split("#token=")[1]
+
+            def asked(query: str) -> tuple[str, dict[str, str], bytes]:
+                request = _get(f"/api/plugins/control/live?{query}", WITH)
+                request = request.replace("{host}", f"localhost:{port}")
+                return _asked(port, request.replace("{token}", token).encode())
+
+            end = time.monotonic() + 20
+            while not (tmp_path / "beside.png").exists() and time.monotonic() < end:
+                time.sleep(0.1)
+            answers = {query: asked(query) for query in (
+                "panel=1", "panel=1&format=PNG&w=400", "panel=2&w=1920", "panel=2&w=100",
+                "panel=3", "panel=1&format=gif")}  # fmt: skip
+        finally:
+            program.send_signal(signal.SIGINT) if os.name == "posix" else program.terminate()
+            said = program.communicate(timeout=30)[1]
+    assert "panicked" not in said, said
+    frames = {n: Image.open(tmp_path / file).convert("RGB")
+              for n, file in ((1, "panel.png"), (2, "beside.png"))}  # fmt: skip
+    for query, n, width, kind in (("panel=1", 1, 960, "jpeg"),
+                                  ("panel=1&format=PNG&w=400", 1, 400, "png"),
+                                  ("panel=2&w=1920", 2, 1920, "jpeg"),
+                                  ("panel=2&w=100", 2, 160, "jpeg")):  # fmt: skip
+        status, headers, body = answers[query]
+        assert status == "HTTP/1.0 200 OK", (query, status, body[:200])
+        assert headers["Content-Type"] == control.PICTURES[kind], query
+        made = control.encode(frames[n], width, kind)
+        if kind == "jpeg":
+            assert body == made, query
+        else:  # (the same pixels; zlib's stream is not the one of Pillow's wheel)
+            with Image.open(io.BytesIO(body)) as ours, Image.open(io.BytesIO(made)) as theirs:
+                assert ours.mode == theirs.mode and ours.tobytes() == theirs.tobytes(), query
+    assert answers["panel=3"][0].split()[1] == "404"
+    assert json.loads(answers["panel=3"][2]) == {"error": "no picture yet"}
+    assert answers["panel=1&format=gif"][0].split()[1] == "400"
+    assert json.loads(answers["panel=1&format=gif"][2]) == {"error": "format is jpeg or png"}
+
+
 def test_the_themes_are_listed_and_read_as_server_py_reads_them(servers: Any) -> None:
     """The themes that are installed (the app's and the person's own: one with files, one
     that cannot be read, one of an odd shape), a theme by its name with what is said of it,

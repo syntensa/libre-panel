@@ -731,6 +731,7 @@ fn page_api(
     };
     match crate::consoles::handle(page, method, path, &query, body, &context) {
         Some(crate::consoles::Answer::Json(status, data)) => exchange.json(&data, status),
+        Some(crate::consoles::Answer::Bytes(data, kind)) => exchange.send(200, &data, kind, ""),
         None => not_found(exchange),
     }
 }

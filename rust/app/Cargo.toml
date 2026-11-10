@@ -20,6 +20,7 @@ lp-theme = { path = "../theme" }
 lp-config = { path = "../config" }
 lp-render = { path = "../render" }
 lp-devices = { path = "../devices" }
+lp-decode = { path = "../decode" }
 lp-sensors = { path = "../sensors" }
 lp-services = { path = "../services" }
 indexmap = "2"

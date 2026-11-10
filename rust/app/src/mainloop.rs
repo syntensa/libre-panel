@@ -46,6 +46,8 @@ const GAME_STREAM_FPS: i64 = 24;
 const ALARM: &str = "alarm";
 /// a companion that is away a moment (a reconnect) keeps the first panel's pair versions
 const PAIR_HOLD_S: f64 = 10.0;
+/// the frame on the panel is kept for the live picture this long after it was last asked for
+pub const LIVE_HOLD_S: f64 = 10.0;
 /// a panel beside the first takes its readings this long after the first panel took them, so
 /// that a value glides on both at once
 const IN_STEP_S: f64 = 0.1;
@@ -84,6 +86,10 @@ pub struct RunStatus {
     pub mode: Option<String>,
     /// what a config.toml without a theme shows on this panel
     pub default_theme: String,
+    /// the frame on the panel now, after transitions and messages, in the theme's orientation:
+    /// kept while the live picture was asked for a moment ago (`live_asked`)
+    pub shown: Option<Arc<Image>>,
+    pub live_asked: Option<Instant>,
     /// the loops of the panels beside the first, by their place in `[[panels]]`
     pub more: IndexMap<usize, Arc<Mutex<RunStatus>>>,
 }
@@ -892,6 +898,15 @@ impl MainLoop {
         Ok(frame)
     }
 
+    /// The frame on the panel kept for the live picture, while it is asked for.
+    fn keep_shown(&self, frame: &Image) {
+        if let Ok(mut status) = self.status.lock() {
+            let asked = status.live_asked;
+            let wanted = asked.is_some_and(|at| at.elapsed().as_secs_f64() < LIVE_HOLD_S);
+            status.shown = wanted.then(|| Arc::new(frame.clone()));
+        }
+    }
+
     /// The frame as it goes out: upside down on a panel mounted so.
     fn turned(&self, frame: Image) -> Image {
         let on_panel = self.panel.as_ref().is_some_and(Display::on_panel);
@@ -1136,7 +1151,10 @@ impl MainLoop {
             .map_err(|e| format!("not drawn by this build yet: {}", e.0))
             .and_then(|(frame, _)| self.fitted(frame, &renderer))
             .map(|frame| self.dressed_frame(frame, &renderer, started))
-            .map(|frame| self.turned(frame));
+            .map(|frame| {
+                self.keep_shown(&frame);
+                self.turned(frame)
+            });
         let (mut moving, due) = (renderer.moving, renderer.due);
         moving |= self.blend.is_some()
             || self.toasts.as_ref().is_some_and(ToastLayer::active)

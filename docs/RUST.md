@@ -1546,6 +1546,14 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       `more` (each one's state, target, theme, model and size), `target`, `mode` and
       `default_theme`. The tests: two panels run into PNG files, the companion and the pair
       version as app.py names them, the second taken out again
+- [x] Control's live picture of each panel (`live?panel=&w=&format=`): the frame on the panel
+      after transitions, messages and the alarm's edge, in the theme's orientation, made
+      smaller with Pillow's bilinear filter and saved as control.py saves it: a JPEG of
+      quality 78 the same to the byte, a PNG with the same pixels (zlib's stream is not that
+      of Pillow's wheel, as for the TURZX panels' PNGs). The loop keeps the frame only while
+      the picture was asked for in the last 10 s (a copy of it each frame then); the first
+      ask waits for the next frame. The tests: both panels as JPEGs and a PNG, compared with
+      encode() of the frames they wrote
 - [ ] the rest of the main loop: the engine in the same process, videos (ffmpeg), the first
       panel's look on the others (same_look), the scene across the panels, the fans in step on
       every panel, the meter's numbers (`stats`, a panel's `fps`), the sun's times for the

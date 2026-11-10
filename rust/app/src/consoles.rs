@@ -85,6 +85,8 @@ pub fn listed(data: &Path) -> Value {
 /// What a page answers: data, sent as JSON, with the status.
 pub enum Answer {
     Json(u16, Value),
+    /// a picture: its bytes and their type
+    Bytes(Vec<u8>, &'static str),
 }
 
 /// A request that cannot be met; the page shows the message (already translated).
@@ -274,6 +276,9 @@ fn names_toml(names: &[String]) -> lp_py::toml::Toml {
 // -- Control ------------------------------------------------------------------------------
 
 const LIVE_WIDTH: i64 = 960;
+const JPEG_QUALITY: i64 = 78;
+/// the formats of the live picture
+const PICTURES: [(&str, &str); 2] = [("jpeg", "image/jpeg"), ("png", "image/png")];
 const BUTTONS: [&str; 3] = ["timer", "timer_reset", "mic_mute"];
 const RESTARTABLE: [&str; 3] = ["running", "stopped", "failed"];
 const GAME_MODE: &str = "game";
@@ -598,7 +603,7 @@ fn control(
             themes.insert("config_problem".into(), Value::Str(problem));
             ok(Value::Dict(themes))
         }
-        ("GET", "live") => live(request),
+        ("GET", "live") => live(request, context),
         ("GET", "log") => {
             let lines = tail(
                 &lp_config::dirs::log_file(),
@@ -624,11 +629,46 @@ fn control(
     })
 }
 
-fn live(request: &Request) -> Result<Answer, Refused> {
-    // (which is which; the frames come with the main loop's status)
-    let _panel = request.integer("panel", 1, 1, 4);
-    let _width = request.integer("w", LIVE_WIDTH, 160, 1920);
-    Ok(Answer::Json(404, error_of(&t("no picture yet"))))
+fn live(request: &Request, context: &Context) -> Result<Answer, Refused> {
+    let panel = request.integer("panel", 1, 1, 4); // (which is which)
+    let frame = (context.app.as_ref()).and_then(|app| app.panel.shown_frame(panel));
+    let Some(frame) = frame else {
+        return Ok(Answer::Json(404, error_of(&t("no picture yet"))));
+    };
+    let kind = request.param("format", "jpeg").to_lowercase();
+    let Some((_, content)) = PICTURES.iter().find(|(name, _)| *name == kind) else {
+        return Err(refused(t("format is jpeg or png")));
+    };
+    let width = request.integer("w", LIVE_WIDTH, 160, 1920);
+    let picture = encode(&frame, width, &kind).map_err(|why| Refused(why, 500))?;
+    Ok(Answer::Bytes(picture, content))
+}
+
+/// encode: `frame` as a JPEG or PNG `width` pixels wide (a smaller frame stays as it is).
+fn encode(frame: &lp_pixels::Image, width: i64, kind: &str) -> Result<Vec<u8>, String> {
+    let (w, h) = frame.size();
+    let resized;
+    let mut frame = frame;
+    if width < w as i64 {
+        let height = (h as f64 * width as f64 / w as f64)
+            .round_ties_even()
+            .max(1.0);
+        let size = (width as usize, height as usize);
+        resized = (frame.resize(size.0, size.1, lp_pixels::Filter::Bilinear, None, None))
+            .map_err(|why| why.to_string())?;
+        frame = &resized;
+    }
+    let rgb;
+    if frame.mode() != lp_pixels::Mode::RGB {
+        rgb = frame
+            .convert(lp_pixels::Mode::RGB)
+            .map_err(|why| why.to_string())?;
+        frame = &rgb;
+    }
+    match kind {
+        "png" => lp_devices::png::encode_with(frame, lp_devices::png::Compression::new(3)),
+        _ => lp_decode::save_jpeg(frame, JPEG_QUALITY).map_err(|why| why.to_string()),
+    }
 }
 
 fn probe(request: &Request, context: &Context) -> Result<Answer, Refused> {

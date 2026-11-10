@@ -195,6 +195,33 @@ impl PanelService {
         self.halt();
     }
 
+    /// shown_frame: the frame on panel `n` now (1: `[device]`'s, 2 and on: those of
+    /// `[[panels]]`), after transitions and messages, in the theme's orientation; None before
+    /// its first frame and while it is paused. The loop keeps it only while it is asked for:
+    /// the first time a frame is waited for (a loop at rest draws twice a second at least).
+    pub fn shown_frame(&self, n: i64) -> Option<Arc<lp_pixels::Image>> {
+        let status = match n {
+            1 => Some(Arc::clone(&self.status)),
+            _ => {
+                let first = self.status.lock().ok()?;
+                usize::try_from(n - 2)
+                    .ok()
+                    .and_then(|n| first.more.get(&n).cloned())
+            }
+        }?;
+        let until = Instant::now() + Duration::from_millis(1500);
+        loop {
+            {
+                let mut status = status.lock().ok()?;
+                status.live_asked = Some(Instant::now());
+                if status.shown.is_some() || status.state != "showing" || Instant::now() >= until {
+                    return status.shown.clone();
+                }
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
     /// Which run of the loop this is (0: none runs): a new start makes the sensors anew.
     pub fn run(&self) -> u64 {
         self.status.lock().map_or(0, |status| status.run)

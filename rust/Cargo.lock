@@ -385,6 +385,7 @@ dependencies = [
  "indexmap",
  "libc",
  "lp-config",
+ "lp-decode",
  "lp-devices",
  "lp-i18n",
  "lp-net",
