@@ -389,6 +389,26 @@ fn load_math(case: &Value) -> Value {
     })
 }
 
+/// netlink: each speed as one says it, the default route's interface of each routing table,
+/// a Wi-Fi's quality in each [text, name], and the rate in each of iw's answers.
+fn netlink(case: &Value) -> Value {
+    use lp_sensors::netlink as n;
+    json!({
+        "speeds": case["speeds"].as_array().into_iter().flatten()
+            .map(|s| n::speed_text(s.as_f64().unwrap_or(0.0))).collect::<Vec<_>>(),
+        "routes": strings(&case["routes"]).iter().map(|r| n::default_interface(r))
+            .collect::<Vec<_>>(),
+        "quality": case["wireless"].as_array().into_iter().flatten().map(|w| {
+            match n::wireless_quality(w[0].as_str().unwrap_or(""), w[1].as_str().unwrap_or("")) {
+                Ok(found) => json!(found.map(float)),
+                Err(why) => json!({"error": why}),
+            }
+        }).collect::<Vec<_>>(),
+        "rates": strings(&case["iw"]).iter().map(|out| n::iw_rate(out).map(float))
+            .collect::<Vec<_>>(),
+    })
+}
+
 pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "regex" => regex(case),
@@ -398,6 +418,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "sensor_protocol" => sensor_protocol(case),
         "lhm_hints" => lhm_hints(case)?,
         "load_math" => load_math(case),
+        "netlink" => netlink(case),
         _ => return Err(format!("no such op: {op}")),
     })
 }

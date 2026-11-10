@@ -469,3 +469,55 @@ def test_loads_and_cores_are_worked_out_as_load_py_and_topology_py_do(tmp_path: 
     for (cores, threads), got in zip(checks, ours["checked"], strict=True):
         assert got == topology.checked(cores, threads), (cores, threads)
     assert sum(got is not None for got in ours["checked"]) > 20
+
+
+def test_the_network_link_is_read_as_netlink_py_reads_it() -> None:
+    from libre_panel.sensors import netlink
+
+    rng = random.Random(0x11F)
+    speeds = [0.0, 0.4, 10.0, 100.0, 866.0, 866.7, 999.4, 999.5, 999.96, 1000.0, 1040.0, 1050.0,
+              2500.0, 9999.0, 10000.0, 100000.0]  # fmt: skip
+    speeds += [rng.uniform(0, 20000) for _ in range(300)]
+    head = "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n"
+    routes = ["", head, head + "eth0\t00000000\t0101A8C0\t0003\t0\t0\t100\t00000000\t0\t0\t0\n"]
+    for _ in range(300):
+        lines = []
+        for _ in range(rng.randrange(0, 6)):
+            name = rng.choice(["eth0", "wlan0", "enp5s0", "wlp3s0"])
+            lines.append("\t".join([name, rng.choice(["00000000", "0000A8C0"]), "0101A8C0", "0003",
+                                    "0", "0", rng.choice(["0", "100", "600", "x", "-1", "20"]),
+                                    "00000000", "0", "0", "0"][: rng.choice([11, 6, 7])])
+                         )  # fmt: skip
+        routes.append(head + "\n".join(lines) + rng.choice(["", "\n"]))
+    top = ("Inter-| sta-|   Quality        |   Discarded packets\n"
+           " face | tus | link level noise |  nwid  crypt   frag\n")  # fmt: skip
+    wireless = [["", "wlan0"], [top, "wlan0"]]
+    for _ in range(300):
+        rows = "".join(
+            f"{rng.choice([' ', ''])}{rng.choice(['wlan0', 'wlp3s0'])}: 0000   "
+            f"{rng.choice(['57.', '70.', '0.', '99', '31.5', 'x', '-4.'])}  -53.  -256\n"
+            for _ in range(rng.randrange(0, 3))
+        )
+        wireless.append([top + rows + rng.choice(["", "wlan0:\n", "wlan0: 0000\n"]), "wlan0"])
+    iw = ["", "Not connected.\n", "Connected to aa:bb\n\ttx bitrate: 866.7 MBit/s VHT-MCS 9\n",
+          "\trx bitrate: 650.0 MBit/s\n\tTX BITRATE:1200 mbit/s\n", "tx bitrate: . MBit/s",
+          "tx bitrate: 1.2.3 MBit/s", "tx bitrate:  54 MBit/s", "tx bitrate: ٣ MBit/s"]  # fmt: skip
+    [ours] = run([{"op": "netlink", "speeds": speeds, "routes": routes, "wireless": wireless,
+                   "iw": iw}])  # fmt: skip
+    assert ours["speeds"] == [netlink.speed_text(speed) for speed in speeds]
+    assert ours["routes"] == [netlink.default_interface(route) for route in routes]
+    assert len({name for name in ours["routes"]}) > 3
+    for (text, name), got in zip(wireless, ours["quality"], strict=True):
+        try:
+            want = netlink.wireless_quality(text, name)
+        except ValueError:
+            assert set(got) == {"error"}, text
+            continue
+        assert got == (None if want is None else _hex(want)), text
+    for out, got in zip(iw, ours["rates"], strict=True):
+        found = netlink._IW_RATE.search(out)
+        try:
+            want = float(found.group(1)) if found else None
+        except ValueError:  # (a rate that is no number: Python raises, and no link is told)
+            want = None
+        assert got == (None if want is None else _hex(want)), out
