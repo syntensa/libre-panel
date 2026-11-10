@@ -222,6 +222,7 @@ dependencies = [
  "lp-pixels",
  "lp-py",
  "lp-render",
+ "lp-sensors",
  "lp-text",
  "lp-theme",
  "windows-sys",
@@ -252,6 +253,7 @@ dependencies = [
  "lp-pixels",
  "lp-py",
  "lp-render",
+ "lp-sensors",
  "lp-text",
  "lp-theme",
  "num-bigint",
@@ -338,6 +340,18 @@ dependencies = [
  "num-integer",
  "num-traits",
  "unicode-general-category",
+]
+
+[[package]]
+name = "lp-sensors"
+version = "0.1.0"
+dependencies = [
+ "indexmap",
+ "lp-i18n",
+ "lp-py",
+ "lp-render",
+ "num-traits",
+ "windows-sys",
 ]
 
 [[package]]

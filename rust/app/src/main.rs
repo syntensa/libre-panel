@@ -23,6 +23,8 @@ Libre Panel
 
   libre-panel run [options]     show the theme on the panel until stopped (Ctrl+C)
   libre-panel render [options]  draw one frame into a PNG file (--output, else frame.png)
+  libre-panel sensors           the readings and their keys (--check-service: whether the
+                                sensor service answers, on Windows)
   libre-panel themes            the themes that are installed
   libre-panel models            the panels Libre Panel knows
   libre-panel ports             the serial ports and what is on them
@@ -36,6 +38,44 @@ Options:
   --output FILE    frames into this PNG file instead of the panel
   --frames N       end after N frames
 ";
+
+/// between the two readings of `sensors`
+const SENSORS_SETTLE_SECONDS: f64 = 1.0;
+/// how long `sensors` waits for a source's first readings
+const READY_SECONDS: f64 = 20.0;
+
+/// unlock_offered: whether "Unlock all sensors" is a thing here: a Windows download that
+/// carries the sensor service (sensors\libre-panel-sensors.exe beside the program), and the
+/// service not installed (or switched off).
+fn unlock_offered() -> bool {
+    if !cfg!(windows) {
+        return false;
+    }
+    let bundled = std::env::current_exe().ok().is_some_and(|exe| {
+        exe.with_file_name("sensors")
+            .join("libre-panel-sensors.exe")
+            .is_file()
+    });
+    bundled && !(lp_sensors::provider::System::own().installed)()
+}
+
+/// `sensors --check-service`: does the sensor service answer this account with readings?
+fn check_service() -> Result<(), String> {
+    if !cfg!(windows) {
+        return Err("The sensor service is for Windows only.".into());
+    }
+    let system = lp_sensors::provider::System::own();
+    let open = system.open.clone();
+    let mut open: lp_sensors::service::Open = Box::new(move || open());
+    let sleep = |seconds: f64| std::thread::sleep(std::time::Duration::from_secs_f64(seconds));
+    let (worked, lines) = lp_sensors::service::check(&mut open, 15.0, &sleep);
+    if worked {
+        println!("{}", lines.join("\n"));
+        Ok(())
+    } else {
+        Err(lines.join("\n"))
+    }
+}
 
 #[cfg(unix)]
 fn follow_signals() {
@@ -150,6 +190,69 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
             println!("theme: {theme}");
             println!("panel: {} ({})", config.device.model, config.device.driver);
             println!("sensors: {}", config.sensors.providers.join(", "));
+        }
+        "sensors" => {
+            if let Some(at) = args.iter().position(|arg| arg == "--check-service") {
+                let mut rest = args.to_vec();
+                rest.remove(at);
+                asked(&rest)?;
+                return check_service();
+            }
+            let asked = asked(args)?;
+            let file = match &asked.config {
+                Some(file) => file.clone(),
+                None => Home::find()?.config_file(),
+            };
+            let config = lp_config::load_config(&file, lp_config::platform()).map_err(|e| e.msg)?;
+            let (mut hub, missing) = sensors::Hub::of(&config.sensors, asked.demo);
+            // Some sources read only while a theme shows their keys: asked for as a theme
+            // would, so they are listed ("lhm:*" is every sensor of LibreHardwareMonitor).
+            hub.want(["cpu.load", "gpu.load", "audio.*", "lhm:*", "temp.*"].map(String::from));
+            let moment = lp_render::Moment::date(1970, 1, 1);
+            hub.snapshot(moment, false);
+            // (rate counters and pollers need time)
+            std::thread::sleep(std::time::Duration::from_secs_f64(SENSORS_SETTLE_SECONDS));
+            hub.wait_ready(READY_SECONDS);
+            let snapshot = hub.snapshot(moment, false);
+            let mut keys: Vec<&String> = snapshot.readings.keys().collect();
+            keys.sort_by(|a, b| a.chars().cmp(b.chars()));
+            for key in keys {
+                let r = &snapshot.readings[key];
+                let value = match &r.value {
+                    lp_py::Value::Float(f) => format!("{f:.2}"),
+                    other => other.str(),
+                };
+                println!("{key:<40} {value:>14} {:<5} {}", r.unit, r.label);
+            }
+            for note in hub.notes() {
+                eprintln!("libre-panel: {note}");
+            }
+            if !asked.demo {
+                let url = match config.sensors.options.get("librehardwaremonitor") {
+                    Some(table) => match table.get("url") {
+                        Some(lp_py::toml::Toml::Str(url)) => url.clone(),
+                        _ => lp_sensors::provider::DEFAULT_URL.to_string(),
+                    },
+                    None => lp_sensors::provider::DEFAULT_URL.to_string(),
+                };
+                let hint = lp_sensors::hints::hardware_hint(
+                    &snapshot.readings,
+                    &config.sensors.providers,
+                    &url,
+                    cfg!(windows),
+                    hub.lhm_status().as_ref(),
+                    unlock_offered(),
+                );
+                if let Some(hint) = hint {
+                    eprintln!("\nnote: {hint}");
+                }
+            }
+            if !missing.is_empty() {
+                eprintln!(
+                    "libre-panel: sensor sources not in this build yet: {}",
+                    missing.join(", ")
+                );
+            }
         }
         "run" | "render" => {
             let mut asked = asked(args)?;

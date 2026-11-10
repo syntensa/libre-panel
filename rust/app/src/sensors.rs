@@ -8,8 +8,11 @@ use std::collections::VecDeque;
 use std::time::Instant;
 
 use indexmap::IndexMap;
+use lp_config::SensorsConfig;
+use lp_py::toml::{Table, Toml};
 use lp_py::Value;
 use lp_render::{Moment, Reading, Snapshot};
+use lp_sensors::service::Wanted;
 
 use crate::system;
 
@@ -24,6 +27,72 @@ pub trait Source {
     fn name(&self) -> &'static str;
     /// The readings of now, each put under its key.
     fn read(&mut self, out: &mut Readings);
+    /// What the source noted for the log since it was last asked.
+    fn notes(&mut self) -> Vec<String> {
+        Vec::new()
+    }
+    /// Waits until the source's first readings are in (or it gave up), `seconds` at most.
+    fn wait_ready(&mut self, _seconds: f64) {}
+    /// How LibreHardwareMonitor is read, where the source is the one that reads it.
+    fn lhm_status(&self) -> Option<lp_sensors::service::LhmStatus> {
+        None
+    }
+}
+
+/// LibreHardwareMonitor's readings (Windows): through Libre Panel's sensor service, or from
+/// the web server of a LibreHardwareMonitor that runs by itself.
+struct Lhm(lp_sensors::provider::Provider);
+
+impl Lhm {
+    /// `[sensors.librehardwaremonitor]` as the provider takes it; what is no such value is
+    /// said and left at its default.
+    fn new(table: Option<&Table>, wanted: &Wanted) -> (Lhm, Vec<String>) {
+        use lp_sensors::provider::{LhmOptions, Provider, System as Own};
+        let mut options = LhmOptions::default();
+        let mut notes = Vec::new();
+        for (key, value) in table.into_iter().flatten() {
+            let number = match value {
+                Toml::Float(f) => Some(*f),
+                Toml::Int(n) => lp_py::num::int_to_float(n).ok(),
+                _ => None,
+            };
+            match (key.as_str(), value, number) {
+                ("url", Toml::Str(url), _) => options.url = url.clone(),
+                ("gpu", Toml::Str(gpu), _) => options.gpu = Some(gpu.clone()),
+                ("mode", Toml::Str(mode), _) => options.mode = mode.clone(),
+                ("poll_seconds", _, Some(seconds)) => options.poll_seconds = seconds,
+                ("stale_seconds", _, Some(seconds)) => options.stale_seconds = seconds,
+                ("dll_dir", ..) => {} // (the Python app's, for LibreHardwareMonitor inside it)
+                _ => notes.push(format!(
+                    "[sensors.librehardwaremonitor] {key}: not a value this source takes"
+                )),
+            }
+        }
+        let provider = Provider::new(options, wanted.clone(), Own::own());
+        (Lhm(provider), notes)
+    }
+}
+
+impl Source for Lhm {
+    fn name(&self) -> &'static str {
+        "librehardwaremonitor"
+    }
+
+    fn read(&mut self, out: &mut Readings) {
+        out.extend(self.0.read());
+    }
+
+    fn notes(&mut self) -> Vec<String> {
+        self.0.notes()
+    }
+
+    fn wait_ready(&mut self, seconds: f64) {
+        self.0.wait_ready(seconds);
+    }
+
+    fn lhm_status(&self) -> Option<lp_sensors::service::LhmStatus> {
+        Some(self.0.status())
+    }
 }
 
 fn put(out: &mut Readings, key: &str, value: f64, unit: &str, label: &str) {
@@ -50,6 +119,9 @@ pub(crate) fn percent(part: f64, whole: f64) -> f64 {
 pub struct Hub {
     sources: Vec<Box<dyn Source>>,
     history: IndexMap<String, VecDeque<f64>>,
+    /// the keys the theme on show reads: a source may read only what is shown
+    wanted: Wanted,
+    notes: Vec<String>,
 }
 
 impl Hub {
@@ -57,25 +129,66 @@ impl Hub {
         Hub {
             sources,
             history: IndexMap::new(),
+            wanted: Wanted::default(),
+            notes: Vec::new(),
         }
+    }
+
+    /// The keys (and patterns) the theme on show reads.
+    pub fn want(&self, keys: impl IntoIterator<Item = String>) {
+        self.wanted.set(keys);
+    }
+
+    /// Sources that start in the background get the moment they need for their first
+    /// readings.
+    pub fn wait_ready(&mut self, seconds: f64) {
+        for source in &mut self.sources {
+            source.wait_ready(seconds);
+        }
+    }
+
+    /// How LibreHardwareMonitor is read, where a source reads it.
+    pub fn lhm_status(&self) -> Option<lp_sensors::service::LhmStatus> {
+        self.sources.iter().find_map(|source| source.lhm_status())
+    }
+
+    /// What the sources noted for the log since they were last asked.
+    pub fn notes(&mut self) -> Vec<String> {
+        let mut notes = std::mem::take(&mut self.notes);
+        for source in &mut self.sources {
+            notes.extend(source.notes());
+        }
+        notes
     }
 
     /// The sources config.toml names, as far as this build has them; the names of those it
     /// has not.
-    pub fn of(names: &[String], demo: bool) -> (Hub, Vec<String>) {
+    pub fn of(sensors: &SensorsConfig, demo: bool) -> (Hub, Vec<String>) {
         let mut sources: Vec<Box<dyn Source>> = Vec::new();
         let mut missing = Vec::new();
+        let mut notes = Vec::new();
+        let wanted = Wanted::default();
         if demo {
             sources.push(Box::new(Demo::new()));
         } else {
-            for name in names {
+            for name in &sensors.providers {
                 match name.as_str() {
                     "psutil" => sources.push(Box::new(System::new())),
+                    "librehardwaremonitor" => {
+                        let (source, said) = Lhm::new(sensors.options.get(name), &wanted);
+                        sources.push(Box::new(source));
+                        notes.extend(said);
+                    }
                     other => missing.push(other.to_string()),
                 }
             }
         }
-        (Hub::new(sources), missing)
+        let hub = Hub {
+            wanted,
+            notes,
+            ..Hub::new(sources)
+        };
+        (hub, missing)
     }
 
     /// The sources that are read, by their names.

@@ -10,6 +10,7 @@ use std::io::{self, BufRead, BufWriter, Write};
 
 mod config;
 mod devices;
+mod sensors;
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
@@ -1800,6 +1801,9 @@ fn run(case: &Value) -> Result<Value, String> {
                 "max_depth": lp_py::json::MAX_DEPTH})
         }
         "config" => config::run(case)?,
+        "regex" | "hwnames" | "lhm_readings" | "lhm_tree" | "sensor_protocol" | "lhm_hints" => {
+            sensors::run(op, case)?
+        }
         "toml" => {
             // each text read as tomllib.loads reads it; each file's bytes as
             // Path.read_text(encoding="utf-8") and then tomllib.loads read them; `frame`: how

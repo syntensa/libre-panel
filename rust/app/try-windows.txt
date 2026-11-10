@@ -19,7 +19,12 @@ To try it
    found in it. A mistake in it is said here.
 4. .\libre-panel.exe render --output frame.png
    draws one frame of your theme into frame.png. No panel is touched.
-5. .\libre-panel.exe run
+5. .\libre-panel.exe sensors
+   lists the readings it has, with their keys. With Libre Panel's sensor service set up
+   (Unlock all sensors in the installed app) the temperatures, the power, the fans and the
+   graphics card are among them; .\libre-panel.exe sensors --check-service says whether
+   the service answers.
+6. .\libre-panel.exe run
    shows the theme on the panel until Ctrl+C. What it says in the terminal is worth
    copying if something is wrong.
 
@@ -36,9 +41,10 @@ What to look at
 
 What it does not do yet
 -----------------------
-- Readings: the processor's load and clock, memory, disk, network and uptime only. The
-  graphics card, temperatures, fans, a game's frame rate, music, weather and the AI
-  activity are missing: their places stay empty.
+- Readings: the processor's load and clock, memory, disk, network and uptime, and what
+  LibreHardwareMonitor reads through Libre Panel's sensor service (or its own web server):
+  temperatures, power, fans, the graphics card. A game's frame rate, music, weather and
+  the AI activity are missing: their places stay empty.
 - One panel; no pages (game, music), no notices, no transitions between themes, no videos
   in themes, no app window and no tray icon.
 - Panels other than TURZX USB and the Hongtai family: config.toml's `driver = "virtual"`

@@ -16,6 +16,7 @@ pub mod math;
 pub mod num;
 pub mod random;
 pub mod re;
+pub mod regex;
 pub mod strftime;
 pub mod toml;
 pub mod value;

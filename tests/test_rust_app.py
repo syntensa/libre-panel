@@ -299,3 +299,70 @@ def test_it_lists_what_it_knows(tmp_path: Path) -> None:
     assert "majesty-9.16" in models
     assert _run(tmp_path, "nope").returncode == 1
     assert "libre-panel run" in _run(tmp_path).stdout
+
+
+def test_it_lists_librehardwaremonitor_s_readings_as_the_python_app_names_them(
+    tmp_path: Path,
+) -> None:
+    """`libre-panel sensors` with LibreHardwareMonitor's web server as the source: the
+    readings the Python app makes of the same tree, in the Python app's lines."""
+    import http.server
+    import threading
+
+    from libre_panel.sensors import librehardwaremonitor as lhm
+
+    def sensor(sensor_id: str, kind: str, text: str, value: str, **more: object) -> dict:
+        return {"Text": text, "SensorId": sensor_id, "Type": kind, "Value": value, **more}
+
+    tree = {"Text": "Sensor", "Children": [{"Text": "PC", "Children": [
+        {"Text": "AMD Ryzen 7 7800X3D 8-Core Processor", "HardwareId": "/amdcpu/0", "Children": [
+            sensor("/amdcpu/0/temperature/2", "Temperature", "Core (Tctl/Tdie)", "61,5 °C"),
+            sensor("/amdcpu/0/load/0", "Load", "CPU Total", "12,3 %"),
+            sensor("/amdcpu/0/clock/1", "Clock", "Core #1", "4875,0 MHz"),
+            sensor("/amdcpu/0/clock/2", "Clock", "Core #2", "5012,5 MHz"),
+            sensor("/amdcpu/0/power/0", "Power", "Package", "48,7 W")]},
+        {"Text": "NVIDIA GeForce RTX 4080", "HardwareId": "/gpu-nvidia/0", "Children": [
+            sensor("/gpu-nvidia/0/temperature/0", "Temperature", "GPU Core", "54,0 °C"),
+            sensor("/gpu-nvidia/0/smalldata/1", "SmallData", "GPU Memory Used", "3120,0 MB"),
+            sensor("/gpu-nvidia/0/fan/1", "Fan", "GPU Fan 1", "1240 RPM")]},
+        {"Text": "Ethernet", "HardwareId": "/nic/%7B1%7D", "Children": [
+            sensor("/nic/%7B1%7D/throughput/7", "Throughput", "Download Speed", "1,2 MB/s",
+                   RawValue=1258291.2)]},
+        {"Text": "DIMM 1", "HardwareId": "/memory/dimm/0", "Children": [
+            sensor("/memory/dimm/0/temperature/0", "Temperature", "DIMM #1", "41,2 °C")]},
+    ]}]}  # fmt: skip
+    body = json.dumps(tree).encode()
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802 - the handler's name for GET
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args: object) -> None:
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        (tmp_path / "config.toml").write_text(
+            '[sensors]\nproviders = ["librehardwaremonitor"]\n[sensors.librehardwaremonitor]\n'
+            f'mode = "webserver"\nurl = "http://127.0.0.1:{server.server_port}/data.json"\n'
+            "poll_seconds = 0.2\n",
+            encoding="utf-8",
+        )
+        done = _run(tmp_path, "sensors")
+    finally:
+        server.shutdown()
+    assert done.returncode == 0, done.stderr
+    readings = lhm.readings_from_tree(tree)
+    lines = []
+    for key in sorted(readings):
+        r = readings[key]
+        value = f"{r.value:.2f}" if isinstance(r.value, float) else str(r.value)
+        lines.append(f"{key:<40} {value:>14} {r.unit:<5} {r.label}")
+    assert done.stdout.splitlines() == lines
+    assert any(line.startswith("cpu.name") and "Ryzen 7 7800X3D" in line for line in lines)
+    assert any(line.startswith("mem.temp") for line in lines)

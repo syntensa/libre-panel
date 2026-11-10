@@ -1603,6 +1603,37 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       GlobalMemoryStatusEx, GetDiskFreeSpaceEx, each adapter's and each drive's counters,
       the processor's clock; not yet run on a Windows PC), each number's history for the
       graphs (600), and readings made up (`--demo`)
+- [x] LibreHardwareMonitor through the sensor service (rust/sensors, lp-sensors): the
+      protocol's client side (sensorservice/protocol.py: the framing, the two requests, every
+      check of an answer, in its words), the pipe (winpipe.py's connection with overlapped
+      I/O and timeouts, the server checked to be the service the Service Control Manager
+      names, a stopped service asked to start; not yet run on a Windows PC), the source that
+      asks it (lhm_service.py: only the hardware a theme on show reads, growing pauses, told
+      after 20 s of silence, 180 s before its first answer), the readings made of the sensors
+      (librehardwaremonitor.py's readings_from_sensors: raw keys, the aliases of the first
+      processor and the best graphics card, the cores' mean clock, every temperature and fan,
+      the hottest memory module, the cable's power monitor, amounts of data as 0.9.6 told
+      them, and which sensors each key is made from), the hardware's names (hwnames.py), the
+      web server's tree and the provider that chooses (the service where it is installed,
+      the web server while it is silent or missing; LibreHardwareMonitor inside the app's
+      process is not in Rust: the service is there to spare that). `libre-panel sensors`
+      lists the readings in the Python app's lines, `--check-service` asks the service once.
+      Compared with Python: 3000 names, 400 computers' sensors, 500 trees, 4000 answers
+      with one thing wrong each (tests/test_rust_sensors.py), the program's listing of a
+      web server's tree (tests/test_rust_app.py); the provider's ways with a service and a
+      web server made up (cargo test)
+- [x] Python's regular expressions as far as the app's own patterns go (lp-py's regex):
+      characters, sets, `\d \s \w \b`, groups, look ahead, atomic groups, greedy, lazy and
+      possessive repeats, with or without re.IGNORECASE, matched by going back as re does
+      (an empty round's captures, 3.12's `\B` in an empty text), search, match, fullmatch,
+      sub and split: 3000 made-up patterns and the app's own against texts, the same spans,
+      texts and refusals
+- [x] what to do when Windows' temperatures and power are missing (hardware_hint for the
+      command line, which `libre-panel sensors` says; user_hint, the sentence in the
+      person's language for the tray and the pages; ring0_steps): every way it may be read
+      and fail, with and without readings, in English and German, the same words
+- [ ] HWiNFO, RTSS, PresentMon, MangoHud, the other sources; Linux's hint of what
+      system-setup brings
 - [ ] the history as a ring, demo.py's values; the .NET service goes
 
 ### R8 services

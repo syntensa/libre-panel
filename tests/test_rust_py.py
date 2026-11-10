@@ -1510,3 +1510,106 @@ def test_a_file_s_text_as_python_reads_it(tmp_path: Path) -> None:
         assert mine == want, content
     kinds = [want.get("kind", "ok") for want in wanted]
     assert kinds.count("unicode") > 1500 and kinds.count("ok") > 100 and kinds.count("decode") > 300
+
+
+def test_patterns_match_as_python_s_re() -> None:
+    # (lp_py::regex, the part of re the app's own patterns are written in: the app's patterns
+    # and ones made up of the same pieces, each searched, matched, matched whole, replaced and
+    # split in texts; a pattern re refuses is refused)
+    from libre_panel.sensors import hwnames
+    from libre_panel.sensors import librehardwaremonitor as lhm
+
+    rng = random.Random(0x5E)
+    real = [lhm._NUMBER, lhm._CORE_CLOCK, hwnames._MARKS, *hwnames._CPU_CUTS, hwnames._VENDOR,
+            hwnames._GENUINE, hwnames._COMPANY]  # fmt: skip
+    patterns = [(p.pattern, bool(p.flags & re.IGNORECASE)) for p in real]
+    patterns += [
+        (r"[^a-z0-9]+", False),
+        (r"[*?\[]", False),
+        (r"/[!-~]{1,199}", False),
+        (r"(?:0x)?[0-9a-f]{4}", True),
+        (r"\s*\([^)]*\)$", False),
+        (r"[^a-z0-9]", False),
+    ]
+    atoms = ["a", "b", "K", "s", ".", r"\d", r"\s", r"\w", r"\W", r"\b", r"\B", "[ab]", "[^a]",
+             "[a-c0-9]", r"[\d.,]", "^", "$", " ", "-", r"\.", r"\(", "é", "ſ", "(?:ab|a)",
+             "(a|b)", "(a*)", "(?=b)", "(?!a)", "x{2}", "a{1,2}", "{", "}", "(b?)",
+             "(?:)", "(?>a|ab)"]  # fmt: skip
+    signs = [
+        "",
+        "",
+        "",
+        "*",
+        "+",
+        "?",
+        "*?",
+        "+?",
+        "??",
+        "{2}",
+        "{0,2}",
+        "{1,}",
+        "{,2}?",
+        "*+",
+        "?+",
+        "{1,2}+",
+    ]
+
+    def made(depth: int = 0) -> str:
+        parts = []
+        for _ in range(rng.randrange(1, 5)):
+            atom = rng.choice(atoms)
+            if depth < 2 and rng.random() < 0.2:
+                atom = rng.choice(["(", "(?:"]) + made(depth + 1) + ")"
+            plain = atom in ("^", "$", r"\b", r"\B") or atom.endswith("}")  # (mostly refused)
+            parts.append(atom + ("" if plain and rng.random() < 0.9 else rng.choice(signs)))
+        text = "".join(parts)
+        return text + "|" + made(depth + 1) if depth < 2 and rng.random() < 0.15 else text
+
+    own = len(patterns)  # (the app's: against every text; the made up ones against short ones,
+    # where going back and back again stays short in re too)
+    patterns += [(made(), rng.random() < 0.4) for _ in range(3000)]
+    names = ["12th Gen Intel(R) Core(TM) i7-12700K CPU @ 3.60GHz",
+             "AMD Ryzen 5 7600 6-Core Processor",
+             "AMD Ryzen 7 5700G with Radeon Graphics", "Genuine Intel(R) CPU 0000 @ 2.40GHz",
+             "Intel(R) Core(TM)2 Quad-Core Processor Q6600", "NVIDIA GeForce RTX 4070",
+             "Advanced Micro Devices, Inc. Radeon RX 7800 XT", "Kingston Technology Company, Inc.",
+             "Patriot Memory (PDP)", " 45,0 °C", "-1234.5 RPM", "NaN", "-", "CPU Core #12",
+             "Core #1", "/amdcpu/0", "/nic/%7B12%7D", "0x859B", "Core (Tctl/Tdie)", "net.*",
+             "", "a", "ab", "aab ba\n", "K ſS s.k", "xx a-b (a) 1,5 é٣ b_", "abab\n"]  # fmt: skip
+    pool = "abKsſS x-.,()é1٣_\n"
+    texts = names + ["".join(rng.choice(pool) for _ in range(rng.randrange(0, 9)))
+                     for _ in range(40)]  # fmt: skip
+    cases, wanted = [], []
+    short = [text for text in texts if len(text) < 10]
+    for n, (pattern, ignore) in enumerate(patterns):
+        try:
+            compiled = re.compile(pattern, re.IGNORECASE if ignore else 0)
+        except re.error:
+            compiled = None
+        for text in (texts if n < own else short) if compiled else texts[:1]:
+            cases.append([pattern, ignore, text])
+            if compiled is None:
+                wanted.append("error")
+                continue
+
+            def spans(m: re.Match[str] | None) -> list[list[int] | None] | None:
+                if m is None:
+                    return None
+                return [None if m.start(n) < 0 else list(m.span(n))
+                        for n in range(m.re.groups + 1)]  # fmt: skip
+
+            wanted.append({
+                "search": spans(compiled.search(text)), "match": spans(compiled.match(text)),
+                "full": compiled.fullmatch(text) is not None, "sub": compiled.sub("<>", text),
+                "split": compiled.split(text),
+            })  # fmt: skip
+    [ours] = run([{"op": "regex", "cases": cases}])
+    assert len(ours) == len(wanted) > 90_000
+    refused = 0
+    for case, got, want in zip(cases, ours, wanted, strict=True):
+        if want == "error":
+            assert "error" in got, case
+            refused += 1
+        else:
+            assert got == want, case
+    assert 0 < refused < len(patterns) // 4

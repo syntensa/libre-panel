@@ -100,7 +100,7 @@ impl MainLoop {
         let config_file = asked.config.clone().unwrap_or_else(|| home.config_file());
         let config =
             lp_config::load_config(&config_file, lp_config::platform()).map_err(|e| e.msg)?;
-        let (hub, missing) = Hub::of(&config.sensors.providers, asked.demo);
+        let (hub, missing) = Hub::of(&config.sensors, asked.demo);
         say(&format!("readings from: {}", hub.names().join(", ")));
         if !missing.is_empty() {
             say(&format!(
@@ -174,8 +174,11 @@ impl MainLoop {
                     self.close_panel();
                 }
                 if fresh.sensors != self.config.sensors {
-                    let (hub, _) = Hub::of(&fresh.sensors.providers, self.asked.demo);
+                    let (hub, _) = Hub::of(&fresh.sensors, self.asked.demo);
                     self.hub = hub;
+                    if let Some(renderer) = &self.renderer {
+                        self.hub.want(renderer.reads());
+                    }
                 }
                 self.config = fresh;
                 self.renderer = None;
@@ -429,6 +432,7 @@ impl MainLoop {
                         say(&format!("theme {name}: {warning}"));
                     }
                     say(&format!("theme {name}"));
+                    self.hub.want(renderer.reads());
                     self.renderer = Some(renderer);
                     self.shown = name;
                     self.refused = None;
@@ -456,7 +460,11 @@ impl MainLoop {
             Some(last) if started < self.next_sample => Snapshot { now, fold, ..last },
             _ => {
                 self.next_sample = started + every;
-                self.hub.snapshot(now, fold)
+                let snapshot = self.hub.snapshot(now, fold);
+                for note in self.hub.notes() {
+                    say(&note);
+                }
+                snapshot
             }
         };
         self.snapshot = Some(snapshot.clone());

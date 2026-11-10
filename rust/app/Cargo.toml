@@ -20,6 +20,7 @@ lp-theme = { path = "../theme" }
 lp-config = { path = "../config" }
 lp-render = { path = "../render" }
 lp-devices = { path = "../devices" }
+lp-sensors = { path = "../sensors" }
 indexmap = "2"
 
 [target.'cfg(unix)'.dependencies]

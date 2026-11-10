@@ -17,6 +17,7 @@ lp-text = { path = "../text" }
 lp-devices = { path = "../devices" }
 lp-theme = { path = "../theme" }
 lp-config = { path = "../config" }
+lp-sensors = { path = "../sensors" }
 indexmap = "2"
 num-bigint = "0.4"
 serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
