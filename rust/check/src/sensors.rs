@@ -2680,6 +2680,60 @@ fn memory(case: &Value) -> Result<Value, String> {
     Ok(json!({"files": files, "places": places, "watches": watches, "services": services}))
 }
 
+/// cooling: for each case (a database of the memory, FanControl's file, the limits of the
+/// options, a period, a mode and the moment it is asked) the recommendations, everything a
+/// page draws and the report in words, as services/cooling.py and its helpers give them.
+fn cooling(case: &Value) -> Result<Value, String> {
+    use lp_services::cooling_data::{catalogue, fancontrol_states, load_rows, Mode};
+    use lp_services::{cooling, cooling_advice, cooling_text, fancontrol as fc};
+    let locale = std::path::PathBuf::from(case["locale"].as_str().unwrap_or(""));
+    let code = case["language"].as_str().unwrap_or("en");
+    lp_i18n::set_language(lp_i18n::Language::load(&locale, code)?);
+    let how = lp_py::json::Dumps::default();
+    let dumped = |table: lp_py::Dict| lp_py::json::dumps(&lp_py::Value::Dict(table), &how);
+    let mut cases = Vec::new();
+    for case in case["cases"].as_array().into_iter().flatten() {
+        let database = std::path::PathBuf::from(case["database"].as_str().unwrap_or(""));
+        let now = case["now"].as_f64().unwrap_or(0.0);
+        let section = fc::section_of(&bytes_of(&case["file"])).unwrap_or_default();
+        let (curves, fans) = fc::curves_and_fans(&fc::state_of(&section));
+        let mut notes = Vec::new();
+        let raw = match loaded(&case["limits"]) {
+            lp_py::Value::List(raw) => raw,
+            _ => Vec::new(),
+        };
+        let limits = cooling_advice::parse_limits(&raw, &mut |note| notes.push(note));
+        let names = catalogue(&database);
+        let states = fancontrol_states(&database);
+        let recent = load_rows(
+            &database,
+            Some(cooling_advice::LOOKBACK_DAYS),
+            Mode::All,
+            now,
+        )?;
+        let recommended =
+            cooling_advice::advise(&recent, &states, &curves, &fans, &names, &limits, now);
+        let mode = match case["mode"].as_str() {
+            Some("game") => Mode::Game,
+            Some("desktop") => Mode::Desktop,
+            _ => Mode::All,
+        };
+        let rows = load_rows(&database, case["days"].as_f64(), mode, now)?;
+        let mut said = json!({
+            "notes": notes, "rows": rows.len(), "recommended": dumped(recommended.clone()),
+        });
+        if !rows.is_empty() {
+            let points = case["points"].as_i64().unwrap_or(480);
+            let drawn = cooling::analysis(&rows, &curves, &fans, &names, &recommended, points);
+            said["analysis"] = json!(dumped(drawn));
+            let lines = cooling_text::report(&rows, &fans, &curves, &recommended, &names);
+            said["report"] = json!(lines);
+        }
+        cases.push(said);
+    }
+    Ok(json!({"cases": cases}))
+}
+
 pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "regex" => regex(case),
@@ -2712,6 +2766,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "game" => game(case)?,
         "downloads" => downloads(case)?,
         "memory" => memory(case)?,
+        "cooling" => cooling(case)?,
         "autopilot" => autopilot(case)?,
         "mangohud" => mangohud(case)?,
         "media" => media(case),

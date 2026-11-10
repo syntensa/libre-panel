@@ -21,6 +21,7 @@ pub fn parts() -> IndexMap<&'static str, Part> {
     let mut parts = IndexMap::new();
     parts.insert("agents", lp_services::agents_service::part());
     parts.insert("autopilot", lp_services::autopilot::part());
+    parts.insert("cooling", lp_services::cooling::part());
     parts.insert("downloads", lp_services::downloads::part());
     parts.insert("game", lp_services::game::part());
     parts.insert("memory", lp_services::memory::part());

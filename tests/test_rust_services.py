@@ -2818,3 +2818,218 @@ def test_the_memory_keeps_what_memory_py_keeps(tmp_path: Any, monkeypatch) -> No
             seen["music"] += sum(bool(row[-3]) for row in tables[0]["minutes"])
             seen["hotspot"] += sum(row[8] is not None for row in tables[0]["minutes"])
     assert all(count >= 5 for count in seen.values()), seen
+
+
+def _cooling_case(rng: random.Random, path: Any, number: int) -> dict[str, Any]:
+    """A database as the memory writes one: some days at the desk and in games, with fans
+    that follow their curves or do not, FanControl's states and the names of the sensors;
+    and FanControl's file of the same curves."""
+    import sqlite3
+
+    from libre_panel.services import memory, memory_store
+
+    def at(points: list[tuple[float, float]], temp: float) -> float:
+        if temp <= points[0][0]:
+            return points[0][1]
+        for (t0, d0), (t1, d1) in zip(points, points[1:], strict=False):
+            if temp <= t1:
+                return d0 + (d1 - d0) * (temp - t0) / (t1 - t0)
+        return points[-1][1]
+
+    cpu_points = [(30.0, rng.choice([20.0, 30.0])), (60.0, 50.0), (80.0, 100.0)]
+    gpu_points = [(40.0, 25.0), (70.0, 60.0), (85.0, 100.0)]
+    board_points = rng.choice([[(30.0, 30.0), (50.0, 60.0), (70.0, 90.0), (80.0, 100.0)], []])
+    wrong = rng.choice([0.0, 0.0, 15.0, -12.0])  # the CPU's curve reads another sensor
+    highest = rng.random() < 0.5  # the mix takes the higher of its parts
+    jumpy = rng.random() < 0.3
+    hot = rng.random() < 0.4
+    loud = rng.choice([0.0, 0.0, 12.0])
+    drift = rng.choice([0.0, 0.0, 0.5])
+    kept = rng.random() < 0.5  # what each curve reads is recorded
+    days = rng.choice([1, 2, 3, 16, 20])
+    hours = 2.0 if days > 5 else rng.choice([0.3, 2.0, 8.0])
+    began = 1_750_000_000 + number * 1000
+    rows, ts = [], began
+    for day in range(days):
+        ts = began + day * 86400
+        outside = rng.choice([None, 12.0 + 6 * rng.random()])
+        for kind, share in (("desktop", 0.5), ("game", 0.3), ("desktop", 0.2)):
+            if kind == "game" and rng.random() < 0.2:
+                continue
+            end = ts + hours * 3600 * share
+            game = rng.choice(["Doom", "Doom", "Quake", None]) if kind == "game" else None
+            flip = 1
+            while ts < end:
+                if kind == "game":
+                    load, step = rng.uniform(50, 100), rng.choice([5, 8, 20, 60, 60])
+                    cpu = 62 + load * 0.15 + rng.uniform(-2, 2)
+                    gpu = (82 if hot else 70) + rng.uniform(-3, 6)
+                else:
+                    load, step = rng.uniform(3, 30), rng.choice([12, 20, 60, 60, 60])
+                    cpu = 36 + load * 0.3 + drift * day + rng.uniform(-1.5, 1.5)
+                    gpu = 41 + rng.uniform(-2, 2)
+                flip = -flip
+                wobble = 6.5 * flip if jumpy else rng.uniform(-1, 1)
+                seen = cpu + wrong
+                cpu_duty = min(100.0, max(0.0, at(cpu_points, seen) + loud + wobble))
+                gpu_duty = min(100.0, at(gpu_points, gpu) + rng.uniform(-1, 1))
+                mixed = max(cpu_duty, gpu_duty) if highest else min(cpu_duty, gpu_duty) - 3
+                board = 38 + rng.uniform(-1, 1)
+                fans = {"CPU Fan": [round(cpu_duty * 15 + rng.uniform(-20, 20)), cpu_duty],
+                        "GPU fans": [None if rng.random() < 0.05 else gpu_duty * 22.0, gpu_duty],
+                        "Case": [mixed * 11.0, mixed]}  # fmt: skip
+                if board_points:
+                    duty = at(board_points, board + 20)
+                    fans["Rear Fan"] = [duty * 9.0, None if rng.random() < 0.02 else duty]
+                sources = {"CPU": round(seen, 1), "GPU": round(gpu, 1)} if kept else {}
+                rows.append((
+                    ts, "game" if kind == "game" else "normal", game, cpu,
+                    rng.uniform(40, 120), load, gpu, gpu + 12 if rng.random() < 0.9 else None,
+                    rng.uniform(30, 300), load, outside,
+                    json.dumps({"temp.board.system": board}) if rng.random() < 0.9 else None,
+                    json.dumps(fans), json.dumps(sources) if sources else None,
+                ))  # fmt: skip
+                ts += step
+            ts += rng.choice([0, 0, 200])
+    mix = {"Name": "Mix", "SelectedFanCurves": [{"Name": "CPU"}, {"Name": "GPU"}]}
+
+    def curve(name: str, points: list[tuple[float, float]], source: str) -> dict[str, Any]:
+        return {"Name": name, "Points": [f"{t:g},{d:g}" for t, d in points],
+                "SelectedTempSource": {"Identifier": source},
+                "HysteresisConfig": rng.choice([{}, {"HysteresisValueUp": 2,
+                                                     "HysteresisValueDown": 3.5,
+                                                     "ResponseTimeDown": 4}])}  # fmt: skip
+
+    def control(name: str, on: str, number: int) -> dict[str, Any]:
+        return {
+            "NickName": name,
+            "Identifier": f"/lpc/nct/control/{number}",
+            "Enable": True,
+            "SelectedFanCurve": {"Name": on},
+            "MinimumPercent": rng.choice([20, None, 30.5]),
+        }
+
+    section = {
+        "FanCurves": [curve("CPU", cpu_points, "/amdcpu/0/temperature/2"),
+                      curve("GPU", gpu_points, "/gpu-nvidia/0/temperature/0"), mix,
+                      curve("Board", board_points, "/lpc/nct/temperature/1")],
+        "Controls": [control("CPU Fan", "CPU", 0), control("GPU fans", "GPU", 1),
+                     control("Case", "Mix", 2), control("Rear_Fan", "Board", 3)],
+    }  # fmt: skip
+    connection = sqlite3.connect(path)
+    try:
+        connection.executescript(memory_store.SCHEMA)
+        marks = ", ".join("?" * len(memory.COOLING_COLUMNS))
+        connection.executemany(f"INSERT INTO cooling VALUES ({marks})", rows)
+        for n in range(rng.choice([0, 1, 2, 2, 3])):
+            state = {"curves": [dict(c, Points=[*c.get("Points", []), f"{90 + n},100"])
+                                for c in section["FanCurves"]],
+                     "controls": section["Controls"]}  # fmt: skip
+            when = began + int((ts - began) * [0.0, 0.3, 0.6][n])
+            connection.execute("INSERT INTO fancontrol VALUES (?, ?, ?)",
+                               (when, f"mark{n}", json.dumps(state)))  # fmt: skip
+        if rng.random() < 0.8:
+            named = {
+                "cpu": rng.choice(["Ryzen 7", None]),
+                "gpu": "RTX 4070",
+                "sensors": [
+                    {
+                        "key": "temp.cpu.core",
+                        "id": "/amdcpu/0/temperature/2",
+                        "label": "Core (Tctl/Tdie)",
+                        "panel": "cpu_temp",
+                    },
+                    {
+                        "key": "temp.gpu.core",
+                        "id": rng.choice([None, "/gpu-nvidia/0/temperature/0"]),
+                        "label": rng.choice(["GPU Core", ""]),
+                        "panel": "gpu_temp",
+                    },
+                    {"key": "temp.board.system", "id": None, "label": "System", "panel": None},
+                ],
+            }
+            connection.execute("INSERT INTO meta VALUES ('sensors', ?)", (json.dumps(named),))
+        connection.commit()
+    finally:
+        connection.close()
+    return {
+        "database": str(path), "file": json.dumps({"FanControl": section}).encode().hex(),
+        "limits": json.dumps(rng.choice([[], [{"key": "gpu.temp", "max": 80, "name": "Card"},
+                                              {"key": "temp.board.system", "max": 30.5}, 5,
+                                              {"key": "", "max": 1}, {"key": "x", "max": True}]])),
+        "days": rng.choice([None, 1.0, 0.5, 30]),
+        "mode": rng.choice([None, None, "game", "desktop"]),
+        "points": rng.choice([480, 480, 5, 40]), "now": float(ts + rng.choice([0, 600, 40000])),
+    }  # fmt: skip
+
+
+def test_the_cooling_is_judged_as_cooling_py_judges_it(tmp_path: Any) -> None:
+    """services/cooling.py with cooling_data.py, cooling_advice.py and cooling_text.py: the
+    rows of a database with the time each holds, the recommendations since FanControl was
+    last changed (a curve on the wrong sensor, a mix that does not take the higher part,
+    what is too warm, oscillation, a fan that could be quieter, the trend), everything a page
+    draws (the course, the clouds, the findings, the table) and the report in words."""
+    from pathlib import Path
+
+    from libre_panel import i18n
+    from libre_panel.services import cooling, cooling_advice, cooling_data, cooling_text, fancontrol
+
+    rng = random.Random(0xC0071)
+    seen = {key: 0 for key in ("source", "mix", "warm", "oscillation", "quieter", "trend", "none",
+                               "changed", "waiting", "effect", "warn", "ok", "proposal", "report",
+                               "notes", "measured", "after")}  # fmt: skip
+    for language, count in (("en", 36), ("ru", 12)):
+        cases = [_cooling_case(rng, tmp_path / f"{language}{n}.db", n) for n in range(count)]
+        theirs = []
+        i18n.set_language(language)
+        try:
+            for case in cases:
+                path = Path(case["database"])
+                config = tmp_path / "userConfig.json"
+                config.write_bytes(bytes.fromhex(case["file"]))
+                section = fancontrol.read_section(config)
+                curves, fans = fancontrol.curves_and_fans(fancontrol.state_of(section))
+                notes: list[str] = []
+                limits = cooling_advice.parse_limits(json.loads(case["limits"]), notes.append)
+                names = cooling_data.catalogue(path)
+                states = cooling_data.fancontrol_states(path)
+                recent = cooling_data.load_rows(path, cooling_advice.LOOKBACK_DAYS, None,
+                                                case["now"])  # fmt: skip
+                recommended = cooling_advice.advise(recent, states, curves, fans, names, limits,
+                                                    case["now"])  # fmt: skip
+                rows = cooling_data.load_rows(path, case["days"], case["mode"], case["now"])
+                said = {"notes": notes, "rows": len(rows), "recommended": json.dumps(recommended)}
+                if rows:
+                    drawn = cooling.analysis(rows, curves, fans, names, recommended, case["points"])
+                    said["analysis"] = json.dumps(drawn)
+                    said["report"] = cooling_text.report(rows, fans, curves, recommended, names)
+                    for finding in drawn["findings"]:
+                        seen[finding["level"]] = seen.get(finding["level"], 0) + 1
+                    seen["measured"] += any(plot["measured"] for plot in drawn["plots"])
+                    seen["proposal"] += any(plot["proposal"] for plot in drawn["plots"])
+                    seen["report"] += len(said["report"])
+                theirs.append(said)
+                seen["notes"] += len(notes)
+                seen["none"] += not recommended["list"]
+                seen["changed"] += recommended["changed"]
+                seen["waiting"] += "waiting" in recommended
+                seen["effect"] += bool(recommended["effect"])
+                for entry in recommended["list"]:
+                    seen[entry["id"].split(":")[0]] += 1
+                    seen["after"] += "after_number" in entry
+        finally:
+            i18n.set_language("en")
+        [ours] = run([{"op": "cooling", "locale": str(i18n.LOCALE_DIR), "language": language,
+                       "cases": cases}])  # fmt: skip
+        assert "cases" in ours, ours
+        for case, want, got in zip(cases, theirs, ours["cases"], strict=True):
+            for key in want:
+                a, b = want[key], got.get(key)
+                if a != b and isinstance(a, str) and isinstance(b, str):
+                    cut = next((i for i, (x, y) in enumerate(zip(a, b, strict=False)) if x != y),
+                               min(len(a), len(b)))  # fmt: skip
+                    a, b = a[max(0, cut - 300) : cut + 120], b[max(0, cut - 300) : cut + 120]
+                assert a == b, (key, {k: case[k] for k in ("days", "mode", "points")})
+            assert set(got) == set(want)
+            Path(case["database"]).unlink()
+    assert all(count >= 2 for count in seen.values()), seen

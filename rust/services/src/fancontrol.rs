@@ -446,7 +446,8 @@ pub fn changes(old: &Dict, new: &Dict) -> Vec<Value> {
 
 // -- looking for changes -------------------------------------------------------------------------
 
-type Stamp = (String, Option<SystemTime>, u64);
+/// A file as it is at a moment: its path, when it was changed and its size.
+pub type Stamp = (String, Option<SystemTime>, u64);
 
 /// Tells when the configuration file changed. Its modification time is looked at every
 /// `CHECK_S`; the file is read only when that has moved (and again if it could not be read,
@@ -476,7 +477,7 @@ impl Watch {
     }
 
     /// stamp: the file as it is now (path, modification time, size); None without one.
-    fn stamp(&mut self) -> Result<Option<Stamp>, String> {
+    pub fn stamp(&mut self) -> Result<Option<Stamp>, String> {
         let path = find(&self.given, &self.places)?;
         if path.is_none() && !self.given.is_empty() && !self.warned {
             self.warned = true;

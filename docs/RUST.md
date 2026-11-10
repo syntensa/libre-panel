@@ -1864,7 +1864,17 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
   fans and their names, what changed, the watch over the file). 800 files of FanControl, 80
   watches and 40 services of samples compared with Python, the databases row for row with
   their schema; in the app, a round is recorded and its report shown.
-- [ ] cooling, devices
+- [x] cooling (services/cooling.py, cooling_data.py, cooling_advice.py, cooling_text.py;
+  lp-services' cooling, cooling_data, cooling_advice, cooling_text): the memory's cooling
+  rows with the time each holds, the quantiles by time, what a curve must have seen for the
+  duty its fan had and which sensor it follows; the recommendations since FanControl was
+  last changed (a curve on the wrong sensor with new points, a mix that does not take the
+  higher part, what is too warm, oscillation, a fan that could be quieter, the trend, before
+  and after a change); everything a page draws (the course in bins, the clouds, the
+  findings, the table) and the report in words, kept per question until FanControl's
+  settings change. 48 databases compared with Python in two languages; in the app, the
+  service starts and names the file it reads.
+- [ ] devices
 
 ### R9 the app
 - [ ] the server and every route of its API, the same JSON

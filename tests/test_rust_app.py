@@ -1947,3 +1947,28 @@ def test_the_memory_keeps_a_round_and_shows_its_report(tmp_path: Path) -> None:
     if os.name != "nt":  # (ended at once on Windows: the minute under way is not written)
         assert minutes and all(row[1] == 55.0 for row in minutes), minutes
         assert "round report: Doom, 0 min, 1" in said, said
+
+
+def test_the_cooling_analysis_starts_and_names_the_file_it_reads(tmp_path: Path) -> None:
+    """`cooling` among the services: it does nothing on its own (a page asks it), and says
+    at its start which file it reads: the memory service's, unless another is named."""
+    (tmp_path / "config.toml").write_text(
+        'theme = "slate"\nfps = 2\nrefresh_ms = 200\n[device]\ndriver = "virtual"\n'
+        'output = "panel.png"\n[sensors]\nproviders = []\n[services]\nenabled = ["cooling"]\n'
+        '[services.cooling]\nlimits = [{ key = "cpu.temp", max = 95 }, 5]\n',
+        encoding="utf-8",
+    )
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries()}  # fmt: skip
+    with subprocess.Popen([str(_program()), "run"], env=env, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        time.sleep(3)
+        if os.name == "nt":
+            program.terminate()
+        else:
+            program.send_signal(signal.SIGINT)
+        said = program.communicate(timeout=30)[1]
+    assert "service 'cooling' started" in said, said
+    reads = tmp_path / "plugins-data" / "memory" / "memory.db"
+    assert f"cooling analysis: reads {reads}" in said, said
+    assert "limits[2]: needs a reading and a maximum" in said, said
