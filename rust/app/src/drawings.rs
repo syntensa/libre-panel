@@ -485,6 +485,94 @@ pub fn module_previews(palette: &Value, style: &Value, symbols: &str, env: &Env)
     Ok(Value::Dict(previews))
 }
 
+/// A theme drawn still for the library, the demo's readings at a fixed moment: its PNG in
+/// base64.
+pub fn still_picture(theme: Theme, symbols: &str, env: &Env) -> Answer<Value> {
+    let snapshot = demo(Some(1_700_000_000.0), &env.fonts_dir)?;
+    let options = lp_render::Options {
+        preview: true,
+        animate: false,
+        dither: false,
+    };
+    let mut renderer = Renderer::new(theme, env, options).map_err(unported)?;
+    renderer.symbols = symbols.to_string();
+    let drawn = renderer.render(snapshot, lp_render::video::monotonic());
+    renderer.close();
+    let (frame, _boxes) = drawn.map_err(unported)?;
+    Ok(Value::Str(base64(&png(&frame)?)))
+}
+
+/// fan_look: a fan of that look as a picture (PNG), in its square frame and the app's accent:
+/// the tiles of Settings show them. None for a look or colours there are not.
+pub fn fan_look(look: &str, paint: &str, fonts: &Path) -> Answer<Option<Vec<u8>>> {
+    let known = lp_theme::tables::FAN_LOOKS.contains(&look)
+        && lp_theme::tables::FAN_PAINTS.contains(&paint);
+    if !known {
+        return Ok(None);
+    }
+    // (a fan that runs: lit, drawn standing, its blades sharp)
+    let mut rotor = lp_render::fan::Rotor::settled("preview", Some(1800.0), 3000.0);
+    rotor.speed = 0.0;
+    let image = lp_render::fan::picture(
+        &lp_render::fan::pictures_dir(fonts),
+        [34, 211, 238],
+        112,
+        &rotor,
+        lp_render::fan::Frame::Square,
+        lp_render::fan_looks::look(look),
+        paint == "own",
+    )
+    .map_err(|e| Refused::Failed(format!("{e:?}")))?;
+    lp_devices::png::encode_with(&image, lp_devices::png::Compression::new(6))
+        .map(Some)
+        .map_err(Refused::Failed)
+}
+
+/// symbols_look: the weather symbols and the moon in that look as a picture (PNG), on a
+/// panel's dark ground: the sun behind a cloud and snow, lit, by day, and the moon waxing.
+/// None for a look there is not.
+pub fn symbols_look(pack: &str, env: &Env) -> Answer<Option<Vec<u8>>> {
+    if !lp_theme::tables::SYMBOL_PACKS.contains(&pack) {
+        return Ok(None);
+    }
+    let (palette, _) = lp_theme::modules::info::look_theme_parts("arctic").unwrap_or_default();
+    let text = r##"{"format": "libre-panel-theme/1", "display": {"width": 360, "height": 120},
+        "background": {"color": "#0b1016"}, "widgets": [
+        {"type": "symbol", "id": "sun", "x": 0, "y": 0, "size": 120, "finish": "lit",
+         "sensor": "weather.code"},
+        {"type": "symbol", "id": "snow", "x": 120, "y": 0, "size": 120, "finish": "lit",
+         "sensor": "weather.hour.1.code"},
+        {"type": "moon", "id": "moon", "x": 250, "y": 10, "size": 100}]}"##;
+    let mut data = lp_py::json::loads(text).map_err(|e| Refused::Failed(e.to_string()))?;
+    if let Value::Dict(d) = &mut data {
+        d.insert("palette".into(), Value::Dict(palette));
+    }
+    let theme = lp_theme::parse_theme(&data, None, env).map_err(theme_error)?;
+    let mut snapshot = demo(Some(1_700_000_000.0), &env.fonts_dir)?;
+    for (key, value) in [
+        ("weather.code", Value::int(2)),
+        ("weather.is_day", Value::int(1)),
+        ("moon.phase", Value::Float(0.36)),
+        ("weather.hour.1.code", Value::int(73)),
+        ("weather.hour.1.day", Value::int(1)),
+    ] {
+        snapshot
+            .readings
+            .insert(key.into(), lp_render::Reading::of(value));
+    }
+    let options = lp_render::Options {
+        preview: true,
+        animate: false,
+        dither: false,
+    };
+    let mut renderer = Renderer::new(theme, env, options).map_err(unported)?;
+    renderer.symbols = pack.to_string();
+    let drawn = renderer.render(snapshot, lp_render::video::monotonic());
+    renderer.close();
+    let (frame, _boxes) = drawn.map_err(unported)?;
+    png(&frame).map(Some)
+}
+
 /// int(value) as Python takes it: its exception and message where it raises.
 pub fn int_of(value: Option<&Value>) -> Result<BigInt, (&'static str, String)> {
     let not = |name: &str| {

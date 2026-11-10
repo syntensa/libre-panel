@@ -24,6 +24,7 @@ mod server;
 mod services;
 mod settings;
 mod share;
+mod specs;
 mod switch;
 mod system;
 mod updates;

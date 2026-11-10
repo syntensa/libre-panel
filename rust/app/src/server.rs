@@ -209,6 +209,42 @@ const ROUTES: &[Route] = &[
             Err(crate::previews::Refused::Drawing(why)) => unanswered(&why),
         }
     }),
+    picture("GET", "/api/fan-look", |s, x, _, u| {
+        let query = crate::http::parse_qs(&u.query);
+        let first = |name: &str, default: &str| {
+            query
+                .get(name)
+                .and_then(|v| v.first())
+                .map_or(default.to_string(), String::clone)
+        };
+        let (look, paint) = (first("look", "noctua-g2"), first("paint", "theme"));
+        picture_answer(
+            x,
+            crate::drawings::fan_look(&look, &paint, &s.home.fonts()),
+            "unknown look or colours",
+        )
+    }),
+    picture("GET", "/api/symbols-look", |s, x, _, u| {
+        let query = crate::http::parse_qs(&u.query);
+        let pack = query
+            .get("pack")
+            .and_then(|v| v.first())
+            .map_or(lp_config::DEFAULT_SYMBOLS.to_string(), String::clone);
+        let env = lp_theme::Env {
+            fonts_dir: s.home.fonts(),
+        };
+        picture_answer(
+            x,
+            crate::drawings::symbols_look(&pack, &env),
+            "unknown look",
+        )
+    }),
+    private("GET", "/api/specs", |s, x, _, _| {
+        let env = lp_theme::Env {
+            fonts_dir: s.home.fonts(),
+        };
+        x.json(&crate::specs::specs(&env, &s.home.places()), 200)
+    }),
     private("GET", "/api/readings", |s, x, _, u| readings(s, x, u)),
     private("GET", "/api/settings", |s, x, _, _| {
         settings(s, x, |told| told.read())
@@ -294,6 +330,18 @@ const ROUTES: &[Route] = &[
         }
     }),
     private("POST", "/api/render", |s, x, _, _| render(s, x)),
+    private("POST", "/api/preset-previews", |s, x, _, _| {
+        drawing(s, x, |payload, _, env, config| {
+            let palette = match payload {
+                Value::Dict(d) => d.get("palette").cloned().unwrap_or(Value::None),
+                _ => Value::None,
+            };
+            let previews = crate::specs::preset_previews(&palette, &config.symbols, env)?;
+            let mut told = Dict::new();
+            told.insert("previews".into(), previews);
+            Ok(Value::Dict(told))
+        })
+    }),
     private("POST", "/api/module-previews", |s, x, _, _| {
         drawing(s, x, |payload, _, env, config| {
             let get = |key: &str| match payload {
@@ -747,6 +795,20 @@ fn render(state: &State, exchange: &mut Exchange) {
             env,
         )
     })
+}
+
+/// A picture of the app's own (Settings' tiles): the PNG, "not found" for what there is not.
+fn picture_answer(
+    exchange: &mut Exchange,
+    drawn: Result<Option<Vec<u8>>, crate::drawings::Refused>,
+    unknown: &str,
+) {
+    match drawn {
+        Ok(Some(png)) => exchange.send(200, &png, "image/png", ""),
+        Ok(None) => exchange.error(unknown, 404, ""),
+        Err(crate::drawings::Refused::Said(why)) => exchange.error(&why, 400, ""),
+        Err(crate::drawings::Refused::Failed(why)) => unanswered(&why),
+    }
 }
 
 /// What sharing a theme came to, as the server answers it.

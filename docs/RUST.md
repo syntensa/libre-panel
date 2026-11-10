@@ -1983,11 +1983,17 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       (`/api/module-previews`), the starting layouts of a grid (`/api/templates`), a module's
       parts as plain widgets (`/api/detach`) and a theme adapted to another panel
       (`/api/adapt`).
+      What the editor knows of themes (`/api/specs`, `rust/app/src/specs.rs`: every widget
+      type's fields, the look's blocks and ranges, the finishes, the panels, fonts, icons and
+      modules, the building blocks of editor/presets.py, kept beside it as presets.json), the
+      building blocks drawn in a theme's palette (`/api/preset-previews`), and Settings' tiles
+      of the fan looks and of the weather symbols' looks (`/api/fan-look`,
+      `/api/symbols-look`).
       `libre-panel editor` serves alone, `start` with
       the panel, and writes its address where a later start finds it. 120 requests to
       Python's server and to this one compared: the status, the headers and the body, byte
       for byte; a run of the program controlled through its server until `quit` ends it.
-      Still to come: every other route (the looks' and presets' previews, the
+      Still to come: every other route (the
       Settings' unlock, hardware, the Player, plugins' pages, …)
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app

@@ -1281,3 +1281,41 @@ def test_the_editors_pictures_are_drawn_as_drawings_py_draws_them(servers: Any) 
                     _same_pictures(previews[0][kind], previews[1][kind], kind)
             break
         assert told[1] == told[0], path
+
+
+def test_what_the_editor_knows_and_its_blocks_are_as_server_py_has_them(servers: Any) -> None:
+    """Every widget type's fields, the look's blocks and ranges, the finishes, the panels, the
+    fonts, icons and modules, the building blocks and their tokens (in the app's language);
+    the blocks drawn in a theme's palette, or the defaults."""
+    ask, _homes = servers
+    theirs, ours = (json.loads(body) for _, _, body in ask(_get("/api/specs", WITH)))
+    for key in theirs:
+        assert ours.get(key) == theirs[key], key
+    assert list(ours) == list(theirs)
+    lumen = json.loads((DATA / "themes" / "lumen" / "theme.json").read_text("utf-8"))
+    for payload in ({}, {"palette": lumen["palette"]}, {"palette": "x"}, [1]):
+        theirs, ours = (json.loads(body)["previews"]
+                        for _, _, body in ask(_post("/api/preset-previews", payload)))  # fmt: skip
+        assert list(ours) == list(theirs), payload
+        for block in theirs:
+            _same_pictures(theirs[block], ours[block], block)
+
+
+def test_the_settings_tiles_are_drawn_as_drawings_py_draws_them(servers: Any) -> None:
+    """Each fan look in each paint, the weather symbols and the moon in each look, the
+    defaults where none is asked for, and a look there is not."""
+    import base64
+
+    ask, _homes = servers
+    paths = ["/api/fan-look", "/api/symbols-look", "/api/fan-look?look=nope",
+             "/api/fan-look?paint=nope", "/api/symbols-look?pack=nope"]  # fmt: skip
+    for look in ("noctua-g2", "noctua-a12x25", "noctua-a14", "libre"):
+        paths += [f"/api/fan-look?look={look}&paint={paint}" for paint in ("theme", "own")]
+    paths += [f"/api/symbols-look?pack={pack}" for pack in ("classic", "vivid")]
+    for path in paths:
+        theirs, ours = ask(_get(path, WITH))
+        assert (ours[0], ours[1].get("Content-Type")) == (theirs[0], theirs[1].get("Content-Type"))
+        if theirs[1].get("Content-Type") != "image/png":
+            assert json.loads(ours[2]) == json.loads(theirs[2]), path
+            continue
+        _same_pictures(base64.b64encode(theirs[2]), base64.b64encode(ours[2]), path)

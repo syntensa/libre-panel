@@ -146,6 +146,16 @@ pub(crate) const LOOKS: [Look; 4] = [
 ];
 
 /// The look of that name, else the default (look()).
+/// labels: each look's name for people, in the looks' order.
+pub fn labels() -> &'static [(&'static str, &'static str)] {
+    &[
+        ("noctua-g2", "Noctua NF-A12x25 G2 / NF-A14x25 G2"),
+        ("noctua-a12x25", "Noctua NF-A12x25 (G1)"),
+        ("noctua-a14", "Noctua NF-A14 (G1, 140 mm)"),
+        ("libre", "Libre Panel"),
+    ]
+}
+
 pub fn look(name: &str) -> &'static Look {
     LOOKS
         .iter()
