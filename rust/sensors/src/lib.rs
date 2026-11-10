@@ -19,6 +19,7 @@ pub mod mangohud;
 pub mod media;
 #[cfg(windows)]
 pub mod media_windows;
+pub mod mqtt;
 pub mod netlink;
 pub mod nut;
 pub mod nvml;

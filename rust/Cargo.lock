@@ -423,6 +423,8 @@ dependencies = [
 name = "lp-net"
 version = "0.1.0"
 dependencies = [
+ "rustls",
+ "rustls-platform-verifier",
  "ureq",
 ]
 

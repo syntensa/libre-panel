@@ -50,7 +50,7 @@ What it does not do yet
   administrator rights or the "Performance Log Users" group; and what is playing, with
   its cover, from Windows' media controls; and the weather, where `[weather]` is on and
   has a place (Open-Meteo, the one address the program asks by itself); and the
-  sources "homeassistant", "json" and "nut" where config.toml names them. The AI activity is missing:
+  sources "homeassistant", "json", "nut" and "mqtt" where config.toml names them. The AI activity is missing:
   its places stay empty. Which program is the game is not found
   yet: the one that shows the most frames counts.
 - One panel; no pages (game, music), no notices, no transitions between themes, no videos

@@ -1103,3 +1103,114 @@ def test_a_ups_is_asked_of_upsd(tmp_path: Path) -> None:
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_mqtt_messages_come_from_a_broker(tmp_path: Path) -> None:
+    """`mqtt` among the sources: the broker (here one of the test's own) is greeted as MQTT
+    3.1.1 asks, with the user's name, and the topics are subscribed; its messages, in
+    pieces and long ones too, become the readings sensors/mqtt.py makes of them. A broker
+    that refuses is said."""
+    import socket
+
+    from libre_panel.sensors import mqtt
+
+    def text(value: bytes) -> bytes:
+        return len(value).to_bytes(2, "big") + value
+
+    def packet(first: int, body: bytes) -> bytes:
+        length, size = b"", len(body)
+        while True:
+            size, low = divmod(size, 128)
+            length += bytes([low | (0x80 if size else 0)])
+            if not size:
+                return bytes([first]) + length + body
+
+    messages = [("home/kitchen/temperature", b"21.5"), ("home/hall/temperature", b" 19 "),
+                ("zigbee2mqtt/plug", b'{"power": 12.5, "state": "ON", "note": "' + b"x" * 200
+                 + b'"}'), ("home/kitchen/light", b"on")]  # fmt: skip
+    heard: list[bytes] = []
+    refuse = [False]
+    listener = socket.create_server(("127.0.0.1", 0))
+    listener.settimeout(0.2)
+    done_serving = threading.Event()
+
+    def packets_of(stream: socket.socket, count: int) -> None:
+        """Reads `count` packets from the client into `heard`."""
+        for _ in range(count):
+            first = stream.recv(1)
+            size, shift = 0, 0
+            while True:
+                byte = stream.recv(1)[0]
+                size |= (byte & 0x7F) << shift
+                shift += 7
+                if not byte & 0x80:
+                    break
+            body = b""
+            while len(body) < size:
+                body += stream.recv(size - len(body))
+            heard.append(first + body)
+
+    def serve() -> None:
+        while not done_serving.is_set():
+            try:
+                stream, _ = listener.accept()
+            except TimeoutError:
+                continue
+            with stream:
+                stream.settimeout(10)
+                try:
+                    packets_of(stream, 1)
+                    if refuse[0]:
+                        stream.sendall(b"\x20\x02\x00\x05")
+                        continue
+                    stream.sendall(b"\x20\x02\x00\x00")
+                    packets_of(stream, 2)
+                    sent = b"".join(packet(0x30, text(topic.encode()) + payload)
+                                    for topic, payload in messages)  # fmt: skip
+                    stream.sendall(sent[:7])
+                    time.sleep(0.05)
+                    stream.sendall(sent[7:] + b"\x90\x03\x00\x01\x00\x90\x03\x00\x02\x00")
+                    while stream.recv(64):  # (until the client leaves)
+                        pass
+                except (OSError, IndexError):
+                    pass
+
+    threading.Thread(target=serve, daemon=True).start()
+    try:
+        port = listener.getsockname()[1]
+        (tmp_path / "config.toml").write_text(
+            f'[sensors]\nproviders = ["mqtt"]\n[sensors.mqtt]\nhost = "127.0.0.1"\nport = {port}\n'
+            'username = "panel"\npassword = "pw"\n'
+            'topics = ["home/+/temperature", "zigbee2mqtt/#"]\n'
+            'units = { "home/+/temperature" = "°C", "zigbee2mqtt/#" = "W" }\n',
+            encoding="utf-8",
+        )
+        done = _run(tmp_path, "sensors")
+        assert done.returncode == 0, done.stderr
+        connect, first, second = heard[:3]
+        assert connect[:11] == b"\x10" + text(b"MQTT") + b"\x04\xc2\x00\x3c"
+        assert connect.endswith(text(b"panel") + text(b"pw")) and b"libre-panel-" in connect
+        assert first == b"\x82\x00\x01" + text(b"home/+/temperature") + b"\x00"
+        assert second == b"\x82\x00\x02" + text(b"zigbee2mqtt/#") + b"\x00"
+        units = {"home/+/temperature": "°C", "zigbee2mqtt/#": "W"}
+        wanted: dict[str, Any] = {}
+        for topic, payload in messages:
+            wanted.update(mqtt.readings_from_message(topic, payload, units))
+        listed = [line for line in done.stdout.splitlines() if line.startswith("mqtt.")]
+        ours = {line[:40].strip(): line[41:] for line in listed}
+        assert list(ours) == sorted(wanted) and len(ours) == 6
+        for key, rest in ours.items():  # (the value, its unit, its label)
+            reading = wanted[key]
+            value = reading.value
+            said = f"{value:.2f}" if isinstance(value, float) else str(value)
+            assert rest.lstrip().startswith(said), key
+            assert rest.endswith(f" {reading.unit:<5} {reading.label}"), key
+
+        refuse[0] = True
+        done = _run(tmp_path, "sensors")
+        assert done.returncode == 0, done.stderr
+        assert "mqtt." not in done.stdout
+        assert f"MQTT: 127.0.0.1:{port}: the broker refused the connection (5)" in done.stderr
+    finally:
+        done_serving.set()
+        listener.close()

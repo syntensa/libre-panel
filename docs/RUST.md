@@ -1749,7 +1749,15 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       the battery, the runtime, the load, the power, the input and the status in words.
       4000 lines and 2000 sets of variables compared with Python; the app asks a upsd of the
       test's own
-- [ ] HWiNFO, RTSS, MQTT, the calendar; Linux's hint of what system-setup brings
+- [x] MQTT (sensors/mqtt.py, lp-sensors' mqtt): a client of its own for MQTT 3.1.1 as the
+      Python app's (paho) speaks it: a clean session, the user's name, the topics subscribed
+      at quality 0, a ping every minute, another try after 1 to 60 seconds; through TLS with
+      the system's certificates where `tls` is set (lp-net's stream; compiled, not yet run
+      against a broker). A message as a number, a text or a JSON object taken apart, with
+      the unit of the first pattern that matches. 3000 messages and 3000 pairs of pattern and
+      topic compared with Python; the app talks to a broker of the test's own. A broker
+      that is not there is said once (Python says nothing)
+- [ ] HWiNFO, RTSS, the calendar; Linux's hint of what system-setup brings
 - [ ] the history as a ring, demo.py's values; the .NET service goes
 
 ### R8 services

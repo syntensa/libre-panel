@@ -1231,6 +1231,66 @@ fn nut(case: &Value) -> Result<Value, String> {
     Ok(json!({"lines": lines, "values": found}))
 }
 
+/// mqtt: the readings of each [topic, payload (base64), units as pairs], whether each
+/// [pattern, topic] matches, and each packet (base64) as the client reads it.
+fn mqtt(case: &Value) -> Result<Value, String> {
+    use base64::engine::general_purpose::STANDARD;
+    use base64::Engine;
+    use lp_sensors::mqtt::{self, Incoming};
+    let bytes = |text: &Value| {
+        STANDARD
+            .decode(text.as_str().unwrap_or(""))
+            .map_err(|why| why.to_string())
+    };
+    let mut messages = Vec::new();
+    for message in case["messages"].as_array().into_iter().flatten() {
+        let units = message[2]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|pair| {
+                let text = |n: usize| pair[n].as_str().unwrap_or("").to_string();
+                (text(0), text(1))
+            })
+            .collect();
+        let topic = message[0].as_str().unwrap_or("");
+        let readings = mqtt::readings_from_message(topic, &bytes(&message[1])?, &units);
+        messages.push(json!(readings
+            .iter()
+            .map(|(key, r)| json!([key, plain(&r.value), r.unit, r.label]))
+            .collect::<Vec<_>>()));
+    }
+    let matches: Vec<bool> = case["matches"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|pair| {
+            mqtt::topic_matches(
+                pair[0].as_str().unwrap_or(""),
+                pair[1].as_str().unwrap_or(""),
+            )
+        })
+        .collect();
+    let mut packets = Vec::new();
+    for data in case["packets"].as_array().into_iter().flatten() {
+        packets.push(match mqtt::parse_packet(&bytes(data)?) {
+            Err(why) => json!({"error": why}),
+            Ok(None) => Value::Null,
+            Ok(Some((Incoming::Connected(code), used))) => json!(["connected", code, used]),
+            Ok(Some((Incoming::Message(topic, payload), used))) => {
+                json!(["message", topic, STANDARD.encode(payload), used])
+            }
+            Ok(Some((Incoming::Other, used))) => json!(["other", used]),
+        });
+    }
+    let text = |key: &str| case[key].as_str().unwrap_or("");
+    Ok(json!({
+        "messages": messages, "matches": matches, "packets": packets,
+        "connect": STANDARD.encode(mqtt::connect_packet(text("client"), text("username"), text("password"))),
+        "subscribe": STANDARD.encode(mqtt::subscribe_packet(7, text("topic"))),
+    }))
+}
+
 pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "regex" => regex(case),
@@ -1248,6 +1308,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "weather" => weather(case)?,
         "web_sources" => web_sources(case)?,
         "nut" => nut(case)?,
+        "mqtt" => mqtt(case)?,
         "mangohud" => mangohud(case)?,
         "media" => media(case),
         "appicon" => appicon(case),

@@ -382,10 +382,79 @@ impl Source for Nut {
     }
 }
 
-/// The source `name` (homeassistant, json, nut) as its table of config.toml sets it up; why
-/// it could not be.
+/// What devices publish to an MQTT broker (sensors/mqtt.py).
+struct Mqtt(lp_sensors::mqtt::MqttSource);
+
+impl Source for Mqtt {
+    fn name(&self) -> &'static str {
+        "mqtt"
+    }
+
+    fn read(&mut self, out: &mut Readings) {
+        out.extend(self.0.read());
+    }
+
+    fn notes(&mut self) -> Vec<String> {
+        self.0.notes()
+    }
+
+    fn wait_ready(&mut self, seconds: f64) {
+        self.0.wait_ready(seconds);
+    }
+}
+
+/// `int(table.get(key) or fallback)` as a port; none where it is none.
+fn port_of(value: Option<&Toml>, fallback: u16) -> Option<u16> {
+    let port = match value {
+        Some(Toml::Int(n)) => u16::try_from(n).ok()?,
+        Some(Toml::Float(f)) if f.is_finite() => u16::try_from(f.trunc() as i64).ok()?,
+        Some(Toml::Str(text)) if !text.is_empty() => {
+            lp_py::int_of_str(text).and_then(|n| u16::try_from(n).ok())?
+        }
+        Some(Toml::Bool(_) | Toml::Str(_)) | None => 0,
+        Some(_) => return None,
+    };
+    Some(if port == 0 { fallback } else { port })
+}
+
+/// The source `name` (homeassistant, json, nut, mqtt) as its table of config.toml sets it
+/// up; why it could not be.
 fn web_source(name: &str, table: Option<&Table>) -> Result<Box<dyn Source>, String> {
     let get = |key: &str| table.and_then(|table| table.get(key));
+    if name == "mqtt" {
+        let truthy = |key: &str| get(key).map(value_of).filter(lp_py::Value::truthy);
+        let mut options = lp_sensors::mqtt::Options {
+            username: truthy("username")
+                .map(|name| name.str())
+                .unwrap_or_default(),
+            password: get("password")
+                .map(|word| value_of(word).str())
+                .unwrap_or_default(),
+            tls: truthy("tls").is_some(),
+            port: port_of(get("port"), 1883).ok_or("port is no port")?,
+            ..Default::default()
+        };
+        if let Some(host) = get("host") {
+            options.host = value_of(host).str();
+        }
+        options.topics = match get("topics") {
+            None => Vec::new(),
+            Some(Toml::Array(list)) => list.iter().map(|topic| value_of(topic).str()).collect(),
+            Some(Toml::Str(text)) => text.chars().map(String::from).collect(),
+            Some(Toml::Table(keys)) => keys.keys().cloned().collect(),
+            Some(_) => return Err("topics is no list".into()),
+        };
+        match get("units") {
+            Some(Toml::Table(units)) => {
+                for (pattern, unit) in units {
+                    options.units.insert(pattern.clone(), value_of(unit).str());
+                }
+            }
+            Some(other) if value_of(other).truthy() => return Err("units is no table".into()),
+            _ => {}
+        }
+        return Ok(Box::new(Mqtt(lp_sensors::mqtt::MqttSource::new(options))));
+    }
     if name == "nut" {
         // `str(options.get(key) or "")`
         let text = |key: &str| match get(key).map(value_of) {
@@ -402,18 +471,7 @@ fn web_source(name: &str, table: Option<&Table>) -> Result<Box<dyn Source>, Stri
         if !text("host").is_empty() {
             options.host = text("host");
         }
-        // `int(options.get("port") or PORT)`
-        let port = match get("port") {
-            Some(Toml::Int(n)) => u16::try_from(n).ok(),
-            Some(Toml::Float(f)) if f.is_finite() => u16::try_from(f.trunc() as i64).ok(),
-            Some(Toml::Str(text)) => lp_py::int_of_str(text).and_then(|n| u16::try_from(n).ok()),
-            Some(Toml::Bool(_)) | None => Some(0),
-            Some(_) => None,
-        };
-        match port.ok_or("port is no port")? {
-            0 => {}
-            port => options.port = port,
-        }
+        options.port = port_of(get("port"), lp_sensors::nut::PORT).ok_or("port is no port")?;
         return Ok(Box::new(Nut(lp_sensors::nut::NutSource::new(options))));
     }
     if name == "json" {
@@ -717,7 +775,7 @@ impl Hub {
                         notes.extend(said);
                     }
                     "hardware" => sources.push(Box::new(Hardware::of(config))),
-                    "homeassistant" | "json" | "nut" => {
+                    "homeassistant" | "json" | "nut" | "mqtt" => {
                         let table = sensors.options.get(name);
                         match web_source(name, table) {
                             Ok(source) => sources.push(source),

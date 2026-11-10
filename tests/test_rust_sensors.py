@@ -1988,3 +1988,76 @@ def test_a_ups_is_read_as_nut_py_reads_it(language: str) -> None:
     finally:
         i18n.set_language("en")
     assert all(count > 20 for count in seen.values()), seen
+
+
+def test_mqtt_messages_are_read_as_mqtt_py_reads_them() -> None:
+    """sensors/mqtt.py: a topic against patterns with + and #, a message's payload as a
+    number, a text or a JSON object taken apart, with the unit of the first pattern that
+    matches; and the client's packets as MQTT 3.1.1 writes them."""
+    from libre_panel.sensors import mqtt
+
+    rng = random.Random(0x1883)
+    levels = ["home", "kitchen", "temperature", "+", "#", "", "a.b", "my room", "zigbee2mqtt"]
+    topics = ["/".join(rng.choice(levels) for _ in range(rng.randrange(1, 5))) for _ in range(300)]
+    matches = [[rng.choice(topics), rng.choice(topics)] for _ in range(3000)]
+    payloads = [b"21.5", b" 40 ", b"on", b"", b"true", b"null", b"[1, 2]", b'"text"', b"NaN",
+                b'{"temperature": 21.5, "humidity": 40, "state": "ON", "ok": true, "x": null}',
+                b'{"my value": " 7 ", "list": [1], "big": 1e400, "n": {"a": 1}}', b"1e400",
+                b"\xff\xfe21", b"caf\xc3\xa9", b"\xc3", b'{"a": ', b"x" * 300, b"-Infinity",
+                b'{"a b": "' + b"y" * 250 + b'"}', str(10**400).encode(), b"1_0", b"\xe2\x82",
+                b'{"temp": "21,5", "t2": "\\u0663"}', b"\xf0\x9f\x98\x80 ok", b"0x10"]  # fmt: skip
+    unit_sets = [[], [["home/+/temperature", "°C"], ["#", "?"]], [["zigbee2mqtt/#", "%"]],
+                 [["+/kitchen", "W"], ["home/#", "V"]]]  # fmt: skip
+    messages = [(rng.choice(topics), rng.choice(payloads), rng.choice(unit_sets))
+                for _ in range(3000)]  # fmt: skip
+
+    def text(value: int | bytes, wide: int = 2) -> bytes:
+        if isinstance(value, int):
+            return value.to_bytes(wide, "big")
+        return len(value).to_bytes(2, "big") + value
+
+    publish = b"\x30" + bytes([2 + 3 + 4]) + text(b"a/b") + b"21.5"
+    long = text(b"long/topic") + b"z" * 300
+    packets = [publish, publish[:5], b"", b"\x30", b"\x20\x02\x00\x00", b"\x20\x02\x00\x05",
+               b"\x90\x03\x00\x01\x00", b"\xd0\x00rest", b"\x30\xb8\x02" + long,
+               b"\x30\xb8\x02" + long[:200], b"\x32\x07" + text(b"q") + b"\x00\x09ok",
+               b"\x30\xff\xff\xff\xff\x01", b"\x30\x80\x80\x80\x01", b"\x30\x01\x00", b"\x20\x00",
+               b"\x30\x04\x00\x05ab"]  # fmt: skip
+    [ours] = run([{"op": "mqtt", "matches": matches,
+                   "messages": [[topic, base64.b64encode(payload).decode(), units]
+                                for topic, payload, units in messages],
+                   "packets": [base64.b64encode(packet).decode() for packet in packets],
+                   "client": "libre-panel-1", "username": "üser", "password": "pw",
+                   "topic": "home/+/temperature"}])  # fmt: skip
+
+    wanted = [mqtt.topic_matches(pattern, topic) for pattern, topic in matches]
+    assert ours["matches"] == wanted and 100 < sum(wanted) < 2900
+    seen = {"apart": 0, "text": 0, "number": 0, "unit": 0, "nothing": 0}
+    for (topic, payload, units), got in zip(messages, ours["messages"], strict=True):
+        readings = mqtt.readings_from_message(topic, payload, dict(units))
+        rows = [[key, r.value, r.unit, r.label] for key, r in readings.items()]
+        seen["apart"] += len(rows) > 1
+        seen["nothing"] += not rows
+        for row in rows:
+            seen["unit"] += bool(row[2])
+            seen["text" if isinstance(row[1], str) else "number"] += 1
+            if isinstance(row[1], float):
+                row[1] = {"float": repr(row[1])}
+        assert got == rows, (topic, payload, units)
+    assert all(count > 50 for count in seen.values()), seen
+
+    b64 = base64.b64encode
+    assert ours["packets"] == [
+        ["message", "a/b", b64(b"21.5").decode(), 11], None, None, None, ["connected", 0, 4],
+        ["connected", 5, 4], ["other", 5], ["other", 2],
+        ["message", "long/topic", b64(b"z" * 300).decode(), 315], None,
+        ["message", "q", b64(b"ok").decode(), 9],
+        {"error": "a packet's length of more than four bytes"},
+        {"error": "a packet of 2097152 bytes"}, {"error": "a short PUBLISH"},
+        {"error": "a short CONNACK"}, {"error": "a short PUBLISH"},
+    ]  # fmt: skip
+    body = (text(b"MQTT") + b"\x04\xc2" + text(60) + text(b"libre-panel-1")
+            + text("üser".encode()) + text(b"pw"))  # fmt: skip
+    assert base64.b64decode(ours["connect"]) == b"\x10" + bytes([len(body)]) + body
+    body = text(7) + text(b"home/+/temperature") + b"\x00"
+    assert base64.b64decode(ours["subscribe"]) == b"\x82" + bytes([len(body)]) + body

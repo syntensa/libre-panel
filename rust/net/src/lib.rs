@@ -77,6 +77,8 @@ pub fn get(
     Ok(data)
 }
 
+pub mod stream;
+
 #[cfg(test)]
 mod tests {
     use std::io::{Read, Write};
