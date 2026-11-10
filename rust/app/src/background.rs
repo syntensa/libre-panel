@@ -225,6 +225,21 @@ impl PanelService {
             Value::List(vec![Value::int(width), Value::int(height)])
         });
         told.insert("size".into(), size);
+        // where the screens in turn stand: the step, its theme and the seconds left of it
+        let sequence = match (state, status.sequence) {
+            ("showing", Some((index, theme, left_s))) => {
+                let mut at = Dict::new();
+                at.insert("index".into(), Value::int(index as i64));
+                at.insert("theme".into(), Value::Str(theme));
+                at.insert(
+                    "left_s".into(),
+                    Value::Float(lp_py::round_digits(left_s, 1)),
+                );
+                Value::Dict(at)
+            }
+            _ => Value::None,
+        };
+        told.insert("sequence".into(), sequence);
         told
     }
 }

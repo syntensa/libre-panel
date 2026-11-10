@@ -653,3 +653,45 @@ def test_the_pages_of_the_panel_are_told_and_set_as_server_py_does(servers: Any)
         _post("/api/pages", {"page": "normal", "theme": "slate", "panel": 2}),
     ):
         assert both(request, request)[0] == "HTTP/1.0 409 Conflict"
+
+
+def test_the_screens_in_turn_are_told_and_set_as_server_py_does(servers: Any) -> None:
+    """The screens in turn: their steps, whether they show, the shortest and longest step;
+    steps written in their largest whole unit, or refused in the same words."""
+    ask, homes = servers
+    # fmt: off
+    payloads = (
+        {"on": True, "steps": [{"theme": "slate", "seconds": 300},
+                               {"theme": " lumen ", "seconds": 7200}]},
+        {"on": True, "steps": [{"theme": "slate", "seconds": 90}, {"theme": "terra",
+                                                                   "seconds": 30.4}]},
+        {"on": False, "steps": [{"theme": "slate", "seconds": 61}]},
+        {"on": True, "steps": []}, {"on": True}, {"on": "yes", "steps": []}, {"steps": []},
+        {"on": True, "steps": [{"theme": "slate", "seconds": 4}]},
+        {"on": True, "steps": [{"theme": "slate", "seconds": 604801}]},
+        {"on": True, "steps": [{"theme": "slate", "seconds": 4.6}]},
+        {"on": True, "steps": [{"theme": "slate"}]},
+        {"on": True, "steps": [{"theme": "slate", "seconds": True}]},
+        {"on": True, "steps": [{"theme": "slate", "seconds": "60"}]},
+        {"on": True, "steps": [{"theme": "slate", "seconds": -60}]},
+        {"on": True, "steps": [{"theme": "", "seconds": 60}]},
+        {"on": True, "steps": [{"seconds": 60}]}, {"on": True, "steps": [{"theme": 5,
+                                                                          "seconds": 60}]},
+        {"on": True, "steps": [{"theme": "nothing", "seconds": 60}]},
+        {"on": True, "steps": [{"theme": "slate", "seconds": 60, "minutes": 5}]},
+        {"on": True, "steps": ["slate"]}, {"on": True, "steps": {}}, [], 5,
+        {"on": True, "steps": [{"theme": "slate", "seconds": 3600}, {"theme": "lumen",
+                                                                     "seconds": 86400}]},
+    )
+    # fmt: on
+    for payload in (*payloads, None):
+        for request in (_post("/api/sequence", payload), _get("/api/sequence", WITH)):
+            theirs, ours = ask(request)
+            assert ours[0] == theirs[0], payload
+            if theirs[2]:
+                assert json.loads(ours[2]) == json.loads(theirs[2]), payload
+            else:
+                assert ours[2] == theirs[2], payload
+            files = [(home / "config.toml").read_text(encoding="utf-8") for home in homes]
+            assert files[1] == files[0], payload
+    assert "hours = 24" in files[0] and "on = true" in files[0]

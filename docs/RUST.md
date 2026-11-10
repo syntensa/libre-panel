@@ -1934,6 +1934,9 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       each mode's and the round report's, those of a panel beside the first, read and set
       (a theme, a frame rate, the idle page's minutes, switched on and off) or refused in the
       same words; 55 requests compared, and the two config.toml files after each.
+      The screens in turn (`/api/sequence`): their steps, whether they show and where the
+      running panel stands in them; steps written in their largest whole unit, or refused
+      in the same words.
       `libre-panel editor` serves alone, `start` with
       the panel, and writes its address where a later start finds it. 120 requests to
       Python's server and to this one compared: the status, the headers and the body, byte

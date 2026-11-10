@@ -205,7 +205,7 @@ fn texts<T: AsRef<str>>(values: &[T]) -> Value {
 }
 
 /// A cleaned value as config.toml holds it; None for what has no place there (null).
-fn toml_of(value: &Value) -> Option<Toml> {
+pub fn toml_of(value: &Value) -> Option<Toml> {
     Some(match value {
         Value::None => return None,
         Value::Bool(on) => Toml::Bool(*on),

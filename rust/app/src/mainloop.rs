@@ -65,6 +65,8 @@ pub struct RunStatus {
     pub run: u64,
     /// the size of the panel's frames
     pub size: Option<(i64, i64)>,
+    /// where the screens in turn stand: the step, its theme and the seconds left of it
+    pub sequence: Option<(usize, String, f64)>,
 }
 
 /// the runs of the loop so far
@@ -138,6 +140,8 @@ pub struct MainLoop {
     switches: u64,
     occasion: &'static str,
     in_sequence: bool,
+    /// the step of the screens in turn the theme was last taken from
+    sequence_at: Option<(usize, String, f64)>,
     /// counts the transitions (each breaks its old frame anew)
     blends: u64,
     connected: bool,
@@ -264,6 +268,7 @@ impl MainLoop {
             switches: 0,
             occasion: "manual",
             in_sequence: false,
+            sequence_at: None,
             blends: 0,
             connected: false,
         };
@@ -544,6 +549,7 @@ impl MainLoop {
     /// version for the panel.
     fn theme_name(&mut self, now: f64) -> String {
         self.in_sequence = false;
+        self.sequence_at = None;
         let page = modes::page_theme(&self.config, self.host.mode().as_deref());
         let named = if let Some(theme) = self.host.theme() {
             theme // (a theme a service shows)
@@ -559,6 +565,7 @@ impl MainLoop {
             .flatten()
         {
             self.in_sequence = true;
+            self.sequence_at = Some((place.index, place.theme.clone(), place.left_s));
             place.theme
         } else if self.config.theme_given {
             self.config.theme.clone()
@@ -898,6 +905,7 @@ impl MainLoop {
                         self.frames += 1;
                         if let Ok(mut status) = self.status.lock() {
                             status.state = "showing";
+                            status.sequence.clone_from(&self.sequence_at);
                             status.size = Some((size.0 as i64, size.1 as i64));
                             status.frames = self.frames;
                             status.theme.clone_from(&self.shown);

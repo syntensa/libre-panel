@@ -444,4 +444,113 @@ impl Settings<'_> {
         self.write(&Value::Dict(dict([("set", Value::Dict(set))])))?;
         Ok(Value::Dict(self.beside_pages(&self.loaded()?, number - 2)))
     }
+
+    /// _sequence: the screens in turn: their steps (a theme and its seconds each), whether
+    /// they show, and where the running panel stands in them (`now`: the step's index and
+    /// theme and the seconds left of it; None while it shows no sequence).
+    pub fn sequence(&self) -> Answer {
+        let config = self.loaded()?;
+        let steps = (config.sequence.steps.iter())
+            .map(|step| {
+                Value::Dict(dict([
+                    ("theme", text(&step.theme)),
+                    ("seconds", Value::int(step.seconds)),
+                ]))
+            })
+            .collect();
+        let active = config.sequence.on && !config.sequence.steps.is_empty();
+        let now = match active {
+            true => self
+                .panel_state()
+                .get("sequence")
+                .cloned()
+                .unwrap_or(Value::None),
+            false => Value::None,
+        };
+        Ok(Value::Dict(dict([
+            ("on", Value::Bool(config.sequence.on)),
+            ("steps", Value::List(steps)),
+            ("now", now),
+            ("shortest_s", Value::int(lp_config::sequence::SHORTEST_S)),
+            ("longest_s", Value::int(lp_config::sequence::LONGEST_S)),
+        ])))
+    }
+
+    /// _set_sequence: `{"on": true, "steps": [{"theme": "almanac", "seconds": 300}, ...]}`:
+    /// the screens in turn, written to config.toml ([sequence]); without steps they are off.
+    pub fn set_sequence(&self, payload: &Value) -> Answer {
+        let asked = match payload {
+            Value::Dict(asked) => asked,
+            _ => {
+                return Err(refusal(
+                    "expected {\"on\": true or false, \"steps\": [...]}",
+                    400,
+                ))
+            }
+        };
+        let Some(Value::Bool(on)) = asked.get("on") else {
+            return Err(refusal(
+                "expected {\"on\": true or false, \"steps\": [...]}",
+                400,
+            ));
+        };
+        let raw = match asked.get("steps") {
+            None => Vec::new(),
+            Some(Value::List(raw)) if raw.iter().all(|step| matches!(step, Value::Dict(_))) => {
+                raw.clone()
+            }
+            Some(_) => {
+                return Err(refusal(
+                    "steps: expected a list of {\"theme\": ..., \"seconds\": ...}",
+                    400,
+                ))
+            }
+        };
+        // each step as {"theme": ..., "seconds": ...}, what is missing as None: a None that
+        // is no text and no number is refused as Python refuses it
+        let as_toml = |value: Option<&Value>| match value {
+            None | Some(Value::None) => Toml::Table(Default::default()),
+            Some(value) => {
+                crate::settings::toml_of(value).unwrap_or(Toml::Table(Default::default()))
+            }
+        };
+        let tables = raw
+            .iter()
+            .map(|step| {
+                let Value::Dict(step) = step else {
+                    unreachable!()
+                };
+                let mut table = lp_py::toml::Table::new();
+                table.insert("theme".into(), as_toml(step.get("theme")));
+                table.insert("seconds".into(), as_toml(step.get("seconds")));
+                Toml::Table(table)
+            })
+            .collect();
+        let steps = lp_config::sequence::parse_steps(&Toml::Array(tables), "sequence.steps")
+            .map_err(|why| refusal(why.msg, 400))?;
+        let places = self.home.places();
+        for step in &steps {
+            versions::find_theme(&step.theme, &places).map_err(|why| refusal(why.msg, 400))?;
+        }
+        let tables = steps
+            .iter()
+            .map(|step| {
+                let (unit, size) = lp_config::sequence::UNITS
+                    .into_iter()
+                    .find(|(_, size)| step.seconds % size == 0)
+                    .unwrap_or(("seconds", 1));
+                let mut table = lp_py::toml::Table::new();
+                table.insert("theme".into(), Toml::Str(step.theme.clone()));
+                table.insert(unit.into(), Toml::Int((step.seconds / size).into()));
+                table
+            })
+            .collect();
+        let changes = [
+            Change::Value("sequence.on".into(), Toml::Bool(*on && !steps.is_empty())),
+            Change::Tables("sequence.steps".into(), tables),
+        ];
+        lp_config::edit::edit_config(&changes, self.config_file, lp_config::platform())
+            .map_err(|why| refusal(why.msg, 409))?;
+        self.sequence()
+    }
 }

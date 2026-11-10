@@ -208,6 +208,9 @@ const ROUTES: &[Route] = &[
             Err(refused) => x.error(&refused.message, refused.status, ""),
         }
     }),
+    private("GET", "/api/sequence", |s, x, _, _| {
+        settings(s, x, |told| told.sequence())
+    }),
     private("GET", "/api/panel", |s, x, _, _| {
         settings(s, x, |told| told.panel())
     }),
@@ -235,6 +238,9 @@ const ROUTES: &[Route] = &[
     }),
     private("POST", "/api/pages", |s, x, _, _| {
         settings_with(s, x, |told, asked| told.set_page(asked))
+    }),
+    private("POST", "/api/sequence", |s, x, _, _| {
+        settings_with(s, x, |told, asked| told.set_sequence(asked))
     }),
     private("POST", "/api/scenes", |s, x, _, _| {
         settings_with(s, x, |told, asked| told.set_scene(asked))
