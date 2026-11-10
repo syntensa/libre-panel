@@ -1848,7 +1848,13 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       (the host asks the main loop), a mode that rests it, and its status. 300 services of
       samples compared with Python; in the app, music that plays shows the rule's theme and
       config.toml's is back when it stops
-- [ ] downloads, memory with its store and the round report, cooling, devices
+- [x] downloads (services/downloads.py, lp-services' downloads): Steam's log followed from
+  its tail (a new log, lines not whole yet, bytes that are no UTF-8), the apps' manifests in
+  every library, the browsers' part files (growing, renamed, paused, finished), what is too
+  small, the download that matters most with its speed's history, and the Downloads and
+  Pictures folders as the Windows shell or `xdg-user-dir` knows them. One comparison test
+  with Python's tracker over the same files, and a run of the app with a download module.
+- [ ] memory with its store and the round report, cooling, devices
 
 ### R9 the app
 - [ ] the server and every route of its API, the same JSON

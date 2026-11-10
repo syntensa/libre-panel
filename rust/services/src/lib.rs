@@ -6,6 +6,7 @@ pub mod agents_service;
 pub mod agents_setup;
 pub mod agents_usage;
 pub mod autopilot;
+pub mod downloads;
 pub mod game;
 pub mod host;
 pub mod launchers;

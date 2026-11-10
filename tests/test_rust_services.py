@@ -2037,3 +2037,246 @@ def test_the_autopilot_picks_the_theme_autopilot_py_picks() -> None:
             seen["missing"] += any("is not installed" in str(act[1]) for act in acts)
             seen["resting"] += resting and service.theme is not None
     assert all(count > 20 for count in seen.values()), seen
+
+
+def _change_files(change: list[Any]) -> None:
+    """What lp-check's cases do to the files they look at (see change_files there)."""
+    import os
+    from pathlib import Path
+
+    what, path = change[0], Path(change[1])
+    if what == "write":
+        path.write_bytes(bytes.fromhex(change[2]))
+    elif what == "append":
+        with open(path, "ab") as stream:
+            stream.write(bytes.fromhex(change[2]))
+    elif what == "size":
+        with open(path, "ab"):
+            pass
+        os.truncate(path, change[2])
+    elif what == "rename":
+        path.rename(change[2])
+    elif what == "remove":
+        path.unlink()
+    else:
+        path.mkdir(parents=True, exist_ok=True)
+
+
+def test_downloads_are_followed_as_downloads_py_follows_them(tmp_path: Any, monkeypatch) -> None:
+    """services/downloads.py: the Downloads and Pictures folders of what the system says, and
+    a tracker's state after each look: Steam's log (its tail at the first look, a new log,
+    lines not whole, bytes that are no UTF-8) and manifests (in a second library too), the
+    browsers' part files (growing, renamed, paused, finished), what is too small, a download
+    of unknown size, the one that matters most and how many more."""
+    import shutil
+
+    from libre_panel import i18n
+    from libre_panel.services import downloads
+
+    rng = random.Random(0xD0771)
+    home = tmp_path / "home"
+    (home / "Documents").mkdir(parents=True)
+    bare = tmp_path / "bare"
+    bare.mkdir()
+    both = tmp_path / "both"
+    (both / "Pictures").mkdir(parents=True)
+    (both / "Documents").mkdir()
+    folders = []
+    for kind in ("downloads", "pictures"):
+        for base in (home, bare, both):
+            for found in (None, "", str(base), str(base) + "/", str(base / "x" / ".."), "rel/dl",
+                          str(tmp_path / "moved"), str(base / "Pictures")):  # fmt: skip
+                folders.append([kind, found, str(base)])
+
+    def text(line: str) -> str:
+        return line.encode().hex()
+
+    states = ["Running Update,Downloading,", "Running Update,Verifying Staged,", "Preallocating,",
+              "Update Required,Paused,", "None", "", "Update Required,", "Reconfiguring,",
+              "Running,Committing,", "Suspended", "Running Update,Staging,",
+              "Verifying Installed,", " Downloading "]  # fmt: skip
+    appids = ["10", "20", "730"]
+    names = ["Unconfirmed 123.crdownload", "movie.mkv.part", "Setup.EXE.PARTIAL", ".crdownload",
+             "ünï.zip.crdownload", "small.part", "notes.txt"]  # fmt: skip
+
+    def tracker_case(number: int) -> dict[str, Any]:
+        root = tmp_path / f"t{number}"
+        steam, lib2, folder = root / "steam", root / "lib2", root / "dl"
+        user = root / "user"
+        usual = user / ".local" / "share" / "Steam"
+        where = rng.choice(["given", "given", "given", "usual", "wrong", "none"])
+        steam = usual if where == "usual" else steam
+        log = steam / "logs" / "content_log.txt"
+        before: list[list[Any]] = [["mkdir", str(root)], ["mkdir", str(folder)],
+                                   ["mkdir", str(user / "dl")]]  # fmt: skip
+        if where != "none":
+            before += [["mkdir", str(steam / "steamapps")], ["mkdir", str(steam / "logs")],
+                       ["mkdir", str(lib2 / "steamapps")]]  # fmt: skip
+            if rng.random() < 0.6:
+                listed = _vdf({"libraryfolders": {"0": {"path": str(steam)},
+                                                  "1": {"path": str(lib2)}}})  # fmt: skip
+                before.append(["write", str(steam / "steamapps" / "libraryfolders.vdf"),
+                               text(listed)])  # fmt: skip
+
+        def line(appid: str) -> str:
+            kind = rng.randrange(8)
+            stamp = "[2026-01-02 03:04:05] "
+            if kind == 0:
+                total = rng.choice([0, 3_000_000, 80_000_000, 5_000_000_000])
+                loaded = rng.choice([0, 0, total // 3])
+                stage = rng.choice([0, total, 7])
+                return (f"{stamp}AppID {appid} update started : download {loaded}/{total}, "
+                        f"store 0/0, reuse 0/0, delta 0/0, stage 0/{stage}")  # fmt: skip
+            if kind == 1:
+                return f'{stamp}AppID {appid} finished update (0x6 "Fully Installed")'
+            if kind == 2:
+                return rng.choice([f"{stamp}Something else about {appid}", "", "AppID x"])
+            state = "Running Update,Downloading," if kind > 4 else rng.choice(states)
+            return f"{stamp}AppID {appid} App update changed : {state}"
+
+        def lines(count: int) -> str:
+            ends = rng.choice(["\n", "\n", "\r\n"])
+            return "".join(line(rng.choice(appids)) + ends for _ in range(count))
+
+        if where != "none" and rng.random() < 0.7:
+            history = lines(rng.randrange(12))
+            if rng.random() < 0.3:  # more than the tail that is read at the start
+                history = "x" * rng.choice([262_100, 262_144, 300_000]) + history
+            before.append(["write", str(log), text(history)])
+
+        def manifest(appid: str) -> list[Any]:
+            state = {"appid": appid, "name": rng.choice(["Half-Life™  2", "Portal", ""])}
+            state["StateFlags"] = rng.choice(["4", "1026", "1282", "518", "x", "0", " 4 "])
+            state["BytesToDownload"] = rng.choice(["0", "80000000", "5000000000", "", "1_0"])
+            state["BytesDownloaded"] = str(rng.choice([0, 1_000_000, 40_000_000, 90_000_000]))
+            for key in rng.sample(sorted(state), rng.randrange(2)):
+                del state[key]
+            table: dict[str, Any] = (
+                {"AppState": state} if rng.random() < 0.95 else {"AppState": "x"}
+            )
+            library = lib2 if appid == "20" else steam
+            return ["write", str(library / "steamapps" / f"appmanifest_{appid}.acf"),
+                    text(_vdf(table))]  # fmt: skip
+
+        sizes: dict[str, int] = {}
+        now, steps = rng.uniform(0, 1000), []
+        for _ in range(rng.randrange(1, 60)):
+            now += rng.choice([1, 1, 1, 1, 1.5, 2, 7, 25, 70, 310])
+            changes: list[list[Any]] = []
+            if where != "none":
+                roll = rng.random()
+                if roll < 0.45:
+                    changes.append(["append", str(log), text(lines(rng.randrange(1, 4)))])
+                elif roll < 0.5:
+                    changes.append(["append", str(log), text(line(rng.choice(appids)))])
+                elif roll < 0.54:
+                    changes.append(["append", str(log), b"AppID 10 \xff\xfe\xc3 \x0c\n".hex()])
+                elif roll < 0.57:
+                    changes.append(["write", str(log), text(lines(rng.randrange(3)))])
+                if rng.random() < 0.4:
+                    changes.append(manifest(rng.choice(appids)))
+            roll = rng.random()
+            if roll < 0.5:
+                name = rng.choice(names)
+                grown = sizes.get(name, 0) + rng.choice([0, 0, 300_000, 3_000_000, 40_000_000])
+                sizes[name] = grown
+                changes.append(["size", str(folder / name), grown])
+            elif roll < 0.65 and sizes:
+                name = rng.choice(sorted(sizes))
+                size = sizes.pop(name)
+                kind = rng.randrange(3)
+                if kind == 0:  # done: the file it was becoming is there
+                    whole = name[: name.rfind(".")] or name
+                    if whole != name and whole not in sizes:
+                        changes.append(["rename", str(folder / name), str(folder / whole)])
+                    else:
+                        sizes[name] = size
+                elif kind == 1:  # the browser gives it its name
+                    new = rng.choice(["big.iso.crdownload", "A.part"])
+                    if new not in sizes:
+                        changes.append(["rename", str(folder / name), str(folder / new)])
+                        sizes[new] = size
+                    else:
+                        sizes[name] = size
+                else:
+                    changes.append(["remove", str(folder / name)])
+            steps.append([now, rng.choice([None, 0, 300_000.0, 700_000, 2_000_000.0, 3e7]),
+                          changes])  # fmt: skip
+        given = {"given": str(steam), "usual": "", "wrong": str(root / "nothing"), "none": ""}
+        return {
+            "before": before, "steps": steps, "root": str(root),
+            "steam": rng.random() < 0.85, "browser": rng.random() < 0.85,
+            "min_mb": rng.choice([50.0, 50.0, 0, 1, 2.5, -3]),
+            "steam_path": given[where],
+            "folder": rng.choice([str(folder), str(folder), "", "~/dl", "~nobody_such_user/dl"]),
+            "found": str(folder), "home": str(user), "env": {"HOME": str(user)},
+        }  # fmt: skip
+
+    for language, count in (("en", 120), ("ru", 40)):
+        cases = [tracker_case(n) for n in range(count)]
+        theirs: list[dict[str, Any]] = []
+        i18n.set_language(language)
+        try:
+            for case in cases:
+                monkeypatch.setenv("HOME", case["home"])
+                for change in case["before"]:
+                    _change_files(change)
+                notes: list[str] = []
+                tracker = downloads.Tracker(
+                    steam_on=case["steam"], browser=case["browser"], min_mb=case["min_mb"],
+                    steam_path=case["steam_path"], folder=case["folder"],
+                    find_folder=lambda case=case: __import__("pathlib").Path(case["found"]),
+                    report=notes.append,
+                )  # fmt: skip
+                said: list[Any] = []
+                for now, rate, changes in case["steps"]:
+                    for change in changes:
+                        _change_files(change)
+                    try:
+                        state = tracker.step(now, rate)
+                        said.append(None if state is None else json.dumps(state))
+                    except RuntimeError as exc:
+                        said.append({"error": f"RuntimeError: {exc}"})
+                places = [str(place) if place else None
+                          for place in (tracker.root, tracker.folder)]  # fmt: skip
+                theirs.append({"states": said, "notes": notes, "root": places[0],
+                               "folder": places[1]})  # fmt: skip
+                shutil.rmtree(case["root"])
+        finally:
+            i18n.set_language("en")
+        [ours] = run([{"op": "downloads", "locale": str(i18n.LOCALE_DIR), "language": language,
+                       "folders": folders, "trackers": cases}])  # fmt: skip
+        assert "trackers" in ours, ours
+        for case in cases:
+            shutil.rmtree(case["root"])
+        for row, got in zip(folders, ours["folders"], strict=True):
+            kind, found, base = row
+            find = downloads.pictures_folder if kind == "pictures" else downloads.downloads_folder
+            from pathlib import Path
+
+            want = find(platform="win32", home=Path(base), known_folder=lambda found=found: found)
+            assert got == str(want), row
+        seen = {"steam": 0, "browser": 0, "done": 0, "paused": 0, "installing": 0, "preparing": 0,
+                "estimated": 0, "remaining": 0, "more": 0, "error": 0, "notes": 0, "none": 0,
+                "unknown": 0, "App": 0}  # fmt: skip
+        for case, want, got in zip(cases, theirs, ours["trackers"], strict=True):
+            assert got == want, (case["steam_path"], case["folder"], [
+                (step, a, b) for step, a, b in zip(case["steps"], want["states"], got["states"],
+                                                   strict=True) if a != b][:1])  # fmt: skip
+            seen["notes"] += len(want["notes"])
+            for state in want["states"]:
+                if state is None:
+                    seen["none"] += 1
+                elif isinstance(state, dict):
+                    seen["error"] += 1
+                else:
+                    state = json.loads(state)
+                    seen[state["source"]] += 1
+                    for phase in ("done", "paused", "installing", "preparing"):
+                        seen[phase] += state["phase"] == phase
+                    seen["estimated"] += state["estimated"]
+                    seen["remaining"] += state["remaining_s"] is not None
+                    seen["more"] += state["more"] > 0
+                    seen["unknown"] += state["source"] == "steam" and state["total"] is None
+                    seen["App"] += state["name"] != "Portal" and state["source"] == "steam"
+        assert all(count >= 3 for count in seen.values()), seen

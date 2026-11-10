@@ -2372,6 +2372,95 @@ fn game(case: &Value) -> Result<Value, String> {
     Ok(json!({"services": services}))
 }
 
+/// A change to the files a case looks at: `["write", path, hex]`, `["append", path, hex]`,
+/// `["size", path, bytes]`, `["rename", from, to]`, `["remove", path]`, `["mkdir", path]`.
+fn change_files(change: &Value) -> Result<(), String> {
+    use std::io::Write;
+    let text = |n: usize| change[n].as_str().unwrap_or("");
+    let bytes = |n: usize| -> Vec<u8> {
+        let digits = text(n).as_bytes();
+        let pairs = digits
+            .chunks(2)
+            .filter_map(|pair| std::str::from_utf8(pair).ok());
+        pairs
+            .filter_map(|pair| u8::from_str_radix(pair, 16).ok())
+            .collect()
+    };
+    let path = std::path::Path::new(text(1));
+    let done = match text(0) {
+        "write" => std::fs::write(path, bytes(2)),
+        "append" => (std::fs::OpenOptions::new().create(true).append(true))
+            .open(path)
+            .and_then(|mut file| file.write_all(&bytes(2))),
+        "size" => (std::fs::OpenOptions::new().create(true).truncate(false))
+            .write(true)
+            .open(path)
+            .and_then(|file| file.set_len(change[2].as_u64().unwrap_or(0))),
+        "rename" => std::fs::rename(path, text(2)),
+        "remove" => std::fs::remove_file(path),
+        _ => std::fs::create_dir_all(path),
+    };
+    done.map_err(|why| format!("{change}: {why}"))
+}
+
+/// downloads: the folders downloads.py finds for what the system says (`[kind, found, home]`)
+/// and, for each tracker, its state after each step `[now, rate, changes to the files]`.
+fn downloads(case: &Value) -> Result<Value, String> {
+    use lp_services::downloads::{downloads_folder, pictures_folder, Settings, Tracker};
+    use lp_services::paths::{Path, HERE};
+    let locale = std::path::PathBuf::from(case["locale"].as_str().unwrap_or(""));
+    let code = case["language"].as_str().unwrap_or("en");
+    lp_i18n::set_language(lp_i18n::Language::load(&locale, code)?);
+    let text = |value: &Value| value.as_str().unwrap_or("").to_string();
+    let how = lp_py::json::Dumps::default();
+    let folders: Vec<Value> = (case["folders"].as_array().into_iter().flatten())
+        .map(|row| {
+            let found = row[1].as_str().map(str::to_string);
+            let home = Path::new(HERE, &text(&row[2]));
+            let folder = match row[0].as_str() {
+                Some("pictures") => pictures_folder(found, &home),
+                _ => downloads_folder(found, &home),
+            };
+            json!(folder.text())
+        })
+        .collect();
+    let mut trackers = Vec::new();
+    for tracker in case["trackers"].as_array().into_iter().flatten() {
+        for change in tracker["before"].as_array().into_iter().flatten() {
+            change_files(change)?;
+        }
+        let settings = Settings {
+            steam: tracker["steam"].as_bool() == Some(true),
+            browser: tracker["browser"].as_bool() == Some(true),
+            min_mb: tracker["min_mb"].as_f64().unwrap_or(50.0),
+            steam_path: text(&tracker["steam_path"]),
+            folder: text(&tracker["folder"]),
+        };
+        let found = text(&tracker["found"]);
+        let find = Box::new(move || Path::new(HERE, &found));
+        let mut follows = Tracker::new(settings, made_up_places(tracker), find);
+        let mut states = Vec::new();
+        for step in tracker["steps"].as_array().into_iter().flatten() {
+            for change in step[2].as_array().into_iter().flatten() {
+                change_files(change)?;
+            }
+            let now = step[0].as_f64().unwrap_or(0.0);
+            states.push(match follows.step(now, step[1].as_f64()) {
+                Ok(Some(state)) => json!(lp_py::json::dumps(&lp_py::Value::Dict(state), &how)),
+                Ok(None) => Value::Null,
+                Err(why) => json!({"error": why}),
+            });
+        }
+        trackers.push(json!({
+            "states": states,
+            "notes": follows.notes,
+            "root": follows.root.as_ref().map(Path::text),
+            "folder": follows.folder.as_ref().map(Path::text),
+        }));
+    }
+    Ok(json!({"folders": folders, "trackers": trackers}))
+}
+
 pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "regex" => regex(case),
@@ -2402,6 +2491,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "launchers" => launchers(case),
         "machine" => machine(case),
         "game" => game(case)?,
+        "downloads" => downloads(case)?,
         "autopilot" => autopilot(case)?,
         "mangohud" => mangohud(case)?,
         "media" => media(case),

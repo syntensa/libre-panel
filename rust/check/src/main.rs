@@ -1805,8 +1805,8 @@ fn run(case: &Value) -> Result<Value, String> {
         | "load_math" | "netlink" | "audio" | "game_frames" | "hardware" | "linux_source"
         | "sky" | "weather" | "web_sources" | "nut" | "mqtt" | "calendar" | "shared_memory"
         | "services_host" | "timer" | "power" | "agents" | "notices" | "service_paths"
-        | "steam" | "launchers" | "machine" | "game" | "autopilot" | "mangohud" | "media"
-        | "appicon" => sensors::run(op, case)?,
+        | "steam" | "launchers" | "machine" | "game" | "autopilot" | "downloads" | "mangohud"
+        | "media" | "appicon" => sensors::run(op, case)?,
         "toml" => {
             // each text read as tomllib.loads reads it; each file's bytes as
             // Path.read_text(encoding="utf-8") and then tomllib.loads read them; `frame`: how

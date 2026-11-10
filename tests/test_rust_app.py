@@ -1804,3 +1804,67 @@ def test_the_autopilot_shows_the_theme_of_the_rule_that_holds(tmp_path: Path) ->
         assert "rule 'music': theme 'blue'" in said, said
         assert "rule 'rule 2' skipped: theme 'nowhere' is not installed" in said, said
         assert "no rule holds: the theme of config.toml" in said, said
+
+
+def test_a_browsers_download_is_on_the_panel_while_it_loads(tmp_path: Path) -> None:
+    """`downloads` among the services: a part file in the folder named is a download on the
+    theme's download module; once the file it was becoming is there, it is done for a few
+    seconds, then the module is as it was."""
+    from libre_panel import design
+
+    look = design.LOOKS[sorted(design.LOOKS)[0]]
+    folder = tmp_path / "themes" / "loads"
+    folder.mkdir(parents=True)
+    theme = {"format": "libre-panel-theme/1", "name": "Loads",
+             "display": {"model": "turing-5", "orientation": "landscape", "width": 800,
+                         "height": 480},
+             "palette": dict(look["palette"]), "style": dict(look["style"]),
+             "grid": {"columns": 1, "rows": 1, "gap": 8, "margin": 24}, "refresh_ms": 200,
+             "widgets": [{"type": "module", "id": "m0", "module": "download", "col": 0, "row": 0,
+                          "cols": 1, "rows": 1, "finish": "flat"}]}  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+    loads = tmp_path / "dl"
+    loads.mkdir()
+    (tmp_path / "config.toml").write_text(
+        'theme = "loads"\nfps = 10\n[device]\ndriver = "virtual"\noutput = "panel.png"\n'
+        '[sensors]\nproviders = []\n[services]\nenabled = ["downloads"]\n'
+        f"[services.downloads]\nsteam = false\nfolder = {json.dumps(str(loads))}\nmin_mb = 0\n",
+        encoding="utf-8",
+    )
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries()}  # fmt: skip
+    seen: list[tuple[float, bytes]] = []
+    part = loads / "film.mkv.part"
+    with subprocess.Popen([str(_program()), "run"], env=env, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        began = time.monotonic()
+        try:
+            while (at := time.monotonic() - began) < 17.5:
+                if 3.0 < at < 7.0:
+                    with open(part, "ab") as stream:  # (it grows while it loads)
+                        stream.write(bytes(200_000))
+                elif at >= 7.0 and part.exists():
+                    part.rename(loads / "film.mkv")
+                try:
+                    with Image.open(tmp_path / "panel.png") as frame:
+                        seen.append((at, frame.convert("RGB").tobytes()))
+                except (OSError, SyntaxError, ValueError):
+                    pass  # (not there yet, or being put in its place)
+                time.sleep(0.05)
+        finally:
+            if os.name == "nt":
+                program.terminate()
+            else:
+                program.send_signal(signal.SIGINT)
+            said = program.communicate(timeout=30)[1]
+    assert "service 'downloads' started" in said, said
+    before = [frame for at, frame in seen if 1.0 < at < 2.9]
+    assert before and all(frame == before[-1] for frame in before), len(before)
+    # the download, then that it is done: neither is the module with nothing to show
+    loading = [frame for at, frame in seen if 5.0 < at < 6.9]
+    done = [frame for at, frame in seen if 9.0 < at < 12.0]
+    assert loading and all(frame != before[-1] for frame in loading), len(loading)
+    assert done and all(frame != before[-1] for frame in done), len(done)
+    assert not set(done) & set(loading)
+    after = [frame for at, frame in seen if at > 16.0]
+    assert after and all(frame == before[-1] for frame in after), len(after)
