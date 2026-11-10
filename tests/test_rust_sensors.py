@@ -9,6 +9,7 @@ import base64
 import json
 import random
 import struct
+import sys
 from typing import Any
 
 from rust_check import run
