@@ -1603,3 +1603,62 @@ def test_ai_activity_comes_from_the_board_and_the_agents_programs(tmp_path: Path
     # (its own reports off, and without the switch that would keep it from asking)
     assert (tmp_path / "claude.env").read_text() == "1-\n"
     assert (tmp_path / "codex.args").read_text() == "app-server\n"
+
+
+def test_notices_say_the_volume_and_a_sensor_past_its_limit(tmp_path: Path) -> None:
+    """`notices` among the services: the volume another source reports (here the test's
+    script) is news when it moves, not at its first value; a sensor at its crit limit is a
+    warning on the panel and the alarm in the log."""
+    folder = tmp_path / "themes" / "red"
+    folder.mkdir(parents=True)
+    theme = {"format": "libre-panel-theme/1", "name": "Red",
+             "display": {"model": "turing-5", "orientation": "landscape", "width": 800,
+                         "height": 480},
+             "palette": {"bg": "#DC1E1E"}, "font": "builtin:Barlow-Medium",
+             "background": {"color": "@bg", "image": None}, "refresh_ms": 200,
+             "widgets": []}  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+    (tmp_path / "config.toml").write_text(
+        'theme = "red"\nfps = 10\n[device]\ndriver = "virtual"\noutput = "panel.png"\n'
+        '[sensors]\nproviders = []\n[services]\nenabled = ["notices"]\n'
+        '[services.notices]\nwarnings = [{ key = "cpu.temp", crit = 90 }]\n',
+        encoding="utf-8",
+    )
+    script = tmp_path / "script.json"
+    script.write_text(json.dumps([
+        [0.3, "publish", "audio.volume", 30.0, "%", "Volume"],
+        [0.3, "publish", "cpu.temp", 60.0, "°C", "CPU"],
+        [2.5, "publish", "audio.volume", 60.0, "%", "Volume"],
+        [9.0, "publish", "cpu.temp", 95.0, "°C", "CPU"],
+    ]), encoding="utf-8")  # fmt: skip
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries(), "LP_HOST_SCRIPT": str(script)}  # fmt: skip
+    ground = bytes((220, 30, 30))
+    others: list[tuple[float, int]] = []
+    with subprocess.Popen([str(_program()), "run"], env=env, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        began = time.monotonic()
+        try:
+            while time.monotonic() < began + 11.5:
+                try:
+                    with Image.open(tmp_path / "panel.png") as frame:
+                        data = frame.convert("RGB").tobytes()
+                    other = sum(1 for at in range(0, len(data), 3) if data[at : at + 3] != ground)
+                    others.append((time.monotonic() - began, other))
+                except (OSError, SyntaxError, ValueError):
+                    pass  # (not there yet, or being put in its place)
+                time.sleep(0.05)
+        finally:
+            if os.name == "nt":
+                program.terminate()
+            else:
+                program.send_signal(signal.SIGINT)
+            said = program.communicate(timeout=30)[1]
+    assert "service 'notices' started" in said, said
+    # the first volume is no news; the second is, for a while; then the warning
+    assert others and all(other == 0 for at, other in others if at < 2.3), others[:40]
+    assert any(other > 500 for at, other in others if 2.6 < at < 5.0), others
+    assert any(other == 0 for at, other in others if 6.0 < at < 9.0), others
+    assert any(other > 500 for at, other in others if at > 9.3), others[-40:]
+    if os.name != "nt":  # (ended at once on Windows: what it said last may be lost)
+        assert "alarm: CPU 95 °C" in said, said

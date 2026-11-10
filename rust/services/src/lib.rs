@@ -7,5 +7,6 @@ pub mod agents_setup;
 pub mod agents_usage;
 pub mod host;
 pub mod manager;
+pub mod notices;
 pub mod power;
 pub mod timer;

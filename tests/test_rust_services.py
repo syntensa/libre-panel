@@ -692,3 +692,147 @@ def test_the_agents_board_tells_what_agents_py_tells(tmp_path: Any, monkeypatch:
             assert os.stat(folder / agents.KEY_FILE).st_mode & 0o777 == 0o600
         assert [p.name for p in folder.iterdir()] == [agents.KEY_FILE]
     assert len({new for _, new, _ in ours["keys"]}) == len(keys)
+
+
+def test_notices_come_when_notices_py_sends_them() -> None:
+    """services/notices.py: the volume, a new track and its cover, the microphone, an
+    appointment soon, sensors past their limits (the quiet time, a worse level), the alarm
+    and its hold, the panel back from a restart; what is wrong with the options and the
+    readings it asks for."""
+    from datetime import datetime
+    from types import SimpleNamespace
+
+    from libre_panel import i18n
+    from libre_panel.sensors.base import Reading, Snapshot
+    from libre_panel.services import notices
+
+    limits = [{"key": "cpu.temp", "warn": 70, "crit": 90},
+              {"key": "gpu.load", "warn": 80, "max": 200},
+              {"key": "x.y", "crit": 50, "name": "Pump", "icon": "fan"},
+              {"key": " disk.used ", "crit": 95.5, "icon": 5, "name": 7},
+              {"key": "cpu.temp", "crit": 93}, {"key": ""}, 5, {"key": "a", "warn": "x"},
+              {"key": "a"}, {"key": "a", "max": True},
+              {"key": "a", "warn": 9, "crit": 3},
+              {"key": "fan.1", "warn": 2000, "icon": ""}]  # fmt: skip
+
+    def readings_of(rng: random.Random) -> dict[str, list[Any]]:
+        pool: dict[str, tuple[list[Any], str, list[str]]] = {
+            "audio.volume": ([30, 30.5, 31, 55.0, 55.4, 80, None, "x", True], "%", ["Volume"]),
+            "audio.muted": ([0, 0, 1, None], "", ["Muted"]),
+            "audio.mic.muted": ([0, 1, 1, 0.0, None, "1"], "", [""]),
+            "media.title": (["Song A", "Song A", "Song B", "Größe", None, 5], "", [""]),
+            "media.artist": (["Band", "Band", "", None], "", [""]),
+            "media.state": (["Playing", "playing", "Playing", "Paused", None], "", [""]),
+            "media.playing": ([1, 0, None], "", [""]),
+            "media.progress": ([0.25, 0.9, None, "x"], "", [""]),
+            "cpu.temp": ([60, 75, 75.25, 92, 95, None], "°C", ["CPU temperature", ""]),
+            "gpu.load": ([50, 85, 210, 9.96], "%", ["GPU load"]),
+            "x.y": ([40, 55, 4.25, 50], "l/h", ["Flow", ""]),
+            "disk.used": ([96, 9.5, 95.5], "%", ["Disk"]),
+            "fan.1": ([1500, 2400], "RPM", ["Fan 1"]),
+        }
+        for n in (1, 2, 3):
+            pool[f"calendar.{n}.title"] = (["Standup", "Lunch", "Lunch", None, 5], "", [""])
+            pool[f"calendar.{n}.minutes"] = ([5, 0.2, 0.5, 0.49, 12, -1, 2.5, 1.5, None], "", [""])
+            pool[f"calendar.{n}.start"] = ([1.78e9, 1.78e9 + 600, 1780000300, None], "", [""])
+            pool[f"calendar.{n}.time"] = (["09:30", "09:30", i18n.t("All day"), "", None], "", [""])
+        return {key: [rng.choice(values), unit, rng.choice(labels)]
+                for key, (values, unit, labels) in pool.items() if rng.random() < 0.75}  # fmt: skip
+
+    defaults = {name: default for name, (_, default) in notices.Notices.options.items()}
+    for language in ("en", "de"):
+        i18n.set_language(language)
+        try:
+            rng = random.Random(0x4071CE)
+            runs = []
+            for _ in range(250):
+                options = {**defaults, "warnings": rng.sample(limits, rng.randrange(5)),
+                           "volume_look": rng.choice(["", "", "ring", "nope"]),
+                           "appointments": rng.choice([10, 10, 0, 30]),
+                           "quiet_s": rng.choice([120.0, 0, 5])}  # fmt: skip
+                for name in ("volume", "music", "microphone", "restarted", "alarm"):
+                    options[name] = rng.random() < 0.85
+                began = rng.uniform(0, 1000)
+                now, steps = began, []
+                for _ in range(rng.randrange(1, 60)):
+                    now += rng.choice([0.05, 0.3, 1, 1, 1, 2.5, 5, 12, 40, 130])
+                    kind = rng.choice(["sample"] * 7 + ["fresh"] * 2 + ["restarted"])
+                    pictures = [key for key in (notices.COVER, notices.APP_ICON)
+                                if rng.random() < 0.4]  # fmt: skip
+                    more: Any = "14:05"
+                    if kind == "fresh":
+                        more = rng.sample(["audio.volume", "audio.muted", "media.title",
+                                           "media.state", "audio.mic.muted", "cpu.temp"],
+                                          rng.randrange(1, 4))  # fmt: skip
+                    steps.append([now, kind, json.dumps(readings_of(rng)), pictures, more])
+                runs.append([json.dumps(options), began, steps])
+            [ours] = run([{"op": "notices", "locale": str(i18n.LOCALE_DIR), "language": language,
+                           "runs": runs}])  # fmt: skip
+            assert "runs" in ours, ours
+
+            seen = {kind: 0 for kind in ("volume", "music", "microphone", "appointment",
+                                         "warning", "panel", "publish", "unpublish", "note",
+                                         "late cover", "error", "report")}  # fmt: skip
+            for (options, began, steps), got in zip(runs, ours["runs"], strict=True):
+                clock = [began]
+                acts: list[list[Any]] = []
+                reports: list[str] = []
+                heard: dict[str, Any] = {}
+                wants: list[str] = []
+                log = SimpleNamespace(
+                    warning=lambda _, text, reports=reports: reports.append(text),
+                    info=lambda text, *more, acts=acts: acts.append(["note", text % more]),
+                    debug=lambda *_: None,
+                )
+
+                def publish(key: str, value: Any, unit: str, label: str, acts: Any = acts) -> None:
+                    assert (unit, label) == ("", i18n.t("Alarm"))
+                    acts.append(["publish", key, value])
+
+                def notify(text: str, acts: Any = acts, **how: Any) -> None:
+                    acts.append(["tell", text, how["icon"], how["level"], how["seconds"],
+                                 how["kind"], how["rank"], how["key"],
+                                 json.dumps(how["payload"])])  # fmt: skip
+
+                host = SimpleNamespace(
+                    log=log, publish=publish, notify=notify,
+                    want=lambda *keys, wants=wants: wants.extend(keys),
+                    on=lambda event, callback, heard=heard: heard.__setitem__(event, callback),
+                    unpublish=lambda key, acts=acts: acts.append(["unpublish", key]),
+                )  # fmt: skip
+                service = notices.Notices(host, json.loads(options), clock=lambda c=clock: c[0],
+                                          wall=lambda: datetime(2026, 1, 1, 14, 5))  # fmt: skip
+                service.start()
+                assert got["reports"] == reports, options
+                assert got["wants"] == wants, options
+                assert got["follows"] == ("fresh" in heard), options
+                assert got["alarms"] == (acts == [["publish", "alarm", 0]]), options
+                seen["report"] += len(reports)
+                for (now, kind, readings, pictures, more), found in zip(
+                    steps, got["steps"], strict=True
+                ):
+                    clock[0] = now
+                    acts.clear()
+                    late = service._late is not None
+                    snapshot = Snapshot(
+                        readings={key: Reading(key, *row)
+                                  for key, row in json.loads(readings).items()},
+                        images={key: key for key in pictures},
+                    )  # fmt: skip
+                    if kind == "sample":
+                        service.on_sample(snapshot)
+                    elif kind == "fresh":
+                        if "fresh" in heard:
+                            service.on_fresh(snapshot, frozenset(more))
+                    else:
+                        service.on_restarted()
+                    if kind == "fresh" and "fresh" not in heard:
+                        continue  # (not listened for: the loop does not tell it)
+                    assert found == acts, (options, steps, now)
+                    for act in acts:
+                        seen[act[5] if act[0] == "tell" else act[0]] += 1
+                        seen["error"] += act[0] == "tell" and act[3] == "error"
+                        seen["late cover"] += late and act[0] == "tell" and act[5] == "music"
+            assert all(count > 20 for count in seen.values()), seen
+        finally:
+            i18n.set_language("en")

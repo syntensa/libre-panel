@@ -1821,7 +1821,14 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       address the hooks post to (`/api/ai/`) comes with the server (R9). The main loop now
       tells the sources and the services what the theme on show reads (it told only what
       the pages read)
-- [ ] game mode, notices, downloads, memory and its store, cooling, autopilot, devices
+- [x] notices (services/notices.py, lp-services' notices): the volume when it moves (in the
+      look chosen for it), a new track with its cover (one that comes up to three seconds
+      later still joins it), the microphone, an appointment that begins soon, sensors past
+      their warn and crit limits (the quiet time, a worse level at once), the alarm and its
+      hold, the panel back from a restart; what is wrong with the options and the readings
+      it asks for. 250 runs of looks compared with Python in two languages; in the app, the
+      volume's message when it moves and a warning with the alarm
+- [ ] game mode, downloads, memory and its store, cooling, autopilot, devices
 
 ### R9 the app
 - [ ] the server and every route of its API, the same JSON

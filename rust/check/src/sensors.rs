@@ -1829,6 +1829,86 @@ fn agents(case: &Value) -> Result<Value, String> {
     }))
 }
 
+/// notices: each run's options (what is wrong with them, the readings it wants) and its
+/// steps `[now, what, readings, pictures, keys or time]`: what each look asks of the host.
+fn notices(case: &Value) -> Result<Value, String> {
+    use lp_render::snapshot::{Reading, Snapshot};
+    use lp_services::notices::{Action, Core, Options};
+    let locale = std::path::PathBuf::from(case["locale"].as_str().unwrap_or(""));
+    let code = case["language"].as_str().unwrap_or("en");
+    lp_i18n::set_language(lp_i18n::Language::load(&locale, code)?);
+    let text = |value: &Value| value.as_str().unwrap_or("").to_string();
+    let how = lp_py::json::Dumps::default();
+    let mut runs = Vec::new();
+    for run in case["runs"].as_array().into_iter().flatten() {
+        let lp_py::Value::Dict(options) = loaded(&run[0]) else {
+            return Err("options that are no table".into());
+        };
+        let mut reports = Vec::new();
+        let mut core = Core::new(
+            Options::of(&options),
+            run[1].as_f64().unwrap_or(0.0),
+            &mut |line| reports.push(line),
+        );
+        let mut steps = Vec::new();
+        for step in run[2].as_array().into_iter().flatten() {
+            let now = step[0].as_f64().unwrap_or(0.0);
+            let mut snapshot = Snapshot::default();
+            if let lp_py::Value::Dict(readings) = loaded(&step[2]) {
+                for (key, row) in readings {
+                    let row = row.as_list().unwrap_or(&[]);
+                    let reading = Reading {
+                        unit: row.get(1).map(lp_py::Value::str).unwrap_or_default(),
+                        label: row.get(2).map(lp_py::Value::str).unwrap_or_default(),
+                        ..Reading::of(row.first().cloned().unwrap_or(lp_py::Value::None))
+                    };
+                    snapshot.readings.insert(key, reading);
+                }
+            }
+            for key in step[3].as_array().into_iter().flatten() {
+                let dot = lp_pixels::Image::new(lp_pixels::Mode::RGB, 1, 1, &[0, 0, 0]);
+                snapshot.images.insert(text(key), dot);
+            }
+            let actions = match step[1].as_str().unwrap_or("") {
+                "sample" => core.sample(&snapshot, now),
+                "fresh" => {
+                    let keys = step[4].as_array().into_iter().flatten().map(text).collect();
+                    core.fresh(&snapshot, &keys, now)
+                }
+                _ => vec![core.restarted(&text(&step[4]))],
+            };
+            steps.push(json!(actions
+                .iter()
+                .map(|action| match action {
+                    Action::Tell(toast) => json!([
+                        "tell",
+                        toast.text,
+                        toast.icon,
+                        toast.level,
+                        toast.seconds,
+                        toast.kind,
+                        toast.rank,
+                        toast.key,
+                        lp_py::json::dumps(&lp_py::Value::Dict(toast.payload.clone()), &how)
+                    ]),
+                    Action::Publish(key, value) => json!(["publish", key, plain(value)]),
+                    Action::Unpublish(key) => json!(["unpublish", key]),
+                    Action::Note(line) => json!(["note", line]),
+                })
+                .collect::<Vec<_>>()));
+        }
+        runs.push(json!({
+            "reports": reports,
+            "wants": core.wants(),
+            "follows": core.follows(),
+            "alarms": core.alarms(),
+            "steps": steps,
+        }));
+    }
+    lp_i18n::set_language(lp_i18n::Language::english());
+    Ok(json!({"runs": runs}))
+}
+
 pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "regex" => regex(case),
@@ -1853,6 +1933,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "timer" => timer(case)?,
         "power" => power(case)?,
         "agents" => agents(case)?,
+        "notices" => notices(case)?,
         "mangohud" => mangohud(case)?,
         "media" => media(case),
         "appicon" => appicon(case),

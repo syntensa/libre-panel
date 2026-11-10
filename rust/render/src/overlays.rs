@@ -21,6 +21,9 @@ use crate::looks::{self, Look};
 use crate::piece::{Failed, Result};
 use crate::renderer::Renderer;
 
+/// The volume's looks by name (volume_looks.py's VOLUME_LOOKS).
+pub const VOLUME_LOOKS: [&str; 4] = looks::NAMES;
+
 /// Supersampling for smooth corners.
 const SS: i64 = 3;
 
