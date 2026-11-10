@@ -162,7 +162,7 @@ pub fn log(level: Level, logger: &str, message: &str) {
 
 /// What the app says of itself: on the standard error as it was, and into the log.
 pub fn say(logger: &str, message: &str) {
-    eprintln!("libre-panel: {message}");
+    eprintln!("libre-panel: {}{message}", panel_of_thread());
     log(Level::Info, logger, message);
 }
 

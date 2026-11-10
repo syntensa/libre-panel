@@ -44,6 +44,20 @@ pub fn occasion(config: &Config, host: &PluginHost, in_sequence: bool) -> &'stat
     "manual"
 }
 
+/// _occasion for a panel beside the first, which has no services: the first panel's `mode`
+/// where config.toml gives this panel a theme for it, else the screens in turn or "manual".
+pub fn beside_occasion(config: &Config, mode: &str, in_sequence: bool) -> &'static str {
+    let own = config.modes.get(mode).and_then(|own| own.theme.as_deref());
+    if own.is_some_and(|theme| !theme.is_empty()) {
+        let known = TRANSITION_OCCASIONS.iter().copied().find(|o| *o == mode);
+        return known.unwrap_or("manual");
+    }
+    if in_sequence {
+        return "sequence";
+    }
+    "manual"
+}
+
 /// _switch_occasion: the occasion of a switch and whether it leaves it: one into a game,
 /// music or the like is that one's; one back from it is that one's too, leaving it.
 pub fn switch_occasion(before: &'static str, after: &'static str) -> (&'static str, bool) {

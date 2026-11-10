@@ -217,7 +217,11 @@ impl PanelService {
         };
         let mut told = Dict::new();
         told.insert("state".into(), Value::Str(state.into()));
-        told.insert("detail".into(), Value::Str(error));
+        let detail = match (error.is_empty(), state) {
+            (true, "waiting") => status.detail.clone(),
+            _ => error,
+        };
+        told.insert("detail".into(), Value::Str(detail));
         told.insert("theme".into(), Value::Str(status.theme));
         told.insert("frames".into(), Value::int(status.frames as i64));
         // the size of the panel's frames: the app shows each theme in its version for it
@@ -240,6 +244,37 @@ impl PanelService {
             _ => Value::None,
         };
         told.insert("sequence".into(), sequence);
+        let running = matches!(state, "showing" | "waiting");
+        told.insert("target".into(), Value::Str(status.target));
+        told.insert("default_theme".into(), Value::Str(status.default_theme));
+        told.insert("mode".into(), status.mode.map_or(Value::None, Value::Str));
+        // the panels beside this one ([[panels]]), by their place there, while it runs
+        let mut more: Vec<(usize, RunStatus)> = (status.more.iter())
+            .map(|(n, each)| (*n, each.lock().map(|s| s.clone()).unwrap_or_default()))
+            .collect();
+        more.sort_by_key(|(n, _)| *n);
+        let more = (more.into_iter().filter(|_| running))
+            .map(|(n, each)| {
+                let mut entry = Dict::new();
+                entry.insert("index".into(), Value::int(n as i64));
+                entry.insert("state".into(), Value::Str(each.state.into()));
+                let detail = match each.state {
+                    "waiting" | "error" => each.detail,
+                    _ => String::new(),
+                };
+                entry.insert("detail".into(), Value::Str(detail));
+                entry.insert("target".into(), Value::Str(each.target));
+                entry.insert("theme".into(), Value::Str(each.theme));
+                entry.insert("fps".into(), Value::None);
+                entry.insert("model".into(), Value::Str(each.model));
+                let size = each.size.map_or(Value::None, |(width, height)| {
+                    Value::List(vec![Value::int(width), Value::int(height)])
+                });
+                entry.insert("size".into(), size);
+                Value::Dict(entry)
+            })
+            .collect();
+        told.insert("more".into(), Value::List(more));
         told
     }
 }

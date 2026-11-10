@@ -7,6 +7,7 @@ mod ai;
 mod autostart;
 mod background;
 mod backup;
+mod beside;
 mod company;
 mod consoles;
 mod display;
@@ -260,7 +261,7 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
             if let Ok(more) = std::env::var("LP_SENSORS_WANT") {
                 keys.extend(more.split(',').map(str::to_string));
             }
-            hub.want(keys);
+            hub.want(0, keys);
             let moment = lp_render::Moment::date(1970, 1, 1);
             hub.snapshot(moment, false);
             // (rate counters and pollers need time)

@@ -4,7 +4,8 @@
 //! network's and the disks' rates, how long the computer runs and the processor's
 //! temperature (system.rs reads them from the system).
 
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
+use std::time::Instant;
 
 use indexmap::IndexMap;
 use lp_py::toml::{Table, Toml};
@@ -29,7 +30,7 @@ pub enum Every {
 }
 
 /// Something readings come from (SensorProvider).
-pub trait Source {
+pub trait Source: Send {
     fn name(&self) -> &'static str;
     /// The readings of now, each put under its key.
     fn read(&mut self, out: &mut Readings);
@@ -695,7 +696,38 @@ pub struct Hub {
     pictures: Vec<(u64, Vec<String>)>,
     /// the fans by the names they go by
     names: crate::fan_names::FanNames,
+    /// the keys each panel's loop reads (0: the first panel's, n + 1: `[[panels]]` n's)
+    wants: IndexMap<usize, BTreeSet<String>>,
+    /// when the readings were taken last, and they and their pictures, for the panels beside
+    /// the first (`shared`)
+    taken: Option<(Instant, Readings, Images)>,
 }
+
+pub type Images = IndexMap<String, lp_pixels::Image>;
+
+/// The readings with their numbers added to `history`, as a snapshot's histories (remember).
+fn remember(history: &mut IndexMap<String, VecDeque<f64>>, readings: &Readings) -> Histories {
+    for (key, reading) in readings {
+        let number = match &reading.value {
+            Value::Float(f) => Some(*f),
+            Value::Int(n) => lp_py::num::int_to_float(n).ok(),
+            _ => None,
+        };
+        if let Some(number) = number {
+            let series = history.entry(key.clone()).or_default();
+            if series.len() == HISTORY_LENGTH {
+                series.pop_front();
+            }
+            series.push_back(number);
+        }
+    }
+    history
+        .iter()
+        .map(|(key, series)| (key.clone(), series.iter().copied().collect()))
+        .collect()
+}
+
+type Histories = IndexMap<String, Vec<f64>>;
 
 impl Hub {
     pub fn new(sources: Vec<Box<dyn Source>>) -> Hub {
@@ -707,6 +739,8 @@ impl Hub {
             owners: IndexMap::new(),
             pictures: Vec::new(),
             names: crate::fan_names::FanNames::default(),
+            wants: IndexMap::new(),
+            taken: None,
         }
     }
 
@@ -731,30 +765,14 @@ impl Hub {
         all: bool,
         video: bool,
     ) {
-        self.pictures.resize(self.sources.len(), (0, Vec::new()));
-        for (n, source) in self.sources.iter().enumerate() {
-            let follows = match source.every_frame() {
-                Every::No => false,
-                Every::Video => video,
-                Every::Frame => true,
-            };
-            let state = source.images_state();
-            if !(all || follows) || state == self.pictures[n].0 {
-                continue;
-            }
-            for key in std::mem::take(&mut self.pictures[n].1) {
-                images.shift_remove(&key);
-            }
-            let found = if state == 0 {
-                IndexMap::new()
-            } else {
-                source.images()
-            };
-            self.pictures[n] = (state, found.keys().cloned().collect());
-            for (key, image) in found {
-                images.entry(key).or_insert(image);
-            }
-        }
+        refresh(&self.sources, &mut self.pictures, images, all, video);
+    }
+
+    /// The hub made anew (config.toml's sources changed): what the loops read is kept.
+    pub fn replace(&mut self, mut fresh: Hub) {
+        fresh.wants = std::mem::take(&mut self.wants);
+        fresh.wanted.set(fresh.wants.values().flatten().cloned());
+        *self = fresh;
     }
 
     /// fresh: between snapshots, the latest values of the sources that follow on every frame,
@@ -792,9 +810,37 @@ impl Hub {
             .any(|source| source.every_frame() != Every::No)
     }
 
-    /// The keys (and patterns) the theme on show reads.
-    pub fn want(&self, keys: impl IntoIterator<Item = String>) {
-        self.wanted.set(keys);
+    /// The keys (and patterns) the themes on show read: `owner`'s (0: the first panel's loop,
+    /// n + 1: that of `[[panels]]` n) and the others' (want: each loop's, forgotten with it).
+    pub fn want(&mut self, owner: usize, keys: impl IntoIterator<Item = String>) {
+        self.wants.insert(owner, keys.into_iter().collect());
+        self.wanted.set(self.wants.values().flatten().cloned());
+    }
+
+    /// What a loop that ended read: not wanted any more.
+    pub fn forget(&mut self, owner: usize) {
+        if self.wants.shift_remove(&owner).is_some() {
+            self.wanted.set(self.wants.values().flatten().cloned());
+        }
+    }
+
+    /// age: how long ago the readings were last taken, in seconds (None: not yet).
+    pub fn age(&self) -> Option<f64> {
+        self.taken
+            .as_ref()
+            .map(|(at, _, _)| at.elapsed().as_secs_f64())
+    }
+
+    /// shared: for another panel (`View`), the readings and pictures taken last where they
+    /// are younger than `max_age` seconds, else new ones: the sources are not read twice for
+    /// two panels that draw at the same pace.
+    pub fn shared(&mut self, max_age: f64) -> (Readings, Images) {
+        if let Some((at, readings, images)) = &self.taken {
+            if at.elapsed().as_secs_f64() < max_age {
+                return (readings.clone(), images.clone());
+            }
+        }
+        self.take()
     }
 
     /// Sources that start in the background get the moment they need for their first
@@ -979,6 +1025,18 @@ impl Hub {
     /// snapshot: every source read once, the numbers among the readings added to their
     /// histories, at the moment `now`.
     pub fn snapshot(&mut self, now: Moment, fold: bool) -> Snapshot {
+        let (readings, images) = self.take();
+        Snapshot {
+            history: remember(&mut self.history, &readings),
+            readings,
+            now,
+            fold,
+            images,
+        }
+    }
+
+    /// Every source read once: the readings and the pictures, kept for `shared`.
+    fn take(&mut self) -> (Readings, Images) {
         let mut readings = Readings::new();
         let mut owners = IndexMap::new();
         for (n, source) in self.sources.iter_mut().enumerate() {
@@ -994,35 +1052,80 @@ impl Hub {
         }
         self.owners = owners;
         self.names.apply(&mut readings);
-        for (key, reading) in &readings {
-            let number = match &reading.value {
-                Value::Float(f) => Some(*f),
-                Value::Int(n) => lp_py::num::int_to_float(n).ok(),
-                _ => None,
-            };
-            if let Some(number) = number {
-                let series = self.history.entry(key.clone()).or_default();
-                if series.len() == HISTORY_LENGTH {
-                    series.pop_front();
-                }
-                series.push_back(number);
-            }
-        }
         // (every picture anew: the snapshot begins without any)
         let mut images = IndexMap::new();
         self.pictures.clear();
         self.refresh_images(&mut images, true, true);
+        self.taken = Some((Instant::now(), readings.clone(), images.clone()));
+        (readings, images)
+    }
+}
+
+/// Hub::refresh_images on `pictures`, what was last taken of each source's (a view keeps its
+/// own).
+fn refresh(
+    sources: &[Box<dyn Source>],
+    pictures: &mut Vec<(u64, Vec<String>)>,
+    images: &mut Images,
+    all: bool,
+    video: bool,
+) {
+    pictures.resize(sources.len(), (0, Vec::new()));
+    for (n, source) in sources.iter().enumerate() {
+        let follows = match source.every_frame() {
+            Every::No => false,
+            Every::Video => video,
+            Every::Frame => true,
+        };
+        let state = source.images_state();
+        if !(all || follows) || state == pictures[n].0 {
+            continue;
+        }
+        for key in std::mem::take(&mut pictures[n].1) {
+            images.shift_remove(&key);
+        }
+        let found = if state == 0 {
+            IndexMap::new()
+        } else {
+            source.images()
+        };
+        pictures[n] = (state, found.keys().cloned().collect());
+        for (key, image) in found {
+            images.entry(key).or_insert(image);
+        }
+    }
+}
+
+/// HubView: a panel beside the first's way to the readings: the first panel's hub reads the
+/// sources, and this panel takes what it read last where that is new enough (`SHARE_S`),
+/// else has them read anew. Its history is its own, at the pace its theme takes readings.
+#[derive(Default)]
+pub struct View {
+    history: IndexMap<String, VecDeque<f64>>,
+    pictures: Vec<(u64, Vec<String>)>,
+}
+
+impl View {
+    /// readings this old are new enough: a panel drawing at the same pace reads none
+    pub const SHARE_S: f64 = 1.0;
+
+    pub fn snapshot(&mut self, hub: &mut Hub, now: Moment, fold: bool) -> Snapshot {
+        let (mut readings, images) = hub.shared(Self::SHARE_S);
+        // what follows on every frame (the services' readings: an alarm) as it is now, not
+        // as it was when the shared ones were taken
+        readings.extend(hub.fresh(true));
         Snapshot {
-            history: self
-                .history
-                .iter()
-                .map(|(key, series)| (key.clone(), series.iter().copied().collect()))
-                .collect(),
+            history: remember(&mut self.history, &readings),
             readings,
             now,
             fold,
             images,
         }
+    }
+
+    /// Hub::refresh_images, of what this panel took last.
+    pub fn refresh_images(&mut self, hub: &Hub, images: &mut Images, video: bool) {
+        refresh(&hub.sources, &mut self.pictures, images, false, video);
     }
 }
 

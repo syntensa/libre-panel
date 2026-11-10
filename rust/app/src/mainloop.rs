@@ -10,7 +10,7 @@ use std::collections::{BTreeSet, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use indexmap::IndexMap;
@@ -26,11 +26,12 @@ use lp_services::host::{Delivery, Event, PluginHost, LEFT_OUT, NO_PANEL, OFF_IN_
 use lp_theme::versions::{self, Places};
 use lp_theme::{Env, Theme};
 
+use crate::beside::More;
 use crate::company::Company;
 use crate::display::{Display, Failed};
 use crate::home::Home;
 use crate::modes::{self, PageSwitch};
-use crate::sensors::Hub;
+use crate::sensors::{Hub, View};
 use crate::switch::{self, Blend};
 
 /// a panel that is missing or gone is tried again after so long, longer each time (_Link)
@@ -43,6 +44,11 @@ const WATCH_S: f64 = 1.0;
 const GAME_STREAM_FPS: i64 = 24;
 /// the notices service's reading: a sensor is at its critical limit
 const ALARM: &str = "alarm";
+/// a companion that is away a moment (a reconnect) keeps the first panel's pair versions
+const PAIR_HOLD_S: f64 = 10.0;
+/// a panel beside the first takes its readings this long after the first panel took them, so
+/// that a value glides on both at once
+const IN_STEP_S: f64 = 0.1;
 
 /// What `notify` is told of a message, kept where any thread may ask: whether the panel is
 /// connected, the kinds the theme switches off and those the screen shows itself.
@@ -67,6 +73,19 @@ pub struct RunStatus {
     pub size: Option<(i64, i64)>,
     /// where the screens in turn stand: the step, its theme and the seconds left of it
     pub sequence: Option<(usize, String, f64)>,
+    /// why the panel is not available ("waiting"), or why a panel beside the first stopped
+    /// ("error")
+    pub detail: String,
+    /// where frames go: a panel, or a PNG file
+    pub target: String,
+    /// the panel's model, set or reported ("": not known yet)
+    pub model: String,
+    /// the mode a service set (a game, music)
+    pub mode: Option<String>,
+    /// what a config.toml without a theme shows on this panel
+    pub default_theme: String,
+    /// the loops of the panels beside the first, by their place in `[[panels]]`
+    pub more: IndexMap<usize, Arc<Mutex<RunStatus>>>,
 }
 
 /// the runs of the loop so far
@@ -89,6 +108,13 @@ pub struct Asked {
     pub port: Option<u16>,
 }
 
+/// What a loop of a panel beside the first has of it: its place in `[[panels]]`, and the
+/// first panel's status (the theme it shows, which a companion follows).
+pub struct Beside {
+    pub n: usize,
+    pub first: Arc<Mutex<RunStatus>>,
+}
+
 pub struct MainLoop {
     home: Home,
     env: Env,
@@ -97,7 +123,15 @@ pub struct MainLoop {
     config: Config,
     config_file: PathBuf,
     watched: f64,
-    hub: Hub,
+    /// the sources' hub: the first panel's loop reads them, those beside it share it
+    hub: Arc<Mutex<Hub>>,
+    /// a panel beside the first: its own history of the shared readings
+    view: Option<View>,
+    beside: Option<Beside>,
+    /// the first panel's: the loops of the panels beside it
+    more: Option<More>,
+    /// when a companion was last seen showing beside the first panel
+    paired_at: Option<f64>,
     panel: Option<Display>,
     /// how often the panel failed in a row, and when it is tried again
     failures: u32,
@@ -160,6 +194,21 @@ pub fn accent_of(choice: &str) -> Option<String> {
     hex.then(|| choice.to_ascii_uppercase())
 }
 
+/// _alarm: whether a sensor is at its critical limit (the notices service says).
+fn alarm_in(snapshot: Option<&Snapshot>) -> bool {
+    let alarm = snapshot.and_then(|snapshot| snapshot.readings.get(ALARM));
+    alarm.is_some_and(|alarm| alarm.value.to_f64() == Some(1.0))
+}
+
+/// panel_config: for a panel beside the first, the config of `[[panels]]` at `n`.
+pub fn panel_config(config: &Config, n: usize) -> Result<Config, String> {
+    let gone = || format!("panels[{n}]: no longer in config.toml");
+    match config.panels.get(n) {
+        Some(panel) if panel.on => config.for_panel(n).ok_or_else(gone),
+        _ => Err(gone()),
+    }
+}
+
 /// The local time of now, and its fold.
 fn moment() -> (Moment, bool) {
     let since = SystemTime::now()
@@ -188,7 +237,6 @@ impl MainLoop {
         let config_file = asked.config.clone().unwrap_or_else(|| home.config_file());
         let config =
             lp_config::load_config(&config_file, lp_config::platform()).map_err(|e| e.msg)?;
-        let began = company.began;
         let host = Arc::clone(&company.host);
         if let Ok(mut status) = status.lock() {
             *status = RunStatus {
@@ -227,7 +275,74 @@ impl MainLoop {
         host.set_themes(Some(Box::new(move |name| {
             versions::find_theme(name, &themes).is_ok()
         })));
-        let mut made = MainLoop {
+        let hub = Arc::new(Mutex::new(hub));
+        // (the panels beside the first: not for a look at a few frames or into a file)
+        let more = (asked.frames.is_none() && asked.output.is_none()).then(|| {
+            More::new(
+                home.clone(),
+                asked.clone(),
+                Arc::clone(&company),
+                Arc::clone(&hub),
+                Arc::clone(&status),
+            )
+        });
+        let mut made = MainLoop::made(home, asked, config_file, config, hub, host, company, owns);
+        made.status = status;
+        made.judged = judged;
+        made.more = more;
+        made.speak();
+        made.follow_services();
+        Ok(made)
+    }
+
+    /// The loop of the panel beside the first at `[[panels]]` `n`, on the first panel's
+    /// readings (`hub`), with no services of its own: of a mode the first panel is in (a game,
+    /// music) it shows only a theme config.toml gives it for that.
+    pub fn beside(
+        home: Home,
+        asked: Asked,
+        company: Arc<Company>,
+        hub: Arc<Mutex<Hub>>,
+        beside: Beside,
+        status: Arc<Mutex<RunStatus>>,
+    ) -> Result<MainLoop, String> {
+        let config_file = asked.config.clone().unwrap_or_else(|| home.config_file());
+        let config =
+            lp_config::load_config(&config_file, lp_config::platform()).map_err(|e| e.msg)?;
+        let config = panel_config(&config, beside.n)?;
+        if let Ok(mut status) = status.lock() {
+            *status = RunStatus {
+                state: "starting",
+                ..RunStatus::default()
+            };
+        }
+        let began = company.began;
+        let host = PluginHost::new(Box::new(move || began.elapsed().as_secs_f64()));
+        let asked = Asked {
+            theme: None,
+            output: None,
+            ..asked
+        };
+        let mut made = MainLoop::made(home, asked, config_file, config, hub, host, company, false);
+        made.status = status;
+        made.view = Some(View::default());
+        made.beside = Some(beside);
+        Ok(made)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn made(
+        home: Home,
+        asked: Asked,
+        config_file: PathBuf,
+        config: Config,
+        hub: Arc<Mutex<Hub>>,
+        host: Arc<PluginHost>,
+        company: Arc<Company>,
+        owns: bool,
+    ) -> MainLoop {
+        let began = company.began;
+        MainLoop {
             env: Env {
                 fonts_dir: home.fonts(),
             },
@@ -238,6 +353,10 @@ impl MainLoop {
             config_file,
             watched: 0.0,
             hub,
+            view: None,
+            beside: None,
+            more: None,
+            paired_at: None,
             panel: None,
             failures: 0,
             retry_at: 0.0,
@@ -254,12 +373,12 @@ impl MainLoop {
             host,
             company,
             owns,
-            status,
+            status: Arc::default(),
             pages: PageSwitch::new(),
             wants: BTreeSet::new(),
             theme_reads: BTreeSet::new(),
             toasts: None,
-            judged,
+            judged: Arc::default(),
             alarm: AlarmEdge::new(),
             blend: None,
             began_in: None,
@@ -271,10 +390,20 @@ impl MainLoop {
             sequence_at: None,
             blends: 0,
             connected: false,
-        };
-        made.speak();
-        made.follow_services();
-        Ok(made)
+        }
+    }
+
+    /// The sources' hub, while this loop reads it.
+    fn hub(&self) -> MutexGuard<'_, Hub> {
+        self.hub
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Who the hub is told the readings of: 0 for the first panel's loop, n + 1 for that of
+    /// `[[panels]]` n.
+    fn owner(&self) -> usize {
+        self.beside.as_ref().map_or(0, |beside| beside.n + 1)
     }
 
     /// The loop's clock: seconds since it began.
@@ -294,9 +423,12 @@ impl MainLoop {
         }
     }
 
-    /// The services (and what else the company has) brought in line with config.toml.
+    /// The services (and what else the company has) brought in line with config.toml (the
+    /// first panel's loop: its config has them).
     fn follow_services(&mut self) {
-        self.company.follow(&self.config);
+        if self.beside.is_none() {
+            self.company.follow(&self.config);
+        }
     }
 
     /// The readings the sources are asked for: those the theme on show reads, those the
@@ -313,7 +445,8 @@ impl MainLoop {
             self.theme_reads = shown;
         }
         if wants != self.wants {
-            self.hub.want(wants.iter().cloned());
+            let owner = self.owner();
+            self.hub().want(owner, wants.iter().cloned());
             self.wants = wants;
         }
     }
@@ -342,6 +475,9 @@ impl MainLoop {
     /// _follow_pages: the page that is due (music while it plays, the clock when the PC is
     /// idle), or back; never over a mode a service set (a game).
     fn follow_pages(&mut self, now: f64) {
+        if self.beside.is_some() {
+            return; // (the first panel's loop switches the pages)
+        }
         let owner = self.host.mode_owner();
         if self.host.mode().is_some() && owner.as_deref() != Some(modes::OWNER) {
             return;
@@ -379,7 +515,13 @@ impl MainLoop {
     /// The transition of a switch that begins now, where config.toml has one for it.
     fn hand_over(&mut self, renderer: &Renderer, policy: Option<&'static str>, now: f64) {
         let chosen = self.host.take_transition();
-        let came = switch::occasion(&self.config, &self.host, self.in_sequence);
+        let came = match self.beside {
+            Some(_) => {
+                let mode = self.beside_mode().unwrap_or_default();
+                switch::beside_occasion(&self.config, &mode, self.in_sequence)
+            }
+            None => switch::occasion(&self.config, &self.host, self.in_sequence),
+        };
         let (occasion, leaving) = switch::switch_occasion(self.occasion, came);
         self.occasion = came;
         if policy == Some("follow") && self.host.switches() == self.switches {
@@ -430,30 +572,42 @@ impl MainLoop {
         if stamp == self.config.stamp {
             return;
         }
-        match lp_config::load_config(&self.config_file, lp_config::platform()) {
+        let loaded = lp_config::load_config(&self.config_file, lp_config::platform())
+            .map_err(|e| e.msg)
+            .and_then(|fresh| match &self.beside {
+                Some(beside) => panel_config(&fresh, beside.n),
+                None => Ok(fresh),
+            });
+        match loaded {
             Ok(fresh) => {
                 if fresh.device != self.config.device {
                     self.close_panel();
                 }
-                if fresh.sensors != self.config.sensors {
-                    let (mut hub, _) = Hub::of(&fresh, self.asked.demo);
-                    hub.add(Box::new(crate::sensors::Services(Arc::clone(&self.host))));
-                    self.hub = hub;
-                    self.wants.clear();
+                if self.beside.is_none() {
+                    // (the sources: the first panel's loop tells them, its config has the
+                    // same readings)
+                    if fresh.sensors != self.config.sensors {
+                        let (mut hub, _) = Hub::of(&fresh, self.asked.demo);
+                        hub.add(Box::new(crate::sensors::Services(Arc::clone(&self.host))));
+                        self.hub().replace(hub);
+                        self.wants.clear();
+                    }
+                    // ([hardware]: the names of this computer's parts and its fans)
+                    self.hub().follow_config(&fresh);
                 }
-                // ([hardware]: the names of this computer's parts and its fans)
-                self.hub.follow_config(&fresh);
                 self.config = fresh;
                 self.renderer = None;
                 self.refused = None;
-                self.speak();
-                say("config.toml changed: read again");
+                if self.beside.is_none() {
+                    self.speak();
+                    say("config.toml changed: read again");
+                }
                 self.follow_services();
             }
-            Err(e) => {
+            Err(why) => {
                 // (the stamp kept, so that the same mistake is said once)
                 self.config.stamp = stamp;
-                say(&format!("config.toml: {}", e.msg));
+                say(&format!("config.toml: {why}"));
             }
         }
     }
@@ -499,6 +653,10 @@ impl MainLoop {
                     say("panel connected");
                 }
                 say(&format!("showing on {}", panel.describe()));
+                if let Ok(mut status) = self.status.lock() {
+                    status.target = panel.describe();
+                    status.detail.clear();
+                }
                 self.failures = 0;
                 self.had_panel |= panel.on_panel();
                 self.panel = Some(panel);
@@ -520,6 +678,9 @@ impl MainLoop {
             say(&format!(
                 "panel not available: {why} (retrying in the background)"
             ));
+        }
+        if let Ok(mut status) = self.status.lock() {
+            status.detail = why.to_string();
         }
         let step = (self.failures as usize).min(BACKOFF_S.len() - 1);
         let delay = if lp_devices::turzx::restart_under_way() {
@@ -552,11 +713,32 @@ impl MainLoop {
     fn theme_name(&mut self, now: f64) -> String {
         self.in_sequence = false;
         self.sequence_at = None;
-        let page = modes::page_theme(&self.config, self.host.mode().as_deref());
+        let page = match self.beside {
+            // a panel beside the first: only a page it was given a theme for
+            Some(_) => self.beside_mode().and_then(|mode| {
+                let own = self.config.modes.get(&mode)?.theme.clone();
+                own.filter(|theme| !theme.is_empty())
+            }),
+            None => modes::page_theme(&self.config, self.host.mode().as_deref()),
+        };
+        // beside Encore, Encore's companion
+        let first = self.beside.as_ref().and_then(|beside| {
+            let first = beside
+                .first
+                .lock()
+                .map(|s| s.theme.clone())
+                .unwrap_or_default();
+            let follows = versions::follows_first(self.config.follow, &self.config.theme);
+            (follows && !first.is_empty())
+                .then(|| versions::companion_for(&first, &self.places))
+                .flatten()
+        });
         let named = if let Some(theme) = self.host.theme() {
             theme // (a theme a service shows)
         } else if let Some(theme) = page {
             theme // (the active mode's: music's page has Encore of its own)
+        } else if let Some(theme) = first {
+            theme
         } else if let Some(theme) = &self.asked.theme {
             theme.clone()
         } else if let Some(place) = self
@@ -576,7 +758,39 @@ impl MainLoop {
         };
         let orientation = &self.config.device.orientation;
         let shown = versions::theme_for(&named, orientation, self.panel_size(), &self.places);
-        versions::unpaired_version(&shown, &self.places).unwrap_or(shown)
+        // while a companion runs beside it, the first panel's pair version (Lumen without the
+        // fans the companion shows)
+        let version = match self.paired(now) {
+            true => versions::pair_version(&shown, &self.places),
+            false => versions::unpaired_version(&shown, &self.places),
+        };
+        version.unwrap_or(shown)
+    }
+
+    /// _pairing: for the first panel, whether a companion runs beside it, and PAIR_HOLD_S
+    /// after the last one was seen, so that a reconnect does not switch back and forth.
+    fn paired(&mut self, now: f64) -> bool {
+        let Some(more) = &self.more else {
+            return false;
+        };
+        let showing = more.statuses().iter().any(|status| {
+            status.lock().is_ok_and(|status| {
+                status.state == "showing" && versions::is_companion(&status.theme)
+            })
+        });
+        if showing {
+            self.paired_at = Some(now);
+        }
+        self.paired_at.is_some_and(|seen| now - seen < PAIR_HOLD_S)
+    }
+
+    /// _mode: the mode of a panel beside the first: "alarm" while a sensor is at its critical
+    /// limit, for one with a theme for that; else the mode the first panel is in.
+    fn beside_mode(&self) -> Option<String> {
+        if self.config.modes.contains_key(ALARM) && alarm_in(self.snapshot.as_ref()) {
+            return Some(ALARM.into());
+        }
+        self.company.host.mode()
     }
 
     /// _dressed: the theme as it is drawn: in the accent, in light colours where asked, its
@@ -750,6 +964,14 @@ impl MainLoop {
             return Duration::from_millis(250);
         }
         let name = self.theme_name(started);
+        let default = lp_theme::defaults::default_theme(self.model(), &self.places);
+        let (model, size) = (self.model().map(|model| model.id), self.panel_size());
+        if let Ok(mut status) = self.status.lock() {
+            status.model = model.unwrap_or_default().to_string();
+            status.size = size;
+            status.mode = self.host.mode();
+            status.default_theme = default.to_string();
+        }
         // while a transition plays, a switch waits for its end, unless the transition says
         // otherwise (follow or restart)
         let mode = self.host.mode();
@@ -823,15 +1045,23 @@ impl MainLoop {
         let (now, fold) = moment();
         let snapshot = match self.snapshot.take() {
             Some(mut last) if started < self.next_sample => {
-                if self.hub.every_frame() {
+                if self.hub().every_frame() {
                     // cheap sources follow on every frame, not only with the readings
                     let streams = self.panel.as_ref().is_some_and(|panel| panel.streams());
-                    let latest = self.hub.fresh(streams);
+                    let hub = Arc::clone(&self.hub);
+                    let mut hub = hub
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    let latest = hub.fresh(streams);
                     // (a service hears of a change at once, not at the sample)
                     let before = self.host.hears("fresh").then(|| last.readings.clone());
                     last.readings
                         .extend(latest.iter().map(|(key, r)| (key.clone(), r.clone())));
-                    self.hub.refresh_images(&mut last.images, false, streams);
+                    match &mut self.view {
+                        Some(view) => view.refresh_images(&hub, &mut last.images, streams),
+                        None => hub.refresh_images(&mut last.images, false, streams),
+                    }
+                    drop(hub);
                     if let Some(before) = before {
                         let told = Arc::new(Snapshot {
                             now,
@@ -845,10 +1075,28 @@ impl MainLoop {
             }
             _ => {
                 self.next_sample = started + every;
-                let snapshot = self.hub.snapshot(now, fold);
-                for note in self.hub.notes() {
-                    say(&note);
-                }
+                let hub = Arc::clone(&self.hub);
+                let mut hub = hub
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                let snapshot = match &mut self.view {
+                    Some(view) => {
+                        let snapshot = view.snapshot(&mut hub, now, fold);
+                        // just after the first panel's next ones
+                        if let Some(age) = hub.age().filter(|age| *age < every) {
+                            self.next_sample = started - age + every + IN_STEP_S;
+                        }
+                        snapshot
+                    }
+                    None => {
+                        let snapshot = hub.snapshot(now, fold);
+                        for note in hub.notes() {
+                            say(&note);
+                        }
+                        snapshot
+                    }
+                };
+                drop(hub);
                 let told = Arc::new(snapshot.clone());
                 self.host.set_latest(Arc::clone(&told));
                 self.host.emit(Event::Sample { snapshot: told }, false);
@@ -870,8 +1118,7 @@ impl MainLoop {
                 say(&format!("message not shown by this build yet: {}", why.0));
             }
         }
-        let alarm = snapshot.readings.get(ALARM);
-        let alarm = alarm.is_some_and(|alarm| alarm.value.to_f64() == Some(1.0));
+        let alarm = alarm_in(Some(&snapshot));
         self.alarm.follow(alarm, started);
 
         let level = lp_config::night::brightness_now(&self.config.device, &now, false, None);
@@ -913,6 +1160,12 @@ impl MainLoop {
                             status.theme.clone_from(&self.shown);
                         }
                         if found {
+                            if let Some(panel) = &self.panel {
+                                let target = panel.describe();
+                                if let Ok(mut status) = self.status.lock() {
+                                    status.target = target;
+                                }
+                            }
                             // (a panel took over from the PNG file: drawn for it from now on)
                             self.had_panel = true;
                             self.renderer = None;
@@ -939,6 +1192,9 @@ impl MainLoop {
             }
         }
         self.follow_link(false);
+        if let Some(more) = &mut self.more {
+            more.follow(&self.config);
+        }
 
         // pause: while something moves at the frame rate (a panel showing video: its own);
         // otherwise until the next reading, but at least twice a second, so that a seconds
@@ -978,6 +1234,14 @@ impl MainLoop {
 
     /// The panel let go: dark where config.toml says so and Libre Panel is `quitting`.
     pub fn close(&mut self, quitting: bool) {
+        // (on the first panel's readings, which close with it)
+        if let Some(mut more) = self.more.take() {
+            more.close(quitting);
+        }
+        if self.beside.is_some() {
+            let owner = self.owner();
+            self.hub().forget(owner);
+        }
         if self.owns {
             self.company.stop_services();
         }

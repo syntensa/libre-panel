@@ -1416,6 +1416,52 @@ def test_the_loop_shows_what_a_service_asks_for(tmp_path: Path) -> None:
     assert 500 < other < 800 * 480 // 2, other
 
 
+def test_a_panel_beside_the_first_shows_its_companion_on_the_first_panels_readings(
+    tmp_path: Path,
+) -> None:
+    """A panel of [[panels]] runs in a loop of its own beside the first panel's: the companion
+    of the theme the first panel shows, while the first shows its pair version (without what
+    the companion shows), as app.py picks them; taken out of config.toml, its loop ends and
+    the first panel's theme is whole again."""
+    from libre_panel.devices.models import find_model
+    from libre_panel.theme.model import companion_for, pair_version, theme_for
+
+    head = 'theme = "lumen"\nfps = 2\n[device]\ndriver = "virtual"\noutput = "panel.png"\n'
+    head += 'model = "turing-9.2-usb"\n[sensors]\nproviders = []\n'
+    beside = '[[panels]]\ntheme = "lumen-companion"\ndriver = "virtual"\noutput = "beside.png"\n'
+    beside += 'model = "turing-5"\n'
+    config = tmp_path / "config.toml"
+    config.write_text(head + beside, encoding="utf-8")
+    size, beside_size = (find_model(name).size("landscape") for name in
+                         ("turing-9.2-usb", "turing-5"))  # fmt: skip
+    alone = theme_for("lumen", "landscape", size)
+    paired = pair_version(alone) or alone
+    companion = theme_for(companion_for(paired) or "", "landscape", beside_size)
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries()}  # fmt: skip
+    with subprocess.Popen([str(_program()), "run"], env=env, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        try:
+            time.sleep(8)
+            with Image.open(tmp_path / "beside.png") as frame:
+                assert frame.size == beside_size
+            config.write_text(head, encoding="utf-8")  # (taken out)
+            time.sleep(13)
+        finally:
+            if os.name == "nt":
+                program.terminate()
+            else:
+                program.send_signal(signal.SIGINT)
+            said = program.communicate(timeout=30)[1]
+    lines = [line.removeprefix("libre-panel: ") for line in said.splitlines()]
+    first = [line for line in lines if line.startswith("theme ")]
+    second = [line for line in lines if line.startswith("panel 2: theme ")]
+    assert paired != alone and first[:2] == [f"theme {alone}", f"theme {paired}"], said
+    assert first[-1] == f"theme {alone}", said  # (the pair held a while, then whole again)
+    assert second == [f"panel 2: theme {companion}"], said
+    assert "panel 2: showing on PNG file" in said and "did not stop in time" not in said
+
+
 def test_the_timer_runs_and_says_when_its_time_is_up(tmp_path: Path) -> None:
     """`timer` among the services: started by its shortcut (here pressed by the test's
     script), it counts its minutes down and shows its notice on the panel when they are

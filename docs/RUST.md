@@ -1533,9 +1533,24 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       down where the panel is mounted so; a panel that fails opened again. `run`, `render`
       (one frame), `themes`, `models`, `ports`, `config`. The tests: the program run on a
       settings folder of its own
-- [ ] the rest of the main loop: panels beside each other, the engine in the same process,
-      videos (ffmpeg), the first panel's look on the others, the sun's times for the night,
-      a theme drawn ahead of its switch, a screen of a plugin that sees the message on show
+- [x] the panels beside the first (`[[panels]]`, app.py's _MorePanels and run_beside): each
+      that is on in a loop of its own, in a thread of its own (`panel-2` ..., its lines in the
+      log so named), started as it is added or switched on, ended as it is taken out or off,
+      again after a config it cannot show (30 s) or a bug in it (5 s); on the first panel's
+      readings (HubView: those taken last where younger than a second, else read anew; its
+      own history; its readings just after the first panel's, so a value glides on both at
+      once), the keys every loop reads asked of the sources together; of a mode the first
+      panel is in only the theme config.toml gives this panel for it, "alarm" while a sensor
+      is at its limit; a companion beside the theme the first panel shows, and the first
+      panel in its pair version while one shows (10 s more after it went). `/api/panel` with
+      `more` (each one's state, target, theme, model and size), `target`, `mode` and
+      `default_theme`. The tests: two panels run into PNG files, the companion and the pair
+      version as app.py names them, the second taken out again
+- [ ] the rest of the main loop: the engine in the same process, videos (ffmpeg), the first
+      panel's look on the others (same_look), the scene across the panels, the fans in step on
+      every panel, the meter's numbers (`stats`, a panel's `fps`), the sun's times for the
+      night, a theme drawn ahead of its switch, a screen of a plugin that sees the message on
+      show
 
 ### R6 devices
 - [x] the Hongtai / Jungle Leopard family (devices/hongtai.py, lp-devices) on a link of its
