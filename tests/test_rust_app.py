@@ -1156,6 +1156,8 @@ def test_mqtt_messages_come_from_a_broker(tmp_path: Path) -> None:
                 stream, _ = listener.accept()
             except TimeoutError:
                 continue
+            except OSError:
+                return  # (the test is over: the listener is closed)
             with stream:
                 stream.settimeout(10)
                 try:
@@ -1175,7 +1177,8 @@ def test_mqtt_messages_come_from_a_broker(tmp_path: Path) -> None:
                 except (OSError, IndexError):
                     pass
 
-    threading.Thread(target=serve, daemon=True).start()
+    broker = threading.Thread(target=serve, daemon=True)
+    broker.start()
     try:
         port = listener.getsockname()[1]
         (tmp_path / "config.toml").write_text(
@@ -1213,6 +1216,7 @@ def test_mqtt_messages_come_from_a_broker(tmp_path: Path) -> None:
         assert f"MQTT: 127.0.0.1:{port}: the broker refused the connection (5)" in done.stderr
     finally:
         done_serving.set()
+        broker.join(5)
         listener.close()
 
 
@@ -1340,3 +1344,73 @@ def test_a_games_frames_come_from_the_memory_rtss_shares(tmp_path: Path) -> None
     assert ours["game.frametime"][:2] == ("10.00", "ms")
     assert ours["game.fps"] == ("100.00", "fps", "Frames per second")
     assert "rtss: reading RivaTuner's frame rates" in done.stderr
+
+
+def test_the_loop_shows_what_a_service_asks_for(tmp_path: Path) -> None:
+    """A service (here one that follows the test's script) through its host: a theme of its
+    own for a while, a mode with the page config.toml has for it, a message; the switches
+    fade as `[transitions]` says, and the panel is back at config.toml's theme after each."""
+    for name, colour in (("red", "#DC1E1E"), ("blue", "#1E1EDC")):
+        folder = tmp_path / "themes" / name
+        folder.mkdir(parents=True)
+        theme = {"format": "libre-panel-theme/1", "name": name.title(),
+                 "display": {"model": "turing-5", "orientation": "landscape", "width": 800,
+                             "height": 480},
+                 "palette": {"bg": colour}, "font": "builtin:Barlow-Medium",
+                 "background": {"color": "@bg", "image": None}, "refresh_ms": 1000,
+                 "widgets": []}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+    (tmp_path / "config.toml").write_text(
+        'theme = "red"\nfps = 20\n[device]\ndriver = "virtual"\noutput = "panel.png"\n'
+        '[sensors]\nproviders = []\n[services]\nenabled = ["nope"]\n'
+        '[transitions]\ndefault = "fade"\nspeed = "slow"\ngame = "fade"\n'
+        '[modes.game]\ntheme = "blue"\n',
+        encoding="utf-8",
+    )
+    script = tmp_path / "script.json"
+    script.write_text(json.dumps([
+        [0.8, "theme", "blue", None, 0, "*"],
+        [3.0, "theme", None],
+        [5.0, "mode", "game", None],
+        [7.0, "mode", None],
+        [9.0, "notify", "Hello panel", "", 0, 30],
+    ]), encoding="utf-8")  # fmt: skip
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries(), "LP_HOST_SCRIPT": str(script)}  # fmt: skip
+    seen: list[tuple[int, int, int]] = []
+    last: list[Image.Image] = []
+    with subprocess.Popen([str(_program()), "run"], env=env, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        try:
+            until = time.monotonic() + 11
+            while time.monotonic() < until:
+                try:
+                    with Image.open(tmp_path / "panel.png") as frame:
+                        picture = frame.convert("RGB")
+                    seen.append(picture.getpixel((400, 240)))
+                    last[:] = [picture]
+                except (OSError, SyntaxError, ValueError):
+                    pass  # (not there yet, or being put in its place)
+                time.sleep(0.02)
+        finally:
+            if os.name == "nt":
+                program.terminate()
+            else:
+                program.send_signal(signal.SIGINT)
+            said = program.communicate(timeout=30)[1]
+    wanted = ["theme red", "service script: shows theme 'blue'", "theme blue",
+              "service script: restores the theme", "theme red", "mode: game", "theme blue",
+              "mode: normal", "theme red"]  # fmt: skip
+    lines = [line.removeprefix("libre-panel: ") for line in said.splitlines()]
+    assert [line for line in lines if line in wanted] == wanted, said
+    assert "services not in this build yet: nope" in said and "failed" not in said
+    red, blue = (220, 30, 30), (30, 30, 220)
+    assert red in seen and blue in seen
+    # between them, the fades: both colours mixed
+    mixed = [c for c in seen if 60 < c[0] < 190 and 60 < c[2] < 190 and abs(c[1] - 30) < 3]
+    assert len(set(mixed)) >= 3, sorted(set(seen))
+    # the message on the theme's ground at the end
+    [picture] = last
+    data, ground = picture.tobytes(), bytes(red)
+    other = sum(1 for at in range(0, len(data), 3) if data[at : at + 3] != ground)
+    assert 500 < other < 800 * 480 // 2, other

@@ -2,10 +2,15 @@
 //! it changes, the theme that is due (the screens in turn, the one config.toml names, the
 //! panel's own) in its version for the panel and dressed as the person chose, the readings
 //! taken at the theme's pace, a frame drawn of them and shown, at the frame rate while
-//! something moves and at rest otherwise.
+//! something moves and at rest otherwise. What the services ask of it through their host: a
+//! theme of theirs, a mode (with its page and frame rate), messages, the transition of a
+//! switch; and the pages it switches to by itself (music, the PC at rest).
 
+use std::collections::{BTreeSet, HashSet};
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use indexmap::IndexMap;
@@ -14,13 +19,19 @@ use lp_config::Config;
 use lp_devices::models::{find_model, PanelModel};
 use lp_pixels::{Filter, Image, Transpose};
 use lp_py::Value;
+use lp_render::alarm::AlarmEdge;
+use lp_render::overlays::ToastLayer;
 use lp_render::{Moment, Options, Renderer, Snapshot};
+use lp_services::host::{Delivery, Event, PluginHost, LEFT_OUT, NO_PANEL, OFF_IN_THEME};
+use lp_services::manager::Manager;
 use lp_theme::versions::{self, Places};
 use lp_theme::{Env, Theme};
 
 use crate::display::{Display, Failed};
 use crate::home::Home;
+use crate::modes::{self, PageSwitch};
 use crate::sensors::Hub;
+use crate::switch::{self, Blend};
 
 /// a panel that is missing or gone is tried again after so long, longer each time (_Link)
 const BACKOFF_S: [f64; 5] = [1.0, 2.0, 5.0, 10.0, 30.0];
@@ -28,6 +39,19 @@ const BACKOFF_S: [f64; 5] = [1.0, 2.0, 5.0, 10.0, 30.0];
 const RESTART_RETRY_S: f64 = 1.0;
 /// config.toml is looked at this often
 const WATCH_S: f64 = 1.0;
+/// a video panel's frame rate while a game runs, where [modes.game] names none
+const GAME_STREAM_FPS: i64 = 24;
+/// the notices service's reading: a sensor is at its critical limit
+const ALARM: &str = "alarm";
+
+/// What `notify` is told of a message, kept where any thread may ask: whether the panel is
+/// connected, the kinds the theme switches off and those the screen shows itself.
+#[derive(Default)]
+struct Judged {
+    connected: bool,
+    off: HashSet<String>,
+    left_out: HashSet<String>,
+}
 
 /// What the loop was started with (the command line's).
 #[derive(Clone, Debug, Default)]
@@ -70,6 +94,31 @@ pub struct MainLoop {
     brightness: Option<i64>,
     began: Instant,
     pub frames: u64,
+    /// the services' host, and the services that run
+    host: Arc<PluginHost>,
+    manager: Manager,
+    /// the services config.toml enables that this build lacks, as they were last said
+    lacking: Vec<String>,
+    pages: PageSwitch,
+    /// the readings asked of the sources: the theme's, the services' and the pages'
+    wants: BTreeSet<String>,
+    toasts: Option<ToastLayer>,
+    judged: Arc<Mutex<Judged>>,
+    alarm: AlarmEdge,
+    /// a transition under way, and the mode it began in
+    blend: Option<Blend>,
+    began_in: Option<String>,
+    /// the frame before toasts, and with them where one showed
+    last_frame: Option<Image>,
+    shown_frame: Option<Image>,
+    /// the host's switches seen, the occasion of the theme on show, and whether it is a step
+    /// of the screens in turn
+    switches: u64,
+    occasion: &'static str,
+    in_sequence: bool,
+    /// counts the transitions (each breaks its old frame anew)
+    blends: u64,
+    connected: bool,
 }
 
 fn say(message: &str) {
@@ -100,7 +149,10 @@ impl MainLoop {
         let config_file = asked.config.clone().unwrap_or_else(|| home.config_file());
         let config =
             lp_config::load_config(&config_file, lp_config::platform()).map_err(|e| e.msg)?;
-        let (hub, missing) = Hub::of(&config, asked.demo);
+        let began = Instant::now();
+        let host = PluginHost::new(Box::new(move || began.elapsed().as_secs_f64()));
+        let (mut hub, missing) = Hub::of(&config, asked.demo);
+        hub.add(Box::new(crate::sensors::Services(Arc::clone(&host))));
         say(&format!("readings from: {}", hub.names().join(", ")));
         if !missing.is_empty() {
             say(&format!(
@@ -108,7 +160,24 @@ impl MainLoop {
                 missing.join(", ")
             ));
         }
-        let made = MainLoop {
+        let judged: Arc<Mutex<Judged>> = Arc::default();
+        let asks = Arc::clone(&judged);
+        host.set_judge(Some(Box::new(move |toast| {
+            let Ok(judged) = asks.lock() else {
+                return Delivery::held(NO_PANEL);
+            };
+            if !judged.connected {
+                Delivery::held(NO_PANEL)
+            } else if judged.off.contains(&toast.kind) {
+                Delivery::held(OFF_IN_THEME)
+            } else if judged.left_out.contains(&toast.kind) {
+                Delivery::held(LEFT_OUT)
+            } else {
+                Delivery::shown()
+            }
+        })));
+        let manager = Manager::new(&host, crate::services::parts());
+        let mut made = MainLoop {
             env: Env {
                 fonts_dir: home.fonts(),
             },
@@ -130,10 +199,28 @@ impl MainLoop {
             snapshot: None,
             next_sample: 0.0,
             brightness: None,
-            began: Instant::now(),
+            began,
             frames: 0,
+            host,
+            manager,
+            lacking: Vec::new(),
+            pages: PageSwitch::new(),
+            wants: BTreeSet::new(),
+            toasts: None,
+            judged,
+            alarm: AlarmEdge::new(),
+            blend: None,
+            began_in: None,
+            last_frame: None,
+            shown_frame: None,
+            switches: 0,
+            occasion: "manual",
+            in_sequence: false,
+            blends: 0,
+            connected: false,
         };
         made.speak();
+        made.follow_services();
         Ok(made)
     }
 
@@ -151,6 +238,149 @@ impl MainLoop {
         match lp_i18n::Language::load(&self.home.locale(), &code) {
             Ok(language) => lp_i18n::set_language(language),
             Err(why) => say(&format!("language {code}: {why}")),
+        }
+    }
+
+    /// The services config.toml enables, started, stopped or started anew as it says; those
+    /// this build does not have yet are said once.
+    fn follow_services(&mut self) {
+        let parts = crate::services::parts();
+        let mut enabled: Vec<String> = Vec::new();
+        let mut lacking = Vec::new();
+        for name in &self.config.services.enabled {
+            match parts.contains_key(name.as_str()) {
+                true => enabled.push(name.clone()),
+                false => lacking.push(name.clone()),
+            }
+        }
+        if parts.contains_key("script") {
+            enabled.push("script".into()); // (the tests' own)
+        }
+        if lacking != self.lacking {
+            if !lacking.is_empty() {
+                say(&format!(
+                    "services not in this build yet: {}",
+                    lacking.join(", ")
+                ));
+            }
+            self.lacking = lacking;
+        }
+        self.manager
+            .apply(&enabled, &crate::services::options_of(&self.config));
+        for note in self.manager.notes() {
+            say(&note);
+        }
+    }
+
+    /// The readings the sources are asked for: those the theme on show reads, those the
+    /// services want and those the pages read.
+    fn rewant(&mut self) {
+        let mut wants: BTreeSet<String> = self.host.wanted();
+        wants.extend(self.pages.reads.iter().map(|key| (*key).to_string()));
+        if let Some(renderer) = &self.renderer {
+            wants.extend(renderer.reads());
+        }
+        if wants != self.wants {
+            self.hub.want(wants.iter().cloned());
+            self.wants = wants;
+        }
+    }
+
+    /// What the host is told of the panel: connected, lost, back after a restart.
+    fn follow_link(&mut self, restarting: bool) {
+        let connected = self.panel.is_some();
+        if connected == self.connected {
+            return;
+        }
+        self.connected = connected;
+        if let Ok(mut judged) = self.judged.lock() {
+            judged.connected = connected;
+        }
+        match connected {
+            true => {
+                self.host.emit(Event::PanelConnected, false);
+                if restarting {
+                    self.host.emit(Event::PanelRestarted, false);
+                }
+            }
+            false => self.host.emit(Event::PanelLost, false),
+        }
+    }
+
+    /// _follow_pages: the page that is due (music while it plays, the clock when the PC is
+    /// idle), or back; never over a mode a service set (a game).
+    fn follow_pages(&mut self, now: f64) {
+        let owner = self.host.mode_owner();
+        if self.host.mode().is_some() && owner.as_deref() != Some(modes::OWNER) {
+            return;
+        }
+        let readings = self.snapshot.as_ref().map(|snapshot| &snapshot.readings);
+        let due = self.pages.due(&self.config, readings, now);
+        if due.map(str::to_string) != self.host.mode() {
+            self.host.set_mode(due, Some(modes::OWNER), None);
+        }
+    }
+
+    /// _fps: frames per second: one where the motion is calm, else the active mode's, else a
+    /// streaming display's (in game mode at most 24), else config.toml's.
+    fn fps(&self) -> i64 {
+        let streams = self.panel.as_ref().is_some_and(Display::streams);
+        if !streams && self.config.device.motion == "calm" {
+            return 1;
+        }
+        let mode = self.host.mode().unwrap_or_default();
+        let own = self.config.modes.get(&mode).and_then(|mode| mode.fps);
+        if let Some(fps) = own.filter(|fps| *fps != 0) {
+            return fps.max(1);
+        }
+        if streams {
+            let video = self.config.device.video.fps;
+            return match mode.as_str() {
+                "game" => video.min(GAME_STREAM_FPS),
+                _ => video,
+            }
+            .max(1);
+        }
+        self.config.fps.max(1)
+    }
+
+    /// The transition of a switch that begins now, where config.toml has one for it.
+    fn hand_over(&mut self, renderer: &Renderer, policy: Option<&'static str>, now: f64) {
+        let chosen = self.host.take_transition();
+        let came = switch::occasion(&self.config, &self.host, self.in_sequence);
+        let (occasion, leaving) = switch::switch_occasion(self.occasion, came);
+        self.occasion = came;
+        if policy == Some("follow") && self.host.switches() == self.switches {
+            return; // (a following one uncovers the new theme)
+        }
+        // a calm panel changes at once: a fade is a whole picture a frame
+        if self.config.device.motion == "calm" {
+            return;
+        }
+        let (moment, _) = moment();
+        self.blends += 1;
+        let kind = switch::handover(
+            &self.config,
+            occasion,
+            leaving,
+            chosen,
+            renderer,
+            self.snapshot.as_ref().map(|snapshot| &snapshot.readings),
+            &renderer.theme.name,
+            &moment,
+            self.blends as usize + now.to_bits() as usize,
+        );
+        let began = Blend::begin(
+            kind,
+            self.last_frame.as_ref(),
+            self.shown_frame.as_ref(),
+            now,
+            self.blends,
+            self.toasts.as_mut(),
+        );
+        if let Some(blend) = began {
+            self.blend = Some(blend);
+            self.began_in = self.host.mode();
         }
     }
 
@@ -174,17 +404,17 @@ impl MainLoop {
                     self.close_panel();
                 }
                 if fresh.sensors != self.config.sensors {
-                    let (hub, _) = Hub::of(&fresh, self.asked.demo);
+                    let (mut hub, _) = Hub::of(&fresh, self.asked.demo);
+                    hub.add(Box::new(crate::sensors::Services(Arc::clone(&self.host))));
                     self.hub = hub;
-                    if let Some(renderer) = &self.renderer {
-                        self.hub.want(renderer.reads());
-                    }
+                    self.wants.clear();
                 }
                 self.config = fresh;
                 self.renderer = None;
                 self.refused = None;
                 self.speak();
                 say("config.toml changed: read again");
+                self.follow_services();
             }
             Err(e) => {
                 // (the stamp kept, so that the same mistake is said once)
@@ -286,7 +516,13 @@ impl MainLoop {
     /// turn that is due, else config.toml's; where that names none, the panel's own. In its
     /// version for the panel.
     fn theme_name(&mut self, now: f64) -> String {
-        let named = if let Some(theme) = &self.asked.theme {
+        self.in_sequence = false;
+        let page = modes::page_theme(&self.config, self.host.mode().as_deref());
+        let named = if let Some(theme) = self.host.theme() {
+            theme // (a theme a service shows)
+        } else if let Some(theme) = page {
+            theme // (the active mode's: music's page has Encore of its own)
+        } else if let Some(theme) = &self.asked.theme {
             theme.clone()
         } else if let Some(place) = self
             .config
@@ -295,6 +531,7 @@ impl MainLoop {
             .then(|| self.rotation.at(&self.config.sequence.steps, now))
             .flatten()
         {
+            self.in_sequence = true;
             place.theme
         } else if self.config.theme_given {
             self.config.theme.clone()
@@ -384,9 +621,9 @@ impl MainLoop {
         Ok(renderer)
     }
 
-    /// The frame as it goes out: made the panel's size where the theme is another (fit_frame:
-    /// scaled into it, the theme's background round it), upside down on a panel mounted so.
-    fn outgoing(&self, frame: Image, renderer: &Renderer) -> Result<Image, String> {
+    /// The frame made the panel's size where the theme is another (fit_frame: scaled into it,
+    /// the theme's background round it).
+    fn fitted(&self, frame: Image, renderer: &Renderer) -> Result<Image, String> {
         let mut frame = frame;
         if let Some(model) = self.model() {
             let (width, height) = model.size(renderer.theme.orientation());
@@ -402,11 +639,60 @@ impl MainLoop {
                     .map_err(|e| e.to_string())?;
             }
         }
-        let on_panel = self.panel.as_ref().is_some_and(Display::on_panel);
-        if on_panel && self.config.device.rotate == 180 {
-            frame = frame.transpose(Transpose::Rotate180);
-        }
         Ok(frame)
+    }
+
+    /// The frame as it goes out: upside down on a panel mounted so.
+    fn turned(&self, frame: Image) -> Image {
+        let on_panel = self.panel.as_ref().is_some_and(Display::on_panel);
+        match on_panel && self.config.device.rotate == 180 {
+            true => frame.transpose(Transpose::Rotate180),
+            false => frame,
+        }
+    }
+
+    /// The frame as the panel shows it: the transition under way, the message on show and the
+    /// alarm's edge over the theme's own.
+    fn dressed_frame(&mut self, frame: Image, renderer: &Renderer, now: f64) -> Image {
+        let mut frame = frame;
+        if let Some(mut blend) = self.blend.take() {
+            let (shown, goes_on, failed) = blend.frame(frame, now, renderer);
+            frame = shown;
+            if let Some(why) = failed {
+                say(&format!("transition {} failed: {why}", blend.kind.name));
+            }
+            if goes_on {
+                self.blend = Some(blend);
+            }
+        }
+        // decided after the blend: the frame a hiding transition ends shows the toast
+        let hidden = self
+            .blend
+            .as_ref()
+            .is_some_and(|blend| blend.kind.toasts == "hide");
+        self.shown_frame = None;
+        if let Some(toasts) = &mut self.toasts {
+            match toasts.draw(&frame, now, hidden, renderer) {
+                Ok(Some(with)) => {
+                    self.last_frame = Some(frame);
+                    self.shown_frame = Some(with.clone());
+                    frame = with;
+                }
+                Ok(None) => self.last_frame = Some(frame.clone()),
+                Err(why) => {
+                    say(&format!("message not drawn by this build yet: {}", why.0));
+                    self.last_frame = Some(frame.clone());
+                }
+            }
+        } else {
+            self.last_frame = Some(frame.clone());
+        }
+        let crit = renderer.theme.palette.get("crit").and_then(Value::as_str);
+        let still = self.config.fps <= 1 || self.config.device.motion == "calm";
+        match self.alarm.draw(&frame, now, crit, still) {
+            Ok(Some(edged)) => edged,
+            _ => frame,
+        }
     }
 
     /// One frame: config.toml followed, the theme that is due drawn of the readings and
@@ -414,11 +700,26 @@ impl MainLoop {
     pub fn step(&mut self) -> Duration {
         let started = self.clock();
         self.follow_config(started);
-        if !self.ensure_panel(started) {
+        for note in self.host.notes() {
+            say(&note);
+        }
+        self.follow_pages(started);
+        let restarting = lp_devices::turzx::restart_under_way();
+        let there = self.ensure_panel(started);
+        self.follow_link(restarting);
+        if !there {
             return Duration::from_millis(250);
         }
         let name = self.theme_name(started);
-        if self.renderer.is_none() || name != self.shown {
+        // while a transition plays, a switch waits for its end, unless the transition says
+        // otherwise (follow or restart)
+        let mode = self.host.mode();
+        let policy = self
+            .blend
+            .as_ref()
+            .map(|blend| blend.policy(mode.as_deref(), self.began_in.as_deref()));
+        let may_switch = policy != Some("wait");
+        if may_switch && (self.renderer.is_none() || name != self.shown) {
             if self
                 .refused
                 .as_ref()
@@ -432,7 +733,26 @@ impl MainLoop {
                         say(&format!("theme {name}: {warning}"));
                     }
                     say(&format!("theme {name}"));
-                    self.hub.want(renderer.reads());
+                    let toasts = match self.toasts.take() {
+                        Some(mut toasts) => toasts.set_renderer(&renderer).map(|()| toasts),
+                        None => ToastLayer::new(&renderer),
+                    };
+                    match toasts {
+                        Ok(toasts) => {
+                            if let Ok(mut judged) = self.judged.lock() {
+                                judged.off = toasts.off().clone();
+                                judged.left_out = toasts.left_out().clone();
+                            }
+                            self.toasts = Some(toasts);
+                        }
+                        Err(why) => say(&format!("theme {name}: its messages: {}", why.0)),
+                    }
+                    if name != self.shown {
+                        self.hand_over(&renderer, policy, started);
+                        self.switches = self.host.switches(); // (this was the switch)
+                        let theme = name.clone();
+                        self.host.emit(Event::ThemeChanged { theme }, false);
+                    }
                     self.renderer = Some(renderer);
                     self.shown = name;
                     self.refused = None;
@@ -448,6 +768,12 @@ impl MainLoop {
         let Some(mut renderer) = self.renderer.take() else {
             return Duration::from_millis(500);
         };
+        if self.host.switches() != self.switches && policy != Some("wait") {
+            // a mode change that keeps the theme, with a transition
+            self.switches = self.host.switches();
+            self.hand_over(&renderer, None, started);
+        }
+        renderer.fps = self.fps() as f64; // (the mode's, the panel's video's, config.toml's)
 
         // the readings, at the theme's pace; between them the last ones at the time of now
         let every = match (&self.config.refresh_ms, &renderer.theme.refresh_ms) {
@@ -461,8 +787,20 @@ impl MainLoop {
                 if self.hub.every_frame() {
                     // cheap sources follow on every frame, not only with the readings
                     let streams = self.panel.as_ref().is_some_and(|panel| panel.streams());
-                    last.readings.extend(self.hub.fresh(streams));
+                    let latest = self.hub.fresh(streams);
+                    // (a service hears of a change at once, not at the sample)
+                    let before = self.host.hears("fresh").then(|| last.readings.clone());
+                    last.readings
+                        .extend(latest.iter().map(|(key, r)| (key.clone(), r.clone())));
                     self.hub.refresh_images(&mut last.images, false, streams);
+                    if let Some(before) = before {
+                        let told = Arc::new(Snapshot {
+                            now,
+                            fold,
+                            ..last.clone()
+                        });
+                        self.host.fresh(told, &before, &latest);
+                    }
                 }
                 Snapshot { now, fold, ..last }
             }
@@ -472,10 +810,30 @@ impl MainLoop {
                 for note in self.hub.notes() {
                     say(&note);
                 }
+                let told = Arc::new(snapshot.clone());
+                self.host.set_latest(Arc::clone(&told));
+                self.host.emit(Event::Sample { snapshot: told }, false);
                 snapshot
             }
         };
         self.snapshot = Some(snapshot.clone());
+        self.rewant();
+
+        // the messages (while the panel is away they wait at the host, the newest), and the
+        // alarm's edge
+        if let Some(toasts) = &mut self.toasts {
+            toasts.add(self.host.take_toasts().into_iter().map(Rc::new));
+            let go_on = self
+                .blend
+                .as_ref()
+                .is_none_or(|blend| matches!(blend.kind.toasts, "over" | "hide"));
+            if let Err(why) = toasts.advance(started, !go_on) {
+                say(&format!("message not shown by this build yet: {}", why.0));
+            }
+        }
+        let alarm = snapshot.readings.get(ALARM);
+        let alarm = alarm.is_some_and(|alarm| alarm.value.to_f64() == Some(1.0));
+        self.alarm.follow(alarm, started);
 
         let level = lp_config::night::brightness_now(&self.config.device, &now, false, None);
         if self.brightness != Some(level) {
@@ -490,8 +848,13 @@ impl MainLoop {
         let drawn = renderer
             .render(snapshot, started)
             .map_err(|e| format!("not drawn by this build yet: {}", e.0))
-            .and_then(|(frame, _)| self.outgoing(frame, &renderer));
-        let (moving, due) = (renderer.moving, renderer.due);
+            .and_then(|(frame, _)| self.fitted(frame, &renderer))
+            .map(|frame| self.dressed_frame(frame, &renderer, started))
+            .map(|frame| self.turned(frame));
+        let (mut moving, due) = (renderer.moving, renderer.due);
+        moving |= self.blend.is_some()
+            || self.toasts.as_ref().is_some_and(ToastLayer::active)
+            || self.alarm.showing(started);
         self.renderer = Some(renderer);
         match drawn {
             Ok(frame) => {
@@ -528,20 +891,12 @@ impl MainLoop {
                 say(&note);
             }
         }
+        self.follow_link(false);
 
         // pause: while something moves at the frame rate (a panel showing video: its own);
         // otherwise until the next reading, but at least twice a second, so that a seconds
         // clock never skips
-        let calm = self.config.device.motion == "calm";
-        let streams = self.panel.as_ref().is_some_and(Display::streams);
-        let fps = if streams {
-            self.config.device.video.fps.max(1)
-        } else if calm {
-            1
-        } else {
-            self.config.fps.max(1)
-        };
-        let mut interval = 1.0 / fps as f64;
+        let mut interval = 1.0 / self.fps() as f64;
         if !moving {
             let mut longest = (self.next_sample - started).min(0.5);
             if let Some(due) = due {
@@ -575,6 +930,15 @@ impl MainLoop {
 
     /// The panel let go: dark where config.toml says so.
     pub fn close(&mut self) {
+        self.manager.stop();
+        for note in self.manager.notes() {
+            say(&note);
+        }
+        self.host.set_judge(None);
+        self.host.close();
+        if let Some(toasts) = &mut self.toasts {
+            toasts.close();
+        }
         if let Some(renderer) = &mut self.renderer {
             renderer.close();
         }

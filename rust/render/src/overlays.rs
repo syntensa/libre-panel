@@ -347,6 +347,16 @@ impl ToastLayer {
         }
     }
 
+    /// The kinds the theme switches off (`toast.off`).
+    pub fn off(&self) -> &HashSet<String> {
+        &self.off
+    }
+
+    /// The kinds the screen shows itself.
+    pub fn left_out(&self) -> &HashSet<String> {
+        &self.left_out
+    }
+
     pub fn add(&mut self, toasts: impl IntoIterator<Item = Rc<Toast>>) {
         self.inbox.extend(toasts);
     }

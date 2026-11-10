@@ -299,7 +299,7 @@ impl Source for Weather {
 const AGENT: &str = concat!("libre-panel/", env!("CARGO_PKG_VERSION"));
 
 /// A value of config.toml as Python has it (dates and times as their texts).
-fn value_of(toml: &Toml) -> lp_py::Value {
+pub fn value_of(toml: &Toml) -> lp_py::Value {
     use lp_py::Value;
     let clock = |time: &lp_py::toml::Time| {
         let mut text = format!("{:02}:{:02}:{:02}", time.hour, time.minute, time.second);
@@ -579,6 +579,32 @@ fn web_source(name: &str, table: Option<&Table>) -> Result<Box<dyn Source>, Stri
     Ok(Box::new(HomeAssistant(source)))
 }
 
+/// What the services publish (plugins/host.py's _HostProvider): cheap, so a published
+/// reading reaches the next frame.
+pub struct Services(pub std::sync::Arc<lp_services::host::PluginHost>);
+
+impl Source for Services {
+    fn name(&self) -> &'static str {
+        "services"
+    }
+
+    fn read(&mut self, out: &mut Readings) {
+        out.extend(self.0.published());
+    }
+
+    fn every_frame(&self) -> Every {
+        Every::Frame
+    }
+
+    fn images(&self) -> IndexMap<String, lp_pixels::Image> {
+        self.0.images()
+    }
+
+    fn images_state(&self) -> u64 {
+        self.0.images_state()
+    }
+}
+
 /// The sun and the moon (sensors/sky.py).
 struct Sky(lp_sensors::sky::SkySource);
 
@@ -743,6 +769,11 @@ impl Hub {
             }
         }
         readings
+    }
+
+    /// One more source, asked after those there are.
+    pub fn add(&mut self, source: Box<dyn Source>) {
+        self.sources.push(source);
     }
 
     /// Whether any source wants to be read on every frame.

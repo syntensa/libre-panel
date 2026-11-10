@@ -5,9 +5,12 @@
 mod display;
 mod home;
 mod mainloop;
+mod modes;
 mod osinfo;
 mod psutil;
 mod sensors;
+mod services;
+mod switch;
 mod system;
 
 use std::path::PathBuf;

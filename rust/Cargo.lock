@@ -337,6 +337,7 @@ dependencies = [
  "lp-py",
  "lp-render",
  "lp-sensors",
+ "lp-services",
  "lp-text",
  "lp-theme",
  "windows-sys 0.61.2",

@@ -534,6 +534,11 @@ impl PluginHost {
         self.with(|state| std::mem::take(&mut state.notes))
     }
 
+    /// Whether anybody listens for `event`.
+    pub fn hears(&self, event: &str) -> bool {
+        self.with(|state| state.listeners.get(event).is_some_and(|l| !l.is_empty()))
+    }
+
     /// Tells the listeners, in the event thread (or here, with `wait`).
     pub fn emit(&self, event: Event, wait: bool) {
         let name = event.name();

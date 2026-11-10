@@ -21,6 +21,7 @@ lp-config = { path = "../config" }
 lp-render = { path = "../render" }
 lp-devices = { path = "../devices" }
 lp-sensors = { path = "../sensors" }
+lp-services = { path = "../services" }
 indexmap = "2"
 
 [target.'cfg(unix)'.dependencies]
@@ -42,4 +43,5 @@ windows-sys = { version = "0.61", features = [
     "Win32_System_Power",
     "Win32_System_SystemInformation",
     "Win32_System_Threading",
+    "Win32_UI_Input_KeyboardAndMouse",
 ] }

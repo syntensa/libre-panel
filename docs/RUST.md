@@ -1533,10 +1533,9 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       down where the panel is mounted so; a panel that fails opened again. `run`, `render`
       (one frame), `themes`, `models`, `ports`, `config`. The tests: the program run on a
       settings folder of its own
-- [ ] the rest of the main loop: what a service shows (modes, pages, toasts, the alarm's
-      frames), transitions between themes, panels beside each other, the engine in the same
-      process, videos (ffmpeg), the first panel's look on the others, the sun's times for the
-      night
+- [ ] the rest of the main loop: panels beside each other, the engine in the same process,
+      videos (ffmpeg), the first panel's look on the others, the sun's times for the night,
+      a theme drawn ahead of its switch, a screen of a plugin that sees the message on show
 
 ### R6 devices
 - [x] the Hongtai / Jungle Leopard family (devices/hongtai.py, lp-devices) on a link of its
@@ -1788,7 +1787,18 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       a service that stops and leaves nothing; the services config.toml enables started,
       stopped (five seconds each) and started anew where their options change, the options
       from the defaults and config.toml's with their types. 300 runs of steps and 400 sets of
-      options compared with Python. Not yet in the main loop
+      options compared with Python
+- [x] the main loop follows the host (app.py, modes.py, overlays.py's handover): what the
+      services publish among the readings on every frame, the readings they want, the theme
+      a service asks for, else the active mode's page (music's Encore, the idle clock's
+      Almanac, `[modes]`), the mode's frame rate, the pages the loop switches to by itself
+      (music while it plays; the PC at rest, by Windows' last input or logind's idle hint),
+      the transition of a switch by its occasion (`[transitions]`: its own, the service's,
+      the default, random; its speed) and what a switch does while one plays, the messages
+      (the theme's style; whether one would show, for `notify`), the alarm's edge, the
+      events (sample, fresh, theme-changed, panel-connected, -lost, -restarted, quit). The
+      services config.toml enables that this build lacks are said. A run with a service of
+      the test's own: its theme, its mode, the fades between them, its message
 - [ ] game mode, notices, AI activity (Claude Code, Codex), downloads, memory and its store,
       timer, cooling, power, autopilot, devices, weather, media (Windows' media session, MPRIS),
       audio
