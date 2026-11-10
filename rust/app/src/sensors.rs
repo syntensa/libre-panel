@@ -300,7 +300,8 @@ impl Source for Weather {
 }
 
 /// What the program names itself to the servers it asks.
-const AGENT: &str = concat!("libre-panel/", env!("CARGO_PKG_VERSION"));
+static AGENT: std::sync::LazyLock<String> =
+    std::sync::LazyLock::new(|| format!("libre-panel/{}", lp_py::VERSION));
 
 /// A value of config.toml as Python has it (dates and times as their texts).
 pub fn value_of(toml: &Toml) -> lp_py::Value {
@@ -496,7 +497,7 @@ fn web_source(name: &str, table: Option<&Table>) -> Result<Box<dyn Source>, Stri
             Some(_) => return Err("days is no number".into()),
         };
         let minutes = seconds_of(table, "update_minutes", 15.0)?;
-        let source = lp_sensors::calendar::CalendarSource::new(sources, days, minutes, AGENT);
+        let source = lp_sensors::calendar::CalendarSource::new(sources, days, minutes, &AGENT);
         return Ok(Box::new(Calendar(source)));
     }
     if name == "mqtt" {
@@ -559,7 +560,7 @@ fn web_source(name: &str, table: Option<&Table>) -> Result<Box<dyn Source>, Stri
             Some(Toml::Table(keys)) => keys.keys().cloned().map(lp_py::Value::Str).collect(),
             _ => Vec::new(),
         };
-        let source = lp_sensors::jsonsource::JsonSource::new(&entries, every, AGENT);
+        let source = lp_sensors::jsonsource::JsonSource::new(&entries, every, &AGENT);
         return Ok(Box::new(Json(source)));
     }
     let mut options = lp_sensors::homeassistant::Options::default();
@@ -579,7 +580,7 @@ fn web_source(name: &str, table: Option<&Table>) -> Result<Box<dyn Source>, Stri
         Some(_) => return Err("entities is no list".into()),
     }
     options.poll_seconds = seconds_of(table, "poll_seconds", 10.0)?;
-    let source = lp_sensors::homeassistant::HomeAssistantSource::new(options, AGENT);
+    let source = lp_sensors::homeassistant::HomeAssistantSource::new(options, &AGENT);
     Ok(Box::new(HomeAssistant(source)))
 }
 
@@ -924,7 +925,7 @@ impl Hub {
                     longitude,
                     config.weather.units == "imperial",
                     u64::try_from(&config.weather.update_minutes).unwrap_or(5),
-                    AGENT,
+                    &AGENT,
                 ))));
             }
             if !sensors.providers.iter().any(|name| name == "media") {

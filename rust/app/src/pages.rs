@@ -78,7 +78,7 @@ fn panel_number(asked: Option<&str>, config: &Config) -> Option<usize> {
 
 /// theme_chosen: whether config.toml names a theme itself: a first start has no file, or
 /// none with a `theme` line yet, and the app asks which look the panel should have.
-fn theme_chosen(path: &std::path::Path) -> bool {
+pub fn theme_chosen(path: &std::path::Path) -> bool {
     std::fs::read(path)
         .ok()
         .and_then(|bytes| String::from_utf8(bytes).ok())

@@ -11,6 +11,7 @@ mod hotkeys;
 mod http;
 mod mainloop;
 mod modes;
+mod news;
 mod osinfo;
 mod pages;
 mod psutil;
@@ -161,7 +162,7 @@ fn asked(args: &[String]) -> Result<Asked, String> {
 
 fn run(command: &str, args: &[String]) -> Result<(), String> {
     match command {
-        "version" | "--version" | "-V" => println!("libre-panel {}", env!("CARGO_PKG_VERSION")),
+        "version" | "--version" | "-V" => println!("libre-panel {}", lp_py::VERSION),
         "help" | "--help" | "-h" => print!("{USAGE}"),
         "models" => {
             let majesty = std::iter::once(&lp_devices::hongtai::MAJESTY);

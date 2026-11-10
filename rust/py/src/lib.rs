@@ -25,6 +25,9 @@ pub mod zones;
 
 pub use value::{Dict, Value};
 
+/// Libre Panel's version, as `src/libre_panel/__init__.py` names it (build.rs).
+pub const VERSION: &str = env!("LIBRE_PANEL_VERSION");
+
 /// str.isspace (and the regular expressions' \s) for one character.
 pub fn isspace(ch: char) -> bool {
     matches!(ch, '\t'..='\r' | '\x1c'..='\x1f' | ' ' | '\u{85}' | '\u{a0}' | '\u{1680}'

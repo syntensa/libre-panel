@@ -47,6 +47,8 @@ pub struct State {
     live: Mutex<Option<std::sync::mpsc::Sender<Reply>>>,
     /// settings the panel loop takes in when it restarts
     restart: crate::settings::Restart,
+    /// whom Start tells what is new (news.rs)
+    news: crate::news::News,
 }
 
 impl State {
@@ -211,6 +213,9 @@ const ROUTES: &[Route] = &[
     private("GET", "/api/sequence", |s, x, _, _| {
         settings(s, x, |told| told.sequence())
     }),
+    private("GET", "/api/news", |s, x, _, _| {
+        x.json(&s.news.state(), 200)
+    }),
     private("GET", "/api/panel", |s, x, _, _| {
         settings(s, x, |told| told.panel())
     }),
@@ -242,6 +247,7 @@ const ROUTES: &[Route] = &[
     private("POST", "/api/sequence", |s, x, _, _| {
         settings_with(s, x, |told, asked| told.set_sequence(asked))
     }),
+    private("POST", "/api/news", |s, x, _, _| see_news(s, x)),
     private("POST", "/api/scenes", |s, x, _, _| {
         settings_with(s, x, |told, asked| told.set_scene(asked))
     }),
@@ -276,6 +282,21 @@ fn settings_with(
     match method(&settings_of(state), &payload) {
         Ok(told) => exchange.json(&told, 200),
         Err(refused) => exchange.error(&refused.message, refused.status, ""),
+    }
+}
+
+/// _see_news: `{"seen": "0.6"}`: the card of a release's news was closed (news.rs).
+fn see_news(state: &State, exchange: &mut Exchange) {
+    let Some(payload) = exchange.read_json(MAX_JSON) else {
+        return;
+    };
+    let seen = match &payload {
+        Value::Dict(payload) => payload.get("seen").and_then(Value::as_str).unwrap_or(""),
+        _ => "",
+    };
+    match state.news.see(seen) {
+        Ok(told) => exchange.json(&told, 200),
+        Err(why) => exchange.error(&why, 400, ""),
     }
 }
 
@@ -907,7 +928,7 @@ fn serve(state: &State, token: &str, hosts: &[String; 2], exchange: &mut Exchang
 
 fn handle(stream: TcpStream, state: &State, token: &str, hosts: &[String; 2]) {
     let _ = stream.set_nonblocking(false);
-    let software = format!("LibrePanelEditor/{}", env!("CARGO_PKG_VERSION"));
+    let software = format!("LibrePanelEditor/{}", lp_py::VERSION);
     let Some(mut exchange) = Exchange::read(stream, &software) else {
         return;
     };
@@ -947,6 +968,7 @@ impl EditorServer {
             Some(token) => token,
             None => access::new_token()?,
         };
+        let news = crate::news::News::new(&config_file);
         Ok(EditorServer {
             port: listener.local_addr()?.port(),
             token,
@@ -958,6 +980,7 @@ impl EditorServer {
                 last_request: Mutex::new(None),
                 live: Mutex::new(None),
                 restart: crate::settings::Restart::default(),
+                news,
             }),
             listener: Some(listener),
             stop: Arc::default(),

@@ -178,7 +178,7 @@ pub fn fetch_tree(url: &str, timeout: f64) -> Result<lp_py::Dict, String> {
     let request = format!(
         "GET {path} HTTP/1.1\r\nHost: {named}:{port}\r\nUser-Agent: libre-panel/{}\r\n\
          Accept-Encoding: identity\r\nConnection: close\r\n\r\n",
-        env!("CARGO_PKG_VERSION")
+        lp_py::VERSION
     );
     stream
         .set_write_timeout(Some(left("asking")?))

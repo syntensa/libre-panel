@@ -1160,7 +1160,7 @@ impl Settings<'_> {
         let form = format!("{PROJECT_URL}/issues/new?template=panel_support.yml");
         let folders = folders().map(|(name, folder)| (name, text(&folder.display().to_string())));
         Ok(dict([
-            ("version", text(env!("CARGO_PKG_VERSION"))),
+            ("version", text(lp_py::VERSION)),
             (
                 "license",
                 dict([

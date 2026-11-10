@@ -695,3 +695,25 @@ def test_the_screens_in_turn_are_told_and_set_as_server_py_does(servers: Any) ->
             files = [(home / "config.toml").read_text(encoding="utf-8") for home in homes]
             assert files[1] == files[0], payload
     assert "hours = 24" in files[0] and "on = true" in files[0]
+
+
+def test_the_news_are_told_and_closed_as_news_py_does(servers: Any) -> None:
+    """Start's card of what is new: news.json written on the first ask (a config.toml that
+    names a theme: an older Libre Panel chose it), a release's news closed, or refused in the
+    same words; the file the same after each request."""
+    ask, homes = servers
+    requests = [_get("/api/news", WITH)]
+    for seen in ("0.8", "10.12", "0.8.1", "x", "", 8, None, "1234.5678", "12345.1", ".8"):
+        requests += [_post("/api/news", {"seen": seen}), _get("/api/news", WITH)]
+    requests += [_post("/api/news", []), _post("/api/news", "0.9")]
+    for request in requests:
+        theirs, ours = ask(request)
+        assert ours[0] == theirs[0] and json.loads(ours[2]) == json.loads(theirs[2]), request
+        files = [(home / "news.json").read_text(encoding="utf-8") for home in homes]
+        assert files[1] == files[0], request
+    assert json.loads(files[0]) == {"first": "older", "seen": "1234.5678"}
+    # a damaged file: worked out anew, as on a first ask
+    for home in homes:
+        (home / "news.json").write_text('{"first": 5}', encoding="utf-8")
+    theirs, ours = ask(_get("/api/news", WITH))
+    assert json.loads(ours[2]) == json.loads(theirs[2]) == {"first": "older", "seen": ""}

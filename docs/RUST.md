@@ -1937,6 +1937,9 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       The screens in turn (`/api/sequence`): their steps, whether they show and where the
       running panel stands in them; steps written in their largest whole unit, or refused
       in the same words.
+      Start's card of what is new (`/api/news`, news.json beside config.toml). The program
+      says Libre Panel's version, read from `src/libre_panel/__init__.py` as it is built
+      (`rust/py/build.rs`, `lp_py::VERSION`).
       `libre-panel editor` serves alone, `start` with
       the panel, and writes its address where a later start finds it. 120 requests to
       Python's server and to this one compared: the status, the headers and the body, byte
