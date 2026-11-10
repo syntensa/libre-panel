@@ -1,11 +1,18 @@
 //! lp-devices: the panels Libre Panel drives (docs/RUST.md, R6): their catalog, as
 //! devices/models.py has it (what the theme format checks a theme's display against, R3), and
-//! their drivers, the first the Hongtai family's and the MAJESTY's (hongtai), which comes in
-//! Rust alone; the serial port they are on (serial); and lp-panel, to try a panel with.
+//! their drivers: the Hongtai family's and the MAJESTY's (hongtai), which comes in Rust
+//! alone, on its serial port (serial); the TURZX USB panels (turzx: their video, with its
+//! bit rate (rate), and their single pictures), found on the bus (usb) and driven through
+//! Libre Panel's engine (engine); PNG files (png); and lp-panel, to try a panel with.
 
 pub mod base;
+pub mod engine;
 pub mod hongtai;
 pub mod link;
 pub mod models;
+pub mod png;
+pub mod rate;
 pub mod serial;
 mod table;
+pub mod turzx;
+pub mod usb;

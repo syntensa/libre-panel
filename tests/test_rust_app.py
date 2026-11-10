@@ -1,13 +1,22 @@
-"""rust/app (docs/RUST.md, R5 and R9): `libre-panel`, the program of Rust, run as a person
-runs it. It finds the app's files, reads config.toml, draws a theme's frame of readings and
-writes it where it is told; its frames are the Rust renderer's, which test_rust_render.py
-holds to the Python renderer's pixels."""
+"""rust/app (docs/RUST.md, R5, R6 and R9): `libre-panel`, the program of Rust, run as a
+person runs it. It finds the app's files, reads config.toml, draws a theme's frame of readings
+and writes it where it is told; its frames are the Rust renderer's, which test_rust_render.py
+holds to the Python renderer's pixels. And with a simulated TURZX panel that Libre Panel's
+engine has (tests/fake_panel.py behind its socket): its video with its start, its bit rate,
+its stop and a hung decoder's restart, and its single pictures."""
 
 from __future__ import annotations
 
+import itertools
+import json
 import os
+import signal
 import subprocess
+import threading
+import time
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 from PIL import Image
@@ -36,14 +45,18 @@ def _program() -> Path:
     return program
 
 
-def _run(home: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    """The program run with its settings in ``home``, the app's files the Python app's, and
-    the libraries of C the comparisons use (rust_check.run)."""
-    env = {**os.environ, "LIBRE_PANEL_HOME": str(home), "LIBRE_PANEL_DATA": str(DATA),
-           **pillow_libwebp()}  # fmt: skip
+def _libraries() -> dict[str, str]:
+    """The libraries of C the comparisons use (rust_check.run), named to the program."""
     libraries = {"LP_LIBJPEG": pillow_libjpeg(), "LP_LIBFREETYPE": pillow_libfreetype(),
                  "LP_LIBHARFBUZZ": pillow_libharfbuzz(), "LP_TZDATA": python_tzdata()}  # fmt: skip
-    env.update({name: file for name, file in libraries.items() if file is not None})
+    return {**pillow_libwebp(), **{n: f for n, f in libraries.items() if f is not None}}
+
+
+def _run(home: Path, *args: str, **more: str) -> subprocess.CompletedProcess[str]:
+    """The program run with its settings in ``home`` and the app's files the Python app's
+    (``more``: what else its environment has)."""
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(home), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries(), **more}  # fmt: skip
     return subprocess.run([str(_program()), *args], env=env, capture_output=True,
                           encoding="utf-8", timeout=120, check=False)  # fmt: skip
 
@@ -81,6 +94,194 @@ def test_it_follows_config_toml(tmp_path: Path) -> None:
     assert "not in this build yet: nope" in done.stderr
     with Image.open(tmp_path / "panel.png") as frame:  # (relative: in the settings folder)
         assert frame.mode == "RGB" and frame.width > frame.height
+
+
+class Rig:
+    """A simulated TURZX panel (fake_panel.py, behind a socket) that Libre Panel's engine has,
+    for the program: config.toml in a settings folder of its own, and the program run on it."""
+
+    def __init__(self, home: Path, pid: int = 0x0092, native: tuple[int, int] = (480, 1920)):
+        pytest.importorskip("usb.core")  # (the simulated panel speaks pyusb's errors)
+        from fake_panel import FakePanel
+        from panel_socket import PanelSocket
+
+        from libre_panel.devices import h264
+        from libre_panel.devices.engine import can_send
+
+        self.engine = h264.find_engine()
+        if not self.engine or not can_send(self.engine):
+            pytest.skip("needs libre-panel-engine with its panel mode (cargo build --release)")
+        self.home = home
+        self.fake = FakePanel(pid=pid, native=native)
+        self.sock = PanelSocket(self.fake)
+        # (whether the panel is on the bus, as a file the program looks for)
+        self.present = home / "panel-present"
+        self._watching = True
+        self._watcher = threading.Thread(target=self._watch, daemon=True)
+        self._watcher.start()
+
+    def _watch(self) -> None:
+        while self._watching:
+            if self.fake.present:
+                self.present.touch()
+            else:
+                self.present.unlink(missing_ok=True)
+            time.sleep(0.02)
+
+    def env(self, **more: str) -> dict[str, str]:
+        return {"LP_ENGINE_LINK": self.sock.link, "LIBRE_PANEL_ENGINE": self.engine,
+                "LP_ENGINE_PRESENT": str(self.present), **more}  # fmt: skip
+
+    def config(self, text: str) -> None:
+        (self.home / "config.toml").write_text(text, encoding="utf-8")
+
+    def run(self, *args: str, **more: str) -> subprocess.CompletedProcess[str]:
+        return _run(self.home, *args, **self.env(**more))
+
+    def close(self) -> None:
+        self._watching = False
+        self._watcher.join(1)
+        self.sock.close()
+
+
+@pytest.fixture
+def rig(tmp_path: Path) -> Iterator[Rig]:
+    made = Rig(tmp_path)
+    yield made
+    made.close()
+
+
+VIDEO = (
+    'theme = "lumen"\n[device]\ndriver = "turzx"\nmodel = "turing-9.2-usb"\n'
+    'brightness = 70\n[video]\nmode = "on"\nfps = 25\ndevice_fps = 30\n'
+    'local_clip = "usr/data/clip.h264"\n'
+)
+
+
+@draws
+def test_it_shows_video_on_a_turzx_panel_through_the_engine(rig: Rig) -> None:
+    """The video's start as devices/turzx_video.py's VideoSession sends it, pictures of the
+    frames, and its stop, the last frame left on the panel as a PNG."""
+    from libre_panel.devices.turzx_usb import brightness_arg
+
+    rig.config(VIDEO)
+    done = rig.run("run", "--demo", "--frames", "30")
+    fake = rig.fake
+    assert done.returncode == 0, done.stderr
+    assert rig.sock.errors == []
+    assert 'showing on Turing 9.2" (firmware turzx_00), video 25 fps' in done.stderr
+    # (the 9.2" shows every stream as full range: its video is made so)
+    assert "video: encoding with the engine, profile high, full range, 2.0M" in done.stderr
+    # the start, command by command, the brightness the loop sets, pictures, then the stop
+    assert fake.commands[:9] == [10, 110, 111, 112, 14, 102, 15, 17, 14], done.stderr
+    assert fake.clip_names == ["usr/data/clip.h264"]
+    assert fake.brightness == [brightness_arg(70)] * 2
+    assert fake.fps_log == [30, 30]  # (the player's rate, and the power-on rate given back)
+    # (pictures of H.264, Annex B: each begins with a start code)
+    assert fake.commands.count(121) >= 1 and fake.blocks[0][:4] == b"\x00\x00\x00\x01"
+    assert fake.commands[-3:] == [123, 15, 102]
+    layer, last = fake.frames
+    assert layer.size == (480, 1920) and layer.getextrema()[3] == (0, 0)
+    # (the last frame: the theme's, as the panel lies, nothing see-through)
+    assert last.getextrema()[3] == (255, 255) and len(last.convert("RGB").getcolors(1 << 24)) > 500
+    assert "video: the engine sent" in done.stderr and "blocks" in done.stderr
+
+
+@draws
+def test_the_bit_rate_auto_goes_on_where_the_last_run_got_to_and_follows_the_panel(
+    rig: Rig,
+) -> None:
+    """video-state.json's rate is where "auto" begins; a panel that takes its blocks slowly
+    gets a step less, into the running stream, and that is kept for the next run."""
+    state = rig.home / "video-state.json"
+    state.write_text(json.dumps({"rates": {"turing-9.2-usb 146 1920x480": 8.0,
+                                           "other 1 2x2": 3.0}, "cards": {"kept": True}}),
+                     encoding="utf-8")  # fmt: skip
+    rig.config(VIDEO)
+    rig.fake.block_delay = 0.05  # (each block longer than a frame at 50 a second)
+    done = rig.run("run", "--demo", "--frames", "260")
+    assert done.returncode == 0, done.stderr
+    assert rig.sock.errors == []
+    assert "full range, 8.0M" in done.stderr
+    assert "video: bit rate 8.0M -> 6.0M (the panel takes less than it is sent)" in done.stderr
+    kept = json.loads(state.read_text(encoding="utf-8"))
+    assert kept["rates"]["turing-9.2-usb 146 1920x480"] < 8.0
+    assert kept["rates"]["other 1 2x2"] == 3.0 and kept["cards"] == {"kept": True}
+    assert rig.fake.commands.count(110) == 1  # (no new start for it: the same stream)
+
+
+@draws
+def test_single_pictures_go_as_pngs_where_no_video_is_shown(rig: Rig) -> None:
+    rig.config(VIDEO.replace('mode = "on"', 'mode = "off"'))
+    done = rig.run("run", "--demo", "--frames", "3")
+    assert done.returncode == 0, done.stderr
+    assert rig.sock.errors == []
+    assert "single pictures through the engine" in done.stderr
+    assert rig.fake.commands == [10, 14, 102, 102, 102], done.stderr
+    for frame in rig.fake.frames:
+        assert frame.size == (480, 1920) and frame.getextrema()[3] == (255, 255)
+        assert len(frame.convert("RGB").getcolors(1 << 24)) > 500
+
+
+@draws
+def test_the_5_2_takes_its_pictures_as_jpegs_under_a_clear_layer(tmp_path: Path) -> None:
+    rig = Rig(tmp_path, pid=0x0050, native=(720, 1280))
+    try:
+        rig.config(VIDEO.replace("turing-9.2-usb", "turing-5.2-usb")
+                   .replace('mode = "on"', 'mode = "auto"'))  # fmt: skip
+        done = rig.run("run", "--demo", "--frames", "3")
+        assert done.returncode == 0, done.stderr
+        assert rig.sock.errors == []
+        # (auto: no video on a model it is not proven on; its stills as JPEGs)
+        assert "video mode off: the video mode is not proven on the" in done.stderr
+        assert rig.fake.commands == [10, 14, 102, 101, 101, 101], done.stderr
+        assert rig.fake.frames[0].getextrema()[3] == (0, 0)
+        assert [jpeg.size for jpeg in rig.fake.jpegs] == [(720, 1280)] * 3
+    finally:
+        rig.close()
+
+
+@draws
+def test_a_hung_decoder_restarts_the_panel_and_the_video_starts_again(rig: Rig) -> None:
+    """The engine finds the decoder hung (slow blocks, a queue stuck high); the program
+    restarts the panel (11), waits for it to leave the bus and to come back, and starts the
+    video anew."""
+    rig.config(VIDEO)
+    rig.fake.restart_away_s = 3.0
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(rig.home), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries(), **rig.env(LP_ENGINE_ARGS="--hang-blocks 4")}  # fmt: skip
+    said = rig.home / "said.txt"
+    with said.open("w", encoding="utf-8") as out:
+        program = subprocess.Popen([str(_program()), "run", "--demo"], env=env, stderr=out)
+        try:
+            fake = rig.fake
+
+            def wait_for(what: Any, seconds: float) -> None:
+                end = time.monotonic() + seconds
+                while not what() and time.monotonic() < end and program.poll() is None:
+                    time.sleep(0.02)
+                assert what(), said.read_text(encoding="utf-8")
+
+            wait_for(lambda: fake.commands.count(121) >= 5, 30)
+            fake.block_delay = 0.25  # (a hung decoder takes each block slowly)
+            fake.hung_depths = itertools.repeat(24)
+            wait_for(lambda: 11 in fake.commands, 60)
+            hung_at = fake.commands.index(11)
+            wait_for(lambda: fake.commands.count(110) == 2, 60)
+            fake.block_delay = 0.0
+            before = fake.commands.count(121)
+            wait_for(lambda: fake.commands.count(121) >= before + 5, 30)
+        finally:
+            program.send_signal(signal.SIGINT)
+            program.wait(30)
+    text = said.read_text(encoding="utf-8")
+    assert program.returncode == 0, text
+    assert rig.sock.errors == []
+    assert fake.commands.count(11) == 1 and fake.restarts == 1
+    assert 123 not in fake.commands[:hung_at]  # nothing more is sent to a hung decoder
+    assert "restarting the panel (1 of 3 in a row)" in text
+    assert "the panel is back after its restart" in text
+    assert fake.commands[-3:] == [123, 15, 102]  # (and the stop at its end, as ever)
 
 
 def test_a_config_that_is_wrong_is_said_in_config_py_s_words(tmp_path: Path) -> None:

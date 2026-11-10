@@ -18,6 +18,17 @@ impl fmt::Display for DeviceError {
 
 impl std::error::Error for DeviceError {}
 
+/// How the message of a frame that cannot be shown begins (FrameError): the frame is
+/// skipped, the panel stays open.
+pub const FRAME_ERROR: &str = "frame too detailed for the panel";
+
+impl DeviceError {
+    /// Whether it is the frame that cannot be shown, not the panel that failed.
+    pub fn is_frame(&self) -> bool {
+        self.0.starts_with(FRAME_ERROR)
+    }
+}
+
 impl From<lp_pixels::Error> for DeviceError {
     fn from(e: lp_pixels::Error) -> DeviceError {
         DeviceError(e.0)
@@ -36,8 +47,47 @@ pub type Result<T> = std::result::Result<T, DeviceError>;
 /// bytes it sent, the errors on its link that made it connect again.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Counters {
+    /// sent to the panel
     pub bytes: u64,
+    /// errors on the panel's link that made the driver connect again
     pub usb_errors: u64,
+    /// video: pictures handed to the panel's decoder
+    pub blocks: u64,
+    /// video: times the sender waited for room in the panel's queue
+    pub waits: u64,
+    /// video: pictures thrown away unsent
+    pub drops: u64,
+    /// video: the deepest queue the panel reported
+    pub max_depth: u64,
+    /// video: blocks the panel took longer than a frame to accept
+    pub slow_blocks: u64,
+    /// video: restarts of the panel to clear a hung decoder
+    pub panel_restarts: u64,
+}
+
+/// The places on the bus that panels of this process have open (take_place, leave_place,
+/// place_taken): two panels of one model are each on a place of their own.
+fn taken() -> std::sync::MutexGuard<'static, std::collections::HashSet<String>> {
+    static TAKEN: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> =
+        std::sync::OnceLock::new();
+    TAKEN
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+}
+
+/// take_place: note that a panel at `place` is open; false where one of this process has it
+/// already.
+pub fn take_place(place: &str) -> bool {
+    taken().insert(place.to_string())
+}
+
+pub fn leave_place(place: &str) {
+    taken().remove(place);
+}
+
+pub fn place_taken(place: &str) -> bool {
+    taken().contains(place)
 }
 
 /// dimmed: `picture` at `percent` of its brightness (100 and more: as it is), each value

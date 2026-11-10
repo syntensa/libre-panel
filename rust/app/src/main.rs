@@ -5,8 +5,8 @@
 mod display;
 mod home;
 mod mainloop;
-mod png;
 mod sensors;
+mod system;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -49,7 +49,20 @@ fn follow_signals() {
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn follow_signals() {
+    use windows_sys::Win32::System::Console::SetConsoleCtrlHandler;
+    // (Ctrl+C, Ctrl+Break, the console's window closed, the session ending)
+    unsafe extern "system" fn stop(_event: u32) -> windows_sys::core::BOOL {
+        STOP.store(true, std::sync::atomic::Ordering::Relaxed);
+        1
+    }
+    unsafe {
+        SetConsoleCtrlHandler(Some(stop), 1);
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
 fn follow_signals() {}
 
 /// The options after the command; what is none of them is an error.

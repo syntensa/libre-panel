@@ -253,7 +253,8 @@ fn run(case: &Value) -> Result<Value, String> {
             json!({"image": value_of(&im)})
         }
         "jpeg_save" | "dimmed" | "hongtai_frame" | "hongtai_picture" | "hongtai_jpeg"
-        | "hongtai_answer" | "hongtai_session" => devices::run(op, case)?,
+        | "hongtai_answer" | "hongtai_session" | "rate_control" | "turzx_pick"
+        | "turzx_pictures" | "turzx_changed" => devices::run(op, case)?,
         "icon" => {
             // icons.py's draw_icon(name, size, color, stroke)
             let colour: Vec<i64> = ints(&case["color"])?;

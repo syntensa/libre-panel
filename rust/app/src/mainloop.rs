@@ -18,12 +18,14 @@ use lp_render::{Moment, Options, Renderer, Snapshot};
 use lp_theme::versions::{self, Places};
 use lp_theme::{Env, Theme};
 
-use crate::display::Panel;
+use crate::display::{Display, Failed};
 use crate::home::Home;
 use crate::sensors::Hub;
 
-/// a panel that could not be opened or shown on is tried again after so long
-const RETRY_S: f64 = 5.0;
+/// a panel that is missing or gone is tried again after so long, longer each time (_Link)
+const BACKOFF_S: [f64; 5] = [1.0, 2.0, 5.0, 10.0, 30.0];
+/// ... and one that restarts to clear its hung decoder, after so long
+const RESTART_RETRY_S: f64 = 1.0;
 /// config.toml is looked at this often
 const WATCH_S: f64 = 1.0;
 
@@ -51,8 +53,12 @@ pub struct MainLoop {
     config_file: PathBuf,
     watched: f64,
     hub: Hub,
-    panel: Option<Panel>,
-    panel_tried: f64,
+    panel: Option<Display>,
+    /// how often the panel failed in a row, and when it is tried again
+    failures: u32,
+    retry_at: f64,
+    /// a panel was in use: one that is gone is waited for (`driver = "auto"`)
+    had_panel: bool,
     renderer: Option<Renderer>,
     /// the name of the theme the renderer draws
     shown: String,
@@ -114,7 +120,9 @@ impl MainLoop {
             watched: 0.0,
             hub,
             panel: None,
-            panel_tried: f64::NEG_INFINITY,
+            failures: 0,
+            retry_at: 0.0,
+            had_panel: false,
             renderer: None,
             shown: String::new(),
             refused: None,
@@ -186,6 +194,9 @@ impl MainLoop {
     fn close_panel(&mut self) {
         if let Some(mut panel) = self.panel.take() {
             panel.close();
+            for note in panel.notes() {
+                say(&note); // (its last words: what it sent)
+            }
         }
         self.brightness = None;
     }
@@ -195,33 +206,68 @@ impl MainLoop {
         if self.panel.is_some() {
             return true;
         }
-        if now - self.panel_tried < RETRY_S {
+        if now < self.retry_at {
             return false;
         }
-        self.panel_tried = now;
+        let device = &self.config.device;
+        let (moment, _) = moment();
+        let level = lp_config::night::brightness_now(device, &moment, false, None);
         let opened = match &self.asked.output {
-            Some(path) => Ok(Panel::File {
-                path: Some(path.clone()),
-            }),
-            None => Panel::open(&self.config.device, &self.home.settings),
+            Some(path) => Ok(Display::file(device, path.clone())),
+            None => Display::open(device, &self.home.settings, level, self.had_panel, now),
         };
+        let opened = opened.and_then(|mut panel| match panel.set_brightness(level) {
+            Ok(()) => Ok(panel),
+            Err(why) => {
+                panel.close();
+                Err(why)
+            }
+        });
         match opened {
-            Ok(panel) => {
+            Ok(mut panel) => {
+                for note in panel.notes() {
+                    say(&note);
+                }
+                if self.failures > 0 {
+                    say("panel connected");
+                }
                 say(&format!("showing on {}", panel.describe()));
+                self.failures = 0;
+                self.had_panel |= panel.on_panel();
                 self.panel = Some(panel);
+                self.brightness = Some(level);
                 self.renderer = None; // (its size may be the panel's)
                 true
             }
             Err(why) => {
-                say(&format!("{why}; trying again in {RETRY_S} s"));
+                self.failed(&why, now);
                 false
             }
         }
     }
 
+    /// _Link._failed: a panel that is missing or gone is tried again with growing pauses (one
+    /// that restarts to clear its hung decoder: soon), said once.
+    fn failed(&mut self, why: &str, now: f64) {
+        if self.failures == 0 {
+            say(&format!(
+                "panel not available: {why} (retrying in the background)"
+            ));
+        }
+        let step = (self.failures as usize).min(BACKOFF_S.len() - 1);
+        let delay = if lp_devices::turzx::restart_under_way() {
+            RESTART_RETRY_S
+        } else {
+            BACKOFF_S[step]
+        };
+        self.failures += 1;
+        self.retry_at = now + delay;
+    }
+
     /// panel_model: the configured model, else the one the panel that is there is.
     fn model(&self) -> Option<&'static PanelModel> {
-        find_model(&self.config.device.model).or_else(|| self.panel.as_ref().and_then(Panel::model))
+        find_model(&self.config.device.model)
+            .or_else(|| self.panel.as_ref().and_then(Display::model))
     }
 
     /// panel_size: the size of the panel's frames, turned as it is mounted.
@@ -326,7 +372,12 @@ impl MainLoop {
         };
         renderer.symbols = config.symbols.clone();
         renderer.switches = switches;
-        renderer.fps = config.fps as f64;
+        let streams = self.panel.as_ref().is_some_and(Display::streams);
+        renderer.fps = if streams {
+            config.device.video.fps as f64
+        } else {
+            config.fps as f64
+        };
         Ok(renderer)
     }
 
@@ -348,7 +399,7 @@ impl MainLoop {
                     .map_err(|e| e.to_string())?;
             }
         }
-        let on_panel = self.panel.as_ref().is_some_and(Panel::on_panel);
+        let on_panel = self.panel.as_ref().is_some_and(Display::on_panel);
         if on_panel && self.config.device.rotate == 180 {
             frame = frame.transpose(Transpose::Rotate180);
         }
@@ -429,15 +480,23 @@ impl MainLoop {
         match drawn {
             Ok(frame) => {
                 let shown = match &mut self.panel {
-                    Some(panel) => panel.show(&frame),
-                    None => Ok(()),
+                    Some(panel) => panel.show(frame, started),
+                    None => Ok(false),
                 };
                 match shown {
-                    Ok(()) => self.frames += 1,
-                    Err(why) => {
-                        say(&format!("{why}; the panel is opened again"));
+                    Ok(found) => {
+                        self.frames += 1;
+                        if found {
+                            // (a panel took over from the PNG file: drawn for it from now on)
+                            self.had_panel = true;
+                            self.renderer = None;
+                            self.brightness = None;
+                        }
+                    }
+                    Err(Failed::Frame(why)) => say(&format!("frame skipped: {why}")),
+                    Err(Failed::Panel(why)) => {
                         self.close_panel();
-                        self.panel_tried = started;
+                        self.failed(&why, started);
                     }
                 }
             }
@@ -448,10 +507,24 @@ impl MainLoop {
             }
         }
 
-        // pause: while something moves at the frame rate; otherwise until the next reading,
-        // but at least twice a second, so that a seconds clock never skips
+        if let Some(panel) = &mut self.panel {
+            for note in panel.notes() {
+                say(&note);
+            }
+        }
+
+        // pause: while something moves at the frame rate (a panel showing video: its own);
+        // otherwise until the next reading, but at least twice a second, so that a seconds
+        // clock never skips
         let calm = self.config.device.motion == "calm";
-        let fps = if calm { 1 } else { self.config.fps.max(1) };
+        let streams = self.panel.as_ref().is_some_and(Display::streams);
+        let fps = if streams {
+            self.config.device.video.fps.max(1)
+        } else if calm {
+            1
+        } else {
+            self.config.fps.max(1)
+        };
         let mut interval = 1.0 / fps as f64;
         if !moving {
             let mut longest = (self.next_sample - started).min(0.5);

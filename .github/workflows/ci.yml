@@ -218,7 +218,19 @@ jobs:
           cargo test --release
           cargo build --release
       # (the Pillow they are compared with: docs/RUST.md; a new one changes nothing unseen)
-      - run: pip install -e ".[dev]" pillow==13.0.0
+      # (pyusb for the simulated TURZX panel of tests/test_rust_app.py, which speaks its errors)
+      - run: pip install -e ".[dev,usb]" pillow==13.0.0
+      # Libre Panel's engine, which has the TURZX panels: with it the program in Rust is run
+      # against the simulated panel (tests/test_rust_app.py: video, its bit rate, single
+      # pictures, a hung decoder); without it those are skipped, as they are on Windows here,
+      # where the engine job builds it
+      - name: The engine for the program's panels (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends libx264-dev
+          cargo build --release --manifest-path engine/Cargo.toml
+          echo "LIBRE_PANEL_ENGINE=$PWD/engine/target/release/libre-panel-engine" >> "$GITHUB_ENV"
       # (the FFmpeg the downloads carry, as the other jobs fetch it, for the videos' comparisons:
       # both read the same video with the same ffmpeg)
       - name: The downloads a run before kept

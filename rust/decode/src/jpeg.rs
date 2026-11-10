@@ -1068,6 +1068,13 @@ unsafe extern "C-unwind" fn compress_output_message(_: *mut Compress) {}
 /// as the library writes it (no density), the whole stream in one. Another mode is refused as
 /// Pillow refuses it.
 pub fn save(image: &lp_pixels::Image, quality: i64) -> Result<Vec<u8>> {
+    save_with(image, quality, false)
+}
+
+/// `image.save(fp, "JPEG", quality=quality, subsampling=0)` where `full_chroma`: the chroma
+/// as fine as the luma (4:4:4; JpegEncode.c's subsampling 0), which keeps coloured letters
+/// crisp; else as [`save`].
+pub fn save_with(image: &lp_pixels::Image, quality: i64, full_chroma: bool) -> Result<Vec<u8>> {
     let (components, space) = match image.mode() {
         lp_pixels::Mode::L => (1, JCS_GRAYSCALE),
         lp_pixels::Mode::RGB => (3, JCS_RGB),
@@ -1121,6 +1128,14 @@ pub fn save(image: &lp_pixels::Image, quality: i64) -> Result<Vec<u8>> {
             (lib.set_defaults)(&mut *cinfo);
             if quality != -1 {
                 (lib.set_quality)(&mut *cinfo, quality, 1); // (-1: Pillow's "not given")
+            }
+            if full_chroma && components == 3 {
+                // (the first component, the luma, sampled once a block each way as the
+                // chroma is by default: a jpeg_component_info begins with its id, its
+                // index, then its h_samp_factor and its v_samp_factor, ints all)
+                let luma = cinfo.comp_info as *mut c_int;
+                *luma.add(2) = 1;
+                *luma.add(3) = 1;
             }
             cinfo.smoothing_factor = 0;
             cinfo.optimize_coding = 0;

@@ -1556,18 +1556,53 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       ports, then a card to tell its way round by, the brightness stepped, pictures as fast as
       it takes them (CI makes it for Windows, with the libjpeg it saves with). Not yet seen on
       a panel: a MAJESTY's owner can try it
-- [ ] TURZX (the engine's), Waveshare, udisp, BeadaPanel, NZXT Kraken, virtual, the other
-      serial panels, the panel as a monitor (Windows' virtual display driver, X11, Wayland)
+- [x] TURZX USB panels, through Libre Panel's engine (lp-devices' engine, turzx, rate and
+      usb: devices/engine.py's EngineLink and EngineTransport, devices/turzx.py,
+      devices/turzx_video.py, devices/turzx_usb.py, h264.py's RateControl and
+      video_state.py's rates). The panel picked among those on the bus as _pick picks it
+      (a model, or "auto" beside what the other panels name; its place taken for this
+      process) and opened by the engine, told its product id and its place. **Video:** the
+      start (110 with the standby clip's name, 111, 112, the brightness, the transparent PNG
+      layer, the player's rate, the block size), each frame as the parts of it that changed
+      since the one before (compared here, in the engine's blocks) with the time it was
+      drawn for, the engine's options as h264.py's engine_options makes them (the profile
+      for the model, the key frames, the lead, the graphics card's encoder where this
+      engine has it), the bit rate "auto" following the panel into the running stream (a
+      step down while it takes less than it is sent, up after a calm minute, a failed step
+      held off) and kept in video-state.json for the next run, the stop (123, the power-on
+      rate, the last frame left as a PNG), a hung decoder's restart (11, the panel waited
+      for to leave the bus and to come back, three in a row at most), what the engine
+      counted said at the end. **Single pictures** where no video is shown: a PNG to the
+      upper layer (filtered row by row as Pillow's encoder filters, within the megabyte the
+      panel takes) or a 4:4:4 JPEG to the one under it, cut to the decoder's width, under a
+      layer made transparent once a connection; a panel that stopped answering opened once
+      more. The loop's link as app.py's _Link: the brightness set after opening, a panel
+      that is gone tried again with growing pauses, a frame too detailed skipped;
+      `driver = "auto"` as devices/auto.py: the PNG file while no panel is there, a panel
+      looked for every five seconds, one that was in use waited for. The tests: the bit
+      rate's control beside RateControl step by step, the choice among panels beside _pick,
+      the pictures beside the Python driver's (the JPEG to the byte, the PNG's pixels and
+      size), the changed parts covering what differs; and `libre-panel` with the simulated
+      panel (tests/fake_panel.py behind its socket) and the engine itself: the video's
+      start, pictures, stop and last frame, a slow panel's step down kept for the next run,
+      PNG and JPEG stills, a hung decoder restarted and the video started anew
+- [ ] TURZX: the engine in the same process (no pipe), frames as their layers (the engine
+      composing them), videos and the screen through ffmpeg into the panel's stream
+- [ ] Waveshare, udisp, BeadaPanel, NZXT Kraken, the other serial panels, the panel as a
+      monitor (Windows' virtual display driver, X11, Wayland)
 
 ### R7 sensors
 - [ ] Linux: hwmon, /proc, the cards' (amdgpu, NVML), storage, network, fans
 - [ ] Windows: processor (with PawnIO for its registers), graphics cards (NVAPI/NVML, ADLX,
       Intel), memory, storage (SMART), network, mainboard chips and fans; HWiNFO, RTSS,
       PresentMon, MangoHud
-- [x] the first source (rust/app's sensors): the computer's own on Linux as
+- [x] the first source (rust/app's sensors and system): the computer's own as
       sensors/psutil_provider.py names them (the processor's load, clock, threads and
       temperature, the memory, the system's disk, the network's and the disks' rates, the
-      uptime), each number's history for the graphs (600), and readings made up (`--demo`)
+      uptime), on Linux from the kernel's files, on Windows from its API (GetSystemTimes,
+      GlobalMemoryStatusEx, GetDiskFreeSpaceEx, each adapter's and each drive's counters,
+      the processor's clock; not yet run on a Windows PC), each number's history for the
+      graphs (600), and readings made up (`--demo`)
 - [ ] the history as a ring, demo.py's values; the .NET service goes
 
 ### R8 services

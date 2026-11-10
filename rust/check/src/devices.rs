@@ -1,6 +1,7 @@
 //! lp-check's cases for lp-devices (tests/test_rust_devices.py): JPEGs as Pillow saves them, a
-//! picture dimmed, and the Hongtai family's frames, pictures, answers and whole sessions on a
-//! panel the case scripts.
+//! picture dimmed, the Hongtai family's frames, pictures, answers and whole sessions on a
+//! panel the case scripts, and the TURZX panels' bit rate, the choice among those on the bus,
+//! their pictures and the parts of a frame that changed.
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -63,7 +64,9 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "jpeg_save" => {
             let quality = case["quality"].as_i64().ok_or("a quality")?;
-            match lp_decode::save_jpeg(&image_of(&case["image"])?, quality) {
+            // ("subsampling": 0 for the chroma as fine as the luma, as Pillow's option)
+            let full = case["subsampling"].as_i64() == Some(0);
+            match lp_decode::save_jpeg_with(&image_of(&case["image"])?, quality, full) {
                 Ok(data) => json!({"data": b64(&data)}),
                 Err(e) => json!({"error": e.msg}),
             }
@@ -98,6 +101,108 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
             }
         }
         "hongtai_session" => session(case)?,
+        "rate_control" => {
+            // devices/h264.py's RateControl(start, remembered) judging "events" (the waits,
+            // blocks and slow blocks counted and the time, one after the other): what each
+            // answers and where it stands after it; and auto_rate, rate_text and mbit
+            use lp_devices::rate;
+            let number = |v: &Value| v.as_f64().unwrap_or(0.0);
+            let count = |v: &Value| v.as_u64().unwrap_or(0);
+            let mut control =
+                rate::RateControl::new(number(&case["start"]), number(&case["remembered"]));
+            let mut steps = vec![json!([
+                null,
+                control.rate,
+                control.floored,
+                control.changes
+            ])];
+            for event in case["events"].as_array().into_iter().flatten() {
+                let counts = (count(&event[0]), count(&event[1]), count(&event[2]));
+                let moved = control.judge(counts, number(&event[3]));
+                steps.push(json!([
+                    moved,
+                    control.rate,
+                    control.floored,
+                    control.changes
+                ]));
+            }
+            let auto: Vec<Value> = case["auto"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|a| {
+                    let size = (a[1].as_i64().unwrap_or(0), a[2].as_i64().unwrap_or(0));
+                    let found = rate::auto_rate(a[0].as_i64().unwrap_or(0), size);
+                    json!([found, rate::rate_text(found)])
+                })
+                .collect();
+            let mbit: Vec<Value> = case["mbit"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|text| json!(rate::mbit(text.as_str().unwrap_or(""))))
+                .collect();
+            json!({"steps": steps, "auto": auto, "mbit": mbit})
+        }
+        "turzx_pick" => {
+            // devices/turzx_usb.py's _pick among "devices" ([pid, bus, address] each): which
+            // (its index) a panel of "pid" (null: "auto") takes beside those "beside" names,
+            // with so many skipped
+            use lp_devices::usb;
+            let devices: Vec<usb::Found> = case["devices"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|d| usb::Found {
+                    pid: d[0].as_u64().unwrap_or(0) as u16,
+                    bus: d[1].as_u64().unwrap_or(0).to_string(),
+                    busnum: Some(d[1].as_u64().unwrap_or(0) as u8),
+                    address: d[2].as_u64().unwrap_or(0) as u8,
+                    ports: Vec::new(),
+                })
+                .collect();
+            let beside: Vec<String> = case["beside"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|name| name.as_str().unwrap_or("").to_string())
+                .collect();
+            let pid = case["pid"].as_u64().map(|pid| pid as u16);
+            let skip = case["skip"].as_u64().unwrap_or(0) as usize;
+            let picked = usb::pick(pid, &beside, &devices, true, skip);
+            json!(picked.and_then(|found| devices.iter().position(|d| d == found)))
+        }
+        "turzx_pictures" => {
+            // devices/turzx_usb.py's pictures of a frame for the panel "model" names: the
+            // frame as the panel lies (to_native), its PNG (encode_frame), its JPEG
+            // (encode_jpeg) and how it takes its stills ("still"); and the transparent layer
+            use lp_devices::turzx;
+            let model = lp_devices::models::find_model(case["model"].as_str().unwrap_or(""));
+            let native = turzx::to_native(&image_of(&case["image"])?);
+            let made = |data: lp_devices::base::Result<Vec<u8>>| match data {
+                Ok(data) => json!({"data": b64(&data)}),
+                Err(e) => json!({"error": e.0}),
+            };
+            let size = (native.width() as i64, native.height() as i64);
+            json!({
+                "native": value_of(&native),
+                "png": made(turzx::encode_frame(&native)),
+                "jpeg": made(turzx::encode_jpeg(&native, turzx::JPEG_QUALITY, model)),
+                "still": turzx::still_format(case["still"].as_str().unwrap_or("auto"), model),
+                "layer": made(turzx::transparent_layer(size)),
+                "jpeg_width": turzx::jpeg_width(model, size.0),
+            })
+        }
+        "turzx_changed" => {
+            // the boxes of the frame "now" that differ from "before" (three bytes a pixel),
+            // in blocks as devices/yuv.py's block_of gives them for its size
+            use lp_devices::turzx;
+            let (before, now) = (image_of(&case["before"])?, image_of(&case["now"])?);
+            let size = (now.width() as i64, now.height() as i64);
+            let block = turzx::block_of(size).unwrap_or(1) as usize;
+            let boxes = turzx::changed_boxes(before.as_bytes(), now.as_bytes(), now.size(), block);
+            json!({"boxes": boxes, "block": block})
+        }
         other => return Err(format!("no case {other}")),
     })
 }

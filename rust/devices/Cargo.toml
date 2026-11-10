@@ -12,6 +12,11 @@ lp-py = { path = "../py" }
 lp-pixels = { path = "../pixels" }
 lp-decode = { path = "../decode" }
 lp-i18n = { path = "../i18n" }
+# (the TURZX panels on the bus, without libusb: usbfs on Linux, WinUSB on Windows, as the
+# engine has them)
+nusb = "0.2.9"
+# (PNG files: zlib as lp-decode has it)
+flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

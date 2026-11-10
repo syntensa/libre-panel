@@ -71,6 +71,12 @@ def test_jpegs_as_pillow_saves_them() -> None:
             im.save(buffer, format="JPEG", quality=quality)
             cases.append({"op": "jpeg_save", "image": image(im), "quality": quality})
             expected.append(buffer.getvalue())
+            # (4:4:4, as the TURZX panels' stills are saved)
+            buffer = io.BytesIO()
+            im.save(buffer, format="JPEG", quality=quality, subsampling=0)
+            cases.append({"op": "jpeg_save", "image": image(im), "quality": quality,
+                          "subsampling": 0})  # fmt: skip
+            expected.append(buffer.getvalue())
     ours = run(cases)
     for n, (got, want) in enumerate(zip(ours, expected, strict=True)):
         assert "data" in got, (n, got)
@@ -390,3 +396,155 @@ def test_the_live_picture_is_kept_while_nothing_changes(kind: str) -> None:
     kept = len(after[: -len(close)]) // len(live)
     assert after == live * kept + close  # (11 alone, again and again; no picture again)
     assert kept >= 3  # (some 10 in the time; a slow machine fewer)
+
+
+# -- TURZX USB panels (devices/turzx_usb.py, devices/h264.py's bit rate) --------------------
+
+
+def test_the_bit_rate_follows_the_panel_as_ratecontrol_does() -> None:
+    from libre_panel.devices import h264
+
+    rng = random.Random(0xB17)
+    cases, wanted = [], []
+    for start in (1.0, 2.0, 2.4, 3.0, 5.7, 32.0):
+        for remembered in (0.0, 1.5, 4.0, 100.0):
+            control = h264.RateControl(start, remembered)
+            steps = [[None, control.rate, control.floored, control.changes]]
+            events, now, waits, blocks, slow = [], 100.0, 0, 0, 0
+            trouble = rng.choice([0.02, 0.2, 0.6])  # (how often the panel lags)
+            for _ in range(400):
+                now += rng.choice([0.04, 0.5, 1.0, 3.0, 7.0, 11.0, 61.0, 700.0])
+                more = rng.randrange(0, 300)
+                blocks += more
+                if rng.random() < trouble:
+                    waits += rng.randrange(0, 9)
+                    slow += rng.randrange(0, more + 1)
+                counted = SimpleNamespace(waits=waits, blocks=blocks, slow_blocks=slow)
+                moved = control.judge(counted, now)
+                steps.append([moved, control.rate, control.floored, control.changes])
+                events.append([waits, blocks, slow, now])
+            cases.append({"op": "rate_control", "start": start, "remembered": remembered,
+                          "events": events})  # fmt: skip
+            wanted.append(steps)
+    sizes = [(25, 1920, 480), (50, 1920, 480), (60, 1920, 720), (1, 320, 240), (30, 480, 1920),
+             (33, 1919, 487), (50, 3840, 1100)]  # fmt: skip
+    texts = ["auto", "", " 2M ", "1500k", "1500K", "2000000", "1.5M", "0.0004M", "x", "2m",
+             "1e3k", "٣M", " ", "M", "12.3456k"]  # fmt: skip
+    cases.append({"op": "rate_control", "start": 1.0, "remembered": 0, "auto": sizes,
+                  "mbit": texts})  # fmt: skip
+    ours = run(cases)
+    for case, got, want in zip(cases, ours, wanted, strict=False):
+        assert got["steps"] == want, (case["start"], case["remembered"])
+    moved = [step[0] for steps in wanted for step in steps if step[0] is not None]
+    assert len(moved) > 100 and any(steps[-1][2] for steps in wanted)  # (steps, and a floor)
+    auto = [h264.auto_rate(SimpleNamespace(fps=fps), (w, h)) for fps, w, h in sizes]
+    assert ours[-1]["auto"] == [[rate, h264.rate_text(rate)] for rate in auto]
+    assert ours[-1]["mbit"] == [h264.mbit(text) for text in texts]
+
+
+def test_a_panel_is_picked_among_those_on_the_bus_as_python_picks() -> None:
+    from libre_panel.devices import turzx_usb
+
+    class Core:
+        def __init__(self, devices: list[Any]) -> None:
+            self.devices = devices
+
+        def find(self, find_all: bool, idVendor: int, idProduct: int, backend: Any) -> list[Any]:
+            assert find_all and idVendor == turzx_usb.VENDOR_ID
+            return [d for d in self.devices if d.pid == idProduct]
+
+    rng = random.Random(0x9C)
+    pids = list(turzx_usb.USB_PIDS)
+    names = [model.id for model in turzx_usb.USB_PIDS.values()] + ["nope", "turing-3.5"]
+    cases, wanted = [], []
+    for _ in range(600):
+        found = [SimpleNamespace(pid=rng.choice(pids[:5]), bus=rng.randrange(1, 4), address=n)
+                 for n in range(rng.randrange(0, 5))]  # fmt: skip
+        beside = tuple(rng.choice(names) for _ in range(rng.randrange(0, 3)))
+        pid = rng.choice([None, None, *pids[:5]])
+        skip = rng.choice([0, 0, 0, 1, 2])
+        picked = turzx_usb._pick(pid, beside, Core(found), None, skip=skip)
+        wanted.append(None if picked is None else found.index(picked[0]))
+        cases.append({"op": "turzx_pick", "pid": pid, "beside": list(beside), "skip": skip,
+                      "devices": [[d.pid, d.bus, d.address] for d in found]})  # fmt: skip
+    assert run(cases) == wanted
+    assert wanted.count(None) > 50 and len(set(wanted)) > 3
+
+
+def test_turzx_pictures_as_the_python_driver_makes_them() -> None:
+    from libre_panel.devices import turzx_usb
+    from libre_panel.devices.models import find_model
+
+    rng = random.Random(0x7C)
+    frames = [_smooth(rng, "RGB", size) for size in
+              [(1920, 480), (480, 1920), (1920, 720), (320, 240), (65, 33)]]  # fmt: skip
+    frames += [noise(rng, "RGB", (1920, 480)), noise(rng, "RGB", (1920, 720))]
+    models = ["turing-9.2-usb", "turing-5.2-usb", "turing-12.3-usb", ""]
+    cases = [{"op": "turzx_pictures", "image": image(frame), "model": model, "still": still}
+             for frame in frames for model in models
+             for still in rng.sample(["auto", "png", "jpeg"], 2)]  # fmt: skip
+    busy = 0
+    for case, got in zip(cases, run(cases), strict=True):
+        frame, model = picture(case["image"]), find_model(case["model"])
+        native = turzx_usb.to_native(frame)
+        assert picture(got["native"]).tobytes() == native.tobytes()
+        assert got["still"] == turzx_usb.still_format(case["still"], model)
+        assert got["jpeg_width"] == turzx_usb.jpeg_width(model, native.width)
+        # (the JPEG to the byte; the PNG's pixels, and no larger than Pillow's by much)
+        try:
+            jpeg = turzx_usb.encode_jpeg(native, model=model)
+        except base.FrameError:
+            assert got["jpeg"]["error"].startswith("frame too detailed for the panel (")
+        else:
+            assert _bytes(got["jpeg"]["data"]) == jpeg
+        try:
+            png = turzx_usb.encode_frame(native)
+        except base.FrameError:
+            assert got["png"]["error"].startswith("frame too detailed for the panel (")
+            busy += 1
+        else:
+            ours = _bytes(got["png"]["data"])
+            with Image.open(io.BytesIO(ours)) as made:
+                assert made.mode == "RGBA" and made.tobytes() == native.convert("RGBA").tobytes()
+            assert len(ours) <= turzx_usb.MAX_PAYLOAD
+            assert len(ours) <= len(png) * 1.1 + 2048, (len(ours), len(png))
+        with Image.open(io.BytesIO(_bytes(got["layer"]["data"]))) as layer:
+            assert layer.mode == "RGBA" and layer.size == native.size
+            assert layer.getextrema() == ((0, 0),) * 4
+    assert busy  # (noise is too detailed for a PNG of a megabyte)
+
+
+def test_the_parts_of_a_frame_that_changed_cover_what_differs() -> None:
+    from PIL import ImageChops
+
+    from libre_panel.devices.yuv import block_of
+
+    rng = random.Random(0xD1F)
+    cases = []
+    for size in [(1920, 480), (480, 1920), (320, 240), (200, 104), (65, 33)]:
+        for changes in (0, 1, 3, 12):
+            before = _smooth(rng, "RGB", size)
+            now = before.copy()
+            for _ in range(changes):
+                w, h = rng.randrange(1, 90), rng.randrange(1, 40)
+                x, y = rng.randrange(0, size[0]), rng.randrange(0, size[1])
+                now.paste(tuple(rng.randrange(256) for _ in range(3)), (x, y, x + w, y + h))
+            cases.append({"op": "turzx_changed", "before": image(before), "now": image(now)})
+    for case, got in zip(cases, run(cases), strict=True):
+        before, now = picture(case["before"]), picture(case["now"])
+        block = block_of(now.size) or 1
+        assert got["block"] == block
+        differs = ImageChops.difference(before, now).convert("L").point(lambda v: 255 if v else 0)
+        covered = Image.new("L", now.size, 0)
+        for x0, y0, x1, y1 in got["boxes"]:
+            assert 0 <= x0 < x1 <= now.width and 0 <= y0 < y1 <= now.height
+            assert x0 % block == 0 and y0 % block == 0
+            assert x1 % block == 0 or x1 == now.width
+            assert y1 % block == 0 or y1 == now.height
+            assert differs.crop((x0, y0, x1, y1)).getbbox() is not None  # (none for nothing)
+            # (and no wider than the blocks that changed in its rows)
+            left, _, right, _ = differs.crop((0, y0, now.width, y1)).getbbox()
+            assert x0 == left - left % block and x1 == min(now.width, right + (-right) % block)
+            covered.paste(255, (x0, y0, x1, y1))
+        assert ImageChops.subtract(differs, covered).getbbox() is None  # (all that differs)
+        assert bool(got["boxes"]) == (differs.getbbox() is not None)
