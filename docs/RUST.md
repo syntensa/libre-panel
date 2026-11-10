@@ -1903,13 +1903,15 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       made new each run, compared without telling how much was right, kept for the programs
       of this user in a file of mode 600 in a folder of mode 700, taken out of a line of the
       log); the app's page, modules, fonts and the old editor's files; the texts in the
-      app's language; the background app's state and controls (pause, resume, anew,
-      brightness, the picture turned, quit). `libre-panel editor` serves alone, `start` with
-      the panel, and writes its address where a later start finds it. 85 requests to
+      app's language; the themes that are installed, a theme by its name with what is said
+      of it, the files in its folder and a file of it (a picture's token in its address);
+      the background app's state and controls (pause, resume, anew, brightness, the picture
+      turned, quit). `libre-panel editor` serves alone, `start` with
+      the panel, and writes its address where a later start finds it. 120 requests to
       Python's server and to this one compared: the status, the headers and the body, byte
       for byte; a run of the program controlled through its server until `quit` ends it.
-      Still to come: every other route (themes, pictures, settings, hardware, the Player,
-      plugins' pages, …)
+      Still to come: every other route (the themes' pictures and versions, saving, the
+      readings, settings, hardware, the Player, plugins' pages, …)
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app
 - [ ] the window (wry, tao), the tray icon, the command line, autostart, single instance,

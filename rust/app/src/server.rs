@@ -145,7 +145,17 @@ const fn private(method: &'static str, template: &'static str, handle: Handle) -
     }
 }
 
-const ROUTES: [Route; 11] = [
+const fn picture(method: &'static str, template: &'static str, handle: Handle) -> Route {
+    Route {
+        method,
+        template,
+        handle,
+        public: false,
+        picture: true,
+    }
+}
+
+const ROUTES: &[Route] = &[
     // -- the app: its page, modules, fonts, styles -----------------------------------------------
     public("GET", "/", |s, x, _, _| app_file(s, x, "index.html")),
     public("GET", "/index.html", |s, x, _, _| {
@@ -161,6 +171,28 @@ const ROUTES: [Route; 11] = [
         static_file(s, x, m[0])
     }),
     // -- reading -----------------------------------------------------------------------------------
+    private("GET", "/api/themes", |s, x, _, _| {
+        x.json(&theme_list(s), 200)
+    }),
+    private("GET", "/api/themes/{theme}/assets", |s, x, m, _| {
+        assets(s, x, m[0])
+    }),
+    picture("GET", "/api/themes/{theme}/assets/{rel+}", |s, x, m, _| {
+        asset_file(s, x, m[0], m[1])
+    }),
+    // (not in this build yet: kept from the route of a theme by its name)
+    picture("GET", "/api/themes/{theme}/preview", |_, x, _, _| {
+        not_found(x)
+    }),
+    private("GET", "/api/themes/{theme}/export", |_, x, _, _| {
+        not_found(x)
+    }),
+    private("GET", "/api/themes/{theme}/sizes", |_, x, _, _| {
+        not_found(x)
+    }),
+    private("GET", "/api/themes/{theme+}", |s, x, m, _| {
+        get_theme(s, x, m[0])
+    }),
     private("GET", "/api/i18n", |s, x, _, _| {
         x.json(&Value::Dict(i18n(s)), 200)
     }),
@@ -263,6 +295,158 @@ fn font(state: &State, exchange: &mut Exchange, name: &str) {
         Some(body) => exchange.send(200, &body, "font/ttf", ""),
         None => not_found(exchange),
     }
+}
+
+/// The asset files' kinds: pictures, fonts and videos.
+fn asset_type(suffix: &str) -> Option<&'static str> {
+    Some(match suffix {
+        ".png" => "image/png",
+        ".jpg" | ".jpeg" => "image/jpeg",
+        ".gif" => "image/gif",
+        ".webp" => "image/webp",
+        ".ttf" => "font/ttf",
+        ".otf" => "font/otf",
+        ".mp4" | ".m4v" => "video/mp4",
+        ".mov" => "video/quicktime",
+        ".webm" => "video/webm",
+        ".mkv" => "video/x-matroska",
+        _ => return None,
+    })
+}
+
+/// _theme_list: the installed themes with their names and panels, for lists and galleries:
+/// read from each theme.json, without loading the theme.
+fn theme_list(state: &State) -> Value {
+    let mut themes = lp_theme::versions::list_themes(&state.home.places());
+    for item in &mut themes {
+        let folder = PathBuf::from(item.get("path").map(Value::str).unwrap_or_default());
+        let text = std::fs::read(folder.join("theme.json")).ok();
+        let text = text.and_then(|bytes| String::from_utf8(bytes).ok());
+        let data = match text.and_then(|text| lp_py::json::loads(&text).ok()) {
+            Some(Value::Dict(data)) => data,
+            _ => Dict::new(),
+        };
+        let display = match data.get("display") {
+            Some(Value::Dict(display)) => display.clone(),
+            _ => Dict::new(),
+        };
+        let text = |value: Option<&Value>| match value {
+            Some(Value::Str(text)) => Some(text.clone()),
+            _ => None,
+        };
+        let name = text(data.get("name")).filter(|name| !lp_py::strip(name).is_empty());
+        let id = item.get("id").cloned().unwrap_or(Value::None);
+        item.insert("name".into(), name.map_or(id, Value::Str));
+        let model = text(display.get("model")).map_or(Value::None, Value::Str);
+        item.insert("model".into(), model);
+        let collection = text(data.get("collection")).unwrap_or_default();
+        item.insert("collection".into(), Value::Str(collection));
+        // a card slot that leaves its cards to the person: Start offers the cards while the
+        // theme is on the panel
+        let slot = |widget: &Value| match widget {
+            Value::Dict(w) => {
+                let named = |key: &str, name: &str| matches!(w.get(key), Some(Value::Str(text)) if text == name);
+                let items = w.get("items").filter(|items| items.truthy());
+                let items = items.map(Value::str).unwrap_or_default();
+                named("type", "module")
+                    && named("module", "cards")
+                    && lp_py::strip(&items).is_empty()
+            }
+            _ => false,
+        };
+        let cards = match data.get("widgets") {
+            Some(Value::List(widgets)) => widgets.iter().any(slot),
+            _ => false,
+        };
+        item.insert("cards".into(), Value::Bool(cards));
+        let whole = |key: &str| {
+            let value = display.get(key);
+            value
+                .filter(|v| matches!(v, Value::Int(_) | Value::Bool(_)))
+                .cloned()
+        };
+        let size = match (whole("width"), whole("height")) {
+            (Some(width), Some(height)) => Value::List(vec![width, height]),
+            _ => Value::None,
+        };
+        item.insert("size".into(), size);
+    }
+    Value::List(themes.into_iter().map(Value::Dict).collect())
+}
+
+/// The files under `folder`, each as its path from there.
+fn files_under(folder: &Path, inside: &str, found: &mut Vec<String>) {
+    let Ok(entries) = std::fs::read_dir(folder) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let rel = match inside.is_empty() {
+            true => name,
+            false => format!("{inside}/{name}"),
+        };
+        let path = entry.path();
+        if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+            files_under(&path, &rel, found);
+        } else if path.is_file() {
+            found.push(rel);
+        }
+    }
+}
+
+/// _assets: the pictures, fonts and videos in a theme's folder.
+fn assets(state: &State, exchange: &mut Exchange, theme_id: &str) {
+    let folder = match lp_theme::versions::find_theme(theme_id, &state.home.places()) {
+        Ok(folder) => folder,
+        Err(why) => return exchange.error(&why.msg, 404, ""),
+    };
+    let mut files = Vec::new();
+    files_under(&folder, "", &mut files);
+    files.retain(|file| asset_type(&suffix(file).to_lowercase()).is_some());
+    files.sort_by(|a, b| a.chars().cmp(b.chars()));
+    let files = files.into_iter().map(Value::Str).collect();
+    exchange.json(&Value::List(files), 200);
+}
+
+/// _asset_file: an image or font of a theme, for the library of pictures and their
+/// previews.
+fn asset_file(state: &State, exchange: &mut Exchange, theme_id: &str, rel: &str) {
+    let rel = Value::Str(crate::http::unquote(rel));
+    let file = lp_theme::versions::find_theme(theme_id, &state.home.places())
+        .and_then(|folder| lp_theme::model::resolve_asset(&folder, &rel));
+    let found = file.ok().and_then(|file| {
+        let name = file.file_name()?.to_string_lossy().into_owned();
+        let kind = asset_type(&suffix(&name).to_lowercase())?;
+        let body = file.is_file().then(|| std::fs::read(&file).ok())??;
+        Some((body, kind))
+    });
+    match found {
+        Some((body, kind)) => exchange.send(200, &body, kind, ""),
+        None => not_found(exchange),
+    }
+}
+
+/// _get_theme: a theme as its file has it, with what is to be said of it.
+fn get_theme(state: &State, exchange: &mut Exchange, theme_id: &str) {
+    let places = state.home.places();
+    let env = lp_theme::Env {
+        fonts_dir: state.home.fonts(),
+    };
+    let loaded = lp_theme::versions::find_theme(theme_id, &places)
+        .and_then(|folder| Ok((lp_theme::model::load_theme(&folder, &env)?, folder)));
+    let (theme, folder) = match loaded {
+        Ok(loaded) => loaded,
+        Err(why) => return exchange.error(&why.msg, 404, ""),
+    };
+    let resolved = |path: &Path| std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let builtin = !resolved(&folder).starts_with(resolved(&places.user));
+    let mut told = Dict::new();
+    told.insert("id".into(), Value::Str(theme_id.to_string()));
+    told.insert("builtin".into(), Value::Bool(builtin));
+    told.insert("theme".into(), theme.to_dict());
+    let warnings = theme.warnings.iter().cloned().map(Value::Str).collect();
+    told.insert("warnings".into(), Value::List(warnings));
+    exchange.json(&Value::Dict(told), 200);
 }
 
 /// _i18n: the app's language, config.toml's setting, the languages there are and the

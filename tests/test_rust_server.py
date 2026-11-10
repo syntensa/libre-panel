@@ -4,7 +4,9 @@ and the body, byte for byte."""
 
 from __future__ import annotations
 
+import json
 import os
+import shutil
 import signal
 import socket
 import subprocess
@@ -56,6 +58,20 @@ def servers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
         (home / "config.toml").write_text(
             'theme = "slate"\nlanguage = "de"\n[device]\ndriver = "virtual"\n', encoding="utf-8"
         )
+        # the person's own themes: one with files, one that cannot be read, one with no name
+        mine = home / "themes" / "mine"
+        shutil.copytree(DATA / "themes" / "slate", mine)
+        (mine / "pic.PNG").write_bytes(b"\x89PNG picture")
+        (mine / "sub").mkdir()
+        (mine / "sub" / "a font.ttf").write_bytes(b"font")
+        (mine / "notes.txt").write_bytes(b"notes")
+        (mine / "clip.webm").write_bytes(b"clip")
+        for name, text in (("broken", "{nope"), ("Bad Name", "{}"), ("list", "[1]"),
+                           ("odd", '{"name": " ", "display": {"width": 480, "height": true,'
+                            ' "model": 5}, "collection": 7, "widgets": [{"type": "module",'
+                            ' "module": "cards", "items": " "}]}')):  # fmt: skip
+            (home / "themes" / name).mkdir()
+            (home / "themes" / name / "theme.json").write_text(text, encoding="utf-8")
         homes.append(home)
     monkeypatch.setenv("LIBRE_PANEL_HOME", str(homes[0]))
     i18n.set_language("de")
@@ -82,7 +98,7 @@ def servers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
                 answers.append(_asked(port, text.replace(b"{token}", token.encode())))
             return answers
 
-        yield ask
+        yield ask, homes
     finally:
         i18n.set_language("en")
         theirs.shutdown()
@@ -165,8 +181,9 @@ def test_the_apps_files_and_the_way_in_are_answered_as_server_py_answers(servers
         b"GET /app/\xff HTTP/1.1\r\nHost: {host}\r\n\r\n",
     ]  # fmt: skip
     seen: dict[str, int] = {}
+    ask, _ = servers
     for request in requests:
-        theirs, ours = servers(request)
+        theirs, ours = ask(request)
         shown = request[:200]
         assert ours[0] == theirs[0], shown
         assert ours[1] == theirs[1], shown
@@ -184,7 +201,6 @@ def test_the_background_app_is_controlled_through_its_server(tmp_path: Path) -> 
     the programs of this user find them; the state and the controls answer (pause, resume,
     brightness, the picture turned, what is no action), and `quit` ends the program, which
     takes its files away."""
-    import json
     import time
 
     config = tmp_path / "config.toml"
@@ -251,3 +267,49 @@ def test_the_background_app_is_controlled_through_its_server(tmp_path: Path) -> 
     assert "panicked" not in said and f"theme editor at http://127.0.0.1:{port}/" in said, said
     assert token not in said, said
     assert not (tmp_path / "instance.json").exists() and not kept.exists()
+
+
+def test_the_themes_are_listed_and_read_as_server_py_reads_them(servers: Any) -> None:
+    """The themes that are installed (the app's and the person's own: one with files, one
+    that cannot be read, one of an odd shape), a theme by its name with what is said of it,
+    the files in its folder, and a file of it, with the token in the header or, as a picture
+    asks, in the address."""
+    ask, homes = servers
+    requests = [
+        _get("/api/themes", WITH), _get("/api/themes"), _get("/api/themes/", WITH),
+        _get("/api/themes/slate", WITH), _get("/api/themes/mine", WITH),
+        _get("/api/themes/nothing", WITH), _get("/api/themes/broken", WITH),
+        _get("/api/themes/list", WITH), _get("/api/themes/odd", WITH),
+        _get("/api/themes/Bad%20Name", WITH), _get("/api/themes/mine/x", WITH),
+        _get("/api/themes/../mine", WITH), _get("/api/themes/slate?x=1", WITH),
+        _get("/api/themes/mine/assets", WITH), _get("/api/themes/slate/assets", WITH),
+        _get("/api/themes/nothing/assets", WITH), _get("/api/themes/mine/assets/", WITH),
+        _get("/api/themes/mine/assets/pic.PNG", WITH), _get("/api/themes/mine/assets/pic.PNG"),
+        _get("/api/themes/mine/assets/pic.PNG?token={token}"),
+        _get("/api/themes/mine/assets/pic.PNG?token=wrong"),
+        _get("/api/themes/mine/assets/pic.png", WITH),
+        _get("/api/themes/mine/assets/sub/a%20font.ttf", WITH),
+        _get("/api/themes/mine/assets/sub%2Fa%20font.ttf", WITH),
+        _get("/api/themes/mine/assets/sub/a font.ttf", WITH),
+        _get("/api/themes/mine/assets/clip.webm", WITH),
+        _get("/api/themes/mine/assets/notes.txt", WITH),
+        _get("/api/themes/mine/assets/theme.json", WITH),
+        _get("/api/themes/mine/assets/sub", WITH),
+        _get("/api/themes/mine/assets/nothing.png", WITH),
+        _get("/api/themes/mine/assets/../../broken/theme.json", WITH),
+        _get("/api/themes/mine/assets/%2e%2e/%2e%2e/config.toml", WITH),
+        _get("/api/themes/mine/assets//etc/passwd", WITH),
+        _get("/api/themes/nothing/assets/pic.PNG", WITH),
+    ]  # fmt: skip
+    seen: dict[str, int] = {}
+    for request in requests:
+        answers = []
+        for home, (status, headers, body) in zip(homes, ask(request), strict=True):
+            for path in (str(home), json.dumps(str(home))[1:-1]):
+                body = body.replace(path.encode(), b"<home>")
+            headers.pop("Content-Length")  # (the folders' names are of one length on Linux)
+            answers.append((status, headers, body))
+        assert answers[1] == answers[0], request
+        seen[answers[0][0]] = seen.get(answers[0][0], 0) + 1
+    assert seen["HTTP/1.0 200 OK"] >= 10 and seen["HTTP/1.0 404 Not Found"] >= 10, seen
+    assert seen["HTTP/1.0 403 Forbidden"] >= 3, seen
