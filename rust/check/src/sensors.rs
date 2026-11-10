@@ -980,6 +980,93 @@ fn media(case: &Value) -> Value {
            "covers": covers})
 }
 
+/// A picture as its size and its bytes' SHA-256, null for none.
+fn picture_json(picture: Option<lp_pixels::Image>) -> Value {
+    use sha2::{Digest, Sha256};
+    match picture {
+        None => Value::Null,
+        Some(picture) => {
+            let hash = Sha256::digest(picture.as_bytes());
+            let hex: String = hash.iter().map(|byte| format!("{byte:02x}")).collect();
+            json!([picture.width(), picture.height(), hex])
+        }
+    }
+}
+
+/// appicon: the program names of each id, each logo's rank, the logo each manifest names,
+/// the file behind each logo, each packaged app's logo, each file as a badge, and on Linux
+/// the folders, each player's desktop entry, its icon's name, the icon's file and the icon.
+fn appicon(case: &Value) -> Value {
+    use lp_sensors::appicon as a;
+    use std::path::{Path, PathBuf};
+    let list = |key: &str| case[key].as_array().cloned().unwrap_or_default();
+    let text = |value: &Value| value.as_str().unwrap_or("").to_string();
+    let paths = |value: &Value| -> Vec<PathBuf> {
+        value
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|p| PathBuf::from(text(p)))
+            .collect()
+    };
+    let shown = |path: Option<PathBuf>| json!(path.map(|p| p.to_string_lossy().into_owned()));
+    let names: Vec<Value> = list("ids")
+        .iter()
+        .map(|id| json!(a::program_names(&text(id))))
+        .collect();
+    let ranks: Vec<Value> = list("ranks")
+        .iter()
+        .map(|one| {
+            let (plain, near) = a::logo_rank(&text(&one[0]), one[1].as_i64().unwrap_or(44) as i128);
+            json!([i32::from(plain), near.to_string()])
+        })
+        .collect();
+    let manifests: Vec<Value> = list("manifests")
+        .iter()
+        .map(|one| json!(a::manifest_logo(Path::new(&text(&one[0])), &text(&one[1]))))
+        .collect();
+    let logos: Vec<Value> = list("logos")
+        .iter()
+        .map(|one| shown(a::logo_file(Path::new(&text(one)))))
+        .collect();
+    let packages: Vec<Value> = list("packages")
+        .iter()
+        .map(|one| picture_json(a::package_logo(&text(&one[0]), paths(&one[1]))))
+        .collect();
+    let files: Vec<Value> = list("files")
+        .iter()
+        .map(|one| picture_json(a::load_file(Path::new(&text(one)))))
+        .collect();
+    let dirs: Vec<Value> = list("dirs")
+        .iter()
+        .map(|one| {
+            let env = |name: &str| one["env"][name].as_str().map(str::to_string);
+            let found = a::data_dirs(&env, Path::new(&text(&one["home"])));
+            json!(found
+                .iter()
+                .map(|p| p.to_string_lossy().into_owned())
+                .collect::<Vec<_>>())
+        })
+        .collect();
+    let players: Vec<Value> = list("players")
+        .iter()
+        .map(|one| {
+            let dirs = paths(&one[1]);
+            let entry = a::desktop_entry(&text(&one[0]), &dirs);
+            let name = entry.as_ref().and_then(|entry| a::desktop_icon_name(entry));
+            let file = name.as_ref().and_then(|name| a::icon_file(name, &dirs));
+            json!([
+                shown(entry),
+                name,
+                shown(file),
+                picture_json(a::linux_icon(&text(&one[0]), &dirs))
+            ])
+        })
+        .collect();
+    json!({"names": names, "ranks": ranks, "manifests": manifests, "logos": logos,
+           "packages": packages, "files": files, "dirs": dirs, "players": players})
+}
+
 pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "regex" => regex(case),
@@ -996,6 +1083,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "sky" => sky(case)?,
         "mangohud" => mangohud(case)?,
         "media" => media(case),
+        "appicon" => appicon(case),
         "linux_source" => linux_source(case)?,
         _ => return Err(format!("no such op: {op}")),
     })

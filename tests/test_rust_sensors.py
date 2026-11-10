@@ -1455,3 +1455,175 @@ def test_what_plays_is_read_as_the_media_source_reads_it(
     assert sum(1 for track in wanted if track) > 80
     assert ours["covers"] == shown
     assert sum(1 for cover in shown if cover) == 13  # (8 pictures, 4 files, 1 from the web)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="folders laid out as Linux names them")
+def test_a_players_icon_is_found_as_appicon_finds_it(tmp_path: Any) -> None:
+    """sensors/appicon.py: the program names of a player's id, the logo a package's manifest
+    names and the file behind it, and on Linux a player's desktop entry, its icon's name and
+    file; every icon as the badge of 96 pixels."""
+    import hashlib
+    from pathlib import Path
+
+    from PIL import Image
+
+    from libre_panel.sensors import appicon
+
+    rng = random.Random(0xA11C)
+
+    def shown(image: Image.Image | None) -> list[Any] | None:
+        if image is None:
+            return None
+        assert image.mode == "RGBA"
+        return [*image.size, hashlib.sha256(image.tobytes()).hexdigest()]
+
+    def picture(file: Path, mode: str, size: tuple[int, int]) -> None:
+        file.parent.mkdir(parents=True, exist_ok=True)
+        noise = Image.effect_noise(size, 70)
+        bands = [noise.rotate(90 * n).resize(size) for n in range(len(mode))]
+        Image.merge(mode, bands).save(file, "PNG")
+
+    ids = ["Spotify.exe", "MSEdge", "Chrome.ABCDEF", "SpotifyAB.SpotifyMusic_zpdnekdrz!Spotify",
+           "", " ", "a!b!c", "Pkg_hash!", "!App", "x.y.z.EXE", " VLC ", "ǅ.exe", "a_b",
+           "İ.x"]  # fmt: skip
+    parts = ["Logo", "Square44x44Logo", "150x150", "scale-200", "scale-100", "targetsize-48",
+             "targetsize-96", "targetsize-256", "altform-unplated", "altform-lightunplated",
+             "ALTFORM-UNPLATED", "TargetSize-128", "scale-", "targetsize-x", "scale-99999",
+             "contrast-black", "targetsize-95"]  # fmt: skip
+    ranks = [[".".join(rng.sample(parts, rng.randrange(1, 5))) + ".png", rng.choice([44, 150, 0])]
+             for _ in range(1500)]  # fmt: skip
+
+    manifests, logos, packages = [], [], []
+    for n in range(200):
+        folder = tmp_path / f"pkg{n}"
+        folder.mkdir()
+        apps = []
+        for app in rng.sample(["App", "Spotify", "Other", ""], rng.randrange(0, 4)):
+            names = rng.sample(["Square44x44Logo", "Square150x150Logo", "Logo", "SmallLogo",
+                                "BackgroundColor"], rng.randrange(0, 4))  # fmt: skip
+            files = [rng.choice(["Assets\\\\" + name + ".png", ""]) for name in names]
+            attrs = " ".join(f'{name}="{file}"' for name, file in zip(names, files, strict=True))
+            visual = rng.choice([f"<uap:VisualElements {attrs}/>",
+                                 f"<Extensions><uap:VisualElements {attrs}></uap:VisualElements>"
+                                 "</Extensions>", "", f"<VisualElements {attrs}/>"])  # fmt: skip
+            identity = f' Id="{app}"' if app or rng.random() < 0.5 else ""
+            apps.append(f"<Application{identity}>{visual}</Application>")
+        text = ('<?xml version="1.0" encoding="utf-8"?>\n<Package xmlns="http://a/foundation" '
+                'xmlns:uap="http://a/uap"><Applications>' + "".join(apps)
+                + "</Applications></Package>")  # fmt: skip
+        if rng.random() < 0.08:
+            text = text[: rng.randrange(20, len(text))]
+        if rng.random() < 0.9:
+            (folder / "AppxManifest.xml").write_text(
+                text, encoding=rng.choice(["utf-8", "utf-8", "utf-8-sig"])
+            )
+        application = rng.choice(["App", "Spotify", "", "None"])
+        manifests.append([str(folder), application])
+        forms = ["", ".scale-100", ".scale-200", ".scale-400", ".targetsize-48",
+                 ".targetsize-96", ".targetsize-256_altform-unplated",
+                 ".targetsize-128_altform-lightunplated", ".contrast-black_scale-80",
+                 ".targetsize-24_altform-unplated"]  # fmt: skip
+        logo_names = ["Square44x44Logo", "Square150x150Logo", "Logo", "SmallLogo"]
+        base = rng.choice(logo_names)
+        for logo in logo_names:
+            for form in rng.sample(forms, rng.randrange(0, 5)):
+                side = rng.choice([24, 44, 96, 150])
+                size = (side, rng.choice([side, 60]))
+                picture(folder / "Assets" / f"{logo}{form}.png", "RGBA", size)
+        (folder / "Assets").mkdir(exist_ok=True)
+        (folder / "Assets" / f"{base}.txt").write_text("no picture", encoding="utf-8")
+        logos.append(str(folder / "Assets" / f"{base}.png"))
+        packages.append([f"Family_hash!{application}", [str(folder)]])
+    for n in range(0, 200, 7):  # (several versions installed: the highest folder name first)
+        packages.append(["Fam!App", [str(tmp_path / f"pkg{m}") for m in (n, n + 1, n + 2)]])
+
+    files = []
+    kinds = [("RGBA", (256, 256)), ("RGB", (300, 120)), ("L", (40, 97)), ("RGBA", (96, 96)),
+             ("LA", (1, 1)), ("RGB", (31, 30))]  # fmt: skip
+    for n, (mode, size) in enumerate(kinds):
+        picture(tmp_path / f"icon{n}.png", mode, size)
+        files.append(str(tmp_path / f"icon{n}.png"))
+    (tmp_path / "icon.svg").write_text("<svg/>", encoding="utf-8")
+    files += [str(tmp_path / "icon.svg"), str(tmp_path / "none.png"), str(tmp_path)]
+
+    dirs = []
+    for n in range(60):
+        env = {}
+        if rng.random() < 0.5:
+            env["XDG_DATA_DIRS"] = rng.choice(["/a/share:/b/share", "", ":/usr/share::/usr/share/",
+                                                "/opt/x//share:/opt/x/share"])  # fmt: skip
+        if rng.random() < 0.5:
+            env["XDG_DATA_HOME"] = rng.choice(["/home/u/data", "", "/usr/share"])
+        dirs.append({"env": env, "home": f"/home/user{n}"})
+
+    players = []
+    for n in range(150):
+        roots = [tmp_path / f"data{n}a", tmp_path / f"data{n}b"]
+        player = rng.choice(["spotify", "Firefox", "vlc", "chromium", "Rhythmbox"])
+        name = player.lower()
+        for root in roots:
+            (root / "applications").mkdir(parents=True)
+            for entry in rng.sample([f"{name}.desktop", f"org.mozilla.{name}.desktop",
+                                     f"{name}-esr.desktop", f"com.{name}.desktop", "other.desktop",
+                                     f"{name}-beta-channel.desktop", f"x{name}.desktop"],
+                                    rng.randrange(0, 4)):  # fmt: skip
+                icon = rng.choice([name, f"{name}-icon", str(tmp_path / "icon0.png"), "", "none"])
+                lines = rng.sample(["[Desktop Entry]", "Name=Player", f"Icon={icon}",
+                                    "[Desktop Action New]", "Icon=wrong", f" Icon = {icon}",
+                                    f"  Icon={icon}  "], rng.randrange(1, 6))  # fmt: skip
+                if rng.random() < 0.6:
+                    lines = ["[Desktop Entry]", "Name=Player", f"Icon={rng.choice([name, icon])}"]
+                (root / "applications" / entry).write_text("\n".join(lines), encoding="utf-8")
+            for size in rng.sample(["512x512", "256x256", "48x48", "32x32", "scalable"],
+                                   rng.randrange(0, 4)):  # fmt: skip
+                side = int(size.split("x")[0]) if "x" in size else 64
+                file = root / "icons/hicolor" / size / "apps" / f"{name}.png"
+                picture(file, "RGBA", (side, side))
+            if rng.random() < 0.3:
+                picture(root / "pixmaps" / f"{name}-icon.png", "RGB", (48, 40))
+            if rng.random() < 0.2:
+                (root / "pixmaps").mkdir(exist_ok=True)
+                (root / "pixmaps" / f"{name}.xpm").write_text("/* XPM */", encoding="utf-8")
+        players.append([player, [str(root) for root in roots]])
+
+    [ours] = run([{"op": "appicon", "ids": ids, "ranks": ranks, "manifests": manifests,
+                   "logos": logos, "packages": packages, "files": files, "dirs": dirs,
+                   "players": players}])  # fmt: skip
+    assert ours["names"] == [sorted(appicon.program_names(app_id)) for app_id in ids]
+    wanted = [appicon._logo_rank(name, base) for name, base in ranks]
+    assert ours["ranks"] == [[plain, str(near)] for plain, near in wanted]
+    assert ours["manifests"] == [appicon.manifest_logo(Path(f), app) for f, app in manifests]
+    assert sum(1 for logo in ours["manifests"] if logo) > 15
+    for declared, got in zip(logos, ours["logos"], strict=True):
+        file = appicon.logo_file(Path(declared))
+        assert (got is None) == (file is None), declared
+        if file is not None:  # (of files as good as each other Python takes any)
+            base = 44 if "44" in declared else 150 if "150" in declared else 44
+            assert Path(got).is_file()
+            assert appicon._logo_rank(Path(got).name, base) == appicon._logo_rank(file.name, base)
+    assert ours["packages"] == [
+        shown(appicon.package_logo(app, folders=lambda family, f=folders: [Path(p) for p in f]))
+        for app, folders in packages
+    ]
+    assert sum(1 for logo in ours["packages"] if logo) > 20
+    assert ours["files"] == [shown(appicon.load_file(Path(file))) for file in files]
+    assert sum(1 for icon in ours["files"] if icon) == 6
+    for case, got in zip(dirs, ours["dirs"], strict=True):
+        assert [Path(folder) for folder in got] == appicon.data_dirs(
+            case["env"], Path(case["home"])
+        ), case
+    found = 0
+    for (player, roots), got in zip(players, ours["players"], strict=True):
+        folders = [Path(root) for root in roots]
+        entry = appicon.desktop_entry(player, folders)
+        assert (got[0] is None) == (entry is None), (player, roots)
+        if entry is None:
+            continue
+        # (of entries with names as long as each other Python takes any: the same folder)
+        assert Path(got[0]).parent == entry.parent and len(Path(got[0]).name) == len(entry.name)
+        name = appicon.desktop_icon_name(Path(got[0]))
+        file = appicon.icon_file(name, folders) if name else None
+        assert got[1:3] == [name, None if file is None else str(file)]
+        assert got[3] == shown(appicon.load_file(file) if file else None)
+        found += got[3] is not None
+    assert found > 15

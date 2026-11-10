@@ -16,6 +16,7 @@ lp-pixels = { path = "../pixels" }
 lp-decode = { path = "../decode" }
 lp-net = { path = "../net" }
 num-bigint = "0.4"
+roxmltree = "0.20"
 indexmap = "2"
 num-traits = "0.2"
 
@@ -31,6 +32,10 @@ windows = { version = "0.61", features = [
 ] }
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Storage_Packaging_Appx",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_UI_WindowsAndMessaging",
     "Win32_NetworkManagement_IpHelper",
     "Win32_NetworkManagement_Ndis",
     "Win32_NetworkManagement_WiFi",

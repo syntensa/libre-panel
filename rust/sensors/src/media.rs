@@ -553,6 +553,9 @@ struct Shared {
     track: Mutex<Option<Track>>,
     /// the cover that was loaded last, its picture, and which one it is of those loaded
     cover: Mutex<(Option<Cover>, Option<Image>, u64)>,
+    /// the icons of the players, found when first needed; the playing one's, and which it is
+    icons: Mutex<Option<crate::appicon::AppIcons>>,
+    icon: Mutex<(Option<Image>, u64)>,
     flags: Mutex<Flags>,
     changed: Condvar,
     notes: Mutex<Vec<String>>,
@@ -596,10 +599,30 @@ impl Shared {
                 }
             }
         }
+        let icon = self.icon_of(track.as_ref());
+        if let Ok(mut kept) = self.icon.lock() {
+            if kept.1 != icon.1 {
+                *kept = icon;
+            }
+        }
         if let Ok(mut kept) = self.track.lock() {
             *kept = track;
         }
         failed
+    }
+
+    /// The icon of the player, if somebody reads it; found once per player.
+    fn icon_of(&self, track: Option<&Track>) -> (Option<Image>, u64) {
+        let app_id = track.map_or("", |track| track.app_id.as_str());
+        if app_id.is_empty() || !self.wants("media.app_icon") {
+            return (None, 0);
+        }
+        let Ok(mut icons) = self.icons.lock() else {
+            return (None, 0);
+        };
+        let icons = icons.get_or_insert_with(crate::appicon::AppIcons::of_system);
+        let (icon, which) = icons.get(app_id);
+        (icon.cloned(), which)
     }
 
     /// Look when the player has news (a backend that has events), and every `interval`
@@ -642,6 +665,9 @@ impl Shared {
                     // nobody looked for a minute: end, start again on demand
                     if let Ok(mut track) = self.track.lock() {
                         *track = None;
+                    }
+                    if let Ok(mut icon) = self.icon.lock() {
+                        *icon = (None, 0);
                     }
                     break;
                 }
@@ -702,6 +728,8 @@ impl MediaSource {
             shared: Arc::new(Shared {
                 track: Mutex::new(None),
                 cover: Mutex::new((None, None, 0)),
+                icons: Mutex::new(None),
+                icon: Mutex::new((None, 0)),
                 flags: Mutex::new(Flags::default()),
                 changed: Condvar::new(),
                 notes: Mutex::new(Vec::new()),
@@ -767,13 +795,19 @@ impl MediaSource {
         }
     }
 
-    /// The pictures of what plays: `media.cover`, where the track has one that was read.
+    /// The pictures of what plays: `media.cover`, where the track has one that was read, and
+    /// the player's `media.app_icon`, where somebody reads it and it was found.
     pub fn images(&self) -> IndexMap<String, Image> {
         let mut found = IndexMap::new();
         let cover = self.track().and_then(|track| track.cover);
         if let (Some(cover), Ok(kept)) = (cover, self.shared.cover.lock()) {
             if let (true, Some(picture)) = (kept.0.as_ref() == Some(&cover), &kept.1) {
                 found.insert("media.cover".to_string(), picture.clone());
+            }
+        }
+        if let Ok(kept) = self.shared.icon.lock() {
+            if let Some(icon) = &kept.0 {
+                found.insert("media.app_icon".to_string(), icon.clone());
             }
         }
         found
@@ -783,12 +817,14 @@ impl MediaSource {
     /// (asked on every frame, where the pictures themselves are only taken when it changed).
     pub fn images_state(&self) -> u64 {
         let cover = self.track().and_then(|track| track.cover);
-        match (cover, self.shared.cover.lock()) {
+        let cover = match (cover, self.shared.cover.lock()) {
             (Some(cover), Ok(kept)) if kept.0.as_ref() == Some(&cover) && kept.1.is_some() => {
                 kept.2
             }
             _ => 0,
-        }
+        };
+        let icon = self.shared.icon.lock().map_or(0, |kept| kept.1);
+        (cover << 32) | (icon & 0xFFFF_FFFF)
     }
 
     /// What the source noted for the log since it was last asked.

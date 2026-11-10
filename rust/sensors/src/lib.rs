@@ -2,6 +2,7 @@
 //! readings, read through Libre Panel's sensor service on Windows, and the names of the
 //! hardware tidied for a panel.
 
+pub mod appicon;
 pub mod audio;
 pub mod frames;
 pub mod gpus;

@@ -1719,8 +1719,16 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       bytes, a file, a file:// or a web address made a picture of at most 512 pixels as
       Pillow's thumbnail makes it, handed to the frame when it changes. Always on. 800
       tracks, 1500 lines of playerctl, 1200 answers of busctl and 24 covers compared with
-      Python; the program run against stand-ins of both tools. Open: the player's icon
-      (media.app_icon, appicon.py), covers in formats lp-decode does not read (BMP)
+      Python; the program run against stand-ins of both tools. Open: covers in formats
+      lp-decode does not read (BMP)
+- [x] the player's icon (sensors/appicon.py, lp-sensors' appicon; media.app_icon): on Linux
+      the player's desktop entry, its `Icon=` and the PNG of the hicolor theme or a pixmap;
+      on Windows the logo a packaged app's manifest names (the file without a plate and
+      nearest in size) or the icon of the running program of the player's name, taken from
+      its file through GDI (compiled for Windows, not yet run there); a badge of 96 pixels,
+      found once per player and again after a minute where there was none. Program names,
+      1500 logo names, 200 packages with their manifests, 150 sets of desktop entries and
+      icons and the badges compared with Python. XPM pixmaps are not read
 - [x] str.capitalize in lp-py (the first character's title case, Unicode 15.0)
 - [ ] HWiNFO, RTSS, the other sources; Linux's hint of what system-setup brings
 - [ ] the history as a ring, demo.py's values; the .NET service goes
