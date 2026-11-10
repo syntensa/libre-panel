@@ -1894,3 +1894,146 @@ def test_game_mode_follows_the_games_as_game_py_follows_them(
             assert all(count > 2 for count in seen.values()), seen
         finally:
             i18n.set_language("en")
+
+
+def test_the_autopilot_picks_the_theme_autopilot_py_picks() -> None:
+    """services/autopilot.py: the rules read (what is wrong with one), the signals of each
+    sample (music, the microphone, the load's mean over a window, a program, the time of
+    day), the first rule that holds once it has held long enough and the theme before has
+    stayed long enough, a theme that is not installed, a mode that rests it, and its
+    status."""
+    from datetime import datetime
+    from types import SimpleNamespace
+
+    from fake_system import FakeMachine
+
+    from libre_panel.sensors.base import Reading, Snapshot
+    from libre_panel.services import autopilot
+    from libre_panel.services.machine import Program
+
+    rng = random.Random(0xA07091)
+    good = [
+        {"name": "music", "theme": "a", "when": {"music": True}},
+        {"theme": "b", "when": {"cpu_over": 50, "for_s": 5}},
+        {"theme": "c", "when": {"apps": ["Code.exe", " Blender ", 5, ""]}, "hold_s": 0,
+         "immediate": True},
+        {"theme": "d", "when": {"time": "22:00-06:30"}, "hold_s": 1.5},
+        {"theme": "d", "when": {"time": " 8:05 - 9:00 "}},
+        {"theme": "e", "when": {"microphone": True, "gpu_over": 30.5}},
+        {"theme": "missing", "when": {"music": False, "cpu_over": 10.0, "for_s": 99999}},
+        {"name": 5, "theme": "a", "when": {"microphone": False, "music": False}},
+    ]  # fmt: skip
+    bad = [5, {"theme": ""}, {"name": "x"}, {"theme": "a", "when": 5}, {"theme": "a", "when": {}},
+           {"theme": "a", "when": {"music": 1}}, {"theme": "a", "when": {"cpu_over": "x"}},
+           {"theme": "a", "when": {"apps": []}}, {"theme": "a", "when": {"time": "25:00-01:00"}},
+           {"theme": "a", "when": {"time": 5}}, {"theme": "a", "when": {"weird": 1}},
+           {"theme": "a", "when": {"music": True, "for_s": 0}},
+           {"theme": "a", "when": {"music": True}, "hold_s": -1},
+           {"theme": "a", "when": {"music": True, "for_s": None}},
+           {"theme": "a", "enabled": False, "when": {"music": True}},
+           {"theme": "a", "when": {"for_s": 3}}]  # fmt: skip
+    names = ["code.exe", "blender", "explorer.exe", "game.exe"]
+    services = []
+    for _ in range(300):
+        options = {
+            "rules": rng.sample(good, rng.randrange(5)) + rng.sample(bad, rng.randrange(3)),
+            "hold_s": rng.choice([8.0, 0, 2]), "min_s": rng.choice([20.0, 0, 5]),
+            "quiet_after_boot_s": rng.choice([240.0, 0]),
+            "transition": rng.choice(["tube", "", "fade"]),
+        }  # fmt: skip
+        rng.shuffle(options["rules"])
+        now, steps = rng.uniform(0, 500), []
+        state = {"media.state": "Paused", "cpu.load": 20.0, "gpu.load": 10.0}
+        machine = [False, None, [], rng.choice([None, 100.0, 500.0])]
+        minutes = rng.randrange(1440)
+        for _ in range(rng.randrange(1, 80)):
+            now += rng.choice([0.2, 0.5, 1, 1, 3, 10])
+            if rng.random() < 0.3:
+                key = rng.choice(["media.state", "cpu.load", "gpu.load", "media.playing"])
+                state[key] = rng.choice({"media.state": ["Playing", "playing", "Paused", None, 5],
+                                         "media.playing": [1, 0, None]}.get(
+                                             key, [5, 45.5, 60, 95.0, None, "x"]))  # fmt: skip
+            if rng.random() < 0.3:
+                machine[0] = rng.random() < 0.5
+                machine[1] = rng.choice([None, *names])
+                machine[2] = rng.sample(names, rng.randrange(4))
+            if rng.random() < 0.2:
+                minutes = rng.choice([rng.randrange(1440), 22 * 60, 6 * 60 + 30, 8 * 60 + 5])
+            themes = rng.sample(["a", "b", "c", "d", "e"], rng.choice([5, 5, 5, 4, 3]))
+            steps.append([now, json.dumps(state), minutes, rng.random() < 0.08, list(machine),
+                          sorted(themes)])  # fmt: skip
+        services.append({"options": json.dumps(options), "has_foreground": rng.random() < 0.5,
+                         "steps": steps})  # fmt: skip
+    [ours] = run([{"op": "autopilot", "services": services}])
+    assert "services" in ours, ours
+
+    seen = {"show": 0, "restore": 0, "missing": 0, "report": 0, "resting": 0, "load": 0,
+            "candidate": 0, "none": 0}  # fmt: skip
+    for case, got in zip(services, ours["services"], strict=True):
+        options = json.loads(case["options"])
+        clock = [0.0]
+        wall = [datetime(2026, 1, 1)]
+        acts: list[list[Any]] = []
+        reports: list[str] = []
+        wants: list[str] = []
+        there: set[str] = set()
+
+        def warned(text: str, *more: Any, acts: Any = acts, reports: Any = reports) -> None:
+            (reports if text == "%s" else acts).append(more[0] if text == "%s" else
+                                                       ["note", text % more])  # fmt: skip
+
+        host = SimpleNamespace(
+            mode=None,
+            log=SimpleNamespace(
+                warning=warned,
+                info=lambda text, *more, acts=acts: acts.append(["note", text % more])),
+            want=lambda *keys, wants=wants: wants.extend(keys), on=lambda *_: None,
+            show_theme=lambda theme, transition=None, priority=None, mode="x", acts=acts:
+                acts.append(["show", theme, transition, priority, mode]),
+            restore_theme=lambda transition=None, acts=acts:
+                acts.append(["restore", transition]),
+        )  # fmt: skip
+        fake = FakeMachine(case["has_foreground"])
+        service = autopilot.Autopilot(
+            host,
+            options,
+            machine=fake,
+            clock=lambda c=clock: c[0],
+            wall=lambda w=wall: w[0],
+            installed=lambda name, there=there: name in there,
+        )
+        service.start()
+        assert got["reports"] == reports, options
+        assert got["rules"] == len(service.rules) and got["wants"] == wants, options
+        seen["report"] += len(reports)
+        seen["none"] += not service.rules
+        for (now, readings, minutes, resting, machine, themes), found in zip(
+            case["steps"], got["steps"], strict=True
+        ):
+            clock[0] = now
+            wall[0] = datetime(2026, 1, 1, minutes // 60, minutes % 60, 30)
+            host.mode = "game" if resting else None
+            fake.microphone, front, running, fake.uptime = machine
+            fake.running = [Program(name, n + 1, "") for n, name in enumerate(running)]
+            if front is not None and case["has_foreground"]:
+                fake.running.append(Program(front, 99, ""))  # (the one in front)
+            fake.front = 99 if front is not None else 0
+            there.clear()
+            there.update(themes)
+            acts.clear()
+            service.on_sample(Snapshot(
+                readings={key: Reading(key, value) for key, value in json.loads(readings).items()}
+            ))  # fmt: skip
+            want = [act[:3] if act[0] == "show" else act for act in acts]
+            assert all(act[3:] == [0, None] for act in acts if act[0] == "show")
+            if service.rules:
+                assert found["acts"] == want, (options, case["steps"], now)
+                status = service.status()
+                assert found["status"] == json.dumps(status), (options, now)
+                seen["load"] += status["signals"]["cpu"] is not None
+                seen["candidate"] += status["candidate"] is not None
+            seen["show"] += any(act[0] == "show" for act in acts)
+            seen["restore"] += any(act[0] == "restore" for act in acts)
+            seen["missing"] += any("is not installed" in str(act[1]) for act in acts)
+            seen["resting"] += resting and service.theme is not None
+    assert all(count > 20 for count in seen.values()), seen

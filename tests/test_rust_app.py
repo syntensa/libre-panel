@@ -1742,3 +1742,65 @@ def test_game_mode_comes_with_a_game_and_goes_with_it(tmp_path: Path) -> None:
     assert there, (seen[-20:], said)
     assert back and took > 0.5, (took, seen[-20:], said)
     assert "game: My Game" in said and "game over" in said, said
+
+
+def test_the_autopilot_shows_the_theme_of_the_rule_that_holds(tmp_path: Path) -> None:
+    """`autopilot` among the services: while music plays (here said by the test's script),
+    the theme of its rule shows; config.toml's is back when it stops."""
+    for name, colour in (("red", "#DC1E1E"), ("blue", "#1E1EDC")):
+        folder = tmp_path / "themes" / name
+        folder.mkdir(parents=True)
+        theme = {"format": "libre-panel-theme/1", "name": name.title(),
+                 "display": {"model": "turing-5", "orientation": "landscape", "width": 800,
+                             "height": 480},
+                 "palette": {"bg": colour}, "font": "builtin:Barlow-Medium",
+                 "background": {"color": "@bg", "image": None}, "refresh_ms": 200,
+                 "widgets": []}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+    (tmp_path / "config.toml").write_text(
+        'theme = "red"\nfps = 10\n[device]\ndriver = "virtual"\noutput = "panel.png"\n'
+        '[sensors]\nproviders = []\n[services]\nenabled = ["autopilot"]\n'
+        '[services.autopilot]\nhold_s = 0.5\nmin_s = 0\ntransition = ""\n'
+        'rules = [{ name = "music", theme = "blue", when = { music = true } },\n'
+        '         { theme = "nowhere", when = { music = false } }]\n',
+        encoding="utf-8",
+    )
+    script = tmp_path / "script.json"
+    script.write_text(json.dumps([
+        [0.2, "publish", "media.state", "Paused", "", "State"],
+        [2.5, "publish", "media.state", "Playing", "", "State"],
+        [6.0, "publish", "media.state", "Paused", "", "State"],
+    ]), encoding="utf-8")  # fmt: skip
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries(), "LP_HOST_SCRIPT": str(script)}  # fmt: skip
+    colours = {(220, 30, 30): "red", (30, 30, 220): "blue"}
+    seen: list[tuple[float, str]] = []
+    with subprocess.Popen([str(_program()), "run"], env=env, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        began = time.monotonic()
+        try:
+            while time.monotonic() < began + 9.5:
+                try:
+                    with Image.open(tmp_path / "panel.png") as frame:
+                        counted = frame.convert("RGB").getcolors(1 << 16) or []
+                    most, colour = max(counted, default=(0, None))
+                    if most > 0.9 * sum(count for count, _ in counted):
+                        seen.append((time.monotonic() - began, colours.get(colour, "other")))
+                except (OSError, SyntaxError, ValueError):
+                    pass  # (not there yet, or being put in its place)
+                time.sleep(0.05)
+        finally:
+            if os.name == "nt":
+                program.terminate()
+            else:
+                program.send_signal(signal.SIGINT)
+            said = program.communicate(timeout=30)[1]
+    assert "service 'autopilot' started" in said, said
+    assert seen and all(shown == "red" for at, shown in seen if at < 2.4), seen[:40]
+    assert any(shown == "blue" for at, shown in seen if 3.0 < at < 6.0), seen
+    assert all(shown == "red" for at, shown in seen if at > 8.0), seen[-40:]
+    assert any(at > 8.0 for at, _ in seen), seen[-5:]
+    if os.name != "nt":  # (ended at once on Windows: what it said last may be lost)
+        assert "rule 'music': theme 'blue'" in said, said
+        assert "rule 'rule 2' skipped: theme 'nowhere' is not installed" in said, said
+        assert "no rule holds: the theme of config.toml" in said, said

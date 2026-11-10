@@ -140,6 +140,7 @@ impl Delivery {
 type Callback = Arc<Mutex<Box<dyn FnMut(&Event) + Send>>>;
 type Judge = Box<dyn Fn(&Toast) -> Delivery + Send + Sync>;
 type Clock = Box<dyn Fn() -> f64 + Send + Sync>;
+type Themes = Box<dyn Fn(&str) -> bool + Send + Sync>;
 
 #[derive(Clone, Debug)]
 struct Request {
@@ -210,6 +211,8 @@ pub struct PluginHost {
     threads: Mutex<Vec<JoinHandle<()>>>,
     /// `<settings>/plugins-data`: where each service has a folder of its own
     data: Mutex<Option<std::path::PathBuf>>,
+    /// says whether a theme is installed (the main loop knows where themes are)
+    themes: Mutex<Option<Themes>>,
 }
 
 impl PluginHost {
@@ -222,6 +225,7 @@ impl PluginHost {
             events: Mutex::new(None),
             threads: Mutex::new(Vec::new()),
             data: Mutex::new(None),
+            themes: Mutex::new(None),
         })
     }
 
@@ -492,6 +496,21 @@ impl PluginHost {
     /// A note for the log, of a service or the loop.
     pub fn note(&self, text: &str) {
         self.with(|state| state.notes.push(text.to_string()));
+    }
+
+    /// How the main loop tells whether a theme is installed.
+    pub fn set_themes(&self, themes: Option<Themes>) {
+        if let Ok(mut held) = self.themes.lock() {
+            *held = themes;
+        }
+    }
+
+    /// Whether the theme `name` is installed (taken as there while nobody can tell).
+    pub fn theme_installed(&self, name: &str) -> bool {
+        let Ok(themes) = self.themes.lock() else {
+            return true;
+        };
+        themes.as_ref().is_none_or(|themes| themes(name))
     }
 
     /// What the main loop says of a toast (none while no loop runs).
@@ -800,6 +819,11 @@ impl ServiceHost {
 
     pub fn mode(&self) -> Option<String> {
         self.hub.mode()
+    }
+
+    /// Whether the theme `name` is installed.
+    pub fn theme_installed(&self, name: &str) -> bool {
+        self.hub.theme_installed(name)
     }
 
     /// Switches to a mode from `[modes.<name>]` (frame rate, theme); None ends it.

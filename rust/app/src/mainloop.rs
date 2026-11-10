@@ -179,6 +179,10 @@ impl MainLoop {
             }
         })));
         host.set_data_dir(home.settings.join("plugins-data"));
+        let themes = home.places();
+        host.set_themes(Some(Box::new(move |name| {
+            versions::find_theme(name, &themes).is_ok()
+        })));
         let manager = Manager::new(&host, crate::services::parts());
         let mut made = MainLoop {
             env: Env {

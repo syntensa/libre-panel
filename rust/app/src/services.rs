@@ -20,6 +20,7 @@ pub const SCRIPT_ENV: &str = "LP_HOST_SCRIPT";
 pub fn parts() -> IndexMap<&'static str, Part> {
     let mut parts = IndexMap::new();
     parts.insert("agents", lp_services::agents_service::part());
+    parts.insert("autopilot", lp_services::autopilot::part());
     parts.insert("game", lp_services::game::part());
     parts.insert("notices", lp_services::notices::part());
     parts.insert("power", lp_services::power::part());

@@ -1841,7 +1841,14 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       computers of launchers, this computer's programs against psutil and 250 services of
       steps (two languages) compared with Python; in the app, a program from the list
       starts and ends, and the panel follows it into `[modes.game]` and back
-- [ ] downloads, memory with its store and the round report, cooling, autopilot, devices
+- [x] the autopilot (services/autopilot.py, lp-services' autopilot): the rules read (what
+      is wrong with one), the signals of each sample (music, the microphone, the load's mean
+      over a window, a program, the time of day), the first rule that holds once it has held
+      long enough and the theme before has stayed long enough, a theme that is not installed
+      (the host asks the main loop), a mode that rests it, and its status. 300 services of
+      samples compared with Python; in the app, music that plays shows the rule's theme and
+      config.toml's is back when it stops
+- [ ] downloads, memory with its store and the round report, cooling, devices
 
 ### R9 the app
 - [ ] the server and every route of its API, the same JSON

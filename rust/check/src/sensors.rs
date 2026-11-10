@@ -2136,6 +2136,8 @@ type Running = (Vec<lp_services::machine::Program>, i64, Vec<(i64, f64)>);
 struct MadeUpComputer {
     has_foreground: bool,
     state: std::sync::Mutex<Running>,
+    /// whether the microphone records, the program in front and how long the system is up
+    more: std::sync::Mutex<(bool, Option<String>, Option<f64>)>,
 }
 
 impl lp_services::machine::Machine for MadeUpComputer {
@@ -2163,8 +2165,97 @@ impl lp_services::machine::Machine for MadeUpComputer {
             .map(|(_, age)| *age)
     }
     fn uptime_s(&self) -> Option<f64> {
-        None
+        self.more.lock().ok().and_then(|more| more.2)
     }
+    fn microphone_in_use(&self) -> bool {
+        self.more.lock().is_ok_and(|more| more.0)
+    }
+    fn foreground_name(&self) -> Option<String> {
+        self.more.lock().ok().and_then(|more| more.1.clone())
+    }
+}
+
+/// autopilot: each service's rules (what is wrong with them, the readings they read) and
+/// its samples `[now, readings, minutes, resting, [microphone, program in front, programs,
+/// uptime], themes installed]`: what each asks of the host, and its status.
+fn autopilot(case: &Value) -> Result<Value, String> {
+    use lp_render::snapshot::{Reading, Snapshot};
+    use lp_services::autopilot::{options_of, parse_rules, Action, Core};
+    use lp_services::machine::Program;
+    use std::sync::Arc;
+    let text = |value: &Value| value.as_str().unwrap_or("").to_string();
+    let how = lp_py::json::Dumps::default();
+    let mut services = Vec::new();
+    for service in case["services"].as_array().into_iter().flatten() {
+        let lp_py::Value::Dict(options) = loaded(&service["options"]) else {
+            return Err("options that are no table".into());
+        };
+        let computer = Arc::new(MadeUpComputer {
+            has_foreground: service["has_foreground"].as_bool() == Some(true),
+            ..MadeUpComputer::default()
+        });
+        let mut reports = Vec::new();
+        let raw = options
+            .get("rules")
+            .and_then(lp_py::Value::as_list)
+            .unwrap_or(&[]);
+        let rules = parse_rules(raw, &mut |line| reports.push(line));
+        let mut core = Core::new(rules, options_of(&options), computer.clone());
+        let mut steps = Vec::new();
+        for step in service["steps"].as_array().into_iter().flatten() {
+            let now = step[0].as_f64().unwrap_or(0.0);
+            let mut snapshot = Snapshot::default();
+            if let lp_py::Value::Dict(readings) = loaded(&step[1]) {
+                for (key, value) in readings {
+                    snapshot.readings.insert(key, Reading::of(value));
+                }
+            }
+            if let (Ok(mut state), Ok(mut more)) = (computer.state.lock(), computer.more.lock()) {
+                state.0 = (step[4][2].as_array().into_iter().flatten())
+                    .map(|name| Program {
+                        name: text(name),
+                        pid: 0,
+                        path: String::new(),
+                    })
+                    .collect();
+                *more = (
+                    step[4][0].as_bool() == Some(true),
+                    step[4][1].as_str().map(str::to_string),
+                    step[4][3].as_f64(),
+                );
+            }
+            let themes: Vec<String> = step[5].as_array().into_iter().flatten().map(text).collect();
+            let resting = step[3].as_bool() == Some(true);
+            let acts: Vec<Value> = core
+                .sample(
+                    &snapshot,
+                    now,
+                    step[2].as_i64().unwrap_or(0),
+                    resting,
+                    &|theme| themes.iter().any(|name| name == theme),
+                )
+                .iter()
+                .map(|action| match action {
+                    Action::Note(line) => json!(["note", line]),
+                    Action::Show(theme, transition) => {
+                        json!(["show", theme, transition.as_ref().map(|t| t.name.clone())])
+                    }
+                    Action::Restore(transition) => {
+                        json!(["restore", transition.as_ref().map(|t| t.name.clone())])
+                    }
+                })
+                .collect();
+            let status = lp_py::Value::Dict(core.status(now, resting));
+            steps.push(json!({"acts": acts, "status": lp_py::json::dumps(&status, &how)}));
+        }
+        services.push(json!({
+            "reports": reports,
+            "wants": core.wants(),
+            "rules": core.rules().len(),
+            "steps": steps,
+        }));
+    }
+    Ok(json!({"services": services}))
 }
 
 /// game: each service's steps `[now, what, ...]` on a made-up computer (a look for a game
@@ -2311,6 +2402,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "launchers" => launchers(case),
         "machine" => machine(case),
         "game" => game(case)?,
+        "autopilot" => autopilot(case)?,
         "mangohud" => mangohud(case)?,
         "media" => media(case),
         "appicon" => appicon(case),
