@@ -19,6 +19,7 @@ pub const SCRIPT_ENV: &str = "LP_HOST_SCRIPT";
 /// The services of this build.
 pub fn parts() -> IndexMap<&'static str, Part> {
     let mut parts = IndexMap::new();
+    parts.insert("timer", lp_services::timer::part());
     if std::env::var_os(SCRIPT_ENV).is_some() {
         parts.insert(
             "script",
@@ -35,7 +36,7 @@ pub fn parts() -> IndexMap<&'static str, Part> {
 /// start: `["publish", key, value, unit, label]`, `["state", key, value]`, `["unpublish",
 /// key]`, `["want", key, ...]`, `["theme", name or null, transition or null, priority, mode
 /// ("*": every)]`, `["mode", name or null, transition or null]`, `["notify", text, kind,
-/// rank, seconds or null]`.
+/// rank, seconds or null]`, `["shortcut", action]` (a keyboard shortcut pressed).
 struct Script {
     host: ServiceHost,
     stop: Arc<AtomicBool>,
@@ -84,6 +85,11 @@ fn follow(host: &ServiceHost, step: &[Value]) -> Result<(), String> {
             }
         },
         "mode" => host.set_mode(text(2), transition(3)),
+        "shortcut" => {
+            let action = key.to_string();
+            host.hub()
+                .emit(lp_services::host::Event::Shortcut { action }, false);
+        }
         "notify" => {
             let toast = Toast {
                 kind: text(3).unwrap_or("").to_string(),

@@ -1538,6 +1538,51 @@ fn services_host(case: &Value) -> Result<Value, String> {
     Ok(json!({"runs": runs, "options": options}))
 }
 
+/// timer: the timer of each [minutes, break_minutes, steps] after each step (["toggle",
+/// now], ["reset"], ["tick", now]): what it says where its time is up, and its readings, in
+/// the case's language; and the clock's text of each number of seconds.
+fn timer(case: &Value) -> Result<Value, String> {
+    use lp_services::timer::{clock_text, Core};
+    let locale = std::path::PathBuf::from(case["locale"].as_str().unwrap_or(""));
+    let code = case["language"].as_str().unwrap_or("en");
+    lp_i18n::set_language(lp_i18n::Language::load(&locale, code)?);
+    let mut runs = Vec::new();
+    for run in case["runs"].as_array().into_iter().flatten() {
+        let number = |n: usize| run[n].as_f64().unwrap_or(0.0);
+        let mut core = Core::new(number(0), number(1));
+        let mut steps = Vec::new();
+        for step in run[2].as_array().into_iter().flatten() {
+            let now = step[1].as_f64().unwrap_or(0.0);
+            let told = match step[0].as_str().unwrap_or("") {
+                "toggle" => {
+                    core.toggle(now);
+                    None
+                }
+                "reset" => {
+                    core.reset();
+                    None
+                }
+                _ => core.tick(now).map(lp_i18n::t),
+            };
+            let readings: Vec<Value> = core
+                .readings()
+                .iter()
+                .map(|(key, value, unit, label)| json!([key, plain(value), unit, label]))
+                .collect();
+            steps.push(json!([told, readings]));
+        }
+        runs.push(json!(steps));
+    }
+    lp_i18n::set_language(lp_i18n::Language::english());
+    let texts: Vec<String> = case["seconds"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|seconds| clock_text(seconds.as_f64().unwrap_or(0.0)))
+        .collect();
+    Ok(json!({"runs": runs, "texts": texts}))
+}
+
 pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "regex" => regex(case),
@@ -1559,6 +1604,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "calendar" => calendar(case)?,
         "shared_memory" => shared_memory(case)?,
         "services_host" => services_host(case)?,
+        "timer" => timer(case)?,
         "mangohud" => mangohud(case)?,
         "media" => media(case),
         "appicon" => appicon(case),

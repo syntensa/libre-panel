@@ -1799,9 +1799,13 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       events (sample, fresh, theme-changed, panel-connected, -lost, -restarted, quit). The
       services config.toml enables that this build lacks are said. A run with a service of
       the test's own: its theme, its mode, the fades between them, its message
+- [x] the timer (services/timer.py, lp-services' timer): minutes counted down, focus and
+      break in turn, started, paused and set back by its shortcuts, its readings and its
+      notice. 300 runs of steps compared with Python in two languages; in the app, started
+      by a shortcut and its notice on the panel. The shortcuts themselves ([hotkeys]) and
+      the app's buttons are not there yet
 - [ ] game mode, notices, AI activity (Claude Code, Codex), downloads, memory and its store,
-      timer, cooling, power, autopilot, devices, weather, media (Windows' media session, MPRIS),
-      audio
+      cooling, power, autopilot, devices
 
 ### R9 the app
 - [ ] the server and every route of its API, the same JSON

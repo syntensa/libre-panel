@@ -130,3 +130,70 @@ def test_the_services_host_holds_what_pythons_holds() -> None:
         assert got[0] == [[key, repr(value)] for key, value in wanted.items()], given
         seen["unknown"] += len(got[1])
     assert all(count > 30 for count in seen.values()), seen
+
+
+class _Host:
+    """A service's host for a test: what it published last, and what it said."""
+
+    def __init__(self) -> None:
+        self.published: dict[str, list[Any]] = {}
+        self.said: list[str] = []
+
+    def publish(self, key: str, value: Any, unit: str = "", label: str = "") -> None:
+        self.published[key] = [key, value, unit, label]
+
+    def notify(self, text: str, **_: Any) -> None:
+        self.said.append(text)
+
+    def on(self, *_: Any) -> None:
+        pass
+
+
+def test_the_timer_counts_as_timer_py_counts() -> None:
+    """services/timer.py: started, paused and set back at moments of a clock, the time that
+    is up (a plain timer; focus and break in turn), what it says then and its readings; and
+    the clock's text of seconds."""
+    from libre_panel import i18n
+    from libre_panel.services import timer
+
+    rng = random.Random(0x7133)
+    runs = []
+    for _ in range(300):
+        minutes = rng.choice([25, 0.05, 0.1, 1, 0, 90])
+        breaks = rng.choice([0, 0, 0.05, 5, -1])
+        now, steps = rng.uniform(0, 1000), []
+        for _ in range(rng.randrange(1, 60)):
+            now += rng.choice([0.2, 0.2, 1.0, 2.9, 3.0, 30.0, 400.0])
+            kind = rng.choice(["toggle", "tick", "tick", "tick", "reset"])
+            steps.append([kind, now])
+        runs.append([minutes, breaks, steps])
+    seconds = [0, 0.1, 1, 59.0, 59.01, 60, 61.5, 3599.5, 3600, 3661.2, 86400.0, -5, 1e7, 0.999]
+    for language in ("en", "de"):
+        [ours] = run([{"op": "timer", "locale": str(i18n.LOCALE_DIR), "language": language,
+                       "runs": runs, "seconds": seconds}])  # fmt: skip
+        assert ours["texts"] == [timer.clock_text(s) for s in seconds]
+        seen = {"up": 0, "break": 0, "over": 0, "paused": 0}
+        i18n.set_language(language)
+        try:
+            for (minutes, breaks, steps), found in zip(runs, ours["runs"], strict=True):
+                now = [0.0]
+                host = _Host()
+                options = {"minutes": minutes, "break_minutes": breaks, "notice": True}
+                service = timer.Timer(host, options, clock=lambda now=now: now[0])
+                for (kind, at), (told, readings) in zip(steps, found, strict=True):
+                    now[0] = at
+                    host.said.clear()
+                    {"toggle": service.toggle, "reset": service.reset, "tick": service.tick}[kind]()
+                    assert ([told] if told else []) == host.said, (minutes, breaks, steps)
+                    rows = [list(row) for row in host.published.values()]
+                    for row in rows:
+                        if isinstance(row[1], float):
+                            row[1] = {"float": repr(row[1])}
+                    assert readings == rows, (minutes, breaks, steps, at)
+                    if told:
+                        seen["up" if breaks <= 0 else "break" if service.phase == "break"
+                             else "over"] += 1  # fmt: skip
+                    seen["paused"] += kind == "toggle" and not service.running
+        finally:
+            i18n.set_language("en")
+        assert all(count > 20 for count in seen.values()), seen

@@ -687,6 +687,11 @@ impl ServiceHost {
         }
     }
 
+    /// The host all services share.
+    pub fn hub(&self) -> &Arc<PluginHost> {
+        &self.hub
+    }
+
     /// The latest readings and history the panel was drawn from.
     pub fn snapshot(&self) -> Option<Arc<Snapshot>> {
         self.hub.latest()
