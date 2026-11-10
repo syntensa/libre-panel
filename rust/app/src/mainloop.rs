@@ -441,6 +441,8 @@ impl MainLoop {
                     self.hub = hub;
                     self.wants.clear();
                 }
+                // ([hardware]: the names of this computer's parts and its fans)
+                self.hub.follow_config(&fresh);
                 self.config = fresh;
                 self.renderer = None;
                 self.refused = None;

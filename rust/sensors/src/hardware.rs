@@ -21,7 +21,6 @@
 //! names are the user's, so nothing here writes one to the log.
 
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
 
 use lp_py::Value;
 use lp_render::Reading;
@@ -588,10 +587,25 @@ fn scan_machine() -> Found {
     }
 }
 
-/// What this computer is made of. It is asked once, in the first call.
-pub fn scan() -> &'static Found {
-    static FOUND: OnceLock<Found> = OnceLock::new();
-    FOUND.get_or_init(scan_machine)
+static FOUND: std::sync::Mutex<Option<std::sync::Arc<Found>>> = std::sync::Mutex::new(None);
+
+/// What this computer is made of. It is asked once, in the first call, and not again unless
+/// [`scan_again`] says so.
+pub fn scan() -> std::sync::Arc<Found> {
+    let mut found = FOUND
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    std::sync::Arc::clone(found.get_or_insert_with(|| std::sync::Arc::new(scan_machine())))
+}
+
+/// scan(refresh=True): the computer asked again (a card was changed while Libre Panel runs).
+pub fn scan_again() -> std::sync::Arc<Found> {
+    let fresh = std::sync::Arc::new(scan_machine());
+    let mut found = FOUND
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    *found = Some(std::sync::Arc::clone(&fresh));
+    fresh
 }
 
 /// The card to name: the one whose name has `prefer` (the `gpu` option of
@@ -688,7 +702,7 @@ impl HardwareSource {
     /// `custom`: `[hardware]`'s cpu_name, gpu_name and memory_name; `prefer`: the `gpu` of
     /// `[sensors.librehardwaremonitor]`.
     pub fn new(custom: [&str; 3], prefer: &str) -> HardwareSource {
-        HardwareSource::of(scan(), custom, prefer)
+        HardwareSource::of(&scan(), custom, prefer)
     }
 
     pub fn of(found: &Found, custom: [&str; 3], prefer: &str) -> HardwareSource {

@@ -9,6 +9,8 @@ mod company;
 mod display;
 mod drawings;
 mod editing;
+mod fan_names;
+mod hardware;
 mod home;
 mod hotkeys;
 mod http;

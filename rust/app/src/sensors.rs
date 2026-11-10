@@ -693,6 +693,8 @@ pub struct Hub {
     owners: IndexMap<String, usize>,
     /// each source's pictures as they were last taken: their state and their keys
     pictures: Vec<(u64, Vec<String>)>,
+    /// the fans by the names they go by
+    names: crate::fan_names::FanNames,
 }
 
 impl Hub {
@@ -704,6 +706,18 @@ impl Hub {
             notes: Vec::new(),
             owners: IndexMap::new(),
             pictures: Vec::new(),
+            names: crate::fan_names::FanNames::default(),
+        }
+    }
+
+    /// config.toml was loaded: `[hardware]`, which no source's own table holds (the names of
+    /// the processor, card and memory, and of the fans).
+    pub fn follow_config(&mut self, config: &lp_config::Config) {
+        self.names.follow_config(config);
+        for source in &mut self.sources {
+            if source.name() == "hardware" {
+                *source = Box::new(Hardware::of(config));
+            }
         }
     }
 
@@ -762,6 +776,7 @@ impl Hub {
                 }
             }
         }
+        self.names.apply(&mut readings);
         readings
     }
 
@@ -947,11 +962,12 @@ impl Hub {
                 sources.push(Box::new(Hardware::of(config))); // the names of this PC
             }
         }
-        let hub = Hub {
+        let mut hub = Hub {
             wanted,
             notes,
             ..Hub::new(sources)
         };
+        hub.names.follow_config(config);
         (hub, missing)
     }
 
@@ -977,6 +993,7 @@ impl Hub {
             }
         }
         self.owners = owners;
+        self.names.apply(&mut readings);
         for (key, reading) in &readings {
             let number = match &reading.value {
                 Value::Float(f) => Some(*f),

@@ -160,6 +160,20 @@ pub fn parse_qs(query: &str) -> indexmap::IndexMap<String, Vec<String>> {
     found
 }
 
+/// parse_qs(query, keep_blank_values=True): a name without a value, or without "=", too.
+pub fn parse_qs_blank(query: &str) -> indexmap::IndexMap<String, Vec<String>> {
+    let mut found: indexmap::IndexMap<String, Vec<String>> = indexmap::IndexMap::new();
+    for pair in query.split('&') {
+        if pair.is_empty() {
+            continue;
+        }
+        let (name, value) = pair.split_once('=').unwrap_or((pair, ""));
+        let plain = |text: &str| unquote(&text.replace('+', " "));
+        found.entry(plain(name)).or_default().push(plain(value));
+    }
+    found
+}
+
 /// The first value of a name in a query, or "".
 pub fn first<'a>(query: &'a indexmap::IndexMap<String, Vec<String>>, name: &str) -> &'a str {
     query

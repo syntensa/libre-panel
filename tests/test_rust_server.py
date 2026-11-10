@@ -4,6 +4,7 @@ and the body, byte for byte."""
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import logging
 import os
@@ -23,6 +24,7 @@ from test_rust_app import DATA, _libraries, _program
 
 from libre_panel import i18n
 from libre_panel.editor import server as editor
+from libre_panel.sensors import hardware
 from libre_panel.weather import open_meteo
 
 pytestmark = pytest.mark.skipif(
@@ -1361,6 +1363,42 @@ def test_the_log_and_the_language_are_as_server_py_has_them(servers: Any) -> Non
         theirs, ours = ask(_post("/api/language", payload))
         assert ours == theirs, payload
         theirs, ours = ask(_get("/api/i18n", WITH))
+        assert ours == theirs, payload
+        configs = [(side / "config.toml").read_text("utf-8") for side in homes]
+        assert configs[1] == configs[0], payload
+
+
+def test_the_hardware_settings_are_as_server_py_has_them(
+    servers: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The parts' names as found and as written, the fans named, with their looks, in the
+    order people count; each change written into config.toml as Python writes it, and what
+    is refused."""
+    ask, homes = servers
+    # (this computer's parts, as the Rust program finds them, not the tests' empty machine)
+    spec = importlib.util.find_spec("libre_panel.sensors.hardware")
+    assert spec is not None and spec.loader is not None
+    fresh = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fresh)
+    monkeypatch.setattr(hardware, "_scan_machine", fresh._scan_machine)
+    for side in homes:
+        with (side / "config.toml").open("a", encoding="utf-8") as config:
+            config.write('[hardware]\ncpu_name = "Mine"\n\n[[hardware.fans]]\n'
+                         'sensor = "fan.lpc.fan_10"\nname = "Back"\n')  # fmt: skip
+    for query in ("", "?refresh", "?refresh=1", "?refresh=0", "?refresh=false"):
+        theirs, ours = ask(_get(f"/api/hardware{query}", WITH))
+        assert ours[2] == theirs[2], query
+        assert ours == theirs, query
+    for payload in (
+        {"cpu": "My  CPU\x07", "gpu": ""}, {"fans": {"fan.lpc.fan_2": "Intake"}},
+        {"fan_looks": {" fan.lpc.fan_2 ": "libre"}, "fan_paints": {"gpu.fan": "own"}},
+        {"fan_look": "noctua-a14", "fan_paint": "own"}, {"fan_look": ""},
+        {"fans": {"fan.lpc.fan_10": ""}, "memory": "Fast"}, {}, [1], {"cpu": 5},
+        {"disk": "x"}, {"fans": {" ": "x"}}, {"fans": {"a": 1}}, {"fans": []},
+        {"fan_look": "nope"}, {"fan_looks": {"a": "nope"}}, {"cpu": "x" * 200},
+        {"fans": {"fan.lpc.fan_3": "y" * 200}},
+    ):  # fmt: skip
+        theirs, ours = ask(_post("/api/hardware", payload))
         assert ours == theirs, payload
         configs = [(side / "config.toml").read_text("utf-8") for side in homes]
         assert configs[1] == configs[0], payload

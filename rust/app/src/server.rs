@@ -293,6 +293,15 @@ const ROUTES: &[Route] = &[
         x.json(&Value::Dict(i18n(s)), 200)
     }),
     private("GET", "/api/app", |s, x, _, _| app_state(s, x)),
+    private("GET", "/api/hardware", |s, x, _, u| {
+        // (`?refresh=1`, and `?refresh`: ask the computer for its parts' names again)
+        let query = crate::http::parse_qs_blank(&u.query);
+        let refresh = query
+            .get("refresh")
+            .and_then(|asked| asked.first())
+            .is_some_and(|asked| asked != "0" && asked != "false");
+        hardware_answer(s, x, refresh);
+    }),
     private("GET", "/api/logs", |_, x, _, u| {
         let query = crate::http::parse_qs(&u.query);
         let level = query.get("level").and_then(|asked| asked.first());
@@ -324,6 +333,15 @@ const ROUTES: &[Route] = &[
     }),
     private("POST", "/api/news", |s, x, _, _| see_news(s, x)),
     private("POST", "/api/logs", |_, x, _, _| set_verbose(x)),
+    private("POST", "/api/hardware", |s, x, _, _| {
+        let Some(payload) = x.read_json(MAX_JSON) else {
+            return;
+        };
+        match crate::hardware::set_hardware(&payload, &s.config_file) {
+            Ok(()) => hardware_answer(s, x, false),
+            Err(why) => x.error(&why, 400, ""),
+        }
+    }),
     private("POST", "/api/language", |s, x, _, _| set_language(s, x)),
     private("POST", "/api/update", |s, x, _, _| update_later(s, x)),
     private("POST", "/api/system", |s, x, _, _| {
@@ -473,6 +491,16 @@ fn see_news(state: &State, exchange: &mut Exchange) {
         _ => "",
     };
     match state.news.see(seen) {
+        Ok(told) => exchange.json(&told, 200),
+        Err(why) => exchange.error(&why, 400, ""),
+    }
+}
+
+/// The Settings' hardware: the parts' names, the fans this computer reads now, their looks.
+fn hardware_answer(state: &State, exchange: &mut Exchange, refresh: bool) {
+    let readings = live_snapshot(state).map(|snapshot| snapshot.readings);
+    let readings = readings.unwrap_or_default();
+    match crate::hardware::hardware(&state.config_file, &readings, refresh) {
         Ok(told) => exchange.json(&told, 200),
         Err(why) => exchange.error(&why, 400, ""),
     }

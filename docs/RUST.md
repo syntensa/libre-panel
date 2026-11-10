@@ -1995,6 +1995,12 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       entry; `/api/logs/file`: the whole of it and a hang; the person's folders taken out as
       the doctor does), its detail switched without a restart; the app's language set
       (`/api/language`) and spoken at once.
+      The Settings' hardware (`/api/hardware`, `rust/app/src/hardware.rs`): the parts'
+      names as found (asked again with `?refresh`) and as written, the fans this computer
+      reads with their names, looks and colours, in the order people count; each change in
+      one write. The fans go by these names on the panel too (`rust/app/src/fan_names.rs`:
+      the user's own, else FanControl's, else the sensor's), and the main loop follows
+      `[hardware]` when config.toml changes.
       `libre-panel editor` serves alone, `start` with
       the panel, and writes its address where a later start finds it. 120 requests to
       Python's server and to this one compared: the status, the headers and the body, byte
