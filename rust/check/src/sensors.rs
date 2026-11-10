@@ -1583,6 +1583,45 @@ fn timer(case: &Value) -> Result<Value, String> {
     Ok(json!({"runs": runs, "texts": texts}))
 }
 
+/// power: the power count of each [sensors, rest_w, price, currency, kept (power.json's
+/// text or null), steps] after each step [now, wall, readings]: its readings; and the
+/// totals it keeps at the end.
+fn power(case: &Value) -> Result<Value, String> {
+    use lp_services::power::Core;
+    let mut runs = Vec::new();
+    for run in case["runs"].as_array().into_iter().flatten() {
+        let Ok(lp_py::Value::List(sensors)) = lp_py::json::loads(&run[0].to_string()) else {
+            return Err("sensors that are no list".into());
+        };
+        let number = |n: usize| run[n].as_f64().unwrap_or(0.0);
+        let mut core = Core::new(
+            &sensors,
+            number(1),
+            number(2),
+            run[3].as_str().unwrap_or(""),
+        );
+        let mut steps = Vec::new();
+        let mut loaded = false;
+        for step in run[5].as_array().into_iter().flatten() {
+            let wall = crate::datetime_of(step[1].as_array().map_or(&[], Vec::as_slice));
+            if !std::mem::replace(&mut loaded, true) {
+                core.load(run[4].as_str(), &wall);
+            }
+            let Ok(lp_py::Value::Dict(readings)) = lp_py::json::loads(&step[2].to_string()) else {
+                return Err("readings that are no table".into());
+            };
+            let value_of = |key: &str| readings.get(key).cloned();
+            let found = core.sample(&value_of, step[0].as_f64().unwrap_or(0.0), &wall);
+            steps.push(json!(found
+                .iter()
+                .map(|(key, value, unit, label)| json!([key, plain(value), unit, label]))
+                .collect::<Vec<_>>()));
+        }
+        runs.push(json!([steps, core.kept()]));
+    }
+    Ok(json!({"runs": runs}))
+}
+
 pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "regex" => regex(case),
@@ -1605,6 +1644,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "shared_memory" => shared_memory(case)?,
         "services_host" => services_host(case)?,
         "timer" => timer(case)?,
+        "power" => power(case)?,
         "mangohud" => mangohud(case)?,
         "media" => media(case),
         "appicon" => appicon(case),

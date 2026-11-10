@@ -19,6 +19,7 @@ pub const SCRIPT_ENV: &str = "LP_HOST_SCRIPT";
 /// The services of this build.
 pub fn parts() -> IndexMap<&'static str, Part> {
     let mut parts = IndexMap::new();
+    parts.insert("power", lp_services::power::part());
     parts.insert("timer", lp_services::timer::part());
     if std::env::var_os(SCRIPT_ENV).is_some() {
         parts.insert(

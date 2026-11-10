@@ -206,6 +206,8 @@ pub struct PluginHost {
     judge: Mutex<Option<Judge>>,
     events: Mutex<Option<Sender<Option<Event>>>>,
     threads: Mutex<Vec<JoinHandle<()>>>,
+    /// `<settings>/plugins-data`: where each service has a folder of its own
+    data: Mutex<Option<std::path::PathBuf>>,
 }
 
 impl PluginHost {
@@ -217,6 +219,7 @@ impl PluginHost {
             judge: Mutex::new(None),
             events: Mutex::new(None),
             threads: Mutex::new(Vec::new()),
+            data: Mutex::new(None),
         })
     }
 
@@ -461,6 +464,18 @@ impl PluginHost {
 
     // -- for the main loop -------------------------------------------------------------------
 
+    /// Where the services keep their files: `<settings>/plugins-data`.
+    pub fn set_data_dir(&self, folder: std::path::PathBuf) {
+        if let Ok(mut data) = self.data.lock() {
+            *data = Some(folder);
+        }
+    }
+
+    /// A note for the log, of a service or the loop.
+    pub fn note(&self, text: &str) {
+        self.with(|state| state.notes.push(text.to_string()));
+    }
+
     /// What the main loop says of a toast (none while no loop runs).
     pub fn set_judge(&self, judge: Option<Judge>) {
         if let Ok(mut held) = self.judge.lock() {
@@ -690,6 +705,20 @@ impl ServiceHost {
     /// The host all services share.
     pub fn hub(&self) -> &Arc<PluginHost> {
         &self.hub
+    }
+
+    /// `<settings>/plugins-data/<service>/`: the service's own files; none where the folder
+    /// cannot be made.
+    pub fn data_dir(&self) -> Option<std::path::PathBuf> {
+        let root = self.hub.data.lock().ok()?.clone()?;
+        let folder = root.join(&self.name);
+        std::fs::create_dir_all(&folder).ok()?;
+        Some(folder)
+    }
+
+    /// A line for the log.
+    pub fn note(&self, text: &str) {
+        self.hub.note(text);
     }
 
     /// The latest readings and history the panel was drawn from.

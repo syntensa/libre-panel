@@ -197,3 +197,77 @@ def test_the_timer_counts_as_timer_py_counts() -> None:
         finally:
             i18n.set_language("en")
         assert all(count > 20 for count in seen.values()), seen
+
+
+def test_power_is_counted_as_power_py_counts_it(tmp_path: Any) -> None:
+    """services/power.py: the watts of the sensors named and the rest, the energy of the day
+    and the month they add up to between samples (not over a pause), their cost, a new day
+    and a new month, the totals kept before and those it keeps."""
+    from datetime import datetime, timedelta
+    from types import SimpleNamespace
+
+    from libre_panel.services import power
+
+    rng = random.Random(0x90E4)
+    runs = []
+    for n in range(300):
+        sensors = rng.choice([["cpu.power", "gpu.power"], ["cpu.power"], [], ["psu.out", " ", 5]])
+        rest = rng.choice([0, 50, 62.5, -10])
+        price = rng.choice([0, 0.3, 0.2875, -1])
+        wall = datetime(2026, rng.randrange(1, 13), rng.randrange(1, 29), rng.randrange(24),
+                        rng.randrange(60), rng.randrange(60))  # fmt: skip
+        day = wall.strftime("%Y-%m-%d")
+        totals = json.dumps({
+            "day": rng.choice([day, day, day, "2020-01-01", 5]),
+            "today_wh": rng.choice([12.5, 7, 0.125, "x", None, True, 1e400]),
+            "month": rng.choice([day[:7], day[:7], "2020-01"]),
+            "month_wh": rng.choice([345.678, 0, None]),
+        })  # fmt: skip
+        kept = rng.choice([None, "", "[1]", "{broken", totals, totals, totals, totals])
+        now, steps = rng.uniform(0, 1000), []
+        for _ in range(rng.randrange(1, 40)):
+            pause = rng.choice([1.0, 1.0, 1.0, 0.5, 10.0, 10.5, 0.0, 3600.0, 86400.0])
+            now += pause
+            wall += timedelta(seconds=pause)
+            readings = {key: rng.choice([65.5, 120, 0, -5, None, True, "9", 2**60, 33.333])
+                        for key in ("cpu.power", "gpu.power", "psu.out", "5")
+                        if rng.random() < 0.8}  # fmt: skip
+            steps.append([now, [wall.year, wall.month, wall.day, wall.hour, wall.minute,
+                                wall.second, 0], readings])  # fmt: skip
+        runs.append([sensors, rest, price, rng.choice(["€", "$", "kr"]), kept, steps, n])
+    [ours] = run([{"op": "power", "runs": [r[:6] for r in runs]}])
+    assert "runs" in ours, ours
+
+    seen = {"cost": 0, "kept": 0, "new day": 0, "no sensor": 0}
+    for (sensors, rest, price, currency, kept, steps, n), (found, saved) in zip(
+        runs, ours["runs"], strict=True
+    ):
+        folder = tmp_path / str(n)
+        folder.mkdir()
+        if kept is not None:
+            (folder / power.FILE).write_text(kept, encoding="utf-8")
+        clock = [0.0, datetime(2026, 1, 1)]
+        host = _Host()
+        host.data_dir = folder
+        host.log = SimpleNamespace(warning=lambda *_: None)
+        options = {"sensors": sensors, "rest_w": rest, "price": price, "currency": currency}
+        service = power.Power(host, options, clock=lambda c=clock: c[0], wall=lambda c=clock: c[1])
+        clock[1] = datetime(*steps[0][1][:6])
+        service._load()
+        seen["kept"] += service.today_wh > 0
+        for (now, wall, readings), got in zip(steps, found, strict=True):
+            clock[0], clock[1] = now, datetime(*wall[:6])
+            before = service.day
+            host.published.clear()
+            service.on_sample(SimpleNamespace(value=readings.get))
+            rows = [list(row) for row in host.published.values()]
+            for row in rows:
+                if isinstance(row[1], float):
+                    row[1] = {"float": repr(row[1])}
+            assert got == rows, (sensors, rest, price, kept, steps, now)
+            seen["cost"] += len(rows) == 5
+            seen["new day"] += before != service.day
+            seen["no sensor"] += rows[0][1] is None
+        service._save()
+        assert saved == (folder / power.FILE).read_text(encoding="utf-8"), (kept, steps)
+    assert all(count > 20 for count in seen.values()), seen

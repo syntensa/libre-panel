@@ -3,4 +3,5 @@
 
 pub mod host;
 pub mod manager;
+pub mod power;
 pub mod timer;

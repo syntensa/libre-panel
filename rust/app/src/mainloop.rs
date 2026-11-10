@@ -176,6 +176,7 @@ impl MainLoop {
                 Delivery::shown()
             }
         })));
+        host.set_data_dir(home.settings.join("plugins-data"));
         let manager = Manager::new(&host, crate::services::parts());
         let mut made = MainLoop {
             env: Env {

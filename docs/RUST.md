@@ -1804,8 +1804,13 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       notice. 300 runs of steps compared with Python in two languages; in the app, started
       by a shortcut and its notice on the panel. The shortcuts themselves ([hotkeys]) and
       the app's buttons are not there yet
+- [x] power (services/power.py, lp-services' power): the watts of the sensors named and
+      the rest of the PC, the energy of the day and the month and their cost, kept in the
+      service's folder (`plugins-data/power/power.json`) every minute and at the end. 300
+      runs of samples compared with Python; in the app, counted from a reading of the
+      test's and kept at the end
 - [ ] game mode, notices, AI activity (Claude Code, Codex), downloads, memory and its store,
-      cooling, power, autopilot, devices
+      cooling, autopilot, devices
 
 ### R9 the app
 - [ ] the server and every route of its API, the same JSON

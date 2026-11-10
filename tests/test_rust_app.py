@@ -1464,3 +1464,34 @@ def test_the_timer_runs_and_says_when_its_time_is_up(tmp_path: Path) -> None:
     # nothing but the theme's ground until its time is up, then the notice on it
     assert others and all(other == 0 for at, other in others if at < 1.5), others[:20]
     assert any(other > 500 for at, other in others if at > 2.0), others[-20:]
+
+
+def test_power_is_counted_and_kept(tmp_path: Path) -> None:
+    """`power` among the services: the watts another source reports (here the test's script)
+    with the rest of the PC add up, sample after sample, to the energy of the day, which is
+    kept in the service's folder when the program ends."""
+    (tmp_path / "config.toml").write_text(
+        'theme = "slate"\nfps = 2\nrefresh_ms = 200\n[device]\ndriver = "virtual"\n'
+        'output = "panel.png"\n[sensors]\nproviders = []\n[services]\nenabled = ["power"]\n'
+        "[services.power]\nrest_w = 3500\nprice = 0.3\n",
+        encoding="utf-8",
+    )
+    script = tmp_path / "script.json"
+    script.write_text(json.dumps([[0.0, "publish", "cpu.power", 100.0, "W", "CPU"]]),
+                      encoding="utf-8")  # fmt: skip
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries(), "LP_HOST_SCRIPT": str(script)}  # fmt: skip
+    with subprocess.Popen([str(_program()), "run"], env=env, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        time.sleep(4)
+        if os.name == "nt":
+            program.terminate()
+            program.communicate(timeout=30)
+            pytest.skip("ended at once on Windows: the totals are kept every minute")
+        program.send_signal(signal.SIGINT)
+        said = program.communicate(timeout=30)[1]
+    assert "service 'power' started" in said, said
+    kept = json.loads((tmp_path / "plugins-data" / "power" / "power.json").read_text("utf-8"))
+    assert kept["day"] == time.strftime("%Y-%m-%d") and kept["month"] == time.strftime("%Y-%m")
+    # 3600 W for some three seconds: about a watt hour a second
+    assert 1.5 < kept["today_wh"] < 4.5 and kept["month_wh"] == kept["today_wh"], kept
