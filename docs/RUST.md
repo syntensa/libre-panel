@@ -80,6 +80,7 @@ all of it. It is the reference every Rust piece is checked against:
 | server | the app's HTTP server and its API | editor/ (server side) |
 | ui | the app's pages in Rust (WebAssembly), the same HTML and CSS | editor/app (JavaScript) |
 | app | the program: command line, config, log, single instance, tray, window, autostart, light mode | the top-level modules |
+| window | the app's window, a program of its own (WebView2, WebKitGTK) | window.py, gtk_window.py |
 | check | `lp-check`, the comparison program for the tests | — |
 
 The engine (engine/) moves into the workspace as the panels' loop takes it over: one process
@@ -2083,8 +2084,21 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       the running app is (its address with the token, waiting for one that is starting
       where it opens the window) and ends, `run` is refused with cli.py's words. The tests:
       a second start and a run beside the background app
-- [ ] the window (wry, tao), the tray icon, the command line, autostart, updates,
-      languages, the log, light mode
+- [x] the app's window (window.py): a program of its own, `libre-panel-window` (rust/window,
+      tao and wry: WebView2 on Windows, WebKitGTK on Linux), so that GTK and WebKitGTK are
+      not linked into `libre-panel` (which runs where they are missing, and whose FreeType
+      and HarfBuzz are not mixed with theirs); it takes in the app's files it shares
+      (window.rs, access.rs, instance.rs, logs.rs, home.rs). `start` (without
+      `--no-browser`) opens it, and so does a second start; an open window comes to the
+      front on the view asked for (`focus <token> <url>` on its own port, window.json), one
+      opening is waited for (window.lock), one that ends with an error within 15 s gives way
+      to the browser; it is started apart from the app (its own process group; on Windows
+      no console) with what it says in logs/window.log; it keeps its size (window-state.json),
+      asks before closing with changes not saved, opens other addresses in the browser and
+      saves a theme's export where the person chooses; it closes as the app quits. The test
+      (Linux, an X server of Xvfb's): the window opens, a second start brings the same one
+      forward, the app's quit closes it and its size is kept, no browser opens
+- [ ] the tray icon, the command line, autostart, updates, languages, the log, light mode
 - [x] the background app (service.py's PanelService and BackgroundApp, as far as there is no
       window yet; `libre-panel start`): the panel's loop in a thread that is paused, resumed
       and started anew, with the services and the shortcuts beside it, which go on while the

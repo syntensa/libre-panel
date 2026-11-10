@@ -44,7 +44,12 @@ impl InstanceLock {
     /// acquire: the lock in the settings folder `settings`, with this process's number in
     /// it. Err: why not (another Libre Panel holds it, or the folder cannot be written).
     pub fn acquire(settings: &Path) -> Result<InstanceLock, NotLocked> {
-        let path: PathBuf = settings.join(LOCK_FILENAME);
+        InstanceLock::acquire_named(settings, LOCK_FILENAME)
+    }
+
+    /// As `acquire`, the lock of the file `name` in the settings folder (the window's own).
+    pub fn acquire_named(settings: &Path, name: &str) -> Result<InstanceLock, NotLocked> {
+        let path: PathBuf = settings.join(name);
         let failed = |why: std::io::Error| NotLocked::Failed(why.to_string());
         std::fs::create_dir_all(settings).map_err(failed)?;
         let mut file = (OpenOptions::new().read(true).append(true).create(true))

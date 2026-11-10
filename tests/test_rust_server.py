@@ -15,6 +15,7 @@ import socket
 import subprocess
 import sys
 import threading
+import time
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -250,7 +251,7 @@ def test_the_background_app_is_controlled_through_its_server(tmp_path: Path) -> 
     )
     env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
            **_libraries()}  # fmt: skip
-    with subprocess.Popen([str(_program()), "start", "--port", "0"], env=env,
+    with subprocess.Popen([str(_program()), "start", "--port", "0", "--no-browser"], env=env,
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           encoding="utf-8") as program:  # fmt: skip
         try:
@@ -341,7 +342,7 @@ def test_the_live_picture_is_the_frame_on_each_panel_as_control_py_makes_it(
     )
     env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
            **_libraries()}  # fmt: skip
-    with subprocess.Popen([str(_program()), "start", "--port", "0"], env=env,
+    with subprocess.Popen([str(_program()), "start", "--port", "0", "--no-browser"], env=env,
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           encoding="utf-8") as program:  # fmt: skip
         try:
@@ -429,7 +430,7 @@ def test_controls_sources_are_those_the_panel_reads_as_control_py_lists_them(
     )
     env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
            **_libraries()}  # fmt: skip
-    with subprocess.Popen([str(_program()), "start", "--port", "0"], env=env,
+    with subprocess.Popen([str(_program()), "start", "--port", "0", "--no-browser"], env=env,
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           encoding="utf-8") as program:  # fmt: skip
         try:
@@ -497,7 +498,7 @@ def test_a_theme_that_is_gone_leaves_the_panel_lit_and_is_said_as_app_py_says_it
     config.write_text('theme = "gone"\n' + head, encoding="utf-8")
     env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
            **_libraries()}  # fmt: skip
-    with subprocess.Popen([str(_program()), "start", "--port", "0"], env=env,
+    with subprocess.Popen([str(_program()), "start", "--port", "0", "--no-browser"], env=env,
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           encoding="utf-8") as program:  # fmt: skip
         try:
@@ -577,6 +578,90 @@ def test_one_libre_panel_drives_the_panel_and_a_second_start_names_the_first(
     )
     assert third.returncode != 0 and refused in third.stderr, third
     assert lock == str(program.pid)
+
+
+def _waited(found: Any, seconds: float) -> Any:
+    """What ``found()`` gives once it gives something, or None after ``seconds``."""
+    until = time.monotonic() + seconds
+    while time.monotonic() < until:
+        if (what := found()) is not None:
+            return what
+        time.sleep(0.1)
+    return None
+
+
+@pytest.mark.skipif(
+    not sys.platform.startswith("linux") or shutil.which("Xvfb") is None,
+    reason="the window on a screen of Xvfb's",
+)
+def test_the_app_opens_its_window_one_window_and_closes_it_as_window_py_does(
+    tmp_path: Path,
+) -> None:
+    """window.py: `start` opens the app in a window of its own, a process apart that says
+    where it is (window.json: its process, the server's port and token, what it shows); a
+    second start brings that window forward and opens no other; as the app quits the window
+    closes, keeps its size (window-state.json) and says it is gone. No browser is opened."""
+    (tmp_path / "config.toml").write_text(
+        'theme = "slate"\nfps = 2\nlanguage = "en"\n[device]\ndriver = "virtual"\n'
+        'output = "panel.png"\n[sensors]\nproviders = []\n',
+        encoding="utf-8",
+    )
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    opened = tmp_path / "browser.txt"
+    (tools / "xdg-open").write_text(f'#!/bin/sh\necho "$@" >> {opened}\n', encoding="utf-8")
+    (tools / "xdg-open").chmod(0o755)
+    read, write = os.pipe()
+    screen = subprocess.Popen(["Xvfb", "-displayfd", str(write), "-screen", "0", "1920x1080x24"],
+                              pass_fds=(write,), stderr=subprocess.DEVNULL)  # fmt: skip
+    os.close(write)
+    try:
+        display = os.read(read, 16).decode().strip()
+    finally:
+        os.close(read)
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           "DISPLAY": f":{display}", "PATH": f"{tools}{os.pathsep}{os.environ['PATH']}",
+           "WAYLAND_DISPLAY": "", **_libraries()}  # fmt: skip
+    running = tmp_path / "window.json"
+
+    def window() -> dict[str, Any] | None:
+        try:
+            return dict(json.loads(running.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            return None
+
+    try:
+        with subprocess.Popen([str(_program()), "start", "--port", "0"], env=env,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              encoding="utf-8") as program:  # fmt: skip
+            try:
+                assert program.stdout is not None
+                address = program.stdout.readline().split(" running at ")[1].split()[0]
+                first = _waited(window, 60)
+                second = subprocess.run([str(_program()), "start"], env=env, timeout=60,
+                                        capture_output=True, encoding="utf-8")  # fmt: skip
+                again = window()
+            finally:
+                program.send_signal(signal.SIGINT)
+                program.communicate(timeout=30)
+        assert first is not None, (tmp_path / "logs" / "window.log").read_text(errors="replace")
+        port = int(address.split(":")[2].split("/")[0])
+        assert sorted(first) == ["pid", "port", "token", "url"]
+        # (its own port, where it answers the other starts; the page it shows, on the app's)
+        assert first["port"] != port and first["url"] == f"http://127.0.0.1:{port}/#/home"
+        assert first["token"] and first["token"] not in address  # (its own, not the app's)
+        assert second.returncode == 0, second
+        assert again == first  # (the same window, brought forward)
+        gone = _waited(lambda: True if not running.exists() else None, 30)
+        assert gone, "the window did not close as the app quit"
+        state = json.loads((tmp_path / "window-state.json").read_text(encoding="utf-8"))
+        assert sorted(state) == ["height", "maximized", "width"]
+        assert not opened.exists(), opened.read_text()
+        said = (tmp_path / "logs" / "window.log").read_text(encoding="utf-8")
+        assert said.startswith("--- ") and " the window starts\n" in said, said
+    finally:
+        screen.terminate()
+        screen.wait(timeout=30)
 
 
 def test_the_themes_are_listed_and_read_as_server_py_reads_them(servers: Any) -> None:

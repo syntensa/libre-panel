@@ -218,6 +218,13 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      # (the app's window is WebKitGTK's on Linux, tao and wry build against GTK 3 and it;
+      # Xvfb for the test that opens it)
+      - name: GTK and WebKitGTK for the app's window (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends libgtk-3-dev libwebkit2gtk-4.1-dev xvfb
       - name: Build and test the crates
         shell: bash
         working-directory: rust
@@ -382,7 +389,8 @@ jobs:
         run: |
           libs="$RUNNER_TEMP/libs"
           mkdir -p libre-panel-rust/share/libre-panel libre-panel-rust/licenses
-          cp rust/target/release/libre-panel.exe libre-panel-rust/
+          cp rust/target/release/libre-panel.exe rust/target/release/libre-panel-window.exe \
+            libre-panel-rust/
           cp rust/app/try-windows.txt libre-panel-rust/README.txt
           cp "$libs/freetype/Release/freetype.dll" "$libs/jpeg/Release/jpeg62.dll" libre-panel-rust/
           cp "$libs"/webp/Release/*.dll libre-panel-rust/

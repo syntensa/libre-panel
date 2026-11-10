@@ -583,6 +583,9 @@ impl BackgroundApp {
     fn stop_editor(&self) {
         let server = self.editor.lock().ok().and_then(|mut editor| editor.take());
         if let Some(mut server) = server {
+            // (the window would show nothing)
+            let url = format!("http://127.0.0.1:{}/", server.port);
+            crate::window::close_window(&self.home.settings, Some(&url));
             access::forget(&self.home.settings, &server.token);
             server.shutdown();
         }

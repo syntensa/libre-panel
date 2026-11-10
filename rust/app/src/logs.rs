@@ -25,6 +25,7 @@ const BACKUPS: u32 = 2;
 pub enum Level {
     Debug = 10,
     Info = 20,
+    Warning = 30,
 }
 
 impl Level {
@@ -32,6 +33,7 @@ impl Level {
         match self {
             Level::Debug => "DEBUG",
             Level::Info => "INFO",
+            Level::Warning => "WARNING",
         }
     }
 }
@@ -68,7 +70,7 @@ pub fn to_file() -> std::io::Result<PathBuf> {
 }
 
 /// logging.Formatter's asctime: the local time, and its milliseconds.
-fn asctime() -> String {
+pub(crate) fn asctime() -> String {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default();

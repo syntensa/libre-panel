@@ -39,6 +39,7 @@ mod specs;
 mod switch;
 mod system;
 mod updates;
+mod window;
 mod zip;
 
 use std::path::PathBuf;
@@ -61,6 +62,8 @@ Libre Panel
   libre-panel editor [options]  the app's server alone (its address, with the token, is
                                 printed)
   libre-panel tray [--background]  the background app, as the start at login runs it
+  libre-panel window URL [--view VIEW]
+                                the app's window (one at a time: an open one comes to the front)
   libre-panel autostart enable|disable|status [--elevated]
                                 start Libre Panel when you log in (--elevated, Windows:
                                 with the highest rights, through Task Scheduler)
@@ -351,6 +354,26 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
             server::serve_until(asked.port.unwrap_or(server::PORT), &home, &file, &STOP)?;
         }
         "autostart" => return autostart(args),
+        "window" => {
+            // `window <url> [--view VIEW]`: the app's window, in a process of its own
+            let mut url = None;
+            let mut view = None;
+            let mut rest = args.iter();
+            while let Some(arg) = rest.next() {
+                match arg.as_str() {
+                    "--view" => view = rest.next().cloned(),
+                    "--config" => drop(rest.next()), // (the app's; the window keeps its own)
+                    other if url.is_none() && !other.starts_with("--") => {
+                        url = Some(other.to_string());
+                    }
+                    other => return Err(format!("window: unknown argument {other}")),
+                }
+            }
+            let url = url.ok_or("window: the app's address")?;
+            let view = view.filter(|view| window::VIEWS.contains(&view.as_str()));
+            let code = window::run_program(&url, view.as_deref());
+            std::process::exit(code);
+        }
         "start" | "tray" => {
             let args_given = args;
             // (the start at login: `tray --background`, as the Python app wrote it too)
@@ -405,13 +428,21 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
                             &[("url", &address)]
                         )
                     );
+                    if open_editor {
+                        let token = token.as_deref();
+                        window::open_window(&home.settings, &url, Some("home"), false, token);
+                    }
                     return Ok(());
                 }
                 Err(why) => return Err(why.message()),
             };
+            let settings = home.settings.clone();
             let app = background::BackgroundApp::new(home, asked.clone());
             if let Some(address) = app.start() {
                 println!("Libre Panel theme editor running at {address}  (Ctrl+C to stop)");
+                if open_editor {
+                    window::open_window(&settings, &address, Some("home"), false, None);
+                }
             }
             // (the tests' own: the controls by lines on the standard input)
             if std::env::var_os("LIBRE_PANEL_CONTROL").is_some_and(|how| how == "stdin") {
