@@ -557,6 +557,7 @@ def test_a_linux_pcs_sensors_are_those_of_the_python_sources(tmp_path: Path) -> 
     source and the psutil source give together on this computer (the chips' temperatures and
     fans from the Linux source alone, as the Python app has it)."""
     pytest.importorskip("psutil")
+    from libre_panel.sensors.base import Reading
     from libre_panel.sensors.linux import LinuxProvider
     from libre_panel.sensors.psutil_provider import PsutilProvider
 
@@ -574,7 +575,20 @@ def test_a_linux_pcs_sensors_are_those_of_the_python_sources(tmp_path: Path) -> 
         time.sleep(0.3)  # (a power needs two readings of its counter, a while apart)
         # (the round before is dropped where the program took longer than SLOW_FRESH: CI)
         linux.read_slow()
-        wanted = _named({**provider.read(), **linux.read()})
+        read = {**provider.read(), **linux.read()}
+        # a drive that did not answer this round (its own thread may have asked it at the
+        # same moment) is asked again, as the program's thread does a few seconds later
+        for item in linux._plan.slow:
+            for _ in range(5):
+                value = item.key not in read and item.read()
+                if value is None:
+                    time.sleep(0.2)
+                    continue
+                if value is not False:
+                    name = linux._plan.names[item.key]
+                    read[item.key] = Reading(item.key, value, item.unit, name)
+                break
+        wanted = _named(read)
     finally:
         linux.close()
         provider.close()
