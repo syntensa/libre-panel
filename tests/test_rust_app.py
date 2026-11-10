@@ -572,6 +572,8 @@ def test_a_linux_pcs_sensors_are_those_of_the_python_sources(tmp_path: Path) -> 
         linux.read_slow()
         done = _run(tmp_path, "sensors")
         time.sleep(0.3)  # (a power needs two readings of its counter, a while apart)
+        # (the round before is dropped where the program took longer than SLOW_FRESH: CI)
+        linux.read_slow()
         wanted = _named({**provider.read(), **linux.read()})
     finally:
         linux.close()
