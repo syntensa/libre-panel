@@ -20,6 +20,7 @@ pub mod media;
 #[cfg(windows)]
 pub mod media_windows;
 pub mod netlink;
+pub mod nut;
 pub mod nvml;
 pub mod presentmon;
 pub mod protocol;

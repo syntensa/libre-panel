@@ -361,10 +361,61 @@ impl Source for Json {
     }
 }
 
-/// The source `name` (homeassistant, json) as its table of config.toml sets it up; why it
-/// could not be.
+/// The UPS, through NUT's upsd (sensors/nut.py).
+struct Nut(lp_sensors::nut::NutSource);
+
+impl Source for Nut {
+    fn name(&self) -> &'static str {
+        "nut"
+    }
+
+    fn read(&mut self, out: &mut Readings) {
+        out.extend(self.0.read());
+    }
+
+    fn notes(&mut self) -> Vec<String> {
+        self.0.notes()
+    }
+
+    fn wait_ready(&mut self, seconds: f64) {
+        self.0.wait_ready(seconds);
+    }
+}
+
+/// The source `name` (homeassistant, json, nut) as its table of config.toml sets it up; why
+/// it could not be.
 fn web_source(name: &str, table: Option<&Table>) -> Result<Box<dyn Source>, String> {
     let get = |key: &str| table.and_then(|table| table.get(key));
+    if name == "nut" {
+        // `str(options.get(key) or "")`
+        let text = |key: &str| match get(key).map(value_of) {
+            Some(value) if value.truthy() => value.str(),
+            _ => String::new(),
+        };
+        let mut options = lp_sensors::nut::Options {
+            ups: text("ups"),
+            username: text("username"),
+            password: text("password"),
+            update_s: seconds_of(table, "update_s", 5.0)?,
+            ..Default::default()
+        };
+        if !text("host").is_empty() {
+            options.host = text("host");
+        }
+        // `int(options.get("port") or PORT)`
+        let port = match get("port") {
+            Some(Toml::Int(n)) => u16::try_from(n).ok(),
+            Some(Toml::Float(f)) if f.is_finite() => u16::try_from(f.trunc() as i64).ok(),
+            Some(Toml::Str(text)) => lp_py::int_of_str(text).and_then(|n| u16::try_from(n).ok()),
+            Some(Toml::Bool(_)) | None => Some(0),
+            Some(_) => None,
+        };
+        match port.ok_or("port is no port")? {
+            0 => {}
+            port => options.port = port,
+        }
+        return Ok(Box::new(Nut(lp_sensors::nut::NutSource::new(options))));
+    }
     if name == "json" {
         let every = seconds_of(table, "update_s", 30.0)?;
         let entries = match get("sources") {
@@ -666,7 +717,7 @@ impl Hub {
                         notes.extend(said);
                     }
                     "hardware" => sources.push(Box::new(Hardware::of(config))),
-                    "homeassistant" | "json" => {
+                    "homeassistant" | "json" | "nut" => {
                         let table = sensors.options.get(name);
                         match web_source(name, table) {
                             Ok(source) => sources.push(source),

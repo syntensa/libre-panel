@@ -1744,7 +1744,12 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       source in a thread of its own, the last values kept three rounds. Compared with Python
       on 600 sets of states and 500 entries with their answers; the app asks a server of the
       test's own. `~user` in a file's path is not looked up
-- [ ] HWiNFO, RTSS, MQTT, NUT, the calendar; Linux's hint of what system-setup brings
+- [x] the UPS (sensors/nut.py, lp-sensors' nut): upsd asked over its port in a thread of
+      its own, with the user's name where one is set; its lines split as shlex splits them;
+      the battery, the runtime, the load, the power, the input and the status in words.
+      4000 lines and 2000 sets of variables compared with Python; the app asks a upsd of the
+      test's own
+- [ ] HWiNFO, RTSS, MQTT, the calendar; Linux's hint of what system-setup brings
 - [ ] the history as a ring, demo.py's values; the .NET service goes
 
 ### R8 services

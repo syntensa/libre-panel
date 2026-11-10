@@ -1018,3 +1018,88 @@ def test_home_assistant_and_json_sources_are_asked_and_read(tmp_path: Path) -> N
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_a_ups_is_asked_of_upsd(tmp_path: Path) -> None:
+    """`nut` among the sources: upsd (here one of the test's own) is asked as sensors/nut.py
+    asks it, with the user's name where one is set and for the first UPS where none is
+    named; the readings are Python's, and a server that is not there is said."""
+    import socketserver
+
+    from libre_panel.sensors import nut
+
+    variables = {"battery.charge": "87", "battery.runtime": "1530", "ups.load": "23",
+                 "ups.realpower.nominal": "405", "input.voltage": "231.5",
+                 "ups.status": "OB DISCHRG", "ups.model": 'Back-UPS "ES" 700G'}  # fmt: skip
+    heard: list[str] = []
+
+    class Upsd(socketserver.StreamRequestHandler):
+        def handle(self) -> None:
+            for raw in self.rfile:
+                line = raw.decode().rstrip("\n")
+                heard.append(line)
+                if line.startswith(("USERNAME ", "PASSWORD ")):
+                    answer = "OK\n"
+                elif line == "LIST UPS":
+                    answer = 'BEGIN LIST UPS\nUPS desk "The desk\'s UPS"\nEND LIST UPS\n'
+                elif line == "LIST VAR desk":
+                    rows = "".join('VAR desk {} "{}"\n'.format(name, value.replace('"', '\\"'))
+                                   for name, value in variables.items())  # fmt: skip
+                    answer = f"BEGIN LIST VAR desk\n{rows}END LIST VAR desk\n"
+                elif line == "LOGOUT":
+                    answer = "OK Goodbye\n"
+                else:
+                    answer = "ERR UNKNOWN-UPS\n"
+                self.wfile.write(answer.encode())
+
+    server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), Upsd)
+    server.daemon_threads = True
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        port = server.server_address[1]
+        options = {"host": "127.0.0.1", "port": port, "username": "panel", "password": "pw"}
+
+        def said_goodbye() -> None:
+            """Waits until the server has heard a talk to its end."""
+            until = time.monotonic() + 5
+            while "LOGOUT" not in heard and time.monotonic() < until:
+                time.sleep(0.01)
+
+        python = nut.NutProvider(options, start=False)
+        python.fetch()
+        wanted = python.read()
+        said_goodbye()
+        asked = list(heard)
+        heard.clear()
+        (tmp_path / "config.toml").write_text(
+            f'[sensors]\nproviders = ["nut"]\n[sensors.nut]\nport = {port}\n'
+            'username = "panel"\npassword = "pw"\n',
+            encoding="utf-8",
+        )
+        done = _run(tmp_path, "sensors")
+        assert done.returncode == 0, done.stderr
+        said_goodbye()
+        assert heard[: len(asked)] == asked and asked[0] == "USERNAME panel"
+        ours = {line[:40].strip(): line[41:]
+                for line in done.stdout.splitlines() if line.startswith("ups.")}  # fmt: skip
+        assert list(ours) == sorted(wanted) and len(ours) == 7
+        for key, rest in ours.items():  # (the value, its unit, its label)
+            reading = wanted[key]
+            value = reading.value
+            text = f"{value:.2f}" if isinstance(value, float) else str(value)
+            assert rest.lstrip().startswith(text), key
+            assert rest.endswith(f" {reading.unit:<5} {reading.label}"), key
+
+        heard.clear()
+        (tmp_path / "config.toml").write_text(
+            f'[sensors]\nproviders = ["nut"]\n[sensors.nut]\nport = {port}\nups = "attic"\n',
+            encoding="utf-8",
+        )
+        done = _run(tmp_path, "sensors")
+        assert done.returncode == 0, done.stderr
+        said_goodbye()
+        assert heard[:2] == ["LIST VAR attic", "LOGOUT"] and "ups." not in done.stdout
+        assert f"nut: 127.0.0.1:{port} does not answer: UNKNOWN-UPS" in done.stderr
+    finally:
+        server.shutdown()
+        server.server_close()

@@ -1935,3 +1935,56 @@ def test_home_assistant_and_json_answers_are_read_as_python_reads_them() -> None
             seen["error" if want == "error" else "readings"] += 1
             seen["limit"] += want != "error" and len(want) == json_source.MAX_VALUES
     assert all(count > 5 for count in seen.values()), seen
+
+
+@pytest.mark.parametrize("language", ["en", "de"])
+def test_a_ups_is_read_as_nut_py_reads_it(language: str) -> None:
+    """sensors/nut.py: upsd's lines split as shlex splits them (quotes, backslashes, what
+    does not close), and the readings of a UPS's variables: the battery, the runtime in
+    minutes, the power the UPS says or its load of the nominal power, the status in words."""
+    import shlex
+
+    from libre_panel import i18n
+    from libre_panel.sensors import nut
+
+    rng = random.Random(0x0705)
+    lines = ['VAR ups battery.charge "100"', 'UPS ups "My \\"big\\" UPS"', "", "  ", "a  b\tc",
+             'VAR u ups.model "Back-UPS ES 700G"', "a\\ b", '"a\\b"', "'a\\'", '"', "a\\", "''",
+             'x"y z"w', "a '' b", '"\\\\"', "é 'ü ö'", 'a"b\'c"d']  # fmt: skip
+    for _ in range(4000):
+        lines.append("".join(rng.choice("ab \"'\\ \t\n\r#é") for _ in range(rng.randrange(0, 12))))
+    names = ["battery.charge", "battery.runtime", "ups.load", "ups.realpower", "input.voltage",
+             "ups.realpower.nominal", "ups.status", "ups.model"]  # fmt: skip
+    texts = ["100", "12.5", "abc", "", " 7 ", "1e3", "3599", "90", "0", "-5", "450", "230.4", "1_0"]
+    flags = ["OL", "OB LB", "OB", "OL CHRG", "", "  ", "LB", "OL  LB", "ob", "OB\tDISCHRG", "X"]
+    values = []
+    for _ in range(2000):
+        ups = {name: rng.choice(texts) for name in names if rng.random() < 0.7}
+        if "ups.status" in ups:
+            ups["ups.status"] = rng.choice(flags)
+        values.append(ups)
+    [ours] = run([{"op": "nut", "locale": str(i18n.LOCALE_DIR), "language": language,
+                   "lines": lines, "values": values}])  # fmt: skip
+
+    seen = {"error": 0, "quoted": 0, "computed": 0, "low": 0}
+    for line, got in zip(lines, ours["lines"], strict=True):
+        try:
+            assert got == shlex.split(line), line
+            seen["quoted"] += "" in got
+        except ValueError as exc:
+            assert got == {"error": str(exc)}, line
+            seen["error"] += 1
+    i18n.set_language(language)
+    try:
+        for ups, got in zip(values, ours["values"], strict=True):
+            wanted = nut.readings(ups)
+            rows = [[key, r.value, r.unit, r.label] for key, r in wanted.items()]
+            for row in rows:
+                if isinstance(row[1], float):
+                    row[1] = {"float": repr(row[1])}
+            assert got == rows, ups
+            seen["computed"] += isinstance(getattr(wanted.get("ups.power"), "value", None), int)
+            seen["low"] += "LB" in ups.get("ups.status", "").split()
+    finally:
+        i18n.set_language("en")
+    assert all(count > 20 for count in seen.values()), seen

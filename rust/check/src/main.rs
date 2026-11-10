@@ -1803,7 +1803,7 @@ fn run(case: &Value) -> Result<Value, String> {
         "config" => config::run(case)?,
         "regex" | "hwnames" | "lhm_readings" | "lhm_tree" | "sensor_protocol" | "lhm_hints"
         | "load_math" | "netlink" | "audio" | "game_frames" | "hardware" | "linux_source"
-        | "sky" | "weather" | "web_sources" | "mangohud" | "media" | "appicon" => {
+        | "sky" | "weather" | "web_sources" | "nut" | "mangohud" | "media" | "appicon" => {
             sensors::run(op, case)?
         }
         "toml" => {

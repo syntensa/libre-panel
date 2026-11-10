@@ -1196,6 +1196,41 @@ fn web_sources(case: &Value) -> Result<Value, String> {
     Ok(json!({"states": states, "json": sources}))
 }
 
+/// nut: each line as the shell splits it ({"error": ...} where it cannot), and the readings
+/// of each UPS's variables in the case's language.
+fn nut(case: &Value) -> Result<Value, String> {
+    let locale = std::path::PathBuf::from(case["locale"].as_str().unwrap_or(""));
+    let code = case["language"].as_str().unwrap_or("en");
+    lp_i18n::set_language(lp_i18n::Language::load(&locale, code)?);
+    let lines: Vec<Value> = case["lines"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(
+            |line| match lp_sensors::nut::shlex_split(line.as_str().unwrap_or("")) {
+                Ok(words) => json!(words),
+                Err(why) => json!({"error": why}),
+            },
+        )
+        .collect();
+    let mut found = Vec::new();
+    for values in case["values"].as_array().into_iter().flatten() {
+        let values = values
+            .as_object()
+            .into_iter()
+            .flatten()
+            .map(|(name, value)| (name.clone(), value.as_str().unwrap_or("").to_string()))
+            .collect();
+        let readings = lp_sensors::nut::readings(&values);
+        found.push(json!(readings
+            .iter()
+            .map(|(key, r)| json!([key, plain(&r.value), r.unit, r.label]))
+            .collect::<Vec<_>>()));
+    }
+    lp_i18n::set_language(lp_i18n::Language::english());
+    Ok(json!({"lines": lines, "values": found}))
+}
+
 pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "regex" => regex(case),
@@ -1212,6 +1247,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "sky" => sky(case)?,
         "weather" => weather(case)?,
         "web_sources" => web_sources(case)?,
+        "nut" => nut(case)?,
         "mangohud" => mangohud(case)?,
         "media" => media(case),
         "appicon" => appicon(case),
