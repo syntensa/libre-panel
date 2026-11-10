@@ -433,6 +433,113 @@ fn audio(case: &Value) -> Value {
     })
 }
 
+/// frames: each run of events played to a FrameCounter (["target", exe or null], ["add", app,
+/// ms, at, waits or null], ["read", now]) with what each read gave; each list of frame times
+/// as a round (its percentiles and figures); and each table of CSV lines as its columns and
+/// frames.
+fn frames(case: &Value) -> Value {
+    use lp_sensors::frames as f;
+    let list = |key: &str| case[key].as_array().cloned().unwrap_or_default();
+    let runs: Vec<Value> = list("runs")
+        .iter()
+        .map(|run| {
+            let mut counter = f::FrameCounter::new(run["every_frame"].as_bool() != Some(false));
+            let mut reads = Vec::new();
+            for event in run["events"].as_array().into_iter().flatten() {
+                match event[0].as_str().unwrap_or("") {
+                    "target" => counter.set_target(event[1].as_str()),
+                    "add" => {
+                        let waits = event[4].as_array().map(|w| {
+                            let n = |i: usize| w[i].as_f64().unwrap_or(0.0);
+                            [n(0), n(1), n(2), n(3)]
+                        });
+                        counter.add(
+                            event[1].as_str().unwrap_or(""),
+                            event[2].as_f64().unwrap_or(f64::NAN),
+                            event[3].as_f64().unwrap_or(0.0),
+                            waits,
+                        );
+                    }
+                    _ => {
+                        let found = counter.readings(event[1].as_f64().unwrap_or(0.0));
+                        reads.push(json!(found
+                            .iter()
+                            .map(|(key, r)| {
+                                let value = match &r.value {
+                                    lp_py::Value::Float(v) => float(*v),
+                                    other => json!(["str", other.str()]),
+                                };
+                                json!([key, value, r.unit, r.label])
+                            })
+                            .collect::<Vec<_>>()));
+                    }
+                }
+            }
+            json!(reads)
+        })
+        .collect();
+    let rounds: Vec<Value> = list("rounds")
+        .iter()
+        .map(|times| {
+            let mut round = f::FrameTimes::default();
+            for ms in times
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_f64)
+            {
+                round.add(ms);
+            }
+            let percentiles = [1u64, 500, 990, 999, 1000].map(|p| round.percentile(p).map(float));
+            json!({
+                "percentiles": percentiles,
+                "figures": round.figures(None).map(|all| all.map(float)),
+            })
+        })
+        .collect();
+    let tables: Vec<Value> = list("tables")
+        .iter()
+        .map(|lines| {
+            let lines = strings(lines);
+            let mut columns: Option<f::Columns> = None;
+            let mut found = Vec::new();
+            for line in &lines {
+                let row = f::csv_row(line);
+                match &columns {
+                    None => {
+                        columns = f::Columns::of(&row);
+                        found.push(json!(columns
+                            .as_ref()
+                            .map(|c| json!([c.app, c.frame, c.waits]))));
+                    }
+                    Some(columns) => {
+                        found.push(json!(columns.frame_of(&row).map(|(app, ms, waits)| {
+                            json!([app, float(ms), waits.map(|w| w.map(float))])
+                        })))
+                    }
+                }
+            }
+            json!(found)
+        })
+        .collect();
+    let limits: Vec<Value> = list("limits")
+        .iter()
+        .map(|limit| {
+            let waits: Vec<f::Waits> = limit[0]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|w| {
+                    let n = |i: usize| w[i].as_f64().unwrap_or(0.0);
+                    [n(0), n(1), n(2), n(3)]
+                })
+                .collect();
+            json!(f::limited_by(&waits, limit[1].as_f64().unwrap_or(0.0)))
+        })
+        .collect();
+    json!({"runs": runs, "rounds": rounds, "tables": tables, "limits": limits})
+}
+
 pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "regex" => regex(case),
@@ -444,6 +551,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "load_math" => load_math(case),
         "netlink" => netlink(case),
         "audio" => audio(case),
+        "game_frames" => frames(case),
         _ => return Err(format!("no such op: {op}")),
     })
 }

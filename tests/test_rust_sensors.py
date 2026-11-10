@@ -555,3 +555,101 @@ def test_the_volume_s_tools_are_read_as_audio_py_reads_them() -> None:
         want = [[key, _hex(r.value) if isinstance(r.value, float) else ["int", str(r.value)],
                  r.unit, r.label] for key, r in found.items()]  # fmt: skip
         assert got == want, (level, muted, mic)
+
+
+def test_a_game_s_frames_are_counted_as_presentmon_py_counts_them() -> None:
+    from libre_panel.sensors import presentmon as pm
+
+    rng = random.Random(0xF95)
+    apps = ["Game.exe", "game.EXE", "Launcher.exe", "dwm.exe", "Other", "", "Discord.exe"]
+    runs = []
+    for n in range(120):
+        every_frame = n % 4 != 0
+        now, events = rng.uniform(0, 1000), []
+        pace = {app: rng.choice([4.0, 8.3, 16.6, 33.3, 250.0]) for app in apps}
+        for _ in range(rng.randrange(20, 400)):
+            what = rng.random()
+            if what < 0.02:
+                events.append(["target", rng.choice([None, "game.exe", "Launcher.exe", ""])])
+            elif what < 0.10:
+                events.append(["read", now])
+            elif what < 0.12:
+                now += rng.choice([0.6, 3.5, 31.0, 6.5])  # (a stall, a pause, a round's end)
+            else:
+                app = rng.choice(apps[:3] if rng.random() < 0.8 else apps)
+                ms = pace[app] * rng.choice([1.0, 1.0, 1.0, 0.5, 2.0, 12.0])
+                ms = rng.choice([ms, ms, ms, 0.0, -1.0, 5000.0, 4999.0, 150.0, 0.004])
+                now += max(ms, 0.0) / 1000 * rng.choice([1.0, 1.0, 0.0, 3.0])
+                waits = None
+                if rng.random() < 0.7:
+                    waits = [ms * rng.random(), ms * rng.random() * 0.4, ms * rng.random(),
+                             ms * rng.random() * 0.4]  # fmt: skip
+                events.append(["add", app, ms, now, waits])
+        events.append(["read", now + rng.choice([0.0, 0.2, 2.0, 4.0])])
+        runs.append({"every_frame": every_frame, "events": events})
+    rounds = [[], [16.6], [0.001, 0.004, 0.005, 99.994, 99.996, 100.0, 100.4, 100.5, 101.5, 4000.0]]
+    rounds += [[rng.choice([rng.uniform(1, 30), rng.uniform(1, 30), rng.uniform(90, 400)])
+                for _ in range(rng.randrange(1, 3000))] for _ in range(60)]  # fmt: skip
+    head = "Application,ProcessID,MsBetweenPresents,MsCPUBusy,MsCPUWait,MsGPUBusy,MsGPUWait"
+    tables = [
+        ["warning: something", head, "Game.exe,12,16.6,5,1,9,0.5", "Game.exe,12,NA,5,1,9,0.5",
+         '"My, Game.exe",12, 8.25 ,NA,1,9,0.5', "short", 'x,1,nan,1,2,3,4', '"a""b",1,1e1,1,2,3'],
+        ["Application,FrameTime,CPUBusy,CPUWait,GPUBusy,GPUWait,Application", "g,7,1,2,3,4,h"],
+        ["ProcessID,msBetweenPresents", "Application,MsBetweenAppStart", "g.exe,_1_0", "g.exe,1_0"],
+        ["Application,MsBetweenPresents,CPUBusy,CPUWait,GPUBusy", "g.exe,5,1,2,3", ""],
+    ]  # fmt: skip
+    limits = [[[], 10.0], [[[1, 2, 3, 4]] * 2, 10.0], [[[1, 2, 3, 4]] * 3, 0.0]]
+    for _ in range(300):
+        mean = rng.uniform(1, 40)
+        waits = [[mean * rng.random(), mean * rng.random() * 0.5, mean * rng.random(),
+                  mean * rng.random() * 0.5] for _ in range(rng.randrange(3, 9))]  # fmt: skip
+        limits.append([waits, mean])
+    [ours] = run([{"op": "game_frames", "runs": runs, "rounds": rounds, "tables": tables,
+                   "limits": limits}])  # fmt: skip
+
+    def said(found: dict[str, Any]) -> list[list[Any]]:
+        return [[key, _hex(r.value) if isinstance(r.value, float) else ["str", str(r.value)],
+                 r.unit, r.label] for key, r in found.items()]  # fmt: skip
+
+    keys: set[str] = set()
+    for case, got in zip(runs, ours["runs"], strict=True):
+        counter = pm.FrameCounter(every_frame=case["every_frame"])
+        reads = []
+        for event in case["events"]:
+            if event[0] == "target":
+                counter.set_target(event[1])
+            elif event[0] == "add":
+                waits = event[4] and tuple(event[4])
+                counter.add(event[1], event[2], event[3], waits)
+            else:
+                found = counter.readings(event[1])
+                keys.update(found)
+                reads.append(said(found))
+        assert got == reads, case["every_frame"]
+    assert {"game.fps", "game.fps_trace", "game.limiter", "game.fps_01low", "game.app",
+            "game.frametime_peak"} <= keys  # fmt: skip
+    for times, got in zip(rounds, ours["rounds"], strict=True):
+        round_ = pm.FrameTimes()
+        for ms in times:
+            round_.add(ms)
+        wanted = [round_.percentile(p) for p in (1, 500, 990, 999, 1000)]
+        assert got["percentiles"] == [None if w is None else _hex(w) for w in wanted]
+        figures = round_.figures()
+        assert got["figures"] == (figures and [_hex(figures[name]) for name in pm.ROUND_READINGS])
+    import csv
+
+    for lines, got in zip(tables, ours["tables"], strict=True):
+        columns, wanted = None, []
+        for row in csv.reader(lines):
+            if columns is None:
+                columns = pm.Columns.of(row)
+                wanted.append(columns and [columns.app, columns.frame,
+                                           columns.waits and list(columns.waits)])  # fmt: skip
+            else:
+                frame = columns.frame_of(row)
+                wanted.append(frame and [frame[0], _hex(frame[1]),
+                                         frame[2] and [_hex(w) for w in frame[2]]])  # fmt: skip
+        assert got == wanted, lines
+    for (waits, mean), got in zip(limits, ours["limits"], strict=True):
+        assert got == pm.limited_by([tuple(w) for w in waits], mean), (waits, mean)
+    assert {"cpu", "gpu", "cap", None} == set(ours["limits"])

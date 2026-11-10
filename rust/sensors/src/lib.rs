@@ -3,6 +3,7 @@
 //! hardware tidied for a panel.
 
 pub mod audio;
+pub mod frames;
 pub mod hints;
 pub mod hwnames;
 pub mod lhm;
