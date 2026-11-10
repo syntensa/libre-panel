@@ -1945,12 +1945,17 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       it (drafts never, pre-releases only of the running one's minor version), what Start
       shows of it, updates.json, a card closed. (The update itself, "Update to", comes with
       the program's downloads.)
+      Settings → System (`/api/system`): the start at login (`rust/app/src/autostart.rs`:
+      Windows' Run value and the Task Scheduler task with the highest rights, the XDG
+      desktop entry), switched on and off as autostart.py does it, and the language; the
+      command line's `autostart enable|disable|status [--elevated]`. The program takes
+      `[--config FILE] tray --background`, the start at login the Python app wrote.
       `libre-panel editor` serves alone, `start` with
       the panel, and writes its address where a later start finds it. 120 requests to
       Python's server and to this one compared: the status, the headers and the body, byte
       for byte; a run of the program controlled through its server until `quit` ends it.
       Still to come: every other route (the themes' pictures and versions, saving, the
-      Settings' system, unlock, report, place search and folders, hardware, the Player, plugins' pages, …)
+      Settings' unlock, report, place search and folders, hardware, the Player, plugins' pages, …)
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app
 - [ ] the window (wry, tao), the tray icon, the command line, autostart, single instance,

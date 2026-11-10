@@ -88,7 +88,8 @@ def servers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
     releases = tmp_path / "releases.json"
     theirs.editor_state.updates.fetch = lambda: json.loads(releases.read_text(encoding="utf-8"))
     env = {**os.environ, "LIBRE_PANEL_HOME": str(homes[1]), "LIBRE_PANEL_DATA": str(DATA),
-           "LP_RELEASES_FILE": str(releases), **_libraries()}  # fmt: skip
+           "LP_RELEASES_FILE": str(releases), "XDG_CONFIG_HOME": str(homes[1] / "xdg"),
+           **_libraries()}  # fmt: skip
     command = [str(_program()), "editor", "--port", "0"]
     ours = subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             encoding="utf-8")  # fmt: skip
@@ -798,3 +799,68 @@ def test_the_update_check_is_told_as_updates_py_tells_it(servers: Any) -> None:
     for home in homes:
         (home / "updates.json").write_text("[1]", encoding="utf-8")
     both(_get("/api/update", WITH), "a file of no table")
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="the XDG autostart entry")
+def test_starting_with_the_system_is_told_and_set_as_settings_py_does(
+    servers: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Settings → System: the start at login (the desktop entry, the same file but for the
+    program it starts), the language; switched on and off, or refused in the same words.
+    And the command line's `autostart`, which writes the same entry."""
+    from libre_panel import autostart
+
+    ask, homes = servers
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(homes[0] / "xdg"))
+    entries = [home / "xdg" / "autostart" / "libre-panel.desktop" for home in homes]
+
+    def both(request: str | bytes, what: Any) -> Any:
+        theirs, ours = ask(request)
+        assert ours[0] == theirs[0], what
+        told = [json.loads(body) for _, _, body in (theirs, ours)]
+        for one, home in zip(told, homes, strict=True):
+            if "program" in one:
+                one["program"] = "a program"
+                one["location"] = one["location"].replace(str(home), "HOME")
+        assert told[1] == told[0], what
+        assert [entry.exists() for entry in entries] == [entries[0].exists()] * 2, what
+        if entries[0].exists() and what != "hidden":
+            lines = [entry.read_text(encoding="utf-8").splitlines() for entry in entries]
+            mine = [line for line in lines[1] if line.startswith("Exec=")]
+            program = str(Path(__file__).parents[1] / "rust" / "target" / "release")
+            assert mine and mine[0].startswith("Exec=") and "tray --background" in mine[0]
+            assert program in mine[0] or "libre-panel" in mine[0]
+            assert [x for x in lines[1] if not x.startswith("Exec=")] == [
+                x for x in lines[0] if not x.startswith("Exec=")]  # fmt: skip
+        return told[0]
+
+    told = both(_get("/api/system", WITH), "read")
+    assert told["kind"] == "xdg" and told["enabled"] is False
+    for payload in ({"autostart": True}, {"autostart": True}, {"elevated": True},
+                    {"elevated": False}, {"autostart": False}, {"autostart": False},
+                    {"autostart": 1}, {}, {"other": True}, [], {"autostart": True},
+                    {"elevated": "yes"}):  # fmt: skip
+        both(_post("/api/system", payload), payload)
+    entries[0].write_text("[Desktop Entry]\nHidden = TRUE \n", encoding="utf-8")
+    entries[1].write_text("[Desktop Entry]\nHidden = TRUE \n", encoding="utf-8")
+    assert both(_get("/api/system", WITH), "hidden")["enabled"] is False
+    # the command line: the same entry as the app writes, and what it says
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(homes[1]), "LIBRE_PANEL_DATA": str(DATA),
+           "XDG_CONFIG_HOME": str(homes[1] / "xdg"), "LANGUAGE": "", "LANG": "C"}  # fmt: skip
+    where = str(entries[1])
+    for action, said in (
+        ("disable", i18n.t("Autostart removed.")),
+        ("status", i18n.t("Autostart is disabled.")),
+        ("enable", i18n.t("Libre Panel starts in the background when you log in ({where}).",
+                          where=where)),
+        ("status", i18n.t("Autostart is enabled ({where}).", where=where)),
+        ("enable --elevated", i18n.t("Starting with the highest rights is for Windows only.")),
+    ):  # fmt: skip
+        done = subprocess.run([str(_program()), "autostart", *action.split()], env=env,
+                              capture_output=True, encoding="utf-8", timeout=60)  # fmt: skip
+        assert said in done.stdout + done.stderr, (action, done)
+        assert (done.returncode == 0) is ("elevated" not in action), (action, done)
+    # (written by the command line without --config: the start at login takes the usual file)
+    command = [str(_program()), "tray", "--background"]
+    exec_line = f"Exec={autostart.desktop_exec(command)}"
+    assert exec_line in entries[1].read_text(encoding="utf-8").splitlines()

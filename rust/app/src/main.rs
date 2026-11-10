@@ -3,6 +3,7 @@
 //! panel, or writes them to a PNG file.
 
 mod access;
+mod autostart;
 mod background;
 mod company;
 mod display;
@@ -42,6 +43,10 @@ Libre Panel
   libre-panel render [options]  draw one frame into a PNG file (--output, else frame.png)
   libre-panel editor [options]  the app's server alone (its address, with the token, is
                                 printed)
+  libre-panel tray [--background]  the background app, as the start at login runs it
+  libre-panel autostart enable|disable|status [--elevated]
+                                start Libre Panel when you log in (--elevated, Windows:
+                                with the highest rights, through Task Scheduler)
   libre-panel sensors           the readings and their keys (--check-service: whether the
                                 sensor service answers, on Windows)
   libre-panel themes            the themes that are installed
@@ -320,8 +325,17 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
             }
             server::serve_until(asked.port.unwrap_or(server::PORT), &home, &file, &STOP)?;
         }
-        "start" => {
-            let asked = asked(args)?;
+        "autostart" => return autostart(args),
+        "start" | "tray" => {
+            // (the start at login: `tray --background`, as the Python app wrote it too)
+            let args: Vec<String> = args
+                .iter()
+                .filter(|arg| {
+                    !(command == "tray" && ["--background", "--no-icon"].contains(&arg.as_str()))
+                })
+                .cloned()
+                .collect();
+            let asked = asked(&args)?;
             lp_text::set_locale_from_environment();
             lp_text::fallback::set_language(Box::new(|| lp_i18n::language().code().to_string()));
             follow_signals();
@@ -357,16 +371,135 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let (command, rest) = match args.split_first() {
-        Some((command, rest)) => (command.as_str(), rest),
-        None => ("help", &[][..]),
+/// The app's language as config.toml sets it ("auto", or a file that cannot be read: the
+/// system's), for what the command line says.
+fn speak(home: &Home, file: &std::path::Path) {
+    let setting = lp_config::load_config(file, lp_config::platform())
+        .map_or_else(|_| "auto".to_string(), |config| config.language);
+    let env = |name: &str| std::env::var(name).unwrap_or_default();
+    let code = lp_i18n::resolve(Some(&setting), || lp_i18n::system_language(&env, None));
+    match lp_i18n::Language::load(&home.locale(), &code) {
+        Ok(language) => lp_i18n::set_language(language),
+        Err(why) => eprintln!("libre-panel: language {code}: {why}"),
+    }
+}
+
+fn t_with(text: &str, values: &[(&str, &str)]) -> String {
+    let values: Vec<(&str, lp_py::Value)> = values
+        .iter()
+        .map(|(name, value)| (*name, lp_py::Value::Str((*value).to_string())))
+        .collect();
+    lp_i18n::t_format(text, &values).unwrap_or_else(|why| why.msg)
+}
+
+/// `autostart enable|disable|status [--elevated]` (cli.py's _cmd_autostart).
+fn autostart(args: &[String]) -> Result<(), String> {
+    let mut action = None;
+    let mut elevated = false;
+    let mut rest = Vec::new();
+    for arg in args {
+        match arg.as_str() {
+            "--elevated" => elevated = true,
+            "enable" | "disable" | "status" if action.is_none() => action = Some(arg.clone()),
+            _ => rest.push(arg.clone()),
+        }
+    }
+    let Some(action) = action else {
+        return Err("autostart: enable, disable or status".into());
     };
-    match run(command, rest) {
+    let asked = asked(&rest)?;
+    let home = Home::find()?;
+    let file = asked.config.clone().unwrap_or_else(|| home.config_file());
+    speak(&home, &file);
+    let command = autostart::launch_command(asked.config.as_deref());
+    let started = autostart::Autostart::new(&command[0]);
+    let icon = home.data.join("assets").join("libre-panel.png");
+    let done = match action.as_str() {
+        "enable" => {
+            if elevated
+                && autostart::writable_by_user(
+                    std::path::Path::new(&command[0]),
+                    &autostart::user_home(),
+                )
+            {
+                eprintln!("{}", t_with(
+                    "Warning: {program} is in your user folder, where any program you run could \
+                     replace it and so get administrator rights at the next login. Safer: \
+                     install Libre Panel under Program Files.",
+                    &[("program", &command[0])],
+                ));
+            }
+            let why = match elevated {
+                true => access::folder_risk(&home.settings, None),
+                false => String::new(),
+            };
+            if !why.is_empty() {
+                let folder = home.settings.display().to_string();
+                eprintln!("{}", t_with(
+                    "Warning: with the highest rights Libre Panel runs what config.toml and the \
+                     plugins in {folder} name, and {why}: any user who can change them can run \
+                     a program with administrator rights. Keep the settings in your user folder \
+                     (LIBRE_PANEL_HOME), or take the other users' rights away.",
+                    &[("folder", &folder), ("why", &why)],
+                ));
+            }
+            started.enable(&command, elevated, &icon).map(|place| {
+                println!(
+                    "{}",
+                    t_with(
+                        "Libre Panel starts in the background when you log in ({where}).",
+                        &[("where", &place)],
+                    )
+                );
+            })
+        }
+        "disable" => started.disable().map(|existed| match existed {
+            true => println!("{}", lp_i18n::t("Autostart removed.")),
+            false => println!("{}", lp_i18n::t("Autostart was not enabled.")),
+        }),
+        _ => started.is_enabled().map(|on| match on {
+            true => println!(
+                "{}",
+                t_with(
+                    "Autostart is enabled ({where}).",
+                    &[("where", &started.location())],
+                )
+            ),
+            false => println!("{}", lp_i18n::t("Autostart is disabled.")),
+        }),
+    };
+    if let Err(why) = done {
+        eprintln!("{why}");
+        return Err(String::new());
+    }
+    if action != "enable" {
+        let hint = started.task_hint();
+        if !hint.is_empty() {
+            eprintln!("{hint}"); // (a leftover task of the same name)
+        }
+    }
+    Ok(())
+}
+
+fn main() -> ExitCode {
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    // the options before the command (`--config FILE tray --background`, the start at login
+    // that the Python app wrote): they go after it
+    let mut leading = Vec::new();
+    while args.first().is_some_and(|first| first == "--config") && args.len() >= 2 {
+        leading.extend(args.drain(..2));
+    }
+    let (command, rest) = match args.split_first() {
+        Some((command, rest)) => (command.clone(), rest.to_vec()),
+        None => ("help".to_string(), Vec::new()),
+    };
+    let rest: Vec<String> = rest.into_iter().chain(leading).collect();
+    match run(&command, &rest) {
         Ok(()) => ExitCode::SUCCESS,
         Err(why) => {
-            eprintln!("libre-panel: {why}");
+            if !why.is_empty() {
+                eprintln!("libre-panel: {why}");
+            }
             ExitCode::FAILURE
         }
     }

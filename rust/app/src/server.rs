@@ -222,6 +222,9 @@ const ROUTES: &[Route] = &[
         let at_once = crate::http::parse_qs(&u.query).contains_key("now");
         x.json(&s.updates.state(check_updates(s), at_once), 200)
     }),
+    private("GET", "/api/system", |s, x, _, _| {
+        settings(s, x, |told| told.system())
+    }),
     private("GET", "/api/panel", |s, x, _, _| {
         settings(s, x, |told| told.panel())
     }),
@@ -255,6 +258,9 @@ const ROUTES: &[Route] = &[
     }),
     private("POST", "/api/news", |s, x, _, _| see_news(s, x)),
     private("POST", "/api/update", |s, x, _, _| update_later(s, x)),
+    private("POST", "/api/system", |s, x, _, _| {
+        settings_with(s, x, |told, asked| told.set_system(asked))
+    }),
     private("POST", "/api/scenes", |s, x, _, _| {
         settings_with(s, x, |told, asked| told.set_scene(asked))
     }),

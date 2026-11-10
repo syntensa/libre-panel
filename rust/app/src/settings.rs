@@ -1111,6 +1111,119 @@ impl Settings<'_> {
         ]))
     }
 
+    // -- the system -----------------------------------------------------------------------
+
+    fn autostart(&self) -> (crate::autostart::Autostart, Vec<String>) {
+        let command = crate::autostart::launch_command(Some(self.config_file));
+        (crate::autostart::Autostart::new(&command[0]), command)
+    }
+
+    /// Starting with the system, and the language.
+    pub fn system(&self) -> Answer<Value> {
+        let (autostart, command) = self.autostart();
+        let config = self.config()?;
+        let kind = autostart.kind();
+        let windows = kind == "windows";
+        let enabled = match kind {
+            "unsupported" => Value::None,
+            _ => autostart.is_enabled().map_or(Value::None, Value::Bool),
+        };
+        let program = command.first().cloned().unwrap_or_default();
+        let risky = !command.is_empty()
+            && crate::autostart::writable_by_user(
+                Path::new(&program),
+                &crate::autostart::user_home(),
+            );
+        let language = lp_i18n::language();
+        let languages = (lp_i18n::LANGUAGES.iter())
+            .map(|(code, name)| ((*code).to_string(), text(name)))
+            .collect();
+        Ok(dict([
+            ("kind", text(kind)),
+            ("enabled", enabled),
+            (
+                "elevated",
+                Value::Bool(windows && autostart.elevated(false)),
+            ),
+            // a task of that name that is off or starts another program (a leftover)
+            (
+                "task_hint",
+                Value::Str(if windows {
+                    autostart.task_hint()
+                } else {
+                    String::new()
+                }),
+            ),
+            ("can_elevate", Value::Bool(autostart.can_elevate())),
+            (
+                "location",
+                Value::Str(if kind != "unsupported" {
+                    autostart.location()
+                } else {
+                    String::new()
+                }),
+            ),
+            (
+                "command",
+                Value::Str(cli_command("autostart enable --elevated")),
+            ),
+            ("program", Value::Str(program)),
+            ("risky", Value::Bool(risky)),
+            // what this run, with the highest rights, does not load or start (rights.py)
+            ("held_back", held_back(&config)),
+            (
+                "language",
+                dict([
+                    ("setting", text(&config.language)),
+                    ("active", text(language.code())),
+                    ("languages", Value::Dict(languages)),
+                ]),
+            ),
+        ]))
+    }
+
+    /// `{"autostart": true}` or `{"elevated": true}`: what the command line's `autostart
+    /// enable` and `disable` do. Starting with the highest rights (Windows) is a thing of its
+    /// own and needs an administrator; it is never done unasked.
+    pub fn set_system(&self, payload: &Value) -> Answer<Value> {
+        let asked = match payload {
+            Value::Dict(asked)
+                if !asked.is_empty()
+                    && asked
+                        .keys()
+                        .all(|key| key == "autostart" || key == "elevated") =>
+            {
+                asked
+            }
+            _ => {
+                return Err(bad(
+                    "expected {\"autostart\": true} or {\"elevated\": true}",
+                ))
+            }
+        };
+        for (name, value) in asked {
+            flag(name, value)?;
+        }
+        let (autostart, command) = self.autostart();
+        let icon = self.home.data.join("assets").join("libre-panel.png");
+        let failed = |why: crate::autostart::AutostartError| refusal(why.0, 409);
+        let on = |key: &str| matches!(asked.get(key), Some(Value::Bool(true)));
+        if asked.contains_key("elevated") {
+            if on("elevated") {
+                autostart.enable(&command, true, &icon).map_err(failed)?;
+            } else if autostart.elevated(true) {
+                // back to the plain start
+                autostart.disable().map_err(failed)?;
+                autostart.enable(&command, false, &icon).map_err(failed)?;
+            }
+        } else if on("autostart") {
+            autostart.enable(&command, false, &icon).map_err(failed)?;
+        } else {
+            autostart.disable().map_err(failed)?;
+        }
+        self.system()
+    }
+
     // -- scenes ---------------------------------------------------------------------------
 
     /// The scenes and the one that is on (scenes.py).
@@ -1368,6 +1481,53 @@ fn maybe_panels() -> Vec<Value> {
             ])
         })
         .collect()
+}
+
+/// `{plugins, programs}`: the plugin folders not loaded and the settings whose program is
+/// not started because Libre Panel runs with the highest rights; empty without them.
+fn held_back(config: &Config) -> Value {
+    let mut programs = Vec::new();
+    if lp_devices::rights::elevated() {
+        let option = |source: &str, key: &str| {
+            let table = config.sensors.options.get(source);
+            match table.and_then(|table| table.get(key)) {
+                Some(Toml::Str(text)) => text.clone(),
+                Some(other) => lp_py::format::str_of(&value_of(other)),
+                None => String::new(),
+            }
+        };
+        let named = [
+            ("video.ffmpeg", config.device.video.ffmpeg.clone()),
+            ("[sensors.presentmon] path", option("presentmon", "path")),
+        ];
+        for (setting, path) in named {
+            let file = expanduser(&path);
+            if !path.is_empty() && file.is_file() && !lp_devices::rights::safe_place(&file) {
+                programs.push(setting);
+            }
+        }
+        let libraries = config.sensors.options.get("librehardwaremonitor");
+        if let Some(Toml::Str(folder)) = libraries.and_then(|table| table.get("dll_dir")) {
+            if !folder.is_empty() && !lp_devices::rights::safe_place(Path::new(folder)) {
+                programs.push("[sensors.librehardwaremonitor] dll_dir"); // (its libraries)
+            }
+        }
+    }
+    dict([
+        ("plugins", Value::List(Vec::new())),
+        ("programs", texts(&programs)),
+    ])
+}
+
+/// Path.expanduser: `~` at the start as the user's folder.
+fn expanduser(path: &str) -> std::path::PathBuf {
+    match path.strip_prefix('~') {
+        Some(rest) if rest.is_empty() || rest.starts_with(['/', '\\']) => {
+            let rest = rest.trim_start_matches(['/', '\\']);
+            crate::autostart::user_home().join(rest)
+        }
+        _ => std::path::PathBuf::from(path),
+    }
 }
 
 fn scenes_told(state: &lp_config::scenes::State) -> Value {
