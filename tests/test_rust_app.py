@@ -441,9 +441,11 @@ def test_programs_ping_and_link_are_read_while_a_theme_shows_them(tmp_path: Path
     assert ours["net.ping.2"] == ("None", "ms", "Ping")
     assert ours["net.ping.2.lost"] == ("100", "%", "Ping lost")
     assert ours["net.ping.3.host"] == ("::1", "", "Ping host")
+    rows = {line[:40].strip(): line[41:] for line in done.stdout.splitlines()}
     for sort in ("cpu", "mem"):
-        name, unit, label = ours[f"proc.{sort}.1.name"]
-        assert name and unit == "" and label == name
+        # (a program's name may be longer than the column of the values: its label is whole)
+        name = rows[f"proc.{sort}.1.name"].rsplit(" " * 7, 1)[-1]
+        assert name and rows[f"proc.{sort}.1.name"] == f"{name:>14} {'':<5} {name}"
         value, unit, label = ours[f"proc.{sort}.1.value"]
         assert 0.0 <= float(value) and (unit, label) == ("%", name)
     assert float(ours["proc.mem.1.value"][0]) >= float(ours["proc.mem.2.value"][0])
