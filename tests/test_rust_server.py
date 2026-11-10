@@ -535,3 +535,40 @@ def test_the_settings_are_read_and_written_as_settings_py_does(
         assert about.pop("version") and about["folders"]["config"] == str(home)
         about["folders"] = {k: v.replace(str(home), "HOME") for k, v in about["folders"].items()}
     assert ours == theirs and "Pillow" in ours["notice"]
+
+
+def test_the_panel_and_the_clip_question_are_told_as_settings_py_tells_them(
+    servers: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What Start asks about the panel, with none plugged in: the model that is set, what
+    smooth motion makes of it and what it lacks (on this panel and on those beside it),
+    whether to ask how black looks and for the standby clip's name, the theme that shows the
+    weather. (Libre Panel's engine encodes: Python is told its ffmpeg is there.)"""
+    from libre_panel.devices import h264
+    from libre_panel.devices.models import find_model
+
+    ask, homes = servers
+    monkeypatch.setattr(h264, "find_ffmpeg", lambda path="": "ffmpeg")
+    proven, seen, unproven = "turing-9.2-usb", "turing-12.3-usb", "turing-8.8-usb"
+    assert [find_model(m).video for m in (proven, seen, unproven)] == [True, False, False]
+    serial, other = "turing-3.5", "waveshare-2.8-udisp"
+    configs = ['[device]\ndriver = "virtual"\n', ""]
+    for model in (proven, seen, unproven, serial, other, "jonsbo-zc360-screen"):
+        for video in ("", 'mode = "on"', 'mode = "off"', 'local_clip = "clip.mp4"',
+                      'mode = "on"\nlocal_clip = "c"', "clip_asked = true"):  # fmt: skip
+            for more in ("", 'driver = "turzx"\nvideo_range = "full"', 'driver = "virtual"'):
+                configs.append(f'[device]\nmodel = "{model}"\n{more}\n[video]\n{video}\n')
+    configs.append(f'theme = "lumen"\n[device]\nmodel = "{proven}"\n[[panels]]\n'
+                   f'model = "{seen}"\nvideo = {{ mode = "auto", local_clip = "x" }}\n'
+                   f'[[panels]]\nmodel = "{unproven}"\nvideo = {{ mode = "on" }}\n'
+                   f"[[panels]]\nvideo = {{ mode = \"auto\" }}\n")  # fmt: skip
+    configs.append("theme = 5\n")
+    asked = 0
+    for config in configs:
+        for home in homes:
+            (home / "config.toml").write_text(config, encoding="utf-8")
+        for path in ("/api/panel", "/api/clip"):
+            theirs, ours = ask(_get(path, WITH))
+            assert ours[0] == theirs[0] and json.loads(ours[2]) == json.loads(theirs[2]), config
+            asked += json.loads(theirs[2]).get("ask", False)
+    assert asked >= 3

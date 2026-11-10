@@ -342,15 +342,26 @@ pub fn video_mode(video: &Video, model: Option<&PanelModel>) -> (bool, Vec<Strin
     let Some(model) = model else {
         return (false, Vec::new());
     };
-    if !model.video {
-        let said = format!("the video mode is not proven on the {} yet", model.label());
-        return (false, vec![said]);
+    let gaps = video_gaps(&video.local_clip, Some(model), true);
+    let texts = gaps.iter().map(|gap| match *gap {
+        "model" => format!("the video mode is not proven on the {} yet", model.label()),
+        _ => "video.local_clip is not set (see docs/CONFIGURATION.md, Video)".to_string(),
+    });
+    (gaps.is_empty(), texts.collect())
+}
+
+/// video_gaps: what the video mode lacks, as codes: "model" (not proven on this panel; it is
+/// then the only one) and "clip" (`local_clip` is not set). `proven` false does not ask for
+/// a proven model, as `mode = "on"` does not. (Libre Panel's engine encodes: no ffmpeg is
+/// looked for, as Python looks for one.)
+pub fn video_gaps(local_clip: &str, model: Option<&PanelModel>, proven: bool) -> Vec<&'static str> {
+    if proven && model.is_some_and(|model| !model.video) {
+        return vec!["model"];
     }
-    if video.local_clip.is_empty() {
-        let said = "video.local_clip is not set (see docs/CONFIGURATION.md, Video)";
-        return (false, vec![said.to_string()]);
+    match local_clip.is_empty() {
+        true => vec!["clip"],
+        false => Vec::new(),
     }
-    (true, Vec::new())
 }
 
 /// changed_boxes: where the frame `now` differs from `before` (both of `size`, three bytes

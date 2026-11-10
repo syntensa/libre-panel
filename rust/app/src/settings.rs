@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex};
 
 use lp_config::edit::Change;
 use lp_config::{Config, DeviceConfig};
+use lp_devices::models::PanelModel;
 use lp_py::toml::{Table, Toml};
 use lp_py::{repr, Dict, Value};
 use num_bigint::BigInt;
@@ -970,6 +971,146 @@ impl Settings<'_> {
         Ok(Change::Value(name.into(), cleaned))
     }
 
+    // -- the panel ------------------------------------------------------------------------
+
+    /// The panel that is found (looked for on the bus, without opening it, so a running
+    /// panel is not disturbed) and what the video mode makes of it.
+    pub fn panel(&self) -> Answer<Value> {
+        let config = self.config()?;
+        let configured = lp_devices::models::find_model(&config.device.model);
+        let mut found = find_panel(&config);
+        if let (Some(configured), Some(on_bus)) = (configured, &found) {
+            if screen_of(configured, on_bus.model) {
+                found = Some(Found::of(configured));
+            }
+        }
+        let model = configured.or(found.as_ref().map(|found| found.model));
+        let video = &config.device.video;
+        let usb = model.is_none_or(|model| model.protocol == "usb-turing");
+        let gaps = gaps_of(&video.mode, &video.local_clip, model, usb);
+        let on = usb && video_on(&video.mode, &video.local_clip, model);
+        let (mut running, mut shown, mut spare) = (Value::None, None, Vec::new());
+        if let Some(app) = &self.controls {
+            let state = app.panel.state();
+            let of = |key: &str| state.get(key).cloned().unwrap_or(Value::None);
+            if of("state").as_str() == Some("showing") {
+                spare = spare_panels();
+            }
+            shown = of("theme")
+                .as_str()
+                .filter(|t| !t.is_empty())
+                .map(str::to_string);
+            running = dict([
+                ("state", of("state")),
+                ("detail", of("detail")),
+                ("size", of("size")),
+                ("more", Value::List(Vec::new())),
+            ]);
+        }
+        let maybe = match found.is_none() && configured.is_none() {
+            true => maybe_panels(),
+            false => Vec::new(),
+        };
+        let unseen = range_unseen(on, &gaps, &config.device.video_range, model);
+        let weather_theme = self.weather_theme(&config, shown.as_deref());
+        Ok(dict([
+            ("configured", text(&config.device.model)),
+            ("found", found.map_or(Value::None, |found| found.info)),
+            // each panel beside this one: whether smooth motion runs on it, what it lacks
+            ("more_video", Value::List(more_video(&config))),
+            // a port with the ids other USB devices have too: the person says what it is
+            ("maybe", Value::List(maybe)),
+            (
+                "model",
+                model.map_or(Value::None, |m| model_info(m, None, true)),
+            ),
+            ("running", running),
+            // panels plugged in that no panel of the app shows anything on: one more to set up
+            ("spare", Value::List(spare)),
+            (
+                "video",
+                dict([
+                    ("mode", text(&video.mode)),
+                    ("fps", Value::int(video.fps)),
+                    ("on", Value::Bool(on)),
+                    ("usb", Value::Bool(usb)),
+                    // a display that takes whole pictures at the video's frames a second,
+                    // without the video mode (udisp)
+                    (
+                        "streams",
+                        Value::Bool(model.is_some_and(|m| m.protocol == "usb-udisp")),
+                    ),
+                    ("gaps", texts(&gaps)),
+                    ("range_unseen", Value::Bool(unseen)),
+                ]),
+            ),
+            (
+                "weather_theme",
+                weather_theme.map_or(Value::None, Value::Str),
+            ),
+        ]))
+    }
+
+    /// The theme on the panel (else the normal one) when it shows the weather, which the app
+    /// then asks for while the weather is off: its id, else None.
+    fn weather_theme(&self, config: &Config, shown: Option<&str>) -> Option<String> {
+        let places = self.home.places();
+        let normal = match config.theme_given {
+            true => config.theme.clone(),
+            false => lp_theme::defaults::default_theme(panel_model(config), &places).to_string(),
+        };
+        let mut themes: Vec<String> = shown.map(str::to_string).into_iter().collect();
+        if !themes.contains(&normal) && !normal.is_empty() {
+            themes.push(normal);
+        }
+        themes.into_iter().find(|theme| {
+            let reads = self.theme_reads(theme);
+            reads.iter().any(|key| key.starts_with("weather."))
+        })
+    }
+
+    /// theme_reads: the sensor keys (and patterns) the theme reads, its modules taken apart
+    /// as the panel draws them; none for a theme that cannot be read.
+    fn theme_reads(&self, theme: &str) -> std::collections::HashSet<String> {
+        let env = lp_theme::Env {
+            fonts_dir: self.home.fonts(),
+        };
+        let options = lp_render::Options {
+            preview: false,
+            animate: false,
+            dither: false,
+        };
+        lp_theme::versions::find_theme(theme, &self.home.places())
+            .ok()
+            .and_then(|folder| lp_theme::load_theme(&folder, &env).ok())
+            .and_then(|theme| lp_render::Renderer::new(theme, &env, options).ok())
+            .map(|renderer| renderer.reads())
+            .unwrap_or_default()
+    }
+
+    /// Whether Start is to ask for the name of the panel's standby clip, and the name the
+    /// vendor app keeps it under, which the question offers. Nothing is written by asking.
+    pub fn clip_question(&self) -> Answer<Value> {
+        let device = self.config()?.device;
+        let video = &device.video;
+        let waits = ["auto", "turzx"].contains(&device.driver.as_str())
+            && video.mode == "auto"
+            && video.local_clip.is_empty()
+            && !video.clip_asked;
+        // (the bus is looked at last)
+        let ask = waits && {
+            let model = lp_devices::models::find_model(&device.model)
+                .or_else(|| lp_devices::usb::present_model(&device.beside, 0));
+            model.is_some_and(|model| {
+                lp_devices::turzx::video_gaps(&video.local_clip, Some(model), true) == ["clip"]
+            })
+        };
+        Ok(dict([
+            ("ask", Value::Bool(ask)),
+            ("name", text("usr/data/standby.h264")),
+        ]))
+    }
+
     // -- scenes ---------------------------------------------------------------------------
 
     /// The scenes and the one that is on (scenes.py).
@@ -1061,6 +1202,172 @@ impl Settings<'_> {
         }
         String::new()
     }
+}
+
+/// A panel on the bus, as the app shows it.
+struct Found {
+    model: &'static PanelModel,
+    info: Value,
+}
+
+impl Found {
+    fn of(model: &'static PanelModel) -> Found {
+        Found {
+            model,
+            info: model_info(model, None, true),
+        }
+    }
+}
+
+const ZC360: &str = "jonsbo-zc360";
+const ZC360_SCREEN: &str = "jonsbo-zc360-screen";
+
+/// A panel model as the app shows it: its name, its size the way round it is mounted, how
+/// it is connected.
+fn model_info(model: &PanelModel, port: Option<&str>, sure: bool) -> Value {
+    let (width, height) = model.size("landscape");
+    let limits = match model.limits {
+        "" => String::new(),
+        limits => lp_i18n::t(limits),
+    };
+    dict([
+        ("id", text(model.id)),
+        ("label", Value::Str(model.label())),
+        (
+            "size",
+            Value::List(vec![Value::int(width), Value::int(height)]),
+        ),
+        ("shape", text(model.shape)),
+        (
+            "connection",
+            text(match model.protocol.starts_with("usb") {
+                true => "usb",
+                false => "serial",
+            }),
+        ),
+        ("port", port.map_or(Value::None, text)),
+        ("sure", Value::Bool(sure)),
+        ("video", Value::Bool(model.video)),
+        ("limits", Value::Str(limits)),
+        // screens that show it together (the ZC-360: three)
+        ("screens", Value::int(if model.id == ZC360 { 3 } else { 1 })),
+    ])
+}
+
+fn port_info(port: &lp_devices::ports::FoundPort) -> Value {
+    model_info(port.model, Some(&port.device), port.sure())
+}
+
+/// Whether the panel set up is one screen of the panel on the bus: a screen of the ZC-360
+/// as a panel of its own, which the bus shows as the three together.
+fn screen_of(configured: &PanelModel, found: &PanelModel) -> bool {
+    configured.id == ZC360_SCREEN && found.id == ZC360
+}
+
+/// _find_panel: a panel on the bus: a TURZX USB one, else a serial one by its USB ids. (The
+/// USB screens of other makers are not looked for in this build yet.)
+fn find_panel(config: &Config) -> Option<Found> {
+    if let Some(model) = lp_devices::usb::present_model(&config.device.beside, 0) {
+        return Some(Found::of(model));
+    }
+    // (a port that is not a panel's is no panel)
+    let port = lp_devices::ports::find_port(None, &config.device.port).ok()??;
+    Some(Found {
+        model: port.model,
+        info: port_info(&port),
+    })
+}
+
+/// panel_model: the panel a config is for, as far as it is known without opening anything:
+/// the configured model; else, with "auto" and a driver that looks for TURZX USB panels,
+/// the one on the USB bus.
+fn panel_model(config: &Config) -> Option<&'static PanelModel> {
+    let device = &config.device;
+    lp_devices::models::find_model(&device.model).or_else(|| {
+        let looks = device.model == "auto" && ["auto", "turzx"].contains(&device.driver.as_str());
+        looks
+            .then(|| lp_devices::usb::present_model(&device.beside, 0))
+            .flatten()
+    })
+}
+
+/// What the video mode lacks on a panel, as codes; none where it is off or the panel is no
+/// TURZX USB one.
+fn gaps_of(mode: &str, clip: &str, model: Option<&PanelModel>, usb: bool) -> Vec<&'static str> {
+    match mode {
+        _ if !usb => Vec::new(),
+        "off" => Vec::new(),
+        "auto" => match model {
+            Some(model) => lp_devices::turzx::video_gaps(clip, Some(model), true),
+            None => Vec::new(),
+        },
+        _ => lp_devices::turzx::video_gaps(clip, model, false),
+    }
+}
+
+/// video_mode's first: whether a TURZX USB panel runs in video mode.
+fn video_on(mode: &str, clip: &str, model: Option<&PanelModel>) -> bool {
+    match mode {
+        "auto" => {
+            model.is_some_and(|m| lp_devices::turzx::video_gaps(clip, Some(m), true).is_empty())
+        }
+        mode => mode == "on",
+    }
+}
+
+/// Whether Start asks how black looks on a panel: smooth motion runs on it (nothing it
+/// lacks), its range is left to the model, and nobody has seen that model's range on a
+/// panel.
+fn range_unseen(on: bool, gaps: &[&str], range: &str, model: Option<&PanelModel>) -> bool {
+    on && gaps.is_empty() && range == "auto" && !model.is_some_and(|m| m.video_range_seen)
+}
+
+/// Smooth motion on each panel of `[[panels]]`: `{index, usb, on, gaps}`, as for the first
+/// panel (its own mode and clip), the model as set.
+fn more_video(config: &Config) -> Vec<Value> {
+    (0..config.panels.len())
+        .filter_map(|n| {
+            let device = config.for_panel(n)?.device;
+            let video = &device.video;
+            let model = lp_devices::models::find_model(&config.panels[n].device.model);
+            let usb = model.is_none_or(|model| model.protocol == "usb-turing");
+            let gaps = gaps_of(&video.mode, &video.local_clip, model, usb);
+            let on = usb && video_on(&video.mode, &video.local_clip, model);
+            let unseen = range_unseen(on, &gaps, &device.video_range, model);
+            Some(dict([
+                ("index", Value::int(n as i64)),
+                ("usb", Value::Bool(usb)),
+                ("on", Value::Bool(on)),
+                ("gaps", texts(&gaps)),
+                ("range_unseen", Value::Bool(unseen)),
+            ]))
+        })
+        .collect()
+}
+
+/// _spare_panels: the panels on the bus that no loop of the app has open: each with its
+/// model and, for a serial one, its port.
+fn spare_panels() -> Vec<Value> {
+    let usb = lp_devices::usb::free_models();
+    let mut found: Vec<Value> = usb.into_iter().map(|m| model_info(m, None, true)).collect();
+    found.extend(lp_devices::ports::free_panels().iter().map(port_info));
+    found
+}
+
+/// _maybe_panels: the ports with the generic ids of an awake Turing rev. C panel, which
+/// Libre Panel does not talk to unasked: each with the panels it may be.
+fn maybe_panels() -> Vec<Value> {
+    lp_devices::ports::gadget_ports()
+        .iter()
+        .map(|port| {
+            let models = port.candidates.iter();
+            let models = models.map(|m| model_info(m, Some(&port.device), false));
+            dict([
+                ("port", text(&port.device)),
+                ("models", Value::List(models.collect())),
+            ])
+        })
+        .collect()
 }
 
 fn scenes_told(state: &lp_config::scenes::State) -> Value {

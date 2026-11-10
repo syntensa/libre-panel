@@ -3564,3 +3564,59 @@ def test_the_demo_is_made_up_as_demo_py_makes_it_up() -> None:
         for key, image in pictures.items()
     ]
     assert len(pictures) == 3
+
+
+def test_serial_panels_are_found_among_the_ports_as_serial_link_py_finds_them(
+    monkeypatch: Any,
+) -> None:
+    """devices/serial_link.py: the port of a serial panel by its USB ids and serial number,
+    for a model, for any and for a port that is named; the panels no panel has open; the
+    ports with a gadget's ids, which are left alone unasked. Lists of ports made up of the
+    ids and serial numbers the models have, of a gadget's and of others'."""
+    from types import SimpleNamespace
+
+    from libre_panel import i18n
+    from libre_panel.devices import serial_link
+    from libre_panel.devices.base import DeviceError
+    from libre_panel.devices.models import MODELS, find_model
+
+    rng = random.Random(41)
+    serial = [m for m in MODELS if m.protocol in serial_link.SERIAL_PROTOCOLS]
+    ids = sorted({pair for m in MODELS for pair in m.usb_ids} | serial_link.GADGET_IDS)
+    numbers = sorted({n for m in MODELS for n in m.serial_numbers})
+    numbers += [serial_link.GADGET_SERIAL, "other", ""]
+    i18n.set_language("de")
+    cases, theirs = [], []
+
+    def told(found: Any) -> Any:
+        candidates = [m.id for m in found.candidates]
+        return [found.device, found.model.id, found.serial_number, candidates, found.sure]
+
+    for _ in range(600):
+        ports = []
+        for n in rng.sample(range(6), rng.randrange(0, 5)):
+            other = rng.choice([(1, 2), (None, None)])
+            vid, pid = rng.choice(ids) if rng.random() < 0.85 else other
+            number = rng.choice(numbers) if rng.random() < 0.7 else None
+            ports.append([f"/dev/ttyACM{n}", vid, pid, number])
+        model = rng.choice(serial).id if rng.random() < 0.6 else None
+        if rng.random() < 0.1:
+            model = rng.choice(MODELS).id
+        port = f"/dev/ttyACM{rng.randrange(7)}" if rng.random() < 0.4 else ""
+        cases.append({"ports": ports, "model": model, "port": port})
+        infos = [SimpleNamespace(device=d, vid=v, pid=p, serial_number=s) for d, v, p, s in ports]
+        monkeypatch.setattr(serial_link, "_ports", lambda infos=infos: list(infos))
+        try:
+            found = serial_link.find_port(find_model(model) if model else None, port)
+            found = told(found) if found else None
+        except DeviceError as exc:
+            found = {"error": str(exc)}
+        free = [told(found) for found in serial_link.free_panels()]
+        theirs.append([found, free, [told(found) for found in serial_link.gadget_ports()]])
+    case = {"op": "ports", "locale": str(i18n.LOCALE_DIR), "language": "de", "lists": cases}
+    [ours] = run([case])
+    assert sum(1 for found, _, _ in theirs if isinstance(found, dict)) > 20
+    assert sum(1 for found, _, _ in theirs if isinstance(found, list)) > 150
+    assert sum(1 for _, _, gadgets in theirs if gadgets) > 20
+    for case, mine, yours in zip(cases, ours, theirs, strict=True):
+        assert mine == yours, case

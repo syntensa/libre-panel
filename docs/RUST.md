@@ -1924,12 +1924,18 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       sources, the switches, the services' options, what names a program while Libre Panel
       has the highest rights); the scenes; what About says. 150 writes compared, and the
       two config.toml files after each.
+      What Start asks about the panel (`/api/panel`, `/api/clip`): the model set or found on
+      the bus without opening it (a TURZX USB panel; a serial one by its USB ids,
+      `rust/devices/src/ports.rs`, 600 lists of ports compared with serial_link.py), what
+      smooth motion makes of it and lacks, the panels beside it, the theme that shows the
+      weather; 110 configurations compared. (The USB screens of other makers are not looked
+      for yet; no ffmpeg is asked for: the engine encodes.)
       `libre-panel editor` serves alone, `start` with
       the panel, and writes its address where a later start finds it. 120 requests to
       Python's server and to this one compared: the status, the headers and the body, byte
       for byte; a run of the program controlled through its server until `quit` ends it.
       Still to come: every other route (the themes' pictures and versions, saving, the
-      Settings' panel, system, unlock, report, place search and folders, hardware, the Player, plugins' pages, …)
+      Settings' system, unlock, report, place search and folders, hardware, the Player, plugins' pages, …)
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app
 - [ ] the window (wry, tao), the tray icon, the command line, autostart, single instance,

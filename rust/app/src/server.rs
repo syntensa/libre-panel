@@ -200,6 +200,12 @@ const ROUTES: &[Route] = &[
     private("GET", "/api/settings", |s, x, _, _| {
         settings(s, x, |told| told.read())
     }),
+    private("GET", "/api/panel", |s, x, _, _| {
+        settings(s, x, |told| told.panel())
+    }),
+    private("GET", "/api/clip", |s, x, _, _| {
+        settings(s, x, |told| told.clip_question())
+    }),
     private("GET", "/api/about", |s, x, _, _| {
         settings(s, x, |told| told.about())
     }),

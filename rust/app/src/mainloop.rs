@@ -63,6 +63,8 @@ pub struct RunStatus {
     pub frames: u64,
     /// which run of the loop this is, counted from 1 (0: none runs)
     pub run: u64,
+    /// the size of the panel's frames
+    pub size: Option<(i64, i64)>,
 }
 
 /// the runs of the loop so far
@@ -886,6 +888,7 @@ impl MainLoop {
         self.renderer = Some(renderer);
         match drawn {
             Ok(frame) => {
+                let size = frame.size();
                 let shown = match &mut self.panel {
                     Some(panel) => panel.show(frame, started),
                     None => Ok(false),
@@ -895,6 +898,7 @@ impl MainLoop {
                         self.frames += 1;
                         if let Ok(mut status) = self.status.lock() {
                             status.state = "showing";
+                            status.size = Some((size.0 as i64, size.1 as i64));
                             status.frames = self.frames;
                             status.theme.clone_from(&self.shown);
                         }

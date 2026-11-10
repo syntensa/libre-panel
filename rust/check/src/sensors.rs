@@ -2875,6 +2875,49 @@ impl lp_devices::link::Link for MadeUpDisplay {
 
 /// The Waveshare display's protocol and its service (devices/waveshare.py,
 /// services/waveshare.py).
+/// The serial panels among lists of ports, as serial_link.py finds them: each case's
+/// `ports` (`[device, vid, pid, serial number]`), `model` (an id or null) and `port`.
+fn ports(case: &Value) -> Result<Value, String> {
+    use lp_devices::ports::{find_among, free_among, gadgets_among, FoundPort};
+    use lp_devices::serial::PortInfo;
+    let locale = std::path::PathBuf::from(case["locale"].as_str().unwrap_or(""));
+    let code = case["language"].as_str().unwrap_or("en");
+    lp_i18n::set_language(lp_i18n::Language::load(&locale, code)?);
+    let told = |found: &FoundPort| {
+        let candidates: Vec<&str> = found.candidates.iter().map(|m| m.id).collect();
+        json!([
+            found.device,
+            found.model.id,
+            found.serial_number,
+            candidates,
+            found.sure()
+        ])
+    };
+    let mut answers = Vec::new();
+    for case in case["lists"].as_array().into_iter().flatten() {
+        let listed = case["ports"].as_array().into_iter().flatten();
+        let ports: Vec<PortInfo> = listed
+            .map(|port| PortInfo {
+                device: port[0].as_str().unwrap_or("").to_string(),
+                vid: port[1].as_u64().map(|n| n as u16),
+                pid: port[2].as_u64().map(|n| n as u16),
+                serial_number: port[3].as_str().map(str::to_string),
+            })
+            .collect();
+        let model = case["model"]
+            .as_str()
+            .and_then(lp_devices::models::find_model);
+        let found = match find_among(&ports, model, case["port"].as_str().unwrap_or("")) {
+            Ok(found) => found.as_ref().map_or(Value::Null, told),
+            Err(why) => json!({"error": why.0}),
+        };
+        let free: Vec<Value> = free_among(&ports).iter().map(told).collect();
+        let gadgets: Vec<Value> = gadgets_among(&ports).iter().map(told).collect();
+        answers.push(json!([found, free, gadgets]));
+    }
+    Ok(Value::Array(answers))
+}
+
 fn waveshare(case: &Value) -> Result<Value, String> {
     use lp_devices::waveshare::{
         answer_of, connect, frame, is_display, qmap, read_qmap, theme_name, Display, Frames, Said,
@@ -3178,6 +3221,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "cooling" => cooling(case)?,
         "devices" => devices(case)?,
         "waveshare" => waveshare(case)?,
+        "ports" => ports(case)?,
         "demo" => demo(case)?,
         "autopilot" => autopilot(case)?,
         "mangohud" => mangohud(case)?,

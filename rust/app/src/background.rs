@@ -220,6 +220,11 @@ impl PanelService {
         told.insert("detail".into(), Value::Str(error));
         told.insert("theme".into(), Value::Str(status.theme));
         told.insert("frames".into(), Value::int(status.frames as i64));
+        // the size of the panel's frames: the app shows each theme in its version for it
+        let size = status.size.map_or(Value::None, |(width, height)| {
+            Value::List(vec![Value::int(width), Value::int(height)])
+        });
+        told.insert("size".into(), size);
         told
     }
 }
