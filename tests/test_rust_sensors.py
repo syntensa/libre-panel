@@ -1627,3 +1627,192 @@ def test_a_players_icon_is_found_as_appicon_finds_it(tmp_path: Any) -> None:
         assert got[3] == shown(appicon.load_file(file) if file else None)
         found += got[3] is not None
     assert found > 15
+
+
+def _made_up_answer(rng: random.Random) -> tuple[dict[str, Any], float]:
+    """An answer as Open-Meteo gives one for a made-up place and day, with what an answer may
+    lack or have wrong, and a moment near it."""
+    from datetime import UTC, datetime, timedelta
+
+    offset = rng.choice([0, 3600, 7200, -18000, 19800, 45900, -34200])
+    start = datetime(rng.randrange(2001, 2090), rng.randrange(1, 13), rng.randrange(1, 29))
+    now = (start - timedelta(seconds=offset)).replace(tzinfo=UTC).timestamp()
+    step = rng.randrange(0, 96) * 900
+    now += rng.choice([rng.uniform(-90000, 8 * 86400), rng.uniform(0, 86400), step, step - 1e-6])
+
+    def some(values: list[Any]) -> list[Any]:
+        """The values with gaps, or cut short."""
+        values = [None if rng.random() < 0.03 else v for v in values]
+        return values[: rng.randrange(len(values) + 1)] if rng.random() < 0.1 else values
+
+    def stamp(at: datetime, date: bool = False) -> str:
+        if rng.random() < 0.01:
+            return rng.choice(["", "soon", "2024-13-01T00:00", "2024-02-30"])
+        return at.strftime("%Y-%m-%d") if date else at.strftime("%Y-%m-%dT%H:%M")
+
+    hours = rng.choice([168, 168, 168, 30, 3, 0])
+    days = rng.choice([7, 7, 7, 3, 9, 0])
+    steps = rng.choice([672, 672, 96, 40, 5, 0])
+    wet = rng.choice([0.0, 0.3, 0.6, 1.0])
+    run_length = rng.choice([1, 3, 10, 40])
+    rain: list[Any] = []
+    while len(rain) < steps:
+        amount = (
+            rng.choice([0.1, 0.2, 1.5, 12]) if rng.random() < wet else rng.choice([0, 0.0, 0.05])
+        )
+        rain.extend([amount] * rng.randrange(1, run_length + 1))
+    data: dict[str, Any] = {
+        "latitude": 52.52,
+        "utc_offset_seconds": offset,
+        "current_units": {
+            "temperature_2m": "°C",
+            "apparent_temperature": "°C",
+            "relative_humidity_2m": "%",
+            "wind_speed_10m": "km/h",
+            "weather_code": "wmo code",
+            "is_day": "",
+        },  # fmt: skip
+        "current": {
+            "time": "x",
+            "interval": 900,
+            "temperature_2m": rng.uniform(-30, 40),
+            "apparent_temperature": rng.randrange(-30, 40),
+            "relative_humidity_2m": rng.randrange(0, 101),
+            "wind_speed_10m": round(rng.uniform(0, 90), 1),
+            "weather_code": rng.choice([0, 1, 2, 3, 45, 61, 95, 99, 4, 100, 3.0, None]),
+            "is_day": rng.randrange(2),
+        },  # fmt: skip
+        "hourly_units": {
+            "temperature_2m": "°F",
+            "precipitation_probability": "%",
+            "weather_code": "wmo code",
+            "is_day": "",
+        },  # fmt: skip
+        "hourly": {
+            "time": [stamp(start + timedelta(hours=h)) for h in range(hours)],
+            "temperature_2m": some([round(rng.uniform(-30, 40), 1) for _ in range(hours)]),
+            "weather_code": some([rng.choice([0, 3, 61, 80]) for _ in range(hours)]),
+            "precipitation_probability": some([rng.randrange(0, 101) for _ in range(hours)]),
+            "is_day": some([rng.randrange(2) for _ in range(hours)]),
+        },
+        "daily_units": {
+            "temperature_2m_max": "°C",
+            "temperature_2m_min": "°C",
+            "weather_code": "wmo code",
+            "precipitation_probability_max": "%",
+        },  # fmt: skip
+        "daily": {
+            "time": [stamp(start + timedelta(days=d), date=True) for d in range(days)],
+            "temperature_2m_max": some([round(rng.uniform(0, 40), 1) for _ in range(days)]),
+            "temperature_2m_min": some([round(rng.uniform(-30, 10), 1) for _ in range(days)]),
+            "weather_code": some([rng.choice([0, 3, 61, 80]) for _ in range(days)]),
+            "precipitation_probability_max": some([rng.randrange(0, 101) for _ in range(days)]),
+        },
+        "minutely_15": {
+            "time": [stamp(start + timedelta(minutes=15 * s)) for s in range(steps)],
+            "precipitation": some(rain[:steps]),
+        },
+    }
+    for key in list(data):
+        if rng.random() < 0.02:
+            data[key] = rng.choice([None, {}])
+        elif rng.random() < 0.02:
+            del data[key]
+    for part in ("current", "current_units", "hourly_units", "daily_units"):
+        table = data.get(part)
+        for key in list(table or {}):
+            if rng.random() < 0.03:
+                del table[key]
+    return data, now
+
+
+@pytest.mark.parametrize("language", ["en", "de", "fr", "zh"])
+def test_the_weather_is_read_as_open_meteo_py_reads_it(language: str) -> None:
+    """weather/open_meteo.py: the forecast's address, the present weather, the hours and
+    the days to come and the rain of the next two hours of made-up answers at moments near
+    them, in the panel's languages; and the times as datetime.fromisoformat reads them."""
+    from datetime import datetime, timedelta
+
+    from libre_panel import i18n
+    from libre_panel.config import WeatherConfig
+    from libre_panel.weather import open_meteo
+
+    rng = random.Random(0x0E7E0 + len(language) + ord(language[0]))
+    places = [[52.52, 13.405, False], [-33.87, 151.21, True], [0.0, -0.0, False],
+              [1e-7, 1e16, True], [89.99999, -179.5, False]]  # fmt: skip
+    answers = [_made_up_answer(rng) for _ in range(1500)]
+    # fmt: off
+    iso = [
+        "2024-05-01", "20240501", "2024-W18-3", "2024W183", "2024-W18", "2024W18", "2020-W53-7",
+        "2021-W53-1", "2024-05-01T12", "2024-05-01 12:30", "2024-05-01T12:30:45",
+        "2024-05-01T123045", "2024-05-01T1230", "2024-05-01T12:30:45.5",
+        "20240501T123045,123456789", "2024-05-01T12:30:45.1234567", "2024-05-01T12:30Z",
+        "2024-05-01T12:30+02:00", "2024-05-01T12:30:45.25-05:30", "2024-05-01T12:30+02",
+        "2024-05-01T12:30+0200", "2024-05-01T12:30+02:00:30.5", "2024-05-01T12:30-23:59:59.999999",
+        "2024-05-01T12:30+24:00", "2024-05-01T12:30+00:00", "2024-05-01T12:30Zx",
+        "2024-05-01T24:00", "2024-05-01T12:60", "2024-05-01T12:30:60", "2024-05-01T",
+        "2024-05-01T1", "2024-05-01T12:3", "2024-05-01T12:30:", "2024-05-01T12:30:45.",
+        "2024-05-01T12:30:45:1", "2024-05-01T12304567", "2024-05-01T1230456", "2024-05-01é12:30",
+        "2024-5-1", "2024-05-1", "0000-01-01", "9999-12-31T23:59:59.999999", "9999-W52-7",
+        "9999-W53-1", "0001-W01-1", "2024-W00-1", "2024-W54-1", "2024-W18-0", "2024-W18-8",
+        "2024-W1", "2024-W18-", "2024-W18-3T10", "2024W183T10", "2024-W18T10", "2024-W18-10",
+        "2024W1810", "2024-02-30", "2024-00-10", "2024-13-10", "202405", "2024-05", "", "x",
+        "2024-05-01T12:30+", "2024-05-01T-02:00", "2024-05-01T12.5", "2024-05-01T12,5+01",
+    ]
+    # fmt: on
+    letters = "0123456789-:.,TWZ+ "
+    for _ in range(3000):
+        text = rng.choice(iso[:40])
+        for _ in range(rng.randrange(1, 3)):
+            at = rng.randrange(len(text) + 1)
+            text = (
+                text[:at] + rng.choice(letters) * rng.randrange(2) + text[at + rng.randrange(2) :]
+            )
+        iso.append(text)
+    [ours] = run([{"op": "weather", "locale": str(i18n.LOCALE_DIR), "language": language,
+                   "urls": places, "iso": iso,
+                   "answers": [[json.dumps(data), now] for data, now in answers]}])  # fmt: skip
+
+    for (latitude, longitude, imperial), url in zip(places, ours["urls"], strict=True):
+        cfg = WeatherConfig(latitude=latitude, longitude=longitude,
+                            units="imperial" if imperial else "metric")  # fmt: skip
+        params = open_meteo.build_params(cfg)
+        from urllib.parse import urlencode
+
+        assert url == f"{open_meteo.FORECAST_URL}?{urlencode(params)}"
+
+    def rows(readings: dict[str, Any]) -> list[list[Any]]:
+        return [[key, {"float": repr(r.value)} if isinstance(r.value, float) else r.value,
+                 r.unit, r.label] for key, r in readings.items()]  # fmt: skip
+
+    seen: set[str] = set()
+    i18n.set_language(language)
+    try:
+        for (data, now), (current, forecast) in zip(answers, ours["answers"], strict=True):
+            assert current == rows(open_meteo.parse_current(data)), data
+            wanted = open_meteo.forecast_readings(data, now)
+            assert forecast == rows(wanted), (now, data)
+            seen.update(key.rsplit(".", 1)[-1] if "rain" not in key else key for key in wanted)
+            if "weather.rain.minutes" not in wanted and "weather.rain.text" in wanted:
+                seen.add("stays")
+            seen.update(f"hours {sum(key.endswith('.time') for key in wanted)}" for _ in "1")
+    finally:
+        i18n.set_language("en")
+    assert seen >= {"weather.rain.minutes", "weather.rain.text", "stays", "time", "name", "high",
+                    "hours 24", "hours 0"}  # fmt: skip
+
+    valid = 0
+    for text, got in zip(iso, ours["iso"], strict=True):
+        try:
+            at = datetime.fromisoformat(text)
+        except ValueError:
+            assert got is None, text
+            continue
+        valid += 1
+        stamp = [at.year, at.month, at.day, at.hour, at.minute, at.second, at.microsecond]
+        assert got is not None and got[0] == stamp, text
+        if at.tzinfo is None:
+            assert len(got) == 1, text
+        else:
+            assert got[1] * 10**6 + got[2] == at.utcoffset() // timedelta(microseconds=1), text
+    assert valid > 500

@@ -28,5 +28,6 @@ pub mod sky;
 pub mod smbios;
 pub mod sysfs;
 pub mod topology;
+pub mod weather;
 #[cfg(windows)]
 pub mod winlink;

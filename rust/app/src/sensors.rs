@@ -244,6 +244,27 @@ impl Source for Media {
     }
 }
 
+/// The weather of the user's place, from Open-Meteo (weather/open_meteo.py).
+struct Weather(lp_sensors::weather::WeatherSource);
+
+impl Source for Weather {
+    fn name(&self) -> &'static str {
+        "open-meteo"
+    }
+
+    fn read(&mut self, out: &mut Readings) {
+        out.extend(self.0.read());
+    }
+
+    fn notes(&mut self) -> Vec<String> {
+        self.0.notes()
+    }
+
+    fn wait_ready(&mut self, seconds: f64) {
+        self.0.wait_ready(seconds);
+    }
+}
+
 /// The sun and the moon (sensors/sky.py).
 struct Sky(lp_sensors::sky::SkySource);
 
@@ -530,6 +551,23 @@ impl Hub {
                     }
                     other => missing.push(other.to_string()),
                 }
+            }
+            if let (true, Some(latitude), Some(longitude)) = (
+                config.weather.enabled,
+                config.weather.latitude,
+                config.weather.longitude,
+            ) {
+                // (the tests' own: a forecast served by the test)
+                let base = std::env::var("LP_WEATHER_URL")
+                    .unwrap_or_else(|_| lp_sensors::weather::FORECAST_URL.to_string());
+                sources.push(Box::new(Weather(lp_sensors::weather::WeatherSource::new(
+                    &base,
+                    latitude,
+                    longitude,
+                    config.weather.units == "imperial",
+                    u64::try_from(&config.weather.update_minutes).unwrap_or(5),
+                    concat!("libre-panel/", env!("CARGO_PKG_VERSION")),
+                ))));
             }
             if !sensors.providers.iter().any(|name| name == "media") {
                 // idle until a theme shows what is playing

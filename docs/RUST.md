@@ -1730,6 +1730,13 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       1500 logo names, 200 packages with their manifests, 150 sets of desktop entries and
       icons and the badges compared with Python. XPM pixmaps are not read
 - [x] str.capitalize in lp-py (the first character's title case, Unicode 15.0)
+- [x] the weather (weather/open_meteo.py, lp-sensors' weather): Open-Meteo's forecast for the
+      place in `[weather]`, asked for in the background through lp-net; the present weather,
+      the next 24 hours, the week's days in the panel's language and the rain of the next two
+      hours, relative to now at each reading. lp-py reads the forecast's times as
+      datetime.fromisoformat does (dates, ISO weeks, times with and without colons,
+      fractions, offsets). Compared with Python on made-up answers in four languages; the app
+      asks a server of the test's own
 - [ ] HWiNFO, RTSS, the other sources; Linux's hint of what system-setup brings
 - [ ] the history as a ring, demo.py's values; the .NET service goes
 

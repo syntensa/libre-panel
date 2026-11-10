@@ -1067,6 +1067,86 @@ fn appicon(case: &Value) -> Value {
            "packages": packages, "files": files, "dirs": dirs, "players": players})
 }
 
+/// A reading's value as JSON keeps its type: null, a bool, a whole number, a float (as
+/// Python's repr writes it), a text.
+fn plain(value: &lp_py::Value) -> Value {
+    match value {
+        lp_py::Value::None => Value::Null,
+        lp_py::Value::Bool(b) => json!(b),
+        lp_py::Value::Int(n) => json!(n.to_string().parse::<i64>().ok()),
+        lp_py::Value::Float(f) => json!({"float": lp_py::float_repr(*f)}),
+        lp_py::Value::Str(s) => json!(s),
+        other => json!({"repr": other.str()}),
+    }
+}
+
+/// weather: the forecast's address for each [latitude, longitude, imperial], the present
+/// weather and the forecast of each [answer, now] in the case's language, and what
+/// datetime.fromisoformat makes of each text.
+fn weather(case: &Value) -> Result<Value, String> {
+    use lp_py::datetime::Iso;
+    use lp_sensors::weather;
+    let locale = std::path::PathBuf::from(case["locale"].as_str().unwrap_or(""));
+    let code = case["language"].as_str().unwrap_or("en");
+    lp_i18n::set_language(lp_i18n::Language::load(&locale, code)?);
+    let urls: Vec<String> = case["urls"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|place| {
+            weather::forecast_url(
+                weather::FORECAST_URL,
+                place[0].as_f64().unwrap_or(0.0),
+                place[1].as_f64().unwrap_or(0.0),
+                place[2].as_bool().unwrap_or(false),
+            )
+        })
+        .collect();
+    let rows = |readings: lp_sensors::lhm::Readings| -> Vec<Value> {
+        readings
+            .iter()
+            .map(|(key, r)| json!([key, plain(&r.value), r.unit, r.label]))
+            .collect()
+    };
+    let mut answers = Vec::new();
+    for answer in case["answers"].as_array().into_iter().flatten() {
+        let data = match lp_py::json::loads(answer[0].as_str().unwrap_or("")) {
+            Ok(lp_py::Value::Dict(data)) => data,
+            _ => return Err("an answer that is no table".into()),
+        };
+        let now = answer[1].as_f64().unwrap_or(0.0);
+        answers.push(json!([
+            rows(weather::parse_current(&data)),
+            rows(weather::forecast_readings(&data, now)),
+        ]));
+    }
+    lp_i18n::set_language(lp_i18n::Language::english());
+    let stamp = |at: &lp_py::datetime::DateTime| {
+        json!([
+            at.year,
+            at.month,
+            at.day,
+            at.hour,
+            at.minute,
+            at.second,
+            at.microsecond
+        ])
+    };
+    let iso: Vec<Value> = case["iso"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(
+            |text| match lp_py::datetime::fromisoformat(text.as_str().unwrap_or("")) {
+                Iso::Naive(at) => json!([stamp(&at)]),
+                Iso::Aware(at, seconds, micros) => json!([stamp(&at), seconds, micros]),
+                Iso::Invalid => Value::Null,
+            },
+        )
+        .collect();
+    Ok(json!({"urls": urls, "answers": answers, "iso": iso}))
+}
+
 pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "regex" => regex(case),
@@ -1081,6 +1161,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "game_frames" => frames(case),
         "hardware" => hardware(case),
         "sky" => sky(case)?,
+        "weather" => weather(case)?,
         "mangohud" => mangohud(case)?,
         "media" => media(case),
         "appicon" => appicon(case),

@@ -802,3 +802,114 @@ def test_what_plays_is_read_from_playerctl_or_else_from_busctl(tmp_path: Path) -
     assert ours["media.artist"] == ("Air, Beck", "", "Artist")
     assert ours["media.source"] == ("Firefox", "", "Player")
     assert ours["media.duration"] == ("300.00", "s", "Length")
+
+
+def test_the_weather_comes_from_the_forecast_of_the_place(tmp_path: Path) -> None:
+    """With `[weather]` on, the forecast is asked for the place in the settings (here of a
+    server of the test's own, which sees what is asked) and read as weather/open_meteo.py
+    reads it; an answer that is none is said and nothing more."""
+    from datetime import UTC, datetime, timedelta
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    from libre_panel.config import WeatherConfig
+    from libre_panel.weather import open_meteo
+
+    start = datetime.now(UTC).replace(minute=0, second=0, microsecond=0, tzinfo=None)
+    start -= timedelta(hours=start.hour)
+    data = {
+        "utc_offset_seconds": 0,
+        "current_units": {
+            "temperature_2m": "°C",
+            "wind_speed_10m": "km/h",
+            "relative_humidity_2m": "%",
+            "apparent_temperature": "°C",
+        },  # fmt: skip
+        "current": {
+            "temperature_2m": 18.5,
+            "apparent_temperature": 17,
+            "weather_code": 61,
+            "relative_humidity_2m": 70,
+            "wind_speed_10m": 12.25,
+            "is_day": 1,
+        },  # fmt: skip
+        "hourly_units": {"temperature_2m": "°C", "precipitation_probability": "%"},
+        "hourly": {
+            "time": [(start + timedelta(hours=h)).strftime("%Y-%m-%dT%H:%M") for h in range(72)],
+            "temperature_2m": [h / 2 for h in range(72)],
+            "weather_code": [3] * 72,
+            "precipitation_probability": [40] * 72,
+            "is_day": [1] * 72,
+        },  # fmt: skip
+        "daily_units": {"temperature_2m_max": "°C", "temperature_2m_min": "°C"},
+        "daily": {
+            "time": [(start + timedelta(days=d)).strftime("%Y-%m-%d") for d in range(3)],
+            "temperature_2m_max": [20.5, 21, 22],
+            "temperature_2m_min": [10, 11.5, 12],
+            "weather_code": [61, 3, 0],
+            "precipitation_probability_max": [80, 20, 0],
+        },  # fmt: skip
+        "minutely_15": {
+            "time": [
+                (start + timedelta(minutes=15 * s)).strftime("%Y-%m-%dT%H:%M") for s in range(288)
+            ],
+            "precipitation": [1.5] * 288,
+        },  # fmt: skip
+    }
+    asked: list[tuple[str, str]] = []
+    answer = [json.dumps(data).encode()]
+
+    class Forecast(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            asked.append((self.path, self.headers.get("User-Agent", "")))
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(answer[0])))
+            self.end_headers()
+            self.wfile.write(answer[0])
+
+        def log_message(self, *args: Any) -> None:
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Forecast)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        (tmp_path / "config.toml").write_text(
+            '[sensors]\nproviders = ["nope"]\n[weather]\nenabled = true\nlatitude = 52.52\n'
+            'longitude = 13.405\nunits = "imperial"\n',
+            encoding="utf-8",
+        )
+        url = f"http://127.0.0.1:{server.server_address[1]}/v1/forecast"
+        env = {"LP_WEATHER_URL": url, "NO_PROXY": "127.0.0.1", "no_proxy": "127.0.0.1"}
+        before = time.time()
+        done = _run(tmp_path, "sensors", **env)
+        after = time.time()
+        assert done.returncode == 0, done.stderr
+        cfg = WeatherConfig(latitude=52.52, longitude=13.405, units="imperial")
+        from urllib.parse import urlencode
+
+        [(path, agent)] = asked
+        assert path == f"/v1/forecast?{urlencode(open_meteo.build_params(cfg))}"
+        assert agent.startswith("libre-panel/")
+        ours = {line[:40].strip(): line[41:]
+                for line in done.stdout.splitlines() if line.startswith("weather.")}  # fmt: skip
+        wanted = [{**open_meteo.parse_current(data), **open_meteo.forecast_readings(data, at)}
+                  for at in (before, after)]  # fmt: skip
+        assert sorted(ours) in [sorted(readings) for readings in wanted]
+        assert {"weather.temperature", "weather.hour.1.time", "weather.day.0.name",
+                "weather.rain.text"} <= set(ours)  # fmt: skip
+        for key, rest in ours.items():  # (the value, its unit, its label)
+            said = [f"{r.value:.2f}" if isinstance(r.value, float) else str(r.value)
+                    for r in (readings[key] for readings in wanted if key in readings)]  # fmt: skip
+            reading = wanted[0].get(key) or wanted[1][key]
+            assert any(rest.lstrip().startswith(text) for text in said), key
+            assert rest.endswith(f" {reading.unit:<5} {reading.label}"), key
+
+        asked.clear()
+        answer[0] = b"<html>no forecast today</html>"
+        done = _run(tmp_path, "sensors", **env)
+        assert done.returncode == 0, done.stderr
+        assert len(asked) == 1 and "weather." not in done.stdout
+        assert "weather update failed" in done.stderr
+    finally:
+        server.shutdown()
+        server.server_close()
