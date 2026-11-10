@@ -442,6 +442,11 @@ impl BackgroundApp {
         self.company.close();
     }
 
+    /// The readings the panel was last drawn from.
+    pub fn latest(&self) -> Option<Arc<lp_render::Snapshot>> {
+        self.company.host.latest()
+    }
+
     /// upside_down: whether the panel's picture is turned round; None where config.toml
     /// cannot be read.
     pub fn upside_down(&self) -> Option<bool> {

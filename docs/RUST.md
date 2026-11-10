@@ -1914,12 +1914,15 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       app's language; the themes that are installed, a theme by its name with what is said
       of it, the files in its folder and a file of it (a picture's token in its address);
       the background app's state and controls (pause, resume, anew, brightness, the picture
-      turned, quit). `libre-panel editor` serves alone, `start` with
+      turned, quit); the readings for the pickers (the panel's own in the background app,
+      a hub of the server's own otherwise, the demo's where the computer gives none, each
+      marked a sample or not, with the history asked for) and every key a theme can show.
+      `libre-panel editor` serves alone, `start` with
       the panel, and writes its address where a later start finds it. 120 requests to
       Python's server and to this one compared: the status, the headers and the body, byte
       for byte; a run of the program controlled through its server until `quit` ends it.
-      Still to come: every other route (the themes' pictures and versions, saving, the
-      readings, settings, hardware, the Player, plugins' pages, …)
+      Still to come: every other route (the themes' pictures and versions, saving,
+      settings, hardware, the Player, plugins' pages, …)
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app
 - [ ] the window (wry, tao), the tray icon, the command line, autostart, single instance,

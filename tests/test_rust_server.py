@@ -47,6 +47,10 @@ def _asked(port: int, request: bytes) -> tuple[str, dict[str, str], bytes]:
     return status, headers, body
 
 
+# what this computer's hardware tells a server without sources: its names
+OWN = ("cpu.name", "mem.", "gpu.name", "board.", "system.")
+
+
 @pytest.fixture
 def servers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
     """Both servers on a config.toml of their own: ``ask(request)`` gives each one's answer to
@@ -56,7 +60,9 @@ def servers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
         home = tmp_path / side
         home.mkdir()
         (home / "config.toml").write_text(
-            'theme = "slate"\nlanguage = "de"\n[device]\ndriver = "virtual"\n', encoding="utf-8"
+            'theme = "slate"\nlanguage = "de"\n[device]\ndriver = "virtual"\n'
+            "[sensors]\nproviders = []\n",
+            encoding="utf-8",
         )
         # the person's own themes: one with files, one that cannot be read, one with no name
         mine = home / "themes" / "mine"
@@ -313,3 +319,39 @@ def test_the_themes_are_listed_and_read_as_server_py_reads_them(servers: Any) ->
         seen[answers[0][0]] = seen.get(answers[0][0], 0) + 1
     assert seen["HTTP/1.0 200 OK"] >= 10 and seen["HTTP/1.0 404 Not Found"] >= 10, seen
     assert seen["HTTP/1.0 403 Forbidden"] >= 3, seen
+
+
+def test_the_readings_and_the_sensors_are_told_as_server_py_tells_them(servers: Any) -> None:
+    """The readings for the app's pickers (all of them, or those asked for, with the history
+    of some) and every key a theme can show: the demo's where the computer gives none, each
+    with its unit, label and whether it is a sample. The values move with the time: their
+    kinds are compared."""
+    ask, _ = servers
+
+    def told(request: str) -> list[Any]:
+        answers = []
+        for status, headers, body in ask(request):
+            assert status == "HTTP/1.0 200 OK" and headers["Content-Type"] == "application/json"
+            answers.append(json.loads(body))
+        return answers
+
+    for query in ("", "?keys=cpu.load,nothing,time.second,_x,cpu.name,,gpu.temp&history=cpu.load,,",
+                  "?keys=mem.load&keys=fan.cpu&history=gpu.load&history=cpu.core.3.load",
+                  "?history=net.down", "?keys=downloads,timer.text,ai.claude.task"):  # fmt: skip
+        theirs, ours = told(_get(f"/api/readings{query}", WITH))
+        assert ours["live"] is theirs["live"] is True, query  # (the moon, at the least)
+        assert list(ours["readings"]) == list(theirs["readings"]), query
+        for key, reading in theirs["readings"].items():
+            mine = ours["readings"][key]
+            if key.startswith(OWN):  # (the tests keep Python from this computer's names)
+                mine["sample"] = reading["sample"]
+            kinds = (type(reading.pop("value")), type(mine.pop("value")))
+            assert mine == reading and kinds[0] is kinds[1], (query, key)
+        assert {k: len(v) for k, v in ours["history"].items()} == {
+            k: len(v) for k, v in theirs["history"].items()}, query  # fmt: skip
+        assert all(isinstance(v, float) for values in ours["history"].values() for v in values)
+    theirs, ours = told(_get("/api/readings", WITH))
+    assert len(theirs["readings"]) > 400 and "time.second" in ours["readings"]
+    theirs, ours = told(_get("/api/sensors", WITH))
+    assert ours == theirs and len(ours) > 400
+    assert {"media.cover", "game.name", "cpu.load"} <= {entry["key"] for entry in ours}

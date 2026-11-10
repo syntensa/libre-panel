@@ -16,6 +16,7 @@ use std::time::{Duration, Instant};
 
 use lp_i18n::t;
 use lp_py::{Dict, Value};
+use lp_render::Snapshot;
 
 use crate::access;
 use crate::background::BackgroundApp;
@@ -41,6 +42,8 @@ pub struct State {
     began: Instant,
     /// when a page of the app last asked something, in seconds since the server began
     last_request: Mutex<Option<f64>>,
+    /// how the server's own hub of sensors is asked (a server without a background app)
+    live: Mutex<Option<std::sync::mpsc::Sender<Reply>>>,
 }
 
 impl State {
@@ -190,9 +193,11 @@ const ROUTES: &[Route] = &[
     private("GET", "/api/themes/{theme}/sizes", |_, x, _, _| {
         not_found(x)
     }),
+    private("GET", "/api/readings", |s, x, _, u| readings(s, x, u)),
     private("GET", "/api/themes/{theme+}", |s, x, m, _| {
         get_theme(s, x, m[0])
     }),
+    private("GET", "/api/sensors", |s, x, _, _| sensors(s, x)),
     private("GET", "/api/i18n", |s, x, _, _| {
         x.json(&Value::Dict(i18n(s)), 200)
     }),
@@ -449,6 +454,269 @@ fn get_theme(state: &State, exchange: &mut Exchange, theme_id: &str) {
     exchange.json(&Value::Dict(told), 200);
 }
 
+/// Readings of sources that work on demand: a running panel has none of them until a theme
+/// (or a service) shows one, so a sensor field offers them from here, whatever the live
+/// readings say. (key, unit, label), as the sources give them.
+const ON_DEMAND: [(&str, &str, &str); 44] = [
+    ("audio.volume", "%", "Volume"),
+    ("audio.muted", "", "Muted"),
+    ("cpu.load", "%", "CPU load"),
+    ("gpu.load", "%", "GPU load"),
+    ("media.title", "", "Title"),
+    ("media.artist", "", "Artist"),
+    ("media.album", "", "Album"),
+    ("media.source", "", "Player"),
+    ("media.state", "", "Media"),
+    ("media.playing", "", "Playing"),
+    ("media.duration", "s", "Length"),
+    ("media.position", "s", "Position"),
+    ("media.progress", "", "Progress"),
+    ("media.remaining", "s", "Remaining"),
+    ("game.fps", "fps", "Frames per second"),
+    ("game.frametime", "ms", "Frame time"),
+    ("game.low", "fps", "1% low"),
+    ("game.frametime_peak", "ms", "Frame time peak"),
+    ("game.fps_avg", "fps", "Average FPS of the round"),
+    ("game.fps_1low", "fps", "1% low of the round"),
+    ("game.fps_01low", "fps", "0.1% low of the round"),
+    (
+        "game.frametime_avg",
+        "ms",
+        "Average frame time of the round",
+    ),
+    ("game.frametime_max", "ms", "Longest frame of the round"),
+    ("game.limiter", "", "Limited by"),
+    ("game.app", "", "Game"),
+    ("game.name", "", "Game"),
+    ("weather.rain.minutes", "min", "Rain starts or stops"),
+    ("weather.rain.text", "", "Rain"),
+    ("net.ping", "ms", "Ping"),
+    ("net.ping.lost", "%", "Ping lost"),
+    ("net.ping.host", "", "Ping host"),
+    ("audio.mic.muted", "", "Microphone muted"),
+    ("audio.mic.volume", "%", "Microphone level"),
+    ("power.watts", "W", "Power"),
+    ("power.today", "kWh", "Energy today"),
+    ("power.month", "kWh", "Energy this month"),
+    // (the currency of [services.power])
+    ("power.today.cost", "€", "Cost today"),
+    ("power.month.cost", "€", "Cost this month"),
+    ("timer.left", "s", "Time left"),
+    ("timer.text", "", "Time left"),
+    ("timer.running", "", "Timer runs"),
+    ("timer.share", "", "Time passed"),
+    ("timer.phase", "", "Timer"),
+    ("timer.rounds", "", "Rounds"),
+];
+/// Pictures a source or service has, for an image widget (`"src": "@media.cover"`). They are
+/// no readings: they come marked `picture`, and a sensor field leaves them out.
+const PICTURES: [(&str, &str); 3] = [
+    ("media.cover", "Album cover"),
+    ("media.app_icon", "Player icon"),
+    ("game.logo", "Game logo"),
+];
+
+/// The local time of now, and its fold.
+fn moment() -> (lp_render::Moment, bool) {
+    let since = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
+    let utc = lp_py::zones::Zone::utc();
+    let zone = lp_py::zones::local().unwrap_or(&utc);
+    lp_py::zones::fromtimestamp(zone, since.map_or(0.0, |since| since.as_secs_f64()))
+        .unwrap_or((lp_render::Moment::date(1970, 1, 1), false))
+}
+
+type Reply = std::sync::mpsc::Sender<Option<Snapshot>>;
+
+/// The readings of a server without a background app: a hub of its own, on a thread of its
+/// own (the sources stay on one thread), asked for a snapshot. None where config.toml
+/// cannot be read.
+fn own_snapshot(state: &State) -> Option<Snapshot> {
+    let mut asks = state.live.lock().ok()?;
+    if asks.is_none() {
+        let (ask, asked) = std::sync::mpsc::channel::<Reply>();
+        let file = state.config_file.clone();
+        let thread = std::thread::Builder::new().name("editor-sensors".into());
+        let made = thread.spawn(move || {
+            let mut hub: Option<crate::sensors::Hub> = None;
+            for reply in asked {
+                if hub.is_none() {
+                    let config = lp_config::load_config(&file, lp_config::platform()).ok();
+                    hub = config.map(|config| crate::sensors::Hub::of(&config, false).0);
+                    if let Some(hub) = &mut hub {
+                        let (now, fold) = moment();
+                        hub.snapshot(now, fold); // (rates need a previous sample)
+                    }
+                }
+                let (now, fold) = moment();
+                let _ = reply.send(hub.as_mut().map(|hub| hub.snapshot(now, fold)));
+            }
+        });
+        made.ok()?;
+        *asks = Some(ask);
+    }
+    let (reply, answer) = std::sync::mpsc::channel();
+    asks.as_ref()?.send(reply).ok()?;
+    answer.recv().ok()?
+}
+
+/// live_snapshot: the readings for previews. In the background app they are the panel's own:
+/// sources that drive hardware must not run twice in one process.
+fn live_snapshot(state: &State) -> Option<Snapshot> {
+    match state.controls.upgrade() {
+        Some(app) => Some(
+            app.latest()
+                .map_or_else(Snapshot::default, |latest| (*latest).clone()),
+        ),
+        None => own_snapshot(state),
+    }
+}
+
+/// The demo's snapshot of now.
+fn demo_snapshot() -> Option<Snapshot> {
+    let since = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
+    let utc = lp_py::zones::Zone::utc();
+    let zone = lp_py::zones::local().unwrap_or(&utc);
+    let t = since.map_or(0.0, |since| since.as_secs_f64());
+    lp_services::demo::demo_snapshot(t, lp_services::demo::HISTORY_SAMPLES, zone).ok()
+}
+
+/// JSON has no NaN.
+fn plain(value: &Value) -> Value {
+    match value {
+        Value::Float(number) if !number.is_finite() => Value::None,
+        other => other.clone(),
+    }
+}
+
+/// _readings: sensor values for the app's pickers (`?keys=a,b`; all without it) and the
+/// recent history of some (`?history=a`): live where there are live ones, sample values
+/// otherwise, each marked `sample`.
+fn readings(state: &State, exchange: &mut Exchange, url: &Url) {
+    let query = crate::http::parse_qs(&url.query);
+    let Some(mut snapshot) = demo_snapshot() else {
+        return exchange.error("no readings", 500, "");
+    };
+    let mut live = false;
+    // the keys this computer gives; the rest are samples
+    let mut measured = std::collections::HashSet::new();
+    if let Some(current) = live_snapshot(state) {
+        live = !current.readings.is_empty();
+        measured = current.readings.keys().cloned().collect();
+        let longer = current
+            .history
+            .into_iter()
+            .filter(|(_, values)| values.len() > 1);
+        snapshot.history.extend(longer);
+        snapshot.readings.extend(current.readings);
+    }
+    let listed = |name: &str| -> Vec<String> {
+        let joined = query
+            .get(name)
+            .map(|values| values.join(","))
+            .unwrap_or_default();
+        joined.split(',').map(str::to_string).collect()
+    };
+    let wanted: Vec<String> = listed("keys")
+        .into_iter()
+        .filter(|key| !key.is_empty())
+        .collect();
+    let keys = match wanted.is_empty() {
+        true => {
+            let mut all: Vec<String> = snapshot.readings.keys().cloned().collect();
+            all.sort_by(|a, b| a.chars().cmp(b.chars()));
+            all
+        }
+        false => wanted.clone(),
+    };
+    let entry = |value: Value, unit: &str, label: &str, sample: bool| {
+        let mut told = Dict::new();
+        told.insert("value".into(), value);
+        told.insert("unit".into(), Value::Str(unit.to_string()));
+        told.insert("label".into(), Value::Str(label.to_string()));
+        // a sample value: this computer gives none for the key (a fan it does not have), so
+        // the panel shows nothing there
+        told.insert("sample".into(), Value::Bool(sample));
+        Value::Dict(told)
+    };
+    let mut found = Dict::new();
+    for key in keys {
+        if let Some(reading) = snapshot
+            .readings
+            .get(&key)
+            .filter(|_| !key.starts_with('_'))
+        {
+            let sample = !measured.contains(&key);
+            let told = entry(plain(&reading.value), &reading.unit, &reading.label, sample);
+            found.insert(key, told);
+        }
+    }
+    // the clock's own (a seconds run): always live
+    let second = lp_render::snapshot::TIME_SECOND;
+    if wanted.is_empty() || wanted.iter().any(|key| key == second) {
+        let told = entry(snapshot.value(second), "s", "Seconds of the minute", false);
+        found.insert(second.to_string(), told);
+    }
+    let mut history = Dict::new();
+    for key in listed("history") {
+        let values = snapshot
+            .history
+            .get(&key)
+            .filter(|values| !key.is_empty() && !values.is_empty());
+        if let Some(values) = values {
+            let last = &values[values.len().saturating_sub(60)..];
+            let rounded = last
+                .iter()
+                .map(|v| plain(&Value::Float(lp_py::round_digits(*v, 3))));
+            history.insert(key, Value::List(rounded.collect()));
+        }
+    }
+    let mut told = Dict::new();
+    told.insert("live".into(), Value::Bool(live));
+    told.insert("readings".into(), Value::Dict(found));
+    told.insert("history".into(), Value::Dict(history));
+    exchange.json(&Value::Dict(told), 200);
+}
+
+/// _sensors: every key a theme can show: those that work on demand, the demo's and the
+/// panel's own (a source's unit and label come last, so they win), and the pictures.
+fn sensors(state: &State, exchange: &mut Exchange) {
+    let entry = |key: &str, unit: &str, label: &str| {
+        let mut told = Dict::new();
+        told.insert("key".into(), Value::Str(key.to_string()));
+        told.insert("unit".into(), Value::Str(unit.to_string()));
+        told.insert("label".into(), Value::Str(label.to_string()));
+        told
+    };
+    let mut found: indexmap::IndexMap<String, Dict> = ON_DEMAND
+        .iter()
+        .map(|(key, unit, label)| ((*key).to_string(), entry(key, unit, label)))
+        .collect();
+    let mut readings = demo_snapshot()
+        .map(|snapshot| snapshot.readings)
+        .unwrap_or_default();
+    // (live sensors are optional for the app)
+    if let Some(current) = live_snapshot(state) {
+        readings.extend(current.readings);
+    }
+    for (key, reading) in &readings {
+        let mut told = entry(key, &reading.unit, &reading.label);
+        // (the app lists a source's raw readings under it)
+        if !reading.device.is_empty() {
+            told.insert("device".into(), Value::Str(reading.device.clone()));
+        }
+        found.insert(key.clone(), told);
+    }
+    for (key, label) in PICTURES {
+        let mut told = entry(key, "", label);
+        told.insert("picture".into(), Value::Bool(true));
+        found.insert(key.to_string(), told);
+    }
+    let mut keys: Vec<&String> = found.keys().collect();
+    keys.sort_by(|a, b| a.chars().cmp(b.chars()));
+    let listed = keys.into_iter().map(|key| Value::Dict(found[key].clone()));
+    exchange.json(&Value::List(listed.collect()), 200);
+}
+
 /// _i18n: the app's language, config.toml's setting, the languages there are and the
 /// tables of the language the pages read.
 fn i18n(state: &State) -> Dict {
@@ -615,6 +883,7 @@ impl EditorServer {
                 controls,
                 began: Instant::now(),
                 last_request: Mutex::new(None),
+                live: Mutex::new(None),
             }),
             listener: Some(listener),
             stop: Arc::default(),
