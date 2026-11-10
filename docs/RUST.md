@@ -1567,6 +1567,12 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       restarts, counted on across a replug, made once a second into `/api/panel`'s `stats`
       and each panel's `fps` in `more`. The tests: the keys and what is not known as meter.py
       has them, for two panels into PNG files
+- [x] a theme config.toml names that is not there (app.py's _instead_of): the panel shows its
+      own, the state says which one is missing and the notice service.py gives; a theme
+      chosen later that cannot be shown leaves the one on show where it is ("keeping theme");
+      `/api/panel` with Windows' sensor hint (sensor_hint: LibreHardwareMonitor asked again)
+      and its keys in service.py's order. The tests: the theme gone at the start and the one
+      after, the log's words and the state as the Python app has them
 - [ ] the meter's `encoder` (h264.py's settings and feed_text, which the engine's stream is
       not told yet) and `ffmpeg_restarts`
 - [ ] the rest of the main loop: the engine in the same process, videos (ffmpeg), the first

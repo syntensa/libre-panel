@@ -53,6 +53,10 @@ pub trait Source: Send {
     fn overrides(&self) -> &'static [&'static str] {
         &[]
     }
+    /// Whether the source has its first readings (or gave up waiting for them).
+    fn ready(&self) -> bool {
+        true
+    }
     /// status: what the source says about itself (how it reads, what keeps it from reading), as
     /// the app's Control page lists it; None for a source that says nothing.
     fn status(&self) -> Option<lp_py::Dict> {
@@ -180,6 +184,10 @@ impl Source for Lhm {
 
     fn status(&self) -> Option<lp_py::Dict> {
         Some(lhm_status_dict(&self.0.status()))
+    }
+
+    fn ready(&self) -> bool {
+        self.0.wait_ready(0.0)
     }
 
     fn read(&mut self, out: &mut Readings) {
@@ -949,6 +957,28 @@ impl Hub {
                 (source.name(), count, source.status())
             })
             .collect()
+    }
+
+    /// sensor_hint: what to tell a person who sees "--" where Windows' temperatures and power
+    /// should be ("" when nothing is the matter, and off Windows). `readings` are what the
+    /// panel last drew; LibreHardwareMonitor is asked again, so a hint never outlives the
+    /// fault because the last sample came before it was fixed.
+    pub fn hint(&mut self, readings: &Readings, unlock: bool) -> String {
+        if !cfg!(windows) {
+            return String::new();
+        }
+        for source in &mut self.sources {
+            if source.name() != "librehardwaremonitor" {
+                continue;
+            }
+            let ready = source.ready();
+            let status = source.lhm_status();
+            let mut all = readings.clone();
+            source.read(&mut all);
+            let windows = true;
+            return lp_sensors::hints::user_hint(&all, windows, status.as_ref(), ready, unlock);
+        }
+        String::new()
     }
 
     /// What the sources noted for the log since they were last asked.

@@ -88,7 +88,7 @@ const READY_SECONDS: f64 = 20.0;
 /// unlock_offered: whether "Unlock all sensors" is a thing here: a Windows download that
 /// carries the sensor service (sensors\libre-panel-sensors.exe beside the program), and the
 /// service not installed (or switched off).
-fn unlock_offered() -> bool {
+pub fn unlock_offered() -> bool {
     if !cfg!(windows) {
         return false;
     }

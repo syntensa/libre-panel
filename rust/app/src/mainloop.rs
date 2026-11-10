@@ -86,6 +86,9 @@ pub struct RunStatus {
     pub mode: Option<String>,
     /// what a config.toml without a theme shows on this panel
     pub default_theme: String,
+    /// a theme config.toml names that cannot be shown (removed, or of a plugin that is not
+    /// there): the panel shows its own instead until another is chosen
+    pub missing_theme: String,
     /// the frame on the panel now, after transitions and messages, in the theme's orientation:
     /// kept while the live picture was asked for a moment ago (`live_asked`)
     pub shown: Option<Arc<Image>>,
@@ -157,6 +160,9 @@ pub struct MainLoop {
     shown: String,
     /// a theme that could not be shown, and why: not tried again until something changes
     refused: Option<(String, String)>,
+    /// the theme on show is drawn anew (config.toml changed, another panel): kept on show
+    /// where the new one cannot be
+    relook: bool,
     rotation: Rotation,
     snapshot: Option<Snapshot>,
     next_sample: f64,
@@ -383,6 +389,7 @@ impl MainLoop {
             renderer: None,
             shown: String::new(),
             refused: None,
+            relook: false,
             rotation: Rotation::default(),
             snapshot: None,
             next_sample: 0.0,
@@ -615,7 +622,7 @@ impl MainLoop {
                     self.hub().follow_config(&fresh);
                 }
                 self.config = fresh;
-                self.renderer = None;
+                self.relook = true;
                 self.refused = None;
                 if self.beside.is_none() {
                     self.speak();
@@ -682,7 +689,7 @@ impl MainLoop {
                 self.had_panel |= panel.on_panel();
                 self.panel = Some(panel);
                 self.brightness = Some(level);
-                self.renderer = None; // (its size may be the panel's)
+                self.relook = true; // (its size may be the panel's)
                 true
             }
             Err(why) => {
@@ -786,6 +793,53 @@ impl MainLoop {
             false => versions::unpaired_version(&shown, &self.places),
         };
         version.unwrap_or(shown)
+    }
+
+    /// _instead_of: where the theme that is due cannot be shown and none is on show yet: the
+    /// theme config.toml names (or the panel's own, where it names none), else the panel's
+    /// own while that one cannot be, so the panel stays lit and the app says which theme is
+    /// missing. The renderer, the theme it draws and the missing one ("" for none).
+    fn instead(&mut self, wanted: &str, why: String) -> Option<(Renderer, String, String)> {
+        // (tried again when config.toml changes, not on every frame)
+        self.refused = Some((wanted.to_string(), why));
+        let default = lp_theme::defaults::default_theme(self.model(), &self.places).to_string();
+        let base = match self.config.theme_given {
+            true => self.config.theme.clone(),
+            false => default.clone(),
+        };
+        let orientation = &self.config.device.orientation;
+        let named = versions::theme_for(&base, orientation, self.panel_size(), &self.places);
+        if wanted != named {
+            say(&format!(
+                "theme {} not found; showing {}",
+                lp_py::repr(wanted),
+                lp_py::repr(&named)
+            ));
+            if let Ok(renderer) = self.renderer_of(&named) {
+                return Some((renderer, named, String::new()));
+            }
+        }
+        let why = match versions::find_theme(&named, &self.places) {
+            Err(e) => e.msg,
+            Ok(_) => format!("theme {} cannot be loaded", lp_py::repr(&named)),
+        };
+        if named == default {
+            say(&format!("theme {named}: {why}"));
+            return None;
+        }
+        match self.renderer_of(&default) {
+            Ok(renderer) => {
+                say(&format!(
+                    "{why}: showing {}, the panel's own, until it is back or another is chosen",
+                    lp_py::repr(&default)
+                ));
+                Some((renderer, default, named))
+            }
+            Err(also) => {
+                say(&format!("theme {named}: {why}; the panel's own: {also}"));
+                None
+            }
+        }
     }
 
     /// _pairing: for the first panel, whether a companion runs beside it, and PAIR_HOLD_S
@@ -1010,49 +1064,61 @@ impl MainLoop {
             .as_ref()
             .map(|blend| blend.policy(mode.as_deref(), self.began_in.as_deref()));
         let may_switch = policy != Some("wait");
-        if may_switch && (self.renderer.is_none() || name != self.shown) {
-            if self
-                .refused
-                .as_ref()
-                .is_some_and(|(theme, _)| *theme == name)
-            {
-                return Duration::from_millis(500);
-            }
-            match self.renderer_of(&name) {
-                Ok(renderer) => {
-                    for warning in renderer.warnings() {
-                        say(&format!("theme {name}: {warning}"));
+        let rebuild = self.renderer.is_none() || self.relook;
+        if may_switch && (rebuild || name != self.shown) {
+            let refused = (self.refused.as_ref()).is_some_and(|(theme, _)| *theme == name);
+            let made = match refused {
+                true => None,
+                false => match self.renderer_of(&name) {
+                    Ok(renderer) => Some((renderer, name.clone(), String::new())),
+                    Err(why) if self.renderer.is_some() && !self.shown.is_empty() => {
+                        // (a half-written file, a theme taken away: the one on show stays)
+                        say(&format!(
+                            "keeping theme {}: {why}",
+                            lp_py::repr(&self.shown)
+                        ));
+                        self.refused = Some((name.clone(), why));
+                        None
                     }
-                    say(&format!("theme {name}"));
-                    let toasts = match self.toasts.take() {
-                        Some(mut toasts) => toasts.set_renderer(&renderer).map(|()| toasts),
-                        None => ToastLayer::new(&renderer),
-                    };
-                    match toasts {
-                        Ok(toasts) => {
-                            if let Ok(mut judged) = self.judged.lock() {
-                                judged.off = toasts.off().clone();
-                                judged.left_out = toasts.left_out().clone();
-                            }
-                            self.toasts = Some(toasts);
-                        }
-                        Err(why) => say(&format!("theme {name}: its messages: {}", why.0)),
-                    }
-                    if name != self.shown {
-                        self.hand_over(&renderer, policy, started);
-                        self.switches = self.host.switches(); // (this was the switch)
-                        let theme = name.clone();
-                        self.host.emit(Event::ThemeChanged { theme }, false);
-                    }
-                    self.renderer = Some(renderer);
-                    self.shown = name;
-                    self.refused = None;
-                    self.next_sample = started; // (its readings at once)
+                    Err(why) => self.instead(&name, why),
+                },
+            };
+            let due = name.clone();
+            if let Some((renderer, name, missing)) = made {
+                for warning in renderer.warnings() {
+                    say(&format!("theme {name}: {warning}"));
                 }
-                Err(why) => {
-                    say(&format!("theme {name}: {why}"));
-                    self.refused = Some((name, why));
-                    return Duration::from_millis(500);
+                say(&format!("theme {name}"));
+                let toasts = match self.toasts.take() {
+                    Some(mut toasts) => toasts.set_renderer(&renderer).map(|()| toasts),
+                    None => ToastLayer::new(&renderer),
+                };
+                match toasts {
+                    Ok(toasts) => {
+                        if let Ok(mut judged) = self.judged.lock() {
+                            judged.off = toasts.off().clone();
+                            judged.left_out = toasts.left_out().clone();
+                        }
+                        self.toasts = Some(toasts);
+                    }
+                    Err(why) => say(&format!("theme {name}: its messages: {}", why.0)),
+                }
+                if name != self.shown {
+                    self.hand_over(&renderer, policy, started);
+                    self.switches = self.host.switches(); // (this was the switch)
+                    let theme = name.clone();
+                    self.host.emit(Event::ThemeChanged { theme }, false);
+                }
+                self.renderer = Some(renderer);
+                if name == due {
+                    self.refused = None;
+                }
+                self.shown = name;
+                self.relook = false;
+                self.next_sample = started; // (its readings at once)
+                if let Ok(mut status) = self.status.lock() {
+                    status.missing_theme = missing;
+                    status.theme.clone_from(&self.shown);
                 }
             }
         }
@@ -1205,7 +1271,7 @@ impl MainLoop {
                             }
                             // (a panel took over from the PNG file: drawn for it from now on)
                             self.had_panel = true;
-                            self.renderer = None;
+                            self.relook = true;
                             self.brightness = None;
                         }
                     }

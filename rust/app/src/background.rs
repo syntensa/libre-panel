@@ -267,6 +267,46 @@ impl PanelService {
             _ => error,
         };
         told.insert("detail".into(), Value::Str(detail));
+        let running = matches!(state, "showing" | "waiting");
+        // what to do when temperatures and power show "--" (Windows), in the user's language
+        let hint = match (running, &status.hub) {
+            (true, Some(hub)) => {
+                let latest = self.company.host.latest();
+                let readings = latest
+                    .map(|latest| latest.readings.clone())
+                    .unwrap_or_default();
+                let mut hub = hub
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                hub.hint(&readings, crate::unlock_offered())
+            }
+            _ => String::new(),
+        };
+        told.insert("hint".into(), Value::Str(hint));
+        // a theme config.toml names that cannot be shown: the panel shows its own instead
+        told.insert(
+            "missing_theme".into(),
+            Value::Str(status.missing_theme.clone()),
+        );
+        let notice = match (running, status.missing_theme.is_empty()) {
+            (true, false) => {
+                let shown = match status.theme.is_empty() {
+                    true => status.default_theme.clone(),
+                    false => status.theme.clone(),
+                };
+                lp_i18n::t_format(
+                    "The theme “{name}” is no longer installed, so the panel shows “{shown}”. \
+                     Choose a theme in the tray menu or on Start.",
+                    &[
+                        ("name", Value::Str(status.missing_theme.clone())),
+                        ("shown", Value::Str(shown)),
+                    ],
+                )
+                .unwrap_or_else(|why| why.msg)
+            }
+            _ => String::new(),
+        };
+        told.insert("notice".into(), Value::Str(notice));
         told.insert("theme".into(), Value::Str(status.theme));
         told.insert("frames".into(), Value::int(status.frames as i64));
         // the size of the panel's frames: the app shows each theme in its version for it
@@ -289,7 +329,6 @@ impl PanelService {
             _ => Value::None,
         };
         told.insert("sequence".into(), sequence);
-        let running = matches!(state, "showing" | "waiting");
         told.insert("target".into(), Value::Str(status.target));
         told.insert("default_theme".into(), Value::Str(status.default_theme));
         told.insert("mode".into(), status.mode.map_or(Value::None, Value::Str));
@@ -324,7 +363,33 @@ impl PanelService {
             })
             .collect();
         told.insert("more".into(), Value::List(more));
-        told
+        // (in the order service.py gives them)
+        let order = [
+            "state",
+            "testing",
+            "detail",
+            "hint",
+            "missing_theme",
+            "notice",
+            "target",
+            "theme",
+            "default_theme",
+            "frames",
+            "mode",
+            "sequence",
+            "size",
+            "stats",
+            "more",
+        ];
+        told.insert("testing".into(), Value::Bool(false)); // (no panel test here yet)
+        let mut sorted = Dict::new();
+        for key in order {
+            if let Some(value) = told.shift_remove(key) {
+                sorted.insert(key.into(), value);
+            }
+        }
+        sorted.extend(told);
+        sorted
     }
 }
 

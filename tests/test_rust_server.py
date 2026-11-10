@@ -479,6 +479,69 @@ def test_controls_sources_are_those_the_panel_reads_as_control_py_lists_them(
     assert ours == theirs
 
 
+def test_a_theme_that_is_gone_leaves_the_panel_lit_and_is_said_as_app_py_says_it(
+    tmp_path: Path,
+) -> None:
+    """A theme config.toml names that is not installed: the panel shows its own, and the
+    panel's state names the missing one with the notice service.py gives; a theme chosen
+    later that cannot be shown either leaves the one on show where it is."""
+    import time
+
+    from libre_panel.devices.models import find_model
+    from libre_panel.theme.defaults import default_theme
+    from libre_panel.theme.model import ThemeError, find_theme
+
+    config = tmp_path / "config.toml"
+    head = 'fps = 2\nlanguage = "en"\n[device]\ndriver = "virtual"\noutput = "panel.png"\n'
+    head += 'model = "turing-5"\n[sensors]\nproviders = []\n'
+    config.write_text('theme = "gone"\n' + head, encoding="utf-8")
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries()}  # fmt: skip
+    with subprocess.Popen([str(_program()), "start", "--port", "0"], env=env,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        try:
+            assert program.stdout is not None
+            address = program.stdout.readline().split(" running at ")[1].split()[0]
+            port, token = int(address.split(":")[2].split("/")[0]), address.split("#token=")[1]
+
+            def panel() -> Any:
+                request = _get("/api/plugins/control/panel", WITH)
+                request = request.replace("{host}", f"localhost:{port}")
+                answer = _asked(port, request.replace("{token}", token).encode())[2]
+                return json.loads(answer)["panel"]
+
+            end = time.monotonic() + 20
+            while panel()["state"] != "showing" and time.monotonic() < end:
+                time.sleep(0.1)
+            first = panel()
+            config.write_text('theme = "also-gone"\n' + head, encoding="utf-8")
+            time.sleep(3)
+            later = panel()
+        finally:
+            program.send_signal(signal.SIGINT) if os.name == "posix" else program.terminate()
+            said = program.communicate(timeout=30)[1]
+    own = default_theme(find_model("turing-5"))
+    notice = i18n.t(
+        "The theme “{name}” is no longer installed, so the panel shows “{shown}”. "
+        "Choose a theme in the tray menu or on Start.",
+        name="gone",
+        shown=own,
+    )
+    assert (first["state"], first["theme"], first["default_theme"]) == ("showing", own, own)
+    assert (first["missing_theme"], first["notice"]) == ("gone", notice), first
+    assert list(first)[:6] == ["state", "testing", "detail", "hint", "missing_theme", "notice"]
+    whys = []
+    for name in ("gone", "also-gone"):
+        with pytest.raises(ThemeError) as caught:
+            find_theme(name)
+        whys.append(str(caught.value))
+    lines = [line.removeprefix("libre-panel: ") for line in said.splitlines()]
+    showing = f"{whys[0]}: showing {own!r}, the panel's own, until it is back or another is chosen"
+    assert showing in lines and f"keeping theme {own!r}: {whys[1]}" in lines, said
+    assert later["theme"] == own and later["frames"] > first["frames"], later
+
+
 def test_the_themes_are_listed_and_read_as_server_py_reads_them(servers: Any) -> None:
     """The themes that are installed (the app's and the person's own: one with files, one
     that cannot be read, one of an odd shape), a theme by its name with what is said of it,
