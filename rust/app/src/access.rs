@@ -31,7 +31,7 @@ pub const TOKEN_FILE: &str = "editor.json";
 const ATTEMPTS: usize = 20;
 
 fn say(message: &str) {
-    eprintln!("libre-panel: {message}");
+    crate::logs::say("libre_panel.editor.access", message);
 }
 
 fn token_byte(byte: u8) -> bool {

@@ -148,7 +148,7 @@ pub struct MainLoop {
 }
 
 fn say(message: &str) {
-    eprintln!("libre-panel: {message}");
+    crate::logs::say("libre_panel.app", message);
 }
 
 /// accent_of: the colour config.toml's `accent` stands for: None for the themes' own (and for

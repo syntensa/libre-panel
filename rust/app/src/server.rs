@@ -31,7 +31,7 @@ const MAX_JSON: u64 = 2 * 1024 * 1024;
 const EDITOR_TABLES: [&str; 5] = ["messages", "fields", "widgets", "enums", "icons"];
 
 fn say(message: &str) {
-    eprintln!("libre-panel: {message}");
+    crate::logs::say("libre_panel.editor.server", message);
 }
 
 /// What the server's requests share (EditorState, as far as this build has it).
@@ -293,6 +293,24 @@ const ROUTES: &[Route] = &[
         x.json(&Value::Dict(i18n(s)), 200)
     }),
     private("GET", "/api/app", |s, x, _, _| app_state(s, x)),
+    private("GET", "/api/logs", |_, x, _, u| {
+        let query = crate::http::parse_qs(&u.query);
+        let level = query.get("level").and_then(|asked| asked.first());
+        x.json(
+            &crate::logs::state(level.map_or("DEBUG", String::as_str)),
+            200,
+        )
+    }),
+    picture("GET", "/api/logs/file", |_, x, _, _| {
+        // (the whole log to keep, without the person's folders)
+        let body = crate::logs::text(&lp_config::dirs::log_file(), None);
+        x.send(
+            200,
+            body.as_bytes(),
+            "text/plain; charset=utf-8",
+            "libre-panel-log.txt",
+        );
+    }),
     // -- writing -----------------------------------------------------------------------------------
     private("POST", "/api/app", |s, x, _, _| app_action(s, x)),
     private("POST", "/api/settings", |s, x, _, _| {
@@ -305,6 +323,8 @@ const ROUTES: &[Route] = &[
         settings_with(s, x, |told, asked| told.set_sequence(asked))
     }),
     private("POST", "/api/news", |s, x, _, _| see_news(s, x)),
+    private("POST", "/api/logs", |_, x, _, _| set_verbose(x)),
+    private("POST", "/api/language", |s, x, _, _| set_language(s, x)),
     private("POST", "/api/update", |s, x, _, _| update_later(s, x)),
     private("POST", "/api/system", |s, x, _, _| {
         settings_with(s, x, |told, asked| told.set_system(asked))
@@ -456,6 +476,63 @@ fn see_news(state: &State, exchange: &mut Exchange) {
         Ok(told) => exchange.json(&told, 200),
         Err(why) => exchange.error(&why, 400, ""),
     }
+}
+
+/// `POST /api/logs {"verbose": true}`: every detail into the log until the app starts again,
+/// or only what matters.
+fn set_verbose(exchange: &mut Exchange) {
+    let Some(payload) = exchange.read_json(MAX_JSON) else {
+        return;
+    };
+    let on = match &payload {
+        Value::Dict(d) => d.get("verbose"),
+        _ => None,
+    };
+    let Some(Value::Bool(on)) = on else {
+        return exchange.error("expected {\"verbose\": true or false}", 400, "");
+    };
+    crate::logs::set_verbose(*on);
+    let mut told = Dict::new();
+    told.insert("verbose".into(), Value::Bool(crate::logs::verbose()));
+    exchange.json(&Value::Dict(told), 200);
+}
+
+/// `POST /api/language {"language": "de"}` (or "auto"): written into config.toml, and the
+/// app speaks it at once.
+fn set_language(state: &State, exchange: &mut Exchange) {
+    let Some(payload) = exchange.read_json(MAX_JSON) else {
+        return;
+    };
+    let setting = match &payload {
+        Value::Dict(d) => match d.get("language") {
+            Some(Value::Str(s)) => Some(s.clone()),
+            _ => None,
+        },
+        _ => None,
+    };
+    let known = |code: &str| code == "auto" || lp_i18n::LANGUAGES.iter().any(|(c, _)| *c == code);
+    let Some(setting) = setting.filter(|code| known(code)) else {
+        let codes: Vec<&str> = lp_i18n::LANGUAGES.iter().map(|(c, _)| *c).collect();
+        let why = format!("language must be auto or one of {}", codes.join(", "));
+        return exchange.error(&why, 400, "");
+    };
+    let written = lp_config::edit::set_config_value(
+        "language",
+        lp_py::toml::Toml::Str(setting.clone()),
+        &state.config_file,
+        lp_config::platform(),
+    );
+    if let Err(why) = written {
+        return exchange.error(&why.msg, 400, "");
+    }
+    // (the panel and the pages follow at once)
+    let env = |name: &str| std::env::var(name).unwrap_or_default();
+    let code = lp_i18n::resolve(Some(&setting), || lp_i18n::system_language(&env, None));
+    match lp_i18n::Language::load(&state.home.locale(), &code) {
+        Ok(language) => lp_i18n::set_language(language),
+        Err(why) => say(&format!("language {code}: {why}")),
+    }
+    exchange.json(&Value::Dict(i18n(state)), 200);
 }
 
 fn not_found(exchange: &mut Exchange) {

@@ -12,6 +12,7 @@ mod editing;
 mod home;
 mod hotkeys;
 mod http;
+mod logs;
 mod mainloop;
 mod modes;
 mod news;
@@ -333,6 +334,7 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
         }
         "autostart" => return autostart(args),
         "start" | "tray" => {
+            let args_given = args;
             // (the start at login: `tray --background`, as the Python app wrote it too)
             let args: Vec<String> = args
                 .iter()
@@ -341,6 +343,12 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
                 })
                 .cloned()
                 .collect();
+            // (the background app logs to a file: there is no terminal to read)
+            if command == "tray" && !args_given.iter().any(|arg| arg == "--no-icon") {
+                if let Err(why) = logs::to_file() {
+                    eprintln!("libre-panel: the log: {why}");
+                }
+            }
             let asked = asked(&args)?;
             lp_text::set_locale_from_environment();
             lp_text::fallback::set_language(Box::new(|| lp_i18n::language().code().to_string()));

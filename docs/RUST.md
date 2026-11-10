@@ -1989,6 +1989,12 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       building blocks drawn in a theme's palette (`/api/preset-previews`), and Settings' tiles
       of the fan looks and of the weather symbols' looks (`/api/fan-look`,
       `/api/symbols-look`).
+      The log (`rust/app/src/logs.rs`): the background app writes `libre-panel.log` as
+      cli.py does (a line per entry, three files of a megabyte at most), and Status →
+      Diagnose reads it back (`/api/logs`: the last entries by level, a traceback in its
+      entry; `/api/logs/file`: the whole of it and a hang; the person's folders taken out as
+      the doctor does), its detail switched without a restart; the app's language set
+      (`/api/language`) and spoken at once.
       `libre-panel editor` serves alone, `start` with
       the panel, and writes its address where a later start finds it. 120 requests to
       Python's server and to this one compared: the status, the headers and the body, byte

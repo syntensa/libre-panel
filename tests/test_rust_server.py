@@ -5,6 +5,7 @@ and the body, byte for byte."""
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import signal
@@ -1319,3 +1320,47 @@ def test_the_settings_tiles_are_drawn_as_drawings_py_draws_them(servers: Any) ->
             assert json.loads(ours[2]) == json.loads(theirs[2]), path
             continue
         _same_pictures(base64.b64encode(theirs[2]), base64.b64encode(ours[2]), path)
+
+
+def test_the_log_and_the_language_are_as_server_py_has_them(servers: Any) -> None:
+    """The log's last entries by level, its tracebacks, its older parts and a hang, the
+    person's folders taken out; the whole of it to keep; its detail switched; the language
+    set, refused, and spoken at once."""
+    ask, homes = servers
+    home = os.path.expanduser("~")
+    for side in homes:
+        logs = side / "logs"
+        logs.mkdir()
+        (logs / "libre-panel.log.1").write_bytes(
+            b"2026-01-02 03:04:05,001 INFO libre_panel.app: older\n"
+        )
+        (logs / "libre-panel.log").write_bytes(
+            b"noise before any entry\n"
+            b"2026-01-02 03:04:06,123 WARNING libre_panel.x: at C:\\Users\\Bob\\f.txt\n"
+            b'Traceback (most recent call last):\n  File "' + home.encode() + b'/a.py"\n\n'
+            b"2026-01-02 03:04:07 ERROR a-b.c:no space\xff\n"
+            b"2026-01-02 03:04:08,5 DEBUG libre_panel.y: detail\x0bmore\n"
+            b"2026-01-02 03:04:09,000 NOTE x: not a level\n"
+        )
+        (logs / "libre-panel-hang.log").write_text("Timeout (0:00:10)!\nThread 1\n", "utf-8")
+    for query in ("", "?level=warning", "?level=ERROR", "?level=nope", "?level="):
+        theirs, ours = ask(_get(f"/api/logs{query}", WITH))
+        assert ours == theirs, query
+    theirs, ours = ask(_get("/api/logs/file", WITH))
+    assert ours == theirs
+    assert b"Bob" not in ours[2] and b"== libre-panel-hang.log ==" in ours[2]
+    root = logging.getLogger().level
+    try:
+        for payload in ({"verbose": True}, {"verbose": False}, {"verbose": 1}, {}, [True]):
+            theirs, ours = ask(_post("/api/logs", payload))
+            assert ours == theirs, payload
+    finally:
+        logging.getLogger().setLevel(root)
+    for payload in ({"language": "fr"}, {"language": "xx"}, {"language": 5}, [1],
+                    {"language": "auto"}, {"language": "de"}):  # fmt: skip
+        theirs, ours = ask(_post("/api/language", payload))
+        assert ours == theirs, payload
+        theirs, ours = ask(_get("/api/i18n", WITH))
+        assert ours == theirs, payload
+        configs = [(side / "config.toml").read_text("utf-8") for side in homes]
+        assert configs[1] == configs[0], payload

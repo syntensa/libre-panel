@@ -24,7 +24,7 @@ use crate::server::EditorServer;
 const INSTANCE_FILENAME: &str = "instance.json";
 
 fn say(message: &str) {
-    eprintln!("libre-panel: {message}");
+    crate::logs::say("libre_panel.service", message);
 }
 
 fn stamp_of(path: &std::path::Path) -> Option<std::time::SystemTime> {

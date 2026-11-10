@@ -11,7 +11,7 @@ use lp_services::host::PluginHost;
 use lp_services::manager::Manager;
 
 fn say(message: &str) {
-    eprintln!("libre-panel: {message}");
+    crate::logs::say("libre_panel.services", message);
 }
 
 /// What else follows config.toml (the background app's keyboard shortcuts).
