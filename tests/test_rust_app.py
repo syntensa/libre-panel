@@ -478,3 +478,41 @@ def test_the_volume_is_read_from_the_tool_on_the_path(tmp_path: Path) -> None:
         "audio.mic.muted": ("1", "", "Microphone muted"),
     }  # fmt: skip
     assert "audio: the volume is read by polling" in done.stderr
+
+
+@pytest.mark.skipif(os.name == "nt", reason="a stand-in program written for the shell")
+def test_a_games_frames_come_from_the_presentmon_named(tmp_path: Path) -> None:
+    """`[sensors] providers = ["presentmon"]` with a `path`: the program is started as
+    PresentMon is (frames of every program to its output, the one session), its rows are
+    counted while something reads game.*, and it is ended with the program."""
+    stand_in = tmp_path / "PresentMon"
+    stand_in.write_text(
+        "#!/bin/sh\n"
+        f'echo "$$ $*" > "{tmp_path}/started"\n'
+        'echo "Application,ProcessID,MsBetweenPresents,MsGPUBusy"\n'
+        'while :; do echo "Game.exe,7,10.0,4.0"; echo "dwm.exe,4,16.6,1.0"; sleep 0.01; done\n',
+        encoding="utf-8",
+    )
+    stand_in.chmod(0o755)
+    (tmp_path / "config.toml").write_text(
+        f'[sensors]\nproviders = ["presentmon"]\n[sensors.presentmon]\npath = "{stand_in}"\n',
+        encoding="utf-8",
+    )
+    done = _run(tmp_path, "sensors", LP_SENSORS_WANT="game.fps")
+    assert done.returncode == 0, done.stderr
+    ours = {line[:40].strip(): (line[41:55].strip(), line[56:61].strip(), line[62:])
+            for line in done.stdout.splitlines()}  # fmt: skip
+    assert ours["game.fps"] == ("100.00", "fps", "Frames per second"), ours
+    assert ours["game.frametime"][:2] == ("10.00", "ms")
+    assert ours["game.app"][0] == "Game"
+    pid, _, arguments = (tmp_path / "started").read_text(encoding="utf-8").strip().partition(" ")
+    assert arguments == (
+        "--output_stdout --no_console_stats --session_name LibrePanel --stop_existing_session"
+    )
+    assert not Path(f"/proc/{pid}").exists()  # (ended with the program that started it)
+
+    # Nothing reads game.*: PresentMon is not started at all.
+    (tmp_path / "started").unlink()
+    done = _run(tmp_path, "sensors")
+    assert done.returncode == 0 and not (tmp_path / "started").exists()
+    assert not any(key.startswith("game.") for key in done.stdout.split())

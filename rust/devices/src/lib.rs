@@ -12,6 +12,7 @@ pub mod link;
 pub mod models;
 pub mod png;
 pub mod rate;
+pub mod rights;
 pub mod serial;
 mod table;
 pub mod turzx;

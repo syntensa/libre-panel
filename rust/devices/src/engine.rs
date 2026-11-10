@@ -91,8 +91,9 @@ fn head(kind: u8, a: u32, b: u32) -> Vec<u8> {
 }
 
 /// find_engine: the engine's program: the one LIBRE_PANEL_ENGINE names, the one beside this
-/// program (in its `tools` folder or next to it), or the one built in the source tree this
-/// program was built in.
+/// program (in its `tools` folder or next to it), the one on the PATH, or the one built in
+/// the source tree this program was built in. With the highest rights only one from a safe
+/// place (rights.rs): one elsewhere is passed over for the others.
 pub fn find_engine() -> Option<PathBuf> {
     let name = if cfg!(windows) {
         format!("{ENGINE}.exe")
@@ -100,22 +101,30 @@ pub fn find_engine() -> Option<PathBuf> {
         ENGINE.to_string()
     };
     if let Some(named) = std::env::var_os("LIBRE_PANEL_ENGINE").map(PathBuf::from) {
-        if named.is_file() {
+        if named.is_file() && crate::rights::safe_place(&named) {
             return Some(named);
         }
     }
     let program = std::env::current_exe().ok()?;
     let program = std::fs::canonicalize(&program).unwrap_or(program);
     let beside = program.parent()?;
-    let mut tried = vec![beside.join("tools").join(&name), beside.join(&name)];
-    tried.extend(beside.ancestors().map(|folder| {
-        folder
-            .join("engine")
-            .join("target")
-            .join("release")
-            .join(&name)
-    }));
-    tried.into_iter().find(|file| file.is_file())
+    let own = [beside.join("tools").join(&name), beside.join(&name)];
+    if let Some(found) = own.into_iter().find(|file| file.is_file()) {
+        return Some(found);
+    }
+    if let Some(found) = crate::rights::which(ENGINE, &mut Vec::new()) {
+        return Some(found);
+    }
+    beside
+        .ancestors()
+        .map(|folder| {
+            folder
+                .join("engine")
+                .join("target")
+                .join("release")
+                .join(&name)
+        })
+        .find(|file| file.is_file() && crate::rights::safe_place(file))
 }
 
 /// _can: what `engine` says it can, after its x264 build (its `version`: "panel", "scenes",

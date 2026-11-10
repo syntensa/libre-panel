@@ -347,6 +347,7 @@ name = "lp-sensors"
 version = "0.1.0"
 dependencies = [
  "indexmap",
+ "lp-devices",
  "lp-i18n",
  "lp-py",
  "lp-render",

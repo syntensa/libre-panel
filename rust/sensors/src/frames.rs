@@ -339,6 +339,11 @@ impl FrameCounter {
         }
     }
 
+    /// The game the `game` service found, lower case; none for none.
+    pub fn target(&self) -> Option<&str> {
+        self.target.as_deref()
+    }
+
     pub fn add(&mut self, app: &str, ms: f64, at: f64, waits: Option<Waits>) {
         if app.is_empty()
             || IGNORED.contains(&lp_py::lower(app).as_str())

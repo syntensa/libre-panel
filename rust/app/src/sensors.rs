@@ -157,6 +157,23 @@ impl Source for Lhm {
     }
 }
 
+/// Frames per second of the game, through PresentMon (sensors/presentmon.py).
+struct PresentMon(lp_sensors::presentmon::PresentMonSource);
+
+impl Source for PresentMon {
+    fn name(&self) -> &'static str {
+        "presentmon"
+    }
+
+    fn read(&mut self, out: &mut Readings) {
+        out.extend(self.0.read());
+    }
+
+    fn notes(&mut self) -> Vec<String> {
+        self.0.notes()
+    }
+}
+
 fn put(out: &mut Readings, key: &str, value: f64, unit: &str, label: &str) {
     out.insert(
         key.to_string(),
@@ -269,6 +286,15 @@ impl Hub {
                     "audio" => sources.push(Box::new(Audio(lp_sensors::audio::AudioSource::new(
                         wanted.clone(),
                     )))),
+                    "presentmon" => {
+                        let path = match sensors.options.get(name).and_then(|t| t.get("path")) {
+                            Some(Toml::Str(path)) => path.clone(),
+                            _ => String::new(),
+                        };
+                        sources.push(Box::new(PresentMon(
+                            lp_sensors::presentmon::PresentMonSource::new(&path, wanted.clone()),
+                        )));
+                    }
                     "librehardwaremonitor" => {
                         let (source, said) = Lhm::new(sensors.options.get(name), &wanted);
                         sources.push(Box::new(source));

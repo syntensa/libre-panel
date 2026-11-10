@@ -9,6 +9,7 @@ pub mod hwnames;
 pub mod lhm;
 pub mod load;
 pub mod netlink;
+pub mod presentmon;
 pub mod protocol;
 pub mod provider;
 pub mod service;

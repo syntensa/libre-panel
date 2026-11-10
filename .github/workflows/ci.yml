@@ -392,6 +392,10 @@ jobs:
           find libre-panel-rust/share -name __pycache__ -prune -exec rm -rf {} +
           find libre-panel-rust/share -name "*.py" -delete
           cp LICENSE libre-panel-rust/licenses/LICENSE-libre-panel.txt
+          # (PresentMon, as the downloads carry it: pinned and checked by fetch_tools.py above)
+          mkdir -p libre-panel-rust/tools
+          cp "$RUNNER_TEMP/tools/PresentMon.exe" libre-panel-rust/tools/
+          cp packaging/tools-licenses/PresentMon-*.txt libre-panel-rust/licenses/
           cp NOTICE.md libre-panel-rust/licenses/
           cp "$libs/freetype-2.14.3/LICENSE.TXT" libre-panel-rust/licenses/LICENSE-freetype.txt
           cp "$libs/freetype-2.14.3/docs/FTL.TXT" libre-panel-rust/licenses/FTL-freetype.txt

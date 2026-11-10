@@ -1664,8 +1664,17 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       every frame; the microphone muted or turned on again. The tools' answers and the
       readings compared with Python (500 texts, 300 states), the program run against a
       stand-in wpctl
-- [ ] HWiNFO, RTSS, PresentMon, MangoHud, the other sources; Linux's hint of what
-      system-setup brings
+- [x] a game's frames (sensors/presentmon.py, lp-sensors' frames and presentmon): the
+      frames counted as Python counts them (the rate, the frame time, the lows of the round,
+      the peak, what limits it, the trace; random runs of rows compared), and PresentMon looked
+      after as Python looks after it: found by its name in the settings, in `tools`, on the
+      PATH or in Intel's folder, with the highest rights only from a safe place (rights.py,
+      lp-devices' rights, which the engine's search follows too); started when a theme reads
+      game.*, ended a minute after none does, started again slowly while it fails or a game
+      runs, in a Windows job that ends it with the program, not started while Windows ends
+      the session. The program run against a stand-in PresentMon; the Windows calls (the
+      job, the session's release) not yet run on a Windows PC
+- [ ] HWiNFO, RTSS, MangoHud, the other sources; Linux's hint of what system-setup brings
 - [ ] the history as a ring, demo.py's values; the .NET service goes
 
 ### R8 services
