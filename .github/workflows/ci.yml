@@ -184,6 +184,16 @@ jobs:
           check_tools.check_engine(tools / engine)
           CHECK
           cat "$RUNNER_TEMP/tools/SOURCES.txt"
+      # (the engine with its notes, for the build of Rust to try a panel with: the job `try`)
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: engine-windows
+          path: |
+            ${{ runner.temp }}/tools/libre-panel-engine.exe
+            ${{ runner.temp }}/tools/SOURCES.txt
+            ${{ runner.temp }}/tools/licenses
+          retention-days: 7
       - name: The app's tests of the engine
         shell: bash
         run: |
@@ -276,8 +286,8 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: ${{ runner.temp }}/libs-cache
-          key: libs-${{ runner.os }}-libjpeg-turbo-3.2.0-libwebp-1.6.0
-      - name: The sources of libjpeg-turbo 3.2.0 and libwebp 1.6.0 (Windows)
+          key: libs-${{ runner.os }}-libjpeg-turbo-3.2.0-libwebp-1.6.0-freetype-2.14.3
+      - name: The sources of libjpeg-turbo 3.2.0, libwebp 1.6.0 and FreeType 2.14.3 (Windows)
         if: runner.os == 'Windows'
         shell: bash
         run: |
@@ -295,12 +305,14 @@ jobs:
             https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.2.0/libjpeg-turbo-3.2.0.tar.gz
           get webp.tar.gz e4ab7009bf0629fd11982d4c2aa83964cf244cffba7347ecd39019a9e38c4564 \
             https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.6.0.tar.gz
+          get freetype.tar.gz e61b31ab26358b946e767ed7eb7f4bb2e507da1cfefeb7a8861ace7fd5c899a1 \
+            https://download.savannah.gnu.org/releases/freetype/freetype-2.14.3.tar.gz
       - name: Kept for the runs after (Windows)
         if: runner.os == 'Windows' && steps.libs-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ runner.temp }}/libs-cache
-          key: libs-${{ runner.os }}-libjpeg-turbo-3.2.0-libwebp-1.6.0
+          key: libs-${{ runner.os }}-libjpeg-turbo-3.2.0-libwebp-1.6.0-freetype-2.14.3
       - name: libjpeg-turbo 3.2.0 and libwebp 1.6.0 for the comparisons (Windows)
         if: runner.os == 'Windows'
         shell: bash
@@ -326,6 +338,20 @@ jobs:
           echo "LP_LIBJPEG=$(cygpath -w "$PWD/jpeg/Release/jpeg62.dll")" >> "$GITHUB_ENV"
           echo "LP_LIBWEBP=$(cygpath -w "$PWD/webp/Release/libwebp.dll")" >> "$GITHUB_ENV"
           echo "LP_LIBWEBPDEMUX=$(cygpath -w "$PWD/webp/Release/libwebpdemux.dll")" >> "$GITHUB_ENV"
+      # Windows has no FreeType of its own and Pillow's is built into it: libre-panel.exe draws
+      # its letters with this one, the version Pillow 13.0 has (the letters' comparisons with
+      # Pillow do not run with it yet: docs/RUST.md, R2)
+      - name: FreeType 2.14.3 for libre-panel.exe (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP/libs"
+          tar -xzf freetype.tar.gz
+          cmake -S freetype-2.14.3 -B freetype -A x64 -DBUILD_SHARED_LIBS=ON \
+            -DFT_DISABLE_ZLIB=ON -DFT_DISABLE_BZIP2=ON -DFT_DISABLE_PNG=ON \
+            -DFT_DISABLE_HARFBUZZ=ON -DFT_DISABLE_BROTLI=ON > /dev/null
+          cmake --build freetype --config Release --parallel > /dev/null
+          ls freetype/Release/*.dll
       - name: The crates against the Python app
         run: python -m pytest -q --durations=20 tests/test_rust_py.py tests/test_rust_pixels.py tests/test_rust_decode.py tests/test_rust_text.py tests/test_rust_theme.py tests/test_rust_modules.py tests/test_rust_render.py tests/test_rust_toasts.py tests/test_rust_transitions.py tests/test_rust_alarm.py tests/test_rust_boot.py tests/test_rust_video.py tests/test_rust_devices.py tests/test_rust_config.py tests/test_rust_app.py
       # lp-panel, for a panel's owner to try the panel with the driver in Rust (the MAJESTY
@@ -346,6 +372,70 @@ jobs:
         with:
           name: lp-panel-windows
           path: lp-panel
+          retention-days: 30
+      # libre-panel.exe with what it loads and the app's themes, fonts and languages, as a
+      # folder that runs by itself: it draws a frame from there, with none of this job's
+      # libraries named to it
+      - name: libre-panel to try on a PC (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          libs="$RUNNER_TEMP/libs"
+          mkdir -p libre-panel-rust/share/libre-panel libre-panel-rust/licenses
+          cp rust/target/release/libre-panel.exe libre-panel-rust/
+          cp rust/app/try-windows.txt libre-panel-rust/README.txt
+          cp "$libs/freetype/Release/freetype.dll" "$libs/jpeg/Release/jpeg62.dll" libre-panel-rust/
+          cp "$libs"/webp/Release/*.dll libre-panel-rust/
+          for part in themes fonts locale assets; do
+            cp -r "src/libre_panel/$part" libre-panel-rust/share/libre-panel/
+          done
+          find libre-panel-rust/share -name __pycache__ -prune -exec rm -rf {} +
+          find libre-panel-rust/share -name "*.py" -delete
+          cp LICENSE libre-panel-rust/licenses/LICENSE-libre-panel.txt
+          cp NOTICE.md libre-panel-rust/licenses/
+          cp "$libs/freetype-2.14.3/LICENSE.TXT" libre-panel-rust/licenses/LICENSE-freetype.txt
+          cp "$libs/freetype-2.14.3/docs/FTL.TXT" libre-panel-rust/licenses/FTL-freetype.txt
+          cp "$libs/libjpeg-turbo-3.2.0/LICENSE.md" libre-panel-rust/licenses/LICENSE-libjpeg-turbo.md
+          cp "$libs/libjpeg-turbo-3.2.0/README.ijg" libre-panel-rust/licenses/README-libjpeg.ijg
+          cp "$libs/libwebp-1.6.0/COPYING" libre-panel-rust/licenses/COPYING-libwebp.txt
+          cd libre-panel-rust
+          export LIBRE_PANEL_HOME="$RUNNER_TEMP/try-home"
+          env -u LP_LIBJPEG -u LP_LIBWEBP -u LP_LIBWEBPDEMUX ./libre-panel.exe render --demo \
+            --theme lumen --output "$RUNNER_TEMP/try-lumen.png"
+          env -u LP_LIBJPEG -u LP_LIBWEBP -u LP_LIBWEBPDEMUX ./libre-panel.exe render \
+            --theme terra --output "$RUNNER_TEMP/try-terra.png"
+          python -c "import sys; from PIL import Image
+          for name in sys.argv[1:]:
+              frame = Image.open(name); frame.load()
+              assert frame.mode == 'RGB' and len(frame.getcolors(1 << 24)) > 500, name
+              print(name, frame.size)" "$RUNNER_TEMP/try-lumen.png" "$RUNNER_TEMP/try-terra.png"
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: libre-panel-rust-app
+          path: libre-panel-rust
+          retention-days: 7
+
+  try:
+    # Libre Panel in Rust to try on a PC with a panel: libre-panel.exe and what it loads (the
+    # job `rust`), with the engine that sends a TURZX panel its video (the job `engine`)
+    needs: [engine, rust]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: libre-panel-rust-app
+          path: libre-panel-rust
+      - uses: actions/download-artifact@v4
+        with:
+          name: engine-windows
+          path: libre-panel-rust/tools
+      - run: ls -R libre-panel-rust | head -60 && test -f libre-panel-rust/tools/libre-panel-engine.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libre-panel-rust-windows
+          path: libre-panel-rust
           retention-days: 30
 
   sensor-host:

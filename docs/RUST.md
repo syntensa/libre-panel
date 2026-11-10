@@ -1649,6 +1649,11 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
 - [ ] WebAssembly plugins: services, sensors and pages, an API of their own
 
 ### R11 packaging
+- [x] a folder to try on a Windows PC, built by CI (ci.yml's `try`, the artifact
+      libre-panel-rust-windows): libre-panel.exe, the FreeType 2.14.3 it draws letters with
+      (built there, as libjpeg-turbo and libwebp are), the app's themes, fonts and languages
+      in `share/libre-panel`, the engine in `tools`, their licences, and how to try it
+      (rust/app/try-windows.txt). CI draws two frames from the folder alone
 - [ ] Windows: the installer and the zip, signing; Linux: the AppImage; the tools (ffmpeg)
 
 ### R12 the switch
