@@ -353,7 +353,7 @@ jobs:
           cmake --build freetype --config Release --parallel > /dev/null
           ls freetype/Release/*.dll
       - name: The crates against the Python app
-        run: python -m pytest -q --durations=20 tests/test_rust_py.py tests/test_rust_pixels.py tests/test_rust_decode.py tests/test_rust_text.py tests/test_rust_theme.py tests/test_rust_modules.py tests/test_rust_render.py tests/test_rust_toasts.py tests/test_rust_transitions.py tests/test_rust_alarm.py tests/test_rust_boot.py tests/test_rust_video.py tests/test_rust_devices.py tests/test_rust_config.py tests/test_rust_sensors.py tests/test_rust_app.py
+        run: python -m pytest -q --durations=20 tests/test_rust_py.py tests/test_rust_pixels.py tests/test_rust_decode.py tests/test_rust_text.py tests/test_rust_theme.py tests/test_rust_modules.py tests/test_rust_render.py tests/test_rust_toasts.py tests/test_rust_transitions.py tests/test_rust_alarm.py tests/test_rust_boot.py tests/test_rust_video.py tests/test_rust_devices.py tests/test_rust_config.py tests/test_rust_sensors.py tests/test_rust_services.py tests/test_rust_app.py
       # lp-panel, for a panel's owner to try the panel with the driver in Rust (the MAJESTY
       # 9.16"'s first): with the libjpeg it saves its pictures with, and their licences
       - name: lp-panel to try a panel with (Windows)

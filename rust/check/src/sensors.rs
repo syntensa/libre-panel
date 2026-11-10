@@ -1387,6 +1387,157 @@ fn shared_memory(case: &Value) -> Result<Value, String> {
     Ok(json!({"rtss": runs, "hwinfo": memories}))
 }
 
+/// services_host: what the services' host holds after each step of each run (a service
+/// publishes, asks for a theme, sets a mode, shows a message, stops), the mode changes its
+/// listeners heard, and the options each [schema, given (JSON text), place] comes to.
+fn services_host(case: &Value) -> Result<Value, String> {
+    use lp_services::host::{Event, PluginHost, Scope, Transition};
+    use std::sync::{Arc, Mutex};
+    let text = |value: &Value| value.as_str().map(str::to_string);
+    let value_of = |value: &Value| -> Result<lp_py::Value, String> {
+        lp_py::json::loads(&value.to_string()).map_err(|why| why.to_string())
+    };
+    let transition = |value: &Value| value.as_str().map(Transition::named);
+    let mut runs = Vec::new();
+    for run in case["runs"].as_array().into_iter().flatten() {
+        let host = PluginHost::new(Box::new(|| 12.5));
+        let heard: Arc<Mutex<Vec<Value>>> = Arc::default();
+        let theirs = Arc::clone(&heard);
+        host.listen(
+            "mode-changed",
+            Box::new(move |event| {
+                if let (Event::ModeChanged { mode }, Ok(mut heard)) = (event, theirs.lock()) {
+                    heard.push(json!(mode));
+                }
+            }),
+            None,
+        )?;
+        let mut steps = Vec::new();
+        for step in run.as_array().into_iter().flatten() {
+            let owner = |n: usize| step[n].as_str();
+            let said = match step[0].as_str().unwrap_or("") {
+                "publish" => {
+                    let reading = lp_render::Reading {
+                        unit: text(&step[3]).unwrap_or_default(),
+                        label: text(&step[4]).unwrap_or_default(),
+                        ..lp_render::Reading::of(value_of(&step[2])?)
+                    };
+                    host.publish(step[1].as_str().unwrap_or(""), reading, owner(5));
+                    Value::Null
+                }
+                "state" => {
+                    let key = step[1].as_str().unwrap_or("");
+                    let label = step[4].as_str().unwrap_or("");
+                    match host.publish_state(key, &value_of(&step[2])?, owner(3), label) {
+                        Ok(()) => Value::Null,
+                        Err(why) => json!({"error": why}),
+                    }
+                }
+                "unpublish" => {
+                    host.unpublish(step[1].as_str().unwrap_or(""));
+                    Value::Null
+                }
+                "theme" => {
+                    let scope = match step[5].as_str() {
+                        Some("*") => Scope::Any,
+                        other => Scope::Mode(other.map(str::to_string)),
+                    };
+                    host.request_theme(
+                        step[1].as_str(),
+                        owner(2).unwrap_or(""),
+                        transition(&step[3]),
+                        step[4].as_i64().unwrap_or(0),
+                        scope,
+                    );
+                    Value::Null
+                }
+                "mode" => {
+                    host.set_mode(step[1].as_str(), owner(2), transition(&step[3]));
+                    Value::Null
+                }
+                "forget" => {
+                    host.forget(owner(1).unwrap_or(""));
+                    Value::Null
+                }
+                "notify" => {
+                    let toast = lp_render::overlays::Toast {
+                        kind: text(&step[2]).unwrap_or_default(),
+                        rank: step[3].as_i64().unwrap_or(0),
+                        service: text(&step[4]).unwrap_or_default(),
+                        ..lp_render::overlays::Toast::new(step[1].as_str().unwrap_or(""))
+                    };
+                    let delivery = host.notify(toast);
+                    json!([delivery.shown, delivery.reason])
+                }
+                "take_toasts" => json!(host
+                    .take_toasts()
+                    .iter()
+                    .map(|toast| json!([toast.text, toast.kind, toast.rank, toast.service]))
+                    .collect::<Vec<_>>()),
+                "take_transition" => json!(host.take_transition().map(|chosen| chosen.name)),
+                other => return Err(format!("no such step: {other}")),
+            };
+            let published: Vec<Value> = host
+                .published()
+                .iter()
+                .map(|(key, r)| json!([key, plain(&r.value), r.unit, r.label, r.stamp]))
+                .collect();
+            steps.push(json!([
+                said,
+                published,
+                host.theme(),
+                host.theme_owner(),
+                host.mode(),
+                host.mode_owner(),
+                host.switches(),
+            ]));
+        }
+        host.close();
+        let heard = heard.lock().map(|heard| heard.clone()).unwrap_or_default();
+        runs.push(json!([steps, heard]));
+    }
+    let mut options = Vec::new();
+    for case in case["options"].as_array().into_iter().flatten() {
+        let schema: lp_services::manager::Schema = case[0]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|option| -> Result<_, String> {
+                let leaked = |n: usize| -> &'static str {
+                    Box::leak(
+                        option[n]
+                            .as_str()
+                            .unwrap_or("")
+                            .to_string()
+                            .into_boxed_str(),
+                    )
+                };
+                Ok((leaked(0), leaked(1), value_of(&option[2])?))
+            })
+            .collect::<Result<_, _>>()?;
+        // (as JSON text: whole numbers of any size)
+        let given = lp_py::json::loads(case[1].as_str().unwrap_or(""));
+        let Ok(lp_py::Value::Dict(given)) = given else {
+            return Err("options that are no table".into());
+        };
+        let mut notes = Vec::new();
+        let place = case[2].as_str().unwrap_or("");
+        options.push(
+            match lp_services::manager::apply_options(&schema, &given, place, &mut notes) {
+                Err(why) => json!({"error": why}),
+                Ok(found) => {
+                    let found: Vec<Value> = found
+                        .iter()
+                        .map(|(key, value)| json!([key, value.repr()]))
+                        .collect();
+                    json!([found, notes])
+                }
+            },
+        );
+    }
+    Ok(json!({"runs": runs, "options": options}))
+}
+
 pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "regex" => regex(case),
@@ -1407,6 +1558,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "mqtt" => mqtt(case)?,
         "calendar" => calendar(case)?,
         "shared_memory" => shared_memory(case)?,
+        "services_host" => services_host(case)?,
         "mangohud" => mangohud(case)?,
         "media" => media(case),
         "appicon" => appicon(case),

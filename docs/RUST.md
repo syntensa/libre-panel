@@ -1779,6 +1779,16 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
 - [ ] the history as a ring, demo.py's values; the .NET service goes
 
 ### R8 services
+- [x] the host between the services and the main loop (plugins/host.py; rust/services,
+      lp-services' host and manager): readings, states (JSON text with the loop's time) and
+      images published by their owner, the readings a service wants, the theme the services
+      ask for (by priority, then the latest, in the modes each request counts in), the mode
+      and who set it, the transition of a switch, the 20 messages kept for the loop, events
+      told in a thread of their own (samples and what moved between them: the newest only),
+      a service that stops and leaves nothing; the services config.toml enables started,
+      stopped (five seconds each) and started anew where their options change, the options
+      from the defaults and config.toml's with their types. 300 runs of steps and 400 sets of
+      options compared with Python. Not yet in the main loop
 - [ ] game mode, notices, AI activity (Claude Code, Codex), downloads, memory and its store,
       timer, cooling, power, autopilot, devices, weather, media (Windows' media session, MPRIS),
       audio
