@@ -36,7 +36,7 @@ pub fn page_theme(config: &Config, name: Option<&str>) -> Option<String> {
     })
 }
 
-fn idle_minutes(config: &Config) -> f64 {
+pub fn idle_minutes(config: &Config) -> f64 {
     let own = config.modes.get(IDLE).and_then(|mode| mode.minutes);
     own.filter(|minutes| *minutes != 0.0)
         .unwrap_or(IDLE_MINUTES)

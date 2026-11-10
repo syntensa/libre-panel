@@ -1281,7 +1281,7 @@ fn find_panel(config: &Config) -> Option<Found> {
 /// panel_model: the panel a config is for, as far as it is known without opening anything:
 /// the configured model; else, with "auto" and a driver that looks for TURZX USB panels,
 /// the one on the USB bus.
-fn panel_model(config: &Config) -> Option<&'static PanelModel> {
+pub fn panel_model(config: &Config) -> Option<&'static PanelModel> {
     let device = &config.device;
     lp_devices::models::find_model(&device.model).or_else(|| {
         let looks = device.model == "auto" && ["auto", "turzx"].contains(&device.driver.as_str());

@@ -1930,6 +1930,10 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       smooth motion makes of it and lacks, the panels beside it, the theme that shows the
       weather; 110 configurations compared. (The USB screens of other makers are not looked
       for yet; no ffmpeg is asked for: the engine encodes.)
+      The pages of the panel (`/api/pages`, `rust/app/src/pages.rs`): the normal theme,
+      each mode's and the round report's, those of a panel beside the first, read and set
+      (a theme, a frame rate, the idle page's minutes, switched on and off) or refused in the
+      same words; 55 requests compared, and the two config.toml files after each.
       `libre-panel editor` serves alone, `start` with
       the panel, and writes its address where a later start finds it. 120 requests to
       Python's server and to this one compared: the status, the headers and the body, byte

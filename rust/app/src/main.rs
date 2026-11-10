@@ -12,6 +12,7 @@ mod http;
 mod mainloop;
 mod modes;
 mod osinfo;
+mod pages;
 mod psutil;
 mod sensors;
 mod server;

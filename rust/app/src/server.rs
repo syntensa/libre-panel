@@ -200,6 +200,14 @@ const ROUTES: &[Route] = &[
     private("GET", "/api/settings", |s, x, _, _| {
         settings(s, x, |told| told.read())
     }),
+    private("GET", "/api/pages", |s, x, _, u| {
+        let query = crate::http::parse_qs(&u.query);
+        let panel = query.get("panel").and_then(|asked| asked.first());
+        match settings_of(s).pages(panel.map(String::as_str)) {
+            Ok(told) => x.json(&told, 200),
+            Err(refused) => x.error(&refused.message, refused.status, ""),
+        }
+    }),
     private("GET", "/api/panel", |s, x, _, _| {
         settings(s, x, |told| told.panel())
     }),
@@ -224,6 +232,9 @@ const ROUTES: &[Route] = &[
     private("POST", "/api/app", |s, x, _, _| app_action(s, x)),
     private("POST", "/api/settings", |s, x, _, _| {
         settings_with(s, x, |told, asked| told.write(asked))
+    }),
+    private("POST", "/api/pages", |s, x, _, _| {
+        settings_with(s, x, |told, asked| told.set_page(asked))
     }),
     private("POST", "/api/scenes", |s, x, _, _| {
         settings_with(s, x, |told, asked| told.set_scene(asked))

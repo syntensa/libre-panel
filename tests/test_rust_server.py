@@ -572,3 +572,84 @@ def test_the_panel_and_the_clip_question_are_told_as_settings_py_tells_them(
             assert ours[0] == theirs[0] and json.loads(ours[2]) == json.loads(theirs[2]), config
             asked += json.loads(theirs[2]).get("ask", False)
     assert asked >= 3
+
+
+# fmt: off
+PAGES = (  # what a page is to show, a request each
+    {"page": "normal", "theme": "lumen"}, {"page": "normal", "theme": "nothing"},
+    {"page": "normal", "theme": ""}, {"page": "normal"}, {"page": "normal", "fps": 5},
+    {"page": "normal", "theme": "slate", "on": True}, {"page": "normal", "theme": 5},
+    {"page": "game", "theme": "arena", "fps": 30}, {"page": "game", "fps": 2.5},
+    {"page": "game", "fps": True}, {"page": "game", "on": True}, {"page": "game", "on": False},
+    {"page": "game", "on": 1}, {"page": "game", "theme": ""}, {"page": "game"},
+    {"page": "media", "on": True}, {"page": "media", "theme": "encore", "on": False},
+    {"page": "idle", "on": True, "minutes": 2.5}, {"page": "idle", "minutes": 10},
+    {"page": "idle", "minutes": 0.4}, {"page": "idle", "minutes": True},
+    {"page": "media", "minutes": 5}, {"page": "idle", "minutes": "5"},
+    {"page": "report", "theme": "round-report"}, {"page": "report", "on": True},
+    {"page": "report", "on": False}, {"page": "report"}, {"page": "report", "theme": ""},
+    {"page": "report", "fps": 5}, {"page": "film", "theme": "terra", "fps": 24, "on": True},
+    {"page": "film", "on": False}, {"page": "Film", "theme": "terra"}, {"page": 5}, {},
+    [], 5, {"page": "x" * 33, "theme": "terra"}, {"page": "a-b_2", "theme": "slate"},
+    {"page": "normal", "theme": "lumen", "panel": 1}, {"page": "normal", "theme": "lumen",
+                                                       "panel": 1.0},
+    {"page": "normal", "theme": "slate", "panel": 2}, {"page": "normal", "theme": "slate",
+                                                       "panel": 3},
+    {"page": "normal", "theme": "slate", "panel": "2"}, {"page": "normal", "panel": 2},
+    {"page": "normal", "follow": True, "panel": 2}, {"page": "game", "theme": "arena",
+                                                     "panel": 2},
+    {"page": "game", "theme": "", "panel": 2}, {"page": "media", "panel": 2},
+    {"page": "alarm", "theme": "nothing", "panel": 2}, {"page": "idle", "theme": "slate",
+                                                        "panel": 2},
+    {"page": "normal", "theme": "", "panel": 2}, {"page": "game", "follow": True, "panel": 2},
+    {"page": "normal", "theme": "lumen-companion", "panel": 2},
+    {"page": "normal", "follow": True, "panel": 2}, {"page": "alarm", "theme": "slate",
+                                                     "panel": 0},
+)
+# fmt: on
+
+
+def test_the_pages_of_the_panel_are_told_and_set_as_server_py_does(servers: Any) -> None:
+    """The pages of the panel: the theme it shows normally, each mode's and the round
+    report's, those of a panel beside the first; a page given a theme, a frame rate, its
+    minutes, switched on and off, or refused in the same words. After each request the two
+    config.toml files hold the same."""
+    ask, homes = servers
+    start = ('theme = "slate"\nlanguage = "de"\n[device]\ndriver = "virtual"\n[sensors]\n'
+             'providers = []\n[[sequence.steps]]\ntheme = "slate"\nseconds = 20\n'
+             '[[sequence.steps]]\ntheme = "lumen"\nseconds = 30\n[[panels]]\n'
+             'driver = "virtual"\n')  # fmt: skip
+    for home in homes:
+        (home / "config.toml").write_text(start, encoding="utf-8")
+
+    def both(request: str | bytes, what: Any) -> Any:
+        theirs, ours = ask(request)
+        assert (ours[0], json.loads(ours[2])) == (theirs[0], json.loads(theirs[2])), what
+        files = [(home / "config.toml").read_text(encoding="utf-8")
+                 for home in homes if (home / "config.toml").exists()]  # fmt: skip
+        assert len(files) != 1 and files[1:] == files[:1], what
+        return theirs[0], json.loads(theirs[2])
+
+    done = 0
+    for query in ("", "?panel=1", "?panel=2", "?panel=3", "?panel=0", "?panel=x", "?panel=",
+                  "?panel=%202&panel=1", "?panel=+2"):  # fmt: skip
+        both(_get(f"/api/pages{query}", WITH), query)
+    for payload in PAGES:
+        status, told = both(_post("/api/pages", payload), payload)
+        done += status == "HTTP/1.0 200 OK"
+        both(_get("/api/pages", WITH), payload)
+        both(_get("/api/pages?panel=2", WITH), payload)
+    assert 20 < done < len(PAGES) - 15
+    assert told["error"] == "no such panel"
+    for home in homes:
+        (home / "config.toml").unlink()
+    status, told = both(_get("/api/pages", WITH), "no file")
+    assert told["chosen"] is False and told["pages"][0]["theme"] == told["default"]
+    for home in homes:
+        (home / "config.toml").write_text("theme = 5\n", encoding="utf-8")
+    for request in (
+        _get("/api/pages", WITH),
+        _post("/api/pages", {"page": "game", "on": True}),
+        _post("/api/pages", {"page": "normal", "theme": "slate", "panel": 2}),
+    ):
+        assert both(request, request)[0] == "HTTP/1.0 409 Conflict"
