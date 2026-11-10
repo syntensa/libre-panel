@@ -452,3 +452,29 @@ def test_programs_ping_and_link_are_read_while_a_theme_shows_them(tmp_path: Path
     if "net.link" in ours:  # (a default route: how the PC is connected)
         assert ours["net.link.kind"][0] in ("lan", "wlan")
         assert ours["net.link.text"][0].startswith(ours["net.link"][0])
+
+
+@pytest.mark.skipif(os.name == "nt", reason="the tools of Linux")
+def test_the_volume_is_read_from_the_tool_on_the_path(tmp_path: Path) -> None:
+    """`[sensors] providers = ["audio"]`: the volume as wpctl says it, while something reads
+    it (`sensors` asks for audio.* as a theme would)."""
+    tools = tmp_path / "bin"
+    tools.mkdir()
+    (tools / "wpctl").write_text(
+        '#!/bin/sh\n[ "$2" = "@DEFAULT_AUDIO_SINK@" ] && echo "Volume: 0.37" || '
+        'echo "Volume: 0.80 [MUTED]"\n',
+        encoding="utf-8",
+    )
+    (tools / "wpctl").chmod(0o755)
+    (tmp_path / "config.toml").write_text('[sensors]\nproviders = ["audio"]\n', encoding="utf-8")
+    path = f"{tools}{os.pathsep}{os.environ.get('PATH', '')}"
+    done = _run(tmp_path, "sensors", PATH=path, LP_SENSORS_WANT="audio.mic.*")
+    assert done.returncode == 0, done.stderr
+    ours = {line[:40].strip(): (line[41:55].strip(), line[56:61].strip(), line[62:])
+            for line in done.stdout.splitlines()}  # fmt: skip
+    assert ours == {
+        "audio.volume": ("37.00", "%", "Volume"), "audio.muted": ("0", "", "Muted"),
+        "audio.mic.volume": ("80.00", "%", "Microphone level"),
+        "audio.mic.muted": ("1", "", "Microphone muted"),
+    }  # fmt: skip
+    assert "audio: the volume is read by polling" in done.stderr

@@ -1655,6 +1655,15 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       cores' times, 200 of Windows' records, 40 folders as sysfs has them); the Windows
       calls not yet run on a Windows PC. Linux's graphics card (the kernel's counter, NVML)
       comes with the source `linux`
+- [x] the volume (sensors/audio.py, lp-sensors' audio): the default output device's level
+      and mute and, while something asks for it, the microphone's; on Linux from wpctl or
+      pactl four times a second (the one that works first, a failing one asked less often),
+      on Windows from Core Audio with a callback made by hand, so that Windows tells every
+      change itself, the default device looked at again every two seconds (compiled for
+      Windows, not yet run there); a thread that runs while a theme reads audio.*, read on
+      every frame; the microphone muted or turned on again. The tools' answers and the
+      readings compared with Python (500 texts, 300 states), the program run against a
+      stand-in wpctl
 - [ ] HWiNFO, RTSS, PresentMon, MangoHud, the other sources; Linux's hint of what
       system-setup brings
 - [ ] the history as a ring, demo.py's values; the .NET service goes

@@ -409,6 +409,30 @@ fn netlink(case: &Value) -> Value {
     })
 }
 
+/// audio: each text as wpctl's and pactl's answers are read, and the readings of each
+/// [level, muted, microphone].
+fn audio(case: &Value) -> Value {
+    use lp_sensors::audio as a;
+    let texts = strings(&case["texts"]);
+    json!({
+        "wpctl": texts.iter().map(|t| a::parse_wpctl(t).map(|(l, m)| json!([float(l), m])))
+            .collect::<Vec<_>>(),
+        "volume": texts.iter().map(|t| a::parse_pactl_volume(t).map(float)).collect::<Vec<_>>(),
+        "mute": texts.iter().map(|t| a::parse_pactl_mute(t)).collect::<Vec<_>>(),
+        "readings": case["states"].as_array().into_iter().flatten().map(|s| {
+            let found = a::readings_of(s[0].as_f64().unwrap_or(0.0),
+                s[1].as_bool() == Some(true), s[2].as_bool() == Some(true));
+            found.iter().map(|(key, r)| {
+                let value = match &r.value {
+                    lp_py::Value::Float(f) => float(*f),
+                    other => json!(["int", other.str()]),
+                };
+                json!([key, value, r.unit, r.label])
+            }).collect::<Vec<_>>()
+        }).collect::<Vec<_>>(),
+    })
+}
+
 pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "regex" => regex(case),
@@ -419,6 +443,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "lhm_hints" => lhm_hints(case)?,
         "load_math" => load_math(case),
         "netlink" => netlink(case),
+        "audio" => audio(case),
         _ => return Err(format!("no such op: {op}")),
     })
 }

@@ -51,6 +51,28 @@ pub trait Source {
     }
 }
 
+/// The volume and the mute of the default output device, and the microphone's
+/// (sensors/audio.py).
+struct Audio(lp_sensors::audio::AudioSource);
+
+impl Source for Audio {
+    fn name(&self) -> &'static str {
+        "audio"
+    }
+
+    fn read(&mut self, out: &mut Readings) {
+        out.extend(self.0.read());
+    }
+
+    fn notes(&mut self) -> Vec<String> {
+        self.0.notes()
+    }
+
+    fn every_frame(&self) -> Every {
+        Every::Frame
+    }
+}
+
 /// The processor's, its cores' and the graphics card's load, ten times a second
 /// (sensors/load.py).
 struct Load(lp_sensors::load::LoadSource);
@@ -242,6 +264,9 @@ impl Hub {
                         wanted.clone(),
                     ))),
                     "load" => sources.push(Box::new(Load(lp_sensors::load::LoadSource::new(
+                        wanted.clone(),
+                    )))),
+                    "audio" => sources.push(Box::new(Audio(lp_sensors::audio::AudioSource::new(
                         wanted.clone(),
                     )))),
                     "librehardwaremonitor" => {

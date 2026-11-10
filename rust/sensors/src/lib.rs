@@ -2,6 +2,7 @@
 //! readings, read through Libre Panel's sensor service on Windows, and the names of the
 //! hardware tidied for a panel.
 
+pub mod audio;
 pub mod hints;
 pub mod hwnames;
 pub mod lhm;

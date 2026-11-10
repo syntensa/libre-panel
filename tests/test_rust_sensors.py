@@ -521,3 +521,37 @@ def test_the_network_link_is_read_as_netlink_py_reads_it() -> None:
         except ValueError:  # (a rate that is no number: Python raises, and no link is told)
             want = None
         assert got == (None if want is None else _hex(want)), out
+
+
+def test_the_volume_s_tools_are_read_as_audio_py_reads_them() -> None:
+    from libre_panel.sensors import audio
+
+    rng = random.Random(0xA0D)
+    texts = ["", "Volume: 0.37\n", "Volume: 0.37 [MUTED]\n", "Volume: 1.00", "Volume:.5",
+             "Volume: 1.", "Volume:  12", "volume: 0.2", "Mute: yes\n", "Mute: no", "Mute:yes",
+             "Mute: maybe", "Volume: front-left: 24248 /  37% / -26.45 dB,   front-right: 2 / 3%",
+             "Volume: 0.3.4 [MUTED]", "100%", "٣٧%", "Volume: ٠.٥", "x % 5%% 150%"]  # fmt: skip
+    pieces = ["Volume:", " ", "0.37", "1", ".", "[MUTED]", "Mute:", "yes", "no", "37%", "%", "\n"]
+    texts += ["".join(rng.choice(pieces) for _ in range(rng.randrange(1, 8))) for _ in range(500)]
+    states = [[rng.choice([-5.0, 0.0, 0.04, 0.05, 36.95, 37.25, 99.96, 100.0, 180.0,
+                           rng.uniform(0, 100)]), rng.random() < 0.4, rng.random() < 0.4]
+              for _ in range(300)]  # fmt: skip
+    [ours] = run([{"op": "audio", "texts": texts, "states": states}])
+    for text, wpctl, volume, mute in zip(texts, ours["wpctl"], ours["volume"], ours["mute"],
+                                         strict=True):  # fmt: skip
+        want = audio.parse_wpctl(text)
+        assert wpctl == (want and [_hex(want[0]), want[1]]), text
+        level = audio.parse_pactl_volume(text)
+        assert volume == (None if level is None else _hex(level)), text
+        assert mute == audio.parse_pactl_mute(text), text
+    provider = audio.AudioProvider({})
+    for (level, muted, mic), got in zip(states, ours["readings"], strict=True):
+        if mic:
+            provider._publish_mic(level, muted)
+            found = provider._mic[1]
+        else:
+            provider._publish(level, muted)
+            found = provider._state[1]
+        want = [[key, _hex(r.value) if isinstance(r.value, float) else ["int", str(r.value)],
+                 r.unit, r.label] for key, r in found.items()]  # fmt: skip
+        assert got == want, (level, muted, mic)
