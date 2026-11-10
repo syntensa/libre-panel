@@ -561,6 +561,9 @@ def test_a_linux_pcs_sensors_are_those_of_the_python_sources(tmp_path: Path) -> 
     provider.hwmon = False
     try:
         linux.read(), provider.read()
+        # the drives' and the memory's temperatures are read by a thread of their own every
+        # few seconds, and the program waits for its first readings: a round is made here
+        linux.read_slow()
         done = _run(tmp_path, "sensors")
         time.sleep(0.3)  # (a power needs two readings of its counter, a while apart)
         wanted = _named({**provider.read(), **linux.read()})
