@@ -8,6 +8,7 @@ mod autostart;
 mod background;
 mod backup;
 mod company;
+mod consoles;
 mod display;
 mod drawings;
 mod editing;

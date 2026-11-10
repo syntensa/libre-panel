@@ -1679,3 +1679,62 @@ def test_notices_of_other_programs_come_in_as_server_py_takes_them(servers: Any)
         told["address"] = told["address"].replace(told["key"], "KEY")
         told["key"] = "KEY"
     assert ours == theirs
+
+
+def test_the_built_in_pages_answer_as_pages_py_does(servers: Any) -> None:
+    """The pages there are and their files; Control's and Autopilot's own API without a
+    background app: what they show, what they change in config.toml, and what they refuse."""
+    ask, homes = servers
+
+    # (each side's own settings folder, as JSON writes it)
+    own = [json.dumps(str(side))[1:-1].encode() for side in homes]
+
+    def both(request: str | bytes) -> None:
+        theirs, ours = ask(request)
+        body = ours[2].replace(own[1], own[0])
+        ours = (ours[0], {**ours[1], "Content-Length": str(len(body))}, body)
+        assert ours == theirs, request
+        configs = [(side / "config.toml").read_text("utf-8") for side in homes]
+        assert configs[1] == configs[0], request
+
+    for side in homes:
+        (side / "logs").mkdir()
+        (side / "logs" / "libre-panel.log").write_text(
+            "".join(f"2026-01-02 03:04:{n:02} INFO x: line {n}\n" for n in range(50)), "utf-8"
+        )
+    for path in ("/plugins/control/", "/plugins/autopilot/console.js", "/plugins/control/../x",
+                 "/plugins/nope/index.html", "/plugins/control/missing.js",
+                 "/plugins/control/index.HTML", "/plugins/control/a.exe"):  # fmt: skip
+        both(_get(path))
+    both(_get("/api/plugins/pages", WITH))
+    for path in ("status", "panel", "sources", "services", "probes", "themes", "live",
+                 "live?format=gif&w=5", "log", "log?lines=3", "log?lines=x", "nope",
+                 "/status/"):  # fmt: skip
+        both(_get(f"/api/plugins/control/{path}", WITH))
+    both(_get("/api/plugins/nope/status", WITH))
+    for path, payload in (
+        ("probe", {"kind": "music"}), ("probe", {"kind": "x"}), ("probe", {}),
+        ("probe", [1]), ("services/enable", {"service": "timer", "enabled": True}),
+        ("services/enable", {"service": "timer", "enabled": True}),
+        ("services/enable", {"service": "nope", "enabled": True}),
+        ("services/enable", {"service": "nope", "enabled": False}),
+        ("services/enable", {"service": "timer", "enabled": "yes"}),
+        ("services/restart", {"service": "timer"}), ("shortcut", {"action": "timer"}),
+        ("shortcut", {"action": "x"}), ("theme", {"mode": "normal", "theme": "terra"}),
+        ("theme", {"mode": "game", "theme": ""}), ("theme", {"mode": "x", "theme": ""}),
+        ("theme", {"mode": "normal", "theme": "nope"}), ("nope", {}),
+    ):  # fmt: skip
+        both(_post(f"/api/plugins/control/{path}", payload))
+    both(_get("/api/plugins/control/status", WITH))
+    rule = {"name": "Music", "theme": "lumen", "when": {"music": True}}
+    for payload in (
+        {"rules": [rule], "enabled": True, "options": {"hold_s": 4, "transition": "fade"}},
+        {"rules": [{**rule, "theme": "nope"}]}, {"rules": [{**rule, "when": {}}]},
+        {"rules": [{**rule, "when": {"cpu_over": 120}}]}, {"rules": [{**rule, "hold_s": True}]},
+        {"rules": [{**rule, "when": {"time": "25:00-1"}}]}, {"rules": [{"theme": "x"}]},
+        {"rules": "x"}, {"options": {"min_s": -1}}, {"options": {"transition": 5}},
+        {"options": "x"}, {"enabled": "on"}, {"enabled": False}, {},
+    ):  # fmt: skip
+        both(_post("/api/plugins/autopilot/settings", payload))
+        both(_get("/api/plugins/autopilot/settings", WITH))
+    both(_get("/api/plugins/autopilot/status", WITH))

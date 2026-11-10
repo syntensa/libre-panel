@@ -87,6 +87,35 @@ impl Company {
         }
     }
 
+    /// Each service config.toml enables and its state (`running`, `failed: ...`, `not
+    /// installed`, `stopped`), as the manager has them.
+    pub fn states(&self) -> indexmap::IndexMap<String, String> {
+        self.manager
+            .lock()
+            .map(|m| m.state.clone())
+            .unwrap_or_default()
+    }
+
+    /// A running service's summary for its card; None where it says nothing.
+    pub fn summary(&self, name: &str) -> Option<lp_py::Value> {
+        self.manager.lock().ok()?.summary_of(name)
+    }
+
+    /// A running service's status for its console page; None where it does not run.
+    pub fn status(&self, name: &str) -> Option<lp_py::Value> {
+        self.manager.lock().ok()?.status_of(name)
+    }
+
+    /// Stops an enabled service and starts it again; its new state.
+    pub fn restart(&self, name: &str) -> Result<String, String> {
+        let mut manager = self.manager.lock().map_err(|_| "the services are stuck")?;
+        let done = manager.restart(name);
+        for note in manager.notes() {
+            say(&note);
+        }
+        done
+    }
+
     /// Every service stopped, the last started first.
     pub fn stop_services(&self) {
         if let Ok(mut manager) = self.manager.lock() {

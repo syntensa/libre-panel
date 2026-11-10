@@ -589,6 +589,26 @@ impl BackgroundApp {
     }
 
     /// snapshot: what the app shows of the panel and its controls.
+    /// Each service config.toml enables and its state, as the service manager has them.
+    pub fn services_state(&self) -> indexmap::IndexMap<String, String> {
+        self.company.states()
+    }
+
+    /// What a running service is doing, for its card; None where it says nothing.
+    pub fn service_summary(&self, name: &str) -> Option<Value> {
+        self.company.summary(name)
+    }
+
+    /// A running service's status for its console page; None where it does not run.
+    pub fn service_status(&self, name: &str) -> Option<Value> {
+        self.company.status(name)
+    }
+
+    /// Stops an enabled service and starts it again; its new state.
+    pub fn restart_service(&self, name: &str) -> Result<String, String> {
+        self.company.restart(name)
+    }
+
     /// A short message on the panel from the app's server (a page, another program's
     /// notice): whether it will show, or why not.
     pub fn notify(&self, toast: lp_render::overlays::Toast) -> lp_services::host::Delivery {

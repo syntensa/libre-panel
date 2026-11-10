@@ -2019,6 +2019,12 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       key, where `allow_notify` is on, checked as notify.py checks them and put on the
       running panel as the app's own toasts; Settings' key, address and command
       (`/api/notify-key`).
+      The built-in pages (`rust/app/src/consoles.rs`): their list and files, Control's API
+      (the panel's state, the services and what each is doing, test messages of every kind,
+      the theme per mode, switching services on and off, restarting them, the buttons, the
+      log's last lines) and Autopilot's (its rules checked as pages/autopilot.py checks them,
+      its options, written in one edit; what the service is doing). The sensor sources and
+      the live picture of Control come with the main loop's status.
       `libre-panel editor` serves alone, `start` with
       the panel, and writes its address where a later start finds it. 120 requests to
       Python's server and to this one compared: the status, the headers and the body, byte

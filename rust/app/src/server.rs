@@ -197,6 +197,10 @@ const ROUTES: &[Route] = &[
     public("GET", "/classic/index.html", |_, x, _, _| x.redirect("/")),
     public("GET", "/app/fonts/{name*}", |s, x, m, _| font(s, x, m[0])),
     public("GET", "/app/{name*}", |s, x, m, _| app_file(s, x, m[0])),
+    public("GET", "/plugins/{page}/{name*}", |s, x, m, _| {
+        let name = if m[1].is_empty() { "index.html" } else { m[1] };
+        page_file(s, x, m[0], name);
+    }),
     public("GET", "/static/{name*}", |s, x, m, _| {
         static_file(s, x, m[0])
     }),
@@ -321,6 +325,13 @@ const ROUTES: &[Route] = &[
         hardware_answer(s, x, refresh);
     }),
     private("GET", "/api/history", |s, x, _, u| history(s, x, u)),
+    private("GET", "/api/plugins/pages", |s, x, _, _| {
+        x.json(&crate::consoles::listed(&s.home.data), 200)
+    }),
+    // (a page may answer with a picture)
+    picture("GET", "/api/plugins/{page}/{rest*}", |s, x, m, u| {
+        page_api(s, x, "GET", m[0], m[1], u, None);
+    }),
     // a notice from another program: with its own key instead of the token
     notice("POST", "/api/ai/hook", |s, x, _, u| ai_in(s, x, u, "hook")),
     notice("POST", "/api/ai/status", |s, x, _, u| {
@@ -409,6 +420,13 @@ const ROUTES: &[Route] = &[
     }),
     private("POST", "/api/news", |s, x, _, _| see_news(s, x)),
     private("POST", "/api/logs", |_, x, _, _| set_verbose(x)),
+    private("POST", "/api/plugins/{page}/{rest*}", |s, x, m, u| {
+        // (a page gets what it was sent, a JSON object, and the answer is its own)
+        let Some(body) = x.read_json(MAX_JSON) else {
+            return;
+        };
+        page_api(s, x, "POST", m[0], m[1], u, Some(&body));
+    }),
     private("POST", "/api/backup", |s, x, _, _| restore_backup(s, x)),
     private("POST", "/api/hardware", |s, x, _, _| {
         let Some(payload) = x.read_json(MAX_JSON) else {
@@ -672,6 +690,49 @@ fn ai_in(state: &State, exchange: &mut Exchange, url: &Url, kind: &str) {
     }
     let line = board.status(&agent, &data);
     exchange.send(200, line.as_bytes(), "text/plain; charset=utf-8", "");
+}
+
+/// A file of a built-in page (its index.html, scripts and styles).
+fn page_file(state: &State, exchange: &mut Exchange, page: &str, name: &str) {
+    let known = crate::consoles::PAGES.iter().any(|p| p.id == page);
+    let kind = match suffix(name).to_ascii_lowercase().as_str() {
+        ".json" => Some("application/json"),
+        ".jpg" => Some("image/jpeg"),
+        ".webp" => Some("image/webp"),
+        ".woff2" => Some("font/woff2"),
+        ".ttf" => Some("font/ttf"),
+        other => content_type(other),
+    };
+    let base = crate::consoles::folder(&state.home.data);
+    match kind
+        .filter(|_| known)
+        .and_then(|kind| Some((file_in(&base, name)?, kind)))
+    {
+        Some((body, kind)) => exchange.send(200, &body, kind, ""),
+        None => not_found(exchange),
+    }
+}
+
+/// A request to a built-in page's own API.
+fn page_api(
+    state: &State,
+    exchange: &mut Exchange,
+    method: &str,
+    page: &str,
+    path: &str,
+    url: &Url,
+    body: Option<&Value>,
+) {
+    let query = crate::http::parse_qs(&url.query);
+    let context = crate::consoles::Context {
+        app: state.controls.upgrade(),
+        config_file: &state.config_file,
+        places: state.home.places(),
+    };
+    match crate::consoles::handle(page, method, path, &query, body, &context) {
+        Some(crate::consoles::Answer::Json(status, data)) => exchange.json(&data, status),
+        None => not_found(exchange),
+    }
 }
 
 /// `POST /api/backup`: a backup (the zip's bytes) put in place: its config.toml and its

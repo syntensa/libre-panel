@@ -27,6 +27,12 @@ pub trait Service: Send {
     fn summary(&self) -> Option<Value> {
         None
     }
+
+    /// What the service is doing in full, for its console page (the autopilot's rule and
+    /// signals); None for a service without one.
+    fn status(&self) -> Option<Value> {
+        None
+    }
 }
 
 /// An option of a service: its name, its type (int, number, bool, string, list) and its
@@ -218,6 +224,18 @@ impl Manager {
         running
             .filter_map(|(name, (service, _))| Some((name.clone(), service.summary()?)))
             .collect()
+    }
+
+    /// What a running service is doing now (its card's summary); None for one that does not
+    /// run or says nothing.
+    pub fn summary_of(&self, name: &str) -> Option<Value> {
+        self.running.get(name)?.0.summary()
+    }
+
+    /// A running service's status for its console page; None for one that does not run or
+    /// has none.
+    pub fn status_of(&self, name: &str) -> Option<Value> {
+        self.running.get(name)?.0.status()
     }
 
     /// What the manager noted for the log since it was last asked.

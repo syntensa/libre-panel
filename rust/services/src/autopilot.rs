@@ -668,7 +668,7 @@ impl Service for Autopilot {
         self.shared.stopped.store(true, Ordering::Relaxed);
     }
 
-    fn summary(&self) -> Option<Value> {
+    fn status(&self) -> Option<Value> {
         let core = self.shared.core.lock().ok()?;
         let now = self.shared.began.elapsed().as_secs_f64();
         Some(Value::Dict(
