@@ -1291,6 +1291,56 @@ fn mqtt(case: &Value) -> Result<Value, String> {
     }))
 }
 
+/// calendar: the events of each [ics, now, days, calendar] in the computer's zone and the
+/// readings made of them, in the case's language; {"error": ...} where the text cannot be
+/// read.
+fn calendar(case: &Value) -> Result<Value, String> {
+    use lp_sensors::calendar;
+    let locale = std::path::PathBuf::from(case["locale"].as_str().unwrap_or(""));
+    let code = case["language"].as_str().unwrap_or("en");
+    lp_i18n::set_language(lp_i18n::Language::load(&locale, code)?);
+    let local = lp_py::zones::local().ok_or("no zone of the computer")?;
+    let stamp = |at: &lp_py::datetime::DateTime| {
+        json!([
+            at.year,
+            at.month,
+            at.day,
+            at.hour,
+            at.minute,
+            at.second,
+            at.microsecond
+        ])
+    };
+    let mut found = Vec::new();
+    for case in case["cases"].as_array().into_iter().flatten() {
+        let now = crate::datetime_of(case[1].as_array().map_or(&[], Vec::as_slice));
+        let ics = case[0].as_str().unwrap_or("");
+        let days = case[2].as_i64().unwrap_or(14);
+        let name = case[3].as_str().unwrap_or("");
+        found.push(
+            match calendar::events_from_ics(ics, &now, days, name, local) {
+                Err(why) => json!({"error": why}),
+                Ok(events) => {
+                    let readings = calendar::calendar_readings(&events, &now, local);
+                    json!({
+                        "events": events
+                            .iter()
+                            .map(|e| json!([e.title, stamp(&e.start), stamp(&e.end), e.all_day,
+                                            e.location, e.calendar]))
+                            .collect::<Vec<_>>(),
+                        "readings": readings
+                            .iter()
+                            .map(|(key, r)| json!([key, plain(&r.value), r.unit, r.label]))
+                            .collect::<Vec<_>>(),
+                    })
+                }
+            },
+        );
+    }
+    lp_i18n::set_language(lp_i18n::Language::english());
+    Ok(json!({"cases": found}))
+}
+
 pub fn run(op: &str, case: &Value) -> Result<Value, String> {
     Ok(match op {
         "regex" => regex(case),
@@ -1309,6 +1359,7 @@ pub fn run(op: &str, case: &Value) -> Result<Value, String> {
         "web_sources" => web_sources(case)?,
         "nut" => nut(case)?,
         "mqtt" => mqtt(case)?,
+        "calendar" => calendar(case)?,
         "mangohud" => mangohud(case)?,
         "media" => media(case),
         "appicon" => appicon(case),

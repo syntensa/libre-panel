@@ -2061,3 +2061,174 @@ def test_mqtt_messages_are_read_as_mqtt_py_reads_them() -> None:
     assert base64.b64decode(ours["connect"]) == b"\x10" + bytes([len(body)]) + body
     body = text(7) + text(b"home/+/temperature") + b"\x00"
     assert base64.b64decode(ours["subscribe"]) == b"\x82" + bytes([len(body)]) + body
+
+
+def _made_up_calendar(rng: random.Random, now: Any) -> str:
+    """An .ics text as calendars write them, with what they may have odd or wrong: events
+    around ``now`` in zones of several kinds, whole days, repeating ones with their rules,
+    left-out and moved days, alarms inside, folded lines."""
+    from datetime import timedelta
+
+    def stamp(at: Any, kind: str | None = None) -> str:
+        kind = kind or rng.choice(["utc", "utc", "zone", "zone", "windows", "mozilla", "floating",
+                                   "nowhere", "day", "date", "bad", "lower"])  # fmt: skip
+        clock = at.strftime("%Y%m%dT%H%M%S")
+        return {
+            "utc": f":{clock}Z",
+            "zone": f";TZID={rng.choice(['Europe/Berlin', 'America/New_York', 'Asia/Kolkata'])}"
+                    f":{clock}",
+            "windows": f';TZID="{rng.choice(["W. Europe Standard Time", "Tokyo Standard Time"])}"'
+                       f":{clock}",
+            "mozilla": f";TZID=/mozilla.org/20050126_1/America/Chicago:{clock}",
+            "floating": f":{clock}",
+            "nowhere": f";TZID=Nowhere/Land:{clock}",
+            "day": f";VALUE=DATE:{at.strftime('%Y%m%d')}",
+            "date": f":{at.strftime('%Y%m%d')}",
+            "bad": rng.choice([":2024-05-01", ":20240230T100000", ":", ":20240501T2500", ":x",
+                               ":20240501T100060Z", ": 20240501T100000 ", ":20240501T1000"]),
+            "lower": f":{clock.lower()}z",
+        }[kind]  # fmt: skip
+
+    rules = ["FREQ=DAILY", "FREQ=DAILY;INTERVAL=2;COUNT=5", "FREQ=DAILY;INTERVAL=3",
+             "FREQ=WEEKLY;BYDAY=MO,WE,FR", "FREQ=WEEKLY", "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,TU",
+             "FREQ=WEEKLY;UNTIL={until}", "FREQ=DAILY;UNTIL={day}", "FREQ=MONTHLY;BYDAY=2TU",
+             "FREQ=MONTHLY;BYDAY=-1FR,1MO", "FREQ=MONTHLY;BYMONTHDAY=15,-1", "FREQ=MONTHLY",
+             "FREQ=MONTHLY;BYDAY=0MO", "FREQ=MONTHLY;BYDAY=6MO", "FREQ=MONTHLY;BYDAY=XX,+2WE",
+             "FREQ=YEARLY", "FREQ=YEARLY;INTERVAL=2", "FREQ=HOURLY", "", "freq=daily;count=3",
+             "FREQ=DAILY;INTERVAL=abc", "FREQ=DAILY;COUNT=²", "FREQ=MONTHLY;BYDAY=+MO",
+             "FREQ=MONTHLY;BYMONTHDAY=--5", "FREQ=DAILY;INTERVAL=0", "FREQ=DAILY;INTERVAL=",
+             "FREQ=DAILY;INTERVAL=999999999999", "FREQ=MONTHLY;INTERVAL=99999;BYMONTHDAY=1",
+             "FREQ=YEARLY;INTERVAL=5000", "FREQ=WEEKLY;COUNT=0", "FREQ=DAILY;UNTIL=soon",
+             "FREQ=MONTHLY;BYMONTHDAY=31", "FREQ=WEEKLY;INTERVAL=99999999999",
+             "FREQ=MONTHLY;BYDAY=99999999999TU", "FREQ=DAILY;COUNT=7;UNTIL={until}"]  # fmt: skip
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0"]
+    if rng.random() < 0.5:
+        lines.append(rng.choice(["X-WR-CALNAME:Work\\, home", "X-WR-CALNAME:", "x-wr-calname:Me"]))
+    if rng.random() < 0.3:
+        lines += ["BEGIN:VTIMEZONE", "TZID:Europe/Berlin", "BEGIN:STANDARD",
+                  "DTSTART:19701025T030000", "END:STANDARD", "END:VTIMEZONE"]  # fmt: skip
+    for _ in range(rng.randrange(0, 7)):
+        start = now + timedelta(days=rng.choice([0, 0, 1, 2, 6, 7, 13, 30, -1, -2, -400, -3000]),
+                                minutes=rng.randrange(-1500, 1500))  # fmt: skip
+        start = start.replace(second=0, microsecond=0)
+        if rng.random() < 0.1:  # (where the clocks change, and a leap day)
+            start = start.replace(month=rng.choice([3, 10, 11]), day=rng.randrange(1, 29),
+                                  hour=rng.randrange(0, 4))  # fmt: skip
+        if rng.random() < 0.03:
+            start = start.replace(year=2024, month=2, day=29)
+        kind = rng.choice([None, None, "utc", "zone", "day"])
+        lines += ["BEGIN:VEVENT", f"UID:u{rng.randrange(4)}", f"DTSTART{stamp(start, kind)}"]
+        ends = rng.random()
+        if ends < 0.4:
+            end = start + timedelta(minutes=rng.choice([30, 60, 90, 1440, 2880, -30, 0]))
+            lines.append(f"DTEND{stamp(end, kind)}")
+        elif ends < 0.7:
+            lines.append("DURATION:" + rng.choice(["PT1H30M", "P1D", "-PT1H", "P1W", "PT", "x",
+                                                   "P2DT3H4M5S", " PT45M ", "P999999999D",
+                                                   "PT99999999999999999999S", "+P1D"]))  # fmt: skip
+        if rng.random() < 0.9:
+            titles = ["Team\\, sync\\nroom\\; x \\\\ y", "Lunch", "", "Zahnärztin", "a:b",
+                      "Call \\N two", "Lunch"]  # fmt: skip
+            lines.append("SUMMARY:" + rng.choice(titles))
+        if rng.random() < 0.3:
+            lines.append("LOCATION" + rng.choice([":Room 1", ';LANGUAGE="de:DE":Büro', ":"]))
+        if rng.random() < 0.08:
+            lines.append(rng.choice(["STATUS:CANCELLED", "STATUS:cancelled", "STATUS:CONFIRMED"]))
+        if rng.random() < 0.6:
+            until = start + timedelta(days=rng.randrange(-2, 40))
+            rule = rng.choice(rules).format(until=until.strftime("%Y%m%dT%H%M%SZ"),
+                                            day=until.strftime("%Y%m%d"))  # fmt: skip
+            lines.append(f"RRULE:{rule}")
+            for _ in range(rng.randrange(0, 3)):
+                out = start + timedelta(days=rng.randrange(0, 15))
+                more = start + timedelta(days=rng.randrange(0, 15))
+                also = rng.choice(["", f",{more.strftime('%Y%m%dT%H%M%S')}", ",junk"])
+                lines.append(f"EXDATE{stamp(out, kind)}{also}")
+        if rng.random() < 0.15:
+            moved = start + timedelta(days=rng.randrange(0, 15))
+            lines.append(f"RECURRENCE-ID{stamp(moved, kind)}")
+        if rng.random() < 0.2:
+            lines += ["BEGIN:VALARM", "TRIGGER:-PT15M", "SUMMARY:alarm", "DTSTART:19990101",
+                      "END:VALARM"]  # fmt: skip
+        lines.append("END:VEVENT" if rng.random() < 0.97 else "END:VTODO")
+    lines.append("END:VCALENDAR")
+    if rng.random() < 0.3:  # (a long line folded)
+        at = rng.randrange(len(lines))
+        cut = rng.randrange(len(lines[at]) + 1)
+        lines[at] = lines[at][:cut] + rng.choice(["\n ", "\n\t"]) + lines[at][cut:]
+    return rng.choice(["\r\n", "\n", "\r"]).join(lines) + "\n"
+
+
+@pytest.mark.parametrize(
+    ("zone", "language"),
+    [(None, "en"), ("Europe/Berlin", "de"), ("America/New_York", "en"), ("Asia/Kolkata", "fr"),
+     ("Australia/Lord_Howe", "en")],
+)  # fmt: skip
+def test_calendars_are_read_as_calendar_py_reads_them(
+    zone: str | None, language: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """sensors/calendar.py: the events of made-up .ics texts (times of zones, whole days,
+    rules with their ends, counts, left-out and moved days) in the computer's zone and in
+    others, and the readings of the next ones in the panel's languages; a text Python
+    cannot read is none here."""
+    from datetime import datetime, timedelta
+
+    from libre_panel import i18n
+    from libre_panel.sensors import calendar
+
+    if zone is not None:
+        if sys.platform == "win32":
+            pytest.skip("the computer's zone set by TZ and tzset")
+        monkeypatch.setenv("TZ", zone)
+        time.tzset()
+    try:
+        rng = random.Random(0x1C5 + len(language) + (len(zone) if zone else 0))
+        cases = []
+        for _ in range(1200):
+            now = datetime(2020, 1, 1) + timedelta(seconds=rng.randrange(0, 12 * 366 * 86400),
+                                                   microseconds=rng.randrange(10**6))  # fmt: skip
+            if rng.random() < 0.3:
+                now = now.replace(minute=0, second=0, microsecond=0)
+            days = rng.choice([1, 14, 14, 60, 366])
+            name = rng.choice(["", "", "Mine"])
+            cases.append((_made_up_calendar(rng, now), now, days, name))
+        [ours] = run([{"op": "calendar", "locale": str(i18n.LOCALE_DIR), "language": language,
+                       "cases": [[text, [now.year, now.month, now.day, now.hour, now.minute,
+                                         now.second, now.microsecond], days, name]
+                                 for text, now, days, name in cases]}])  # fmt: skip
+
+        def fields(at: datetime) -> list[int]:
+            return [at.year, at.month, at.day, at.hour, at.minute, at.second, at.microsecond]
+
+        seen = {"error": 0, "events": 0, "repeated": 0, "whole days": 0, "going": 0, "moved": 0}
+        i18n.set_language(language)
+        try:
+            for (text, now, days, name), got in zip(cases, ours["cases"], strict=True):
+                try:
+                    events = calendar.events_from_ics(text, now, days, name)
+                except Exception:  # noqa: BLE001 - whatever Python raises, Rust says an error
+                    assert "error" in got, text
+                    seen["error"] += 1
+                    continue
+                assert "error" not in got, (text, got)
+                found = [[e.title, fields(e.start), fields(e.end), e.all_day, e.location,
+                          e.calendar] for e in events]  # fmt: skip
+                assert got["events"] == found, (text, now)
+                rows = [[key, r.value, r.unit, r.label]
+                        for key, r in calendar.calendar_readings(events, now).items()]  # fmt: skip
+                for row in rows:
+                    if isinstance(row[1], float):
+                        row[1] = {"float": repr(row[1])}
+                assert got["readings"] == rows, (text, now)
+                seen["events"] += len(events)
+                seen["repeated"] += len(events) > 8
+                seen["whole days"] += any(e.all_day for e in events)
+                seen["going"] += any(row[0].endswith(".now") for row in rows)
+                seen["moved"] += "RECURRENCE-ID" in text and len(events) > 2
+        finally:
+            i18n.set_language("en")
+        assert all(count > 20 for count in seen.values()), seen
+    finally:
+        monkeypatch.undo()
+        if sys.platform != "win32":
+            time.tzset()

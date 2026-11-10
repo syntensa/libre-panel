@@ -1757,7 +1757,16 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       the unit of the first pattern that matches. 3000 messages and 3000 pairs of pattern and
       topic compared with Python; the app talks to a broker of the test's own. A broker
       that is not there is said once (Python says nothing)
-- [ ] HWiNFO, RTSS, the calendar; Linux's hint of what system-setup brings
+- [x] the calendar (sensors/calendar.py, lp-sensors' calendar): .ics texts from addresses
+      (webcal:// too) and files, loaded in a thread of its own; their events in the
+      computer's time (UTC, a zone's name, Outlook's and Mozilla's names of zones, whole
+      days), repeating ones by their rule (daily, weekly on days, monthly on a day or a
+      weekday of the month, yearly; interval, count, end, left-out and moved days), and the
+      readings of the next 20. lp-py gives a zone's offset at a wall time as zoneinfo does
+      (zones::to_local). 6000 made-up calendars compared with Python in five zones and three
+      languages; the app reads a file and asks a server of the test's own. A calendar that
+      is not loaded is said by its number and the kind of failure, never by its address
+- [ ] HWiNFO, RTSS; Linux's hint of what system-setup brings
 - [ ] the history as a ring, demo.py's values; the .NET service goes
 
 ### R8 services

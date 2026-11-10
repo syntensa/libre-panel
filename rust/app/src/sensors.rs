@@ -403,6 +403,27 @@ impl Source for Mqtt {
     }
 }
 
+/// The next events of iCalendar addresses and files (sensors/calendar.py).
+struct Calendar(lp_sensors::calendar::CalendarSource);
+
+impl Source for Calendar {
+    fn name(&self) -> &'static str {
+        "calendar"
+    }
+
+    fn read(&mut self, out: &mut Readings) {
+        out.extend(self.0.read());
+    }
+
+    fn notes(&mut self) -> Vec<String> {
+        self.0.notes()
+    }
+
+    fn wait_ready(&mut self, seconds: f64) {
+        self.0.wait_ready(seconds);
+    }
+}
+
 /// `int(table.get(key) or fallback)` as a port; none where it is none.
 fn port_of(value: Option<&Toml>, fallback: u16) -> Option<u16> {
     let port = match value {
@@ -421,6 +442,29 @@ fn port_of(value: Option<&Toml>, fallback: u16) -> Option<u16> {
 /// up; why it could not be.
 fn web_source(name: &str, table: Option<&Table>) -> Result<Box<dyn Source>, String> {
     let get = |key: &str| table.and_then(|table| table.get(key));
+    if name == "calendar" {
+        let sources = match get("sources") {
+            None => Vec::new(),
+            Some(Toml::Str(one)) => vec![one.clone()],
+            Some(Toml::Array(list)) => list.iter().map(|one| value_of(one).str()).collect(),
+            Some(Toml::Table(keys)) => keys.keys().cloned().collect(),
+            Some(_) => return Err("sources is no list".into()),
+        };
+        // `int(options.get("days", 14))`
+        let days = match get("days") {
+            None => 14,
+            Some(Toml::Int(n)) => i64::try_from(n).unwrap_or(i64::MAX),
+            Some(Toml::Float(f)) if f.is_finite() => f.trunc() as i64,
+            Some(Toml::Bool(on)) => i64::from(*on),
+            Some(Toml::Str(text)) => lp_py::int_of_str(text)
+                .map(|n| i64::try_from(n).unwrap_or(i64::MAX))
+                .ok_or("days is no number")?,
+            Some(_) => return Err("days is no number".into()),
+        };
+        let minutes = seconds_of(table, "update_minutes", 15.0)?;
+        let source = lp_sensors::calendar::CalendarSource::new(sources, days, minutes, AGENT);
+        return Ok(Box::new(Calendar(source)));
+    }
     if name == "mqtt" {
         let truthy = |key: &str| get(key).map(value_of).filter(lp_py::Value::truthy);
         let mut options = lp_sensors::mqtt::Options {
@@ -775,7 +819,7 @@ impl Hub {
                         notes.extend(said);
                     }
                     "hardware" => sources.push(Box::new(Hardware::of(config))),
-                    "homeassistant" | "json" | "nut" | "mqtt" => {
+                    "homeassistant" | "json" | "nut" | "mqtt" | "calendar" => {
                         let table = sensors.options.get(name);
                         match web_source(name, table) {
                             Ok(source) => sources.push(source),

@@ -1214,3 +1214,83 @@ def test_mqtt_messages_come_from_a_broker(tmp_path: Path) -> None:
     finally:
         done_serving.set()
         listener.close()
+
+
+def test_the_next_events_come_from_calendars(tmp_path: Path) -> None:
+    """`calendar` among the sources: an .ics file and an address (webcal:// asked as
+    https:// would be; here a server of the test's own) give the next events as
+    sensors/calendar.py reads them; a calendar that is not there is said by its number,
+    not by its address."""
+    from datetime import UTC, datetime, timedelta
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    from libre_panel.sensors import calendar
+
+    def event(title: str, start: datetime, rule: str = "") -> str:
+        lines = ["BEGIN:VEVENT", f"UID:{title}", f"SUMMARY:{title}",
+                 f"DTSTART:{start.strftime('%Y%m%dT%H%M%SZ')}", "DURATION:PT1H"]  # fmt: skip
+        return "\r\n".join(lines + ([f"RRULE:{rule}"] if rule else []) + ["END:VEVENT"])
+
+    start = datetime.now(UTC).replace(second=0, microsecond=0)
+    work = "\r\n".join(["BEGIN:VCALENDAR", "X-WR-CALNAME:Work",
+                        event("Stand-up", start + timedelta(hours=3), "FREQ=DAILY;COUNT=3"),
+                        event("Review", start - timedelta(minutes=20)),
+                        "END:VCALENDAR"])  # fmt: skip
+    home = "\r\n".join(["BEGIN:VCALENDAR", event("Dentist", start + timedelta(days=2)),
+                        "BEGIN:VEVENT", "SUMMARY:Holiday", "LOCATION:Sea",
+                        f"DTSTART;VALUE=DATE:{(start + timedelta(days=4)).strftime('%Y%m%d')}",
+                        "END:VEVENT", "END:VCALENDAR"])  # fmt: skip
+    asked: list[str] = []
+
+    class Calendars(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            asked.append(self.path)
+            body = home.encode() if self.path == "/secret/home.ics" else b"gone"
+            self.send_response(200 if self.path == "/secret/home.ics" else 404)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args: Any) -> None:
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Calendars)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        base = f"http://127.0.0.1:{server.server_address[1]}"
+        file = tmp_path / "work.ics"
+        file.write_text(work, encoding="utf-8")
+        (tmp_path / "config.toml").write_text(
+            '[sensors]\nproviders = ["calendar"]\n[sensors.calendar]\ndays = 7\n'
+            f'sources = ["{file.as_posix()}", "{base}/secret/home.ics",\n'
+            f'           "{base}/secret/gone.ics"]\n',
+            encoding="utf-8",
+        )
+        before = datetime.now()
+        done = _run(tmp_path, "sensors", NO_PROXY="127.0.0.1", no_proxy="127.0.0.1")
+        after = datetime.now()
+        assert done.returncode == 0, done.stderr
+        assert sorted(set(asked)) == ["/secret/gone.ics", "/secret/home.ics"]
+        assert "calendar 3 not loaded: the server's answer 404" in done.stderr
+        assert "secret" not in done.stderr
+        listed = [line for line in done.stdout.splitlines() if line.startswith("calendar.")]
+        ours = {line[:40].strip(): line[41:] for line in listed}
+        wanted = []
+        for now in (before, after):
+            events = [e for text in (work, home) for e in calendar.events_from_ics(text, now, 7)]
+            events.sort(key=lambda e: (e.start, not e.all_day, e.title))
+            wanted.append(calendar.calendar_readings(events, now))
+        assert sorted(ours) in [sorted(readings) for readings in wanted]
+        assert ours["calendar.events"].lstrip().startswith("6.00")
+        assert ours["calendar.1.title"].lstrip().startswith("Review")
+        assert "calendar.1.now" in ours and "calendar.6.location" in ours
+        for key, rest in ours.items():  # (the value, its unit, its label)
+            said = [f"{r.value:.2f}" if isinstance(r.value, float) else str(r.value)
+                    for r in (readings[key] for readings in wanted)]  # fmt: skip
+            if not key.endswith(".minutes"):  # (they pass)
+                assert any(rest.lstrip().startswith(text) for text in said), key
+            reading = wanted[0][key]
+            assert rest.endswith(f" {reading.unit:<5} {reading.label}"), key
+    finally:
+        server.shutdown()
+        server.server_close()

@@ -228,6 +228,36 @@ impl Rule {
     }
 }
 
+impl Rule {
+    /// The type at the local wall time `t` (seconds from 1970, read as if UTC) of the year
+    /// `year`, the earlier (fold false) or the later of two moments of one wall time:
+    /// zoneinfo's find_tzrule_ttinfo.
+    fn wall(&self, t: i64, year: i64, fold: bool) -> Type {
+        let Some((dst, start, end)) = self.summer else {
+            return self.std;
+        };
+        let (mut on, mut off) = (start.zoneinfo_local(year), end.zoneinfo_local(year));
+        // (the time with the smaller offset runs from the gap's end to the fold's end for the
+        // earlier moment, from the gap's start to the fold's start for the later)
+        let diff = dst.offset - self.std.offset;
+        if fold == (diff >= 0) {
+            off -= diff;
+        } else {
+            on += diff;
+        }
+        let summer = if on < off {
+            on <= t && t < off
+        } else {
+            t < off || t >= on
+        };
+        if summer {
+            dst
+        } else {
+            self.std
+        }
+    }
+}
+
 // -- reading ------------------------------------------------------------------------------------
 
 fn be32(b: &[u8], at: usize) -> Option<i64> {
@@ -551,6 +581,59 @@ impl Zone {
         self.types[self.after[idx - 1]].offset
     }
 
+    /// zoneinfo's utcoffset of a wall time: the offset of the zone at the local time `t`
+    /// (seconds from 1970, read as if UTC) of the year `year`; where the clocks go back the
+    /// earlier of its two moments (fold false) or the later (find_ttinfo, the transitions in
+    /// wall time as ts_to_local makes them).
+    pub fn wall_offset(&self, t: i64, year: i64, fold: bool) -> i64 {
+        let n = self.transitions.len();
+        let after_all = |zone: &Zone| match zone.rule {
+            Some(rule) => rule.wall(t, year, fold).offset,
+            None if n == 0 => zone.types.last().map_or(0, |t| t.offset),
+            None => zone.types[zone.after[n - 1]].offset,
+        };
+        if n == 0 || self.types.is_empty() {
+            return after_all(self);
+        }
+        // each transition in wall time: by the larger of the offsets before and after it for
+        // the earlier moment, by the smaller for the later
+        let wall = |i: usize| {
+            let (before, after) = match i {
+                0 if self.types.len() > 1 => {
+                    (self.types[0].offset, self.types[self.after[0]].offset)
+                }
+                0 => (self.types[0].offset, self.types[0].offset),
+                _ => (
+                    self.types[self.after[i - 1]].offset,
+                    self.types[self.after[i]].offset,
+                ),
+            };
+            self.transitions[i]
+                + if fold {
+                    before.min(after)
+                } else {
+                    before.max(after)
+                }
+        };
+        if t < wall(0) {
+            return self.first_standard().map_or(0, |t| t.offset);
+        }
+        if t > wall(n - 1) {
+            return after_all(self);
+        }
+        // (bisect_right over the wall times)
+        let (mut low, mut high) = (0, n);
+        while low < high {
+            let middle = (low + high) / 2;
+            if wall(middle) <= t {
+                low = middle + 1;
+            } else {
+                high = middle;
+            }
+        }
+        self.types[self.after[low - 1]].offset
+    }
+
     /// glibc's localtime: the offset of the zone at the UTC moment `ts` (seconds); of a zone
     /// read as glibc reads it (the C runtime's own answers [`Zone::offset`]).
     pub fn localtime(&self, ts: i64) -> i64 {
@@ -845,6 +928,22 @@ pub fn astimezone(local: &Zone, zone: &Zone, dt: &DateTime, fold: bool) -> Optio
         return None;
     }
     naive_of(there, dt.microsecond)
+}
+
+/// A time of `zone` (a zone of a name, or UTC) as the computer's local time, naive:
+/// dt.replace(tzinfo=zone).astimezone().replace(tzinfo=None): the time less zoneinfo's offset
+/// at it is UTC, and the computer's offset there the result's. None where Python raises.
+pub fn to_local(local: &Zone, zone: &Zone, dt: &DateTime) -> Option<DateTime> {
+    let t = naive_seconds(dt);
+    let utc = t.checked_sub(zone.wall_offset(t, dt.year, false))?;
+    if !in_years(utc) {
+        return None;
+    }
+    let here = utc.checked_add(local.offset(utc)?)?;
+    if !in_years(here) {
+        return None;
+    }
+    naive_of(here, dt.microsecond)
 }
 
 /// _PyTime_ObjectToTimeval of a float, rounded half to even: its whole seconds and
