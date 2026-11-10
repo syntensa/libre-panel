@@ -1971,11 +1971,16 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       zips are read and written as Python's zipfile does (`rust/app/src/zip.rs`: its end
       records, ZIP64's too, names in code page 437 or UTF-8, stored and deflated files, the
       CRC, its errors); bzip2 and LZMA, which no file manager writes, are not read yet.
+      A theme saved (`POST /api/themes/{theme}`, a copy taking the pictures and fonts of the
+      theme it is made from) and a version of it made for a panel size
+      (`/api/themes/{theme}/version`: laid out from the version for the nearest shape, or
+      scaled into it), `rust/app/src/editing.rs`. What Python's server does not catch is
+      logged and left unanswered, as there.
       `libre-panel editor` serves alone, `start` with
       the panel, and writes its address where a later start finds it. 120 requests to
       Python's server and to this one compared: the status, the headers and the body, byte
       for byte; a run of the program controlled through its server until `quit` ends it.
-      Still to come: every other route (a theme's version made for a size, saving, the
+      Still to come: every other route (the editor's pictures and previews, the
       Settings' unlock, hardware, the Player, plugins' pages, …)
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app

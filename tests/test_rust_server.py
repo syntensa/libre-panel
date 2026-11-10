@@ -1148,3 +1148,46 @@ def test_themes_are_shared_and_taken_in_as_share_py_does(servers: Any) -> None:
     for home in homes:
         assert not [p for p in (home / "themes").iterdir() if p.name.startswith(".import-")]
     assert {p.name for p in (homes[0] / "themes").iterdir()} >= {"folder", "folder-2", "a"}
+
+
+def test_themes_are_saved_and_made_for_a_size_as_server_py_does(servers: Any) -> None:
+    """A theme saved (a new one, a copy of another with its pictures and fonts, under a name
+    that is none, one that is no theme, a body that is no dict; one named "import"), and a
+    version of a theme made for a panel size (laid out from the nearest shape, scaled into it,
+    one there already, sizes that are none or out of bounds, a theme that is not there)."""
+    ask, homes = servers
+    theme = json.loads((DATA / "themes" / "slate" / "theme.json").read_text("utf-8"))
+    bodies: list[tuple[str, Any]] = [
+        ("/api/themes/new-one", {"theme": theme}),
+        ("/api/themes/copy", {"theme": theme, "source": "mine"}),
+        ("/api/themes/copy2", {"theme": theme, "source": 5}),
+        ("/api/themes/Bad%20Name", {"theme": theme}),
+        ("/api/themes/", {"theme": theme}),
+        ("/api/themes/odd", {"theme": {"name": 5}}),
+        ("/api/themes/odd", {"theme": None}),
+        ("/api/themes/odd", ["theme"]),
+        ("/api/themes/slate/version", {"width": 800, "height": 480}),
+        ("/api/themes/lumen/version", {"width": 1000, "height": 700}),
+        ("/api/themes/lumen/version", {"width": 700.9, "height": "1000"}),
+        ("/api/themes/lumen/version", {"width": 1920, "height": 480}),
+        ("/api/themes/mine/version", {"width": 320, "height": 240}),
+        ("/api/themes/mine/version", {"width": "x", "height": 240}),
+        ("/api/themes/mine/version", {"width": 10, "height": 240}),
+        ("/api/themes/mine/version", {"height": 240}),
+        ("/api/themes/mine/version", [1]),
+        ("/api/themes/nothing/version", {"width": 320, "height": 240}),
+    ]  # fmt: skip
+    for path, payload in bodies:
+        theirs, ours = ask(_post(path, payload))
+        if theirs == ("", {}, b""):  # (an exception the server does not catch: no answer)
+            assert ours == theirs, path
+            continue
+        told = [json.loads(body.replace(json.dumps(str(home))[1:-1].encode(), b"<home>"))
+                for home, (_, _, body) in zip(homes, (theirs, ours), strict=True)]  # fmt: skip
+        assert (ours[0], told[1]) == (theirs[0], told[0]), path
+        if "id" in told[0]:
+            trees = [_tree(home / "themes" / told[0]["id"]) for home in homes]
+            assert trees[1] == trees[0], path
+    theirs, ours = ask(_post("/api/themes/import", {"theme": theme}))  # (JSON: saved)
+    assert ours[0] == theirs[0] == "HTTP/1.0 200 OK"
+    assert _tree(homes[1] / "themes" / "import") == _tree(homes[0] / "themes" / "import")

@@ -206,7 +206,7 @@ const ROUTES: &[Route] = &[
         match crate::previews::theme_sizes(m[0], &env, &s.home.places()) {
             Ok(told) => x.json(&told, 200),
             Err(crate::previews::Refused::Theme(_)) => not_found(x),
-            Err(crate::previews::Refused::Drawing(why)) => x.error(&why, 500, ""),
+            Err(crate::previews::Refused::Drawing(why)) => unanswered(&why),
         }
     }),
     private("GET", "/api/readings", |s, x, _, u| readings(s, x, u)),
@@ -283,16 +283,23 @@ const ROUTES: &[Route] = &[
         settings_with(s, x, |told, asked| told.set_scene(asked))
     }),
     private("POST", "/api/themes/import", |s, x, _, u| {
-        // (a theme named "import" saved: its body is JSON, an import's a zip; saving comes
-        // with the editor's routes)
+        // (a theme named "import" saved: its body is JSON, an import's a zip)
         let json = x
             .header("Content-Type")
             .unwrap_or("")
             .starts_with("application/json");
         match json {
-            true => not_found(x),
+            true => save_theme(s, x, "import"),
             false => import_theme(s, x, u),
         }
+    }),
+    private("POST", "/api/themes/{theme}/version", |s, x, m, _| {
+        edit(s, x, |payload, places, env| {
+            crate::editing::make_version(m[0], payload, places, env)
+        })
+    }),
+    private("POST", "/api/themes/{theme*}", |s, x, m, _| {
+        save_theme(s, x, m[0])
     }),
 ];
 
@@ -589,6 +596,42 @@ fn asset_file(state: &State, exchange: &mut Exchange, theme_id: &str, rel: &str)
     }
 }
 
+/// A writing route of the editor's (editing.rs) with the request's JSON.
+fn edit(
+    state: &State,
+    exchange: &mut Exchange,
+    route: impl FnOnce(
+        &Value,
+        &lp_theme::versions::Places,
+        &lp_theme::Env,
+    ) -> Result<Value, crate::editing::Refused>,
+) {
+    let Some(payload) = exchange.read_json(MAX_JSON) else {
+        return;
+    };
+    let env = lp_theme::Env {
+        fonts_dir: state.home.fonts(),
+    };
+    match route(&payload, &state.home.places(), &env) {
+        Ok(told) => exchange.json(&told, 200),
+        Err(why) if why.status == 500 => unanswered(&why.message),
+        Err(why) => exchange.error(&why.message, why.status, ""),
+    }
+}
+
+/// handle_error: what Python's server does not catch: logged, the request left unanswered
+/// (its connection closed with nothing).
+fn unanswered(why: &str) {
+    say(&format!("editor: request failed: {why}"));
+}
+
+/// _save: a theme saved into the person's themes folder.
+fn save_theme(state: &State, exchange: &mut Exchange, theme_id: &str) {
+    edit(state, exchange, |payload, places, env| {
+        crate::editing::save(theme_id, payload, places, env)
+    })
+}
+
 /// What sharing a theme came to, as the server answers it.
 fn refused(exchange: &mut Exchange, refused: crate::share::Refused) {
     use crate::share::Refused;
@@ -596,7 +639,7 @@ fn refused(exchange: &mut Exchange, refused: crate::share::Refused) {
         Refused::Share(why) => exchange.error(&why, 400, ""),
         Refused::Theme(why) => exchange.error(&why, 404, ""),
         Refused::Os(why) => exchange.error(&why, 409, ""),
-        Refused::Failed(why) => exchange.error(&why, 500, ""),
+        Refused::Failed(why) => unanswered(&why),
     }
 }
 
@@ -705,7 +748,7 @@ fn theme_preview(state: &State, exchange: &mut Exchange, theme_id: &str, url: &U
         None => {}
         Some(Ok(png)) => exchange.send(200, &png, "image/png", ""),
         Some(Err(crate::previews::Refused::Theme(why))) => exchange.error(&why, 404, ""),
-        Some(Err(crate::previews::Refused::Drawing(why))) => exchange.error(&why, 500, ""),
+        Some(Err(crate::previews::Refused::Drawing(why))) => unanswered(&why),
     }
 }
 

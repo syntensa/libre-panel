@@ -305,6 +305,15 @@ pub fn list_themes(places: &Places) -> Vec<Dict> {
     themes.into_iter().map(|(_, d)| d).collect()
 }
 
+/// The OSError Python raises for `path`, in its words.
+fn os_error(e: &std::io::Error, path: &Path) -> Error {
+    let (class, msg) = crate::model::os_error_of(e, path);
+    Error {
+        kind: Kind::Os(class),
+        msg,
+    }
+}
+
 /// shutil.copytree: the folder and all in it, files where links are (as copytree copies).
 fn copy_tree(from: &Path, to: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(to)?;
@@ -317,7 +326,12 @@ fn copy_tree(from: &Path, to: &Path) -> std::io::Result<()> {
         if entry.is_dir() {
             copy_tree(&entry, &target)?;
         } else {
+            // (copy2: the file's time too)
             std::fs::copy(&entry, &target)?;
+            if let Ok(modified) = std::fs::metadata(&entry).and_then(|m| m.modified()) {
+                let file = std::fs::OpenOptions::new().write(true).open(&target)?;
+                file.set_modified(modified)?;
+            }
         }
     }
     Ok(())
@@ -343,24 +357,23 @@ pub fn save_theme(
     if let Some(source) = source.filter(|s| !s.is_empty() && *s != name) {
         if !target.exists() {
             let from = find_theme(source, places)?;
-            copy_tree(&from, &target).map_err(|e| Error {
-                kind: Kind::Os("OSError"),
-                msg: e.to_string(),
-            })?;
+            copy_tree(&from, &target).map_err(|e| os_error(&e, &target))?;
         }
     }
-    std::fs::create_dir_all(&target).map_err(|e| Error {
-        kind: Kind::Os("OSError"),
-        msg: e.to_string(),
-    })?;
+    std::fs::create_dir_all(&target).map_err(|e| os_error(&e, &target))?;
     let theme = parse_theme(data, Some(&target), env)?;
     let text = lp_py::json::dumps(&theme.to_dict(), &lp_py::json::Dumps::file(2)) + "\n";
     let tmp = target.join(format!("{THEME_FILENAME}.tmp"));
-    let written = std::fs::write(&tmp, text.as_bytes())
-        .and_then(|()| std::fs::rename(&tmp, target.join(THEME_FILENAME)));
-    written.map_err(|e| Error {
-        kind: Kind::Os("OSError"),
-        msg: e.to_string(),
+    std::fs::write(&tmp, text.as_bytes()).map_err(|e| os_error(&e, &tmp))?;
+    let file = target.join(THEME_FILENAME);
+    std::fs::rename(&tmp, &file).map_err(|e| {
+        // (os.replace's error names both paths)
+        let Error { kind, msg } = os_error(&e, &tmp);
+        let to = lp_py::repr(&file.to_string_lossy());
+        Error {
+            kind,
+            msg: format!("{msg} -> {to}"),
+        }
     })?;
     Ok(target)
 }
