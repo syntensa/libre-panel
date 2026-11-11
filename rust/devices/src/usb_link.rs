@@ -347,11 +347,19 @@ pub struct NusbIo {
     claimed: HashMap<u8, nusb::Interface>,
     endpoints: HashMap<u8, Endpoint>,
     place: String,
+    /// its bus as the system numbers it (Linux's busnum) and its address on it
+    pub bus: String,
+    pub address: u8,
 }
 
 impl NusbIo {
     fn open(found: &Found, place: String) -> UsbResult<NusbIo> {
         let product = found.product();
+        #[cfg(target_os = "linux")]
+        let bus = found.info.busnum().to_string();
+        #[cfg(not(target_os = "linux"))]
+        let bus = found.info.bus_id().to_string();
+        let address = found.info.device_address();
         let device = found.info.open().wait().map_err(usb_error)?;
         let interfaces = match device.active_configuration() {
             Ok(config) => config
@@ -382,6 +390,8 @@ impl NusbIo {
             claimed: HashMap::new(),
             endpoints: HashMap::new(),
             place,
+            bus,
+            address,
         })
     }
 

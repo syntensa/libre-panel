@@ -21,6 +21,7 @@ from libre_panel.config import DeviceConfig
 from libre_panel.devices import (
     beadapanel,
     lianli_usb,
+    nzxt_kraken,
     thermalright,
     thermaltake,
     turzx_usb,
@@ -160,6 +161,8 @@ def _driver(name: str, config: DeviceConfig, model: Any) -> Any:
         return lianli_usb.LianLiDisplay(config, model)
     if name == "thermalright":
         return thermalright.TrofeoDisplay(config, model)
+    if name == "nzxt":
+        return nzxt_kraken.KrakenDisplay(config, model)
     raise AssertionError(name)
 
 
@@ -433,3 +436,61 @@ def test_trofeo_sessions_as_thermalright_py_drives_them(monkeypatch: pytest.Monk
                                                   thermalright.BULK_PRODUCT: 3600.0})  # fmt: skip
     rng = random.Random(0x7709)
     assert _compare([_trofeo_case(rng) for _ in range(40)], monkeypatch) > 12
+
+
+def _kraken_answer(asked: tuple[int, int], **at: int) -> str:
+    answer = bytearray(64)
+    answer[0], answer[1] = asked[0] + 1, asked[1]
+    for place, value in at.items():
+        answer[int(place[1:])] = value
+    return _b64(answer)
+
+
+def _kraken_case(rng: random.Random) -> dict[str, Any]:
+    product, firmware = rng.choice([(nzxt_kraken.Z3, 1), (nzxt_kraken.KRAKEN_2023, 2),
+                                    (nzxt_kraken.KRAKEN_2023, 1), (0x3014, 1)])  # fmt: skip
+    size = {nzxt_kraken.Z3: 320}.get(product, 240)
+    direct = product == nzxt_kraken.KRAKEN_2023 and firmware == 2
+    status = _b64(bytes((0x75, 0x02)) + rng.randbytes(30))  # (the cooler's own report)
+
+    def asked(report: tuple[int, int], **at: int) -> list[str]:
+        return ([status] if rng.random() < 0.2 else []) + [_kraken_answer(report, **at)]
+
+    answers: list[Any] = [status] * rng.randrange(3) + [None]  # (drained)
+    answers += asked((0x10, 0x01), b17=firmware, b18=rng.randrange(9), b19=rng.randrange(9))
+    answers += asked((0x30, 0x01), b26=rng.randrange(8))
+    if not direct:
+        answers += asked((0x38, 0x01)) + asked((0x32, 0x02)) + asked((0x32, 0x02))
+    steps: list[dict[str, Any]] = []
+    for _ in range(rng.randrange(1, 4)):
+        if rng.random() < 0.3:
+            steps.append({"brightness": rng.choice([-3, 0, 45, 100, 120])})
+            continue
+        steps.append({"show": _frame(rng, [(size, size), (64, 48), (size + 3, size)]),
+                      "region": None})  # fmt: skip
+        if direct:
+            times = 2 if not any("show" in s for s in steps[:-1]) else 1
+            answers += [rng.choice([status, None]) for _ in range(2 * times)]
+        else:
+            taken = rng.choice([1, 1, 0])
+            answers += [rng.choice([status, None])]  # 36 03
+            answers += asked((0x32, 0x02), b14=taken)
+            if taken:
+                answers += asked((0x32, 0x02), b14=0)
+            answers += asked((0x32, 0x01), b14=rng.choice([1, 0]))
+            answers += [rng.choice([status, None])]  # 36 01
+            answers += asked((0x38, 0x01), b14=1)
+    fail = [[rng.randrange(4, 12), 19, "No such device"]] if rng.random() < 0.15 else []
+    endpoints = rng.choice([[[0x01, 64, True], [0x81, 64, True]], [[0x81, 64, True]]])
+    return {"driver": "nzxt", "model": None, "product": "Kraken", "product_id": product,
+            "interfaces": [{"number": 0, "class": 255, "endpoints": [[0x02, 512, False]]},
+                           {"number": 1, "class": 3, "endpoints": endpoints}],
+            "answers": answers, "options": {"brightness": rng.choice([0, 60, 100])},
+            "steps": steps, "fail_writes": fail}  # fmt: skip
+
+
+def test_kraken_sessions_as_nzxt_kraken_py_drives_them(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(nzxt_kraken, "_linux", lambda: False)  # (the HID interface itself)
+    monkeypatch.setattr(nzxt_kraken.time, "sleep", lambda seconds: None)
+    rng = random.Random(0x2A3)
+    assert _compare([_kraken_case(rng) for _ in range(24)], monkeypatch) > 10

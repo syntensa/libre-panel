@@ -190,6 +190,16 @@ fn opened(case: &Value, io: Box<dyn UsbIo>) -> Result<Box<dyn Driver>, String> {
             driver.open_on(io, product).map_err(|e| e.0)?;
             Ok(Box::new(driver))
         }
+        "nzxt" => {
+            let mut driver = lp_devices::nzxt::Kraken::new(model, int("brightness", 100));
+            driver.hidraw = false;
+            driver.pauses = false;
+            let product = case["product_id"].as_u64().unwrap_or(0) as u16;
+            driver
+                .open_on(io, product, ("1".into(), 2))
+                .map_err(|e| e.0)?;
+            Ok(Box::new(driver))
+        }
         other => Err(format!("no driver {other:?} here")),
     }
 }

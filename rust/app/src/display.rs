@@ -72,6 +72,10 @@ fn other(
             let mut driver = lp_devices::thermalright::Trofeo::new(model);
             driver.open().map(|()| Box::new(driver) as Box<dyn Driver>)
         }
+        "usb-nzxt" => {
+            let mut driver = lp_devices::nzxt::Kraken::new(model, device.brightness);
+            driver.open().map(|()| Box::new(driver) as Box<dyn Driver>)
+        }
         "usb-lianli" => {
             let mut driver = lp_devices::lianli::LianLi::new(model);
             driver.open().map(|()| Box::new(driver) as Box<dyn Driver>)
@@ -92,6 +96,7 @@ fn other_usb_model() -> Option<&'static PanelModel> {
     lp_devices::lianli::present_model()
         .or_else(lp_devices::thermalright::present_model)
         .or_else(lp_devices::beada::present_model)
+        .or_else(lp_devices::nzxt::present_model)
         .or_else(lp_devices::thermaltake::present_model)
         .or_else(lp_devices::udisp::present_model)
 }

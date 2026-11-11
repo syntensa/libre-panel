@@ -16,6 +16,7 @@ pub mod keep;
 pub mod lianli;
 pub mod link;
 pub mod models;
+pub mod nzxt;
 pub mod png;
 pub mod ports;
 pub mod rate;

@@ -1661,7 +1661,12 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       and the bars on bulk transfers, asked what they are, their pictures turned as TRCC turns
       them and in their packets, a bar's answer to each picture and five missed in a row
       taken for a bar that is gone; tests/test_rust_usb_drivers.py)
-- [ ] NZXT Kraken, JONSBO, MS9132, the serial panels (Turing rev. A/B/C, Kipye rev. D, WeAct, JONSBO DS916), the panel as a monitor
+- [x] NZXT Kraken coolers' LCDs (rust/devices' nzxt: the HID interface's reports, through the
+      kernel's hidraw node on Linux, asked and answered past the cooler's own status reports;
+      the firmware and the screen's turn; pictures in two buckets in turn as R G B 0, or
+      without buckets as RGB565 on a Kraken 2023 with firmware 2; the screen given back to
+      the liquid's temperature on closing; tests/test_rust_usb_drivers.py)
+- [ ] JONSBO, MS9132, the serial panels (Turing rev. A/B/C, Kipye rev. D, WeAct, JONSBO DS916), the panel as a monitor
       (Windows' virtual display driver, X11, Wayland)
 
 ### R7 sensors
