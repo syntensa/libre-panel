@@ -598,8 +598,9 @@ def test_a_linux_pcs_sensors_are_those_of_the_python_sources(tmp_path: Path) -> 
     # each line ends in its unit and its label)
     ours = {line[:40].strip(): line for line in _lines(done)}
     # a drive that did not answer the program's round is asked again, as above (and as the
-    # program's own thread does a few seconds later)
-    for _ in range(3):
+    # program's own thread does a few seconds later): CI's NVMe drive often does not answer,
+    # and the program asks it once in its short life
+    for _ in range(12):
         missing = {key for key in wanted if key not in ours} & slow
         if not missing:
             break
