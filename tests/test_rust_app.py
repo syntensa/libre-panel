@@ -577,9 +577,10 @@ def test_a_linux_pcs_sensors_are_those_of_the_python_sources(tmp_path: Path) -> 
         linux.read_slow()
         read = {**provider.read(), **linux.read()}
         # a drive that did not answer this round (its own thread may have asked it at the
-        # same moment) is asked again, as the program's thread does a few seconds later
+        # same moment) is asked again, as the program's thread does a few seconds later:
+        # CI's NVMe drive often does not answer for a while
         for item in linux._plan.slow:
-            for _ in range(5):
+            for _ in range(30):
                 value = item.key not in read and item.read()
                 if value is None:
                     time.sleep(0.2)
