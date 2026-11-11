@@ -2357,7 +2357,11 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
 - [x] the licences of the Rust crates the programs are built from (packaging/rust_licenses.py:
       cargo's dependencies of the programs for the target, without their tests' and builds',
       each crate with its version, licence and licence files), in the folder to try
-- [ ] Windows: the installer and the zip, signing; Linux: the AppImage; the tools (ffmpeg)
+- [x] Windows: the setup and the portable zip of the Rust app, with ffmpeg, PresentMon, PawnIO's
+      installer, the engine and the sensor service (CI's job `try`); Linux: the AppImage
+      (CI's job `appimage`); see R9's entries
+- [ ] signing the Windows programs (SignPath), and the downloads of a release made by
+      release.yml from the Rust app
 
 ### R12 the switch
 - [ ] fixtures recorded from the Python app; the Rust app on main; the Python app goes

@@ -510,10 +510,19 @@ jobs:
       - name: Test the setup (install, run, uninstall)
         shell: pwsh
         run: python packaging/windows/test_installer.py --rust "dist/libre-panel-$env:VERSION-windows-x64-setup.exe"
+      - name: Its portable zip
+        # as release.yml makes the downloads' (the settings in "data" beside the program:
+        # config.portable_dir), from the folder the setup was made of
+        shell: pwsh
+        run: |
+          Copy-Item packaging/windows/portable.txt libre-panel-rust/
+          7z a "dist/libre-panel-$env:VERSION-windows-x64-portable.zip" ./libre-panel-rust/*
       - uses: actions/upload-artifact@v4
         with:
           name: libre-panel-rust-setup
-          path: dist/*-setup.exe
+          path: |
+            dist/*-setup.exe
+            dist/*-portable.zip
           retention-days: 30
 
   appimage:
