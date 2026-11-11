@@ -166,6 +166,13 @@ pub struct Renderer {
     pub moving: bool,
     /// the panel's frame rate (the loop sets it; 0: not known)
     pub fps: f64,
+    /// video mode: every frame reaches the panel (the loop sets it; Python's continuous)
+    pub continuous: bool,
+    /// when the last reading came and the seconds to the next (Python's sample, the loop's)
+    pub sample: (f64, f64),
+    /// what draws the plugins' widget types and screen (the app's plugin host); None: a frame
+    /// that holds one is not made here
+    pub plugins: Option<Rc<dyn crate::plugin::Plugins>>,
     /// the theme's pictures fitted (_images), and the animated pictures' frames (_animations)
     pub(crate) pictures: RefCell<Kept<image::PictureKey, Option<Rc<Image>>>>,
     pub(crate) animations: Kept<image::AnimationKey, Option<Rc<image::Animation>>>,
@@ -302,6 +309,9 @@ impl Renderer {
             motion: motion::Motion::default(),
             moving: false,
             fps: 0.0,
+            continuous: false,
+            sample: (0.0, 1.0),
+            plugins: None,
             pictures: RefCell::new(Kept::new(image::IMAGE_BYTES)),
             animations: Kept::new(image::ANIMATION_BYTES),
             moves: HashMap::new(),
@@ -434,6 +444,11 @@ impl Renderer {
                 })
                 .collect()
         })
+    }
+
+    /// A warning of what draws for it (the plugins'), with its own.
+    pub fn warn_of(&self, message: String) {
+        self.warn(message);
     }
 
     pub(crate) fn warn(&self, message: String) {
@@ -1518,7 +1533,24 @@ impl Renderer {
                 let lit = finish::of(&w) == Finish::LitDownloads;
                 return self.download(&w, lit, &snapshot, self.at);
             }
-            other => return Drawn::Unported(format!("{other} widgets")),
+            other => {
+                let Some(plugins) = self.plugins.clone() else {
+                    return Drawn::Unported(format!("{other} widgets"));
+                };
+                let snapshot = self.snapshot.clone().unwrap_or_default();
+                let frame = self.frame_info();
+                return match plugins.widget(w, &snapshot, &frame) {
+                    Ok(drawing) => {
+                        self.moving |= drawing.moving;
+                        drawing
+                            .warnings
+                            .into_iter()
+                            .for_each(|said| self.warn(said));
+                        drawing.made.map_or(Drawn::Nothing, Drawn::Piece)
+                    }
+                    Err(e) => Drawn::Failed(Failed(e)),
+                };
+            }
         };
         match made {
             // (LitText: the text's or the metric's glow as light, its letters faded)
@@ -1550,6 +1582,79 @@ impl Renderer {
         name.to_string()
     }
 
+    /// How far `now` is from the last reading to the next, 0 to 1 (Renderer.progress).
+    pub fn progress(&self, now: f64) -> f64 {
+        let (at, interval) = self.sample;
+        ((now - at) / interval).clamp(0.0, 1.0)
+    }
+
+    /// The name of the theme's screen ("" for none).
+    fn screen_name(&self) -> String {
+        self.theme
+            .screen
+            .as_ref()
+            .map_or("", |s| widget::text(s, "name"))
+            .to_string()
+    }
+
+    /// What a plugin's drawing is told of this frame.
+    fn frame_info(&self) -> crate::plugin::Frame {
+        crate::plugin::Frame {
+            now: self.at,
+            fps: self.fps,
+            continuous: self.continuous,
+            progress: self.progress(self.at),
+        }
+    }
+
+    /// The screen's picture of this frame (_screen_image): None where the theme has none or no
+    /// plugin draws it (with a warning where it failed).
+    fn screen_image(&mut self, snapshot: &Snapshot) -> Option<Image> {
+        self.theme.screen.as_ref()?;
+        let plugins = self.plugins.clone()?;
+        match plugins.screen(snapshot, &self.frame_info()) {
+            Ok(drawing) => {
+                self.moving |= drawing.moving;
+                drawing
+                    .warnings
+                    .into_iter()
+                    .for_each(|said| self.warn(said));
+                drawing.made
+            }
+            Err(e) => {
+                let name = self.screen_name();
+                self.warn(format!("screen {} failed: {e}", lp_py::repr(&name)));
+                None
+            }
+        }
+    }
+
+    /// _screen_piece: the screen's picture as the piece beneath the widgets, in the theme's
+    /// size (one of another size is resized, with a warning).
+    fn screen_piece(&mut self, image: Image) -> std::result::Result<Rc<Piece>, Unported> {
+        let (w, h) = (self.theme.width as usize, self.theme.height as usize);
+        let mut layer = if image.mode() == Mode::RGBA {
+            image
+        } else {
+            image
+                .convert(Mode::RGBA)
+                .map_err(|e| Unported(format!("a screen's picture: {e}")))?
+        };
+        if (layer.width(), layer.height()) != (w, h) {
+            let name = self.screen_name();
+            self.warn(format!(
+                "screen {} draws {}x{}, not ({w}, {h})",
+                lp_py::repr(&name),
+                layer.width(),
+                layer.height()
+            ));
+            layer = layer
+                .resize(w, h, Filter::Bicubic, None, None)
+                .map_err(|e| Unported(format!("a screen's picture: {e}")))?;
+        }
+        Ok(Rc::new(Piece::new(layer, 0, 0)))
+    }
+
     /// What a frame of the theme holds beyond its widgets that is not drawn here yet: a screen
     /// (a plugin's, drawn under the widgets), the panel's look (its grid beneath them) and the
     /// finishes Rust does not draw yet (render/finish.py: lit, facet, acrylic; one that does not
@@ -1557,7 +1662,7 @@ impl Renderer {
     /// Python goes on without (a screen no plugin has): never a frame drawn without what Python
     /// draws.
     fn beyond_widgets(&self) -> Option<&'static str> {
-        if self.theme.screen.is_some() {
+        if self.theme.screen.is_some() && self.plugins.is_none() {
             return Some("screens");
         }
         if self.ground_unread {
@@ -1612,6 +1717,7 @@ impl Renderer {
                 .and_then(|r| motion::number(&r.value))
         };
         self.motion.begin(&readings, now, glide, lead);
+        let screen = self.screen_image(&snapshot);
         // which card each slot shows
         self.begin_slots(&snapshot, now)?;
         let mut boxes = IndexMap::new();
@@ -1772,6 +1878,16 @@ impl Renderer {
             self.turn_pieces(&mut pieces, &turns, &mut boxes)?;
         }
         self.full_video = self.whole_video(&pieces, &turns);
+        if let Some(screen) = screen {
+            self.full_video = None;
+            let whole = (screen.width(), screen.height())
+                == (self.theme.width as usize, self.theme.height as usize);
+            if pieces.is_empty() && screen.mode() == Mode::RGB && whole {
+                // an opaque screen alone is the frame: nothing to compose
+                return Ok((screen, boxes));
+            }
+            pieces.insert(0, ("\0screen".to_string(), self.screen_piece(screen)?));
+        }
         let canvas = self.compose(&pieces)?;
         Ok((compose::as_rgb(&canvas)?, boxes))
     }

@@ -372,7 +372,10 @@ pub fn shared(settings: &Path) -> Option<Shared> {
     if held.is_none() {
         match PluginHost::start(settings) {
             Ok(None) => return None,
-            Ok(Some(host)) => *held = Some(Ok(Arc::new(host))),
+            Ok(Some(host)) => {
+                learn_schemas(&host);
+                *held = Some(Ok(Arc::new(host)));
+            }
             Err(why) => {
                 crate::logs::say("libre_panel.plugins", &format!("plugins: {why}"));
                 *held = Some(Err(why));
@@ -380,6 +383,44 @@ pub fn shared(settings: &Path) -> Option<Shared> {
         }
     }
     held.clone()
+}
+
+/// The fields of the plugins' widget types, screens and toast styles told to the theme loader
+/// (lp_theme::plugins), so that themes are checked against them as theme/model.py checks them.
+fn learn_schemas(host: &PluginHost) {
+    let Ok((told, _)) = host.request("schemas", Dict::new(), &[]) else {
+        return;
+    };
+    let Value::List(parts) = field(&told, "parts") else {
+        return;
+    };
+    let mut learnt = Vec::new();
+    for part in parts {
+        let Value::List(part) = part else { continue };
+        let (Some(Value::Str(kind)), Some(Value::Str(name)), Some(Value::List(fields))) =
+            (part.first(), part.get(1), part.get(2))
+        else {
+            continue;
+        };
+        let fields = fields
+            .iter()
+            .filter_map(|f| match f {
+                Value::List(f) => match (f.first(), f.get(1), f.get(2)) {
+                    (Some(Value::Str(name)), Some(Value::Str(kind)), default) => {
+                        Some(lp_theme::plugins::PluginField {
+                            name: name.clone(),
+                            kind: kind.clone(),
+                            default: default.cloned().unwrap_or(Value::None),
+                        })
+                    }
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect();
+        learnt.push((kind.clone(), name.clone(), fields));
+    }
+    lp_theme::plugins::set(learnt);
 }
 
 /// The theme folders the installed plugins bring (none without plugins).
@@ -973,4 +1014,314 @@ pub fn entries(catalog: &Dict, list: &str) -> Vec<Dict> {
             .collect(),
         _ => Vec::new(),
     }
+}
+
+/// What the installed plugins draw for a renderer (lp_render::Plugins): their widget types and
+/// the theme's screen, drawn by the plugin host with Python's renderer for the theme as this app
+/// has it, their pieces handed back.
+pub struct PluginDrawing {
+    host: Arc<PluginHost>,
+    drawing: Value,
+    /// the snapshot sent last (a frame's widgets share one: sent once)
+    snapshot: std::cell::RefCell<Value>,
+    /// the pictures sent, by key: the mark of their pixels
+    sent: std::cell::RefCell<HashMap<String, i64>>,
+    /// each widget's piece as it was given last, and the screen's picture
+    last: std::cell::RefCell<HashMap<String, std::rc::Rc<lp_render::Piece>>>,
+    screen: std::cell::RefCell<Option<lp_pixels::Image>>,
+}
+
+impl PluginDrawing {
+    /// For `renderer`'s theme where it holds a widget type a plugin has, or a screen; None
+    /// otherwise, or where no plugin host runs.
+    pub fn open(settings: &Path, renderer: &lp_render::Renderer) -> Option<PluginDrawing> {
+        let theme = &renderer.theme;
+        let has_screen = theme.screen.is_some();
+        if !has_screen && renderer.widgets.iter().all(built_in_type) {
+            return None;
+        }
+        let Ok(host) = shared(settings)? else {
+            return None;
+        };
+        let types = host.names("widgets");
+        let needed = has_screen
+            || renderer.widgets.iter().any(|w| {
+                types
+                    .iter()
+                    .any(|t| t == lp_render::widget::text(w, "type"))
+            });
+        if !needed {
+            return None;
+        }
+        let mut told = Dict::new();
+        told.insert("name".into(), Value::Str(theme.name.clone()));
+        told.insert("width".into(), Value::int(theme.width));
+        told.insert("height".into(), Value::int(theme.height));
+        told.insert("model".into(), Value::Str(theme.model.clone()));
+        told.insert("palette".into(), Value::Dict(theme.palette.clone()));
+        told.insert("font".into(), Value::Str(theme.font.clone()));
+        told.insert(
+            "screen".into(),
+            theme.screen.clone().map_or(Value::None, Value::Dict),
+        );
+        told.insert(
+            "root".into(),
+            theme.root.as_ref().map_or(Value::None, |root| {
+                Value::Str(root.to_string_lossy().into_owned())
+            }),
+        );
+        let mut fields = Dict::new();
+        fields.insert("theme".into(), Value::Dict(told));
+        fields.insert("preview".into(), Value::Bool(renderer.options.preview));
+        fields.insert("animate".into(), Value::Bool(renderer.options.animate));
+        let (answer, _) = match host.request("draw.open", fields, &[]) {
+            Ok(answer) => answer,
+            Err(why) => {
+                crate::logs::say("libre_panel.plugins", &format!("plugins: {why}"));
+                return None;
+            }
+        };
+        let drawing = PluginDrawing {
+            host,
+            drawing: field(&answer, "drawing").clone(),
+            snapshot: std::cell::RefCell::new(Value::None),
+            sent: std::cell::RefCell::new(HashMap::new()),
+            last: std::cell::RefCell::new(HashMap::new()),
+            screen: std::cell::RefCell::new(None),
+        };
+        for said in warnings_of(&answer) {
+            renderer.warn_of(said);
+        }
+        Some(drawing)
+    }
+
+    /// The fields of a draw request for this frame: the snapshot where it is not the one sent
+    /// last, the pictures not sent before (their pixels in the blob that goes with it).
+    fn frame_fields(
+        &self,
+        snapshot: &lp_render::Snapshot,
+        frame: &lp_render::plugin::Frame,
+    ) -> (Dict, Vec<u8>) {
+        let mut fields = Dict::new();
+        fields.insert("drawing".into(), self.drawing.clone());
+        let mut timing = Dict::new();
+        timing.insert("now".into(), Value::Float(frame.now));
+        timing.insert("fps".into(), Value::Float(frame.fps));
+        timing.insert("continuous".into(), Value::Bool(frame.continuous));
+        timing.insert("progress".into(), Value::Float(frame.progress));
+        fields.insert("frame".into(), Value::Dict(timing));
+        let told = snapshot_dict(snapshot);
+        let mut last = self.snapshot.borrow_mut();
+        if *last == told {
+            fields.insert("snapshot".into(), Value::from("same"));
+        } else {
+            fields.insert("snapshot".into(), told.clone());
+            *last = told;
+        }
+        let mut blob = Vec::new();
+        let mut sent = self.sent.borrow_mut();
+        let mut pictures = Vec::new();
+        for (key, image) in &snapshot.images {
+            let rgba = if image.mode() == lp_pixels::Mode::RGBA {
+                std::borrow::Cow::Borrowed(image)
+            } else {
+                match image.convert(lp_pixels::Mode::RGBA) {
+                    Ok(converted) => std::borrow::Cow::Owned(converted),
+                    Err(_) => continue,
+                }
+            };
+            let mark = mark_of(&rgba);
+            let mut item = Dict::new();
+            item.insert("key".into(), Value::Str(key.clone()));
+            item.insert("mark".into(), Value::int(mark));
+            if sent.get(key) != Some(&mark) {
+                item.insert(
+                    "size".into(),
+                    Value::List(vec![
+                        Value::int(rgba.width() as i64),
+                        Value::int(rgba.height() as i64),
+                    ]),
+                );
+                blob.extend_from_slice(rgba.as_bytes());
+                sent.insert(key.clone(), mark);
+            }
+            pictures.push(Value::Dict(item));
+        }
+        sent.retain(|key, _| snapshot.images.contains_key(key));
+        fields.insert("pictures".into(), Value::List(pictures));
+        (fields, blob)
+    }
+
+    fn ask(&self, op: &str, fields: Dict, blob: &[u8]) -> Result<(Dict, Vec<u8>), String> {
+        let answer = self.host.request(op, fields, blob);
+        if answer.is_err() {
+            // (the host may have lost what was sent: all goes again)
+            *self.snapshot.borrow_mut() = Value::None;
+            self.sent.borrow_mut().clear();
+        }
+        answer
+    }
+}
+
+/// Whether a widget's type is one of Libre Panel's own (lp_theme's table), not a plugin's.
+pub fn built_in_type(widget: &Dict) -> bool {
+    let kind = lp_render::widget::text(widget, "type");
+    lp_theme::tables::WIDGETS
+        .iter()
+        .any(|(name, _)| *name == kind)
+}
+
+/// A number that tells pictures apart by their size and pixels.
+fn mark_of(image: &lp_pixels::Image) -> i64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    (image.width(), image.height()).hash(&mut hasher);
+    image.as_bytes().hash(&mut hasher);
+    (hasher.finish() & ((1 << 53) - 1)) as i64
+}
+
+fn warnings_of(answer: &Dict) -> Vec<String> {
+    match field(answer, "warnings") {
+        Value::List(said) => said
+            .iter()
+            .filter_map(Value::as_str)
+            .map(str::to_string)
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn int_of(value: &Value) -> i64 {
+    match value {
+        Value::Int(n) => i64::try_from(n.clone()).unwrap_or(0),
+        _ => 0,
+    }
+}
+
+/// A piece as the plugin host sends one: its layer, place, hit box, backdrop and light.
+fn piece_of(told: &Dict, blob: &[u8]) -> Result<lp_render::Piece, String> {
+    use lp_pixels::{Image, Mode};
+    let mut at = 0;
+    let mut take = |mode: Mode, size: (usize, usize)| -> Result<Image, String> {
+        let end = at + size.0 * size.1 * if mode == Mode::L { 1 } else { 4 };
+        let data = blob
+            .get(at..end)
+            .ok_or("the plugin host sent a piece cut short")?;
+        at = end;
+        Image::from_bytes(mode, size.0, size.1, data.to_vec()).map_err(|e| e.to_string())
+    };
+    let size = size_of(field(told, "size")).ok_or("a piece of no size")?;
+    let layer = take(Mode::RGBA, size)?;
+    let mut piece =
+        lp_render::Piece::new(layer, int_of(field(told, "x")), int_of(field(told, "y")));
+    if let Value::List(hit) = field(told, "box") {
+        if hit.len() == 4 {
+            piece.hit = Some([
+                int_of(&hit[0]),
+                int_of(&hit[1]),
+                int_of(&hit[2]),
+                int_of(&hit[3]),
+            ]);
+        }
+    }
+    piece.add = matches!(field(told, "add"), Value::Bool(true));
+    if let Value::Dict(backdrop) = field(told, "backdrop") {
+        let size = size_of(field(backdrop, "size")).ok_or("a backdrop of no size")?;
+        piece.backdrop = Some(take(Mode::L, size)?);
+        piece.backdrop_radius = match field(backdrop, "radius") {
+            Value::Float(r) => *r as f32,
+            other => int_of(other) as f32,
+        };
+    }
+    if let Value::Dict(light) = field(told, "light") {
+        let size = size_of(field(light, "size")).ok_or("a light of no size")?;
+        let mut lit = lp_render::Piece::new(
+            take(Mode::RGBA, size)?,
+            int_of(field(light, "x")),
+            int_of(field(light, "y")),
+        );
+        lit.add = matches!(field(light, "add"), Value::Bool(true));
+        piece.light = Some(Box::new(lit));
+    }
+    Ok(piece)
+}
+
+impl lp_render::Plugins for PluginDrawing {
+    fn widget(
+        &self,
+        widget: &Dict,
+        snapshot: &lp_render::Snapshot,
+        frame: &lp_render::plugin::Frame,
+    ) -> Result<lp_render::plugin::Drawing<std::rc::Rc<lp_render::Piece>>, String> {
+        let (mut fields, blob) = self.frame_fields(snapshot, frame);
+        fields.insert("widget".into(), Value::Dict(widget.clone()));
+        let (answer, data) = self.ask("draw.widget", fields, &blob)?;
+        let id = lp_render::widget::text(widget, "id").to_string();
+        let made = if matches!(field(&answer, "same"), Value::Bool(true)) {
+            self.last.borrow().get(&id).cloned()
+        } else if let Value::Dict(told) = field(&answer, "piece") {
+            let piece = std::rc::Rc::new(piece_of(told, &data)?);
+            self.last
+                .borrow_mut()
+                .insert(id, std::rc::Rc::clone(&piece));
+            Some(piece)
+        } else {
+            self.last.borrow_mut().remove(&id);
+            None
+        };
+        Ok(lp_render::plugin::Drawing {
+            made,
+            moving: matches!(field(&answer, "moving"), Value::Bool(true)),
+            warnings: warnings_of(&answer),
+        })
+    }
+
+    fn screen(
+        &self,
+        snapshot: &lp_render::Snapshot,
+        frame: &lp_render::plugin::Frame,
+    ) -> Result<lp_render::plugin::Drawing<lp_pixels::Image>, String> {
+        let (fields, blob) = self.frame_fields(snapshot, frame);
+        let (answer, data) = self.ask("draw.screen", fields, &blob)?;
+        let made = if matches!(field(&answer, "same"), Value::Bool(true)) {
+            self.screen.borrow().clone()
+        } else if let Value::Dict(told) = field(&answer, "image") {
+            let (w, h) = size_of(field(told, "size")).ok_or("a screen of no size")?;
+            let mode = if text(told, "mode") == "RGB" {
+                lp_pixels::Mode::RGB
+            } else {
+                lp_pixels::Mode::RGBA
+            };
+            let image =
+                lp_pixels::Image::from_bytes(mode, w, h, data).map_err(|e| e.to_string())?;
+            *self.screen.borrow_mut() = Some(image.clone());
+            Some(image)
+        } else {
+            *self.screen.borrow_mut() = None;
+            None
+        };
+        Ok(lp_render::plugin::Drawing {
+            made,
+            moving: matches!(field(&answer, "moving"), Value::Bool(true)),
+            warnings: warnings_of(&answer),
+        })
+    }
+}
+
+impl Drop for PluginDrawing {
+    fn drop(&mut self) {
+        let mut fields = Dict::new();
+        fields.insert("drawing".into(), self.drawing.clone());
+        let _ = self.host.request("draw.close", fields, &[]);
+    }
+}
+
+/// What the plugins draw given to `renderer`, where its theme holds a plugin's widget type or a
+/// screen (lp_render::Plugins); nothing otherwise.
+pub fn attach(renderer: &mut lp_render::Renderer) {
+    let Ok(home) = crate::home::Home::find() else {
+        return;
+    };
+    renderer.plugins = PluginDrawing::open(&home.settings, renderer)
+        .map(|drawing| std::rc::Rc::new(drawing) as std::rc::Rc<dyn lp_render::Plugins>);
 }

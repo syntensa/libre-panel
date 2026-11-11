@@ -251,6 +251,7 @@ pub fn round_picture(
         dither: false,
     };
     let mut renderer = lp_render::Renderer::new(dressed, env, options).map_err(|e| failed(e.0))?;
+    crate::plugins::attach(&mut renderer);
     renderer.symbols = config.symbols.clone();
     renderer.switches = crate::previews::chosen_switches(&config, &name)
         .into_iter()

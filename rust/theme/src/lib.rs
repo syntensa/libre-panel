@@ -10,6 +10,7 @@ pub mod light;
 pub mod model;
 pub mod modules;
 pub mod paths;
+pub mod plugins;
 pub mod specs;
 pub mod tables;
 pub mod versions;

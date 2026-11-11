@@ -374,6 +374,7 @@ pub fn render(
         dither: false,
     };
     let mut renderer = Renderer::new(dressed, env, options).map_err(unported)?;
+    crate::plugins::attach(&mut renderer);
     renderer.fan_choices = fan_choices(config);
     renderer.symbols = config.symbols.clone();
     renderer.switches = switches(&theme, config);

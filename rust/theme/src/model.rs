@@ -14,6 +14,7 @@ use num_bigint::BigInt;
 use num_traits::{FromPrimitive, Zero};
 
 use crate::paths;
+use crate::plugins::PluginField;
 use crate::specs::Field;
 use crate::tables::*;
 
@@ -563,6 +564,36 @@ fn spec_of(own: &'static [Field]) -> Vec<&'static Field> {
     spec
 }
 
+/// A table's field as a plugin's is held.
+fn owned(field: &Field) -> PluginField {
+    PluginField {
+        name: field.name.to_string(),
+        kind: field.kind.to_string(),
+        default: field.default.value(),
+    }
+}
+
+/// _check_paths: fonts and assets named in a plugin's fields stay inside the theme folder too
+/// (a built-in font's name is the font's own check).
+fn check_paths(spec: &[PluginField], values: &Dict, root: Option<&Path>) -> Result<()> {
+    for field in spec {
+        let Some(value @ Value::Str(text)) = values.get(&field.name) else {
+            continue;
+        };
+        if text.is_empty() {
+            continue;
+        }
+        let kind = field.kind.trim_end_matches('?');
+        let builtin = kind == "font" && text.starts_with(BUILTIN_PREFIX);
+        if (kind == "font" || kind == "asset") && !builtin {
+            if let Some(root) = root {
+                resolve_asset(root, value)?;
+            }
+        }
+    }
+    Ok(())
+}
+
 fn get(d: &Dict, key: &str, default: Value) -> Value {
     d.get(key).cloned().unwrap_or(default)
 }
@@ -579,13 +610,25 @@ pub fn normalize_widget(
         return refuse(format!("{place}: expected an object"));
     };
     let wtype = raw.get("type").cloned().unwrap_or(Value::None);
-    let spec = match &wtype {
+    let mut plugin = None;
+    let spec: Vec<PluginField> = match &wtype {
         Value::Str(t) => match widget_fields(t) {
-            Some(own) => spec_of(own),
-            // a plugin's widget type: none is installed (R10)
-            None if t.contains('.') => {
-                return missing_plugin_widget(raw, t, index, &place, palette)
-            }
+            Some(own) => spec_of(own).into_iter().map(owned).collect(),
+            // a plugin's widget type
+            None if t.contains('.') => match crate::plugins::fields("widgets", t) {
+                Some(own) => {
+                    let mut spec: Vec<PluginField> = COMMON.iter().map(owned).collect();
+                    for field in &own {
+                        match spec.iter().position(|f| f.name == field.name) {
+                            Some(i) => spec[i] = field.clone(),
+                            None => spec.push(field.clone()),
+                        }
+                    }
+                    plugin = Some(own);
+                    spec
+                }
+                None => return missing_plugin_widget(raw, t, index, &place, palette),
+            },
             None => return refuse(format!("{place}: unknown widget type {}", wtype.repr())),
         },
         _ => return refuse(format!("{place}: unknown widget type {}", wtype.repr())),
@@ -594,14 +637,14 @@ pub fn normalize_widget(
     let mut widget = Dict::new();
     widget.insert("type".into(), wtype.clone().into());
     for field in &spec {
-        let value = get(raw, field.name, field.default.value());
+        let value = get(raw, &field.name, field.default.clone());
         let coerced = coerce(
-            field.kind,
+            &field.kind,
             value,
             &format!("{place}.{}", field.name),
             palette,
         )?;
-        widget.insert(field.name.into(), coerced);
+        widget.insert(field.name.clone(), coerced);
     }
     let field = |name: &str| widget.get(name).expect("a field of every widget");
     if !between(field("opacity"), &int(0), &int(1)) {
@@ -634,6 +677,9 @@ pub fn normalize_widget(
     }
     if !field("id").truthy() {
         widget.insert("id".into(), format!("{wtype}-{}", index + 1).into());
+    }
+    if let Some(own) = &plugin {
+        check_paths(own, &widget, _root)?;
     }
     let gone = GONE_FIELDS
         .iter()
@@ -697,13 +743,14 @@ fn plugin_options(
     let Value::Dict(given) = given else {
         return refuse(format!("{place}.options must be an object"));
     };
-    let schema = match kind {
+    let schema: Option<Vec<PluginField>> = match kind {
         "toasts" => TOAST_STYLES
             .iter()
             .find(|(n, _)| *n == name)
-            .map(|(_, o)| *o),
+            .map(|(_, o)| o.iter().map(owned).collect()),
         _ => None,
-    };
+    }
+    .or_else(|| crate::plugins::fields(kind, name));
     let Some(schema) = schema else {
         warnings.push(format!(
             "{place} {} needs a plugin that is not installed",
@@ -713,14 +760,14 @@ fn plugin_options(
     };
     let mut options = Dict::new();
     for field in schema {
-        let value = get(&given, field.name, field.default.value());
+        let value = get(&given, &field.name, field.default);
         let coerced = coerce(
-            field.kind,
+            &field.kind,
             value,
             &format!("{place}.options.{}", field.name),
             Some(palette),
         )?;
-        options.insert(field.name.into(), coerced);
+        options.insert(field.name, coerced);
     }
     let mut unknown: Vec<&String> = given.keys().filter(|k| !options.contains_key(*k)).collect();
     unknown.sort();

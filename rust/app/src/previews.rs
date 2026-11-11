@@ -237,6 +237,7 @@ fn draw_theme(
         dither: false,
     };
     let mut renderer = lp_render::Renderer::new(dressed, env, options).map_err(|e| e.0)?;
+    crate::plugins::attach(&mut renderer);
     renderer.symbols = asked.symbols.clone();
     renderer.switches = asked.chosen.iter().cloned().collect();
     let utc = lp_py::zones::Zone::utc();

@@ -195,3 +195,37 @@ def test_settings_list_the_plugins_as_settings_py_lists_them(plugin_folder, isol
     finally:
         ours.send_signal(signal.SIGINT) if os.name != "nt" else ours.terminate()
         ours.communicate(timeout=30)
+
+
+def test_a_plugins_screen_and_widget_type_are_drawn_as_the_python_app_draws_them(
+    plugin_folder, isolated_home, tmp_path
+):
+    from PIL import Image, ImageChops
+    from test_plugins import DRAWING, DRAWING_PARTS
+
+    plugin_folder(DRAWING, parts=DRAWING_PARTS)
+    data = theme_data({"name": "tint", "options": {"color": "#102030"}}, [
+        {"type": "demo.bar", "id": "bar", "x": 10, "y": 20, "w": 120, "h": 14,
+         "sensor": "disk.load", "glow": 0.6, "color": "@accent"},
+        {"type": "text", "id": "label", "x": 10, "y": 50, "text": "over the screen",
+         "font_size": 16},
+    ])  # fmt: skip
+    data["palette"] = {"accent": "#40c0ff"}
+    folder = isolated_home / "themes" / "plugged"
+    folder.mkdir(parents=True)
+    (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+    want, got = tmp_path / "python.png", tmp_path / "rust.png"
+    # (disk.load: a demo reading that holds still)
+    assert cli.main(["preview", "plugged", "--output", str(want)]) == 0
+    done = _run(isolated_home, "preview", "plugged", "--output", str(got), **HOST)
+    assert done.returncode == 0, done.stderr
+    with Image.open(want) as python, Image.open(got) as rust:
+        assert rust.size == python.size == (200, 100)
+        assert rust.getpixel((190, 90)) == (16, 32, 48)  # the screen under everything
+        assert ImageChops.difference(rust.convert("RGB"), python.convert("RGB")).getbbox() is None
+    # a screen no plugin has: no frame made in Python's place without it
+    data["screen"] = {"name": "nowhere", "options": {}}
+    (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+    done = _run(isolated_home, "preview", "plugged", "--output", str(got),
+                LIBRE_PANEL_PLUGIN_HOST="/nonexistent")  # fmt: skip
+    assert done.returncode != 0

@@ -178,6 +178,7 @@ fn preview_command(args: &[String]) -> Result<(), String> {
         dither: false,
     };
     let mut renderer = lp_render::Renderer::new(theme.clone(), &env, options).map_err(|e| e.0)?;
+    plugins::attach(&mut renderer);
     renderer.symbols = config.symbols.clone();
     let snapshot = if live {
         let (mut hub, _missing) = sensors::Hub::of(&config, false);

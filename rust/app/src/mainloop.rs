@@ -1066,6 +1066,7 @@ impl MainLoop {
         };
         let mut renderer =
             Renderer::new(self.dressed(&theme)?, &self.env, options).map_err(|e| e.0)?;
+        crate::plugins::attach(&mut renderer);
         // under the theme: this panel's part of the picture across the panels
         if let Some(backdrop) = crate::arrangement::backdrop(self.across.as_ref()) {
             renderer.set_backdrop(Some(backdrop)).map_err(|e| e.0)?;
@@ -1326,6 +1327,7 @@ impl MainLoop {
             _ => 1000.0,
         } / 1000.0;
         let (now, fold) = moment();
+        let mut sampled = false; // (fresh readings: Renderer.new_sample)
         let snapshot = match self.snapshot.take() {
             Some(mut last) if started < self.next_sample => {
                 if self.hub().every_frame() {
@@ -1357,6 +1359,7 @@ impl MainLoop {
                 Snapshot { now, fold, ..last }
             }
             _ => {
+                sampled = true;
                 self.next_sample = started + every;
                 let hub = Arc::clone(&self.hub);
                 let mut hub = hub
@@ -1388,6 +1391,10 @@ impl MainLoop {
         };
         self.snapshot = Some(snapshot.clone());
         self.rewant(&renderer);
+        if sampled {
+            renderer.sample = (started, every.max(0.001));
+        }
+        renderer.continuous = self.panel.as_ref().is_some_and(Display::streams);
 
         // the messages (while the panel is away they wait at the host, the newest), and the
         // alarm's edge

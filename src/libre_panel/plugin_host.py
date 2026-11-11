@@ -73,6 +73,7 @@ class Host:
     """What the Rust app asks of the plugins."""
 
     def __init__(self, channel: Channel, folder: Path | None) -> None:
+        from libre_panel.plugins import loader
         from libre_panel.plugins.loader import BUILT_IN, discover
 
         self.channel = channel
@@ -82,13 +83,18 @@ class Host:
             parts = self.registry.parts[kind]
             for name in [n for n, found in parts.items() if found.source == BUILT_IN]:
                 del parts[name]
+        loader._registry = self.registry  # (what the renderer and the sources look up)
         self.ops = {"hello": self.hello, "catalog": self.catalog, "check": self.check,
                     "config": self.follow_config,
                     "sensors.open": self.sensor_open, "sensors.read": self.sensor_read,
                     "sensors.images": self.sensor_images, "sensors.close": self.sensor_close,
                     "services.apply": self.services_apply, "services.summary": self.summary,
                     "services.restart": self.services_restart, "emit": self.emit,
-                    "services.stop": self.services_stop}  # fmt: skip
+                    "services.stop": self.services_stop, "schemas": self.schemas,
+                    "draw.open": self.draw_open, "draw.widget": self.draw_widget,
+                    "draw.screen": self.draw_screen, "draw.close": self.draw_close}  # fmt: skip
+        self.drawings: dict[int, _Drawing] = {}
+        self._drawing_ids = iter(range(1, 1 << 62))
         self.config: Any = None
         self.sources: dict[str, Any] = {}
         self._calls: dict[int, tuple[threading.Event, list[Any]]] = {}
@@ -308,6 +314,151 @@ class Host:
             data["keys"] = frozenset(data["keys"])
         self.bridge.emit(message["event"], wait=bool(message.get("wait")), **data)
         return {}
+
+    # -- what plugins draw ----------------------------------------------------------------
+
+    def schemas(self, message: dict[str, Any], blob: bytes) -> dict[str, Any]:
+        """The fields of the widget types (``spec``), screens and toast styles (``options``)
+        as [kind, name, [[field, kind, default], ...]]: what themes are checked against."""
+        parts = []
+        for kind, attribute in (("widgets", "spec"), ("screens", "options"),
+                                ("toasts", "options")):  # fmt: skip
+            for name in self.registry.names(kind):
+                cls = self.registry.get(kind, name)
+                fields = getattr(cls, attribute, None) if cls is not None else None
+                if isinstance(fields, dict):
+                    told = [[key, of, default] for key, (of, default) in fields.items()]
+                    parts.append([kind, name, told])
+        return {"parts": parts}
+
+    def draw_open(self, message: dict[str, Any], blob: bytes) -> dict[str, Any]:
+        """A renderer for a theme of the Rust app's (its size, palette, font, model, folder and
+        screen as the app has it, dressed): the plugins' widget types and the screen are drawn
+        with it, as the Python app's renderer draws them."""
+        from libre_panel.render.renderer import Renderer
+        from libre_panel.theme.model import DEFAULT_FONT, Theme
+
+        told = message["theme"]
+        theme = Theme(name=told.get("name", ""), width=int(told["width"]),
+                      height=int(told["height"]), widgets=[],
+                      model=told.get("model") or "custom", palette=dict(told.get("palette") or {}),
+                      font=told.get("font") or DEFAULT_FONT, screen=told.get("screen"),
+                      root=Path(told["root"]) if told.get("root") else None)  # fmt: skip
+        renderer = Renderer(theme, animate=bool(message.get("animate")),
+                            preview=bool(message.get("preview")))  # fmt: skip
+        ident = next(self._drawing_ids)
+        self.drawings[ident] = _Drawing(renderer)
+        return {"drawing": ident, "screen": renderer.screen is not None,
+                "warnings": _warnings(renderer)}  # fmt: skip
+
+    def draw_widget(self, message: dict[str, Any], blob: bytes) -> tuple[dict, bytes]:
+        """A plugin widget type's piece of ``widget`` (renderer._draw_plugin, its effects
+        applied); ``same`` where it is the piece it gave last for that widget."""
+        drawing = self.drawings[message["drawing"]]
+        renderer, snapshot, now = drawing.begin(message, blob)
+        widget = message["widget"]
+        piece = renderer._draw_plugin(widget, snapshot, now)
+        told: dict[str, Any] = {"moving": renderer.moving, "warnings": _warnings(renderer)}
+        if piece is None:
+            drawing.last.pop(widget["id"], None)
+            return {**told, "piece": None}, b""
+        if drawing.last.get(widget["id"]) is piece:
+            return {**told, "same": True}, b""
+        drawing.last[widget["id"]] = piece
+        return _piece(piece, told)
+
+    def draw_screen(self, message: dict[str, Any], blob: bytes) -> tuple[dict, bytes]:
+        """The screen's picture of this frame (renderer._screen_image), RGB or RGBA."""
+        drawing = self.drawings[message["drawing"]]
+        renderer, snapshot, now = drawing.begin(message, blob)
+        image = renderer._screen_image(snapshot, now) if renderer.screen is not None else None
+        told: dict[str, Any] = {"moving": renderer.moving, "warnings": _warnings(renderer)}
+        if image is None:
+            return {**told, "image": None}, b""
+        if image.mode not in ("RGB", "RGBA"):
+            image = image.convert("RGBA")
+        if drawing.screen is image:
+            return {**told, "same": True}, b""
+        drawing.screen = image
+        return {**told, "image": {"mode": image.mode, "size": list(image.size)}}, image.tobytes()
+
+    def draw_close(self, message: dict[str, Any], blob: bytes) -> dict[str, Any]:
+        drawing = self.drawings.pop(message["drawing"], None)
+        if drawing is not None:
+            drawing.renderer.close()
+        return {}
+
+
+class _Drawing:
+    """A renderer the Rust app draws plugins with, what it gave last, and the pictures of the
+    readings it was sent (by key: their fingerprint and picture)."""
+
+    def __init__(self, renderer: Any) -> None:
+        self.renderer = renderer
+        self.last: dict[str, Any] = {}
+        self.screen: Any = None
+        self.pictures: dict[str, tuple[Any, Any]] = {}
+        self.snapshot: Any = None
+
+    def begin(self, message: dict[str, Any], blob: bytes) -> tuple[Any, Any, float]:
+        """The renderer as the frame has it (its rate, video mode, readings' timing), and the
+        frame's snapshot with its pictures (those not sent before come in ``blob``)."""
+        from PIL import Image
+
+        renderer = self.renderer
+        frame = message.get("frame") or {}
+        now = float(frame.get("now", 0.0))
+        renderer.fps = int(frame.get("fps") or 0)
+        renderer.continuous = bool(frame.get("continuous"))
+        renderer.sample = tuple(frame.get("sample") or (0.0, 1.0))
+        renderer.moving = False
+        renderer.warnings = []
+        told = message.get("snapshot")
+        if told != "same" or self.snapshot is None:
+            self.snapshot = _snapshot(told if isinstance(told, dict) else {})
+        snapshot = self.snapshot
+        at, pictures = 0, {}
+        for told in message.get("pictures") or []:
+            key, mark = told["key"], told["mark"]
+            if "size" in told:
+                width, height = told["size"]
+                size = width * height * 4
+                image = Image.frombytes("RGBA", (width, height), blob[at : at + size])
+                at += size
+                self.pictures[key] = (mark, image)
+            kept = self.pictures.get(key)
+            if kept is not None and kept[0] == mark:
+                pictures[key] = kept[1]
+        for key in [k for k in self.pictures if k not in pictures]:
+            del self.pictures[key]
+        snapshot.images = pictures
+        renderer.snapshot = snapshot
+        return renderer, snapshot, now
+
+
+def _warnings(renderer: Any) -> list[str]:
+    said, renderer.warnings = list(renderer.warnings), []
+    return said
+
+
+def _piece(piece: Any, told: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
+    """A piece as its place and layers (RGBA, then the backdrop's L mask and the light's RGBA
+    where it has them), their pixels one after another."""
+    layer = piece.layer if piece.layer.mode == "RGBA" else piece.layer.convert("RGBA")
+    data = bytearray(layer.tobytes())
+    made: dict[str, Any] = {"x": piece.x, "y": piece.y, "size": list(layer.size),
+                            "box": list(piece.box) if piece.box is not None else None,
+                            "add": piece.add}  # fmt: skip
+    if piece.backdrop is not None:
+        mask = piece.backdrop.convert("L")
+        made["backdrop"] = {"size": list(mask.size), "radius": piece.backdrop_radius}
+        data += mask.tobytes()
+    if piece.light is not None:
+        light = piece.light.layer.convert("RGBA")
+        made["light"] = {"x": piece.light.x, "y": piece.light.y, "size": list(light.size),
+                         "add": piece.light.add}  # fmt: skip
+        data += light.tobytes()
+    return {**told, "piece": made}, bytes(data)
 
 
 _WANTS = type("_RustApp", (), {})()  # (who reads what the themes on show read, for want())
