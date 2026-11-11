@@ -2202,6 +2202,13 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       computer laid out in a folder, what Linux's setup would do, its JSON and removal and
       what the app shows as Python's; the app's answers and refusals as Python's; Windows'
       `--status` and refusals as Python's (CI)
+- [x] the rest of cli.py's commands: `quit` (the running app asked through its server, then
+      waited for until its process is gone, as a setup needs it), `notify` (a notice on the
+      running app's panel with the notify key), `devices` (the drivers, the serial ports with
+      what the system calls them, as pyserial's description, and the USB panels, each with
+      the models its ids may be), `udev-rules` and `location`; LibrePanel.exe, the app
+      without a console window (Windows), the tray app unless a command is given. The test:
+      a notice shown and the app quit with cli.py's words, both refused without a running app
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app
 - [x] one Libre Panel at a panel (instance.py): the system's lock on libre-panel.lock in the

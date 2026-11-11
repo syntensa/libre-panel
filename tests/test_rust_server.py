@@ -581,6 +581,50 @@ def test_one_libre_panel_drives_the_panel_and_a_second_start_names_the_first(
     assert lock == str(program.pid)
 
 
+def test_a_notice_is_sent_and_libre_panel_quits_as_cli_py_does_it(tmp_path: Path) -> None:
+    """cli.py's `notify` and `quit`: a notice sent with the notify key is shown on the panel of
+    the running app, and `quit` ends the app (its process gone) with the words cli.py has;
+    without a running app both say so. `udev-rules` and `devices` say what cli.py says."""
+    (tmp_path / "config.toml").write_text(
+        'theme = "slate"\nfps = 2\nlanguage = "en"\nallow_notify = true\n[device]\n'
+        'driver = "virtual"\noutput = "panel.png"\n[sensors]\nproviders = []\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "notify.json").write_text('{"key": "a-key-of-the-tests"}', encoding="utf-8")
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries()}  # fmt: skip
+
+    def ours(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run([str(_program()), *args], env=env, capture_output=True,
+                              encoding="utf-8", timeout=60)  # fmt: skip
+
+    alone = ours("quit"), ours("notify", "Hello")
+    with subprocess.Popen([str(_program()), "start", "--port", "0", "--no-browser"], env=env,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        try:
+            assert program.stdout is not None
+            program.stdout.readline()  # (its address: the app's server runs)
+            shown = ours("notify", "Hello", "--title", "Build", "--seconds", "2")
+            wrong = ours("notify", "Hello", "--level", "loud")
+            quit = ours("quit")
+            program.communicate(timeout=30)
+        finally:
+            if program.poll() is None:
+                program.kill()
+    not_running = i18n.t("Libre Panel is not running.") + "\n"
+    assert alone[0].returncode == 0 and alone[0].stdout == not_running, alone[0]
+    assert alone[1].returncode == 1 and alone[1].stderr == not_running, alone[1]
+    assert shown.returncode == 0, shown
+    assert wrong.returncode != 0 and "invalid choice: 'loud'" in wrong.stderr, wrong
+    assert quit.returncode == 0 and quit.stdout == i18n.t("Libre Panel has quit.") + "\n", quit
+    assert program.returncode is not None
+    rules = (DATA / "assets" / "60-libre-panel.rules").read_text(encoding="utf-8")
+    assert ours("udev-rules").stdout == rules
+    listed = ours("devices")
+    assert listed.returncode == 0 and listed.stdout.startswith("drivers: auto, turzx, virtual\n")
+
+
 class _Item:
     """pystray's MenuItem as tray.py makes it: what the tests read of it."""
 

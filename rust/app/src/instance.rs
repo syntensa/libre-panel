@@ -66,7 +66,6 @@ impl InstanceLock {
     }
 
     /// _instance_running: whether another Libre Panel holds the lock now.
-    #[allow(dead_code)] // (for `notify` and `quit`, which come with the window)
     pub fn held_elsewhere(settings: &Path) -> bool {
         matches!(InstanceLock::acquire(settings), Err(NotLocked::Running(_)))
     }

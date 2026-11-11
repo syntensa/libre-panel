@@ -16,6 +16,8 @@ pub struct PortInfo {
     pub vid: Option<u16>,
     pub pid: Option<u16>,
     pub serial_number: Option<String>,
+    /// what the system calls it (pyserial's description: "n/a" where it says nothing)
+    pub description: String,
 }
 
 /// An open serial port.
@@ -398,6 +400,7 @@ mod imp {
                     vid: None,
                     pid: None,
                     serial_number: None,
+                    description: "n/a".to_string(),
                 });
                 continue;
             };
@@ -417,11 +420,29 @@ mod imp {
             if subsystem.as_deref() == Some("platform") {
                 continue; // (pyserial leaves out the board's own, which may not be there)
             }
+            // (pyserial's read_line: the first line, stripped)
+            let text = |path: std::path::PathBuf| line(&path).map(|s| s.trim().to_string());
+            let description = match subsystem.as_deref() {
+                Some("usb") | Some("usb-serial") => {
+                    let product = usb.and_then(|u| text(u.join("product")));
+                    let interface = interface.as_ref().and_then(|i| text(i.join("interface")));
+                    match (product, interface) {
+                        (product, Some(interface)) => {
+                            format!("{} - {interface}", product.as_deref().unwrap_or("None"))
+                        }
+                        (Some(product), None) => product,
+                        (None, None) => name.clone(),
+                    }
+                }
+                Some("pnp") | Some("amba") => name.clone(),
+                _ => "n/a".to_string(),
+            };
             found.push(PortInfo {
                 device: format!("/dev/{name}"),
                 vid: id("idVendor"),
                 pid: id("idProduct"),
                 serial_number: usb.and_then(|u| line(&u.join("serial"))),
+                description,
             });
         }
         found
@@ -440,8 +461,8 @@ mod imp {
     };
     use windows_sys::Win32::Devices::DeviceAndDriverInstallation::{
         SetupDiDestroyDeviceInfoList, SetupDiEnumDeviceInfo, SetupDiGetClassDevsW,
-        SetupDiGetDeviceInstanceIdW, SetupDiOpenDevRegKey, DICS_FLAG_GLOBAL, DIGCF_PRESENT,
-        DIREG_DEV, SP_DEVINFO_DATA,
+        SetupDiGetDeviceInstanceIdW, SetupDiGetDeviceRegistryPropertyW, SetupDiOpenDevRegKey,
+        DICS_FLAG_GLOBAL, DIGCF_PRESENT, DIREG_DEV, SPDRP_FRIENDLYNAME, SP_DEVINFO_DATA,
     };
     use windows_sys::Win32::Foundation::{
         CloseHandle, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE,
@@ -731,11 +752,32 @@ mod imp {
                     String::new()
                 };
                 let (vid, pid, serial_number) = ids_of(&instance);
+                // (pyserial's description: the device's friendly name)
+                let mut friendly = [0u16; 256];
+                let description = if SetupDiGetDeviceRegistryPropertyW(
+                    set,
+                    &info,
+                    SPDRP_FRIENDLYNAME,
+                    null_mut(),
+                    friendly.as_mut_ptr().cast(),
+                    (friendly.len() * 2) as u32,
+                    null_mut(),
+                ) != 0
+                {
+                    let end = friendly
+                        .iter()
+                        .position(|&c| c == 0)
+                        .unwrap_or(friendly.len());
+                    String::from_utf16_lossy(&friendly[..end])
+                } else {
+                    "n/a".to_string()
+                };
                 found.push(PortInfo {
                     device,
                     vid,
                     pid,
                     serial_number,
+                    description,
                 });
             }
             SetupDiDestroyDeviceInfoList(set);

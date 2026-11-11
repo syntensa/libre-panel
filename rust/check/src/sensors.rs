@@ -2902,6 +2902,7 @@ fn ports(case: &Value) -> Result<Value, String> {
                 vid: port[1].as_u64().map(|n| n as u16),
                 pid: port[2].as_u64().map(|n| n as u16),
                 serial_number: port[3].as_str().map(str::to_string),
+                description: "n/a".to_string(),
             })
             .collect();
         let model = case["model"]

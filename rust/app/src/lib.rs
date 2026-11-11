@@ -10,6 +10,7 @@ mod background;
 mod backup;
 mod beside;
 mod capture;
+mod client;
 mod colour_show;
 mod colours;
 mod community;
@@ -101,6 +102,12 @@ Libre Panel
                                 Linux the panel's access, the fan chip's driver and, with
                                 --rapl, the processor's power (--linux, --dry-run, --json)
   libre-panel config            where config.toml is, and whether it is right
+  libre-panel quit [--timeout S]  quit the running app (and wait until it is gone)
+  libre-panel notify TEXT [--title T] [--seconds S] [--icon NAME] [--level info|warning|error]
+                                a notice on the panel of the running app
+  libre-panel devices           the drivers, serial ports and USB panels there are
+  libre-panel udev-rules        the Linux udev rule for the panels' access
+  libre-panel location NAME     latitude and longitude for the weather
   libre-panel version
 
 Options:
@@ -365,6 +372,11 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
             MainLoop::new(home, asked)?.run(&STOP, &|| mainloop::Ending::Quit);
         }
         "system-setup" => std::process::exit(i32::from(system_setup_command(args)?)),
+        "quit" => std::process::exit(quit_command(args)?),
+        "notify" => std::process::exit(notify_command(args)?),
+        "devices" => devices_command(),
+        "udev-rules" => print!("{}", linux_setup::udev_rules_text()),
+        "location" => std::process::exit(location_command(args)?),
         "doctor" => {
             // libre-panel doctor [--report FILE] [--no-questions] [--frames N] [--config FILE]
             let (mut report, mut questions, mut frames, mut config) = (None, true, 20, None);
@@ -657,6 +669,286 @@ fn t_with(text: &str, values: &[(&str, &str)]) -> String {
         .map(|(name, value)| (*name, lp_py::Value::Str((*value).to_string())))
         .collect();
     lp_i18n::t_format(text, &values).unwrap_or_else(|why| why.msg)
+}
+
+/// running_instance: what the running app wrote about itself (its server's address, its
+/// process), where it did.
+fn running_instance(settings: &std::path::Path) -> lp_py::Dict {
+    let text = std::fs::read_to_string(settings.join("instance.json")).unwrap_or_default();
+    match lp_py::json::loads(&text) {
+        Ok(lp_py::Value::Dict(told)) => told,
+        _ => lp_py::Dict::new(),
+    }
+}
+
+/// The value after an option (`--timeout 15`); Err where there is none.
+fn option_value<'a>(
+    rest: &mut std::slice::Iter<'a, String>,
+    name: &str,
+) -> Result<&'a str, String> {
+    rest.next()
+        .map(String::as_str)
+        .ok_or_else(|| format!("{name}: expected one argument"))
+}
+
+/// `quit [--timeout S]` (cli.py's _cmd_quit): the running app asked to quit, e.g. before a
+/// setup replaces it, and waited for until its process is gone too (an uninstaller then
+/// finds no file in use).
+fn quit_command(args: &[String]) -> Result<i32, String> {
+    let mut timeout = 15.0;
+    let mut rest = args.iter();
+    while let Some(arg) = rest.next() {
+        match arg.as_str() {
+            "--timeout" => {
+                let value = option_value(&mut rest, "--timeout")?;
+                timeout = value
+                    .parse::<f64>()
+                    .map_err(|_| format!("--timeout: invalid float value: '{value}'"))?;
+            }
+            other => return Err(format!("quit: unrecognized argument {other}")),
+        }
+    }
+    let home = Home::find()?;
+    let settings = &home.settings;
+    if !instance::InstanceLock::held_elsewhere(settings) {
+        println!("{}", lp_i18n::t("Libre Panel is not running."));
+        return Ok(0);
+    }
+    let info = running_instance(settings);
+    let pid = match info.get("pid") {
+        Some(lp_py::Value::Int(pid)) => i64::try_from(pid).ok(),
+        _ => None,
+    };
+    if let Some(lp_py::Value::Str(url)) = info.get("editor") {
+        let port = url
+            .rsplit(':')
+            .next()
+            .and_then(|rest| rest.trim_end_matches('/').parse::<u16>().ok());
+        let token = access::read_token(settings, port);
+        let headers = [(access::HEADER, token.as_deref().unwrap_or(""))];
+        let body = br#"{"action": "quit"}"#;
+        if let Err(why) = client::post(url, "/api/app", &headers, body, 5.0) {
+            let missing = if token.is_some() {
+                ""
+            } else {
+                " (no access token to send)"
+            };
+            logs::say(
+                "libre_panel",
+                &format!("quit request failed: {why}{missing}"),
+            );
+        }
+    }
+    let own = i64::from(std::process::id());
+    let gone = || {
+        !instance::InstanceLock::held_elsewhere(settings)
+            && !pid.is_some_and(|pid| pid != own && access::pid_exists(pid) && !ended(pid))
+    };
+    let until = std::time::Instant::now() + std::time::Duration::from_secs_f64(timeout.max(0.0));
+    while std::time::Instant::now() < until {
+        if gone() {
+            println!("{}", lp_i18n::t("Libre Panel has quit."));
+            return Ok(0);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    eprintln!(
+        "{}",
+        lp_i18n::t("Libre Panel did not quit (it may run in a terminal).")
+    );
+    Ok(1)
+}
+
+/// ended: whether the process `pid` has ended and only waits for its parent to hear of it (a
+/// zombie, Linux): its files are no longer in use.
+fn ended(pid: i64) -> bool {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).unwrap_or_default();
+    // (the state after the program's name in brackets, which may hold spaces)
+    stat.rsplit_once(')')
+        .and_then(|(_, rest)| rest.split_whitespace().next())
+        == Some("Z")
+}
+
+/// `notify TEXT [--title T] [--seconds S] [--icon NAME] [--level info|warning|error]`
+/// (cli.py's _cmd_notify): a notice on the panel of the running app, e.g. at the end of a
+/// script.
+fn notify_command(args: &[String]) -> Result<i32, String> {
+    let (mut text, mut title, mut seconds, mut icon, mut level) =
+        (None, String::new(), 5.0, String::new(), "info".to_string());
+    let mut rest = args.iter();
+    while let Some(arg) = rest.next() {
+        match arg.as_str() {
+            "--title" => title = option_value(&mut rest, "--title")?.to_string(),
+            "--icon" => icon = option_value(&mut rest, "--icon")?.to_string(),
+            "--seconds" => {
+                let value = option_value(&mut rest, "--seconds")?;
+                seconds = value
+                    .parse::<f64>()
+                    .map_err(|_| format!("--seconds: invalid float value: '{value}'"))?;
+            }
+            "--level" => {
+                let value = option_value(&mut rest, "--level")?;
+                if !["info", "warning", "error"].contains(&value) {
+                    return Err(format!(
+                        "--level: invalid choice: '{value}' (choose from 'info', 'warning', \
+                         'error')"
+                    ));
+                }
+                level = value.to_string();
+            }
+            other if text.is_none() && !other.starts_with("--") => text = Some(other.to_string()),
+            other => return Err(format!("notify: unrecognized argument {other}")),
+        }
+    }
+    let text = text.ok_or("notify: the following arguments are required: text")?;
+    let home = Home::find()?;
+    let url = match instance::InstanceLock::held_elsewhere(&home.settings) {
+        true => match running_instance(&home.settings).get("editor") {
+            Some(lp_py::Value::Str(url)) if !url.is_empty() => Some(url.clone()),
+            _ => None,
+        },
+        false => None,
+    };
+    let Some(url) = url else {
+        eprintln!("{}", lp_i18n::t("Libre Panel is not running."));
+        return Ok(1);
+    };
+    let mut body = lp_py::Dict::new();
+    body.insert("text".into(), lp_py::Value::Str(text));
+    body.insert("seconds".into(), lp_py::Value::Float(seconds));
+    body.insert("level".into(), lp_py::Value::Str(level));
+    if !title.is_empty() {
+        body.insert("title".into(), lp_py::Value::Str(title));
+    }
+    if !icon.is_empty() {
+        body.insert("icon".into(), lp_py::Value::Str(icon));
+    }
+    let body = lp_py::json::dumps(&lp_py::Value::Dict(body), &lp_py::json::Dumps::default());
+    let key = notify::read_key();
+    let headers = [(notify::HEADER, key.as_str())];
+    let (status, answer) = match client::post(&url, "/api/notify", &headers, body.as_bytes(), 10.0)
+    {
+        Ok(answered) => answered,
+        Err(why) => {
+            eprintln!("{why}");
+            return Ok(1);
+        }
+    };
+    let answer = lp_py::json::loads(&String::from_utf8_lossy(&answer)).ok();
+    let field = |name: &str| match &answer {
+        Some(lp_py::Value::Dict(answer)) => answer.get(name).cloned(),
+        _ => None,
+    };
+    if status >= 400 {
+        let said = match field("error") {
+            Some(error) if error.truthy() => error.str(),
+            _ => format!("HTTP Error {status}"),
+        };
+        eprintln!("{said}");
+        return Ok(1);
+    }
+    if !field("shown").is_some_and(|shown| shown.truthy()) {
+        let why = match field("reason") {
+            Some(reason) if reason.truthy() => reason.str(),
+            _ => "?".to_string(),
+        };
+        eprintln!("{}", t_with("Not shown: {why}.", &[("why", &why)]));
+        return Ok(2);
+    }
+    Ok(0)
+}
+
+/// " -> model / model" where the ids are a panel's the catalogue knows (cli.py's
+/// _describe_candidates).
+fn candidates(vid: Option<u16>, pid: Option<u16>, serial: Option<&str>) -> String {
+    let Some((vid, pid)) = vid.zip(pid) else {
+        return String::new();
+    };
+    let found = lp_devices::models::models_for_usb(vid, pid, serial);
+    if found.is_empty() {
+        return String::new();
+    }
+    let ids: Vec<&str> = found.iter().map(|model| model.id).collect();
+    format!("  -> {}", ids.join(" / "))
+}
+
+/// `devices` (cli.py's _cmd_devices): the drivers, and the serial ports and USB panels there
+/// are, each with the panels its ids may be.
+fn devices_command() {
+    println!("drivers: auto, turzx, virtual");
+    let ports = lp_devices::serial::ports();
+    for port in &ports {
+        let ids = match port.vid.zip(port.pid) {
+            Some((vid, pid)) => format!("{vid:04x}:{pid:04x}"),
+            _ => "----:----".to_string(),
+        };
+        let serial = port.serial_number.as_deref();
+        println!(
+            "{:<16} {ids}  {}  serial={}{}",
+            port.device,
+            port.description,
+            serial.unwrap_or("None"),
+            candidates(port.vid, port.pid, serial)
+        );
+    }
+    // (list_usb_devices: the plain USB panels by their makers' ids, and the catalogue's other
+    // USB screens by their own)
+    const VENDORS: [u16; 3] = [0x1CBE, 0x43A8, 0x345F];
+    let mut products: Vec<(u16, u16)> = lp_devices::models::MODELS
+        .iter()
+        .filter(|model| model.protocol.starts_with("usb"))
+        .flat_map(|model| model.usb_ids.iter().copied())
+        .filter(|(vid, _)| !VENDORS.contains(vid))
+        .collect();
+    products.sort_unstable();
+    products.dedup();
+    let present = lp_devices::usb::all_ids();
+    let mut usb = Vec::new();
+    for vendor in VENDORS {
+        usb.extend(present.iter().filter(|(vid, _)| *vid == vendor));
+    }
+    for ids in &products {
+        usb.extend(present.iter().filter(|found| *found == ids));
+    }
+    for (vid, pid) in &usb {
+        println!(
+            "{:<16} {vid:04x}:{pid:04x}{}",
+            "usb",
+            candidates(Some(*vid), Some(*pid), None)
+        );
+    }
+    if ports.is_empty() && usb.is_empty() {
+        println!("no panels found");
+    }
+}
+
+/// `location NAME` (cli.py's _cmd_location): latitude and longitude of the places of that
+/// name, for `[weather]`.
+fn location_command(args: &[String]) -> Result<i32, String> {
+    let [name] = args else {
+        return Err("location: the following arguments are required: name".into());
+    };
+    let agent = format!("libre-panel/{}", lp_py::VERSION);
+    let found = lp_sensors::weather::geocode(name, 5, "en", &agent)?;
+    if found.is_empty() {
+        println!("no matches");
+        return Ok(1);
+    }
+    for place in found {
+        let parts: Vec<&str> = [&place.name, &place.region, &place.country]
+            .into_iter()
+            .map(String::as_str)
+            .filter(|part| !part.is_empty())
+            .collect();
+        println!(
+            "{}\n  latitude = {}\n  longitude = {}",
+            parts.join(", "),
+            lp_py::format::str_of(&place.latitude),
+            lp_py::format::str_of(&place.longitude)
+        );
+    }
+    println!("\nWeather data by Open-Meteo.com (CC BY 4.0)");
+    Ok(0)
 }
 
 /// `autostart enable|disable|status [--elevated]` (cli.py's _cmd_autostart).
