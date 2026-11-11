@@ -55,6 +55,8 @@ pub struct State {
     updates: crate::updates::Updates,
     /// the pictures of the themes kept (previews.rs)
     previews: crate::previews::Previews,
+    /// the start screen's pictures and files kept (start_screen.rs)
+    start_screen: crate::start_screen::Kept,
     /// the port the server listens on (what the AI hooks call)
     port: u16,
 }
@@ -350,6 +352,15 @@ const ROUTES: &[Route] = &[
     }),
     private("GET", "/api/tray/icon", |s, x, _, u| {
         tray_icon(s, x, &u.query)
+    }),
+    private("GET", "/api/start-screen", |s, x, _, u| {
+        start_screen_state(s, x, &u.query)
+    }),
+    private("GET", "/api/start-screen/picture", |s, x, _, u| {
+        start_screen_picture(s, x, &u.query)
+    }),
+    private("GET", "/api/start-screen/file", |s, x, _, u| {
+        start_screen_file(s, x, &u.query)
     }),
     private("GET", "/api/hardware", |s, x, _, u| {
         // (`?refresh=1`, and `?refresh`: ask the computer for its parts' names again)
@@ -1765,6 +1776,173 @@ fn experiment_action(state: &State, exchange: &mut Exchange) {
     exchange.json(&run.state(), 200);
 }
 
+/// _whole_of: a whole number of the query (`?panel=1`); 0 where it is none.
+fn whole_of(query: &indexmap::IndexMap<String, Vec<String>>, name: &str) -> i64 {
+    let raw = query
+        .get(name)
+        .and_then(|v| v.first())
+        .map_or("", String::as_str);
+    if !raw.is_empty() && raw.bytes().all(|b| b.is_ascii_digit()) {
+        raw.parse().unwrap_or(i64::MAX)
+    } else {
+        0
+    }
+}
+
+/// _panel_at: panel `n` (0: the one [device] names, 1: the first of [[panels]] ...): its
+/// device, and where its loop finds it on the bus (the models it is set beside, and how many
+/// panels before it name the same); None past the last.
+fn panel_at(config: &lp_config::Config, n: i64) -> Option<(lp_config::DeviceConfig, usize)> {
+    let device = match n {
+        0 => config.device.clone(),
+        _ if n >= 1 && (n as usize) <= config.panels.len() => {
+            config.for_panel(n as usize - 1)?.device
+        }
+        _ => return None,
+    };
+    let models: Vec<&str> = std::iter::once(config.device.model.as_str())
+        .chain(
+            config
+                .panels
+                .iter()
+                .map(|panel| panel.device.model.as_str()),
+        )
+        .collect();
+    let skip = models[..n as usize]
+        .iter()
+        .filter(|model| **model == device.model)
+        .count();
+    Some((device, skip))
+}
+
+/// The config and panel `n` of it (None where either is not there).
+fn start_screen_place(state: &State, n: i64) -> Option<(lp_config::DeviceConfig, usize)> {
+    let config = lp_config::load_config(&state.config_file, lp_config::platform()).ok()?;
+    panel_at(&config, n)
+}
+
+/// _mounted: how panel `n` is mounted, for its own screens: "portrait" for a bar on end.
+fn mounted(state: &State, n: i64) -> &'static str {
+    match start_screen_place(state, n) {
+        Some((device, _)) if device.orientation == "portrait" => "portrait",
+        _ => "landscape",
+    }
+}
+
+/// `GET /api/start-screen?panel=n`: the TURZX USB panels whose boot logo and standby clip
+/// Libre Panel makes, and the one at hand: as config.toml names it, else as found on the USB
+/// bus where it is (_start_screen).
+fn start_screen_state(state: &State, exchange: &mut Exchange, query: &str) {
+    let asked = crate::http::parse_qs(query);
+    let n = whole_of(&asked, "panel");
+    let place = start_screen_place(state, n);
+    let way = match &place {
+        Some((device, _)) if device.orientation == "portrait" => "portrait",
+        _ => "landscape",
+    };
+    let (configured, beside, skip) = match place {
+        Some((device, skip)) => (device.model, device.beside, skip),
+        None => (String::new(), Vec::new(), 0), // (DeviceConfig(), FIRST)
+    };
+    let configured = crate::start_screen::model_of(&configured).map(|model| model.id);
+    let model = configured.or_else(|| {
+        lp_devices::usb::present_model(&beside, skip)
+            .and_then(|found| crate::start_screen::model_of(found.id))
+            .map(|model| model.id)
+    });
+    let told = crate::start_screen::Told {
+        panel: n,
+        orientation: way,
+        model,
+        runs_panel: state.controls.upgrade().is_some(),
+    };
+    exchange.json(&crate::start_screen::state(&told), 200);
+}
+
+/// What `?model=...&what=logo|clip&design=...` name: the panel, what of it and the look.
+fn start_screen_asked(
+    asked: &indexmap::IndexMap<String, Vec<String>>,
+) -> Option<(
+    &'static lp_devices::models::PanelModel,
+    String,
+    &'static str,
+)> {
+    let first = |key: &str| asked.get(key).and_then(|v| v.first()).cloned();
+    let model = crate::start_screen::model_of(&first("model").unwrap_or_default());
+    let what = first("what").unwrap_or_else(|| "logo".into());
+    let design = crate::start_screen::design_of(&first("design").unwrap_or_default());
+    match (model, design) {
+        (Some(model), Some(design)) if what == "logo" || what == "clip" => {
+            Some((model, what, design))
+        }
+        _ => None,
+    }
+}
+
+/// `GET /api/start-screen/picture?model=...&what=logo|clip&w=960&design=...`: the boot logo
+/// (PNG) or the standby clip (an animated WebP) in a look as the app shows them.
+fn start_screen_picture(state: &State, exchange: &mut Exchange, query: &str) {
+    let asked = crate::http::parse_qs(query);
+    let Some((model, what, design)) = start_screen_asked(&asked) else {
+        return exchange.error("unknown panel, picture or look", 404, "");
+    };
+    let width = asked
+        .get("w")
+        .and_then(|v| v.first())
+        .map_or(Some(960), |w| w.trim().parse::<i64>().ok())
+        .map_or(960, |w| w.clamp(120, 1920));
+    let way = mounted(state, whole_of(&asked, "panel"));
+    let env = lp_theme::Env {
+        fonts_dir: state.home.fonts(),
+    };
+    match state
+        .start_screen
+        .preview(&env, model, &what, width, way, design)
+    {
+        Ok(picture) => {
+            let kind = crate::start_screen::picture_type(&picture);
+            exchange.send(200, &picture, kind, "")
+        }
+        Err(why) => exchange.error(&why, 500, ""),
+    }
+}
+
+/// `GET /api/start-screen/file?model=...&what=logo|clip&design=...&panel=n`: the boot logo's
+/// JPEG or the standby clip (H.264) as the panel takes them, to keep: the clip in the range
+/// of values panel `n` gets its video in.
+fn start_screen_file(state: &State, exchange: &mut Exchange, query: &str) {
+    let asked = crate::http::parse_qs(query);
+    let Some((model, what, design)) = start_screen_asked(&asked) else {
+        return exchange.error("unknown panel, file or look", 404, "");
+    };
+    let n = whole_of(&asked, "panel");
+    let place = start_screen_place(state, n);
+    let video_range = place
+        .as_ref()
+        .map_or("auto", |(device, _)| device.video_range.as_str());
+    let full = lp_devices::turzx::full_range(video_range, Some(model));
+    let way = match &place {
+        Some((device, _)) if device.orientation == "portrait" => "portrait",
+        _ => "landscape",
+    };
+    let env = lp_theme::Env {
+        fonts_dir: state.home.fonts(),
+    };
+    match state
+        .start_screen
+        .file(&env, model, &what, way, design, full)
+    {
+        Ok(data) => {
+            let (name, kind) = match what.as_str() {
+                "logo" => ("boot.jpg", "image/jpeg"),
+                _ => ("standby.h264", "application/octet-stream"),
+            };
+            exchange.send(200, &data, kind, &format!("{}-{name}", model.id))
+        }
+        Err(why) => exchange.error(&why, 409, ""),
+    }
+}
+
 /// `GET /api/tray/icon?state=showing&size=32`: the app's icon with the dot for how the panel is
 /// doing, as a PNG (branding.logo).
 fn tray_icon(state: &State, exchange: &mut Exchange, query: &str) {
@@ -1920,6 +2098,7 @@ impl EditorServer {
                 news,
                 updates,
                 previews: crate::previews::Previews::default(),
+                start_screen: crate::start_screen::Kept::default(),
             }),
             listener: Some(listener),
             stop: Arc::default(),

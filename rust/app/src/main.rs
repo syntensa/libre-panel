@@ -41,6 +41,7 @@ mod services;
 mod settings;
 mod share;
 mod specs;
+mod start_screen;
 mod switch;
 mod system;
 mod tray;

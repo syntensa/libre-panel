@@ -304,3 +304,278 @@ pub(crate) fn each_frame(
     })
     .map(|_| ())
 }
+
+// -- writing an animation -----------------------------------------------------------------------
+
+/// encode.h's and mux.h's interface versions (their major byte must match the library's).
+const ENCODER_ABI: c_int = 0x0210;
+const MUX_ABI: c_int = 0x0109;
+
+#[repr(C)]
+struct Config {
+    lossless: c_int,
+    quality: f32,
+    method: c_int,
+    image_hint: c_int,
+    target_size: c_int,
+    target_psnr: f32,
+    /// segments, sns_strength, filter_strength, filter_sharpness, filter_type, autofilter,
+    /// alpha_compression, alpha_filtering
+    filters: [c_int; 8],
+    alpha_quality: c_int,
+    /// pass ... qmax
+    rest: [c_int; 14],
+}
+
+#[repr(C)]
+struct WebPPicture {
+    use_argb: c_int,
+    colorspace: c_int,
+    width: c_int,
+    height: c_int,
+    y: *mut u8,
+    u: *mut u8,
+    v: *mut u8,
+    y_stride: c_int,
+    uv_stride: c_int,
+    a: *mut u8,
+    a_stride: c_int,
+    pad1: [u32; 2],
+    argb: *mut u32,
+    argb_stride: c_int,
+    pad2: [u32; 3],
+    writer: *mut c_void,
+    custom_ptr: *mut c_void,
+    extra_info_type: c_int,
+    extra_info: *mut u8,
+    stats: *mut c_void,
+    error_code: c_int,
+    progress_hook: *mut c_void,
+    user_data: *mut c_void,
+    pad3: [u32; 3],
+    pad4: *mut u8,
+    pad5: *mut u8,
+    pad6: [u32; 8],
+    memory: *mut c_void,
+    memory_argb: *mut c_void,
+    pad7: [*mut c_void; 2],
+}
+
+#[repr(C)]
+struct AnimOptions {
+    bgcolor: u32,
+    loop_count: c_int,
+    minimize_size: c_int,
+    kmin: c_int,
+    kmax: c_int,
+    allow_mixed: c_int,
+    verbose: c_int,
+    padding: [u32; 4],
+}
+
+#[repr(C)]
+struct OutData {
+    bytes: *mut u8,
+    size: usize,
+}
+
+struct EncLib {
+    _webp: libloading::Library,
+    _mux: libloading::Library,
+    config_init: unsafe extern "C" fn(*mut Config, c_int, f32, c_int) -> c_int,
+    validate: unsafe extern "C" fn(*const Config) -> c_int,
+    picture_init: unsafe extern "C" fn(*mut WebPPicture, c_int) -> c_int,
+    picture_alloc: unsafe extern "C" fn(*mut WebPPicture) -> c_int,
+    picture_free: unsafe extern "C" fn(*mut WebPPicture),
+    free: unsafe extern "C" fn(*mut c_void),
+    options_init: unsafe extern "C" fn(*mut AnimOptions, c_int) -> c_int,
+    new: unsafe extern "C" fn(c_int, c_int, *const AnimOptions, c_int) -> *mut c_void,
+    add: unsafe extern "C" fn(*mut c_void, *mut WebPPicture, c_int, *const Config) -> c_int,
+    assemble: unsafe extern "C" fn(*mut c_void, *mut OutData) -> c_int,
+    error: unsafe extern "C" fn(*mut c_void) -> *const std::ffi::c_char,
+    delete: unsafe extern "C" fn(*mut c_void),
+}
+
+static ENC: OnceLock<std::result::Result<EncLib, String>> = OnceLock::new();
+
+fn load_encoder() -> std::result::Result<EncLib, String> {
+    let webp = match std::env::var("LP_LIBWEBP") {
+        Ok(path) => open(&path)?,
+        Err(_) => first(&["libwebp.so.7", "libwebp.dll", "libwebp.7.dylib"])?,
+    };
+    let mux = match std::env::var("LP_LIBWEBPMUX") {
+        Ok(path) => open(&path)?,
+        Err(_) => first(&["libwebpmux.so.3", "libwebpmux.dll", "libwebpmux.3.dylib"])?,
+    };
+    macro_rules! get {
+        ($lib:expr, $name:literal) => {
+            // SAFETY: the symbol is libwebp's function of that name and type
+            *unsafe { $lib.get(concat!($name, "\0").as_bytes()) }.map_err(|e| e.to_string())?
+        };
+    }
+    Ok(EncLib {
+        config_init: get!(webp, "WebPConfigInitInternal"),
+        validate: get!(webp, "WebPValidateConfig"),
+        picture_init: get!(webp, "WebPPictureInitInternal"),
+        picture_alloc: get!(webp, "WebPPictureAlloc"),
+        picture_free: get!(webp, "WebPPictureFree"),
+        free: get!(webp, "WebPFree"),
+        options_init: get!(mux, "WebPAnimEncoderOptionsInitInternal"),
+        new: get!(mux, "WebPAnimEncoderNewInternal"),
+        add: get!(mux, "WebPAnimEncoderAdd"),
+        assemble: get!(mux, "WebPAnimEncoderAssemble"),
+        error: get!(mux, "WebPAnimEncoderGetError"),
+        delete: get!(mux, "WebPAnimEncoderDelete"),
+        _webp: webp,
+        _mux: mux,
+    })
+}
+
+/// The encoder made by WebPAnimEncoderNew and the picture it is handed, freed once.
+struct Encoder<'a> {
+    lib: &'a EncLib,
+    enc: *mut c_void,
+    frame: WebPPicture,
+}
+
+impl Drop for Encoder<'_> {
+    fn drop(&mut self) {
+        // SAFETY: both made below, freed once
+        unsafe {
+            (self.lib.picture_free)(&mut self.frame);
+            (self.lib.delete)(self.enc);
+        }
+    }
+}
+
+impl Encoder<'_> {
+    fn failed(&self) -> Error {
+        // SAFETY: a live encoder; its message is a C string of its own
+        let said = unsafe { std::ffi::CStr::from_ptr((self.lib.error)(self.enc)) };
+        Error::new(Raised::OSError, said.to_string_lossy().into_owned())
+    }
+}
+
+/// `frames[0].save(fp, "WEBP", save_all=True, append_images=frames[1:], loop=loop_count,
+/// duration=duration, quality=quality, method=method)` as Pillow 13.0 writes an animation of
+/// more than one picture (WebPImagePlugin._save_all, _webp.c): libwebp's animation encoder
+/// with Pillow's defaults (a clear background, no minimising, key frames 3 to 5 apart, lossy,
+/// no mixing, alpha at 100), each picture handed over as ARGB (RGB and RGBX opaque), the
+/// last one's length by an empty picture at the end; no ICC, EXIF or XMP.
+pub fn save_animation(
+    frames: &[lp_pixels::Image],
+    duration: i64,
+    loop_count: i32,
+    quality: f32,
+    method: i32,
+) -> Result<Vec<u8>> {
+    let Some(first_frame) = frames.first() else {
+        return raise(Raised::ValueError, "no pictures to write");
+    };
+    let (width, height) = first_frame.size();
+    let lib = ENC
+        .get_or_init(load_encoder)
+        .as_ref()
+        .map_err(|e| Error::new(Raised::Unported, format!("libwebp: {e}")))?;
+    // SAFETY: zeroed structures are filled in by libwebp's own initialisers before use
+    let mut options: AnimOptions = unsafe { std::mem::zeroed() };
+    if unsafe { (lib.options_init)(&mut options, MUX_ABI) } == 0 {
+        return raise(Raised::OSError, "failed to initialize encoder options");
+    }
+    options.bgcolor = 0;
+    options.loop_count = loop_count;
+    options.minimize_size = 0;
+    options.kmin = 3;
+    options.kmax = 5;
+    options.allow_mixed = 0;
+    options.verbose = 0;
+    let (w, h) = (
+        c_int::try_from(width).unwrap_or(0),
+        c_int::try_from(height).unwrap_or(0),
+    );
+    if w <= 0 || h <= 0 {
+        return raise(Raised::ValueError, "invalid canvas dimensions");
+    }
+    // SAFETY: as above
+    let mut frame: WebPPicture = unsafe { std::mem::zeroed() };
+    if unsafe { (lib.picture_init)(&mut frame, ENCODER_ABI) } == 0 {
+        return raise(Raised::OSError, "could not create encoder object");
+    }
+    // SAFETY: options set up by its initialiser
+    let enc = unsafe { (lib.new)(w, h, &options, MUX_ABI) };
+    if enc.is_null() {
+        return raise(Raised::OSError, "could not create encoder object");
+    }
+    let mut encoder = Encoder { lib, enc, frame };
+    let mut timestamp: i64 = 0;
+    for picture in frames {
+        let mode = picture.mode();
+        let opaque = match mode {
+            lp_pixels::Mode::RGBA => false,
+            lp_pixels::Mode::RGB => true,
+            other => {
+                return raise(
+                    Raised::ValueError,
+                    format!("cannot write mode {other} as WEBP"),
+                )
+            }
+        };
+        // SAFETY: as above
+        let mut config: Config = unsafe { std::mem::zeroed() };
+        if unsafe { (lib.config_init)(&mut config, 0, 75.0, ENCODER_ABI) } == 0 {
+            return raise(Raised::OSError, "failed to initialize config!");
+        }
+        config.lossless = 0;
+        config.quality = quality;
+        config.alpha_quality = 100;
+        config.method = method;
+        if unsafe { (lib.validate)(&config) } == 0 {
+            return raise(Raised::ValueError, "invalid configuration");
+        }
+        let (pw, ph) = picture.size();
+        let frame = &mut encoder.frame;
+        frame.width = c_int::try_from(pw).unwrap_or(0);
+        frame.height = c_int::try_from(ph).unwrap_or(0);
+        frame.use_argb = 1;
+        // SAFETY: the picture set up by its initialiser; Alloc frees what it held before
+        if unsafe { (lib.picture_alloc)(frame) } == 0 {
+            return raise(Raised::OSError, "can't allocate picture frame");
+        }
+        let bands = picture.bands();
+        let data = picture.as_bytes();
+        let stride = frame.argb_stride as usize;
+        for y in 0..ph {
+            // SAFETY: Alloc made argb_stride * height pixels
+            let row = unsafe { std::slice::from_raw_parts_mut(frame.argb.add(y * stride), pw) };
+            for (x, out) in row.iter_mut().enumerate() {
+                let p = &data[(y * pw + x) * bands..];
+                let alpha = if opaque { 0xff } else { u32::from(p[3]) };
+                *out = u32::from(p[2])
+                    | (u32::from(p[1]) << 8)
+                    | (u32::from(p[0]) << 16)
+                    | (alpha << 24);
+            }
+        }
+        let at = c_int::try_from(timestamp).unwrap_or(c_int::MAX);
+        // SAFETY: a live encoder, a whole picture and a checked config
+        if unsafe { (lib.add)(encoder.enc, &mut encoder.frame, at, &config) } == 0 {
+            return Err(encoder.failed());
+        }
+        timestamp += duration;
+    }
+    let at = c_int::try_from(timestamp).unwrap_or(c_int::MAX);
+    // SAFETY: an empty picture says how long the last lasts
+    unsafe { (lib.add)(encoder.enc, std::ptr::null_mut(), at, std::ptr::null()) };
+    let mut out = OutData {
+        bytes: std::ptr::null_mut(),
+        size: 0,
+    };
+    // SAFETY: a live encoder; what it hands back is libwebp's to free
+    if unsafe { (lib.assemble)(encoder.enc, &mut out) } == 0 {
+        return Err(encoder.failed());
+    }
+    // SAFETY: `size` bytes made by libwebp, copied and then freed once
+    let file = unsafe { std::slice::from_raw_parts(out.bytes, out.size) }.to_vec();
+    unsafe { (lib.free)(out.bytes.cast()) };
+    Ok(file)
+}

@@ -347,6 +347,7 @@ jobs:
           echo "LP_LIBJPEG=$(cygpath -w "$PWD/jpeg/Release/jpeg62.dll")" >> "$GITHUB_ENV"
           echo "LP_LIBWEBP=$(cygpath -w "$PWD/webp/Release/libwebp.dll")" >> "$GITHUB_ENV"
           echo "LP_LIBWEBPDEMUX=$(cygpath -w "$PWD/webp/Release/libwebpdemux.dll")" >> "$GITHUB_ENV"
+          echo "LP_LIBWEBPMUX=$(cygpath -w "$PWD/webp/Release/libwebpmux.dll")" >> "$GITHUB_ENV"
       # Windows has no FreeType of its own and Pillow's is built into it: libre-panel.exe draws
       # its letters with this one, the version Pillow 13.0 has (the letters' comparisons with
       # Pillow do not run with it yet: docs/RUST.md, R2)
@@ -417,9 +418,9 @@ jobs:
             -o libre-panel-rust/licenses/THIRD-PARTY-RUST.txt
           cd libre-panel-rust
           export LIBRE_PANEL_HOME="$RUNNER_TEMP/try-home"
-          env -u LP_LIBJPEG -u LP_LIBWEBP -u LP_LIBWEBPDEMUX ./libre-panel.exe render --demo \
+          env -u LP_LIBJPEG -u LP_LIBWEBP -u LP_LIBWEBPDEMUX -u LP_LIBWEBPMUX ./libre-panel.exe render --demo \
             --theme lumen --output "$RUNNER_TEMP/try-lumen.png"
-          env -u LP_LIBJPEG -u LP_LIBWEBP -u LP_LIBWEBPDEMUX ./libre-panel.exe render \
+          env -u LP_LIBJPEG -u LP_LIBWEBP -u LP_LIBWEBPDEMUX -u LP_LIBWEBPMUX ./libre-panel.exe render \
             --theme terra --output "$RUNNER_TEMP/try-terra.png"
           python -c "import sys; from PIL import Image
           for name in sys.argv[1:]:

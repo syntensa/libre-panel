@@ -70,13 +70,15 @@ def pillow_libharfbuzz() -> str | None:
 
 
 def pillow_libwebp() -> dict[str, str]:
-    """libwebp and libwebpdemux as Pillow's wheel brings them, named for lp-check (none where
-    they are built into Pillow)."""
+    """libwebp, libwebpdemux and libwebpmux as Pillow's wheel brings them, named for lp-check
+    (none where they are built into Pillow)."""
     import PIL
 
     here = Path(PIL.__file__).resolve().parent
     named = {}
-    for key, stem in (("LP_LIBWEBP", "libwebp-"), ("LP_LIBWEBPDEMUX", "libwebpdemux")):
+    stems = (("LP_LIBWEBP", "libwebp-"), ("LP_LIBWEBPDEMUX", "libwebpdemux"),
+             ("LP_LIBWEBPMUX", "libwebpmux"))  # fmt: skip
+    for key, stem in stems:
         if os.environ.get(key):
             named[key] = os.environ[key]
             continue
@@ -84,7 +86,7 @@ def pillow_libwebp() -> dict[str, str]:
                  *sorted((here / ".dylibs").glob(stem + "*.dylib"))]  # fmt: skip
         if found:
             named[key] = str(found[0])
-    return named if len(named) == 2 else {}
+    return named if len(named) == len(stems) else {}
 
 
 def python_tzdata() -> str | None:

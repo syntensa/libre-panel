@@ -1075,6 +1075,17 @@ pub fn save(image: &lp_pixels::Image, quality: i64) -> Result<Vec<u8>> {
 /// as fine as the luma (4:4:4; JpegEncode.c's subsampling 0), which keeps coloured letters
 /// crisp; else as [`save`].
 pub fn save_with(image: &lp_pixels::Image, quality: i64, full_chroma: bool) -> Result<Vec<u8>> {
+    save_options(image, quality, full_chroma, false)
+}
+
+/// As [`save_with`], with `optimize=True` where `optimize`: libjpeg works out Huffman tables
+/// of the picture's own (optimize_coding), smaller, the same pixels.
+pub fn save_options(
+    image: &lp_pixels::Image,
+    quality: i64,
+    full_chroma: bool,
+    optimize: bool,
+) -> Result<Vec<u8>> {
     let (components, space) = match image.mode() {
         lp_pixels::Mode::L => (1, JCS_GRAYSCALE),
         lp_pixels::Mode::RGB => (3, JCS_RGB),
@@ -1138,7 +1149,7 @@ pub fn save_with(image: &lp_pixels::Image, quality: i64, full_chroma: bool) -> R
                 *luma.add(3) = 1;
             }
             cinfo.smoothing_factor = 0;
-            cinfo.optimize_coding = 0;
+            cinfo.optimize_coding = Boolean::from(optimize);
             cinfo.restart_interval = 0;
             cinfo.restart_in_rows = 0;
             (lib.start_compress)(&mut *cinfo, 1);

@@ -2446,3 +2446,42 @@ def test_the_built_in_pages_answer_as_pages_py_does(servers: Any) -> None:
         both(_post("/api/plugins/autopilot/settings", payload))
         both(_get("/api/plugins/autopilot/settings", WITH))
     both(_get("/api/plugins/autopilot/status", WITH))
+
+
+def _frames_of(data: bytes) -> list[bytes]:
+    """The pixels of each picture of a file, as Pillow reads them."""
+    import io
+
+    from PIL import Image, ImageSequence
+
+    with Image.open(io.BytesIO(data)) as picture:
+        return [frame.convert("RGBA").tobytes() for frame in ImageSequence.Iterator(picture)]
+
+
+def test_the_start_screen_is_told_drawn_and_made_as_server_py_does(servers: Any) -> None:
+    """Settings → Panel → Start screen (/api/start-screen): the panels, looks and names; the
+    app's pictures of the boot logo (PNG) and of the standby clip (animated WebP) and the files
+    as the panel takes them (the logo's JPEG; the clip's H.264 where ffmpeg is there), with the
+    same pixels; what is not a panel, a picture or a look refused in the same words."""
+    ask, _ = servers
+    for request in (_get("/api/start-screen", WITH), _get("/api/start-screen?panel=3", WITH)):
+        theirs, ours = ask(request)
+        assert ours[0] == theirs[0] and json.loads(ours[2]) == json.loads(theirs[2]), request
+    for path in ("picture?model=turing-9.2-usb&what=logo&w=300&design=aurora",
+                 "picture?model=turing-2.1-usb&what=clip&w=120",
+                 "file?model=turing-8.8-usb&what=logo&design=night"):  # fmt: skip
+        theirs, ours = ask(_get(f"/api/start-screen/{path}", WITH))
+        assert ours[0] == theirs[0] == "HTTP/1.0 200 OK", (path, ours[2][:200])
+        # (the same pixels; a PNG packed by another zlib may be a few bytes longer or shorter)
+        unsized = [{k: v for k, v in side[1].items() if k != "Content-Length"}
+                   for side in (ours, theirs)]  # fmt: skip
+        assert unsized[0] == unsized[1], path
+        assert _frames_of(ours[2]) == _frames_of(theirs[2]), path
+    if shutil.which("ffmpeg"):
+        theirs, ours = ask(_get("/api/start-screen/file?model=turing-2.1-usb&what=clip", WITH))
+        assert ours[0] == theirs[0] and ours[1] == theirs[1]
+        assert ours[2] == theirs[2]
+    for path in ("picture?model=nope", "picture?model=turing-9.2-usb&what=x",
+                 "picture?model=turing-9.2-usb&design=nope", "file?what=clip"):  # fmt: skip
+        theirs, ours = ask(_get(f"/api/start-screen/{path}", WITH))
+        assert ours[0] == theirs[0] and json.loads(ours[2]) == json.loads(theirs[2]), path

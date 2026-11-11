@@ -135,6 +135,10 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       Pillow's
 - [x] decoding WebP: still and animated, through libwebp's animation decoder as Pillow uses
       it (loaded as libjpeg-turbo is: LP_LIBWEBP, LP_LIBWEBPDEMUX)
+- [x] saving an animated WebP (the start screen's clip in the app): libwebp's animation
+      encoder (libwebpmux: LP_LIBWEBPMUX) set up as _webp.c sets it up, with Pillow's
+      defaults; saving JPEG with `optimize=True` (Huffman tables of the picture's own) and PNG
+      with `optimize=True` (zlib's best, the average filter tried too)
 - [x] thumbnail on a file just opened, as media.py makes a track's cover small: a JPEG drafted
       first (decoded at 1/2, 1/4 or 1/8, then resized from the box its draft gives), every
       picture resized in its file's own mode (1 and P by NEAREST, LA, CMYK, I;16), a GIF whose
@@ -2082,6 +2086,15 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       judges them (statistics.fmean through math.fsum, to the bit); the settings from before
       back when it ends or is stopped. The tests: a server without the app answers as
       Python's, and on the running app the steps, the first step written, the stop
+- [x] the start screen (`/api/start-screen`, devices/panel_files.py): the TURZX USB panels,
+      the one at hand (as config.toml names it, else as found on the bus), the looks; the
+      app's pictures (`/picture`: the boot logo as a PNG, the standby clip as an animated
+      WebP, drawn smaller, 16 kept) and the files as the panel takes them (`/file`: the
+      logo's JPEG from quality 95 down until it fits in 1 MiB, the clip's H.264 through ffmpeg
+      from crf 20 as panel_files.py steps it, one slice a picture, 4 kept); ffmpeg found as
+      devices/h264.find_ffmpeg finds it (the renderer's videos take it too). The test: both
+      servers' answers, the same pixels, the clip's H.264 byte for byte. Still to come: the
+      writing to the panel (`POST /api/start-screen`)
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app
 - [x] one Libre Panel at a panel (instance.py): the system's lock on libre-panel.lock in the

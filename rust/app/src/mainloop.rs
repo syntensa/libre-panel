@@ -958,6 +958,8 @@ impl MainLoop {
         let mut renderer =
             Renderer::new(self.dressed(&theme)?, &self.env, options).map_err(|e| e.0)?;
         renderer.place = config.weather.latitude.zip(config.weather.longitude);
+        // (videos in themes: ffmpeg found as Python's renderer finds it, else none)
+        renderer.ffmpeg = lp_devices::h264::find_ffmpeg("").ok();
         let hardware = &config.hardware;
         renderer.fan_choices = lp_render::fan::Choices {
             look: hardware.fan_look.clone(),

@@ -38,6 +38,10 @@ const DOTS: [u8; 3] = [22, 30, 40];
 pub(crate) const SS: usize = 3;
 /// The look of the panel's own screens where none is named.
 pub const DEFAULT: &str = "libre-panel";
+/// Every look, Libre Panel's own first (bootscreen.designs(): bootlooks.DESIGNS's order).
+pub const DESIGNS: [&str; 7] = [
+    DEFAULT, "aurora", "pulse", "circuit", "night", "levels", "dark",
+];
 /// The ink of the shapes on a picture of their coverage.
 pub(crate) const WHITE: [u8; 4] = [255, 0, 0, 0];
 

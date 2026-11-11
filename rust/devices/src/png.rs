@@ -28,6 +28,16 @@ pub fn encode(image: &Image) -> Result<Vec<u8>, String> {
 
 /// The PNG file of `image`, packed as `level` says.
 pub fn encode_with(image: &Image, level: Compression) -> Result<Vec<u8>, String> {
+    encode_filtered(image, level, false)
+}
+
+/// `image.save(fp, "PNG", optimize=True)`: packed as tightly as zlib packs, each row's
+/// filter chosen among the average too (ZipEncode.c's optimize).
+pub fn encode_optimized(image: &Image) -> Result<Vec<u8>, String> {
+    encode_filtered(image, Compression::best(), true)
+}
+
+fn encode_filtered(image: &Image, level: Compression, average: bool) -> Result<Vec<u8>, String> {
     let colour_type = match image.mode() {
         Mode::L => 0u8,
         Mode::RGB => 2,
@@ -45,7 +55,7 @@ pub fn encode_with(image: &Image, level: Compression) -> Result<Vec<u8>, String>
     let mut packed = ZlibEncoder::new(Vec::new(), level);
     let none = vec![0u8; row];
     let mut above: &[u8] = &none;
-    let mut filtered = [vec![0u8; row + 1], vec![0u8; row + 1], vec![0u8; row + 1]];
+    let mut filtered = [(); 4].map(|()| vec![0u8; row + 1]);
     for line in image.as_bytes().chunks(row.max(1)).take(height) {
         // (how much a row leaves: its bytes as signed ones, their sizes added)
         let weight = |bytes: &[u8]| -> u64 {
@@ -79,6 +89,23 @@ pub fn encode_with(image: &Image, level: Compression) -> Result<Vec<u8>, String>
             let left = weight(&sub[1..]);
             if left < least {
                 (least, chosen) = (left, Some(1));
+            }
+        }
+        if average && least > 0 {
+            // 3, average: of the pixel before and the one above
+            let mean = &mut filtered[3];
+            mean[0] = 3;
+            for i in 0..row {
+                let before = if i >= step {
+                    u16::from(line[i - step])
+                } else {
+                    0
+                };
+                mean[i + 1] = line[i].wrapping_sub(((before + u16::from(above[i])) / 2) as u8);
+            }
+            let left = weight(&mean[1..]);
+            if left < least {
+                (least, chosen) = (left, Some(3));
             }
         }
         if least > 0 {

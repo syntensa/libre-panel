@@ -13,7 +13,9 @@ pub use exif::orientation;
 pub use gif::Frame;
 /// A picture saved as a JPEG as Pillow saves it (the panels that take JPEGs).
 pub use jpeg::save as save_jpeg;
+pub use jpeg::save_options as save_jpeg_options;
 pub use jpeg::save_with as save_jpeg_with;
+pub use webp::save_animation as save_webp_animation;
 
 use lp_pixels::{thumbnail_size, Filter, Image, Mode};
 use std::fmt;

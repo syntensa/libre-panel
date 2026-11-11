@@ -7,6 +7,7 @@
 
 pub mod base;
 pub mod engine;
+pub mod h264;
 pub mod hongtai;
 pub mod link;
 pub mod models;
