@@ -94,6 +94,11 @@ impl PanelService {
         }
     }
 
+    /// The first panel's status (its `more` has the panels beside it).
+    pub fn status(&self) -> Arc<Mutex<RunStatus>> {
+        Arc::clone(&self.status)
+    }
+
     pub fn paused(&self) -> bool {
         self.paused.load(Ordering::Relaxed)
     }

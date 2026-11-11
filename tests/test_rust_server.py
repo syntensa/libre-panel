@@ -1535,6 +1535,74 @@ def test_starting_with_the_system_is_told_and_set_as_settings_py_does(
     assert exec_line in entries[1].read_text(encoding="utf-8").splitlines()
 
 
+def test_the_video_experiment_is_told_and_refused_as_experiment_py_does(servers: Any) -> None:
+    """Settings → Panel → Video experiment (/api/experiment) of a server without the running
+    app: the run that never ran, and a start refused (it needs the app), an action that is
+    none refused, in the same words."""
+    ask, _ = servers
+    requests = (
+        _get("/api/experiment", WITH),
+        _post("/api/experiment", {"action": "start"}),
+        _post("/api/experiment", {"action": "go"}),
+        _post("/api/experiment", []),
+    )
+    for request in requests:
+        theirs, ours = ask(request)
+        assert ours[0] == theirs[0] and json.loads(ours[2]) == json.loads(theirs[2]), request
+
+
+def test_the_video_experiment_runs_on_the_app_and_brings_the_settings_back(
+    tmp_path: Path,
+) -> None:
+    """The experiment on the running app: its steps as experiment.py makes them (the card's
+    encoder only where the graphics card has one), the first step's settings written, and
+    when it is stopped the settings from before it back in config.toml."""
+    from libre_panel.editor import experiment
+
+    (tmp_path / "config.toml").write_text(
+        'theme = "slate"\nfps = 2\nlanguage = "en"\n[device]\ndriver = "virtual"\n'
+        'output = "panel.png"\n[sensors]\nproviders = []\n[video]\ncrf = 23\n',
+        encoding="utf-8",
+    )
+    before = __import__("tomllib").loads((tmp_path / "config.toml").read_text())["video"]
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries()}  # fmt: skip
+    with subprocess.Popen([str(_program()), "start", "--port", "0", "--no-browser"], env=env,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        try:
+            assert program.stdout is not None
+            address = program.stdout.readline().split(" running at ")[1].split()[0]
+            port, token = int(address.split(":")[2].split("/")[0]), address.split("#token=")[1]
+
+            def ask(request: str | bytes) -> tuple[str, dict[str, str], bytes]:
+                text = request.decode() if isinstance(request, bytes) else request
+                text = text.replace("{host}", f"localhost:{port}")
+                return _asked(port, text.replace("{token}", token).encode())
+
+            started = json.loads(ask(_post("/api/experiment", {"action": "start"}))[2])
+            want = [{"id": s.id, "changes": s.changes, "seconds": s.seconds}
+                    for s in experiment.steps("")]  # fmt: skip
+            assert started["steps"] == want and started["running"] is True
+            config = tmp_path / "config.toml"
+
+            def video() -> dict[str, Any]:
+                return dict(__import__("tomllib").loads(config.read_text())["video"])
+
+            # (the first step: the measured settings, crf 20 among them)
+            assert _waited(lambda: True if video().get("crf") == 20 else None, 30), video()
+            assert json.loads(ask(_post("/api/experiment", {"action": "start"}))[2]) == {
+                "error": "the experiment is running"}  # fmt: skip
+            ask(_post("/api/experiment", {"action": "stop"}))
+            ended = _waited(lambda: (lambda s: s if s["ended"] else None)(
+                json.loads(ask(_get("/api/experiment", WITH))[2])), 30)  # fmt: skip
+            assert ended and ended["ended"] == "stopped" and not ended["running"], ended
+            assert video()["crf"] == before["crf"]
+        finally:
+            program.send_signal(signal.SIGINT)
+            program.communicate(timeout=30)
+
+
 def test_the_report_the_place_search_and_the_folders_are_as_settings_py_has_them(
     servers: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:

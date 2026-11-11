@@ -46,7 +46,9 @@ pub struct State {
     /// how the server's own hub of sensors is asked (a server without a background app)
     live: Mutex<Option<std::sync::mpsc::Sender<Reply>>>,
     /// settings the panel loop takes in when it restarts
-    restart: crate::settings::Restart,
+    restart: Arc<crate::settings::Restart>,
+    /// the video experiment's run, made on first use (experiment.rs)
+    experiment: Mutex<Option<Arc<crate::experiment::Experiment>>>,
     /// whom Start tells what is new (news.rs)
     news: crate::news::News,
     /// whether a newer version is out (updates.rs)
@@ -58,6 +60,23 @@ pub struct State {
 }
 
 impl State {
+    /// The video experiment's run, made on first use: it writes the settings as the app does
+    /// and reads every panel's numbers from the app's panel loop.
+    fn experiment(&self) -> Option<Arc<crate::experiment::Experiment>> {
+        let mut made = self.experiment.lock().ok()?;
+        let run = made.get_or_insert_with(|| {
+            Arc::new(crate::experiment::Experiment::new(
+                crate::experiment::Context {
+                    home: self.home.clone(),
+                    config_file: self.config_file.clone(),
+                    controls: self.controls.clone(),
+                    restart: Arc::clone(&self.restart),
+                },
+            ))
+        });
+        Some(Arc::clone(run))
+    }
+
     /// When a page of the app last asked something.
     #[allow(dead_code)] // (for light mode: what only the app needs goes while it is closed)
     pub fn last_request(&self) -> Option<f64> {
@@ -315,6 +334,12 @@ const ROUTES: &[Route] = &[
         x.json(&Value::Dict(i18n(s)), 200)
     }),
     private("GET", "/api/app", |s, x, _, _| app_state(s, x)),
+    private("GET", "/api/experiment", |s, x, _, _| {
+        match s.experiment() {
+            Some(run) => x.json(&run.state(), 200),
+            None => unanswered("the experiment is stuck"),
+        }
+    }),
     // (the tray icon's program and the app: its menu, what is chosen in it, its picture;
     // rust/desktop, tray.rs. The Python app has its icon in its own process)
     private("GET", "/api/tray", |s, x, _, _| {
@@ -420,6 +445,9 @@ const ROUTES: &[Route] = &[
     }),
     // -- writing -----------------------------------------------------------------------------------
     private("POST", "/api/app", |s, x, _, _| app_action(s, x)),
+    private("POST", "/api/experiment", |s, x, _, _| {
+        experiment_action(s, x)
+    }),
     private("POST", "/api/tray", |s, x, _, _| tray_action(s, x)),
     private("POST", "/api/settings", |s, x, _, _| {
         settings_with(s, x, |told, asked| told.write(asked))
@@ -1706,6 +1734,37 @@ fn app_action(state: &State, exchange: &mut Exchange) {
     }
 }
 
+/// `POST /api/experiment {"action": "start"}` or `"stop"`: the video experiment, begun on the
+/// running app's panels, or ended, with the settings from before it back.
+fn experiment_action(state: &State, exchange: &mut Exchange) {
+    let Some(payload) = exchange.read_json(MAX_JSON) else {
+        return;
+    };
+    let Some(run) = state.experiment() else {
+        return unanswered("the experiment is stuck");
+    };
+    let action = match &payload {
+        Value::Dict(payload) => payload
+            .get("action")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        _ => None,
+    };
+    match action.as_deref() {
+        Some("start") => {
+            if state.controls.upgrade().is_none() {
+                return exchange.error("the experiment needs the running app", 409, "");
+            }
+            if let Err(why) = run.start() {
+                return exchange.error(&why, 409, "");
+            }
+        }
+        Some("stop") => run.stop(),
+        _ => return exchange.error("expected {\"action\": \"start\" or \"stop\"}", 400, ""),
+    }
+    exchange.json(&run.state(), 200);
+}
+
 /// `GET /api/tray/icon?state=showing&size=32`: the app's icon with the dot for how the panel is
 /// doing, as a PNG (branding.logo).
 fn tray_icon(state: &State, exchange: &mut Exchange, query: &str) {
@@ -1856,7 +1915,8 @@ impl EditorServer {
                 began: Instant::now(),
                 last_request: Mutex::new(None),
                 live: Mutex::new(None),
-                restart: crate::settings::Restart::default(),
+                restart: Arc::default(),
+                experiment: Mutex::new(None),
                 news,
                 updates,
                 previews: crate::previews::Previews::default(),

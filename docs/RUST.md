@@ -2076,6 +2076,12 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       for byte; a run of the program controlled through its server until `quit` ends it.
       Still to come: every other route (the
       Settings' unlock, hardware, the Player, plugins' pages, …)
+- [x] the video experiment (editor/experiment.py, `/api/experiment`): its steps (the card's
+      encoder where the graphics card has one), each written as the app writes settings, the
+      panel let settle, every panel's numbers sampled from the meter and judged as Python
+      judges them (statistics.fmean through math.fsum, to the bit); the settings from before
+      back when it ends or is stopped. The tests: a server without the app answers as
+      Python's, and on the running app the steps, the first step written, the stop
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app
 - [x] one Libre Panel at a panel (instance.py): the system's lock on libre-panel.lock in the

@@ -13,6 +13,7 @@ mod consoles;
 mod display;
 mod drawings;
 mod editing;
+mod experiment;
 mod fan_names;
 mod hardware;
 mod history;
