@@ -10,9 +10,12 @@ import os
 import signal
 import subprocess
 import sys
+import tempfile
 import time
+from pathlib import Path
 from typing import Any
 
+import pytest
 from test_plugins import SENSOR, SENSOR_PARTS, theme_data
 from test_rust_app import DATA, _libraries, _program, _run
 
@@ -20,6 +23,28 @@ from libre_panel import cli
 
 HOST = {"LIBRE_PANEL_PLUGIN_HOST": sys.executable,
         "LIBRE_PANEL_PLUGIN_HOST_ARGS": "-m libre_panel.plugin_host"}  # fmt: skip
+
+
+@pytest.fixture
+def isolated_home(tmp_path, monkeypatch):
+    """The settings folder, as conftest.py's; with administrator rights (Windows runners have
+    them) one in Program Files: the plugin host then loads plugin folders only from where
+    nobody without those rights can change them (libre_panel.rights), as the downloads' check
+    of the host does (packaging/check_plugin_host.py)."""
+    if sys.platform == "win32":
+        import ctypes
+
+        if ctypes.windll.shell32.IsUserAnAdmin():
+            made = tempfile.TemporaryDirectory(dir=os.environ["ProgramFiles"],
+                                               ignore_cleanup_errors=True)  # fmt: skip
+            with made as place:
+                home = Path(place) / "home"
+                monkeypatch.setenv("LIBRE_PANEL_HOME", str(home))
+                yield home
+            return
+    home = tmp_path / "home"
+    monkeypatch.setenv("LIBRE_PANEL_HOME", str(home))
+    yield home
 
 
 def test_the_plugins_are_listed_as_cli_py_lists_them(plugin_folder, isolated_home, capsys):
