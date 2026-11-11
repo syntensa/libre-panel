@@ -149,3 +149,49 @@ def test_a_plugins_sensor_source_and_service_run_in_the_rust_app(plugin_folder, 
     assert "service 'demo' started" in lines, said
     assert "service demo: shows theme 'blue'" in lines, said
     assert "not in this build yet" not in said
+
+
+def test_settings_list_the_plugins_as_settings_py_lists_them(plugin_folder, isolated_home):
+    """Settings' catalog: the plugins' services (where each came from, why it does not load,
+    the options it declares) among Libre Panel's own in their order, and their sensor sources
+    after the built-in ones; an option of a plugin's service checked as it declares it."""
+    from test_rust_server import _asked
+
+    from libre_panel.editor.settings import Restart, Settings
+
+    services = {"demo": "Demo", "aaa": "Missing"}
+    plugin_folder(SERVICE, {"libre_panel.sensors": {"demo.fans": "Fans"},
+                            "libre_panel.services": services})  # fmt: skip
+    config = isolated_home / "config.toml"
+    config.write_text("[sensors]\nproviders = []\n", encoding="utf-8")
+    want = Settings(config, None, Restart())._catalog()
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(isolated_home), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries(), **HOST}  # fmt: skip
+    pipe = subprocess.PIPE
+    ours = subprocess.Popen([str(_program()), "editor", "--port", "0"], env=env, stdout=pipe,
+                            stderr=pipe, encoding="utf-8")  # fmt: skip
+    try:
+        assert ours.stdout is not None
+        address = ours.stdout.readline().split(" running at ")[1].split()[0]
+        port, token = int(address.split(":")[2].split("/")[0]), address.split("#token=")[1]
+
+        def ask(method: str, path: str, body: str = "") -> tuple[str, dict]:
+            request = (f"{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
+                       f"X-Libre-Panel: {token}\r\nContent-Type: application/json\r\n"
+                       f"Content-Length: {len(body.encode())}\r\n\r\n{body}")  # fmt: skip
+            status, _, answer = _asked(port, request.encode())
+            return status, json.loads(answer)
+
+        _, told = ask("GET", "/api/settings")
+        got = told["catalog"]
+        assert got["services"] == want["services"]
+        assert got["providers"] == want["providers"]
+        status, _ = ask("POST", "/api/settings", json.dumps({"set": {"services.demo.color": 5}}))
+        assert status == "HTTP/1.0 400 Bad Request"
+        status, _ = ask("POST", "/api/settings",
+                        json.dumps({"set": {"services.demo.color": "green"}}))  # fmt: skip
+        assert status == "HTTP/1.0 200 OK", status
+        assert 'color = "green"' in config.read_text("utf-8")
+    finally:
+        ours.send_signal(signal.SIGINT) if os.name != "nt" else ours.terminate()
+        ours.communicate(timeout=30)

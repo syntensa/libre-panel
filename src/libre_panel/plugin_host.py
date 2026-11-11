@@ -82,7 +82,8 @@ class Host:
             parts = self.registry.parts[kind]
             for name in [n for n, found in parts.items() if found.source == BUILT_IN]:
                 del parts[name]
-        self.ops = {"hello": self.hello, "check": self.check, "config": self.follow_config,
+        self.ops = {"hello": self.hello, "catalog": self.catalog, "check": self.check,
+                    "config": self.follow_config,
                     "sensors.open": self.sensor_open, "sensors.read": self.sensor_read,
                     "sensors.images": self.sensor_images, "sensors.close": self.sensor_close,
                     "services.apply": self.services_apply, "services.summary": self.summary,
@@ -186,6 +187,22 @@ class Host:
             parts.append({"kind": found.kind, "name": found.name, "source": _source(found),
                           "error": found.error})  # fmt: skip
         return {"parts": parts, "errors": list(self.registry.errors)}
+
+    def catalog(self, message: dict[str, Any], blob: bytes) -> dict[str, Any]:
+        """What Settings lists of the plugins (editor/settings.py's _catalog): each service with
+        where it came from, why it does not load and the options it declares; each sensor
+        source with where it came from."""
+        from libre_panel.editor.settings import _declared
+
+        services = []
+        for name, found in self.registry.parts.get("services", {}).items():
+            cls = self.registry.get("services", name)
+            services.append({"name": name, "source": found.source,
+                             "error": found.error if cls is None else "",
+                             "options": _declared(cls)})  # fmt: skip
+        found_sensors = sorted(self.registry.parts.get("sensors", {}).items())
+        sensors = [{"name": name, "source": found.source} for name, found in found_sensors]
+        return {"services": services, "sensors": sensors}
 
     # -- config.toml ---------------------------------------------------------------------
 

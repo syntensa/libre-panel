@@ -765,11 +765,29 @@ impl Settings<'_> {
             let place = SERVICE_ORDER.iter().position(|known| *known == name);
             place.unwrap_or(SERVICE_ORDER.len())
         };
+        let plugins = crate::plugins::catalog(&self.home.settings).unwrap_or_default();
+        let theirs = crate::plugins::entries(&plugins, "services");
         let mut names: Vec<&str> = parts.keys().copied().collect();
+        for service in &theirs {
+            if let Some(Value::Str(name)) = service.get("name") {
+                names.push(name.as_str());
+            }
+        }
         names.sort_by(|a, b| (rank(a), *a).cmp(&(rank(b), *b)));
         let services = names
             .into_iter()
             .map(|name| {
+                // (a plugin's, as the plugin host tells it)
+                if let Some(service) = theirs.iter().find(|s| s.get("name") == Some(&text(name))) {
+                    let got = |key: &str| service.get(key).cloned().unwrap_or(Value::None);
+                    return dict([
+                        ("name", text(name)),
+                        ("source", got("source")),
+                        ("builtin", Value::Bool(false)),
+                        ("error", got("error")),
+                        ("options", got("options")),
+                    ]);
+                }
                 let options = (parts[name].options)()
                     .into_iter()
                     .map(|(key, kind, default)| {
@@ -789,7 +807,7 @@ impl Settings<'_> {
                 ])
             })
             .collect();
-        let providers = PROVIDERS
+        let mut providers: Vec<Value> = PROVIDERS
             .iter()
             .map(|name| {
                 dict([
@@ -799,6 +817,14 @@ impl Settings<'_> {
                 ])
             })
             .collect();
+        for source in crate::plugins::entries(&plugins, "sensors") {
+            let got = |key: &str| source.get(key).cloned().unwrap_or(Value::None);
+            providers.push(dict([
+                ("name", got("name")),
+                ("source", got("source")),
+                ("builtin", Value::Bool(false)),
+            ]));
+        }
         let transitions = transition_list()
             .into_iter()
             .map(|(id, group)| dict([("id", text(id)), ("group", text(group))]))
@@ -949,17 +975,39 @@ impl Settings<'_> {
         }
         let (service, wanted) = (parts[1], parts[2]);
         let found = crate::services::parts();
-        let Some(part) = found.get(service) else {
-            return Err(refusal(
-                format!("{service} is not an installed service"),
-                404,
-            ));
+        let declared: Vec<(String, String, Value)> = match found.get(service) {
+            Some(part) => (part.options)()
+                .into_iter()
+                .map(|(key, kind, default)| (key.to_string(), kind.to_string(), default))
+                .collect(),
+            // (a plugin's service: the options it declares, as the plugin host tells them)
+            None => {
+                let plugins = crate::plugins::catalog(&self.home.settings).unwrap_or_default();
+                let theirs = crate::plugins::entries(&plugins, "services");
+                let Some(entry) = theirs
+                    .iter()
+                    .find(|s| s.get("name") == Some(&text(service)))
+                else {
+                    return Err(refusal(
+                        format!("{service} is not an installed service"),
+                        404,
+                    ));
+                };
+                crate::plugins::entries(entry, "options")
+                    .iter()
+                    .map(|option| {
+                        let got = |key: &str| option.get(key).cloned().unwrap_or(Value::None);
+                        let as_text = |key: &str| got(key).as_str().unwrap_or("").to_string();
+                        (as_text("key"), as_text("type"), got("default"))
+                    })
+                    .collect()
+            }
         };
-        let declared = (part.options)();
-        let Some((_, kind, default)) = declared.iter().find(|(key, _, _)| *key == wanted) else {
+        let Some((_, kind, default)) = declared.iter().find(|(key, _, _)| key == wanted) else {
             return Err(bad(format!("{service} has no option {}", repr(wanted))));
         };
-        if *kind == "string" {
+        let kind = kind.as_str();
+        if kind == "string" {
             // (a file or a folder is a text)
             self.check_rights(name, value, config, &plain(default))?;
         }

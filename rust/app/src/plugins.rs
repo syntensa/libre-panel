@@ -950,3 +950,27 @@ impl Drop for PluginSource {
         let _ = self.host.request("sensors.close", self.named(), &[]);
     }
 }
+
+/// What Settings lists of the plugins (editor/settings.py's _catalog): `services` (each with
+/// its `source`, `error` and declared `options`, `{key, type, default}`) and `sensors` (each
+/// with its `source`); none without plugins.
+pub fn catalog(settings: &Path) -> Option<Dict> {
+    let host = shared(settings)?.ok()?;
+    host.request("catalog", Dict::new(), &[])
+        .ok()
+        .map(|(told, _)| told)
+}
+
+/// The entries of `list` in a catalog, each a dict.
+pub fn entries(catalog: &Dict, list: &str) -> Vec<Dict> {
+    match field(catalog, list) {
+        Value::List(items) => items
+            .iter()
+            .filter_map(|item| match item {
+                Value::Dict(item) => Some(item.clone()),
+                _ => None,
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
+}
