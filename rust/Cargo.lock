@@ -1292,6 +1292,7 @@ dependencies = [
 name = "libre-panel"
 version = "0.1.0"
 dependencies = [
+ "dbus",
  "embed-resource",
  "flate2",
  "getrandom",

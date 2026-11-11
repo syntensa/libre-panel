@@ -62,6 +62,8 @@ mod system;
 mod system_setup;
 mod tray;
 mod updates;
+mod wayland;
+mod wayland_feed;
 mod window;
 mod winsession;
 mod zip;
@@ -407,6 +409,8 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
         "devices" => devices_command(),
         "udev-rules" => print!("{}", linux_setup::udev_rules_text()),
         "location" => std::process::exit(location_command(args)?),
+        // (the app's own: its capture program on Wayland, wayland.rs)
+        "wayland-feed" => std::process::exit(wayland_feed::run(args)),
         "doctor" => {
             // libre-panel doctor [--report FILE] [--no-questions] [--frames N] [--config FILE]
             let (mut report, mut questions, mut frames, mut config) = (None, true, 20, None);

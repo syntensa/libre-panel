@@ -368,7 +368,7 @@ jobs:
       # simulated panel (on Windows not yet: its paths and programs are told apart there)
       - name: The app's server against the Python app's (Linux)
         if: runner.os == 'Linux'
-        run: python -m pytest -q --durations=20 tests/test_rust_server.py
+        run: python -m pytest -q --durations=20 tests/test_rust_server.py tests/test_rust_wayland.py
       # lp-panel, for a panel's owner to try the panel with the driver in Rust (the MAJESTY
       # 9.16"'s first): with the libjpeg it saves its pictures with, and their licences
       - name: lp-panel to try a panel with (Windows)

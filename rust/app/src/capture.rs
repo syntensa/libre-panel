@@ -374,6 +374,8 @@ pub fn monitors(place: &str) -> Vec<Monitor> {
                 Vec::new()
             }
         },
+        // (GNOME's; elsewhere the desktop's dialog lists them)
+        "wayland" => crate::wayland::monitors(),
         _ => Vec::new(),
     };
     // (sorted: the main one first, real before virtual, then by place)

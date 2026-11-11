@@ -2233,6 +2233,16 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       (packaging/linux/AppRun-rust; nothing in LD_LIBRARY_PATH, so the window and the tray
       icon take the system's GTK); tried by test_appimage.sh as the release's (RUST=1). What
       the tray icon's program says goes into the app's log, as tray.py logs it
+- [x] the screen on Wayland (wayland.py, wayland_feed.py): the capture program
+      (`libre-panel wayland-feed`) holds the desktop's session over the session bus (libdbus):
+      GNOME's screen cast with a monitor by its connector or the panel's own, else the
+      screen-sharing portal with its dialog, its choice kept (restore token) and the PipeWire
+      connection handed to GStreamer as a file descriptor; GStreamer's pipeline as
+      wayland_feed.py makes it, the session stopped as it ends or GStreamer ended as the
+      desktop closes it; GNOME's monitors listed, the panel's own monitor offered where GNOME
+      or the portal is. The tests: against test_wayland.py's stand-ins on a bus of their own,
+      the pipeline word for word, the calls and their options, the kept choice, a cancelled
+      dialog, the monitors as the app lists them
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app
 - [x] one Libre Panel at a panel (instance.py): the system's lock on libre-panel.lock in the

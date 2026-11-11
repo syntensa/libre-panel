@@ -76,6 +76,12 @@ fn warn(message: &str) {
 /// "xrandr", "wayland", or ""), whether it is set up (`ready`) and what is missing.
 pub fn state(size: Option<(i64, i64)>, place: &str) -> Dict {
     let mut told = Dict::new();
+    if place == "wayland" {
+        // (the desktop makes it as the capture starts: wayland.rs)
+        told.insert("how".into(), Value::from("wayland"));
+        told.extend(crate::wayland::virtual_state());
+        return told;
+    }
     let (how, ready, missing) = match place {
         "windows" => {
             let installed = vdd_installed();
@@ -93,7 +99,6 @@ pub fn state(size: Option<(i64, i64)>, place: &str) -> Dict {
             let found = capture::which("xrandr").is_some();
             ("xrandr", found, if found { "" } else { "xrandr" })
         }
-        "wayland" => ("wayland", false, "portal"),
         _ => ("", false, ""),
     };
     told.insert("how".into(), Value::from(how));

@@ -51,6 +51,11 @@ libc = "0.2"
 # the keyboard shortcuts on X11 (hotkeys.rs): the protocol itself, no libX11
 x11rb = { version = "0.13", default-features = false, features = ["xtest"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# the screen on Wayland (wayland.rs): Mutter's screen cast and the portal on the session bus,
+# through libdbus (as the window's tao already links it)
+dbus = "0.9"
+
 [target.'cfg(windows)'.dependencies]
 # the computer's own readings (system.rs), and Ctrl+C
 windows-sys = { version = "0.61", features = [

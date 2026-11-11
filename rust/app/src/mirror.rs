@@ -243,13 +243,17 @@ pub fn status() -> Value {
 // -- capturing ------------------------------------------------------------------------------
 
 /// capture_of: ffmpeg's input for `source` here, now (a monitor's place and a window's handle
-/// are looked up as it starts: they change).
-pub fn capture_of(ffmpeg: &str, source: &Source, fps: i64) -> Result<Capture, MirrorError> {
+/// are looked up as it starts: they change); `size`: the panel's frame (Wayland's capture
+/// program fits the pictures to it).
+pub fn capture_of(
+    ffmpeg: &str,
+    source: &Source,
+    fps: i64,
+    size: Option<(usize, usize)>,
+) -> Result<Capture, MirrorError> {
     let place = capture::platform();
     if place == "wayland" {
-        return Err(MirrorError(
-            "on Wayland this build does not show the screen yet".into(),
-        ));
+        return crate::wayland::capture_of(source, fps, size);
     }
     let named = |what: &str| {
         if source.name.is_empty() {
@@ -571,7 +575,7 @@ impl Screen {
             }
         }
         let ffmpeg = self.ffmpeg.clone().unwrap_or_default();
-        match capture_of(&ffmpeg, source, rate) {
+        match capture_of(&ffmpeg, source, rate, Some(size)) {
             Ok(found) => {
                 self.error = String::new();
                 let command = frames_command(&ffmpeg, &found, size, &source.fit, rate);
