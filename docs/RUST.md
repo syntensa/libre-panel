@@ -1693,10 +1693,12 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       Driver, X11's monitor beyond the others, Wayland's screen cast; see the entries above)
 
 ### R7 sensors
-- [ ] Linux: hwmon, /proc, the cards' (amdgpu, NVML), storage, network, fans
-- [ ] Windows: processor (with PawnIO for its registers), graphics cards (NVAPI/NVML, ADLX,
-      Intel), memory, storage (SMART), network, mainboard chips and fans; HWiNFO, RTSS,
-      PresentMon, MangoHud
+- [x] Linux: hwmon, /proc, the cards' (amdgpu, NVML), storage, network, fans (lp-sensors'
+      hwmon, sysfs, linux, gpus, nvml, rapl, netlink; the entries below)
+- [x] Windows: processor (with PawnIO for its registers), graphics cards, memory, storage,
+      network, mainboard chips and fans through LibreHardwareMonitor in the .NET sensor
+      service (lp-sensors' service, winlink, provider); HWiNFO, RTSS, PresentMon, MangoHud
+      (the entries below)
 - [x] the computer's own readings (sensors/psutil_provider.py; rust/app's psutil, system and
       osinfo), without psutil: the processor's load, clock and threads and every core's
       load, the memory and the swap, the system's disk and every drive a user thinks of
@@ -1875,8 +1877,11 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       HWiNFO's (names of both kinds, versions 1 and 2, cut short, another program's)
       compared with Python; on Windows the app reads a memory the test shares as RTSS does.
       HWiNFO's own memory is not yet read on a PC that runs it
-- [ ] Linux's hint of what system-setup brings; the app's Sensors page says what each source
-      does (RTSS runs, HWiNFO shares)
+- [x] Linux's hint of what system-setup brings (linux_setup.hint; rust/app's linux_setup
+      `hint`): in `sensors`' note where no other is, and in the doctor's temperature step,
+      which rust/app's doctor `sensors_check` now gives as doctor.py does (Windows: the
+      sensor service, else LibreHardwareMonitor's web server; no private address in the
+      report); the app's Sensors page says what each source does (RTSS runs, HWiNFO shares)
 - [x] demo.py's values (lp-services' demo): every reading a theme can show, made up of the
       time alone (the waves, the drives and programs, the sun, a song, appointments, a
       forecast, the agents, a round's report, a round under way, a download), the history
@@ -1885,7 +1890,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       than 400 readings in its order with its unit, label and the reading it repeats as
       Python has it (the history to the last bit but numpy's sine), and the three pictures
       pixel for pixel
-- [ ] the history as a ring; the .NET service goes
+- [x] the history as a ring (rust/app's sensors: a VecDeque of numbers per key)
+- [ ] the .NET sensor service goes (after 0.9: LibreHardwareMonitor's work in Rust)
 
 ### R8 services
 - [x] the host between the services and the main loop (plugins/host.py; rust/services,

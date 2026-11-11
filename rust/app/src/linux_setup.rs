@@ -1113,6 +1113,38 @@ pub fn offers(facts: &Facts) -> Vec<Offer> {
     found
 }
 
+/// hint: one sentence for a person who sees readings missing, saying what is the matter and
+/// the command that mends it; empty when the setup has nothing that is needed.
+pub fn hint(facts: &Facts, command: &str) -> String {
+    let needed: Vec<&str> = offers(facts)
+        .into_iter()
+        .filter(|offer| offer.needed)
+        .map(|offer| offer.id)
+        .collect();
+    if needed.is_empty() {
+        return String::new();
+    }
+    let mut missing = Vec::new();
+    if needed.contains(&"usb") {
+        missing.push(t("Your user may not use the USB panel yet."));
+    }
+    if needed.contains(&"fans") {
+        missing.push(t(
+            "The driver for the fan and temperature chip of the mainboard is not loaded.",
+        ));
+    }
+    if needed.contains(&"power") {
+        missing.push(t(
+            "The processor's power needs permission to read its energy counters.",
+        ));
+    }
+    format!(
+        "{} {}",
+        missing.join(" "),
+        tf("This mends it: {command}", &[("command", command)])
+    )
+}
+
 fn t(text: &str) -> String {
     lp_i18n::t(text)
 }

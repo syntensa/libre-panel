@@ -143,6 +143,144 @@ enum Opened {
 /// The temperatures-and-power step: (result, what to say), or None where nothing is to be said.
 pub type Sensors = Box<dyn Fn() -> Option<(&'static str, String)> + Send>;
 
+/// What asks LibreHardwareMonitor's web server for its `data.json` (tests give their own).
+pub type Fetch<'a> = &'a dyn Fn(&str) -> Result<Dict, String>;
+
+/// sensors_check: Windows: do the temperatures and power that need LibreHardwareMonitor
+/// arrive? Linux: is something missing that the one-click setup brings (the panel's
+/// permission, the mainboard's fans, the processor's power)? (result, what to say) for the
+/// report; None elsewhere, and on Linux when nothing is missing. Where the sensor service
+/// reads LibreHardwareMonitor it is asked; otherwise the web server, through `fetch` where
+/// given (and then only it).
+pub fn sensors_check(
+    config_file: &Path,
+    platform: &str,
+    fetch: Option<Fetch>,
+) -> Option<(&'static str, String)> {
+    if platform.starts_with("linux") {
+        let facts = crate::linux_setup::gather(&crate::linux_setup::root());
+        return linux_check(&facts);
+    }
+    if platform != "win32" {
+        return None;
+    }
+    let config = lp_config::load_config(config_file, platform)
+        .or_else(|_| lp_config::parse_config(&Default::default(), None, platform))
+        .ok()?;
+    let table = config.sensors.options.get("librehardwaremonitor");
+    let text = |key: &str| match table.and_then(|table| table.get(key)) {
+        Some(lp_py::toml::Toml::Str(text)) => Some(text.clone()),
+        _ => None,
+    };
+    let default_url = lp_sensors::provider::DEFAULT_URL;
+    let url = text("url").unwrap_or_else(|| default_url.to_string());
+    let gpu = text("gpu");
+    // a report goes to a public issue: no address of the user's network in it
+    let shown = if url == default_url {
+        url.clone()
+    } else {
+        "the address in [sensors.librehardwaremonitor]".to_string()
+    };
+    let mode = text("mode").unwrap_or_else(|| "auto".into());
+    let providers = &config.sensors.providers;
+    if fetch.is_none() && mode != "webserver" {
+        if let Some(found) = service_check(&url, gpu.clone(), &mode, providers, &shown) {
+            return Some(found);
+        }
+    }
+    let tree = match fetch {
+        Some(fetch) => fetch(&url),
+        None => lp_sensors::provider::fetch_tree(&url, lp_sensors::provider::REQUEST_SECONDS),
+    };
+    let (readings, answers) = match tree {
+        Ok(tree) => (
+            lp_sensors::lhm::readings_from_tree(&tree, gpu.as_deref()),
+            true,
+        ),
+        Err(_) => (Default::default(), false), // not running, or not what it should be
+    };
+    let Some(hint) =
+        lp_sensors::hints::hardware_hint(&readings, providers, &shown, true, None, false)
+    else {
+        return Some((
+            "info",
+            format!("LibreHardwareMonitor answers at {shown}: temperature and power arrive"),
+        ));
+    };
+    let state = if answers {
+        "answers, but sends no temperatures or power"
+    } else {
+        "does not answer"
+    };
+    Some((
+        "info",
+        format!("LibreHardwareMonitor {state} at {shown}. {hint}"),
+    ))
+}
+
+/// linux_check: what the one-click setup would bring, said with its command; None when it
+/// has nothing that is needed.
+pub fn linux_check(facts: &crate::linux_setup::Facts) -> Option<(&'static str, String)> {
+    let said = crate::linux_setup::hint(facts, "libre-panel system-setup --linux");
+    (!said.is_empty()).then_some(("info", said))
+}
+
+/// The same question where the sensor service reads LibreHardwareMonitor; None where it does
+/// not (then the web server is asked). LibreHardwareMonitor never runs inside this program.
+fn service_check(
+    url: &str,
+    gpu: Option<String>,
+    mode: &str,
+    providers: &[String],
+    shown: &str,
+) -> Option<(&'static str, String)> {
+    use lp_sensors::provider::{LhmOptions, Provider, System};
+    let system = System::own();
+    if !(mode == "service" || (mode == "auto" && (system.installed)())) {
+        if mode == "inprocess" {
+            return Some((
+                "info",
+                "LibreHardwareMonitor cannot run inside Libre Panel: the sensor service reads \
+                 it (or its own web server)"
+                    .to_string(),
+            ));
+        }
+        return None;
+    }
+    let options = LhmOptions {
+        url: url.to_string(),
+        gpu,
+        mode: mode.to_string(),
+        ..LhmOptions::default()
+    };
+    let wanted = lp_sensors::service::Wanted::default();
+    wanted.set(["cpu.*", "gpu.*", "lhm:*"].map(String::from));
+    let source = Provider::new(options, wanted, system);
+    source.wait_ready(LHM_READY_SECONDS);
+    let (readings, status) = (source.read(), source.status());
+    source.close();
+    if let Some(hint) =
+        lp_sensors::hints::hardware_hint(&readings, providers, shown, true, Some(&status), false)
+    {
+        return Some(("info", hint));
+    }
+    let place = if status.mode == "service" {
+        "in the sensor service"
+    } else {
+        "inside Libre Panel"
+    };
+    let mut text = format!("LibreHardwareMonitor runs {place}: temperature and power arrive");
+    if status.ring0 == Some(false) {
+        // the graphics card's do, the processor's do not
+        let steps = lp_sensors::hints::ring0_steps(&status, false);
+        text += &format!(", but not the CPU's: {}", steps.join(" and "));
+    }
+    Some(("info", text))
+}
+
+/// how long the doctor waits for LibreHardwareMonitor's first readings (lhm_inprocess's)
+const LHM_READY_SECONDS: f64 = 20.0;
+
 /// How a test is set up: config.toml's `[device]` and where its settings are.
 pub struct Options {
     pub brightness: i64,
@@ -1111,7 +1249,10 @@ pub fn run_doctor(
         frames,
         seconds_per_card: 6.0,
         speed_seconds: 20.0,
-        sensors: None,
+        sensors: Some({
+            let file = config_file.to_path_buf();
+            Box::new(move || sensors_check(&file, lp_config::platform(), None))
+        }),
     };
     let terminal = Terminal;
     let questions: Option<&dyn Questions> =
@@ -1131,4 +1272,104 @@ pub fn run_doctor(
     println!("Report: {}", shown.display());
     println!("Please attach it to a hardware report: {ISSUE_URL}");
     Ok(found.failed())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const URL: &str = "http://127.0.0.1:8085/data.json";
+
+    fn config(text: &str) -> (std::path::PathBuf, PathBuf) {
+        let folder =
+            std::env::temp_dir().join(format!("lp-doctor-{}-{}", std::process::id(), text.len()));
+        std::fs::create_dir_all(&folder).unwrap();
+        let file = folder.join("config.toml");
+        std::fs::write(&file, text).unwrap();
+        (folder, file)
+    }
+
+    fn check(text: &str, answer: Result<Dict, String>) -> (Vec<String>, String) {
+        let (folder, file) = config(text);
+        let asked = std::cell::RefCell::new(Vec::new());
+        let fetch = |url: &str| {
+            asked.borrow_mut().push(url.to_string());
+            answer.clone()
+        };
+        let (result, said) = sensors_check(&file, "win32", Some(&fetch)).unwrap();
+        std::fs::remove_dir_all(folder).unwrap();
+        assert_eq!(result, "info"); // a panel check does not fail for this
+        (asked.into_inner(), said)
+    }
+
+    #[test]
+    fn says_what_librehardwaremonitor_sends_as_doctor_py_does() {
+        let refused = Err("connection refused".to_string());
+        let (asked, said) = check("[sensors]\nproviders = [\"load\", \"psutil\"]\n", refused);
+        assert_eq!(asked, [URL]);
+        assert!(said.starts_with(&format!("LibreHardwareMonitor does not answer at {URL}.")));
+        assert!(said.contains("No CPU or GPU temperature or power readings."));
+        assert!(said.contains("run it as administrator"));
+        assert!(said.contains("Options -> Remote Web Server -> Run"));
+        assert!(said.contains("Add \"librehardwaremonitor\" to providers"));
+
+        let mut empty = Dict::new();
+        empty.insert("Children".into(), Value::List(Vec::new()));
+        let (_, said) = check("", Ok(empty));
+        assert!(said.contains("answers, but sends no temperatures or power"));
+
+        let data = std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/data/lhm_data.json"),
+        )
+        .unwrap();
+        let Ok(Value::Dict(tree)) = lp_py::json::loads(&data) else {
+            panic!("the test tree")
+        };
+        let (_, said) = check("", Ok(tree));
+        assert_eq!(
+            said,
+            format!("LibreHardwareMonitor answers at {URL}: temperature and power arrive")
+        );
+
+        // the address of the config is asked, but a report goes into a public issue
+        let private = "[sensors]\nproviders = [\"load\", \"audio\", \"librehardwaremonitor\", \
+                       \"presentmon\", \"psutil\"]\n[sensors.librehardwaremonitor]\n\
+                       url = \"http://192.168.1.50:8085/data.json\"\n";
+        let (asked, said) = check(private, Err("timed out".into()));
+        assert_eq!(asked, ["http://192.168.1.50:8085/data.json"]);
+        assert!(!said.contains("192.168"));
+        assert!(said.contains("the address in [sensors.librehardwaremonitor]"));
+        assert!(!said.contains("Add "));
+
+        let (_, said) = check("this is = not [valid", Err("refused".into()));
+        assert!(said.contains("does not answer"));
+        assert_eq!(sensors_check(Path::new("none.toml"), "darwin", None), None);
+    }
+
+    #[test]
+    fn says_on_linux_what_the_setup_would_bring() {
+        use crate::linux_setup::{Facts, OWN_FILES};
+        let mut needs = Facts {
+            available: vec!["nct6775".into()],
+            panel_denied: true,
+            files: OWN_FILES.iter().map(|f| (f.to_string(), None)).collect(),
+            ..Facts::default()
+        };
+        needs
+            .dmi
+            .insert("board_vendor".into(), "ASUSTeK COMPUTER INC.".into());
+        needs.dmi.insert("chassis_type".into(), "3".into());
+        let (result, said) = linux_check(&needs).unwrap();
+        assert_eq!(result, "info");
+        assert!(said.contains("may not use the USB panel"));
+        assert!(said.contains("fan and temperature chip"));
+        assert!(said.ends_with("libre-panel system-setup --linux"));
+        assert!(!said.contains("ASUS")); // (no names of the PC in a public issue)
+        let calm = Facts {
+            hwmon: vec!["nct6798".into()],
+            files: needs.files.clone(),
+            ..Facts::default()
+        };
+        assert_eq!(linux_check(&calm), None);
+    }
 }

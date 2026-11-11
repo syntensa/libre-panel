@@ -132,6 +132,16 @@ const READY_SECONDS: f64 = 20.0;
 /// unlock_offered: whether "Unlock all sensors" is a thing here: a Windows download that
 /// carries the sensor service (sensors\libre-panel-sensors.exe beside the program), and the
 /// service not installed (or switched off).
+/// _linux_hint: what is missing on Linux that `system-setup --linux` brings, in a sentence
+/// and with the command that does it; none when nothing is.
+fn linux_hint() -> Option<String> {
+    let program = linux_setup::program();
+    let command =
+        linux_setup::terminal_command(linux_setup::Options::default(), program.as_deref());
+    let said = linux_setup::hint(&linux_setup::gather(&linux_setup::root()), &command);
+    (!said.is_empty()).then_some(said)
+}
+
 pub fn unlock_offered() -> bool {
     if !cfg!(windows) {
         return false;
@@ -368,7 +378,8 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
                     cfg!(windows),
                     hub.lhm_status().as_ref(),
                     unlock_offered(),
-                );
+                )
+                .or_else(|| cfg!(target_os = "linux").then(linux_hint).flatten());
                 if let Some(hint) = hint {
                     eprintln!("\nnote: {hint}");
                 }
