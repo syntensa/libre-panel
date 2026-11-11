@@ -6,9 +6,12 @@
 //! Libre Panel's engine (engine); PNG files (png); and lp-panel, to try a panel with.
 
 pub mod base;
+pub mod changes;
+pub mod driver;
 pub mod engine;
 pub mod h264;
 pub mod hongtai;
+pub mod keep;
 pub mod link;
 pub mod models;
 pub mod png;
@@ -18,5 +21,7 @@ pub mod rights;
 pub mod serial;
 mod table;
 pub mod turzx;
+pub mod udisp;
 pub mod usb;
+pub mod usb_link;
 pub mod waveshare;

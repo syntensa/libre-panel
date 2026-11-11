@@ -562,9 +562,16 @@ impl MainLoop {
 
     /// _fps: frames per second: one where the motion is calm, else the active mode's, else a
     /// streaming display's (in game mode at most 24), else config.toml's.
+    /// calm: whether the panel's motion is kept calm (`[device] motion`): a picture a second,
+    /// no gliding, turning or fading, for a slow panel (a USB serial one) by itself.
+    fn calm(&self) -> bool {
+        let motion = self.config.device.motion.as_str();
+        motion == "calm" || (motion == "auto" && self.panel.as_ref().is_some_and(Display::slow))
+    }
+
     fn fps(&self) -> i64 {
         let streams = self.panel.as_ref().is_some_and(Display::streams);
-        if !streams && self.config.device.motion == "calm" {
+        if !streams && self.calm() {
             return 1;
         }
         let mode = self.host.mode().unwrap_or_default();
@@ -573,7 +580,8 @@ impl MainLoop {
             return fps.max(1);
         }
         if streams {
-            let video = self.config.device.video.fps;
+            let video = (self.panel.as_ref().and_then(Display::stream_fps))
+                .unwrap_or(self.config.device.video.fps);
             return match mode.as_str() {
                 "game" => video.min(GAME_STREAM_FPS),
                 _ => video,
@@ -599,7 +607,7 @@ impl MainLoop {
             return; // (a following one uncovers the new theme)
         }
         // a calm panel changes at once: a fade is a whole picture a frame
-        if self.config.device.motion == "calm" {
+        if self.calm() {
             return;
         }
         let (moment, _) = moment();
@@ -1134,7 +1142,7 @@ impl MainLoop {
             self.last_frame = Some(frame.clone());
         }
         let crit = renderer.theme.palette.get("crit").and_then(Value::as_str);
-        let still = self.config.fps <= 1 || self.config.device.motion == "calm";
+        let still = self.config.fps <= 1 || self.calm();
         let frame = match self.alarm.draw(&frame, now, crit, still) {
             Ok(Some(edged)) => edged,
             _ => frame,

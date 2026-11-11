@@ -1636,9 +1636,21 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       PNG and JPEG stills, a hung decoder restarted and the video started anew
 - [ ] TURZX: the engine in the same process (no pipe), frames as their layers (the engine
       composing them), videos and the screen through ffmpeg into the panel's stream
-- [ ] udisp (Waveshare's AIDA64 firmware; its own firmware is fed by the waveshare service,
-      R8), BeadaPanel, NZXT Kraken, the other serial panels, the panel as a
-      monitor (Windows' virtual display driver, X11, Wayland)
+- [x] udisp (Waveshare's USB display image; rust/devices' udisp, usb_link, keep, driver,
+      changes): the display found by its USB ids and its product string read as udisp.py
+      reads it (its size, the kind of picture named first, a JPEG's limit, its frames a
+      second), its pictures as JPEG within the limit (4:4:4 or 4:2:0, lower qualities where
+      too large), RGB565 or RGB888 behind udisp.py's header, a picture of whole packets
+      ended, the 2.8" turned by 180°, the brightness in the picture and the last picture
+      sent again at once, and again after a second without one; streamed at the rate it came
+      to. The USB screens of other makers share usb_link (nusb, no libusb: claimed
+      interfaces, endpoints, HID reports) and the app's display sends a streaming one every
+      frame, a slow one the parts that changed (changed_regions) and the others the box
+      around them (tests/test_rust_usb_drivers.py: whole sessions against udisp.py's, byte
+      for byte)
+- [ ] BeadaPanel, NZXT Kraken, Thermalright, Thermaltake, Lian Li, JONSBO, MS9132, the serial
+      panels (Turing rev. A/B/C, Kipye rev. D, WeAct, JONSBO DS916), the panel as a monitor
+      (Windows' virtual display driver, X11, Wayland)
 
 ### R7 sensors
 - [ ] Linux: hwmon, /proc, the cards' (amdgpu, NVML), storage, network, fans

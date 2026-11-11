@@ -8,6 +8,8 @@
 use std::path::{Path, PathBuf};
 
 use lp_config::DeviceConfig;
+use lp_devices::changes::{changed_region, changed_regions};
+use lp_devices::driver::Driver;
 use lp_devices::hongtai::{HongtaiDisplay, Kind, Timing, BAUD};
 use lp_devices::models::{find_model, models_for_usb, PanelModel, PROTOCOLS};
 use lp_devices::rate::VideoState;
@@ -31,6 +33,46 @@ enum Panel {
         model: Option<&'static PanelModel>,
     },
     Turzx(Turzx),
+    /// a serial panel or another maker's USB screen, and the frame it was sent last
+    Other {
+        driver: Box<dyn Driver>,
+        previous: Option<Image>,
+    },
+}
+
+/// The driver of a protocol of the panels that are neither TURZX USB nor the Hongtai family
+/// (turzx.py's SERIAL_DRIVERS and OTHER_DRIVERS), opened; None for a protocol this build has
+/// no driver for.
+fn other(
+    device: &DeviceConfig,
+    model: Option<&'static PanelModel>,
+    protocol: &str,
+) -> Option<Result<Panel, String>> {
+    let opened: Result<Box<dyn Driver>, String> = match protocol {
+        "usb-udisp" => {
+            let mut driver = lp_devices::udisp::Udisp::new(
+                lp_devices::udisp::Options {
+                    jpeg: device.jpeg.clone(),
+                    jpeg_quality: device.jpeg_quality,
+                    fps: device.video.fps,
+                },
+                model,
+            );
+            driver.open().map(|()| Box::new(driver) as Box<dyn Driver>)
+        }
+        _ => return None,
+    }
+    .map_err(|e| e.0);
+    Some(opened.map(|driver| Panel::Other {
+        driver,
+        previous: None,
+    }))
+}
+
+/// other_usb_model: the USB screen of another maker on the bus, as `auto` finds it, in this
+/// order, without opening it.
+fn other_usb_model() -> Option<&'static PanelModel> {
+    lp_devices::udisp::present_model()
 }
 
 /// output_path: the file of `[device] output`; a relative one is inside the settings folder.
@@ -183,6 +225,9 @@ fn any_panel(device: &DeviceConfig, settings: &Path, brightness: i64) -> Result<
         Some((_, "usb-turing")) => turzx(device, settings, brightness),
         Some((_, "serial-hongtai")) => hongtai(device),
         Some((model, protocol)) => {
+            if let Some(opened) = other(device, Some(model), protocol) {
+                return opened;
+            }
             let name = PROTOCOLS
                 .iter()
                 .find(|(id, _)| *id == protocol)
@@ -195,7 +240,15 @@ fn any_panel(device: &DeviceConfig, settings: &Path, brightness: i64) -> Result<
         }
         None => match turzx(device, settings, brightness) {
             Ok(panel) => Ok(panel),
-            Err(why) => hongtai(device).map_err(|_| why),
+            Err(why) => {
+                // another maker's USB screen, else a panel on a serial port
+                if let Some(model) = other_usb_model() {
+                    if let Some(Ok(panel)) = other(device, Some(model), model.protocol) {
+                        return Ok(panel);
+                    }
+                }
+                hongtai(device).map_err(|_| why)
+            }
         },
     }
 }
@@ -293,12 +346,32 @@ impl Display {
             Panel::File { .. } => None,
             Panel::Hongtai { model, .. } => *model,
             Panel::Turzx(panel) => panel.model(),
+            Panel::Other { driver, .. } => driver.model(),
+        }
+    }
+
+    /// A slow link (pixels over a serial port): the motion is kept calm with `[device] motion`
+    /// "auto", and the parts that changed go one by one.
+    pub fn slow(&self) -> bool {
+        matches!(&self.panel, Panel::Other { driver, .. } if driver.slow())
+    }
+
+    /// The frames a second of a panel that wants every frame where its driver says (a udisp
+    /// display: fewer than `[video] fps` where it takes fewer); None: `[video] fps`.
+    pub fn stream_fps(&self) -> Option<i64> {
+        match &self.panel {
+            Panel::Other { driver, .. } if driver.streaming() => Some(driver.stream_fps()),
+            _ => None,
         }
     }
 
     /// Whether the panel shows video: it is drawn for at `[video] fps`.
     pub fn streams(&self) -> bool {
-        matches!(&self.panel, Panel::Turzx(panel) if panel.streams())
+        match &self.panel {
+            Panel::Turzx(panel) => panel.streams(),
+            Panel::Other { driver, .. } => driver.streaming(),
+            _ => false,
+        }
     }
 
     pub fn describe(&self) -> String {
@@ -310,6 +383,7 @@ impl Display {
                 None => format!("panel on {port}"),
             },
             Panel::Turzx(panel) => panel.describe(),
+            Panel::Other { driver, .. } => driver.describe(),
         }
     }
 
@@ -341,6 +415,33 @@ impl Display {
             Panel::File { path: None } => Ok(()),
             Panel::Hongtai { display, .. } => display.show(&frame).map_err(failed),
             Panel::Turzx(panel) => panel.show(frame, Some(now)).map_err(failed),
+            Panel::Other { driver, previous } => {
+                // app.py's loop: a streaming display every frame whole; a slow one the parts
+                // that changed, each on its own; the others the box around what changed
+                let parts: Vec<Option<lp_devices::driver::Region>> = if driver.streaming() {
+                    vec![None]
+                } else if driver.slow() {
+                    let parts = changed_regions(previous.as_ref(), &frame, 24, 4);
+                    if parts.is_empty() {
+                        return Ok(found);
+                    }
+                    parts.into_iter().map(Some).collect()
+                } else {
+                    match changed_region(previous.as_ref(), &frame) {
+                        Some(region) => vec![Some(region)],
+                        None => return Ok(found),
+                    }
+                };
+                let shown = parts
+                    .into_iter()
+                    .try_for_each(|part| driver.show(&frame, part))
+                    .map_err(failed);
+                *previous = match (&shown, driver.streaming()) {
+                    (Ok(()), false) => Some(frame),
+                    _ => None,
+                };
+                shown
+            }
         }?;
         Ok(found)
     }
@@ -361,6 +462,7 @@ impl Display {
                 display.set_brightness(percent).map_err(|e| e.to_string())
             }
             Panel::Turzx(panel) => panel.set_brightness(percent).map_err(|e| e.to_string()),
+            Panel::Other { driver, .. } => driver.set_brightness(percent).map_err(|e| e.0),
         }
     }
 
@@ -370,6 +472,7 @@ impl Display {
             Panel::File { .. } => lp_devices::base::Counters::default(),
             Panel::Hongtai { display, .. } => display.counters(),
             Panel::Turzx(panel) => panel.counters(),
+            Panel::Other { driver, .. } => driver.counters(),
         }
     }
 
@@ -395,6 +498,7 @@ impl Display {
             Panel::File { .. } => {}
             Panel::Hongtai { display, .. } => display.close(),
             Panel::Turzx(panel) => panel.close(),
+            Panel::Other { driver, .. } => driver.close(),
         }
     }
 }

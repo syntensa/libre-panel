@@ -21,11 +21,17 @@ impl std::error::Error for DeviceError {}
 /// How the message of a frame that cannot be shown begins (FrameError): the frame is
 /// skipped, the panel stays open.
 pub const FRAME_ERROR: &str = "frame too detailed for the panel";
+/// How the drivers' FrameErrors begin, each as its driver says it (the USB screens' too).
+const FRAME_ERRORS: [&str; 3] = [
+    FRAME_ERROR,
+    "frame too detailed for the display",
+    "a picture of ",
+];
 
 impl DeviceError {
     /// Whether it is the frame that cannot be shown, not the panel that failed.
     pub fn is_frame(&self) -> bool {
-        self.0.starts_with(FRAME_ERROR)
+        FRAME_ERRORS.iter().any(|start| self.0.starts_with(start))
     }
 }
 
@@ -99,4 +105,14 @@ pub fn dimmed(picture: &Image, percent: i64) -> Result<Image> {
     let level = percent.max(0) as f64 / 100.0;
     let once: Vec<i64> = (0..256).map(|v| (f64::from(v) * level) as i64).collect();
     Ok(picture.point(&once.repeat(picture.bands()))?)
+}
+
+/// t(text, **values) with text values, as the drivers' messages take them (a message that
+/// cannot take them says why, as Python's would fail).
+pub fn tf(text: &str, values: &[(&str, &str)]) -> String {
+    let values: Vec<(&str, lp_py::Value)> = values
+        .iter()
+        .map(|(name, value)| (*name, lp_py::Value::Str((*value).to_string())))
+        .collect();
+    lp_i18n::t_format(text, &values).unwrap_or_else(|why| why.msg)
 }

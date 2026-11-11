@@ -11,6 +11,7 @@ use std::io::{self, BufRead, BufWriter, Write};
 mod config;
 mod devices;
 mod sensors;
+mod usb_drivers;
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
@@ -256,6 +257,7 @@ fn run(case: &Value) -> Result<Value, String> {
         "jpeg_save" | "dimmed" | "hongtai_frame" | "hongtai_picture" | "hongtai_jpeg"
         | "hongtai_answer" | "hongtai_session" | "rate_control" | "turzx_pick"
         | "turzx_pictures" | "turzx_changed" => devices::run(op, case)?,
+        "usb_session" => usb_drivers::session(case)?,
         "icon" => {
             // icons.py's draw_icon(name, size, color, stroke)
             let colour: Vec<i64> = ints(&case["color"])?;
