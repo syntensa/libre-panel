@@ -330,7 +330,7 @@ def test_it_lists_what_it_knows(tmp_path: Path) -> None:
     models = _run(tmp_path, "models").stdout
     assert "majesty-9.16" in models
     assert _run(tmp_path, "nope").returncode == 1
-    assert "libre-panel run" in _run(tmp_path).stdout
+    assert "libre-panel run" in _run(tmp_path, "help").stdout  # (no command starts the app)
 
 
 def test_it_lists_librehardwaremonitor_s_readings_as_the_python_app_names_them(

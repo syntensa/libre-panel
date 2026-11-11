@@ -11,7 +11,9 @@ copy of config.toml if you want to be able to go back.
 
 What is in the folder
 ---------------------
-  libre-panel.exe          the app (run, start, tray, doctor, sensors, ...: .\libre-panel.exe help)
+  LibrePanel.exe           the app without a console window, as the start menu would start it
+  libre-panel.exe          the same in the terminal (run, start, doctor, sensors, ...:
+                           .\libre-panel.exe help)
   libre-panel-window.exe   its window (WebView2, as the installed app's)
   libre-panel-tray.exe     its tray icon
   tools\                   Libre Panel's engine (a TURZX panel's video), ffmpeg (videos, the
@@ -25,14 +27,13 @@ To try it
 ---------
 1. Quit Libre Panel (its tray icon, Quit) and the TURZX app: only one program can have the
    panels.
-2. Open a terminal (PowerShell) in this folder.
-3. .\libre-panel.exe tray
-   starts the app as the start at login does: its tray icon, every panel of config.toml,
-   and the app's window. Quit in the icon's menu ends it. What it writes in the terminal is
-   worth copying if something is wrong, as is the log (the tray icon's menu opens it).
-4. Use it as you use the installed app: Start, Status, Themes, Design, Player, Settings.
+2. Double-click LibrePanel.exe: the app starts as the installed one does, with its tray
+   icon, every panel of config.toml and the app's window. Quit in the icon's menu ends it.
+   The log (the tray icon's menu opens it) is worth copying if something is wrong.
+3. Use it as you use the installed app: Start, Status, Themes, Design, Player, Settings.
 
-   .\libre-panel.exe start          the same in the terminal, until Ctrl+C
+   In a terminal (PowerShell) in this folder:
+   .\libre-panel.exe start          the app with what it says in the terminal, until Ctrl+C
    .\libre-panel.exe doctor         the panel check, with a report
    .\libre-panel.exe sensors        the readings and their keys
 

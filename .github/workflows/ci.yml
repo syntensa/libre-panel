@@ -397,8 +397,9 @@ jobs:
         run: |
           libs="$RUNNER_TEMP/libs"
           mkdir -p libre-panel-rust/share/libre-panel libre-panel-rust/licenses
-          cp rust/target/release/libre-panel.exe rust/target/release/libre-panel-window.exe \
-            rust/target/release/libre-panel-tray.exe libre-panel-rust/
+          cp rust/target/release/libre-panel.exe rust/target/release/LibrePanel.exe \
+            rust/target/release/libre-panel-window.exe rust/target/release/libre-panel-tray.exe \
+            libre-panel-rust/
           cp rust/app/try-windows.txt libre-panel-rust/README.txt
           cp "$libs/freetype/Release/freetype.dll" "$libs/jpeg/Release/jpeg62.dll" libre-panel-rust/
           cp "$libs"/webp/Release/*.dll libre-panel-rust/
@@ -440,7 +441,7 @@ jobs:
         shell: pwsh
         run: |
           $version = (Select-String -Path src/libre_panel/__init__.py -Pattern '__version__ = "(.+)"').Matches[0].Groups[1].Value
-          foreach ($exe in "libre-panel.exe", "libre-panel-window.exe", "libre-panel-tray.exe") {
+          foreach ($exe in "libre-panel.exe", "LibrePanel.exe", "libre-panel-window.exe", "libre-panel-tray.exe") {
             $info = (Get-Item "libre-panel-rust/$exe").VersionInfo
             if ($info.CompanyName -ne "Libre Panel contributors" -or $info.ProductVersion -ne $version) {
               throw "$exe says nothing of itself: $($info | Format-List | Out-String)"

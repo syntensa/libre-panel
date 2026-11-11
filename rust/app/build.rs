@@ -3,5 +3,8 @@
 include!("../winres.rs");
 
 fn main() {
-    windows_resources(&[("libre-panel", "Libre Panel (command line)")]);
+    windows_resources(&[
+        ("libre-panel", "Libre Panel (command line)"),
+        ("LibrePanel", "Libre Panel"),
+    ]);
 }
