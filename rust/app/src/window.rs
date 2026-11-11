@@ -323,6 +323,43 @@ fn error_output() -> std::process::Stdio {
     }
 }
 
+/// _double_clicked: whether this console program (libre-panel.exe of the Windows downloads)
+/// was started with a double click: Windows then made a console for it alone, not a terminal
+/// it runs in.
+#[cfg(windows)]
+fn double_clicked() -> bool {
+    use windows_sys::Win32::System::Console::GetConsoleProcessList;
+    if !crate::settings::packaged() {
+        return false;
+    }
+    let mut ids = [0u32; 4];
+    // SAFETY: the list is written into `ids`, of the length given
+    unsafe { GetConsoleProcessList(ids.as_mut_ptr(), ids.len() as u32) == 1 }
+}
+
+#[cfg(not(windows))]
+fn double_clicked() -> bool {
+    false
+}
+
+/// _hand_over_to_the_app: a double click on libre-panel.exe starts the app as LibrePanel.exe
+/// does (LibrePanel.exe started, on its own), so that the console goes at once. Whether it
+/// was handed over.
+pub fn hand_over() -> bool {
+    if !double_clicked() {
+        return false;
+    }
+    let Ok(windowed) = sibling("LibrePanel") else {
+        return false;
+    };
+    if !windowed.is_file() {
+        return false;
+    }
+    let mut command = std::process::Command::new(windowed);
+    detached(&mut command);
+    command.spawn().is_ok()
+}
+
 /// _detached: the window process on its own, so that it outlives what started it (a terminal,
 /// the tray's restart) and no console window shows.
 fn detached(command: &mut std::process::Command) {

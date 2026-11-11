@@ -63,3 +63,71 @@ pub fn user_themes_dir() -> PathBuf {
 pub fn log_file() -> PathBuf {
     config_dir().join("logs").join(LOG_FILENAME)
 }
+
+/// copy_tree: `source` into the new folder `target`, without the folders named in `skip`
+/// at its top (shutil.copytree with ignore_patterns, for a folder's own names).
+fn copy_tree(source: &Path, target: &Path, skip: &[&str]) -> std::io::Result<()> {
+    std::fs::create_dir_all(target)?;
+    for entry in std::fs::read_dir(source)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        if skip.iter().any(|skipped| name == *skipped) {
+            continue;
+        }
+        let path = entry.path();
+        if entry.file_type()?.is_dir() {
+            copy_tree(&path, &target.join(&name), skip)?;
+        } else {
+            std::fs::copy(&path, target.join(&name))?;
+        }
+    }
+    Ok(())
+}
+
+/// take_over_into_portable: on the first start of a portable copy, the settings in the
+/// user's own folder (where an installed Libre Panel keeps its) copied into its `data`
+/// folder, once; the logs stay behind. The folder they came from, or None; Err: why they
+/// were not taken over.
+pub fn take_over_into_portable() -> Result<Option<PathBuf>, String> {
+    let portable = match set("LIBRE_PANEL_HOME") {
+        Some(_) => None,
+        None => portable_dir(None),
+    };
+    let Some(portable) = portable.filter(|portable| !portable.exists()) else {
+        return Ok(None);
+    };
+    let usual = usual_dir();
+    if !usual.join(CONFIG_FILENAME).is_file() {
+        return Ok(None);
+    }
+    let mut name = portable.file_name().unwrap_or_default().to_os_string();
+    name.push(".part");
+    let part = portable.with_file_name(name);
+    let _ = std::fs::remove_dir_all(&part);
+    let copied =
+        copy_tree(&usual, &part, &["logs"]).and_then(|()| std::fs::rename(&part, &portable));
+    match copied {
+        Ok(()) => Ok(Some(usual)),
+        Err(why) => {
+            let _ = std::fs::remove_dir_all(&part);
+            Err(format!(
+                "portable: the settings of {} were not taken over: {why}",
+                usual.display()
+            ))
+        }
+    }
+}
+
+/// caches the versions before kept and this one does not: the weather symbols' lit bodies
+/// (render/light3d.py, until 0.8.0rc1)
+const GONE_CACHES: [&str; 1] = ["light3d"];
+
+/// forget_gone_caches: what GONE_CACHES names, out of the settings folder's `cache`.
+pub fn forget_gone_caches() {
+    for name in GONE_CACHES {
+        let folder = config_dir().join("cache").join(name);
+        if folder.is_dir() {
+            let _ = std::fs::remove_dir_all(folder);
+        }
+    }
+}

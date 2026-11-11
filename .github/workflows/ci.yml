@@ -458,11 +458,17 @@ jobs:
   try:
     # Libre Panel in Rust to try on a PC with a panel: libre-panel.exe and what it loads (the
     # job `rust`), with the engine that sends a TURZX panel its video (the job `engine`) and
-    # the sensor service (the job `sensor-host`) in "sensors", as the downloads carry it
+    # the sensor service (the job `sensor-host`) in "sensors", as the downloads carry it; and
+    # its setup, made with the downloads' Inno Setup script and tried as release.yml tries
+    # theirs (install for all users with every box, run, uninstall)
     needs: [engine, rust, sensor-host]
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    runs-on: windows-latest
+    timeout-minutes: 30
     steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
       - uses: actions/download-artifact@v4
         with:
           name: libre-panel-rust-app
@@ -475,8 +481,11 @@ jobs:
         with:
           name: sensors-windows
           path: libre-panel-rust/sensors
-      - run: |
-          ls -R libre-panel-rust | head -80
+      - name: What the folder holds
+        shell: bash
+        run: |
+          find libre-panel-rust -maxdepth 2 | sort | head -80
+          test -f libre-panel-rust/LibrePanel.exe
           test -f libre-panel-rust/tools/libre-panel-engine.exe
           test -f libre-panel-rust/tools/ffmpeg.exe
           test -f libre-panel-rust/sensors/libre-panel-sensors.exe
@@ -485,6 +494,26 @@ jobs:
         with:
           name: libre-panel-rust-windows
           path: libre-panel-rust
+          retention-days: 30
+      - name: Its setup
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path src/libre_panel/__init__.py -Pattern '__version__ = "(.+)"').Matches[0].Groups[1].Value
+          $numeric = python -c "import re, sys; v = sys.argv[1]; n = re.findall(r'\d+', v)[:4 if re.fullmatch(r'[\d.]+', v) else 3]; print('.'.join((n + ['0'] * 4)[:4]))" $version
+          "VERSION=$version" >> $env:GITHUB_ENV
+          Copy-Item LICENSE, README.md, NOTICE.md libre-panel-rust/
+          Remove-Item libre-panel-rust/README.txt  # (the try folder's: not for the setup)
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          & $iscc "/DAppVersion=$version" "/DNumericVersion=$numeric" "/DSourceDir=..\..\libre-panel-rust" "/DOutputDir=..\..\dist" packaging\windows\libre-panel.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Test the setup (install, run, uninstall)
+        shell: pwsh
+        run: python packaging/windows/test_installer.py --rust "dist/libre-panel-$env:VERSION-windows-x64-setup.exe"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libre-panel-rust-setup
+          path: dist/*-setup.exe
           retention-days: 30
 
   sensor-host:

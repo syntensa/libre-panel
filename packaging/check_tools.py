@@ -208,14 +208,15 @@ def check_discovery(program: Path, tools: Path, names: list[str]) -> None:
             print(f"ok: started from {exe.name}, the app finds {name} in {TOOLS_FOLDER}")
 
 
-def check(program: Path, run: Runner = run) -> None:
+def check(program: Path, run: Runner = run, discovery: bool = True) -> None:
     tools = program / TOOLS_FOLDER
     if not tools.is_dir():
         raise CheckError(f"{program} has no {TOOLS_FOLDER} folder")
     names = check_files(tools)
     if not {"ffmpeg", "ffmpeg.exe"} & set(names):
         raise CheckError(f"{tools} has no ffmpeg: the video mode would need one of its own")
-    check_discovery(program, tools, names)
+    if discovery:
+        check_discovery(program, tools, names)
     for name in names:
         if name in ("ffmpeg", "ffmpeg.exe"):
             check_ffmpeg(tools / name, run)
@@ -228,9 +229,15 @@ def check(program: Path, run: Runner = run) -> None:
 def main(argv: list[str] | None = None, run: Runner = run) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("program", type=Path, help="the folder with libre-panel in it")
+    parser.add_argument(
+        "--no-discovery",
+        action="store_true",
+        help="the build is not the Python app's (the Rust app's): its own look for its programs "
+        "is not asked through the Python modules",
+    )
     args = parser.parse_args(argv)
     try:
-        check(args.program, run)
+        check(args.program, run, discovery=not args.no_discovery)
     except CheckError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 1

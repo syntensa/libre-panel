@@ -80,7 +80,8 @@ Libre Panel
 
   libre-panel run [options]     show the theme on the panel until stopped (Ctrl+C)
   libre-panel start [options]   the same as a background app: with the keyboard shortcuts
-                                of config.toml, the panel paused and resumed by them
+                                of config.toml, the panel paused and resumed by them (the
+                                command when none is given)
   libre-panel render [options]  draw one frame into a PNG file (--output, else frame.png)
   libre-panel editor [options]  the app's server alone (its address, with the token, is
                                 printed)
@@ -91,7 +92,8 @@ Libre Panel
                                 start Libre Panel when you log in (--elevated, Windows:
                                 with the highest rights, through Task Scheduler)
   libre-panel sensors           the readings and their keys (--check-service: whether the
-                                sensor service answers, on Windows)
+                                sensor service answers, on Windows; --check-lhm: whether
+                                LibreHardwareMonitor loads with the download's libraries)
   libre-panel themes            the themes that are installed
   libre-panel models            the panels Libre Panel knows
   libre-panel ports             the serial ports and what is on them
@@ -140,6 +142,27 @@ pub fn unlock_offered() -> bool {
 }
 
 /// `sensors --check-service`: does the sensor service answer this account with readings?
+/// `sensors --check-lhm` (cli.py's _check_lhm): whether LibreHardwareMonitor loads and opens
+/// with the libraries the download carries, as Libre Panel reads them, through the sensor
+/// service's own program (its `--check`): no administrator rights needed, and the
+/// processor's sensors being out of reach is no failure.
+fn check_lhm() -> Result<(), String> {
+    if !cfg!(windows) {
+        return Err("LibreHardwareMonitor is for Windows only.".into());
+    }
+    let folder = system_setup::bundled_service()
+        .ok_or("this download carries no sensor service (sensors\\libre-panel-sensors.exe)")?;
+    let program = folder.join(system_setup::SERVICE_EXE);
+    let status = std::process::Command::new(&program)
+        .arg("--check")
+        .status()
+        .map_err(|why| format!("{}: {why}", program.display()))?;
+    match status.success() {
+        true => Ok(()),
+        false => Err(String::new()),
+    }
+}
+
 fn check_service() -> Result<(), String> {
     if !cfg!(windows) {
         return Err("The sensor service is for Windows only.".into());
@@ -279,6 +302,12 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
             println!("sensors: {}", config.sensors.providers.join(", "));
         }
         "sensors" => {
+            if let Some(at) = args.iter().position(|arg| arg == "--check-lhm") {
+                let mut rest = args.to_vec();
+                rest.remove(at);
+                asked(&rest)?;
+                return check_lhm();
+            }
             if let Some(at) = args.iter().position(|arg| arg == "--check-service") {
                 let mut rest = args.to_vec();
                 rest.remove(at);
@@ -1124,7 +1153,7 @@ fn system_setup_command(args: &[String]) -> Result<u8, String> {
     ))
 }
 
-/// main: the program: the command its arguments name, else `default` ("help" for
+/// main: the program: the command its arguments name, else `default` ("start" for
 /// libre-panel, "tray" for LibrePanel.exe, as the Python downloads' programs have it).
 pub fn main(default: &str) -> ExitCode {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
@@ -1134,11 +1163,33 @@ pub fn main(default: &str) -> ExitCode {
     while args.first().is_some_and(|first| first == "--config") && args.len() >= 2 {
         leading.extend(args.drain(..2));
     }
+    // a double click on libre-panel.exe, the command line's program, starts the app as
+    // LibrePanel.exe does, and its console goes at once (it would else stay open as long as
+    // the app runs, and closing it would end the app)
+    if default == "start" && args.is_empty() && leading.is_empty() && window::hand_over() {
+        return ExitCode::SUCCESS;
+    }
+    // (LibrePanel.exe: `--background` alone means `tray --background`)
+    let options_only = args
+        .first()
+        .is_some_and(|first| first.starts_with('-') && !["--help", "-h"].contains(&first.as_str()));
     let (command, rest) = match args.split_first() {
+        Some(_) if options_only && default != "help" => (default.to_string(), args.clone()),
         Some((command, rest)) => (command.clone(), rest.to_vec()),
         None => (default.to_string(), Vec::new()),
     };
     let rest: Vec<String> = rest.into_iter().chain(leading).collect();
+    // a portable copy's first start takes over the settings of the user's own folder; and
+    // what an earlier version kept in the cache and this one does not goes
+    match lp_config::dirs::take_over_into_portable() {
+        Ok(Some(came)) => logs::say(
+            "libre_panel.cli",
+            &format!("portable: took over the settings of {}", came.display()),
+        ),
+        Ok(None) => {}
+        Err(why) => logs::say("libre_panel.config", &why),
+    }
+    lp_config::dirs::forget_gone_caches();
     match run(&command, &rest) {
         Ok(()) => ExitCode::SUCCESS,
         Err(why) => {

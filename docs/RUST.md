@@ -2209,6 +2209,15 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       the models its ids may be), `udev-rules` and `location`; LibrePanel.exe, the app
       without a console window (Windows), the tray app unless a command is given. The test:
       a notice shown and the app quit with cli.py's words, both refused without a running app
+- [x] the Windows setup of the Rust app: the downloads' Inno Setup script (packaging/windows/
+      libre-panel.iss) over the try folder, tried in CI's job `try` as release.yml tries the
+      downloads' (packaging/windows/test_installer.py --rust: for all users with every box,
+      the sensor service set up and read through, the smoke test's Rust run, PresentMon's
+      box, the uninstaller quitting the app and taking everything with it). For it the app
+      starts as cli.py does: `libre-panel` alone is `start` (a double click hands over to
+      LibrePanel.exe), `LibrePanel.exe --background` is `tray --background`, a portable
+      copy's first start takes over the user's settings, and `sensors --check-lhm` asks the
+      sensor service's own program whether LibreHardwareMonitor loads
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app
 - [x] one Libre Panel at a panel (instance.py): the system's lock on libre-panel.lock in the

@@ -4,10 +4,12 @@ A plugin folder with a service that uses sqlite3 checks that folder plugins
 load on the bundled Python. The built-in service "notices" checks that Libre
 Panel's own services start from a build that has no package metadata.
 
-python packaging/smoke_test.py [--tools] dist/libre-panel/libre-panel tray --background
+python packaging/smoke_test.py [--tools] [--rust] dist/libre-panel/libre-panel tray --background
 
 --tools: the download carries ffmpeg (packaging/fetch_tools.py), so the app's own account of
 the video mode (the panel page of its API) must miss nothing, not even ffmpeg.
+--rust: the build is the Rust app's (docs/RUST.md): it loads no plugin folders of Python and
+draws the app's pictures in its own process, so those two are not looked for.
 """
 
 import json
@@ -102,25 +104,28 @@ def home_parent():
 
 
 def main(command):
-    tools = command[:1] == ["--tools"]
-    command = command[1:] if tools else command
+    tools = "--tools" in command[:2]
+    rust = "--rust" in command[:2]
+    command = [part for part in command[:2] if part not in ("--tools", "--rust")] + command[2:]
     with tempfile.TemporaryDirectory(dir=home_parent()) as folder:
         home = Path(folder)
         frame = home / "frame.png"
+        services = '["notices"]' if rust else '["smoke", "notices"]'
         (home / "config.toml").write_text(
             f'theme = "lumen"\n\n[device]\ndriver = "virtual"\noutput = "{frame.as_posix()}"\n'
             '\n[video]\nmode = "on"\nlocal_clip = "smoke.h264"\n'
-            '\n[services]\nenabled = ["smoke", "notices"]\n\n[services.notices]\nmusic = false\n',
+            f"\n[services]\nenabled = {services}\n\n[services.notices]\nmusic = false\n",
             encoding="utf-8",
         )
-        plugin = home / "plugins" / "smoke"
-        (plugin / "smoke_plugin").mkdir(parents=True)
-        (plugin / "smoke_plugin" / "__init__.py").write_text(PLUGIN, encoding="utf-8")
-        (plugin / "plugin.toml").write_text(
-            'name = "smoke"\napi = 1\n\n[entry-points."libre_panel.services"]\n'
-            'smoke = "smoke_plugin:Smoke"\n',
-            encoding="utf-8",
-        )
+        if not rust:
+            plugin = home / "plugins" / "smoke"
+            (plugin / "smoke_plugin").mkdir(parents=True)
+            (plugin / "smoke_plugin" / "__init__.py").write_text(PLUGIN, encoding="utf-8")
+            (plugin / "plugin.toml").write_text(
+                'name = "smoke"\napi = 1\n\n[entry-points."libre_panel.services"]\n'
+                'smoke = "smoke_plugin:Smoke"\n',
+                encoding="utf-8",
+            )
         env = dict(os.environ, LIBRE_PANEL_HOME=str(home))
         print("starting:", " ".join(command))
         proc = subprocess.Popen(command, env=env)
@@ -134,7 +139,8 @@ def main(command):
             state = wait(lambda: api(url)["panel"]["state"] == "showing" and api(url), 60, "frames")
             print("panel:", state["panel"])
             wait(frame.exists, 10, "frame file")
-            wait((home / "plugins-data" / "smoke" / "started").exists, 10, "folder plugin")
+            if not rust:
+                wait((home / "plugins-data" / "smoke" / "started").exists, 10, "folder plugin")
             # the editor's own pages (Control, Autopilot): their files and code are in the build
             pages = {page["id"] for page in json.loads(fetch(url + "api/plugins/pages"))}
             if not {"control", "autopilot"} <= pages:
@@ -176,6 +182,9 @@ def main(command):
         # Quit has to work by itself, not through the last-resort exit.
         if "exiting anyway" in text:
             raise SystemExit("FAIL: the app only ended through the last-resort exit")
+        if rust:
+            print("OK")
+            return
         if "service 'notices' started" not in text:
             raise SystemExit("FAIL: the built-in service notices did not start")
         if "the app's pictures: in a process of their own" not in text or "; drawn here" in text:
