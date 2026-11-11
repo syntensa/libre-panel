@@ -11,6 +11,7 @@ mod backup;
 mod beside;
 mod colour_show;
 mod colours;
+mod community;
 mod company;
 mod consoles;
 mod display;

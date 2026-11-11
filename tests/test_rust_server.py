@@ -2927,3 +2927,131 @@ def test_the_panel_test_runs_on_the_app_s_panel_as_doctor_session_py_runs_it(
                 program.wait(10)
     finally:
         rig.close()
+
+
+@pytest.fixture
+def community_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
+    """GitHub's community folder as a web server of this computer (set before the servers
+    start): what is put in the folder it answers, and `moved.zip` a redirect to another
+    host."""
+    from libre_panel.editor import community
+
+    folder = tmp_path / "site"
+    folder.mkdir()
+
+    class Site(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            name = self.path.lstrip("/")
+            if name.endswith("moved.zip"):
+                self.send_response(302)
+                self.send_header("Location", "http://localhost:1/elsewhere.zip")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            path = folder / name
+            if not path.is_file():
+                self.send_response(404)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            body = path.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args: Any) -> None:
+            pass
+
+    site = ThreadingHTTPServer(("127.0.0.1", 0), Site)
+    threading.Thread(target=site.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{site.server_address[1]}/index.json"
+    monkeypatch.setattr(community, "INDEX_URL", url)
+    monkeypatch.setenv("LP_COMMUNITY_INDEX", url)
+    try:
+        yield folder
+    finally:
+        site.shutdown()
+
+
+def test_community_themes_are_listed_and_installed_as_community_py_does(
+    community_site: Path, servers: Any
+) -> None:
+    """Start → Themes → Community themes: the list as GitHub has it (entries that are not
+    sound left out), a preview, a theme installed as it came and one adapted to another panel,
+    the same files as Python's; a checksum that differs, a size the list does not name, a
+    redirect to another host, a theme not listed, a panel not known and what is no request
+    refused in the same words; a look at a theme on a panel drawn."""
+    import hashlib
+    import io
+
+    from PIL import Image
+
+    from libre_panel.theme.model import find_theme, load_theme
+    from libre_panel.theme.share import export_theme
+
+    ask, homes = servers
+    data, _name = export_theme("slate")
+    theme = load_theme(find_theme("slate"))
+    size = f"{theme.width}x{theme.height}"
+    (community_site / "slate").mkdir()
+    (community_site / "slate" / "slate.zip").write_bytes(data)
+    (community_site / "wrong").mkdir()
+    (community_site / "wrong" / "wrong.zip").write_bytes(data)
+    (community_site / "sized").mkdir()
+    (community_site / "sized" / "sized.zip").write_bytes(data)
+    preview = Image.new("RGB", (40, 20), (10, 120, 200))
+    preview.save(community_site / "slate" / "slate.png")
+    sha = hashlib.sha256(data).hexdigest()
+    entry = {"name": " Slate ", "author": "Libre Panel", "description": "the classic",
+             "sizes": [size], "zip": "slate/slate.zip", "preview": "slate/slate.png",
+             "sha256": sha.upper()}  # fmt: skip
+    index = {"format": "libre-panel-community/1", "themes": [
+        entry,
+        {**entry, "name": "again"},  # (the same id once)
+        {**entry, "zip": "wrong/wrong.zip", "sha256": "0" * 64},
+        {**entry, "zip": "sized/sized.zip", "sizes": ["100x100"]},
+        {**entry, "zip": "moved/moved.zip"},
+        {**entry, "zip": "../up.zip"},  # not sound: left out
+        {**entry, "sizes": ["1x1"]},
+        {**entry, "name": "x" * 81},
+        "nothing",
+    ]}  # fmt: skip
+    (community_site / "index.json").write_text(json.dumps(index), encoding="utf-8")
+    theirs, ours = ask(_get("/api/community/themes", WITH))
+    assert ours[0] == theirs[0] == "HTTP/1.0 200 OK", ours[2]
+    listed = json.loads(ours[2])
+    assert listed == json.loads(theirs[2])
+    assert [t["id"] for t in listed["themes"]] == ["slate", "wrong", "sized", "moved"]
+    assert listed["themes"][0]["name"] == "Slate" and listed["offline"] is False
+    theirs, ours = ask(_get("/api/community/themes/slate/preview", WITH))
+    assert ours[0] == theirs[0] == "HTTP/1.0 200 OK" and ours[2] == theirs[2]
+    theirs, ours = ask(_get("/api/community/themes/nope/preview", WITH))
+    assert ours[0] == theirs[0] == "HTTP/1.0 404 Not Found"
+    theirs, ours = ask(_post("/api/community/install", {"id": "slate"}))
+    assert ours[0] == theirs[0] == "HTTP/1.0 200 OK", ours[2]
+    done = json.loads(ours[2])
+    assert done == json.loads(theirs[2])
+    kept = [sorted((p.relative_to(h / "themes" / done["id"]), p.read_bytes())
+                   for p in (h / "themes" / done["id"]).rglob("*") if p.is_file())
+            for h in homes]  # fmt: skip
+    assert kept[1] == kept[0] and kept[0]
+    asked = {"id": "slate", "model": "turing-2.1-usb"}
+    theirs, ours = ask(_post("/api/community/install", asked))
+    assert ours[0] == theirs[0] == "HTTP/1.0 200 OK", ours[2]
+    mine, python = json.loads(ours[2]), json.loads(theirs[2])
+    assert mine == python and mine["adapted"] == [480, 480], mine
+    adapted = [(h / "themes" / mine["id"] / "theme.json").read_text("utf-8") for h in homes]
+    assert adapted[1] == adapted[0]
+    for body in ({"id": "wrong"}, {"id": "sized"}, {"id": "moved"}, {"id": "nope"},
+                 {"id": "slate", "model": "nope"}, {"id": "slate", "model": 5}, {"id": 5},
+                 [1]):  # fmt: skip
+        theirs, ours = ask(_post("/api/community/install", body))
+        assert ours[0] == theirs[0], (body, ours, theirs)
+        assert json.loads(ours[2]) == json.loads(theirs[2]), body
+    theirs, ours = ask(_get("/api/community/themes/slate/look?model=nope", WITH))
+    assert ours[0] == theirs[0] and json.loads(ours[2]) == json.loads(theirs[2])
+    theirs, ours = ask(_get("/api/community/themes/slate/look?model=turing-12.3-usb", WITH))
+    assert ours[0] == theirs[0] == "HTTP/1.0 200 OK", ours[2]
+    sizes = [Image.open(io.BytesIO(answer[2])).size for answer in (theirs, ours)]
+    assert sizes[0] == sizes[1] == (1920, 720)

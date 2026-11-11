@@ -796,6 +796,77 @@ fn put_in_place(
     })
 }
 
+/// A folder of its own for a look at a shared theme (tempfile.TemporaryDirectory), gone when
+/// dropped.
+pub struct Place(pub PathBuf);
+
+impl Place {
+    pub fn new() -> std::io::Result<Place> {
+        let folder = std::env::temp_dir().join(format!("libre-panel-{}", token_hex(8)));
+        std::fs::create_dir_all(&folder)?;
+        Ok(Place(folder))
+    }
+}
+
+impl Drop for Place {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// inspect_shared: the size of the theme a shared theme's zip holds, checked as an import
+/// checks it and kept nowhere.
+pub fn inspect_shared(data: &[u8], places: &Places, env: &Env) -> Answer<(i64, i64)> {
+    let place = Place::new().map_err(|e| Refused::Os(e.to_string()))?;
+    let done = import_theme(data, &place.0, places, env, "", "")?;
+    let theme = lp_theme::model::load_theme(&place.0.join(&done.id), env)
+        .map_err(|e| Refused::Theme(e.msg))?;
+    Ok((theme.width, theme.height))
+}
+
+/// rewritten: a shared theme's zip (one inspect_shared took) with its theme.json as `change`
+/// makes it of what it holds, every other file as it was (a community theme adapted to the
+/// person's panel before it is put in place).
+pub fn rewritten(
+    data: &[u8],
+    change: impl FnOnce(Value) -> Result<Value, String>,
+) -> Answer<Vec<u8>> {
+    let archive = match Archive::new(data) {
+        Ok(archive) => archive,
+        Err(ZipError::BadZip(_) | ZipError::UnicodeDecode(_)) => return Err(not_a_zip()),
+        Err(other) => return Err(Refused::Failed(other.told())),
+    };
+    let (_top, files) = checked(&archive)?;
+    let found = files[THEME_FILENAME].clone();
+    let body = archive
+        .read(&found)
+        .map_err(|e| Refused::Failed(e.told()))?;
+    let text = String::from_utf8(body).map_err(|e| Refused::Failed(e.to_string()))?;
+    let raw = lp_py::json::loads(&text).map_err(|e| Refused::Failed(e.to_string()))?;
+    let raw = change(raw).map_err(Refused::Share)?;
+    let dumps = lp_py::json::Dumps {
+        indent: Some("  ".into()),
+        ensure_ascii: false,
+        ..Default::default()
+    };
+    let written = lp_py::json::dumps(&raw, &dumps) + "\n";
+    let mut zip = Writer::default();
+    for entry in &archive.infolist {
+        let body = if entry.filename == found.filename {
+            written.as_bytes().to_vec()
+        } else {
+            archive.read(entry).map_err(|e| Refused::Failed(e.told()))?
+        };
+        zip.add(&Entry {
+            name: &entry.filename,
+            date_time: entry.date_time,
+            external_attr: entry.external_attr,
+            data: &body,
+        });
+    }
+    Ok(zip.finish())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

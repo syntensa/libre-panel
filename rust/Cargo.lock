@@ -1311,6 +1311,7 @@ dependencies = [
  "lp-theme",
  "num-bigint",
  "rusqlite",
+ "sha2",
  "windows-sys 0.61.2",
  "x11rb",
 ]

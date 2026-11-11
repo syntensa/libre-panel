@@ -151,7 +151,6 @@ pub struct Info {
     pub file_size: u64,
     pub header_offset: i128,
     pub external_attr: u32,
-    #[allow(dead_code)] // (the community's zips rewritten keep it)
     pub date_time: [u32; 6],
     end_offset: Option<i128>,
 }

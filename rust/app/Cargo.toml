@@ -25,6 +25,7 @@ lp-sensors = { path = "../sensors" }
 lp-services = { path = "../services" }
 indexmap = "2"
 num-bigint = "0.4"
+sha2 = "0.10"
 lp-net = { path = "../net" }
 # shared themes' zips (zip.rs)
 flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }

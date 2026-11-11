@@ -2149,6 +2149,14 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       this build does not drive need (a rev. C panel's size asked, the other JPEG layout
       tried). The tests: every panel's cards to the bit (lp-check doctor_card), and the whole
       test on the running app with a simulated panel
+- [x] the themes the community shares (editor/community.py, `/api/community/themes`, its
+      preview and look, `/api/community/install`): the list from the project's GitHub (kept an
+      hour, a minute after no answer; entries that are not sound left out, each id once), the
+      previews kept as long, a redirect followed only on the same host (lp-net's
+      get_same_host); a zip checked against the list's SHA-256 and the sizes it names, put in
+      place as an import of the file, adapted to another panel before it is (share.rs's
+      rewritten), and drawn on a panel with the demo readings. The test: against a web server
+      of this computer, the list, the files and every refusal as Python's
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app
 - [x] one Libre Panel at a panel (instance.py): the system's lock on libre-panel.lock in the

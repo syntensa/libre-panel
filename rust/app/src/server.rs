@@ -61,6 +61,8 @@ pub struct State {
     colours: crate::colours::ColourCheck,
     /// the panel test (doctor.rs)
     doctor: crate::doctor::Session,
+    /// the themes the community shares (community.rs)
+    community: crate::community::Community,
     /// the port the server listens on (what the AI hooks call)
     port: u16,
 }
@@ -367,6 +369,24 @@ const ROUTES: &[Route] = &[
         x.json(&s.doctor.status(), 200)
     }),
     private("POST", "/api/doctor", |s, x, _, _| doctor_action(s, x)),
+    // the themes the community shares: the list and the previews, from GitHub
+    private("GET", "/api/community/themes", |s, x, _, _| {
+        x.json(&s.community.themes(), 200);
+    }),
+    picture(
+        "GET",
+        "/api/community/themes/{theme}/preview",
+        |s, x, m, _| match s.community.preview(m[0]) {
+            Some(png) => x.send(200, &png, "image/png", ""),
+            None => x.error("not found", 404, ""),
+        },
+    ),
+    picture("GET", "/api/community/themes/{theme}/look", |s, x, m, u| {
+        community_look(s, x, m[0], &u.query);
+    }),
+    private("POST", "/api/community/install", |s, x, _, _| {
+        community_install(s, x);
+    }),
     picture("GET", "/api/across/picture", |s, x, _, _| {
         across_picture(s, x)
     }),
@@ -2153,6 +2173,63 @@ fn doctor_action(state: &State, exchange: &mut Exchange) {
     }
 }
 
+/// `?model=turing-12.3-usb`: a theme the community shares as it would show on that panel,
+/// adapted where it is made for another size (community.rs); nothing installed.
+fn community_look(state: &State, exchange: &mut Exchange, theme_id: &str, query: &str) {
+    let asked = crate::http::parse_qs(query);
+    let model = asked
+        .get("model")
+        .and_then(|values| values.first())
+        .cloned()
+        .unwrap_or_default();
+    let env = lp_theme::Env {
+        fonts_dir: state.home.fonts(),
+    };
+    let places = state.home.places();
+    match state.community.look_on(theme_id, &model, &places, &env) {
+        Ok(png) => exchange.send(200, &png, "image/png", ""),
+        Err((status, why)) => exchange.error(&why, status, ""),
+    }
+}
+
+/// `{"id": "aurora"}`: a theme the community shares, downloaded, checked against the list's
+/// SHA-256 and put in the person's themes folder; with `"model"`, one made for another size
+/// adapted to that panel.
+fn community_install(state: &State, exchange: &mut Exchange) {
+    let Some(payload) = exchange.read_json(MAX_JSON) else {
+        return;
+    };
+    let found = match &payload {
+        Value::Dict(payload) => match payload.get("id") {
+            Some(Value::Str(id)) => Some((id.clone(), payload.get("model").cloned())),
+            _ => None,
+        },
+        _ => None,
+    };
+    let Some((id, model)) = found else {
+        return exchange.error(
+            "expected {\"id\": \"<the id of a theme in the community list>\"}",
+            400,
+            "",
+        );
+    };
+    let model = match model {
+        Some(model) if model.truthy() => match model {
+            Value::Str(model) => model,
+            _ => return exchange.error("\"model\" is the id of a panel model", 400, ""),
+        },
+        _ => String::new(),
+    };
+    let env = lp_theme::Env {
+        fonts_dir: state.home.fonts(),
+    };
+    let places = state.home.places();
+    match state.community.install(&id, &model, &places, &env) {
+        Ok(told) => exchange.json(&Value::Dict(told), 200),
+        Err((status, why)) => exchange.error(&why, status, ""),
+    }
+}
+
 /// int(text) as Python reads a whole number: blanks around it, a sign, digits with single
 /// underscores between them.
 fn py_int(text: &str) -> Option<num_bigint::BigInt> {
@@ -2583,6 +2660,7 @@ impl EditorServer {
                 start_screen: crate::start_screen::Kept::default(),
                 colours,
                 doctor: crate::doctor::Session::default(),
+                community: crate::community::Community::default(),
             }),
             listener: Some(listener),
             stop: Arc::default(),

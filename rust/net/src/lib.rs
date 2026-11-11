@@ -77,6 +77,134 @@ pub fn get(
     Ok(data)
 }
 
+/// The scheme and host of an address (urlsplit's scheme and netloc).
+fn origin(url: &str) -> (String, String) {
+    let (scheme, rest) = url.split_once("://").unwrap_or(("", url));
+    let host = rest.split(['/', '?', '#']).next().unwrap_or("");
+    (scheme.to_lowercase(), host.to_string())
+}
+
+/// An address a redirect names, read against the one it came from.
+fn joined(base: &str, location: &str) -> String {
+    if location.contains("://") {
+        return location.to_string();
+    }
+    let (scheme, host) = origin(base);
+    if let Some(rest) = location.strip_prefix("//") {
+        return format!("{scheme}://{rest}");
+    }
+    if location.starts_with('/') {
+        return format!("{scheme}://{host}{location}");
+    }
+    let folder = base.rsplit_once('/').map_or(base, |(folder, _)| folder);
+    format!("{folder}/{location}")
+}
+
+/// get_same_host: as `get`, but a redirect is followed only on the same host (scheme and
+/// host and port alike): one to another is an error, as urllib answers when its redirect
+/// handler declines (the redirect's status and reason). More than `limit` bytes is an error.
+pub fn get_same_host(
+    url: &str,
+    headers: &[(&str, &str)],
+    timeout: f64,
+    limit: usize,
+) -> Result<Vec<u8>, Error> {
+    let wait = Some(Duration::from_secs_f64(timeout));
+    let agent: Agent = Agent::config_builder()
+        .timeout_resolve(wait)
+        .timeout_connect(wait)
+        .timeout_send_request(wait)
+        .timeout_recv_response(wait)
+        .timeout_per_read(wait)
+        .timeout_per_write(wait)
+        .max_redirects(0)
+        .tls_config(
+            TlsConfig::builder()
+                .root_certs(RootCerts::PlatformVerifier)
+                .build(),
+        )
+        .build()
+        .new_agent();
+    let status_error = |code: u16| Error {
+        status: Some(code),
+        text: http_reason(code).to_string(),
+    };
+    let mut address = url.to_string();
+    for _ in 0..10 {
+        let mut request = agent.get(&address);
+        for (name, value) in headers {
+            request = request.header(*name, *value);
+        }
+        let answer = request.call().map_err(|why| match &why {
+            ureq::Error::StatusCode(code) => status_error(*code),
+            _ => Error {
+                status: None,
+                text: why.to_string(),
+            },
+        })?;
+        let code = answer.status().as_u16();
+        if (300..400).contains(&code) {
+            let location = answer
+                .headers()
+                .get("location")
+                .and_then(|value| value.to_str().ok())
+                .map(str::to_string);
+            let Some(location) = location else {
+                return Err(status_error(code));
+            };
+            let next = joined(&address, &location);
+            if origin(&next) != origin(&address) {
+                return Err(status_error(code));
+            }
+            address = next;
+            continue;
+        }
+        let mut data = Vec::new();
+        answer
+            .into_body()
+            .into_reader()
+            .take(limit as u64 + 1)
+            .read_to_end(&mut data)
+            .map_err(|why| Error {
+                status: None,
+                text: why.to_string(),
+            })?;
+        if data.len() > limit {
+            return Err(Error {
+                status: None,
+                text: format!("{url}: larger than {limit} bytes"),
+            });
+        }
+        return Ok(data);
+    }
+    Err(Error {
+        status: None,
+        text: "too many redirects".into(),
+    })
+}
+
+/// The reason phrase of a status, as http.client's responses name it.
+fn http_reason(code: u16) -> &'static str {
+    match code {
+        300 => "Multiple Choices",
+        301 => "Moved Permanently",
+        302 => "Found",
+        303 => "See Other",
+        307 => "Temporary Redirect",
+        308 => "Permanent Redirect",
+        400 => "Bad Request",
+        401 => "Unauthorized",
+        403 => "Forbidden",
+        404 => "Not Found",
+        429 => "Too Many Requests",
+        500 => "Internal Server Error",
+        502 => "Bad Gateway",
+        503 => "Service Unavailable",
+        504 => "Gateway Timeout",
+        _ => "Error",
+    }
+}
+
 pub mod stream;
 
 #[cfg(test)]
