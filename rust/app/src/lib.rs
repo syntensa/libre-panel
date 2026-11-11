@@ -1302,7 +1302,32 @@ pub fn hand_over() -> bool {
 
 /// main: the program: the command its arguments name, else `default` ("start" for
 /// libre-panel, "tray" for LibrePanel.exe, as the Python downloads' programs have it).
+/// The handles of the console or the pipes this process was given are its own, not passed on
+/// to every program it starts: Windows hands a new process all handles that may be inherited,
+/// and a program that outlives this one (the window, a browser) would hold whoever started the
+/// app waiting for the end of its output. Python's subprocess passes on only the three a child
+/// is given; Rust's `Stdio::inherit` makes its own copy of them, which still works.
+fn own_handles() {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Foundation::{SetHandleInformation, HANDLE_FLAG_INHERIT};
+        use windows_sys::Win32::System::Console::{
+            GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+        };
+        for which in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+            // SAFETY: the process's own standard handles; a missing one is null and refused.
+            unsafe {
+                let handle = GetStdHandle(which);
+                if !handle.is_null() && handle as isize != -1 {
+                    SetHandleInformation(handle, HANDLE_FLAG_INHERIT, 0);
+                }
+            }
+        }
+    }
+}
+
 pub fn main(default: &str) -> ExitCode {
+    own_handles();
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     // the options before the command (`--config FILE tray --background`, the start at login
     // that the Python app wrote): they go after it
