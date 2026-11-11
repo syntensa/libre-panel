@@ -310,12 +310,7 @@ mod native {
             .set_title(TITLE)
             .set_description(question)
             .set_level(rfd::MessageLevel::Warning);
-        // (Windows: the system's own OK and Cancel, until the program has a manifest for the
-        // common controls that take buttons of other names)
-        if cfg!(windows) {
-            let asked = dialog.set_buttons(rfd::MessageButtons::OkCancel).show();
-            return asked == rfd::MessageDialogResult::Ok;
-        }
+        // (Windows: a task dialog of the common controls the program's manifest names)
         let close = lp_i18n::t("Close");
         let buttons = rfd::MessageButtons::OkCancelCustom(close.clone(), lp_i18n::t("Cancel"));
         match dialog.set_buttons(buttons).show() {

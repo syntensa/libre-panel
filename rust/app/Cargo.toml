@@ -62,3 +62,7 @@ windows-sys = { version = "0.61", features = [
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_WindowsAndMessaging",
 ] }
+
+[build-dependencies]
+# (the Windows programs' version, icon and manifest: ../winres.rs)
+embed-resource = "3"

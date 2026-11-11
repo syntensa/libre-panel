@@ -412,6 +412,9 @@ jobs:
           cp "$libs/libjpeg-turbo-3.2.0/LICENSE.md" libre-panel-rust/licenses/LICENSE-libjpeg-turbo.md
           cp "$libs/libjpeg-turbo-3.2.0/README.ijg" libre-panel-rust/licenses/README-libjpeg.ijg
           cp "$libs/libwebp-1.6.0/COPYING" libre-panel-rust/licenses/COPYING-libwebp.txt
+          # (the Rust crates the programs are built from, with their licences)
+          python packaging/rust_licenses.py --target x86_64-pc-windows-msvc \
+            -o libre-panel-rust/licenses/THIRD-PARTY-RUST.txt
           cd libre-panel-rust
           export LIBRE_PANEL_HOME="$RUNNER_TEMP/try-home"
           env -u LP_LIBJPEG -u LP_LIBWEBP -u LP_LIBWEBPDEMUX ./libre-panel.exe render --demo \
@@ -423,6 +426,20 @@ jobs:
               frame = Image.open(name); frame.load()
               assert frame.mode == 'RGB' and len(frame.getcolors(1 << 24)) > 500, name
               print(name, frame.size)" "$RUNNER_TEMP/try-lumen.png" "$RUNNER_TEMP/try-terra.png"
+      # (what Explorer, Windows Security and an antivirus program read of each program: its
+      # version resource, rust/winres.rs, as the downloads' programs have theirs)
+      - name: The programs say who made them (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path src/libre_panel/__init__.py -Pattern '__version__ = "(.+)"').Matches[0].Groups[1].Value
+          foreach ($exe in "libre-panel.exe", "libre-panel-window.exe", "libre-panel-tray.exe") {
+            $info = (Get-Item "libre-panel-rust/$exe").VersionInfo
+            if ($info.CompanyName -ne "Libre Panel contributors" -or $info.ProductVersion -ne $version) {
+              throw "$exe says nothing of itself: $($info | Format-List | Out-String)"
+            }
+            "{0}: {1}, {2}, {3}" -f $exe, $info.FileDescription, $info.CompanyName, $info.ProductVersion
+          }
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Windows'
         with:

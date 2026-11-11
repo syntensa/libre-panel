@@ -2192,6 +2192,14 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       (built there, as libjpeg-turbo and libwebp are), the app's themes, fonts and languages
       in `share/libre-panel`, the engine in `tools`, their licences, and how to try it
       (rust/app/try-windows.txt). CI draws two frames from the folder alone
+- [x] what the Windows programs say of themselves (rust/winres.rs, from each crate's build.rs):
+      the version resource as the Python app's programs have it (Libre Panel contributors, the
+      release's version, what the program is), the icon, and a manifest (the common controls
+      of version 6, so the window's question before closing has buttons of its own words;
+      per-monitor DPI; Windows 10 and 11; no elevation asked); CI reads it back from each
+- [x] the licences of the Rust crates the programs are built from (packaging/rust_licenses.py:
+      cargo's dependencies of the programs for the target, without their tests' and builds',
+      each crate with its version, licence and licence files), in the folder to try
 - [ ] Windows: the installer and the zip, signing; Linux: the AppImage; the tools (ffmpeg)
 
 ### R12 the switch

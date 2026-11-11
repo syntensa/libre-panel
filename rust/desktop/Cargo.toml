@@ -33,7 +33,7 @@ getrandom = "0.2"
 # not saved, and where a file the page saves goes
 tao = "0.37"
 wry = "0.57"
-rfd = { version = "0.15", default-features = false, features = ["gtk3"] }
+rfd = { version = "0.15", default-features = false, features = ["gtk3", "common-controls-v6"] }
 # the tray icon and its menu (libappindicator on Linux, loaded as it runs; no libxdo)
 tray-icon = { version = "0.26", default-features = false, features = ["libappindicator"] }
 
@@ -48,3 +48,7 @@ windows-sys = { version = "0.61", features = [
     "Win32_System_Threading",
     "Win32_UI_WindowsAndMessaging",
 ] }
+
+[build-dependencies]
+# (the Windows programs' version, icon and manifest: ../winres.rs)
+embed-resource = "3"
