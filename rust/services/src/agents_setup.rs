@@ -267,6 +267,12 @@ pub fn write_settings(path: &Path, data: &Dict) -> std::io::Result<Option<PathBu
     }
     let temporary = folder.join(format!(".{name}.{}", std::process::id()));
     let text = lp_py::json::dumps(&Value::Dict(data.clone()), &Dumps::file(2)) + "\n";
+    // (written as Python's write_text writes text: on Windows its lines end in \r\n)
+    let text = if cfg!(windows) {
+        text.replace('\n', "\r\n")
+    } else {
+        text
+    };
     std::fs::write(&temporary, text)?;
     std::fs::rename(&temporary, path)?;
     Ok(kept)

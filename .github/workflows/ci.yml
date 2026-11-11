@@ -209,7 +209,7 @@ jobs:
     # Libre Panel in Rust (docs/RUST.md): the workspace's crates, then their comparisons with
     # the Python app they replace (tests/test_rust_*.py, through lp-check); the comparisons on
     # Windows took 25 minutes and more by now, and grow with each piece in Rust
-    timeout-minutes: 50
+    timeout-minutes: 75  # (Windows: some 35 minutes of comparisons after the builds)
     strategy:
       fail-fast: false
       matrix:

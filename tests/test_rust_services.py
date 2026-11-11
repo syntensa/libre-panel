@@ -2286,6 +2286,8 @@ def test_downloads_are_followed_as_downloads_py_follows_them(tmp_path: Any, monk
                     seen["more"] += state["more"] > 0
                     seen["unknown"] += state["source"] == "steam" and state["total"] is None
                     seen["App"] += state["name"] != "Portal" and state["source"] == "steam"
+        if os.name == "nt":  # (~nobody_such_user is a folder beside the user's there: no error)
+            seen.pop("error")
         assert all(count >= 3 for count in seen.values()), seen
 
 
