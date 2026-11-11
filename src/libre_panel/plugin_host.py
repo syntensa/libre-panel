@@ -99,7 +99,9 @@ class Host:
                     "transition.close": self.transition_close,
                     "toast.open": self.toast_open, "toast.draw": self.toast_draw,
                     "toast.lifetime": self.toast_lifetime, "toast.hold": self.toast_hold,
-                    "toast.rebind": self.toast_rebind, "toast.close": self.toast_close}  # fmt: skip
+                    "toast.rebind": self.toast_rebind, "toast.close": self.toast_close,
+                    "pages.list": self.pages_list, "page.handle": self.page_handle}  # fmt: skip
+        self.pages: dict[str, Any] = {}
         self.styles: dict[int, Any] = {}
         self.transitions: dict[int, list[Any]] = {}
         self.drawings: dict[int, _Drawing] = {}
@@ -493,6 +495,51 @@ class Host:
             style.close()
         return {}
 
+    # -- the plugins' pages in the app ------------------------------------------------------
+
+    def pages_list(self, message: dict[str, Any], blob: bytes) -> dict[str, Any]:
+        """The plugins' editor pages that have their files: each ``{id, titles, icon,
+        folder}`` (titles by language, the folder their files are served from)."""
+        pages = []
+        for page_id in self.registry.names("editor_pages"):
+            cls = self.registry.get("editor_pages", page_id)
+            folder = cls.folder() if cls is not None else None
+            if folder is None or not (folder / "index.html").is_file():
+                continue
+            pages.append({"id": page_id, "titles": dict(getattr(cls, "title", {}) or {}),
+                          "icon": str(getattr(cls, "icon", "") or ""),
+                          "folder": str(folder)})  # fmt: skip
+        return {"pages": pages}
+
+    def page_handle(self, message: dict[str, Any], blob: bytes) -> tuple[dict, bytes]:
+        """A request to a plugin's page (``/api/plugins/<page>/<path>``), with what the app
+        told of itself (``context``); its answer: ``status`` and ``json``, or ``status``,
+        ``kind`` and the bytes; ``after``: what the page asked the app to do (follow
+        config.toml, a shortcut, restart a service of the app's)."""
+        from libre_panel.plugins.pages import PageContext
+
+        page_id = message["page"]
+        cls = self.registry.get("editor_pages", page_id)
+        if cls is None:
+            raise LookupError(f"no plugin has the page {page_id!r}")
+        told = message.get("context") or {}
+        controls = _PageControls(self, told) if told.get("background") else None
+        context = PageContext(controls, Path(told["config_path"]) if told.get("config_path")
+                              else None)  # fmt: skip
+        page = self.pages.get(page_id)
+        if page is None:
+            page = self.pages[page_id] = cls(context)
+        else:
+            page.context = context
+        query = {key: list(values) for key, values in (message.get("query") or {}).items()}
+        status, data, *kind = page.handle(message["method"], message.get("path", ""), query,
+                                          message.get("body"))  # fmt: skip
+        after = controls.after if controls is not None else []
+        if isinstance(data, bytes):
+            return {"status": int(status), "kind": kind[0] if kind else
+                    "application/octet-stream", "after": after}, data  # fmt: skip
+        return {"status": int(status), "json": data, "after": after}, b""
+
     def draw_close(self, message: dict[str, Any], blob: bytes) -> dict[str, Any]:
         drawing = self.drawings.pop(message["drawing"], None)
         if drawing is not None:
@@ -545,6 +592,45 @@ class _Drawing:
         snapshot.images = pictures
         renderer.snapshot = snapshot
         return renderer, snapshot, now
+
+
+class _PageServices:
+    """The services as a page sees them: each enabled one's state as the app told it, the
+    plugins' running here."""
+
+    def __init__(self, host: Host, controls: _PageControls) -> None:
+        self._host, self._controls = host, controls
+        self.state = dict(controls.told.get("services") or {})
+
+    @property
+    def running(self) -> dict[str, Any]:
+        return dict(self._host.services.running) if self._host.services is not None else {}
+
+    def restart(self, name: str) -> str:
+        if name in self.running:
+            return self._host.services.restart(name)
+        self._controls.after.append(["restart", name])  # (one of the app's: it restarts it)
+        return self.state.get(name, "not installed")
+
+
+class _PageControls:
+    """The running app as a page's context reaches it in the plugin host: what the app told
+    with the request, and what the page asks of it, done by the app once the page answered."""
+
+    def __init__(self, host: Host, told: dict[str, Any]) -> None:
+        self.told = told
+        self.after: list[Any] = []
+        self.config_path = Path(told["config_path"]) if told.get("config_path") else None
+        self.services = _PageServices(host, self)
+        self.plugin_host = host.bridge
+        status = told.get("status")
+        self.panel = type("_Panel", (), {"state": staticmethod(lambda: status)})()
+
+    def follow_config(self) -> None:
+        self.after.append(["follow_config"])
+
+    def shortcut(self, action: str) -> None:
+        self.after.append(["shortcut", action])
 
 
 def _takes_previous(style: Any) -> bool:

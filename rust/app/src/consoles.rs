@@ -55,27 +55,42 @@ pub fn folder(data: &Path) -> std::path::PathBuf {
     data.join("pages").join("web")
 }
 
-/// _pages: the pages there are, each `{id, title, icon}`, in the app's language.
+/// _pages: the pages there are (Libre Panel's and the plugins', by id), each `{id, title,
+/// icon}`, in the app's language.
 pub fn listed(data: &Path) -> Value {
-    if !folder(data).join("index.html").is_file() {
-        return Value::List(Vec::new());
-    }
     let language = lp_i18n::language();
     let code = language.code();
-    Value::List(
-        PAGES
+    let mut pages: Vec<(String, String, String)> = Vec::new();
+    if folder(data).join("index.html").is_file() {
+        for page in &PAGES {
+            let title = page
+                .titles
+                .iter()
+                .find(|(lang, _)| *lang == code)
+                .or_else(|| page.titles.iter().find(|(lang, _)| *lang == "en"))
+                .map_or(page.id, |(_, title)| title);
+            pages.push((page.id.into(), title.into(), String::new()));
+        }
+    }
+    for page in crate::plugins::pages() {
+        let title = [code, "en"]
             .iter()
-            .map(|page| {
-                let title = page
-                    .titles
-                    .iter()
-                    .find(|(lang, _)| *lang == code)
-                    .or_else(|| page.titles.iter().find(|(lang, _)| *lang == "en"))
-                    .map_or(page.id, |(_, title)| title);
+            .find_map(|lang| match page.titles.get(*lang) {
+                Some(Value::Str(title)) if !title.is_empty() => Some(title.clone()),
+                _ => None,
+            })
+            .unwrap_or_else(|| page.id.clone());
+        pages.push((page.id, title, page.icon));
+    }
+    pages.sort_by(|a, b| a.0.cmp(&b.0));
+    Value::List(
+        pages
+            .into_iter()
+            .map(|(id, title, icon)| {
                 let mut d = Dict::new();
-                d.insert("id".into(), Value::from(page.id));
-                d.insert("title".into(), Value::from(title));
-                d.insert("icon".into(), Value::from(""));
+                d.insert("id".into(), Value::Str(id));
+                d.insert("title".into(), Value::Str(title));
+                d.insert("icon".into(), Value::Str(icon));
                 Value::Dict(d)
             })
             .collect(),
@@ -86,7 +101,7 @@ pub fn listed(data: &Path) -> Value {
 pub enum Answer {
     Json(u16, Value),
     /// a picture: its bytes and their type
-    Bytes(Vec<u8>, &'static str),
+    Bytes(Vec<u8>, String),
 }
 
 /// A request that cannot be met; the page shows the message (already translated).
@@ -208,12 +223,77 @@ pub fn handle(
     let done = match id {
         "control" => control(method, route, &request, context),
         "autopilot" => autopilot(method, route, &request, context),
-        _ => return None,
+        _ => return plugin_page(id, method, path, query, body_of(&request), context),
     };
     Some(match done {
         Some(Ok(answer)) => answer,
         Some(Err(Refused(message, status))) => Answer::Json(status, error_of(&message)),
         None => Answer::Json(404, error_of(&t("not found"))),
+    })
+}
+
+fn body_of(request: &Request) -> Option<Value> {
+    Some(Value::Dict(request.body.clone()))
+}
+
+/// A request to a plugin's page, answered in the plugin host with what the app tells of
+/// itself; what the page asked of the app done after (_page_api).
+fn plugin_page(
+    id: &str,
+    method: &str,
+    path: &str,
+    query: &IndexMap<String, Vec<String>>,
+    body: Option<Value>,
+    context: &Context,
+) -> Option<Answer> {
+    let mut told = Dict::new();
+    told.insert("background".into(), Value::Bool(context.background()));
+    told.insert("elevated".into(), Value::Bool(crate::access::elevated()));
+    told.insert(
+        "config_path".into(),
+        Value::Str(context.config_file.to_string_lossy().into_owned()),
+    );
+    told.insert(
+        "status".into(),
+        context.status().map_or(Value::None, Value::Dict),
+    );
+    told.insert(
+        "services".into(),
+        Value::Dict(
+            context
+                .services()
+                .into_iter()
+                .map(|(name, state)| (name, Value::Str(state)))
+                .collect(),
+        ),
+    );
+    let body = if method == "POST" { body } else { None };
+    let answered = crate::plugins::page_request(id, method, path, query, body.as_ref(), told)?;
+    Some(match answered {
+        Ok(answer) => {
+            for asked in &answer.after {
+                let what = |i: usize| asked.get(i).and_then(Value::as_str).unwrap_or("");
+                match (what(0), &context.app) {
+                    ("follow_config", _) => context.follow_config(),
+                    ("shortcut", Some(app)) => app.shortcut(what(1)),
+                    ("restart", Some(app)) => {
+                        let _ = app.restart_service(what(1));
+                    }
+                    _ => {}
+                }
+            }
+            match (answer.bytes, answer.json) {
+                (Some((bytes, kind)), _) => Answer::Bytes(bytes, kind),
+                (None, json) => Answer::Json(answer.status, json.unwrap_or(Value::None)),
+            }
+        }
+        Err(why) => {
+            crate::logs::say(
+                "libre_panel.editor.server",
+                &format!("editor page {id} failed: {why}"),
+            );
+            Answer::Json(500, error_of(&format!("{id}: {why}")))
+        }
     })
 }
 
@@ -754,7 +834,7 @@ fn live(request: &Request, context: &Context) -> Result<Answer, Refused> {
     };
     let width = request.integer("w", LIVE_WIDTH, 160, 1920);
     let picture = encode(&frame, width, &kind).map_err(|why| Refused(why, 500))?;
-    Ok(Answer::Bytes(picture, content))
+    Ok(Answer::Bytes(picture, content.to_string()))
 }
 
 /// encode: `frame` as a JPEG or PNG `width` pixels wide (a smaller frame stays as it is).

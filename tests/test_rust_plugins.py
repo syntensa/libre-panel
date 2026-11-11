@@ -11,6 +11,7 @@ import signal
 import subprocess
 import sys
 import time
+from typing import Any
 
 from test_plugins import SENSOR, SENSOR_PARTS, theme_data
 from test_rust_app import DATA, _libraries, _program, _run
@@ -330,3 +331,61 @@ def test_a_plugins_transition_and_toast_style_play_in_the_rust_app(plugin_folder
             said = program.communicate(timeout=30)[1]
     assert all(seen.values()), (seen, said)
     assert "failed" not in said and "not installed" not in said, said
+
+
+def test_a_plugins_editor_page_is_served_as_server_py_serves_it(plugin_folder, isolated_home):
+    """A plugin's page among the app's own (its title in the app's language, its icon), its
+    files from its folder and nothing beside them, and its API answered in the plugin host:
+    a query, a body, a status of its own and its failure."""
+    from test_plugins import PAGE, PAGE_FILES, PAGE_PARTS
+    from test_rust_server import _asked
+
+    plugin_folder(PAGE, PAGE_PARTS, files=PAGE_FILES)
+    (isolated_home / "config.toml").write_text(
+        '[device]\ndriver = "virtual"\n[sensors]\nproviders = []\n', encoding="utf-8"
+    )
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(isolated_home), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries(), **HOST}  # fmt: skip
+    with subprocess.Popen([str(_program()), "editor", "--port", "0"], env=env,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        try:
+            assert program.stdout is not None
+            address = program.stdout.readline().split(" running at ")[1].split()[0]
+            port, token = int(address.split(":")[2].split("/")[0]), address.split("#token=")[1]
+
+            def ask(method: str, path: str, body: Any = None) -> tuple[int, Any]:
+                data = json.dumps(body).encode() if body is not None else b""
+                head = (f"{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
+                        f"X-Libre-Panel: {token}\r\nContent-Type: application/json\r\n"
+                        f"Content-Length: {len(data)}\r\n\r\n")  # fmt: skip
+                status, _, answer = _asked(port, head.encode() + data)
+                code = int(status.split()[1])
+                try:
+                    return code, json.loads(answer)
+                except ValueError:
+                    return code, answer
+
+            assert ask("GET", "/api/plugins/pages") == (200, [
+                {"id": "analysis", "title": "Analysis", "icon": "graph"},
+                {"id": "autopilot", "title": "Autopilot", "icon": ""},
+                {"id": "control", "title": "Control", "icon": ""},
+            ])  # fmt: skip
+            status, html = ask("GET", "/plugins/analysis/")
+            assert status == 200 and b"Analysis" in html
+            assert ask("GET", "/plugins/analysis/app.js")[0] == 200
+            assert ask("GET", "/plugins/analysis/secret.py")[0] == 404
+            assert ask("GET", "/plugins/analysis/../../plugin.toml")[0] == 404
+            assert ask("GET", "/plugins/nothing/")[0] == 404
+            assert ask("GET", "/api/plugins/analysis/status?x=7") == (
+                200, {"running": False, "q": "7"})  # fmt: skip
+            assert ask("POST", "/api/plugins/analysis/echo", {"a": 1}) == (201, {"got": {"a": 1}})
+            status, data = ask("GET", "/api/plugins/analysis/boom")
+            assert status == 500 and "the analysis failed" in data["error"]
+            assert ask("GET", "/api/plugins/pages")[0] == 200
+        finally:
+            if os.name == "nt":
+                program.terminate()
+            else:
+                program.send_signal(signal.SIGINT)
+            program.communicate(timeout=30)

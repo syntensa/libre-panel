@@ -1584,3 +1584,112 @@ pub fn attach(renderer: &mut lp_render::Renderer) {
     renderer.plugins = PluginDrawing::open(&home.settings, renderer)
         .map(|drawing| std::rc::Rc::new(drawing) as std::rc::Rc<dyn lp_render::Plugins>);
 }
+
+/// A plugin's editor page: its id, title by language, icon and the folder of its files.
+pub struct Page {
+    pub id: String,
+    pub titles: Dict,
+    pub icon: String,
+    pub folder: PathBuf,
+}
+
+/// The plugins' editor pages that have their files (none without plugins).
+pub fn pages() -> Vec<Page> {
+    let Ok(home) = crate::home::Home::find() else {
+        return Vec::new();
+    };
+    let Some(Ok(host)) = shared(&home.settings) else {
+        return Vec::new();
+    };
+    let Ok((told, _)) = host.request("pages.list", Dict::new(), &[]) else {
+        return Vec::new();
+    };
+    let Value::List(pages) = field(&told, "pages") else {
+        return Vec::new();
+    };
+    pages
+        .iter()
+        .filter_map(|page| match page {
+            Value::Dict(page) => Some(Page {
+                id: text(page, "id"),
+                titles: match field(page, "titles") {
+                    Value::Dict(titles) => titles.clone(),
+                    _ => Dict::new(),
+                },
+                icon: text(page, "icon"),
+                folder: PathBuf::from(text(page, "folder")),
+            }),
+            _ => None,
+        })
+        .collect()
+}
+
+/// What a plugin's page answered: its status and JSON, or its status, bytes and their type;
+/// and what it asked the app to do afterwards (each a list: its action and what it names).
+pub struct PageAnswer {
+    pub status: u16,
+    pub json: Option<Value>,
+    pub bytes: Option<(Vec<u8>, String)>,
+    pub after: Vec<Vec<Value>>,
+}
+
+/// A request to a plugin's page `page`, with what the app tells of itself (`context`); None
+/// where no plugin has the page, Err where it failed.
+pub fn page_request(
+    page: &str,
+    method: &str,
+    path: &str,
+    query: &indexmap::IndexMap<String, Vec<String>>,
+    body: Option<&Value>,
+    context: Dict,
+) -> Option<Result<PageAnswer, String>> {
+    let home = crate::home::Home::find().ok()?;
+    let host = match shared(&home.settings)? {
+        Ok(host) => host,
+        Err(why) => return Some(Err(why)),
+    };
+    if !host.names("editor_pages").iter().any(|known| known == page) {
+        return None;
+    }
+    let mut fields = Dict::new();
+    fields.insert("page".into(), Value::from(page));
+    fields.insert("method".into(), Value::from(method));
+    fields.insert("path".into(), Value::from(path));
+    fields.insert(
+        "query".into(),
+        Value::Dict(
+            query
+                .iter()
+                .map(|(key, values)| {
+                    let values = values.iter().map(|v| Value::Str(v.clone())).collect();
+                    (key.clone(), Value::List(values))
+                })
+                .collect(),
+        ),
+    );
+    fields.insert("body".into(), body.cloned().unwrap_or(Value::None));
+    fields.insert("context".into(), Value::Dict(context));
+    Some(
+        host.request("page.handle", fields, &[])
+            .map(|(told, data)| {
+                let status = u16::try_from(int_of(field(&told, "status"))).unwrap_or(500);
+                let after = match field(&told, "after") {
+                    Value::List(asked) => asked
+                        .iter()
+                        .filter_map(|a| match a {
+                            Value::List(a) => Some(a.clone()),
+                            _ => None,
+                        })
+                        .collect(),
+                    _ => Vec::new(),
+                };
+                let kind = text(&told, "kind");
+                PageAnswer {
+                    status,
+                    json: (kind.is_empty()).then(|| field(&told, "json").clone()),
+                    bytes: (!kind.is_empty()).then_some((data, kind)),
+                    after,
+                }
+            }),
+    )
+}

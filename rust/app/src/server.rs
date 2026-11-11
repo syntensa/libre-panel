@@ -882,10 +882,18 @@ fn page_file(state: &State, exchange: &mut Exchange, page: &str, name: &str) {
         ".ttf" => Some("font/ttf"),
         other => content_type(other),
     };
-    let base = crate::consoles::folder(&state.home.data);
+    // (a plugin's page: the files of its folder)
+    let base = if known {
+        Some(crate::consoles::folder(&state.home.data))
+    } else {
+        crate::plugins::pages()
+            .into_iter()
+            .find(|p| p.id == page)
+            .map(|p| p.folder)
+    };
     match kind
-        .filter(|_| known)
-        .and_then(|kind| Some((file_in(&base, name)?, kind)))
+        .zip(base)
+        .and_then(|(kind, base)| Some((file_in(&base, name)?, kind)))
     {
         Some((body, kind)) => exchange.send(200, &body, kind, ""),
         None => not_found(exchange),
@@ -910,7 +918,7 @@ fn page_api(
     };
     match crate::consoles::handle(page, method, path, &query, body, &context) {
         Some(crate::consoles::Answer::Json(status, data)) => exchange.json(&data, status),
-        Some(crate::consoles::Answer::Bytes(data, kind)) => exchange.send(200, &data, kind, ""),
+        Some(crate::consoles::Answer::Bytes(data, kind)) => exchange.send(200, &data, &kind, ""),
         None => not_found(exchange),
     }
 }
