@@ -288,6 +288,8 @@ pub fn session(case: &Value) -> Result<Value, String> {
     let seen = |events: &Events| Value::Array(events.lock().unwrap().clone());
     let opened = if case["driver"] == "zc360" {
         zc360(case, &events)
+    } else if case.get("found").is_some() {
+        serial_opened(case, &events)
     } else {
         opened(case, Box::new(ScriptedUsb::of(case, &events, None)))
     };
@@ -330,4 +332,97 @@ pub fn session(case: &Value) -> Result<Value, String> {
         "usb_errors": counters.usb_errors,
         "told": told,
     }))
+}
+
+/// A serial port the case scripts: what comes in, read as it is asked for; what went out.
+struct ScriptedLink {
+    incoming: VecDeque<u8>,
+    fail_writes: Vec<(u64, String)>,
+    writes: u64,
+    events: Events,
+}
+
+impl lp_devices::link::Link for ScriptedLink {
+    fn write(&mut self, data: &[u8]) -> lp_devices::base::Result<()> {
+        self.writes += 1;
+        self.events
+            .lock()
+            .unwrap()
+            .push(json!(["write", b64(data)]));
+        if let Some((_, why)) = self.fail_writes.iter().find(|(n, _)| *n == self.writes) {
+            return Err(lp_devices::base::DeviceError(format!(
+                "serial write failed: {why}"
+            )));
+        }
+        Ok(())
+    }
+
+    fn read(&mut self, size: usize) -> lp_devices::base::Result<Vec<u8>> {
+        self.events.lock().unwrap().push(json!(["read", size]));
+        let n = size.min(self.incoming.len());
+        Ok(self.incoming.drain(..n).collect())
+    }
+
+    fn drain_input(&mut self) {
+        self.events.lock().unwrap().push(json!(["drain"]));
+    }
+
+    fn close(&mut self) {
+        self.events.lock().unwrap().push(json!(["close"]));
+    }
+}
+
+/// A serial panel's driver opened on the port the case scripts.
+fn serial_opened(case: &Value, events: &Events) -> Result<Box<dyn Driver>, String> {
+    use lp_devices::serial_panel::{RevA, RevB, RevD, SerialPanel, WeAct};
+    let found = &case["found"];
+    let found = lp_devices::ports::FoundPort {
+        device: found["device"].as_str().unwrap_or("COM9").to_string(),
+        model: found["model"]
+            .as_str()
+            .and_then(find_model)
+            .ok_or("no model found")?,
+        serial_number: found["serial"].as_str().map(str::to_string),
+        candidates: Vec::new(),
+    };
+    let incoming = STANDARD
+        .decode(case["incoming"].as_str().unwrap_or(""))
+        .map_err(|e| e.to_string())?;
+    let link = Box::new(ScriptedLink {
+        incoming: incoming.into(),
+        fail_writes: case["fail_writes"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|f| {
+                (
+                    f[0].as_u64().unwrap_or(0),
+                    f[1].as_str().unwrap_or("").to_string(),
+                )
+            })
+            .collect(),
+        writes: 0,
+        events: Arc::clone(events),
+    });
+    let model = case["model"].as_str().and_then(find_model);
+    let configured = case["configured"].as_bool().unwrap_or(true);
+    macro_rules! open {
+        ($family:expr) => {{
+            let mut panel = SerialPanel::new($family, model, configured, "");
+            panel
+                .open_on(link, &found, String::new())
+                .map_err(|e| e.0)?;
+            Ok(Box::new(panel) as Box<dyn Driver>)
+        }};
+    }
+    match case["driver"].as_str().unwrap_or("") {
+        "rev_a" => open!(RevA),
+        "rev_b" => open!(RevB {
+            full_range: false,
+            cooldown: std::time::Duration::ZERO,
+        }),
+        "rev_d" => open!(RevD),
+        "weact" => open!(WeAct),
+        other => Err(format!("no serial driver {other:?} here")),
+    }
 }

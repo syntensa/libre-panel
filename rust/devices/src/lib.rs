@@ -24,6 +24,7 @@ pub mod ports;
 pub mod rate;
 pub mod rights;
 pub mod serial;
+pub mod serial_panel;
 mod table;
 pub mod thermalright;
 pub mod thermaltake;

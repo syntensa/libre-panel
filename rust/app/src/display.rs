@@ -91,7 +91,16 @@ fn other(
             let mut driver = lp_devices::lianli::LianLi::new(model);
             driver.open().map(|()| Box::new(driver) as Box<dyn Driver>)
         }
-        _ => return None,
+        _ => {
+            return serial(device, model, protocol, true).map(|opened| {
+                opened
+                    .map(|driver| Panel::Other {
+                        driver,
+                        previous: None,
+                    })
+                    .map_err(|e| e.0)
+            })
+        }
     }
     .map_err(|e| e.0);
     Some(opened.map(|driver| Panel::Other {
@@ -112,6 +121,31 @@ fn zc360_numbers(size: (usize, usize)) -> Option<Vec<Image>> {
     (1..=lp_devices::jonsbo_zc360::SCREENS)
         .map(|n| crate::identify::picture(&env, n, size, crate::identify::ACCENT).ok())
         .collect()
+}
+
+/// A serial panel of a family the driver of which is SerialPanel's (turzx.py's SERIAL_DRIVERS
+/// but the Hongtai family and the DS916): `configured`, as config.toml names its model, or
+/// found by auto.
+fn serial(
+    device: &DeviceConfig,
+    model: Option<&'static PanelModel>,
+    protocol: &str,
+    configured: bool,
+) -> Option<Result<Box<dyn Driver>, lp_devices::base::DeviceError>> {
+    use lp_devices::serial_panel::{RevA, RevB, RevD, SerialPanel, WeAct};
+    macro_rules! opened {
+        ($family:expr) => {{
+            let mut panel = SerialPanel::new($family, model, configured, &device.port);
+            Some(panel.open().map(|()| Box::new(panel) as Box<dyn Driver>))
+        }};
+    }
+    match protocol {
+        "serial-a" => opened!(RevA),
+        "serial-b" => opened!(RevB::default()),
+        "serial-d" => opened!(RevD),
+        "serial-weact" => opened!(WeAct),
+        _ => None,
+    }
 }
 
 /// other_usb_model: the USB screen of another maker on the bus, as `auto` finds it, in this
@@ -305,7 +339,23 @@ fn any_panel(device: &DeviceConfig, settings: &Path, brightness: i64) -> Result<
                         return opened;
                     }
                 }
-                hongtai(device).map_err(|_| why)
+                // else a panel on a serial port
+                match lp_devices::ports::find_port(None, &device.port) {
+                    Ok(Some(found)) if found.model.protocol != "serial-hongtai" => {
+                        let protocol = found.model.protocol;
+                        match serial(device, Some(found.model), protocol, false) {
+                            Some(opened) => opened
+                                .map(|driver| Panel::Other {
+                                    driver,
+                                    previous: None,
+                                })
+                                .map_err(|e| e.0),
+                            None => hongtai(device).map_err(|_| why),
+                        }
+                    }
+                    Err(e) if !device.port.is_empty() => Err(e.0),
+                    _ => hongtai(device).map_err(|_| why),
+                }
             }
         },
     }

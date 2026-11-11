@@ -1675,8 +1675,14 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       reports written and read back, the vendor's start, the size its EDID says and the mode
       for it, the frames in pieces of 64 KB, the output on once two frames are in, the panel
       turned off; only where device.model names it; tests/test_rust_usb_drivers.py)
-- [ ] the serial panels (Turing rev. A/B/C, Kipye rev. D, WeAct, JONSBO DS916), the panel as
-      a monitor (Windows' virtual display driver, X11, Wayland)
+- [x] the serial panels of Turing rev. A, XuanFang rev. B, Kipye rev. D and WeAct (rust/devices'
+      serial_panel, as serial_panel.py and their drivers: the port found by its USB ids and
+      serial number, the panel asked what it is, a frame of another size padded, the
+      orientation set with the first frame, the parts that changed sent each on its own as
+      RGB565 in the family's commands, the brightness; auto takes a serial panel last, as
+      turzx.py does; tests/test_rust_serial_drivers.py)
+- [ ] Turing rev. C, JONSBO DS916, the panel as a monitor (Windows' virtual display driver,
+      X11, Wayland)
 
 ### R7 sensors
 - [ ] Linux: hwmon, /proc, the cards' (amdgpu, NVML), storage, network, fans
