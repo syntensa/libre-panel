@@ -224,8 +224,8 @@ pub struct MainLoop {
     /// the plugin transitions' failures to say how to switch, said once each
     failed_switches: std::collections::HashSet<String>,
     /// the frame before toasts, and with them where one showed
-    last_frame: Option<Image>,
-    shown_frame: Option<Image>,
+    last_frame: Option<Rc<Image>>,
+    shown_frame: Option<Rc<Image>>,
     /// what the app's Player plays here (player.rs), drawn instead of the theme
     player: crate::player::Screen,
     playing: bool,
@@ -635,8 +635,8 @@ impl MainLoop {
         );
         let began = Blend::begin(
             kind,
-            self.last_frame.as_ref(),
-            self.shown_frame.as_ref(),
+            self.last_frame.as_deref(),
+            self.shown_frame.as_deref(),
             now,
             self.blends,
             self.toasts.as_mut(),
@@ -1157,18 +1157,18 @@ impl MainLoop {
         if let Some(toasts) = &mut self.toasts {
             match toasts.draw(&frame, now, hidden, renderer) {
                 Ok(Some(with)) => {
-                    self.last_frame = Some(frame);
-                    self.shown_frame = Some(with.clone());
+                    self.last_frame = Some(Rc::new(frame));
+                    self.shown_frame = Some(Rc::new(with.clone()));
                     frame = with;
                 }
-                Ok(None) => self.last_frame = Some(frame.clone()),
+                Ok(None) => self.last_frame = Some(Rc::new(frame.clone())),
                 Err(why) => {
                     say(&format!("message not drawn by this build yet: {}", why.0));
-                    self.last_frame = Some(frame.clone());
+                    self.last_frame = Some(Rc::new(frame.clone()));
                 }
             }
         } else {
-            self.last_frame = Some(frame.clone());
+            self.last_frame = Some(Rc::new(frame.clone()));
         }
         let crit = renderer.theme.palette.get("crit").and_then(Value::as_str);
         let still = self.config.fps <= 1 || self.calm();
@@ -1420,6 +1420,15 @@ impl MainLoop {
             if let Err(why) = toasts.advance(started, !go_on) {
                 say(&format!("message not shown by this build yet: {}", why.0));
             }
+            renderer.toast = toasts.showing(started); // (screens see a toast as it begins)
+        }
+        if renderer.plugins.is_some() {
+            // what the panel showed last, for the plugins (context.shown)
+            renderer.shown = self
+                .shown_frame
+                .as_ref()
+                .or(self.last_frame.as_ref())
+                .cloned();
         }
         let alarm = alarm_in(Some(&snapshot));
         self.alarm.follow(alarm, started);

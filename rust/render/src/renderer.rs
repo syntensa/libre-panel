@@ -173,6 +173,13 @@ pub struct Renderer {
     /// what draws the plugins' widget types and screen (the app's plugin host); None: a frame
     /// that holds one is not made here
     pub plugins: Option<Rc<dyn crate::plugin::Plugins>>,
+    /// the frame the panel showed last and the toast on show with its age (the loop sets them,
+    /// for the plugins: Python's renderer.shown and renderer.toast)
+    pub shown: Option<Rc<Image>>,
+    pub toast: Option<(Rc<crate::overlays::Toast>, f64)>,
+    /// the screen's last picture and its piece (_screen_last): the same picture is not
+    /// composed again
+    screen_last: Option<(Rc<Image>, Rc<Piece>)>,
     /// the theme's pictures fitted (_images), and the animated pictures' frames (_animations)
     pub(crate) pictures: RefCell<Kept<image::PictureKey, Option<Rc<Image>>>>,
     pub(crate) animations: Kept<image::AnimationKey, Option<Rc<image::Animation>>>,
@@ -312,6 +319,9 @@ impl Renderer {
             continuous: false,
             sample: (0.0, 1.0),
             plugins: None,
+            shown: None,
+            screen_last: None,
+            toast: None,
             pictures: RefCell::new(Kept::new(image::IMAGE_BYTES)),
             animations: Kept::new(image::ANIMATION_BYTES),
             moves: HashMap::new(),
@@ -1604,12 +1614,14 @@ impl Renderer {
             fps: self.fps,
             continuous: self.continuous,
             progress: self.progress(self.at),
+            shown: self.shown.clone(),
+            toast: self.toast.clone(),
         }
     }
 
     /// The screen's picture of this frame (_screen_image): None where the theme has none or no
     /// plugin draws it (with a warning where it failed).
-    fn screen_image(&mut self, snapshot: &Snapshot) -> Option<Image> {
+    fn screen_image(&mut self, snapshot: &Snapshot) -> Option<Rc<Image>> {
         self.theme.screen.as_ref()?;
         let plugins = self.plugins.clone()?;
         match plugins.screen(snapshot, &self.frame_info()) {
@@ -1631,10 +1643,15 @@ impl Renderer {
 
     /// _screen_piece: the screen's picture as the piece beneath the widgets, in the theme's
     /// size (one of another size is resized, with a warning).
-    fn screen_piece(&mut self, image: Image) -> std::result::Result<Rc<Piece>, Unported> {
+    fn screen_piece(&mut self, image: Rc<Image>) -> std::result::Result<Rc<Piece>, Unported> {
+        if let Some((last, piece)) = &self.screen_last {
+            if Rc::ptr_eq(last, &image) {
+                return Ok(piece.clone()); // the same picture: nothing to compose again
+            }
+        }
         let (w, h) = (self.theme.width as usize, self.theme.height as usize);
         let mut layer = if image.mode() == Mode::RGBA {
-            image
+            (*image).clone()
         } else {
             image
                 .convert(Mode::RGBA)
@@ -1652,7 +1669,9 @@ impl Renderer {
                 .resize(w, h, Filter::Bicubic, None, None)
                 .map_err(|e| Unported(format!("a screen's picture: {e}")))?;
         }
-        Ok(Rc::new(Piece::new(layer, 0, 0)))
+        let piece = Rc::new(Piece::new(layer, 0, 0));
+        self.screen_last = Some((image, piece.clone()));
+        Ok(piece)
     }
 
     /// What a frame of the theme holds beyond its widgets that is not drawn here yet: a screen
@@ -1717,6 +1736,9 @@ impl Renderer {
                 .and_then(|r| motion::number(&r.value))
         };
         self.motion.begin(&readings, now, glide, lead);
+        if let Some(plugins) = self.plugins.clone() {
+            plugins.begin(&self.frame_info());
+        }
         let screen = self.screen_image(&snapshot);
         // which card each slot shows
         self.begin_slots(&snapshot, now)?;
@@ -1884,7 +1906,7 @@ impl Renderer {
                 == (self.theme.width as usize, self.theme.height as usize);
             if pieces.is_empty() && screen.mode() == Mode::RGB && whole {
                 // an opaque screen alone is the frame: nothing to compose
-                return Ok((screen, boxes));
+                return Ok((Rc::unwrap_or_clone(screen), boxes));
             }
             pieces.insert(0, ("\0screen".to_string(), self.screen_piece(screen)?));
         }

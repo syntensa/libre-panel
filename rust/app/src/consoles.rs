@@ -258,6 +258,25 @@ fn plugin_page(
         context.status().map_or(Value::None, Value::Dict),
     );
     told.insert(
+        "sources".into(),
+        Value::List(
+            context
+                .app
+                .as_ref()
+                .map(|app| app.panel.sources())
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(name, readings, status)| {
+                    Value::List(vec![
+                        Value::from(name),
+                        Value::int(readings as i64),
+                        status.map_or(Value::None, Value::Dict),
+                    ])
+                })
+                .collect(),
+        ),
+    );
+    told.insert(
         "services".into(),
         Value::Dict(
             context
@@ -268,7 +287,11 @@ fn plugin_page(
         ),
     );
     let body = if method == "POST" { body } else { None };
-    let answered = crate::plugins::page_request(id, method, path, query, body.as_ref(), told)?;
+    let app = context.app.clone();
+    let mut need =
+        |asked: &Dict, blob: &[u8]| crate::plugins::page_need(app.as_deref(), asked, blob);
+    let answered =
+        crate::plugins::page_request(id, method, path, query, body.as_ref(), told, &mut need)?;
     Some(match answered {
         Ok(answer) => {
             for asked in &answer.after {

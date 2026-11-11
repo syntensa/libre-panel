@@ -1001,6 +1001,12 @@ impl BackgroundApp {
 
     /// A short message on the panel from the app's server (a page, another program's
     /// notice): whether it will show, or why not.
+    /// A picture published for the app's pages (a message's that names it).
+    pub fn publish_image(&self, key: &str, image: lp_pixels::Image) {
+        lp_services::host::ServiceHost::new(&self.company.host, "editor")
+            .publish_image(key, Some(image));
+    }
+
     pub fn notify(&self, toast: lp_render::overlays::Toast) -> lp_services::host::Delivery {
         lp_services::host::ServiceHost::new(&self.company.host, "editor").notify(toast)
     }

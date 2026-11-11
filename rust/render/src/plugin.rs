@@ -12,13 +12,17 @@ use crate::snapshot::Snapshot;
 
 /// What a plugin's drawing is told of the frame, beyond the readings (RenderContext's fps,
 /// continuous and progress).
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone)]
 pub struct Frame {
     pub now: f64,
     pub fps: f64,
     pub continuous: bool,
     /// how far `now` is from the last reading to the next, 0 to 1 (Renderer.progress)
     pub progress: f64,
+    /// the frame the panel showed last (context.shown), and the toast on show with its age
+    /// (context.toast)
+    pub shown: Option<Rc<Image>>,
+    pub toast: Option<(Rc<crate::overlays::Toast>, f64)>,
 }
 
 /// A plugin's drawing: its piece or picture, and whether it asks for the next frame at full
@@ -43,7 +47,8 @@ pub trait Plugins {
 
     /// The picture of the theme's screen (theme.screen), RGB or RGBA; None where no plugin has
     /// it or it failed to start. Err: it failed this frame.
-    fn screen(&self, snapshot: &Snapshot, frame: &Frame) -> Result<Drawing<Image>, String>;
+    /// (the same picture as the frame before, the same Rc: its piece is not made again)
+    fn screen(&self, snapshot: &Snapshot, frame: &Frame) -> Result<Drawing<Rc<Image>>, String>;
 
     /// A plugin's transition `name` with `params`, made for this renderer's theme: None where
     /// no plugin has it; Err where it failed to start.
@@ -65,6 +70,15 @@ pub trait Plugins {
     /// Which of the drawings this is (a toast style that goes on is bound to it).
     fn handle(&self) -> i64 {
         0
+    }
+
+    /// A frame begins: what it is told of (the frame shown, the toast on show), for all the
+    /// plugin parts drawn for this renderer.
+    fn begin(&self, _frame: &Frame) {}
+
+    /// What this drawing keeps of the frame, for a toast style that goes on with it.
+    fn seen(&self) -> Option<Rc<dyn std::any::Any>> {
+        None
     }
 }
 

@@ -197,6 +197,18 @@ impl PluginHost {
 
     /// `op` asked with `fields` and `blob`; its answer (an error where it says one).
     pub fn request(&self, op: &str, fields: Dict, blob: &[u8]) -> Result<Answer, String> {
+        self.request_with(op, fields, blob, &mut |_, _| (Value::None, Vec::new()))
+    }
+
+    /// request, where the host may ask the app for something while it answers (an event
+    /// `need` for this request): `need` gives what it asks for, a value and pixels.
+    pub fn request_with(
+        &self,
+        op: &str,
+        fields: Dict,
+        blob: &[u8],
+        need: &mut Need<'_>,
+    ) -> Result<Answer, String> {
         if let Some(why) = self.inner.gone.lock().ok().and_then(|gone| gone.clone()) {
             return Err(why);
         }
@@ -211,17 +223,31 @@ impl PluginHost {
         message.insert("id".into(), Value::Int(id.into()));
         message.insert("op".into(), Value::from(op));
         self.inner.send(message, blob)?;
-        let (told, data) = answer
-            .recv_timeout(Duration::from_secs(ANSWER_S))
-            .map_err(|_| {
-                self.inner.waiting.lock().ok().map(|mut w| w.remove(&id));
-                self.inner
-                    .gone
-                    .lock()
-                    .ok()
-                    .and_then(|gone| gone.clone())
-                    .unwrap_or_else(|| format!("the plugin host did not answer {op} in time"))
-            })?;
+        let (told, data) = loop {
+            let (told, data) =
+                answer
+                    .recv_timeout(Duration::from_secs(ANSWER_S))
+                    .map_err(|_| {
+                        self.inner.waiting.lock().ok().map(|mut w| w.remove(&id));
+                        self.inner
+                            .gone
+                            .lock()
+                            .ok()
+                            .and_then(|gone| gone.clone())
+                            .unwrap_or_else(|| {
+                                format!("the plugin host did not answer {op} in time")
+                            })
+                    })?;
+            if text(&told, "event") != "need" {
+                break (told, data);
+            }
+            let (value, pixels) = need(&told, &data);
+            let mut said = Dict::new();
+            said.insert("answer".into(), field(&told, "call").clone());
+            said.insert("value".into(), value);
+            self.inner.send(said, &pixels)?;
+        };
+        self.inner.waiting.lock().ok().map(|mut w| w.remove(&id));
         match told.get("error") {
             Some(Value::Str(why)) => Err(why.clone()),
             _ => Ok((told, data)),
@@ -304,9 +330,20 @@ impl Inner {
 
     fn deliver(&self, (message, blob): Answer) {
         match message.get("id") {
+            // (what the host asks while it answers a request: to that request)
+            _ if matches!(message.get("for"), Some(Value::Int(_))) => {
+                let Some(Value::Int(id)) = message.get("for") else {
+                    return;
+                };
+                let id = u64::try_from(id.clone()).unwrap_or(0);
+                let tell = self.waiting.lock().ok().and_then(|w| w.get(&id).cloned());
+                if let Some(tell) = tell {
+                    let _ = tell.send((message, blob));
+                }
+            }
             Some(Value::Int(id)) => {
                 let id = u64::try_from(id.clone()).unwrap_or(0);
-                let tell = self.waiting.lock().ok().and_then(|mut w| w.remove(&id));
+                let tell = self.waiting.lock().ok().and_then(|w| w.get(&id).cloned());
                 if let Some(tell) = tell {
                     let _ = tell.send((message, blob));
                 }
@@ -684,25 +721,7 @@ fn act(host: &PluginHost, hub: &lp_services::host::PluginHost, message: &Dict, b
             let Value::Dict(told) = field(message, "toast") else {
                 return;
             };
-            let mut toast = lp_render::overlays::Toast::new(text(told, "text"));
-            toast.icon = opt_text(field(told, "icon"));
-            toast.level = text(told, "level");
-            toast.seconds = match field(told, "seconds") {
-                Value::Float(f) => Some(*f),
-                Value::Int(n) => lp_py::num::int_to_float(n).ok(),
-                _ => None,
-            };
-            toast.kind = text(told, "kind");
-            toast.rank = match field(told, "rank") {
-                Value::Int(n) => i64::try_from(n.clone()).unwrap_or(0),
-                _ => 0,
-            };
-            if let Value::Dict(payload) = field(told, "payload") {
-                toast.payload = payload.clone();
-            }
-            toast.service = text(told, "service");
-            toast.key = text(told, "key");
-            let delivery = hub.notify(toast);
+            let delivery = hub.notify(toast_of(told));
             let mut said = Dict::new();
             said.insert("shown".into(), Value::Bool(delivery.shown));
             said.insert("reason".into(), Value::from(delivery.reason.as_str()));
@@ -1016,6 +1035,50 @@ pub fn entries(catalog: &Dict, list: &str) -> Vec<Dict> {
     }
 }
 
+/// What a renderer's plugins may ask of the frame they draw for: the frame the panel showed
+/// last and the toast on show with its age (context.shown, context.toast).
+#[derive(Default)]
+struct Seen {
+    shown: Option<std::rc::Rc<lp_pixels::Image>>,
+    toast: Option<(std::rc::Rc<lp_render::overlays::Toast>, f64)>,
+}
+
+type Shared2 = std::rc::Rc<std::cell::RefCell<Seen>>;
+
+/// What answers the host's needs during a request: what it asks (and its bytes) -> the answer
+/// and its bytes.
+pub type Need<'a> = dyn FnMut(&Dict, &[u8]) -> (Value, Vec<u8>) + 'a;
+
+/// What the plugin host asks while it draws (a `need`): the frame shown, the toast on show.
+fn seen_need(seen: &Shared2, told: &Dict) -> (Value, Vec<u8>) {
+    let seen = seen.borrow();
+    match text(told, "what").as_str() {
+        "shown" => match &seen.shown {
+            Some(frame) => frame_told(frame),
+            None => (Value::None, Vec::new()),
+        },
+        "toast" => match &seen.toast {
+            Some((toast, age)) => (
+                Value::List(vec![toast_dict(toast), Value::Float(*age)]),
+                Vec::new(),
+            ),
+            None => (Value::None, Vec::new()),
+        },
+        _ => (Value::None, Vec::new()),
+    }
+}
+
+/// A frame's pixels as RGB or RGBA (what it is), None for another mode.
+fn rgb_or_rgba(frame: &lp_pixels::Image) -> Option<Vec<u8>> {
+    match frame.mode() {
+        lp_pixels::Mode::RGB | lp_pixels::Mode::RGBA => Some(frame.as_bytes().to_vec()),
+        _ => frame
+            .convert(lp_pixels::Mode::RGB)
+            .ok()
+            .map(|f| f.as_bytes().to_vec()),
+    }
+}
+
 /// What the installed plugins draw for a renderer (lp_render::Plugins): their widget types and
 /// the theme's screen, drawn by the plugin host with Python's renderer for the theme as this app
 /// has it, their pieces handed back.
@@ -1028,7 +1091,9 @@ pub struct PluginDrawing {
     sent: std::cell::RefCell<HashMap<String, i64>>,
     /// each widget's piece as it was given last, and the screen's picture
     last: std::cell::RefCell<HashMap<String, std::rc::Rc<lp_render::Piece>>>,
-    screen: std::cell::RefCell<Option<lp_pixels::Image>>,
+    screen: std::cell::RefCell<Option<std::rc::Rc<lp_pixels::Image>>>,
+    /// the frame shown and the toast on show, as the renderer last told them
+    seen: Shared2,
 }
 
 impl PluginDrawing {
@@ -1087,6 +1152,7 @@ impl PluginDrawing {
             sent: std::cell::RefCell::new(HashMap::new()),
             last: std::cell::RefCell::new(HashMap::new()),
             screen: std::cell::RefCell::new(None),
+            seen: Shared2::default(),
         };
         for said in warnings_of(&answer) {
             renderer.warn_of(said);
@@ -1152,7 +1218,10 @@ impl PluginDrawing {
     }
 
     fn ask(&self, op: &str, fields: Dict, blob: &[u8]) -> Result<(Dict, Vec<u8>), String> {
-        let answer = self.host.request(op, fields, blob);
+        let seen = std::rc::Rc::clone(&self.seen);
+        let answer = self
+            .host
+            .request_with(op, fields, blob, &mut |told, _| seen_need(&seen, told));
         if answer.is_err() {
             // (the host may have lost what was sent: all goes again)
             *self.snapshot.borrow_mut() = Value::None;
@@ -1237,6 +1306,87 @@ fn piece_of(told: &Dict, blob: &[u8]) -> Result<lp_render::Piece, String> {
     Ok(piece)
 }
 
+/// A toast as the plugin host tells one (a Toast's fields).
+pub fn toast_of(told: &Dict) -> lp_render::overlays::Toast {
+    let mut toast = lp_render::overlays::Toast::new(text(told, "text"));
+    toast.icon = opt_text(field(told, "icon"));
+    toast.level = text(told, "level");
+    toast.seconds = match field(told, "seconds") {
+        Value::Float(f) => Some(*f),
+        Value::Int(n) => lp_py::num::int_to_float(n).ok(),
+        _ => None,
+    };
+    toast.kind = text(told, "kind");
+    toast.rank = match field(told, "rank") {
+        Value::Int(n) => i64::try_from(n.clone()).unwrap_or(0),
+        _ => 0,
+    };
+    if let Value::Dict(payload) = field(told, "payload") {
+        toast.payload = payload.clone();
+    }
+    toast.service = text(told, "service");
+    toast.key = text(told, "key");
+    toast
+}
+
+/// A frame as the plugin host takes one: its size and mode, its pixels.
+fn frame_told(frame: &lp_pixels::Image) -> (Value, Vec<u8>) {
+    let Some(bytes) = rgb_or_rgba(frame) else {
+        return (Value::None, Vec::new());
+    };
+    let mut said = Dict::new();
+    said.insert(
+        "size".into(),
+        Value::List(vec![
+            Value::int(frame.width() as i64),
+            Value::int(frame.height() as i64),
+        ]),
+    );
+    let rgba = frame.mode() == lp_pixels::Mode::RGBA;
+    said.insert(
+        "mode".into(),
+        Value::from(if rgba { "RGBA" } else { "RGB" }),
+    );
+    (Value::Dict(said), bytes)
+}
+
+/// What a plugin's page asks of the running app while it answers (page_request's `need`): a
+/// panel's frame now, the readings the panel was last drawn from, a message (its pictures
+/// published first).
+pub fn page_need(
+    app: Option<&crate::background::BackgroundApp>,
+    told: &Dict,
+    blob: &[u8],
+) -> (Value, Vec<u8>) {
+    let Some(app) = app else {
+        return (Value::None, Vec::new());
+    };
+    match text(told, "what").as_str() {
+        "shown_frame" => match app.panel.shown_frame(int_of(field(told, "panel")).max(1)) {
+            Some(frame) => frame_told(&frame),
+            None => (Value::None, Vec::new()),
+        },
+        "snapshot" => match app.latest() {
+            Some(snapshot) => (snapshot_dict(&snapshot), Vec::new()),
+            None => (Value::None, Vec::new()),
+        },
+        "notify" => {
+            for (key, picture) in pictures_of(told, blob) {
+                app.publish_image(&key, picture);
+            }
+            let Value::Dict(toast) = field(told, "toast") else {
+                return (Value::None, Vec::new());
+            };
+            let delivery = app.notify(toast_of(toast));
+            let mut said = Dict::new();
+            said.insert("shown".into(), Value::Bool(delivery.shown));
+            said.insert("reason".into(), Value::from(delivery.reason.as_str()));
+            (Value::Dict(said), Vec::new())
+        }
+        _ => (Value::None, Vec::new()),
+    }
+}
+
 /// A toast as the plugin host makes a Toast of it.
 fn toast_dict(toast: &lp_render::overlays::Toast) -> Value {
     let mut told = Dict::new();
@@ -1263,12 +1413,15 @@ struct HostToastStyle {
     host: Arc<PluginHost>,
     style: Value,
     leave_s: f64,
+    seen: std::cell::RefCell<Shared2>,
 }
 
 impl HostToastStyle {
     fn ask(&self, op: &str, mut fields: Dict, blob: &[u8]) -> Result<(Dict, Vec<u8>), String> {
         fields.insert("style".into(), self.style.clone());
-        self.host.request(op, fields, blob)
+        let seen = std::rc::Rc::clone(&self.seen.borrow());
+        self.host
+            .request_with(op, fields, blob, &mut |told, _| seen_need(&seen, told))
     }
 
     fn toasts(
@@ -1344,6 +1497,11 @@ impl lp_render::plugin::PluginToastStyle for HostToastStyle {
     }
 
     fn rebind(&self, plugins: &dyn lp_render::Plugins, anchor: &str) {
+        if let Some(seen) = plugins.seen() {
+            if let Ok(seen) = seen.downcast::<std::cell::RefCell<Seen>>() {
+                *self.seen.borrow_mut() = seen;
+            }
+        }
         let mut fields = Dict::new();
         fields.insert("drawing".into(), Value::int(plugins.handle()));
         fields.insert("anchor".into(), Value::from(anchor));
@@ -1358,8 +1516,18 @@ impl Drop for HostToastStyle {
 }
 
 impl lp_render::Plugins for PluginDrawing {
+    fn begin(&self, frame: &lp_render::plugin::Frame) {
+        let mut seen = self.seen.borrow_mut();
+        seen.shown.clone_from(&frame.shown);
+        seen.toast.clone_from(&frame.toast);
+    }
+
     fn handle(&self) -> i64 {
         int_of(&self.drawing)
+    }
+
+    fn seen(&self) -> Option<std::rc::Rc<dyn std::any::Any>> {
+        Some(std::rc::Rc::clone(&self.seen) as std::rc::Rc<dyn std::any::Any>)
     }
 
     fn toast_style(
@@ -1384,6 +1552,7 @@ impl lp_render::Plugins for PluginDrawing {
                         host: Arc::clone(&self.host),
                         style: field(&told, "style").clone(),
                         leave_s: HostToastStyle::seconds(&told),
+                        seen: std::cell::RefCell::new(std::rc::Rc::clone(&self.seen)),
                     }) as Box<dyn lp_render::plugin::PluginToastStyle>
                 }),
         )
@@ -1423,6 +1592,7 @@ impl lp_render::Plugins for PluginDrawing {
                         host: Arc::clone(&self.host),
                         transition: field(&told, "transition").clone(),
                         sent_old: None,
+                        seen: std::rc::Rc::clone(&self.seen),
                     };
                     (
                         info,
@@ -1465,7 +1635,7 @@ impl lp_render::Plugins for PluginDrawing {
         &self,
         snapshot: &lp_render::Snapshot,
         frame: &lp_render::plugin::Frame,
-    ) -> Result<lp_render::plugin::Drawing<lp_pixels::Image>, String> {
+    ) -> Result<lp_render::plugin::Drawing<std::rc::Rc<lp_pixels::Image>>, String> {
         let (fields, blob) = self.frame_fields(snapshot, frame);
         let (answer, data) = self.ask("draw.screen", fields, &blob)?;
         let made = if matches!(field(&answer, "same"), Value::Bool(true)) {
@@ -1477,8 +1647,9 @@ impl lp_render::Plugins for PluginDrawing {
             } else {
                 lp_pixels::Mode::RGBA
             };
-            let image =
-                lp_pixels::Image::from_bytes(mode, w, h, data).map_err(|e| e.to_string())?;
+            let image = std::rc::Rc::new(
+                lp_pixels::Image::from_bytes(mode, w, h, data).map_err(|e| e.to_string())?,
+            );
             *self.screen.borrow_mut() = Some(image.clone());
             Some(image)
         } else {
@@ -1498,6 +1669,7 @@ struct HostTransition {
     host: Arc<PluginHost>,
     transition: Value,
     sent_old: Option<i64>,
+    seen: Shared2,
 }
 
 impl lp_render::plugin::PluginTransition for HostTransition {
@@ -1525,7 +1697,12 @@ impl lp_render::plugin::PluginTransition for HostTransition {
             blob.extend_from_slice(rgb(old)?.as_bytes());
         }
         blob.extend_from_slice(rgb(new)?.as_bytes());
-        let (answer, data) = self.host.request("transition.frame", fields, &blob)?;
+        let seen = std::rc::Rc::clone(&self.seen);
+        let (answer, data) =
+            self.host
+                .request_with("transition.frame", fields, &blob, &mut |told, _| {
+                    seen_need(&seen, told)
+                })?;
         self.sent_old = Some(old_mark);
         let (w, h) = size_of(field(&answer, "size")).ok_or("a frame of no size")?;
         lp_pixels::Image::from_bytes(lp_pixels::Mode::RGB, w, h, data).map_err(|e| e.to_string())
@@ -1542,7 +1719,12 @@ impl lp_render::plugin::PluginTransition for HostTransition {
         fields.insert("theme".into(), Value::from(theme));
         fields.insert("mode".into(), mode.map_or(Value::None, Value::from));
         fields.insert("mode_changed".into(), Value::Bool(mode_changed));
-        let (answer, _) = self.host.request("transition.switch", fields, &[])?;
+        let seen = std::rc::Rc::clone(&self.seen);
+        let (answer, _) =
+            self.host
+                .request_with("transition.switch", fields, &[], &mut |told, _| {
+                    seen_need(&seen, told)
+                })?;
         Ok(text(&answer, "policy"))
     }
 }
@@ -1642,6 +1824,7 @@ pub fn page_request(
     query: &indexmap::IndexMap<String, Vec<String>>,
     body: Option<&Value>,
     context: Dict,
+    need: &mut Need<'_>,
 ) -> Option<Result<PageAnswer, String>> {
     let home = crate::home::Home::find().ok()?;
     let host = match shared(&home.settings)? {
@@ -1670,7 +1853,7 @@ pub fn page_request(
     fields.insert("body".into(), body.cloned().unwrap_or(Value::None));
     fields.insert("context".into(), Value::Dict(context));
     Some(
-        host.request("page.handle", fields, &[])
+        host.request_with("page.handle", fields, &[], need)
             .map(|(told, data)| {
                 let status = u16::try_from(int_of(field(&told, "status"))).unwrap_or(500);
                 let after = match field(&told, "after") {

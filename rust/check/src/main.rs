@@ -1888,10 +1888,16 @@ fn run(case: &Value) -> Result<Value, String> {
                             _ => None,
                         };
                         let index = case["index"].as_u64().unwrap_or(0) as usize;
-                        lp_theme::normalize_widget(&d, index, palette.as_ref(), root.as_deref(), &env)
-                            .map(|(w, warnings)| {
-                                (lp_py::json::dumps(&lp_py::Value::Dict(w), &how), warnings)
-                            })
+                        lp_theme::normalize_widget(
+                            &d,
+                            index,
+                            palette.as_ref(),
+                            root.as_deref(),
+                            &env,
+                        )
+                        .map(|(w, warnings)| {
+                            (lp_py::json::dumps(&lp_py::Value::Dict(w), &how), warnings)
+                        })
                     }
                     Err(e) => Err(lp_theme::Error {
                         kind: lp_theme::Kind::Value,

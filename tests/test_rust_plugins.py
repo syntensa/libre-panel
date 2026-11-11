@@ -389,3 +389,135 @@ def test_a_plugins_editor_page_is_served_as_server_py_serves_it(plugin_folder, i
             else:
                 program.send_signal(signal.SIGINT)
             program.communicate(timeout=30)
+
+
+WATCHING = """
+import json
+from pathlib import Path
+
+from PIL import Image
+
+from libre_panel.plugins import EditorPage, Screen, Service
+
+NOTES = Path(__file__).parent / "seen.json"
+
+
+class Watcher(Screen):
+    name = "watcher"
+    api = 1
+
+    def render(self, snapshot, now):
+        shown, toast = self.context.shown, self.context.toast
+        NOTES.write_text(json.dumps({
+            "shown": list(shown.size) if shown is not None else None,
+            "corner": list(shown.getpixel((5, 400))[:3]) if shown is not None else None,
+            "toast": toast[0].text if toast is not None else None,
+        }))
+        return Image.new("RGB", self.context.size, (40, 90, 160))
+
+
+class Teller(Service):
+    name = "teller"
+    api = 1
+
+    def start(self):
+        self.host.on("sample", lambda snapshot: self.host.notify("hello there", seconds=30))
+
+
+class Inspect(EditorPage):
+    api = 1
+    title = {"en": "Inspect"}
+
+    def handle(self, method, path, query, body):
+        ctx = self.context
+        if path == "frame":
+            frame = ctx.shown_frame()
+            return 200, {"size": list(frame.size) if frame is not None else None,
+                         "picture": list(ctx.shown_picture().size)
+                         if ctx.shown_picture() is not None else None,
+                         "second": ctx.shown_frame(2) is not None}
+        if path == "snapshot":
+            snapshot = ctx.snapshot()
+            return 200, {"has": snapshot is not None and "moon.phase" in snapshot.readings}
+        if path == "sources":
+            return 200, {"names": [s["name"] for s in ctx.sources()]}
+        if path == "notify":
+            delivery = ctx.notify("from the page", payload={"image": Image.new("RGB", (8, 8))})
+            return 200, {"shown": delivery.shown, "reason": delivery.reason}
+        if path == "state":
+            return 200, {"background": ctx.background,
+                         "state": (ctx.status() or {}).get("state"),
+                         "services": ctx.services()}
+        return 404, {"error": "no"}
+"""
+
+
+def test_plugins_see_the_frame_shown_and_the_toast_and_pages_the_running_app(
+    plugin_folder, isolated_home
+):
+    """A plugin's screen sees the frame the panel showed last and the toast on show (context
+    .shown, context.toast), as the Python app's renderer gives them; a plugin's page in the
+    background app reads the panel's frames, readings, sources and state and sends a message
+    with a picture, through the app."""
+    package = plugin_folder(WATCHING, {"libre_panel.screens": {"watcher": "Watcher"},
+                                       "libre_panel.services": {"teller": "Teller"},
+                                       "libre_panel.editor_pages": {"inspect": "Inspect"}},
+                            files={"page/index.html": "<h1>Inspect</h1>"})  # fmt: skip
+    folder = isolated_home / "themes" / "watched"
+    folder.mkdir(parents=True)
+    theme = {"format": "libre-panel-theme/1", "name": "watched",
+             "display": {"width": 800, "height": 480}, "screen": {"name": "watcher"},
+             "background": {"color": "#000000", "image": None}, "refresh_ms": 300,
+             "widgets": []}  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+    (isolated_home / "config.toml").write_text(
+        'theme = "watched"\nfps = 10\nrefresh_ms = 300\n[device]\ndriver = "virtual"\n'
+        'output = "panel.png"\n[sensors]\nproviders = []\n[services]\nenabled = ["teller"]\n',
+        encoding="utf-8",
+    )
+    notes = isolated_home / "plugins" / package / package / "seen.json"
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(isolated_home), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries(), **HOST}  # fmt: skip
+    from test_rust_server import _asked
+
+    with subprocess.Popen([str(_program()), "start", "--port", "0", "--no-browser"], env=env,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        try:
+            assert program.stdout is not None
+            address = program.stdout.readline().split(" running at ")[1].split()[0]
+            port, token = int(address.split(":")[2].split("/")[0]), address.split("#token=")[1]
+
+            def ask(path: str) -> Any:
+                head = (f"GET /api/plugins/inspect/{path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
+                        f"X-Libre-Panel: {token}\r\n\r\n")  # fmt: skip
+                status, _, answer = _asked(port, head.encode())
+                assert status.split()[1] == "200", (status, answer)
+                return json.loads(answer)
+
+            seen: dict[str, Any] = {}
+            until = time.monotonic() + 40
+            while time.monotonic() < until:
+                try:
+                    seen = json.loads(notes.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    seen = {}
+                if seen.get("shown") and seen.get("toast"):
+                    break
+                time.sleep(0.1)
+            assert seen.get("shown") == [800, 480] and seen.get("toast") == "hello there", seen
+            assert seen["corner"] == [40, 90, 160]  # the screen's own colour, as it showed
+            assert ask("frame") == {"size": [800, 480], "picture": [800, 480], "second": False}
+            state = ask("state")
+            assert state["background"] is True and state["state"] == "showing", state
+            assert state["services"].get("teller") == "running", state
+            assert ask("notify") == {"shown": True, "reason": ""}
+            assert isinstance(ask("sources")["names"], list)
+            assert ask("snapshot") == {"has": True}  # (the sky's readings are always there)
+        finally:
+            if os.name == "nt":
+                program.terminate()
+            else:
+                program.send_signal(signal.SIGINT)
+            said = program.communicate(timeout=30)[1]
+    assert "panicked" not in said and "Traceback" not in said, said

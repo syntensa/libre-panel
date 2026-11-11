@@ -2444,8 +2444,16 @@ app's log. Libre Panel's own parts stay the app's (the host leaves the built-in 
       switch goes while one plays and how long a toast holds and lives
 - [x] editor pages: listed with the app's own, their files from their folder, their API in
       the host with a page context of what the app tells of itself
+- [x] what plugins see of the running app, asked of the app only when a plugin asks (the
+      host's `need` during a request): the frame the panel shows (`context.shown`) and the
+      toast on show (`context.toast`) while they draw; on their pages the panels' frames
+      (`shown_frame`), snapshots, the sources, the services and notifications with pictures
 - [x] in the downloads: CI builds the host on Windows and Linux, runs a plugin on it, and
       has the packaged app find it beside itself and run that plugin
+- [x] the pipe's cost, measured (1920×480 at 25 fps, a plugin's screen and a plugin's bar,
+      virtual panel; render_ms the app's, CPU of one core): a new screen picture every
+      frame 12.8 ms, the app 32 %, the host 9 %; the same picture 8.5 ms, the app 27 %, the
+      host 2 % (its piece kept as Python's `_screen_last` keeps it: before that 11.2 ms)
 
 ### R11 packaging
 - [x] a folder to try on a Windows PC, built by CI (ci.yml's `try`, the artifact

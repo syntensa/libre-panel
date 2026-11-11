@@ -113,6 +113,8 @@ class Host:
         self._calls_lock = threading.Lock()
         self.bridge: Bridge | None = None
         self.services: Any = None
+        self._local = threading.local()  # the request each worker answers (ask_app's)
+        self.asked = 0
 
     # -- the messages ----------------------------------------------------------------------
 
@@ -133,6 +135,24 @@ class Host:
             self._calls.pop(ident, None)
         return waiting[1][0]
 
+    def ask_app(self, what: str, blob: bytes = b"", /, **fields: Any) -> tuple[Any, bytes]:
+        """What the request being answered needs of the Rust app (the frame shown, the toast on
+        show, a panel's frame, the readings): its answer and the pixels with it; None where
+        no request is being answered."""
+        serving = getattr(self._local, "serving", None)
+        if serving is None:
+            return None, b""
+        with self._calls_lock:
+            ident = next(self._call_ids)
+            waiting = (threading.Event(), [None, b""])
+            self._calls[ident] = waiting
+        self.channel.send({**fields, "event": "need", "what": what, "call": ident,
+                           "for": serving}, blob)  # fmt: skip
+        waiting[0].wait(ANSWER_S)
+        with self._calls_lock:
+            self._calls.pop(ident, None)
+        return waiting[1][0], waiting[1][1]
+
     def serve(self) -> None:
         """Requests are done one after another on a thread of their own, so that a plugin that
         asks the Rust app something (a toast's delivery) while one is done hears its answer."""
@@ -142,6 +162,12 @@ class Host:
         worker = threading.Thread(target=self._work, args=(requests,), name="plugin-requests",
                                   daemon=True)  # fmt: skip
         worker.start()
+        # (the pages' requests beside the panel's, as the Python app's server runs beside its
+        # loop: a page that asks for the panel's frame does not wait behind it)
+        pages: queue.Queue[tuple[dict[str, Any], bytes] | None] = queue.Queue()
+        page_worker = threading.Thread(target=self._work, args=(pages,), name="plugin-pages",
+                                       daemon=True)  # fmt: skip
+        page_worker.start()
         while (received := self.channel.receive()) is not None:
             message, blob = received
             if "answer" in message:
@@ -149,11 +175,18 @@ class Host:
                     waiting = self._calls.get(message["answer"])
                 if waiting is not None:
                     waiting[1][0] = message.get("value")
+                    if len(waiting[1]) > 1:
+                        waiting[1][1] = blob
                     waiting[0].set()
                 continue
-            requests.put((message, blob))
+            if str(message.get("op", "")).startswith(("page.", "pages.")):
+                pages.put((message, blob))
+            else:
+                requests.put((message, blob))
         requests.put(None)
+        pages.put(None)
         worker.join(10)
+        page_worker.join(10)
         self.services_stop({}, b"")
         for source in list(self.sources.values()):
             _close(source)
@@ -161,6 +194,8 @@ class Host:
     def _work(self, requests: Any) -> None:
         while (request := requests.get()) is not None:
             message, blob = request
+            self._local.serving = message.get("id")
+            self.asked += 1  # (what was asked of the app for the request before goes)
             op = self.ops.get(message.get("op", ""))
             answer: dict[str, Any] = {"id": message.get("id")}
             out = b""
@@ -346,7 +381,6 @@ class Host:
         """A renderer for a theme of the Rust app's (its size, palette, font, model, folder and
         screen as the app has it, dressed): the plugins' widget types and the screen are drawn
         with it, as the Python app's renderer draws them."""
-        from libre_panel.render.renderer import Renderer
         from libre_panel.theme.model import DEFAULT_FONT, Theme
 
         told = message["theme"]
@@ -355,8 +389,8 @@ class Host:
                       model=told.get("model") or "custom", palette=dict(told.get("palette") or {}),
                       font=told.get("font") or DEFAULT_FONT, screen=told.get("screen"),
                       root=Path(told["root"]) if told.get("root") else None)  # fmt: skip
-        renderer = Renderer(theme, animate=bool(message.get("animate")),
-                            preview=bool(message.get("preview")))  # fmt: skip
+        renderer = _host_renderer(self)(theme, animate=bool(message.get("animate")),
+                                        preview=bool(message.get("preview")))  # fmt: skip
         ident = next(self._drawing_ids)
         self.drawings[ident] = _Drawing(renderer)
         return {"drawing": ident, "screen": renderer.screen is not None,
@@ -547,6 +581,56 @@ class Host:
         return {}
 
 
+def _frame_of(told: Any, blob: bytes) -> Any:
+    """A frame the app sent: its size and mode, its pixels; None for none."""
+    from PIL import Image
+
+    if not isinstance(told, dict):
+        return None
+    return Image.frombytes(told.get("mode", "RGB"), tuple(told["size"]), blob)
+
+
+_HOST_RENDERERS: dict[int, type] = {}
+
+
+def _host_renderer(host: Host) -> type:
+    """The renderer the host draws plugins with: Python's, but the frame shown and the toast
+    on show (context.shown, context.toast) are asked of the app when a plugin reads them,
+    once a request."""
+    made = _HOST_RENDERERS.get(id(host))
+    if made is not None:
+        return made
+    from libre_panel.render.renderer import Renderer
+
+    def asked(renderer: Any, what: str, make: Any) -> Any:
+        kept = renderer.__dict__.setdefault("_asked", {})
+        if kept.get(what, (None,))[0] != host.asked:
+            value, blob = host.ask_app(what)
+            kept[what] = (host.asked, make(value, blob))
+        return kept[what][1]
+
+    class HostRenderer(Renderer):
+        @property
+        def shown(self) -> Any:
+            return asked(self, "shown", _frame_of)
+
+        @shown.setter
+        def shown(self, value: Any) -> None:
+            pass  # (the app's)
+
+        @property
+        def toast(self) -> Any:
+            return asked(self, "toast", lambda value, blob: (_toast(value[0]), float(value[1]))
+                         if value else None)  # fmt: skip
+
+        @toast.setter
+        def toast(self, value: Any) -> None:
+            pass  # (the app's)
+
+    _HOST_RENDERERS[id(host)] = HostRenderer
+    return HostRenderer
+
+
 class _Drawing:
     """A renderer the Rust app draws plugins with, what it gave last, and the pictures of the
     readings it was sent (by key: their fingerprint and picture)."""
@@ -615,22 +699,134 @@ class _PageServices:
 
 class _PageControls:
     """The running app as a page's context reaches it in the plugin host: what the app told
-    with the request, and what the page asks of it, done by the app once the page answered."""
+    with the request, what the page asks of it while it answers (a panel's frame, the readings,
+    a message), and what it asks the app to do once it answered."""
 
     def __init__(self, host: Host, told: dict[str, Any]) -> None:
         self.told = told
         self.after: list[Any] = []
         self.config_path = Path(told["config_path"]) if told.get("config_path") else None
         self.services = _PageServices(host, self)
-        self.plugin_host = host.bridge
-        status = told.get("status")
-        self.panel = type("_Panel", (), {"state": staticmethod(lambda: status)})()
+        self.plugin_host = _PageHost(host)
+        self.panel = _PagePanel(host, told)
 
     def follow_config(self) -> None:
         self.after.append(["follow_config"])
 
     def shortcut(self, action: str) -> None:
         self.after.append(["shortcut", action])
+
+
+def _shown(host: Host, panel: int) -> Any:
+    """Panel ``panel``'s frame now (1: [device]'s), asked of the app; None for none."""
+    value, blob = host.ask_app("shown_frame", panel=panel)
+    return _frame_of(value, blob)
+
+
+class _PageHost:
+    """The host of the services as a page sees it: the readings the panel was last drawn
+    from, the frame on the first panel, and messages, all through the app."""
+
+    def __init__(self, host: Host) -> None:
+        self._host = host
+
+    @property
+    def latest(self) -> Any:
+        value, _ = self._host.ask_app("snapshot")
+        return _snapshot(value) if isinstance(value, dict) else None
+
+    @property
+    def shown(self) -> Any:
+        return _shown(self._host, 1)
+
+    def notify(self, toast: Any) -> Any:
+        from libre_panel.plugins.host import Delivery
+
+        told = _toast_told(toast)
+        pictures: dict[str, Any] = {}
+        for key, value in toast.payload.items():
+            if hasattr(value, "convert"):  # a picture: published by the app, named in its place
+                named = f"plugin-toast.{toast.service or 'editor'}.{len(pictures)}"
+                pictures[named] = value
+                told["payload"][key] = named
+        listed, data = _pictures(pictures)
+        value, _ = self._host.ask_app("notify", data, toast=told, pictures=listed["images"])
+        if not isinstance(value, dict):
+            return Delivery(False, "no-panel")
+        return Delivery(bool(value.get("shown")), str(value.get("reason") or ""))
+
+
+class _Beside:
+    """A panel beside the first, as the page's context asks for its frame."""
+
+    def __init__(self, host: Host, panel: int) -> None:
+        self._host, self._panel = host, panel
+
+    @property
+    def shown(self) -> Any:
+        return _shown(self._host, self._panel)
+
+    def picture(self) -> Any:
+        return _shown(self._host, self._panel)
+
+
+class _More(dict):
+    """The panels beside the first, by number from 0 (panel 2): asked of the app when read."""
+
+    def __init__(self, host: Host) -> None:
+        super().__init__()
+        self._host = host
+
+    def get(self, key: Any, default: Any = None) -> Any:
+        return _Beside(self._host, int(key) + 2) if isinstance(key, int) and key >= 0 else default
+
+
+class _Provider:
+    """A sensor source the panel reads, as the app told it: its name and what it says."""
+
+    def __init__(self, name: str, readings: int, status: Any) -> None:
+        self.name, self.readings, self._status = name, readings, status
+
+    def status(self) -> Any:
+        return self._status
+
+
+class _Hub:
+    def __init__(self, sources: list[Any]) -> None:
+        self.providers = [_Provider(str(name), int(readings or 0), status)
+                          for name, readings, status in sources]  # fmt: skip
+
+    def readings_from(self, provider: _Provider) -> int:
+        return provider.readings
+
+
+class _PageStatus:
+    def __init__(self, host: Host, told: dict[str, Any]) -> None:
+        self.hub = _Hub(told.get("sources") or [])
+        self.more = _More(host)
+        self._host = host
+
+    def picture(self) -> Any:
+        return _shown(self._host, 1)
+
+
+class _PagePanel:
+    """The panel as a page's context reads it: its state as the app told it, its sources, its
+    frames."""
+
+    def __init__(self, host: Host, told: dict[str, Any]) -> None:
+        self._state = told.get("status")
+        self.status = _PageStatus(host, told)
+
+    def state(self) -> Any:
+        return self._state
+
+
+def _toast_told(toast: Any) -> dict[str, Any]:
+    """A Toast as the app takes one."""
+    return {"text": toast.text, "icon": toast.icon, "level": toast.level,
+            "seconds": toast.seconds, "kind": toast.kind, "rank": toast.rank,
+            "payload": dict(toast.payload), "service": toast.service, "key": toast.key}  # fmt: skip
 
 
 def _takes_previous(style: Any) -> bool:
@@ -683,6 +879,8 @@ def _piece(piece: Any, told: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
         data += light.tobytes()
     return {**told, "piece": made}, bytes(data)
 
+
+ANSWER_S = 30  # (as long as the app waits for an answer)
 
 _WANTS = type("_RustApp", (), {})()  # (who reads what the themes on show read, for want())
 
