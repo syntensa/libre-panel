@@ -273,9 +273,11 @@ MODELS: tuple[PanelModel, ...] = (
         1920,
         "usb-turing",
         usb_ids=((0x1CBE, 0x0123),),
+        notes="protocol verified on hardware",
         # an owner's panel showed limited-range video washed out (black grey) with the card's
         # conversion and with the processor's, the stream tagged limited, and right as stills:
         # its decoder takes every stream as full range
+        video=True,
         video_range="full",
         video_range_seen=True,
     ),
@@ -738,7 +740,9 @@ _DRIVER_STATUS = {
 _CONFIRMED: set[str] = {
     "turing-9.2-usb",  # stills and 50 fps video, for hours on end; an owner's doctor report (#19)
     "turing-8.8-usb",  # "works wonderfully", an owner's report in the TURZX forum
-    "turing-12.3-usb",  # recognised and running from the first start, on the maintainer's desk
+    # stills and video from the first start, on the maintainer's desk; an owner's doctor
+    # report, every check passed (#45, Windows 11)
+    "turing-12.3-usb",
     "turing-3.5",  # rev. A: runs, its screen turned off with the command Libre Panel sends
     "turing-8.8",  # rev. C: runs since 0.6.4, an owner's report
     # each screen its own panel: an owner's doctor report for each of the three (#13, Windows)

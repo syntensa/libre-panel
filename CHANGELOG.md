@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.0 — in testing
+
+Libre Panel ported whole to Rust, pixel for pixel as before; being finished and tested now.
+
+**Panels**
+- **The Turing 12.3" fully verified.** Stills and the video mode from the first start, and an
+  owner's doctor report on Windows 11 with every check passed (#45): the video mode's `"auto"`
+  now takes it as on the 9.2", and the doctor no longer calls it unproven there.
+- **The JONSBO DS339 without the purple flicker** (#46): its start, video and frames the way
+  its owner found them to work (other MS9132 panels keep theirs).
+- **The MAJESTY 9.16"** (Hongtai `33C3:7792`, #40): its setup, brightness and dimming.
+
 ## 0.8.1rc2 — 2026-11-06
 
 **Lighter**

@@ -1360,7 +1360,7 @@ def test_the_panel_and_the_clip_question_are_told_as_settings_py_tells_them(
     ask, homes = servers
     monkeypatch.setattr(h264, "find_ffmpeg", lambda path="": "ffmpeg")
     proven, seen, unproven = "turing-9.2-usb", "turing-12.3-usb", "turing-8.8-usb"
-    assert [find_model(m).video for m in (proven, seen, unproven)] == [True, False, False]
+    assert [find_model(m).video for m in (proven, seen, unproven)] == [True, True, False]
     serial, other = "turing-3.5", "waveshare-2.8-udisp"
     configs = ['[device]\ndriver = "virtual"\n', ""]
     for model in (proven, seen, unproven, serial, other, "jonsbo-zc360-screen"):
