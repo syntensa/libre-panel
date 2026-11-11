@@ -82,6 +82,11 @@ fn other(
             driver.numbers = Some(Box::new(zc360_numbers));
             driver.open().map(|()| Box::new(driver) as Box<dyn Driver>)
         }
+        // (only where device.model names it: never by auto, USB-to-HDMI adapters have the chip)
+        "usb-ms9132" => {
+            let mut driver = lp_devices::ms9132::Ms9132::new(model);
+            driver.open().map(|()| Box::new(driver) as Box<dyn Driver>)
+        }
         "usb-lianli" => {
             let mut driver = lp_devices::lianli::LianLi::new(model);
             driver.open().map(|()| Box::new(driver) as Box<dyn Driver>)

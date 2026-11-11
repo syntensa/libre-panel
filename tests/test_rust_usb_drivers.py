@@ -8,11 +8,13 @@ from __future__ import annotations
 import base64
 import io
 import random
+import sys
 from collections import deque
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
+import usb
 import usb.core
 from PIL import Image
 from rust_check import image, noise, run
@@ -22,6 +24,7 @@ from libre_panel.devices import (
     beadapanel,
     jonsbo_zc360,
     lianli_usb,
+    ms9132,
     nzxt_kraken,
     thermalright,
     thermaltake,
@@ -134,6 +137,18 @@ def _zc360_screens(case: dict[str, Any], events: list[Any], monkeypatch: pytest.
     monkeypatch.setattr(jonsbo_zc360.time, "sleep", lambda seconds: None)
 
 
+def _ms9132_chip(screen: FakeScreen, events: list[Any], monkeypatch: pytest.MonkeyPatch) -> None:
+    """The MS9132 as ms9132.py finds, claims and lets go of it, on the fake screen."""
+    monkeypatch.setattr(ms9132, "_device", lambda: screen)
+    monkeypatch.setattr(ms9132.Ms9132Display, "_claim",
+                        lambda self: events.append(["claim", [0, 3]]))  # fmt: skip
+    util = SimpleNamespace(release_interface=lambda device, interface: None,
+                           dispose_resources=lambda device: events.append(["release"]))  # fmt: skip
+    monkeypatch.setitem(sys.modules, "usb.util", util)
+    monkeypatch.setattr(usb, "util", util, raising=False)
+    monkeypatch.setattr(ms9132.time, "sleep", lambda seconds: None)
+
+
 def _python_session(case: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     events: list[Any] = []
     if case["driver"] == "zc360":
@@ -153,6 +168,8 @@ def _python_session(case: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> di
     )
     if case["driver"] == "lianli":
         _turzx_transport(screen, events, monkeypatch)
+    if case["driver"] == "ms9132":
+        _ms9132_chip(screen, events, monkeypatch)
     options = case.get("options", {})
     config = DeviceConfig(driver="turzx")
     config.jpeg = options.get("jpeg", "4:4:4")
@@ -203,6 +220,8 @@ def _driver(name: str, config: DeviceConfig, model: Any) -> Any:
         return nzxt_kraken.KrakenDisplay(config, model)
     if name == "zc360":
         return jonsbo_zc360.Zc360Display(config, model)
+    if name == "ms9132":
+        return ms9132.Ms9132Display(config, model)
     raise AssertionError(name)
 
 
@@ -586,3 +605,48 @@ def _zc360_case(rng: random.Random) -> dict[str, Any]:
 def test_zc360_sessions_as_jonsbo_zc360_py_drives_them(monkeypatch: pytest.MonkeyPatch) -> None:
     rng = random.Random(0x2C36)
     assert _compare([_zc360_case(rng) for _ in range(30)], monkeypatch) > 12
+
+
+def _edid(size: tuple[int, int] | None) -> bytes:
+    edid = bytearray(128)
+    if size is None:
+        return bytes(edid)
+    edid[:8] = b"\x00\xff\xff\xff\xff\xff\xff\x00"
+    width, height = size
+    edid[0x38], edid[0x3A] = width & 0xFF, (width >> 8) << 4
+    edid[0x3B], edid[0x3D] = height & 0xFF, (height >> 8) << 4
+    return bytes(edid)
+
+
+def _ms9132_case(rng: random.Random) -> dict[str, Any]:
+    size = rng.choice([(376, 960), (320, 960), (480, 480), (123, 456), None])
+    edid = _edid(size)
+    answers: list[Any] = []
+    for report in ms9132.START:
+        data = rng.randbytes(5)
+        if report[:2] == bytes((0xB5, 0xC0)):
+            data = edid[report[2] : report[2] + 4] + b"\0"
+        answers.append(_b64(rng.randbytes(3) + data))
+    if rng.random() < 0.1:
+        answers[rng.randrange(len(answers))] = None  # (a report the chip does not answer)
+    answers += [_b64(bytes(8)) if rng.random() < 0.95 else None for _ in range(60)]
+    model = rng.choice([None, "jonsbo-ds339"])
+    shape = size if size in ((376, 960), (320, 960), (480, 480)) else (376, 960)
+    steps: list[dict[str, Any]] = []
+    for _ in range(rng.randrange(1, 5)):
+        if rng.random() < 0.25:
+            steps.append({"brightness": rng.choice([0, 40, 100, 130])})
+        else:
+            steps.append({"show": _frame(rng, [shape, (shape[1], shape[0]), (50, 40)]),
+                          "region": None})  # fmt: skip
+    fail = [[rng.randrange(1, 40), 19, "No such device"]] if rng.random() < 0.15 else []
+    return {"driver": "ms9132", "model": model, "product": "MS9132",
+            "interfaces": [{"number": 0, "class": 3, "endpoints": [[0x81, 8, True]]},
+                           {"number": 3, "class": 255, "endpoints": [[0x04, 512, False]]}],
+            "answers": answers, "options": {}, "steps": steps, "fail_writes": fail}  # fmt: skip
+
+
+def test_ms9132_sessions_as_ms9132_py_drives_them(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ms9132, "AGAIN_S", 3600.0)
+    rng = random.Random(0x9132)
+    assert _compare([_ms9132_case(rng) for _ in range(24)], monkeypatch) > 10

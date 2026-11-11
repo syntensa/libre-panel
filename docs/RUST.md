@@ -1671,8 +1671,12 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       on the bus; the DES commands, the framebuffers in their records, a screen that did not
       change not written again, a controller just powered taken on with 88, "Which is which?"
       on the three; tests/test_rust_usb_drivers.py)
-- [ ] MS9132, the serial panels (Turing rev. A/B/C, Kipye rev. D, WeAct, JONSBO DS916), the panel as a monitor
-      (Windows' virtual display driver, X11, Wayland)
+- [x] the MS9132 chip's panels, JONSBO DS339 and VMAX 4.6" (rust/devices' ms9132: its feature
+      reports written and read back, the vendor's start, the size its EDID says and the mode
+      for it, the frames in pieces of 64 KB, the output on once two frames are in, the panel
+      turned off; only where device.model names it; tests/test_rust_usb_drivers.py)
+- [ ] the serial panels (Turing rev. A/B/C, Kipye rev. D, WeAct, JONSBO DS916), the panel as
+      a monitor (Windows' virtual display driver, X11, Wayland)
 
 ### R7 sensors
 - [ ] Linux: hwmon, /proc, the cards' (amdgpu, NVML), storage, network, fans

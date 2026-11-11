@@ -237,6 +237,11 @@ fn opened(case: &Value, io: Box<dyn UsbIo>) -> Result<Box<dyn Driver>, String> {
                 .map_err(|e| e.0)?;
             Ok(Box::new(driver))
         }
+        "ms9132" => {
+            let mut driver = lp_devices::ms9132::Ms9132::new(model).without_pauses();
+            driver.open_on(io).map_err(|e| e.0)?;
+            Ok(Box::new(driver))
+        }
         other => Err(format!("no driver {other:?} here")),
     }
 }
