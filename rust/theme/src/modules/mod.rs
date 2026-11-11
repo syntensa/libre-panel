@@ -1351,7 +1351,7 @@ pub fn expand(theme: &Theme, env: &Env) -> Result<Expanded> {
         raw.insert("color".into(), colors["bg"].clone());
         raw.insert("color2".into(), colors["bg2"].clone());
         done.widgets
-            .push(normalize_widget(&Value::Dict(raw), 0, None, None)?.0);
+            .push(normalize_widget(&Value::Dict(raw), 0, None, None, env)?.0);
     }
     for widget in &theme.widgets {
         if !is_module(widget) {
@@ -1390,7 +1390,7 @@ pub fn expand(theme: &Theme, env: &Env) -> Result<Expanded> {
             let part = raw.get("id").map(Value::str).unwrap_or_default();
             raw.insert("id".into(), format!("{id}/{part}").into());
             let card = raw.shift_remove("_card");
-            match normalize_widget(&Value::Dict(raw), i, None, None) {
+            match normalize_widget(&Value::Dict(raw), i, None, None, env) {
                 Ok((mut made, _warnings)) => {
                     made.insert("_module".into(), id.clone().into());
                     if let Some(card) = card {

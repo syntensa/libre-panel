@@ -573,9 +573,15 @@ fn owned(field: &Field) -> PluginField {
     }
 }
 
-/// _check_paths: fonts and assets named in a plugin's fields stay inside the theme folder too
-/// (a built-in font's name is the font's own check).
-fn check_paths(spec: &[PluginField], values: &Dict, root: Option<&Path>) -> Result<()> {
+/// _check_paths: fonts and assets named in a plugin's fields stay inside the theme folder too,
+/// and a built-in font is one there is.
+fn check_paths(
+    spec: &[PluginField],
+    values: &Dict,
+    place: &str,
+    root: Option<&Path>,
+    env: &Env,
+) -> Result<()> {
     for field in spec {
         let Some(value @ Value::Str(text)) = values.get(&field.name) else {
             continue;
@@ -583,12 +589,16 @@ fn check_paths(spec: &[PluginField], values: &Dict, root: Option<&Path>) -> Resu
         if text.is_empty() {
             continue;
         }
-        let kind = field.kind.trim_end_matches('?');
-        let builtin = kind == "font" && text.starts_with(BUILTIN_PREFIX);
-        if (kind == "font" || kind == "asset") && !builtin {
-            if let Some(root) = root {
-                resolve_asset(root, value)?;
+        match field.kind.trim_end_matches('?') {
+            "font" => {
+                check_font(value, &format!("{place}.{}", field.name), root, env)?;
             }
+            "asset" => {
+                if let Some(root) = root {
+                    resolve_asset(root, value)?;
+                }
+            }
+            _ => {}
         }
     }
     Ok(())
@@ -603,7 +613,8 @@ pub fn normalize_widget(
     raw: &Value,
     index: usize,
     palette: Option<&Dict>,
-    _root: Option<&Path>,
+    root: Option<&Path>,
+    env: &Env,
 ) -> Result<(Dict, Vec<String>)> {
     let place = format!("widgets[{index}]");
     let Value::Dict(raw) = raw else {
@@ -679,7 +690,7 @@ pub fn normalize_widget(
         widget.insert("id".into(), format!("{wtype}-{}", index + 1).into());
     }
     if let Some(own) = &plugin {
-        check_paths(own, &widget, _root)?;
+        check_paths(own, &widget, &place, root, env)?;
     }
     let gone = GONE_FIELDS
         .iter()
@@ -1126,6 +1137,7 @@ fn parse_detached(
     raw: Option<&Value>,
     palette: &Dict,
     root: Option<&Path>,
+    env: &Env,
     warnings: &mut Vec<String>,
 ) -> Result<Dict> {
     let Some(Value::Dict(raw)) = raw else {
@@ -1138,7 +1150,7 @@ fn parse_detached(
         if !is_module {
             continue;
         }
-        match normalize_widget(module, 0, Some(palette), root) {
+        match normalize_widget(module, 0, Some(palette), root, env) {
             Ok((widget, _)) => {
                 kept.insert(name.clone(), Value::Dict(widget));
             }
@@ -1331,7 +1343,7 @@ pub fn parse_theme(data: &Value, root: Option<&Path>, env: &Env) -> Result<Theme
     let mut warnings = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
     for (i, raw) in raw_widgets.iter().enumerate() {
-        let (widget, found) = normalize_widget(raw, i, Some(&palette), root)?;
+        let (widget, found) = normalize_widget(raw, i, Some(&palette), root, env)?;
         let id = widget["id"].str();
         if seen.contains(&id) {
             return refuse(format!(
@@ -1370,7 +1382,7 @@ pub fn parse_theme(data: &Value, root: Option<&Path>, env: &Env) -> Result<Theme
     let toast = parse_toast(data.get("toast"), &palette, &mut warnings)?;
     let look = parse_look(data.get("look"), &palette, &mut warnings)?;
     let switches = parse_switches(data.get("switches"))?;
-    let detached = parse_detached(data.get("detached"), &palette, root, &mut warnings)?;
+    let detached = parse_detached(data.get("detached"), &palette, root, env, &mut warnings)?;
     Ok(Theme {
         name,
         author,

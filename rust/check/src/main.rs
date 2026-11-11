@@ -1888,7 +1888,7 @@ fn run(case: &Value) -> Result<Value, String> {
                             _ => None,
                         };
                         let index = case["index"].as_u64().unwrap_or(0) as usize;
-                        lp_theme::normalize_widget(&d, index, palette.as_ref(), root.as_deref())
+                        lp_theme::normalize_widget(&d, index, palette.as_ref(), root.as_deref(), &env)
                             .map(|(w, warnings)| {
                                 (lp_py::json::dumps(&lp_py::Value::Dict(w), &how), warnings)
                             })
@@ -3126,7 +3126,7 @@ fn run(case: &Value) -> Result<Value, String> {
                     "name": made.name,
                     "duration": bits(made.duration),
                     "switch": made.switch,
-                    "on_switch": [made.on_switch(false), made.on_switch(true)],
+                    "on_switch": [made.on_switch("", None, false).0, made.on_switch("", None, true).0],
                     "toasts": made.toasts,
                     "from_shown": made.from_shown,
                     "steps": steps,
