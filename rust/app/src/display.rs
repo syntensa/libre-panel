@@ -144,6 +144,10 @@ fn serial(
         "serial-b" => opened!(RevB::default()),
         "serial-d" => opened!(RevD),
         "serial-weact" => opened!(WeAct),
+        "serial-jonsbo" => {
+            let mut panel = lp_devices::jonsbo_ds916::Ds916::new(model, &device.port);
+            Some(panel.open().map(|()| Box::new(panel) as Box<dyn Driver>))
+        }
         _ => None,
     }
 }

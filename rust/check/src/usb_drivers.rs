@@ -423,6 +423,13 @@ fn serial_opened(case: &Value, events: &Events) -> Result<Box<dyn Driver>, Strin
         }),
         "rev_d" => open!(RevD),
         "weact" => open!(WeAct),
+        "ds916" => {
+            let mut panel = lp_devices::jonsbo_ds916::Ds916::new(model, "");
+            panel
+                .open_on(link, &found, String::new())
+                .map_err(|e| e.0)?;
+            Ok(Box::new(panel) as Box<dyn Driver>)
+        }
         other => Err(format!("no serial driver {other:?} here")),
     }
 }

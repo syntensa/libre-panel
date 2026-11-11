@@ -12,6 +12,7 @@ pub mod driver;
 pub mod engine;
 pub mod h264;
 pub mod hongtai;
+pub mod jonsbo_ds916;
 pub mod jonsbo_zc360;
 pub mod keep;
 pub mod lianli;

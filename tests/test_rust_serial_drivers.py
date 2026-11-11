@@ -17,6 +17,7 @@ from test_rust_usb_drivers import _b64, _frame
 
 from libre_panel.config import DeviceConfig
 from libre_panel.devices import (
+    jonsbo_ds916,
     kipye_rev_d,
     serial_link,
     serial_panel,
@@ -62,6 +63,7 @@ DRIVERS = {
     "rev_b": turing_rev_b.RevBDisplay,
     "rev_d": kipye_rev_d.RevDDisplay,
     "weact": weact.WeActDisplay,
+    "ds916": jonsbo_ds916.Ds916Display,
 }
 
 
@@ -73,6 +75,7 @@ def _python_session(case: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> di
     monkeypatch.setattr(serial_link, "open_serial",
                         lambda device, baud, rtscts: FakePort(case, events))  # fmt: skip
     monkeypatch.setattr(turing_rev_b.RevBDisplay, "sleep", staticmethod(lambda seconds: None))
+    monkeypatch.setattr(jonsbo_ds916, "AGAIN_S", 3600.0)
     model = get_model(case["model"]) if case.get("model") else None
     display = DRIVERS[case["driver"]](DeviceConfig(driver="turzx"), model,
                                       configured=case.get("configured", True))  # fmt: skip
@@ -121,7 +124,7 @@ def _compare(cases: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch) -> in
 
 SIZES = {"turing-3.5": (320, 480), "usbpcmonitor-5": (480, 800), "usbpcmonitor-7": (600, 1024),
          "xuanfang-3.5": (320, 480), "kipye-3.5": (320, 480), "weact-3.5": (320, 480),
-         "weact-0.96": (80, 160)}  # fmt: skip
+         "weact-0.96": (80, 160), "jonsbo-ds916": (462, 1920)}  # fmt: skip
 
 
 def _case(rng: random.Random, driver: str) -> dict[str, Any]:
@@ -132,6 +135,10 @@ def _case(rng: random.Random, driver: str) -> dict[str, Any]:
                                    b"\xcaHELLO\x0a\x12\x00\xca", b"\x01\x02\x03"]),
         "rev_d": ("kipye-3.5", [b"", rng.randbytes(40)]),
         "weact": (rng.choice(["weact-3.5", "weact-0.96"]), [b"", rng.randbytes(19)]),
+        "ds916": ("jonsbo-ds916", [b"", b"VMAXB160462*1920S0123456789",
+                                   b"\0VMAXB16 0240*0320 S12\r\n", b"garbage" * 4,
+                                   b"x" * 26 + b"VMAXB160480*1920S01234567",
+                                   b"V\xc3\xa9MAXB0462*1920S"]),
     }[driver]  # fmt: skip
     configured = rng.random() < 0.5
     model = port_model if configured else None

@@ -1681,7 +1681,10 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       orientation set with the first frame, the parts that changed sent each on its own as
       RGB565 in the family's commands, the brightness; auto takes a serial panel last, as
       turzx.py does; tests/test_rust_serial_drivers.py)
-- [ ] Turing rev. C, JONSBO DS916, the panel as a monitor (Windows' virtual display driver,
+- [x] JONSBO DS916 (rust/devices' jonsbo_ds916: asked what it is, its framebuffer's size from
+      its answer, whole JPEGs within 256 KB, the last one again every half second;
+      tests/test_rust_serial_drivers.py)
+- [ ] Turing rev. C, the panel as a monitor (Windows' virtual display driver,
       X11, Wayland)
 
 ### R7 sensors
