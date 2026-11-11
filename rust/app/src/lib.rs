@@ -30,6 +30,7 @@ mod home;
 mod hotkeys;
 mod http;
 mod identify;
+mod install;
 mod instance;
 mod linux_setup;
 mod load;

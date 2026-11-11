@@ -584,14 +584,27 @@ impl Autostart {
         }
     }
 
+    /// The command Windows' Run key starts at login for Libre Panel (Windows), where it has
+    /// one.
     #[cfg(windows)]
-    fn run_value(&self) -> Option<String> {
+    pub fn run_value(&self) -> Option<String> {
         windows::get(WINDOWS_RUN_KEY, APP_NAME)
     }
 
     #[cfg(not(windows))]
-    fn run_value(&self) -> Option<String> {
+    pub fn run_value(&self) -> Option<String> {
         None
+    }
+
+    /// The Run key's command for Libre Panel set to `value` (Windows).
+    #[cfg(windows)]
+    pub fn set_run_value(&self, value: &str) -> std::io::Result<()> {
+        windows::set(WINDOWS_RUN_KEY, APP_NAME, value)
+    }
+
+    #[cfg(not(windows))]
+    pub fn set_run_value(&self, _value: &str) -> std::io::Result<()> {
+        Ok(())
     }
 
     pub fn is_enabled(&self) -> Result<bool> {

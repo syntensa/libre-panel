@@ -53,6 +53,8 @@ pub struct State {
     news: crate::news::News,
     /// whether a newer version is out (updates.rs)
     updates: crate::updates::Updates,
+    /// its download and install on a click (install.rs)
+    install: crate::install::Install,
     /// the pictures of the themes kept (previews.rs)
     previews: crate::previews::Previews,
     /// the start screen's pictures and files kept (start_screen.rs)
@@ -318,6 +320,9 @@ const ROUTES: &[Route] = &[
         let at_once = crate::http::parse_qs(&u.query).contains_key("now");
         x.json(&s.updates.state(check_updates(s), at_once), 200)
     }),
+    private("GET", "/api/update/install", |s, x, _, _| {
+        x.json(&Value::Dict(s.install.state()), 200)
+    }),
     private("GET", "/api/system", |s, x, _, _| {
         settings(s, x, |told| told.system())
     }),
@@ -559,6 +564,9 @@ const ROUTES: &[Route] = &[
     }),
     private("POST", "/api/language", |s, x, _, _| set_language(s, x)),
     private("POST", "/api/update", |s, x, _, _| update_later(s, x)),
+    private("POST", "/api/update/install", |s, x, _, _| {
+        update_install(s, x)
+    }),
     private("POST", "/api/system", |s, x, _, _| {
         settings_with(s, x, |told, asked| told.set_system(asked))
     }),
@@ -696,6 +704,54 @@ fn update_later(state: &State, exchange: &mut Exchange) {
     match state.updates.later(later, check_updates(state)) {
         Ok(told) => exchange.json(&told, 200),
         Err(why) => exchange.error(&why, 400, ""),
+    }
+}
+
+/// _update_install: `{"action": "download"}`: the newer version for this kind of install
+/// fetched and checked; `{"action": "install"}`: put in place, and this app quits for it to
+/// start (the Windows setup, the portable zip, the AppImage), or the folder of the download
+/// shown (the Linux tarball). Answers as `GET /api/update/install` (install.rs).
+fn update_install(state: &State, exchange: &mut Exchange) {
+    let Some(payload) = exchange.read_json(MAX_JSON) else {
+        return;
+    };
+    let action = match &payload {
+        Value::Dict(payload) => payload.get("action").and_then(Value::as_str).unwrap_or(""),
+        _ => "",
+    };
+    let answered = match action {
+        "download" => {
+            let update = state.updates.state(check_updates(state), false);
+            let latest = match &update {
+                Value::Dict(update) if update.get("newer").is_some_and(Value::truthy) => {
+                    update.get("latest").and_then(Value::as_dict).cloned()
+                }
+                _ => None,
+            };
+            state.install.download(latest.as_ref())
+        }
+        "install" => {
+            let controls = state.controls.clone();
+            let quit: Option<Box<dyn FnOnce() + Send>> = controls.upgrade().map(|_| {
+                Box::new(move || {
+                    if let Some(app) = controls.upgrade() {
+                        let _ = app.act("quit", &Value::None);
+                    }
+                }) as Box<dyn FnOnce() + Send>
+            });
+            state.install.install(quit)
+        }
+        _ => {
+            return exchange.error(
+                "expected {\"action\": \"download\" or \"install\"}",
+                400,
+                "",
+            )
+        }
+    };
+    match answered {
+        Ok(told) => exchange.json(&Value::Dict(told), 200),
+        Err(why) => exchange.error(&why, 409, ""),
     }
 }
 
@@ -3097,6 +3153,7 @@ impl EditorServer {
                 experiment: Mutex::new(None),
                 news,
                 updates,
+                install: crate::install::Install::new(),
                 previews: crate::previews::Previews::default(),
                 start_screen: crate::start_screen::Kept::default(),
                 colours,

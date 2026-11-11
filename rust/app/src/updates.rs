@@ -140,6 +140,15 @@ fn pick<'a>(data: &'a Value, current: &str) -> Option<&'a Dict> {
 /// Windows .zip), "appimage", "linux" (the Linux .tar.gz) or "python" (built from its
 /// source), which says the download that replaces it.
 pub fn install_kind() -> &'static str {
+    // (the tests' own: how Libre Panel came, instead of what it finds)
+    if let Ok(kind) = std::env::var(crate::install::KIND_ENV) {
+        if let Some(known) = ["setup", "portable", "appimage", "linux", "python"]
+            .into_iter()
+            .find(|known| *known == kind)
+        {
+            return known;
+        }
+    }
     if !crate::settings::packaged() {
         return "python";
     }

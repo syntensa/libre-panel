@@ -2218,6 +2218,15 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       LibrePanel.exe), `LibrePanel.exe --background` is `tray --background`, a portable
       copy's first start takes over the user's settings, and `sensors --check-lhm` asks the
       sensor service's own program whether LibreHardwareMonitor loads
+- [x] the update itself (updates.py's Install, `/api/update/install`): the newer release's
+      download for this kind of install fetched from the release's own files over HTTPS only
+      (redirects too), its size and its SHA-256 against the release's SHA256SUMS checked, and
+      on the second click put in place once the app has quit: the setup run by PowerShell
+      without questions where it is still the checked file, the portable zip unpacked beside
+      with the settings (and the start at login moved to it), the AppImage renamed into its
+      place; the Linux tarball's folder shown. The test: through the app's server, nothing
+      to install first, the download checked, the command that starts it Python's
+      restart_command word for word, and the app quits
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app
 - [x] one Libre Panel at a panel (instance.py): the system's lock on libre-panel.lock in the

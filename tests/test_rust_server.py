@@ -625,6 +625,95 @@ def test_a_notice_is_sent_and_libre_panel_quits_as_cli_py_does_it(tmp_path: Path
     assert listed.returncode == 0 and listed.stdout.startswith("drivers: auto, turzx, virtual\n")
 
 
+def test_an_update_is_fetched_checked_and_installed_as_updates_py_does(tmp_path: Path) -> None:
+    """updates.py's Install, through the app's server: nothing to install before a download;
+    the newer release's setup fetched from the release's files and checked against its
+    SHA256SUMS; on the second click the command that runs it once the app has quit (Python's
+    restart_command, word for word) started, and the app quits."""
+    import hashlib
+    import urllib.request
+
+    from libre_panel.editor import updates
+
+    name = "libre-panel-9.1.0-windows-x64-setup.exe"
+    content = b"the setup " * 100
+    files = tmp_path / "release"
+    files.mkdir()
+    (files / name).write_bytes(content)
+    digest = hashlib.sha256(content).hexdigest()
+    (files / "SHA256SUMS").write_text(f"{'0' * 64}  other.zip\n{digest}  {name}\n")
+    own = f"{updates.RELEASE_FILES}v9.1.0/"
+    answer = {
+        "tag_name": "v9.1.0", "html_url": "https://github.com/syntensa/libre-panel/releases/tag/v9.1.0",
+        "body": "What is new.", "published_at": "2026-11-01T10:00:00Z", "prerelease": False,
+        "assets": [{"name": name, "size": len(content), "browser_download_url": own + name},
+                   {"name": "SHA256SUMS", "size": 99, "browser_download_url": own + "SHA256SUMS"}],
+    }  # fmt: skip
+    (tmp_path / "releases.json").write_text(json.dumps(answer), encoding="utf-8")
+    (tmp_path / "config.toml").write_text(
+        'theme = "slate"\nfps = 2\nlanguage = "en"\ncheck_updates = true\n[device]\n'
+        'driver = "virtual"\noutput = "panel.png"\n[sensors]\nproviders = []\n',
+        encoding="utf-8",
+    )
+    spawned = tmp_path / "spawned.json"
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           "LP_RELEASES_FILE": str(tmp_path / "releases.json"),
+           "LP_RELEASE_FILES_DIR": str(files), "LP_INSTALL_KIND": "setup",
+           "LP_INSTALL_SPAWN": str(spawned), **_libraries()}  # fmt: skip
+
+    with subprocess.Popen([str(_program()), "start", "--port", "0", "--no-browser"], env=env,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        try:
+            assert program.stdout is not None
+            address = program.stdout.readline().split(" running at ")[1].split()[0]
+            base, token = address.split("#token=")
+
+            def ask(path: str, payload: Any = None) -> tuple[int, Any]:
+                data = None if payload is None else json.dumps(payload).encode()
+                headers = {"X-Libre-Panel": token, "Content-Type": "application/json"}
+                request = urllib.request.Request(base.rstrip("/") + path, data, headers)
+                try:
+                    with urllib.request.urlopen(request, timeout=10) as response:
+                        return response.status, json.loads(response.read())
+                except urllib.error.HTTPError as error:
+                    return error.code, json.loads(error.read())
+
+            idle = ask("/api/update/install")
+            early = ask("/api/update/install", {"action": "install"})
+            assert ask("/api/update?now=1")[1]["newer"] is True
+            started = ask("/api/update/install", {"action": "download"})
+            ready = _waited(
+                lambda: s if (s := ask("/api/update/install")[1])["state"] == "ready" else None, 20
+            )
+            wrong = ask("/api/update/install", {"action": "?"})
+            installing = ask("/api/update/install", {"action": "install"})
+            told = _waited(
+                lambda: json.loads(spawned.read_text()) if spawned.exists() else None, 20
+            )
+            command, cwd = told
+            program.communicate(timeout=30)
+        finally:
+            if program.poll() is None:
+                program.kill()
+    assert idle == (200, updates.IDLE)
+    assert early == (409, {"error": "Nothing is downloaded to install yet."})
+    assert (
+        started[0] == 200 and started[1]["state"] == "downloading" and started[1]["how"] == "setup"
+    )
+    assert ready == {**updates.IDLE, "state": "ready", "version": "9.1.0", "how": "setup",
+                     "file": name, "where": ready["where"], "done": len(content),
+                     "total": len(content), "checked": True}  # fmt: skip
+    setup = Path(ready["where"]) / name
+    assert wrong[0] == 400
+    assert installing == (200, {**ready, "state": "installing"})
+    assert command == updates.restart_command(
+        "setup", program.pid, _program().with_name("LibrePanel.exe"), setup, digest
+    )
+    assert Path(cwd) == setup.parent.parent
+    assert program.returncode is not None
+
+
 class _Item:
     """pystray's MenuItem as tray.py makes it: what the tests read of it."""
 

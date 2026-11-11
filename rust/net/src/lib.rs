@@ -77,6 +77,55 @@ pub fn get(
     Ok(data)
 }
 
+/// open_https: the answer to a GET of `url`, an HTTPS address, and of every place it is sent
+/// on to, also over HTTPS only (updates.py's open_https): its length where it says one, and
+/// its body to read; each step may take `timeout` seconds.
+pub fn open_https(
+    url: &str,
+    headers: &[(&str, &str)],
+    timeout: f64,
+) -> Result<(Option<u64>, Box<dyn Read + Send>), Error> {
+    if !url.to_ascii_lowercase().starts_with("https://") {
+        return Err(Error {
+            status: None,
+            text: format!("<urlopen error {url} is not HTTPS>"),
+        });
+    }
+    let wait = Some(Duration::from_secs_f64(timeout));
+    let agent: Agent = Agent::config_builder()
+        .timeout_resolve(wait)
+        .timeout_connect(wait)
+        .timeout_send_request(wait)
+        .timeout_recv_response(wait)
+        .timeout_per_read(wait)
+        .timeout_per_write(wait)
+        .https_only(true)
+        .tls_config(
+            TlsConfig::builder()
+                .root_certs(RootCerts::PlatformVerifier)
+                .build(),
+        )
+        .build()
+        .new_agent();
+    let mut request = agent.get(url);
+    for (name, value) in headers {
+        request = request.header(*name, *value);
+    }
+    let answer = request.call().map_err(|why| Error {
+        status: match &why {
+            ureq::Error::StatusCode(code) => Some(*code),
+            _ => None,
+        },
+        text: why.to_string(),
+    })?;
+    let length = answer
+        .headers()
+        .get("content-length")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.trim().parse::<u64>().ok());
+    Ok((length, Box::new(answer.into_body().into_reader())))
+}
+
 /// The scheme and host of an address (urlsplit's scheme and netloc).
 fn origin(url: &str) -> (String, String) {
     let (scheme, rest) = url.split_once("://").unwrap_or(("", url));
