@@ -2438,7 +2438,12 @@ fn downloads(case: &Value) -> Result<Value, String> {
         };
         let found = text(&tracker["found"]);
         let find = Box::new(move || Path::new(HERE, &found));
-        let mut follows = Tracker::new(settings, made_up_places(tracker), find);
+        // (the test sets HOME in this process's environment: the rest is the real one, USERNAME
+        // and USERPROFILE among it, as Python's tracker reads os.environ)
+        let mut places = made_up_places(tracker);
+        let given = places.env;
+        places.env = Box::new(move |name| given(name).or_else(|| std::env::var(name).ok()));
+        let mut follows = Tracker::new(settings, places, find);
         let mut states = Vec::new();
         for step in tracker["steps"].as_array().into_iter().flatten() {
             for change in step[2].as_array().into_iter().flatten() {

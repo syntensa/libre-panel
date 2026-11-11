@@ -105,6 +105,10 @@ pub fn normpath(windows: bool, path: &str) -> String {
             joined
         };
     }
+    if cfg!(windows) {
+        // (on Windows ntpath.normpath is nt._path_normpath, CPython's C)
+        return normpath_c(path);
+    }
     let path = path.replace('/', "\\");
     let (drive, root, rest) = splitroot(true, &path);
     let mut parts: Vec<&str> = rest.split('\\').collect();
@@ -129,6 +133,109 @@ pub fn normpath(windows: bool, path: &str) -> String {
         parts.push(".");
     }
     format!("{drive}{root}{}", parts.join("\\"))
+}
+
+/// ntpath.normpath on Windows: CPython 3.12's _Py_normpath_and_size (Python/fileutils.c, its
+/// MS_WINDOWS branch) and os._path_normpath ("." for nothing). It takes a path beginning with
+/// two separators up to its second separator after them as the part that stays (`\\?\UNC\`),
+/// where ntpath's own normpath takes the server and the share.
+pub fn normpath_c(path: &str) -> String {
+    const SEP: char = '\\';
+    let p: Vec<char> = path.chars().collect();
+    let end = p.len();
+    let is_sep = |i: usize| i < end && (p[i] == SEP || p[i] == '/');
+    let sep_or_end = |i: usize| i >= end || p[i] == SEP || p[i] == '/';
+    let mut out: Vec<char> = Vec::with_capacity(end);
+    let mut p1 = 0;
+    let mut min = 0; // out's index that stays
+    let mut last = '\0';
+    if end > 1 && p[0] == '.' && is_sep(1) {
+        p1 = 2;
+        while is_sep(p1) {
+            p1 += 1;
+        }
+        last = SEP;
+    } else if end > 1 && p[1] == ':' {
+        out.push(p[0]);
+        out.push(p[1]);
+        p1 = 2;
+        min = 2;
+        last = ':';
+    } else if is_sep(0) && is_sep(1) {
+        let mut seps = 2;
+        out.push(SEP);
+        out.push(SEP);
+        p1 = 2;
+        while p1 < end && seps > 0 {
+            if is_sep(p1) {
+                seps -= 1;
+                last = SEP;
+            } else {
+                last = p[p1];
+            }
+            out.push(last);
+            p1 += 1;
+        }
+        min = out.len() - 1;
+    }
+    while p1 < end {
+        let c = if p[p1] == '/' { SEP } else { p[p1] };
+        if last == SEP {
+            if c == '.' {
+                let sep_at_1 = sep_or_end(p1 + 1);
+                let sep_at_2 = !sep_at_1 && sep_or_end(p1 + 2);
+                if sep_at_2 && p[p1 + 1] == '.' {
+                    let mut p3 = out.len();
+                    while p3 != min {
+                        p3 -= 1;
+                        if out[p3] != SEP {
+                            break;
+                        }
+                    }
+                    while p3 != min && out[p3 - 1] != SEP {
+                        p3 -= 1;
+                    }
+                    let dots = p3 + 2 < out.len()
+                        && out[p3] == '.'
+                        && out[p3 + 1] == '.'
+                        && out[p3 + 2] == SEP;
+                    if out.len() == min || dots {
+                        out.push('.');
+                        out.push('.');
+                        last = '.';
+                    } else if p3 < out.len() && out[p3] == SEP {
+                        out.truncate(p3 + 1);
+                    } else {
+                        out.truncate(p3);
+                    }
+                    p1 += 1;
+                } else if !sep_at_1 {
+                    out.push(c);
+                    last = c;
+                }
+            } else if c != SEP {
+                out.push(c);
+                last = c;
+            }
+        } else {
+            out.push(c);
+            last = c;
+        }
+        p1 += 1;
+    }
+    // the separators at its end, down to the part that stays
+    if out.len() > min {
+        let mut at = out.len() - 1;
+        while at != min && out[at] == SEP {
+            at -= 1;
+        }
+        out.truncate(at + 1);
+    }
+    if out.is_empty() {
+        ".".into()
+    } else {
+        out.into_iter().collect()
+    }
 }
 
 /// os.path.normcase: on Windows its slashes backslashes and its letters small.

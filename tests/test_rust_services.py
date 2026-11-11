@@ -1004,13 +1004,19 @@ class _Keys:
 
 
 def _vdf(table: dict[str, Any], depth: int = 0) -> str:
+    """Steam's text format as Steam writes it: a backslash and a quote escaped (a Windows path's
+    backslashes doubled)."""
+
+    def quoted(text: Any) -> str:
+        return '"' + str(text).replace("\\", "\\\\").replace('"', '\\"') + '"'
+
     tabs = "\t" * depth
     lines = []
     for key, value in table.items():
         if isinstance(value, dict):
-            lines += [f'{tabs}"{key}"', tabs + "{", _vdf(value, depth + 1), tabs + "}"]
+            lines += [f"{tabs}{quoted(key)}", tabs + "{", _vdf(value, depth + 1), tabs + "}"]
         else:
-            lines.append(f'{tabs}"{key}"\t\t"{value}"')
+            lines.append(f"{tabs}{quoted(key)}\t\t{quoted(value)}")
     return "\n".join(lines)
 
 
@@ -2421,7 +2427,8 @@ def test_the_memory_keeps_what_memory_py_keeps(tmp_path: Any, monkeypatch) -> No
             "steps": steps,
             "root": str(root),
             "home": str(root),
-            "env": {"HOME": str(root)},
+            "env": {"HOME": str(root), "USERPROFILE": str(root)},
+            "windows": os.name == "nt",
             "before": [["mkdir", str(usual)]],
         }
 
@@ -2645,7 +2652,9 @@ def test_the_memory_keeps_what_memory_py_keeps(tmp_path: Any, monkeypatch) -> No
                 found = fancontrol.default_paths(case["env"], Path(case["home"]))
                 theirs["places"].append([str(path) for path in found])
             for case in watches:
+                # (the home folder: HOME's, on Windows USERPROFILE's)
                 monkeypatch.setenv("HOME", case["home"])
+                monkeypatch.setenv("USERPROFILE", case["home"])
                 for change in case["before"]:
                     _change_files(change)
                 watch = fancontrol.Watch(case["given"])
@@ -3392,7 +3401,7 @@ def test_the_waveshare_display_is_fed_as_waveshare_py_feeds_it() -> None:
         }  # fmt: skip
         return {"options": json.dumps(options), "answers": answers,
                 "noise": rng.choice(["", "", "00ff41413535"]), "piece": rng.choice([4096, 7, 1]),
-                "rotate_s": rng.choice([None, None, 1e-9]), "readings": json.dumps(readings()),
+                "rotate_s": rng.choice([None, None, -1.0]), "readings": json.dumps(readings()),
                 "now": a_moment()}  # fmt: skip
 
     connects = [
@@ -3459,6 +3468,8 @@ def test_the_waveshare_display_is_fed_as_waveshare_py_feeds_it() -> None:
                                            pick=lambda paths: paths[0])  # fmt: skip
                 feeder.every = 0.0
                 if case["rotate_s"] is not None:
+                    # (a turn due at every look: Python 3.12's clock on Windows moves in steps
+                    # of 15.6 ms, so a turn due in a moment came there or not by chance)
                     feeder.rotate_s = case["rotate_s"]
                 notes.lines.clear()
                 about: Any = None

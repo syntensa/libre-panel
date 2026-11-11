@@ -572,13 +572,19 @@ def test_a_games_frames_come_from_the_presentmon_named(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="the kernel's own files")
-def test_a_linux_pcs_sensors_are_those_of_the_python_sources(tmp_path: Path) -> None:
+def test_a_linux_pcs_sensors_are_those_of_the_python_sources(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """`[sensors] providers = ["linux", "psutil", ...]`: the keys, units and labels the Linux
     source and the psutil source give together on this computer (the chips' temperatures and
     fans from the Linux source alone, as the Python app has it)."""
     pytest.importorskip("psutil")
+    from libre_panel.sensors import linux as linux_source
     from libre_panel.sensors.base import Reading
     from libre_panel.sensors.linux import LinuxProvider
+
+    # (the tests' computer is empty, conftest.py: here it is the real one, as the program's)
+    monkeypatch.setattr(linux_source, "ROOT", Path("/"))
     from libre_panel.sensors.psutil_provider import PsutilProvider
 
     (tmp_path / "config.toml").write_text(
@@ -639,14 +645,7 @@ def test_a_linux_pcs_sensors_are_those_of_the_python_sources(tmp_path: Path) -> 
             time.sleep(0.2)
     # A drive that answers neither side's repeated asking for a while (CI's NVMe drive) is
     # left out of the comparison; every other reading is compared, the drives' among them.
-    # Its label may not answer either (the key is then its place, "temp.nvme.0", on one side and
-    # "temp.nvme.composite" on the other): a key of a slow chip on one side only goes too.
-    drives = {key.split(".")[1] for key in slow}
-    silent = {
-        key
-        for key in set(ours) ^ set(wanted)
-        if key in slow or (key.startswith("temp.") and key.split(".")[1] in drives)
-    }
+    silent = (set(ours) ^ set(wanted)) & set(slow)
     for key in silent:
         ours.pop(key, None)
         wanted.pop(key, None)
@@ -1355,7 +1354,7 @@ def test_a_games_frames_come_from_the_memory_rtss_shares(tmp_path: Path) -> None
         time1 = 1000
         while not stop.wait(0.02):
             time1 += 20
-            shared[: len(memory(0))] = memory(time1)
+            shared[: len(first)] = memory(time1)
 
     writer = threading.Thread(target=game)
     writer.start()

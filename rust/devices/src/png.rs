@@ -159,5 +159,19 @@ pub fn save(image: &Image, path: &Path) -> Result<(), String> {
     name.push(".tmp");
     let part = path.with_file_name(name);
     std::fs::write(&part, data).map_err(failed)?;
-    std::fs::rename(&part, path).map_err(failed)
+    // (on Windows a viewer that holds the file open blocks the rename: tried three times, then
+    // the frame is left out, as devices/virtual.py does)
+    for attempt in 0..3u64 {
+        match std::fs::rename(&part, path) {
+            // (Python's PermissionError: access denied, and on Windows a sharing violation)
+            Err(e)
+                if e.kind() == std::io::ErrorKind::PermissionDenied
+                    || (cfg!(windows) && e.raw_os_error() == Some(32)) =>
+            {
+                std::thread::sleep(std::time::Duration::from_millis(20 * (attempt + 1)));
+            }
+            done => return done.map_err(failed),
+        }
+    }
+    Ok(())
 }
