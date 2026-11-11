@@ -873,9 +873,17 @@ def test_the_tray_shows_its_icon_and_its_quit_ends_libre_panel(tmp_path: Path) -
                     if "tray icon ready" in said[-1] or "no tray icon" in said[-1]:
                         break
                 assert "libre-panel: tray icon ready\n" in said, said
+                # (the icon's program among the app's (logind's monitor is one too)
                 children = Path(f"/proc/{program.pid}/task/{program.pid}/children")
-                icon = int(children.read_text().split()[0])
-                assert Path(f"/proc/{icon}/exe").resolve().name == "libre-panel-tray"
+
+                def named(pid: str) -> str:
+                    try:
+                        return Path(f"/proc/{pid}/exe").resolve().name
+                    except OSError:
+                        return ""
+
+                icon = int(next(p for p in children.read_text().split()
+                                if named(p) == "libre-panel-tray"))  # fmt: skip
                 request = _post("/api/tray", {"id": "quit"}).decode()
                 request = request.replace("{host}", f"localhost:{port}")
                 assert " 200 " in _asked(port, request.replace("{token}", token).encode())[0]
@@ -892,6 +900,52 @@ def test_the_tray_shows_its_icon_and_its_quit_ends_libre_panel(tmp_path: Path) -
         tray.wait(timeout=30)
         screen.terminate()
         screen.wait(timeout=30)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the end of a Windows session")
+def test_libre_panel_has_stopped_when_windows_gets_its_answer_at_the_sessions_end(
+    tmp_path: Path,
+) -> None:
+    """winsession.py: the background app's hidden window answers Windows' question whether the
+    session may end at once (never holding it up), and answers the end itself only once the
+    app has stopped: its panel let go, its address no longer written down; a cancelled end
+    changes nothing."""
+    import ctypes
+    from ctypes import wintypes
+
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    user32.FindWindowW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR]
+    user32.FindWindowW.restype = wintypes.HWND
+    user32.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM,
+                                    wintypes.LPARAM]  # fmt: skip
+    user32.SendMessageW.restype = ctypes.c_ssize_t
+    query, end = 0x0011, 0x0016  # WM_QUERYENDSESSION, WM_ENDSESSION
+    (tmp_path / "config.toml").write_text(
+        'theme = "slate"\nfps = 2\nlanguage = "en"\n[device]\ndriver = "virtual"\n'
+        'output = "panel.png"\n[sensors]\nproviders = []\n',
+        encoding="utf-8",
+    )
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries()}  # fmt: skip
+    with subprocess.Popen([str(_program()), "start", "--port", "0", "--no-browser"], env=env,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        try:
+            assert program.stdout is not None
+            program.stdout.readline()
+            window = _waited(lambda: user32.FindWindowW("LibrePanelSession", None) or None, 30)
+            assert window, "no session window"
+            assert user32.SendMessageW(window, query, 0, 0) == 1  # never blocks the end
+            user32.SendMessageW(window, end, 0, 0)  # another program cancelled it
+            assert program.poll() is None
+            assert (tmp_path / "instance.json").is_file()
+            user32.SendMessageW(window, end, 1, 0)  # returns once the app has stopped
+            assert not (tmp_path / "instance.json").exists()
+            assert program.wait(timeout=30) == 0
+        finally:
+            if program.poll() is None:
+                program.terminate()
+            program.communicate(timeout=30)
 
 
 def test_the_themes_are_listed_and_read_as_server_py_reads_them(servers: Any) -> None:

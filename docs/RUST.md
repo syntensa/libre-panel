@@ -2121,6 +2121,17 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       is chosen goes to the app, a click on the icon opens the app (Windows). Where no icon
       can be shown it says so and Libre Panel goes on without one. The test (Linux, Xvfb and
       stalonetray): the icon is shown, and Quit chosen in its menu ends it and Libre Panel
+- [x] the end of a session and the computer's sleep (tray.py's _stop_with_windows,
+      winsession.py, logind.py, presence.py): on Windows a hidden window of its own answers
+      Windows' question at once and its end only once Libre Panel has stopped (at most 4.5 s;
+      among the first programs told, SetProcessShutdownParameters), no panel is opened anew
+      on the way out; the panel's loop ends as the computer sleeps (dark where `[device]
+      dark_on_sleep` says so) and starts as it wakes; a locked session or a monitor gone off
+      gives the panels their `away_brightness` where `dark_when_away` says so. On Linux
+      logind says the same through `gdbus monitor` or `dbus-monitor`, with a delay lock
+      (`systemd-inhibit`) the panel goes dark under before the computer sleeps. The tests: the
+      monitor's lines as test_logind.py hands them (Rust's own), and on Windows the session's
+      end sent to the running app's window (CI)
 - [ ] the command line, updates, languages, the log, light mode
 - [x] the background app (service.py's PanelService and BackgroundApp, as far as there is no
       window yet; `libre-panel start`): the panel's loop in a thread that is paused, resumed

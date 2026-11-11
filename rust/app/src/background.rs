@@ -3,7 +3,7 @@
 //! of them (`libre-panel start`, in a terminal).
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -17,7 +17,7 @@ use crate::access;
 use crate::company::Company;
 use crate::home::Home;
 use crate::hotkeys::{self, Hotkeys, BRIGHTNESS_STEP};
-use crate::mainloop::{Asked, MainLoop, RunStatus};
+use crate::mainloop::{Asked, Ending, MainLoop, RunStatus};
 use crate::server::EditorServer;
 
 /// in the settings folder: what the running app says of itself (its pid, its address)
@@ -55,8 +55,11 @@ pub struct PanelService {
     company: Arc<Company>,
     loops: Mutex<Loops>,
     paused: AtomicBool,
-    /// Libre Panel quits (stop()): the panel may go dark; a pause or a restart leaves it
-    ending: Arc<AtomicBool>,
+    /// why the loop ends (Ending's number): Libre Panel quits (stop()) or the computer sleeps
+    /// (sleep()), and the panel may go dark; a pause or a restart leaves it
+    ending: Arc<AtomicU8>,
+    /// the loop stopped for the computer's sleep: it starts again as it wakes
+    asleep: AtomicBool,
     error: Arc<Mutex<String>>,
     status: Arc<Mutex<RunStatus>>,
 }
@@ -85,6 +88,7 @@ impl PanelService {
             loops: Mutex::default(),
             paused: AtomicBool::new(false),
             ending: Arc::default(),
+            asleep: AtomicBool::new(false),
             error: Arc::default(),
             status: Arc::default(),
         }
@@ -191,8 +195,31 @@ impl PanelService {
     /// stop: Libre Panel quits: the loop ends, and the panel goes dark where config.toml
     /// says so (`[device] dark_on_quit`); pausing leaves it as it is.
     pub fn stop(&self) {
-        self.ending.store(true, Ordering::Relaxed);
+        self.ending.store(Ending::Quit.number(), Ordering::Relaxed);
         self.halt();
+    }
+
+    /// sleep: the computer goes to sleep: the loop ends, the panel goes dark where config.toml
+    /// says so (`[device] dark_on_sleep`), and `wake` starts it again. A paused panel stays as
+    /// it is. Whether it stopped.
+    pub fn sleep(&self) -> bool {
+        if !self.running() || self.paused() {
+            return false;
+        }
+        self.ending.store(Ending::Sleep.number(), Ordering::Relaxed);
+        self.asleep.store(true, Ordering::Relaxed);
+        self.halt();
+        self.ending.store(Ending::No.number(), Ordering::Relaxed);
+        true
+    }
+
+    /// wake: the computer woke: the loop that stopped for its sleep starts again (whether).
+    pub fn wake(&self) -> bool {
+        if !self.asleep.swap(false, Ordering::Relaxed) {
+            return false;
+        }
+        self.start();
+        true
     }
 
     /// shown_frame: the frame on panel `n` now (1: `[device]`'s, 2 and on: those of
@@ -398,7 +425,7 @@ struct Work {
     home: Home,
     asked: Asked,
     company: Arc<Company>,
-    ending: Arc<AtomicBool>,
+    ending: Arc<AtomicU8>,
     error: Arc<Mutex<String>>,
     status: Arc<Mutex<RunStatus>>,
     stop: Arc<AtomicBool>,
@@ -422,7 +449,9 @@ impl Work {
             match MainLoop::with(home, asked, company, false, Arc::clone(&self.status)) {
                 Ok(mut made) => {
                     self.error("");
-                    made.run(&self.stop, &|| self.ending.load(Ordering::Relaxed));
+                    made.run(&self.stop, &|| {
+                        Ending::of(self.ending.load(Ordering::Relaxed))
+                    });
                     if self.asked.frames.is_some() {
                         return; // (the frames asked for are shown)
                     }

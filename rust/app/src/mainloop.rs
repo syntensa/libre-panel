@@ -123,6 +123,34 @@ pub struct Asked {
 
 /// What a loop of a panel beside the first has of it: its place in `[[panels]]`, and the
 /// first panel's status (the theme it shows, which a companion follows).
+/// Why a panel's loop ends: Libre Panel quits, or the computer goes to sleep; the panel may
+/// go dark then (`[device] dark_on_quit`, `dark_on_sleep`). A pause or a restart leaves it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Ending {
+    #[default]
+    No,
+    Quit,
+    Sleep,
+}
+
+impl Ending {
+    pub fn of(n: u8) -> Ending {
+        match n {
+            1 => Ending::Quit,
+            2 => Ending::Sleep,
+            _ => Ending::No,
+        }
+    }
+
+    pub fn number(self) -> u8 {
+        match self {
+            Ending::No => 0,
+            Ending::Quit => 1,
+            Ending::Sleep => 2,
+        }
+    }
+}
+
 pub struct Beside {
     pub n: usize,
     pub first: Arc<Mutex<RunStatus>>,
@@ -655,12 +683,14 @@ impl MainLoop {
         if self.panel.is_some() {
             return true;
         }
-        if now < self.retry_at {
+        // (no new start on the way out of a Windows session)
+        if now < self.retry_at || crate::winsession::ending() {
             return false;
         }
         let device = &self.config.device;
         let (moment, _) = moment();
-        let level = lp_config::night::brightness_now(device, &moment, false, None);
+        let away = crate::presence::away();
+        let level = lp_config::night::brightness_now(device, &moment, away, None);
         let opened = match &self.asked.output {
             Some(path) => Ok(Display::file(device, path.clone())),
             None => Display::open(device, &self.home.settings, level, self.had_panel, now),
@@ -1233,7 +1263,8 @@ impl MainLoop {
         let alarm = alarm_in(Some(&snapshot));
         self.alarm.follow(alarm, started);
 
-        let level = lp_config::night::brightness_now(&self.config.device, &now, false, None);
+        let away = crate::presence::away();
+        let level = lp_config::night::brightness_now(&self.config.device, &now, away, None);
         if self.brightness != Some(level) {
             if let Some(panel) = &mut self.panel {
                 match panel.set_brightness(level) {
@@ -1337,9 +1368,10 @@ impl MainLoop {
         Duration::from_secs_f64((interval - (self.clock() - started)).max(0.0))
     }
 
-    /// The loop, until `stop` is set or the frames asked for are shown. `quitting`: whether
-    /// Libre Panel ends with it (the panel may go dark), asked when it ends.
-    pub fn run(&mut self, stop: &AtomicBool, quitting: &dyn Fn() -> bool) {
+    /// The loop, until `stop` is set or the frames asked for are shown. `ending`: why it
+    /// ends (Libre Panel quits, the computer sleeps: the panel may go dark), asked when it
+    /// ends.
+    pub fn run(&mut self, stop: &AtomicBool, ending: &dyn Fn() -> Ending) {
         while !stop.load(Ordering::Relaxed) {
             let mut wait = self.step();
             if self
@@ -1356,14 +1388,15 @@ impl MainLoop {
                 wait -= nap;
             }
         }
-        self.close(quitting());
+        self.close(ending());
     }
 
-    /// The panel let go: dark where config.toml says so and Libre Panel is `quitting`.
-    pub fn close(&mut self, quitting: bool) {
+    /// The panel let go: dark where config.toml says so for why the loop ends
+    /// (`[device] dark_on_quit`, `dark_on_sleep`).
+    pub fn close(&mut self, ending: Ending) {
         // (on the first panel's readings, which close with it)
         if let Some(mut more) = self.more.take() {
-            more.close(quitting);
+            more.close(ending);
         }
         if self.beside.is_some() {
             let owner = self.owner();
@@ -1385,7 +1418,13 @@ impl MainLoop {
         if let Some(renderer) = &mut self.renderer {
             renderer.close();
         }
-        if quitting && self.config.device.dark_on_quit {
+        let device = &self.config.device;
+        let dark = match ending {
+            Ending::Quit => device.dark_on_quit,
+            Ending::Sleep => device.dark_on_sleep,
+            Ending::No => false,
+        };
+        if dark {
             if let Some(panel) = &mut self.panel {
                 let _ = panel.set_brightness(0);
             }

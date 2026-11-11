@@ -7,7 +7,7 @@
 
 use std::collections::BTreeSet;
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -17,7 +17,7 @@ use lp_config::Config;
 
 use crate::company::Company;
 use crate::home::Home;
-use crate::mainloop::{Asked, Beside, MainLoop, RunStatus};
+use crate::mainloop::{Asked, Beside, Ending, MainLoop, RunStatus};
 use crate::sensors::Hub;
 
 /// after a config or theme that cannot be shown
@@ -47,8 +47,8 @@ struct Start {
     /// the first panel's status: the theme it shows (for a companion), and where the others'
     /// are told
     first: Arc<Mutex<RunStatus>>,
-    /// whether Libre Panel quits as the loops end (their panels may go dark)
-    quitting: Arc<AtomicBool>,
+    /// why the loops end (their panels may go dark): Ending's number
+    ending: Arc<AtomicU8>,
 }
 
 pub struct More {
@@ -72,7 +72,7 @@ impl More {
                 company,
                 hub,
                 first,
-                quitting: Arc::default(),
+                ending: Arc::default(),
             },
             runs: IndexMap::new(),
             statuses: IndexMap::new(),
@@ -152,9 +152,9 @@ impl More {
         }
     }
 
-    /// Every loop ended, with the first panel's: `quitting` whether Libre Panel ends.
-    pub fn close(&mut self, quitting: bool) {
-        self.start.quitting.store(quitting, Ordering::Relaxed);
+    /// Every loop ended, with the first panel's, for the same reason.
+    pub fn close(&mut self, ending: Ending) {
+        self.start.ending.store(ending.number(), Ordering::Relaxed);
         let all: Vec<usize> = self.runs.keys().copied().collect();
         self.end(&all);
         self.tell();
@@ -194,8 +194,8 @@ fn run_beside(n: usize, start: &Start, status: &Arc<Mutex<RunStatus>>, stop: &At
         );
         match made {
             Ok(mut made) => {
-                let quitting = || start.quitting.load(Ordering::Relaxed);
-                let ran = catch_unwind(AssertUnwindSafe(|| made.run(stop, &quitting)));
+                let ending = || Ending::of(start.ending.load(Ordering::Relaxed));
+                let ran = catch_unwind(AssertUnwindSafe(|| made.run(stop, &ending)));
                 if let Err(bug) = ran {
                     let why = (bug.downcast_ref::<String>().cloned())
                         .or_else(|| bug.downcast_ref::<&str>().map(|why| why.to_string()))

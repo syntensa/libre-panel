@@ -21,6 +21,8 @@ mod hotkeys;
 mod http;
 mod identify;
 mod instance;
+#[cfg(target_os = "linux")]
+mod logind;
 mod logs;
 mod mainloop;
 mod meter;
@@ -29,6 +31,7 @@ mod news;
 mod notify;
 mod osinfo;
 mod pages;
+mod presence;
 mod previews;
 mod psutil;
 mod sensors;
@@ -42,6 +45,7 @@ mod system;
 mod tray;
 mod updates;
 mod window;
+mod winsession;
 mod zip;
 
 use std::path::PathBuf;
@@ -336,7 +340,7 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
                 ),
                 _ => None,
             };
-            MainLoop::new(home, asked)?.run(&STOP, &|| true);
+            MainLoop::new(home, asked)?.run(&STOP, &|| mainloop::Ending::Quit);
         }
         "editor" => {
             let asked = asked(args)?;
@@ -440,6 +444,10 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
             };
             let settings = home.settings.clone();
             let app = background::BackgroundApp::new(home, asked.clone());
+            // (Windows: stopped in order as the session ends; the panel sleeps with the
+            // computer and dims while the person is away)
+            let stopped = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+            let mut session = follow_session(&app, &stopped);
             let icon = command == "tray" && !args_given.iter().any(|arg| arg == "--no-icon");
             let mut tray = None;
             if let Some(address) = app.start() {
@@ -479,10 +487,101 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
                 let _ = tray.wait();
             }
             app.shutdown();
+            stopped.store(true, std::sync::atomic::Ordering::Relaxed);
+            session.stop();
         }
         other => return Err(format!("unknown command {other}\n\n{USAGE}")),
     }
     Ok(())
+}
+
+/// What hears the session: Windows' window, or logind on Linux.
+enum Session {
+    None,
+    #[cfg(windows)]
+    Windows(winsession::Watcher),
+    #[cfg(target_os = "linux")]
+    Linux(logind::Watcher),
+}
+
+impl Session {
+    fn stop(&mut self) {
+        match self {
+            Session::None => {}
+            #[cfg(windows)]
+            Session::Windows(watcher) => watcher.stop(),
+            #[cfg(target_os = "linux")]
+            Session::Linux(watcher) => watcher.stop(),
+        }
+    }
+}
+
+/// _stop_with_windows: Windows' end of the session stops the app in order (Windows waits for
+/// it a moment), and the panel sleeps with the computer and wakes with it (_sleep_and_wake);
+/// on Linux logind tells (_follow_logind).
+fn follow_session(
+    app: &std::sync::Arc<background::BackgroundApp>,
+    stopped: &std::sync::Arc<std::sync::atomic::AtomicBool>,
+) -> Session {
+    let say = |message: &str| logs::log(logs::Level::Info, "libre_panel.tray", message);
+    let asleep = std::sync::Arc::clone(app);
+    let sleeps = Box::new(move || {
+        if asleep.panel.sleep() {
+            say("the computer went to sleep; the panel stopped until it wakes");
+        }
+    });
+    let awake = std::sync::Arc::clone(app);
+    let wakes = Box::new(move || {
+        let quitting = awake
+            .quit_requested
+            .load(std::sync::atomic::Ordering::Relaxed);
+        if !quitting && awake.panel.wake() {
+            say("the computer woke; the panel starts again");
+        }
+    });
+    #[cfg(windows)]
+    {
+        /// Windows asks the user about programs that take longer than about 5 s
+        const SESSION_END_S: f64 = 4.5;
+        let (ending, stopped) = (std::sync::Arc::clone(app), std::sync::Arc::clone(stopped));
+        let on_end = Box::new(move || {
+            say("Windows is ending the session; stopping the panel");
+            ending.quit();
+            let until =
+                std::time::Instant::now() + std::time::Duration::from_secs_f64(SESSION_END_S);
+            while !stopped.load(std::sync::atomic::Ordering::Relaxed)
+                && std::time::Instant::now() < until
+            {
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+        });
+        winsession::shut_down_early();
+        let handlers = winsession::Handlers {
+            on_end,
+            on_sleep: sleeps,
+            on_wake: wakes,
+        };
+        match winsession::Watcher::start(handlers) {
+            Ok(watcher) => Session::Windows(watcher),
+            Err(why) => {
+                logs::say(
+                    "libre_panel.tray",
+                    &format!("no clean stop at shutdown: {why}"),
+                );
+                Session::None
+            }
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = stopped;
+        logind::follow(sleeps, wakes).map_or(Session::None, Session::Linux)
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
+    {
+        let _ = (stopped, sleeps, wakes);
+        Session::None
+    }
 }
 
 /// The app's language as config.toml sets it ("auto", or a file that cannot be read: the
