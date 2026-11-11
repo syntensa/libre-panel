@@ -22,6 +22,7 @@ pub mod rate;
 pub mod rights;
 pub mod serial;
 mod table;
+pub mod thermalright;
 pub mod thermaltake;
 pub mod turzx;
 pub mod turzx_packet;

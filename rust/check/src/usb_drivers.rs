@@ -184,6 +184,12 @@ fn opened(case: &Value, io: Box<dyn UsbIo>) -> Result<Box<dyn Driver>, String> {
             driver.open_on(io).map_err(|e| e.0)?;
             Ok(Box::new(driver))
         }
+        "thermalright" => {
+            let mut driver = lp_devices::thermalright::Trofeo::new(model);
+            let product = case["product_id"].as_u64().unwrap_or(0) as u16;
+            driver.open_on(io, product).map_err(|e| e.0)?;
+            Ok(Box::new(driver))
+        }
         other => Err(format!("no driver {other:?} here")),
     }
 }

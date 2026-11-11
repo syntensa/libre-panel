@@ -18,7 +18,15 @@ from PIL import Image
 from rust_check import image, noise, run
 
 from libre_panel.config import DeviceConfig
-from libre_panel.devices import beadapanel, lianli_usb, thermaltake, turzx_usb, udisp, usb_link
+from libre_panel.devices import (
+    beadapanel,
+    lianli_usb,
+    thermalright,
+    thermaltake,
+    turzx_usb,
+    udisp,
+    usb_link,
+)
 from libre_panel.devices.models import get_model
 
 
@@ -94,7 +102,11 @@ class _Interface:
 def _python_session(case: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     events: list[Any] = []
     screen = FakeScreen(case, events)
-    monkeypatch.setattr(usb_link, "take", lambda vendor, products, label: (screen, 0, "usb:1.2"))
+    monkeypatch.setattr(
+        usb_link,
+        "take",
+        lambda vendor, products, label: (screen, case.get("product_id", 0), "usb:1.2"),
+    )
     monkeypatch.setattr(
         usb_link, "claim", lambda device, interfaces: events.append(["claim", list(interfaces)])
     )
@@ -146,6 +158,8 @@ def _driver(name: str, config: DeviceConfig, model: Any) -> Any:
         return thermaltake.ThermaltakeDisplay(config, model)
     if name == "lianli":
         return lianli_usb.LianLiDisplay(config, model)
+    if name == "thermalright":
+        return thermalright.TrofeoDisplay(config, model)
     raise AssertionError(name)
 
 
@@ -376,3 +390,46 @@ def _lianli_case(rng: random.Random) -> dict[str, Any]:
 def test_lianli_sessions_as_lianli_usb_py_drives_them(monkeypatch: pytest.MonkeyPatch) -> None:
     rng = random.Random(0x11A1)
     assert _compare([_lianli_case(rng) for _ in range(24)], monkeypatch) > 8
+
+
+def _trofeo_case(rng: random.Random) -> dict[str, Any]:
+    hid = rng.random() < 0.4
+    steps: list[dict[str, Any]] = []
+    answers: list[Any] = []
+    if hid:
+        said = bytearray(32)
+        said[0:4], said[12] = thermalright.MAGIC, 1
+        said[5], said[4] = rng.choice([0x80, 0x80, 0x81]), rng.choice([1, 2])
+        answers = rng.choice([[_b64(said)], [_b64(bytes(30)), _b64(said)], [None, _b64(said)],
+                              [None, None]])  # fmt: skip
+        interfaces = [{"number": 0, "class": 3, "endpoints": rng.choice(
+            [[[0x01, 512, True], [0x81, 512, True]], [[0x81, 512, True]]])}]  # fmt: skip
+        sizes = [(1280, 480), (480, 1280), (40, 30)]
+    else:
+        said = bytearray(512)
+        said[0:2], said[8] = b"\x03\xff", 1
+        said[20], said[22] = rng.choice([1, 3, 4, 5, 9]), rng.choice([0, 1, 3])
+        answers = [rng.choice([_b64(said), _b64(said), None, _b64(bytes(30))])]
+        interfaces = [{"number": 0, "class": 255,
+                       "endpoints": [[0x01, 512, False], [0x81, 512, False]]}]  # fmt: skip
+        sizes = [(1920, 462), (1920, 440), (462, 1920), (50, 20)]
+    for _ in range(rng.randrange(1, 8)):
+        if rng.random() < 0.25:
+            steps.append({"brightness": rng.choice([0, 33, 100, 140])})
+        else:
+            steps.append({"show": _frame(rng, sizes), "region": None})
+        if not hid:  # (the bar's answer to each picture)
+            took = bytes((3, 0xFF, 0, 0, 0, 0, 0, 0, 1))
+            answers.append(rng.choice([_b64(took), _b64(took), None]))
+    fail = [[rng.randrange(2, 6), 19, "No such device"]] if rng.random() < 0.15 else []
+    return {"driver": "thermalright", "model": None, "product": "Trofeo",
+            "product_id": thermalright.HID_PRODUCT if hid else thermalright.BULK_PRODUCT,
+            "interfaces": interfaces, "answers": answers, "options": {}, "steps": steps,
+            "fail_writes": fail}  # fmt: skip
+
+
+def test_trofeo_sessions_as_thermalright_py_drives_them(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(thermalright, "AGAIN_S", {thermalright.HID_PRODUCT: 3600.0,
+                                                  thermalright.BULK_PRODUCT: 3600.0})  # fmt: skip
+    rng = random.Random(0x7709)
+    assert _compare([_trofeo_case(rng) for _ in range(40)], monkeypatch) > 12

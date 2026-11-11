@@ -1657,7 +1657,11 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       more than three pictures wait), each sent again after a second as its Python driver
       does (tests/test_rust_usb_drivers.py: whole sessions, byte for byte; Lian Li's PNG by
       its pixels, as the TURZX panels' are)
-- [ ] NZXT Kraken, Thermalright, JONSBO, MS9132, the serial panels (Turing rev. A/B/C, Kipye rev. D, WeAct, JONSBO DS916), the panel as a monitor
+- [x] Thermalright's Trofeo Vision (rust/devices' thermalright: the 6.86" on its HID reports
+      and the bars on bulk transfers, asked what they are, their pictures turned as TRCC turns
+      them and in their packets, a bar's answer to each picture and five missed in a row
+      taken for a bar that is gone; tests/test_rust_usb_drivers.py)
+- [ ] NZXT Kraken, JONSBO, MS9132, the serial panels (Turing rev. A/B/C, Kipye rev. D, WeAct, JONSBO DS916), the panel as a monitor
       (Windows' virtual display driver, X11, Wayland)
 
 ### R7 sensors

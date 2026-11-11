@@ -82,6 +82,11 @@ impl<T: Send + 'static> Keeper<T> {
         f(&mut self.shared.lock())
     }
 
+    /// How long without a picture before the last goes again (from the next start).
+    pub fn set_every(&mut self, every: f64) {
+        self.every = every;
+    }
+
     pub fn start(&mut self) {
         self.stop();
         {
