@@ -465,7 +465,7 @@ jobs:
     # the sensor service (the job `sensor-host`) in "sensors", as the downloads carry it; and
     # its setup, made with the downloads' Inno Setup script and tried as release.yml tries
     # theirs (install for all users with every box, run, uninstall)
-    needs: [engine, rust, sensor-host]
+    needs: [engine, rust, sensor-host, plugin-host]
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -485,6 +485,10 @@ jobs:
         with:
           name: sensors-windows
           path: libre-panel-rust/sensors
+      - uses: actions/download-artifact@v4
+        with:
+          name: plugin-host-windows
+          path: libre-panel-rust/plugin-host
       - name: What the folder holds
         shell: bash
         run: |
@@ -494,6 +498,7 @@ jobs:
           test -f libre-panel-rust/tools/ffmpeg.exe
           test -f libre-panel-rust/sensors/libre-panel-sensors.exe
           test -d libre-panel-rust/sensors/lhm
+          test -f libre-panel-rust/plugin-host/libre-panel-plugins.exe
       - uses: actions/upload-artifact@v4
         with:
           name: libre-panel-rust-windows
@@ -511,6 +516,9 @@ jobs:
           if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
           & $iscc "/DAppVersion=$version" "/DNumericVersion=$numeric" "/DSourceDir=..\..\libre-panel-rust" "/DOutputDir=..\..\dist" packaging\windows\libre-panel.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: The app runs plugins through its plugin host
+        shell: bash
+        run: python packaging/check_plugin_host.py --app libre-panel-rust/libre-panel.exe
       - name: Test the setup (install, run, uninstall)
         shell: pwsh
         run: python packaging/windows/test_installer.py --rust "dist/libre-panel-$env:VERSION-windows-x64-setup.exe"
@@ -536,6 +544,7 @@ jobs:
     # wheel), ffmpeg and the engine in "tools", and the app's files; tried as release.yml tries
     # its AppImage (packaging/linux/test_appimage.sh, RUST=1: started as autostart starts it,
     # with and without a tray, its programs, glibc, autostart, the udev rule, system-setup)
+    needs: [plugin-host]
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -566,6 +575,10 @@ jobs:
             --x264 "from $package" \
             --x264-source "x264: https://code.videolan.org/videolan/x264 (the commit its version names)" \
             --x264-source "Ubuntu's source package: https://launchpad.net/ubuntu/+source/x264 (apt-get source x264)"
+      - uses: actions/download-artifact@v4
+        with:
+          name: plugin-host-linux
+          path: dist/libre-panel-rust/plugin-host
       - name: The folder of the AppImage
         run: |
           app=dist/libre-panel-rust
@@ -579,6 +592,7 @@ jobs:
           find "$app/share" -name __pycache__ -prune -exec rm -rf {} +
           find "$app/share" -name "*.py" -delete
           cp -r "$RUNNER_TEMP/tools" "$app/tools"
+          chmod +x "$app/plugin-host/libre-panel-plugins"
           # (Pillow's own FreeType, HarfBuzz, libjpeg and libwebp with what they need, as its
           # wheel carries them, and its licence, which names theirs)
           python - "$app" <<'PILLOW'
@@ -622,6 +636,7 @@ jobs:
             --theme lumen --output "$tried/frame.png"
           python -c "from PIL import Image; f = Image.open('$tried/frame.png'); assert f.size == (1920, 480), f.size"
           "$tried/libre-panel/libre-panel.sh" version
+          python packaging/check_plugin_host.py --app "$tried/libre-panel/libre-panel.sh"
       - uses: actions/upload-artifact@v4
         with:
           name: libre-panel-rust-appimage
@@ -682,6 +697,57 @@ jobs:
           path: |
             sensorhost/bin/Release
             !sensorhost/bin/Release/logs/**
+          retention-days: 7
+
+  plugin-host:
+    # The plugin host (src/libre_panel/plugin_host.py): the Python process the Rust app starts
+    # when plugins are installed, which loads them and runs their sensors, services and themes
+    # for it. Built as the downloads carry it in "plugin-host" beside the app (on Windows with
+    # PyInstaller's loader compiled here, as release.yml did for the Python programs), and tried
+    # on a plugin of its own (packaging/check_plugin_host.py).
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows
+          - os: ubuntu-22.04
+            name: linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install .
+      - name: PyInstaller, on Windows its loader compiled here
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then
+            PYINSTALLER_COMPILE_BOOTLOADER=1 pip install --no-binary pyinstaller pyinstaller
+            version=$(python -c "from importlib.metadata import version; print(version('pyinstaller'))")
+            pip download "pyinstaller==$version" --only-binary :all: --no-deps -d shipped-pyinstaller
+            python packaging/windows/own_loader.py shipped-pyinstaller/*.whl
+          else
+            pip install pyinstaller
+          fi
+      - name: The plugin host
+        shell: bash
+        run: |
+          pyinstaller --noconfirm --clean packaging/pyinstaller/libre-panel-plugins.spec
+          ls dist/plugin-host | head -20
+      - name: It runs a plugin
+        shell: bash
+        run: |
+          exe=dist/plugin-host/libre-panel-plugins
+          [ "$RUNNER_OS" = Windows ] && exe="$exe.exe"
+          # (from elsewhere, so that the checkout's sources are not what it imports)
+          cd "$RUNNER_TEMP" && python "$GITHUB_WORKSPACE/packaging/check_plugin_host.py" "$GITHUB_WORKSPACE/$exe"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-host-${{ matrix.name }}
+          path: dist/plugin-host
           retention-days: 7
 
   desktop:
