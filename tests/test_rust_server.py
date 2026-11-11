@@ -459,6 +459,9 @@ def test_controls_sources_are_those_the_panel_reads_as_control_py_lists_them(
     fresh = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(fresh)
     monkeypatch.setattr(hardware, "_scan_machine", fresh._scan_machine)
+    from libre_panel.sensors import linux
+
+    monkeypatch.setattr(linux, "ROOT", Path("/"))  # (its chips and cards too)
     hub = build_hub(load_config(config))
     hub.providers.append(PluginHost().provider())
     try:
@@ -1623,6 +1626,11 @@ def test_starting_with_the_system_is_told_and_set_as_settings_py_does(
         told = [json.loads(body) for _, _, body in (theirs, ours)]
         for one, home in zip(told, homes, strict=True):
             if "program" in one:
+                # (whether the user may write over the program each side starts: its own,
+                # the Python app's interpreter)
+                program = one["program"]
+                risky = bool(program) and autostart.writable_by_user(Path(program), Path.home())
+                assert one.pop("risky") == risky, (what, program)
                 one["program"] = "a program"
                 one["location"] = one["location"].replace(str(home), "HOME")
         assert told[1] == told[0], what

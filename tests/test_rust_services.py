@@ -4,6 +4,7 @@ the main loop (plugins/host.py), as the Rust app has it."""
 from __future__ import annotations
 
 import json
+import os
 import random
 from typing import Any
 
@@ -2055,7 +2056,7 @@ def _change_files(change: list[Any]) -> None:
             pass
         os.truncate(path, change[2])
     elif what == "rename":
-        path.rename(change[2])
+        path.replace(change[2])  # (as rename(2) does: over a file there, on Windows too)
     elif what == "remove":
         path.unlink()
     else:
@@ -3521,6 +3522,8 @@ def test_the_demo_is_made_up_as_demo_py_makes_it_up() -> None:
     rng = random.Random(0xDE30)
     times = [0.0, 1.0, 1_700_000_000.0, 1_794_330_061.5, 86399.999, 951_782_400.25]
     times += [rng.uniform(1.6e9, 1.9e9) for _ in range(12)]
+    if os.name == "nt":  # (the C runtime gives no local time before 1970: Python fails there)
+        times = [t for t in times if t > 1e6]
     samples = 40
     for language in ("en", "de"):
         i18n.set_language(language)

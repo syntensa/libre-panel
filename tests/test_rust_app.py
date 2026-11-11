@@ -1344,7 +1344,8 @@ def test_a_games_frames_come_from_the_memory_rtss_shares(tmp_path: Path) -> None
 
     name = f"LibrePanelTestRTSS{os.getpid()}"
     shared = mmap.mmap(-1, 4096, tagname=name)
-    shared[: len(memory(0))] = memory(1000)
+    first = memory(1000)
+    shared[: len(first)] = first
     (tmp_path / "config.toml").write_text(
         f'[sensors]\nproviders = ["rtss"]\n[sensors.rtss]\nmapping = "{name}"\n', encoding="utf-8"
     )
