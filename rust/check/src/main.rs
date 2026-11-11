@@ -2513,6 +2513,34 @@ fn run(case: &Value) -> Result<Value, String> {
                 "themes": themes,
             })
         }
+        "panels_photo" => {
+            // arrangement.py's photo: one picture of the panels where they stand, each with
+            // its frame or its number
+            let env = lp_theme::Env {
+                fonts_dir: case["fonts_dir"].as_str().unwrap_or("").into(),
+            };
+            let mut panels = Vec::new();
+            for p in case["panels"].as_array().into_iter().flatten() {
+                let r: Vec<f64> = (p["rect"].as_array().into_iter().flatten())
+                    .filter_map(Value::as_f64)
+                    .collect();
+                let frame = match p["frame"].is_null() {
+                    true => None,
+                    false => Some(image_of(&p["frame"])?),
+                };
+                panels.push(lp_render::photo::Placed {
+                    rect: (r[0], r[1], r[2], r[3]),
+                    frame,
+                    round: p["round"].as_bool().unwrap_or(false),
+                    number: p["number"].as_u64().unwrap_or(1) as usize,
+                });
+            }
+            match lp_render::photo::photo(&env, &panels) {
+                Ok(Some(picture)) => json!({"image": value_of(&picture)}),
+                Ok(None) => json!({"image": null}),
+                Err(e) => json!({"error": e.0}),
+            }
+        }
         "render_frame" => {
             // render/renderer.py's Renderer(theme, preview=True, dither=...).render(snapshot) of
             // each theme's folder: its frame's SHA-256 (and bytes where asked) and its boxes;

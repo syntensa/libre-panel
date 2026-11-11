@@ -254,6 +254,27 @@ impl PanelService {
         }
     }
 
+    /// told: what each panel's loop says of it (its model and the size of its frames): the
+    /// first panel's, then those of the first `count` of `[[panels]]`; None for one whose
+    /// loop does not run.
+    pub fn told(&self, count: usize) -> Vec<Option<crate::arrangement::Told>> {
+        let told = |status: &RunStatus| crate::arrangement::Told {
+            model: status.model.clone(),
+            size: status.size,
+        };
+        let Ok(first) = self.status.lock() else {
+            return vec![None; count + 1];
+        };
+        let more: Vec<Option<Arc<Mutex<RunStatus>>>> =
+            (0..count).map(|n| first.more.get(&n).cloned()).collect();
+        let mut found = vec![Some(told(&first))];
+        drop(first);
+        for each in more {
+            found.push(each.and_then(|each| each.lock().ok().map(|status| told(&status))));
+        }
+        found
+    }
+
     /// sources: the sensor sources the panel reads, the first that has a reading winning: each
     /// one's name, how many readings of the last snapshot came from it and what it says of
     /// itself. None before the loop runs.
@@ -655,6 +676,11 @@ impl BackgroundApp {
         self.panel.stop();
         self.stop_editor();
         self.company.close();
+    }
+
+    /// The pictures the services published (the album cover, the game's logo, ...).
+    pub fn images(&self) -> indexmap::IndexMap<String, lp_pixels::Image> {
+        self.company.host.images()
     }
 
     /// The readings the panel was last drawn from.

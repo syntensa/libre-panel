@@ -17,11 +17,16 @@ pub const ACROSS_FILE: &str = "across/picture.jpg";
 const MAX_SIDE: f64 = 4096.0;
 pub const MAX_BYTES: usize = 40 * 1024 * 1024;
 const MAX_PIXELS: usize = 80_000_000;
+/// between two panels not placed yet, as the app lays them out
+pub const GAP_MM: f64 = 30.0;
+/// a panel of a model not known: as dense as the 9.2" bar
+pub const GUESS_MM_PER_PX: f64 = 0.118;
 
 /// x, y, width, height in millimetres
 pub type Rect = (f64, f64, f64, f64);
 
 /// What a panel's loop says of it: its model and the size of its frames.
+#[derive(Clone, Debug)]
 pub struct Told {
     pub model: String,
     pub size: Option<(i64, i64)>,
@@ -40,8 +45,14 @@ pub fn millimetres(model: &PanelModel, size: Option<(i64, i64)>) -> Option<(f64,
 }
 
 /// panel_rect: where the panel of `device` stands, in the size of its model as set, else as
-/// the panel said it is; None while it is not placed, or of a size not known.
-pub fn panel_rect(device: &lp_config::DeviceConfig, status: Option<&Told>) -> Option<Rect> {
+/// the panel said it is; None while it is not placed, or of a size not known. `guess`: a panel
+/// of a model not known that says the size of its frames is taken as dense as the 9.2" bar,
+/// and one not placed stands at 0, 0 (`laid_out` moves it).
+pub fn panel_rect(
+    device: &lp_config::DeviceConfig,
+    status: Option<&Told>,
+    guess: bool,
+) -> Option<Rect> {
     let told = status.map_or("", |s| s.model.as_str());
     let model = find_model(&device.model)
         .or_else(|| (!told.is_empty()).then(|| find_model(told)).flatten());
@@ -53,9 +64,19 @@ pub fn panel_rect(device: &lp_config::DeviceConfig, status: Option<&Told>) -> Op
     let size = status
         .and_then(|s| s.size)
         .or_else(|| model.map(|m| m.size(way)));
-    let (x, y) = device.at?;
-    let (w, h) = millimetres(model?, size)?;
-    Some((x as f64, y as f64, w, h))
+    let (x, y) = match device.at {
+        Some(at) => at,
+        None if guess => (0, 0),
+        None => return None,
+    };
+    match model.and_then(|model| millimetres(model, size)) {
+        Some((w, h)) => Some((x as f64, y as f64, w, h)),
+        None if guess => size.map(|(w, h)| {
+            let per = GUESS_MM_PER_PX;
+            (x as f64, y as f64, w as f64 * per, h as f64 * per)
+        }),
+        None => None,
+    }
 }
 
 /// places: where every panel stands: the first panel's first, then those of `[[panels]]`;
@@ -64,7 +85,59 @@ pub fn places(config: &lp_config::Config, statuses: &[Option<Told>]) -> Vec<Opti
     let devices = std::iter::once(&config.device).chain(config.panels.iter().map(|p| &p.device));
     devices
         .enumerate()
-        .map(|(i, device)| panel_rect(device, statuses.get(i).and_then(Option::as_ref)))
+        .map(|(i, device)| panel_rect(device, statuses.get(i).and_then(Option::as_ref), false))
+        .collect()
+}
+
+/// laid_out: every panel where it is shown to stand: its place, or, not placed, in a row with
+/// the others not placed, beside those that are (as Settings → Panels lays them out); None
+/// for one whose size is not known at all.
+pub fn laid_out(config: &lp_config::Config, statuses: &[Option<Told>]) -> Vec<Option<Rect>> {
+    let devices: Vec<&lp_config::DeviceConfig> = std::iter::once(&config.device)
+        .chain(config.panels.iter().map(|p| &p.device))
+        .collect();
+    let sized: Vec<Option<Rect>> = devices
+        .iter()
+        .enumerate()
+        .map(|(i, device)| panel_rect(device, statuses.get(i).and_then(Option::as_ref), true))
+        .collect();
+    let placed: Vec<Rect> = sized
+        .iter()
+        .zip(&devices)
+        .filter_map(|(r, d)| r.filter(|_| d.at.is_some()))
+        .collect();
+    let loose: Vec<Rect> = sized
+        .iter()
+        .zip(&devices)
+        .filter_map(|(r, d)| r.filter(|_| d.at.is_none()))
+        .collect();
+    let row =
+        loose.iter().map(|r| r.2).sum::<f64>() + GAP_MM * loose.len().saturating_sub(1) as f64;
+    let mut x = if placed.is_empty() {
+        -(round(row / 2.0) as f64)
+    } else {
+        placed
+            .iter()
+            .map(|r| r.0 + r.2)
+            .fold(f64::NEG_INFINITY, f64::max)
+            + GAP_MM
+    };
+    let y = if placed.is_empty() {
+        0.0
+    } else {
+        placed.iter().map(|r| r.1).fold(f64::INFINITY, f64::min)
+    };
+    sized
+        .iter()
+        .zip(&devices)
+        .map(|(found, device)| match found {
+            Some((_, _, w, h)) if device.at.is_none() => {
+                let shown = (x, y, *w, *h);
+                x += w + GAP_MM;
+                Some(shown)
+            }
+            other => *other,
+        })
         .collect()
 }
 

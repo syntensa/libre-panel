@@ -35,6 +35,7 @@ mod news;
 mod notify;
 mod osinfo;
 mod pages;
+mod photos;
 mod presence;
 mod previews;
 mod psutil;

@@ -356,6 +356,10 @@ const ROUTES: &[Route] = &[
         tray_icon(s, x, &u.query)
     }),
     private("POST", "/api/across", |s, x, _, _| across_upload(s, x)),
+    picture("GET", "/api/panels/photo", |s, x, _, _| panels_photo(s, x)),
+    private("POST", "/api/history/picture", |s, x, _, _| {
+        round_picture(s, x)
+    }),
     picture("GET", "/api/across/picture", |s, x, _, _| {
         across_picture(s, x)
     }),
@@ -2013,6 +2017,51 @@ fn across_picture(state: &State, exchange: &mut Exchange) {
     match small {
         Ok(jpeg) => exchange.send(200, &jpeg, "image/jpeg", ""),
         Err(why) => exchange.error(&why, 500, ""),
+    }
+}
+
+/// `GET /api/panels/photo`: one picture of all panels that are on, where they stand
+/// (Settings → Panels), each with what it shows now, to keep or share.
+fn panels_photo(state: &State, exchange: &mut Exchange) {
+    let env = lp_theme::Env {
+        fonts_dir: state.home.fonts(),
+    };
+    let app = state.controls.upgrade();
+    match crate::photos::panels(app.as_deref(), &state.config_file, &env) {
+        Ok((png, name)) => exchange.send(200, &png, "image/png", &name),
+        Err((status, why)) => exchange.error(&why, status, ""),
+    }
+}
+
+/// `POST /api/history/picture {"id": 1760000000123}`: the report of that round (Status →
+/// History) as the panel shows it, in a picture of the panel, kept in the person's Pictures
+/// folder (in `Libre Panel`), which then opens: `{"file", "folder", "opened"}`.
+fn round_picture(state: &State, exchange: &mut Exchange) {
+    let Some(payload) = exchange.read_json(MAX_JSON) else {
+        return;
+    };
+    let ident = match &payload {
+        Value::Dict(payload) => match payload.get("id") {
+            Some(Value::Int(ident)) => Some(i64::try_from(ident).unwrap_or(i64::MAX)),
+            _ => None,
+        },
+        _ => None,
+    };
+    let Some(ident) = ident else {
+        return exchange.error(
+            "expected {\"id\": 1760000000123}, a round of /api/history",
+            400,
+            "",
+        );
+    };
+    let env = lp_theme::Env {
+        fonts_dir: state.home.fonts(),
+    };
+    let app = state.controls.upgrade();
+    let places = state.home.places();
+    match crate::photos::round_picture(app.as_deref(), &state.config_file, &places, &env, ident) {
+        Ok(told) => exchange.json(&Value::Dict(told), 200),
+        Err((status, why)) => exchange.error(&why, status, ""),
     }
 }
 

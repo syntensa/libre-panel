@@ -8289,3 +8289,31 @@ def test_a_panels_part_of_the_picture_across_the_panels_lies_under_its_theme(
         assert got["sha256"] == hashlib.sha256(want.tobytes()).hexdigest(), n
         drawn += 1
     assert drawn >= 3, ours["frames"]
+
+
+def test_the_picture_of_all_panels_is_arrangement_pys(tmp_path: Path) -> None:
+    """arrangement.photo: the panels where they stand, each in its dark frame with its shadow,
+    showing its frame (or its number where it shows nothing), round ones round, the mark in
+    the corner, as large as the densest shows its frame (at most 4000 pixels): to the bit."""
+    from libre_panel import arrangement
+
+    rng = random.Random(77)
+    for case in range(5):
+        panels = []
+        for number in range(1, rng.randint(1, 4) + 1):
+            w, h = rng.choice([(226.7, 56.7), (120.0, 72.0), (54.0, 54.0), (60.0, 240.0)])
+            rect = (float(rng.randint(-200, 300)), float(rng.randint(-50, 200)), w, h)
+            frame = None
+            if rng.random() < 0.7:
+                frame = noise(rng, "RGB", (rng.randint(80, 600), rng.randint(60, 400)))
+            panels.append((rect, frame, w == h and rng.random() < 0.6, number))
+        want = arrangement.photo(panels)
+        asked = [{"rect": list(rect), "frame": None if frame is None else image(frame),
+                  "round": round_, "number": number}
+                 for rect, frame, round_, number in panels]  # fmt: skip
+        [got] = run([{"op": "panels_photo", "panels": asked, "fonts_dir": str(fonts.FONT_DIR)}])
+        mine = picture(got["image"])
+        assert mine.size == want.size, case
+        if mine.tobytes() != want.tobytes():
+            differ = sum(a != b for a, b in zip(mine.getdata(), want.getdata(), strict=True))
+            raise AssertionError(f"case {case}: {differ} pixels differ")

@@ -2119,6 +2119,16 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       its renderer again when the picture, a place or a panel's size changes. The tests: the
       routes as Python's (the file kept byte for byte), the renderer with a backdrop to the
       bit (lp-check render_frame), and a panel's frame its part of the picture
+- [x] the pictures to keep (server.py's `/api/panels/photo` and `/api/history/picture`,
+      arrangement.py's photo and laid_out): all panels where they stand (those not placed in
+      a row beside the others, a model not known as dense as the 9.2" bar), each in its
+      frame with its shadow, showing its frame now or its number, "Libre Panel" in the
+      corner, as a PNG made smaller; a round of History as the panel shows its report (the
+      round report's theme in its version for the panel, the theme dressed as the panel's,
+      the round's end as the frame's time), in a picture of the panel, kept in the person's
+      Pictures folder (`Libre Panel`, the next free name), which then opens. The tests: the
+      picture of the panels to the bit (lp-check panels_photo), and the round's picture with
+      the same name and pixels as Python's, what is refused in the same words
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app
 - [x] one Libre Panel at a panel (instance.py): the system's lock on libre-panel.lock in the

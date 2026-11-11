@@ -2725,3 +2725,59 @@ def test_the_picture_across_the_panels_is_kept_and_shown_as_server_py_does(
     assert _frames_of(ours[2]) == _frames_of(theirs[2])
     theirs, ours = ask(upload(b"no picture"))
     assert ours[0] == theirs[0] and json.loads(ours[2]) == json.loads(theirs[2])
+
+
+@pytest.fixture
+def pictures_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A home folder of the test's own (its Pictures folder, where both servers keep the
+    pictures of a round), set before the servers start."""
+    home = tmp_path / "person"
+    (home / "Pictures").mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(home))
+    return home
+
+
+def test_the_pictures_of_the_panels_and_of_a_round_are_made_as_server_py_makes_them(
+    pictures_home: Path, servers: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Status → History's *Keep as a picture* (/api/history/picture): the round's report as
+    the panel shows it, in a picture of the panel, kept in the Pictures folder under the same
+    name, with the same pixels; again: a file of its own; a round without frame rates, one not
+    kept and what is no round refused in the same words. The picture of all panels
+    (/api/panels/photo) without a panel loop: refused in the same words."""
+    from PIL import Image
+    from test_editor_server import kept_rounds
+
+    from libre_panel import tray
+
+    monkeypatch.setattr(tray, "open_path", lambda path: None)
+    ask, homes = servers
+    ids = [kept_rounds(home) for home in homes]
+    assert ids[0] == ids[1]
+    first, last, puzzle = ids[0]
+    folder = pictures_home / "Pictures" / "Libre Panel"
+    files = []
+    for ident in (last, last):
+        theirs, ours = ask(_post("/api/history/picture", {"id": ident}))
+        assert theirs[0] == "HTTP/1.0 200 OK", theirs[2]
+        python = json.loads(theirs[2])
+        assert ours[0] == "HTTP/1.0 200 OK", ours[2]
+        mine = json.loads(ours[2])
+        assert mine["folder"] == python["folder"] == str(folder)
+        assert isinstance(mine["opened"], bool)
+        files.append((Path(python["file"]), Path(mine["file"])))
+    names = [path.name for pair in files for path in pair]
+    assert names[0].startswith("Starfall 2023-11-1") and names[0].endswith(".png")
+    # (Python's first, then the next free name for Rust's)
+    stem = names[0][: -len(".png")]
+    assert names == [f"{stem}.png", f"{stem} (2).png", f"{stem} (3).png", f"{stem} (4).png"]
+    python_picture, rust_picture = (Image.open(path) for path in files[0])
+    assert rust_picture.size == python_picture.size and python_picture.width > 1920
+    assert rust_picture.convert("RGB").tobytes() == python_picture.convert("RGB").tobytes()
+    for body in ({"id": puzzle}, {"id": 5}, {"id": "1700"}, {"id": True}, {}, [1]):
+        theirs, ours = ask(_post("/api/history/picture", body))
+        assert ours[0] == theirs[0], body
+        assert json.loads(ours[2]) == json.loads(theirs[2]), body
+    theirs, ours = ask(_get("/api/panels/photo", WITH))
+    assert ours[0] == theirs[0] == "HTTP/1.0 404 Not Found"
+    assert json.loads(ours[2]) == json.loads(theirs[2])
