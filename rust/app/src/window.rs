@@ -255,12 +255,28 @@ pub fn sibling(name: &str) -> std::io::Result<std::path::PathBuf> {
 pub fn start_tray(address: &str) -> Option<std::process::Child> {
     let (base, token) = access::split_token(address);
     let mut command = std::process::Command::new(sibling("libre-panel-tray").ok()?);
-    command.arg(&base).stdin(std::process::Stdio::null());
+    command
+        .arg(&base)
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped());
     if let Some(token) = token {
         command.env(access::ENV, token);
     }
     match command.spawn() {
-        Ok(child) => Some(child),
+        Ok(mut child) => {
+            // (what the icon's program says goes into the app's log, as tray.py logs it)
+            if let Some(said) = child.stderr.take() {
+                let relay = std::thread::Builder::new().name("tray-said".into());
+                let _ = relay.spawn(move || {
+                    use std::io::BufRead;
+                    for line in std::io::BufReader::new(said).lines().map_while(Result::ok) {
+                        let line = line.strip_prefix("libre-panel: ").unwrap_or(&line);
+                        crate::logs::say("libre_panel.tray", line);
+                    }
+                });
+            }
+            Some(child)
+        }
         Err(why) => {
             say(&format!(
                 "no tray icon ({why}); Libre Panel keeps running without one"

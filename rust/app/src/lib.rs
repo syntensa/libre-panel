@@ -1170,6 +1170,10 @@ pub fn main(default: &str) -> ExitCode {
     if default == "start" && args.is_empty() && leading.is_empty() && window::hand_over() {
         return ExitCode::SUCCESS;
     }
+    // (`--version`, as cli.py's parser has it)
+    if args.first().is_some_and(|first| first == "--version") {
+        args[0] = "version".to_string();
+    }
     // (LibrePanel.exe: `--background` alone means `tray --background`)
     let options_only = args
         .first()

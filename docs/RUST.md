@@ -2227,6 +2227,12 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       place; the Linux tarball's folder shown. The test: through the app's server, nothing
       to install first, the download checked, the command that starts it Python's
       restart_command word for word, and the app quits
+- [x] the Linux AppImage of the Rust app (CI's job `appimage`, on the oldest Ubuntu offered):
+      the programs, the app's files, ffmpeg and the engine in "tools", and Pillow's own
+      FreeType, HarfBuzz, libjpeg and libwebp in "lib", named to the program by its AppRun
+      (packaging/linux/AppRun-rust; nothing in LD_LIBRARY_PATH, so the window and the tray
+      icon take the system's GTK); tried by test_appimage.sh as the release's (RUST=1). What
+      the tray icon's program says goes into the app's log, as tray.py logs it
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app
 - [x] one Libre Panel at a panel (instance.py): the system's lock on libre-panel.lock in the

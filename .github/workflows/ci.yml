@@ -516,6 +516,89 @@ jobs:
           path: dist/*-setup.exe
           retention-days: 30
 
+  appimage:
+    # Libre Panel in Rust as the Linux download: an AppImage of the programs (built on the
+    # oldest Ubuntu offered, as release.yml builds its AppImage: it takes glibc from the system
+    # it runs on), with the libraries of C that draw as Pillow draws (Pillow's own, from its
+    # wheel), ffmpeg and the engine in "tools", and the app's files; tried as release.yml tries
+    # its AppImage (packaging/linux/test_appimage.sh, RUST=1: started as autostart starts it,
+    # with and without a tray, its programs, glibc, autostart, the udev rule, system-setup)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: GTK, WebKitGTK, AppIndicator, libx264, Xvfb and a tray
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends libgtk-3-dev libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-1 libx264-dev xvfb stalonetray
+      - run: pip install -e .
+      - name: The programs and the engine
+        run: |
+          cargo build --release --manifest-path rust/Cargo.toml -p libre-panel -p libre-panel-desktop
+          (cd engine && X264_STATIC=1 cargo build --release)
+      - name: The downloads a run before kept
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ runner.temp }}/tools-cache
+          key: tools-${{ runner.os }}-${{ hashFiles('packaging/fetch_tools.py') }}
+      - name: ffmpeg and the engine, as the release puts them into "tools"
+        run: |
+          python packaging/fetch_tools.py "$RUNNER_TEMP/tools" --cache "$RUNNER_TEMP/tools-cache"
+          package="libx264-dev $(dpkg-query -W -f='${Version}' libx264-dev)"
+          python packaging/add_engine.py "$RUNNER_TEMP/tools" engine/target/release/libre-panel-engine \
+            --x264 "from $package" \
+            --x264-source "x264: https://code.videolan.org/videolan/x264 (the commit its version names)" \
+            --x264-source "Ubuntu's source package: https://launchpad.net/ubuntu/+source/x264 (apt-get source x264)"
+      - name: The folder of the AppImage
+        run: |
+          app=dist/libre-panel-rust
+          mkdir -p "$app/share/libre-panel" "$app/licenses" "$app/lib"
+          cp rust/target/release/libre-panel rust/target/release/libre-panel-window \
+            rust/target/release/libre-panel-tray "$app/"
+          for part in themes fonts locale assets; do
+            cp -r "src/libre_panel/$part" "$app/share/libre-panel/"
+          done
+          find "$app/share" -name __pycache__ -prune -exec rm -rf {} +
+          find "$app/share" -name "*.py" -delete
+          cp -r "$RUNNER_TEMP/tools" "$app/tools"
+          # (Pillow's own FreeType, HarfBuzz, libjpeg and libwebp with what they need, as its
+          # wheel carries them, and its licence, which names theirs)
+          python - "$app" <<'PILLOW'
+          import shutil, sys
+          from importlib.metadata import distribution
+          from pathlib import Path
+          app = Path(sys.argv[1])
+          pillow = distribution("pillow")
+          libs = Path(pillow.locate_file("pillow.libs"))
+          for library in sorted(libs.iterdir()):
+              shutil.copy2(library, app / "lib" / library.name)
+          licence = next(f for f in pillow.files if f.name.startswith("LICENSE"))
+          shutil.copyfile(pillow.locate_file(licence), app / "licenses" / "LICENSE-Pillow.txt")
+          print(sorted(p.name for p in (app / "lib").iterdir()))
+          PILLOW
+          test -n "$(ls "$app"/lib/libfreetype*)" && test -n "$(ls "$app"/lib/libjpeg*)"
+          cp LICENSE "$app/licenses/LICENSE-libre-panel.txt"
+          cp NOTICE.md "$app/licenses/"
+          python packaging/rust_licenses.py --target x86_64-unknown-linux-gnu \
+            -o "$app/licenses/THIRD-PARTY-RUST.txt"
+          version=$(python -c "import libre_panel; print(libre_panel.__version__)")
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+      - name: The AppImage
+        run: |
+          SOURCE="$PWD/dist/libre-panel-rust" APPRUN="$PWD/packaging/linux/AppRun-rust" \
+            packaging/linux/build_appimage.sh "$VERSION" "dist/Libre_Panel-$VERSION-rust-x86_64.AppImage"
+      - name: Test the AppImage (headless and on an X11 tray)
+        run: RUST=1 packaging/linux/test_appimage.sh "dist/Libre_Panel-$VERSION-rust-x86_64.AppImage"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libre-panel-rust-appimage
+          path: dist/*.AppImage
+          retention-days: 30
+
   sensor-host:
     # The sensor service as a .NET program of its own (sensorhost/, C#; docs/ROADMAP.md): built
     # against LibreHardwareMonitor's libraries as the release fetches them, its own look at the
