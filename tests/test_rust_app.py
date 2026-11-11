@@ -719,11 +719,15 @@ def test_the_sun_and_the_moon_are_always_there(tmp_path: Path) -> None:
     done = _run(tmp_path, "sensors")
     after = sky.sky_readings(time.time(), 52.52, 13.405)
     assert done.returncode == 0, done.stderr
-    ours = {line[:40].strip(): (line[41:55].strip(), line[56:61].strip(), line[62:])
+    # (a value longer than its column, as "Waxing Crescent", moves the rest along: each line
+    # ends in its unit and its label)
+    ours = {line[:40].strip(): line[41:]
             for line in done.stdout.splitlines() if line.startswith(("moon.", "sun."))}  # fmt: skip
     assert list(ours) == sorted(before) and {"sun.rise", "sun.set", "moon.phase"} <= set(ours)
-    for key, (value, unit, label) in ours.items():
-        assert (unit, label) == (before[key].unit, before[key].label), key
+    for key, rest in ours.items():
+        tail = f" {before[key].unit:<5} {before[key].label}"
+        assert rest.endswith(tail), (key, rest)
+        value = rest[: -len(tail)].strip()
         said = [f"{r.value:.2f}" if isinstance(r.value, float) else str(r.value)
                 for r in (before[key], after[key])]  # fmt: skip
         if key != "sun.elevation":  # (it moves by the second)
