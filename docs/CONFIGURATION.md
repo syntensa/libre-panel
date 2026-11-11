@@ -187,7 +187,7 @@ units = "metric"               # or "imperial"
 update_minutes = 15
 
 [video]
-mode = "auto"                  # "auto": smooth video mode by itself where it is proven (the 9.2");
+mode = "auto"                  # "auto": smooth video mode by itself where it is proven (9.2", 12.3");
                                # "on": on every TURZX USB panel (needs ffmpeg); "off"
 fps = 50                       # frames per second in video mode
 local_clip = ""                # required for "auto" and "on", see below
@@ -1792,7 +1792,7 @@ local_clip = "usr/data/standby.h264"
 ```
 
 With `mode = "auto"` (the default) the video mode is on by itself where it is
-proven, today the 9.2", as soon as ffmpeg is found and `local_clip` is set.
+proven, today the 9.2" and the 12.3", as soon as ffmpeg is found and `local_clip` is set.
 `libre-panel doctor` and the log say what is missing. `mode = "on"` tries it on
 every TURZX USB panel; `"off"` keeps single frames, PNG or JPEG as `[device] still` says
 (JPEG by itself on the 5.2", see [the protocol notes](protocol/turzx-usb.md#jpeg-stills-101)).
@@ -1843,7 +1843,7 @@ answer too.
 
 | Setting | Default | |
 |---|---|---|
-| `mode` | `"auto"` | `"auto"`: on where proven (9.2"), with ffmpeg and `local_clip`; `"on"`, `"off"` |
+| `mode` | `"auto"` | `"auto"`: on where proven (9.2", 12.3"), with ffmpeg and `local_clip`; `"on"`, `"off"` |
 | `fps` | 25 | frames per second (1–60). 25 looks smooth on the panels, and a graph moves a pixel a frame. Beside 25, 30 takes about a tenth more of the processor, 50 about 60 % more and 60 about 80 % more, 20 about a tenth less (Libre Panel and ffmpeg's x264 together, Lumen on the 12.3", where something moves in every frame; a screen that rests between its readings takes less at any rate); *Settings → Panel* says so under the choice. 60 is an experiment the panels do not keep up with |
 | `device_fps` | 60 | the rate reported to the panel; must be at least `fps`. The panel's player never catches up once behind, so it gets a little more than it needs |
 | `crf` | 20 | quality, 0–51; lower is sharper and needs more bits (20 was measured on the 12.3" and the 9.2" at about 3–4 Mbit/s at 50 fps on a screen that moves; 25 was the first measurement's) |
