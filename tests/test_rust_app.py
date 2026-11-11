@@ -111,6 +111,26 @@ def test_it_draws_a_theme_into_a_png_file(tmp_path: Path) -> None:
 
 
 @draws
+def test_preview_draws_a_theme_as_cli_py_does(tmp_path: Path) -> None:
+    done = _run(tmp_path, "preview", "terra", "-o", str(tmp_path / "terra.png"))
+    assert done.returncode == 0, done.stderr
+    with Image.open(tmp_path / "terra.png") as frame:
+        assert done.stdout == f"wrote {tmp_path / 'terra.png'} ({frame.width}x{frame.height})\n"
+        assert len(frame.getcolors(1 << 24)) > 500
+    # a theme's folder, and the default name of the file (in the folder the program runs in)
+    done = subprocess.run([str(_program()), "preview", str(BUILTIN_THEMES_DIR / "lumen")],
+                          env={**os.environ, "LIBRE_PANEL_HOME": str(tmp_path),
+                               "LIBRE_PANEL_DATA": str(DATA), **_libraries()},
+                          cwd=tmp_path, capture_output=True, encoding="utf-8", timeout=120,
+                          check=False)  # fmt: skip
+    assert done.returncode == 0, done.stderr
+    with Image.open(tmp_path / "preview.png") as frame:
+        assert frame.size == (1920, 480)
+    missing = _run(tmp_path, "preview", "no-such-theme")
+    assert missing.returncode != 0 and "no-such-theme" in missing.stderr
+
+
+@draws
 def test_it_follows_config_toml(tmp_path: Path) -> None:
     (tmp_path / "config.toml").write_text(
         'theme = "terra"\nfps = 5\n[device]\ndriver = "virtual"\noutput = "panel.png"\n'

@@ -2357,7 +2357,10 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       (`systemd-inhibit`) the panel goes dark under before the computer sleeps. The tests: the
       monitor's lines as test_logind.py hands them (Rust's own), and on Windows the session's
       end sent to the running app's window (CI)
-- [ ] the command line, updates, languages, the log, light mode
+- [x] the command line (cli.py): every command of the Python app but `plugins`, which waits
+      for the plugins' own step below; `preview` draws a theme, by its name or its folder,
+      into a PNG of the demo's readings or (--live) this computer's. Updates (rust/app's
+      updates), languages (lp-i18n), the log (rust/app's logs); light mode is always on
 - [x] the background app (service.py's PanelService and BackgroundApp, as far as there is no
       window yet; `libre-panel start`): the panel's loop in a thread that is paused, resumed
       and started anew, with the services and the shortcuts beside it, which go on while the

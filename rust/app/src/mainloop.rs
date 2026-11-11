@@ -269,7 +269,7 @@ pub fn panel_config(config: &Config, n: usize) -> Result<Config, String> {
 }
 
 /// The local time of now, and its fold.
-fn moment() -> (Moment, bool) {
+pub(crate) fn moment() -> (Moment, bool) {
     let since = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0.0, |d| d.as_secs_f64());

@@ -86,6 +86,8 @@ Libre Panel
                                 of config.toml, the panel paused and resumed by them (the
                                 command when none is given)
   libre-panel render [options]  draw one frame into a PNG file (--output, else frame.png)
+  libre-panel preview [THEME] [-o FILE] [--live]
+                                a theme drawn into a PNG (demo readings, or this PC's)
   libre-panel editor [options]  the app's server alone (its address, with the token, is
                                 printed)
   libre-panel tray [--background]  the background app, as the start at login runs it
@@ -132,6 +134,84 @@ const READY_SECONDS: f64 = 20.0;
 /// unlock_offered: whether "Unlock all sensors" is a thing here: a Windows download that
 /// carries the sensor service (sensors\libre-panel-sensors.exe beside the program), and the
 /// service not installed (or switched off).
+/// `libre-panel preview [THEME] [-o FILE] [--live] [--config FILE]` (cli.py's _cmd_preview): a
+/// theme, by its name or its folder, drawn once into a PNG, of the demo's readings or (--live)
+/// this computer's.
+fn preview_command(args: &[String]) -> Result<(), String> {
+    let (mut theme, mut output, mut live, mut config) =
+        (None, "preview.png".to_string(), false, None);
+    let mut rest = args.iter();
+    while let Some(arg) = rest.next() {
+        let mut value = |name: &str| {
+            rest.next()
+                .cloned()
+                .ok_or_else(|| format!("argument {name}: expected one argument"))
+        };
+        match arg.as_str() {
+            "-o" | "--output" => output = value("-o/--output")?,
+            "--live" => live = true,
+            "--config" => config = Some(PathBuf::from(value("--config")?)),
+            other if theme.is_none() && !other.starts_with('-') => theme = Some(other.to_string()),
+            other => return Err(format!("unrecognized arguments: {other}")),
+        }
+    }
+    lp_text::set_locale_from_environment();
+    lp_text::fallback::set_language(Box::new(|| lp_i18n::language().code().to_string()));
+    let home = Home::find()?;
+    let file = config.unwrap_or_else(|| home.config_file());
+    let config = lp_config::load_config(&file, lp_config::platform()).map_err(|e| e.msg)?;
+    let theme = theme.unwrap_or_else(|| "libre-default".into());
+    let folder = if std::path::Path::new(&theme).is_dir() {
+        PathBuf::from(&theme)
+    } else {
+        lp_theme::versions::find_theme(&theme, &home.places()).map_err(|e| e.msg)?
+    };
+    let env = lp_theme::Env {
+        fonts_dir: home.fonts(),
+    };
+    let theme = lp_theme::load_theme(&folder, &env).map_err(|e| e.msg)?;
+    let options = lp_render::Options {
+        preview: true,
+        animate: false,
+        dither: false,
+    };
+    let mut renderer = lp_render::Renderer::new(theme.clone(), &env, options).map_err(|e| e.0)?;
+    renderer.symbols = config.symbols.clone();
+    let snapshot = if live {
+        let (mut hub, _missing) = sensors::Hub::of(&config, false);
+        hub.want(0, renderer.reads());
+        // (rates, of the network and the drives, need two samples)
+        hub.snapshot(mainloop::moment().0, false);
+        hub.wait_ready(READY_SECONDS);
+        let (now, fold) = mainloop::moment();
+        let snapshot = hub.snapshot(now, fold);
+        drop(hub);
+        snapshot
+    } else {
+        let since = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
+        let utc = lp_py::zones::Zone::utc();
+        let zone = lp_py::zones::local().unwrap_or(&utc);
+        let mut snapshot = lp_services::demo::demo_snapshot(
+            since.map_or(0.0, |since| since.as_secs_f64()),
+            lp_services::demo::HISTORY_SAMPLES,
+            zone,
+        )?;
+        snapshot.images = lp_services::demo::pictures(&env.fonts_dir)?;
+        snapshot
+    };
+    let drawn = renderer.render(snapshot, lp_render::video::monotonic());
+    let warnings = renderer.warnings();
+    renderer.close();
+    let (frame, _boxes) = drawn.map_err(|why| format!("not drawn here yet: {}", why.0))?;
+    let data = lp_devices::png::encode_with(&frame, lp_devices::png::Compression::new(6))?;
+    std::fs::write(&output, data).map_err(|why| format!("{output}: {why}"))?;
+    for warning in theme.warnings.iter().chain(&warnings) {
+        eprintln!("warning: {warning}");
+    }
+    println!("wrote {output} ({}x{})", theme.width, theme.height);
+    Ok(())
+}
+
 /// _linux_hint: what is missing on Linux that `system-setup --linux` brings, in a sentence
 /// and with the command that does it; none when nothing is.
 fn linux_hint() -> Option<String> {
@@ -414,6 +494,7 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
             };
             MainLoop::new(home, asked)?.run(&STOP, &|| mainloop::Ending::Quit);
         }
+        "preview" => preview_command(args)?,
         "system-setup" => std::process::exit(i32::from(system_setup_command(args)?)),
         "quit" => std::process::exit(quit_command(args)?),
         "notify" => std::process::exit(notify_command(args)?),
