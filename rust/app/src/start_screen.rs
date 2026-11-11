@@ -13,6 +13,9 @@ use lp_render::boot;
 /// The boot logo's file on the panel, and the standby clip's (the vendor app's name).
 pub const BOOT_LOGO: &str = "usr/data/boot.jpg";
 pub const STANDBY_CLIP: &str = "usr/data/standby.h264";
+/// the panels the boot picture and the standby clip were measured on (panel_files.py
+/// MEASURED: SPUR II on the 9.2"); the other USB panels share its firmware, untried
+pub const MEASURED: &[&str] = &["turing-9.2-usb"];
 /// A file on the panel is at most this large.
 pub const MAX_FILE: usize = 1024 * 1024;
 /// The boot logo's JPEG: (quality, a colour every pixel) in turn until it fits.
@@ -699,7 +702,7 @@ pub fn state(told: &Told) -> Value {
                 "size".into(),
                 Value::List(vec![Value::Int(w.into()), Value::Int(h.into())]),
             );
-            one.insert("measured".into(), Value::Bool(m.video));
+            one.insert("measured".into(), Value::Bool(MEASURED.contains(&m.id)));
             Value::Dict(one)
         })
         .collect();

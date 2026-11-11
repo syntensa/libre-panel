@@ -1745,7 +1745,7 @@ class EditorHandler(BaseHTTPRequestHandler):
                         "id": m.id,
                         "label": m.label,
                         "size": list(m.size(way)),
-                        "measured": m.video,
+                        "measured": m.id in panel_files.MEASURED,
                     }  # (the 9.2": where SPUR II measured it all)
                     for m in panel_files.models()
                 ],  # fmt: skip

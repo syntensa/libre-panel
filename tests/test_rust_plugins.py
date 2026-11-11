@@ -11,6 +11,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,37 @@ from libre_panel import cli
 HOST_S = 300 if sys.platform == "win32" else 60
 HOST = {"LIBRE_PANEL_PLUGIN_HOST": sys.executable,
         "LIBRE_PANEL_PLUGIN_HOST_ARGS": "-m libre_panel.plugin_host"}  # fmt: skip
+
+
+def _drain(stream: Any) -> tuple[threading.Thread, list[str]]:
+    """``stream`` (a program's stdout or stderr) read as the program writes it, its lines kept:
+    a pipe nobody reads stops the program once it is full (4 KB on Windows: the plugin host's
+    log, which the app passes on to its stderr, filled it, and the app and its host stood
+    still until the test gave up)."""
+    lines: list[str] = []
+
+    def read() -> None:
+        try:
+            for line in stream:
+                lines.append(line)
+        except (OSError, ValueError):  # (closed as the test ended)
+            pass
+
+    thread = threading.Thread(target=read, name="drain", daemon=True)
+    thread.start()
+    return thread, lines
+
+
+def _ended(program: subprocess.Popen, said: tuple[threading.Thread, list[str]]) -> str:
+    """``program`` asked to end (SIGINT; on Windows terminated) and waited for: what it wrote to
+    its stderr, which ``said`` drained."""
+    if os.name == "nt":
+        program.terminate()
+    else:
+        program.send_signal(signal.SIGINT)
+    program.wait(timeout=30)
+    said[0].join(10)
+    return "".join(said[1])
 
 
 @pytest.fixture
@@ -153,6 +185,7 @@ def test_a_plugins_sensor_source_and_service_run_in_the_rust_app(plugin_folder, 
     blue = False
     with subprocess.Popen([str(_program()), "run"], env=env, stderr=subprocess.PIPE,
                           encoding="utf-8") as program:  # fmt: skip
+        err = _drain(program.stderr)
         try:
             until = time.monotonic() + HOST_S
             while time.monotonic() < until and not blue:
@@ -165,11 +198,7 @@ def test_a_plugins_sensor_source_and_service_run_in_the_rust_app(plugin_folder, 
                     pass
                 time.sleep(0.05)
         finally:
-            if os.name == "nt":
-                program.terminate()
-            else:
-                program.send_signal(signal.SIGINT)
-            said = program.communicate(timeout=30)[1]
+            said = _ended(program, err)
     assert blue, said
     heard = json.loads(heard_file.read_text("utf-8"))
     assert heard["fans"] == 1200.0 and heard["value"] == 42.0, heard
@@ -200,9 +229,11 @@ def test_settings_list_the_plugins_as_settings_py_lists_them(plugin_folder, isol
     pipe = subprocess.PIPE
     ours = subprocess.Popen([str(_program()), "editor", "--port", "0"], env=env, stdout=pipe,
                             stderr=pipe, encoding="utf-8")  # fmt: skip
+    err = _drain(ours.stderr)
     try:
         assert ours.stdout is not None
         address = ours.stdout.readline().split(" running at ")[1].split()[0]
+        _drain(ours.stdout)
         port, token = int(address.split(":")[2].split("/")[0]), address.split("#token=")[1]
 
         def ask(method: str, path: str, body: str = "") -> tuple[str, dict]:
@@ -223,8 +254,7 @@ def test_settings_list_the_plugins_as_settings_py_lists_them(plugin_folder, isol
         assert status == "HTTP/1.0 200 OK", status
         assert 'color = "green"' in config.read_text("utf-8")
     finally:
-        ours.send_signal(signal.SIGINT) if os.name != "nt" else ours.terminate()
-        ours.communicate(timeout=30)
+        _ended(ours, err)
 
 
 def test_a_plugins_screen_and_widget_type_are_drawn_as_the_python_app_draws_them(
@@ -337,6 +367,7 @@ def test_a_plugins_transition_and_toast_style_play_in_the_rust_app(plugin_folder
     red, blue, green = (220, 30, 30), (30, 30, 220), (0, 220, 0)
     with subprocess.Popen([str(_program()), "run"], env=env, stderr=subprocess.PIPE,
                           encoding="utf-8") as program:  # fmt: skip
+        err = _drain(program.stderr)
         try:
             until = time.monotonic() + HOST_S
             while time.monotonic() < until and not all(seen.values()):
@@ -353,11 +384,7 @@ def test_a_plugins_transition_and_toast_style_play_in_the_rust_app(plugin_folder
                 seen["blue"] |= left == blue and right == blue
                 time.sleep(0.02)
         finally:
-            if os.name == "nt":
-                program.terminate()
-            else:
-                program.send_signal(signal.SIGINT)
-            said = program.communicate(timeout=30)[1]
+            said = _ended(program, err)
     assert all(seen.values()), (seen, said)
     assert "failed" not in said and "not installed" not in said, said
 
@@ -378,9 +405,11 @@ def test_a_plugins_editor_page_is_served_as_server_py_serves_it(plugin_folder, i
     with subprocess.Popen([str(_program()), "editor", "--port", "0"], env=env,
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           encoding="utf-8") as program:  # fmt: skip
+        err = _drain(program.stderr)
         try:
             assert program.stdout is not None
             address = program.stdout.readline().split(" running at ")[1].split()[0]
+            _drain(program.stdout)
             port, token = int(address.split(":")[2].split("/")[0]), address.split("#token=")[1]
 
             def ask(method: str, path: str, body: Any = None) -> tuple[int, Any]:
@@ -413,11 +442,7 @@ def test_a_plugins_editor_page_is_served_as_server_py_serves_it(plugin_folder, i
             assert status == 500 and "the analysis failed" in data["error"]
             assert ask("GET", "/api/plugins/pages")[0] == 200
         finally:
-            if os.name == "nt":
-                program.terminate()
-            else:
-                program.send_signal(signal.SIGINT)
-            program.communicate(timeout=30)
+            _ended(program, err)
 
 
 WATCHING = """
@@ -512,9 +537,11 @@ def test_plugins_see_the_frame_shown_and_the_toast_and_pages_the_running_app(
     with subprocess.Popen([str(_program()), "start", "--port", "0", "--no-browser"], env=env,
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           encoding="utf-8") as program:  # fmt: skip
+        err = _drain(program.stderr)
         try:
             assert program.stdout is not None
             address = program.stdout.readline().split(" running at ")[1].split()[0]
+            _drain(program.stdout)
             port, token = int(address.split(":")[2].split("/")[0]), address.split("#token=")[1]
 
             def ask(path: str) -> Any:
@@ -544,9 +571,5 @@ def test_plugins_see_the_frame_shown_and_the_toast_and_pages_the_running_app(
             assert isinstance(ask("sources")["names"], list)
             assert ask("snapshot") == {"has": True}  # (the sky's readings are always there)
         finally:
-            if os.name == "nt":
-                program.terminate()
-            else:
-                program.send_signal(signal.SIGINT)
-            said = program.communicate(timeout=30)[1]
+            said = _ended(program, err)
     assert "panicked" not in said and "Traceback" not in said, said
