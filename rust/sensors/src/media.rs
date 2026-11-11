@@ -620,8 +620,7 @@ impl Shared {
             if let Ok(mut flags) = self.flags.lock() {
                 flags.wake = false;
             }
-            let pause;
-            if self.wants("media.") {
+            let pause = if self.wants("media.") {
                 idle_since = None;
                 let failed = self.look(backend);
                 std::thread::sleep(Duration::from_secs_f64(MIN_GAP_SECONDS));
@@ -632,7 +631,11 @@ impl Shared {
                     backend.interval()
                 };
                 // (a backend that failed starts anew and has no events yet: look soon)
-                pause = if failed { wait.min(POLL_SECONDS) } else { wait };
+                if failed {
+                    wait.min(POLL_SECONDS)
+                } else {
+                    wait
+                }
             } else {
                 let since = *idle_since.get_or_insert_with(Instant::now);
                 if since.elapsed().as_secs_f64() > IDLE_SECONDS {
@@ -642,8 +645,8 @@ impl Shared {
                     }
                     break;
                 }
-                pause = IDLE_CHECK_SECONDS;
-            }
+                IDLE_CHECK_SECONDS
+            };
             let Ok(flags) = self.flags.lock() else {
                 break;
             };
