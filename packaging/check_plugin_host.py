@@ -53,6 +53,18 @@ def ask(program: subprocess.Popen, ident: int, op: str, **fields: object) -> dic
             return message
 
 
+def _home() -> tempfile.TemporaryDirectory[str]:
+    """A settings folder for the check. With administrator rights (Windows runners have them)
+    plugin folders load only from where nobody without them can change them
+    (libre_panel.rights): one in Program Files then."""
+    if sys.platform == "win32":
+        import ctypes
+
+        if ctypes.windll.shell32.IsUserAnAdmin():
+            return tempfile.TemporaryDirectory(dir=os.environ["ProgramFiles"])
+    return tempfile.TemporaryDirectory()
+
+
 def plugin_in(home: str) -> Path:
     """The plugin folder, installed in ``home``."""
     folder = Path(home) / "plugins" / "check"
@@ -69,7 +81,7 @@ def plugin_in(home: str) -> Path:
 
 def app(path: str) -> int:
     """The app finds its plugin host beside it and lists the plugin's parts as loading."""
-    with tempfile.TemporaryDirectory() as home:
+    with _home() as home:
         plugin_in(home)
         env = {**os.environ, "LIBRE_PANEL_HOME": home}
         env.pop("LIBRE_PANEL_PLUGIN_HOST", None)
@@ -88,7 +100,7 @@ def main() -> int:
     if sys.argv[1] == "--app":
         return app(sys.argv[2])
     program_path = sys.argv[1]
-    with tempfile.TemporaryDirectory() as home:
+    with _home() as home:
         folder = plugin_in(home)
         program = subprocess.Popen(
             [program_path, "--folder", str(folder.parent)],
