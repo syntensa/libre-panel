@@ -355,6 +355,10 @@ const ROUTES: &[Route] = &[
     private("GET", "/api/tray/icon", |s, x, _, u| {
         tray_icon(s, x, &u.query)
     }),
+    private("POST", "/api/across", |s, x, _, _| across_upload(s, x)),
+    picture("GET", "/api/across/picture", |s, x, _, _| {
+        across_picture(s, x)
+    }),
     private("GET", "/api/colour-check", |s, x, _, u| {
         colour_check(s, x, &u.query)
     }),
@@ -1951,6 +1955,64 @@ fn start_screen_file(state: &State, exchange: &mut Exchange, query: &str) {
             exchange.send(200, &data, kind, &format!("{}-{name}", model.id))
         }
         Err(why) => exchange.error(&why, 409, ""),
+    }
+}
+
+/// The settings folder: the one config.toml is in.
+fn settings_folder(state: &State) -> PathBuf {
+    state
+        .config_file
+        .parent()
+        .map_or_else(lp_config::dirs::config_dir, Path::to_path_buf)
+}
+
+/// `POST /api/across` with a picture's file: the picture across all panels that are placed
+/// (arrangement.rs), kept in the settings folder without its metadata, and named in
+/// config.toml (`across`).
+fn across_upload(state: &State, exchange: &mut Exchange) {
+    let Some(data) = exchange.read_body(crate::arrangement::MAX_BYTES as u64, "request too large")
+    else {
+        return;
+    };
+    let folder = settings_folder(state);
+    let name = match crate::arrangement::save_picture(&data, &folder) {
+        Ok(Ok(name)) => name,
+        Ok(Err(refused)) => return exchange.error(&refused, 400, ""),
+        Err(why) => return exchange.error(&why, 409, ""),
+    };
+    let change =
+        lp_config::edit::Change::Value("across".into(), lp_py::toml::Toml::Str(name.clone()));
+    if let Err(why) =
+        lp_config::edit::edit_config(&[change], &state.config_file, lp_config::platform())
+    {
+        return exchange.error(&why.msg, 409, "");
+    }
+    if let Some(app) = state.controls.upgrade() {
+        app.follow_config();
+    }
+    let stamp = crate::arrangement::stamp_of(&folder.join(&name)).unwrap_or(0);
+    let mut told = lp_py::Dict::new();
+    told.insert("across".into(), Value::Str(name));
+    told.insert("stamp".into(), Value::Int(stamp.into()));
+    exchange.json(&Value::Dict(told), 200);
+}
+
+/// `GET /api/across/picture`: the picture across the panels, small, for the app.
+fn across_picture(state: &State, exchange: &mut Exchange) {
+    let across = lp_config::load_config(&state.config_file, lp_config::platform())
+        .map(|config| config.across)
+        .unwrap_or_default();
+    let path = crate::arrangement::across_path(&across, &settings_folder(state));
+    let Some((picture, _)) = crate::arrangement::load(path.as_deref()) else {
+        return exchange.error("no picture across the panels", 404, "");
+    };
+    let small = picture
+        .thumbnail((1200.0, 1200.0), lp_pixels::Filter::Bicubic, Some(2.0))
+        .map_err(|e| e.0)
+        .and_then(|small| lp_decode::save_jpeg(&small, 85).map_err(|e| e.to_string()));
+    match small {
+        Ok(jpeg) => exchange.send(200, &jpeg, "image/jpeg", ""),
+        Err(why) => exchange.error(&why, 500, ""),
     }
 }
 

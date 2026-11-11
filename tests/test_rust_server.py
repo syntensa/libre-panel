@@ -2684,3 +2684,44 @@ def test_the_panel_compares_its_range_for_the_eye_and_shows_its_theme_again(
         assert ranges[-1] == "limited", ranges
     finally:
         rig.close()
+
+
+def test_the_picture_across_the_panels_is_kept_and_shown_as_server_py_does(
+    servers: Any,
+) -> None:
+    """Settings → Panels → a picture across them (/api/across): none at first; a picture given
+    kept in the settings folder as arrangement.py keeps it (turned as its EXIF says, at most
+    4096 pixels long, a JPEG without its metadata), named in config.toml, and shown small for
+    the app, with the same pixels; what is no picture refused in the same words."""
+    import io
+
+    from PIL import Image
+
+    ask, homes = servers
+    theirs, ours = ask(_get("/api/across/picture", WITH))
+    assert ours[0] == theirs[0] and json.loads(ours[2]) == json.loads(theirs[2])
+    given = Image.effect_mandelbrot((5000, 1300), (-2.0, -1.0, 1.0, 1.0), 40).convert("RGB")
+    exif = Image.Exif()
+    exif[0x0112] = 6  # (taken on its side: kept upright)
+    data = io.BytesIO()
+    given.save(data, "JPEG", quality=90, exif=exif.tobytes())
+
+    def upload(body: bytes) -> bytes:
+        head = ["POST /api/across HTTP/1.1", "Host: {host}", WITH,
+                "Content-Type: image/jpeg", f"Content-Length: {len(body)}"]  # fmt: skip
+        return "\r\n".join(head).encode("utf-8") + b"\r\n\r\n" + body
+
+    theirs, ours = ask(upload(data.getvalue()))
+    assert ours[0] == theirs[0] == "HTTP/1.0 200 OK", ours[2]
+    mine, python = json.loads(ours[2]), json.loads(theirs[2])
+    assert mine["across"] == python["across"] == "across/picture.jpg"
+    kept = [Image.open(home / "across" / "picture.jpg") for home in homes]
+    assert kept[1].size == kept[0].size and kept[0].height == 4096  # (upright now)
+    assert kept[1].tobytes() == kept[0].tobytes()
+    for home in homes:
+        assert 'across = "across/picture.jpg"' in (home / "config.toml").read_text("utf-8")
+    theirs, ours = ask(_get("/api/across/picture", WITH))
+    assert ours[0] == theirs[0] == "HTTP/1.0 200 OK"
+    assert _frames_of(ours[2]) == _frames_of(theirs[2])
+    theirs, ours = ask(upload(b"no picture"))
+    assert ours[0] == theirs[0] and json.loads(ours[2]) == json.loads(theirs[2])

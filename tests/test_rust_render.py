@@ -8253,3 +8253,39 @@ def test_downloads_whose_light_runs_frame_after_frame_as_python_draws_them(tmp_p
         expected.append(_python_moving(folder, steps, fps))
     drawn, moving = _compare_moving(cases, expected)
     assert drawn > 300 and moving > 100, (drawn, moving)
+
+
+def test_a_panels_part_of_the_picture_across_the_panels_lies_under_its_theme(
+    tmp_path: Path,
+) -> None:
+    """Renderer(theme, backdrop=...) as the loop makes it for a panel under a picture across
+    the panels (arrangement.py): the picture fitted to the theme's size instead of its own
+    background picture, under whatever the theme draws, to the bit."""
+    rng = random.Random(55)
+    cases, expected = [], []
+    for n in range(12):
+        folder = tmp_path / f"t{n}"
+        _frame_theme(rng, folder, None)
+        given, snapshot = _frame_snapshot(rng)
+        backdrop = noise(rng, "RGB", (rng.randint(40, 400), rng.randint(40, 300)))
+        cases.append({"folder": str(folder), "snapshot": given, "now": 1000.0,
+                      "backdrop": image(backdrop)})  # fmt: skip
+        try:
+            theme = load_theme(folder)
+        except ThemeError:
+            expected.append(None)  # (a theme that is not read: Rust says why too)
+            continue
+        lists._RAN.clear()
+        renderer = Renderer(theme, preview=True, backdrop=backdrop)
+        expected.append(renderer.render(snapshot, now=1000.0)[0])
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    drawn = 0
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        if want is None:
+            assert "error" in got, n
+            continue
+        if "unported" in got:
+            continue
+        assert got["sha256"] == hashlib.sha256(want.tobytes()).hexdigest(), n
+        drawn += 1
+    assert drawn >= 3, ours["frames"]

@@ -210,6 +210,9 @@ pub struct Renderer {
     /// where ffmpeg is, for the videos (the app finds it as devices/h264.find_ffmpeg does);
     /// None: Rust leaves a frame with a video to Python
     pub ffmpeg: Option<std::path::PathBuf>,
+    /// a picture under the theme instead of its own background picture: the panel's part of
+    /// one across all panels (arrangement.py), fitted to the theme's size (set_backdrop)
+    backdrop: Option<Image>,
     /// the frames a second a video is decoded at: the panel's (the loop sets it, as Python's
     /// renderer.video_fps); None or 0: moving.VIDEO_FPS
     pub video_fps: Option<u32>,
@@ -318,6 +321,7 @@ impl Renderer {
             bars_drawn: RefCell::new(None),
             level_bars: HashMap::new(),
             ffmpeg: None,
+            backdrop: None,
             video_fps: None,
             video_keys: false,
             feeds: HashMap::new(),
@@ -732,6 +736,10 @@ impl Renderer {
             self.theme.width.max(0) as usize,
             self.theme.height.max(0) as usize,
         );
+        if let Some(backdrop) = &self.backdrop {
+            let fitted = backdrop.fit((w, h), Filter::Bicubic, 0.0, (0.5, 0.5))?;
+            return Ok(Some(fitted.convert(Mode::RGBA)?));
+        }
         let rel = self.theme.background_image.clone().unwrap_or_default();
         let image = match self.read_picture(&rel) {
             Ok(Some(image)) => Some(image.fit((w, h), Filter::Bicubic, 0.0, (0.5, 0.5))?),
@@ -751,6 +759,14 @@ impl Renderer {
             Some(image) => alpha_composite(&ground, &image)?,
             None => ground,
         }))
+    }
+
+    /// The picture under the theme instead of its own background picture (Renderer's
+    /// backdrop): the background made again with it.
+    pub fn set_backdrop(&mut self, backdrop: Option<Image>) -> Result<()> {
+        self.backdrop = backdrop;
+        self.background = self.load_background()?;
+        Ok(())
     }
 
     /// _gradient_ground: the theme's background gradient, the panel's size, worked out in

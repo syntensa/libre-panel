@@ -2110,6 +2110,15 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       the graphics card's own conversion through ffmpeg (devices/colour_check.py) ends at once
       there, saying so. The tests: the state and what is refused as Python's; on the running
       app with a simulated panel the A/B begun, the stream in both ranges, stopped and back
+- [x] a picture across the panels (arrangement.py, `/api/across`, `/api/across/picture`):
+      the panels' places in millimetres (their models' diagonals, as mounted, as the panel
+      said its size), the picture kept as arrangement.py keeps it (turned by its EXIF, at most
+      4096 long, a JPEG of quality 92 made smaller with optimize, without its metadata), each
+      panel's part cut where it stands and laid under its theme instead of the theme's
+      background picture (the renderer's backdrop, fitted as ImageOps.fit); the loop makes
+      its renderer again when the picture, a place or a panel's size changes. The tests: the
+      routes as Python's (the file kept byte for byte), the renderer with a backdrop to the
+      bit (lp-check render_frame), and a panel's frame its part of the picture
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app
 - [x] one Libre Panel at a panel (instance.py): the system's lock on libre-panel.lock in the

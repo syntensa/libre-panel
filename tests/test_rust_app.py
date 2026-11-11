@@ -2157,3 +2157,45 @@ def test_the_background_app_follows_its_shortcuts(tmp_path: Path) -> None:
     assert "shortcut: pause" in said and "scene: Work" in said and "scene: Film" in said, said
     assert "service 'timer' started" in said and "the shortcut for brightness_up failed" in said
     assert "panel stopped: " in said and "(waiting for the config or theme to change)" in said
+
+
+@draws
+def test_each_panel_shows_its_part_of_the_picture_across_the_panels(tmp_path: Path) -> None:
+    """A picture across the panels (config.toml across) and a panel placed (at): the panel
+    shows its part of the picture under its theme, fitted to its frames, as arrangement.py
+    cuts it and the renderer fits it."""
+    from PIL import ImageOps
+
+    from libre_panel import arrangement
+    from libre_panel.config import load_config
+
+    folder = tmp_path / "themes" / "plain"
+    folder.mkdir(parents=True)
+    theme = {"format": "libre-panel-theme/1", "name": "Plain",
+             "display": {"model": "turing-9.2-usb", "orientation": "landscape", "width": 1920,
+                         "height": 480},
+             "palette": {"bg": "#000000"}, "font": "builtin:Barlow-Medium",
+             "background": {"color": "@bg", "image": None}, "refresh_ms": 1000,
+             "widgets": []}  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+    picture = Image.effect_mandelbrot((1600, 900), (-2.0, -1.0, 1.0, 1.0), 30).convert("RGB")
+    (tmp_path / "across").mkdir()
+    picture.save(tmp_path / "across" / "picture.jpg", quality=95)
+    (tmp_path / "config.toml").write_text(
+        'theme = "plain"\nacross = "across/picture.jpg"\n[device]\ndriver = "virtual"\n'
+        'model = "turing-9.2-usb"\nat = [0, 0]\noutput = "panel.png"\n'
+        '[[panels]]\n[panels.device]\ndriver = "virtual"\nmodel = "turing-9.2-usb"\n'
+        'at = [240, 30]\noutput = "panel2.png"\n[sensors]\nproviders = []\n',
+        encoding="utf-8",
+    )
+    done = _run(tmp_path, "run", "--frames", "3")
+    assert done.returncode == 0, done.stderr
+    config = load_config(tmp_path / "config.toml")
+    places = arrangement.places(config, [None, None])
+    loaded = arrangement.load(tmp_path / "across" / "picture.jpg")
+    assert loaded is not None
+    rounded = [None if r is None else tuple(round(v, 1) for v in r) for r in places]
+    part = arrangement.part(loaded[0], rounded, 0)
+    expected = ImageOps.fit(part, (1920, 480))
+    with Image.open(tmp_path / "panel.png") as frame:
+        assert frame.convert("RGB").tobytes() == expected.tobytes()

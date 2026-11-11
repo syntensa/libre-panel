@@ -2545,6 +2545,15 @@ fn run(case: &Value) -> Result<Value, String> {
                         Ok(r) => r,
                         Err(e) => return json!({"error": e.0}),
                     };
+                    // (a picture under the theme instead of its own background picture: a
+                    // panel's part of the picture across the panels, as the loop sets it)
+                    if !c["backdrop"].is_null() {
+                        let set = image_of(&c["backdrop"])
+                            .and_then(|b| renderer.set_backdrop(Some(b)).map_err(|e| e.0));
+                        if let Err(e) = set {
+                            return json!({"error": e});
+                        }
+                    }
                     // (the look of the weather symbols and the moon the person chose, as the app
                     // sets it)
                     if let Some(look) = c["symbols"].as_str() {

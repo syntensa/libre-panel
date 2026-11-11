@@ -191,6 +191,10 @@ pub struct MainLoop {
     /// the theme on show is drawn anew (config.toml changed, another panel): kept on show
     /// where the new one cannot be
     relook: bool,
+    /// this panel's part of the picture across the panels (arrangement.rs), as the renderer
+    /// was made with it, and when that was last looked at
+    across: Option<crate::arrangement::Across>,
+    across_watched: f64,
     rotation: Rotation,
     snapshot: Option<Snapshot>,
     next_sample: f64,
@@ -418,6 +422,8 @@ impl MainLoop {
             shown: String::new(),
             refused: None,
             relook: false,
+            across: None,
+            across_watched: f64::NEG_INFINITY,
             rotation: Rotation::default(),
             snapshot: None,
             next_sample: 0.0,
@@ -916,6 +922,65 @@ impl MainLoop {
         .unwrap_or(dressed))
     }
 
+    /// _across: this panel's part of the picture across the panels (`across`): its file, when
+    /// it was written, where every panel stands and which of them this is; None without a
+    /// picture, or while this panel is not placed.
+    fn across_now(&self) -> Option<crate::arrangement::Across> {
+        use crate::arrangement::Told;
+        if self.config.across.is_empty() {
+            return None;
+        }
+        // (where every panel stands: the whole config.toml, the first panel's first)
+        let loaded;
+        let full = match &self.beside {
+            None => &self.config,
+            Some(_) => {
+                loaded = lp_config::load_config(&self.config_file, lp_config::platform()).ok()?;
+                &loaded
+            }
+        };
+        let first = match &self.beside {
+            Some(beside) => Arc::clone(&beside.first),
+            None => Arc::clone(&self.status),
+        };
+        let told = |status: &RunStatus| Told {
+            model: status.model.clone(),
+            size: status.size,
+        };
+        let (own, more) = {
+            let status = first.lock().ok()?;
+            let more: Vec<Option<Arc<Mutex<RunStatus>>>> = (0..full.panels.len())
+                .map(|n| status.more.get(&n).map(Arc::clone))
+                .collect();
+            (told(&status), more)
+        };
+        let mut statuses = vec![Some(own)];
+        for each in more {
+            statuses.push(each.and_then(|each| each.lock().ok().map(|s| told(&s))));
+        }
+        let places = crate::arrangement::places(full, &statuses);
+        let index = self.beside.as_ref().map_or(0, |beside| beside.n + 1);
+        let folder = self
+            .config_file
+            .parent()
+            .map_or_else(lp_config::dirs::config_dir, std::path::Path::to_path_buf);
+        crate::arrangement::across_of(full, &folder, &places, index)
+    }
+
+    /// The part of the picture across the panels followed: a new one (another picture, a
+    /// panel placed or moved, its size said) makes the renderer again.
+    fn follow_across(&mut self, now: f64) {
+        if now - self.across_watched < WATCH_S {
+            return;
+        }
+        self.across_watched = now;
+        let across = self.across_now();
+        if across != self.across {
+            self.across = across;
+            self.relook = true;
+        }
+    }
+
     /// _renderer: the renderer of the theme `name`, laid out on the panel's frames and dressed.
     fn renderer_of(&self, name: &str) -> Result<Renderer, String> {
         let folder = versions::find_theme(name, &self.places).map_err(|e| e.msg)?;
@@ -957,6 +1022,10 @@ impl MainLoop {
         };
         let mut renderer =
             Renderer::new(self.dressed(&theme)?, &self.env, options).map_err(|e| e.0)?;
+        // under the theme: this panel's part of the picture across the panels
+        if let Some(backdrop) = crate::arrangement::backdrop(self.across.as_ref()) {
+            renderer.set_backdrop(Some(backdrop)).map_err(|e| e.0)?;
+        }
         renderer.place = config.weather.latitude.zip(config.weather.longitude);
         // (videos in themes: ffmpeg found as Python's renderer finds it, else none)
         renderer.ffmpeg = lp_devices::h264::find_ffmpeg("").ok();
@@ -1107,6 +1176,7 @@ impl MainLoop {
     pub fn step(&mut self) -> Duration {
         let started = self.clock();
         self.follow_config(started);
+        self.follow_across(started);
         for note in self.host.notes() {
             say(&note);
         }

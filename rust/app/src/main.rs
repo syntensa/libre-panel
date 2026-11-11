@@ -4,6 +4,7 @@
 
 mod access;
 mod ai;
+mod arrangement;
 mod autostart;
 mod background;
 mod backup;
