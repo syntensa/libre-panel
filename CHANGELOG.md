@@ -1,8 +1,9 @@
 # Changelog
 
-## 0.9.0 — in testing
+## 0.9.0rc1 — 2026-11-11
 
-Libre Panel ported whole to Rust, pixel for pixel as before; being finished and tested now.
+The first release candidate of 0.9.0: Libre Panel ported whole to Rust, pixel for pixel as
+before; being finished and tested now.
 
 **Panels**
 - **The Turing 12.3" fully verified.** Stills and the video mode from the first start, and an

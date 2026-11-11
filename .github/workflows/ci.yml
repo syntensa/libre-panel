@@ -10,6 +10,13 @@ on:
 permissions:
   contents: read
 
+# A newer push to a branch makes an older run on it moot: that run is cancelled and the
+# runners go to the newer one (on main every run finishes). Pull requests and a release's
+# run (workflow_call) are each a group of their own.
+concurrency:
+  group: ${{ github.event_name == 'push' && format('ci-{0}', github.ref) || format('ci-run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' }}
+
 jobs:
   lint:
     timeout-minutes: 10

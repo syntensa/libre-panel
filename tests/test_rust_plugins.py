@@ -21,6 +21,10 @@ from test_rust_app import DATA, _libraries, _program, _run
 
 from libre_panel import cli
 
+# How long the first drawing, transition, toast style or page of a fresh plugin host may take:
+# on a Windows runner its first import of Python's renderer took over 30 seconds (the app waits
+# up to 120, plugins.rs OPENING_S), elsewhere a second or two.
+HOST_S = 300 if sys.platform == "win32" else 60
 HOST = {"LIBRE_PANEL_PLUGIN_HOST": sys.executable,
         "LIBRE_PANEL_PLUGIN_HOST_ARGS": "-m libre_panel.plugin_host"}  # fmt: skip
 
@@ -150,7 +154,7 @@ def test_a_plugins_sensor_source_and_service_run_in_the_rust_app(plugin_folder, 
     with subprocess.Popen([str(_program()), "run"], env=env, stderr=subprocess.PIPE,
                           encoding="utf-8") as program:  # fmt: skip
         try:
-            until = time.monotonic() + 30
+            until = time.monotonic() + HOST_S
             while time.monotonic() < until and not blue:
                 try:
                     from PIL import Image
@@ -205,7 +209,7 @@ def test_settings_list_the_plugins_as_settings_py_lists_them(plugin_folder, isol
             request = (f"{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
                        f"X-Libre-Panel: {token}\r\nContent-Type: application/json\r\n"
                        f"Content-Length: {len(body.encode())}\r\n\r\n{body}")  # fmt: skip
-            status, _, answer = _asked(port, request.encode())
+            status, _, answer = _asked(port, request.encode(), wait=HOST_S)
             return status, json.loads(answer)
 
         _, told = ask("GET", "/api/settings")
@@ -334,7 +338,7 @@ def test_a_plugins_transition_and_toast_style_play_in_the_rust_app(plugin_folder
     with subprocess.Popen([str(_program()), "run"], env=env, stderr=subprocess.PIPE,
                           encoding="utf-8") as program:  # fmt: skip
         try:
-            until = time.monotonic() + 40
+            until = time.monotonic() + HOST_S
             while time.monotonic() < until and not all(seen.values()):
                 try:
                     with Image.open(isolated_home / "panel.png") as frame:
@@ -384,7 +388,7 @@ def test_a_plugins_editor_page_is_served_as_server_py_serves_it(plugin_folder, i
                 head = (f"{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
                         f"X-Libre-Panel: {token}\r\nContent-Type: application/json\r\n"
                         f"Content-Length: {len(data)}\r\n\r\n")  # fmt: skip
-                status, _, answer = _asked(port, head.encode() + data)
+                status, _, answer = _asked(port, head.encode() + data, wait=HOST_S)
                 code = int(status.split()[1])
                 try:
                     return code, json.loads(answer)
@@ -516,12 +520,12 @@ def test_plugins_see_the_frame_shown_and_the_toast_and_pages_the_running_app(
             def ask(path: str) -> Any:
                 head = (f"GET /api/plugins/inspect/{path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
                         f"X-Libre-Panel: {token}\r\n\r\n")  # fmt: skip
-                status, _, answer = _asked(port, head.encode())
+                status, _, answer = _asked(port, head.encode(), wait=HOST_S)
                 assert status.split()[1] == "200", (status, answer)
                 return json.loads(answer)
 
             seen: dict[str, Any] = {}
-            until = time.monotonic() + 40
+            until = time.monotonic() + HOST_S
             while time.monotonic() < until:
                 try:
                     seen = json.loads(notes.read_text(encoding="utf-8"))

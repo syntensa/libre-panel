@@ -37,11 +37,14 @@ pytestmark = pytest.mark.skipif(
 TOKEN = "t" * 43
 
 
-def _asked(port: int, request: bytes, done: bool = True) -> tuple[str, dict[str, str], bytes]:
+def _asked(
+    port: int, request: bytes, done: bool = True, wait: float = 60
+) -> tuple[str, dict[str, str], bytes]:
     """What the server on ``port`` answers to ``request``: its status line, its headers (but
     for the server's name and the date) and its body. ``done``: the request's end said by
-    closing the way there (else it stays open, as a browser's that waits for a picture)."""
-    with socket.create_connection(("127.0.0.1", port), timeout=60) as link:
+    closing the way there (else it stays open, as a browser's that waits for a picture);
+    ``wait``: seconds without a word from the server before it is taken for hung."""
+    with socket.create_connection(("127.0.0.1", port), timeout=wait) as link:
         link.sendall(request)
         if done:
             link.shutdown(socket.SHUT_WR)
@@ -3379,7 +3382,9 @@ def test_the_load_on_the_pc_is_measured_as_load_report_py_measures_it(tmp_path: 
                 assert abs(main["private"] - uss) < max(uss * 0.3, 16 << 20), (main, uss)
                 # (both from the share before it was rounded, as load_report.py's _shares has it)
                 assert main["cpu_core"] >= 0
-                assert abs(main["cpu_pc"] - main["cpu_core"] / cpus) <= 0.0051
+                # (each rounded to hundredths: the share of the PC from the unrounded core's)
+                off = abs(main["cpu_pc"] - main["cpu_core"] / cpus)
+                assert off <= 0.005 * (1 + 1 / cpus) + 1e-9, (main, cpus)
                 total = report["total"]
                 assert total["rss"] == sum(p["rss"] for p in report["processes"])
                 names = [t["name"] for t in report["threads"]]
