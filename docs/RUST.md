@@ -35,8 +35,10 @@ below), so that the work can be picked up where it stands.
   port of zlib that stops where Pillow's zlib stops).
 - **LibreHardwareMonitor** (C#, a library of its own) is replaced by sensors read in Rust, chip
   family by chip family; until a family is read in Rust, the .NET service reads it, then goes.
-- **Python plugins end** (there is no Python to run them). Plugins come back as WebAssembly
-  modules with an API of their own (stage R10).
+- **Python plugins run in a program of their own**, the plugin host (stage R10): Python with
+  Libre Panel's package, in the downloads beside the app, started only where plugin folders are
+  installed. Every kind of part works as in the Python app; the app and the host speak
+  through a pipe.
 - **`pip install libre-panel` ends**: Libre Panel comes as its downloads (Windows installer and
   zip, Linux AppImage).
 
@@ -1223,8 +1225,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       names, three numbers as int() takes them, else the level's), the icon, the text cut to
       120 letters and to its room with "…" (a text that FreeType cannot lay out leaves the
       toast out), the strips the panel's bezel hides, the anchor, the fade and the slide. A
-      plugin's style comes with the plugins (R11): until then a theme that names one gets the
-      card, as Python's does where the plugin is not installed. The tests: 160
+      plugin's style is drawn by the plugin host (R10); a theme that names one no plugin has
+      gets the card, as Python's does. The tests: 160
       layers through scripts of up to 34 steps and two scenarios the scripts seldom meet by
       chance (a text of 121 narrow letters on the 9.2" bar, the card at the same size in a theme
       of other colours): 332 frames with a toast on them compared to the bit, and every step's
@@ -2358,8 +2360,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       (`systemd-inhibit`) the panel goes dark under before the computer sleeps. The tests: the
       monitor's lines as test_logind.py hands them (Rust's own), and on Windows the session's
       end sent to the running app's window (CI)
-- [x] the command line (cli.py): every command of the Python app but `plugins`, which waits
-      for the plugins' own step below; `preview` draws a theme, by its name or its folder,
+- [x] the command line (cli.py): every command of the Python app (`plugins` with R10);
+      `preview` draws a theme, by its name or its folder,
       into a PNG of the demo's readings or (--live) this computer's. Updates (rust/app's
       updates), languages (lp-i18n), the log (rust/app's logs); light mode is always on
 - [x] the background app (service.py's PanelService and BackgroundApp, as far as there is no
@@ -2416,7 +2418,34 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       scrubbed from it (test_rust_server's export and import beside share.py)
 
 ### R10 plugins
-- [ ] WebAssembly plugins: services, sensors and pages, an API of their own
+The Python plugins run in the plugin host (src/libre_panel/plugin_host.py): Python with Libre
+Panel's package, a program of its own in the downloads (`plugin-host/libre-panel-plugins`,
+built by PyInstaller, on Windows with its loader compiled in CI), started by the app only
+where `<settings>/plugins/*/plugin.toml` exists, one for the process (rust/app's plugins).
+The app and the host speak through the host's standard input and output: each message a
+length and JSON, with raw pixels after it where it says so; the host's log lines go into the
+app's log. Libre Panel's own parts stay the app's (the host leaves the built-in ones out).
+
+- [x] what is installed: `libre-panel plugins` as cli.py lists it, the themes plugins bring
+      among the app's, and Settings' catalog with the plugins' services and sensor sources
+      and their options checked as declared (test_rust_plugins.py beside the Python app)
+- [x] sensor sources: opened with their options, read with the keys the themes on show want,
+      their pictures when they change
+- [x] services: started, stopped and restarted as ServiceManager does it, with the events of
+      the app's host (samples with their snapshot, the mode); what they publish, their states,
+      pictures, themes and modes asked for, and their toasts with the app's answer
+- [x] widget types and screens: drawn by Python's renderer for the theme as the app has it
+      (its palette, fonts, size, readings and their pictures, the frame's rate and progress),
+      the piece with its effects handed back and kept while it stays the same; themes checked
+      against the fields the plugins declare (lp-theme's plugins). The same pixels as the
+      Python app's frame
+- [x] transitions and toast styles: played in the host with the new theme's context (the old
+      frame sent once, each new one after it; the toast with the one it replaced), with how a
+      switch goes while one plays and how long a toast holds and lives
+- [x] editor pages: listed with the app's own, their files from their folder, their API in
+      the host with a page context of what the app tells of itself
+- [x] in the downloads: CI builds the host on Windows and Linux, runs a plugin on it, and
+      has the packaged app find it beside itself and run that plugin
 
 ### R11 packaging
 - [x] a folder to try on a Windows PC, built by CI (ci.yml's `try`, the artifact
