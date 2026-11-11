@@ -580,6 +580,174 @@ def test_one_libre_panel_drives_the_panel_and_a_second_start_names_the_first(
     assert lock == str(program.pid)
 
 
+class _Item:
+    """pystray's MenuItem as tray.py makes it: what the tests read of it."""
+
+    def __init__(
+        self,
+        text: Any,
+        action: Any,
+        checked: Any = None,
+        radio: bool = False,
+        default: bool = False,
+        enabled: bool = True,
+        visible: Any = True,
+    ) -> None:
+        self.args = (text, action, checked, radio, default, enabled, visible)
+
+
+class _Menu:
+    """pystray's Menu: its items, or what makes them as the menu opens."""
+
+    SEPARATOR = object()
+
+    def __init__(self, *items: Any) -> None:
+        self.items = items
+
+    def listed(self) -> list[Any]:
+        made = self.items[0] if len(self.items) == 1 and callable(self.items[0]) else None
+        return list(made()) if made is not None else list(self.items)
+
+
+def _as_listed(menu: _Menu) -> list[dict[str, Any]]:
+    """A menu tray.py made, as /api/tray lists one: the visible items, what each says, whether
+    it is on, a choice, the default, and its own menu; separators as they are."""
+    told: list[dict[str, Any]] = []
+    for item in menu.listed():
+        if item is _Menu.SEPARATOR:
+            told.append({"separator": True})
+            continue
+        text, action, checked, radio, default, enabled, visible = item.args
+        if not (visible(item) if callable(visible) else visible):
+            continue
+        told.append({
+            "text": text(item) if callable(text) else text,
+            "enabled": enabled,
+            "checked": checked(item) if callable(checked) else checked,
+            "radio": radio,
+            "default": default,
+            "items": _as_listed(action) if isinstance(action, _Menu) else None,
+        })  # fmt: skip
+    return told
+
+
+def _without_ids(menu: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """/api/tray's menu without what the tray's program sends back (each item's id)."""
+    return [
+        {**{k: v for k, v in item.items() if k != "id"},
+         **({"items": _without_ids(item["items"])} if item.get("items") else {})}
+        for item in menu
+    ]  # fmt: skip
+
+
+def test_the_trays_menu_is_tray_pys_and_what_is_chosen_in_it_is_done(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """tray.py's menu as the Rust app makes it for the tray's program (GET /api/tray): the
+    headline, the themes for the panel by name (those of a set apart, the one shown checked),
+    the scenes, the panel beside the first with its theme and brightness, the brightness steps,
+    the switches, the views and Quit; each item's words, whether it is on and a choice, the
+    same. And what is chosen in it (POST /api/tray) is done: a brightness step, a scene, the
+    panel beside switched on, the panel paused, Quit; the icon's picture is branding.py's."""
+    import types
+
+    from PIL import Image
+
+    from libre_panel.branding import logo
+    from libre_panel.service import BackgroundApp
+    from libre_panel.tray import Tray, tooltip
+
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / "config.toml").write_text(
+        'theme = "slate"\nfps = 2\nlanguage = "en"\n[device]\ndriver = "virtual"\n'
+        f'brightness = 50\noutput = "{(home / "panel.png").as_posix()}"\n[sensors]\n'
+        'providers = []\n[[panels]]\ntheme = "orbit"\non = false\n[panels.device]\n'
+        'driver = "virtual"\n'
+        f'output = "{(home / "panel2.png").as_posix()}"\n[[scenes]]\nname = "Work"\n'
+        'themes = ["slate"]\n[[scenes]]\nname = "Play"\nthemes = ["orbit"]\n',
+        encoding="utf-8",
+    )
+    folder = home / "themes" / "desk"
+    folder.mkdir(parents=True)
+    data = {"format": "libre-panel-theme/1", "name": "Desk", "collection": "Desk Set",
+            "display": {"model": "turing-9.2-usb", "orientation": "landscape"},
+            "widgets": [{"type": "text", "id": "t", "text": "Desk"}]}  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+    monkeypatch.setenv("LIBRE_PANEL_HOME", str(home))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(home / "xdg"))
+
+    def showing(state: dict[str, Any]) -> bool:
+        return state["state"] == "showing"
+
+    app = BackgroundApp(port=0)
+    app.start()
+    try:
+        assert _waited(lambda: True if showing(app.panel.state()) else None, 60)
+        tray = Tray(app, types.SimpleNamespace(Menu=_Menu, MenuItem=_Item), log_path=None)
+        theirs = _as_listed(tray.build_menu())
+        their_tip = tooltip(app.panel.state())
+    finally:
+        app.quit()
+        app.shutdown()
+    env = {**os.environ, "LIBRE_PANEL_DATA": str(DATA), **_libraries()}
+    with subprocess.Popen([str(_program()), "start", "--port", "0", "--no-browser"], env=env,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        try:
+            assert program.stdout is not None
+            address = program.stdout.readline().split(" running at ")[1].split()[0]
+            port, token = int(address.split(":")[2].split("/")[0]), address.split("#token=")[1]
+
+            def ask(request: str) -> tuple[str, dict[str, str], bytes]:
+                request = request.replace("{host}", f"localhost:{port}")
+                return _asked(port, request.replace("{token}", token).encode())
+
+            def told() -> dict[str, Any]:
+                return dict(json.loads(ask(_get("/api/tray", WITH))[2]))
+
+            def choose(item_id: str) -> None:
+                status = ask(_post("/api/tray", {"id": item_id}).decode())[0]
+                assert " 200 " in status, (item_id, status)
+
+            def state() -> dict[str, Any]:
+                return dict(json.loads(ask(_get("/api/app", WITH))[2])["panel"])
+
+            assert _waited(lambda: True if showing(state()) else None, 60)
+            ours = told()
+            assert _without_ids(ours["menu"]) == theirs
+            assert ours["title"] == their_tip and ours["state"] == "showing"
+            ids = {i["text"]: i for i in ours["menu"] if "text" in i}
+            assert ids["Open Libre Panel"]["id"] == "open"
+            picture = ask(_get("/api/tray/icon?state=paused&size=32", WITH))[2]
+            got = Image.open(__import__("io").BytesIO(picture))
+            assert got.tobytes() == logo(32, "paused").tobytes()
+            # what is chosen is done, as the tray's actions do it
+            # (each in a thread of its own, as tray.py's: one after the other here, each
+            # written before the next is chosen)
+            config = home / "config.toml"
+
+            def written() -> dict[str, Any]:
+                return dict(__import__("tomllib").loads(config.read_text(encoding="utf-8")))
+
+            for item_id, done in (
+                ("brightness:75", lambda c: c["device"].get("brightness") == 75),
+                ("scene:Play", lambda c: c.get("scene") == "Play"),
+                ("panel-on:0", lambda c: c["panels"][0].get("on", True) is True),
+            ):
+                choose(item_id)
+                assert _waited(lambda done=done: True if done(written()) else None, 30), item_id
+            choose("pause")
+            assert _waited(lambda: True if state()["state"] == "paused" else None, 30)
+            choose("quit")
+            program.wait(timeout=30)
+        finally:
+            if program.poll() is None:
+                program.send_signal(signal.SIGINT)
+            program.communicate(timeout=30)
+    assert program.returncode == 0
+
+
 def _waited(found: Any, seconds: float) -> Any:
     """What ``found()`` gives once it gives something, or None after ``seconds``."""
     until = time.monotonic() + seconds

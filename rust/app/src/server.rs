@@ -315,6 +315,17 @@ const ROUTES: &[Route] = &[
         x.json(&Value::Dict(i18n(s)), 200)
     }),
     private("GET", "/api/app", |s, x, _, _| app_state(s, x)),
+    // (the tray icon's program and the app: its menu, what is chosen in it, its picture;
+    // rust/desktop, tray.rs. The Python app has its icon in its own process)
+    private("GET", "/api/tray", |s, x, _, _| {
+        match s.controls.upgrade() {
+            Some(app) => x.json(&crate::tray::state(&app), 200),
+            None => x.error("this editor does not run the panel", 404, ""),
+        }
+    }),
+    private("GET", "/api/tray/icon", |s, x, _, u| {
+        tray_icon(s, x, &u.query)
+    }),
     private("GET", "/api/hardware", |s, x, _, u| {
         // (`?refresh=1`, and `?refresh`: ask the computer for its parts' names again)
         let query = crate::http::parse_qs_blank(&u.query);
@@ -409,6 +420,7 @@ const ROUTES: &[Route] = &[
     }),
     // -- writing -----------------------------------------------------------------------------------
     private("POST", "/api/app", |s, x, _, _| app_action(s, x)),
+    private("POST", "/api/tray", |s, x, _, _| tray_action(s, x)),
     private("POST", "/api/settings", |s, x, _, _| {
         settings_with(s, x, |told, asked| told.write(asked))
     }),
@@ -1691,6 +1703,49 @@ fn app_action(state: &State, exchange: &mut Exchange) {
     match app.act(&action, &value.unwrap_or(Value::None)) {
         Ok(snapshot) => exchange.json(&available(snapshot), 200),
         Err(why) => exchange.error(&why, 400, ""),
+    }
+}
+
+/// `GET /api/tray/icon?state=showing&size=32`: the app's icon with the dot for how the panel is
+/// doing, as a PNG (branding.logo).
+fn tray_icon(state: &State, exchange: &mut Exchange, query: &str) {
+    if state.controls.upgrade().is_none() {
+        return exchange.error("this editor does not run the panel", 404, "");
+    }
+    let asked = crate::http::parse_qs_blank(query);
+    let first = |key: &str| asked.get(key).and_then(|values| values.first()).cloned();
+    let size = first("size").and_then(|size| size.parse::<usize>().ok());
+    let size = size.filter(|size| (16..=256).contains(size)).unwrap_or(64);
+    let status = first("state").unwrap_or_default();
+    let png = lp_render::branding::logo(size, Some(&status))
+        .map_err(|why| why.0)
+        .and_then(|picture| {
+            lp_devices::png::encode_with(&picture, lp_devices::png::Compression::new(6))
+                .map_err(|why| why.to_string())
+        });
+    match png {
+        Ok(png) => exchange.send(200, &png, "image/png", ""),
+        Err(why) => exchange.error(&why, 500, ""),
+    }
+}
+
+/// `POST /api/tray {"id": ...}`: an item of the tray's menu chosen; done in the background.
+fn tray_action(state: &State, exchange: &mut Exchange) {
+    let Some(payload) = exchange.read_json(MAX_JSON) else {
+        return;
+    };
+    let Some(app) = state.controls.upgrade() else {
+        return exchange.error("this editor does not run the panel", 404, "");
+    };
+    match payload {
+        Value::Dict(payload) => match payload.get("id") {
+            Some(Value::Str(id)) => {
+                crate::tray::act(app, id.clone());
+                exchange.json(&Value::Dict(Dict::new()), 200);
+            }
+            _ => exchange.error("expected {\"id\": ...}", 400, ""),
+        },
+        _ => exchange.error("expected {\"id\": ...}", 400, ""),
     }
 }
 

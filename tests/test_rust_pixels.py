@@ -719,6 +719,20 @@ def test_thumbnails_image_ops_extrema_and_gradients_are_pillow_s():
     check(pairs)
 
 
+def test_the_apps_icon_is_branding_pys_with_the_trays_dot() -> None:
+    """branding.logo: the mark on its tile with its glow, as the window and the tray show it,
+    with the dot for each state of the panel and none, at the sizes the tray and the window
+    take."""
+    from libre_panel.branding import STATUS_COLORS, logo
+
+    pairs = [
+        ({"op": "logo", "size": size, "status": status}, logo(size, status))
+        for size in (16, 32, 64)
+        for status in (None, "stopped", *STATUS_COLORS)
+    ]
+    check(pairs)
+
+
 def _few_colours(rng: random.Random, w: int, h: int) -> Image.Image:
     """An RGB picture of one of the kinds a quantizer meets: noise, a few colours, smooth
     light, shapes on a ground, or values that repeat along a channel (ties along an axis)."""

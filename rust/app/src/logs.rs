@@ -69,6 +69,14 @@ pub fn to_file() -> std::io::Result<PathBuf> {
     Ok(path)
 }
 
+/// The log file the app writes into, while it does.
+pub fn file() -> Option<PathBuf> {
+    let sink = SINK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    sink.as_ref().map(|sink| sink.path.clone())
+}
+
 /// logging.Formatter's asctime: the local time, and its milliseconds.
 pub(crate) fn asctime() -> String {
     let now = std::time::SystemTime::now()

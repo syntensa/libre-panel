@@ -2098,7 +2098,22 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       saves a theme's export where the person chooses; it closes as the app quits. The test
       (Linux, an X server of Xvfb's): the window opens, a second start brings the same one
       forward, the app's quit closes it and its size is kept, no browser opens
-- [ ] the tray icon, the command line, autostart, updates, languages, the log, light mode
+- [x] the tray's menu (tray.py's Tray.build_menu), made by the app for the tray icon's program
+      (`GET /api/tray`: the icon's state, its tooltip and the menu, the items that are not
+      visible left out; `POST /api/tray {"id"}`: what is chosen, done in a thread of its own as
+      tray.py's _later; `GET /api/tray/icon`: branding.logo with the dot, to the bit): the
+      headline and what needs doing, the themes for the panel by name with those of a set
+      apart, the scenes, each panel beside the first with its theme and brightness and "Which
+      is which?", the brightness, the timer while it runs, the switches, the views, the folders
+      and Quit. These routes are the Rust app's own (the Python app has its icon in its own
+      process). A failed choice is logged; Python's tray also says it as the icon's notice.
+      The test: tray.py's menu and the Rust one for the same settings, item by item, and a
+      brightness step, a scene, a panel switched on, a pause and Quit chosen in it
+- [x] the start at login from the app (BackgroundApp.set_autostart: the tray's switch, Settings'
+      in the app's own words) and its state in `/api/app`; "Which is which?" (identify.py):
+      every panel's number for six seconds instead of its frame, in the theme's accent; the
+      shortcut and the tray's "Open" open the window
+- [ ] the tray icon's program, the command line, updates, languages, the log, light mode
 - [x] the background app (service.py's PanelService and BackgroundApp, as far as there is no
       window yet; `libre-panel start`): the panel's loop in a thread that is paused, resumed
       and started anew, with the services and the shortcuts beside it, which go on while the

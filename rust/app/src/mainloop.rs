@@ -1023,10 +1023,26 @@ impl MainLoop {
         }
         let crit = renderer.theme.palette.get("crit").and_then(Value::as_str);
         let still = self.config.fps <= 1 || self.config.device.motion == "calm";
-        match self.alarm.draw(&frame, now, crit, still) {
+        let frame = match self.alarm.draw(&frame, now, crit, still) {
             Ok(Some(edged)) => edged,
             _ => frame,
+        };
+        // which panel is which: its number instead, a moment
+        if crate::identify::showing() {
+            let accent = (renderer.theme.palette.get("accent").and_then(Value::as_str))
+                .filter(|accent| !accent.is_empty());
+            let number = self.beside.as_ref().map_or(1, |beside| beside.n + 2);
+            let env = lp_theme::Env {
+                fonts_dir: self.home.fonts(),
+            };
+            let size = (frame.width(), frame.height());
+            let colour = accent.unwrap_or(crate::identify::ACCENT);
+            match crate::identify::picture(&env, number, size, colour) {
+                Ok(numbered) => return numbered,
+                Err(why) => say(&format!("the panel's number not drawn: {why}")),
+            }
         }
+        frame
     }
 
     /// One frame: config.toml followed, the theme that is due drawn of the readings and

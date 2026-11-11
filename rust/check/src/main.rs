@@ -756,6 +756,13 @@ fn run(case: &Value) -> Result<Value, String> {
             let extrema = image_of(&case["image"])?.getextrema();
             json!({"extrema": extrema.map(|v| v.iter().map(|&(a, b)| vec![a, b]).collect::<Vec<_>>())})
         }
+        "logo" => {
+            // branding.logo(size, status): the app's icon, with the tray's dot
+            let size = case["size"].as_u64().unwrap_or(64) as usize;
+            let picture =
+                lp_render::branding::logo(size, case["status"].as_str()).map_err(|e| e.0)?;
+            json!({"image": value_of(&picture)})
+        }
         "linear_gradient" => json!({"image": value_of(&Image::linear_gradient())}),
         "radial_gradient" => json!({"image": value_of(&Image::radial_gradient())}),
         "open" => {

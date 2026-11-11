@@ -456,6 +456,8 @@ fn held(config: &Config) -> indexmap::IndexMap<String, String> {
 pub struct BackgroundApp {
     home: Home,
     config_file: PathBuf,
+    /// what the start at login runs: this program's `tray --background`, with the --config asked
+    autostart_command: Vec<String>,
     /// the port asked for the app's server (another is used if it is taken)
     port: u16,
     company: Arc<Company>,
@@ -488,6 +490,7 @@ impl BackgroundApp {
                 let _ = thread.spawn(move || hotkeys.apply(&named));
             })));
             BackgroundApp {
+                autostart_command: crate::autostart::launch_command(asked.config.as_deref()),
                 config_file,
                 port: asked.port.unwrap_or(crate::server::PORT),
                 panel: PanelService::new(home.clone(), asked, Arc::clone(&company)),
@@ -659,7 +662,13 @@ impl BackgroundApp {
                 }
                 _ => return Err("upside_down must be true or false".into()),
             },
-            "autostart" | "identify" | "show_transition" => {
+            "autostart" => match value {
+                Value::Bool(on) => self.set_autostart(*on)?,
+                _ => return Err("autostart must be true or false".into()),
+            },
+            // which panel is which: each shows its number
+            "identify" => crate::identify::show(),
+            "show_transition" => {
                 return Err(format!("{action} is not in this build yet"));
             }
             "quit" => {
@@ -676,6 +685,108 @@ impl BackgroundApp {
             other => return Err(format!("unknown action {}", lp_py::repr(other))),
         }
         Ok(self.snapshot())
+    }
+
+    pub fn home(&self) -> &Home {
+        &self.home
+    }
+
+    pub fn config_file(&self) -> &std::path::Path {
+        &self.config_file
+    }
+
+    /// quit: Libre Panel asked to end (the tray's Quit).
+    pub fn quit(&self) {
+        self.quit_requested.store(true, Ordering::Relaxed);
+    }
+
+    /// The log file, where the app writes one (the tray's "Open log").
+    pub fn log_file(&self) -> Option<PathBuf> {
+        crate::logs::file()
+    }
+
+    /// How the timer stands, while it runs (the timer service's summary).
+    pub fn timer(&self) -> Option<Value> {
+        self.company.summary("timer")
+    }
+
+    /// active_theme: the theme of the normal page: config.toml's, else the panel's own default.
+    pub fn active_theme(&self) -> Option<String> {
+        let config = self.config().ok()?;
+        if config.theme_given {
+            return Some(config.theme);
+        }
+        let running = match self.panel.state().get("default_theme") {
+            Some(Value::Str(theme)) if !theme.is_empty() => Some(theme.clone()),
+            _ => None,
+        };
+        let places = self.home.places();
+        let model = crate::settings::panel_model(&config);
+        Some(
+            running
+                .unwrap_or_else(|| lp_theme::defaults::default_theme(model, &places).to_string()),
+        )
+    }
+
+    /// clip_question: whether the person is still to be asked for the panel's standby clip
+    /// (Start asks; the tray points to it): on a panel it is proven on, the one config.toml
+    /// names, else the one the loop sends to. Nothing here looks at the USB bus.
+    pub fn clip_question(&self) -> bool {
+        let Ok(config) = self.config() else {
+            return false;
+        };
+        let device = &config.device;
+        let video = &device.video;
+        if !["auto", "turzx"].contains(&device.driver.as_str()) || video.mode != "auto" {
+            return false;
+        }
+        if !video.local_clip.is_empty() || video.clip_asked {
+            return false;
+        }
+        let target = match self.panel.state().get("target") {
+            Some(Value::Str(target)) => target.clone(),
+            _ => String::new(),
+        };
+        let model = lp_devices::models::find_model(&device.model).or_else(|| {
+            (lp_devices::models::MODELS.iter())
+                .find(|model| model.video && target.starts_with(&model.label()))
+        });
+        model.is_some_and(|model| {
+            lp_devices::turzx::video_gaps(&video.local_clip, Some(model), true) == ["clip"]
+        })
+    }
+
+    fn autostart(&self) -> crate::autostart::Autostart {
+        crate::autostart::Autostart::new(&self.autostart_command[0])
+    }
+
+    /// set_autostart: Libre Panel started at login (its background app), or no longer.
+    pub fn set_autostart(&self, enabled: bool) -> Result<(), String> {
+        let autostart = self.autostart();
+        if enabled {
+            let icon = self.home.data.join("assets").join("libre-panel.png");
+            let at = (autostart.enable(&self.autostart_command, false, &icon)).map_err(|e| e.0)?;
+            crate::logs::log(
+                crate::logs::Level::Info,
+                "libre_panel.service",
+                &format!("autostart enabled: {at}"),
+            );
+        } else if autostart.disable().map_err(|e| e.0)? {
+            crate::logs::log(
+                crate::logs::Level::Info,
+                "libre_panel.service",
+                "autostart disabled",
+            );
+        }
+        Ok(())
+    }
+
+    /// open: the app shown on `view`, in its window (opened or brought to the front), or in
+    /// the browser where there can be no window; its address (None while it has no server).
+    pub fn open(&self, view: &str) -> Option<String> {
+        let address = self.start_editor()?;
+        crate::window::open_window(&self.home.settings, &address, Some(view), false, None);
+        Some(address)
     }
 
     /// The panel's brightness as config.toml has it; None where the file cannot be read.
@@ -716,7 +827,7 @@ impl BackgroundApp {
                     failed(why);
                 }
             }
-            "open" => say("the app's window is not in this build yet"),
+            "open" => drop(self.open("home")),
             // the scene after the one that is on
             "next_scene" => {
                 match lp_config::scenes::next_one(&self.config_file, lp_config::platform()) {
@@ -774,6 +885,13 @@ impl BackgroundApp {
         told.insert("brightness".into(), brightness);
         let turned = self.upside_down().map_or(Value::None, Value::Bool);
         told.insert("upside_down".into(), turned);
+        let autostart = self.autostart();
+        let enabled = autostart.is_enabled().map_or(Value::None, Value::Bool);
+        told.insert("autostart".into(), enabled);
+        told.insert(
+            "autostart_location".into(),
+            Value::Str(autostart.location()),
+        );
         told.insert("can_quit".into(), Value::Bool(true));
         told.insert("hotkeys".into(), Value::Dict(self.hotkeys.state()));
         told

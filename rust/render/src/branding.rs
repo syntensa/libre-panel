@@ -1,12 +1,12 @@
 //! The Libre Panel mark, drawn in code (branding.py): a gauge's ring, open at the bottom, lit
 //! from the lower left over the top to the right and dark for its last part, round three bars
-//! that rise to the right, the last one lit. So far the mark alone without its glow, as the
-//! panel's own screens take it (render/boot.rs); the app's icon, the tray's and the SVG are
+//! that rise to the right, the last one lit: the mark alone, as the panel's own screens take it
+//! (render/boot.rs), and the app's icon with its glow and the tray's dot (`logo`); the SVG is
 //! still Python's.
 
 use std::hint::black_box;
 
-use lp_pixels::{Draw, Image, Mode, ALL_CORNERS};
+use lp_pixels::{Draw, Filter, Image, Mode, ALL_CORNERS};
 
 use crate::piece::{Failed, Result};
 
@@ -123,5 +123,90 @@ pub fn mark(diameter: f64, light: f64) -> Result<Image> {
         .convert(Mode::RGBa)
         .and_then(|s| s.reduce(SCALE, SCALE, None))
         .and_then(|s| s.convert(Mode::RGBA))
+        .map_err(failed)
+}
+
+/// STATUS_COLORS: the tray icon's dot for how the panel is doing.
+fn status_colour(status: &str) -> Option<[u8; 3]> {
+    Some(match status {
+        "showing" => [34, 197, 94],
+        "waiting" | "starting" => [245, 158, 11],
+        "paused" => [100, 116, 139],
+        "error" => [239, 68, 68],
+        _ => return None,
+    })
+}
+
+/// logo(size, status): the app's icon, the mark on a rounded tile, its light glowing; with a
+/// dot for `status` where it has a colour (the tray). Drawn at four times the size and reduced.
+pub fn logo(size: usize, status: Option<&str>) -> Result<Image> {
+    let s = size * 4;
+    let sf = s as f64;
+    let mut img = Image::blank(Mode::RGBA, s, s);
+    let mut tile = Image::blank(Mode::L, s, s);
+    let corner = (sf - 1.0, sf - 1.0);
+    Draw::new(&mut tile)
+        .rounded_rectangle(
+            (0.0, 0.0, corner.0, corner.1),
+            sf * 0.22,
+            Some([255, 0, 0, 0]),
+            None,
+            1,
+            ALL_CORNERS,
+        )
+        .map_err(failed)?;
+    let (top, bottom) = ([22u8, 32, 48], [9u8, 13, 20]);
+    let gradient = Image::linear_gradient()
+        .resize(s, s, Filter::Bicubic, None, None)
+        .map_err(failed)?;
+    let body = lp_pixels::chops::composite(
+        &Image::new(Mode::RGB, s, s, &bottom),
+        &Image::new(Mode::RGB, s, s, &top),
+        &gradient,
+    )
+    .and_then(|body| body.convert(Mode::RGBA))
+    .map_err(failed)?;
+    img.paste(&body, 0, 0, Some(&tile)).map_err(failed)?;
+    let radius = sf * 0.335 / extent();
+    let centre = (sf / 2.0, sf / 2.0 + lift() * radius);
+    let none = [0, 0, 0, 0];
+    let [ar, ag, ab] = libre("accent");
+    let accent = [ar, ag, ab, 255];
+    let mut lit = Image::blank(Mode::RGBA, s, s);
+    paint(&mut Draw::new(&mut lit), centre, radius, accent, none, none)?;
+    let glow = (sf * 0.03) as f32;
+    let glow = lit.gaussian_blur(glow, glow).map_err(failed)?;
+    img = lp_pixels::alpha_composite(&img, &glow).map_err(failed)?;
+    let [tr, tg, tb] = libre("text");
+    let [kr, kg, kb] = TRACK;
+    paint(
+        &mut Draw::new(&mut img),
+        centre,
+        radius,
+        accent,
+        [tr, tg, tb, 255],
+        [kr, kg, kb, 255],
+    )?;
+    if let Some([r, g, b]) = status.and_then(status_colour) {
+        let dot = sf * 0.17;
+        let (x, y) = (sf - dot - sf * 0.02, sf - dot - sf * 0.02);
+        let rim = dot + sf * 0.03;
+        let mut draw = Draw::new(&mut img);
+        draw.ellipse(
+            (x - rim, y - rim, x + rim, y + rim),
+            Some([9, 13, 20, 255]),
+            None,
+            1,
+        )
+        .map_err(failed)?;
+        draw.ellipse(
+            (x - dot, y - dot, x + dot, y + dot),
+            Some([r, g, b, 255]),
+            None,
+            1,
+        )
+        .map_err(failed)?;
+    }
+    img.resize(size, size, Filter::Lanczos, None, None)
         .map_err(failed)
 }
