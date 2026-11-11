@@ -23,6 +23,13 @@ mod show;
 #[path = "../../app/src/window.rs"]
 mod window;
 
+/// What home.rs takes from the app's plugins.rs: the window looks for no themes.
+mod plugins {
+    pub fn theme_folders(_settings: &std::path::Path) -> Vec<std::path::PathBuf> {
+        Vec::new()
+    }
+}
+
 /// What logs.rs takes from the app's autostart.rs.
 mod autostart {
     /// The person's own folder.

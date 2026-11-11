@@ -1261,6 +1261,44 @@ fn system_setup_command(args: &[String]) -> Result<u8, String> {
     ))
 }
 
+/// _double_clicked: whether this console program (libre-panel.exe of the Windows downloads)
+/// was started with a double click: Windows then made a console for it alone, not a terminal
+/// it runs in.
+#[cfg(windows)]
+fn double_clicked() -> bool {
+    use windows_sys::Win32::System::Console::GetConsoleProcessList;
+    if !crate::settings::packaged() {
+        return false;
+    }
+    let mut ids = [0u32; 4];
+    // SAFETY: the list is written into `ids`, of the length given
+    unsafe { GetConsoleProcessList(ids.as_mut_ptr(), ids.len() as u32) == 1 }
+}
+
+#[cfg(not(windows))]
+fn double_clicked() -> bool {
+    false
+}
+
+/// (here, not in window.rs, which the desktop programs share: only this program hands over)
+/// _hand_over_to_the_app: a double click on libre-panel.exe starts the app as LibrePanel.exe
+/// does (LibrePanel.exe started, on its own), so that the console goes at once. Whether it
+/// was handed over.
+pub fn hand_over() -> bool {
+    if !double_clicked() {
+        return false;
+    }
+    let Ok(windowed) = window::sibling("LibrePanel") else {
+        return false;
+    };
+    if !windowed.is_file() {
+        return false;
+    }
+    let mut command = std::process::Command::new(windowed);
+    window::detached(&mut command);
+    command.spawn().is_ok()
+}
+
 /// main: the program: the command its arguments name, else `default` ("start" for
 /// libre-panel, "tray" for LibrePanel.exe, as the Python downloads' programs have it).
 pub fn main(default: &str) -> ExitCode {
@@ -1274,7 +1312,7 @@ pub fn main(default: &str) -> ExitCode {
     // a double click on libre-panel.exe, the command line's program, starts the app as
     // LibrePanel.exe does, and its console goes at once (it would else stay open as long as
     // the app runs, and closing it would end the app)
-    if default == "start" && args.is_empty() && leading.is_empty() && window::hand_over() {
+    if default == "start" && args.is_empty() && leading.is_empty() && hand_over() {
         return ExitCode::SUCCESS;
     }
     // (`--version`, as cli.py's parser has it)

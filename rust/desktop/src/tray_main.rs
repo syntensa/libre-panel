@@ -220,7 +220,20 @@ fn main() {
         std::process::exit(1);
     };
 
-    let mut event_loop = EventLoopBuilder::<Told>::with_user_event().build();
+    // (tray.py: without a desktop to put it on there is no tray icon, and Libre Panel keeps
+    // running without one; GTK, which tao starts, panics where it finds no display)
+    let no_display = |name: &str| std::env::var_os(name).is_none_or(|value| value.is_empty());
+    if cfg!(target_os = "linux") && no_display("DISPLAY") && no_display("WAYLAND_DISPLAY") {
+        say("no tray icon (no desktop); Libre Panel keeps running without one");
+        return;
+    }
+    std::panic::set_hook(Box::new(|_| {}));
+    let built = std::panic::catch_unwind(|| EventLoopBuilder::<Told>::with_user_event().build());
+    let _ = std::panic::take_hook();
+    let Ok(mut event_loop) = built else {
+        say("no tray icon (the desktop has none to offer); Libre Panel keeps running without one");
+        return;
+    };
     let proxy = event_loop.create_proxy();
     let told = proxy.clone();
     MenuEvent::set_event_handler(Some(move |chosen: MenuEvent| {

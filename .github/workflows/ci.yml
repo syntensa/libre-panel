@@ -405,8 +405,10 @@ jobs:
           cp rust/app/try-windows.txt libre-panel-rust/README.txt
           cp "$libs/freetype/Release/freetype.dll" "$libs/jpeg/Release/jpeg62.dll" libre-panel-rust/
           cp "$libs"/webp/Release/*.dll libre-panel-rust/
-          for part in themes fonts locale assets; do
-            cp -r "src/libre_panel/$part" libre-panel-rust/share/libre-panel/
+          # (the app's pages, the old editor's files and those of the built-in pages too)
+          for part in themes fonts locale assets editor/app editor/static pages/web; do
+            mkdir -p "libre-panel-rust/share/libre-panel/$(dirname "$part")"
+            cp -r "src/libre_panel/$part" "libre-panel-rust/share/libre-panel/$part"
           done
           find libre-panel-rust/share -name __pycache__ -prune -exec rm -rf {} +
           find libre-panel-rust/share -name "*.py" -delete
@@ -570,8 +572,9 @@ jobs:
           mkdir -p "$app/share/libre-panel" "$app/licenses" "$app/lib"
           cp rust/target/release/libre-panel rust/target/release/libre-panel-window \
             rust/target/release/libre-panel-tray "$app/"
-          for part in themes fonts locale assets; do
-            cp -r "src/libre_panel/$part" "$app/share/libre-panel/"
+          for part in themes fonts locale assets editor/app editor/static pages/web; do
+            mkdir -p "$app/share/libre-panel/$(dirname "$part")"
+            cp -r "src/libre_panel/$part" "$app/share/libre-panel/$part"
           done
           find "$app/share" -name __pycache__ -prune -exec rm -rf {} +
           find "$app/share" -name "*.py" -delete
