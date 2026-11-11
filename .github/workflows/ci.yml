@@ -408,10 +408,11 @@ jobs:
           find libre-panel-rust/share -name __pycache__ -prune -exec rm -rf {} +
           find libre-panel-rust/share -name "*.py" -delete
           cp LICENSE libre-panel-rust/licenses/LICENSE-libre-panel.txt
-          # (PresentMon, as the downloads carry it: pinned and checked by fetch_tools.py above)
+          # (ffmpeg, PresentMon and PawnIO's installer, as the downloads carry them: pinned and
+          # checked by fetch_tools.py above, with their licences and SOURCES.txt)
           mkdir -p libre-panel-rust/tools
-          cp "$RUNNER_TEMP/tools/PresentMon.exe" libre-panel-rust/tools/
-          cp packaging/tools-licenses/PresentMon-*.txt libre-panel-rust/licenses/
+          cp -r "$RUNNER_TEMP/tools/." libre-panel-rust/tools/
+          test -f libre-panel-rust/tools/ffmpeg.exe && test -f libre-panel-rust/tools/PawnIO_setup.exe
           cp NOTICE.md libre-panel-rust/licenses/
           cp "$libs/freetype-2.14.3/LICENSE.TXT" libre-panel-rust/licenses/LICENSE-freetype.txt
           cp "$libs/freetype-2.14.3/docs/FTL.TXT" libre-panel-rust/licenses/FTL-freetype.txt
@@ -455,8 +456,9 @@ jobs:
 
   try:
     # Libre Panel in Rust to try on a PC with a panel: libre-panel.exe and what it loads (the
-    # job `rust`), with the engine that sends a TURZX panel its video (the job `engine`)
-    needs: [engine, rust]
+    # job `rust`), with the engine that sends a TURZX panel its video (the job `engine`) and
+    # the sensor service (the job `sensor-host`) in "sensors", as the downloads carry it
+    needs: [engine, rust, sensor-host]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -468,7 +470,16 @@ jobs:
         with:
           name: engine-windows
           path: libre-panel-rust/tools
-      - run: ls -R libre-panel-rust | head -60 && test -f libre-panel-rust/tools/libre-panel-engine.exe
+      - uses: actions/download-artifact@v4
+        with:
+          name: sensors-windows
+          path: libre-panel-rust/sensors
+      - run: |
+          ls -R libre-panel-rust | head -80
+          test -f libre-panel-rust/tools/libre-panel-engine.exe
+          test -f libre-panel-rust/tools/ffmpeg.exe
+          test -f libre-panel-rust/sensors/libre-panel-sensors.exe
+          test -d libre-panel-rust/sensors/lhm
       - uses: actions/upload-artifact@v4
         with:
           name: libre-panel-rust-windows
@@ -520,6 +531,14 @@ jobs:
         if: always()
         shell: bash
         run: cat sensorhost/bin/Release/logs/service.log 2>/dev/null || true
+      # (for the job `try`: the folder the downloads carry as "sensors", without its log)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sensors-windows
+          path: |
+            sensorhost/bin/Release
+            !sensorhost/bin/Release/logs/**
+          retention-days: 7
 
   desktop:
     # The app in a real browser (every test that needs one: the others skip them), the tray
