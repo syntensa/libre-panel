@@ -6,6 +6,14 @@ on:
   pull_request:
   # (release.yml: the downloads of a release are those this workflow builds and tries)
   workflow_call:
+  # by hand: "quick" builds and packages the downloads and tries them, without the test suites
+  # and the Rust comparisons (an hour on Windows): to see a change of the packaging in minutes
+  workflow_dispatch:
+    inputs:
+      quick:
+        description: "Only build, package and try the downloads (no test suites)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -32,6 +40,7 @@ jobs:
 
   test:
     # Windows takes about 20 minutes for the suite, and a slow runner more
+    if: ${{ !inputs.quick }}
     timeout-minutes: 50
     strategy:
       fail-fast: false
@@ -372,6 +381,7 @@ jobs:
           cmake --build freetype --config Release --parallel > /dev/null
           ls freetype/Release/*.dll
       - name: The crates against the Python app
+        if: ${{ !inputs.quick }}
         run: python -u -X faulthandler -m pytest -v -rfE --durations=20 tests/test_rust_py.py tests/test_rust_pixels.py tests/test_rust_decode.py tests/test_rust_text.py tests/test_rust_theme.py tests/test_rust_modules.py tests/test_rust_render.py tests/test_rust_toasts.py tests/test_rust_transitions.py tests/test_rust_alarm.py tests/test_rust_boot.py tests/test_rust_video.py tests/test_rust_devices.py tests/test_rust_config.py tests/test_rust_sensors.py tests/test_rust_services.py tests/test_rust_app.py tests/test_rust_plugins.py
       - name: The stacks of a comparison that hung
         if: failure()
@@ -380,7 +390,7 @@ jobs:
       # the app's server answering as Python's, request by request, and the running app with a
       # simulated panel (on Windows not yet: its paths and programs are told apart there)
       - name: The app's server against the Python app's (Linux)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && !inputs.quick
         run: python -m pytest -q --durations=20 tests/test_rust_server.py tests/test_rust_wayland.py
       # lp-panel, for a panel's owner to try the panel with the driver in Rust (the MAJESTY
       # 9.16"'s first): with the libjpeg it saves its pictures with, and their licences
@@ -764,6 +774,7 @@ jobs:
   desktop:
     # The app in a real browser (every test that needs one: the others skip them), the tray
     # icon on a real X11 tray, and keyboard shortcuts pressed on an X server.
+    if: ${{ !inputs.quick }}
     timeout-minutes: 30
     runs-on: ubuntu-latest
     steps:
