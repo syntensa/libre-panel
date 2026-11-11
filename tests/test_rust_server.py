@@ -3253,3 +3253,201 @@ def test_the_load_on_the_pc_is_measured_as_load_report_py_measures_it(tmp_path: 
                 program.wait(10)
     finally:
         rig.close()
+
+
+_XRANDR = r"""#!{python} -I
+import os, sys
+log = os.environ["FAKE_X11_LOG"]
+args = sys.argv[1:]
+with open(log, "a", encoding="utf-8") as out:
+    out.write(" ".join(["xrandr", *args]) + "\n")
+said = open(log, encoding="utf-8").read().splitlines()
+made = max((i for i, l in enumerate(said) if "--setmonitor" in l), default=-1)
+gone = max((i for i, l in enumerate(said) if "--delmonitor" in l), default=-1)
+if args == ["--listmonitors"]:
+    own = made > gone
+    print(f"Monitors: {{2 + own}}")
+    print(" 0: +*DP-1 2560/597x1440/336+0+0  DP-1")
+    print(" 1: +HDMI-1 1920/527x1080/296+2560+0  HDMI-1")
+    if own:
+        print(" 2: LibrePanel 480/127x1920/508+4480+0  none")
+elif args == ["-q"]:
+    print("Screen 0: minimum 8 x 8, current 4480 x 1440, maximum 32767 x 32767")
+"""
+
+_XPROP = r"""#!{python} -I
+import sys
+args = sys.argv[1:]
+if args[:2] == ["-root", "_NET_CLIENT_LIST"]:
+    print("_NET_CLIENT_LIST(WINDOW): window id # 0x1400003, 0x2200007, 0x3a00001")
+elif args[:2] == ["-id", "0x1400003"]:
+    print('_NET_WM_NAME(UTF8_STRING) = "Terminal — say \\"hi\\""')
+    print('WM_CLASS(STRING) = "gnome-terminal-server", "Gnome-terminal"')
+    print("_NET_WM_STATE(ATOM) = ")
+elif args[:2] == ["-id", "0x2200007"]:
+    print('_NET_WM_NAME(UTF8_STRING) = "Panel"')
+    print('WM_CLASS(STRING) = "panel", "Panel"')
+    print("_NET_WM_STATE(ATOM) = _NET_WM_STATE_SKIP_TASKBAR")
+elif args[:2] == ["-id", "0x3a00001"]:
+    print('_NET_WM_NAME(UTF8_STRING) = "Firefox"')
+    print('WM_CLASS(STRING) = "Navigator", "firefox"')
+"""
+
+_FFMPEG = r"""#!{python} -I
+import os, re, sys
+with open(os.environ["FAKE_X11_LOG"], "a", encoding="utf-8") as out:
+    out.write(" ".join(["ffmpeg", *sys.argv[1:]]) + "\n")
+size = re.findall(r"scale=(\d+):(\d+)", " ".join(sys.argv))[-1]
+frame = bytes([0, 200, 100]) * (int(size[0]) * int(size[1]))
+try:
+    while True:
+        sys.stdout.buffer.write(frame)
+        sys.stdout.buffer.flush()
+except (BrokenPipeError, OSError):
+    pass
+"""
+
+
+@pytest.fixture
+def x11(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """An X11 desktop of programs that say what xrandr, xprop and ffmpeg would (two monitors,
+    windows, a monitor of the panel's own once made), set before the servers start; each call
+    written to the log the environment names."""
+    folder = tmp_path / "x11bin"
+    folder.mkdir()
+    for name, text in (("xrandr", _XRANDR), ("xprop", _XPROP), ("ffmpeg", _FFMPEG)):
+        program = folder / name
+        program.write_text(text.format(python=sys.executable), encoding="utf-8")
+        program.chmod(0o755)
+    log = tmp_path / "x11.log"
+    log.write_text("", encoding="utf-8")
+    monkeypatch.setenv("PATH", f"{folder}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("DISPLAY", ":7")
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    monkeypatch.delenv("XDG_SESSION_TYPE", raising=False)
+    monkeypatch.setenv("FAKE_X11_LOG", str(log))
+    return log
+
+
+@pytest.mark.skipif(os.name == "nt", reason="an X11 desktop")
+def test_the_screen_a_panel_can_show_is_told_as_mirror_py_tells_it(x11: Path, servers: Any) -> None:
+    """Screen (/api/mirror) on X11: the monitors xrandr lists, the windows xprop does (one that
+    skips the taskbar left out), the panels, the fits and the panel's own monitor as Python
+    tells them; showing without the running app, a source that is none and setting up without
+    a panel's size refused in the same words."""
+    ask, homes = servers
+    for path in ("/api/mirror", "/api/mirror?windows=1"):
+        theirs, ours = ask(_get(path, WITH))
+        assert ours[0] == theirs[0] == "HTTP/1.0 200 OK", ours[2]
+        told = json.loads(ours[2])
+        assert told == json.loads(theirs[2]), path
+    assert told["platform"] == "x11" and [m["id"] for m in told["monitors"]] == ["DP-1", "HDMI-1"]
+    assert [w["title"] for w in told["windows"]] == ['Terminal — say \\"hi\\"', "Firefox"]
+    assert told["extend"] == {"how": "xrandr", "ready": True, "missing": "", "running": False,
+                              "said": "", "error": ""}  # fmt: skip
+    source = {"kind": "monitor", "id": "DP-1"}
+    for body in ({"action": "show", "source": source}, {"action": "stop"},
+                 {"action": "setup"}, {"action": "nope"}, [1], {}):  # fmt: skip
+        theirs, ours = ask(_post("/api/mirror", body))
+        assert ours[0] == theirs[0], body
+        assert json.loads(ours[2]) == json.loads(theirs[2]), body
+    from libre_panel import mirror
+
+    for raw in (None, {"kind": "tv"}, {"kind": "monitor"}, {"kind": "monitor", "id": 3},
+                {"kind": "window", "id": "0x1", "region": [0, 0, 8, 8]},
+                {"kind": "monitor", "id": "DP-1", "region": [0, 0, 100, True]},
+                {"kind": "monitor", "id": "DP-1", "fit": "zoom"}):  # fmt: skip
+        with pytest.raises(mirror.MirrorError) as said:
+            mirror.source_of(raw)
+        assert str(said.value), raw
+
+
+@pytest.mark.skipif(os.name == "nt", reason="an X11 desktop")
+def test_a_panel_shows_a_monitor_and_its_own_as_mirror_py_does(x11: Path, tmp_path: Path) -> None:
+    """The running app with a simulated panel on X11: a part of a monitor shown on the panel,
+    captured with ffmpeg's command line as Python's and its pictures on the panel; the panel's
+    own monitor made with xrandr's calls as extend.py's and taken off again; stopped, the theme
+    again."""
+    from libre_panel import capture, extend, mirror
+
+    rig = Rig(tmp_path)
+    try:
+        rig.config(
+            'theme = "slate"\nlanguage = "en"\n[device]\ndriver = "turzx"\n'
+            'model = "turing-9.2-usb"\n[video]\nmode = "off"\n[sensors]\nproviders = []\n'
+        )
+        env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+               **_libraries(), **rig.env()}  # fmt: skip
+        command = [str(_program()), "start", "--port", "0", "--no-browser"]
+        with subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              encoding="utf-8") as program:  # fmt: skip
+            try:
+                assert program.stdout is not None
+                address = program.stdout.readline().split(" running at ")[1].split()[0]
+                port = int(address.split(":")[2].split("/")[0])
+                token = address.split("#token=")[1]
+
+                def ask(request: str | bytes) -> tuple[str, Any]:
+                    text = request if isinstance(request, bytes) else request.encode("utf-8")
+                    text = text.replace(b"{host}", f"127.0.0.1:{port}".encode())
+                    text = text.replace(b"{token}", token.encode())
+                    status, _, answer = _asked(port, text)
+                    return status.split(" ", 2)[1], json.loads(answer)
+
+                def green(frame: Any) -> bool:
+                    colours = frame.convert("RGB").getcolors(4)
+                    return colours is not None and [c for _, c in colours] == [(0, 200, 100)]
+
+                assert _waited(lambda: len(rig.fake.frames) > 0 or None, 30), "no frame shown"
+                status, told = ask(_get("/api/mirror", WITH))
+                assert status == "200" and told["available"] and told["size"] == [1920, 480]
+                source = {
+                    "kind": "monitor",
+                    "id": "HDMI-1",
+                    "name": "HDMI-1",
+                    "region": [100, 51, 801, 600],
+                    "fit": "stretch",
+                    "cursor": False,
+                }
+                status, told = ask(_post("/api/mirror", {"action": "show", "source": source}))
+                assert status == "200" and told["showing"]["source"] == source, told
+                before = len(rig.fake.frames)
+                assert _waited(lambda: any(green(f) for f in rig.fake.frames[before:]) or None,
+                               30), "the screen is not shown"  # fmt: skip
+                calls = x11.read_text(encoding="utf-8").splitlines()
+                line = next(c for c in calls if c.startswith("ffmpeg "))
+                rate = int(line.split(",fps=")[1].split()[0])
+                monitor = capture.find_monitor("HDMI-1", "x11")
+                found = capture.monitor_capture("ffmpeg", monitor, rate, False, (100, 51, 801, 600),
+                                                "x11")  # fmt: skip
+                wanted = mirror.frames_command("ffmpeg", found, (1920, 480), "stretch", rate)
+                assert line == " ".join(wanted), line
+                # the panel's own monitor: xrandr told as extend.py tells it
+                x11.write_text("", encoding="utf-8")
+                status, told = ask(
+                    _post("/api/mirror", {"action": "show", "source": {"kind": "virtual"}})
+                )
+                assert status == "200", told
+                status, told = ask(_post("/api/mirror", {"action": "stop"}))
+                assert status == "200" and told["showing"] is None, told
+
+                # (what changes the desktop; the panel's loop asks for the monitors as well)
+                def changes() -> list[str]:
+                    lines = x11.read_text(encoding="utf-8").splitlines()
+                    asked = ("xrandr --listmonitors", "xrandr -q")
+                    return [c for c in lines if c.startswith("xrandr") and c not in asked]
+
+                ours = changes()
+                x11.write_text("", encoding="utf-8")
+                extend.attach((1920, 480), "x11")
+                extend.detach("x11")
+                theirs = changes()
+                assert ours == theirs and any("--setmonitor" in c for c in ours), ours
+                after = len(rig.fake.frames)
+                assert _waited(lambda: any(not green(f) for f in rig.fake.frames[after:]) or None,
+                               30), "the theme is not shown again"  # fmt: skip
+            finally:
+                program.terminate()
+                program.wait(10)
+    finally:
+        rig.close()

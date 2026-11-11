@@ -2175,6 +2175,21 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       text for an issue. Only while asked, as Python's. What the main process holds says the
       C heap, the threads and (Windows) what is committed: a Rust program has no objects or
       modules to count. The test: on the running app, the numbers against psutil's
+- [x] a panel as a monitor (mirror.py, capture.py, extend.py, `/api/mirror`): a monitor, a part
+      of one or a window on the panels named instead of their themes (and of the Player),
+      fitted whole, to the edges or stretched, the pointer with it or not; the monitors and
+      windows as Windows lists them (EnumDisplayMonitors per-monitor DPI aware, EnumWindows
+      without tool windows and cloaked ones) and as X11 does (xrandr, xprop); ffmpeg captures
+      (gfxcapture, else gdigrab; x11grab) into frames of the panel's size, the newest drawn,
+      notices and the alarm over them. The panel's own monitor: on X11 a monitor of xrandr's
+      beyond the others; on Windows the Virtual Display Driver, set up in one step with the
+      administrator's rights (its package and NefCon downloaded and checked, the same
+      PowerShell as Python's) and put on the desktop and off it. Every panel gets frames (the
+      engine encodes them; Python's TURZX stream took the screen straight from ffmpeg). Not
+      yet: Wayland (the desktop's screen cast over D-Bus and GStreamer). The tests: on an X11
+      desktop of stand-in programs, what the app lists and refuses as Python's; on the running
+      app with a simulated panel, a part of a monitor shown with ffmpeg's command as Python's,
+      the panel's own monitor made and taken off with xrandr's calls as extend.py's
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app
 - [x] one Libre Panel at a panel (instance.py): the system's lock on libre-panel.lock in the

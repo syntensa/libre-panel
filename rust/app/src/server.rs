@@ -375,6 +375,11 @@ const ROUTES: &[Route] = &[
         x.json(&s.doctor.status(), 200)
     }),
     private("POST", "/api/doctor", |s, x, _, _| doctor_action(s, x)),
+    // a panel as a monitor (mirror.rs)
+    private("GET", "/api/mirror", |s, x, _, u| {
+        mirror_state(s, x, &u.query)
+    }),
+    private("POST", "/api/mirror", |s, x, _, _| mirror_action(s, x)),
     // the app's Player (player.rs)
     private("GET", "/api/player", |s, x, _, _| player_state(s, x)),
     private("POST", "/api/player", |s, x, _, _| player_action(s, x)),
@@ -2264,6 +2269,142 @@ fn load_sampler(state: &State) -> Arc<crate::load::Sampler> {
     });
     *kept = Some(Arc::clone(&sampler));
     sampler
+}
+
+/// _panel_frame: the size of panel `number`'s frames (1 the first), as config.toml and the
+/// panel say; None where its model is not known.
+fn panel_frame(state: &State, number: i64) -> Option<(i64, i64)> {
+    let config = lp_config::load_config(&state.config_file, lp_config::platform()).ok()?;
+    let config = if number <= 1 {
+        config
+    } else {
+        let index = usize::try_from(number - 2).ok()?;
+        if index >= config.panels.len() || !config.panels[index].on {
+            return None;
+        }
+        config.for_panel(index)?
+    };
+    let reported = if number <= 1 {
+        state
+            .controls
+            .upgrade()
+            .and_then(|app| app.panel.told(0).into_iter().next().flatten())
+            .map(|told| told.model)
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let model = lp_devices::models::find_model(&config.device.model)
+        .or_else(|| lp_devices::models::find_model(&reported))?;
+    let way = if config.device.orientation == "portrait" {
+        "portrait"
+    } else {
+        "landscape"
+    };
+    Some(model.size(way))
+}
+
+/// `GET /api/mirror`: what a panel can show as a monitor here (the monitors; with
+/// `?windows=1` the windows too), what it shows now, the panels, and whether the running app
+/// is there to show it.
+fn mirror_state(state: &State, exchange: &mut Exchange, query: &str) {
+    let place = crate::capture::platform();
+    let asked = crate::http::parse_qs(query);
+    let listed = asked
+        .get("windows")
+        .and_then(|values| values.first())
+        .is_some_and(|value| value == "1");
+    let size = panel_frame(state, 1);
+    let mut told = Dict::new();
+    told.insert(
+        "available".into(),
+        Value::Bool(state.controls.upgrade().is_some()),
+    );
+    told.insert("platform".into(), Value::from(place));
+    let monitors = crate::capture::monitors(place)
+        .iter()
+        .map(|m| m.value())
+        .collect();
+    told.insert("monitors".into(), Value::List(monitors));
+    let windows = if listed {
+        Value::List(
+            crate::capture::windows(place)
+                .iter()
+                .map(|w| w.value())
+                .collect(),
+        )
+    } else {
+        Value::None
+    };
+    told.insert("windows".into(), windows);
+    told.insert("showing".into(), crate::mirror::status());
+    told.insert("panels".into(), player_panels(state));
+    let words = |all: &[&str]| Value::List(all.iter().map(|w| Value::from(*w)).collect());
+    told.insert("fits".into(), words(&crate::mirror::FITS));
+    told.insert(
+        "size".into(),
+        size.map_or(Value::None, |(w, h)| {
+            Value::List(vec![Value::int(w), Value::int(h)])
+        }),
+    );
+    let mut extend = crate::extend::state(size, place);
+    for (key, value) in crate::extend::setup_state() {
+        extend.insert(key, value);
+    }
+    told.insert("extend".into(), Value::Dict(extend));
+    exchange.json(&Value::Dict(told), 200);
+}
+
+/// `POST /api/mirror`: `{"action": "show", "source": {...}, "panels": [1]}` shows it on those
+/// panels as a monitor; `{"action": "stop"}` the themes again; `{"action": "setup"}` the
+/// panel's own monitor (Windows: the driver, its size). The answer is `GET /api/mirror`'s.
+fn mirror_action(state: &State, exchange: &mut Exchange) {
+    let Some(payload) = exchange.read_json(MAX_JSON) else {
+        return;
+    };
+    let Value::Dict(payload) = payload else {
+        return exchange.error("expected {\"action\": ...}", 400, "");
+    };
+    match payload.get("action").and_then(Value::as_str) {
+        Some("show") => {
+            if state.controls.upgrade().is_none() {
+                let said = lp_i18n::t("a panel shows the screen in the running app");
+                return exchange.error(&said, 409, "");
+            }
+            let panels: Option<Vec<i64>> = match payload.get("panels") {
+                None => Some(vec![1]),
+                Some(Value::List(panels)) => panels
+                    .iter()
+                    .map(|n| match n {
+                        Value::Int(n) => i64::try_from(n).ok(),
+                        _ => None,
+                    })
+                    .collect(),
+                Some(_) => None,
+            };
+            let Some(panels) = panels else {
+                return exchange.error("panels: expected [1, ...]", 400, "");
+            };
+            let shown = crate::mirror::source_of(payload.get("source")).and_then(|source| {
+                let size = panels.iter().min().and_then(|n| panel_frame(state, *n));
+                crate::mirror::show(source, &panels, size)
+            });
+            if let Err(crate::mirror::MirrorError(why)) = shown {
+                return exchange.error(&why, 400, "");
+            }
+        }
+        Some("stop") => crate::mirror::stop(),
+        Some("setup") => {
+            let Some(size) = panel_frame(state, 1) else {
+                let said =
+                    lp_i18n::t("the panel's size is not known: choose its model in Settings");
+                return exchange.error(&said, 400, "");
+            };
+            crate::extend::start_setup(size);
+        }
+        _ => return exchange.error("action: show, stop or setup", 400, ""),
+    }
+    mirror_state(state, exchange, "");
 }
 
 /// a file for the Player, written as it comes

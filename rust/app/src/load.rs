@@ -465,6 +465,20 @@ mod os {
             .find(|(_, _, exe)| exe.to_lowercase() == name)
             .map(|(pid, _, _)| pid)
     }
+
+    pub fn program_name(pid: u32) -> String {
+        processes()
+            .into_iter()
+            .find(|(p, _, _)| *p == pid)
+            .map(|(_, _, name)| name)
+            .unwrap_or_default()
+    }
+}
+
+/// The name of the program a process runs ("" where it is gone or may not be looked at).
+#[cfg(windows)]
+pub fn program_name(pid: u32) -> String {
+    os::program_name(pid)
 }
 
 #[cfg(not(any(target_os = "linux", windows)))]

@@ -735,6 +735,7 @@ impl BackgroundApp {
     }
 
     pub fn shutdown(&self) {
+        crate::mirror::stop(); // (the panel's own monitor off the desktop, too)
         self.hotkeys.close();
         self.company.set_also(None);
         self.company.stop_services();

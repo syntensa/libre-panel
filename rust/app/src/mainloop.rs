@@ -224,6 +224,10 @@ pub struct MainLoop {
     /// what the app's Player plays here (player.rs), drawn instead of the theme
     player: crate::player::Screen,
     playing: bool,
+    /// the screen shown here as a monitor (mirror.rs) ...
+    mirror: crate::mirror::Screen,
+    /// ... instead of the theme
+    mirrored: bool,
     /// the host's switches seen, the occasion of the theme on show, and whether it is a step
     /// of the screens in turn
     switches: u64,
@@ -449,6 +453,8 @@ impl MainLoop {
             shown_frame: None,
             player: crate::player::Screen::default(),
             playing: false,
+            mirror: crate::mirror::Screen::default(),
+            mirrored: false,
             switches: 0,
             occasion: "manual",
             in_sequence: false,
@@ -1379,22 +1385,26 @@ impl MainLoop {
         let drawing = self.clock();
         // the app's Player: instead of the theme, on the panels it plays on
         let number = self.beside.as_ref().map_or(1, |beside| beside.n + 2) as i64;
-        let playing = crate::player::now(number);
-        let drawn = match &playing {
-            Some(showing) => {
-                let size = match self.model() {
-                    Some(model) => {
-                        let (w, h) = model.size(renderer.theme.orientation());
-                        (w as usize, h as usize)
-                    }
-                    None => (
-                        renderer.theme.width.max(1) as usize,
-                        renderer.theme.height.max(1) as usize,
-                    ),
-                };
-                Ok(self.player.frame(showing, size, renderer.fps))
+        // the panel as a monitor: instead of the theme (mirror.rs)
+        let mirrored = crate::mirror::now(number);
+        let playing = match mirrored {
+            None => crate::player::now(number),
+            Some(_) => None,
+        };
+        let size = match self.model() {
+            Some(model) => {
+                let (w, h) = model.size(renderer.theme.orientation());
+                (w as usize, h as usize)
             }
-            None => renderer
+            None => (
+                renderer.theme.width.max(1) as usize,
+                renderer.theme.height.max(1) as usize,
+            ),
+        };
+        let drawn = match (&mirrored, &playing) {
+            (Some(source), _) => Ok(self.mirror.frame(source, size, renderer.fps)),
+            (None, Some(showing)) => Ok(self.player.frame(showing, size, renderer.fps)),
+            (None, None) => renderer
                 .render(snapshot, started)
                 .map_err(|e| format!("not drawn by this build yet: {}", e.0))
                 .and_then(|(frame, _)| self.fitted(frame, &renderer)),
@@ -1403,6 +1413,10 @@ impl MainLoop {
             self.player.close(); // (it ended: ffmpeg stops)
         }
         self.playing = playing.is_some();
+        if self.mirrored && mirrored.is_none() {
+            self.mirror.close();
+        }
+        self.mirrored = mirrored.is_some();
         let drawn = drawn
             .map(|frame| self.dressed_frame(frame, &renderer, started))
             .map(|frame| {
@@ -1414,6 +1428,7 @@ impl MainLoop {
         }
         let (mut moving, due) = (renderer.moving, renderer.due);
         moving |= self.playing
+            || self.mirrored
             || self.blend.is_some()
             || self.toasts.as_ref().is_some_and(ToastLayer::active)
             || self.alarm.showing(started);

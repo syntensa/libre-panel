@@ -545,6 +545,7 @@ pub fn play(asked: &Asked, place: &Path) -> Result<(), PlayerError> {
     } else {
         (items, first)
     };
+    crate::mirror::stop(); // (one or the other on a panel: the Player, or a monitor)
     let shown: Vec<String> = panels.iter().map(i64::to_string).collect();
     say(&format!(
         "player: {} to play on panel {}, from {}",
