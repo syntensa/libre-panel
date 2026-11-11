@@ -47,6 +47,7 @@ mod osinfo;
 mod pages;
 mod photos;
 mod player;
+mod plugins;
 mod presence;
 mod previews;
 mod psutil;
@@ -86,6 +87,7 @@ Libre Panel
                                 of config.toml, the panel paused and resumed by them (the
                                 command when none is given)
   libre-panel render [options]  draw one frame into a PNG file (--output, else frame.png)
+  libre-panel plugins           the plugins installed, and whether they load
   libre-panel preview [THEME] [-o FILE] [--live]
                                 a theme drawn into a PNG (demo readings, or this PC's)
   libre-panel editor [options]  the app's server alone (its address, with the token, is
@@ -363,7 +365,10 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
         "themes" => {
             let home = Home::find()?;
             let places = home.places();
-            for folder in [&places.user, &places.builtin] {
+            let folders = std::iter::once(&places.user)
+                .chain(&places.plugins)
+                .chain(std::iter::once(&places.builtin));
+            for folder in folders {
                 let mut names: Vec<String> = std::fs::read_dir(folder)
                     .into_iter()
                     .flatten()
@@ -495,6 +500,12 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
             MainLoop::new(home, asked)?.run(&STOP, &|| mainloop::Ending::Quit);
         }
         "preview" => preview_command(args)?,
+        "plugins" => {
+            let home = Home::find()?;
+            if !plugins::list(&home.settings) {
+                return Err(String::new());
+            }
+        }
         "system-setup" => std::process::exit(i32::from(system_setup_command(args)?)),
         "quit" => std::process::exit(quit_command(args)?),
         "notify" => std::process::exit(notify_command(args)?),

@@ -68,11 +68,12 @@ impl Home {
         self.settings.join(lp_config::dirs::CONFIG_FILENAME)
     }
 
-    /// Where themes are looked for: the person's own, then those that come with the app.
+    /// Where themes are looked for: the person's own, the plugins', then those that come
+    /// with the app.
     pub fn places(&self) -> Places {
         Places {
             user: self.settings.join("themes"),
-            plugins: Vec::new(),
+            plugins: crate::plugins::theme_folders(&self.settings),
             builtin: self.data.join("themes"),
         }
     }
