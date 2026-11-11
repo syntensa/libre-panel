@@ -26,18 +26,38 @@ def load(name, path):
     return module
 
 
+def job(workflow, name):
+    """The text of one job of a workflow."""
+    start = workflow.index(f"\n  {name}:\n") + 1
+    found = re.search(r"\n  [a-z][a-z0-9-]*:\n", workflow[start + 1 :])
+    return workflow[start : start + 1 + found.start()] if found else workflow[start:]
+
+
 def test_the_release_fetches_before_it_builds_and_checks_the_built_folder():
-    workflow = read(".github", "workflows", "release.yml")
-    fetch = workflow.index("run: python packaging/fetch_tools.py")
-    build = workflow.index("run: pyinstaller --noconfirm --clean packaging/pyinstaller")
-    check = workflow.index("run: python packaging/check_tools.py dist/libre-panel")
+    """The release's downloads are those CI builds and tries (its jobs `try` and `appimage`):
+    release.yml calls ci.yml, and publishes only once all of it passed."""
+    release = read(".github", "workflows", "release.yml")
+    assert "uses: ./.github/workflows/ci.yml" in job(release, "app")
+    assert "needs: [python-package, app]" in job(release, "github-release")
+    ci = read(".github", "workflows", "ci.yml")
+    assert "\n  workflow_call:\n" in ci[: ci.index("\njobs:")]
+    rust = job(ci, "rust")
+    # (Windows: the tools fetched before the folder is made, which carries them)
+    fetch = rust.index('python packaging/fetch_tools.py "$RUNNER_TEMP/tools"')
+    folder = rust.index("- name: libre-panel to try on a PC (Windows)")
+    assert fetch < folder and 'cp -r "$RUNNER_TEMP/tools/." libre-panel-rust/tools/' in rust
+    tried = job(ci, "try")
+    assert "test -f libre-panel-rust/tools/ffmpeg.exe" in tried
+    assert tried.index("ISCC.exe") < tried.index("test_installer.py --rust")
+    appimage = job(ci, "appimage")
+    fetch = appimage.index('python packaging/fetch_tools.py "$RUNNER_TEMP/tools"')
+    build = appimage.index("packaging/linux/build_appimage.sh")
+    check = appimage.index("RUST=1 packaging/linux/test_appimage.sh")
     assert fetch < build < check
     # for both systems: neither step is held back by an ``if:``
-    before = workflow[workflow.rindex("- name:", 0, fetch) : fetch]
+    before = appimage[appimage.rindex("- name:", 0, fetch) : fetch]
     assert "if:" not in before
-    assert "if:" not in workflow[workflow.rindex("- name:", 0, check) : check]
-    # the app started as at login must see the video mode miss nothing
-    assert 'smoke_test.py --tools "$GUI" tray --background' in workflow
+    assert "if:" not in appimage[appimage.rindex("- name:", 0, check) : check]
 
 
 def test_the_setup_and_the_appimage_are_proven_with_the_same_check():
@@ -47,15 +67,18 @@ def test_the_setup_and_the_appimage_are_proven_with_the_same_check():
     appimage = read("packaging", "linux", "test_appimage.sh")
     assert "--appimage-extract" in appimage
     assert 'packaging/check_tools.py" "$unpacked/squashfs-root/usr/lib/libre-panel"' in appimage
-    assert appimage.count("smoke_test.py") == 2 and appimage.count("--tools") >= 2
+    # (both starts, without and with a tray, with the tools' check)
+    assert "smoke=(--tools)" in appimage and appimage.count("smoke_test.py") == 2
+    assert '"${smoke[@]}"' in appimage and "${smoke[*]}" in appimage
 
 
 def test_the_appimage_is_built_on_the_oldest_ubuntu_and_checked_for_the_glibc_it_needs(tmp_path):
     """An AppImage takes glibc from the system it runs on: built on a new runner, it asked for
     GLIBC_2.38 and did not start on the oldest Ubuntu LTS still supported (the AppImage
     catalog's test system)."""
-    workflow = read(".github", "workflows", "release.yml")
-    assert re.search(r"- os: ubuntu-22\.04\n\s+name: linux-x64", workflow)
+    ci = read(".github", "workflows", "ci.yml")
+    assert "runs-on: ubuntu-22.04" in job(ci, "appimage")
+    assert re.search(r"- os: ubuntu-22\.04\n\s+name: linux", job(ci, "plugin-host"))
     appimage = read("packaging", "linux", "test_appimage.sh")
     assert 'check_glibc.py" "$unpacked/squashfs-root" "${GLIBC_LIMIT:-2.35}"' in appimage
     check = load("check_glibc_wiring", PACKAGING / "linux" / "check_glibc.py")
@@ -65,9 +88,11 @@ def test_the_appimage_is_built_on_the_oldest_ubuntu_and_checked_for_the_glibc_it
 
 
 def test_the_downloads_carry_the_notice_that_names_their_sources():
-    workflow = read(".github", "workflows", "release.yml")
-    assert "Copy-Item LICENSE, README.md, NOTICE.md dist/libre-panel/" in workflow  # Windows
-    assert "cp LICENSE README.md NOTICE.md dist/libre-panel/" in workflow  # Linux
+    ci = read(".github", "workflows", "ci.yml")
+    assert "Copy-Item LICENSE, README.md, NOTICE.md libre-panel-rust/" in job(ci, "try")
+    assert "cp NOTICE.md libre-panel-rust/licenses/" in job(ci, "rust")  # Windows
+    assert "cp LICENSE README.md NOTICE.md dist/libre-panel/" in job(ci, "appimage")  # Linux
+    assert 'cp NOTICE.md "$app/licenses/"' in job(ci, "appimage")
 
 
 def test_the_spec_puts_the_fetched_folder_next_to_the_program_under_the_name_the_app_looks_for():
@@ -188,23 +213,38 @@ def test_presentmon_is_a_box_of_the_setup_that_says_first_what_will_not_work_wit
 
 def test_the_windows_programs_say_who_made_them_and_start_with_a_loader_of_their_own():
     """Defender's machine learning took 0.7.10's setup for a trojan (Trojan:Win32/Bearfoos.A!ml).
-    Every program of the Windows download says who made it (a version resource), starts with a
-    PyInstaller loader compiled on the runner, not the ready-made one that malware shares
-    (own_loader.py fails the build where it is that one), and every download gets GitHub's
-    signed attestation of where it was built, before the release is published."""
-    workflow = read(".github", "workflows", "release.yml")
-    install = workflow.index(
+    Every program of the Windows download says who made it (a version resource: the Rust
+    programs', rust/winres.rs, checked in CI's job `rust`; the plugin host's and the sensor
+    service's), the plugin host starts with a PyInstaller loader compiled on the runner, not the
+    ready-made one that malware shares (own_loader.py fails the build where it is that one), and
+    every download gets GitHub's signed attestation of where it was built, before the release
+    is published."""
+    ci = read(".github", "workflows", "ci.yml")
+    rust = job(ci, "rust")
+    folder = rust.index("- name: libre-panel to try on a PC (Windows)")
+    resource = rust.index('$info.CompanyName -ne "Libre Panel contributors"')
+    assert folder < resource
+    for name in (
+        "libre-panel.exe",
+        "LibrePanel.exe",
+        "libre-panel-window.exe",
+        "libre-panel-tray.exe",
+    ):
+        assert f'"{name}"' in rust[resource - 400 : resource]
+    host = job(ci, "plugin-host")
+    install = host.index(
         "PYINSTALLER_COMPILE_BOOTLOADER=1 pip install --no-binary pyinstaller pyinstaller"
     )
-    check = workflow.index("python packaging/windows/own_loader.py shipped-pyinstaller/*.whl")
-    build = workflow.index("run: pyinstaller --noconfirm --clean packaging/pyinstaller")
-    resource = workflow.index('$info.CompanyName -ne "Libre Panel contributors"')
-    assert install < check < build < resource
-    spec = read("packaging", "pyinstaller", "libre-panel.spec")
-    assert spec.count("version=version_resource(") == 2  # (each program; the sensor service)
+    check = host.index("python packaging/windows/own_loader.py shipped-pyinstaller/*.whl")
+    build = host.index("pyinstaller --noconfirm --clean packaging/pyinstaller/libre-panel-plugins")
+    assert install < check < build
+    spec = read("packaging", "pyinstaller", "libre-panel-plugins.spec")
+    assert "version=version_resource()," in spec
     assert '("CompanyName", "Libre Panel contributors")' in spec
-    for name in ("libre-panel", "LibrePanel", "libre-panel-sensors"):
-        assert f'"{name}": "Libre Panel' in spec
+    assert "<Company>Libre Panel contributors</Company>" in read(
+        "sensorhost", "LibrePanel.Sensors.csproj"
+    )
+    workflow = read(".github", "workflows", "release.yml")
     release = workflow[workflow.index("  github-release:") : workflow.index("  pypi:")]
     assert "id-token: write" in release and "attestations: write" in release
     attest = release.index("uses: actions/attest@v4")
@@ -239,21 +279,19 @@ def test_own_loader_fails_where_the_loader_is_the_one_pyinstaller_ships(tmp_path
 
 def test_the_release_builds_the_dotnet_sensor_service_and_the_spec_takes_it():
     """The sensor service of the Windows downloads is the .NET program of sensorhost/, built after
-    LibreHardwareMonitor's libraries are fetched and before the programs, with the reference
-    assemblies pinned, as CI's job sensor-host builds and tests it; the spec takes its folder as
-    "sensors", and the setup clears its libraries before an update."""
-    workflow = read(".github", "workflows", "release.yml")
-    fetch = workflow.index("python packaging/windows/fetch_lhm.py")
-    host = workflow.index("dotnet build sensorhost -c Release -p:RestoreLockedMode=true")
-    build = workflow.index("run: pyinstaller --noconfirm --clean packaging/pyinstaller")
-    smoke = workflow.index("run: dist/libre-panel/sensors/libre-panel-sensors.exe --check")
-    assert fetch < host < build < smoke
-    assert '-p:InformationalVersion="$VERSION"' in workflow  # (its version: the release's)
+    LibreHardwareMonitor's libraries are fetched, with the reference assemblies pinned and the
+    release's version (CI's job sensor-host, which the release runs), and carried in "sensors"
+    beside the app (its job `try`); the setup clears its libraries before an update."""
     ci = read(".github", "workflows", "ci.yml")
-    assert "dotnet build sensorhost -c Release -p:RestoreLockedMode=true" in ci
-    spec = read("packaging", "pyinstaller", "libre-panel.spec")
-    assert 'host = ROOT / "sensorhost" / "bin" / "Release"' in spec
-    assert 'copytree(host, target, ignore=shutil.ignore_patterns("logs"))' in spec
+    host = job(ci, "sensor-host")
+    fetch = host.index("python packaging/windows/fetch_lhm.py")
+    build = host.index("dotnet build sensorhost -c Release -p:RestoreLockedMode=true")
+    smoke = host.index("run: sensorhost/bin/Release/libre-panel-sensors.exe --check")
+    assert fetch < build < smoke
+    assert '-p:InformationalVersion="$version"' in host  # (its version: the release's)
+    tried = job(ci, "try")
+    assert "name: sensors-windows\n          path: libre-panel-rust/sensors" in tried
+    assert "test -d libre-panel-rust/sensors/lhm" in tried
     assert 'Name: "{app}\\sensors\\lhm"' in read("packaging", "windows", "libre-panel.iss")
     project = read("sensorhost", "LibrePanel.Sensors.csproj")
     assert "<AssemblyName>libre-panel-sensors</AssemblyName>" in project

@@ -639,7 +639,14 @@ def test_a_linux_pcs_sensors_are_those_of_the_python_sources(tmp_path: Path) -> 
             time.sleep(0.2)
     # A drive that answers neither side's repeated asking for a while (CI's NVMe drive) is
     # left out of the comparison; every other reading is compared, the drives' among them.
-    silent = (set(ours) ^ set(wanted)) & set(slow)
+    # Its label may not answer either (the key is then its place, "temp.nvme.0", on one side and
+    # "temp.nvme.composite" on the other): a key of a slow chip on one side only goes too.
+    drives = {key.split(".")[1] for key in slow}
+    silent = {
+        key
+        for key in set(ours) ^ set(wanted)
+        if key in slow or (key.startswith("temp.") and key.split(".")[1] in drives)
+    }
     for key in silent:
         ours.pop(key, None)
         wanted.pop(key, None)

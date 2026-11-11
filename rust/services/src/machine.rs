@@ -138,6 +138,48 @@ mod system {
         }
     }
 
+    /// psutil's Process.exe(): the program's link, and where it cannot be read (another user's
+    /// process: AccessDenied) or there is none (the kernel's threads), the command line's first
+    /// word where that is a program one may run there (guess_it), else "".
+    fn exe_of(pid: i64) -> String {
+        if let Some(exe) = link(&format!("/proc/{pid}/exe")) {
+            if !exe.is_empty() {
+                return exe;
+            }
+        }
+        guessed(pid).unwrap_or_default()
+    }
+
+    /// guess_it: the command line's first word, where it is an absolute path to a file one may
+    /// run.
+    fn guessed(pid: i64) -> Option<String> {
+        let first = cmdline(pid).into_iter().next()?;
+        let path = std::path::Path::new(&first);
+        if !path.is_absolute() || !path.is_file() {
+            return None;
+        }
+        let wanted = std::ffi::CString::new(first.as_bytes()).ok()?;
+        // SAFETY: access() reads the path the C string holds.
+        (unsafe { libc::access(wanted.as_ptr(), libc::X_OK) } == 0).then_some(first)
+    }
+
+    /// psutil's cmdline(): the words of /proc/<pid>/cmdline, split at its zeros, or at spaces
+    /// where a program wrote its line as one.
+    fn cmdline(pid: i64) -> Vec<String> {
+        let data = std::fs::read(format!("/proc/{pid}/cmdline")).unwrap_or_default();
+        let data = String::from_utf8_lossy(&data).into_owned();
+        if data.is_empty() {
+            return Vec::new();
+        }
+        let sep = if data.ends_with('\0') { '\0' } else { ' ' };
+        let data = data.strip_suffix(sep).unwrap_or(&data);
+        let words: Vec<String> = data.split(sep).map(str::to_string).collect();
+        if sep == '\0' && words.len() == 1 && data.contains(' ') {
+            return data.split(' ').map(str::to_string).collect();
+        }
+        words
+    }
+
     /// The name and the fields after it of /proc/<pid>/stat ("pid (name) state ...": the
     /// name may hold brackets and spaces).
     fn stat(pid: i64) -> Option<(String, Vec<String>)> {
@@ -182,7 +224,7 @@ mod system {
             let Some(name) = name(pid) else {
                 continue; // (gone since the list was read)
             };
-            let exe = link(&format!("/proc/{pid}/exe")).unwrap_or_default();
+            let exe = exe_of(pid);
             let folder = || link(&format!("/proc/{pid}/cwd")).unwrap_or_default();
             found.extend(program_of(pid, &name, &exe, folder));
         }
