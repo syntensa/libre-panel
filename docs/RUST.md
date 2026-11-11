@@ -2435,8 +2435,12 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
 - [x] Windows: the setup and the portable zip of the Rust app, with ffmpeg, PresentMon, PawnIO's
       installer, the engine and the sensor service (CI's job `try`); Linux: the AppImage
       (CI's job `appimage`); see R9's entries
-- [ ] signing the Windows programs (SignPath), and the downloads of a release made by
-      release.yml from the Rust app
+- [x] the downloads of a release made by release.yml from the Rust app: it runs ci.yml whole
+      (`workflow_call`) and publishes what its jobs `try` and `appimage` built and tried: the
+      Windows setup and portable zip, the AppImage, and the Linux archive (the AppImage's
+      folder, started by its own script as libre-panel.sh, unpacked and drawn from in CI);
+      the Python package beside them for PyPI
+- [ ] signing the Windows programs (SignPath)
 
 ### R12 the switch
 - [ ] fixtures recorded from the Python app; the Rust app on main; the Python app goes

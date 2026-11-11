@@ -4,6 +4,8 @@ on:
   push:
     branches-ignore: ["handoff/**"]  # mailbox branches carry only notes
   pull_request:
+  # (release.yml: the downloads of a release are those this workflow builds and tries)
+  workflow_call:
 
 permissions:
   contents: read
@@ -602,10 +604,27 @@ jobs:
             packaging/linux/build_appimage.sh "$VERSION" "dist/Libre_Panel-$VERSION-rust-x86_64.AppImage"
       - name: Test the AppImage (headless and on an X11 tray)
         run: RUST=1 packaging/linux/test_appimage.sh "dist/Libre_Panel-$VERSION-rust-x86_64.AppImage"
+      - name: The Linux archive
+        # the AppImage's folder as it is, started by the AppImage's own script (libre-panel.sh:
+        # it names Pillow's libraries in lib to the program); tried from where it is unpacked
+        run: |
+          mv dist/libre-panel-rust dist/libre-panel
+          cp packaging/linux/AppRun-rust dist/libre-panel/libre-panel.sh
+          chmod +x dist/libre-panel/libre-panel.sh
+          cp LICENSE README.md NOTICE.md dist/libre-panel/
+          tar -C dist -czf "dist/libre-panel-$VERSION-linux-x64.tar.gz" libre-panel
+          tried="$RUNNER_TEMP/archive"
+          mkdir -p "$tried" && tar -C "$tried" -xzf "dist/libre-panel-$VERSION-linux-x64.tar.gz"
+          LIBRE_PANEL_HOME="$tried/home" "$tried/libre-panel/libre-panel.sh" render --demo \
+            --theme lumen --output "$tried/frame.png"
+          python -c "from PIL import Image; f = Image.open('$tried/frame.png'); assert f.size == (1920, 480), f.size"
+          "$tried/libre-panel/libre-panel.sh" version
       - uses: actions/upload-artifact@v4
         with:
           name: libre-panel-rust-appimage
-          path: dist/*.AppImage
+          path: |
+            dist/*.AppImage
+            dist/*.tar.gz
           retention-days: 30
 
   sensor-host:

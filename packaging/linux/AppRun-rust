@@ -1,5 +1,5 @@
 #!/bin/sh
-# Entry point of the AppImage of Libre Panel in Rust (docs/RUST.md). Without a command (a
+# Entry point of the AppImage of Libre Panel in Rust (docs/RUST.md), and of its Linux archive. Without a command (a
 # double-click) Libre Panel starts in the background with its tray icon; with one it is the
 # normal command line: ./Libre_Panel-x86_64.AppImage editor | autostart enable | ...
 # The libraries of C that draw as Pillow draws (FreeType, HarfBuzz, libjpeg, libwebp: Pillow's
@@ -7,6 +7,10 @@
 # and the tray icon use the system's GTK with the system's libraries.
 HERE="$(dirname "$(readlink -f "$0")")"
 APP="$HERE/usr/lib/libre-panel"
+# (the same script starts the Linux archive's folder, libre-panel.sh beside the programs)
+if [ ! -d "$APP" ]; then
+    APP="$HERE"
+fi
 pick() {
     for file in "$APP/lib/$2"*; do
         if [ -e "$file" ]; then
