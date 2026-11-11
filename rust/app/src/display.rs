@@ -170,7 +170,7 @@ fn serial(
 /// other_usb_model: the USB screen of another maker on the bus, as `auto` finds it, in this
 /// order (turzx.py's: Lian Li, Thermalright, BeadaPanel, NZXT, Thermaltake, udisp), without
 /// opening it.
-fn other_usb_model() -> Option<&'static PanelModel> {
+pub fn other_usb_model() -> Option<&'static PanelModel> {
     lp_devices::lianli::present_model()
         .or_else(lp_devices::thermalright::present_model)
         .or_else(lp_devices::beada::present_model)

@@ -1621,10 +1621,18 @@ fn screen_of(configured: &PanelModel, found: &PanelModel) -> bool {
     configured.id == ZC360_SCREEN && found.id == ZC360
 }
 
-/// _find_panel: a panel on the bus: a TURZX USB one, else a serial one by its USB ids. (The
-/// USB screens of other makers are not looked for in this build yet.)
+/// _find_panel: a panel on the bus, none of it opened: a TURZX USB one, another maker's USB
+/// screen, a ZC-360, else a serial one by its USB ids.
 fn find_panel(config: &Config) -> Option<Found> {
-    if let Some(model) = lp_devices::usb::present_model(&config.device.beside, 0) {
+    // a TURZX USB one, another maker's USB screen, a ZC-360, else a serial one by its USB ids
+    let model = lp_devices::usb::present_model(&config.device.beside, 0)
+        .or_else(crate::display::other_usb_model)
+        .or_else(|| {
+            lp_devices::jonsbo_zc360::present()
+                .then(|| lp_devices::models::find_model(lp_devices::jonsbo_zc360::MODEL_ID))
+                .flatten()
+        });
+    if let Some(model) = model {
         return Some(Found::of(model));
     }
     // (a port that is not a panel's is no panel)

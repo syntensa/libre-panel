@@ -169,6 +169,9 @@ pub struct MainLoop {
     /// a panel beside the first: its own history of the shared readings
     view: Option<View>,
     beside: Option<Beside>,
+    /// the TURZX panel on the USB bus while none is open (panel_model), and when it was looked
+    /// for
+    on_bus: std::cell::Cell<Option<(Instant, Option<&'static PanelModel>)>>,
     /// the first panel's: the loops of the panels beside it
     more: Option<More>,
     /// when a companion was last seen showing beside the first panel
@@ -267,6 +270,9 @@ pub fn panel_config(config: &Config, n: usize) -> Result<Config, String> {
         _ => Err(gone()),
     }
 }
+
+/// how long the panel found on the USB bus counts before it is looked for again
+const BUS_LOOK_S: u64 = 5;
 
 /// The local time of now, and its fold.
 pub(crate) fn moment() -> (Moment, bool) {
@@ -405,6 +411,7 @@ impl MainLoop {
     ) -> MainLoop {
         let began = company.began;
         MainLoop {
+            on_bus: std::cell::Cell::new(None),
             env: Env {
                 fonts_dir: home.fonts(),
             },
@@ -776,9 +783,27 @@ impl MainLoop {
     }
 
     /// panel_model: the configured model, else the one the panel that is there is.
+    /// panel_model: the configured model; else the one the panel says it is; else, with `model =
+    /// "auto"` and a driver that looks for TURZX USB panels, the one on the USB bus (found by
+    /// its ids, never opened; looked for again after a while).
     fn model(&self) -> Option<&'static PanelModel> {
-        find_model(&self.config.device.model)
-            .or_else(|| self.panel.as_ref().and_then(Display::model))
+        let device = &self.config.device;
+        let known =
+            find_model(&device.model).or_else(|| self.panel.as_ref().and_then(Display::model));
+        if known.is_some()
+            || device.model != "auto"
+            || !["auto", "turzx"].contains(&device.driver.as_str())
+        {
+            return known;
+        }
+        if let Some((at, found)) = self.on_bus.get() {
+            if at.elapsed() < Duration::from_secs(BUS_LOOK_S) {
+                return found;
+            }
+        }
+        let found = lp_devices::usb::present_model(&device.beside, 0);
+        self.on_bus.set(Some((Instant::now(), found)));
+        found
     }
 
     /// panel_size: the size of the panel's frames, turned as it is mounted.

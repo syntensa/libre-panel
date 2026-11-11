@@ -2035,8 +2035,9 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       the bus without opening it (a TURZX USB panel; a serial one by its USB ids,
       `rust/devices/src/ports.rs`, 600 lists of ports compared with serial_link.py), what
       smooth motion makes of it and lacks, the panels beside it, the theme that shows the
-      weather; 110 configurations compared. (The USB screens of other makers are not looked
-      for yet; no ffmpeg is asked for: the engine encodes.)
+      weather; 110 configurations compared; the USB screens of other makers and a ZC-360 are
+      looked for as turzx.py's other_usb_model and jonsbo_zc360.present look. (No ffmpeg is
+      asked for: the engine encodes.)
       The pages of the panel (`/api/pages`, `rust/app/src/pages.rs`): the normal theme,
       each mode's and the round report's, those of a panel beside the first, read and set
       (a theme, a frame rate, the idle page's minutes, switched on and off) or refused in the
@@ -2404,12 +2405,15 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       ("please edit it by hand"); one write at a time, through a file beside it. Scenes put
       on, the next one, kept and taken out. 800 files of many layouts with their steps
       compared with Python: what each step gives or its error, and the file's bytes
-- [ ] the panel a config is for
+- [x] the panel a config is for
       (theme/defaults.py's panel_model: the configured model, the one a display reports, a
-      TURZX panel on the USB bus) and the theme of its normal page
-- [ ] community themes as one file (theme/share.py): the zip read as Python's zipfile reads it
-      (every entry, name, method and damage) and written as it writes it, every check of an
-      import in its words, the files a theme names, what is scrubbed from it
+      TURZX panel on the USB bus) and the theme of its normal page (rust/app's mainloop
+      `model`, whose panel on the bus is looked for again after 5 s while none is open, and
+      settings' panel_model; lp-theme's defaults)
+- [x] community themes as one file (theme/share.py; rust/app's share and zip): the zip read
+      as Python's zipfile reads it (every entry, name, method and damage) and written as it
+      writes it, every check of an import in its words, the files a theme names, what is
+      scrubbed from it (test_rust_server's export and import beside share.py)
 
 ### R10 plugins
 - [ ] WebAssembly plugins: services, sensors and pages, an API of their own
