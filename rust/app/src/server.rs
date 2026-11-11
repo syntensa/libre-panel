@@ -63,6 +63,8 @@ pub struct State {
     doctor: crate::doctor::Session,
     /// the themes the community shares (community.rs)
     community: crate::community::Community,
+    /// what Libre Panel costs the PC, Status → Diagnose (load.rs), made on first use
+    load: Mutex<Option<Arc<crate::load::Sampler>>>,
     /// the port the server listens on (what the AI hooks call)
     port: u16,
 }
@@ -365,6 +367,10 @@ const ROUTES: &[Route] = &[
         round_picture(s, x)
     }),
     private("POST", "/api/panels/send", |s, x, _, _| send_modules(s, x)),
+    private("GET", "/api/load", |s, x, _, _| {
+        let report = load_sampler(s).report();
+        x.json(&report, 200);
+    }),
     private("GET", "/api/doctor", |s, x, _, _| {
         x.json(&s.doctor.status(), 200)
     }),
@@ -2154,10 +2160,12 @@ fn doctor_action(state: &State, exchange: &mut Exchange) {
                     .and_then(Value::as_str)
                     .map(str::to_string)
             });
+            let sampler = load_sampler(state);
             session.start(crate::doctor::Start {
                 app: state.controls.upgrade(),
                 config_file: state.config_file.clone(),
                 devices,
+                load: Some(Box::new(move || sampler.text(crate::load::WINDOW_S + 1.0))),
             })
         }
         Some("answer") => {
@@ -2237,6 +2245,25 @@ fn community_install(state: &State, exchange: &mut Exchange) {
         Ok(told) => exchange.json(&Value::Dict(told), 200),
         Err((status, why)) => exchange.error(&why, status, ""),
     }
+}
+
+/// What Libre Panel costs this PC (load.rs), made on first use: it samples only while asked.
+fn load_sampler(state: &State) -> Arc<crate::load::Sampler> {
+    let mut kept = state
+        .load
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(sampler) = kept.as_ref() {
+        return Arc::clone(sampler);
+    }
+    let settings = state.home.settings.clone();
+    let controls = state.controls.clone();
+    let sampler = crate::load::Sampler::new(crate::load::Ways {
+        window: Box::new(move || crate::window::window_pid(&settings)),
+        lhm: Box::new(move || controls.upgrade().and_then(|app| app.panel.lhm_status())),
+    });
+    *kept = Some(Arc::clone(&sampler));
+    sampler
 }
 
 /// a file for the Player, written as it comes
@@ -2928,6 +2955,7 @@ impl EditorServer {
                 colours,
                 doctor: crate::doctor::Session::default(),
                 community: crate::community::Community::default(),
+                load: Mutex::new(None),
             }),
             listener: Some(listener),
             stop: Arc::default(),

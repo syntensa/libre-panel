@@ -3188,3 +3188,68 @@ def test_the_player_plays_a_picture_on_the_app_s_panel_and_gives_it_back(tmp_pat
                 program.wait(10)
     finally:
         rig.close()
+
+
+def test_the_load_on_the_pc_is_measured_as_load_report_py_measures_it(tmp_path: Path) -> None:
+    """Status → Diagnose → Load (/api/load) on the running app: not ready at first, then this
+    process with its processor time, its private memory and working set as psutil measures
+    them, its threads by their names, what it holds inside and the text for an issue."""
+    import psutil
+
+    rig = Rig(tmp_path)
+    try:
+        rig.config(
+            'theme = "slate"\nlanguage = "en"\n[device]\ndriver = "turzx"\n'
+            'model = "turing-9.2-usb"\n[video]\nmode = "off"\n[sensors]\nproviders = []\n'
+        )
+        env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+               **_libraries(), **rig.env()}  # fmt: skip
+        command = [str(_program()), "start", "--port", "0", "--no-browser"]
+        with subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              encoding="utf-8") as program:  # fmt: skip
+            try:
+                assert program.stdout is not None
+                address = program.stdout.readline().split(" running at ")[1].split()[0]
+                port = int(address.split(":")[2].split("/")[0])
+                token = address.split("#token=")[1]
+
+                def ask() -> Any:
+                    text = _get("/api/load", WITH).encode("utf-8")
+                    text = text.replace(b"{host}", f"127.0.0.1:{port}".encode())
+                    text = text.replace(b"{token}", token.encode())
+                    status, _, answer = _asked(port, text)
+                    assert status.split(" ", 2)[1] == "200", answer
+                    return json.loads(answer)
+
+                assert _waited(lambda: len(rig.fake.frames) > 2 or None, 30), "no frame shown"
+                cpus = psutil.cpu_count()
+                first = ask()
+                assert first == {"ready": False, "cpus": cpus, "window_s": 2.0}
+                report = _waited(lambda: (r := ask())["ready"] and r or None, 20)
+                assert report, "no load measured"
+                assert report["cpus"] == cpus and 1.5 < report["window_s"] < 6
+                assert 0 <= report["age_s"] < 6 and report["sample_ms"] >= 0
+                main = report["processes"][0]
+                assert (main["role"], main["label"], main["count"]) == ("main", "main process", 1)
+                me = psutil.Process(program.pid)
+                rss, uss = me.memory_info().rss, me.memory_full_info().uss
+                assert abs(main["rss"] - rss) < max(rss * 0.3, 16 << 20), (main, rss)
+                assert abs(main["private"] - uss) < max(uss * 0.3, 16 << 20), (main, uss)
+                assert main["cpu_core"] >= 0 and main["cpu_pc"] == round(main["cpu_core"] / cpus, 2)
+                total = report["total"]
+                assert total["rss"] == sum(p["rss"] for p in report["processes"])
+                names = [t["name"] for t in report["threads"]]
+                assert names[-1] == "other" and "load-report" in names, names
+                assert report["service"] is None and report["sensors"] is None
+                inside = report["inside"]
+                assert inside["threads"] >= 3 and inside["heap"]["in_use"] > 0, inside
+                text = report["text"]
+                assert text.startswith(f"Libre Panel load over {report['window_s']:.1f} s, ")
+                assert "\nmain process" in text and "threads of the main process" in text
+                assert "the main process holds: C heap " in text
+                assert text.endswith(f"this measurement took {report['sample_ms']:.1f} ms\n")
+            finally:
+                program.terminate()
+                program.wait(10)
+    finally:
+        rig.close()

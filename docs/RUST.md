@@ -2145,9 +2145,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       basic layout); the questions with the app's buttons (ten minutes each, a cancel, a second
       click refused) or in a terminal; the report, its text and the issue form filled in. Not
       yet: the terminal's temperatures-and-power step (LibreHardwareMonitor's check, Linux's
-      system setup hint), the load in the report (load_report.py), and what only the panels
-      this build does not drive need (a rev. C panel's size asked, the other JPEG layout
-      tried). The tests: every panel's cards to the bit (lp-check doctor_card), and the whole
+      system setup hint) and what only the panels this build does not drive need (a rev. C
+      panel's size asked, the other JPEG layout tried). The tests: every panel's cards to the bit (lp-check doctor_card), and the whole
       test on the running app with a simulated panel
 - [x] the themes the community shares (editor/community.py, `/api/community/themes`, its
       preview and look, `/api/community/install`): the list from the project's GitHub (kept an
@@ -2167,6 +2166,15 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       the toasts and the alarm still go over it. The tests: the library, its pictures and
       every refusal as Python's; a picture played on the running app with a simulated panel,
       paused, stopped and the theme back
+- [x] what Libre Panel costs the PC (load_report.py, `/api/load`, Status → Diagnose → Load, and
+      in the panel test's report): this process, the engines, ffmpegs, PresentMon, the window
+      and its browser engine, the sensor service (the Service Control Manager's, else by its
+      program); each one's processor time over two seconds, per core and per PC, its private
+      memory (Linux's private pages, Windows's working set's pages not shared: psutil's USS,
+      every six seconds) and its working set; this process's threads by their names; the
+      text for an issue. Only while asked, as Python's. What the main process holds says the
+      C heap, the threads and (Windows) what is committed: a Rust program has no objects or
+      modules to count. The test: on the running app, the numbers against psutil's
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app
 - [x] one Libre Panel at a panel (instance.py): the system's lock on libre-panel.lock in the

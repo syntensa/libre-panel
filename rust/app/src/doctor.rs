@@ -669,6 +669,8 @@ struct Inner {
     report: Option<Report>,
     /// what is plugged in, for the report form
     devices: Option<String>,
+    /// what Libre Panel cost the PC before the test, as text (load.rs), for the report
+    load_text: String,
 }
 
 struct Shared {
@@ -790,11 +792,14 @@ impl Default for Session {
 }
 
 /// What a test needs from the app: its panel loop (None in a plain editor), config.toml and
-/// what is plugged in, for the report form.
+/// what is plugged in and what Libre Panel costs the PC, for the report form.
 pub struct Start {
     pub app: Option<Arc<crate::background::BackgroundApp>>,
     pub config_file: PathBuf,
     pub devices: Option<String>,
+    /// what Libre Panel costs the PC now, as text (load.rs's report); measured before the
+    /// test holds the panel
+    pub load: Option<Box<dyn FnOnce() -> String + Send>>,
 }
 
 impl Session {
@@ -826,7 +831,11 @@ impl Session {
             .collect();
         out.insert("steps".into(), Value::List(steps));
         if let Some(report) = &inner.report {
-            let text = report.text();
+            // the doctor's report, and what Libre Panel cost the PC before the test
+            let text = match inner.load_text.as_str() {
+                "" => report.text(),
+                load => format!("{}\n{load}", report.text()),
+            };
             let model = report.model.map_or(Value::None, |model| {
                 Value::Dict(question(vec![
                     ("id", Value::from(model.id)),
@@ -959,11 +968,18 @@ fn say(message: &str) {
 }
 
 /// The test's thread: the panel held from the loop, the doctor run, the panel given back.
-fn run(shared: Arc<Shared>, answers: Receiver<Dict>, start: Start) {
+fn run(shared: Arc<Shared>, answers: Receiver<Dict>, mut start: Start) {
     let questions = AppQuestions {
         shared: Arc::clone(&shared),
         answers: Mutex::new(answers),
     };
+    // before the test holds the panel: Libre Panel as it runs
+    if let Some(load) = start.load.take() {
+        let text = load();
+        if let Ok(mut inner) = shared.inner.lock() {
+            inner.load_text = text;
+        }
+    }
     let mut held = None;
     if let Some(app) = &start.app {
         match app.panel.hold() {

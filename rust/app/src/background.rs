@@ -345,6 +345,19 @@ impl PanelService {
         hub.sources()
     }
 
+    /// How LibreHardwareMonitor is read, where a source of the loop reads it (load.rs).
+    pub fn lhm_status(&self) -> Option<lp_sensors::service::LhmStatus> {
+        let hub = self
+            .status
+            .lock()
+            .ok()
+            .and_then(|status| status.hub.clone())?;
+        let hub = hub
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        hub.lhm_status()
+    }
+
     /// Which run of the loop this is (0: none runs): a new start makes the sensors anew.
     pub fn run(&self) -> u64 {
         self.status.lock().map_or(0, |status| status.run)

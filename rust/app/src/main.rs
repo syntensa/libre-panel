@@ -28,6 +28,7 @@ mod hotkeys;
 mod http;
 mod identify;
 mod instance;
+mod load;
 #[cfg(target_os = "linux")]
 mod logind;
 mod logs;

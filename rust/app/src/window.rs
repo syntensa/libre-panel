@@ -101,6 +101,11 @@ fn running(settings: &Path) -> Option<Running> {
     })
 }
 
+/// The open window's process, as it wrote itself down (load.rs).
+pub(crate) fn window_pid(settings: &Path) -> Option<u32> {
+    running(settings).and_then(|info| u32::try_from(info.pid).ok())
+}
+
 /// _ask: one request to the open window; true when it answered "ok".
 fn ask(info: &Running, words: &[&str]) -> bool {
     let mut line = vec![words[0], info.token.as_str()];
