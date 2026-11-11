@@ -82,11 +82,67 @@ class Host:
             parts = self.registry.parts[kind]
             for name in [n for n, found in parts.items() if found.source == BUILT_IN]:
                 del parts[name]
-        self.ops = {"hello": self.hello, "check": self.check}
+        self.ops = {"hello": self.hello, "check": self.check, "config": self.follow_config,
+                    "sensors.open": self.sensor_open, "sensors.read": self.sensor_read,
+                    "sensors.images": self.sensor_images, "sensors.close": self.sensor_close,
+                    "services.apply": self.services_apply, "services.summary": self.summary,
+                    "services.restart": self.services_restart, "emit": self.emit,
+                    "services.stop": self.services_stop}  # fmt: skip
+        self.config: Any = None
+        self.sources: dict[str, Any] = {}
+        self._calls: dict[int, tuple[threading.Event, list[Any]]] = {}
+        self._call_ids = iter(range(1, 1 << 62))
+        self._calls_lock = threading.Lock()
+        self.bridge: Bridge | None = None
+        self.services: Any = None
+
+    # -- the messages ----------------------------------------------------------------------
+
+    def event(self, what: str, blob: bytes = b"", /, **fields: Any) -> None:
+        """Something a plugin did, told to the Rust app."""
+        self.channel.send({**fields, "event": what}, blob)
+
+    def call(self, what: str, timeout: float, default: Any, /, **fields: Any) -> Any:
+        """Something a plugin asks of the Rust app (a toast's delivery), its answer; ``default``
+        where none comes in ``timeout`` seconds."""
+        with self._calls_lock:
+            ident = next(self._call_ids)
+            waiting = (threading.Event(), [default])
+            self._calls[ident] = waiting
+        self.channel.send({**fields, "event": what, "call": ident})
+        waiting[0].wait(timeout)
+        with self._calls_lock:
+            self._calls.pop(ident, None)
+        return waiting[1][0]
 
     def serve(self) -> None:
+        """Requests are done one after another on a thread of their own, so that a plugin that
+        asks the Rust app something (a toast's delivery) while one is done hears its answer."""
+        import queue
+
+        requests: queue.Queue[tuple[dict[str, Any], bytes] | None] = queue.Queue()
+        worker = threading.Thread(target=self._work, args=(requests,), name="plugin-requests",
+                                  daemon=True)  # fmt: skip
+        worker.start()
         while (received := self.channel.receive()) is not None:
             message, blob = received
+            if "answer" in message:
+                with self._calls_lock:
+                    waiting = self._calls.get(message["answer"])
+                if waiting is not None:
+                    waiting[1][0] = message.get("value")
+                    waiting[0].set()
+                continue
+            requests.put((message, blob))
+        requests.put(None)
+        worker.join(10)
+        self.services_stop({}, b"")
+        for source in list(self.sources.values()):
+            _close(source)
+
+    def _work(self, requests: Any) -> None:
+        while (request := requests.get()) is not None:
+            message, blob = request
             op = self.ops.get(message.get("op", ""))
             answer: dict[str, Any] = {"id": message.get("id")}
             out = b""
@@ -131,6 +187,250 @@ class Host:
                           "error": found.error})  # fmt: skip
         return {"parts": parts, "errors": list(self.registry.errors)}
 
+    # -- config.toml ---------------------------------------------------------------------
+
+    def follow_config(self, message: dict[str, Any], blob: bytes) -> dict[str, Any]:
+        """config.toml was read (``path``): the sources take what they follow of it (and the
+        language is the app's)."""
+        from libre_panel import i18n
+        from libre_panel.config import load_config
+
+        self.config = load_config(Path(message["path"]))
+        if getattr(self.config, "language", ""):
+            i18n.set_language(self.config.language)
+        for source in list(self.sources.values()):
+            source.follow_config(self.config)
+        return {}
+
+    # -- sensor sources ------------------------------------------------------------------
+
+    def sensor_open(self, message: dict[str, Any], blob: bytes) -> dict[str, Any]:
+        """The plugin's sensor source ``name`` made with its ``options``; how often it is read."""
+        from libre_panel.sensors.base import create_provider
+
+        name = message["name"]
+        source = create_provider(name, message.get("options") or {})
+        if self.config is not None:
+            source.follow_config(self.config)
+        _close(self.sources.pop(name, None))
+        self.sources[name] = source
+        every = source.every_frame
+        return {"every_frame": every if isinstance(every, str) else bool(every),
+                "overrides": list(source.overrides)}  # fmt: skip
+
+    def sensor_read(self, message: dict[str, Any], blob: bytes) -> dict[str, Any]:
+        """The readings of now, with the keys the themes on show read (``wanted``), and which
+        pictures the source holds (a number that changes with them)."""
+        from libre_panel.sensors.base import want
+
+        want(_WANTS, frozenset(message.get("wanted") or ()))
+        source = self.sources[message["name"]]
+        readings = [_reading(reading) for reading in source.read().values()]
+        pictures = source.images()
+        held = hash(tuple((key, id(image)) for key, image in pictures.items())) if pictures else 0
+        return {"readings": readings, "images": held & ((1 << 53) - 1)}
+
+    def sensor_images(self, message: dict[str, Any], blob: bytes) -> tuple[dict, bytes]:
+        """The pictures the source holds, as RGBA pixels one after another."""
+        pictures = self.sources[message["name"]].images()
+        return _pictures(pictures)
+
+    def sensor_close(self, message: dict[str, Any], blob: bytes) -> dict[str, Any]:
+        _close(self.sources.pop(message["name"], None))
+        return {}
+
+    # -- services ------------------------------------------------------------------------
+
+    def services_apply(self, message: dict[str, Any], blob: bytes) -> dict[str, Any]:
+        """The plugin services config.toml enables (``enabled``, ``options``) started, stopped
+        or restarted as ServiceManager does it; each one's state."""
+        from types import SimpleNamespace
+
+        from libre_panel.plugins.host import ServiceManager
+
+        if self.bridge is None:
+            self.bridge = Bridge(self)
+            self.services = ServiceManager(self.bridge, self.registry)
+        enabled = [name for name in message.get("enabled", [])
+                   if name in self.registry.parts.get("services", {})]  # fmt: skip
+        options = message.get("options") or {}
+        config = SimpleNamespace(services=SimpleNamespace(enabled=enabled, options=options))
+        self.services.apply(config)
+        return {"state": dict(self.services.state)}
+
+    def services_restart(self, message: dict[str, Any], blob: bytes) -> dict[str, Any]:
+        state = self.services.restart(message["name"]) if self.services else "not installed"
+        return {"state": state}
+
+    def services_stop(self, message: dict[str, Any], blob: bytes) -> dict[str, Any]:
+        if self.services is not None:
+            self.services.stop()
+            self.services = None
+            if self.bridge is not None:
+                self.bridge.close()
+            self.bridge = None
+        return {}
+
+    def summary(self, message: dict[str, Any], blob: bytes) -> dict[str, Any]:
+        """What a running service says it is doing (its card), or None."""
+        running = self.services.running.get(message["name"]) if self.services else None
+        return {"summary": running[0].summary() if running else None}
+
+    def emit(self, message: dict[str, Any], blob: bytes) -> dict[str, Any]:
+        """An event of the app (``event``, ``data``) told to the services that hear it; a
+        sample's and a change's ``snapshot`` as the app has it, and the mode on now."""
+        if self.bridge is None:
+            return {}
+        data = dict(message.get("data") or {})
+        if "mode" in message:
+            self.bridge.mode_now = message["mode"]
+        if "snapshot" in data:
+            data["snapshot"] = _snapshot(data["snapshot"])
+            self.bridge.latest = data["snapshot"]
+        if "keys" in data:
+            data["keys"] = frozenset(data["keys"])
+        self.bridge.emit(message["event"], wait=bool(message.get("wait")), **data)
+        return {}
+
+
+_WANTS = type("_RustApp", (), {})()  # (who reads what the themes on show read, for want())
+
+
+def _close(source: Any) -> None:
+    if source is None:
+        return
+    try:
+        source.close()
+    except Exception:  # a source's own problem: it is gone either way
+        log.exception("a plugin's sensor source failed while closing")
+
+
+def _reading(reading: Any) -> dict[str, Any]:
+    value = reading.value
+    if isinstance(value, float) and value != value:  # (JSON has no NaN)
+        value = None
+    return {"key": reading.key, "value": value, "unit": reading.unit, "label": reading.label,
+            "origin": reading.origin, "device": reading.device}  # fmt: skip
+
+
+def _pictures(pictures: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
+    """Pictures as their keys and sizes, and their RGBA pixels one after another."""
+    told, data = [], bytearray()
+    for key, image in pictures.items():
+        if image is None:
+            continue
+        rgba = image.convert("RGBA")
+        told.append({"key": key, "size": list(rgba.size)})
+        data += rgba.tobytes()
+    return {"images": told}, bytes(data)
+
+
+def _snapshot(told: dict[str, Any]) -> Any:
+    """A snapshot as the app sent it: its readings, history and moment."""
+    from datetime import datetime
+
+    from libre_panel.sensors.base import Reading, Snapshot
+
+    readings = {r["key"]: Reading(r["key"], r.get("value"), r.get("unit", ""),
+                                  r.get("label", ""), r.get("origin", ""), r.get("stamp"),
+                                  r.get("device", ""))
+                for r in told.get("readings", [])}  # fmt: skip
+    now = datetime.fromisoformat(told["now"]) if told.get("now") else datetime.now()
+    return Snapshot(readings=readings, history=dict(told.get("history") or {}), now=now)
+
+
+def _transition(spec: Any) -> Any:
+    """A transition as JSON: a name, [name, parameters] or None."""
+    if isinstance(spec, tuple):
+        return [spec[0], dict(spec[1])]
+    return spec
+
+
+class _Bridge:
+    """Defined below on first use (the plugin API is imported only then)."""
+
+
+def _make_bridge() -> type:
+    from libre_panel.plugins.host import ANY_MODE, Delivery, PluginHost
+
+    class Bridge(PluginHost):
+        """The services' PluginHost: what they do goes to the Rust app, whose main loop decides
+        (the theme, the mode, whether a toast shows); what it tells them comes back here."""
+
+        def __init__(self, host: Host) -> None:
+            super().__init__()
+            self.host = host
+            self.mode_now: str | None = None
+            self._pictures = 0
+
+        @property
+        def mode(self) -> str | None:  # (the main loop's, as it last told)
+            return self.mode_now
+
+        def publish(self, reading: Any, owner: str | None = None) -> None:
+            super().publish(reading, owner)
+            if reading.stamp is None:  # (a state goes as one: publish_state)
+                self.host.event("publish", owner=owner, reading=_reading(reading))
+
+        def publish_state(self, key: str, value: Any, owner: str | None = None,
+                          label: str = "") -> None:  # fmt: skip
+            super().publish_state(key, value, owner, label)
+            self.host.event("state", owner=owner, key=key, value=value, label=label)
+
+        def unpublish(self, key: str) -> None:
+            super().unpublish(key)
+            self.host.event("unpublish", key=key)
+
+        def want(self, owner: str, keys: Any) -> None:
+            self.host.event("want", owner=owner, keys=sorted(keys))
+
+        def publish_image(self, key: str, image: Any, owner: str | None = None) -> None:
+            super().publish_image(key, image, owner)
+            if image is None:
+                self.host.event("image", owner=owner, key=key)
+                return
+            told, data = _pictures({key: image})
+            self.host.event("image", data, owner=owner, key=key, size=told["images"][0]["size"])
+
+        def request_theme(self, name: str | None, by: str, transition: Any = None,
+                          priority: int = 0, mode: str | None = ANY_MODE) -> None:  # fmt: skip
+            self.host.event("theme", name=name, by=by, transition=_transition(transition),
+                            priority=int(priority), mode=mode)  # fmt: skip
+
+        def set_mode(self, name: str | None, by: str | None = None,
+                     transition: Any = None) -> None:  # fmt: skip
+            self.host.event("mode", name=name, by=by, transition=_transition(transition))
+
+        def notify(self, toast: Any) -> Any:
+            payload = {}
+            for key, value in toast.payload.items():
+                if hasattr(value, "convert"):  # a picture: published, and named in its place
+                    self._pictures += 1
+                    named = f"plugin-toast.{toast.service or 'plugin'}.{self._pictures % 8}"
+                    self.publish_image(named, value, owner=toast.service or None)
+                    value = named
+                payload[key] = value
+            told = self.host.call("notify", 5.0, None, toast={
+                "text": toast.text, "icon": toast.icon, "level": toast.level,
+                "seconds": toast.seconds, "kind": toast.kind, "rank": toast.rank,
+                "payload": payload, "service": toast.service, "key": toast.key})  # fmt: skip
+            if not isinstance(told, dict):
+                return Delivery(True)
+            return Delivery(bool(told.get("shown")), str(told.get("reason") or ""))
+
+        def forget(self, owner: str) -> None:
+            super().forget(owner)
+            self.host.event("forget", owner=owner)
+
+    return Bridge
+
+
+def Bridge(host: Host) -> Any:  # noqa: N802 (made as a class is)
+    global _Bridge
+    if not isinstance(_Bridge, type) or _Bridge.__name__ != "Bridge":
+        _Bridge = _make_bridge()
+    return _Bridge(host)
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="libre-panel-plugins")
@@ -139,8 +439,9 @@ def main(argv: list[str] | None = None) -> int:
     # (the messages own standard output: what plugins print goes to the log)
     channel = Channel(sys.stdin.buffer, sys.stdout.buffer)
     sys.stdout = sys.stderr
+    # (the app puts each line into its own log: "<level>\t<logger>\t<message>")
     logging.basicConfig(stream=sys.stderr, level=logging.INFO,
-                        format="%(name)s: %(message)s")  # fmt: skip
+                        format="%(levelname)s\t%(name)s\t%(message)s")  # fmt: skip
     Host(channel, args.folder).serve()
     return 0
 

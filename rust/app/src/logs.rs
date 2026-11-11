@@ -178,6 +178,21 @@ pub fn say(logger: &str, message: &str) {
     log(Level::Info, logger, message);
 }
 
+/// A line the plugin host logged (`level` by its Python name, its `logger`): said as the
+/// app's own are, and into the log.
+pub fn plugin_line(level: &str, logger: &str, message: &str) {
+    let level = match level {
+        "DEBUG" => Level::Debug,
+        "WARNING" => Level::Warning,
+        "ERROR" | "CRITICAL" => Level::Error,
+        _ => Level::Info,
+    };
+    if level as i32 >= Level::Info as i32 {
+        eprintln!("libre-panel: {message}");
+    }
+    log(level, logger, message);
+}
+
 pub fn verbose() -> bool {
     VERBOSE.load(Ordering::Relaxed)
 }

@@ -52,10 +52,23 @@ impl Company {
     /// this build does not have yet are said once.
     pub fn follow(&self, config: &Config) {
         let parts = crate::services::parts();
+        // (the plugins' services, run in the plugin host where plugins are installed)
+        let settings = config
+            .path
+            .as_deref()
+            .and_then(std::path::Path::parent)
+            .map_or_else(lp_config::dirs::config_dir, std::path::Path::to_path_buf);
+        let plugins = match crate::plugins::shared(&settings) {
+            Some(Ok(host)) => host.names("services"),
+            _ => Vec::new(),
+        };
+        if !plugins.is_empty() {
+            self.plugin_services(&settings, config);
+        }
         let mut enabled: Vec<String> = Vec::new();
         let mut lacking = Vec::new();
         for name in &config.services.enabled {
-            match parts.contains_key(name.as_str()) {
+            match parts.contains_key(name.as_str()) || plugins.contains(name) {
                 true => enabled.push(name.clone()),
                 false => lacking.push(name.clone()),
             }
@@ -84,6 +97,21 @@ impl Company {
             if let Some(also) = also.as_ref() {
                 also(config);
             }
+        }
+    }
+
+    /// The plugins' services handed to the manager, once.
+    fn plugin_services(&self, settings: &std::path::Path, config: &Config) {
+        let Ok(mut manager) = self.manager.lock() else {
+            return;
+        };
+        if manager.has_remote() {
+            return;
+        }
+        if let Some(Ok(host)) = crate::plugins::shared(settings) {
+            let remote =
+                crate::plugins::RemoteServices::new(host, &self.host, config.path.as_deref());
+            manager.set_remote(Box::new(remote));
         }
     }
 

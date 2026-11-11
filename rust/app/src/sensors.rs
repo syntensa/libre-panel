@@ -150,6 +150,14 @@ impl Lhm {
     }
 }
 
+/// A table of config.toml as a dict.
+fn toml_dict(table: &Table) -> lp_py::Dict {
+    table
+        .iter()
+        .map(|(key, value)| (key.clone(), value_of(value)))
+        .collect()
+}
+
 /// A dict of `(key, value)` in order.
 fn told(pairs: Vec<(&str, Value)>) -> lp_py::Dict {
     pairs.into_iter().map(|(k, v)| (k.to_string(), v)).collect()
@@ -1094,7 +1102,31 @@ impl Hub {
                         let place = number("latitude").zip(number("longitude"));
                         sources.push(Box::new(Sky(lp_sensors::sky::SkySource::new(place))));
                     }
-                    other => missing.push(other.to_string()),
+                    other => {
+                        // (a plugin's: read in the plugin host)
+                        let options = sensors
+                            .options
+                            .get(other)
+                            .map(toml_dict)
+                            .unwrap_or_default();
+                        let settings = config
+                            .path
+                            .as_deref()
+                            .and_then(std::path::Path::parent)
+                            .map_or_else(lp_config::dirs::config_dir, std::path::Path::to_path_buf);
+                        let opened = crate::plugins::PluginSource::open(
+                            &settings,
+                            other,
+                            options,
+                            config.path.as_deref(),
+                            wanted.clone(),
+                        );
+                        match opened {
+                            Some(Ok(source)) => sources.push(Box::new(source)),
+                            Some(Err(why)) => notes.push(why),
+                            None => missing.push(other.to_string()),
+                        }
+                    }
                 }
             }
             if let (true, Some(latitude), Some(longitude)) = (

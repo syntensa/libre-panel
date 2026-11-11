@@ -87,6 +87,25 @@ pub fn apply_options(
     Ok(result)
 }
 
+/// Services that run elsewhere (the plugins', in the plugin host): started, stopped and
+/// kept in step with config.toml there, their options checked there.
+pub trait Remote: Send {
+    /// The services it has, by name.
+    fn names(&self) -> Vec<String>;
+    /// Those of them config.toml enables, with their options: each one's state after.
+    fn apply(
+        &mut self,
+        enabled: &[String],
+        options: &IndexMap<String, Dict>,
+    ) -> IndexMap<String, String>;
+    /// One stopped and started again: its new state.
+    fn restart(&mut self, name: &str) -> Result<String, String>;
+    /// What a running one is doing now; None for one that does not run or says nothing.
+    fn summary(&self, name: &str) -> Option<Value>;
+    /// All of them stopped.
+    fn stop(&mut self);
+}
+
 /// How long a service may take to stop.
 const STOP_SECONDS: f64 = 5.0;
 
@@ -101,6 +120,10 @@ pub struct Manager {
     /// enabled services and their options
     wanted: IndexMap<String, Dict>,
     notes: Vec<String>,
+    /// the plugins' services, run in the plugin host
+    remote: Option<Box<dyn Remote>>,
+    /// the names it has
+    remote_names: Vec<String>,
 }
 
 impl Manager {
@@ -112,7 +135,24 @@ impl Manager {
             state: IndexMap::new(),
             wanted: IndexMap::new(),
             notes: Vec::new(),
+            remote: None,
+            remote_names: Vec::new(),
         }
+    }
+
+    /// The services the plugins bring, run where they are (the plugin host).
+    pub fn set_remote(&mut self, remote: Box<dyn Remote>) {
+        self.remote_names = remote.names();
+        self.remote = Some(remote);
+    }
+
+    /// Whether the plugins' services were handed over.
+    pub fn has_remote(&self) -> bool {
+        self.remote.is_some()
+    }
+
+    fn is_remote(&self, name: &str) -> bool {
+        !self.parts.contains_key(name) && self.remote_names.iter().any(|known| known == name)
     }
 
     /// Starts, stops or restarts services so they match `enabled` and their `options`.
@@ -122,6 +162,15 @@ impl Manager {
             .map(|name| (name.clone(), options.get(name).cloned().unwrap_or_default()))
             .collect();
         self.wanted = wanted.clone();
+        let remote: Vec<String> = enabled
+            .iter()
+            .filter(|name| self.is_remote(name))
+            .cloned()
+            .collect();
+        let wanted: IndexMap<String, Dict> = wanted
+            .into_iter()
+            .filter(|(name, _)| !self.is_remote(name))
+            .collect();
         let gone: Vec<String> = self.running.keys().cloned().collect();
         for name in gone.iter().filter(|name| !wanted.contains_key(*name)) {
             self.stop_one(name);
@@ -135,7 +184,17 @@ impl Manager {
             }
             self.start_one(name, given);
         }
-        self.state.retain(|name, _| wanted.contains_key(name));
+        let states = match self.remote.as_mut() {
+            Some(running) => running.apply(&remote, options),
+            None => IndexMap::new(),
+        };
+        self.state
+            .retain(|name, _| wanted.contains_key(name) || remote.contains(name));
+        for (name, state) in states {
+            if remote.contains(&name) {
+                self.state.insert(name, state);
+            }
+        }
     }
 
     /// Stops an enabled service and starts it again; its new state.
@@ -144,6 +203,14 @@ impl Manager {
             let named = lp_py::repr(name);
             return Err(format!("service {named} is not enabled in config.toml"));
         };
+        if self.is_remote(name) {
+            let state = match self.remote.as_mut() {
+                Some(running) => running.restart(name)?,
+                None => "not installed".to_string(),
+            };
+            self.state.insert(name.to_string(), state.clone());
+            return Ok(state);
+        }
         if self.running.contains_key(name) {
             self.stop_one(name);
         }
@@ -216,19 +283,35 @@ impl Manager {
         for name in names {
             self.stop_one(&name);
         }
+        if let Some(running) = self.remote.as_mut() {
+            running.stop();
+        }
     }
 
     /// What each running service is doing now.
     pub fn summaries(&self) -> IndexMap<String, Value> {
         let running = self.running.iter();
-        running
+        let mut found: IndexMap<String, Value> = running
             .filter_map(|(name, (service, _))| Some((name.clone(), service.summary()?)))
-            .collect()
+            .collect();
+        if let Some(remote) = self.remote.as_ref() {
+            for (name, state) in &self.state {
+                if state == "running" && self.is_remote(name) {
+                    if let Some(said) = remote.summary(name) {
+                        found.insert(name.clone(), said);
+                    }
+                }
+            }
+        }
+        found
     }
 
     /// What a running service is doing now (its card's summary); None for one that does not
     /// run or says nothing.
     pub fn summary_of(&self, name: &str) -> Option<Value> {
+        if self.is_remote(name) {
+            return self.remote.as_ref()?.summary(name);
+        }
         self.running.get(name)?.0.summary()
     }
 
