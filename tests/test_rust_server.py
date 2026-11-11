@@ -3055,3 +3055,136 @@ def test_community_themes_are_listed_and_installed_as_community_py_does(
     assert ours[0] == theirs[0] == "HTTP/1.0 200 OK", ours[2]
     sizes = [Image.open(io.BytesIO(answer[2])).size for answer in (theirs, ours)]
     assert sizes[0] == sizes[1] == (1920, 720)
+
+
+def _upload(name: str, data: bytes | None) -> bytes:
+    lines = [f"POST /api/player/media?name={name} HTTP/1.1", "Host: {host}", WITH,
+             "Content-Type: application/octet-stream"]  # fmt: skip
+    if data is not None:
+        lines.append(f"Content-Length: {len(data)}")
+    return "\r\n".join(lines).encode("utf-8") + b"\r\n\r\n" + (data or b"")
+
+
+def test_the_player_s_library_is_told_filled_and_refused_as_server_py_does(servers: Any) -> None:
+    """Player (/api/player): the library and the panels to play on as Python tells them; a
+    picture taken in, its small picture drawn the same, removed again; a name that is no
+    video's or picture's, no length, a file that cannot be played, playing without the
+    running app and what is no action refused in the same words."""
+    import io
+
+    from PIL import Image
+
+    ask, homes = servers
+
+    def told(answer: tuple[str, Any, str], home: Path) -> Any:
+        data = json.loads(answer[2])
+        if isinstance(data, dict) and "folder" in data:
+            data["folder"] = str(Path(data["folder"]).relative_to(home))
+        return data
+
+    def same(request: Any, status: str | None = None) -> Any:
+        theirs, ours = ask(request)
+        assert ours[0] == theirs[0], (request, theirs, ours)
+        if status is not None:
+            assert ours[0] == status, ours[2]
+        mine = told(ours, homes[1])
+        assert mine == told(theirs, homes[0]), request
+        return mine
+
+    state = same(_get("/api/player", WITH), "HTTP/1.0 200 OK")
+    assert state["available"] is False and state["library"] == []
+    assert state["panels"][0]["number"] == 1
+    picture = io.BytesIO()
+    Image.new("RGB", (64, 40), (200, 30, 90)).save(picture, "PNG")
+    state = same(_upload("red.png", picture.getvalue()), "HTTP/1.0 200 OK")
+    assert [item["name"] for item in state["library"]] == ["red.png"]
+    theirs, ours = ask(_get("/api/player/picture?name=red.png&w=32", WITH))
+    assert ours[0] == theirs[0] == "HTTP/1.0 200 OK" and ours[2] == theirs[2]
+    for query in ("name=red.png&w=x", "name=nope.png", "name=../red.png"):
+        theirs, ours = ask(_get(f"/api/player/picture?{query}", WITH))
+        assert ours[0] == theirs[0], query
+        assert json.loads(ours[2]) == json.loads(theirs[2]), query
+    same(_upload(".hidden.png", b"x"))
+    same(_upload("clip.exe", b"x"))
+    same(_upload("broken.mp4", b"no video"))
+    same(_upload("nolength.png", None))
+    assert not any(any(Path(h).rglob("broken.mp4")) for h in homes)
+    for body in ({"action": "play", "names": ["red.png"]}, {"action": "pause"},
+                 {"action": "stop"}, {"action": "seek"}, {"action": "seek", "seconds": "1"},
+                 {"action": "set", "fit": "nope"}, {"action": "jump"}, {}, [1], "play",
+                 {"action": "remove", "name": "../red.png"}):  # fmt: skip
+        same(_post("/api/player", body))
+    state = same(_post("/api/player", {"action": "remove", "name": "red.png"}), "HTTP/1.0 200 OK")
+    assert state["library"] == []
+
+
+def test_the_player_plays_a_picture_on_the_app_s_panel_and_gives_it_back(tmp_path: Path) -> None:
+    """Player on the running app with a simulated panel: a picture taken in and played shows
+    on the panel instead of the theme, filled to its edges; paused it stays; stopped, the
+    panel shows its theme again. Play on a panel 0, and names that are none or not there,
+    refused."""
+    import io
+
+    from PIL import Image
+
+    rig = Rig(tmp_path)
+    try:
+        rig.config(
+            'theme = "slate"\nlanguage = "en"\n[device]\ndriver = "turzx"\n'
+            'model = "turing-9.2-usb"\n[video]\nmode = "off"\n[sensors]\nproviders = []\n'
+        )
+        env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+               **_libraries(), **rig.env()}  # fmt: skip
+        command = [str(_program()), "start", "--port", "0", "--no-browser"]
+        with subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              encoding="utf-8") as program:  # fmt: skip
+            try:
+                assert program.stdout is not None
+                address = program.stdout.readline().split(" running at ")[1].split()[0]
+                port = int(address.split(":")[2].split("/")[0])
+                token = address.split("#token=")[1]
+
+                def ask(request: str | bytes) -> tuple[str, Any]:
+                    text = request if isinstance(request, bytes) else request.encode("utf-8")
+                    text = text.replace(b"{host}", f"127.0.0.1:{port}".encode())
+                    text = text.replace(b"{token}", token.encode())
+                    status, _, answer = _asked(port, text)
+                    return status.split(" ", 2)[1], json.loads(answer)
+
+                def red(frame: Any) -> bool:
+                    colours = frame.convert("RGB").getcolors(4)
+                    return colours is not None and [c for _, c in colours] == [(200, 30, 90)]
+
+                assert _waited(lambda: len(rig.fake.frames) > 0 or None, 30), "no frame shown"
+                status, state = ask(_get("/api/player", WITH))
+                assert status == "200" and state["available"] is True, state
+                assert state["panels"] == [{"number": 1, "name": 'Turing 9.2"'}]
+                picture = io.BytesIO()
+                Image.new("RGB", (64, 40), (200, 30, 90)).save(picture, "PNG")
+                status, state = ask(_upload("red.png", picture.getvalue()))
+                assert status == "200", state
+                status, state = ask(_post("/api/player", {"action": "play", "names": ["red.png"]}))
+                assert status == "200" and state["playing"]["name"] == "red.png", state
+                before = len(rig.fake.frames)
+                assert _waited(lambda: any(red(f) for f in rig.fake.frames[before:]) or None, 30), (
+                    "the picture is not shown"
+                )
+                assert rig.fake.frames[-1].size == (480, 1920)
+                status, state = ask(_post("/api/player", {"action": "pause"}))
+                assert status == "200" and state["playing"]["paused"] is True, state
+                status, state = ask(_post("/api/player", {"action": "stop"}))
+                assert status == "200" and state["playing"] is None, state
+                after = len(rig.fake.frames)
+                assert _waited(
+                    lambda: any(not red(f) for f in rig.fake.frames[after:]) or None, 30
+                ), "the theme is not shown again"
+                for body in ({"action": "play", "names": ["red.png"], "panels": [0]},
+                             {"action": "play", "names": []},
+                             {"action": "play", "names": ["gone.png"]}):  # fmt: skip
+                    status, said = ask(_post("/api/player", body))
+                    assert status == "400" and said["error"], (body, said)
+            finally:
+                program.terminate()
+                program.wait(10)
+    finally:
+        rig.close()

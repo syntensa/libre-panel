@@ -474,6 +474,34 @@ impl Exchange {
         }
     }
 
+    /// int(headers.get("Content-Length", "-1")): -1 where it is none or no number.
+    pub fn length_given(&self) -> i128 {
+        self.header("Content-Length")
+            .and_then(lp_py::int_of_str)
+            .and_then(|n| n.to_string().parse().ok())
+            .unwrap_or(-1)
+    }
+
+    /// The body, `length` bytes of it, written to `out` as it comes (a file of gigabytes
+    /// too); an error where it ends before.
+    pub fn copy_body(&mut self, length: u64, out: &mut dyn std::io::Write) -> std::io::Result<()> {
+        self.body_read = true;
+        let mut left = length;
+        let mut buffer = vec![0u8; 1 << 20];
+        while left > 0 {
+            let want = left.min(buffer.len() as u64) as usize;
+            let got = self.reader.read(&mut buffer[..want])?;
+            if got == 0 {
+                return Err(std::io::Error::other(
+                    "the upload ended before the file did",
+                ));
+            }
+            out.write_all(&buffer[..got])?;
+            left -= got as u64;
+        }
+        Ok(())
+    }
+
     /// _read_body: the request's body; None (and the error answered) where it is larger than
     /// `limit`.
     pub fn read_body(&mut self, limit: u64, too_large: &str) -> Option<Vec<u8>> {

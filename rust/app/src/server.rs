@@ -369,6 +369,15 @@ const ROUTES: &[Route] = &[
         x.json(&s.doctor.status(), 200)
     }),
     private("POST", "/api/doctor", |s, x, _, _| doctor_action(s, x)),
+    // the app's Player (player.rs)
+    private("GET", "/api/player", |s, x, _, _| player_state(s, x)),
+    private("POST", "/api/player", |s, x, _, _| player_action(s, x)),
+    picture("GET", "/api/player/picture", |s, x, _, u| {
+        player_picture(s, x, &u.query);
+    }),
+    private("POST", "/api/player/media", |s, x, _, u| {
+        player_upload(s, x, &u.query);
+    }),
     // the themes the community shares: the list and the previews, from GitHub
     private("GET", "/api/community/themes", |s, x, _, _| {
         x.json(&s.community.themes(), 200);
@@ -2228,6 +2237,264 @@ fn community_install(state: &State, exchange: &mut Exchange) {
         Ok(told) => exchange.json(&Value::Dict(told), 200),
         Err((status, why)) => exchange.error(&why, status, ""),
     }
+}
+
+/// a file for the Player, written as it comes
+const MAX_MEDIA: i128 = 32 << 30;
+const PLAYER_ACTIONS: [&str; 11] = [
+    "play", "pause", "resume", "toggle", "next", "previous", "seek", "set", "stop", "remove",
+    "folder",
+];
+
+/// The panels to play on: `{number, name}`, 1 the first, then [[panels]] that are on.
+fn player_panels(state: &State) -> Value {
+    let entry = |number: i64, name: String| {
+        let mut told = lp_py::Dict::new();
+        told.insert("number".into(), Value::int(number));
+        told.insert("name".into(), Value::Str(name));
+        Value::Dict(told)
+    };
+    let Ok(config) = lp_config::load_config(&state.config_file, lp_config::platform()) else {
+        return Value::List(vec![entry(1, String::new())]);
+    };
+    let told = state
+        .controls
+        .upgrade()
+        .and_then(|app| app.panel.told(0).into_iter().next().flatten())
+        .map(|told| told.model)
+        .unwrap_or_default();
+    let model = lp_devices::models::find_model(&config.device.model)
+        .or_else(|| lp_devices::models::find_model(&told));
+    let mut panels = vec![entry(1, model.map_or(String::new(), |m| m.label()))];
+    for (n, panel) in config.panels.iter().enumerate() {
+        if panel.on {
+            let beside = lp_devices::models::find_model(&panel.device.model);
+            panels.push(entry(
+                n as i64 + 2,
+                beside.map_or(String::new(), |m| m.label()),
+            ));
+        }
+    }
+    Value::List(panels)
+}
+
+/// `GET /api/player`: the library, what plays, the panels it can play on, and whether the
+/// running app is there to play them.
+fn player_state(state: &State, exchange: &mut Exchange) {
+    let place = crate::player::folder();
+    let mut told = lp_py::Dict::new();
+    told.insert(
+        "available".into(),
+        Value::Bool(state.controls.upgrade().is_some()),
+    );
+    told.insert(
+        "folder".into(),
+        Value::Str(place.to_string_lossy().into_owned()),
+    );
+    told.insert("library".into(), crate::player::library_value(&place));
+    told.insert("playing".into(), crate::player::status());
+    told.insert("panels".into(), player_panels(state));
+    told.insert("ffmpeg".into(), Value::Bool(crate::player::has_ffmpeg()));
+    let words = |all: &[&str]| Value::List(all.iter().map(|w| Value::from(*w)).collect());
+    told.insert("fits".into(), words(&crate::player::FITS));
+    told.insert("loops".into(), words(&crate::player::LOOPS));
+    exchange.json(&Value::Dict(told), 200);
+}
+
+/// `GET /api/player/picture?name=...&w=320`: a picture of a file of the library.
+fn player_picture(_state: &State, exchange: &mut Exchange, query: &str) {
+    let asked = crate::http::parse_qs(query);
+    let first = |key: &str| asked.get(key).and_then(|values| values.first()).cloned();
+    let name = first("name").unwrap_or_default();
+    let width = match first("w") {
+        None => Some(320),
+        Some(w) => lp_py::int_of_str(&w).map(|w| i64::try_from(w).unwrap_or(i64::MAX)),
+    };
+    let Some(width) = width else {
+        return exchange.error("w: expected a whole number", 400, "");
+    };
+    match crate::player::thumbnail(&name, width, &crate::player::folder()) {
+        Some(jpeg) => exchange.send(200, &jpeg, "image/jpeg", ""),
+        None => exchange.error(&lp_i18n::t("no picture of it"), 404, ""),
+    }
+}
+
+/// `POST /api/player {"action": ...}`: play, pause, resume, toggle, next, previous, seek,
+/// set, stop; remove a file; open the folder. The answer is `GET /api/player`'s.
+fn player_action(state: &State, exchange: &mut Exchange) {
+    use crate::player;
+    let Some(payload) = exchange.read_json(MAX_JSON) else {
+        return;
+    };
+    let Value::Dict(payload) = payload else {
+        return exchange.error("expected {\"action\": ...}", 400, "");
+    };
+    let get = |key: &str| payload.get(key).cloned().unwrap_or(Value::None);
+    let place = player::folder();
+    let action = payload.get("action").and_then(Value::as_str).unwrap_or("");
+    let done = match action {
+        "play" => {
+            if state.controls.upgrade().is_none() {
+                let said = lp_i18n::t("the Player plays on the panels of the running app");
+                return exchange.error(&said, 409, "");
+            }
+            let names: Option<Vec<String>> = match payload.get("names") {
+                Some(Value::List(names)) => names
+                    .iter()
+                    .map(|n| n.as_str().map(str::to_string))
+                    .collect(),
+                _ => None,
+            };
+            let Some(names) = names else {
+                return exchange.error("names: expected [\"file.mp4\", ...]", 400, "");
+            };
+            let panels: Option<Vec<i64>> = match payload.get("panels") {
+                None => Some(vec![1]),
+                Some(Value::List(panels)) => panels
+                    .iter()
+                    .map(|n| match n {
+                        Value::Int(n) => Some(i64::try_from(n).unwrap_or(i64::MAX)),
+                        _ => None,
+                    })
+                    .collect(),
+                Some(_) => None,
+            };
+            let Some(panels) = panels else {
+                return exchange.error("panels: expected [1, ...]", 400, "");
+            };
+            let start = payload.get("start").and_then(Value::as_str);
+            let fit = payload.get("fit").cloned().unwrap_or(Value::from("cover"));
+            let looping = payload.get("loop").cloned().unwrap_or(Value::from("all"));
+            let shuffle = payload.get("shuffle").is_some_and(Value::truthy);
+            let picture_s = payload
+                .get("picture_s")
+                .cloned()
+                .unwrap_or(Value::Float(player::PICTURE_S));
+            player::play(
+                &player::Asked {
+                    names: &names,
+                    panels: &panels,
+                    start,
+                    fit: &fit,
+                    looping: &looping,
+                    shuffle,
+                    picture_s: &picture_s,
+                },
+                &place,
+            )
+        }
+        "pause" => {
+            player::pause();
+            Ok(())
+        }
+        "resume" => {
+            player::resume();
+            Ok(())
+        }
+        "toggle" => {
+            player::toggle();
+            Ok(())
+        }
+        "next" => {
+            player::next_item();
+            Ok(())
+        }
+        "previous" => {
+            player::previous_item();
+            Ok(())
+        }
+        "stop" => {
+            player::stop();
+            Ok(())
+        }
+        "seek" => match payload.get("seconds") {
+            Some(seconds @ (Value::Int(_) | Value::Float(_))) => {
+                player::seek(seconds.to_f64().unwrap_or(0.0));
+                Ok(())
+            }
+            _ => return exchange.error("seconds: expected a number", 400, ""),
+        },
+        "set" => player::configure(
+            &get("fit"),
+            &get("loop"),
+            &get("shuffle"),
+            &get("picture_s"),
+        ),
+        "remove" => player::remove(&get("name"), &place),
+        "folder" => {
+            let _ = std::fs::create_dir_all(&place);
+            let _ = crate::settings::open_path(&place);
+            Ok(())
+        }
+        _ => {
+            let said = format!("action: one of {}", PLAYER_ACTIONS.join(", "));
+            return exchange.error(&said, 400, "");
+        }
+    };
+    match done {
+        Ok(()) => player_state(state, exchange),
+        Err(player::PlayerError(why)) => exchange.error(&why, 400, ""),
+    }
+}
+
+/// `POST /api/player/media?name=clip.mp4` with the file: into the library, written as it
+/// comes (a video of gigabytes too) and put in place once it is whole.
+fn player_upload(state: &State, exchange: &mut Exchange, query: &str) {
+    use crate::player;
+    let asked = crate::http::parse_qs(query);
+    let name = asked
+        .get("name")
+        .and_then(|values| values.first())
+        .cloned()
+        .unwrap_or_default();
+    if !player::valid_name(&name) {
+        let shown: String = name.chars().take(80).collect();
+        let said = lp_i18n::t("{name}: a video or a picture with a name of its own")
+            .replace("{name}", &shown);
+        return exchange.error(&said, 400, "");
+    }
+    let length = exchange.length_given();
+    if !(0..=MAX_MEDIA).contains(&length) {
+        let said =
+            lp_i18n::t("a file of {gb} GB at most").replace("{gb}", &(MAX_MEDIA >> 30).to_string());
+        return exchange.error(&said, 413, "");
+    }
+    let place = player::folder();
+    let part = place.join(format!(".{name}.part"));
+    let written = (|| -> Result<Option<String>, String> {
+        std::fs::create_dir_all(&place).map_err(|e| e.to_string())?;
+        let free = crate::osinfo::usage(&place.to_string_lossy()).map(|usage| usage.free);
+        if free.is_some_and(|free| free < (length + (64 << 20)) as f64) {
+            return Ok(Some(lp_i18n::t("not enough room on the disk for it")));
+        }
+        let mut out = std::fs::File::create(&part).map_err(|e| e.to_string())?;
+        exchange
+            .copy_body(length as u64, &mut out)
+            .map_err(|e| e.to_string())?;
+        drop(out);
+        std::fs::rename(&part, place.join(&name)).map_err(|e| e.to_string())?;
+        Ok(None)
+    })();
+    match written {
+        Ok(None) => {}
+        Ok(Some(full)) => return exchange.error(&full, 507, ""),
+        Err(why) => {
+            let _ = std::fs::remove_file(&part);
+            return exchange.error(&why, 409, "");
+        }
+    }
+    if player::info(&place.join(&name)).is_none() {
+        let _ = std::fs::remove_file(place.join(&name));
+        let said =
+            lp_i18n::t("{name} is no video or picture that can be played").replace("{name}", &name);
+        return exchange.error(&said, 400, "");
+    }
+    crate::logs::log(
+        crate::logs::Level::Info,
+        "libre_panel.editor.server",
+        &format!("player: {name} added ({} MB)", length >> 20),
+    );
+    player_state(state, exchange);
 }
 
 /// int(text) as Python reads a whole number: blanks around it, a sign, digits with single

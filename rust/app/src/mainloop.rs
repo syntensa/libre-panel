@@ -221,6 +221,9 @@ pub struct MainLoop {
     /// the frame before toasts, and with them where one showed
     last_frame: Option<Image>,
     shown_frame: Option<Image>,
+    /// what the app's Player plays here (player.rs), drawn instead of the theme
+    player: crate::player::Screen,
+    playing: bool,
     /// the host's switches seen, the occasion of the theme on show, and whether it is a step
     /// of the screens in turn
     switches: u64,
@@ -444,6 +447,8 @@ impl MainLoop {
             began_in: None,
             last_frame: None,
             shown_frame: None,
+            player: crate::player::Screen::default(),
+            playing: false,
             switches: 0,
             occasion: "manual",
             in_sequence: false,
@@ -1372,10 +1377,33 @@ impl MainLoop {
         }
 
         let drawing = self.clock();
-        let drawn = renderer
-            .render(snapshot, started)
-            .map_err(|e| format!("not drawn by this build yet: {}", e.0))
-            .and_then(|(frame, _)| self.fitted(frame, &renderer))
+        // the app's Player: instead of the theme, on the panels it plays on
+        let number = self.beside.as_ref().map_or(1, |beside| beside.n + 2) as i64;
+        let playing = crate::player::now(number);
+        let drawn = match &playing {
+            Some(showing) => {
+                let size = match self.model() {
+                    Some(model) => {
+                        let (w, h) = model.size(renderer.theme.orientation());
+                        (w as usize, h as usize)
+                    }
+                    None => (
+                        renderer.theme.width.max(1) as usize,
+                        renderer.theme.height.max(1) as usize,
+                    ),
+                };
+                Ok(self.player.frame(showing, size, renderer.fps))
+            }
+            None => renderer
+                .render(snapshot, started)
+                .map_err(|e| format!("not drawn by this build yet: {}", e.0))
+                .and_then(|(frame, _)| self.fitted(frame, &renderer)),
+        };
+        if self.playing && playing.is_none() {
+            self.player.close(); // (it ended: ffmpeg stops)
+        }
+        self.playing = playing.is_some();
+        let drawn = drawn
             .map(|frame| self.dressed_frame(frame, &renderer, started))
             .map(|frame| {
                 self.keep_shown(&frame);
@@ -1385,7 +1413,8 @@ impl MainLoop {
             self.meter.drew(self.clock() - drawing);
         }
         let (mut moving, due) = (renderer.moving, renderer.due);
-        moving |= self.blend.is_some()
+        moving |= self.playing
+            || self.blend.is_some()
             || self.toasts.as_ref().is_some_and(ToastLayer::active)
             || self.alarm.showing(started);
         self.renderer = Some(renderer);

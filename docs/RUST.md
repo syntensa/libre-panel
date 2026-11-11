@@ -2157,6 +2157,16 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       place as an import of the file, adapted to another panel before it is (share.rs's
       rewritten), and drawn on a panel with the demo readings. The test: against a web server
       of this computer, the list, the files and every refusal as Python's
+- [x] the app's Player (player.py, `/api/player`, its pictures and `/api/player/media`): the
+      library beside config.toml (what each file is, its length and rate, kept per file and
+      stamp; small pictures from the first frame), playing on the panels named in turn, in a
+      loop or once, shuffled, paused, sought, the next and the one before; a file taken in as
+      it comes (gigabytes too) and put in place when whole, refused where it cannot be
+      played. Each panel's loop shows the item of the moment at its size instead of the theme
+      (videos through ffmpeg from where they stand, animated pictures by their frames' times);
+      the toasts and the alarm still go over it. The tests: the library, its pictures and
+      every refusal as Python's; a picture played on the running app with a simulated panel,
+      paused, stopped and the theme back
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app
 - [x] one Libre Panel at a panel (instance.py): the system's lock on libre-panel.lock in the

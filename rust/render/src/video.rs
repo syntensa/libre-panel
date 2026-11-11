@@ -321,6 +321,12 @@ impl VideoFeed {
         }
     }
 
+    /// begin_at: its first frame shows at `at` (on the clock its frames are asked on), not
+    /// at the first ask once one is there (VideoFeed's `began`).
+    pub fn begin_at(&self, at: f64) {
+        lock(&self.shared).began = Some(at);
+    }
+
     /// Whether it played to its end (`rounds` false).
     pub fn ended(&self) -> bool {
         lock(&self.shared).ended

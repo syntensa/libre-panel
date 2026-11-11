@@ -359,7 +359,7 @@ fn parts_below(root: &std::path::Path, path: &std::path::Path) -> Option<Vec<Str
 }
 
 /// What reading an animated picture came to.
-pub(crate) enum Read {
+pub enum Read {
     /// its frames, finished
     Frames(Animation),
     /// a picture of one frame: drawn as a still
@@ -377,14 +377,14 @@ fn passed_over(e: &lp_decode::Error) -> bool {
 }
 
 /// moving.Animation: the frames of an animated picture, finished, and when each one ends.
-pub(crate) struct Animation {
-    pub(crate) frames: Vec<Image>,
+pub struct Animation {
+    pub frames: Vec<Image>,
     ends: Vec<f64>,
 }
 
 impl Animation {
     /// The frame on show `seconds` into the animation, round and round.
-    pub(crate) fn index(&self, seconds: f64) -> usize {
+    pub fn index(&self, seconds: f64) -> usize {
         let at = py_mod(seconds, *self.ends.last().expect("frames"));
         self.ends
             .iter()
@@ -405,7 +405,7 @@ impl Animation {
 /// moving.read_animation: the frames of an animated picture one after the other, each passed
 /// through `finish`, every second one (third ...) kept where all would take more than
 /// FRAMES_BYTES, each showing as long as those it stands for.
-pub(crate) fn read_animation(data: &[u8], finish: &dyn Fn(&Image) -> Result<Image>) -> Read {
+pub fn read_animation(data: &[u8], finish: &dyn Fn(&Image) -> Result<Image>) -> Read {
     const ENOUGH: &str = "(enough)";
     // (Image.open, n_frames: a picture of one frame is a still, its pixels not read)
     match lp_decode::n_frames(data) {
