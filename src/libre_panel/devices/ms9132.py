@@ -23,6 +23,17 @@ a USB capture of the vendor's application on a DS339) documents it:
 - No command for the backlight is known: the brightness goes into the pixels. A6 07 00 turns
   the panel off; the next open() turns it on again.
 
+The JONSBO DS339 flickers in a washed-out purple with that start (issue #46; InfoPanel's too).
+What its owner found to end it on the panel, and what is sent to the DS339 alone (the VMAX
+4.6" keeps the vendor's start, which nobody has tried otherwise on it):
+
+- display control B6 F0 05 40 at the start (not 20) and 50 to turn the output on (not 30),
+  and B6 F0 16 08 (not 00);
+- the reports that only write (A6, B6, C6) are not read back;
+- after each frame a packet of no bytes ends the transfer;
+- the panel's state is asked about every 0.5 s, not after each frame;
+- no pixel byte is FF (FE in its place): the chip takes FF for a marker.
+
 On Windows the frames need the vendor's driver on interface 3 (installed with its
 application); the HID interface needs none.
 """
@@ -59,6 +70,8 @@ REPORT_TIMEOUT_MS = 1000
 FIRST_FRAME_S = 0.4  # after A6 04 01, as the vendor's application waits
 AGAIN_S = 1.0  # the last frame again after this long without one (the vendor streams)
 TRAILER = bytes((0xFF, 0xC0, 0, 0, 0, 0, 0, 0))
+WRITE_ONLY = (0xA6, 0xB6, 0xC6)  # the reports the DS339's start does not read back
+STATE_EVERY_S = 0.5  # how often the DS339's state is asked while frames go out
 
 
 def _report(*data: int) -> bytes:
@@ -101,6 +114,14 @@ VIDEO_ON = (
     _report(0xB5, 0xC5, 0x55),
 )
 POWER_OFF = _report(0xA6, 0x07)
+# the DS339's (issue #46): its display control and one register otherwise
+_DS339 = {
+    _report(0xB6, 0xF0, 0x05, 0x20): _report(0xB6, 0xF0, 0x05, 0x40),
+    _report(0xB6, 0xF0, 0x16, 0x00): _report(0xB6, 0xF0, 0x16, 0x08),
+    _report(0xB6, 0xF0, 0x05, 0x30): _report(0xB6, 0xF0, 0x05, 0x50),
+}
+START_DS339 = tuple(_DS339.get(report, report) for report in START)
+VIDEO_ON_DS339 = tuple(_DS339.get(report, report) for report in VIDEO_ON)
 # the vendor's mode number for each size of panel (its framebuffer, standing on end)
 VIC = {
     (480, 480): 143,
@@ -133,13 +154,17 @@ def edid_size(edid: bytes) -> tuple[int, int] | None:
     return (width, height) if width and height else None
 
 
-def frame_packet(native: Image.Image) -> bytes:
-    """A frame as the chip takes it: its header, the pixels as BGR and the trailer."""
+def frame_packet(native: Image.Image, no_ff: bool = False) -> bytes:
+    """A frame as the chip takes it: its header, the pixels as BGR and the trailer; with
+    ``no_ff`` (the DS339) no pixel byte FF."""
     width, height = native.size
     header = bytes((0xFF, 0x00, 0x00, 0x00, 0x00, width // 16)) + (height | 0x8000).to_bytes(
         2, "big"
     )
-    return header + native.convert("RGB").tobytes("raw", "BGR") + TRAILER
+    pixels = native.convert("RGB").tobytes("raw", "BGR")
+    if no_ff:
+        pixels = pixels.replace(b"\xff", b"\xfe")
+    return header + pixels + TRAILER
 
 
 def to_native(frame: Image.Image, size: tuple[int, int]) -> Image.Image:
@@ -181,6 +206,8 @@ class Ms9132Display(Display):
         self.size = (self.model.native_width, self.model.native_height)
         self.brightness = 100
         self.frames = 0
+        self.ds339 = self.model.id == MODEL_ID  # (its start, issue #46)
+        self._state_at: float | None = None  # when the DS339's state was asked last
         self._picture: Image.Image | None = None
         self._packet = b""
         self._keeper = KeepShowing(AGAIN_S, self._again, name="ms9132-keep")
@@ -191,8 +218,12 @@ class Ms9132Display(Display):
     # -- the chip -------------------------------------------------------------------------
 
     def report(self, report: bytes) -> bytes:
-        """One feature report written and read back; the reply's data (5 bytes)."""
+        """One feature report written and read back; the reply's data (5 bytes). The DS339's
+        reports that only write are not read back (no data then)."""
         self.device.ctrl_transfer(0x21, 0x09, 0x0300, CONTROL, report, REPORT_TIMEOUT_MS)
+        if self.ds339 and report[0] in WRITE_ONLY:
+            time.sleep(pause_after(report))
+            return bytes(5)
         reply = bytes(self.device.ctrl_transfer(0xA1, 0x01, 0x0300, CONTROL, 8,
                                                 REPORT_TIMEOUT_MS))  # fmt: skip
         time.sleep(pause_after(report))
@@ -210,10 +241,11 @@ class Ms9132Display(Display):
                 t("another panel of Libre Panel has the {panel} open", panel=self.model.label)
             )
         self.device, self.place, self.frames = device, place, 0
+        self._state_at = None
         try:
             self._claim()
             edid = bytearray(128)
-            for report in START:
+            for report in START_DS339 if self.ds339 else START:
                 reply = self.report(report)
                 if report[:2] == bytes((0xB5, 0xC0)):
                     edid[report[2] : report[2] + 4] = reply[:4]
@@ -276,13 +308,13 @@ class Ms9132Display(Display):
         self.brightness = max(0, min(100, int(percent)))
         if self.device is not None and self._picture is not None:
             with self._keeper.lock:
-                self._send(frame_packet(dimmed(self._picture, self.brightness)))
+                self._send(frame_packet(dimmed(self._picture, self.brightness), self.ds339))
 
     def show(self, frame: Image.Image, region: tuple[int, int, int, int] | None = None) -> None:
         if self.device is None:
             raise DeviceError(t("the {panel} is not open", panel=self.model.label))
         native = to_native(frame, self.size)
-        packet = frame_packet(dimmed(native, self.brightness))
+        packet = frame_packet(dimmed(native, self.brightness), self.ds339)
         with self._keeper.lock:
             self._keeper.check()
             self._picture = native
@@ -297,13 +329,18 @@ class Ms9132Display(Display):
             for start in range(0, len(packet), CHUNK):
                 self.device.write(ENDPOINT_OUT, packet[start : start + CHUNK], WRITE_TIMEOUT_MS)
                 self.counters.bytes += min(CHUNK, len(packet) - start)
+            if self.ds339:  # (the transfer ended by a packet of no bytes)
+                self.device.write(ENDPOINT_OUT, b"", WRITE_TIMEOUT_MS)
             self.frames += 1
-            try:
-                self.report(STATUS)
-            except usb.core.USBError:
-                pass  # (the state is only asked, as the vendor's application does)
+            now = time.monotonic()
+            if not self.ds339 or self._state_at is None or now - self._state_at >= STATE_EVERY_S:
+                self._state_at = now
+                try:
+                    self.report(STATUS)
+                except usb.core.USBError:
+                    pass  # (the state is only asked, as the vendor's application does)
             if self.frames == 2:
-                for report in VIDEO_ON:
+                for report in VIDEO_ON_DS339 if self.ds339 else VIDEO_ON:
                     self.report(report)
         except usb.core.USBError as exc:
             self.counters.usb_errors += 1

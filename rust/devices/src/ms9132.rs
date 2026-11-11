@@ -9,8 +9,15 @@
 //! - A frame goes to bulk endpoint 0x04 of interface 3 in pieces of 64 KB: a header, the pixels
 //!   as BGR and a trailer; the panel's state is read after each. The output goes on once two
 //!   frames are in. The brightness goes into the pixels; A6 07 00 turns the panel off.
+//!
+//! The JONSBO DS339 flickers in a washed-out purple with that start (issue #46). What its owner
+//! found to end it on the panel goes to the DS339 alone (the VMAX 4.6" keeps the vendor's):
+//! display control B6 F0 05 40 at the start and 50 to turn the output on (not 20 and 30),
+//! B6 F0 16 08 (not 00); the reports that only write (A6, B6, C6) are not read back; a packet
+//! of no bytes after each frame; the state asked about every 0.5 s, not after each frame; and
+//! no pixel byte FF (FE in its place).
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use lp_pixels::{Filter, Image, Mode, Transpose};
 
@@ -32,6 +39,20 @@ const REPORT_TIMEOUT_MS: u64 = 1000;
 const FIRST_FRAME_S: f64 = 0.4;
 const AGAIN_S: f64 = 1.0;
 const TRAILER: [u8; 8] = [0xFF, 0xC0, 0, 0, 0, 0, 0, 0];
+/// the reports the DS339's start does not read back
+const WRITE_ONLY: [u8; 3] = [0xA6, 0xB6, 0xC6];
+/// how often the DS339's state is asked while frames go out
+const STATE_EVERY_S: f64 = 0.5;
+
+/// The DS339's own report where it has one (issue #46).
+fn ds339(report: [u8; 8]) -> [u8; 8] {
+    match report[..4] {
+        [0xB6, 0xF0, 0x05, 0x20] => self::report(&[0xB6, 0xF0, 0x05, 0x40]),
+        [0xB6, 0xF0, 0x16, 0x00] => self::report(&[0xB6, 0xF0, 0x16, 0x08]),
+        [0xB6, 0xF0, 0x05, 0x30] => self::report(&[0xB6, 0xF0, 0x05, 0x50]),
+        _ => report,
+    }
+}
 
 fn report(data: &[u8]) -> [u8; 8] {
     let mut out = [0u8; 8];
@@ -131,8 +152,9 @@ pub fn edid_size(edid: &[u8]) -> Option<(i64, i64)> {
     (width != 0 && height != 0).then_some((width, height))
 }
 
-/// frame_packet: a frame as the chip takes it: its header, the pixels as BGR and the trailer.
-pub fn frame_packet(native: &Image) -> Result<Vec<u8>> {
+/// frame_packet: a frame as the chip takes it: its header, the pixels as BGR and the trailer;
+/// with `no_ff` (the DS339) no pixel byte FF.
+pub fn frame_packet(native: &Image, no_ff: bool) -> Result<Vec<u8>> {
     let rgb;
     let native = if native.mode() == Mode::RGB {
         native
@@ -146,6 +168,13 @@ pub fn frame_packet(native: &Image) -> Result<Vec<u8>> {
     out.reserve(width * height * 3 + 8);
     for p in native.as_bytes().chunks_exact(3) {
         out.extend_from_slice(&[p[2], p[1], p[0]]);
+    }
+    if no_ff {
+        for byte in &mut out[8..] {
+            if *byte == 0xFF {
+                *byte = 0xFE;
+            }
+        }
     }
     out.extend_from_slice(&TRAILER);
     Ok(out)
@@ -181,6 +210,10 @@ pub struct Link {
     frames: u64,
     packet: Vec<u8>,
     pauses: bool,
+    /// the DS339's start and frames (issue #46)
+    ds339: bool,
+    /// when the DS339's state was asked last
+    state_at: Option<Instant>,
 }
 
 impl Link {
@@ -197,6 +230,12 @@ impl Link {
             report,
             REPORT_TIMEOUT_MS,
         )?;
+        if self.ds339 && WRITE_ONLY.contains(&report[0]) {
+            if self.pauses {
+                std::thread::sleep(Duration::from_secs_f64(pause_after(report)));
+            }
+            return Ok(vec![0; 5]);
+        }
         let reply = io.control_in(0xA1, 0x01, 0x0300, u16::from(CONTROL), 8, REPORT_TIMEOUT_MS)?;
         if self.pauses {
             std::thread::sleep(Duration::from_secs_f64(pause_after(report)));
@@ -213,11 +252,23 @@ impl Link {
                 io.write(ENDPOINT_OUT, chunk, WRITE_TIMEOUT_MS)?;
                 self.counters.bytes += chunk.len() as u64;
             }
+            if self.ds339 {
+                // (the transfer ended by a packet of no bytes)
+                self.io_mut()?.write(ENDPOINT_OUT, &[], WRITE_TIMEOUT_MS)?;
+            }
             self.frames += 1;
-            // (the state is only asked, as the vendor's application does)
-            let _ = self.report(&status());
+            let now = Instant::now();
+            let due = self
+                .state_at
+                .is_none_or(|at| now.duration_since(at) >= Duration::from_secs_f64(STATE_EVERY_S));
+            if !self.ds339 || due {
+                self.state_at = Some(now);
+                // (the state is only asked, as the vendor's application does)
+                let _ = self.report(&status());
+            }
             if self.frames == 2 {
                 for report in video_on() {
+                    let report = if self.ds339 { ds339(report) } else { report };
                     self.report(&report)?;
                 }
             }
@@ -232,6 +283,12 @@ impl Link {
         }
         self.packet = packet.to_vec();
         Ok(())
+    }
+
+    fn io_mut(&mut self) -> UsbResult<&mut Box<dyn UsbIo>> {
+        self.io
+            .as_mut()
+            .ok_or_else(|| UsbError::Other("the device is let go".into()))
     }
 
     fn again(link: &mut Link) -> Result<()> {
@@ -264,6 +321,8 @@ impl Ms9132 {
             frames: 0,
             packet: Vec::new(),
             pauses: true,
+            ds339: model.id == MODEL_ID,
+            state_at: None,
         };
         Ms9132 {
             model,
@@ -290,6 +349,7 @@ impl Ms9132 {
         self.keeper.with(|kept| {
             kept.inner.io = Some(io);
             kept.inner.frames = 0;
+            kept.inner.state_at = None;
         });
         // the size its EDID says, where a mode is known for it
         let started = self.keeper.with(|kept| -> UsbResult<Option<(i64, i64)>> {
@@ -298,6 +358,7 @@ impl Ms9132 {
             io.claim(&[CONTROL, VIDEO])?;
             let mut edid = [0u8; 128];
             for report in start() {
+                let report = if link.ds339 { ds339(report) } else { report };
                 let reply = link.report(&report)?;
                 if report[..2] == [0xB5, 0xC0] {
                     let at = usize::from(report[2]);
@@ -376,7 +437,8 @@ impl Driver for Ms9132 {
             )));
         }
         let native = to_native(frame, self.size)?;
-        let packet = frame_packet(&dimmed(&native, self.brightness)?)?;
+        let no_ff = self.model.id == MODEL_ID;
+        let packet = frame_packet(&dimmed(&native, self.brightness)?, no_ff)?;
         let mut checked = false;
         let shown = self.keeper.with(|kept| {
             kept.check()?;
@@ -398,7 +460,8 @@ impl Driver for Ms9132 {
         self.brightness = percent.clamp(0, 100);
         if self.is_open() {
             if let Some(picture) = &self.picture {
-                let packet = frame_packet(&dimmed(picture, self.brightness)?)?;
+                let no_ff = self.model.id == MODEL_ID;
+                let packet = frame_packet(&dimmed(picture, self.brightness)?, no_ff)?;
                 self.keeper.with(|kept| {
                     kept.inner.send(&packet)?;
                     kept.sent();
