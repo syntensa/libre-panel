@@ -460,6 +460,9 @@ const ROUTES: &[Route] = &[
         experiment_action(s, x)
     }),
     private("POST", "/api/tray", |s, x, _, _| tray_action(s, x)),
+    private("POST", "/api/start-screen", |s, x, _, _| {
+        start_screen_action(s, x)
+    }),
     private("POST", "/api/settings", |s, x, _, _| {
         settings_with(s, x, |told, asked| told.write(asked))
     }),
@@ -1940,6 +1943,202 @@ fn start_screen_file(state: &State, exchange: &mut Exchange, query: &str) {
             exchange.send(200, &data, kind, &format!("{}-{name}", model.id))
         }
         Err(why) => exchange.error(&why, 409, ""),
+    }
+}
+
+/// _panel_s: whether the start screen just written (its `model`) is panel `n`'s: the only
+/// panel's is; beside others it is that panel's model, as set or as found on the bus where it
+/// is.
+fn panel_s(config: &lp_config::Config, n: i64, written: &lp_py::Dict) -> bool {
+    if n == 0 && config.panels.is_empty() {
+        return true;
+    }
+    let Some((device, skip)) = panel_at(config, n) else {
+        return false;
+    };
+    let model = if device.model != "auto" {
+        device.model.clone()
+    } else {
+        lp_devices::usb::present_model(&device.beside, skip)
+            .map_or(String::new(), |found| found.id.to_string())
+    };
+    !model.is_empty() && written.get("model") == Some(&Value::Str(model))
+}
+
+/// _name_clip: the standby clip just written named as what panel `n` plays in the video mode:
+/// in [device] video for the first, in its own [[panels]] video for another.
+fn name_clip(state: &State, n: i64) -> Result<(), String> {
+    use lp_py::toml::Toml;
+    let clip = crate::start_screen::STANDBY_CLIP;
+    if n == 0 {
+        let changes = [
+            lp_config::edit::Change::Value("video.local_clip".into(), Toml::Str(clip.into())),
+            lp_config::edit::Change::Value("video.clip_asked".into(), Toml::Bool(true)),
+        ];
+        return lp_config::edit::edit_config(&changes, &state.config_file, lp_config::platform())
+            .map_err(|why| why.msg);
+    }
+    let settings = settings_of(state);
+    let read = settings.read().map_err(|why| why.message)?;
+    let item = |value: Option<&Value>, key: &str| match value {
+        Some(Value::Dict(dict)) => dict.get(key).cloned(),
+        _ => None,
+    };
+    let Some(Value::List(mut panels)) = item(item(Some(&read), "config").as_ref(), "panels") else {
+        return Err("no panels in the settings".into());
+    };
+    if let Some(Value::Dict(panel)) = panels.get_mut(n as usize - 1) {
+        let mut video = match panel.get("video") {
+            Some(Value::Dict(video)) => video.clone(),
+            _ => lp_py::Dict::new(),
+        };
+        video.insert("local_clip".into(), Value::Str(clip.into()));
+        video.insert("clip_asked".into(), Value::Bool(true));
+        panel.insert("video".into(), Value::Dict(video));
+    }
+    let mut set = lp_py::Dict::new();
+    set.insert("panels".into(), Value::List(panels));
+    let mut payload = lp_py::Dict::new();
+    payload.insert("set".into(), Value::Dict(set));
+    settings
+        .write(&Value::Dict(payload))
+        .map(drop)
+        .map_err(|why| why.message)
+}
+
+/// `POST /api/start-screen {"action": "state" | "logo" | "remove-logo" | "clip", "model",
+/// "panel", "design"}`: what is on panel `n`, or its boot logo or standby clip written or
+/// taken away. The panels' themes are paused first (and stay paused) (_start_screen_action).
+fn start_screen_action(state: &State, exchange: &mut Exchange) {
+    use crate::start_screen as screen;
+    let Some(payload) = exchange.read_json(MAX_JSON) else {
+        return;
+    };
+    let Value::Dict(payload) = payload else {
+        return exchange.error(
+            "expected {\"action\": \"state\", \"logo\", \"remove-logo\" or \"clip\"}",
+            400,
+            "",
+        );
+    };
+    let action = match payload.get("action") {
+        Some(Value::Str(action))
+            if ["state", "logo", "remove-logo", "clip"].contains(&action.as_str()) =>
+        {
+            action.clone()
+        }
+        _ => {
+            return exchange.error(
+                "expected {\"action\": \"state\", \"logo\", \"remove-logo\" or \"clip\"}",
+                400,
+                "",
+            )
+        }
+    };
+    let mut model = None;
+    if let Some(asked) = payload.get("model").filter(|asked| asked.truthy()) {
+        let id = lp_py::format::str_of(asked);
+        match screen::model_of(&id) {
+            Some(found) => model = Some(found),
+            None => {
+                let said = format!("{} is no TURZX USB panel", lp_py::repr(&id));
+                return exchange.error(&said, 400, "");
+            }
+        }
+    }
+    let design = match payload.get("design").filter(|asked| asked.truthy()) {
+        None => lp_render::boot::DEFAULT,
+        Some(asked) => {
+            let found = match asked {
+                Value::Str(name) => screen::design_of(name),
+                _ => None,
+            };
+            match found {
+                Some(design) => design,
+                None => {
+                    let said = format!(
+                        "{} is no look of the start screen",
+                        lp_py::format::repr_of(asked)
+                    );
+                    return exchange.error(&said, 400, "");
+                }
+            }
+        }
+    };
+    let n = match payload.get("panel") {
+        None => 0,
+        Some(Value::Int(n)) => i64::try_from(n.clone()).unwrap_or(i64::MAX),
+        Some(_) => return exchange.error("panel: expected a whole number", 400, ""),
+    };
+    let config = match lp_config::load_config(&state.config_file, lp_config::platform()) {
+        Ok(config) => config,
+        Err(why) => return exchange.error(&why.msg, 409, ""),
+    };
+    let Some((device, skip)) = panel_at(&config, n) else {
+        let shown = match payload.get("panel") {
+            Some(Value::Int(n)) => n.to_string(),
+            _ => n.to_string(),
+        };
+        return exchange.error(&format!("panel {shown}: there is no such panel"), 400, "");
+    };
+    let way = mounted(state, n);
+    let mut paused = false;
+    if let Some(app) = state.controls.upgrade() {
+        let _ = app.act("pause", &Value::None); // (the panels are free for this, and stay so)
+        paused = true;
+    }
+    let env = lp_theme::Env {
+        fonts_dir: state.home.fonts(),
+    };
+    let place = screen::Where {
+        beside: &device.beside,
+        skip,
+    };
+    let done = match action.as_str() {
+        "state" => screen::panel_state(model, &place),
+        "logo" => screen::write_logo(&env, model, way, &place, design),
+        "remove-logo" => screen::remove_logo(model, &place),
+        _ => screen::write_clip(
+            &env,
+            device.brightness,
+            model,
+            way,
+            &place,
+            design,
+            &device.video_range,
+        )
+        .and_then(|written| {
+            // the video mode names the clip it plays: the panel's own, where it went there
+            if device.video.local_clip.is_empty() && panel_s(&config, n, &written) {
+                name_clip(state, n)?;
+            }
+            Ok(written)
+        }),
+    };
+    match done {
+        Ok(mut result) => {
+            crate::logs::log(
+                crate::logs::Level::Info,
+                "libre_panel.editor.server",
+                &format!(
+                    "start screen: {action} done: {}",
+                    lp_py::format::repr_of(&Value::Dict(result.clone()))
+                ),
+            );
+            result.insert("paused".into(), Value::Bool(paused));
+            exchange.json(&Value::Dict(result), 200);
+        }
+        Err(why) => {
+            crate::logs::log(
+                crate::logs::Level::Warning,
+                "libre_panel.editor.server",
+                &format!("start screen: {action} failed: {why}"),
+            );
+            let mut told = lp_py::Dict::new();
+            told.insert("error".into(), Value::Str(why));
+            told.insert("paused".into(), Value::Bool(paused));
+            exchange.json(&Value::Dict(told), 409);
+        }
     }
 }
 

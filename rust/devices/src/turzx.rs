@@ -534,6 +534,12 @@ impl Connection {
     /// choice as devices/turzx_usb.py's _pick), opened by the engine, which is told its
     /// product id and where it is on the bus; then asked to sync.
     fn open(setup: &Setup) -> Result<Connection> {
+        Connection::open_at(setup, 0)
+    }
+
+    /// As [`Connection::open`], passing over `skip` panels that would do first (a panel
+    /// beside others of the same model).
+    fn open_at(setup: &Setup, skip: usize) -> Result<Connection> {
         let wanted = setup
             .model
             .and_then(|model| model.usb_ids.first())
@@ -553,7 +559,7 @@ impl Connection {
             }
             None => {
                 let devices = usb::list();
-                let Some(device) = usb::pick(wanted, &setup.beside, &devices, true, 0) else {
+                let Some(device) = usb::pick(wanted, &setup.beside, &devices, true, skip) else {
                     return Err(DeviceError(
                         "no Turing/TURZX USB panel found. Is it plugged in, and is the TURZX \
                          app closed? (it holds the device exclusively)"
@@ -630,6 +636,53 @@ impl Connection {
         if let Some(place) = self.place.take() {
             leave_place(&place);
         }
+    }
+}
+
+/// A TURZX USB panel opened by the engine for its file commands (panel_files.py's
+/// open_panel: the start screen's boot logo and standby clip), in step; closed when dropped.
+pub struct FileLink {
+    conn: Connection,
+}
+
+impl FileLink {
+    /// open_panel: the panel the setup names (its model if given), `skip` panels alike passed
+    /// over, opened and in step.
+    pub fn open(setup: &Setup, skip: usize) -> Result<FileLink> {
+        Connection::open_at(setup, skip).map(|conn| FileLink { conn })
+    }
+
+    /// The panel's model: the one its product id is, else the one asked for.
+    pub fn model(&self) -> Option<&'static PanelModel> {
+        usb::model_of(self.conn.pid).or(self.conn.model)
+    }
+
+    /// A command and its reply, accepted (UsbTransport.command).
+    pub fn command(
+        &self,
+        cmd: u8,
+        args: &[u8],
+        payload: &[u8],
+        timeout_ms: u32,
+    ) -> Result<Vec<u8>> {
+        self.conn.link.command(cmd, args, payload, timeout_ms)
+    }
+
+    /// A question whose reply carries data (UsbTransport.ask; `echo`: it begins with the
+    /// command's number).
+    pub fn ask(&self, cmd: u8, args: &[u8], echo: bool) -> Result<Vec<u8>> {
+        self.conn.link.ask(cmd, args, 2000, echo)
+    }
+
+    /// What the panel still had to say read away (UsbTransport.drain).
+    pub fn drain(&self) {
+        self.conn.link.drain(50, 64);
+    }
+}
+
+impl Drop for FileLink {
+    fn drop(&mut self) {
+        self.conn.close();
     }
 }
 

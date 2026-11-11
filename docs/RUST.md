@@ -2093,8 +2093,12 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       logo's JPEG from quality 95 down until it fits in 1 MiB, the clip's H.264 through ffmpeg
       from crf 20 as panel_files.py steps it, one slice a picture, 4 kept); ffmpeg found as
       devices/h264.find_ffmpeg finds it (the renderer's videos take it too). The test: both
-      servers' answers, the same pixels, the clip's H.264 byte for byte. Still to come: the
-      writing to the panel (`POST /api/start-screen`)
+      servers' answers, the same pixels, the clip's H.264 byte for byte. The writing to the
+      panel (`POST /api/start-screen`: what is on it, the logo written and shown or taken
+      away, the clip written, played, saved as the start and named in config.toml) through
+      the engine's link (lp-devices' FileLink: commands 40, 42, 98, 99, 110, 113, 125), the
+      panel's themes paused first; tested on the simulated panel, which keeps files now, the
+      logo and the clip byte for byte as panel_files.py makes them
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app
 - [x] one Libre Panel at a panel (instance.py): the system's lock on libre-panel.lock in the

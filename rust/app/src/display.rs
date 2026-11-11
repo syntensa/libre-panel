@@ -134,6 +134,48 @@ fn turzx(device: &DeviceConfig, settings: &Path, brightness: i64) -> Result<Pane
         .map_err(|e| e.to_string())
 }
 
+/// What the start screen opens a TURZX USB panel with for its files (panel_files.py's
+/// open_panel): the engine, the model asked for and the models the other panels name; the
+/// tests' simulated panel as for the video.
+pub fn files_setup(
+    model: Option<&'static lp_devices::models::PanelModel>,
+    beside: &[String],
+) -> Result<Setup, String> {
+    let Some(engine) = lp_devices::engine::find_engine() else {
+        return Err(
+            "Libre Panel's engine (libre-panel-engine) is not here: it has the TURZX panels".into(),
+        );
+    };
+    let env = |name: &str| std::env::var(name).ok().filter(|value| !value.is_empty());
+    let text = |t: &str| t.to_string();
+    Ok(Setup {
+        engine,
+        model,
+        beside: beside.to_vec(),
+        video: Video {
+            mode: text("off"),
+            fps: 0,
+            device_fps: 0,
+            crf: 0,
+            preset: String::new(),
+            keyframe_s: 0.0,
+            maxrate: String::new(),
+            profile: String::new(),
+            engine_encoder: String::new(),
+            local_clip: String::new(),
+            video_range: text("auto"),
+        },
+        still: text("auto"),
+        brightness: 0,
+        state: None,
+        test_link: env("LP_ENGINE_LINK"),
+        test_present: env("LP_ENGINE_PRESENT").map(PathBuf::from),
+        test_args: env("LP_ENGINE_ARGS")
+            .map(|args| args.split_whitespace().map(str::to_string).collect())
+            .unwrap_or_default(),
+    })
+}
+
 /// TurzxDisplay: the panel `[device]` names by its model's protocol; with the model "auto"
 /// a TURZX USB panel, else one of the Hongtai family on a serial port.
 fn any_panel(device: &DeviceConfig, settings: &Path, brightness: i64) -> Result<Panel, String> {

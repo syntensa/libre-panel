@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from test_rust_app import DATA, _libraries, _program
+from test_rust_app import DATA, Rig, _libraries, _program
 
 from libre_panel import i18n
 from libre_panel.editor import server as editor
@@ -2485,3 +2485,94 @@ def test_the_start_screen_is_told_drawn_and_made_as_server_py_does(servers: Any)
                  "picture?model=turing-9.2-usb&design=nope", "file?what=clip"):  # fmt: skip
         theirs, ours = ask(_get(f"/api/start-screen/{path}", WITH))
         assert ours[0] == theirs[0] and json.loads(ours[2]) == json.loads(theirs[2]), path
+
+
+def test_the_start_screen_is_written_to_the_panel_as_panel_files_py_writes_it(
+    tmp_path: Path,
+) -> None:
+    """POST /api/start-screen on a simulated TURZX panel the engine has: what is on it, the
+    boot logo written and shown (the JPEG panel_files.py makes, byte for byte), taken away
+    again, the standby clip written, played and saved as the start (H.264 byte for byte where
+    ffmpeg is there) and named in config.toml; what is no action, panel or model refused in
+    server.py's words."""
+    from libre_panel.devices import panel_files
+    from libre_panel.devices.turzx_usb import brightness_arg
+
+    rig = Rig(tmp_path)
+    try:
+        rig.config(
+            'theme = "slate"\nlanguage = "en"\n[device]\ndriver = "turzx"\n'
+            'model = "turing-9.2-usb"\nbrightness = 60\n[sensors]\nproviders = []\n'
+        )
+        env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+               **_libraries(), **rig.env()}  # fmt: skip
+        with subprocess.Popen([str(_program()), "editor", "--port", "0"], env=env,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              encoding="utf-8") as program:  # fmt: skip
+            try:
+                assert program.stdout is not None
+                address = program.stdout.readline().split(" running at ")[1].split()[0]
+                port = int(address.split(":")[2].split("/")[0])
+                token = address.split("#token=")[1]
+
+                def post(payload: Any) -> tuple[str, Any]:
+                    body = json.dumps(payload)
+                    request = _get(
+                        "/api/start-screen",
+                        f"X-Libre-Panel: {token}",
+                        "Content-Type: application/json",
+                        f"Content-Length: {len(body)}",
+                        method="POST",
+                        body=body,
+                    )
+                    request = request.replace("{host}", f"127.0.0.1:{port}")
+                    status, _, answer = _asked(port, request.encode("utf-8"))
+                    return status.split(" ", 2)[1], json.loads(answer)
+
+                model = panel_files.model_of("turing-9.2-usb")
+                status, said = post({"action": "state"})
+                assert status == "200", said
+                assert said == {"model": model.id, "files": [], "boot_logo": 0,
+                                "standby_clip": 0, "paused": False}  # fmt: skip
+                logo = panel_files.logo_jpeg(model, design="aurora")
+                status, said = post({"action": "logo", "design": "aurora"})
+                assert status == "200", said
+                assert said == {"model": model.id, "boot_logo": len(logo), "design": "aurora",
+                                "paused": False}  # fmt: skip
+                assert rig.fake.files[panel_files.BOOT_LOGO] == logo
+                assert rig.fake.shown == [panel_files.BOOT_LOGO]
+                status, said = post({"action": "state", "model": model.id})
+                assert said["files"] == ["boot.jpg"] and said["boot_logo"] == len(logo), said
+                status, said = post({"action": "remove-logo"})
+                assert status == "200" and said["boot_logo"] == 0, said
+                assert panel_files.BOOT_LOGO not in rig.fake.files
+                if shutil.which("ffmpeg"):
+                    clip = panel_files.clip_h264(model, shutil.which("ffmpeg"), full=True)
+                    status, said = post({"action": "clip"})
+                    assert status == "200", said
+                    assert said == {"model": model.id, "standby_clip": len(clip),
+                                    "name": panel_files.STANDBY_CLIP, "design": "libre-panel",
+                                    "paused": False}  # fmt: skip
+                    assert rig.fake.files[panel_files.STANDBY_CLIP] == clip
+                    assert rig.fake.clip_names[-1] == panel_files.STANDBY_CLIP
+                    assert rig.fake.fps_log[-1] == 30
+                    assert rig.fake.saved[-1] == bytes([brightness_arg(60), 2, 0, 0, 0, 0])
+                    written = (tmp_path / "config.toml").read_text(encoding="utf-8")
+                    assert 'local_clip = "usr/data/standby.h264"' in written, written
+                    assert "clip_asked = true" in written, written
+                for payload, words in (
+                    ({"action": "nope"},
+                     'expected {"action": "state", "logo", "remove-logo" or "clip"}'),
+                    ({"action": "state", "panel": 3}, "panel 3: there is no such panel"),
+                    ({"action": "state", "panel": True}, "panel: expected a whole number"),
+                    ({"action": "state", "model": "x"}, "'x' is no TURZX USB panel"),
+                    ({"action": "logo", "design": "x"}, "'x' is no look of the start screen"),
+                ):  # fmt: skip
+                    status, said = post(payload)
+                    assert (status, said["error"]) == ("400", words), payload
+            finally:
+                program.send_signal(signal.SIGINT) if os.name != "nt" else program.terminate()
+                stderr = program.communicate(timeout=30)[1]
+                assert "panicked" not in stderr, stderr
+    finally:
+        rig.close()

@@ -309,6 +309,348 @@ fn clip_h264(ffmpeg: &std::path::Path, frames: &[Image], full: bool) -> Result<V
     Ok(data)
 }
 
+// -- on the panel -------------------------------------------------------------------------------
+
+const FOLDER: &str = "usr/data";
+const LIST_PIECES: usize = 20;
+const PIECE: usize = 512;
+const ACK: u8 = 0xC8;
+const CMD_WRITE_FILE: u8 = 40;
+const CMD_DELETE_FILE: u8 = 42;
+const CMD_FILE_SIZE: u8 = 98;
+const CMD_LIST: u8 = 99;
+const CMD_PLAY_LOCAL: u8 = 110;
+const CMD_SHOW_JPEG: u8 = 113;
+const CMD_SAVE_SETTINGS: u8 = 125;
+const CMD_FRAME_RATE: u8 = 15;
+/// the settings' start mode: play the clip they name
+const START_WITH_CLIP: u8 = 2;
+/// restart, halt, and the other save of the settings: never sent
+const NEVER: [u8; 3] = [11, 12, 13];
+
+fn note(message: &str) {
+    crate::logs::log(
+        crate::logs::Level::Info,
+        "libre_panel.devices.panel_files",
+        message,
+    );
+}
+
+fn warn(message: &str) {
+    crate::logs::log(
+        crate::logs::Level::Warning,
+        "libre_panel.devices.panel_files",
+        message,
+    );
+}
+
+/// checked_name: a file name as the panel takes it: relative, below `usr/data/`, no `..`.
+pub fn checked_name(name: &str) -> Result<Vec<u8>, String> {
+    let shown = lp_py::repr(name);
+    if !name.starts_with(&format!("{FOLDER}/")) || name.starts_with('/') {
+        return Err(format!("{shown}: only files below {FOLDER}/ are written"));
+    }
+    let plain =
+        name.split('/').all(|part| !matches!(part, "" | "." | "..")) && !name.contains('\\');
+    let raw = name.as_bytes();
+    if !plain || !name.is_ascii() || raw.len() > 200 || !raw.iter().all(|b| (33..127).contains(b)) {
+        return Err(format!("{shown}: not a plain file name"));
+    }
+    Ok(raw.to_vec())
+}
+
+fn file_args(name: &[u8], size: usize) -> Vec<u8> {
+    let mut args = (name.len() as u32).to_be_bytes().to_vec();
+    args.extend_from_slice(&(size as u32).to_be_bytes());
+    args.extend_from_slice(name);
+    args
+}
+
+/// names_in: the file names in a folder's listing as the panel gives it: the plain names in
+/// the text, in order, once each (re.findall of `[A-Za-z0-9_][A-Za-z0-9_.\-]*\.[A-Za-z0-9]+`).
+pub fn names_in(listing: &[u8]) -> Vec<String> {
+    let text: Vec<u8> = listing
+        .iter()
+        .map(|&b| if b == 0 { b'\n' } else { b })
+        .collect();
+    let first = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+    let inner = |b: u8| first(b) || b == b'.' || b == b'-';
+    let mut found: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < text.len() {
+        if !first(text[i]) {
+            i += 1;
+            continue;
+        }
+        let run_end = (i + 1..text.len())
+            .find(|&k| !inner(text[k]))
+            .unwrap_or(text.len());
+        // the last dot of the run followed by a letter or digit: the greedy match's end
+        let matched = (i + 1..run_end)
+            .rev()
+            .find(|&j| text[j] == b'.' && text.get(j + 1).is_some_and(u8::is_ascii_alphanumeric))
+            .map(|j| {
+                (j + 1..text.len())
+                    .find(|&k| !text[k].is_ascii_alphanumeric())
+                    .unwrap_or(text.len())
+            });
+        match matched {
+            Some(end) => {
+                let token: String = text[i..end].iter().map(|&b| char::from(b)).collect();
+                if !found.contains(&token) {
+                    found.push(token);
+                }
+                i = end;
+            }
+            None => i += 1,
+        }
+    }
+    found
+}
+
+/// PanelFiles: the file commands on an open panel.
+struct PanelFiles<'a> {
+    link: &'a lp_devices::turzx::FileLink,
+}
+
+impl PanelFiles<'_> {
+    fn command(&self, cmd: u8, args: &[u8], payload: &[u8], timeout_ms: u32) -> Result<(), String> {
+        if NEVER.contains(&cmd) {
+            return Err(format!("command {cmd} is never sent"));
+        }
+        self.link
+            .command(cmd, args, payload, timeout_ms)
+            .map(drop)
+            .map_err(|e| e.to_string())
+    }
+
+    /// listing: the names in usr/data, as the panel lists them (all 20 pieces are fetched).
+    fn listing(&self) -> Result<Vec<String>, String> {
+        let mut pieces = Vec::new();
+        for n in 0..LIST_PIECES {
+            let reply = self
+                .link
+                .ask(CMD_LIST, &file_args(FOLDER.as_bytes(), 0), false)
+                .map_err(|e| e.to_string())?;
+            if n == 0 {
+                let head: Vec<String> = reply.iter().take(32).map(|b| format!("{b:02x}")).collect();
+                crate::logs::log(
+                    crate::logs::Level::Debug,
+                    "libre_panel.devices.panel_files",
+                    &format!("start screen: listing {FOLDER} begins {}", head.join(" ")),
+                );
+            }
+            let header = reply.first() == Some(&CMD_LIST) && reply.get(1) == Some(&ACK);
+            let piece = if header {
+                reply.get(8..).unwrap_or_default()
+            } else {
+                &reply[..]
+            };
+            pieces.extend_from_slice(&piece[..piece.len().min(PIECE)]);
+        }
+        Ok(names_in(&pieces))
+    }
+
+    /// noted_listing: the listing before a file is written, for the log; one that the panel
+    /// does not give does not stop the writing.
+    fn noted_listing(&self) -> Option<Vec<String>> {
+        match self.listing() {
+            Ok(names) => {
+                let said = if names.is_empty() {
+                    "nothing listed".to_string()
+                } else {
+                    names.join(", ")
+                };
+                note(&format!("start screen: {FOLDER} holds {said}"));
+                Some(names)
+            }
+            Err(why) => {
+                warn(&format!(
+                    "start screen: the panel's files could not be listed: {why}"
+                ));
+                self.link.drain();
+                None
+            }
+        }
+    }
+
+    /// size: the size of a file of the panel's (0: none).
+    fn size(&self, name: &str) -> Result<i64, String> {
+        let reply = self
+            .link
+            .ask(CMD_FILE_SIZE, &file_args(&checked_name(name)?, 0), true)
+            .map_err(|e| e.to_string())?;
+        let Some(bytes) = reply.get(8..12) else {
+            return Err("unpack requires a buffer of 4 bytes".into());
+        };
+        let size = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        Ok(if size == u32::MAX { 0 } else { i64::from(size) })
+    }
+
+    /// write: a file written, and checked that it has the size it should.
+    fn write(&self, name: &str, data: &[u8]) -> Result<(), String> {
+        let raw = checked_name(name)?;
+        if data.is_empty() || data.len() > MAX_FILE {
+            return Err(format!(
+                "{name}: a file is 1 byte to 1 MiB, not {}",
+                data.len()
+            ));
+        }
+        self.command(CMD_WRITE_FILE, &file_args(&raw, data.len()), data, 20000)?;
+        let written = self.size(name)?;
+        if written != data.len() as i64 {
+            return Err(format!(
+                "{name}: the panel has {written} bytes of it, not {}",
+                data.len()
+            ));
+        }
+        Ok(())
+    }
+
+    fn delete(&self, name: &str) -> Result<(), String> {
+        self.command(
+            CMD_DELETE_FILE,
+            &file_args(&checked_name(name)?, 0),
+            &[],
+            4000,
+        )
+    }
+
+    fn show_jpeg(&self, name: &str) -> Result<(), String> {
+        self.command(
+            CMD_SHOW_JPEG,
+            &file_args(&checked_name(name)?, 0),
+            &[],
+            4000,
+        )
+    }
+
+    /// play: a clip of the panel's played at the rate of a cold start; its name goes into the
+    /// panel's settings (in memory, until save_start).
+    fn play(&self, name: &str) -> Result<(), String> {
+        let raw = checked_name(name)?;
+        self.command(CMD_FRAME_RATE, &[boot::CLIP_FPS as u8], &[], 4000)?;
+        self.command(CMD_PLAY_LOCAL, &file_args(&raw, 0), &[], 4000)
+    }
+
+    /// save_start: the panel's settings saved: its brightness, to start with the clip `play`
+    /// named, unturned, and to dim when the PC has been gone for 10 s.
+    fn save_start(&self, brightness: i64) -> Result<(), String> {
+        let arg = lp_devices::turzx::brightness_arg(brightness);
+        self.command(
+            CMD_SAVE_SETTINGS,
+            &[arg, START_WITH_CLIP, 0, 0, 0, 0],
+            &[],
+            4000,
+        )
+    }
+}
+
+/// Which panel: the models the other panels name, and how many alike to pass over.
+pub struct Where<'a> {
+    pub beside: &'a [String],
+    pub skip: usize,
+}
+
+/// _with_panel: `job` on the panel opened (closed again afterwards).
+fn with_panel(
+    model: Option<&'static PanelModel>,
+    place: &Where,
+    job: impl FnOnce(&PanelFiles, &'static PanelModel) -> Result<Dict, String>,
+) -> Result<Dict, String> {
+    let setup = crate::display::files_setup(model, place.beside)?;
+    let link = lp_devices::turzx::FileLink::open(&setup, place.skip).map_err(|e| e.to_string())?;
+    let Some(found) = link.model() else {
+        return Err(lp_i18n::t("No TURZX USB panel found"));
+    };
+    job(&PanelFiles { link: &link }, found)
+}
+
+fn told(pairs: Vec<(&str, Value)>) -> Dict {
+    pairs.into_iter().map(|(k, v)| (k.to_string(), v)).collect()
+}
+
+fn whole(n: i64) -> Value {
+    Value::Int(n.into())
+}
+
+/// StartScreen.state: what is on the panel.
+pub fn panel_state(model: Option<&'static PanelModel>, place: &Where) -> Result<Dict, String> {
+    with_panel(model, place, |files, found| {
+        let names = files.noted_listing().map_or(Value::None, |names| {
+            Value::List(names.into_iter().map(Value::Str).collect())
+        });
+        Ok(told(vec![
+            ("model", Value::Str(found.id.into())),
+            ("files", names),
+            ("boot_logo", whole(files.size(BOOT_LOGO)?)),
+            ("standby_clip", whole(files.size(STANDBY_CLIP)?)),
+        ]))
+    })
+}
+
+/// StartScreen.write_logo: the boot logo written and shown (it shows at the next cold start).
+pub fn write_logo(
+    env: &lp_theme::Env,
+    model: Option<&'static PanelModel>,
+    way: &str,
+    place: &Where,
+    design: &str,
+) -> Result<Dict, String> {
+    with_panel(model, place, |files, found| {
+        let picture = boot::boot_logo(env, found, way, design, 1.0).map_err(|e| e.0)?;
+        let data = logo_jpeg(&picture)?;
+        files.noted_listing();
+        files.write(BOOT_LOGO, &data)?;
+        files.show_jpeg(BOOT_LOGO)?;
+        Ok(told(vec![
+            ("model", Value::Str(found.id.into())),
+            ("boot_logo", whole(data.len() as i64)),
+            ("design", Value::Str(design.into())),
+        ]))
+    })
+}
+
+/// StartScreen.remove_logo: the boot logo taken away (the factory logo shows again).
+pub fn remove_logo(model: Option<&'static PanelModel>, place: &Where) -> Result<Dict, String> {
+    with_panel(model, place, |files, found| {
+        files.delete(BOOT_LOGO)?;
+        Ok(told(vec![
+            ("model", Value::Str(found.id.into())),
+            ("boot_logo", whole(files.size(BOOT_LOGO)?)),
+        ]))
+    })
+}
+
+/// StartScreen.write_clip: the standby clip written, played and saved as what the panel
+/// starts with; in the range of values its decoder shows.
+pub fn write_clip(
+    env: &lp_theme::Env,
+    brightness: i64,
+    model: Option<&'static PanelModel>,
+    way: &str,
+    place: &Where,
+    design: &str,
+    video_range: &str,
+) -> Result<Dict, String> {
+    let ffmpeg = lp_devices::h264::find_ffmpeg("")?;
+    with_panel(model, place, |files, found| {
+        let frames = boot::standby_frames(env, found, None, way, design, 1.0).map_err(|e| e.0)?;
+        let full = lp_devices::turzx::full_range(video_range, Some(found));
+        let data = clip_h264(&ffmpeg, &frames, full)?;
+        files.noted_listing();
+        files.write(STANDBY_CLIP, &data)?;
+        files.play(STANDBY_CLIP)?;
+        files.save_start(brightness)?;
+        Ok(told(vec![
+            ("model", Value::Str(found.id.into())),
+            ("standby_clip", whole(data.len() as i64)),
+            ("name", Value::Str(STANDBY_CLIP.into())),
+            ("design", Value::Str(design.into())),
+        ]))
+    })
+}
+
 /// repr() of Python bytes.
 fn bytes_repr(data: &[u8]) -> String {
     let quote = if data.contains(&b'\'') && !data.contains(&b'"') {
