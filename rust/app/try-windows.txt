@@ -54,9 +54,9 @@ What it does not do yet
   where config.toml names them. The AI activity is missing:
   its places stay empty. Which program is the game is not found
   yet: the one that shows the most frames counts.
-- No pages (game, music), no notices, no transitions between themes, no videos in themes,
-  no tray icon. `.\libre-panel.exe start` runs it in the background and opens the app in
-  its window (libre-panel-window.exe, in WebView2 as the installed app's); Ctrl+C in the
-  terminal ends both.
+- No pages (game, music), no notices, no transitions between themes, no videos in themes.
+  `.\libre-panel.exe tray` runs it in the background with its tray icon (libre-panel-tray.exe:
+  the menu of the installed app's) and opens the app in its window (libre-panel-window.exe,
+  in WebView2 as the installed app's); Quit in the icon's menu ends it.
 - Panels other than TURZX USB and the Hongtai family: config.toml's `driver = "virtual"`
   writes the frames into a PNG file.

@@ -832,6 +832,68 @@ def test_the_app_opens_its_window_one_window_and_closes_it_as_window_py_does(
         screen.wait(timeout=30)
 
 
+@pytest.mark.skipif(
+    not sys.platform.startswith("linux")
+    or not (shutil.which("Xvfb") and shutil.which("stalonetray")),
+    reason="the tray icon on a screen of Xvfb's, in stalonetray's tray",
+)
+def test_the_tray_shows_its_icon_and_its_quit_ends_libre_panel(tmp_path: Path) -> None:
+    """tray.py's run_app: `libre-panel tray` shows its icon (the program libre-panel-tray,
+    in an X tray: "tray icon ready"), which asks the app for its menu; Quit chosen in it ends
+    the icon and Libre Panel, which leaves its log in the settings folder."""
+    (tmp_path / "config.toml").write_text(
+        'theme = "slate"\nfps = 2\nlanguage = "en"\n[device]\ndriver = "virtual"\n'
+        'output = "panel.png"\n[sensors]\nproviders = []\n',
+        encoding="utf-8",
+    )
+    read, write = os.pipe()
+    screen = subprocess.Popen(["Xvfb", "-displayfd", str(write), "-screen", "0", "1280x800x24"],
+                              pass_fds=(write,), stderr=subprocess.DEVNULL)  # fmt: skip
+    os.close(write)
+    try:
+        display = os.read(read, 16).decode().strip()
+    finally:
+        os.close(read)
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           "DISPLAY": f":{display}", "WAYLAND_DISPLAY": "", "XDG_CONFIG_HOME": str(tmp_path),
+           **_libraries()}  # fmt: skip
+    tray = subprocess.Popen(["stalonetray"], env=env, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL)  # fmt: skip
+    try:
+        with subprocess.Popen([str(_program()), "tray", "--background", "--port", "0"], env=env,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              encoding="utf-8") as program:  # fmt: skip
+            try:
+                assert program.stdout is not None and program.stderr is not None
+                address = program.stdout.readline().split(" running at ")[1].split()[0]
+                port, token = int(address.split(":")[2].split("/")[0]), address.split("#token=")[1]
+                said = []
+                for _ in range(200):  # (what the icon's program says, through the app's)
+                    said.append(program.stderr.readline())
+                    if "tray icon ready" in said[-1] or "no tray icon" in said[-1]:
+                        break
+                assert "libre-panel: tray icon ready\n" in said, said
+                children = Path(f"/proc/{program.pid}/task/{program.pid}/children")
+                icon = int(children.read_text().split()[0])
+                assert Path(f"/proc/{icon}/exe").resolve().name == "libre-panel-tray"
+                request = _post("/api/tray", {"id": "quit"}).decode()
+                request = request.replace("{host}", f"localhost:{port}")
+                assert " 200 " in _asked(port, request.replace("{token}", token).encode())[0]
+                program.wait(timeout=30)
+            finally:
+                if program.poll() is None:
+                    program.send_signal(signal.SIGINT)
+                program.communicate(timeout=30)
+        assert program.returncode == 0
+        assert not Path(f"/proc/{icon}").exists() or "Z" in Path(f"/proc/{icon}/stat").read_text()
+        assert (tmp_path / "logs" / "libre-panel.log").is_file()
+    finally:
+        tray.terminate()
+        tray.wait(timeout=30)
+        screen.terminate()
+        screen.wait(timeout=30)
+
+
 def test_the_themes_are_listed_and_read_as_server_py_reads_them(servers: Any) -> None:
     """The themes that are installed (the app's and the person's own: one with files, one
     that cannot be read, one of an odd shape), a theme by its name with what is said of it,

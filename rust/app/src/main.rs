@@ -440,10 +440,16 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
             };
             let settings = home.settings.clone();
             let app = background::BackgroundApp::new(home, asked.clone());
+            let icon = command == "tray" && !args_given.iter().any(|arg| arg == "--no-icon");
+            let mut tray = None;
             if let Some(address) = app.start() {
                 println!("Libre Panel theme editor running at {address}  (Ctrl+C to stop)");
                 if open_editor {
                     window::open_window(&settings, &address, Some("home"), false, None);
+                }
+                // (the tray icon, a program of its own: it shows the app's menu)
+                if icon {
+                    tray = window::start_tray(&address);
                 }
             }
             // (the tests' own: the controls by lines on the standard input)
@@ -466,6 +472,11 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
             };
             while !STOP.load(std::sync::atomic::Ordering::Relaxed) && !shown(&app) && !quit(&app) {
                 std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            // (the icon goes first: its menu would act on an app that is ending)
+            if let Some(mut tray) = tray {
+                let _ = tray.kill();
+                let _ = tray.wait();
             }
             app.shutdown();
         }

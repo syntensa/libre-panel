@@ -80,7 +80,7 @@ all of it. It is the reference every Rust piece is checked against:
 | server | the app's HTTP server and its API | editor/ (server side) |
 | ui | the app's pages in Rust (WebAssembly), the same HTML and CSS | editor/app (JavaScript) |
 | app | the program: command line, config, log, single instance, tray, window, autostart, light mode | the top-level modules |
-| window | the app's window, a program of its own (WebView2, WebKitGTK) | window.py, gtk_window.py |
+| desktop | the app's window and the tray icon, programs of their own (WebView2, WebKitGTK, the system's tray) | window.py, gtk_window.py, tray.py |
 | check | `lp-check`, the comparison program for the tests | — |
 
 The engine (engine/) moves into the workspace as the panels' loop takes it over: one process
@@ -2084,7 +2084,7 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       the running app is (its address with the token, waiting for one that is starting
       where it opens the window) and ends, `run` is refused with cli.py's words. The tests:
       a second start and a run beside the background app
-- [x] the app's window (window.py): a program of its own, `libre-panel-window` (rust/window,
+- [x] the app's window (window.py): a program of its own, `libre-panel-window` (rust/desktop,
       tao and wry: WebView2 on Windows, WebKitGTK on Linux), so that GTK and WebKitGTK are
       not linked into `libre-panel` (which runs where they are missing, and whose FreeType
       and HarfBuzz are not mixed with theirs); it takes in the app's files it shares
@@ -2113,7 +2113,15 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       in the app's own words) and its state in `/api/app`; "Which is which?" (identify.py):
       every panel's number for six seconds instead of its frame, in the theme's accent; the
       shortcut and the tray's "Open" open the window
-- [ ] the tray icon's program, the command line, updates, languages, the log, light mode
+- [x] the tray icon (tray.py's Tray.run): a program of its own, `libre-panel-tray` (rust/desktop,
+      tray-icon: the system's tray on Windows, AppIndicator on Linux, loaded as it runs, an
+      X tray where there is no other), started by `libre-panel tray` (not with `--no-icon`)
+      and ended as Libre Panel quits; it asks the app for its state, tooltip and menu once a
+      second and shows them anew where they changed, its picture where the state did; what
+      is chosen goes to the app, a click on the icon opens the app (Windows). Where no icon
+      can be shown it says so and Libre Panel goes on without one. The test (Linux, Xvfb and
+      stalonetray): the icon is shown, and Quit chosen in its menu ends it and Libre Panel
+- [ ] the command line, updates, languages, the log, light mode
 - [x] the background app (service.py's PanelService and BackgroundApp, as far as there is no
       window yet; `libre-panel start`): the panel's loop in a thread that is paused, resumed
       and started anew, with the services and the shortcuts beside it, which go on while the

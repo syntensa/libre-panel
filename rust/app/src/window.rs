@@ -1,6 +1,6 @@
 //! Libre Panel's own window (window.py): the app (start, design, look, live, settings) in a
 //! native window, WebView2 on Windows and WebKitGTK on Linux, in a process of its own (the
-//! program `libre-panel-window`, rust/window), one at a time. This is the side of the window that
+//! program `libre-panel-window`, rust/desktop), one at a time. This is the side of the window that
 //! the app and every start have; the window's program takes it in as well.
 //!
 //! Whoever wants the app shown (the tray, `libre-panel start`, a second start) calls
@@ -236,8 +236,33 @@ pub fn open_window(
 /// The window's own program, next to this one: GTK and WebKitGTK (Linux) are its alone, so that
 /// Libre Panel runs where they are not, and the app's own libraries are not mixed with theirs.
 pub fn program() -> std::io::Result<std::path::PathBuf> {
-    let name = format!("libre-panel-window{}", std::env::consts::EXE_SUFFIX);
+    sibling("libre-panel-window")
+}
+
+/// A program of Libre Panel's next to this one (rust/desktop's).
+pub fn sibling(name: &str) -> std::io::Result<std::path::PathBuf> {
+    let name = format!("{name}{}", std::env::consts::EXE_SUFFIX);
     Ok(std::env::current_exe()?.with_file_name(name))
+}
+
+/// The tray icon's program (rust/desktop's libre-panel-tray) for the app at `address` (with
+/// its token, which goes in the environment); None where it does not start.
+pub fn start_tray(address: &str) -> Option<std::process::Child> {
+    let (base, token) = access::split_token(address);
+    let mut command = std::process::Command::new(sibling("libre-panel-tray").ok()?);
+    command.arg(&base).stdin(std::process::Stdio::null());
+    if let Some(token) = token {
+        command.env(access::ENV, token);
+    }
+    match command.spawn() {
+        Ok(child) => Some(child),
+        Err(why) => {
+            say(&format!(
+                "no tray icon ({why}); Libre Panel keeps running without one"
+            ));
+            None
+        }
+    }
 }
 
 /// `libre-panel window URL [--view VIEW]`: the window's program run, its end this one's.
