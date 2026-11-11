@@ -3377,7 +3377,9 @@ def test_the_load_on_the_pc_is_measured_as_load_report_py_measures_it(tmp_path: 
                 rss, uss = me.memory_info().rss, me.memory_full_info().uss
                 assert abs(main["rss"] - rss) < max(rss * 0.3, 16 << 20), (main, rss)
                 assert abs(main["private"] - uss) < max(uss * 0.3, 16 << 20), (main, uss)
-                assert main["cpu_core"] >= 0 and main["cpu_pc"] == round(main["cpu_core"] / cpus, 2)
+                # (both from the share before it was rounded, as load_report.py's _shares has it)
+                assert main["cpu_core"] >= 0
+                assert abs(main["cpu_pc"] - main["cpu_core"] / cpus) <= 0.0051
                 total = report["total"]
                 assert total["rss"] == sum(p["rss"] for p in report["processes"])
                 names = [t["name"] for t in report["threads"]]

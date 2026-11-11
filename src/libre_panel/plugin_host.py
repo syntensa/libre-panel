@@ -1031,8 +1031,21 @@ def main(argv: list[str] | None = None) -> int:
     # (the app puts each line into its own log: "<level>\t<logger>\t<message>")
     logging.basicConfig(stream=sys.stderr, level=logging.INFO,
                         format="%(levelname)s\t%(name)s\t%(message)s")  # fmt: skip
+    threading.Thread(target=_warm, name="plugin-warm", daemon=True).start()
     Host(channel, args.folder).serve()
     return 0
+
+
+def _warm() -> None:
+    """The renderer's modules imported while the app asks for the catalog: their first import
+    (Pillow, the fonts, the widgets) takes long where a virus scanner reads every file, and the
+    app's first drawing should not wait for it."""
+    try:
+        import libre_panel.render.overlays  # noqa: F401
+        import libre_panel.render.renderer  # noqa: F401
+        import libre_panel.render.transitions  # noqa: F401
+    except Exception:  # noqa: BLE001 - what fails here fails again where it is used, and is said
+        logging.getLogger(__name__).debug("warming up failed", exc_info=True)
 
 
 if __name__ == "__main__":

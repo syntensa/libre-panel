@@ -23,6 +23,18 @@ pub const PLUGIN_FILENAME: &str = "plugin.toml";
 pub const BUILT_IN: &str = "built in";
 /// how long a request may take before the host is taken for hung
 const ANSWER_S: u64 = 30;
+/// what opens a drawing, a transition, a toast's style or a page may wait for the first import
+/// of Python's renderer in the host (long where a virus scanner reads every file)
+const OPENING_S: u64 = 120;
+
+fn answer_s(op: &str) -> u64 {
+    let opening = op.ends_with(".open") || op.starts_with("page") || op == "schemas";
+    if opening {
+        OPENING_S
+    } else {
+        ANSWER_S
+    }
+}
 
 /// loader.py's BUILT_IN_PARTS: what Libre Panel brings itself, by kind (a plugin cannot use
 /// these names).
@@ -224,20 +236,17 @@ impl PluginHost {
         message.insert("op".into(), Value::from(op));
         self.inner.send(message, blob)?;
         let (told, data) = loop {
-            let (told, data) =
-                answer
-                    .recv_timeout(Duration::from_secs(ANSWER_S))
-                    .map_err(|_| {
-                        self.inner.waiting.lock().ok().map(|mut w| w.remove(&id));
-                        self.inner
-                            .gone
-                            .lock()
-                            .ok()
-                            .and_then(|gone| gone.clone())
-                            .unwrap_or_else(|| {
-                                format!("the plugin host did not answer {op} in time")
-                            })
-                    })?;
+            let (told, data) = answer
+                .recv_timeout(Duration::from_secs(answer_s(op)))
+                .map_err(|_| {
+                    self.inner.waiting.lock().ok().map(|mut w| w.remove(&id));
+                    self.inner
+                        .gone
+                        .lock()
+                        .ok()
+                        .and_then(|gone| gone.clone())
+                        .unwrap_or_else(|| format!("the plugin host did not answer {op} in time"))
+                })?;
             if text(&told, "event") != "need" {
                 break (told, data);
             }
