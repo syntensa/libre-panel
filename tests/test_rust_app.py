@@ -590,7 +590,7 @@ def test_a_linux_pcs_sensors_are_those_of_the_python_sources(tmp_path: Path) -> 
                     read[item.key] = Reading(item.key, value, item.unit, name)
                 break
         wanted = _named(read)
-        slow = {item.key for item in linux._plan.slow}
+        slow = {item.key: item for item in linux._plan.slow}
     finally:
         linux.close()
         provider.close()
@@ -602,13 +602,27 @@ def test_a_linux_pcs_sensors_are_those_of_the_python_sources(tmp_path: Path) -> 
     # program's own thread does a few seconds later): CI's NVMe drive often does not answer,
     # and the program asks it once in its short life
     for _ in range(12):
-        missing = {key for key in wanted if key not in ours} & slow
+        missing = {key for key in wanted if key not in ours} & set(slow)
         if not missing:
             break
         again = _run(tmp_path, "sensors")
         assert again.returncode == 0, again.stderr
         ours.update({line[:40].strip(): line for line in _lines(again)
                      if line[:40].strip() in missing})  # fmt: skip
+    # and one the program read that Python's side did not is asked again on Python's side
+    for key in (set(ours) - set(wanted)) & set(slow):
+        for _ in range(30):
+            value = slow[key].read()
+            if value is not None:
+                wanted[key] = Reading(key, value, slow[key].unit, linux._plan.names[key])
+                break
+            time.sleep(0.2)
+    # A drive that answers neither side's repeated asking for a while (CI's NVMe drive) is
+    # left out of the comparison; every other reading is compared, the drives' among them.
+    silent = (set(ours) ^ set(wanted)) & set(slow)
+    for key in silent:
+        ours.pop(key, None)
+        wanted.pop(key, None)
     assert sorted(ours) == sorted(wanted)
     for key, r in wanted.items():
         assert ours[key].endswith(f" {r.unit:<5} {r.label}"), (key, ours[key])
