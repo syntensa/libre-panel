@@ -321,6 +321,9 @@ const ROUTES: &[Route] = &[
     private("GET", "/api/system", |s, x, _, _| {
         settings(s, x, |told| told.system())
     }),
+    private("GET", "/api/unlock", |s, x, _, _| {
+        settings(s, x, |told| told.unlock())
+    }),
     private("GET", "/api/report", |s, x, _, _| {
         settings(s, x, |told| told.report())
     }),
@@ -558,6 +561,9 @@ const ROUTES: &[Route] = &[
     private("POST", "/api/update", |s, x, _, _| update_later(s, x)),
     private("POST", "/api/system", |s, x, _, _| {
         settings_with(s, x, |told, asked| told.set_system(asked))
+    }),
+    private("POST", "/api/unlock", |s, x, _, _| {
+        settings_with(s, x, |told, asked| told.set_unlock(asked))
     }),
     private("POST", "/api/location", |s, x, _, _| {
         settings_with(s, x, |told, asked| told.search_place(asked))

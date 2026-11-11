@@ -30,6 +30,7 @@ mod hotkeys;
 mod http;
 mod identify;
 mod instance;
+mod linux_setup;
 mod load;
 #[cfg(target_os = "linux")]
 mod logind;
@@ -56,6 +57,7 @@ mod specs;
 mod start_screen;
 mod switch;
 mod system;
+mod system_setup;
 mod tray;
 mod updates;
 mod window;
@@ -94,6 +96,10 @@ Libre Panel
   libre-panel ports             the serial ports and what is on them
   libre-panel doctor [--report FILE] [--no-questions] [--frames N]
                                 check a connected panel and write a report
+  libre-panel system-setup [--service] [--pawnio] [--perf-log-users] [--remove] [--status]
+                                as administrator: what the sensors need (Windows), and on
+                                Linux the panel's access, the fan chip's driver and, with
+                                --rapl, the processor's power (--linux, --dry-run, --json)
   libre-panel config            where config.toml is, and whether it is right
   libre-panel version
 
@@ -358,6 +364,7 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
             };
             MainLoop::new(home, asked)?.run(&STOP, &|| mainloop::Ending::Quit);
         }
+        "system-setup" => std::process::exit(i32::from(system_setup_command(args)?)),
         "doctor" => {
             // libre-panel doctor [--report FILE] [--no-questions] [--frames N] [--config FILE]
             let (mut report, mut questions, mut frames, mut config) = (None, true, 20, None);
@@ -739,6 +746,90 @@ fn autostart(args: &[String]) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// `libre-panel system-setup`: what the system needs an administrator for, one command on
+/// both systems (cli.py's _cmd_system_setup). Windows: the sensor service, the PawnIO driver
+/// and the group game frame rates need. Linux: the panel's permission, the mainboard's sensor
+/// driver and the processor's power (`--linux`, taken for granted on Linux unless a flag of
+/// Windows' is given).
+fn system_setup_command(args: &[String]) -> Result<u8, String> {
+    let mut windows_options = system_setup::Options::default();
+    let mut linux_options = linux_setup::CliOptions::default();
+    let mut linux = false;
+    let mut rest = args.iter();
+    while let Some(arg) = rest.next() {
+        match arg.as_str() {
+            "--service" => windows_options.service = true,
+            "--pawnio" => windows_options.pawnio = true,
+            "--perf-log-users" => windows_options.perf_log_users = true,
+            "--user-sid" => {
+                let sid = rest.next().ok_or("--user-sid needs a value")?;
+                windows_options.user_sid = Some(sid.clone());
+            }
+            "--linux" => linux = true,
+            "--rapl" => linux_options.rapl = true,
+            "--no-rapl" => linux_options.no_rapl = true,
+            "--remove" => {
+                windows_options.remove = true;
+                linux_options.remove = true;
+            }
+            "--status" => {
+                windows_options.status = true;
+                linux_options.status = true;
+            }
+            "--dry-run" => linux_options.dry_run = true,
+            "--json" => linux_options.json = true,
+            other => return Err(format!("system-setup: unknown option {other}")),
+        }
+    }
+    if linux_options.rapl && linux_options.no_rapl {
+        return Err("system-setup: --rapl and --no-rapl, not both".into());
+    }
+    let windows: Vec<&str> = [
+        ("--service", windows_options.service),
+        ("--pawnio", windows_options.pawnio),
+        ("--perf-log-users", windows_options.perf_log_users),
+        ("--user-sid", windows_options.user_sid.is_some()),
+    ]
+    .iter()
+    .filter(|(_, given)| *given)
+    .map(|(flag, _)| *flag)
+    .collect();
+    if linux || (cfg!(target_os = "linux") && windows.is_empty()) {
+        if !windows.is_empty() {
+            eprintln!(
+                "error: {} is for Windows, not for --linux",
+                windows.join(", ")
+            );
+            return Ok(2);
+        }
+        return Ok(linux_setup::run_cli(&linux_options));
+    }
+    let only_linux: Vec<&str> = [
+        ("--rapl", linux_options.rapl),
+        ("--no-rapl", linux_options.no_rapl),
+        ("--dry-run", linux_options.dry_run),
+        ("--json", linux_options.json),
+    ]
+    .iter()
+    .filter(|(_, given)| *given)
+    .map(|(flag, _)| *flag)
+    .collect();
+    if !only_linux.is_empty() {
+        eprintln!("error: {} is for Linux (--linux)", only_linux.join(", "));
+        return Ok(2);
+    }
+    if !cfg!(windows) {
+        eprintln!("system-setup is for Windows: elsewhere the sensors need no service.");
+        return Ok(1);
+    }
+    let admin = autostart::is_admin();
+    Ok(system_setup::run_command(
+        &mut windows_options,
+        &system_setup::win::Real,
+        admin,
+    ))
 }
 
 fn main() -> ExitCode {

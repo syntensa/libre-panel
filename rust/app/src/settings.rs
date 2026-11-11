@@ -1118,6 +1118,139 @@ impl Settings<'_> {
         (crate::autostart::Autostart::new(&command[0]), command)
     }
 
+    /// unlock: what the setup of this system would bring and how a run of it is going.
+    /// Windows: the sensor service and what else "Unlock all sensors" sets up. Linux: the
+    /// panel's permission, the mainboard's sensor driver and the processor's power. Both have
+    /// `platform`, `available`, `command` and `job`.
+    pub fn unlock(&self) -> Answer<Value> {
+        if cfg!(target_os = "linux") {
+            let facts = crate::linux_setup::gather(&crate::linux_setup::root());
+            return Ok(Value::Dict(crate::linux_setup::status(&facts, true)));
+        }
+        let mut state = crate::system_setup::unlock_state();
+        if cfg!(windows) {
+            state.insert("presentmon".into(), self.presentmon());
+        }
+        state.insert(
+            "command".into(),
+            Value::Str(cli_command(
+                "system-setup --service --pawnio --perf-log-users",
+            )),
+        );
+        Ok(Value::Dict(state))
+    }
+
+    /// Whether the program that reads the frame rates of games is there; None while
+    /// config.toml cannot be read.
+    fn presentmon(&self) -> Value {
+        let Ok(config) = self.config() else {
+            return Value::None;
+        };
+        let path = config
+            .sensors
+            .options
+            .get("presentmon")
+            .and_then(|options| options.get("path"))
+            .and_then(|path| match path {
+                lp_py::toml::Toml::Str(path) => Some(path.clone()),
+                _ => None,
+            })
+            .unwrap_or_default();
+        Value::Bool(lp_sensors::presentmon::find_presentmon(&path, &mut Vec::new()).is_some())
+    }
+
+    /// set_unlock: `{"action": "unlock"}` (or `"remove"`): `libre-panel system-setup` with the
+    /// system's own question for administrator rights (UAC on Windows, polkit's password window
+    /// on Linux, where `"rapl"` also opens or closes the energy counters). The answer comes at
+    /// once; the run goes on in the background.
+    pub fn set_unlock(&self, payload: &Value) -> Answer<Value> {
+        let payload = payload.as_dict();
+        if cfg!(target_os = "linux") {
+            return self.unlock_linux(payload);
+        }
+        let action = payload
+            .and_then(|p| p.get("action"))
+            .and_then(Value::as_str);
+        let Some(action) = action.filter(|a| ["unlock", "remove"].contains(a)) else {
+            return Err(refusal(
+                "expected {\"action\": \"unlock\"} or {\"action\": \"remove\"}",
+                400,
+            ));
+        };
+        let program = crate::system_setup::cli_program();
+        let available = self
+            .unlock()?
+            .as_dict()
+            .and_then(|state| state.get("available"))
+            .is_some_and(Value::truthy);
+        let (true, Some(program)) = (available, program) else {
+            return Err(refusal(
+                lp_i18n::t("The sensor service comes with the Windows downloads (setup or zip)."),
+                409,
+            ));
+        };
+        let user = crate::system_setup::current_user();
+        crate::system_setup::start(action, &program, user.as_deref());
+        self.unlock()
+    }
+
+    /// The Linux side of set_unlock: pkexec shows the password dialog, and what the run is to
+    /// do is only ever the two switches of `system-setup --linux`.
+    fn unlock_linux(&self, payload: Option<&lp_py::Dict>) -> Answer<Value> {
+        use crate::linux_setup as setup;
+        let valid = payload.is_some_and(|p| p.keys().all(|k| k == "action" || k == "rapl"));
+        let action = payload
+            .filter(|_| valid)
+            .and_then(|p| p.get("action"))
+            .and_then(Value::as_str)
+            .filter(|a| ["unlock", "remove"].contains(a));
+        let Some(action) = action else {
+            return Err(refusal(
+                "expected {\"action\": \"unlock\"} or {\"action\": \"remove\"}",
+                400,
+            ));
+        };
+        let rapl = match payload.and_then(|p| p.get("rapl")) {
+            None | Some(Value::None) => None,
+            Some(Value::Bool(flag)) => Some(*flag),
+            Some(_) => return Err(refusal("rapl: expected true or false", 400)),
+        };
+        if rapl.is_some() && action == "remove" {
+            return Err(refusal(
+                "expected {\"action\": \"unlock\", \"rapl\": true}",
+                400,
+            ));
+        }
+        let options = setup::Options {
+            rapl,
+            remove: action == "remove",
+        };
+        let command = setup::program();
+        let way = setup::elevation(options, command.as_deref(), false, true);
+        let say = |text: &str| {
+            lp_i18n::t_format(text, &[("command", Value::Str(way.terminal.clone()))])
+                .unwrap_or_else(|why| why.msg)
+        };
+        if crate::access::elevated() {
+            return Err(refusal(
+                say(
+                    "Libre Panel runs with administrator rights. Run this in a terminal: {command}",
+                ),
+                403,
+            ));
+        }
+        if way.argv.is_empty() {
+            return Err(refusal(
+                say("Libre Panel cannot ask for the administrator's rights from here. Run this in a terminal: {command}"),
+                409,
+            ));
+        }
+        if !setup::start(&way, action) {
+            return Err(refusal(lp_i18n::t("The setup is running already."), 409));
+        }
+        self.unlock()
+    }
+
     /// Starting with the system, and the language.
     pub fn system(&self) -> Answer<Value> {
         let (autostart, command) = self.autostart();

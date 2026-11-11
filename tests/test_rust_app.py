@@ -2199,3 +2199,22 @@ def test_each_panel_shows_its_part_of_the_picture_across_the_panels(tmp_path: Pa
     expected = ImageOps.fit(part, (1920, 480))
     with Image.open(tmp_path / "panel.png") as frame:
         assert frame.convert("RGB").tobytes() == expected.tobytes()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows' sensor service")
+def test_windows_system_setup_tells_what_is_in_place_as_setup_py_does(tmp_path: Path) -> None:
+    """`system-setup --status` on Windows: the sensor service, PawnIO, the group game frame
+    rates need and what this program carries, as sensorservice/setup.py tells them; a SID that
+    is none, a Linux flag and nothing to do refused in the same words."""
+    from libre_panel.sensorservice import setup
+
+    done = _run(tmp_path, "system-setup", "--status")
+    assert done.returncode == 0, done.stderr
+    ours = json.loads(done.stdout)
+    theirs = setup.status(setup.WindowsSystem())
+    assert ours == theirs, (ours, theirs)
+    for args, code, said in ((["--user-sid", "nobody", "--service"], 1, "is not a SID"),
+                             (["--rapl"], 2, "is for Linux"),
+                             ([], 1, "say what to set up")):  # fmt: skip
+        done = _run(tmp_path, "system-setup", *args)
+        assert done.returncode == code and said in done.stderr, (args, done.stderr)

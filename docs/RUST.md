@@ -2190,6 +2190,18 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       desktop of stand-in programs, what the app lists and refuses as Python's; on the running
       app with a simulated panel, a part of a monitor shown with ffmpeg's command as Python's,
       the panel's own monitor made and taken off with xrandr's calls as extend.py's
+- [x] what the system needs an administrator for (sensorservice/setup.py, linux_setup.py,
+      linux_rights.py, `libre-panel system-setup`, `/api/unlock`): on Windows the sensor
+      service copied to Program Files and registered (sc.exe, its folder closed with icacls,
+      startable by everyone signed in), PawnIO from the installer the download carries (by its
+      SHA-256), the person put in Performance Log Users and taken out again only where this
+      setup put them; "Unlock all sensors" runs it with Windows' question for rights and says
+      how it went. On Linux the panels' udev rule, the board's fan chip driver (by what the
+      firmware says the board is, never forced), drivetemp, and on request the processor's
+      energy counters; asked for through pkexec or sudo, each step reported. The tests: on a
+      computer laid out in a folder, what Linux's setup would do, its JSON and removal and
+      what the app shows as Python's; the app's answers and refusals as Python's; Windows'
+      `--status` and refusals as Python's (CI)
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app
 - [x] one Libre Panel at a panel (instance.py): the system's lock on libre-panel.lock in the

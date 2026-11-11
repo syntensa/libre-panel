@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import re
+import shlex
 import shutil
 import signal
 import socket
@@ -3451,3 +3452,149 @@ def test_a_panel_shows_a_monitor_and_its_own_as_mirror_py_does(x11: Path, tmp_pa
                 program.wait(10)
     finally:
         rig.close()
+
+
+def _one_program(text: str | bytes, program: str) -> str:
+    """A command line of the setup with the program that starts it said one way: Python's
+    starts itself as `python -B -I -m libre_panel`, the Rust app as its own file."""
+    from libre_panel import linux_rights
+
+    text = text.decode("utf-8") if isinstance(text, bytes) else text
+    python = linux_rights.program()
+    if python:
+        text = text.replace(shlex.join(python), "PROGRAM")
+    # (the tests' Python has no program root can run: it names the one a pip install has)
+    text = text.replace("sudo libre-panel ", "sudo PROGRAM ")
+    return text.replace(shlex.quote(program), "PROGRAM")
+
+
+def _a_pc(root: Path) -> None:
+    """A computer laid out in a folder: an ASUS board whose fan chip no driver reads yet, a
+    kernel that has nct6775 and drivetemp, a SATA drive, two closed energy counters and a
+    TURZX panel plugged in."""
+    files = {
+        "sys/class/dmi/id/board_vendor": "ASUSTeK COMPUTER INC.\n",
+        "sys/class/dmi/id/board_name": "ROG STRIX B650E-F\n",
+        "sys/class/dmi/id/chassis_type": "3\n",
+        "proc/modules": "k10temp 16384 0 - Live 0x0\n",
+        "sys/class/hwmon/hwmon0/name": "k10temp\n",
+        f"lib/modules/{os.uname().release}/modules.dep":
+            "kernel/drivers/hwmon/nct6775.ko.zst: kernel/drivers/hwmon/nct6775-core.ko.zst\n"
+            "kernel/drivers/hwmon/drivetemp.ko.zst:\n",
+        "sys/block/sda/device/vendor": "ATA\n",
+        "sys/class/powercap/intel-rapl:0/energy_uj": "123\n",
+        "sys/class/powercap/intel-rapl:0:0/energy_uj": "45\n",
+        "sys/bus/usb/devices/1-2/idVendor": "1cbe\n",
+        "sys/bus/usb/devices/1-2/idProduct": "0088\n",
+        "etc/modules": "# /etc/modules\nloop\n",
+    }  # fmt: skip
+    for name, text in files.items():
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    for zone in ("intel-rapl:0", "intel-rapl:0:0"):
+        (root / "sys/class/powercap" / zone / "energy_uj").chmod(0o400)
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux's setup")
+def test_the_linux_setup_is_planned_and_told_as_linux_setup_py_does(tmp_path: Path) -> None:
+    """`system-setup --linux` on a computer laid out in a folder: what it would do (the rule,
+    the board's driver, the drives' driver, the energy counters opened, udev told), with
+    --json, to remove, and what the app shows of it, as linux_setup.py and linux_rights.py say;
+    a Windows flag refused in the same words."""
+    import argparse
+    import contextlib
+    import io
+
+    from libre_panel import linux_rights, linux_setup
+
+    root = tmp_path / "pc"
+    _a_pc(root)
+    program = str(_program())
+    env = {**os.environ, "LP_SETUP_ROOT": str(root), "LIBRE_PANEL_HOME": str(tmp_path),
+           "LIBRE_PANEL_DATA": str(DATA), **_libraries()}  # fmt: skip
+    env.pop("DISPLAY", None)
+    env.pop("WAYLAND_DISPLAY", None)
+    # (the tests' linux_setup looks at no computer: a copy of the module of its own does)
+    spec = importlib.util.find_spec("libre_panel.linux_setup")
+    assert spec is not None and spec.loader is not None
+    looking = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(looking)
+    facts = looking.gather(root)
+
+    def python(**flags: Any) -> tuple[int, str, str]:
+        args = argparse.Namespace(**{"status": False, "rapl": False, "no_rapl": False,
+                                     "remove": False, "dry_run": False, "json": False,
+                                     **flags})  # fmt: skip
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(pytest.MonkeyPatch.context()).delenv("DISPLAY", raising=False)
+            code = linux_setup.run_cli(args, facts=facts, root=False, stdout=out, stderr=err)
+        return code, out.getvalue(), err.getvalue()
+
+    runs = [({"rapl": True, "dry_run": True}, ["--rapl", "--dry-run"]),
+            ({"dry_run": True}, ["--dry-run"]),
+            ({"dry_run": True, "json": True}, ["--dry-run", "--json"]),
+            ({"remove": True, "dry_run": True}, ["--remove", "--dry-run"])]  # fmt: skip
+    for flags, words in runs:
+        done = subprocess.run([program, "system-setup", "--linux", *words], env=env,
+                              capture_output=True, text=True, timeout=60)  # fmt: skip
+        theirs = python(**flags)
+        assert (done.returncode, done.stdout, done.stderr) == theirs, words
+    said = python(rapl=True, dry_run=True)[1]
+    assert "60-libre-panel.rules" in said and "nct6775" in said and "drivetemp" in said
+    assert "energy counters" in said
+    done = subprocess.run([program, "system-setup", "--linux", "--status"], env=env,
+                          capture_output=True, text=True, timeout=60)  # fmt: skip
+    assert done.returncode == 0, done.stderr
+    ours = json.loads(_one_program(done.stdout, program))
+    with pytest.MonkeyPatch.context() as patch:
+        patch.delenv("DISPLAY", raising=False)
+        theirs = linux_rights.status(facts)
+    theirs.pop("job")
+    theirs = json.loads(_one_program(json.dumps(theirs), program))
+    assert ours == theirs
+    assert [offer["id"] for offer in ours["offers"]] == ["usb", "fans", "drives", "power"]
+    done = subprocess.run([program, "system-setup", "--service"], env=env, capture_output=True,
+                          text=True, timeout=60)  # fmt: skip
+    assert done.returncode == 1
+    assert "system-setup is for Windows" in done.stderr
+
+
+@pytest.fixture
+def no_computer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A computer with nothing in it for the setup to look at (set before the servers start):
+    the Rust app's, as the tests' Python one looks at none."""
+    root = tmp_path / "nothing"
+    root.mkdir()
+    monkeypatch.setenv("LP_SETUP_ROOT", str(root))
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    return root
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux's setup")
+def test_unlocking_is_told_and_refused_as_settings_py_does(
+    no_computer: Path, servers: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Settings → Unlock all sensors (/api/unlock) on Linux without a desktop: what the setup
+    would bring this computer and how it is started as Python tells it; what is no request and
+    a run that cannot ask for the rights here (or that runs as root already, where the tests
+    do) refused in the same words."""
+    from libre_panel.editor import access
+
+    # (the Rust app knows whether it runs as root: Python's is told the same)
+    monkeypatch.setattr(access, "elevated", lambda: os.geteuid() == 0)
+    ask, _homes = servers
+    program = str(_program())
+    theirs, ours = ask(_get("/api/unlock", WITH))
+    assert ours[0] == theirs[0] == "HTTP/1.0 200 OK", ours[2]
+    mine, python = (json.loads(_one_program(answer[2], program)) for answer in (ours, theirs))
+    assert mine == python and mine["platform"] == "linux"
+    for body in ({"action": "nope"}, {"action": "unlock", "more": 1}, [1],
+                 {"action": "remove", "rapl": True}, {"action": "unlock", "rapl": "yes"},
+                 {"action": "unlock"}):  # fmt: skip
+        theirs, ours = ask(_post("/api/unlock", body))
+        assert ours[0] == theirs[0], (body, ours, theirs)
+        mine, python = (json.loads(_one_program(answer[2], program)) for answer in (ours, theirs))
+        assert mine == python, body
