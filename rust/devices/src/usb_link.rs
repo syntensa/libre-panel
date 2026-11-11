@@ -301,7 +301,7 @@ pub fn take(vendor: u16, products: &[u16], label: &str) -> Result<(NusbIo, u16)>
         if !take_place(&place) {
             continue;
         }
-        return match NusbIo::open(&candidate, place.clone()) {
+        return match NusbIo::open_found(&candidate, place.clone()) {
             Ok(io) => Ok((io, candidate.product_id)),
             Err(e) => {
                 leave_place(&place);
@@ -353,7 +353,8 @@ pub struct NusbIo {
 }
 
 impl NusbIo {
-    fn open(found: &Found, place: String) -> UsbResult<NusbIo> {
+    /// open_found: `found` opened; `place` is left again on release ("" for none).
+    pub fn open_found(found: &Found, place: String) -> UsbResult<NusbIo> {
         let product = found.product();
         #[cfg(target_os = "linux")]
         let bus = found.info.busnum().to_string();

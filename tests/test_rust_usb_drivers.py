@@ -20,6 +20,7 @@ from rust_check import image, noise, run
 from libre_panel.config import DeviceConfig
 from libre_panel.devices import (
     beadapanel,
+    jonsbo_zc360,
     lianli_usb,
     nzxt_kraken,
     thermalright,
@@ -100,8 +101,44 @@ class _Interface:
         return iter(self._endpoints)
 
 
+class _Tagged(list):
+    """The events of one of several screens, each beginning with its number."""
+
+    def __init__(self, events: list[Any], tag: int) -> None:
+        super().__init__()
+        self.events, self.tag = events, tag
+
+    def append(self, event: Any) -> None:
+        self.events.append([self.tag, *event])
+
+
+def _zc360_screens(case: dict[str, Any], events: list[Any], monkeypatch: pytest.MonkeyPatch):
+    """The ZC-360's screens of the case as pyusb would list them, scripted each."""
+    screens = []
+    for n, part in enumerate(case["screens"]):
+        screen = FakeScreen(part, _Tagged(events, n))
+        screen.address, screen.port_numbers, screen.serial = (
+            part["address"],
+            part["ports"],
+            part["serial"],
+        )
+        screens.append(screen)
+    monkeypatch.setattr(jonsbo_zc360, "_devices", lambda: list(screens))
+    monkeypatch.setattr(jonsbo_zc360, "_serial", lambda device: device.serial)
+    monkeypatch.setattr(
+        jonsbo_zc360.Screen, "claim", lambda self: self.device.events.append(["claim", [0]])
+    )
+    monkeypatch.setattr(
+        jonsbo_zc360.Screen, "release", lambda self: self.device.events.append(["release"])
+    )
+    monkeypatch.setattr(jonsbo_zc360.time, "sleep", lambda seconds: None)
+
+
 def _python_session(case: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     events: list[Any] = []
+    if case["driver"] == "zc360":
+        _zc360_screens(case, events, monkeypatch)
+        case = {**case, "product": "", "interfaces": []}
     screen = FakeScreen(case, events)
     monkeypatch.setattr(
         usb_link,
@@ -122,6 +159,7 @@ def _python_session(case: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> di
     config.jpeg_quality = options.get("jpeg_quality", 90)
     config.video.fps = options.get("fps", 30)
     config.brightness = options.get("brightness", 100)
+    config.port = options.get("port", "")
     model = get_model(case["model"]) if case.get("model") else None
     display = _driver(case["driver"], config, model)
     try:
@@ -163,6 +201,8 @@ def _driver(name: str, config: DeviceConfig, model: Any) -> Any:
         return thermalright.TrofeoDisplay(config, model)
     if name == "nzxt":
         return nzxt_kraken.KrakenDisplay(config, model)
+    if name == "zc360":
+        return jonsbo_zc360.Zc360Display(config, model)
     raise AssertionError(name)
 
 
@@ -494,3 +534,55 @@ def test_kraken_sessions_as_nzxt_kraken_py_drives_them(monkeypatch: pytest.Monke
     monkeypatch.setattr(nzxt_kraken.time, "sleep", lambda seconds: None)
     rng = random.Random(0x2A3)
     assert _compare([_kraken_case(rng) for _ in range(24)], monkeypatch) > 10
+
+
+def _zc360_answer(state: int) -> str:
+    """A controller's answer saying ``state``."""
+    from Crypto.Cipher import DES
+
+    answer = bytearray(32)
+    answer[2:10] = DES.new(jonsbo_zc360.DES_KEY, DES.MODE_ECB).encrypt(
+        bytes((state, 0, 0, 0, 0, 0, 0, 0))
+    )
+    return _b64(answer)
+
+
+def _zc360_case(rng: random.Random) -> dict[str, Any]:
+    single = rng.random() < 0.35
+    count = rng.choice([3, 3, 3, 4, 2]) if not single else rng.choice([1, 2, 3])
+    steps: list[dict[str, Any]] = []
+    for _ in range(rng.randrange(1, 4)):
+        if rng.random() < 0.25:
+            steps.append({"brightness": rng.choice([-1, 0, 50, 100, 120])})
+        else:
+            sizes = (
+                [(640, 180), (180, 640), (300, 90)]
+                if single
+                else [(1920, 180), (180, 1920), (960, 90)]
+            )
+            frame = _frame(rng, sizes)
+            steps.append({"show": frame, "region": None})
+            if rng.random() < 0.3:
+                steps.append({"show": frame, "region": None})  # (the same again: not written)
+    states = [0x62, 0x62, 0x60, 0x59, None]
+    screens = []
+    for n in range(count):
+        answers = [rng.choice([_zc360_answer(0x10), None]) for _ in range(3)]
+        answers += [None if (state := rng.choice(states)) is None else _zc360_answer(state)
+                    for _ in range(40)]  # fmt: skip
+        fail = [[rng.randrange(1, 60), 19, "No such device"]] if rng.random() < 0.08 else []
+        screens.append({"product": "TURZX-338inch-r", "serial": rng.choice(["A1", "B2", "C3", ""]),
+                        "address": 10 + n, "ports": [1, rng.randrange(1, 5)],
+                        "interfaces": [{"number": 0, "class": 255,
+                                        "endpoints": [[0x02, 512, False], [0x82, 512, False]]}],
+                        "answers": answers, "fail_writes": fail})  # fmt: skip
+    port = rng.choice(["", "2,1,3", "312", "1", "3", "4", "nope"])
+    return {"driver": "zc360", "product": "ZC-360",
+            "model": "jonsbo-zc360-screen" if single else rng.choice([None, "jonsbo-zc360"]),
+            "screens": screens, "options": {"brightness": rng.choice([0, 70, 100]), "port": port},
+            "steps": steps}  # fmt: skip
+
+
+def test_zc360_sessions_as_jonsbo_zc360_py_drives_them(monkeypatch: pytest.MonkeyPatch) -> None:
+    rng = random.Random(0x2C36)
+    assert _compare([_zc360_case(rng) for _ in range(30)], monkeypatch) > 12

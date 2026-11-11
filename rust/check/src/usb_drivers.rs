@@ -31,11 +31,48 @@ struct ScriptedUsb {
     fail_writes: Vec<(u64, String)>,
     writes: u64,
     events: Events,
+    /// the screen's number among several (its events begin with it)
+    tag: Option<u64>,
 }
 
 impl ScriptedUsb {
     fn note(&self, event: Value) {
+        let event = match (self.tag, event) {
+            (Some(tag), Value::Array(mut items)) => {
+                items.insert(0, json!(tag));
+                Value::Array(items)
+            }
+            (_, event) => event,
+        };
         self.events.lock().unwrap().push(event);
+    }
+
+    fn of(case: &Value, events: &Events, tag: Option<u64>) -> ScriptedUsb {
+        ScriptedUsb {
+            product: case["product"].as_str().unwrap_or("").to_string(),
+            interfaces: interfaces_of(&case["interfaces"]),
+            answers: case["answers"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .into(),
+            fail_writes: case["fail_writes"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|f| {
+                    let errno = f[1].as_i64().unwrap_or(0);
+                    let text = f[2].as_str().unwrap_or("");
+                    (
+                        f[0].as_u64().unwrap_or(0),
+                        format!("[Errno {errno}] {text}"),
+                    )
+                })
+                .collect(),
+            writes: 0,
+            events: Arc::clone(events),
+            tag,
+        }
     }
 
     fn answer(&mut self) -> UsbResult<Vec<u8>> {
@@ -204,34 +241,52 @@ fn opened(case: &Value, io: Box<dyn UsbIo>) -> Result<Box<dyn Driver>, String> {
     }
 }
 
+/// The ZC-360 opened among the screens the case scripts ("screens": each its own script,
+/// serial number and place on the bus).
+fn zc360(case: &Value, events: &Events) -> Result<Box<dyn Driver>, String> {
+    use lp_devices::jonsbo_zc360::{Candidate, Zc360};
+    let candidates = case["screens"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .enumerate()
+        .map(|(n, screen)| Candidate {
+            io: Box::new(ScriptedUsb::of(screen, events, Some(n as u64))),
+            serial: screen["serial"].as_str().unwrap_or("").to_string(),
+            place: format!("usb:1.{}", screen["address"].as_u64().unwrap_or(0)),
+            position: (
+                "1".into(),
+                screen["ports"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .map(|p| p.as_u64().unwrap_or(0) as u8)
+                    .collect(),
+                screen["address"].as_u64().unwrap_or(0) as u8,
+            ),
+        })
+        .collect();
+    let model = case["model"].as_str().and_then(find_model);
+    let options = &case["options"];
+    let mut driver = Zc360::new(
+        model,
+        options["port"].as_str().unwrap_or(""),
+        options["brightness"].as_i64().unwrap_or(100),
+    );
+    driver.pauses = false;
+    driver.open_among(candidates).map_err(|e| e.0)?;
+    Ok(Box::new(driver))
+}
+
 pub fn session(case: &Value) -> Result<Value, String> {
     let events: Events = Arc::default();
-    let io = ScriptedUsb {
-        product: case["product"].as_str().unwrap_or("").to_string(),
-        interfaces: interfaces_of(&case["interfaces"]),
-        answers: case["answers"]
-            .as_array()
-            .cloned()
-            .unwrap_or_default()
-            .into(),
-        fail_writes: case["fail_writes"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .map(|f| {
-                let errno = f[1].as_i64().unwrap_or(0);
-                let text = f[2].as_str().unwrap_or("");
-                (
-                    f[0].as_u64().unwrap_or(0),
-                    format!("[Errno {errno}] {text}"),
-                )
-            })
-            .collect(),
-        writes: 0,
-        events: Arc::clone(&events),
-    };
     let seen = |events: &Events| Value::Array(events.lock().unwrap().clone());
-    let mut driver = match opened(case, Box::new(io)) {
+    let opened = if case["driver"] == "zc360" {
+        zc360(case, &events)
+    } else {
+        opened(case, Box::new(ScriptedUsb::of(case, &events, None)))
+    };
+    let mut driver = match opened {
         Ok(driver) => driver,
         Err(why) => return Ok(json!({"error": why, "events": seen(&events)})),
     };

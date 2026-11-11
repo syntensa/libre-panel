@@ -1666,7 +1666,12 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       the firmware and the screen's turn; pictures in two buckets in turn as R G B 0, or
       without buckets as RGB565 on a Kraken 2023 with firmware 2; the screen given back to
       the liquid's temperature on closing; tests/test_rust_usb_drivers.py)
-- [ ] JONSBO, MS9132, the serial panels (Turing rev. A/B/C, Kipye rev. D, WeAct, JONSBO DS916), the panel as a monitor
+- [x] JONSBO ZC-360 (rust/devices' jonsbo_zc360: its three screens as one panel in the order of
+      their serial numbers or `device.port`, or one of them as a panel of its own by its place
+      on the bus; the DES commands, the framebuffers in their records, a screen that did not
+      change not written again, a controller just powered taken on with 88, "Which is which?"
+      on the three; tests/test_rust_usb_drivers.py)
+- [ ] MS9132, the serial panels (Turing rev. A/B/C, Kipye rev. D, WeAct, JONSBO DS916), the panel as a monitor
       (Windows' virtual display driver, X11, Wayland)
 
 ### R7 sensors

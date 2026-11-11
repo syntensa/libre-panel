@@ -76,6 +76,12 @@ fn other(
             let mut driver = lp_devices::nzxt::Kraken::new(model, device.brightness);
             driver.open().map(|()| Box::new(driver) as Box<dyn Driver>)
         }
+        "usb-jonsbo" => {
+            let mut driver =
+                lp_devices::jonsbo_zc360::Zc360::new(model, &device.port, device.brightness);
+            driver.numbers = Some(Box::new(zc360_numbers));
+            driver.open().map(|()| Box::new(driver) as Box<dyn Driver>)
+        }
         "usb-lianli" => {
             let mut driver = lp_devices::lianli::LianLi::new(model);
             driver.open().map(|()| Box::new(driver) as Box<dyn Driver>)
@@ -87,6 +93,20 @@ fn other(
         driver,
         previous: None,
     }))
+}
+
+/// "Which is which?" on the ZC-360's three screens: each its number, while it shows.
+fn zc360_numbers(size: (usize, usize)) -> Option<Vec<Image>> {
+    if !crate::identify::showing() {
+        return None;
+    }
+    let home = crate::home::Home::find().ok()?;
+    let env = lp_theme::Env {
+        fonts_dir: home.fonts(),
+    };
+    (1..=lp_devices::jonsbo_zc360::SCREENS)
+        .map(|n| crate::identify::picture(&env, n, size, crate::identify::ACCENT).ok())
+        .collect()
 }
 
 /// other_usb_model: the USB screen of another maker on the bus, as `auto` finds it, in this
@@ -271,6 +291,13 @@ fn any_panel(device: &DeviceConfig, settings: &Path, brightness: i64) -> Result<
                 if let Some(model) = other_usb_model() {
                     if let Some(Ok(panel)) = other(device, Some(model), model.protocol) {
                         return Ok(panel);
+                    }
+                }
+                // a JONSBO ZC-360 with its three screens free
+                if lp_devices::jonsbo_zc360::all_free() {
+                    let model = find_model(lp_devices::jonsbo_zc360::MODEL_ID);
+                    if let Some(opened) = other(device, model, "usb-jonsbo") {
+                        return opened;
                     }
                 }
                 hongtai(device).map_err(|_| why)
