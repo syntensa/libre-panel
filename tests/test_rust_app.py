@@ -589,6 +589,7 @@ def test_a_linux_pcs_sensors_are_those_of_the_python_sources(tmp_path: Path) -> 
                     read[item.key] = Reading(item.key, value, item.unit, name)
                 break
         wanted = _named(read)
+        slow = {item.key for item in linux._plan.slow}
     finally:
         linux.close()
         provider.close()
@@ -596,6 +597,16 @@ def test_a_linux_pcs_sensors_are_those_of_the_python_sources(tmp_path: Path) -> 
     # (a value longer than its column, as a processor's long name, moves the rest along:
     # each line ends in its unit and its label)
     ours = {line[:40].strip(): line for line in _lines(done)}
+    # a drive that did not answer the program's round is asked again, as above (and as the
+    # program's own thread does a few seconds later)
+    for _ in range(3):
+        missing = {key for key in wanted if key not in ours} & slow
+        if not missing:
+            break
+        again = _run(tmp_path, "sensors")
+        assert again.returncode == 0, again.stderr
+        ours.update({line[:40].strip(): line for line in _lines(again)
+                     if line[:40].strip() in missing})  # fmt: skip
     assert sorted(ours) == sorted(wanted)
     for key, r in wanted.items():
         assert ours[key].endswith(f" {r.unit:<5} {r.label}"), (key, ours[key])
