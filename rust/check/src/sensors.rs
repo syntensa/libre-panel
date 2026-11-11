@@ -2441,6 +2441,12 @@ fn downloads(case: &Value) -> Result<Value, String> {
         // (the test sets HOME in this process's environment: the rest is the real one, USERNAME
         // and USERPROFILE among it, as Python's tracker reads os.environ)
         let mut places = made_up_places(tracker);
+        // (Steam is looked for as on this system: on Windows in the registry and the program
+        // folders, not under the test's home folder)
+        places.windows = cfg!(windows);
+        if cfg!(windows) {
+            places.home = std::env::var("USERPROFILE").unwrap_or_default();
+        }
         let given = places.env;
         places.env = Box::new(move |name| given(name).or_else(|| std::env::var(name).ok()));
         let mut follows = Tracker::new(settings, places, find);
