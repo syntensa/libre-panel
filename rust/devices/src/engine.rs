@@ -137,7 +137,7 @@ pub fn capabilities(engine: &Path) -> String {
         .unwrap_or_else(|e| e.into_inner());
     said.entry(engine.to_path_buf())
         .or_insert_with(|| {
-            let done = Command::new(engine)
+            let done = hidden(&mut Command::new(engine))
                 .arg("version")
                 .stdin(Stdio::null())
                 .stderr(Stdio::null())
@@ -151,6 +151,18 @@ pub fn capabilities(engine: &Path) -> String {
             }
         })
         .clone()
+}
+
+/// `command` started without a console window of its own: on Windows the engine, a console
+/// program, started by the app (which has no console) got one for each panel otherwise.
+fn hidden(command: &mut Command) -> &mut Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
 }
 
 /// can_send: whether `engine` can have the panel (`libre-panel-engine panel`): an engine of
@@ -286,7 +298,7 @@ impl EngineLink {
         let (program, arguments) = command
             .split_first()
             .ok_or_else(|| DeviceError("no engine to start".into()))?;
-        let mut child = Command::new(program)
+        let mut child = hidden(&mut Command::new(program))
             .args(arguments)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

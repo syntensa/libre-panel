@@ -229,6 +229,7 @@ fn config(c: &Config) -> Value {
             maybe(&c.check_updates, |check| flag(*check)),
         ),
         ("allow_notify", flag(c.allow_notify)),
+        ("tray_icon", flag(c.tray_icon)),
         ("device", device(&c.device)),
         ("sensors", sensors(&c.sensors)),
         ("hardware", hardware(&c.hardware)),

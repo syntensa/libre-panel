@@ -173,8 +173,6 @@
     "Let Libre Panel read the processor's power": "Libre Panelにプロセッサの電力の読み取りを許可する",
     "Libre Panel cannot ask for the administrator's rights from here. Run this in a terminal: {command}": "ここからは管理者権限を要求できません。ターミナルで次を実行してください：{command}",
     "Libre Panel reads most sensors without any rights. A few need a change on this computer that only an administrator can make, once, when you press the button; your system then asks for the password. Nothing else is changed, and Remove again takes it all out.": "Libre Panelは、ほとんどのセンサーを権限なしで読み取ります。一部のセンサーでは、このコンピューターへの変更が必要です。この変更は管理者だけが行え、ボタンを押したときに一度だけ実行されます。その際、システムがパスワードを求めます。それ以外は何も変更されず、「設定を取り消す」ですべて元に戻せます。",
-    "Libre Panel runs in the background, its icon sits in the notification area.": "Libre Panelはバックグラウンドで動作しており、アイコンは通知領域にあります。",
-    "Libre Panel runs in the background, its icon sits in the tray.": "Libre Panelはバックグラウンドで動作しており、アイコンはシステムトレイにあります。",
     "Libre Panel runs with administrator rights. Run this in a terminal: {command}": "Libre Panelは管理者権限で実行されています。ターミナルで次を実行してください：{command}",
     "Libre Panel will start with the highest rights at every login, without a question. Turn it off again here, as an administrator.": "Libre Panelは、ログインのたびに確認なしで最上位の権限で起動します。オフに戻すには、管理者としてここで操作してください。",
     "Licence": "ライセンス",
@@ -2985,7 +2983,11 @@
     "Open Status: how the panel runs": "状態を開く：パネルの動作状況",
     "Show the picture large": "画像を大きく表示",
     "Which panel Start and Status show and Design edits": "ホームと状態で表示し、デザインで編集するパネル",
-    "The app's pictures": "アプリの画像"
+    "The app's pictures": "アプリの画像",
+    "Icon in the notification area": "通知領域のアイコン",
+    "Icon in the tray": "トレイのアイコン",
+    "Its menu shows how the panel is doing, switches themes and quits Libre Panel. Off: Libre Panel opens from the Start menu or your list of apps.": "メニューでパネルの状態の確認、テーマの切り替え、Libre Panel の終了ができます。オフ：Libre Panel はスタートメニューまたはアプリ一覧から開きます。",
+    "Libre Panel runs in the background.": "Libre Panel はバックグラウンドで動作します。"
   },
   "fields": {
     "night": "夜",

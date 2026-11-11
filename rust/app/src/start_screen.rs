@@ -268,7 +268,7 @@ fn clip_h264(ffmpeg: &std::path::Path, frames: &[Image], full: bool) -> Result<V
     let encoded = |crf: i64| -> Result<Vec<u8>, String> {
         let command = clip_command(ffmpeg, size, crf, full);
         let failed = |why: String| format!("ffmpeg could not make the standby clip: {why}");
-        let mut child = std::process::Command::new(&command[0])
+        let mut child = crate::capture::quiet(&mut std::process::Command::new(&command[0]))
             .args(&command[1..])
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())

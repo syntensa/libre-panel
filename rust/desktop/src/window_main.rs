@@ -47,8 +47,7 @@ mod autostart {
 fn speak(home: &home::Home) {
     let setting = lp_config::load_config(&home.config_file(), lp_config::platform())
         .map_or_else(|_| "auto".to_string(), |config| config.language);
-    let env = |name: &str| std::env::var(name).unwrap_or_default();
-    let code = lp_i18n::resolve(Some(&setting), || lp_i18n::system_language(&env, None));
+    let code = lp_i18n::resolve(Some(&setting), lp_i18n::system_language_here);
     if let Ok(language) = lp_i18n::Language::load(&home.locale(), &code) {
         lp_i18n::set_language(language);
     }

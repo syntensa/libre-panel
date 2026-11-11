@@ -728,6 +728,7 @@ impl Settings<'_> {
                 config.check_updates.map_or(Value::None, Value::Bool),
             ),
             ("allow_notify", Value::Bool(config.allow_notify)),
+            ("tray_icon", Value::Bool(config.tray_icon)),
             (
                 "hotkeys",
                 Value::Dict(
@@ -1052,7 +1053,14 @@ impl Settings<'_> {
                 ("state", of("state")),
                 ("detail", of("detail")),
                 ("size", of("size")),
-                ("more", Value::List(Vec::new())),
+                // the panels beside it as they are doing (Diagnose's rows for panel 2, 3 …)
+                (
+                    "more",
+                    state
+                        .get("more")
+                        .cloned()
+                        .unwrap_or(Value::List(Vec::new())),
+                ),
             ]);
         }
         let maybe = match found.is_none() && configured.is_none() {
@@ -2424,8 +2432,8 @@ fn rule(key: &str, name: &str, value: &Value, config: &Config) -> Option<Answer<
         "video.local_clip" => a_text(name, value, 200),
         "video.ffmpeg" => a_text(name, value, 260),
         "refresh_ms" => whole(name, value, 100, 3_600_000),
-        "check_updates" | "allow_notify" | "light_colours" | "graph_steps" | "hotkeys.enabled"
-        | "weather.enabled" => flag(name, value),
+        "check_updates" | "allow_notify" | "tray_icon" | "light_colours" | "graph_steps"
+        | "hotkeys.enabled" | "weather.enabled" => flag(name, value),
         "symbols" => choice(name, value, &c::SYMBOL_PACKS),
         "cards" => rule_cards(name, value),
         "card_order" => choice(name, value, lp_theme::modules::slots::CARD_ORDERS),

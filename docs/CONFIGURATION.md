@@ -54,6 +54,7 @@ language = "auto"              # "auto" (system language), "en", "de", "fr", "es
 # refresh_ms = 1000            # override the theme's refresh interval
 # check_updates = true        # look once a day for a newer version (not set: Start asks)
 # allow_notify = false        # other programs may show a notice (see below)
+# tray_icon = false           # its icon in the notification area (the tray), with its menu
 fps = 10                       # 1-60; values glide between readings
 # [transitions]                # how the panel goes from one screen to the next
 # default = "fade"             # (see "Transitions"; Settings → Panel → Transitions)

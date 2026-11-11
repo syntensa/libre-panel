@@ -13,6 +13,16 @@ before; being finished and tested now.
   its owner found them to work (other MS9132 panels keep theirs).
 - **The MAJESTY 9.16"** (Hongtai `33C3:7792`, #40): its setup, brightness and dimming.
 
+**From the first hardware test**
+- **No console windows of the engine** on Windows: Libre Panel's engine and ffmpeg start
+  without a window of their own.
+- **Diagnose names the panels beside the first as they are doing**, not "Not running" while
+  they show their themes.
+- **The app speaks the language of Windows** where *Language* is *System* (it spoke English
+  unless the language was chosen by hand).
+- **The icon in the notification area is off by default**: *Settings → Start and system →
+  Icon in the notification area* turns it on (`tray_icon = true`), at once.
+
 ## 0.8.1rc2 — 2026-11-06
 
 **Lighter**

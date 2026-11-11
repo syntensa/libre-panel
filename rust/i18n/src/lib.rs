@@ -225,6 +225,31 @@ pub fn system_language(env: &dyn Fn(&str) -> String, windows: Option<&str>) -> S
     "en".into()
 }
 
+/// The user's language on this computer (i18n.py's system_language as it runs): the
+/// environment's settings, on Windows the language of its own user interface first.
+pub fn system_language_here() -> String {
+    let env = |name: &str| std::env::var(name).unwrap_or_default();
+    system_language(&env, windows_ui_language())
+}
+
+/// The name of the Windows user interface's language (`GetUserDefaultUILanguage`), as
+/// Python's locale.windows_locale has it; None off Windows and for an id it does not know.
+#[cfg(windows)]
+fn windows_ui_language() -> Option<&'static str> {
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetUserDefaultUILanguage() -> u16;
+    }
+    // SAFETY: a call without arguments that only returns the language's id
+    let id = unsafe { GetUserDefaultUILanguage() };
+    Some(windows_name(u32::from(id))).filter(|name| !name.is_empty())
+}
+
+#[cfg(not(windows))]
+fn windows_ui_language() -> Option<&'static str> {
+    None
+}
+
 /// resolve: a language setting ("auto" or one of LANGUAGES) as the code it comes to.
 pub fn resolve(setting: Option<&str>, system: impl FnOnce() -> String) -> String {
     match setting {

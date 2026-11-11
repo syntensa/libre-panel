@@ -494,10 +494,7 @@ impl MainLoop {
 
     /// The app's language as config.toml sets it ("auto": the system's).
     fn speak(&self) {
-        let env = |name: &str| std::env::var(name).unwrap_or_default();
-        let code = lp_i18n::resolve(Some(&self.config.language), || {
-            lp_i18n::system_language(&env, None)
-        });
+        let code = lp_i18n::resolve(Some(&self.config.language), lp_i18n::system_language_here);
         match lp_i18n::Language::load(&self.home.locale(), &code) {
             Ok(language) => lp_i18n::set_language(language),
             Err(why) => say(&format!("language {code}: {why}")),

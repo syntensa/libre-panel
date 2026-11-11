@@ -173,8 +173,6 @@
     "Let Libre Panel read the processor's power": "Pozwól Libre Panel odczytywać moc procesora",
     "Libre Panel cannot ask for the administrator's rights from here. Run this in a terminal: {command}": "Libre Panel nie może stąd poprosić o uprawnienia administratora. Uruchom to w terminalu: {command}",
     "Libre Panel reads most sensors without any rights. A few need a change on this computer that only an administrator can make, once, when you press the button; your system then asks for the password. Nothing else is changed, and Remove again takes it all out.": "Libre Panel odczytuje większość czujników bez żadnych uprawnień. Kilka wymaga zmiany na tym komputerze, którą może wprowadzić tylko administrator, raz, gdy naciśniesz przycisk; system zapyta wtedy o hasło. Nic więcej nie jest zmieniane, a „Usuń” cofa wszystko.",
-    "Libre Panel runs in the background, its icon sits in the notification area.": "Libre Panel działa w tle, jego ikona jest w obszarze powiadomień.",
-    "Libre Panel runs in the background, its icon sits in the tray.": "Libre Panel działa w tle, jego ikona jest w zasobniku systemowym.",
     "Libre Panel runs with administrator rights. Run this in a terminal: {command}": "Libre Panel działa z uprawnieniami administratora. Uruchom to w terminalu: {command}",
     "Libre Panel will start with the highest rights at every login, without a question. Turn it off again here, as an administrator.": "Libre Panel będzie startować z najwyższymi uprawnieniami przy każdym logowaniu, bez pytania. Wyłączysz to tutaj, jako administrator.",
     "Licence": "Licencja",
@@ -2985,7 +2983,11 @@
     "Open Status: how the panel runs": "Otwórz Stan: jak działa panel",
     "Show the picture large": "Pokaż obraz w powiększeniu",
     "Which panel Start and Status show and Design edits": "Który panel pokazują Start i Stan oraz edytuje Projekt",
-    "The app's pictures": "Obrazy aplikacji"
+    "The app's pictures": "Obrazy aplikacji",
+    "Icon in the notification area": "Ikona w obszarze powiadomień",
+    "Icon in the tray": "Ikona w zasobniku",
+    "Its menu shows how the panel is doing, switches themes and quits Libre Panel. Off: Libre Panel opens from the Start menu or your list of apps.": "Jego menu pokazuje stan panelu, zmienia motywy i zamyka Libre Panel. Wyłączone: Libre Panel otwierasz z menu Start lub listy aplikacji.",
+    "Libre Panel runs in the background.": "Libre Panel działa w tle."
   },
   "fields": {
     "night": "noc",

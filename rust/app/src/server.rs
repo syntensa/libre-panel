@@ -1047,8 +1047,7 @@ fn set_language(state: &State, exchange: &mut Exchange) {
         return exchange.error(&why.msg, 400, "");
     }
     // (the panel and the pages follow at once)
-    let env = |name: &str| std::env::var(name).unwrap_or_default();
-    let code = lp_i18n::resolve(Some(&setting), || lp_i18n::system_language(&env, None));
+    let code = lp_i18n::resolve(Some(&setting), lp_i18n::system_language_here);
     match lp_i18n::Language::load(&state.home.locale(), &code) {
         Ok(language) => lp_i18n::set_language(language),
         Err(why) => say(&format!("language {code}: {why}")),

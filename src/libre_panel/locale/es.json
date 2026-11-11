@@ -173,8 +173,6 @@
     "Let Libre Panel read the processor's power": "Dejar que Libre Panel lea el consumo del procesador",
     "Libre Panel cannot ask for the administrator's rights from here. Run this in a terminal: {command}": "Libre Panel no puede pedir derechos de administrador desde aquí. Ejecuta esto en un terminal: {command}",
     "Libre Panel reads most sensors without any rights. A few need a change on this computer that only an administrator can make, once, when you press the button; your system then asks for the password. Nothing else is changed, and Remove again takes it all out.": "Libre Panel lee la mayoría de los sensores sin ningún derecho. Algunos necesitan un cambio en este ordenador que solo un administrador puede hacer, una vez, cuando pulsas el botón; tu sistema pide entonces la contraseña. No se cambia nada más, y “Quitar” lo deshace todo.",
-    "Libre Panel runs in the background, its icon sits in the notification area.": "Libre Panel se ejecuta en segundo plano, su icono está en el área de notificación.",
-    "Libre Panel runs in the background, its icon sits in the tray.": "Libre Panel se ejecuta en segundo plano, su icono está en la bandeja del sistema.",
     "Libre Panel runs with administrator rights. Run this in a terminal: {command}": "Libre Panel se ejecuta con derechos de administrador. Ejecuta esto en un terminal: {command}",
     "Libre Panel will start with the highest rights at every login, without a question. Turn it off again here, as an administrator.": "Libre Panel arrancará con los derechos más altos en cada inicio de sesión, sin preguntar. Desactívalo aquí de nuevo, como administrador.",
     "Licence": "Licencia",
@@ -2985,7 +2983,11 @@
     "Open Status: how the panel runs": "Abrir Estado: cómo funciona el panel",
     "Show the picture large": "Ver la imagen en grande",
     "Which panel Start and Status show and Design edits": "El panel que muestran Inicio y Estado y que edita Diseño",
-    "The app's pictures": "Las imágenes de la app"
+    "The app's pictures": "Las imágenes de la app",
+    "Icon in the notification area": "Icono en el área de notificación",
+    "Icon in the tray": "Icono en la bandeja",
+    "Its menu shows how the panel is doing, switches themes and quits Libre Panel. Off: Libre Panel opens from the Start menu or your list of apps.": "Su menú muestra cómo va el panel, cambia de tema y cierra Libre Panel. Desactivado: Libre Panel se abre desde el menú Inicio o tu lista de aplicaciones.",
+    "Libre Panel runs in the background.": "Libre Panel se ejecuta en segundo plano."
   },
   "fields": {
     "night": "noche",

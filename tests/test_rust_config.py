@@ -151,7 +151,8 @@ PANEL = ["theme", "on", "follow_brightness", "game_theme", "media_theme", "alarm
 KEYS = [
     "theme", "language", "fps", "transition", "symbols", "cards", "card_order",
     "card_transition", "accent", "card_opacity", "light_colours", "graph_steps", "across",
-    "refresh_ms", "check_updates", "allow_notify", "switches", "hotkeys", "device", "video",
+    "refresh_ms", "check_updates", "allow_notify", "tray_icon", "switches", "hotkeys", "device",
+    "video",
     "sensors", "hardware", "weather", "services", "modes", "sequence", "panels", "scenes",
     "scene", "transitions", "nope",
     *(f"device.{key}" for key in DEVICE),

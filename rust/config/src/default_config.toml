@@ -33,6 +33,10 @@ language = "auto"
 # Stream Deck button), with the key in notify.json; see Settings → Game mode and more.
 # allow_notify = false
 
+# Whether Libre Panel shows its icon in the notification area (the tray), with its menu. Off:
+# the app opens from the Start menu or the list of apps, and a second start shows its window.
+# tray_icon = false
+
 # Keyboard shortcuts for the whole PC (Windows; Linux with X11), set in Settings → Start and
 # system by pressing the keys. The actions: pause, brightness_up, brightness_down, open,
 # next_scene, timer (start or pause the timer service), timer_reset, mic_mute (the microphone);

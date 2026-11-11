@@ -173,8 +173,6 @@
     "Let Libre Panel read the processor's power": "允许 Libre Panel 读取处理器功耗",
     "Libre Panel cannot ask for the administrator's rights from here. Run this in a terminal: {command}": "Libre Panel 无法从此处请求管理员权限。请在终端中运行：{command}",
     "Libre Panel reads most sensors without any rights. A few need a change on this computer that only an administrator can make, once, when you press the button; your system then asks for the password. Nothing else is changed, and Remove again takes it all out.": "Libre Panel 无需任何权限即可读取大多数传感器。少数传感器需要在这台电脑上做一项只有管理员才能完成的更改，在你按下按钮时执行一次；随后系统会询问密码。不会更改其他内容，“再次移除”会撤销全部更改。",
-    "Libre Panel runs in the background, its icon sits in the notification area.": "Libre Panel 在后台运行，其图标位于通知区域。",
-    "Libre Panel runs in the background, its icon sits in the tray.": "Libre Panel 在后台运行，其图标位于系统托盘。",
     "Libre Panel runs with administrator rights. Run this in a terminal: {command}": "Libre Panel 正以管理员权限运行。请在终端中运行：{command}",
     "Libre Panel will start with the highest rights at every login, without a question. Turn it off again here, as an administrator.": "Libre Panel 将在每次登录时以最高权限启动，且不再询问。请在此处以管理员身份重新关闭它。",
     "Licence": "许可证",
@@ -2985,7 +2983,11 @@
     "Open Status: how the panel runs": "打开“状态”：面板的运行情况",
     "Show the picture large": "放大显示画面",
     "Which panel Start and Status show and Design edits": "开始和状态显示、设计编辑的是哪块面板",
-    "The app's pictures": "应用的图片"
+    "The app's pictures": "应用的图片",
+    "Icon in the notification area": "通知区域图标",
+    "Icon in the tray": "托盘图标",
+    "Its menu shows how the panel is doing, switches themes and quits Libre Panel. Off: Libre Panel opens from the Start menu or your list of apps.": "其菜单显示面板状态、切换主题并退出 Libre Panel。关闭时：从开始菜单或应用列表打开 Libre Panel。",
+    "Libre Panel runs in the background.": "Libre Panel 在后台运行。"
   },
   "fields": {
     "night": "夜晚",

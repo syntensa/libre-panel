@@ -173,8 +173,6 @@
     "Let Libre Panel read the processor's power": "Разрешить Libre Panel читать мощность процессора",
     "Libre Panel cannot ask for the administrator's rights from here. Run this in a terminal: {command}": "Отсюда Libre Panel не может запросить права администратора. Выполните в терминале: {command}",
     "Libre Panel reads most sensors without any rights. A few need a change on this computer that only an administrator can make, once, when you press the button; your system then asks for the password. Nothing else is changed, and Remove again takes it all out.": "Libre Panel считывает большинство датчиков вообще без прав. Для некоторых на этом компьютере нужно изменение, которое может выполнить только администратор — один раз, при нажатии кнопки; система запросит пароль. Больше ничего не меняется, а «Отменить настройку» возвращает всё как было.",
-    "Libre Panel runs in the background, its icon sits in the notification area.": "Libre Panel работает в фоне, его значок находится в области уведомлений.",
-    "Libre Panel runs in the background, its icon sits in the tray.": "Libre Panel работает в фоне, его значок находится в системном трее.",
     "Libre Panel runs with administrator rights. Run this in a terminal: {command}": "Libre Panel запущен с правами администратора. Выполните в терминале: {command}",
     "Libre Panel will start with the highest rights at every login, without a question. Turn it off again here, as an administrator.": "Libre Panel будет запускаться с наивысшими правами при каждом входе, без запроса. Отключить это снова можно здесь — от имени администратора.",
     "Licence": "Лицензия",
@@ -2985,7 +2983,11 @@
     "Open Status: how the panel runs": "Открыть «Состояние»: как работает панель",
     "Show the picture large": "Показать изображение крупно",
     "Which panel Start and Status show and Design edits": "Какую панель показывают «Главная» и «Состояние» и изменяет «Дизайн»",
-    "The app's pictures": "Картинки приложения"
+    "The app's pictures": "Картинки приложения",
+    "Icon in the notification area": "Значок в области уведомлений",
+    "Icon in the tray": "Значок в трее",
+    "Its menu shows how the panel is doing, switches themes and quits Libre Panel. Off: Libre Panel opens from the Start menu or your list of apps.": "Его меню показывает состояние панели, переключает темы и закрывает Libre Panel. Выключено: Libre Panel открывается из меню «Пуск» или списка приложений.",
+    "Libre Panel runs in the background.": "Libre Panel работает в фоновом режиме."
   },
   "fields": {
     "night": "ночь",

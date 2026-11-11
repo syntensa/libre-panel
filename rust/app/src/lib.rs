@@ -555,8 +555,7 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
             // system's)
             let setting = lp_config::load_config(&file, lp_config::platform())
                 .map_or_else(|_| "auto".to_string(), |config| config.language);
-            let env = |name: &str| std::env::var(name).unwrap_or_default();
-            let code = lp_i18n::resolve(Some(&setting), || lp_i18n::system_language(&env, None));
+            let code = lp_i18n::resolve(Some(&setting), lp_i18n::system_language_here);
             match lp_i18n::Language::load(&home.locale(), &code) {
                 Ok(language) => lp_i18n::set_language(language),
                 Err(why) => eprintln!("libre-panel: language {code}: {why}"),
@@ -653,17 +652,16 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
             let stopped = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
             let mut session = follow_session(&app, &stopped);
             let icon = command == "tray" && !args_given.iter().any(|arg| arg == "--no-icon");
-            let mut tray = None;
-            if let Some(address) = app.start() {
+            let started = app.start();
+            if let Some(address) = &started {
                 println!("Libre Panel theme editor running at {address}  (Ctrl+C to stop)");
                 if open_editor {
-                    window::open_window(&settings, &address, Some("home"), false, None);
-                }
-                // (the tray icon, a program of its own: it shows the app's menu)
-                if icon {
-                    tray = window::start_tray(&address);
+                    window::open_window(&settings, address, Some("home"), false, None);
                 }
             }
+            // (the tray icon, a program of its own: it shows the app's menu, where config.toml
+            // asks for it: tray_icon, off unless turned on)
+            let mut tray = TrayFollower::new(started.filter(|_| icon));
             // (the tests' own: the controls by lines on the standard input)
             if std::env::var_os("LIBRE_PANEL_CONTROL").is_some_and(|how| how == "stdin") {
                 app.follow_input();
@@ -683,13 +681,11 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
                     .load(std::sync::atomic::Ordering::Relaxed)
             };
             while !STOP.load(std::sync::atomic::Ordering::Relaxed) && !shown(&app) && !quit(&app) {
+                tray.follow(app.config_file());
                 std::thread::sleep(std::time::Duration::from_millis(50));
             }
             // (the icon goes first: its menu would act on an app that is ending)
-            if let Some(mut tray) = tray {
-                let _ = tray.kill();
-                let _ = tray.wait();
-            }
+            tray.close();
             app.shutdown();
             stopped.store(true, std::sync::atomic::Ordering::Relaxed);
             session.stop();
@@ -788,13 +784,74 @@ fn follow_session(
     }
 }
 
+/// The tray icon as config.toml's `tray_icon` asks for it: started when it is turned on,
+/// ended when it is turned off, looked at once a second (when the file changed).
+struct TrayFollower {
+    /// the app's address (None: no icon in this run)
+    address: Option<String>,
+    child: Option<std::process::Child>,
+    /// when the file was written, as last read
+    stamp: Option<std::time::SystemTime>,
+    next: std::time::Instant,
+    /// the icon's program ended by itself (no tray on this desktop): not started again
+    gave_up: bool,
+}
+
+impl TrayFollower {
+    fn new(address: Option<String>) -> TrayFollower {
+        TrayFollower {
+            address,
+            child: None,
+            stamp: None,
+            next: std::time::Instant::now(),
+            gave_up: false,
+        }
+    }
+
+    fn follow(&mut self, file: &std::path::Path) {
+        let Some(address) = &self.address else {
+            return;
+        };
+        let now = std::time::Instant::now();
+        if now < self.next {
+            return;
+        }
+        self.next = now + std::time::Duration::from_secs(1);
+        if let Some(child) = &mut self.child {
+            if matches!(child.try_wait(), Ok(Some(_))) {
+                self.child = None;
+                self.gave_up = true;
+            }
+        }
+        let stamp = std::fs::metadata(file).and_then(|m| m.modified()).ok();
+        if stamp == self.stamp && self.stamp.is_some() {
+            return;
+        }
+        self.stamp = stamp;
+        let wanted = lp_config::load_config(file, lp_config::platform())
+            .is_ok_and(|config| config.tray_icon);
+        match (wanted, self.child.is_some()) {
+            (true, false) if !self.gave_up => self.child = window::start_tray(address),
+            (false, true) => self.close(),
+            (false, false) => self.gave_up = false, // (asked again later: tried again)
+            _ => {}
+        }
+    }
+
+    fn close(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+
 /// The app's language as config.toml sets it ("auto", or a file that cannot be read: the
 /// system's), for what the command line says.
 fn speak(home: &Home, file: &std::path::Path) {
     let setting = lp_config::load_config(file, lp_config::platform())
         .map_or_else(|_| "auto".to_string(), |config| config.language);
-    let env = |name: &str| std::env::var(name).unwrap_or_default();
-    let code = lp_i18n::resolve(Some(&setting), || lp_i18n::system_language(&env, None));
+    let code = lp_i18n::resolve(Some(&setting), lp_i18n::system_language_here);
     match lp_i18n::Language::load(&home.locale(), &code) {
         Ok(language) => lp_i18n::set_language(language),
         Err(why) => eprintln!("libre-panel: language {code}: {why}"),

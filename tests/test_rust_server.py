@@ -980,9 +980,11 @@ def test_the_app_opens_its_window_one_window_and_closes_it_as_window_py_does(
 def test_the_tray_shows_its_icon_and_its_quit_ends_libre_panel(tmp_path: Path) -> None:
     """tray.py's run_app: `libre-panel tray` shows its icon (the program libre-panel-tray,
     in an X tray: "tray icon ready"), which asks the app for its menu; Quit chosen in it ends
-    the icon and Libre Panel, which leaves its log in the settings folder."""
+    the icon and Libre Panel, which leaves its log in the settings folder. (The icon only
+    where config.toml asks for it: tray_icon, off unless turned on.)"""
     (tmp_path / "config.toml").write_text(
-        'theme = "slate"\nfps = 2\nlanguage = "en"\n[device]\ndriver = "virtual"\n'
+        'theme = "slate"\nfps = 2\nlanguage = "en"\ntray_icon = true\n[device]\n'
+        'driver = "virtual"\n'
         'output = "panel.png"\n[sensors]\nproviders = []\n',
         encoding="utf-8",
     )

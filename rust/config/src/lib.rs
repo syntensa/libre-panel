@@ -407,6 +407,8 @@ pub struct Config {
     pub transitions: TransitionsConfig,
     pub check_updates: Option<bool>,
     pub allow_notify: bool,
+    /// its icon in the notification area (the tray), with its menu
+    pub tray_icon: bool,
     pub device: DeviceConfig,
     pub sensors: SensorsConfig,
     pub hardware: HardwareConfig,
@@ -451,6 +453,7 @@ impl Config {
             transitions: TransitionsConfig::default(),
             check_updates: None,
             allow_notify: false,
+            tray_icon: false,
             device: DeviceConfig::default(),
             sensors: SensorsConfig {
                 providers: default_providers(platform),
@@ -1498,6 +1501,7 @@ pub fn parse_config(data: &Table, path: Option<&Path>, platform: &str) -> Result
         cfg.check_updates = Some(bool_of(value, "check_updates")?);
     }
     cfg.allow_notify = flag(data, "allow_notify", cfg.allow_notify, "allow_notify")?;
+    cfg.tray_icon = flag(data, "tray_icon", cfg.tray_icon, "tray_icon")?;
     if let Some(value) = data.get("switches") {
         cfg.switches = switches(value)?;
     }
