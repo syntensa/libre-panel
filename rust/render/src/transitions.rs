@@ -87,6 +87,8 @@ enum Kind {
     Glitch,
     Tiles,
     Shatter(Option<(u64, Vec<Shard>)>),
+    /// a plugin's (render/plugin.rs)
+    Plugin(Box<dyn crate::plugin::PluginTransition>),
 }
 
 #[derive(Clone, Copy)]
@@ -150,7 +152,7 @@ impl Transition {
             "glitch" => (0.7, "wait", "over", false, Kind::Glitch),
             "tiles" => (1.2, "wait", "over", false, Kind::Tiles),
             "shatter" => (1.3, "wait", "over", false, Kind::Shatter(None)),
-            _ => return None,
+            _ => return Transition::plugin(name, params, renderer),
         };
         let name = BUILT_IN.iter().copied().find(|n| *n == name)?;
         Some(Transition {
@@ -161,6 +163,36 @@ impl Transition {
             from_shown,
             palette: renderer.theme.palette.clone(),
             kind,
+        })
+    }
+
+    /// A plugin's transition (overlays.transition: the registry's), from what draws the plugins
+    /// for `renderer`; None where none has it or it failed to start (with a warning).
+    fn plugin(name: &str, params: &Dict, renderer: &Renderer) -> Option<Transition> {
+        let started = renderer.plugins.as_ref()?.transition(name, params)?;
+        let (info, played) = match started {
+            Ok(started) => started,
+            Err(why) => {
+                renderer.warn_of(format!(
+                    "transition {} failed to start; switching without one: {why}",
+                    lp_py::repr(name)
+                ));
+                return None;
+            }
+        };
+        Some(Transition {
+            name: Box::leak(name.to_string().into_boxed_str()),
+            duration: info.duration,
+            switch: policy(&info.switch),
+            toasts: match info.toasts.as_str() {
+                "over" => "over",
+                "restart" => "restart",
+                "hide" => "hide",
+                _ => "wait",
+            },
+            from_shown: info.from_shown,
+            palette: renderer.theme.palette.clone(),
+            kind: Kind::Plugin(played),
         })
     }
 
@@ -177,13 +209,24 @@ impl Transition {
         }
     }
 
-    /// on_switch: what a switch does while it plays ("wait", "follow" or "restart"); the
-    /// entrance restarts where the mode turned back, and else reveals the screen asked for.
-    pub fn on_switch(&self, mode_changed: bool) -> &'static str {
-        match self.kind {
-            Kind::Entrance(_) if mode_changed => "restart",
-            Kind::Entrance(_) => "follow",
-            _ => self.switch,
+    /// on_switch (switch_policy): what a switch to `theme` in `mode` does while it plays
+    /// ("wait", "follow" or "restart"); the entrance restarts where the mode turned back, and
+    /// else reveals the screen asked for; a plugin's says (one that fails: "wait", the error
+    /// given back to be said once).
+    pub fn on_switch(
+        &mut self,
+        theme: &str,
+        mode: Option<&str>,
+        mode_changed: bool,
+    ) -> (&'static str, Option<String>) {
+        match &mut self.kind {
+            Kind::Entrance(_) if mode_changed => ("restart", None),
+            Kind::Entrance(_) => ("follow", None),
+            Kind::Plugin(played) => match played.on_switch(theme, mode, mode_changed) {
+                Ok(said) => (policy(&said), None),
+                Err(why) => ("wait", Some(why)),
+            },
+            _ => (self.switch, None),
         }
     }
 
@@ -229,7 +272,17 @@ impl Transition {
             Kind::Glitch => glitch(old, new, t),
             Kind::Tiles => tiles(old, new, t, &colours),
             Kind::Shatter(pieces) => shatter(pieces, old, old_key, new, t, 1.3),
+            Kind::Plugin(played) => played.frame(old, new, t).map_err(Failed),
         }
+    }
+}
+
+/// A switch policy as switch_policy keeps it: one of SWITCH_POLICIES, else "wait".
+fn policy(said: &str) -> &'static str {
+    match said {
+        "follow" => "follow",
+        "restart" => "restart",
+        _ => "wait",
     }
 }
 

@@ -1037,14 +1037,13 @@ impl PluginDrawing {
     pub fn open(settings: &Path, renderer: &lp_render::Renderer) -> Option<PluginDrawing> {
         let theme = &renderer.theme;
         let has_screen = theme.screen.is_some();
-        if !has_screen && renderer.widgets.iter().all(built_in_type) {
-            return None;
-        }
         let Ok(host) = shared(settings)? else {
             return None;
         };
         let types = host.names("widgets");
         let needed = has_screen
+            || !host.names("transitions").is_empty()
+            || !host.names("toasts").is_empty()
             || renderer.widgets.iter().any(|w| {
                 types
                     .iter()
@@ -1163,14 +1162,6 @@ impl PluginDrawing {
     }
 }
 
-/// Whether a widget's type is one of Libre Panel's own (lp_theme's table), not a plugin's.
-pub fn built_in_type(widget: &Dict) -> bool {
-    let kind = lp_render::widget::text(widget, "type");
-    lp_theme::tables::WIDGETS
-        .iter()
-        .any(|(name, _)| *name == kind)
-}
-
 /// A number that tells pictures apart by their size and pixels.
 fn mark_of(image: &lp_pixels::Image) -> i64 {
     use std::hash::{Hash, Hasher};
@@ -1246,7 +1237,201 @@ fn piece_of(told: &Dict, blob: &[u8]) -> Result<lp_render::Piece, String> {
     Ok(piece)
 }
 
+/// A toast as the plugin host makes a Toast of it.
+fn toast_dict(toast: &lp_render::overlays::Toast) -> Value {
+    let mut told = Dict::new();
+    told.insert("text".into(), Value::Str(toast.text.clone()));
+    told.insert(
+        "icon".into(),
+        toast.icon.clone().map_or(Value::None, Value::Str),
+    );
+    told.insert("level".into(), Value::Str(toast.level.clone()));
+    told.insert(
+        "seconds".into(),
+        toast.seconds.map_or(Value::None, Value::Float),
+    );
+    told.insert("kind".into(), Value::Str(toast.kind.clone()));
+    told.insert("rank".into(), Value::int(toast.rank));
+    told.insert("payload".into(), Value::Dict(toast.payload.clone()));
+    told.insert("service".into(), Value::Str(toast.service.clone()));
+    told.insert("key".into(), Value::Str(toast.key.clone()));
+    Value::Dict(told)
+}
+
+/// A plugin's toast style started in the plugin host.
+struct HostToastStyle {
+    host: Arc<PluginHost>,
+    style: Value,
+    leave_s: f64,
+}
+
+impl HostToastStyle {
+    fn ask(&self, op: &str, mut fields: Dict, blob: &[u8]) -> Result<(Dict, Vec<u8>), String> {
+        fields.insert("style".into(), self.style.clone());
+        self.host.request(op, fields, blob)
+    }
+
+    fn toasts(
+        fields: &mut Dict,
+        toast: &lp_render::overlays::Toast,
+        previous: Option<(&lp_render::overlays::Toast, f64)>,
+    ) {
+        fields.insert("toast".into(), toast_dict(toast));
+        fields.insert(
+            "previous".into(),
+            previous.map_or(Value::None, |(toast, age)| {
+                Value::List(vec![toast_dict(toast), Value::Float(age)])
+            }),
+        );
+    }
+
+    fn seconds(answer: &Dict) -> f64 {
+        match field(answer, "seconds") {
+            Value::Float(s) => *s,
+            other => int_of(other) as f64,
+        }
+    }
+}
+
+impl lp_render::plugin::PluginToastStyle for HostToastStyle {
+    fn draw(
+        &self,
+        frame: &lp_pixels::Image,
+        toast: &lp_render::overlays::Toast,
+        age: f64,
+        previous: Option<(&lp_render::overlays::Toast, f64)>,
+    ) -> Result<lp_pixels::Image, String> {
+        let mut fields = Dict::new();
+        Self::toasts(&mut fields, toast, previous);
+        fields.insert("age".into(), Value::Float(age));
+        fields.insert(
+            "size".into(),
+            Value::List(vec![
+                Value::int(frame.width() as i64),
+                Value::int(frame.height() as i64),
+            ]),
+        );
+        let (answer, data) = self.ask("toast.draw", fields, rgb(frame)?.as_bytes())?;
+        let (w, h) = size_of(field(&answer, "size")).ok_or("a frame of no size")?;
+        lp_pixels::Image::from_bytes(lp_pixels::Mode::RGB, w, h, data).map_err(|e| e.to_string())
+    }
+
+    fn lifetime(
+        &self,
+        toast: &lp_render::overlays::Toast,
+        previous: Option<(&lp_render::overlays::Toast, f64)>,
+    ) -> Result<f64, String> {
+        let mut fields = Dict::new();
+        Self::toasts(&mut fields, toast, previous);
+        let (answer, _) = self.ask("toast.lifetime", fields, &[])?;
+        Ok(Self::seconds(&answer))
+    }
+
+    fn hold_s(
+        &self,
+        toast: &lp_render::overlays::Toast,
+        theme_seconds: f64,
+    ) -> Result<f64, String> {
+        let mut fields = Dict::new();
+        Self::toasts(&mut fields, toast, None);
+        fields.insert("theme_seconds".into(), Value::Float(theme_seconds));
+        let (answer, _) = self.ask("toast.hold", fields, &[])?;
+        Ok(Self::seconds(&answer))
+    }
+
+    fn leave_s(&self) -> f64 {
+        self.leave_s
+    }
+
+    fn rebind(&self, plugins: &dyn lp_render::Plugins, anchor: &str) {
+        let mut fields = Dict::new();
+        fields.insert("drawing".into(), Value::int(plugins.handle()));
+        fields.insert("anchor".into(), Value::from(anchor));
+        let _ = self.ask("toast.rebind", fields, &[]);
+    }
+}
+
+impl Drop for HostToastStyle {
+    fn drop(&mut self) {
+        let _ = self.ask("toast.close", Dict::new(), &[]);
+    }
+}
+
 impl lp_render::Plugins for PluginDrawing {
+    fn handle(&self) -> i64 {
+        int_of(&self.drawing)
+    }
+
+    fn toast_style(
+        &self,
+        name: &str,
+        options: &Dict,
+        anchor: &str,
+    ) -> Option<Result<Box<dyn lp_render::plugin::PluginToastStyle>, String>> {
+        if !self.host.names("toasts").iter().any(|known| known == name) {
+            return None;
+        }
+        let mut fields = Dict::new();
+        fields.insert("drawing".into(), self.drawing.clone());
+        fields.insert("name".into(), Value::from(name));
+        fields.insert("options".into(), Value::Dict(options.clone()));
+        fields.insert("anchor".into(), Value::from(anchor));
+        Some(
+            self.host
+                .request("toast.open", fields, &[])
+                .map(|(told, _)| {
+                    Box::new(HostToastStyle {
+                        host: Arc::clone(&self.host),
+                        style: field(&told, "style").clone(),
+                        leave_s: HostToastStyle::seconds(&told),
+                    }) as Box<dyn lp_render::plugin::PluginToastStyle>
+                }),
+        )
+    }
+
+    fn transition(
+        &self,
+        name: &str,
+        params: &Dict,
+    ) -> Option<Result<lp_render::plugin::Started, String>> {
+        if !self
+            .host
+            .names("transitions")
+            .iter()
+            .any(|known| known == name)
+        {
+            return None;
+        }
+        let mut fields = Dict::new();
+        fields.insert("drawing".into(), self.drawing.clone());
+        fields.insert("name".into(), Value::from(name));
+        fields.insert("params".into(), Value::Dict(params.clone()));
+        Some(
+            self.host
+                .request("transition.open", fields, &[])
+                .map(|(told, _)| {
+                    let info = lp_render::plugin::TransitionInfo {
+                        duration: match field(&told, "duration") {
+                            Value::Float(d) => *d,
+                            other => int_of(other) as f64,
+                        },
+                        switch: text(&told, "switch"),
+                        toasts: text(&told, "toasts"),
+                        from_shown: matches!(field(&told, "from_shown"), Value::Bool(true)),
+                    };
+                    let played = HostTransition {
+                        host: Arc::clone(&self.host),
+                        transition: field(&told, "transition").clone(),
+                        sent_old: None,
+                    };
+                    (
+                        info,
+                        Box::new(played) as Box<dyn lp_render::plugin::PluginTransition>,
+                    )
+                }),
+        )
+    }
+
     fn widget(
         &self,
         widget: &Dict,
@@ -1305,6 +1490,80 @@ impl lp_render::Plugins for PluginDrawing {
             moving: matches!(field(&answer, "moving"), Value::Bool(true)),
             warnings: warnings_of(&answer),
         })
+    }
+}
+
+/// A plugin's transition playing in the plugin host, and the old frame it was sent.
+struct HostTransition {
+    host: Arc<PluginHost>,
+    transition: Value,
+    sent_old: Option<i64>,
+}
+
+impl lp_render::plugin::PluginTransition for HostTransition {
+    fn frame(
+        &mut self,
+        old: &lp_pixels::Image,
+        new: &lp_pixels::Image,
+        t: f64,
+    ) -> Result<lp_pixels::Image, String> {
+        let mut fields = Dict::new();
+        fields.insert("transition".into(), self.transition.clone());
+        fields.insert("t".into(), Value::Float(t));
+        fields.insert(
+            "size".into(),
+            Value::List(vec![
+                Value::int(new.width() as i64),
+                Value::int(new.height() as i64),
+            ]),
+        );
+        // (the old frame stays while it plays: sent once)
+        let old_mark = mark_of(old);
+        let mut blob = Vec::with_capacity(old.as_bytes().len() * 2);
+        if self.sent_old != Some(old_mark) {
+            fields.insert("old".into(), Value::Bool(true));
+            blob.extend_from_slice(rgb(old)?.as_bytes());
+        }
+        blob.extend_from_slice(rgb(new)?.as_bytes());
+        let (answer, data) = self.host.request("transition.frame", fields, &blob)?;
+        self.sent_old = Some(old_mark);
+        let (w, h) = size_of(field(&answer, "size")).ok_or("a frame of no size")?;
+        lp_pixels::Image::from_bytes(lp_pixels::Mode::RGB, w, h, data).map_err(|e| e.to_string())
+    }
+
+    fn on_switch(
+        &mut self,
+        theme: &str,
+        mode: Option<&str>,
+        mode_changed: bool,
+    ) -> Result<String, String> {
+        let mut fields = Dict::new();
+        fields.insert("transition".into(), self.transition.clone());
+        fields.insert("theme".into(), Value::from(theme));
+        fields.insert("mode".into(), mode.map_or(Value::None, Value::from));
+        fields.insert("mode_changed".into(), Value::Bool(mode_changed));
+        let (answer, _) = self.host.request("transition.switch", fields, &[])?;
+        Ok(text(&answer, "policy"))
+    }
+}
+
+impl Drop for HostTransition {
+    fn drop(&mut self) {
+        let mut fields = Dict::new();
+        fields.insert("transition".into(), self.transition.clone());
+        let _ = self.host.request("transition.close", fields, &[]);
+    }
+}
+
+/// A frame as RGB (the transitions' frames are).
+fn rgb(image: &lp_pixels::Image) -> Result<std::borrow::Cow<'_, lp_pixels::Image>, String> {
+    if image.mode() == lp_pixels::Mode::RGB {
+        Ok(std::borrow::Cow::Borrowed(image))
+    } else {
+        image
+            .convert(lp_pixels::Mode::RGB)
+            .map(std::borrow::Cow::Owned)
+            .map_err(|e| e.to_string())
     }
 }
 

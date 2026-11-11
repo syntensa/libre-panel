@@ -203,9 +203,15 @@ impl Blend {
         })
     }
 
-    /// switch_policy: what a switch does while it plays ("wait", "follow" or "restart").
-    pub fn policy(&self, mode: Option<&str>, began_in: Option<&str>) -> &'static str {
-        self.kind.on_switch(mode != began_in)
+    /// switch_policy: what a switch to `theme` does while it plays ("wait", "follow" or
+    /// "restart"), and a plugin transition's failure to say, to be said once.
+    pub fn policy(
+        &mut self,
+        theme: &str,
+        mode: Option<&str>,
+        began_in: Option<&str>,
+    ) -> (&'static str, Option<String>) {
+        self.kind.on_switch(theme, mode, mode != began_in)
     }
 
     /// _blend: the frame the transition shows now, and whether it goes on; a broken

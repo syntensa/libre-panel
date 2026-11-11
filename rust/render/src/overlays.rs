@@ -172,6 +172,8 @@ type Shown = (Rc<Toast>, f64, Option<(Rc<Toast>, f64)>);
 enum Style {
     Card(CardStyle),
     Band(Box<BandStyle>),
+    /// a plugin's (render/plugin.rs)
+    Plugin(Box<dyn crate::plugin::PluginToastStyle>),
 }
 
 /// The toast on show over a frame the engine composes (ToastLayer.draw of a SceneFrame).
@@ -295,6 +297,12 @@ impl ToastLayer {
                     band.anchor = anchor;
                     return Ok(());
                 }
+                Some(Style::Plugin(style)) => {
+                    if let Some(plugins) = &renderer.plugins {
+                        style.rebind(plugins.as_ref(), &anchor);
+                    }
+                    return Ok(());
+                }
                 None => {}
             }
         }
@@ -321,11 +329,31 @@ impl ToastLayer {
                 }
             }
             other => {
-                self.log.push(format!(
-                    "toast style {} is not installed; using the built-in card",
-                    lp_py::repr(other)
-                ));
-                card()
+                let options = match &self.settings().options {
+                    Value::Dict(options) => options.clone(),
+                    _ => Dict::new(),
+                };
+                match renderer
+                    .plugins
+                    .as_ref()
+                    .and_then(|plugins| plugins.toast_style(other, &options, &anchor))
+                {
+                    Some(Ok(style)) => Style::Plugin(style),
+                    Some(Err(why)) => {
+                        self.log.push(format!(
+                            "toast style {} failed to start; using the built-in card: {why}",
+                            lp_py::repr(other)
+                        ));
+                        card()
+                    }
+                    None => {
+                        self.log.push(format!(
+                            "toast style {} is not installed; using the built-in card",
+                            lp_py::repr(other)
+                        ));
+                        card()
+                    }
+                }
             }
         };
         self.style = Some(style);
@@ -379,7 +407,8 @@ impl ToastLayer {
         if self.suppressed.contains(&current.toast.kind) {
             return true; // (it goes on unseen)
         }
-        Self::look_of(&current.toast).is_some() || !matches!(self.style, Some(Style::Band(_)))
+        Self::look_of(&current.toast).is_some()
+            || !matches!(self.style, Some(Style::Band(_) | Style::Plugin(_)))
     }
 
     /// set_aside: a transition begins that the toast on show must not cover: it leaves now and
@@ -435,15 +464,26 @@ impl ToastLayer {
 
     /// _prepared: the toast as it will show (with the theme's hold time where it has none of
     /// its own), or None when this screen leaves its kind out.
-    fn prepared(&self, toast: Rc<Toast>) -> std::result::Result<Option<Rc<Toast>>, Unported> {
+    fn prepared(&mut self, toast: Rc<Toast>) -> std::result::Result<Option<Rc<Toast>>, Unported> {
         if self.suppressed.contains(&toast.kind) {
             return Ok(None);
         }
         if toast.seconds.is_some() {
             return Ok(Some(toast));
         }
-        // (the styles' hold_s: the theme's hold time; max(0.0, seconds))
-        let seconds = light::py_max(0.0, self.settings().seconds);
+        // (the styles' hold_s: the theme's hold time, a plugin's its own; max(0.0, seconds))
+        let theme_seconds = self.settings().seconds;
+        let asked = match (&self.style, Self::look_of(&toast)) {
+            (Some(Style::Plugin(style)), None) => match style.hold_s(&toast, theme_seconds) {
+                Ok(seconds) => seconds,
+                Err(why) => {
+                    self.asked_failed(&format!("hold_s: {why}"));
+                    theme_seconds
+                }
+            },
+            _ => theme_seconds,
+        };
+        let seconds = light::py_max(0.0, asked);
         let mut replaced = Toast::clone(&toast);
         replaced.seconds = Some(seconds);
         Ok(Some(Rc::new(replaced)))
@@ -542,6 +582,7 @@ impl ToastLayer {
         now: f64,
         previous: Option<(Rc<Toast>, f64)>,
     ) -> std::result::Result<(), Unported> {
+        let mut failed = None;
         let lifetime = match &mut self.style {
             // (a look's: its hold time and the time it takes to leave)
             _ if Self::look_of(&toast).is_some() => {
@@ -551,9 +592,23 @@ impl ToastLayer {
             Some(Style::Band(band)) => {
                 band.lifetime(&toast, previous.as_ref().map(|(t, age)| (t, *age)))
             }
+            Some(Style::Plugin(style)) => {
+                let fallback = toast.seconds.unwrap_or(f64::NAN) + style.leave_s();
+                let previous = previous.as_ref().map(|(t, age)| (t.as_ref(), *age));
+                match style.lifetime(&toast, previous) {
+                    Ok(lifetime) => lifetime,
+                    Err(why) => {
+                        failed = Some(format!("lifetime: {why}"));
+                        fallback
+                    }
+                }
+            }
             // (the card's: its hold time and the time it takes to leave)
             _ => toast.seconds.unwrap_or(f64::NAN) + CardStyle::LEAVE_S,
         };
+        if let Some(said) = failed {
+            self.asked_failed(&said);
+        }
         self.ends = now + lifetime;
         self.current = Some(Current {
             toast,
@@ -582,6 +637,14 @@ impl ToastLayer {
     }
 
     /// A failure of the style: the frame goes on without the toast, and it is told once.
+    /// A plugin style that failed to answer (_ask), said once.
+    fn asked_failed(&mut self, said: &str) {
+        if self.failed.as_deref() != Some(said) {
+            self.failed = Some(said.to_string());
+            self.log.push(format!("toast style failed in {said}"));
+        }
+    }
+
     fn failure(&mut self, e: Failed) {
         if self.failed.as_ref() != Some(&e.0) {
             self.failed = Some(e.0.clone());
@@ -629,6 +692,10 @@ impl ToastLayer {
             (None, Some(Style::Band(band))) => band
                 .draw(frame, &toast, age, replaced, &self.context, renderer)
                 .map(|drawn| drawn.map(|d| (d, None))),
+            (None, Some(Style::Plugin(style))) => style
+                .draw(frame, &toast, age, replaced.map(|(t, a)| (t.as_ref(), a)))
+                .map(|drawn| Some((drawn, None)))
+                .map_err(Failed),
             (None, None) => Ok(None),
         };
         match drawn {
@@ -687,6 +754,19 @@ impl ToastLayer {
                 let composed = Image::new(Mode::RGB, w, h, &[0, 0, 0]);
                 band.draw(&composed, &toast, age, replaced, &self.context, renderer)
                     .map(|drawn| drawn.map(Over::Frame))
+            }
+            (None, Some(Style::Plugin(style))) => {
+                let (w, h) = (size.0.max(0) as usize, size.1.max(0) as usize);
+                let composed = Image::new(Mode::RGB, w, h, &[0, 0, 0]);
+                style
+                    .draw(
+                        &composed,
+                        &toast,
+                        age,
+                        replaced.map(|(t, a)| (t.as_ref(), a)),
+                    )
+                    .map(|drawn| Some(Over::Frame(drawn)))
+                    .map_err(Failed)
             }
             (None, None) => Ok(None),
         };

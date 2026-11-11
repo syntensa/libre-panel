@@ -44,4 +44,82 @@ pub trait Plugins {
     /// The picture of the theme's screen (theme.screen), RGB or RGBA; None where no plugin has
     /// it or it failed to start. Err: it failed this frame.
     fn screen(&self, snapshot: &Snapshot, frame: &Frame) -> Result<Drawing<Image>, String>;
+
+    /// A plugin's transition `name` with `params`, made for this renderer's theme: None where
+    /// no plugin has it; Err where it failed to start.
+    fn transition(&self, _name: &str, _params: &Dict) -> Option<Result<Started, String>> {
+        None
+    }
+
+    /// A plugin's toast style `name` with its `options`, for this renderer's theme: None where
+    /// no plugin has it; Err where it failed to start.
+    fn toast_style(
+        &self,
+        _name: &str,
+        _options: &Dict,
+        _anchor: &str,
+    ) -> Option<Result<Box<dyn PluginToastStyle>, String>> {
+        None
+    }
+
+    /// Which of the drawings this is (a toast style that goes on is bound to it).
+    fn handle(&self) -> i64 {
+        0
+    }
+}
+
+/// What a plugin's transition says of itself (Transition's duration, switch, toasts and
+/// from_shown).
+#[derive(Clone, Debug, PartialEq)]
+pub struct TransitionInfo {
+    pub duration: f64,
+    pub switch: String,
+    pub toasts: String,
+    pub from_shown: bool,
+}
+
+/// A plugin's transition, playing.
+pub trait PluginTransition {
+    /// frame(old, new, t): the frame it shows `t` of the way (RGB, the frames' size).
+    fn frame(&mut self, old: &Image, new: &Image, t: f64) -> Result<Image, String>;
+
+    /// on_switch(theme, mode, mode_changed): what a switch does while it plays.
+    fn on_switch(
+        &mut self,
+        theme: &str,
+        mode: Option<&str>,
+        mode_changed: bool,
+    ) -> Result<String, String>;
+}
+
+/// A started plugin transition: what it says of itself, and it.
+pub type Started = (TransitionInfo, Box<dyn PluginTransition>);
+
+/// A plugin's toast style (ToastStyle), started for a theme.
+pub trait PluginToastStyle {
+    /// draw(frame, toast, age, previous): the frame with the toast on it.
+    fn draw(
+        &self,
+        frame: &Image,
+        toast: &crate::overlays::Toast,
+        age: f64,
+        previous: Option<(&crate::overlays::Toast, f64)>,
+    ) -> Result<Image, String>;
+
+    /// lifetime(toast, previous): seconds from its arrival until the toast is gone.
+    fn lifetime(
+        &self,
+        toast: &crate::overlays::Toast,
+        previous: Option<(&crate::overlays::Toast, f64)>,
+    ) -> Result<f64, String>;
+
+    /// hold_s(toast, theme_seconds): how long a toast without its own seconds holds.
+    fn hold_s(&self, toast: &crate::overlays::Toast, theme_seconds: f64) -> Result<f64, String>;
+
+    /// The time a toast takes to leave after its hold time (leave_s).
+    fn leave_s(&self) -> f64;
+
+    /// The style goes on with a new theme (the same style and options at the same size): its
+    /// context becomes that theme's, from what draws its plugins.
+    fn rebind(&self, plugins: &dyn Plugins, anchor: &str);
 }

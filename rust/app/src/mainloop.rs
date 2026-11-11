@@ -221,6 +221,8 @@ pub struct MainLoop {
     /// a transition under way, and the mode it began in
     blend: Option<Blend>,
     began_in: Option<String>,
+    /// the plugin transitions' failures to say how to switch, said once each
+    failed_switches: std::collections::HashSet<String>,
     /// the frame before toasts, and with them where one showed
     last_frame: Option<Image>,
     shown_frame: Option<Image>,
@@ -456,6 +458,7 @@ impl MainLoop {
             alarm: AlarmEdge::new(),
             blend: None,
             began_in: None,
+            failed_switches: std::collections::HashSet::new(),
             last_frame: None,
             shown_frame: None,
             player: crate::player::Screen::default(),
@@ -1247,10 +1250,20 @@ impl MainLoop {
         // while a transition plays, a switch waits for its end, unless the transition says
         // otherwise (follow or restart)
         let mode = self.host.mode();
-        let policy = self
-            .blend
-            .as_ref()
-            .map(|blend| blend.policy(mode.as_deref(), self.began_in.as_deref()));
+        let began_in = self.began_in.clone();
+        let policy = self.blend.as_mut().map(|blend| {
+            let (policy, failed) = blend.policy(&name, mode.as_deref(), began_in.as_deref());
+            if let Some(why) = failed {
+                let said = format!("transition {}: {why}", lp_py::repr(blend.kind.name));
+                if self.failed_switches.insert(said.clone()) {
+                    crate::logs::say(
+                        "libre_panel.render.overlays",
+                        &format!("transition {said} failed to say how to switch"),
+                    );
+                }
+            }
+            policy
+        });
         let may_switch = policy != Some("wait");
         let rebuild = self.renderer.is_none() || self.relook;
         if may_switch && (rebuild || name != self.shown) {

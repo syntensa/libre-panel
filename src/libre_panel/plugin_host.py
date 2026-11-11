@@ -92,7 +92,16 @@ class Host:
                     "services.restart": self.services_restart, "emit": self.emit,
                     "services.stop": self.services_stop, "schemas": self.schemas,
                     "draw.open": self.draw_open, "draw.widget": self.draw_widget,
-                    "draw.screen": self.draw_screen, "draw.close": self.draw_close}  # fmt: skip
+                    "draw.screen": self.draw_screen, "draw.close": self.draw_close,
+                    "transition.open": self.transition_open,
+                    "transition.frame": self.transition_frame,
+                    "transition.switch": self.transition_switch,
+                    "transition.close": self.transition_close,
+                    "toast.open": self.toast_open, "toast.draw": self.toast_draw,
+                    "toast.lifetime": self.toast_lifetime, "toast.hold": self.toast_hold,
+                    "toast.rebind": self.toast_rebind, "toast.close": self.toast_close}  # fmt: skip
+        self.styles: dict[int, Any] = {}
+        self.transitions: dict[int, list[Any]] = {}
         self.drawings: dict[int, _Drawing] = {}
         self._drawing_ids = iter(range(1, 1 << 62))
         self.config: Any = None
@@ -382,6 +391,108 @@ class Host:
         drawing.screen = image
         return {**told, "image": {"mode": image.mode, "size": list(image.size)}}, image.tobytes()
 
+    def transition_open(self, message: dict[str, Any], blob: bytes) -> dict[str, Any]:
+        """A plugin's transition ``name`` with ``params`` (overlays.transition), its context the
+        drawing's renderer (the new theme's); what it says of itself."""
+        from libre_panel.plugins.render import RenderContext
+
+        renderer = self.drawings[message["drawing"]].renderer
+        cls = self.registry.get("transitions", message["name"])
+        if cls is None:
+            raise LookupError(f"no plugin has the transition {message['name']!r}")
+        kind = cls(RenderContext(renderer, cls), dict(message.get("params") or {}))
+        ident = next(self._drawing_ids)
+        self.transitions[ident] = [kind, None]
+        return {"transition": ident, "duration": float(kind.duration),
+                "switch": str(getattr(kind, "switch", "wait")),
+                "toasts": str(getattr(kind, "toasts", "wait")),
+                "from_shown": bool(getattr(kind, "from_shown", False))}  # fmt: skip
+
+    def transition_frame(self, message: dict[str, Any], blob: bytes) -> tuple[dict, bytes]:
+        """frame(old, new, t): the old frame where it is sent (``old``), then the new one, RGB
+        in ``size``; the frame it shows, RGB."""
+        from PIL import Image
+
+        held = self.transitions[message["transition"]]
+        size = tuple(message["size"])
+        length = size[0] * size[1] * 3
+        if message.get("old"):
+            held[1] = Image.frombytes("RGB", size, blob[:length])
+            blob = blob[length:]
+        new = Image.frombytes("RGB", size, blob[:length])
+        out = held[0].frame(held[1], new, float(message["t"]))
+        if out.mode != "RGB":
+            out = out.convert("RGB")
+        return {"size": list(out.size)}, out.tobytes()
+
+    def transition_switch(self, message: dict[str, Any], blob: bytes) -> dict[str, Any]:
+        """on_switch(theme, mode, mode_changed): what a switch does while it plays."""
+        kind = self.transitions[message["transition"]][0]
+        said = kind.on_switch(message.get("theme") or "", message.get("mode"),
+                              bool(message.get("mode_changed")))  # fmt: skip
+        return {"policy": str(said)}
+
+    def transition_close(self, message: dict[str, Any], blob: bytes) -> dict[str, Any]:
+        self.transitions.pop(message["transition"], None)
+        return {}
+
+    def toast_open(self, message: dict[str, Any], blob: bytes) -> dict[str, Any]:
+        """A plugin's toast style ``name`` with the theme's ``options`` (ToastLayer's), its
+        context the drawing's renderer; how long a toast takes to leave."""
+        from libre_panel.plugins.render import RenderContext
+
+        renderer = self.drawings[message["drawing"]].renderer
+        cls = self.registry.get("toasts", message["name"])
+        if cls is None:
+            raise LookupError(f"no plugin has the toast style {message['name']!r}")
+        style = cls(RenderContext(renderer, cls), dict(message.get("options") or {}))
+        style.anchor = message.get("anchor") or "top-right"
+        ident = next(self._drawing_ids)
+        self.styles[ident] = style
+        return {"style": ident, "seconds": float(getattr(style, "leave_s", 0.25))}
+
+    def toast_draw(self, message: dict[str, Any], blob: bytes) -> tuple[dict, bytes]:
+        """draw(frame, toast, age, previous): the frame (RGB, ``size``) with the toast on it."""
+        from PIL import Image
+
+        style = self.styles[message["style"]]
+        frame = Image.frombytes("RGB", tuple(message["size"]), blob)
+        toast, previous = _toasts(message)
+        age = float(message["age"])
+        if _takes_previous(style):
+            out = style.draw(frame, toast, age, previous=previous)
+        else:  # (styles written before ``previous`` existed)
+            out = style.draw(frame, toast, age)
+        if out.mode != "RGB":
+            out = out.convert("RGB")
+        return {"size": list(out.size)}, out.tobytes()
+
+    def toast_lifetime(self, message: dict[str, Any], blob: bytes) -> dict[str, Any]:
+        toast, previous = _toasts(message)
+        return {"seconds": float(self.styles[message["style"]].lifetime(toast, previous))}
+
+    def toast_hold(self, message: dict[str, Any], blob: bytes) -> dict[str, Any]:
+        toast, _ = _toasts(message)
+        style = self.styles[message["style"]]
+        return {"seconds": float(style.hold_s(toast, float(message["theme_seconds"])))}
+
+    def toast_rebind(self, message: dict[str, Any], blob: bytes) -> dict[str, Any]:
+        """The style goes on with a new theme: its context becomes that theme's."""
+        from libre_panel.plugins.render import RenderContext
+
+        style = self.styles[message["style"]]
+        drawing = self.drawings.get(message["drawing"])
+        if drawing is not None:
+            style.context = RenderContext(drawing.renderer, type(style))
+        style.anchor = message.get("anchor") or style.anchor
+        return {}
+
+    def toast_close(self, message: dict[str, Any], blob: bytes) -> dict[str, Any]:
+        style = self.styles.pop(message["style"], None)
+        if style is not None:
+            style.close()
+        return {}
+
     def draw_close(self, message: dict[str, Any], blob: bytes) -> dict[str, Any]:
         drawing = self.drawings.pop(message["drawing"], None)
         if drawing is not None:
@@ -434,6 +545,32 @@ class _Drawing:
         snapshot.images = pictures
         renderer.snapshot = snapshot
         return renderer, snapshot, now
+
+
+def _takes_previous(style: Any) -> bool:
+    """Whether a toast style's draw takes ``previous`` (ToastLayer._make_style)."""
+    import inspect
+
+    try:
+        parameters = inspect.signature(style.draw).parameters.values()
+    except (TypeError, ValueError):
+        return False
+    return any(p.name == "previous" or p.kind is p.VAR_KEYWORD for p in parameters)
+
+
+def _toast(told: dict[str, Any]) -> Any:
+    from libre_panel.plugins.host import Toast
+
+    return Toast(text=told.get("text", ""), icon=told.get("icon"), level=told.get("level", "info"),
+                 seconds=told.get("seconds"), kind=told.get("kind", ""),
+                 rank=int(told.get("rank") or 0), payload=dict(told.get("payload") or {}),
+                 service=told.get("service", ""), key=told.get("key", ""))  # fmt: skip
+
+
+def _toasts(message: dict[str, Any]) -> tuple[Any, Any]:
+    """The toast of a request, and the one it replaced with that one's age, or None."""
+    previous = message.get("previous")
+    return _toast(message["toast"]), (_toast(previous[0]), float(previous[1])) if previous else None
 
 
 def _warnings(renderer: Any) -> list[str]:

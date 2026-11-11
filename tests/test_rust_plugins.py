@@ -229,3 +229,104 @@ def test_a_plugins_screen_and_widget_type_are_drawn_as_the_python_app_draws_them
     done = _run(isolated_home, "preview", "plugged", "--output", str(got),
                 LIBRE_PANEL_PLUGIN_HOST="/nonexistent")  # fmt: skip
     assert done.returncode != 0
+
+
+SWITCHING = """
+from PIL import Image, ImageDraw
+
+from libre_panel.plugins import Service, ToastStyle, Transition
+
+
+class Curtain(Transition):
+    name = "demo.curtain"
+    api = 1
+    duration = 3.0
+
+    def frame(self, old, new, t):
+        out = old.copy()
+        width = round(new.width * t)
+        out.paste(new.crop((0, 0, width, new.height)), (0, 0))
+        return out
+
+
+class Green(ToastStyle):
+    name = "demo.green"
+    api = 1
+    options = {"height": ("int", 40)}
+    leave_s = 0.1
+
+    def draw(self, frame, toast, age, previous=None):
+        out = frame.copy()
+        ImageDraw.Draw(out).rectangle([0, 0, out.width - 1, self.options["height"] - 1],
+                                      fill=(0, 220, 0))
+        return out
+
+
+class Switcher(Service):
+    name = "switcher"
+    api = 1
+
+    def start(self):
+        self.done = False
+        self.host.on("sample", self.sample)
+
+    def sample(self, snapshot):
+        if self.done:
+            return
+        self.done = True
+        self.host.notify("a green band")
+        self.host.show_theme("blue", transition=("demo.curtain", {}))
+"""
+
+
+def test_a_plugins_transition_and_toast_style_play_in_the_rust_app(plugin_folder, isolated_home):
+    """A theme's toast style from a plugin draws the toasts, and a plugin's transition plays
+    when a service switches the theme with it: both run in the plugin host."""
+    from PIL import Image
+
+    plugin_folder(SWITCHING, {"libre_panel.toasts": {"demo.green": "Green"},
+                              "libre_panel.transitions": {"demo.curtain": "Curtain"},
+                              "libre_panel.services": {"switcher": "Switcher"}})  # fmt: skip
+    for name, colour in (("red", "#dc1e1e"), ("blue", "#1e1edc")):
+        folder = isolated_home / "themes" / name
+        folder.mkdir(parents=True)
+        theme = {"format": "libre-panel-theme/1", "name": name,
+                 "display": {"width": 800, "height": 480}, "palette": {"bg": colour},
+                 "background": {"color": "@bg", "image": None}, "refresh_ms": 500,
+                 "toast": {"style": "demo.green", "options": {"height": 30}},
+                 "widgets": []}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+    (isolated_home / "config.toml").write_text(
+        'theme = "red"\nfps = 10\nrefresh_ms = 500\n[device]\ndriver = "virtual"\n'
+        'output = "panel.png"\n[services]\nenabled = ["switcher"]\n',
+        encoding="utf-8",
+    )
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(isolated_home), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries(), **HOST}  # fmt: skip
+    seen = {"band": False, "curtain": False, "blue": False}
+    red, blue, green = (220, 30, 30), (30, 30, 220), (0, 220, 0)
+    with subprocess.Popen([str(_program()), "run"], env=env, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        try:
+            until = time.monotonic() + 40
+            while time.monotonic() < until and not all(seen.values()):
+                try:
+                    with Image.open(isolated_home / "panel.png") as frame:
+                        frame = frame.convert("RGB")
+                        top, left, right = (frame.getpixel(at) for at in
+                                            ((400, 10), (40, 300), (760, 300)))  # fmt: skip
+                except (OSError, SyntaxError, ValueError):
+                    time.sleep(0.02)
+                    continue
+                seen["band"] |= top == green
+                seen["curtain"] |= left == blue and right == red
+                seen["blue"] |= left == blue and right == blue
+                time.sleep(0.02)
+        finally:
+            if os.name == "nt":
+                program.terminate()
+            else:
+                program.send_signal(signal.SIGINT)
+            said = program.communicate(timeout=30)[1]
+    assert all(seen.values()), (seen, said)
+    assert "failed" not in said and "not installed" not in said, said
