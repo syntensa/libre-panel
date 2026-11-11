@@ -15,6 +15,9 @@ lp-i18n = { path = "../i18n" }
 # (the TURZX panels on the bus, without libusb: usbfs on Linux, WinUSB on Windows, as the
 # engine has them)
 nusb = "0.2.9"
+# (the TURZX command packets Lian Li's screens take: DES-CBC, as the engine builds them)
+des = { version = "0.8", default-features = false }
+cbc = { version = "0.1", default-features = false }
 # (the values for a Waveshare display, in the order they were given)
 indexmap = "2"
 # (PNG files: zlib as lp-decode has it)

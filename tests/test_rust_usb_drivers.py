@@ -6,6 +6,7 @@ changed, closed; what went to the screen, in order, and what the driver says of 
 from __future__ import annotations
 
 import base64
+import io
 import random
 from collections import deque
 from types import SimpleNamespace
@@ -17,7 +18,7 @@ from PIL import Image
 from rust_check import image, noise, run
 
 from libre_panel.config import DeviceConfig
-from libre_panel.devices import udisp, usb_link
+from libre_panel.devices import beadapanel, lianli_usb, thermaltake, turzx_usb, udisp, usb_link
 from libre_panel.devices.models import get_model
 
 
@@ -100,11 +101,14 @@ def _python_session(case: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> di
     monkeypatch.setattr(
         usb_link, "release", lambda device, interfaces, where: events.append(["release"])
     )
+    if case["driver"] == "lianli":
+        _turzx_transport(screen, events, monkeypatch)
     options = case.get("options", {})
     config = DeviceConfig(driver="turzx")
     config.jpeg = options.get("jpeg", "4:4:4")
     config.jpeg_quality = options.get("jpeg_quality", 90)
     config.video.fps = options.get("fps", 30)
+    config.brightness = options.get("brightness", 100)
     model = get_model(case["model"]) if case.get("model") else None
     display = _driver(case["driver"], config, model)
     try:
@@ -136,12 +140,66 @@ def _python_session(case: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> di
 def _driver(name: str, config: DeviceConfig, model: Any) -> Any:
     if name == "udisp":
         return udisp.UdispDisplay(config, model)
+    if name == "beada":
+        return beadapanel.BeadaDisplay(config, model)
+    if name == "thermaltake":
+        return thermaltake.ThermaltakeDisplay(config, model)
+    if name == "lianli":
+        return lianli_usb.LianLiDisplay(config, model)
     raise AssertionError(name)
+
+
+class _Endpoint:
+    """An endpoint of the fake screen, as turzx_usb.UsbTransport writes to and reads it."""
+
+    def __init__(self, screen: FakeScreen, address: int) -> None:
+        self.screen, self.bEndpointAddress = screen, address
+
+    def write(self, data: bytes, timeout: int) -> int:
+        return self.screen.write(self.bEndpointAddress, data, timeout)
+
+    def read(self, size: int, timeout: int) -> bytes:
+        return self.screen.read(self.bEndpointAddress, size, timeout)
+
+
+def _turzx_transport(screen: FakeScreen, events: list[Any], monkeypatch: pytest.MonkeyPatch):
+    """turzx_usb.UsbTransport on the fake screen (Lian Li's), as the Rust side claims it."""
+
+    def opened(pid, beside=(), skip=0):
+        events.append(["claim", [0]])
+        out = next(e.bEndpointAddress for i in screen.config for e in i.endpoints
+                   if not e.bEndpointAddress & 0x80)  # fmt: skip
+        into = next(e.bEndpointAddress for i in screen.config for e in i.endpoints
+                    if e.bEndpointAddress & 0x80)  # fmt: skip
+        return turzx_usb.UsbTransport(screen, _Endpoint(screen, out), _Endpoint(screen, into),
+                                      pid, "usb:1.2")  # fmt: skip
+
+    monkeypatch.setattr(turzx_usb.UsbTransport, "open", staticmethod(opened))
+    monkeypatch.setattr(turzx_usb.UsbTransport, "close", lambda self: events.append(["release"]))
+    monkeypatch.setattr(turzx_usb, "ms_since_midnight", lambda now=None: 12_345_678)
 
 
 def _rust_case(case: dict[str, Any]) -> dict[str, Any]:
     steps = [{**s, "show": image(s["show"])} if "show" in s else s for s in case["steps"]]
     return {"op": "usb_session", **case, "steps": steps}
+
+
+def _png_written(event: list[Any]) -> list[Any]:
+    """A write of a TURZX command packet and a PNG (Lian Li's layer) as what it means: the
+    command, the length its arguments name (the PNG's own) and the PNG's pixels. (Rust packs
+    its PNGs with zlib-rs, not zlib: the same pixels, other bytes, as tests/test_rust_devices.py
+    takes the TURZX panels' PNGs.)"""
+    if event[0] != "write":
+        return event
+    data = base64.b64decode(event[2])
+    if data[512:520] != b"\x89PNG\r\n\x1a\n":
+        return event
+    plain = turzx_usb.decode_packet(data[:512])
+    payload = data[512:]
+    assert int.from_bytes(plain[8:12], "big") == len(payload)
+    with Image.open(io.BytesIO(payload)) as png:
+        pixels = (png.mode, png.size, _b64(png.tobytes()))
+    return ["write png", event[1], plain[0], list(pixels)]
 
 
 def _compare(cases: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch) -> int:
@@ -151,11 +209,14 @@ def _compare(cases: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch) -> in
                                         strict=True)):  # fmt: skip
         want = _python_session(case, monkeypatch)
         assert got["error"] == want["error"], (n, case["product"])
-        assert got["events"] == want["events"], (n, case["product"])
+        ours, theirs = ([_png_written(e) for e in side["events"]] for side in (got, want))
+        assert ours == theirs, (n, case["product"])
         if "told" in want:
             opened += 1
             assert got["told"] == want["told"], n
-            assert (got["bytes"], got["usb_errors"]) == (want["bytes"], want["usb_errors"]), n
+            assert got["usb_errors"] == want["usb_errors"], n
+            if case["driver"] != "lianli":  # (its PNG's bytes are counted)
+                assert got["bytes"] == want["bytes"], n
     return opened
 
 
@@ -207,3 +268,111 @@ def test_udisp_sessions_as_udisp_py_drives_them(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(udisp, "AGAIN_S", 3600.0)  # (the keeper sends nothing in a case)
     rng = random.Random(0x0D15)
     assert _compare([_udisp_case(rng) for _ in range(40)], monkeypatch) > 15
+
+
+def _beada_info(rng: random.Random, code: int, size: tuple[int, int], top: int, link: int) -> bytes:
+    info = bytearray(80)
+    info[0:2] = rng.randrange(600, 800).to_bytes(2, "little")
+    info[2], info[4], info[5], info[78] = link, rng.randrange(4), code, top
+    info[70:74] = size[0].to_bytes(2, "little") + size[1].to_bytes(2, "little")
+    header = (
+        b"STATUS-LINK" + bytes((1, 1, 0)) + (0).to_bytes(2, "little") + (100).to_bytes(2, "little")
+    )
+    return header + b"\0\0" + bytes(info)
+
+
+def _beada_case(rng: random.Random) -> dict[str, Any]:
+    code, size = rng.choice([(17, (480, 480)), (3, (320, 480)), (99, (480, 800)), (98, (123, 45)),
+                             (13, (0, 480))])  # fmt: skip
+    roll = rng.random()
+    if roll < 0.1:
+        answers: list[Any] = [None]
+    elif roll < 0.15:
+        answers = [_b64(b"STATUS-LINK" + bytes(10))]
+    else:
+        info = _beada_info(rng, code, size, rng.choice([0, 100, 255, 37]), rng.choice([1, 2]))
+        answers = [_b64(info)]
+    steps: list[dict[str, Any]] = []
+    for _ in range(rng.randrange(1, 4)):
+        if rng.random() < 0.3:
+            steps.append({"brightness": rng.choice([-5, 0, 37, 50, 100, 130])})
+        else:
+            steps.append({"show": _frame(rng, [size if all(size) else (8, 8), (480, 320), (9, 7)]),
+                          "region": None})  # fmt: skip
+    fail = [[rng.randrange(1, 7), 5, "Input/Output Error"]] if rng.random() < 0.15 else []
+    return {"driver": "beada", "model": None, "product": "BeadaPanel",
+            "interfaces": [{"number": 0, "class": 255,
+                            "endpoints": [[0x01, 512, False], [0x02, 512, False],
+                                          [0x82, 512, False]]}],
+            "answers": answers, "options": {"brightness": rng.choice([0, 40, 100])},
+            "steps": steps, "fail_writes": fail}  # fmt: skip
+
+
+def test_beadapanel_sessions_as_beadapanel_py_drives_them(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(beadapanel, "AGAIN_S", 3600.0)
+    monkeypatch.setattr(beadapanel.time, "sleep", lambda seconds: None)
+    rng = random.Random(0xBEAD)
+    assert _compare([_beada_case(rng) for _ in range(30)], monkeypatch) > 10
+
+
+def _thermaltake_case(rng: random.Random) -> dict[str, Any]:
+    stale = [_b64(rng.randbytes(20)) for _ in range(rng.choice([0, 0, 2, 20]))]
+    ok = [_b64(b"HTTP/1.1 200 OK"), _b64(b"200")]
+    answers = [*stale, None, *(rng.choice([ok, ok, ok, [_b64(b"500")], [None]])), _b64(b"200")]
+    endpoints = rng.choice([[[0x01, 1024, True], [0x81, 1024, True]], [[0x81, 1024, True]]])
+    steps: list[dict[str, Any]] = []
+    for _ in range(rng.randrange(1, 4)):
+        if rng.random() < 0.3:
+            steps.append({"brightness": rng.choice([0, 37, 100, 130])})
+        else:
+            steps.append({"show": _frame(rng, [(1480, 720), (720, 1480), (64, 48)]),
+                          "region": None})  # fmt: skip
+    fail = [[rng.randrange(3, 8), 19, "No such device"]] if rng.random() < 0.15 else []
+    return {"driver": "thermaltake", "model": None, "product": "LCD",
+            "interfaces": [{"number": 1, "class": 3, "endpoints": endpoints}],
+            "answers": answers, "options": {}, "steps": steps, "fail_writes": fail}  # fmt: skip
+
+
+def test_thermaltake_sessions_as_thermaltake_py_drives_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(thermaltake, "AGAIN_S", 3600.0)
+    monkeypatch.setattr(thermaltake.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(thermaltake.time, "time", lambda: 1_700_000_000.123)
+    rng = random.Random(0x7A7E)
+    assert _compare([_thermaltake_case(rng) for _ in range(24)], monkeypatch) > 8
+
+
+def _lianli_case(rng: random.Random) -> dict[str, Any]:
+    model = rng.choice(["lianli-hydroshift2-lcd", "lianli-hydroshift2-lcd", "lianli-universal-9.2"])
+    reply = lambda level: _b64(bytes((101, 0xC8, 0, 0, 0, 0, 0, 0, level)) + rng.randbytes(4))  # noqa: E731
+    answers: list[Any] = [_b64(b"stale"), None]  # (drained)
+    answers += [_b64(rng.randbytes(16)) for _ in range(3)]  # 10, 123, 52
+    answers += [rng.choice([None, reply(0)])]  # the PNG layer
+    answers += [_b64(rng.randbytes(16))]  # 15
+    size = (480, 480) if model.endswith("lcd") else (1920, 464)
+    steps: list[dict[str, Any]] = []
+    for _ in range(rng.randrange(1, 4)):
+        if rng.random() < 0.3:
+            steps.append({"brightness": rng.choice([-1, 0, 37, 100, 150])})
+            answers.append(_b64(rng.randbytes(16)))
+        else:
+            steps.append({"show": _frame(rng, [size, (size[1], size[0]), (33, 21)]),
+                          "region": None})  # fmt: skip
+            level = rng.choice([None, 0, 2, 3, 4, 6])
+            answers.append(None if level is None else reply(level))
+            if level is not None and level > 3:  # asked with 122 until 2 or fewer wait
+                answers += [_b64(bytes((122, 0, 0, 0, 0, 0, 0, 0, 5))), None,
+                            _b64(bytes((122, 0, 0, 0, 0, 0, 0, 0, 1)))]  # fmt: skip
+    if rng.random() < 0.1:
+        answers = answers[:3]  # (it stops answering while it opens)
+    fail = [[rng.randrange(2, 9), 32, "Pipe error"]] if rng.random() < 0.15 else []
+    return {"driver": "lianli", "model": model, "product": "Lian Li",
+            "interfaces": [{"number": 0, "class": 255,
+                            "endpoints": [[0x01, 512, False], [0x81, 512, False]]}],
+            "answers": answers, "options": {}, "steps": steps, "fail_writes": fail}  # fmt: skip
+
+
+def test_lianli_sessions_as_lianli_usb_py_drives_them(monkeypatch: pytest.MonkeyPatch) -> None:
+    rng = random.Random(0x11A1)
+    assert _compare([_lianli_case(rng) for _ in range(24)], monkeypatch) > 8

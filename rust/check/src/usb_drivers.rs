@@ -165,6 +165,25 @@ fn opened(case: &Value, io: Box<dyn UsbIo>) -> Result<Box<dyn Driver>, String> {
             driver.open_on(io).map_err(|e| e.0)?;
             Ok(Box::new(driver))
         }
+        "beada" => {
+            let mut driver = lp_devices::beada::Beada::new(model, int("brightness", 100));
+            driver.settle_s = 0.0;
+            driver.open_on(io).map_err(|e| e.0)?;
+            Ok(Box::new(driver))
+        }
+        "thermaltake" => {
+            let mut driver = lp_devices::thermaltake::Thermaltake::new(model);
+            driver.clock = || 1_700_000_000.123;
+            driver.pause_s = 0.0;
+            driver.open_on(io).map_err(|e| e.0)?;
+            Ok(Box::new(driver))
+        }
+        "lianli" => {
+            let mut driver = lp_devices::lianli::LianLi::new(model);
+            driver.stamp = || 12_345_678;
+            driver.open_on(io).map_err(|e| e.0)?;
+            Ok(Box::new(driver))
+        }
         other => Err(format!("no driver {other:?} here")),
     }
 }

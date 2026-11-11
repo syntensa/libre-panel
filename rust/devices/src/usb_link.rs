@@ -598,3 +598,75 @@ impl Drop for NusbIo {
         self.release();
     }
 }
+
+/// Where a screen's pictures go: an endpoint, or HID reports.
+#[derive(Clone, Debug)]
+pub enum Target {
+    Endpoint(u8),
+    Hid(HidReports),
+}
+
+/// What a keeper guards for a USB screen that shows its own picture again when it gets none
+/// for a while: the link, and the messages of the last picture, sent again as they went.
+pub struct Screen {
+    pub io: Option<Box<dyn UsbIo>>,
+    pub label: String,
+    pub counters: crate::base::Counters,
+    pub target: Target,
+    pub timeout_ms: u64,
+    pub last: Vec<Vec<u8>>,
+}
+
+impl Screen {
+    pub fn new(label: String, target: Target, timeout_ms: u64) -> Screen {
+        Screen {
+            io: None,
+            label,
+            counters: crate::base::Counters::default(),
+            target,
+            timeout_ms,
+            last: Vec::new(),
+        }
+    }
+
+    /// The error of a link that failed while showing (the main loop connects again).
+    pub fn stopped(&mut self, e: &UsbError) -> DeviceError {
+        self.counters.usb_errors += 1;
+        DeviceError(tf(
+            "the {panel} stopped answering: {error}",
+            &[("panel", &self.label), ("error", &e.to_string())],
+        ))
+    }
+
+    /// One message to the target.
+    pub fn write(&mut self, message: &[u8]) -> UsbResult<()> {
+        let Some(io) = self.io.as_mut() else {
+            return Err(UsbError::Other("the device is let go".into()));
+        };
+        match &self.target {
+            Target::Endpoint(endpoint) => io.write(*endpoint, message, self.timeout_ms),
+            Target::Hid(reports) => reports.write(io.as_mut(), message, self.timeout_ms),
+        }
+    }
+
+    /// A picture's messages, in order, counted and kept to go again.
+    pub fn picture(&mut self, messages: Vec<Vec<u8>>) -> Result<()> {
+        for message in &messages {
+            if let Err(e) = self.write(message) {
+                return Err(self.stopped(&e));
+            }
+        }
+        self.counters.bytes += messages.iter().map(|m| m.len() as u64).sum::<u64>();
+        self.last = messages;
+        Ok(())
+    }
+
+    /// The last picture again (the keeper's).
+    pub fn again(screen: &mut Screen) -> Result<()> {
+        if screen.io.is_some() && !screen.last.is_empty() {
+            let last = screen.last.clone();
+            return screen.picture(last);
+        }
+        Ok(())
+    }
+}

@@ -1648,8 +1648,16 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       frame, a slow one the parts that changed (changed_regions) and the others the box
       around them (tests/test_rust_usb_drivers.py: whole sessions against udisp.py's, byte
       for byte)
-- [ ] BeadaPanel, NZXT Kraken, Thermalright, Thermaltake, Lian Li, JONSBO, MS9132, the serial
-      panels (Turing rev. A/B/C, Kipye rev. D, WeAct, JONSBO DS916), the panel as a monitor
+- [x] BeadaPanel (rust/devices' beada: Status-Link and Panel-Link as beadapanel.py speaks
+      them, the panel's information, the model by its code, its stream of RGB565, the
+      backlight up to its highest, the stream's end), Thermaltake's 6" LCD (thermaltake: its
+      HID reports, the framed commands answered with 200, the JPEG in pieces, the picture
+      dimmed) and Lian Li's screens (lianli, on turzx_packet: the TURZX command packet in
+      DES-CBC, the cleared PNG layer, the JPEG with its command in one write, the wait while
+      more than three pictures wait), each sent again after a second as its Python driver
+      does (tests/test_rust_usb_drivers.py: whole sessions, byte for byte; Lian Li's PNG by
+      its pixels, as the TURZX panels' are)
+- [ ] NZXT Kraken, Thermalright, JONSBO, MS9132, the serial panels (Turing rev. A/B/C, Kipye rev. D, WeAct, JONSBO DS916), the panel as a monitor
       (Windows' virtual display driver, X11, Wayland)
 
 ### R7 sensors

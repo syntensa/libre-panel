@@ -60,6 +60,18 @@ fn other(
             );
             driver.open().map(|()| Box::new(driver) as Box<dyn Driver>)
         }
+        "usb-beada" => {
+            let mut driver = lp_devices::beada::Beada::new(model, device.brightness);
+            driver.open().map(|()| Box::new(driver) as Box<dyn Driver>)
+        }
+        "usb-thermaltake" => {
+            let mut driver = lp_devices::thermaltake::Thermaltake::new(model);
+            driver.open().map(|()| Box::new(driver) as Box<dyn Driver>)
+        }
+        "usb-lianli" => {
+            let mut driver = lp_devices::lianli::LianLi::new(model);
+            driver.open().map(|()| Box::new(driver) as Box<dyn Driver>)
+        }
         _ => return None,
     }
     .map_err(|e| e.0);
@@ -70,9 +82,13 @@ fn other(
 }
 
 /// other_usb_model: the USB screen of another maker on the bus, as `auto` finds it, in this
-/// order, without opening it.
+/// order (turzx.py's: Lian Li, Thermalright, BeadaPanel, NZXT, Thermaltake, udisp), without
+/// opening it.
 fn other_usb_model() -> Option<&'static PanelModel> {
-    lp_devices::udisp::present_model()
+    lp_devices::lianli::present_model()
+        .or_else(lp_devices::beada::present_model)
+        .or_else(lp_devices::thermaltake::present_model)
+        .or_else(lp_devices::udisp::present_model)
 }
 
 /// output_path: the file of `[device] output`; a relative one is inside the settings folder.
