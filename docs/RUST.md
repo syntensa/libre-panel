@@ -2099,6 +2099,17 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       the engine's link (lp-devices' FileLink: commands 40, 42, 98, 99, 110, 113, 125), the
       panel's themes paused first; tested on the simulated panel, which keeps files now, the
       logo and the clip byte for byte as panel_files.py makes them
+- [x] the colour check (`/api/colour-check`, editor/colours.py, colour_show.py): who converts
+      the colours for a panel and why, and the A/B on that panel for the eye (its test picture
+      for 30 s, A and B every 3 s; "range": the engine's stream made in limited and in full
+      range in turn, Start's *Is black too light? Compare*), the marker beside config.toml
+      while it runs. The counters say the encoder as the Python app's do with the engine
+      ("native, boxes"); editor/colours.py now takes that feed too (it took the engine's video
+      for none, and the range compare said the panel showed no video). By design the Rust
+      app's video is the engine's alone, which converts as the processor does: the check of
+      the graphics card's own conversion through ffmpeg (devices/colour_check.py) ends at once
+      there, saying so. The tests: the state and what is refused as Python's; on the running
+      app with a simulated panel the A/B begun, the stream in both ranges, stopped and back
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app
 - [x] one Libre Panel at a panel (instance.py): the system's lock on libre-panel.lock in the

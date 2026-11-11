@@ -716,6 +716,13 @@ pub struct TurzxVideo {
     began: Instant,
     pub counters: Counters,
     notes: Vec<String>,
+    /// the range a colour check compares now ("limited", "full"; None: `[device]
+    /// video_range`), and whether the running stream is in full range
+    range: Option<String>,
+    stream_full: bool,
+    /// the theme's last frame while a colour check's picture is shown (what stays on the
+    /// panel when it closes)
+    left: Option<Image>,
 }
 
 impl TurzxVideo {
@@ -770,6 +777,9 @@ impl TurzxVideo {
             counters: Counters::default(),
             notes,
             setup,
+            range: None,
+            stream_full: false,
+            left: None,
         };
         if let Err(e) = panel.start() {
             panel.conn.close();
@@ -983,7 +993,7 @@ impl TurzxVideo {
             self.rate_key = None;
             mbit(&video.maxrate)
         };
-        let full = full_range(&video.video_range, self.conn.model);
+        let full = self.full();
         let options = engine_options(size, video, model_id, full, rate, &self.encoder);
         self.conn.link.stream(&options, self.block)?;
         self.bit_rate = rate;
@@ -999,8 +1009,35 @@ impl TurzxVideo {
             rate_text(rate)
         ));
         self.stream = Some((size, 0));
+        self.stream_full = full;
         self.last = None; // (its first frame whole)
         Ok(())
+    }
+
+    /// _full: whether this panel gets its video in full range: as a colour check compares it,
+    /// else as `[device] video_range` says for this model.
+    fn full(&self) -> bool {
+        let range = self
+            .range
+            .as_deref()
+            .unwrap_or(&self.setup.video.video_range);
+        full_range(range, self.conn.model)
+    }
+
+    /// set_range: the range a colour check compares now (None: `[device] video_range` again):
+    /// the next frame begins a stream in it where it differs.
+    pub fn set_range(&mut self, range: Option<String>) {
+        if self.range.is_none() && range.is_some() {
+            self.left = self.last.clone(); // (a colour check's picture does not stay)
+        } else if range.is_none() {
+            self.left = None;
+        }
+        self.range = range;
+    }
+
+    /// The range a colour check compares now.
+    pub fn range(&self) -> Option<&str> {
+        self.range.as_deref()
     }
 
     /// show: a frame into the stream, drawn for the time `planned` (seconds on the loop's
@@ -1028,7 +1065,8 @@ impl TurzxVideo {
                 size.0, size.1
             )));
         }
-        if !matches!(self.stream, Some((running, _)) if running == size) {
+        let same = matches!(self.stream, Some((running, _)) if running == size);
+        if !same || self.stream_full != self.full() {
             self.begin_stream(size)?;
         }
         self.follow_the_panel();
@@ -1074,7 +1112,7 @@ impl TurzxVideo {
             let link = &self.conn.link;
             let _ = link.command(CMD_STOP_STREAM, &[], &[], 2000);
             let _ = link.command(CMD_FRAME_RATE, &[POWER_ON_FPS], &[], 2000);
-            let last = self.last.as_ref().map(to_native);
+            let last = self.left.as_ref().or(self.last.as_ref()).map(to_native);
             if let Some(png) = last.and_then(|native| encode_frame(&native).ok()) {
                 let length = (png.len() as u32).to_be_bytes();
                 let _ = link.command(CMD_UPLOAD_PNG, &length, &png, 5000);
@@ -1290,6 +1328,15 @@ impl Turzx {
         match self {
             Turzx::Video(panel) => panel.show(frame, planned),
             Turzx::Stills(panel) => panel.show(&frame),
+        }
+    }
+
+    /// set_range: the range a colour check compares (video only; single pictures have none).
+    pub fn set_range(&mut self, range: Option<String>) {
+        if let Turzx::Video(panel) = self {
+            if panel.range() != range.as_deref() {
+                panel.set_range(range);
+            }
         }
     }
 

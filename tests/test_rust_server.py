@@ -2576,3 +2576,111 @@ def test_the_start_screen_is_written_to_the_panel_as_panel_files_py_writes_it(
                 assert "panicked" not in stderr, stderr
     finally:
         rig.close()
+
+
+def test_the_colour_check_is_told_and_refused_as_colours_py_does(servers: Any) -> None:
+    """Settings → Panel → Check the colours (/api/colour-check) of a server without the
+    running app: the state, what is no panel or no action, and the A/B refused (it needs the
+    app), in the same words. Who encodes differs by design: the Rust app's video is Libre
+    Panel's engine alone ("native"), which converts the colours as the processor does."""
+    ask, _ = servers
+    theirs, ours = ask(_get("/api/colour-check", WITH))
+    assert ours[0] == theirs[0] == "HTTP/1.0 200 OK", ours[2][:300]
+    mine, python = json.loads(ours[2]), json.loads(theirs[2])
+    assert mine.pop("auto") == {"set": "auto", "picked": "native", "passed": []}
+    assert mine.pop("in_use") == {"encoder": "native", "feed": "rgb0", "card": False,
+                                  "running": False}  # fmt: skip
+    choice = mine.pop("choice")
+    assert (choice["encoder"], choice["why"], choice["way"]) == ("native", "x264", "processor")
+    python.pop("auto"), python.pop("in_use")
+    keys = ("pixels", "full", "range", "model_range", "verdict", "worst", "when", "by")
+    python_choice = python.pop("choice")
+    assert {k: choice[k] for k in keys} == {k: python_choice[k] for k in keys}
+    assert mine == python
+    requests = (
+        _get("/api/colour-check?panel=x", WITH),
+        _get("/api/colour-check?panel=4", WITH),
+        _post("/api/colour-check", {"action": "nope"}),
+        _post("/api/colour-check", {"action": "range"}),
+        _post("/api/colour-check", {"action": "show", "panel": 2}),
+        _post("/api/colour-check", {"action": "stop", "panel": True}),
+    )
+    for request in requests:
+        theirs, ours = ask(request)
+        assert ours[0] == theirs[0] and json.loads(ours[2]) == json.loads(theirs[2]), request
+
+
+def test_the_panel_compares_its_range_for_the_eye_and_shows_its_theme_again(
+    tmp_path: Path,
+) -> None:
+    """Start's *Is black too light? Compare* on the running app with a simulated panel in the
+    video mode: the A/B begun, the engine's stream made in limited and in full range in turn,
+    the test picture on the panel; stopped, and the panel's own range again."""
+    rig = Rig(tmp_path)
+    try:
+        rig.config(
+            'theme = "slate"\nlanguage = "en"\n[device]\ndriver = "turzx"\n'
+            'model = "turing-9.2-usb"\nvideo_range = "limited"\n[video]\nmode = "on"\n'
+            'fps = 10\ndevice_fps = 30\nlocal_clip = "usr/data/clip.h264"\n'
+            "[sensors]\nproviders = []\n"
+        )
+        env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+               **_libraries(), **rig.env()}  # fmt: skip
+        command = [str(_program()), "start", "--port", "0", "--no-browser"]
+        with subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              encoding="utf-8") as program:  # fmt: skip
+            try:
+                assert program.stdout is not None
+                address = program.stdout.readline().split(" running at ")[1].split()[0]
+                port = int(address.split(":")[2].split("/")[0])
+                token = address.split("#token=")[1]
+
+                def ask(request: str | bytes) -> tuple[str, Any]:
+                    text = request if isinstance(request, bytes) else request.encode("utf-8")
+                    text = text.replace(b"{host}", f"127.0.0.1:{port}".encode())
+                    text = text.replace(b"{token}", token.encode())
+                    status, _, answer = _asked(port, text)
+                    return status.split(" ", 2)[1], json.loads(answer)
+
+                said = _waited(lambda: ask(_get("/api/colour-check", WITH))[1]["video"] or None,
+                               30)  # fmt: skip
+                assert said, "the panel never showed video"
+                state = ask(_get("/api/colour-check", WITH))[1]
+                assert state["in_use"] == {"encoder": "native", "feed": "boxes", "card": False,
+                                           "running": True}  # fmt: skip
+                assert state["ab"] == "x264"
+                status, said = ask(_post("/api/colour-check", {"action": "show"}))
+                assert (status, said["error"]) == (
+                    "409",
+                    "panel 1 runs native: the processor converts",
+                )
+                status, said = ask(_post("/api/colour-check", {"action": "range"}))
+                assert status == "200", said
+                assert said["show"]["running"] and said["show"]["kind"] == "range"
+                assert said["show"]["panel"] == 1 and said["show"]["of"] == 1
+                seen = set()
+
+                def both() -> bool | None:
+                    seen.add(ask(_get("/api/colour-check", WITH))[1]["show"]["value"])
+                    return ({"limited", "full"} <= seen) or None
+
+                assert _waited(both, 15), seen
+                time.sleep(1.5)  # (a frame in B: the loop draws a still theme twice a second)
+                status, said = ask(_post("/api/colour-check", {"action": "stop"}))
+                assert status == "200", said
+                ended = _waited(
+                    lambda: ask(_get("/api/colour-check", WITH))[1]["show"]["ended"] or None, 5
+                )
+                assert ended == "stopped"
+                assert not (tmp_path / "colour-check.json").exists()
+                time.sleep(1.5)  # (a frame after it, in the panel's own range)
+            finally:
+                program.send_signal(signal.SIGINT) if os.name != "nt" else program.terminate()
+                stderr = program.communicate(timeout=60)[1]
+        assert "panicked" not in stderr, stderr
+        # the engine's stream made in each range, then in the panel's own again
+        ranges = re.findall(r"video: encoding with the engine.*?, (limited|full) range", stderr)
+        assert ranges[:1] == ["limited"] and "full" in ranges, ranges
+        assert ranges[-1] == "limited", ranges
+    finally:
+        rig.close()

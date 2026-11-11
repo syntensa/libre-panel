@@ -179,8 +179,8 @@ impl Meter {
             ("blocks_per_s", video_only(rate(first.3, last.3, 1.0))),
             ("max_depth", video_only(int(total.max_depth))),
             ("bit_rate", video_only(Value::Float(counted.bit_rate))),
-            // (the encoder and what it is fed: the engine's settings are not told here yet)
-            ("encoder", Value::None),
+            // (the encoder and what it is fed: Libre Panel's engine, the frames' changed parts)
+            ("encoder", video_only(Value::Str("native, boxes".into()))),
             ("waits", video_only(int(total.waits))),
             ("drops", video_only(int(total.drops))),
             ("usb_errors", int(total.usb_errors)),

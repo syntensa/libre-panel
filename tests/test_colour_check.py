@@ -566,6 +566,8 @@ def test_why_the_card_converts_or_not():
     assert in_use_of("h264_amf, rgb0") == ("h264_amf", "rgb0", False)
     assert in_use_of("h264_amf, rgb0, card") == ("h264_amf", "rgb0", True)
     assert in_use_of(None) is None and in_use_of("libx264") is None
+    # (Libre Panel's engine: the frames' changed parts, converted as the processor does)
+    assert in_use_of("native, boxes") == ("native", "boxes", False)
 
 
 def running_app(stats=None, more=None, model=NINE, size=(1920, 480)):

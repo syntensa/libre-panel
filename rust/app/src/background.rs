@@ -572,6 +572,7 @@ impl BackgroundApp {
     /// address with its token (None where it did not start).
     pub fn start(&self) -> Option<String> {
         self.check_folders();
+        crate::colour_show::recover(); // (a colour check the app ended during: said, gone)
         match self.config() {
             Ok(config) => self.company.follow(&config),
             // (they start once the config is fixed)

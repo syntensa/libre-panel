@@ -345,6 +345,14 @@ impl Display {
         Ok(found)
     }
 
+    /// set_range: the range a colour check compares on a panel showing video (None: its
+    /// own again).
+    pub fn set_range(&mut self, range: Option<&str>) {
+        if let Panel::Turzx(panel) = &mut self.panel {
+            panel.set_range(range.map(str::to_string));
+        }
+    }
+
     pub fn set_brightness(&mut self, percent: i64) -> Result<(), String> {
         self.brightness = percent;
         match &mut self.panel {

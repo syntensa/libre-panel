@@ -51,9 +51,10 @@ class ColourError(ValueError):
 
 def in_use_of(text: str | None) -> tuple[str, str, bool] | None:
     """The encoder, its feed and whether the card converts, from the counters' ``encoder``
-    ("h264_amf, rgb0", "h264_amf, rgb0, card")."""
+    ("h264_amf, rgb0", "h264_amf, rgb0, card"; Libre Panel's engine: "native, boxes", the
+    changed parts of the frames, which it converts as the processor does)."""
     parts = [part.strip() for part in (text or "").split(",")]
-    if len(parts) < 2 or not parts[0] or parts[1] not in ("rgb0", "rgb24"):
+    if len(parts) < 2 or not parts[0] or parts[1] not in ("rgb0", "rgb24", "boxes"):
         return None
     return parts[0], parts[1], parts[2:3] == ["card"]
 

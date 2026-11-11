@@ -8,6 +8,8 @@ mod autostart;
 mod background;
 mod backup;
 mod beside;
+mod colour_show;
+mod colours;
 mod company;
 mod consoles;
 mod display;

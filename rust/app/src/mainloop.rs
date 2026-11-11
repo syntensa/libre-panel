@@ -1059,6 +1059,31 @@ impl MainLoop {
             Ok(Some(edged)) => edged,
             _ => frame,
         };
+        // the colour check's picture (Settings → Panel), its video made in the range its
+        // moment says
+        let number = self.beside.as_ref().map_or(1, |beside| beside.n + 2) as i64;
+        let streaming = self.panel.as_ref().is_some_and(|panel| panel.streams());
+        let checking = streaming.then(|| crate::colour_show::now(number)).flatten();
+        if let Some(panel) = self.panel.as_mut() {
+            let wanted = checking.filter(|(_, kind, _)| *kind == "range");
+            panel.set_range(wanted.map(|(_, _, value)| value));
+        }
+        let frame = match checking {
+            Some((letter, ..)) => {
+                let env = lp_theme::Env {
+                    fonts_dir: self.home.fonts(),
+                };
+                let size = (frame.width(), frame.height());
+                match crate::colour_show::picture(&env, size, letter) {
+                    Ok(picture) => picture,
+                    Err(why) => {
+                        say(&format!("the colour check's picture not drawn: {why}"));
+                        frame
+                    }
+                }
+            }
+            None => frame,
+        };
         // which panel is which: its number instead, a moment
         if crate::identify::showing() {
             let accent = (renderer.theme.palette.get("accent").and_then(Value::as_str))

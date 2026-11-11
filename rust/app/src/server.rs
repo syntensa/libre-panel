@@ -57,6 +57,8 @@ pub struct State {
     previews: crate::previews::Previews,
     /// the start screen's pictures and files kept (start_screen.rs)
     start_screen: crate::start_screen::Kept,
+    /// the colour check and its A/B on a panel (colours.rs)
+    colours: crate::colours::ColourCheck,
     /// the port the server listens on (what the AI hooks call)
     port: u16,
 }
@@ -353,6 +355,9 @@ const ROUTES: &[Route] = &[
     private("GET", "/api/tray/icon", |s, x, _, u| {
         tray_icon(s, x, &u.query)
     }),
+    private("GET", "/api/colour-check", |s, x, _, u| {
+        colour_check(s, x, &u.query)
+    }),
     private("GET", "/api/start-screen", |s, x, _, u| {
         start_screen_state(s, x, &u.query)
     }),
@@ -460,6 +465,9 @@ const ROUTES: &[Route] = &[
         experiment_action(s, x)
     }),
     private("POST", "/api/tray", |s, x, _, _| tray_action(s, x)),
+    private("POST", "/api/colour-check", |s, x, _, _| {
+        colour_check_action(s, x)
+    }),
     private("POST", "/api/start-screen", |s, x, _, _| {
         start_screen_action(s, x)
     }),
@@ -1946,6 +1954,81 @@ fn start_screen_file(state: &State, exchange: &mut Exchange, query: &str) {
     }
 }
 
+/// int(text) as Python reads a whole number: blanks around it, a sign, digits with single
+/// underscores between them.
+fn py_int(text: &str) -> Option<num_bigint::BigInt> {
+    let text = text.trim();
+    let digits = text.strip_prefix(['+', '-']).unwrap_or(text);
+    let plain = !digits.is_empty()
+        && !digits.starts_with('_')
+        && !digits.ends_with('_')
+        && !digits.contains("__")
+        && digits.chars().all(|c| c.is_ascii_digit() || c == '_');
+    plain.then(|| text.replace('_', "").parse().ok()).flatten()
+}
+
+/// `GET /api/colour-check?panel=1`: the colour check as it stands, what panel `n` (1 the
+/// first) runs and feeds, what to do about it, and the A/B (colours.rs).
+fn colour_check(state: &State, exchange: &mut Exchange, query: &str) {
+    let asked = crate::http::parse_qs(query);
+    let raw = asked
+        .get("panel")
+        .and_then(|v| v.first())
+        .map_or("1", String::as_str);
+    let Some(number) = py_int(raw) else {
+        return exchange.error("panel: expected a whole number", 400, "");
+    };
+    match state.colours.state(&Value::Int(number)) {
+        Ok(told) => exchange.json(&told, 200),
+        Err(why) => exchange.error(&why.message, why.status, ""),
+    }
+}
+
+/// `POST /api/colour-check {"action": "check" | "show" | "range" | "stop", "panel": n}`: the
+/// check begun with panel `n`'s settings, its picture shown on that panel for the eye (the
+/// running app only), or that ended.
+fn colour_check_action(state: &State, exchange: &mut Exchange) {
+    let Some(payload) = exchange.read_json(MAX_JSON) else {
+        return;
+    };
+    let (action, number) = match &payload {
+        Value::Dict(payload) => (
+            payload.get("action").cloned(),
+            payload
+                .get("panel")
+                .cloned()
+                .unwrap_or(Value::Int(1.into())),
+        ),
+        _ => (None, Value::Int(1.into())),
+    };
+    let runner = &state.colours;
+    let done = match &action {
+        Some(Value::Str(a)) if a == "check" => runner.start_check(&number),
+        Some(Value::Str(a)) if a == "show" => runner.start_show(&number, "feed"),
+        Some(Value::Str(a)) if a == "range" => runner.start_show(&number, "range"),
+        Some(Value::Str(a)) if a == "stop" => {
+            runner.stop_show();
+            Ok(())
+        }
+        _ => {
+            return exchange.error(
+                "expected {\"action\": \"check\", \"show\", \"range\" or \"stop\"}",
+                400,
+                "",
+            )
+        }
+    };
+    // (a panel that is no whole number: the first's state)
+    let shown = match number {
+        Value::Int(_) | Value::Bool(_) => number,
+        _ => Value::Int(1.into()),
+    };
+    match done.and_then(|()| runner.state(&shown)) {
+        Ok(told) => exchange.json(&told, 200),
+        Err(why) => exchange.error(&why.message, why.status, ""),
+    }
+}
+
 /// _panel_s: whether the start screen just written (its `model`) is panel `n`'s: the only
 /// panel's is; beside others it is that panel's model, as set or as found on the bus where it
 /// is.
@@ -2280,6 +2363,7 @@ impl EditorServer {
         };
         let news = crate::news::News::new(&config_file);
         let updates = crate::updates::Updates::new(&config_file);
+        let colours = crate::colours::ColourCheck::new(config_file.clone(), controls.clone());
         let port = listener.local_addr()?.port();
         Ok(EditorServer {
             port,
@@ -2298,6 +2382,7 @@ impl EditorServer {
                 updates,
                 previews: crate::previews::Previews::default(),
                 start_screen: crate::start_screen::Kept::default(),
+                colours,
             }),
             listener: Some(listener),
             stop: Arc::default(),
@@ -2371,6 +2456,8 @@ impl EditorServer {
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
         }
+        // (the app ends: a panel showing the colour check's picture shows its theme)
+        self.state.colours.close();
     }
 }
 
