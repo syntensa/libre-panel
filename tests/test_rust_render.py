@@ -8317,3 +8317,34 @@ def test_the_picture_of_all_panels_is_arrangement_pys(tmp_path: Path) -> None:
         if mine.tobytes() != want.tobytes():
             differ = sum(a != b for a, b in zip(mine.getdata(), want.getdata(), strict=True))
             raise AssertionError(f"case {case}: {differ} pixels differ")
+
+
+def test_the_panel_tests_cards_are_doctor_pys() -> None:
+    """doctor.test_card (both ways up, round, inside the strips a bezel hides) and
+    doctor.ruler_card, in Pillow's default font: to the bit, on every panel's size."""
+    from libre_panel import doctor
+    from libre_panel.devices.models import MODELS
+
+    asked, wanted = [], []
+    for model in MODELS:
+        round_panel = model.shape == "round"
+        for way in ("landscape", "portrait"):
+            w, h = model.size(way)
+            hidden = {} if round_panel else model.hidden_edges(way)
+            edges = [hidden.get(edge, 0) for edge in ("top", "right", "bottom", "left")]
+            title, subtitle = "Libre Panel", f"{model.label} · {w}x{h} {way} · card 1"
+            wanted.append(doctor.test_card(w, h, title, subtitle, round_panel, hidden))
+            asked.append({"op": "doctor_card", "card": "test", "width": w, "height": h,
+                          "title": title, "subtitle": subtitle, "round": round_panel,
+                          "hidden": edges})  # fmt: skip
+        w, h = model.size("landscape")
+        wanted.append(doctor.ruler_card(w, h, step=2))
+        asked.append({"op": "doctor_card", "card": "ruler", "width": w, "height": h,
+                      "step": 2, "depth": 40})  # fmt: skip
+    for n, (got, want) in enumerate(zip(run(asked), wanted, strict=True)):
+        assert "error" not in got, (asked[n], got)
+        mine = picture(got["image"])
+        assert mine.size == want.size, asked[n]
+        if mine.tobytes() != want.tobytes():
+            differ = sum(a != b for a, b in zip(mine.getdata(), want.getdata(), strict=True))
+            raise AssertionError(f"{asked[n]}: {differ} pixels differ")

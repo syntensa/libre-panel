@@ -2137,6 +2137,18 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       shows. editor/server.py now answers a request that is no JSON object with 400 (it
       failed). The tests: the copy, config.toml and the modules placed as Python's, what is
       refused in the same words
+- [x] the panel test (doctor.py, doctor_session.py, `/api/doctor`, `libre-panel doctor`): the
+      loop gives the panel to the test and gets it back (PanelService hold/release); a TURZX
+      USB panel through the engine (its sync reply, whole frames as PNG, the brightness, opened
+      again), a panel of the Hongtai family through its driver; the test cards both ways up,
+      inside the strips the bezel hides, and the ruler, in Pillow's default font (Aileron,
+      basic layout); the questions with the app's buttons (ten minutes each, a cancel, a second
+      click refused) or in a terminal; the report, its text and the issue form filled in. Not
+      yet: the terminal's temperatures-and-power step (LibreHardwareMonitor's check, Linux's
+      system setup hint), the load in the report (load_report.py), and what only the panels
+      this build does not drive need (a rev. C panel's size asked, the other JPEG layout
+      tried). The tests: every panel's cards to the bit (lp-check doctor_card), and the whole
+      test on the running app with a simulated panel
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app
 - [x] one Libre Panel at a panel (instance.py): the system's lock on libre-panel.lock in the

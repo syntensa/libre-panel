@@ -2820,3 +2820,110 @@ def test_modules_are_sent_to_another_panel_as_distribute_py_sends_them(servers: 
         theirs, ours = ask(_post("/api/panels/send", body))
         assert ours[0] == theirs[0], body
         assert json.loads(ours[2]) == json.loads(theirs[2]), body
+
+
+def test_the_panel_test_runs_on_the_app_s_panel_as_doctor_session_py_runs_it(
+    tmp_path: Path,
+) -> None:
+    """Status → Diagnose → panel test on the running app with a simulated panel: the loop gives
+    the panel to the test, which asks with the app's buttons (the test cards both ways up, the
+    ruler's four edges, the brightness), sends whole frames and the brightness, opens the
+    panel again and reports; the loop then has the panel again. A second click on an answered
+    question, and a cancel, as Python's."""
+    rig = Rig(tmp_path)
+    try:
+        rig.config(
+            'theme = "slate"\nlanguage = "en"\n[device]\ndriver = "turzx"\n'
+            'model = "turing-9.2-usb"\nbrightness = 55\n[video]\nmode = "off"\n'
+            "[sensors]\nproviders = []\n"
+        )
+        env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+               **_libraries(), **rig.env()}  # fmt: skip
+        command = [str(_program()), "start", "--port", "0", "--no-browser"]
+        with subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              encoding="utf-8") as program:  # fmt: skip
+            try:
+                assert program.stdout is not None
+                address = program.stdout.readline().split(" running at ")[1].split()[0]
+                port = int(address.split(":")[2].split("/")[0])
+                token = address.split("#token=")[1]
+
+                def ask(request: str | bytes) -> tuple[str, Any]:
+                    text = request if isinstance(request, bytes) else request.encode("utf-8")
+                    text = text.replace(b"{host}", f"127.0.0.1:{port}".encode())
+                    text = text.replace(b"{token}", token.encode())
+                    status, _, answer = _asked(port, text)
+                    return status.split(" ", 2)[1], json.loads(answer)
+
+                assert _waited(lambda: len(rig.fake.frames) > 0 or None, 30), "no frame shown"
+                assert ask(_get("/api/doctor", WITH))[1] == {
+                    "state": "idle", "question": None, "error": "", "steps": []}  # fmt: skip
+                status, said = ask(_post("/api/doctor", {"action": "start"}))
+                assert status == "200" and said["state"] == "running", said
+                status, said = ask(_post("/api/doctor", {"action": "start"}))
+                assert (status, said["error"]) == ("409", "the panel test is running already")
+                before, asked, stale = len(rig.fake.frames), [], None
+                deadline = time.monotonic() + 120
+                while time.monotonic() < deadline:
+                    state = ask(_get("/api/doctor", WITH))[1]
+                    if state["state"] not in ("running", "asking"):
+                        break
+                    question = state["question"]
+                    if question is None:
+                        time.sleep(0.05)
+                        continue
+                    asked.append(question["key"])
+                    answer: dict[str, Any] = {"id": question["id"]}
+                    if question["kind"] == "confirm":
+                        answer["yes"] = True
+                    elif question["kind"] == "number":
+                        answer["number"] = 4
+                    status, said = ask(_post("/api/doctor", {"action": "answer",
+                                                             "answer": answer}))  # fmt: skip
+                    assert status == "200", said
+                    stale = answer
+                assert state["state"] == "done", state
+                assert asked == ["card-landscape", "card-portrait", "ruler-top", "ruler-bottom",
+                                 "ruler-left", "ruler-right", "brightness-watch",
+                                 "brightness"]  # fmt: skip
+                status, said = ask(_post("/api/doctor", {"action": "answer", "answer": stale}))
+                assert (status, said["error"]) == ("409", "the panel test asks nothing now")
+                report = state["report"]
+                assert report["passed"] and report["summary"] == "all checks passed", report
+                assert report["model"] == {"id": "turing-9.2-usb", "label": 'Turing 9.2"'}
+                names = [step["name"] for step in state["steps"]]
+                assert names[:4] == ["environment", "find and open a USB panel",
+                                     "handshake (command 10)", "test card, landscape"]  # fmt: skip
+                assert "close and reconnect" in names and names[-1] == "video mode"
+                ruler = next(s for s in state["steps"] if s["name"] == "hidden edges (ruler)")
+                assert ruler["detail"] == "hidden: top 2 px, bottom 2 px, left 2 px, right 2 px"
+                assert report["text"].startswith("Libre Panel doctor report — ")
+                assert "RESULT: all checks passed" in report["text"]
+                assert report["form"].startswith(
+                    "https://github.com/syntensa/libre-panel/issues/new?template=panel_support"
+                    ".yml&doctor=Libre+Panel+doctor+report"
+                )
+                levels = rig.fake.brightness
+                # dark, bright, then config.toml's again (the panel's own scale: 55 % of 102)
+                assert any(levels[i : i + 3] == [10, 102, 56] for i in range(len(levels))), levels
+                sent = rig.fake.frames[before:]
+                assert len(sent) >= 6 and all(f.size == (480, 1920) for f in sent)
+                # the loop has the panel again
+                after = len(rig.fake.frames)
+                assert _waited(lambda: len(rig.fake.frames) > after or None, 30)
+                status, said = ask(_post("/api/doctor", {"action": "start"}))
+                assert status == "200", said
+                assert _waited(lambda: ask(_get("/api/doctor", WITH))[1]["question"], 30)
+                status, said = ask(_post("/api/doctor", {"action": "cancel"}))
+                assert status == "200", said
+                assert _waited(
+                    lambda: ask(_get("/api/doctor", WITH))[1]["state"] == "cancelled" or None, 15
+                )
+                for body in ({"action": "nope"}, {"action": "answer", "answer": 5}, [1]):
+                    status, said = ask(_post("/api/doctor", body))
+                    assert status in ("400", "409"), (body, said)
+            finally:
+                program.terminate()
+                program.wait(10)
+    finally:
+        rig.close()

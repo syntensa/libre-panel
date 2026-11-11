@@ -15,6 +15,7 @@ mod company;
 mod consoles;
 mod display;
 mod distribute;
+mod doctor;
 mod drawings;
 mod editing;
 mod experiment;
@@ -85,6 +86,8 @@ Libre Panel
   libre-panel themes            the themes that are installed
   libre-panel models            the panels Libre Panel knows
   libre-panel ports             the serial ports and what is on them
+  libre-panel doctor [--report FILE] [--no-questions] [--frames N]
+                                check a connected panel and write a report
   libre-panel config            where config.toml is, and whether it is right
   libre-panel version
 
@@ -348,6 +351,37 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
                 _ => None,
             };
             MainLoop::new(home, asked)?.run(&STOP, &|| mainloop::Ending::Quit);
+        }
+        "doctor" => {
+            // libre-panel doctor [--report FILE] [--no-questions] [--frames N] [--config FILE]
+            let (mut report, mut questions, mut frames, mut config) = (None, true, 20, None);
+            let mut rest = args.iter();
+            while let Some(arg) = rest.next() {
+                let mut value = |name: &str| {
+                    rest.next()
+                        .cloned()
+                        .ok_or_else(|| format!("{name} needs a value"))
+                };
+                match arg.as_str() {
+                    "--report" => report = Some(PathBuf::from(value("--report")?)),
+                    "--no-questions" => questions = false,
+                    "--frames" => {
+                        frames = value("--frames")?
+                            .parse()
+                            .map_err(|_| "--frames: expected a whole number".to_string())?;
+                    }
+                    "--config" => config = Some(PathBuf::from(value("--config")?)),
+                    other => return Err(format!("unrecognized argument: {other}")),
+                }
+            }
+            let home = Home::find()?;
+            let file = config.unwrap_or_else(|| home.config_file());
+            // (one Libre Panel at a panel: the test has it alone)
+            let _lock =
+                instance::InstanceLock::acquire(&home.settings).map_err(|why| why.message())?;
+            if doctor::run_doctor(report, questions, frames, &file)? {
+                return Err(String::new());
+            }
         }
         "editor" => {
             let asked = asked(args)?;

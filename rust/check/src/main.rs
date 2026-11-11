@@ -2541,6 +2541,36 @@ fn run(case: &Value) -> Result<Value, String> {
                 Err(e) => json!({"error": e.0}),
             }
         }
+        "doctor_card" => {
+            // doctor.py's test_card and ruler_card
+            let int = |key: &str| case[key].as_i64().unwrap_or(0);
+            let made = match case["card"].as_str() {
+                Some("ruler") => lp_render::doctor_cards::ruler_card(
+                    int("width"),
+                    int("height"),
+                    int("step"),
+                    int("depth"),
+                ),
+                _ => {
+                    let hidden: Vec<i64> = (case["hidden"].as_array().into_iter().flatten())
+                        .filter_map(Value::as_i64)
+                        .collect();
+                    let hidden = [0, 1, 2, 3].map(|i| hidden.get(i).copied().unwrap_or(0));
+                    lp_render::doctor_cards::test_card(
+                        int("width"),
+                        int("height"),
+                        case["title"].as_str().unwrap_or(""),
+                        case["subtitle"].as_str().unwrap_or(""),
+                        case["round"].as_bool().unwrap_or(false),
+                        hidden,
+                    )
+                }
+            };
+            match made {
+                Ok(picture) => json!({"image": value_of(&picture)}),
+                Err(e) => json!({"error": e}),
+            }
+        }
         "render_frame" => {
             // render/renderer.py's Renderer(theme, preview=True, dither=...).render(snapshot) of
             // each theme's folder: its frame's SHA-256 (and bytes where asked) and its boxes;

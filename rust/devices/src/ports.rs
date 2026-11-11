@@ -19,7 +19,7 @@ pub const SERIAL_PROTOCOLS: [&str; 7] = [
 /// Generic Linux USB gadget serial ids, which awake rev. C panels use, and so do other
 /// devices (a Raspberry Pi as a USB gadget, development boards). Without a model in the
 /// config such a port counts only with the panels' serial number.
-const GADGET_IDS: [(u16, u16); 3] = [(0x0525, 0xA4A7), (0x1D6B, 0x0121), (0x1D6B, 0x0106)];
+pub const GADGET_IDS: [(u16, u16); 3] = [(0x0525, 0xA4A7), (0x1D6B, 0x0121), (0x1D6B, 0x0106)];
 const GADGET_SERIAL: &str = "20080411";
 
 /// A port a serial panel is on.

@@ -59,6 +59,8 @@ pub struct State {
     start_screen: crate::start_screen::Kept,
     /// the colour check and its A/B on a panel (colours.rs)
     colours: crate::colours::ColourCheck,
+    /// the panel test (doctor.rs)
+    doctor: crate::doctor::Session,
     /// the port the server listens on (what the AI hooks call)
     port: u16,
 }
@@ -361,6 +363,10 @@ const ROUTES: &[Route] = &[
         round_picture(s, x)
     }),
     private("POST", "/api/panels/send", |s, x, _, _| send_modules(s, x)),
+    private("GET", "/api/doctor", |s, x, _, _| {
+        x.json(&s.doctor.status(), 200)
+    }),
+    private("POST", "/api/doctor", |s, x, _, _| doctor_action(s, x)),
     picture("GET", "/api/across/picture", |s, x, _, _| {
         across_picture(s, x)
     }),
@@ -2098,6 +2104,55 @@ fn send_modules(state: &State, exchange: &mut Exchange) {
     }
 }
 
+/// `POST /api/doctor`: `{"action": "start"}`, `{"action": "answer", "answer": {...}}` or
+/// `{"action": "cancel"}`; answers the test's state (`GET /api/doctor`).
+fn doctor_action(state: &State, exchange: &mut Exchange) {
+    let Some(payload) = exchange.read_json(MAX_JSON) else {
+        return;
+    };
+    let action = match &payload {
+        Value::Dict(payload) => payload.get("action").and_then(Value::as_str),
+        _ => None,
+    };
+    let session = &state.doctor;
+    let done = match action {
+        Some("start") => {
+            let settings = settings_of(state);
+            let devices = settings.report().ok().and_then(|report| {
+                report
+                    .as_dict()
+                    .and_then(|report| report.get("text"))
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            });
+            session.start(crate::doctor::Start {
+                app: state.controls.upgrade(),
+                config_file: state.config_file.clone(),
+                devices,
+            })
+        }
+        Some("answer") => {
+            let answer = match &payload {
+                Value::Dict(payload) => payload.get("answer"),
+                _ => None,
+            };
+            session.answer(answer)
+        }
+        Some("cancel") => Ok(session.cancel()),
+        _ => {
+            return exchange.error(
+                "expected {\"action\": \"start\", \"answer\" or \"cancel\"}",
+                400,
+                "",
+            )
+        }
+    };
+    match done {
+        Ok(told) => exchange.json(&told, 200),
+        Err(crate::doctor::Refused(why)) => exchange.error(&why, 409, ""),
+    }
+}
+
 /// int(text) as Python reads a whole number: blanks around it, a sign, digits with single
 /// underscores between them.
 fn py_int(text: &str) -> Option<num_bigint::BigInt> {
@@ -2527,6 +2582,7 @@ impl EditorServer {
                 previews: crate::previews::Previews::default(),
                 start_screen: crate::start_screen::Kept::default(),
                 colours,
+                doctor: crate::doctor::Session::default(),
             }),
             listener: Some(listener),
             stop: Arc::default(),

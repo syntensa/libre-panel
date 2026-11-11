@@ -13,6 +13,7 @@ mod calendar;
 pub mod compose;
 pub mod countdown;
 pub mod cover;
+pub mod doctor_cards;
 pub mod download;
 pub mod earth;
 pub mod effects;

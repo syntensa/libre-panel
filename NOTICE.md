@@ -137,7 +137,9 @@ Copyright © 2010 by Jeffrey 'Alex' Clark and contributors; MIT-CMU.
 the Python app makes with Pillow, to the same bytes, and carry parts of Pillow's code
 (`PIL/*.py` and libImaging's C) in their own words: its image operations (`rust/pixels`), how it
 decodes pictures (`rust/decode`), and how it lays out and draws letters with FreeType
-(`rust/text`). By obtaining, using, and/or copying this software and/or its associated
+(`rust/text`). The panel test's cards (`rust/render`) are drawn in the font Pillow carries as its
+default, Aileron Regular by Sora Sagano (dotcolon.net), dedicated to the public domain (CC0 1.0).
+By obtaining, using, and/or copying this software and/or its associated
 documentation, you agree that you have read, understood, and will comply with the following
 terms and conditions: Permission to use, copy, modify and distribute this software and its
 documentation for any purpose and without fee is hereby granted, provided that the above

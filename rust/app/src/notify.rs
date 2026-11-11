@@ -152,7 +152,7 @@ pub fn notice(params: &Dict) -> Result<Toast, String> {
 }
 
 /// urllib.parse.quote_plus
-fn quote_plus(text: &str) -> String {
+pub fn quote_plus(text: &str) -> String {
     let mut out = String::new();
     for byte in text.bytes() {
         match byte {

@@ -525,6 +525,8 @@ struct Connection {
     pid: u16,
     model: Option<&'static PanelModel>,
     firmware: String,
+    /// what the panel answered to the sync
+    reply: Vec<u8>,
     /// where it is on the bus, while it is open (take_place)
     place: Option<String>,
 }
@@ -609,6 +611,7 @@ impl Connection {
             pid,
             model: setup.model.or_else(|| usb::model_of(pid)),
             firmware: firmware_of(&reply),
+            reply,
             place,
         })
     }
@@ -657,6 +660,16 @@ impl FileLink {
         usb::model_of(self.conn.pid).or(self.conn.model)
     }
 
+    /// The panel's product id (the 1cbe:pid of its USB ids).
+    pub fn pid(&self) -> u16 {
+        self.conn.pid
+    }
+
+    /// What the panel answered to the sync when it was opened.
+    pub fn reply(&self) -> &[u8] {
+        &self.conn.reply
+    }
+
     /// A command and its reply, accepted (UsbTransport.command).
     pub fn command(
         &self,
@@ -674,9 +687,9 @@ impl FileLink {
         self.conn.link.ask(cmd, args, 2000, echo)
     }
 
-    /// What the panel still had to say read away (UsbTransport.drain).
-    pub fn drain(&self) {
-        self.conn.link.drain(50, 64);
+    /// What the panel still had to say read away (UsbTransport.drain): how many replies.
+    pub fn drain(&self) -> u32 {
+        self.conn.link.drain(50, 64)
     }
 }
 

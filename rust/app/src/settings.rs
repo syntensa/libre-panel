@@ -1662,7 +1662,7 @@ pub fn open_path(path: &Path) -> std::io::Result<()> {
 }
 
 /// platform.system(), .release() and .machine().
-fn platform() -> (String, String, String) {
+pub fn platform() -> (String, String, String) {
     #[cfg(unix)]
     {
         // SAFETY: uname fills the struct it is given.

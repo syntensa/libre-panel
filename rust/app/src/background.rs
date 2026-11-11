@@ -55,6 +55,10 @@ pub struct PanelService {
     company: Arc<Company>,
     loops: Mutex<Loops>,
     paused: AtomicBool,
+    /// the panel test has the panel (hold): the loop does not start until it gives it back
+    held: AtomicBool,
+    /// whether the loop was paused when the panel test took the panel
+    before: AtomicBool,
     /// why the loop ends (Ending's number): Libre Panel quits (stop()) or the computer sleeps
     /// (sleep()), and the panel may go dark; a pause or a restart leaves it
     ending: Arc<AtomicU8>,
@@ -87,6 +91,8 @@ impl PanelService {
             company,
             loops: Mutex::default(),
             paused: AtomicBool::new(false),
+            held: AtomicBool::new(false),
+            before: AtomicBool::new(false),
             ending: Arc::default(),
             asleep: AtomicBool::new(false),
             error: Arc::default(),
@@ -111,6 +117,10 @@ impl PanelService {
     }
 
     pub fn start(&self) {
+        if self.held.load(Ordering::Relaxed) {
+            say("the panel test has the panel: the panel starts after it");
+            return;
+        }
         let Ok(mut loops) = self.loops.lock() else {
             return;
         };
@@ -185,6 +195,35 @@ impl PanelService {
         self.start();
         // (the loop of an earlier try still hangs on a panel)
         self.running().then_some(()).ok_or_else(stuck)
+    }
+
+    /// hold: give the panel to the panel test (doctor.rs): the loop stops, releases the
+    /// panel and does not start again, from the tray or a shortcut either, until `release`.
+    /// Whether it ran; an error where the loop does not let the panel go.
+    pub fn hold(&self) -> Result<bool, String> {
+        let ran = self.running() && !self.paused();
+        self.before.store(self.paused(), Ordering::Relaxed);
+        self.held.store(true, Ordering::Relaxed);
+        self.paused.store(true, Ordering::Relaxed);
+        if !self.halt() {
+            // it hangs on the panel: the test would talk to it at the same time
+            self.held.store(false, Ordering::Relaxed);
+            self.paused
+                .store(self.before.load(Ordering::Relaxed), Ordering::Relaxed);
+            return Err("the panel loop did not let the panel go; restart Libre Panel".into());
+        }
+        Ok(ran)
+    }
+
+    /// release: the panel test is done: the loop starts again where it ran before, and stays
+    /// paused where it was.
+    pub fn release(&self, resume: bool) {
+        self.held.store(false, Ordering::Relaxed);
+        self.paused
+            .store(self.before.load(Ordering::Relaxed), Ordering::Relaxed);
+        if resume {
+            self.start();
+        }
     }
 
     /// pause: stop sending frames and release the panel (another program may use it).
