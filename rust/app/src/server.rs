@@ -360,6 +360,7 @@ const ROUTES: &[Route] = &[
     private("POST", "/api/history/picture", |s, x, _, _| {
         round_picture(s, x)
     }),
+    private("POST", "/api/panels/send", |s, x, _, _| send_modules(s, x)),
     picture("GET", "/api/across/picture", |s, x, _, _| {
         across_picture(s, x)
     }),
@@ -2062,6 +2063,38 @@ fn round_picture(state: &State, exchange: &mut Exchange) {
     match crate::photos::round_picture(app.as_deref(), &state.config_file, &places, &env, ident) {
         Ok(told) => exchange.json(&Value::Dict(told), 200),
         Err((status, why)) => exchange.error(&why, status, ""),
+    }
+}
+
+/// `POST /api/panels/send {"panel": 2, "modules": [...]}`: modules of the theme in Design sent
+/// to the theme another panel shows (distribute.rs), a copy of its own first where that is
+/// built in.
+fn send_modules(state: &State, exchange: &mut Exchange) {
+    let Some(payload) = exchange.read_json(MAX_JSON) else {
+        return;
+    };
+    let (number, modules) = match &payload {
+        Value::Dict(payload) => (payload.get("panel"), payload.get("modules")),
+        _ => (None, None),
+    };
+    let (Some(Value::Int(number)), Some(Value::List(modules))) = (number, modules) else {
+        return exchange.error("expected {\"panel\": 2, \"modules\": [...]}", 400, "");
+    };
+    if !(1..=32).contains(&modules.len()) || !modules.iter().all(|m| m.as_dict().is_some()) {
+        return exchange.error("modules: 1 to 32 of them", 400, "");
+    }
+    let number = i64::try_from(number).unwrap_or(i64::MAX);
+    let settings = settings_of(state);
+    let seen = match (&settings.controls, usize::try_from(number - 2)) {
+        (Some(app), Ok(n)) => app.panel.beside_theme(n),
+        _ => String::new(),
+    };
+    let env = lp_theme::Env {
+        fonts_dir: state.home.fonts(),
+    };
+    match crate::distribute::send(modules, number, &seen, &settings, &env) {
+        Ok(told) => exchange.json(&Value::Dict(told), 200),
+        Err(why) => exchange.error(&why, 409, ""),
     }
 }
 

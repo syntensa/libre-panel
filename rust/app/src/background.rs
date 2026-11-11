@@ -254,6 +254,19 @@ impl PanelService {
         }
     }
 
+    /// beside_theme: the theme the loop of the panel `[[panels]]` at `n` says it shows (""
+    /// where it does not run, or says none).
+    pub fn beside_theme(&self, n: usize) -> String {
+        let beside = self
+            .status
+            .lock()
+            .ok()
+            .and_then(|first| first.more.get(&n).cloned());
+        beside
+            .and_then(|beside| beside.lock().ok().map(|status| status.theme.clone()))
+            .unwrap_or_default()
+    }
+
     /// told: what each panel's loop says of it (its model and the size of its frames): the
     /// first panel's, then those of the first `count` of `[[panels]]`; None for one whose
     /// loop does not run.

@@ -2129,6 +2129,14 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       Pictures folder (`Libre Panel`, the next free name), which then opens. The tests: the
       picture of the panels to the bit (lp-check panels_photo), and the round's picture with
       the same name and pixels as Python's, what is refused in the same words
+- [x] modules sent to another panel (distribute.py, `/api/panels/send`): the theme that
+      panel shows (as its loop says, else config.toml's in the version for its size) gets
+      them on free cells of its grid, in their own size where that fits, else smaller, with
+      an id of their own where the theme has theirs; a built-in theme gets a copy of the
+      person's own first ("slate-own", a companion's a companion still), which the panel then
+      shows. editor/server.py now answers a request that is no JSON object with 400 (it
+      failed). The tests: the copy, config.toml and the modules placed as Python's, what is
+      refused in the same words
 - [ ] the pages in Rust (WebAssembly), view by view, with the same HTML and CSS; the browser
       tests (Playwright) against the Rust app
 - [x] one Libre Panel at a panel (instance.py): the system's lock on libre-panel.lock in the

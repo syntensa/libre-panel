@@ -295,7 +295,7 @@ fn int_value(n: i64) -> Value {
     Value::int(n)
 }
 
-fn grid_settings(theme: &Theme) -> lp_theme::grid::Settings {
+pub fn grid_settings(theme: &Theme) -> lp_theme::grid::Settings {
     let int = |g: &Dict, k: &str| match g.get(k) {
         Some(Value::Int(n)) => i64::try_from(n).unwrap_or(0),
         Some(Value::Bool(b)) => i64::from(*b),

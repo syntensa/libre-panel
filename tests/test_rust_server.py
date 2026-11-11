@@ -2781,3 +2781,42 @@ def test_the_pictures_of_the_panels_and_of_a_round_are_made_as_server_py_makes_t
     theirs, ours = ask(_get("/api/panels/photo", WITH))
     assert ours[0] == theirs[0] == "HTTP/1.0 404 Not Found"
     assert json.loads(ours[2]) == json.loads(theirs[2])
+
+
+def test_modules_are_sent_to_another_panel_as_distribute_py_sends_them(servers: Any) -> None:
+    """Design → a module's menu → Copy to panel 2 (/api/panels/send): a built-in theme gets a
+    copy of the person's own with the module on free cells, and the panel shows it from then
+    on, the same file and config.toml as Python's; again: into the copy, beside the first,
+    with an id of its own; what cannot be sent refused in the same words."""
+    ask, homes = servers
+    for home in homes:
+        with (home / "config.toml").open("a", encoding="utf-8") as config:
+            config.write('\n[[panels]]\nmodel = "turing-9.2-usb"\ntheme = "slate"\n')
+    cpu = {"type": "module", "id": "cpu", "module": "stat", "source": "cpu", "col": 0,
+           "row": 0, "cols": 2, "rows": 1}  # fmt: skip
+    theirs, ours = ask(_post("/api/panels/send", {"panel": 2, "modules": [cpu]}))
+    assert ours[0] == theirs[0] == "HTTP/1.0 200 OK", ours[2]
+    python, mine = json.loads(theirs[2]), json.loads(ours[2])
+    assert mine == python == {"theme": "slate-own", "copied": True, "ids": ["cpu"]}
+    copies = [(home / "themes" / "slate-own" / "theme.json").read_text("utf-8") for home in homes]
+    assert copies[1] == copies[0] and '"Slate (meins)"' in copies[0]  # (in German)
+    configs = [(home / "config.toml").read_text("utf-8") for home in homes]
+    assert configs[1] == configs[0] and 'theme = "slate-own"' in configs[0]
+    theirs, ours = ask(_post("/api/panels/send", {"panel": 2, "modules": [cpu, cpu]}))
+    assert ours[0] == theirs[0] == "HTTP/1.0 200 OK", ours[2]
+    python, mine = json.loads(theirs[2]), json.loads(ours[2])
+    assert mine["theme"] == python["theme"] == "slate-own" and not mine["copied"]
+    assert len(mine["ids"]) == len(python["ids"]) == 2 and "cpu" not in mine["ids"]
+
+    def placed(home: Path) -> list[Any]:
+        data = json.loads((home / "themes" / "slate-own" / "theme.json").read_text("utf-8"))
+        modules = [w for w in data["widgets"] if w.get("type") == "module"]
+        return [{k: v for k, v in w.items() if k != "id"} for w in modules]
+
+    assert placed(homes[1]) == placed(homes[0]) and len(placed(homes[0])) == 3
+    for body in ({"panel": 3, "modules": [cpu]}, {"panel": 2, "modules": [{"type": "text"}]},
+                 {"panel": True, "modules": [cpu]}, {"panel": 2, "modules": []},
+                 {"panel": 2, "modules": [1]}, {"panel": 2}, [2]):  # fmt: skip
+        theirs, ours = ask(_post("/api/panels/send", body))
+        assert ours[0] == theirs[0], body
+        assert json.loads(ours[2]) == json.loads(theirs[2]), body

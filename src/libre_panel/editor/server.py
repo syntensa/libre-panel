@@ -2201,6 +2201,7 @@ class EditorHandler(BaseHTTPRequestHandler):
         payload = self._read_json()
         if payload is None:
             return None
+        payload = payload if isinstance(payload, dict) else {}
         number, modules = payload.get("panel"), payload.get("modules")
         if not isinstance(number, int) or isinstance(number, bool) or not isinstance(modules, list):
             return self._error('expected {"panel": 2, "modules": [...]}')

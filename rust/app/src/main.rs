@@ -14,6 +14,7 @@ mod colours;
 mod company;
 mod consoles;
 mod display;
+mod distribute;
 mod drawings;
 mod editing;
 mod experiment;
