@@ -29,6 +29,7 @@ pub mod serial_panel;
 mod table;
 pub mod thermalright;
 pub mod thermaltake;
+pub mod turing_rev_c;
 pub mod turzx;
 pub mod turzx_packet;
 pub mod udisp;

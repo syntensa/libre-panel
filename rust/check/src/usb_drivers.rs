@@ -423,6 +423,32 @@ fn serial_opened(case: &Value, events: &Events) -> Result<Box<dyn Driver>, Strin
         }),
         "rev_d" => open!(RevD),
         "weact" => open!(WeAct),
+        "rev_c" => {
+            use lp_devices::serial::PortInfo;
+            let ports: Vec<PortInfo> = case["ports"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|p| PortInfo {
+                    device: p["device"].as_str().unwrap_or("").to_string(),
+                    vid: p["vid"].as_u64().map(|v| v as u16),
+                    pid: p["pid"].as_u64().map(|v| v as u16),
+                    serial_number: p["serial"].as_str().map(str::to_string),
+                    description: "n/a".into(),
+                })
+                .collect();
+            let mut panel = lp_devices::turing_rev_c::panel(model, configured, "");
+            panel.family.pauses = false;
+            let mut link = Some(link as Box<dyn lp_devices::link::Link>);
+            let mut opening =
+                |_device: &str| -> lp_devices::base::Result<Box<dyn lp_devices::link::Link>> {
+                    link.take()
+                        .ok_or_else(|| lp_devices::base::DeviceError("opened twice".into()))
+                };
+            lp_devices::turing_rev_c::open(&mut panel, "", &|| ports.clone(), &mut opening)
+                .map_err(|e| e.0)?;
+            Ok(Box::new(panel) as Box<dyn Driver>)
+        }
         "ds916" => {
             let mut panel = lp_devices::jonsbo_ds916::Ds916::new(model, "");
             panel

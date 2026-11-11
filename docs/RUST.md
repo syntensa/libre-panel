@@ -1684,8 +1684,13 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
 - [x] JONSBO DS916 (rust/devices' jonsbo_ds916: asked what it is, its framebuffer's size from
       its answer, whole JPEGs within 256 KB, the last one again every half second;
       tests/test_rust_serial_drivers.py)
-- [ ] Turing rev. C, the panel as a monitor (Windows' virtual display driver,
-      X11, Wayland)
+- [x] Turing rev. C (rust/devices' turing_rev_c: a sleeping panel woken, an awake one taken as
+      it is, the size by its serial number or the first frame, HELLO and the ROM version,
+      whole frames and boxes in the panel's framebuffer with their 250-byte blocks, a box
+      that would end where the panel loses it sent as two, a whole frame after
+      "needReSend:1"; tests/test_rust_serial_drivers.py)
+- [x] the panel as a monitor (the app's extend, mirror and wayland: Windows' Virtual Display
+      Driver, X11's monitor beyond the others, Wayland's screen cast; see the entries above)
 
 ### R7 sensors
 - [ ] Linux: hwmon, /proc, the cards' (amdgpu, NVML), storage, network, fans

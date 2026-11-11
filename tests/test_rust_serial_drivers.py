@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 import random
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -23,6 +24,7 @@ from libre_panel.devices import (
     serial_panel,
     turing_rev_a,
     turing_rev_b,
+    turing_rev_c,
     weact,
 )
 from libre_panel.devices.models import get_model
@@ -64,6 +66,7 @@ DRIVERS = {
     "rev_d": kipye_rev_d.RevDDisplay,
     "weact": weact.WeActDisplay,
     "ds916": jonsbo_ds916.Ds916Display,
+    "rev_c": turing_rev_c.RevCDisplay,
 }
 
 
@@ -76,6 +79,11 @@ def _python_session(case: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> di
                         lambda device, baud, rtscts: FakePort(case, events))  # fmt: skip
     monkeypatch.setattr(turing_rev_b.RevBDisplay, "sleep", staticmethod(lambda seconds: None))
     monkeypatch.setattr(jonsbo_ds916, "AGAIN_S", 3600.0)
+    monkeypatch.setattr(turing_rev_c.RevCDisplay, "sleep", staticmethod(lambda seconds: None))
+    ports = [SimpleNamespace(device=p["device"], vid=p.get("vid"), pid=p.get("pid"),
+                             serial_number=p.get("serial"), description="n/a")
+             for p in case.get("ports", [])]  # fmt: skip
+    monkeypatch.setattr(serial_link, "_ports", lambda: list(ports))
     model = get_model(case["model"]) if case.get("model") else None
     display = DRIVERS[case["driver"]](DeviceConfig(driver="turzx"), model,
                                       configured=case.get("configured", True))  # fmt: skip
@@ -163,7 +171,46 @@ def _case(rng: random.Random, driver: str) -> dict[str, Any]:
             "fail_writes": fail}  # fmt: skip
 
 
-@pytest.mark.parametrize("driver", list(DRIVERS))
+@pytest.mark.parametrize("driver", [d for d in DRIVERS if d != "rev_c"])
 def test_serial_sessions_as_the_python_drivers_drive_them(driver, monkeypatch) -> None:
     rng = random.Random(f"serial-{driver}")
     assert _compare([_case(rng, driver) for _ in range(20)], monkeypatch) > 5
+
+
+def _rev_c_case(rng: random.Random) -> dict[str, Any]:
+    model = rng.choice(["turing-2.1", "turing-5", "turing-8.8"])
+    configured = rng.random() < 0.6
+    hello = rng.choice([b"chs_5inch.dev1_rom1.87\0", b"chs_88inch.dev1_rom1.90",
+                        b"\x01status:x|" + b"chs_21inch.dev1_rom1.88",
+                        b"needReSend:0|renderCnt:3 " * 2 + b"chs_5inch.dev1_rom1.95",
+                        b"nothing at all"])  # fmt: skip
+    statuses = [rng.choice([b"needReSend:0|renderCnt:0", b"needReSend:1|renderCnt:7", b""])
+                .ljust(rng.choice([0, 30, 1024]), b"\0") for _ in range(12)]  # fmt: skip
+    w, h = {"turing-2.1": (480, 480), "turing-5": (480, 800), "turing-8.8": (480, 1920)}[model]
+    steps: list[dict[str, Any]] = []
+    for _ in range(rng.randrange(1, 5)):
+        roll = rng.random()
+        if roll < 0.2:
+            steps.append({"brightness": rng.choice([0, 50, 100])})
+            continue
+        size = rng.choice([(w, h), (h, w)])
+        region = None
+        if roll < 0.75:
+            x0, y0 = rng.randrange(size[0] - 1), rng.randrange(size[1] - 1)
+            region = [x0, y0, min(size[0], x0 + rng.randrange(1, 90)),
+                      min(size[1], y0 + rng.randrange(1, 90))]  # fmt: skip
+        steps.append({"show": _frame(rng, [size]), "region": region})
+    ports = [
+        {"device": "/dev/ttyS0", "vid": None, "pid": None, "serial": None},
+        {"device": "/dev/ttyACM3", "vid": 0x1D6B, "pid": 0x0121, "serial": "20080411"},
+    ]
+    fail = [[rng.randrange(2, 20), "write timeout"]] if rng.random() < 0.1 else []
+    return {"driver": "rev_c", "model": model if configured else None, "configured": configured,
+            "found": {"device": "/dev/ttyACM3", "model": "turing-5"}, "ports": ports,
+            "incoming": _b64(hello + b"".join(statuses)), "steps": steps,
+            "fail_writes": fail}  # fmt: skip
+
+
+def test_rev_c_sessions_as_turing_rev_c_py_drives_them(monkeypatch: pytest.MonkeyPatch) -> None:
+    rng = random.Random(0x7C)
+    assert _compare([_rev_c_case(rng) for _ in range(30)], monkeypatch) > 10

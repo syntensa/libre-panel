@@ -123,6 +123,16 @@ pub trait Family: Send {
         width: i64,
         height: i64,
     ) -> Result<()>;
+    /// Before a frame is shown: the model where the frame says it (Turing rev. C's first frame),
+    /// and the box to send (None: the whole frame).
+    fn fit(
+        &mut self,
+        _model: &mut Option<&'static PanelModel>,
+        _frame: &Image,
+        region: Option<Region>,
+    ) -> Option<Region> {
+        region
+    }
     /// Pixels for the box from (x0, y0) to (x1, y1), the last pixel included.
     fn send_bitmap(
         &mut self,
@@ -239,6 +249,8 @@ impl<F: Family> Driver for SerialPanel<F> {
         let Some(ctx) = self.ctx.as_mut() else {
             return Err(DeviceError("panel not open".into()));
         };
+        let region = self.family.fit(&mut self.model, frame, region);
+        ctx.model = self.model;
         let orientation = orientation_of(frame.width() as i64, frame.height() as i64);
         let size = self
             .model

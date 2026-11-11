@@ -144,6 +144,21 @@ fn serial(
         "serial-b" => opened!(RevB::default()),
         "serial-d" => opened!(RevD),
         "serial-weact" => opened!(WeAct),
+        "serial-c" => {
+            use lp_devices::turing_rev_c;
+            let mut panel = turing_rev_c::panel(model, configured, &device.port);
+            let mut opening = |port: &str| {
+                lp_devices::serial::SerialPort::open(port, 115_200, true)
+                    .map(|link| Box::new(link) as Box<dyn lp_devices::link::Link>)
+            };
+            let opened = turing_rev_c::open(
+                &mut panel,
+                &device.port,
+                &lp_devices::serial::ports,
+                &mut opening,
+            );
+            Some(opened.map(|()| Box::new(panel) as Box<dyn Driver>))
+        }
         "serial-jonsbo" => {
             let mut panel = lp_devices::jonsbo_ds916::Ds916::new(model, &device.port);
             Some(panel.open().map(|()| Box::new(panel) as Box<dyn Driver>))
