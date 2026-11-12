@@ -21,7 +21,8 @@ computer's own readings, on the same computer as 0.8.0; every change the same pi
   tables are integer formulas (each checked against its table for all 256 values, and the
   whole conversion against the tables for all 16.7 million colours), so the bytes are the
   same. A whole 12.3" frame takes 1.9 ms instead of 3.4; Lumen's changed blocks about 0.1 ms
-  less a frame.
+  less a frame. Where a strip it keeps shows, row by row, it finds in half the time (four
+  clear pixels passed over at once).
 - **The graphs' windows cut by the engine, as in 0.8.** Where the engine keeps the graphs'
   strips, the app sends a window as what it is cut from and no longer cuts it itself (some
   0.75 MB a graph and frame on the 12.3"); a strip that grows goes as its new columns. A
