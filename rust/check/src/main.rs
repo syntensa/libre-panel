@@ -2631,6 +2631,13 @@ fn run(case: &Value) -> Result<Value, String> {
                         renderer.place = lat.as_f64().zip(lon.as_f64());
                     }
                     renderer.fps = c["fps"].as_f64().unwrap_or(0.0);
+                    // (the windows of scrolling graphs left out where asked, the frame laying
+                    // what they are cut from as an engine that keeps it cuts them: a panel's
+                    // loop through the engine)
+                    renderer.left_out_windows = c["left_out"].as_bool().unwrap_or(false);
+                    // (video mode: every frame reaches the panel, the graphs scroll on in each,
+                    // as the loop sets it for a panel that streams)
+                    renderer.continuous = c["continuous"].as_bool().unwrap_or(false);
                     // (what the person chose for the fans, as the app sets it: a look and paint
                     // for all, and for some by their sensor)
                     if let Some(chosen) = c["fan_choices"].as_object() {
@@ -2668,7 +2675,14 @@ fn run(case: &Value) -> Result<Value, String> {
                     renderer.video_fps = c["video_fps"].as_u64().map(|f| f as u32);
                     renderer.video_keys = c["video_keys"].as_bool().unwrap_or(false);
                     let bytes = c["bytes"].as_bool() == Some(true);
-                    let mut frame_at = |snapshot: &Value, now: f64| {
+                    let mut frame_at = |snapshot: &Value, now: f64, sample: &Value| {
+                        // (fresh readings taken at a time, the next after a while: as the loop
+                        // tells the renderer before the frame)
+                        if let Some([at, every]) = sample.as_array().map(Vec::as_slice) {
+                            if let (Some(at), Some(every)) = (at.as_f64(), every.as_f64()) {
+                                renderer.new_sample(at, every);
+                            }
+                        }
                         let mut out = match renderer.render(snapshot_of(snapshot), now) {
                             Ok((frame, boxes)) => {
                                 let sum = Sha256::digest(frame.as_bytes());
@@ -2711,11 +2725,18 @@ fn run(case: &Value) -> Result<Value, String> {
                     if let Some(steps) = c["steps"].as_array() {
                         let steps: Vec<Value> = steps
                             .iter()
-                            .map(|s| frame_at(&s["snapshot"], s["now"].as_f64().unwrap_or(1000.0)))
+                            .map(|s| {
+                                let now = s["now"].as_f64().unwrap_or(1000.0);
+                                frame_at(&s["snapshot"], now, &s["sample"])
+                            })
                             .collect();
                         return json!({"steps": steps});
                     }
-                    frame_at(&c["snapshot"], c["now"].as_f64().unwrap_or(1000.0))
+                    frame_at(
+                        &c["snapshot"],
+                        c["now"].as_f64().unwrap_or(1000.0),
+                        &c["sample"],
+                    )
                 })
                 .collect();
             lp_i18n::set_language(lp_i18n::Language::english());

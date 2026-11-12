@@ -42,13 +42,13 @@ fn end(w: &Dict, key: &str) -> Option<Value> {
 }
 
 /// What Python's arithmetic raises, as the widget's failure.
-fn py<T>(r: pn::Result<T>) -> Result<T> {
+pub(crate) fn py<T>(r: pn::Result<T>) -> Result<T> {
     r.map_err(|e| Failed(e.msg))
 }
 
 /// a == b of numbers as Python compares them: an int against a float exactly, NaN equal to
 /// nothing.
-fn same(a: &Value, b: &Value) -> bool {
+pub(crate) fn same(a: &Value, b: &Value) -> bool {
     compare(a, b) == Some(Ordering::Equal)
 }
 
@@ -111,7 +111,7 @@ pub(crate) const NAN_POINTS: &str =
     "graphs through points that are no numbers (a log scale of no finite span)";
 
 /// int(x) of a float, as Python takes it: toward zero, an error for NaN and the infinities.
-fn int_of(x: f64) -> Result<f64> {
+pub(crate) fn int_of(x: f64) -> Result<f64> {
     if x.is_nan() {
         return Err(Failed("cannot convert float NaN to integer".into()));
     }
@@ -813,11 +813,10 @@ impl Renderer {
         if self.continuous {
             // the curve is drawn from the gliding value: so is its end, where the curve is
             // drawn in this frame
-            let Some((w, value, (lo, hi))) = self.timeline_end(w, snapshot)? else {
+            let Some((w, value, range)) = self.timeline_end(w, snapshot)? else {
                 return Ok(None);
             };
             let s = crate::timeline::STRIP_SCALE;
-            let range = (Value::Float(lo), Value::Float(hi));
             return self.end_dot(&w, value, &range, s).map(Some);
         }
         let (values, _) = history_of(snapshot, w);
@@ -924,6 +923,8 @@ fn lit_curve(
     s: i64,
 ) -> Result<()> {
     let width = widget::int(w, "line_width", 2).saturating_mul(s) as i32;
+    // (points a strip draws this close are a curve already: no round joints, as the flat line)
+    let joints = widget::flag(w, "\0joints", true);
     let rgb = crate::light::mix(
         [255, 255, 255],
         [colour[0], colour[1], colour[2]],
@@ -936,7 +937,7 @@ fn lit_curve(
         let mut m = Image::blank(Mode::L, cw, ch);
         let mut draw = Draw::new(&mut m);
         for run in runs {
-            draw.line(run, Some([255, 0, 0, 0]), width, true)?;
+            draw.line(run, Some([255, 0, 0, 0]), width, joints)?;
         }
         Some(m)
     } else {
@@ -967,7 +968,7 @@ fn lit_curve(
         _ => {
             let mut draw = Draw::new(layer);
             for run in runs {
-                draw.line(run, Some(core), width, true)?;
+                draw.line(run, Some(core), width, joints)?;
             }
         }
     }

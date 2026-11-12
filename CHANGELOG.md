@@ -21,7 +21,11 @@ computer's own readings, on the same computer as 0.8.0; every change the same pi
   0.75 MB a graph and frame on the 12.3"); a strip that grows goes as its new columns. A
   whole strip is drawn in 0.83 ms instead of 1.52: its fill and its glow laid in one colour
   over what is clear without a division per pixel, its light blurred along the rows as down
-  the columns, for all of them at once.
+  the columns, for all of them at once. A window whose end is drawn again (a reading that
+  came otherwise than the strip drew ahead) and one with a glow beside it are cut by the
+  engine too, the end and the glow laid over the cut as 0.8 lays them: before, such a window
+  went as its pixels in every such frame, and the engine let go of the strip, which then
+  went whole again. Lumen sends the engine about 6 MB a second instead of 9.
 - **What stays the same is kept, as 0.8 keeps it**: the fans' rings, rotors and blades, the
   box the digits of a rolling clock fill (a frame of the roll 0.23 ms instead of 0.50), and
   which version of the theme is shown (looked up on the disk once a second, not every frame).
@@ -30,6 +34,15 @@ computer's own readings, on the same computer as 0.8.0; every change the same pi
   runner's engine: 2,663 page faults a second).
 
 **Fixed**
+- **Graphs in the video mode as Python draws them, in every case.** They are now compared with
+  Python frame for frame (the windows cut as the engine cuts them, and drawn in the app;
+  readings between two samples too, as the processor's load comes ten times a second, so the
+  end of a window is drawn again in many frames), and what that found is fixed: a graph whose
+  readings run out of what a float holds fails as Python's does (it was drawn, and a stretch
+  of such a range could ask for a picture of hundreds of gigabytes, enough to stop the app);
+  its end dot lies where the range's exact ends put it; a lit line's joints are as flat as
+  Python draws them where the points are dense; a strip that cannot be drawn is asked for
+  again only after a quarter of a second, the window cut from the one before meanwhile.
 - **Plugins on Windows: a page that starts the plugin host no longer waits two minutes.** The
   host inherited the browser's connection and held it open after the answer; it now inherits
   its own three pipes alone, as Python's subprocess starts a program.

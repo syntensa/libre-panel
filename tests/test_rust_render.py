@@ -7564,6 +7564,141 @@ def _gliding_graphs(tmp_path: Path, rng: random.Random, count: int, make: Any,
     return _compare_moving(cases, expected, level)
 
 
+def _video_graph(rng: random.Random, i: int, size: tuple[int, int],
+                 lit: bool = False) -> dict[str, Any]:  # fmt: skip
+    """A graph of a sensor's history as a panel in video mode shows it, scrolling on in every
+    frame (`lit`: with its glow, flat or lit); or something else."""
+    if rng.random() < 0.15:
+        return _card_or_text(rng, i, size)
+    graph = _graph(rng, i, size)
+    graph["sensor"] = rng.choice(GLIDE_SENSORS)
+    graph["w"] = rng.choice([0, 1, 2, 7, 40, 40, 120, 120, 300])
+    graph["h"] = rng.choice([1, 2, 9, 30, 60, 60, 100])
+    graph["history"] = rng.choice([10, 30, 60, 120])
+    if not lit:
+        for key in ("glow", "glow_radius", "finish"):
+            graph.pop(key, None)
+    elif rng.random() < 0.6:  # (a glow beside the window, more often: the strip's own)
+        graph["glow"] = rng.choice([0.21, 0.35, 1.0])
+        graph["glow_radius"] = rng.choice([2, 6, 10])
+        if rng.random() < 0.7:
+            graph.pop("clip", None)
+            graph.pop("finish", None)
+    return graph
+
+
+def _python_video(folder: Path, steps: list[tuple[Snapshot, float, tuple[float, float] | None]],
+                  fps: float, views: bool) -> list[dict[str, Any]] | None:  # fmt: skip
+    """Frames of a panel in video mode one after another by one renderer, as the loop draws
+    them (`views`: the windows of its graphs cut from the strips, as for the engine), the fresh
+    readings told to it where a step has them: _python_moving's."""
+    try:
+        renderer = Renderer(load_theme(folder), animate=True, preview=False)
+    except ThemeError:
+        return None
+    renderer.fps = fps
+    renderer.continuous = True
+    renderer.native_views = views
+    lists._RAN.clear()
+    out: list[dict[str, Any]] = []
+    for snapshot, now, sample in steps:
+        if sample is not None:
+            renderer.new_sample(*sample)
+        try:
+            frame, boxes = renderer.render(snapshot, now=now)
+            out.append({"frame": frame, "boxes": boxes, "moving": renderer.moving,
+                        "due": renderer.due})  # fmt: skip
+        except Exception as error:  # noqa: BLE001 (a frame Python cannot make)
+            out.append({"failed": f"{type(error).__name__}: {error}"})
+    return out
+
+
+def _video_graphs(tmp_path: Path, rng: random.Random, count: int, make: Any,
+                  level: bool = False, between: bool = False) -> tuple[int, int]:  # fmt: skip
+    """`count` themes of the graphs `make` makes on a panel in video mode, frame after frame at
+    its rate (now and then one left out), a reading a second that grows their histories, by Rust
+    and by Python; every other one with its graphs' windows left out, made of what they are cut
+    from as the engine cuts them: _compare_moving's counts. `between`: readings anew between
+    two samples too, their histories not (a source that follows on every frame, as the panels'
+    loop takes the hub's fresh ones)."""
+    cases, expected = [], []
+    for n in range(count):
+        folder = tmp_path / f"v{n}"
+        _frame_theme(rng, folder, make)
+        history = {k: _history(rng) for k in GLIDE_SENSORS if rng.random() < 0.9}
+        moment = datetime(2026, 11, 7, rng.randrange(24), rng.randrange(60), 5)
+        fps, views = rng.choice([25, 30, 50]), n % 2 == 1
+        now = taken = rng.uniform(1000, 2000)
+        steps: list[tuple[Snapshot, float, tuple[float, float] | None]] = []
+        given = []
+        fresh: dict[str, float] = {}
+        for k in range(rng.randrange(30, 110)):
+            sample = None
+            if k == 0 or now - taken >= 1.0:
+                if k:
+                    history = _histories_after(rng, history)
+                taken, sample, fresh = now, (now, 1.0), {}
+            elif between and history and rng.random() < 0.35:
+                key = rng.choice(sorted(history))
+                values = history[key]
+                last = values[-1] if values and math.isfinite(values[-1]) else 50.0
+                fresh[key] = rng.choice([last * 1.02, last * 0.9, last + 7, last * 2 + 5, 0.0])
+            readings = {
+                key: Reading(key, fresh.get(key, values[-1]))
+                for key, values in history.items()
+                if values
+            }
+            snapshot = Snapshot(readings=readings, history=history, now=moment)
+            steps.append((snapshot, now, sample))
+            step: dict[str, Any] = {"snapshot": _snapshot_given(snapshot), "now": now}
+            if sample is not None:
+                step["sample"] = list(sample)
+            given.append(step)
+            now += rng.choice([1, 1, 1, 1, 2, 3]) / fps
+        cases.append({"folder": str(folder), "dither": False, "animate": True, "preview": False,
+                      "continuous": True, "left_out": views, "fps": fps, "steps": given,
+                      "bytes": level})  # fmt: skip
+        expected.append(_python_video(folder, steps, fps, views))
+    return _compare_moving(cases, expected, level)
+
+
+def test_graphs_in_video_mode_as_python_draws_them(tmp_path: Path) -> None:
+    # (a panel that streams: each graph a window into a strip drawn ahead, scrolling on in
+    # every frame, the strip grown from the one before where a reading came, its end drawn
+    # again where the reading went otherwise than drawn; the windows cut from the strips as
+    # the engine cuts them, or drawn here)
+    drawn, moving = _video_graphs(tmp_path, random.Random(0x7A1), 40, _video_graph)
+    assert drawn > 1500 and moving > 1000, (drawn, moving)
+
+
+def test_glowing_graphs_in_video_mode_within_a_level(tmp_path: Path) -> None:
+    # (the same with their glow, flat or lit: their light blurred in floating point, so now
+    # and then a pixel a level apart; the glow beside the window cut from the strip's own)
+    make = functools.partial(_video_graph, lit=True)
+    drawn, moving = _video_graphs(tmp_path, random.Random(0x7A2), 30, make, True)
+    assert drawn > 1000 and moving > 700, (drawn, moving)
+
+
+def test_graphs_in_video_mode_with_readings_between_samples_as_python_draws_them(
+    tmp_path: Path,
+) -> None:
+    # (readings that come between two samples, as sources that follow every frame bring them:
+    # the value glides off the course the strip drew ahead, so the window's end is drawn again
+    # until the next strip, in many frames, the window moving on a column every few of them)
+    make = _video_graph
+    drawn, moving = _video_graphs(tmp_path, random.Random(0x7A3), 40, make, between=True)
+    assert drawn > 1500 and moving > 1000, (drawn, moving)
+
+
+def test_glowing_graphs_in_video_mode_with_readings_between_samples_within_a_level(
+    tmp_path: Path,
+) -> None:
+    # (the same with their glow, flat or lit: the end drawn again with the glow round it)
+    make = functools.partial(_video_graph, lit=True)
+    drawn, moving = _video_graphs(tmp_path, random.Random(0x7A4), 30, make, True, between=True)
+    assert drawn > 1000 and moving > 700, (drawn, moving)
+
+
 def test_graphs_whose_own_range_glides_as_python_draws_them(tmp_path: Path) -> None:
     # (one renderer drawing its graphs frame after frame as the panels' loop does, their
     # histories growing: a range of its own gliding from the one drawn last toward the one it

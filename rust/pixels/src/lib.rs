@@ -218,6 +218,23 @@ impl Image {
         &self.data[at..at + b]
     }
 
+    /// Image.crop as Pillow takes a box worked out of numbers that may run away: refused, as
+    /// _decompression_bomb_check refuses it, where it has more than twice MAX_IMAGE_PIXELS (each
+    /// side counted as at least 1), before anything is made; else [`Image::crop`].
+    pub fn crop_checked(&self, x0: i64, y0: i64, x1: i64, y1: i64) -> Result<Image> {
+        // (twice int(1024 * 1024 * 1024 // 4 // 3))
+        const BOMB_PIXELS: u128 = 2 * 89_478_485;
+        let pixels =
+            (x1 - x0).unsigned_abs().max(1) as u128 * (y1 - y0).unsigned_abs().max(1) as u128;
+        if pixels > BOMB_PIXELS {
+            return Err(Error(format!(
+                "Image size ({pixels} pixels) exceeds limit of {BOMB_PIXELS} pixels, could be \
+                 decompression bomb DOS attack."
+            )));
+        }
+        Ok(self.crop(x0, y0, x1, y1))
+    }
+
     /// Image.crop(box), the box in whole pixels: what lies outside the image is 0 in every band
     /// (Crop.c fills the new image with zeros where the box reaches beyond it).
     pub fn crop(&self, x0: i64, y0: i64, x1: i64, y1: i64) -> Image {

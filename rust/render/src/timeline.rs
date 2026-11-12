@@ -9,12 +9,13 @@
 use std::rc::Rc;
 
 use lp_pixels::{chops, Filter, Image, Mode};
+use lp_py::num as pn;
 use lp_py::{Dict, Value};
 
 use crate::effects;
 use crate::graph::{self, Range};
 use crate::motion::{self, Course, History, RATE};
-use crate::piece::{Piece, Result};
+use crate::piece::{Failed, Piece, Result};
 use crate::renderer::Renderer;
 use crate::shapes;
 use crate::snapshot::Snapshot;
@@ -74,8 +75,10 @@ pub(crate) struct Strip {
     /// pixels, which are the same: blending, premultiplying and cutting go pixel by pixel.
     weighed: Vec<Image>,
     parts: i64,
-    /// the glow alone, for beside the window
-    halo: Option<Image>,
+    /// the glow alone, for beside the window ...
+    halo: Option<Rc<Image>>,
+    /// ... grown from the one before's where the steps were
+    halo_growth: Option<crate::piece::Growth>,
     /// drawn while the graph's own range glided: the next comes soon
     gliding: bool,
     /// the values it was drawn through, from point `first` (the next is made of it where they
@@ -120,7 +123,7 @@ pub(crate) type Fine = (String, Vec<Option<f64>>);
 
 /// A graph's end in video mode: the graph as it draws, the value at its right edge and the
 /// range it is shown in.
-pub(crate) type End = (Dict, f64, (f64, f64));
+pub(crate) type End = (Dict, f64, Range);
 
 /// What a strip is drawn as: its steps, them premultiplied, its glow alone, its pad, origin,
 /// width and fade.
@@ -149,12 +152,47 @@ impl Strips {
     }
 }
 
-fn py_floor(x: f64) -> i64 {
-    x.floor() as i64
+/// math.floor(x) and math.ceil(x) as Python takes them: an error for NaN and the infinities,
+/// and for one an i64 does not hold (Python's int would not go into a picture's sizes either).
+fn py_whole(x: f64) -> Result<i64> {
+    if x.is_nan() {
+        return Err(Failed("cannot convert float NaN to integer".into()));
+    }
+    if x.is_infinite() {
+        return Err(Failed("cannot convert float infinity to integer".into()));
+    }
+    // (-2**63 up to 2**63: what an i64 holds)
+    let most = -(i64::MIN as f64);
+    if !(-most..most).contains(&x) {
+        return Err(Failed("Python int too large to convert to C long".into()));
+    }
+    Ok(x as i64)
 }
 
-fn py_ceil(x: f64) -> i64 {
-    x.ceil() as i64
+/// max(a, b) and min(a, b) of floats as Python takes them: `a` unless `b` is greater (less),
+/// so a NaN first stays.
+fn py_max(a: f64, b: f64) -> f64 {
+    if b > a {
+        b
+    } else {
+        a
+    }
+}
+
+fn py_min(a: f64, b: f64) -> f64 {
+    if b < a {
+        b
+    } else {
+        a
+    }
+}
+
+fn py_floor(x: f64) -> Result<i64> {
+    py_whole(x.floor())
+}
+
+fn py_ceil(x: f64) -> Result<i64> {
+    py_whole(x.ceil())
 }
 
 /// A number of a range's end, as Python's float() takes it.
@@ -311,18 +349,19 @@ fn reach(w: &Dict) -> i64 {
 /// point (25 a second).
 fn graph_seconds(w: &Dict) -> f64 {
     let mut seconds = widget::number(w, "seconds", 0.0);
-    if seconds.is_nan() || seconds <= 0.0 {
+    // (a NaN stays, as in Python: what is worked out of it fails there and here)
+    if seconds <= 0.0 {
         seconds = (widget::int(w, "w", 200) - 1) as f64 / RATE;
     }
     let most = (motion::MAX_POINTS as f64 - 4.0 * RATE) / RATE;
-    seconds.max(2.0 / RATE).min(most)
+    py_min(py_max(seconds, 2.0 / RATE), most)
 }
 
 /// _strip_origin: the left edge (at the strip's scale) of a strip whose first point is
 /// `first`: a pixel before it, on the grid of STRIP_GRID.
-fn strip_origin(first: i64, per_point: f64) -> i64 {
+fn strip_origin(first: i64, per_point: f64) -> Result<i64> {
     let grid = STRIP_GRID * STRIP_SCALE;
-    (py_floor(first as f64 * per_point) - 1).div_euclid(grid) * grid
+    Ok((py_floor(first as f64 * per_point)? - 1).div_euclid(grid) * grid)
 }
 
 /// _fade_top: where a strip's fill starts to fade: its highest point; for a range in whole
@@ -336,14 +375,16 @@ fn fade_top(w: &Dict, numbers: &[f64], bounds: &Range, s: i64) -> Result<i64> {
         return Ok(0);
     }
     let scale = widget::text(w, "scale");
-    let mut highest = f64::NEG_INFINITY;
-    for &v in numbers {
+    // (the largest as Python's max finds it: the first, then each larger one; a NaN first
+    // stays, and int() of it fails, as there)
+    let mut highest = graph::fraction(numbers[0], bounds, scale)?;
+    for &v in &numbers[1..] {
         let f = graph::fraction(v, bounds, scale)?;
         if f > highest {
             highest = f;
         }
     }
-    Ok((first + (last - first) * (1.0 - highest)) as i64)
+    Ok(graph::int_of(first + (last - first) * (1.0 - highest))? as i64)
 }
 
 /// The columns `x0..x1` of `from` (as `crop` takes them: beyond its edges nothing) into `to`
@@ -449,16 +490,16 @@ impl Renderer {
 
     /// _parts: into how many parts a graph's steps are cut: so many that it moves on in every
     /// frame, by about the same.
-    fn parts(&self, per_point: f64) -> i64 {
+    fn parts(&self, per_point: f64) -> Result<i64> {
         let speed = if self.fps > 0.0 {
             RATE * per_point / self.fps
         } else {
             0.0
         };
         if speed <= 0.0 || speed >= 0.75 {
-            return 1;
+            return Ok(1);
         }
-        STRIP_PARTS.min(py_ceil(1.5 / speed))
+        Ok(STRIP_PARTS.min(py_ceil(1.5 / speed)?))
     }
 
     /// _graph_view: the time at a scrolling graph's right edge, and whether it moves: `now`,
@@ -483,22 +524,23 @@ impl Renderer {
 
     /// _range_now in video mode: a graph's own range at `now`, on its way to the one it glides
     /// to, the newest point inside too; None for a graph with min and max, or none drawn yet.
-    fn range_live(&self, w: &Dict, now: f64) -> Result<Option<(f64, f64)>> {
+    fn range_live(&self, w: &Dict, now: f64) -> Result<Option<Range>> {
         if graph::fixed(w) {
             return Ok(None);
         }
         let Some(state) = self.ranges.get(widget::text(w, "id")) else {
             return Ok(None);
         };
-        let (lo, hi) = graph::glide_now(w, state, now, self.options.animate)?;
-        let (mut lo, mut hi) = (float_of(&lo), float_of(&hi));
+        let (mut lo, mut hi) = graph::glide_now(w, state, now, self.options.animate)?;
         if self.options.animate && self.continuous {
             if let Some(live) = self.motion.value(widget::text(w, "sensor"), now) {
-                // (Python's min and max: the first where neither is less or greater)
-                if live < lo {
-                    lo = live;
+                // (min(lo, live) and max(hi, live) as Python takes them: the first where the
+                // other is not less or greater, an int against the float exactly)
+                let live = Value::Float(live);
+                if graph::py(pn::lt(&live, &lo))? {
+                    lo = live.clone();
                 }
-                if live > hi {
+                if graph::py(pn::gt(&live, &hi))? {
                     hi = live;
                 }
             }
@@ -510,25 +552,35 @@ impl Renderer {
     /// as in `now_range`: a row r of the drawn curve is a * r + c now, as (a, c); None where
     /// it stays as drawn (a curve on a scale other than linear, or hung from the top, and a
     /// stretch under a third of a pixel).
-    fn stretch(w: &Dict, drawn: &Range, now_range: (f64, f64)) -> Option<(f64, f64)> {
+    fn stretch(w: &Dict, drawn: &Range, now_range: &Range) -> Result<Option<(f64, f64)>> {
         let scale = widget::text(w, "scale");
         if !(scale.is_empty() || scale == "linear") || widget::text(w, "direction") == "down" {
-            return None;
+            return Ok(None);
         }
         let (first, last) = graph::range_rows(w, STRIP_SCALE);
         let s = STRIP_SCALE as f64;
         let (first, length) = (first / s, (last - first) / s);
-        let (lo, hi) = (float_of(&drawn.0), float_of(&drawn.1));
-        let (span, span_now) = (hi - lo, now_range.1 - now_range.0);
-        if !(span > 0.0 && span_now > 0.0) {
-            return None;
+        // (in Python's numbers: the ends' ints exactly, their spans too)
+        let span = graph::py(pn::sub(&drawn.1, &drawn.0))?;
+        let span_now = graph::py(pn::sub(&now_range.1, &now_range.0))?;
+        // (span <= 0 or span_now <= 0, as Python asks it: a NaN span is neither, and goes on
+        // into the stretch)
+        let zero = Value::int(0);
+        let not_above = |v: &Value| -> Result<bool> {
+            Ok(graph::py(pn::lt(v, &zero))? || graph::same(v, &zero))
+        };
+        if not_above(&span)? || not_above(&span_now)? {
+            return Ok(None);
         }
-        let a = span / span_now;
-        let c = first + length - length * (hi - now_range.0) / span_now - a * first;
-        if c.abs().max(((a - 1.0) * (first + length) + c).abs()) < 0.3 {
-            return None;
+        let a = float_of(&graph::py(pn::true_div(&span, &span_now))?);
+        let lead = graph::py(pn::sub(&drawn.1, &now_range.0))?;
+        let part = graph::py(pn::mul(&Value::Float(length), &lead))?;
+        let part = float_of(&graph::py(pn::true_div(&part, &span_now))?);
+        let c = first + length - part - a * first;
+        if py_max(c.abs(), ((a - 1.0) * (first + length) + c).abs()) < 0.3 {
+            return Ok(None);
         }
-        Some((a, c))
+        Ok(Some((a, c)))
     }
 
     /// _restretch: `layer` (a strip's window, `pad` px larger on every side), drawn in the
@@ -537,8 +589,9 @@ impl Renderer {
         let (width, height) = (layer.width(), layer.height());
         let top = pad as f64 - (pad as f64 + c) / a;
         let bottom = top + height as f64 / a;
-        let (y0, y1) = (py_floor(top) - 1, py_ceil(bottom) + 1);
-        let band = layer.crop(0, y0, width as i64, y1);
+        let (y0, y1) = (py_floor(top)? - 1, py_ceil(bottom)? + 1);
+        // (a band too tall to make is refused, as Pillow's crop refuses it)
+        let band = layer.crop_checked(0, y0, width as i64, y1)?;
         let bounds = (0.0, top - y0 as f64, width as f64, bottom - y0 as f64);
         Ok(band.resize(width, height, Filter::Bilinear, Some(bounds), None)?)
     }
@@ -580,9 +633,9 @@ impl Renderer {
         let w = dense(w, every as f64 * per_point);
         let numbers: Vec<f64> = values.iter().flatten().copied().collect();
         let top = fade_top(&w, &numbers, &bounds, s)?;
-        let origin = strip_origin(first, per_point);
+        let origin = strip_origin(first, per_point)?;
         let last = first + (values.len() as i64 - 1) * every;
-        let width = py_ceil((last as f64 * per_point - origin as f64 + 1.0) / s as f64) + 1;
+        let width = py_ceil((last as f64 * per_point - origin as f64 + 1.0) / s as f64)? + 1;
         let step = every as f64 * per_point;
         let at = first.div_euclid(every);
         let points: Vec<(f64, Option<f64>)> = values
@@ -633,13 +686,13 @@ impl Renderer {
     ) -> Result<Strip> {
         let key = widget::text(w, "sensor").to_string();
         let last = motion::grid(edge);
-        let ahead = py_ceil((self.sample.1 + STRIP_AHEAD_S) * RATE);
+        let ahead = py_ceil((self.sample.1 + STRIP_AHEAD_S) * RATE)?;
         let span = (widget::int(w, "w", 200) * STRIP_SCALE - 1) as f64 / per_point;
         let made_course = self.motion.course(&key);
         let (values, first) = values_of(
             history,
             made_course.as_ref().map(|(_, c)| c),
-            last - py_ceil(span) - margin - every,
+            last - py_ceil(span)? - margin - every,
             last + ahead + margin,
             every,
         );
@@ -686,6 +739,17 @@ impl Renderer {
                 .collect(),
             _ => vec![None; steps.len()],
         };
+        let halo_growth = match (grew, before, &halo) {
+            (Some((shift, keep)), Some(before), Some(_)) => {
+                before.halo.as_ref().map(|base| crate::piece::Growth {
+                    base: Rc::downgrade(base),
+                    shift,
+                    keep,
+                })
+            }
+            _ => None,
+        };
+        let halo = halo.map(Rc::new);
         let steps: Vec<Rc<Image>> = steps.into_iter().map(Rc::new).collect();
         self.strip_count += 1;
         Ok(Strip {
@@ -706,6 +770,7 @@ impl Renderer {
             weighed,
             parts,
             halo,
+            halo_growth,
             gliding,
             values,
             first,
@@ -759,17 +824,18 @@ impl Renderer {
             .count() as i64;
         let changed = first + same * every; // the first point that is not as it was
         let grid = STRIP_GRID * s;
-        let origin = strip_origin(first, per_point);
+        let origin = strip_origin(first, per_point)?;
         let last = first + (values.len() as i64 - 1) * every;
-        let width = py_ceil((last as f64 * per_point - origin as f64 + 1.0) / s as f64) + 1;
+        let width = py_ceil((last as f64 * per_point - origin as f64 + 1.0) / s as f64)? + 1;
         let pad = before.pad;
         // (the lit halo too)
         let reach = reach(&dense) + 3 * widget::int(&dense, "glow_radius", 10) + grid;
         let shift = (origin - before.origin).div_euclid(s); // the one before's columns, from
                                                             // this one's columns from `seam` on are drawn anew: from the segment that leads to the
                                                             // first point changed on, and the glow and line around it
-        let seam =
-            py_floor(((changed - every) as f64 * per_point - origin as f64) / s as f64) - reach - 2;
+        let seam = py_floor(((changed - every) as f64 * per_point - origin as f64) / s as f64)?
+            - reach
+            - 2;
         let seam = seam.min(before.width - shift - reach - 2);
         if seam < 2 * reach + pad || seam >= width {
             return Ok(None); // (little of it stays: drawn whole)
@@ -778,7 +844,7 @@ impl Renderer {
                              // drawn from here: the glow at `seam` is the whole's, and its grid the same
         let begin = (seam - reach - 2).div_euclid(step) * step;
         let x0 = origin + s * begin; // its left edge, at `s`
-        let lo = ((py_floor(x0 as f64 / per_point) - first).div_euclid(every) - 1).max(0) as usize;
+        let lo = ((py_floor(x0 as f64 / per_point)? - first).div_euclid(every) - 1).max(0) as usize;
         let points: Vec<(f64, Option<f64>)> = (lo..values.len())
             .map(|i| {
                 (
@@ -850,7 +916,7 @@ impl Renderer {
             .map(|(old, tail)| joined(old, tail))
             .collect::<Result<Vec<Image>>>()?;
         let halo = match (&before.halo, &halo) {
-            (Some(old), Some(tail)) => Some(joined(old, tail)?),
+            (Some(old), Some(tail)) => Some(joined(old.as_ref(), tail)?),
             _ => None,
         };
         let drawn = (steps, weighed, halo, pad, origin, width, before.top);
@@ -875,11 +941,11 @@ impl Renderer {
         // window columns from `start` on change (and the glow that reaches them); from `begin`
         // on, the patch draws what that glow sees
         let changed = (valid * RATE * strip.per_point - left as f64) / s as f64;
-        let start = (-pad).max(py_floor(changed) - reach);
+        let start = (-pad).max(py_floor(changed)? - reach);
         let (begin, end) = (start - reach, gw + pad + reach);
         let x0 = left + s * begin;
-        let first = py_floor(x0 as f64 / strip.per_point) - strip.every;
-        let last = py_ceil((x0 + s * (end - begin)) as f64 / strip.per_point) + strip.every;
+        let first = py_floor(x0 as f64 / strip.per_point)? - strip.every;
+        let last = py_ceil((x0 + s * (end - begin)) as f64 / strip.per_point)? + strip.every;
         let course = self.motion.course(widget::text(&w, "sensor"));
         let (values, first) = values_of(
             history,
@@ -947,17 +1013,17 @@ impl Renderer {
             .unwrap_or_default();
         let span = graph_seconds(&w) * RATE; // points across the window
         let per_point = (gw * s - 1) as f64 / span; // their distance, in pixels at `s`
-        let every = ((s as f64 / per_point) as i64).max(1); // long windows: a point a pixel
-        let margin = py_ceil(s as f64 * (pad_of(&w) + reach(&w) + 1) as f64 / per_point);
+        let every = (py_whole(graph::int_of(s as f64 / per_point)?)?).max(1); // long windows: a point a pixel
+        let margin = py_ceil(s as f64 * (pad_of(&w) + reach(&w) + 1) as f64 / per_point)?;
         let (view, scrolls) = self.graph_view(now, fine.is_some(), glide);
         self.moving |= scrolls;
         // a graph that steps shows up to a reading or two before now: as many points more
         let lag = if view >= now {
             0
         } else {
-            py_ceil((now - view).max(2.0 * self.sample.1) * RATE)
+            py_ceil((now - view).max(2.0 * self.sample.1) * RATE)?
         };
-        let size = (py_ceil(span) + margin + 2 * every + lag).max(0) as usize;
+        let size = (py_ceil(span)? + margin + 2 * every + lag).max(0) as usize;
         let interval = self.sample.1;
         let history = self
             .motion
@@ -977,8 +1043,8 @@ impl Renderer {
         // the window's left edge at `s`, point k sitting at k * per_point on every strip: the
         // newest point at the right edge, now
         let exact = view * RATE * per_point - (gw * s - 1) as f64;
-        let left = py_floor(exact);
-        let parts = self.parts(per_point);
+        let left = py_floor(exact)?;
+        let parts = self.parts(per_point)?;
         let ready = self
             .strips
             .get(&wid)
@@ -1009,6 +1075,11 @@ impl Renderer {
         };
         let asked = self.strips.get(&wid).map_or(f64::NEG_INFINITY, |s| s.asked);
         if due && now - asked >= every_s {
+            // (asked now, before it is made: one that fails is asked for again only after a
+            // while, the window cut from the strip there is meanwhile, as Python asks)
+            if let Some(strips) = self.strips.get_mut(&wid) {
+                strips.asked = now;
+            }
             let before = Rc::clone(&strip);
             let made = crate::prof::part("strip due", || {
                 let before = Some(&*before);
@@ -1019,12 +1090,11 @@ impl Renderer {
             strip = Rc::new(made);
             valid = strip.until;
             if let Some(strips) = self.strips.get_mut(&wid) {
-                strips.asked = now;
                 strips.ready = Some(strip.clone());
             }
         }
         // a step, and a part of one
-        let stepped = lp_py::round(exact * strip.parts as f64) as i64;
+        let stepped = py_whole(lp_py::round(exact * strip.parts as f64))?;
         let (left, part) = (
             stepped.div_euclid(strip.parts),
             stepped.rem_euclid(strip.parts),
@@ -1041,16 +1111,23 @@ impl Renderer {
             && (self.apart(&w, &strip, view)? >= 0.4 || self.apart(&w, &strip, beyond)? >= 4.0);
         // (its own range: where it is this frame)
         let mut now_range = self.range_live(&w, now)?;
-        if let Some((lo, hi)) = now_range {
-            let rounded = (lp_py::round_digits(lo, 3), lp_py::round_digits(hi, 3));
-            let drawn = (
-                lp_py::round_digits(float_of(&strip.bounds.0), 3),
-                lp_py::round_digits(float_of(&strip.bounds.1), 3),
-            );
-            now_range = (rounded != drawn).then_some(rounded);
+        if let Some((lo, hi)) = &now_range {
+            // (round(v, 3) of each: an int as it is; the tuples equal as Python finds them, a
+            // NaN equal to nothing)
+            let round3 = |v: &Value| match v {
+                Value::Float(f) => Value::Float(lp_py::round_digits(*f, 3)),
+                other => other.clone(),
+            };
+            let rounded = (round3(lo), round3(hi));
+            let drawn = (round3(&strip.bounds.0), round3(&strip.bounds.1));
+            let same = graph::same(&rounded.0, &drawn.0) && graph::same(&rounded.1, &drawn.1);
+            now_range = (!same).then_some(rounded);
         }
         // (a window its own range leaves as drawn is the strip's window, cut as any)
-        let stretch = now_range.and_then(|r| Self::stretch(&w, &strip.bounds, r));
+        let stretch = match &now_range {
+            Some(range) => Self::stretch(&w, &strip.bounds, range)?,
+            None => None,
+        };
         let content = Value::List(vec![
             Value::Str("timeline".into()),
             Value::int(strip.id as i64),
@@ -1069,7 +1146,16 @@ impl Renderer {
                 }
             }
         }
-        let window = |k: i64, column: i64, at: i64| -> Result<Image> {
+        // the end drawn again (where its left edge is `left`), laid over the window
+        let patched = if patch {
+            let (piece, x) = crate::prof::part("graph patch", || {
+                self.patch_piece(&w, &strip, &history, valid, left)
+            })?;
+            Some((Rc::new(piece), x))
+        } else {
+            None
+        };
+        let window = |k: i64, column: i64, end: Option<&(Rc<Image>, i64)>| -> Result<Image> {
             let k = k.clamp(0, strip.phase_count() - 1);
             let mut layer = strip.phase_window(k, column, gw + 2 * pad, gh + 2 * pad)?;
             if let Some(halo) = &strip.halo {
@@ -1079,24 +1165,23 @@ impl Renderer {
                     layer.paste(&side, x0, 0, None)?;
                 }
             }
-            if patch {
-                let (piece, x) = self.patch_piece(&w, &strip, &history, valid, at)?;
-                layer.paste(&piece, x, 0, None)?;
+            if let Some((piece, x)) = end {
+                layer.paste(piece, *x, 0, None)?;
             }
             Ok(layer)
         };
-        // (a window cut from a step alone, nothing laid on it: what it is cut from, for an
-        // engine that keeps the strip's steps and cuts it itself)
+        // (a window cut from a step, the glow beside it and the end drawn again laid on it as
+        // window() lays them: what it is cut from, for an engine that keeps the strip's steps
+        // and its glow and cuts it itself; render/renderer.py's _timeline, its View)
         let mut cut = None;
         let k = (phase * strip.parts + part).clamp(0, strip.phase_count() - 1);
         let parts_of = strip.parts.max(1);
-        if !patch
-            && stretch.is_none()
-            && strip.halo.is_none()
+        if stretch.is_none()
+            && (!patch || part == 0)
             && (k.rem_euclid(parts_of) == 0 || strip.weighed.is_empty())
         {
             let step = k.div_euclid(parts_of) as usize;
-            cut = Some(vec![crate::piece::CutPart {
+            let mut parts = vec![crate::piece::CutPart {
                 image: Rc::clone(&strip.steps[step]),
                 growth: strip.growth.get(step).cloned().flatten(),
                 sx: offset,
@@ -1105,7 +1190,34 @@ impl Renderer {
                 dy: 0,
                 w: gw + 2 * pad,
                 h: gh + 2 * pad,
-            }]);
+            }];
+            if let Some(halo) = &strip.halo {
+                for x0 in [0, gw + pad] {
+                    parts.push(crate::piece::CutPart {
+                        image: Rc::clone(halo),
+                        growth: strip.halo_growth.clone(),
+                        sx: offset + x0,
+                        sy: 0,
+                        dx: x0,
+                        dy: 0,
+                        w: pad,
+                        h: gh + 2 * pad,
+                    });
+                }
+            }
+            if let Some((piece, x)) = &patched {
+                parts.push(crate::piece::CutPart {
+                    image: Rc::clone(piece),
+                    growth: None,
+                    sx: 0,
+                    sy: 0,
+                    dx: *x,
+                    dy: 0,
+                    w: piece.width() as i64,
+                    h: piece.height() as i64,
+                });
+            }
+            cut = Some(parts);
         }
         // (where the engine cuts it from what it keeps, its pixels are left out: made only
         // where something asks for them, Piece::whole)
@@ -1114,16 +1226,19 @@ impl Renderer {
         let mut layer = if leave_out {
             Image::blank(Mode::RGBA, 0, 0)
         } else if !patch || part == 0 {
-            window(phase * strip.parts + part, offset, left)?
+            window(phase * strip.parts + part, offset, patched.as_ref())?
         } else {
             // the end drawn again: on both steps, and blended as the strip's parts are
             let ahead = (phase + 1).rem_euclid(s);
+            let (piece, x) = crate::prof::part("graph patch", || {
+                self.patch_piece(&w, &strip, &history, valid, left + 1)
+            })?;
             let following = window(
                 ahead * strip.parts,
                 offset + i64::from(ahead == 0),
-                left + 1,
+                Some(&(Rc::new(piece), x)),
             )?;
-            let this = window(phase * strip.parts, offset, left)?;
+            let this = window(phase * strip.parts, offset, patched.as_ref())?;
             between(&this, &following, part, strip.parts)?
         };
         if let Some(stretch) = stretch {
@@ -1177,7 +1292,7 @@ impl Renderer {
         };
         let bounds = match self.range_live(&w, now)? {
             Some(range) => range,
-            None => (float_of(&strip.bounds.0), float_of(&strip.bounds.1)),
+            None => strip.bounds.clone(),
         };
         Ok(value.map(|value| (w.into_owned(), value, bounds)))
     }
