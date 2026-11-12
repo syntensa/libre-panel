@@ -381,20 +381,20 @@ jobs:
           cmake --build freetype --config Release --parallel > /dev/null
           ls freetype/Release/*.dll
       # what drawing a frame costs here (no panel: the frames go nowhere), before the long
-      # comparisons, so that a failing one does not hide it; on Windows with and without the
-      # large blocks kept (heap.rs), elsewhere without and with
+      # comparisons, so that a failing one does not hide it: with this computer's readings,
+      # then with the app's demo readings (the weather and its symbol, readings that jump)
       - name: What drawing a frame costs (Lumen on a virtual 12.3", 25 fps)
         if: ${{ !inputs.quick }}
         shell: bash
         run: |
           if [ "$RUNNER_OS" = Windows ]; then
             export LP_LIBFREETYPE="$(cygpath -w "$RUNNER_TEMP/libs/freetype/Release/freetype.dll")"
-            python tests/frame_load.py --app rust/target/release/libre-panel.exe --seconds 30 \
-              --env LP_HEAP_KEEP=0
+            app=rust/target/release/libre-panel.exe
           else
-            python tests/frame_load.py --app rust/target/release/libre-panel --seconds 30 \
-              --env LP_HEAP_KEEP=1
+            app=rust/target/release/libre-panel
           fi
+          python tests/frame_load.py --app "$app" --seconds 30
+          python tests/frame_load.py --app "$app" --seconds 30 --demo
       - name: The crates against the Python app
         if: ${{ !inputs.quick }}
         run: python -u -X faulthandler -m pytest -v -rfE --durations=20 tests/test_rust_py.py tests/test_rust_pixels.py tests/test_rust_decode.py tests/test_rust_text.py tests/test_rust_theme.py tests/test_rust_modules.py tests/test_rust_render.py tests/test_rust_toasts.py tests/test_rust_transitions.py tests/test_rust_alarm.py tests/test_rust_boot.py tests/test_rust_video.py tests/test_rust_devices.py tests/test_rust_config.py tests/test_rust_sensors.py tests/test_rust_services.py tests/test_rust_app.py tests/test_rust_plugins.py

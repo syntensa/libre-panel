@@ -11,7 +11,9 @@ with the downloads' programs::
         --engine libre-panel-rust/tools/libre-panel-engine.exe
 
 ``--env NAME=VALUE`` (repeatable) runs it again with that set, after a run without, so the two
-can be compared on the same machine.
+can be compared on the same machine. ``--demo`` takes the app's demo readings instead of the
+computer's: the weather with its symbol, readings that jump about, graphs whose own range glides
+(as on a computer that works).
 """
 
 from __future__ import annotations
@@ -34,7 +36,12 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def measure(
-    app: str, engine: str | None, seconds: float, theme: str, extra: dict[str, str]
+    app: str,
+    engine: str | None,
+    seconds: float,
+    theme: str,
+    extra: dict[str, str],
+    demo: bool = False,
 ) -> None:
     """One run: with ``engine`` the video through it to the simulated panel; without, the
     frames drawn for a virtual 12.3" and shown nowhere (what drawing costs alone)."""
@@ -45,7 +52,7 @@ def measure(
                 f'theme = "{theme}"\nfps = 25\n[device]\ndriver = "virtual"\n'
                 'model = "turing-12.3-usb"\noutput = ""\n[sensors]\nproviders = ["psutil"]\n'
             )
-        run(app, home, {}, seconds, theme, extra)
+        run(app, home, {}, seconds, theme, extra, demo)
         return
     fake = FakePanel(pid=0x0123, native=(720, 1920))
     sock = PanelSocket(fake)
@@ -68,16 +75,23 @@ def measure(
             '[sensors]\nproviders = ["psutil"]\n'
         )
     linked = {"LP_ENGINE_LINK": sock.link, "LIBRE_PANEL_ENGINE": engine}
-    run(app, home, {**linked, "LP_ENGINE_PRESENT": present}, seconds, theme, extra)
+    run(app, home, {**linked, "LP_ENGINE_PRESENT": present}, seconds, theme, extra, demo)
     alive = False
     sock.close()
 
 
 def run(
-    app: str, home: str, more: dict[str, str], seconds: float, theme: str, extra: dict[str, str]
+    app: str,
+    home: str,
+    more: dict[str, str],
+    seconds: float,
+    theme: str,
+    extra: dict[str, str],
+    demo: bool = False,
 ) -> None:
-    """The app run with its settings in ``home`` and ``more`` in its environment, measured for
-    ``seconds`` once it is warm, and what its profile said."""
+    """The app run with its settings in ``home`` and ``more`` in its environment (with its demo
+    readings where ``demo``), measured for ``seconds`` once it is warm, and what its profile
+    said."""
     env = {
         **os.environ,
         "LIBRE_PANEL_HOME": home,
@@ -88,7 +102,11 @@ def run(
     }
     env.pop("DISPLAY", None)
     p = subprocess.Popen(
-        [app, "run"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True
+        [app, "run", *(["--demo"] if demo else [])],
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
     )
     lines: list[str] = []
     threading.Thread(target=lambda: lines.extend(p.stderr), daemon=True).start()
@@ -106,6 +124,8 @@ def run(
     time.sleep(seconds)
     span = time.monotonic() - t0
     label = " ".join(f"{k}={v}" for k, v in extra.items()) or "as shipped"
+    if demo:
+        label += ", demo readings"
     print(f"== {theme}, {label}: over {span:.0f} s")
     for q in procs:
         try:
@@ -141,11 +161,12 @@ def main() -> None:
     ap.add_argument("--seconds", type=float, default=40)
     ap.add_argument("--theme", default="lumen")
     ap.add_argument("--env", action="append", default=[], help="NAME=VALUE for a second run")
+    ap.add_argument("--demo", action="store_true", help="the app's demo readings")
     args = ap.parse_args()
-    measure(args.app, args.engine, args.seconds, args.theme, {})
+    measure(args.app, args.engine, args.seconds, args.theme, {}, args.demo)
     if args.env:
         extra = dict(item.split("=", 1) for item in args.env)
-        measure(args.app, args.engine, args.seconds, args.theme, extra)
+        measure(args.app, args.engine, args.seconds, args.theme, extra, args.demo)
 
 
 if __name__ == "__main__":
