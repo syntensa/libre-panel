@@ -96,31 +96,37 @@ impl SceneSender {
             image = &converted;
         }
         let (mut x, mut y) = (layer.x, layer.y);
-        let cropped;
+        // (what shows of it: its rows cut to the box, copied once into the record's pixels)
+        let (mut x0, mut y0, mut x1, mut y1) = (0, 0, image.width(), image.height());
         if how != How::Solid {
-            let (x0, y0, x1, y1) = image.getbbox(how == How::Over)?;
-            if (x0, y0, x1, y1) != (0, 0, image.width(), image.height()) {
-                cropped = image.crop(x0 as i64, y0 as i64, x1 as i64, y1 as i64);
-                image = &cropped;
-                x += x0 as i64;
-                y += y0 as i64;
-            }
+            (x0, y0, x1, y1) = image.getbbox(how == How::Over)?;
+            x += x0 as i64;
+            y += y0 as i64;
         }
+        let bands = image.bands();
+        let data = if (x0, y0, x1, y1) == (0, 0, image.width(), image.height()) {
+            image.as_bytes().to_vec()
+        } else {
+            let mut data = Vec::with_capacity((x1 - x0) * (y1 - y0) * bands);
+            for row in y0..y1 {
+                data.extend_from_slice(&image.row(row)[x0 * bands..x1 * bands]);
+            }
+            data
+        };
         let number = self.next.wrapping_add(1);
         self.next = number;
-        let data = image.as_bytes();
         let mut geometry = Vec::with_capacity(20);
         geometry.extend_from_slice(&(x as i32).to_le_bytes());
         geometry.extend_from_slice(&(y as i32).to_le_bytes());
-        geometry.extend_from_slice(&(image.width() as u32).to_le_bytes());
-        geometry.extend_from_slice(&(image.height() as u32).to_le_bytes());
+        geometry.extend_from_slice(&((x1 - x0) as u32).to_le_bytes());
+        geometry.extend_from_slice(&((y1 - y0) as u32).to_le_bytes());
         geometry.extend_from_slice(&(how as u32).to_le_bytes());
         let mut record = head(LAYER, number, (geometry.len() + data.len()) as u32);
         record.extend_from_slice(&geometry);
         parts.push(record);
-        parts.push(data.to_vec());
         self.layers += 1;
         self.bytes += data.len() as u64;
+        parts.push(data);
         Some(number)
     }
 

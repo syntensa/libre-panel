@@ -6,6 +6,8 @@ use crate::{Image, Mode};
 /// only the byte `at` of each where given (an alpha), else every one.
 fn ends(row: &[u8], bands: usize, at: Option<usize>) -> Option<(usize, usize)> {
     match at {
+        // (four pixels' alphas at a time where they are all zero)
+        Some(3) if bands == 4 => alpha_ends(row),
         Some(at) => {
             let mut pixels = row.chunks_exact(bands);
             let first = pixels.position(|p| p[at] != 0)?;
@@ -18,6 +20,31 @@ fn ends(row: &[u8], bands: usize, at: Option<usize>) -> Option<(usize, usize)> {
             Some((first / bands, last / bands))
         }
     }
+}
+
+/// ends of RGBA pixels by their alpha: groups of four pixels whose alphas are all zero passed
+/// over at once, from either end.
+fn alpha_ends(row: &[u8]) -> Option<(usize, usize)> {
+    const ALPHAS: u128 = 0xFF00_0000_FF00_0000_FF00_0000_FF00_0000;
+    let n = row.len() / 4;
+    let groups = n / 4;
+    let group = |g: usize| {
+        let bytes: [u8; 16] = row[g * 16..g * 16 + 16].try_into().unwrap_or([0; 16]);
+        u128::from_le_bytes(bytes) & ALPHAS != 0
+    };
+    let lit = |i: usize| row[i * 4 + 3] != 0;
+    let from = (0..groups)
+        .find(|&g| group(g))
+        .map_or(groups * 4, |g| g * 4);
+    let first = (from..n).find(|&i| lit(i))?;
+    let last = match (groups * 4..n).rev().find(|&i| lit(i)) {
+        Some(last) => last,
+        None => {
+            let g = (0..groups).rev().find(|&g| group(g))?;
+            (g * 4..g * 4 + 4).rev().find(|&i| lit(i))?
+        }
+    };
+    Some((first, last))
 }
 
 impl Image {
@@ -81,7 +108,8 @@ mod tests {
         };
         for mode in [Mode::RGBA, Mode::RGBa, Mode::RGB, Mode::L] {
             for _ in 0..200 {
-                let (w, h) = (1 + next(17) as usize, 1 + next(13) as usize);
+                // (wide enough for groups of four pixels and the ones after them)
+                let (w, h) = (1 + next(70) as usize, 1 + next(13) as usize);
                 let mut data = vec![0u8; w * h * mode.bands()];
                 for _ in 0..next(5) {
                     let i = next(data.len() as u64) as usize;
