@@ -4,12 +4,16 @@ A plugin folder with a service that uses sqlite3 checks that folder plugins
 load on the bundled Python. The built-in service "notices" checks that Libre
 Panel's own services start from a build that has no package metadata.
 
-python packaging/smoke_test.py [--tools] [--rust] dist/libre-panel/libre-panel tray --background
+python packaging/smoke_test.py [--tools] [--rust] [--tray] PROGRAM tray --background
+
+PROGRAM: the build's program, such as dist/libre-panel/libre-panel.
 
 --tools: the download carries ffmpeg (packaging/fetch_tools.py), so the app's own account of
 the video mode (the panel page of its API) must miss nothing, not even ffmpeg.
 --rust: the build is the Rust app's (docs/RUST.md): it loads no plugin folders of Python and
 draws the app's pictures in its own process, so those two are not looked for.
+--tray: its icon in the notification area turned on (`tray_icon = true`; it is off unless
+asked), for a run on a tray that looks for it.
 """
 
 import json
@@ -103,16 +107,21 @@ def home_parent():
     return None
 
 
+FLAGS = ("--tools", "--rust", "--tray")
+
+
 def main(command):
-    tools = "--tools" in command[:2]
-    rust = "--rust" in command[:2]
-    command = [part for part in command[:2] if part not in ("--tools", "--rust")] + command[2:]
+    flags = []
+    while command and command[0] in FLAGS:
+        flags.append(command.pop(0))
+    tools, rust, tray = (flag in flags for flag in FLAGS)
     with tempfile.TemporaryDirectory(dir=home_parent()) as folder:
         home = Path(folder)
         frame = home / "frame.png"
         services = '["notices"]' if rust else '["smoke", "notices"]'
         (home / "config.toml").write_text(
-            f'theme = "lumen"\n\n[device]\ndriver = "virtual"\noutput = "{frame.as_posix()}"\n'
+            ("tray_icon = true\n" if tray else "")
+            + f'theme = "lumen"\n\n[device]\ndriver = "virtual"\noutput = "{frame.as_posix()}"\n'
             '\n[video]\nmode = "on"\nlocal_clip = "smoke.h264"\n'
             f"\n[services]\nenabled = {services}\n\n[services.notices]\nmusic = false\n",
             encoding="utf-8",

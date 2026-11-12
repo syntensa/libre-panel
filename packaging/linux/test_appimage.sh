@@ -26,7 +26,7 @@ if command -v xvfb-run >/dev/null && command -v stalonetray >/dev/null; then
         set -o pipefail
         stalonetray >/dev/null 2>&1 &
         sleep 1
-        python3 '$root/packaging/smoke_test.py' ${smoke[*]} '$appimage' tray --background | tee '$log'
+        python3 '$root/packaging/smoke_test.py' ${smoke[*]} --tray '$appimage' tray --background | tee '$log'
     "
     grep -q "tray icon ready" "$log"
 fi
