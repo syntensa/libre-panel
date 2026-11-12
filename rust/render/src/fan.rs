@@ -433,6 +433,43 @@ type MadeDiscs = Mutex<
 /// size), the most recently used last, with their bytes.
 type MadeFrames = Mutex<Vec<((PathBuf, &'static str, usize), Arc<Vec<f32>>, usize)>>;
 
+/// fan.py's IMAGE_BYTES: what its pictures kept may hold together.
+const IMAGE_BYTES: usize = 6 << 20;
+
+/// What fan.py keeps a picture by (fan._kept): a ring by how far it is lit, a square frame by
+/// its brightness, a rotor by its position, the blades by their position, blur and light.
+#[derive(Clone, PartialEq, Eq, Hash)]
+enum Pictured {
+    Ring([u8; 3], i64, i64, usize),
+    Frame(PathBuf, &'static str, bool, [u8; 3], usize, i64),
+    Rotor(PathBuf, &'static str, [u8; 3], [u8; 3], usize, usize),
+    Blades(
+        PathBuf,
+        &'static str,
+        [u8; 3],
+        [u8; 3],
+        usize,
+        usize,
+        i64,
+        i64,
+    ),
+}
+
+/// fan._kept: the picture of `key`, made by `make` where it is not kept (the most recently used
+/// kept within IMAGE_BYTES: what goes is only made again, the pixels the same).
+fn kept_picture(key: Pictured, make: impl FnOnce() -> Result<Image>) -> Result<Arc<Image>> {
+    static IMAGES: OnceLock<Mutex<crate::kept::Kept<Pictured, Arc<Image>>>> = OnceLock::new();
+    let images = IMAGES.get_or_init(|| Mutex::new(crate::kept::Kept::new(IMAGE_BYTES)));
+    if let Some(found) = images.lock().ok().and_then(|mut kept| kept.get(&key)) {
+        return Ok(found);
+    }
+    let made = Arc::new(make()?);
+    if let Ok(mut kept) = images.lock() {
+        kept.put(key, Arc::clone(&made), made.as_bytes().len());
+    }
+    Ok(made)
+}
+
 /// The rotor's layers at a size: `k` x `k` pixels, its five layers (shape, core and gloss times
 /// alpha, alpha, and where a second colour goes) at each position, position after position,
 /// layer after layer, row after row (fan.rotor_layers).
@@ -711,12 +748,50 @@ fn blades(
     phase: usize,
     blur: i64,
     dim: i64,
-) -> Result<Image> {
+) -> Result<Arc<Image>> {
     let (colour, second) = colours;
+    let (k, phase) = (layers.side(), phase % POSITIONS);
+    let failed = |e: lp_pixels::Error| Failed(e.to_string());
+    // (fan.rotor_image: the rotor at its position, kept by it)
+    let rotor = || {
+        let key = Pictured::Rotor(dir.to_path_buf(), look.name, colour, second, k, phase);
+        kept_picture(key, || {
+            Image::from_bytes(Mode::RGBA, k, k, layers.coloured(phase, colour, second))
+                .map_err(failed)
+        })
+    };
+    if blur == 0 && dim == 0 {
+        return rotor();
+    }
+    let key = Pictured::Blades(
+        dir.to_path_buf(),
+        look.name,
+        colour,
+        second,
+        k,
+        phase,
+        blur,
+        dim,
+    );
+    kept_picture(key, || {
+        let image = (*rotor()?).clone();
+        blurred_and_dimmed(dir, look, layers, colours, image, blur, dim)
+    })
+}
+
+/// fan._blades past the rotor's picture: `image` blended towards the rotor's disc by `blur`
+/// and its opacity dimmed by `dim`.
+fn blurred_and_dimmed(
+    dir: &Path,
+    look: &'static Look,
+    layers: &Layers,
+    (colour, second): ([u8; 3], [u8; 3]),
+    mut image: Image,
+    blur: i64,
+    dim: i64,
+) -> Result<Image> {
     let k = layers.side();
     let failed = |e: lp_pixels::Error| Failed(e.to_string());
-    let mut image = Image::from_bytes(Mode::RGBA, k, k, layers.coloured(phase, colour, second))
-        .map_err(failed)?;
     if blur != 0 {
         let disc = disc(dir, look, layers, colour, second);
         let disc = Image::from_bytes(Mode::RGBA, k, k, disc.to_vec()).map_err(failed)?;
@@ -794,7 +869,13 @@ fn glow(mask: &Image, colour: [u8; 3], halo: f64) -> Result<Image> {
 
 /// fan.ring_image: the faint groove all round with the glowing arc `steps` of RING_STEPS long,
 /// on a canvas of `canvas` px.
-fn ring(colour: [u8; 3], size: i64, steps: i64, canvas: usize) -> Result<Image> {
+fn ring(colour: [u8; 3], size: i64, steps: i64, canvas: usize) -> Result<Arc<Image>> {
+    kept_picture(Pictured::Ring(colour, size, steps, canvas), || {
+        ring_made(colour, size, steps, canvas)
+    })
+}
+
+fn ring_made(colour: [u8; 3], size: i64, steps: i64, canvas: usize) -> Result<Image> {
     let failed = |e: lp_pixels::Error| Failed(e.to_string());
     let scale = size as f64 / FAN_SIZE;
     let (centre, stroke) = (RING_CENTRE * scale, py_max(1.5, RING_STROKE * scale));
@@ -856,6 +937,18 @@ fn frame_image(
     steps: i64,
     look: &'static Look,
     own: bool,
+) -> Result<Arc<Image>> {
+    let key = Pictured::Frame(dir.to_path_buf(), look.name, own, colour, size, steps);
+    kept_picture(key, || frame_made(dir, colour, size, steps, look, own))
+}
+
+fn frame_made(
+    dir: &Path,
+    colour: [u8; 3],
+    size: usize,
+    steps: i64,
+    look: &'static Look,
+    own: bool,
 ) -> Result<Image> {
     // (the idle frame is dark, a fast one as bright as the blades)
     let bright = 0.58 + 0.42 * steps as f64 / SHADES as f64;
@@ -889,7 +982,7 @@ pub fn picture(
     let k = rotor_size(size);
     let (side, canvas_px) = (k as usize, canvas as usize);
     let mut laid = match frame {
-        Frame::Ring => ring(colour, size, rotor.steps(), canvas_px)?,
+        Frame::Ring => (*ring(colour, size, rotor.steps(), canvas_px)?).clone(),
         Frame::Square => {
             let square = frame_image(dir, colour, size as usize, rotor.shades(), look, own)?;
             let mut laid = Image::blank(Mode::RGBA, canvas_px, canvas_px);
