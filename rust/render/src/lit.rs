@@ -766,7 +766,8 @@ fn ring_cover(
             let dx = at(x);
             let far = (dx * dx + dy * dy).sqrt();
             let cover = clip01(half - (far - middle).abs());
-            let Some(sweep) = ends else {
+            // (off the band nothing is covered: what its ends make of it stays 0)
+            let Some(sweep) = ends.filter(|_| cover != 0.0) else {
                 out.push(cover);
                 continue;
             };
