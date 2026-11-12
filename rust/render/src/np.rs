@@ -1,4 +1,45 @@
 //! What numpy computes otherwise than the C library, where the renderer's numbers go through it.
+//!
+//! numpy's float32 functions fuse their products and sums (FMA3), and so do these (mul_add).
+//! Where the processor fuses itself, they take its instruction, chosen at run time; else each
+//! step is a call to the C library's fmaf, which gives the same numbers but may work them out
+//! in software (weather symbols, moons and globes take these for every pixel).
+
+/// `$name`, for a processor that fuses a product and a sum itself (FMA3): `$body` inlined
+/// where the compiler may use the instruction for every mul_add, and that chosen when the
+/// processor has it (the same numbers: a fused step rounds once either way).
+macro_rules! fused {
+    ($(#[$doc:meta])* $vis:vis $name:ident, $fast:ident, $body:ident, ($($arg:ident: $ty:ty),*)) => {
+        $(#[$doc])*
+        $vis fn $name($($arg: $ty),*) -> f32 {
+            #[cfg(target_arch = "x86_64")]
+            if std::arch::is_x86_feature_detected!("fma") {
+                // SAFETY: the processor has FMA3, just asked
+                return unsafe { $fast($($arg),*) };
+            }
+            $body($($arg),*)
+        }
+
+        #[cfg(target_arch = "x86_64")]
+        #[target_feature(enable = "fma")]
+        unsafe fn $fast($($arg: $ty),*) -> f32 {
+            $body($($arg),*)
+        }
+    };
+}
+
+fused!(
+    /// numpy's float32 exp: see expf_body.
+    pub expf, expf_fma, expf_body, (x: f32)
+);
+fused!(
+    /// numpy's float32 tanh: see tanhf_body.
+    pub tanhf, tanhf_fma, tanhf_body, (x: f32)
+);
+fused!(
+    /// numpy's float32 sine, or its cosine where `cos`: see sincos_body.
+    sincos, sincos_fma, sincos_body, (x: f32, cos: bool)
+);
 
 /// numpy's float32 exp (loops_exponent_log's simd_exp_FLOAT): every x86-64 numpy with AVX2 and
 /// FMA3 or with AVX512F takes it, for a single number too, never the C library's expf. The
@@ -7,7 +48,8 @@
 /// place off the true value at most, exactly as numpy is. The whole part's product and sum as
 /// numpy's builds have them: apart on Linux (GCC builds numpy's C as ISO C11, contracting
 /// nothing), one fused step on Windows (MSVC with /fp:contract): 84 float32s come out apart.
-pub fn expf(x: f32) -> f32 {
+#[inline(always)]
+fn expf_body(x: f32) -> f32 {
     // (numpy's constants as the float32s they are, written as short as they read back)
     const XMAX: f32 = 88.722_84;
     const XMIN: f32 = -103.972_084;
@@ -56,7 +98,8 @@ pub fn expf(x: f32) -> f32 {
 /// numpy with FMA3 takes it, for a single number too. |x| falls in one of 32 intervals (by
 /// its exponent and first mantissa bits), each with a polynomial of degree six in |x| less
 /// the interval's start (fused, Horner); past the last, 1; the sign of x put back.
-pub fn tanhf(x: f32) -> f32 {
+#[inline(always)]
+fn tanhf_body(x: f32) -> f32 {
     // (per interval: c6, c5, c4, c3, c2, c1, c0 and its start b, as numpy's lut8x32 has them)
     const LUT: [[u32; 8]; 32] = [
         [
@@ -222,7 +265,8 @@ pub fn cosf(x: f32) -> f32 {
 /// simd_sincos_f32 for a number: the nearest whole number of quarter turns, Cody-Waite's
 /// reduction to within a quarter turn of it (in three fused steps), then that quarter's
 /// polynomial of the sine or the cosine (fused, Horner), its sign the quarter's.
-fn sincos(x: f32, cos: bool) -> f32 {
+#[inline(always)]
+fn sincos_body(x: f32, cos: bool) -> f32 {
     // (numpy's constants, as the float32s they are)
     let c = f32::from_bits;
     let two_over_pi = c(0x3f22_f983);

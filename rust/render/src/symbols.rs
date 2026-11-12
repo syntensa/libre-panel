@@ -8,7 +8,9 @@
 //! where a drop lands, crystals spinning, clouds drifting and breathing, a bolt flashing and
 //! lighting its cloud).
 
+use std::collections::{HashMap, VecDeque};
 use std::f64::consts::PI;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use lp_pixels::{alpha_composite, chops, Draw, Filter, Image, Mode, Transform};
 use lp_py::{Dict, Value};
@@ -32,6 +34,10 @@ pub(crate) const STEP: f64 = 25.0;
 const QUICK: f64 = 1.8;
 /// Degrees a second the sun's rays turn.
 const TURN: f64 = 7.0;
+/// Bytes of kept layer sets (a panel's weather takes well under one).
+const BUDGET: usize = 16 << 20;
+/// How many turns of the rays a set keeps (the last few angles).
+const TURNS_KEPT: usize = 16;
 /// The lit finish's weather icons draw a symbol from this size on (lit.MIN_ICON), and these
 /// icons are the weathers' symbols (lit.SYMBOLS).
 pub(crate) const MIN_ICON: i64 = 16;
@@ -204,6 +210,10 @@ struct Layers {
     streak: Option<Part>,
     /// the ring where a drop lands (big rain)
     splash: Option<Part>,
+    /// the rays by their turn in quarter degrees, the last few kept (_rays_turned)
+    turned: Mutex<VecDeque<(i64, Arc<Image>)>>,
+    /// the snow crystal by its turn in steps of three degrees, kept (_spun)
+    spun: Mutex<HashMap<i64, Part>>,
 }
 
 impl Layers {
@@ -211,6 +221,130 @@ impl Layers {
     fn big(&self) -> bool {
         self.rich && self.k >= SMALL
     }
+
+    /// Layers.size: the bytes the layers take, with the turns kept of them (the budget of the
+    /// kept sets counts them).
+    fn size(&self) -> usize {
+        let four = |image: &Image| image.width() * image.height() * 4;
+        let parts = [
+            &self.disc,
+            &self.rays,
+            &self.cloud,
+            &self.back,
+            &self.drop,
+            &self.flake,
+            &self.bolt,
+            &self.bolt_rest,
+            &self.corona,
+            &self.flash,
+            &self.streak,
+            &self.splash,
+        ];
+        let mut own: usize = parts
+            .iter()
+            .flat_map(|p| p.iter())
+            .map(|p| four(&p.image))
+            .sum();
+        own += self
+            .stars
+            .iter()
+            .chain(&self.bars)
+            .map(|p| four(&p.image))
+            .sum::<usize>();
+        if let Some(through) = &self.through {
+            own += through.alpha.width() * through.alpha.height();
+        }
+        let turned = self.turned.lock().unwrap_or_else(PoisonError::into_inner);
+        let spun = self.spun.lock().unwrap_or_else(PoisonError::into_inner);
+        own + turned.iter().map(|(_, i)| four(i)).sum::<usize>()
+            + spun.values().map(|p| four(&p.image)).sum::<usize>()
+    }
+}
+
+/// What a kept set is known by: the kind, night, its size, lit, its colours and the look.
+type SetKey = (String, bool, usize, bool, [[i64; 4]; 5], bool);
+
+/// The kept sets, the one asked for last at the end (the render threads of every panel ask).
+static SETS: Mutex<Vec<(SetKey, Arc<Layers>)>> = Mutex::new(Vec::new());
+
+/// layers_for: the layers of a kind of weather at size `k`, in a look, lit or flat, with a big
+/// clear night's shooting star. Kept: one set serves every symbol that looks like it, and the
+/// oldest go while the sets take more than BUDGET.
+fn layers_for(
+    kind: &str,
+    night: bool,
+    k: usize,
+    c: &Colours,
+    rich: bool,
+    lit: bool,
+) -> Result<Arc<Layers>> {
+    let colours = [c.cloud, c.dark, c.sun, c.rain, c.snow];
+    let key: SetKey = (kind.to_string(), night, k, lit, colours, rich);
+    {
+        let mut sets = SETS.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(at) = sets.iter().position(|(kept, _)| *kept == key) {
+            let hit = sets.remove(at);
+            let layers = Arc::clone(&hit.1);
+            sets.push(hit);
+            return Ok(layers);
+        }
+    }
+    let mut made = made(kind, night, k, c, rich, lit)?;
+    if made.big() && night && kind == "clear" {
+        made.streak = streak_part(k, c.cloud)?;
+    }
+    let made = Arc::new(made);
+    let mut sets = SETS.lock().unwrap_or_else(PoisonError::into_inner);
+    sets.retain(|(kept, _)| *kept != key);
+    sets.push((key, Arc::clone(&made)));
+    let mut total: usize = sets.iter().map(|(_, layers)| layers.size()).sum();
+    while total > BUDGET && sets.len() > 1 {
+        let (_, gone) = sets.remove(0);
+        total -= gone.size();
+    }
+    Ok(made)
+}
+
+/// Every kept set dropped (tests).
+pub fn forget() {
+    SETS.lock().unwrap_or_else(PoisonError::into_inner).clear();
+}
+
+/// _rays_turned: the rays turned by `angle` degrees, in steps of a quarter degree and kept
+/// for the last few angles: every symbol of the kind asks for its own.
+fn rays_turned(layers: &Layers, rays: &Part, angle: f64) -> Result<Arc<Image>> {
+    let key = lp_py::round(angle * 4.0) as i64;
+    {
+        let mut turned = layers.turned.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(at) = turned.iter().position(|(kept, _)| *kept == key) {
+            let hit = turned.remove(at).expect("a turn kept");
+            let image = Arc::clone(&hit.1);
+            turned.push_back(hit);
+            return Ok(image);
+        }
+    }
+    let centre = (
+        layers.centre.0 - rays.x as f64,
+        layers.centre.1 - rays.y as f64,
+    );
+    let image = rays
+        .image
+        .rotate(
+            (-key) as f64 / 4.0,
+            Filter::Bicubic,
+            false,
+            Some(centre),
+            None,
+            None,
+        )?
+        .convert(Mode::RGBA)?;
+    let image = Arc::new(image);
+    let mut turned = layers.turned.lock().unwrap_or_else(PoisonError::into_inner);
+    turned.push_back((key, Arc::clone(&image)));
+    while turned.len() > TURNS_KEPT {
+        turned.pop_front();
+    }
+    Ok(image)
 }
 
 /// _part: `image` cut to its content plus a little room, premultiplied; None for a layer with
@@ -430,6 +564,8 @@ fn made(kind: &str, night: bool, k: usize, c: &Colours, rich: bool, lit: bool) -
         flash: None,
         streak: None,
         splash: None,
+        turned: Mutex::new(VecDeque::new()),
+        spun: Mutex::new(HashMap::new()),
     };
     let cloud =
         |colour: [i64; 4], dark: bool, scale: f64, dx: f64, dy: f64| -> Result<Option<Part>> {
@@ -690,28 +826,16 @@ fn compose(layers: &Layers, kind: &str, t: Option<f64>) -> Result<Image> {
         } else {
             0.0
         };
-        // (_rays_turned: in steps of a quarter degree)
-        let key = lp_py::round(angle * 4.0) as i64;
-        let centre = (
-            layers.centre.0 - rays.x as f64,
-            layers.centre.1 - rays.y as f64,
-        );
-        let mut turned = rays
-            .image
-            .rotate(
-                (-key) as f64 / 4.0,
-                Filter::Bicubic,
-                false,
-                Some(centre),
-                None,
-                None,
-            )?
-            .convert(Mode::RGBA)?;
-        if big {
-            turned = moved(&turned, 0.0, 0.0, 1.0 + 0.035 * (tau * s / 3.1).sin())?;
-        }
+        let turned = rays_turned(layers, rays, angle)?;
+        let pulsed;
+        let turned = if big {
+            pulsed = moved(&turned, 0.0, 0.0, 1.0 + 0.035 * (tau * s / 3.1).sin())?;
+            &pulsed
+        } else {
+            &*turned
+        };
         let whole = (0, 0, turned.width() as i64, turned.height() as i64);
-        out.alpha_composite_at(&turned, (rays.x, rays.y), whole)?;
+        out.alpha_composite_at(turned, (rays.x, rays.y), whole)?;
     }
     for (i, star) in layers.stars.iter().enumerate() {
         let i = i as f64;
@@ -810,7 +934,7 @@ fn compose(layers: &Layers, kind: &str, t: Option<f64>) -> Result<Image> {
                 let spin = if n % 2 == 0 { 38.0 } else { -31.0 };
                 let turn = rem(s * spin + turn0, 60.0);
                 let crystal = if layers.rich {
-                    spun(flake, turn)?
+                    spun(layers, flake, turn)?
                 } else {
                     flake.clone()
                 };
@@ -818,7 +942,7 @@ fn compose(layers: &Layers, kind: &str, t: Option<f64>) -> Result<Image> {
                 put(&mut out, Some(&crystal), at(xx), at(yy), share, scale)?;
             } else if scale == 1.0 {
                 let crystal = if layers.rich {
-                    spun(flake, turn0)?
+                    spun(layers, flake, turn0)?
                 } else {
                     flake.clone()
                 };
@@ -910,18 +1034,24 @@ fn compose(layers: &Layers, kind: &str, t: Option<f64>) -> Result<Image> {
     Ok(out)
 }
 
-/// _spun: the snow crystal turned by `angle` degrees, in steps of three degrees (int() of
-/// Python's angle // 3).
-fn spun(flake: &Part, angle: f64) -> Result<Part> {
+/// _spun: the snow crystal turned by `angle` degrees (six arms: it repeats after 60), in
+/// steps of three degrees (int() of Python's angle // 3), kept.
+fn spun(layers: &Layers, flake: &Part, angle: f64) -> Result<Part> {
     let key = (lp_py::num::float_div_mod(angle, 3.0).0 as i64).rem_euclid(20);
+    let mut spun = layers.spun.lock().unwrap_or_else(PoisonError::into_inner);
+    if let Some(hit) = spun.get(&key) {
+        return Ok(hit.clone());
+    }
     let image = flake
         .image
         .rotate((key * 3) as f64, Filter::Bicubic, false, None, None, None)?;
-    Ok(Part {
+    let part = Part {
         image,
         x: flake.x,
         y: flake.y,
-    })
+    };
+    spun.insert(key, part.clone());
+    Ok(part)
 }
 
 /// A symbol of a kind of weather: `k` px square, in a look, lit or flat, at time `t` (None:
@@ -935,10 +1065,7 @@ fn symbol(
     lit: bool,
     t: Option<f64>,
 ) -> Result<Image> {
-    let mut layers = made(kind, night, k, c, pack == "vivid", lit)?;
-    if layers.big() && night && kind == "clear" {
-        layers.streak = streak_part(k, c.cloud)?;
-    }
+    let layers = layers_for(kind, night, k, c, pack == "vivid", lit)?;
     compose(&layers, kind, t)
 }
 
