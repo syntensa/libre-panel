@@ -344,6 +344,30 @@ fn fade_top(w: &Dict, numbers: &[f64], bounds: &Range, s: i64) -> Result<i64> {
     Ok((first + (last - first) * (1.0 - highest)) as i64)
 }
 
+/// The columns `x0..x1` of `from` (as `crop` takes them: beyond its edges nothing) into `to`
+/// from its column `at` on, row for row, as far as both reach: what pasting that crop at `at`
+/// does where `to` is blank and of the same mode.
+fn copy_columns(to: &mut Image, from: &Image, x0: i64, x1: i64, at: i64) {
+    let (tw, fw) = (to.width() as i64, from.width() as i64);
+    // the source columns within `from`, and their place in `to` within it
+    let lo = x0.max(0).max(x0 + (0 - at));
+    let hi = x1.min(fw).min(x0 + (tw - at));
+    if lo >= hi {
+        return;
+    }
+    let b = from.bands();
+    let (src, dst) = (lo as usize * b, (at + lo - x0) as usize * b);
+    let n = (hi - lo) as usize * b;
+    let rows = to.height().min(from.height());
+    let (trow, frow) = (to.width() * b, from.width() * b);
+    let source = from.as_bytes();
+    let target = to.as_bytes_mut();
+    for y in 0..rows {
+        target[y * trow + dst..y * trow + dst + n]
+            .copy_from_slice(&source[y * frow + src..y * frow + src + n]);
+    }
+}
+
 /// _values: the values of the points `first` .. `last` that are drawn (every `every`-th):
 /// recorded ones from the history, later ones ahead of time from the glide. Returns them and
 /// the first point's number.
@@ -558,23 +582,28 @@ impl Renderer {
             .enumerate()
             .map(|(i, &v)| ((at + i as i64) as f64 * step - origin as f64, v))
             .collect();
-        let layer = self.graph_curve(&w, &points, width + 1, s, Some(&bounds), Some(top as f64))?;
+        let layer = crate::prof::part("whole curve", || {
+            self.graph_curve(&w, &points, width + 1, s, Some(&bounds), Some(top as f64))
+        })?;
         let opacity = widget::number(&w, "opacity", 1.0);
         let mut lines = Vec::with_capacity(s as usize);
+        let downing = crate::prof::Span::new("whole down");
         for p in 0..s {
             lines.push(faded(
                 shapes::down_at(&layer, p, width, h, s as usize)?,
                 opacity,
             )?);
         }
+        drop(downing);
         drop(layer); // (drawn twice as large: the biggest picture here)
         let shadow = self.shadow_tint(&w)?;
-        let (halo, pad) = match halo_exact(&w, &lines[0], shadow)? {
-            Some((halo, pad)) => (Some(halo), pad),
-            None => (None, 0),
-        };
-        let steps = strip_steps(lines, halo.as_ref(), pad)?;
-        let weighed = weigh(&steps, parts)?;
+        let (halo, pad) =
+            match crate::prof::part("whole halo", || halo_exact(&w, &lines[0], shadow))? {
+                Some((halo, pad)) => (Some(halo), pad),
+                None => (None, 0),
+            };
+        let steps = crate::prof::part("whole steps", || strip_steps(lines, halo.as_ref(), pad))?;
+        let weighed = crate::prof::part("whole weigh", || weigh(&steps, parts))?;
         Ok((steps, weighed, halo, pad, origin, width, top))
     }
 
@@ -621,14 +650,16 @@ impl Renderer {
             (bounds, gliding) = graph::glided_bounds(w, &numbers, now, animate, &mut self.ranges)?;
         }
         let grown = match before {
-            Some(before) => {
-                self.grown_strip(w, before, &values, first, per_point, every, &bounds, parts)?
-            }
+            Some(before) => crate::prof::part("strip grown", || {
+                self.grown_strip(w, before, &values, first, per_point, every, &bounds, parts)
+            })?,
             None => None,
         };
         let (steps, weighed, halo, pad, origin, width, top) = match grown {
             Some(grown) => grown,
-            None => self.draw_strip(w, &values, first, per_point, every, bounds.clone(), parts)?,
+            None => crate::prof::part("strip whole", || {
+                self.draw_strip(w, &values, first, per_point, every, bounds.clone(), parts)
+            })?,
         };
         self.strip_count += 1;
         Ok(Strip {
@@ -762,6 +793,13 @@ impl Renderer {
         let cut = seam - begin + pad; // the tail's column of this one's column `seam`
         let joined = |old: &Image, tail: &Image| -> Result<Image> {
             let mut out = Image::blank(old.mode(), size.0, size.1);
+            if old.mode() == tail.mode() {
+                // (what pasting the two crops does: the parts within each copied, the rest
+                // left blank, as their zeros would leave it)
+                copy_columns(&mut out, old, shift, shift + keep, 0);
+                copy_columns(&mut out, tail, cut, tail.width() as i64, keep);
+                return Ok(out);
+            }
             out.paste(
                 &old.crop(shift, 0, shift + keep, old.height() as i64),
                 0,
@@ -1082,5 +1120,41 @@ impl Renderer {
             None => (float_of(&strip.bounds.0), float_of(&strip.bounds.1)),
         };
         Ok(value.map(|value| (w, value, bounds)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lp_pixels::Mode;
+
+    #[test]
+    fn columns_copied_are_the_crop_pasted() {
+        let mut seed = 7u64;
+        let mut next = |n: i64| {
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            ((seed >> 33) as i64).rem_euclid(n)
+        };
+        for _ in 0..400 {
+            let (fw, fh) = (1 + next(30) as usize, 1 + next(12) as usize);
+            let (tw, th) = (1 + next(30) as usize, 1 + next(12) as usize);
+            let mut from = Image::blank(Mode::RGBA, fw, fh);
+            for (i, v) in from.as_bytes_mut().iter_mut().enumerate() {
+                *v = (i * 37 % 251) as u8 + 1;
+            }
+            let (x0, x1, at) = (next(50) - 15, next(50) - 15, next(50) - 15);
+            let mut want = Image::blank(Mode::RGBA, tw, th);
+            want.paste(&from.crop(x0, 0, x1.max(x0), fh as i64), at, 0, None)
+                .unwrap();
+            let mut got = Image::blank(Mode::RGBA, tw, th);
+            copy_columns(&mut got, &from, x0, x1, at);
+            assert_eq!(
+                got.as_bytes(),
+                want.as_bytes(),
+                "{fw}x{fh} -> {tw}x{th} {x0}..{x1} at {at}"
+            );
+        }
     }
 }
