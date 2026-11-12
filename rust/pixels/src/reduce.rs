@@ -33,44 +33,152 @@ impl Image {
         if self.mode != Mode::RGBA || s < 1 {
             return error("reduce_rgba_part takes RGBA and a scale above 0");
         }
-        let count = (s * s) as u32;
-        let m = u64::from(multiplier(count));
         let mut out = vec![0u8; w * h * 4];
         let (width, height) = (self.width as i64, self.height as i64);
-        let reduced = |sum: u32| ((u64::from(sum) * m) as u32 >> 24) as u8;
         for oy in 0..h {
-            for ox in 0..w {
-                let mut sums = [count / 2; 4];
-                for dy in 0..s {
-                    let y = y0 + (oy * s + dy) as i64;
-                    if y < 0 || y >= height {
-                        continue;
-                    }
-                    for dx in 0..s {
-                        let x = x0 + (ox * s + dx) as i64;
-                        if x < 0 || x >= width {
-                            continue;
-                        }
-                        let at = (y as usize * self.width + x as usize) * 4;
-                        let p = &self.data[at..at + 4];
-                        let a = u32::from(p[3]);
-                        sums[0] += muldiv255(u32::from(p[0]), a);
-                        sums[1] += muldiv255(u32::from(p[1]), a);
-                        sums[2] += muldiv255(u32::from(p[2]), a);
-                        sums[3] += a;
-                    }
-                }
-                let a = reduced(sums[3]);
-                let at = (oy * w + ox) * 4;
-                for k in 0..3 {
-                    out[at + k] = unmultiplied(reduced(sums[k]), a);
-                }
-                out[at + 3] = a;
+            // (blocks of 2 x 2 wholly inside the picture: four at a time, below)
+            let (mut lo, mut hi) = (w, w);
+            let y = y0 + (oy * s) as i64;
+            if s == 2 && y >= 0 && y + 1 < height && width - 2 - x0 >= 0 {
+                lo = ((-x0).max(0) as usize).div_ceil(2).min(w);
+                hi = (((width - 2 - x0) / 2 + 1) as usize).min(w).max(lo);
+            }
+            let row = &mut out[oy * w * 4..(oy + 1) * w * 4];
+            if lo < hi {
+                let at = (y as usize * self.width + (x0 + 2 * lo as i64) as usize) * 4;
+                let n = hi - lo;
+                let top = &self.data[at..at + n * 8];
+                let next = at + self.width * 4;
+                let bottom = &self.data[next..next + n * 8];
+                halved(top, bottom, &mut row[lo * 4..hi * 4]);
+            }
+            for ox in (0..lo).chain(hi..w) {
+                let block = self.reduced_block(x0, y0, ox, oy, s);
+                row[ox * 4..ox * 4 + 4].copy_from_slice(&block);
             }
         }
         Image::from_bytes(Mode::RGBA, w, h, out)
     }
 
+    /// The block (`ox`, `oy`) of `s` x `s` pixels from (`x0`, `y0`) reduced (premultiplied,
+    /// then back): its sum and half its count, times the multiplier, >> 24; the pixels outside
+    /// the picture transparent black.
+    fn reduced_block(&self, x0: i64, y0: i64, ox: usize, oy: usize, s: usize) -> [u8; 4] {
+        let count = (s * s) as u32;
+        let m = u64::from(multiplier(count));
+        let (width, height) = (self.width as i64, self.height as i64);
+        let reduced = |sum: u32| ((u64::from(sum) * m) as u32 >> 24) as u8;
+        let mut sums = [count / 2; 4];
+        for dy in 0..s {
+            let y = y0 + (oy * s + dy) as i64;
+            if y < 0 || y >= height {
+                continue;
+            }
+            for dx in 0..s {
+                let x = x0 + (ox * s + dx) as i64;
+                if x < 0 || x >= width {
+                    continue;
+                }
+                let at = (y as usize * self.width + x as usize) * 4;
+                let p = &self.data[at..at + 4];
+                let a = u32::from(p[3]);
+                sums[0] += muldiv255(u32::from(p[0]), a);
+                sums[1] += muldiv255(u32::from(p[1]), a);
+                sums[2] += muldiv255(u32::from(p[2]), a);
+                sums[3] += a;
+            }
+        }
+        let a = reduced(sums[3]);
+        [
+            unmultiplied(reduced(sums[0]), a),
+            unmultiplied(reduced(sums[1]), a),
+            unmultiplied(reduced(sums[2]), a),
+            a,
+        ]
+    }
+}
+
+/// Blocks of 2 x 2 RGBA pixels reduced as reduced_block reduces them: `top` and `bottom` the
+/// two rows of pixels (8 bytes a block), `out` a pixel a block. For four pixels the multiplier
+/// is 2^22 exactly ((sum * 2^22) >> 24: the sum >> 2, the sum at most 4 * 255 + 2), so the
+/// premultiplied sums are worked out in 16 bits, eight at a time.
+fn halved(top: &[u8], bottom: &[u8], out: &mut [u8]) {
+    let n = out.len() / 4;
+    let mut done = 0;
+    #[cfg(target_arch = "x86_64")]
+    {
+        // SAFETY: SSE2 is part of x86_64; every load and store is within the slices (16
+        // blocks' bytes of each row and 16 of out, four blocks a turn).
+        unsafe {
+            use std::arch::x86_64::*;
+            let zero = _mm_setzero_si128();
+            let alpha = _mm_set_epi16(-1, 0, 0, 0, -1, 0, 0, 0);
+            let half = _mm_set1_epi16(128);
+            let two = _mm_set1_epi16(2);
+            // two pixels in 16 bits, their colours premultiplied (MULDIV255), their alpha kept
+            let premultiplied = |v: __m128i| {
+                let a = _mm_shufflehi_epi16(_mm_shufflelo_epi16(v, 0xFF), 0xFF);
+                let t = _mm_add_epi16(_mm_mullo_epi16(v, a), half);
+                let m = _mm_srli_epi16(_mm_add_epi16(t, _mm_srli_epi16(t, 8)), 8);
+                _mm_or_si128(_mm_andnot_si128(alpha, m), _mm_and_si128(alpha, v))
+            };
+            // the sums of the pairs of eight pixels: four blocks' halves
+            let pairs = |row: *const u8| {
+                let (lo, hi) = (
+                    _mm_loadu_si128(row.cast()),
+                    _mm_loadu_si128(row.add(16).cast()),
+                );
+                let p01 = premultiplied(_mm_unpacklo_epi8(lo, zero));
+                let p23 = premultiplied(_mm_unpackhi_epi8(lo, zero));
+                let p45 = premultiplied(_mm_unpacklo_epi8(hi, zero));
+                let p67 = premultiplied(_mm_unpackhi_epi8(hi, zero));
+                (
+                    _mm_add_epi16(_mm_unpacklo_epi64(p01, p23), _mm_unpackhi_epi64(p01, p23)),
+                    _mm_add_epi16(_mm_unpacklo_epi64(p45, p67), _mm_unpackhi_epi64(p45, p67)),
+                )
+            };
+            let mut sums = [0u8; 16];
+            while done + 4 <= n {
+                let (a, b) = pairs(top.as_ptr().add(done * 8));
+                let (c, d) = pairs(bottom.as_ptr().add(done * 8));
+                let first = _mm_srli_epi16(_mm_add_epi16(_mm_add_epi16(a, c), two), 2);
+                let second = _mm_srli_epi16(_mm_add_epi16(_mm_add_epi16(b, d), two), 2);
+                _mm_storeu_si128(sums.as_mut_ptr().cast(), _mm_packus_epi16(first, second));
+                for (pixel, sum) in out[done * 4..done * 4 + 16]
+                    .chunks_exact_mut(4)
+                    .zip(sums.chunks_exact(4))
+                {
+                    let a = sum[3];
+                    pixel[0] = unmultiplied(sum[0], a);
+                    pixel[1] = unmultiplied(sum[1], a);
+                    pixel[2] = unmultiplied(sum[2], a);
+                    pixel[3] = a;
+                }
+                done += 4;
+            }
+        }
+    }
+    for i in done..n {
+        let mut sums = [2u32; 4];
+        for row in [top, bottom] {
+            for p in row[i * 8..i * 8 + 8].chunks_exact(4) {
+                let a = u32::from(p[3]);
+                sums[0] += muldiv255(u32::from(p[0]), a);
+                sums[1] += muldiv255(u32::from(p[1]), a);
+                sums[2] += muldiv255(u32::from(p[2]), a);
+                sums[3] += a;
+            }
+        }
+        let a = (sums[3] >> 2) as u8;
+        let pixel = &mut out[i * 4..i * 4 + 4];
+        for k in 0..3 {
+            pixel[k] = unmultiplied((sums[k] >> 2) as u8, a);
+        }
+        pixel[3] = a;
+    }
+}
+
+impl Image {
     /// ``xscale`` by ``yscale`` reduced, the part of the picture in ``bounds`` (left, top,
     /// right, bottom; the whole picture where None). RGBA is reduced premultiplied (Image.py
     /// converts it to RGBa and back).
@@ -209,6 +317,35 @@ mod tests {
     }
 
     #[test]
+    fn every_colour_at_every_alpha_reduced_by_two_as_cut_and_reduced() {
+        // every colour byte at every alpha, in each corner of a block
+        let (w, h) = (2 * 65536usize, 2usize);
+        let mut data = vec![0u8; w * h * 4];
+        for i in 0..65536usize {
+            let (c, a) = ((i % 256) as u8, (i / 256) as u8);
+            let corners = [
+                [c, c.wrapping_mul(7), c ^ 0x5a, a],
+                [c.wrapping_add(85), c, c.wrapping_mul(3), a.wrapping_add(17)],
+                [c.wrapping_mul(5), c.wrapping_add(170), c, a ^ 0x33],
+                [c ^ 0xff, c.wrapping_mul(11), c.wrapping_add(1), 255 - a],
+            ];
+            for (k, pixel) in corners.iter().enumerate() {
+                let at = ((k / 2) * w + 2 * i + k % 2) * 4;
+                data[at..at + 4].copy_from_slice(pixel);
+            }
+        }
+        let im = Image::from_bytes(Mode::RGBA, w, h, data).unwrap();
+        let want = im
+            .convert(Mode::RGBa)
+            .unwrap()
+            .reduce(2, 2, None)
+            .unwrap()
+            .convert(Mode::RGBA)
+            .unwrap();
+        assert_eq!(im.reduce_rgba_part(0, 0, w / 2, 1, 2).unwrap(), want);
+    }
+
+    #[test]
     fn an_rgba_part_reduced_in_one_go_as_cut_and_reduced() {
         let (w, h) = (23usize, 17usize);
         let mut seed = 0x9e37_79b9_u64;
@@ -233,6 +370,12 @@ mod tests {
                 (3, 2, 4, 5),
                 (-2, -1, 6, 3),
                 (20, 15, 3, 3),
+                // (four blocks at a time, and the ones beside them, inside and over the edges)
+                (0, 0, 11, 8),
+                (-3, 1, 13, 7),
+                (-1, -2, 14, 10),
+                (2, 3, 9, 4),
+                (5, 0, 12, 9),
             ] {
                 let cut = im.crop(x0, y0, x0 + (ow * s) as i64, y0 + (oh * s) as i64);
                 let want = cut

@@ -127,6 +127,9 @@ pub(crate) enum Drawn {
     Unported(String),
 }
 
+/// The widgets a renderer draws, kept behind Rcs.
+pub type Widgets = Rc<Vec<Rc<Dict>>>;
+
 pub struct Renderer {
     pub theme: Theme,
     pub(crate) env: Env,
@@ -134,7 +137,7 @@ pub struct Renderer {
     pub(crate) dither: bool,
     /// the widgets to draw: the theme's, its modules replaced by their parts
     /// (kept behind Rcs: a frame walks them without copying them)
-    pub widgets: Rc<Vec<Rc<Dict>>>,
+    pub widgets: Widgets,
     /// the box of each module, for the editor
     pub module_boxes: IndexMap<String, [i64; 4]>,
     /// the theme's modules by id
@@ -183,6 +186,9 @@ pub struct Renderer {
     pub(crate) facet_glyphs: crate::text::FacetGlyphs,
     /// and coloured, kept while they hold at most PATCH_BYTES
     pub(crate) facet_patches: crate::text::FacetPatches,
+    /// whether a widget of `widgets` has a finish not drawn here, found once for those
+    /// widgets (held, so that another list is never taken for them)
+    unported_finish: RefCell<Option<(Widgets, bool)>>,
     /// the look of the weather symbols the person chose (config.toml's symbols: the app sets
     /// it; vivid where it does not, as Python's renderer has it)
     pub symbols: String,
@@ -390,6 +396,7 @@ impl Renderer {
             world: ([0; 3], [0; 3]),
             facet_glyphs: RefCell::new(HashMap::new()),
             facet_patches: RefCell::new(Kept::new(crate::text::PATCH_BYTES)),
+            unported_finish: RefCell::new(None),
             symbols: crate::symbols::DEFAULT_PACK.to_string(),
             ranges: HashMap::new(),
             strips: HashMap::new(),
@@ -1797,14 +1804,24 @@ impl Renderer {
         if widget::truthy(&self.theme.look, "grid") {
             return Some("looks");
         }
-        if self
-            .widgets
-            .iter()
-            .any(|w| finish::of(w) == Finish::Unported)
-        {
+        if self.unported_finishes() {
             return Some("finishes");
         }
         None
+    }
+
+    /// Whether a widget has a finish not drawn here: looked at once for each list of
+    /// widgets, not on every frame (the widgets of a list do not change).
+    fn unported_finishes(&self) -> bool {
+        let mut known = self.unported_finish.borrow_mut();
+        match known.as_ref() {
+            Some((widgets, found)) if Rc::ptr_eq(widgets, &self.widgets) => *found,
+            _ => {
+                let found = (self.widgets.iter()).any(|w| finish::of(w) == Finish::Unported);
+                *known = Some((Rc::clone(&self.widgets), found));
+                found
+            }
+        }
     }
 
     /// render: the frame (RGB) of `snapshot` at `now` (the clock the slots' rules keep their
