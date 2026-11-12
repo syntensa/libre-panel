@@ -22,6 +22,30 @@ impl From<lp_pixels::Error> for Failed {
 
 pub type Result<T> = std::result::Result<T, Failed>;
 
+/// What a picture was grown from (render/scene.py's grew): its first `keep` columns are
+/// `base`'s from column `shift` on (a graph's strip grown from the one before).
+#[derive(Clone, Debug)]
+pub struct Growth {
+    pub base: std::rc::Weak<Image>,
+    pub shift: i64,
+    pub keep: i64,
+}
+
+/// A part a piece's layer is cut from (render/scene.py's View): `image` from (sx, sy), w x h,
+/// pasted at (dx, dy) on a clear picture of the layer's size (nothing where it lies off
+/// `image`); `growth` where `image` was grown from another.
+#[derive(Clone, Debug)]
+pub struct CutPart {
+    pub image: std::rc::Rc<Image>,
+    pub growth: Option<Growth>,
+    pub sx: i64,
+    pub sy: i64,
+    pub dx: i64,
+    pub dy: i64,
+    pub w: i64,
+    pub h: i64,
+}
+
 /// A rendered widget: its layer (RGBA) with its corner at (x, y).
 #[derive(Clone, Debug)]
 pub struct Piece {
@@ -37,6 +61,9 @@ pub struct Piece {
     pub add: bool,
     /// light added onto the panel after the layer: a glow
     pub light: Option<Box<Piece>>,
+    /// what its layer is cut from, where it is so cut (a scrolling graph's window from its
+    /// strip): an engine that keeps those pictures cuts it itself (render/scene.py's View)
+    pub cut: Option<Vec<CutPart>>,
 }
 
 impl Piece {
@@ -51,6 +78,7 @@ impl Piece {
             backdrop_radius: 0.0,
             add: false,
             light: None,
+            cut: None,
         }
     }
 

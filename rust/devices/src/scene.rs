@@ -15,10 +15,14 @@ use lp_pixels::{Image, Mode};
 
 use crate::engine::head;
 
-/// The records of a frame of layers (wire.rs): its ground, a layer, the frame.
+/// The records of a frame of layers (wire.rs): its ground, a layer, the frame; a picture the
+/// engine keeps, a layer it cuts from such pictures, and a picture it grows from one it keeps.
 const GROUND: u8 = 9;
 const LAYER: u8 = 10;
 const SCENE: u8 = 11;
+const SOURCE: u8 = 14;
+const VIEW: u8 = 15;
+const GROWN: u8 = 20;
 
 /// How a layer lies on the frame (scene.rs's How): through its alpha, as it is, or added.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -28,12 +32,28 @@ pub enum How {
     Add = 2,
 }
 
-/// A layer of a piece: its picture at x, y, laid so.
+/// A layer of a piece: its picture at x, y, laid so; and where it is cut from pictures (a
+/// scrolling graph's window from its strip), those parts.
 pub struct Layer<'a> {
     pub image: &'a Image,
     pub x: i64,
     pub y: i64,
     pub how: How,
+    pub cut: Option<Vec<Cut>>,
+}
+
+/// A part a layer is cut from (render/scene.py's View): `image` from (sx, sy), w x h, pasted at
+/// (dx, dy) on a clear picture of the layer's size; `grown` where `image`'s first `keep` columns
+/// are those of `base` from column `shift` on (render/scene.py's grew).
+pub struct Cut {
+    pub image: Rc<Image>,
+    pub grown: Option<(Rc<Image>, i64, i64)>,
+    pub sx: i64,
+    pub sy: i64,
+    pub dx: i64,
+    pub dy: i64,
+    pub w: i64,
+    pub h: i64,
 }
 
 /// The ground under the layers: the theme's colour, or its picture (RGB, the frame's size;
@@ -60,21 +80,49 @@ enum Kept {
     Picture(usize),
 }
 
+/// A piece the engine has: kept alive (its key stays its own), its layers, and the pictures
+/// they are cut from.
+type Had = (Rc<dyn Any>, Vec<u32>, Vec<usize>);
+
+/// The pictures the engine keeps by their key (the picture's address): the picture kept alive,
+/// its number there.
+type Sources = HashMap<usize, (Rc<Image>, u32)>;
+
 /// What one stream of the engine has of the frames' layers. Used by the stream's writer alone.
 #[derive(Default)]
 pub struct SceneSender {
     ground: Option<(Kept, Option<Rc<Image>>)>,
-    /// each piece's layers by its key, and the piece kept alive (its key stays its own)
-    pieces: HashMap<usize, (Rc<dyn Any>, Vec<u32>)>,
+    /// each piece's layers by its key
+    pieces: HashMap<usize, Had>,
+    /// the pictures layers are cut from, while the frames' layers are (the engine forgets the
+    /// others with them)
+    sources: Sources,
+    /// whether the engine cuts layers from pictures it keeps ("views"), and grows a picture
+    /// from one it keeps ("grown")
+    views: bool,
+    grown: bool,
     next: u32,
-    /// layers sent, and their bytes
+    /// layers sent, and their bytes (pictures to cut from with them)
     pub layers: u64,
     pub bytes: u64,
+    /// layers the engine cut from pictures it keeps, and pictures it grew
+    pub cut: u64,
+    pub grew: u64,
 }
 
 impl SceneSender {
     pub fn new() -> SceneSender {
         SceneSender::default()
+    }
+
+    /// A sender for an engine that cuts layers from pictures it keeps (`views`) and grows a
+    /// picture from one it keeps (`grown`), as it says it does.
+    pub fn with(views: bool, grown: bool) -> SceneSender {
+        SceneSender {
+            views,
+            grown: views && grown,
+            ..SceneSender::default()
+        }
     }
 
     /// Whether the engine has the layers of the piece of `key` (from the frame before).
@@ -130,6 +178,119 @@ impl SceneSender {
         Some(number)
     }
 
+    /// The layer the engine cuts from pictures it keeps (devices/engine.py's _view), those sent
+    /// once while the frames' layers are cut from them; None where it goes as its pixels: an
+    /// engine that does not cut, a layer laid otherwise than through its alpha, or one that is
+    /// not (byte for byte) what its parts cut.
+    fn view(
+        &mut self,
+        parts: &mut Vec<Vec<u8>>,
+        layer: &Layer<'_>,
+        now: &mut Sources,
+    ) -> Option<(u32, Vec<usize>)> {
+        let cut = layer.cut.as_ref().filter(|cut| !cut.is_empty())?;
+        let image = layer.image;
+        let rgba = |image: &Image| image.mode() == Mode::RGBA;
+        if !self.views || layer.how != How::Over || !rgba(image) {
+            return None;
+        }
+        if !cut.iter().all(|part| rgba(&part.image)) || !cut_is(image, cut) {
+            return None;
+        }
+        let mut keys = Vec::with_capacity(cut.len());
+        let mut body = Vec::with_capacity(20 + 28 * cut.len());
+        body.extend_from_slice(&(layer.x as i32).to_le_bytes());
+        body.extend_from_slice(&(layer.y as i32).to_le_bytes());
+        body.extend_from_slice(&(image.width() as u32).to_le_bytes());
+        body.extend_from_slice(&(image.height() as u32).to_le_bytes());
+        body.extend_from_slice(&(cut.len() as u32).to_le_bytes());
+        for part in cut {
+            keys.push(Rc::as_ptr(&part.image) as usize);
+            let number = self.source(parts, part, now);
+            body.extend_from_slice(&number.to_le_bytes());
+            for v in [part.sx, part.sy, part.dx, part.dy] {
+                body.extend_from_slice(&(v as i32).to_le_bytes());
+            }
+            body.extend_from_slice(&(part.w as u32).to_le_bytes());
+            body.extend_from_slice(&(part.h as u32).to_le_bytes());
+        }
+        let number = self.next.wrapping_add(1);
+        self.next = number;
+        let mut record = head(VIEW, number, body.len() as u32);
+        record.extend_from_slice(&body);
+        parts.push(record);
+        self.layers += 1;
+        self.cut += 1;
+        Some((number, keys))
+    }
+
+    /// The number of the picture the engine keeps for `part`'s image, sent the first time and
+    /// kept while the frames' layers are cut from it (devices/engine.py's _source); one grown
+    /// from a picture it keeps goes as the rest of its columns.
+    fn source(&mut self, parts: &mut Vec<Vec<u8>>, part: &Cut, now: &mut Sources) -> u32 {
+        let key = Rc::as_ptr(&part.image) as usize;
+        let known = (now.get(&key).or_else(|| self.sources.get(&key)))
+            .filter(|(image, _)| Rc::ptr_eq(image, &part.image))
+            .map(|(image, number)| (Rc::clone(image), *number));
+        if let Some(hit) = known {
+            let number = hit.1;
+            now.insert(key, hit);
+            return number;
+        }
+        let number = self.next.wrapping_add(1);
+        self.next = number;
+        let image = &part.image;
+        let (w, h) = (image.width(), image.height());
+        let base = part
+            .grown
+            .as_ref()
+            .filter(|_| self.grown)
+            .and_then(|(base, shift, keep)| {
+                let at = Rc::as_ptr(base) as usize;
+                let (had, n) = now.get(&at).or_else(|| self.sources.get(&at))?;
+                let (shift, keep) = (usize::try_from(*shift).ok()?, usize::try_from(*keep).ok()?);
+                let fits = Rc::ptr_eq(had, base)
+                    && base.height() == h
+                    && keep <= w
+                    && shift
+                        .checked_add(keep)
+                        .is_some_and(|end| end <= base.width());
+                // (and its first columns are those of the one it grew from, byte for byte)
+                let same = fits
+                    && (0..h).all(|y| {
+                        image.row(y)[..keep * 4] == base.row(y)[shift * 4..(shift + keep) * 4]
+                    });
+                same.then_some((*n, shift, keep))
+            });
+        match base {
+            Some((from, shift, keep)) => {
+                let mut rest = Vec::with_capacity((w - keep) * h * 4);
+                for y in 0..h {
+                    rest.extend_from_slice(&image.row(y)[keep * 4..]);
+                }
+                let mut record = head(GROWN, number, (20 + rest.len()) as u32);
+                for v in [w, h, from as usize, shift, keep] {
+                    record.extend_from_slice(&(v as u32).to_le_bytes());
+                }
+                parts.push(record);
+                self.bytes += rest.len() as u64;
+                self.grew += 1;
+                parts.push(rest);
+            }
+            None => {
+                let data = image.as_bytes().to_vec();
+                let mut record = head(SOURCE, number, (8 + data.len()) as u32);
+                record.extend_from_slice(&(w as u32).to_le_bytes());
+                record.extend_from_slice(&(h as u32).to_le_bytes());
+                parts.push(record);
+                self.bytes += data.len() as u64;
+                parts.push(data);
+            }
+        }
+        now.insert(key, (Rc::clone(&part.image), number));
+        number
+    }
+
     /// The records of the frame numbered `number` (drawn for `planned`; turned half a turn
     /// where `half`), with the ground and the layers the engine does not have yet.
     pub fn records(
@@ -172,28 +333,40 @@ impl SceneSender {
             }
         }
         let mut order: Vec<u32> = Vec::new();
-        let mut now: HashMap<usize, (Rc<dyn Any>, Vec<u32>)> =
-            HashMap::with_capacity(entries.len());
+        let mut now: HashMap<usize, Had> = HashMap::with_capacity(entries.len());
+        let mut sources: Sources = HashMap::new();
         for entry in entries {
             match entry {
                 Entry::Known(key) => {
                     if let Some(had) = now.get(&key).or_else(|| self.pieces.get(&key)) {
-                        let had = (Rc::clone(&had.0), had.1.clone());
+                        let had = (Rc::clone(&had.0), had.1.clone(), had.2.clone());
                         order.extend_from_slice(&had.1);
+                        // (the pictures its layers are cut from stay)
+                        for at in &had.2 {
+                            if let Some(source) = self.sources.get(at) {
+                                sources.insert(*at, (Rc::clone(&source.0), source.1));
+                            }
+                        }
                         now.insert(key, had);
                     }
                 }
                 Entry::New { key, keep, layers } => {
-                    let ids: Vec<u32> = layers
-                        .iter()
-                        .filter_map(|layer| self.layer(&mut parts, layer))
-                        .collect();
+                    let (mut ids, mut cut_from) = (Vec::new(), Vec::new());
+                    for layer in &layers {
+                        if let Some((id, keys)) = self.view(&mut parts, layer, &mut sources) {
+                            ids.push(id);
+                            cut_from.extend(keys);
+                        } else if let Some(id) = self.layer(&mut parts, layer) {
+                            ids.push(id);
+                        }
+                    }
                     order.extend_from_slice(&ids);
-                    now.insert(key, (keep, ids));
+                    now.insert(key, (keep, ids, cut_from));
                 }
             }
         }
         self.pieces = now;
+        self.sources = sources;
         let mut record = head(SCENE, number, order.len() as u32);
         record.extend_from_slice(&planned.unwrap_or(f64::NAN).to_le_bytes());
         record.extend_from_slice(&(if half { 180u32 } else { 0 }).to_le_bytes());
@@ -208,7 +381,42 @@ impl SceneSender {
     pub fn forget(&mut self) {
         self.ground = None;
         self.pieces.clear();
+        self.sources.clear();
     }
+}
+
+/// Whether `image` is what `cut` cuts: its parts pasted in turn on a clear picture of its size,
+/// each nothing where it lies off its picture (as Pillow crops and pastes).
+fn cut_is(image: &Image, cut: &[Cut]) -> bool {
+    let (w, h) = (image.width() as i64, image.height() as i64);
+    // (the usual one: a part over all of it, its rows compared where they are)
+    if let [part] = cut {
+        if (part.dx, part.dy, part.w, part.h) == (0, 0, w, h) {
+            let (pw, ph) = (part.image.width() as i64, part.image.height() as i64);
+            let (a, b) = ((-part.sx).clamp(0, w), (pw - part.sx).clamp(0, w));
+            return (0..h).all(|y| {
+                let row = image.row(y as usize);
+                let sy = part.sy + y;
+                if !(0..ph).contains(&sy) || b <= a {
+                    return row.iter().all(|&v| v == 0);
+                }
+                let from = &part.image.row(sy as usize)[((part.sx + a) * 4) as usize..];
+                row[..(a * 4) as usize].iter().all(|&v| v == 0)
+                    && row[(a * 4) as usize..(b * 4) as usize] == from[..((b - a) * 4) as usize]
+                    && row[(b * 4) as usize..].iter().all(|&v| v == 0)
+            });
+        }
+    }
+    let mut made = Image::blank(Mode::RGBA, w as usize, h as usize);
+    for part in cut {
+        let piece = part
+            .image
+            .crop(part.sx, part.sy, part.sx + part.w, part.sy + part.h);
+        if made.paste(&piece, part.dx, part.dy, None).is_err() {
+            return false;
+        }
+    }
+    made.as_bytes() == image.as_bytes()
 }
 
 #[cfg(test)]
@@ -245,6 +453,7 @@ mod tests {
                 x: 100,
                 y: 50,
                 how: How::Over,
+                cut: None,
             }],
         }];
         let parts = sender.records(&Ground::Colour([1, 2, 3]), entries, 7, Some(1.5), false);
@@ -295,12 +504,14 @@ mod tests {
                     x: 0,
                     y: 0,
                     how: How::Over,
+                    cut: None,
                 },
                 Layer {
                     image: &light,
                     x: 10,
                     y: 10,
                     how: How::Add,
+                    cut: None,
                 },
             ],
         }];
@@ -314,5 +525,136 @@ mod tests {
         // the same ground picture: not sent again
         let parts = sender.records(&Ground::Picture(&ground), vec![], 2, None, false);
         assert_eq!(kinds(&parts), vec![(SCENE, 2, 0)]);
+    }
+
+    /// A picture of `w` x `h` whose pixels are their place: no two alike.
+    fn numbered(w: usize, h: usize) -> Image {
+        let data = (0..w * h * 4).map(|i| (i * 7 % 251) as u8 | 1).collect();
+        Image::from_bytes(Mode::RGBA, w, h, data).unwrap()
+    }
+
+    #[test]
+    fn a_layer_cut_from_a_picture_goes_as_its_parts_the_picture_once_and_grown_as_its_rest() {
+        let strip = Rc::new(numbered(12, 3));
+        let window = strip.crop(2, 0, 7, 3);
+        let cut = |image: &Rc<Image>, grown: Option<(Rc<Image>, i64, i64)>, sx: i64| {
+            Some(vec![Cut {
+                image: Rc::clone(image),
+                grown,
+                sx,
+                sy: 0,
+                dx: 0,
+                dy: 0,
+                w: 5,
+                h: 3,
+            }])
+        };
+        let mut sender = SceneSender::with(true, true);
+        let piece: Rc<dyn Any> = Rc::new(1u8);
+        let key = Rc::as_ptr(&piece) as *const () as usize;
+        let layer = Layer {
+            image: &window,
+            x: 4,
+            y: 5,
+            how: How::Over,
+            cut: cut(&strip, None, 2),
+        };
+        let entries = vec![Entry::New {
+            key,
+            keep: Rc::clone(&piece),
+            layers: vec![layer],
+        }];
+        let parts = sender.records(&Ground::Colour([0, 0, 0]), entries, 1, None, false);
+        assert_eq!(
+            kinds(&parts),
+            vec![
+                (GROUND, 0, 3),
+                (SOURCE, 1, 8 + 12 * 3 * 4),
+                (VIEW, 2, 20 + 28),
+                (SCENE, 1, 1)
+            ]
+        );
+        // the next window of the same strip: the strip not again
+        let window = strip.crop(3, 0, 8, 3);
+        let piece2: Rc<dyn Any> = Rc::new(2u8);
+        let key2 = Rc::as_ptr(&piece2) as *const () as usize;
+        let entries = vec![Entry::New {
+            key: key2,
+            keep: Rc::clone(&piece2),
+            layers: vec![Layer {
+                image: &window,
+                x: 4,
+                y: 5,
+                how: How::Over,
+                cut: cut(&strip, None, 3),
+            }],
+        }];
+        let parts = sender.records(&Ground::Colour([0, 0, 0]), entries, 2, None, false);
+        assert_eq!(kinds(&parts), vec![(VIEW, 3, 20 + 28), (SCENE, 2, 1)]);
+        // a strip grown from it: its first 9 columns those of the one before from column 3 on
+        let mut grown = numbered(12, 3);
+        for y in 0..3 {
+            let from = strip.row(y)[3 * 4..12 * 4].to_vec();
+            grown.row_mut(y)[..9 * 4].copy_from_slice(&from);
+        }
+        let grown = Rc::new(grown);
+        let window = grown.crop(0, 0, 5, 3);
+        let piece3: Rc<dyn Any> = Rc::new(3u8);
+        let key3 = Rc::as_ptr(&piece3) as *const () as usize;
+        let entries = vec![Entry::New {
+            key: key3,
+            keep: Rc::clone(&piece3),
+            layers: vec![Layer {
+                image: &window,
+                x: 4,
+                y: 5,
+                how: How::Over,
+                cut: cut(&grown, Some((Rc::clone(&strip), 3, 9)), 0),
+            }],
+        }];
+        let parts = sender.records(&Ground::Colour([0, 0, 0]), entries, 3, None, false);
+        assert_eq!(
+            kinds(&parts),
+            vec![
+                (GROWN, 4, 20 + 3 * 3 * 4),
+                (VIEW, 5, 20 + 28),
+                (SCENE, 3, 1)
+            ]
+        );
+        assert_eq!((sender.cut, sender.grew), (3, 1));
+        // a layer that is not what its parts cut goes as its pixels
+        let mut other = grown.crop(1, 0, 6, 3);
+        other.as_bytes_mut()[0] ^= 0xFF;
+        let piece4: Rc<dyn Any> = Rc::new(4u8);
+        let key4 = Rc::as_ptr(&piece4) as *const () as usize;
+        let entries = vec![Entry::New {
+            key: key4,
+            keep: Rc::clone(&piece4),
+            layers: vec![Layer {
+                image: &other,
+                x: 4,
+                y: 5,
+                how: How::Over,
+                cut: cut(&grown, None, 1),
+            }],
+        }];
+        let parts = sender.records(&Ground::Colour([0, 0, 0]), entries, 4, None, false);
+        assert_eq!(kinds(&parts)[0].0, LAYER);
+        // an engine that does not cut: its pixels too
+        let mut plain = SceneSender::with(false, false);
+        let first = strip.crop(2, 0, 7, 3);
+        let entries = vec![Entry::New {
+            key,
+            keep: Rc::clone(&piece),
+            layers: vec![Layer {
+                image: &first,
+                x: 4,
+                y: 5,
+                how: How::Over,
+                cut: cut(&strip, None, 2),
+            }],
+        }];
+        let parts = plain.records(&Ground::Colour([0, 0, 0]), entries, 1, None, false);
+        assert_eq!(kinds(&parts)[1].0, LAYER);
     }
 }

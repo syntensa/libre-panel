@@ -215,5 +215,20 @@ pub fn clip_sides(mut piece: Piece) -> Piece {
     let height = piece.layer.height() as i64;
     piece.layer = piece.layer.crop(left, 0, right, height);
     piece.x += left;
+    // (what it is cut from, cut to those columns: render/scene.py's cut_columns)
+    piece.cut = piece.cut.take().map(|parts| {
+        parts
+            .into_iter()
+            .filter_map(|part| {
+                let (a, b) = (part.dx.max(left), (part.dx + part.w).min(right));
+                (b > a).then(|| crate::piece::CutPart {
+                    sx: part.sx + a - part.dx,
+                    dx: a - left,
+                    w: b - a,
+                    ..part
+                })
+            })
+            .collect()
+    });
     piece
 }

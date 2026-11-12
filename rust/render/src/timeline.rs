@@ -66,7 +66,9 @@ pub(crate) struct Strip {
     top: i64,
     pad: i64,
     /// per half-pixel step its line on its glow (_strip_phases' steps) ...
-    steps: Vec<Image>,
+    steps: Vec<Rc<Image>>,
+    /// ... each grown from the one before's where it was (render/scene.py's grew) ...
+    growth: Vec<Option<crate::piece::Growth>>,
     /// ... and premultiplied, what the parts of a step are blended of (none for one part).
     /// _strip_phases blends every part of the whole strip; a window blends only its own
     /// pixels, which are the same: blending, premultiplying and cutting go pixel by pixel.
@@ -655,12 +657,30 @@ impl Renderer {
             })?,
             None => None,
         };
-        let (steps, weighed, halo, pad, origin, width, top) = match grown {
-            Some(grown) => grown,
-            None => crate::prof::part("strip whole", || {
-                self.draw_strip(w, &values, first, per_point, every, bounds.clone(), parts)
-            })?,
+        let (drawn, grew) = match grown {
+            Some((drawn, grew)) => (drawn, Some(grew)),
+            None => (
+                crate::prof::part("strip whole", || {
+                    self.draw_strip(w, &values, first, per_point, every, bounds.clone(), parts)
+                })?,
+                None,
+            ),
         };
+        let (steps, weighed, halo, pad, origin, width, top) = drawn;
+        // (each step grown from the one before's: its first columns that one's)
+        let growth = match (grew, before) {
+            (Some((shift, keep)), Some(before)) => (before.steps.iter())
+                .map(|base| {
+                    Some(crate::piece::Growth {
+                        base: Rc::downgrade(base),
+                        shift,
+                        keep,
+                    })
+                })
+                .collect(),
+            _ => vec![None; steps.len()],
+        };
+        let steps: Vec<Rc<Image>> = steps.into_iter().map(Rc::new).collect();
         self.strip_count += 1;
         Ok(Strip {
             id: self.strip_count,
@@ -676,6 +696,7 @@ impl Renderer {
             top,
             pad,
             steps,
+            growth,
             weighed,
             parts,
             halo,
@@ -703,7 +724,7 @@ impl Renderer {
         every: i64,
         bounds: &Range,
         parts: i64,
-    ) -> Result<Option<Drawn>> {
+    ) -> Result<Option<(Drawn, (i64, i64))>> {
         let same_range = float_of(&before.bounds.0) == float_of(&bounds.0)
             && float_of(&before.bounds.1) == float_of(&bounds.1);
         if before.steps.is_empty()
@@ -826,7 +847,8 @@ impl Renderer {
             (Some(old), Some(tail)) => Some(joined(old, tail)?),
             _ => None,
         };
-        Ok(Some((steps, weighed, halo, pad, origin, width, before.top)))
+        let drawn = (steps, weighed, halo, pad, origin, width, before.top);
+        Ok(Some((drawn, (shift, keep))))
     }
 
     /// _patch_piece: the end of the window (from `left`) drawn again from where the strip no
@@ -1057,6 +1079,28 @@ impl Renderer {
             }
             Ok(layer)
         };
+        // (a window cut from a step alone, nothing laid on it: what it is cut from, for an
+        // engine that keeps the strip's steps and cuts it itself)
+        let mut cut = None;
+        let k = (phase * strip.parts + part).clamp(0, strip.phase_count() - 1);
+        let parts_of = strip.parts.max(1);
+        if !patch
+            && stretch.is_none()
+            && strip.halo.is_none()
+            && (k.rem_euclid(parts_of) == 0 || strip.weighed.is_empty())
+        {
+            let step = k.div_euclid(parts_of) as usize;
+            cut = Some(vec![crate::piece::CutPart {
+                image: Rc::clone(&strip.steps[step]),
+                growth: strip.growth.get(step).cloned().flatten(),
+                sx: offset,
+                sy: 0,
+                dx: 0,
+                dy: 0,
+                w: gw + 2 * pad,
+                h: gh + 2 * pad,
+            }]);
+        }
         let mut layer = if !patch || part == 0 {
             window(phase * strip.parts + part, offset, left)?
         } else {
@@ -1077,6 +1121,7 @@ impl Renderer {
         let (x, y) = (widget::int(&w, "x", 0), widget::int(&w, "y", 0));
         let mut piece = Piece::new(layer, x - pad, y - pad);
         piece.hit = Some([x, y, gw, gh]);
+        piece.cut = cut;
         if widget::truthy(&w, "clip") {
             piece = effects::clip_sides(piece);
         }

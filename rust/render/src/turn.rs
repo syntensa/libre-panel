@@ -124,6 +124,7 @@ pub(crate) fn turned(piece: &Piece, turn: Turn) -> Result<Piece> {
         backdrop_radius: piece.backdrop_radius,
         add: piece.add,
         light,
+        cut: None,
     })
 }
 

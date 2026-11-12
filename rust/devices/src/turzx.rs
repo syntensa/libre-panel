@@ -831,7 +831,7 @@ impl TurzxVideo {
         }
         .to_string();
         let scenes = (setup.video.engine_layers && can.contains("scenes"))
-            .then(crate::scene::SceneSender::new);
+            .then(|| crate::scene::SceneSender::with(can.contains("views"), can.contains("grown")));
         let mut panel = TurzxVideo {
             conn,
             block: DEFAULT_BLOCK,
@@ -1314,11 +1314,18 @@ impl TurzxVideo {
             ));
         }
         if let Some(scenes) = self.scenes.as_ref().filter(|scenes| scenes.layers > 0) {
-            self.notes.push(format!(
+            let mut said = format!(
                 "video: {} layers went to the engine, {:.1} MB",
                 scenes.layers,
                 scenes.bytes as f64 / 1e6
-            ));
+            );
+            if scenes.cut > 0 {
+                said += &format!(
+                    "; {} of them cut there from pictures it keeps ({} grown there)",
+                    scenes.cut, scenes.grew
+                );
+            }
+            self.notes.push(said);
         }
         if of("pictures") > 0.0 {
             let late = of("late") as u64;

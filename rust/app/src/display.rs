@@ -629,13 +629,39 @@ impl Display {
                         x: piece.x,
                         y: piece.y,
                         how: How::Add,
+                        cut: None,
                     });
                 } else {
+                    // (what its layer is cut from, as devices/engine.py's _view takes it: a
+                    // piece with no light of its own)
+                    let cut = piece
+                        .cut
+                        .as_ref()
+                        .filter(|_| piece.light.is_none())
+                        .map(|parts| {
+                            parts
+                                .iter()
+                                .map(|part| lp_devices::scene::Cut {
+                                    image: Rc::clone(&part.image),
+                                    grown: part.growth.as_ref().and_then(|growth| {
+                                        let base = growth.base.upgrade()?;
+                                        Some((base, growth.shift, growth.keep))
+                                    }),
+                                    sx: part.sx,
+                                    sy: part.sy,
+                                    dx: part.dx,
+                                    dy: part.dy,
+                                    w: part.w,
+                                    h: part.h,
+                                })
+                                .collect()
+                        });
                     layers.push(Layer {
                         image: &piece.layer,
                         x: piece.x,
                         y: piece.y,
                         how: How::Over,
+                        cut,
                     });
                     if let Some(light) = &piece.light {
                         layers.push(Layer {
@@ -643,6 +669,7 @@ impl Display {
                             x: light.x,
                             y: light.y,
                             how: How::Add,
+                            cut: None,
                         });
                     }
                 }
