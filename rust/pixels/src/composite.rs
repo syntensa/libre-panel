@@ -95,14 +95,21 @@ pub fn tint_over_at(
     Ok(())
 }
 
-/// One colour laid over pixels through an alpha of each, as over_pixel lays it.
+/// One colour laid over pixels through an alpha of each, as over_pixel lays it. Its share
+/// of a pixel (coef1, and the alpha that comes of it) hangs on the two alphas alone: worked
+/// out once for each pair met (a division a pixel, else), kept where the pair's place in
+/// `shares` holds it.
 struct Tint {
     colour: [u8; 3],
+    shares: [(u16, u32, u8); 256],
 }
 
 impl Tint {
     fn new(colour: [u8; 3]) -> Tint {
-        Tint { colour }
+        Tint {
+            colour,
+            shares: [(0, 0, 0); 256],
+        }
     }
 
     #[inline(always)]
@@ -110,9 +117,33 @@ impl Tint {
         if a == 0 {
             return; // (over_pixel leaves it as it is)
         }
-        let src = [self.colour[0], self.colour[1], self.colour[2], a];
-        let was = [d[0], d[1], d[2], d[3]];
-        over_pixel(&was, &src, d);
+        let da = d[3];
+        if a == 255 || da == 0 {
+            // (over_pixel: the colour's own pixel)
+            d[..3].copy_from_slice(&self.colour);
+            d[3] = a;
+            return;
+        }
+        // (no pair is 0: an alpha of 0 is taken above)
+        let pair = (u16::from(a) << 8) | u16::from(da);
+        let place = (usize::from(a) * 7 + usize::from(da)) & 255;
+        let (kept, coef1, alpha) = self.shares[place];
+        let (coef1, alpha) = if kept == pair {
+            (coef1, alpha)
+        } else {
+            let sa = u32::from(a);
+            let outa255 = sa * 255 + u32::from(da) * (255 - sa);
+            let coef1 = sa * 255 * 255 * (1 << PRECISION_BITS) / outa255;
+            let alpha = shift_div255(outa255 + 0x80) as u8;
+            self.shares[place] = (pair, coef1, alpha);
+            (coef1, alpha)
+        };
+        let coef2 = 255 * (1 << PRECISION_BITS) - coef1;
+        for (level, &c) in d[..3].iter_mut().zip(&self.colour) {
+            let tmp = u32::from(c) * coef1 + u32::from(*level) * coef2;
+            *level = (shift_div255(tmp + (0x80 << PRECISION_BITS)) >> PRECISION_BITS) as u8;
+        }
+        d[3] = alpha;
     }
 }
 
@@ -221,6 +252,46 @@ mod tests {
                 ] {
                     over_pixel(&dst, &src, &mut out);
                     assert_eq!(out, over_by_sums(&dst, &src), "{src:?} over {dst:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_tint_over_every_pair_of_alphas_as_over_pixel_lays_it() {
+        // (each pair of alphas, in rows and in a scattered order, so that the shares kept
+        // are met again, and others in their places)
+        let (w, h) = (256usize, 256usize);
+        let mut scatter = 0x2545_f491u32;
+        let mut order: Vec<usize> = (0..w * h).collect();
+        for i in (1..order.len()).rev() {
+            scatter ^= scatter << 13;
+            scatter ^= scatter >> 17;
+            scatter ^= scatter << 5;
+            order.swap(i, scatter as usize % (i + 1));
+        }
+        for colour in [[200u8, 31, 99], [0, 0, 0], [255, 255, 255]] {
+            for picked in [(0..w * h).collect::<Vec<usize>>(), order.clone()] {
+                let mut dst = Image::blank(Mode::RGBA, w, h);
+                let mut alpha = vec![0u8; w * h];
+                for (k, &i) in picked.iter().enumerate() {
+                    let (a, da) = ((i % w) as u8, (i / w) as u8);
+                    dst.data[k * 4..k * 4 + 4].copy_from_slice(&[
+                        a ^ 0x5a,
+                        da,
+                        a.wrapping_mul(3),
+                        da,
+                    ]);
+                    alpha[k] = a;
+                }
+                let mut got = dst.clone();
+                tint_over(&mut got, colour, &alpha).unwrap();
+                let pixels = dst.data.chunks_exact(4).zip(got.data.chunks_exact(4));
+                for (k, ((was, now), &a)) in pixels.zip(&alpha).enumerate() {
+                    let mut want = [0u8; 4];
+                    let src = [colour[0], colour[1], colour[2], a];
+                    over_pixel(was, &src, &mut want);
+                    assert_eq!(now, &want, "{src:?} at {k}");
                 }
             }
         }
