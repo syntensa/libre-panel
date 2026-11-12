@@ -7,11 +7,17 @@ use crate::{error, Image, Mode, Result};
 const PRECISION_BITS: u32 = 7;
 
 /// One pixel of ``src`` over one of ``dst`` (both RGBA), as AlphaComposite.c computes it.
+/// Over a clear pixel, and where ``src`` is opaque, that is ``src`` itself, to the bit (the
+/// other's share is nought and the sums give back each level): taken as it is.
 #[inline(always)]
 pub(crate) fn over_pixel(dst: &[u8], src: &[u8], out: &mut [u8]) {
     let sa = u32::from(src[3]);
     if sa == 0 {
         out.copy_from_slice(&dst[..4]);
+        return;
+    }
+    if sa == 255 || dst[3] == 0 {
+        out.copy_from_slice(&src[..4]);
         return;
     }
     let blend = u32::from(dst[3]) * (255 - sa);
@@ -89,22 +95,14 @@ pub fn tint_over_at(
     Ok(())
 }
 
-/// One colour laid over pixels through an alpha of each, as over_pixel lays it. Over a clear
-/// pixel the outcome is the colour's own at that alpha whatever the pixel's colour (its share
-/// is nought): those are worked out once each, as they come.
+/// One colour laid over pixels through an alpha of each, as over_pixel lays it.
 struct Tint {
     colour: [u8; 3],
-    clear: [[u8; 4]; 256],
-    known: [bool; 256],
 }
 
 impl Tint {
     fn new(colour: [u8; 3]) -> Tint {
-        Tint {
-            colour,
-            clear: [[0; 4]; 256],
-            known: [false; 256],
-        }
+        Tint { colour }
     }
 
     #[inline(always)]
@@ -113,15 +111,6 @@ impl Tint {
             return; // (over_pixel leaves it as it is)
         }
         let src = [self.colour[0], self.colour[1], self.colour[2], a];
-        if d[3] == 0 {
-            let k = usize::from(a);
-            if !self.known[k] {
-                over_pixel(&[0; 4], &src, &mut self.clear[k]);
-                self.known[k] = true;
-            }
-            d.copy_from_slice(&self.clear[k]);
-            return;
-        }
         let was = [d[0], d[1], d[2], d[3]];
         over_pixel(&was, &src, d);
     }
@@ -197,6 +186,44 @@ mod tests {
             data.push(if i % 3 == 0 { 0 } else { a });
         }
         Image::from_bytes(Mode::RGBA, w, h, data).unwrap()
+    }
+
+    /// AlphaComposite.c's sums for one pixel, without a short way.
+    fn over_by_sums(dst: &[u8; 4], src: &[u8; 4]) -> [u8; 4] {
+        let sa = u32::from(src[3]);
+        if sa == 0 {
+            return *dst;
+        }
+        let blend = u32::from(dst[3]) * (255 - sa);
+        let outa255 = sa * 255 + blend;
+        let coef1 = sa * 255 * 255 * (1 << PRECISION_BITS) / outa255;
+        let coef2 = 255 * (1 << PRECISION_BITS) - coef1;
+        let mut out = [0u8; 4];
+        for c in 0..3 {
+            let tmp = u32::from(src[c]) * coef1 + u32::from(dst[c]) * coef2;
+            out[c] = (shift_div255(tmp + (0x80 << PRECISION_BITS)) >> PRECISION_BITS) as u8;
+        }
+        out[3] = shift_div255(outa255 + 0x80) as u8;
+        out
+    }
+
+    #[test]
+    fn over_a_clear_pixel_and_opaque_a_pixel_is_itself_as_the_sums_give_it() {
+        let mut out = [0u8; 4];
+        for level in 0..=255u8 {
+            for a in 0..=255u8 {
+                let src = [level, 255 - level, level / 3, a];
+                for dst in [
+                    [0, 0, 0, 0],
+                    [9, 200, 77, 0],
+                    [level, 3, 250, a],
+                    [1, 2, 3, 255],
+                ] {
+                    over_pixel(&dst, &src, &mut out);
+                    assert_eq!(out, over_by_sums(&dst, &src), "{src:?} over {dst:?}");
+                }
+            }
+        }
     }
 
     #[test]
