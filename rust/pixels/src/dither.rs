@@ -215,9 +215,10 @@ fn turned<T: Level>(a: &[T], h: usize, w: usize) -> Vec<T> {
 }
 
 /// rows down the columns: the same sums in the same order for each column (as the rows of the
-/// picture turned), worked out for all columns at once, row by row.
+/// picture turned), worked out for all columns at once, row by row. Of the running sums only
+/// the two a window takes are kept, where it starts and where it ends, each summed from the
+/// first row on as rows sums them: the same additions in the same order.
 fn cols<T: Level>(a: &[T], h: usize, w: usize, side: usize, frac: f64) -> Vec<T> {
-    let padded = h + 2 * side + 2;
     let frac_t = T::of(frac);
     let scale = T::of(1.0 / (2.0 * side as f64 + 1.0 + 2.0 * frac));
     // the padded column's k-th value: the edges held
@@ -225,26 +226,37 @@ fn cols<T: Level>(a: &[T], h: usize, w: usize, side: usize, frac: f64) -> Vec<T>
         let r = k.saturating_sub(side + 1).min(h - 1);
         &a[r * w..(r + 1) * w]
     };
-    // the running sums, c[0] = 0, c[k + 1] = c[k] + p[k], for every column
-    let mut c = vec![T::ZERO; (padded + 1) * w];
-    for k in 0..padded {
-        let (done, next) = c.split_at_mut((k + 1) * w);
-        let before = &done[k * w..];
-        for ((n, &b), &v) in next[..w].iter_mut().zip(before).zip(at(k)) {
-            *n = b + v;
+    // c[1] and c[2 side + 2] of the running sums c[0] = 0, c[k + 1] = c[k] + p[k]
+    let (mut lo, mut hi) = (vec![T::ZERO; w], vec![T::ZERO; w]);
+    for (sum, &v) in lo.iter_mut().zip(at(0)) {
+        *sum = *sum + v;
+    }
+    for k in 0..2 * side + 2 {
+        for (sum, &v) in hi.iter_mut().zip(at(k)) {
+            *sum = *sum + v;
         }
     }
     let mut out = vec![T::ZERO; h * w];
     for i in 0..h {
-        let (hi, lo) = (&c[(2 * side + 2 + i) * w..][..w], &c[(1 + i) * w..][..w]);
         let (first, last) = (at(i), at(2 * side + 2 + i));
         let row = &mut out[i * w..(i + 1) * w];
-        for x in 0..w {
-            let mut v = hi[x] - lo[x];
-            if frac != 0.0 {
-                v = v + frac_t * (first[x] + last[x]);
+        if frac != 0.0 {
+            for x in 0..w {
+                row[x] = (hi[x] - lo[x] + frac_t * (first[x] + last[x])) * scale;
             }
-            row[x] = v * scale;
+        } else {
+            for x in 0..w {
+                row[x] = (hi[x] - lo[x]) * scale;
+            }
+        }
+        // (on to c[i + 2] and c[2 side + 3 + i])
+        if i + 1 < h {
+            for (sum, &v) in lo.iter_mut().zip(at(i + 1)) {
+                *sum = *sum + v;
+            }
+            for (sum, &v) in hi.iter_mut().zip(last) {
+                *sum = *sum + v;
+            }
         }
     }
     out
