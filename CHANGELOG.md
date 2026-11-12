@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+**Lighter** (Lumen on the 12.3" at 25 fps, the video mode through the engine, with the
+computer's own readings, on the same computer as 0.8.0; every change the same pixels)
+- **What a frame costs cut down further.** The app 7.3 % of a core instead of 9.3 a morning
+  before (three runs of each in turn), the engine as before. On that computer 0.8.0 now takes
+  28.2 % of a core (Python 13.8, its engine 14.4), this 19.4 (the app 7.3, the engine 12.1);
+  x264 on the processor is some 10 points of each, which the graphics card's encoder takes
+  over where it is AMD's or NVIDIA's.
+- **The graphs' windows cut by the engine, as in 0.8.** Where the engine keeps the graphs'
+  strips, the app sends a window as what it is cut from and no longer cuts it itself (some
+  0.75 MB a graph and frame on the 12.3"); a strip that grows goes as its new columns. A
+  whole strip is drawn in 0.83 ms instead of 1.52: its fill and its glow laid in one colour
+  over what is clear without a division per pixel, its light blurred along the rows as down
+  the columns, for all of them at once.
+- **What stays the same is kept, as 0.8 keeps it**: the fans' rings, rotors and blades, the
+  box the digits of a rolling clock fill (a frame of the roll 0.23 ms instead of 0.50), and
+  which version of the theme is shown (looked up on the disk once a second, not every frame).
+- **The engine on Windows keeps a frame's large blocks for the next one**, as the app does:
+  Windows gave their memory back each time and had it zeroed and mapped again (the Windows
+  runner's engine: 2,663 page faults a second).
+
 ## 0.9.0rc1 — 2026-11-11
 
 The first release candidate of 0.9.0: Libre Panel ported whole to Rust, pixel for pixel as
