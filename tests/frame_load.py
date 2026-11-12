@@ -1,9 +1,11 @@
 """What the Rust app's frames cost on this computer: Lumen on a simulated 12.3" at 25 fps, made
 into video by the engine and sent to the fake panel of fake_panel.py, the app's process measured
 for a while (CPU, page faults, memory) and its own profile said (LP_PROFILE: where a frame's
-time goes, per part).
+time goes, per part). Without ``--engine``, the frames are drawn for a virtual 12.3" and shown
+nowhere: what drawing costs alone.
 
-CI's Windows job runs it with the downloads' programs::
+CI runs it: the job `rust` without the engine, before the comparisons; the Windows job `try`
+with the downloads' programs::
 
     python tests/frame_load.py --app libre-panel-rust/libre-panel.exe \
         --engine libre-panel-rust/tools/libre-panel-engine.exe
@@ -31,10 +33,22 @@ from panel_socket import PanelSocket  # noqa: E402
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def measure(app: str, engine: str, seconds: float, theme: str, extra: dict[str, str]) -> None:
+def measure(
+    app: str, engine: str | None, seconds: float, theme: str, extra: dict[str, str]
+) -> None:
+    """One run: with ``engine`` the video through it to the simulated panel; without, the
+    frames drawn for a virtual 12.3" and shown nowhere (what drawing costs alone)."""
+    home = tempfile.mkdtemp(prefix="lp-load-")
+    if engine is None:
+        with open(os.path.join(home, "config.toml"), "w", encoding="utf-8") as f:
+            f.write(
+                f'theme = "{theme}"\nfps = 25\n[device]\ndriver = "virtual"\n'
+                'model = "turing-12.3-usb"\noutput = ""\n[sensors]\nproviders = ["psutil"]\n'
+            )
+        run(app, home, {}, seconds, theme, extra)
+        return
     fake = FakePanel(pid=0x0123, native=(720, 1920))
     sock = PanelSocket(fake)
-    home = tempfile.mkdtemp(prefix="lp-load-")
     present = os.path.join(home, "panel-present")
     alive = True
 
@@ -53,14 +67,23 @@ def measure(app: str, engine: str, seconds: float, theme: str, extra: dict[str, 
             '[video]\nmode = "on"\nfps = 25\ndevice_fps = 30\nlocal_clip = "usr/data/clip.h264"\n'
             '[sensors]\nproviders = ["psutil"]\n'
         )
+    linked = {"LP_ENGINE_LINK": sock.link, "LIBRE_PANEL_ENGINE": engine}
+    run(app, home, {**linked, "LP_ENGINE_PRESENT": present}, seconds, theme, extra)
+    alive = False
+    sock.close()
+
+
+def run(
+    app: str, home: str, more: dict[str, str], seconds: float, theme: str, extra: dict[str, str]
+) -> None:
+    """The app run with its settings in ``home`` and ``more`` in its environment, measured for
+    ``seconds`` once it is warm, and what its profile said."""
     env = {
         **os.environ,
         "LIBRE_PANEL_HOME": home,
         "LIBRE_PANEL_DATA": os.path.join(ROOT, "src", "libre_panel"),
-        "LP_ENGINE_LINK": sock.link,
-        "LIBRE_PANEL_ENGINE": engine,
-        "LP_ENGINE_PRESENT": present,
         "LP_PROFILE": "1",
+        **more,
         **extra,
     }
     env.pop("DISPLAY", None)
@@ -106,17 +129,15 @@ def measure(app: str, engine: str, seconds: float, theme: str, extra: dict[str, 
             q.kill()
         except psutil.Error:
             pass
-    alive = False
-    sock.close()
     for line in lines:
-        if line.startswith("profile ") or "video:" in line:
+        if line.startswith(("profile ", "heap:")) or "video:" in line:
             print("  " + line.rstrip())
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--app", required=True)
-    ap.add_argument("--engine", required=True)
+    ap.add_argument("--engine", help="the engine; without, a virtual panel (drawing alone)")
     ap.add_argument("--seconds", type=float, default=40)
     ap.add_argument("--theme", default="lumen")
     ap.add_argument("--env", action="append", default=[], help="NAME=VALUE for a second run")
