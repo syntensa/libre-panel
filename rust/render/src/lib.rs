@@ -31,6 +31,7 @@ mod light;
 mod list;
 mod lit;
 mod looks;
+pub mod lru;
 mod metric;
 pub mod moon;
 pub mod motion;

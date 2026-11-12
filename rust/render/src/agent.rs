@@ -20,6 +20,14 @@ const ROUND_S: f64 = 1.6;
 const BREATH_S: f64 = 2.4;
 /// pictures a round (or a breath)
 const STEPS: i64 = 48;
+/// pictures kept, the ones shown longest ago going first
+const KEEP: usize = 384;
+
+/// What a kept picture shows: its size, state, step and colours.
+type Shows = (i64, String, Option<i64>, Rgba, Rgba, Rgba);
+
+/// The pictures kept by what they show (_CACHE).
+static KEPT: crate::lru::Shared<Shows, Image> = crate::lru::Shared::new(KEEP);
 
 /// step: the picture of the motion at `now` (seconds), None for a sign that stands still.
 pub fn step(state: &str, now: f64) -> Option<i64> {
@@ -43,9 +51,23 @@ fn alpha(colour: Rgba, share: f64) -> [u8; 4] {
     ]
 }
 
-/// picture (_draw): the sign, `size` square (8 px at least), for `state` (working, waiting, idle,
-/// off) at step `at` of its motion (None: where it starts).
+/// picture: the sign, `size` square (8 px at least), for `state` (working, waiting, idle, off) at
+/// step `at` of its motion (None: where it starts). Kept by what it shows (KEEP of them), so a
+/// sign that goes round costs a lookup after its first round.
 pub fn picture(
+    size: i64,
+    state: &str,
+    at: Option<i64>,
+    colour: Rgba,
+    waiting: Rgba,
+    muted: Rgba,
+) -> Result<Image> {
+    let shows: Shows = (size, state.to_string(), at, colour, waiting, muted);
+    KEPT.get_or(shows, || draw(size, state, at, colour, waiting, muted))
+}
+
+/// _draw: the sign as `picture` describes it, drawn.
+fn draw(
     size: i64,
     state: &str,
     at: Option<i64>,

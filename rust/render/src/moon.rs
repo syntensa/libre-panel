@@ -562,7 +562,16 @@ fn byte(v: f32) -> u8 {
 
 /// _halo_alpha: the halo's light round a disc DISC of `size` px wide: bright at the disc's
 /// edge, fading outwards in two steps, to nothing at the picture's edge.
-fn halo_alpha(size: usize) -> Vec<f32> {
+fn halo_alpha(size: usize) -> std::sync::Arc<Vec<f32>> {
+    // (kept by size: the share is DISC's)
+    static KEPT: crate::lru::Shared<usize, std::sync::Arc<Vec<f32>>> = crate::lru::Shared::new(32);
+    let Ok(made) = KEPT.get_or(size, || {
+        Ok::<_, std::convert::Infallible>(std::sync::Arc::new(halo_alpha_of(size)))
+    });
+    made
+}
+
+fn halo_alpha_of(size: usize) -> Vec<f32> {
     let half = weak(size as f64 / 2.0);
     let at: Vec<f32> = (0..size).map(|k| k as f32 + 0.5 - half).collect();
     let (radius, rim) = (weak(size as f64 * DISC / 2.0), weak(size as f64 * 0.02));
@@ -587,7 +596,7 @@ fn halo_alpha(size: usize) -> Vec<f32> {
 pub fn halo(size: usize, colour: [u8; 3], strength: f64) -> Image {
     let s = weak(strength);
     let mut data = Vec::with_capacity(size * size * 4);
-    for a in halo_alpha(size) {
+    for &a in halo_alpha(size).iter() {
         let alpha = clip(a * s, 0.0, 1.0);
         data.extend_from_slice(&colour);
         data.push((alpha * 255.0 + 0.5) as u8);
@@ -606,13 +615,27 @@ pub fn picture(
     mirror: bool,
     t: Option<f64>,
 ) -> Image {
-    let glow = halo(
-        size,
-        colour,
-        halo_level(phase, t) as f64 / HALO_LEVELS as f64,
-    );
-    let moon = disc(size, lp_py::round_digits(phase, 3), colour, night, mirror);
-    alpha_composite(&glow, &moon).unwrap_or(glow)
+    // (the disc made once per phase and kept, the halo in a few strengths: _disc_kept,
+    // _halo_kept)
+    type DiscKey = (usize, u64, [u8; 3], Option<[u8; 3]>, bool);
+    static DISCS: crate::lru::Shared<DiscKey, std::sync::Arc<Image>> = crate::lru::Shared::new(8);
+    static HALOS: crate::lru::Shared<(usize, [u8; 3], i64), std::sync::Arc<Image>> =
+        crate::lru::Shared::new(96);
+    let level = halo_level(phase, t);
+    let Ok(glow) = HALOS.get_or((size, colour, level), || {
+        Ok::<_, std::convert::Infallible>(std::sync::Arc::new(halo(
+            size,
+            colour,
+            level as f64 / HALO_LEVELS as f64,
+        )))
+    });
+    let phase = lp_py::round_digits(phase, 3);
+    let Ok(moon) = DISCS.get_or((size, phase.to_bits(), colour, night, mirror), || {
+        Ok::<_, std::convert::Infallible>(std::sync::Arc::new(disc(
+            size, phase, colour, night, mirror,
+        )))
+    });
+    alpha_composite(&glow, &moon).unwrap_or_else(|_| (*glow).clone())
 }
 
 /// A colour as the bytes ImageDraw inks with.
