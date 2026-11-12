@@ -203,7 +203,13 @@ impl PluginHost {
             inner,
             hello: Dict::new(),
         };
+        let begun = std::time::Instant::now();
         host.hello = host.request("hello", Dict::new(), &[])?.0;
+        let took = begun.elapsed().as_secs_f64();
+        if took > 5.0 {
+            let said = format!("plugins: the plugin host took {took:.1} s to start");
+            crate::logs::say("libre_panel.plugins", &said);
+        }
         Ok(Some(host))
     }
 
@@ -434,8 +440,15 @@ pub fn shared(settings: &Path) -> Option<Shared> {
 /// The fields of the plugins' widget types, screens and toast styles told to the theme loader
 /// (lp_theme::plugins), so that themes are checked against them as theme/model.py checks them.
 fn learn_schemas(host: &PluginHost) {
-    let Ok((told, _)) = host.request("schemas", Dict::new(), &[]) else {
-        return;
+    let begun = std::time::Instant::now();
+    let told = match host.request("schemas", Dict::new(), &[]) {
+        Ok((told, _)) => told,
+        Err(why) => {
+            let took = begun.elapsed().as_secs_f64();
+            let said = format!("plugins: their widget types not learnt ({took:.1} s): {why}");
+            crate::logs::say("libre_panel.plugins", &said);
+            return;
+        }
     };
     let Value::List(parts) = field(&told, "parts") else {
         return;
