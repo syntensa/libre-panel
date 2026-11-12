@@ -2473,6 +2473,109 @@ def test_frames_of_lit_gauges_within_a_level(tmp_path: Path) -> None:
     assert differ <= total // 10000
 
 
+def _engine_ring(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """_lit_gauge as one an engine makes (render/lit.py's _native_ring) most of the time: round,
+    turning clockwise, wide beside its groove, of one colour (or of colour rules) and drawn as
+    it is; now and then one that is not (a gradient, a fade, a glow, a turn, too thin)."""
+    gauge = _lit_gauge(rng, i, size)
+    if rng.random() < 0.85:
+        gauge["w"] = gauge["h"] = rng.choice([64, 90, 120, 180, 240])
+        gauge["thickness"] = rng.choice([4, 8, 12, 20])
+        gauge["start_angle"], gauge["end_angle"] = rng.choice(
+            [(135, 405), (-90, 270), (0, 180), (180, 360), (-120, 120), (90, 450)]
+        )
+        for key in ("color2", "opacity"):
+            gauge.pop(key, None)
+    if rng.random() < 0.1:
+        gauge[rng.choice(["glow", "shadow", "rotate", "clip"])] = rng.choice([True, 30, 1])
+    return gauge
+
+
+def _engine_ring_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _engine_ring(rng, i, size) if rng.random() < 0.85 else _card_or_text(rng, i, size)
+
+
+def test_lit_rings_the_engine_makes_are_drawn_here_as_before_where_a_frame_asks(
+    tmp_path: Path,
+) -> None:
+    # (where the frames go to an engine that makes lit rings, a ring of one colour goes as what
+    # the engine makes it of, its pixels made here only where a frame is composed here: those
+    # the same, byte for byte, as the ring drawn here; the engine's are within a level of them,
+    # test_scene.py's test_the_engine_makes_a_lit_ring_as_the_renderer_does_to_a_level)
+    rng = random.Random(0x1A7)
+    cases = []
+    for n in range(80):
+        folder = tmp_path / f"t{n}"
+        _frame_theme(rng, folder, _engine_ring_or_more)
+        given, _snapshot = _unkept_ring_snapshot(rng)
+        dither = rng.random() < 0.3
+        cases.append({"folder": str(folder), "snapshot": given, "dither": dither, "bytes": True})
+    native = [{**case, "native_rings": True} for case in cases]
+    asked = {"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}
+    [plain, made] = run([asked, {**asked, "frames": native}])
+    drawn = rings = 0
+    for n, (a, b) in enumerate(zip(plain["frames"], made["frames"], strict=True)):
+        assert ("error" in a) == ("error" in b), n
+        if "error" in a:
+            continue
+        assert a["sha256"] == b["sha256"], n
+        assert a["boxes"] == b["boxes"], n
+        assert a["native_rings"] == 0, n
+        rings += b["native_rings"]
+        drawn += 1
+    assert drawn > 50 and rings > 80, (drawn, rings)
+
+
+def _engine_bar(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    """_lit_bar as one an engine makes (render/lit.py's _native_bar) most of the time: drawn as it
+    is, its glow's area one it works out or not; now and then one that is not (a shadow, a
+    turn, cut sides, a fade)."""
+    bar = _lit_bar(rng, i, size)
+    if rng.random() < 0.85:
+        for key in ("shadow", "opacity", "rotate", "clip"):
+            bar.pop(key, None)
+    if rng.random() < 0.1:
+        bar[rng.choice(["shadow", "rotate", "clip"])] = rng.choice([True, 30, 1])
+    elif rng.random() < 0.05:
+        bar["opacity"] = rng.choice([0.5, 0.998])
+    return bar
+
+
+def _engine_bar_or_more(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+    return _engine_bar(rng, i, size) if rng.random() < 0.85 else _card_or_text(rng, i, size)
+
+
+def test_lit_bars_the_engine_makes_are_drawn_here_as_before_where_a_frame_asks(
+    tmp_path: Path,
+) -> None:
+    # (where the frames go to an engine that makes lit bars, a lit bar goes as what the engine
+    # makes it of, its pixels and its glow's made here only where a frame is composed here:
+    # those the same, byte for byte, as the bar drawn here; the engine's are within a level of
+    # them, test_scene.py's bar tests)
+    rng = random.Random(0xBA2)
+    cases = []
+    for n in range(100):
+        folder = tmp_path / f"t{n}"
+        _frame_theme(rng, folder, _engine_bar_or_more)
+        given, _snapshot = _bar_snapshot(rng)
+        dither = rng.random() < 0.3
+        cases.append({"folder": str(folder), "snapshot": given, "dither": dither, "bytes": True})
+    native = [{**case, "native_bars": True} for case in cases]
+    asked = {"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}
+    [plain, made] = run([asked, {**asked, "frames": native}])
+    drawn = bars = 0
+    for n, (a, b) in enumerate(zip(plain["frames"], made["frames"], strict=True)):
+        assert ("error" in a) == ("error" in b), n
+        if "error" in a:
+            continue
+        assert a["sha256"] == b["sha256"], n
+        assert a["boxes"] == b["boxes"], n
+        assert a["native_bars"] == 0, n
+        bars += b["native_bars"]
+        drawn += 1
+    assert drawn > 70 and bars > 100, (drawn, bars)
+
+
 LIVE_PICTURES = ["media.cover", "game.logo", "media.app_icon"]
 
 

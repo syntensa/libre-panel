@@ -2635,6 +2635,10 @@ fn run(case: &Value) -> Result<Value, String> {
                     // what they are cut from as an engine that keeps it cuts them: a panel's
                     // loop through the engine)
                     renderer.left_out_windows = c["left_out"].as_bool().unwrap_or(false);
+                    // (and the lit rings of one colour as what the engine makes them of, their
+                    // pixels made here where the frame is composed: Piece::whole)
+                    renderer.native_rings = c["native_rings"].as_bool().unwrap_or(false);
+                    renderer.native_bars = c["native_bars"].as_bool().unwrap_or(false);
                     // (video mode: every frame reaches the panel, the graphs scroll on in each,
                     // as the loop sets it for a panel that streams)
                     renderer.continuous = c["continuous"].as_bool().unwrap_or(false);
@@ -2692,6 +2696,8 @@ fn run(case: &Value) -> Result<Value, String> {
                                 let mut out = json!({"sha256": hex, "size": [frame.width(),
                                     frame.height()], "boxes": boxes,
                                     "warnings": renderer.warnings(),
+                                    "native_rings": renderer.native_rings_made.get(),
+                                    "native_bars": renderer.native_bars_made.get(),
                                     "moving": renderer.moving, "due": renderer.due});
                                 if bytes {
                                     out["frame"] = value_of(&frame);

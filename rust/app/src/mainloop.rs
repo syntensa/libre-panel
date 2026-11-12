@@ -1323,8 +1323,14 @@ impl MainLoop {
             .collect();
         let first = differ[0];
         let (x, y) = (first % ours.width(), first / ours.width());
+        let most = a
+            .iter()
+            .zip(b)
+            .map(|(p, q)| p.abs_diff(*q))
+            .max()
+            .unwrap_or(0);
         say(&format!(
-            "scene check: the engine's frame differs in {} pixels, the first at ({x}, {y}): {:?} here, {:?} by the engine",
+            "scene check: the engine's frame differs in {} pixels by up to {most}, the first at ({x}, {y}): {:?} here, {:?} by the engine",
             differ.len(),
             &a[first * 3..first * 3 + 3],
             &b[first * 3..first * 3 + 3]
@@ -1642,6 +1648,8 @@ impl MainLoop {
         }
         renderer.continuous = self.panel.as_ref().is_some_and(Display::streams);
         renderer.left_out_windows = self.panel.as_ref().is_some_and(Display::cuts_windows);
+        renderer.native_rings = self.panel.as_ref().is_some_and(Display::makes_rings);
+        renderer.native_bars = self.panel.as_ref().is_some_and(Display::makes_bars);
         // (graphs that rest: frames that rest)
         renderer.graph_steps = self.config.graph_steps;
 

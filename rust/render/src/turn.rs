@@ -127,6 +127,9 @@ pub(crate) fn turned(piece: &Piece, turn: Turn) -> Result<Piece> {
         light,
         cut: None,
         left_out: None,
+        made: None,
+        ring: None,
+        bar: None,
     })
 }
 

@@ -502,6 +502,18 @@ impl Display {
         matches!(&self.panel, Panel::Turzx(panel) if panel.cuts_views())
     }
 
+    /// Whether frames go as their layers to an engine that makes lit rings itself
+    /// (renderer.native_rings).
+    pub fn makes_rings(&self) -> bool {
+        matches!(&self.panel, Panel::Turzx(panel) if panel.makes_rings())
+    }
+
+    /// Whether frames go as their layers to an engine that makes lit bars itself
+    /// (renderer.native_bars).
+    pub fn makes_bars(&self) -> bool {
+        matches!(&self.panel, Panel::Turzx(panel) if panel.makes_bars())
+    }
+
     pub fn streams(&self) -> bool {
         match &self.panel {
             Panel::Turzx(panel) => panel.streams(),
@@ -611,10 +623,56 @@ impl Display {
         now: f64,
         half: bool,
     ) -> Result<(), Failed> {
-        use lp_devices::scene::{Entry, Ground, How, Layer};
+        use lp_devices::scene::{BarLayer, Entry, Ground, How, Layer, RingLayer};
         let Panel::Turzx(panel) = &mut self.panel else {
             return Err(Failed::Frame("this panel takes no frames of layers".into()));
         };
+        // (a ring or a bar the engine makes: what it is made of, its pixels and its glow's left
+        // out; one made for an engine that makes them where this one does not, or one it does
+        // not take as it is: its pixels, and its glow's)
+        #[derive(Default)]
+        struct Made {
+            ring: Option<Rc<RingLayer>>,
+            bar: Option<Rc<BarLayer>>,
+            layer: Option<lp_pixels::Image>,
+            light: Option<lp_pixels::Image>,
+        }
+        let (rings, bars) = (panel.makes_rings(), panel.makes_bars());
+        let made: Vec<Made> = scene
+            .pieces
+            .iter()
+            .map(|(_, piece)| {
+                let mut out = Made::default();
+                if panel.knows_piece(Rc::as_ptr(piece) as usize) {
+                    return out;
+                }
+                if let Some(ring) = piece.ring.as_ref().filter(|r| rings && r.fits()) {
+                    out.ring = Some(Rc::clone(ring));
+                    return out;
+                }
+                if let Some(bar) = piece.bar.as_ref().filter(|b| bars && b.fits()) {
+                    // (its glow where the engine makes it: a piece moved goes as its pixels)
+                    let glow_there = match (&piece.light, bar.base.glow) {
+                        (Some(light), Some(g)) => {
+                            bar.glow && (light.x, light.y) == (g.area.0, g.area.1)
+                        }
+                        (None, _) => !bar.glow,
+                        (Some(_), None) => false,
+                    };
+                    if glow_there {
+                        out.bar = Some(Rc::clone(bar));
+                        return out;
+                    }
+                }
+                if piece.left_out.is_some() && piece.made.is_some() {
+                    out.layer = Some(piece.whole().into_owned());
+                }
+                if let Some(light) = piece.light.as_ref().filter(|l| l.left_out.is_some()) {
+                    out.light = Some(light.whole().into_owned());
+                }
+                out
+            })
+            .collect();
         let ground = match &scene.ground {
             lp_render::scene::Ground::Colour(rgb) => Ground::Colour(*rgb),
             lp_render::scene::Ground::Picture(picture) => Ground::Picture(picture),
@@ -622,7 +680,8 @@ impl Display {
         let entries: Vec<Entry<'_>> = scene
             .pieces
             .iter()
-            .map(|(_, piece)| {
+            .zip(&made)
+            .map(|((_, piece), made)| {
                 let key = Rc::as_ptr(piece) as usize;
                 if panel.knows_piece(key) {
                     return Entry::Known(key);
@@ -638,6 +697,8 @@ impl Display {
                         how: How::Add,
                         cut: None,
                         left_out: None,
+                        ring: None,
+                        bar: None,
                     });
                 } else {
                     // (what its layer is cut from, as devices/engine.py's _view takes it: a
@@ -666,21 +727,30 @@ impl Display {
                                 .collect()
                         });
                     layers.push(Layer {
-                        image: &piece.layer,
+                        image: made.layer.as_ref().unwrap_or(&piece.layer),
                         x: piece.x,
                         y: piece.y,
                         how: How::Over,
                         cut,
-                        left_out: piece.left_out,
+                        left_out: if made.layer.is_some() {
+                            None
+                        } else {
+                            piece.left_out
+                        },
+                        ring: made.ring.clone(),
+                        bar: made.bar.clone(),
                     });
-                    if let Some(light) = &piece.light {
+                    // (a bar the engine makes: its glow goes with it)
+                    if let Some(light) = piece.light.as_ref().filter(|_| made.bar.is_none()) {
                         layers.push(Layer {
-                            image: &light.layer,
+                            image: made.light.as_ref().unwrap_or(&light.layer),
                             x: light.x,
                             y: light.y,
                             how: How::Add,
                             cut: None,
                             left_out: None,
+                            ring: None,
+                            bar: None,
                         });
                     }
                 }

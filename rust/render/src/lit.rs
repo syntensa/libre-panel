@@ -12,10 +12,12 @@ use lp_py::{Dict, Value};
 use num_bigint::{BigInt, Sign};
 use num_traits::ToPrimitive;
 
+use lp_devices::scene::{BarBase, BarGlow, BarLayer, BarShape, NATIVE_SIDE, NATIVE_SPANS};
+
 use crate::bar::{self, Paint};
 use crate::facets;
 use crate::finish::{LIGHT, OPACITY};
-use crate::piece::{Failed, Piece, Result};
+use crate::piece::{Failed, Maker, Piece, Result};
 use crate::renderer::{Drawn, Renderer};
 use crate::widget;
 
@@ -265,6 +267,15 @@ fn clip01(x: f32) -> f32 {
 /// _pill: a pill `length` x `thick` with `room` around it, as coverage (drawn twice as large
 /// with round ends, reduced with LANCZOS, over 255 in float32).
 fn pill(length: usize, thick: usize, room: usize) -> Result<Vec<f32>> {
+    Ok(pill_levels(length, thick, room)?
+        .iter()
+        .map(|&v| f32::from(v) / 255.0)
+        .collect())
+}
+
+/// _levels(_pill(...)): the pill's coverage as the levels it was made of (its coverage is them
+/// over 255, to the bit).
+fn pill_levels(length: usize, thick: usize, room: usize) -> Result<Vec<u8>> {
     let u = 2;
     let (w, h) = (length + 2 * room, thick + 2 * room);
     let mut mask = Image::blank(Mode::L, w * u, h * u);
@@ -283,11 +294,7 @@ fn pill(length: usize, thick: usize, room: usize) -> Result<Vec<f32>> {
         ALL_CORNERS,
     )?;
     let small = mask.resize(w, h, Filter::Lanczos, None, None)?;
-    Ok(small
-        .as_bytes()
-        .iter()
-        .map(|&v| f32::from(v) / 255.0)
-        .collect())
+    Ok(small.as_bytes().to_vec())
 }
 
 /// _layout: a bar's length and thickness, whether it stands upright and fills from its far end.
@@ -605,21 +612,7 @@ fn bar_canvas(
     unit_px: f64,
 ) -> Result<Image> {
     let (length, thick, upright, reverse) = layout(w);
-    let (cw, ch) = (length + 2 * pad, thick + 2 * pad);
-    if (cw as i64).saturating_mul(ch as i64) > crate::renderer::MOST_PIXELS {
-        return Err(Failed("a bar too large".into()));
-    }
-    let mut canvas = Image::blank(Mode::RGBA, cw, ch);
-    if let Some(track) = track {
-        let groove = match facets::groove_bar(length, thick, track, false)? {
-            Some(milled) => milled,
-            None => {
-                let ink = track.map(|v| v.clamp(0, 255) as u8);
-                Image::new(Mode::RGBA, length, thick, &ink)
-            }
-        };
-        canvas.paste(&groove, pad as i64, pad as i64, None)?;
-    }
+    let mut canvas = bar_ground(track, length, thick, pad)?;
     if !spans.is_empty() {
         let colours = bar_colours(w, length, paint, reverse);
         let fade = paint.0[3] as f64 / 255.0;
@@ -646,6 +639,72 @@ fn bar_canvas(
         canvas = canvas.transpose(Transpose::Transpose);
     }
     Ok(canvas)
+}
+
+/// _bar_ground: a bar's groove on its canvas, `pad` px of room round it, lying: milled into the
+/// panel in the track's colour, plain where a bevel does not read.
+fn bar_ground(track: Option<[i64; 4]>, length: usize, thick: usize, pad: usize) -> Result<Image> {
+    let (cw, ch) = (length + 2 * pad, thick + 2 * pad);
+    if (cw as i64).saturating_mul(ch as i64) > crate::renderer::MOST_PIXELS {
+        return Err(Failed("a bar too large".into()));
+    }
+    let mut canvas = Image::blank(Mode::RGBA, cw, ch);
+    if let Some(track) = track {
+        let groove = match facets::groove_bar(length, thick, track, false)? {
+            Some(milled) => milled,
+            None => {
+                let ink = track.map(|v| v.clamp(0, 255) as u8);
+                Image::new(Mode::RGBA, length, thick, &ink)
+            }
+        };
+        canvas.paste(&groove, pad as i64, pad as i64, None)?;
+    }
+    Ok(canvas)
+}
+
+/// A pill keeps its first and last columns this far in from its room for every length (lit.py's
+/// PILL_REACH, engine/src/bar.rs): its cap's half disc and Lanczos's reach end there; the
+/// columns between are alike.
+const PILL_REACH: usize = 4;
+
+/// _native_bar: whether an engine makes the bar as bar_piece does: drawn as it is (no shadow,
+/// fade, cut sides or turn over it), of a size and as many segments as it takes.
+fn native_bar(w: &Dict, length: usize, thick: usize, pad: usize) -> bool {
+    if ["shadow", "clip", "rotate"]
+        .iter()
+        .any(|k| widget::truthy(w, k))
+    {
+        return false;
+    }
+    let segments = widget::int(w, "segments", 0);
+    if widget::number(w, "opacity", 1.0) < 0.999 || !(0..=NATIVE_SPANS as i64).contains(&segments) {
+        return false;
+    }
+    length.max(thick) + 2 * pad <= NATIVE_SIDE
+}
+
+/// _glow_shape: how a bar's glow is worked out, as an engine takes it: the bar's x, y, its area,
+/// the scale it is worked out at, its radius, strength, rise and tail, and its steps; None
+/// where the area is larger than an engine works one out.
+fn glow_shape(w: &Dict, strength: f64, unit_px: f64) -> Result<Option<BarGlow>> {
+    let radius = widget::number(w, "glow_radius", 10.0).max(1.0);
+    let [ax, ay, aw, ah] = glow_area(w, radius)?;
+    let side = |v: i128| usize::try_from(v).ok().filter(|v| *v <= NATIVE_SIDE);
+    let (Ok(ax), Ok(ay), Some(aw), Some(ah)) =
+        (i64::try_from(ax), i64::try_from(ay), side(aw), side(ah))
+    else {
+        return Ok(None);
+    };
+    Ok(Some(BarGlow {
+        bar: (widget::int(w, "x", 0), widget::int(w, "y", 0)),
+        area: (ax, ay, aw, ah),
+        scale: glow_scale(radius),
+        radius,
+        strength,
+        rise: GLOW_HEAD * unit_px,
+        tail: GLOW_TAIL,
+        steps: rise_steps(),
+    }))
 }
 
 /// bar_piece: the lit bar, lying: the groove, the light of each lit span over it; its glow is
@@ -698,16 +757,168 @@ impl Renderer {
         let unit_px = self.theme.width.min(self.theme.height) as f64 / 480.0;
         let mut plain = w.clone();
         plain.insert("glow".into(), Value::Float(0.0));
-        let content = Value::List(vec!["lit".into(), bar::content(frac, paint)]);
+        // (one the engine makes is another piece than one drawn here)
+        let native = Value::Bool(self.native_bars);
+        let content = Value::List(vec!["lit".into(), bar::content(frac, paint), native]);
         let lit = w.clone();
         Some(
-            match self.cached(&plain, content, |_| {
+            match self.cached(&plain, content, |r| {
+                if r.native_bars {
+                    if let Some(piece) = r.native_bar_piece(&lit, unit_px, track, frac, paint)? {
+                        return Ok(piece);
+                    }
+                }
                 bar_piece(&lit, unit_px, track, frac, paint)
             }) {
                 Ok(piece) => Drawn::Piece(piece),
                 Err(e) => Drawn::Failed(e),
             },
         )
+    }
+
+    /// bar_piece where an engine makes bars itself (renderer.native_bars): the bar as what the
+    /// engine makes it of (render/scene.py's Bar: its base, its lit spans and paint), its
+    /// picture and its glow's made here only where something asks for them; None for one it
+    /// does not make, drawn here.
+    fn native_bar_piece(
+        &self,
+        w: &Dict,
+        unit_px: f64,
+        track: Option<[i64; 4]>,
+        frac: f64,
+        paint: Paint,
+    ) -> Result<Option<Piece>> {
+        let (x, y) = (widget::int(w, "x", 0), widget::int(w, "y", 0));
+        let (bw, bh) = (widget::int(w, "w", 200), widget::int(w, "h", 16));
+        let (length, thick, upright, reverse) = layout(w);
+        let pad = (BAR_ROOM * unit_px).ceil() as usize;
+        if !native_bar(w, length, thick, pad) {
+            return Ok(None);
+        }
+        let strength = widget::number(w, "glow", 0.0);
+        let strength = if strength < 1.0 { strength } else { 1.0 };
+        let glow = if strength > 0.0 {
+            match glow_shape(w, strength, unit_px)? {
+                Some(glow) => Some(glow),
+                None => return Ok(None),
+            }
+        } else {
+            None
+        };
+        // (its colours as the engine takes them, a byte a band)
+        let byte = |c: [i64; 4]| c.map(u8::try_from);
+        let colour = byte(paint.0);
+        let to = paint.1.map(byte);
+        if colour.iter().chain(to.iter().flatten()).any(|v| v.is_err()) {
+            return Ok(None);
+        }
+        let as_bytes = |c: [std::result::Result<u8, _>; 4]| c.map(|v| v.unwrap_or(0));
+        let (core, offset) = bar_core(w, thick, upright);
+        let shape = BarShape {
+            length,
+            thick,
+            pad,
+            core,
+            offset,
+            upright,
+            reverse,
+            segments: widget::int(w, "segments", 0) as u32,
+            halo: BAR_HALO * unit_px,
+        };
+        let base = self.bar_base(track, shape, glow)?;
+        let lit = spans(w, length, frac, reverse);
+        let layer = BarLayer {
+            base,
+            spans: lit.iter().map(|&(a, b, _amount)| (a, b)).collect(),
+            colour: as_bytes(colour),
+            to: to.map(as_bytes),
+            glow: !lit.is_empty() && glow.is_some(),
+        };
+        if !layer.fits() {
+            return Ok(None);
+        }
+        let (cw, ch) = (length + 2 * pad, thick + 2 * pad);
+        let mut piece = Piece::new(
+            Image::blank(Mode::RGBA, 0, 0),
+            x - pad as i64,
+            y - pad as i64,
+        );
+        piece.hit = Some([x, y, bw, bh]);
+        piece.left_out = Some(if upright { (ch, cw) } else { (cw, ch) });
+        let (drawn, spans_lit) = (w.clone(), lit.clone());
+        piece.made = Some(Maker(Rc::new(move || {
+            bar_canvas(&drawn, track, &spans_lit, paint, pad, unit_px).ok()
+        })));
+        if let (true, Some(g)) = (layer.glow, glow) {
+            // (a glow of nothing: black, which adds nothing)
+            let (ax, ay, aw, ah) = g.area;
+            let mut light = Piece::new(Image::blank(Mode::RGBA, 0, 0), ax, ay);
+            light.left_out = Some((aw, ah));
+            let (drawn, spans_lit) = (w.clone(), lit);
+            light.made = Some(Maker(Rc::new(move || {
+                match glow_piece(&drawn, unit_px, paint, &spans_lit, strength) {
+                    Ok(Some(made)) => Some(made.layer),
+                    Ok(None) => Some(Image::blank(Mode::RGBA, aw, ah)),
+                    Err(_) => None,
+                }
+            })));
+            piece.light = Some(Box::new(light));
+        }
+        piece.bar = Some(Rc::new(layer));
+        self.native_bars_made.set(self.native_bars_made.get() + 1);
+        Ok(Some(piece))
+    }
+
+    /// _bar_base: what a lit bar is made of at every value, kept by its shape, its groove's
+    /// colour and its glow: its groove on its canvas and its pill in parts (a reference's first
+    /// and last columns and the column between, and the short pills whole).
+    fn bar_base(
+        &self,
+        track: Option<[i64; 4]>,
+        shape: BarShape,
+        glow: Option<BarGlow>,
+    ) -> Result<Rc<BarBase>> {
+        let key = format!("bar-base {shape:?} {track:?} {glow:?}");
+        if let Some(found) = self.bar_bases.borrow().get(&key) {
+            return Ok(Rc::clone(found));
+        }
+        let (pad, core) = (shape.pad, shape.core);
+        // (the pill of 2 core + 9: one middle column)
+        let side = pad + core + PILL_REACH;
+        let (high, wide) = (core + 2 * pad, 2 * side + 1);
+        let reference = pill_levels(2 * (side - pad) + 1, core, pad)?;
+        if reference.len() != high * wide {
+            return Err(Failed("a bar's pill of another size".into()));
+        }
+        let (mut left, mut middle, mut right) = (
+            Vec::with_capacity(high * side),
+            Vec::with_capacity(high),
+            Vec::with_capacity(high * side),
+        );
+        for row in reference.chunks_exact(wide) {
+            left.extend_from_slice(&row[..side]);
+            middle.push(row[side]);
+            right.extend_from_slice(&row[side + 1..]);
+        }
+        let short = (1..2 * (side - pad))
+            .map(|span| pill_levels(span, core, pad))
+            .collect::<Result<Vec<_>>>()?;
+        let base = Rc::new(BarBase {
+            canvas: bar_ground(track, shape.length, shape.thick, pad)?,
+            left,
+            middle,
+            right,
+            side,
+            short,
+            shape,
+            glow,
+        });
+        let mut kept = self.bar_bases.borrow_mut();
+        if kept.len() > 64 {
+            kept.clear(); // (a few bars' bases: what is no longer shown goes now and then)
+        }
+        kept.insert(key, Rc::clone(&base));
+        Ok(base)
     }
 }
 
@@ -726,6 +937,7 @@ pub(crate) fn ringed(w: &Dict) -> bool {
 
 /// The gauge as a ring's light takes it: its size and groove, where it starts and ends
 /// (degrees), and the room round it on its canvas (px).
+#[derive(Clone)]
 struct RingShape {
     w: i64,
     h: i64,
@@ -1130,7 +1342,6 @@ impl Renderer {
             return Err(Failed("a ring too large".into()));
         }
         let (ground_key, ground) = crate::prof::part("gauge ground", || self.ring_ground(w, room))?;
-        let mut canvas = crate::prof::part("gauge clone", || (*ground).clone());
         if frac > 0.0 {
             let (a, b) = paint;
             let stroke = (lp_py::round(shape.thickness as f64 * RING_CORE) as i64).max(2);
@@ -1139,28 +1350,46 @@ impl Renderer {
                 // one colour: the groove with its whole sweep lit is kept, cut at the arc's tip
                 // for each value, the light around the tip laid on the groove anew
                 // (_light_ring: as the whole light laid over the groove, pixel for pixel)
-                let fade = a[3] as f64 / 255.0;
                 let lit = crate::prof::part("gauge lit", || {
                     self.ring_lit(&ground_key, &ground, &shape, a, stroke, halo)
                 })?;
-                let colour = [a[0], a[1], a[2]];
-                let kept = Some(&self.ring_pictures);
-                let patches = crate::prof::part("gauge parts", || {
-                    ring_parts(&shape, frac, colour, stroke, halo, kept)
-                })?;
-                sector_through(&shape, frac, &mut canvas, &lit)?;
-                let _patching = crate::prof::Span::new("gauge patches");
-                for (left, top, patch) in patches {
-                    let (pw, ph) = (patch.width() as i64, patch.height() as i64);
-                    let mut tile = ground.crop(left, top, left + pw, top + ph);
-                    let light = alpha_scaled(&patch, fade)?;
-                    tile.alpha_composite_at(&light, (0, 0), (0, 0, pw, ph))?;
-                    canvas.paste(&tile, left, top, None)?;
+                if self.native_rings && native_ring(w, &shape, stroke, halo) {
+                    // (the engine makes it, of the groove and its sweep lit, for each value:
+                    // gauge_piece's Ring; its pixels made here only where something asks)
+                    let (drawn, groove, sweep) =
+                        (shape.clone(), Rc::clone(&ground), Rc::clone(&lit));
+                    let make =
+                        move || lit_ring(&drawn, frac, a, stroke, halo, &groove, &sweep, None).ok();
+                    let mut piece = Piece::new(
+                        Image::blank(Mode::RGBA, 0, 0),
+                        x - room as i64,
+                        y - room as i64,
+                    );
+                    piece.left_out = Some((width, height));
+                    piece.made = Some(crate::piece::Maker(Rc::new(make)));
+                    piece.ring = Some(Rc::new(lp_devices::scene::RingLayer {
+                        groove: ground,
+                        lit,
+                        frac,
+                        w: shape.w as f64,
+                        thickness: shape.thickness as f64,
+                        start: shape.start,
+                        end: shape.end,
+                        stroke: stroke as u32,
+                        halo,
+                        colour: a.map(|v| v.clamp(0, 255) as u8),
+                    }));
+                    piece.hit = Some([x, y, gw, gh]);
+                    self.native_rings_made.set(self.native_rings_made.get() + 1);
+                    return Ok(piece);
                 }
+                let kept = Some(&self.ring_pictures);
+                let canvas = lit_ring(&shape, frac, a, stroke, halo, &ground, &lit, kept)?;
                 let mut piece = Piece::new(canvas, x - room as i64, y - room as i64);
                 piece.hit = Some([x, y, gw, gh]);
                 return Ok(piece);
             }
+            let mut canvas = crate::prof::part("gauge clone", || (*ground).clone());
             // (a gradient: the colour where the arc ends, in whole levels)
             let colour = match b {
                 None => [a[0], a[1], a[2]],
@@ -1173,9 +1402,67 @@ impl Renderer {
             }
             let whole = (0, 0, width as i64, height as i64);
             canvas.alpha_composite_at(&light, (0, 0), whole)?;
+            let mut piece = Piece::new(canvas, x - room as i64, y - room as i64);
+            piece.hit = Some([x, y, gw, gh]);
+            return Ok(piece);
         }
+        let canvas = crate::prof::part("gauge clone", || (*ground).clone());
         let mut piece = Piece::new(canvas, x - room as i64, y - room as i64);
         piece.hit = Some([x, y, gw, gh]);
         Ok(piece)
     }
+}
+
+/// _light_ring: the groove `ground` with its arc of `frac` lit in one colour `a` (RGBA): the
+/// whole sweep's light `lit` (on the groove) through a sector to the arc's tip, and the light
+/// round the tip and round the start of a closed ring made anew, each laid on the groove;
+/// `kept`: where the start's light is kept (the same at every value but some).
+#[allow(clippy::too_many_arguments)]
+fn lit_ring(
+    shape: &RingShape,
+    frac: f64,
+    a: [i64; 4],
+    stroke: i64,
+    halo: f64,
+    ground: &Image,
+    lit: &Image,
+    kept: Option<&RefCell<HashMap<String, Rc<Image>>>>,
+) -> Result<Image> {
+    let mut canvas = crate::prof::part("gauge clone", || ground.clone());
+    let fade = a[3] as f64 / 255.0;
+    let colour = [a[0], a[1], a[2]];
+    let patches = crate::prof::part("gauge parts", || {
+        ring_parts(shape, frac, colour, stroke, halo, kept)
+    })?;
+    sector_through(shape, frac, &mut canvas, lit)?;
+    let _patching = crate::prof::Span::new("gauge patches");
+    for (left, top, patch) in patches {
+        let (pw, ph) = (patch.width() as i64, patch.height() as i64);
+        let mut tile = ground.crop(left, top, left + pw, top + ph);
+        let light = alpha_scaled(&patch, fade)?;
+        tile.alpha_composite_at(&light, (0, 0), (0, 0, pw, ph))?;
+        canvas.paste(&tile, left, top, None)?;
+    }
+    Ok(canvas)
+}
+
+/// _native_ring: whether an engine makes the ring as lit_ring does: round and turning
+/// clockwise (_round: its arc worked out), the light around it not reaching its middle (where
+/// all of the sweep's edges meet), drawn as it is (no shadow, glow, fade, cut sides or turn over
+/// it), and no larger than an engine takes.
+fn native_ring(w: &Dict, shape: &RingShape, stroke: i64, halo: f64) -> bool {
+    let round = shape.w == shape.h && shape.end > shape.start;
+    if !round
+        || ["glow", "shadow", "clip", "rotate"]
+            .iter()
+            .any(|k| widget::truthy(w, k))
+    {
+        return false;
+    }
+    if widget::number(w, "opacity", 1.0) < 0.999 {
+        return false;
+    }
+    let reach = (stroke as f64 / 2.0 + 3.0 * halo).ceil() + 3.0;
+    (shape.w - shape.thickness) as f64 / 2.0 - reach > 2.0
+        && shape.w + 2 * shape.room as i64 <= 4096
 }

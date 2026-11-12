@@ -299,7 +299,7 @@ pub fn composite(
     }
     paste(canvas, &layer, piece.x - ox, piece.y - oy, opaque)?;
     if let Some(light) = &piece.light {
-        add_light(canvas, &light.layer, light.x - ox, light.y - oy)?;
+        add_light(canvas, &light.whole(), light.x - ox, light.y - oy)?;
     }
     Ok(())
 }

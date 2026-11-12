@@ -4,7 +4,8 @@
 
 **Lighter** (Lumen on the 12.3" at 25 fps, the video mode through the engine, with the
 computer's own readings, on the same computer as 0.8.0; every change the same frames drawn,
-and x264 makes a cleaner picture of them)
+the lit rings and bars the engine makes as 0.8's engine made them, within two levels in a
+pixel or two, and x264 makes a cleaner picture of them)
 - **x264 without a rate control of its own: a third less of its work, a cleaner picture.**
   The engine gives x264 a constant quantizer for each picture, two below `crf` (18 at the
   default 20), and keeps the bit rate's cap itself as x264's VBV kept it: a bucket of a
@@ -20,6 +21,16 @@ and x264 makes a cleaner picture of them)
   cap of 2 Mbit/s 52.85 dB instead of 51.31; at 1 Mbit/s, which Lumen does not fit in, 45.99
   instead of 45.46, the worst frame 44.07 dB instead of 40.42, the bucket never more than 84 %
   full.
+- **Lit rings and bars made by the engine, as in 0.8.** Where the engine makes them, a lit
+  gauge's ring of one colour and a lit bar go to it as what they are made of (the groove, its
+  sweep lit, the bar's pill: once) and, for each value, the share lit or the spans lit; the
+  app no longer draws them for each value, nor sends their pixels or a bar's glow. Lumen's
+  three rings and its bar, run in turn three times a minute each: the app 5.1 to 5.3 % of a
+  core instead of 8.2 to 8.5 (a ring 0.01 ms instead of 0.25, the bar 0.03 instead of 0.3),
+  the engine 13.7 to 14.0 instead of 12.5 to 12.8, the whole 18.9 to 19.3 instead of 20.6 to
+  21.3; Lumen sends the engine 4.1 MB a second instead of 12.3. The engine keeps what they
+  are made of (5 MB more). Its frames held against those composed here, for a minute: of
+  1679, 76 apart in one or two pixels by one or two levels, the others the same.
 - **What a frame costs cut down further.** Run in turn twice with 0.8.0 on that computer, a
   minute each, the same engine for both: 0.8.0 31.4 and 32.5 % of a core (Python 14.9 and
   15.3, its engine 16.5 and 17.2), this 21.1 and 21.6 (the app 6.9 and 7.0, the engine 14.3

@@ -246,14 +246,19 @@ def test_frames_go_to_the_engine_as_their_layers_and_it_composes_them_as_the_app
 ) -> None:
     """With an engine that composes scenes, the frames go as their pieces (render/scene.py,
     devices/engine.py's SceneSender), each piece's layers once while it stays; every frame the
-    engine composed is the frame composed of them here, pixel for pixel (LP_SCENE_CHECK). With
-    `[video] engine_layers = false` the frames go as pixels."""
+    engine composed is the frame composed of them here, pixel for pixel (LP_SCENE_CHECK), but
+    for the lit rings and bars it makes, as 0.8's engine made them: within two levels in a few
+    pixels. With `[video] engine_layers = false` the frames go as pixels."""
     rig.config(VIDEO)
     done = rig.run("run", "--demo", "--frames", "150", LP_SCENE_CHECK="1")
     assert done.returncode == 0, done.stderr
     assert rig.sock.errors == []
     assert "scene check: 101 frames the same as composed here" in done.stderr, done.stderr
-    assert "scene check: the engine" not in done.stderr and "not composed" not in done.stderr
+    for line in done.stderr.splitlines():
+        if "scene check:" not in line or "frames the same as composed here" in line:
+            continue
+        apart = re.search(r"differs in (\d+) pixels by up to (\d+),", line)
+        assert apart is not None and int(apart[1]) <= 16 and int(apart[2]) <= 2, done.stderr
     went = re.search(r"video: (\d+) layers went to the engine, ([\d.]+) MB", done.stderr)
     assert went is not None, done.stderr
     # (fewer layers than frames times pieces: those that stay go once)

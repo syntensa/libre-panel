@@ -240,6 +240,18 @@ pub struct Renderer {
     /// whether a graph's window cut from its strip may leave its pixels out (Piece::left_out):
     /// where the frames go to an engine that cuts it itself
     pub left_out_windows: bool,
+    /// whether a lit ring of one colour may go as what an engine makes it of (Piece::ring, its
+    /// pixels left out): where the frames go to an engine that makes rings (render/lit.py's
+    /// renderer.native_rings)
+    pub native_rings: bool,
+    /// how many rings went so (for the checks)
+    pub native_rings_made: std::cell::Cell<u64>,
+    /// whether a lit bar may go as what an engine makes it of (Piece::bar, its pixels and its
+    /// glow's left out): where the frames go to an engine that makes bars (render/lit.py's
+    /// renderer.native_bars); how many went so; the bars' bases kept
+    pub native_bars: bool,
+    pub native_bars_made: std::cell::Cell<u64>,
+    pub(crate) bar_bases: RefCell<HashMap<String, Rc<lp_devices::scene::BarBase>>>,
     /// when the last reading came and the seconds to the next (Python's sample, the loop's)
     pub sample: (f64, f64),
     /// what draws the plugins' widget types and screen (the app's plugin host); None: a frame
@@ -426,6 +438,11 @@ impl Renderer {
             fps: 0.0,
             continuous: false,
             left_out_windows: false,
+            native_rings: false,
+            native_rings_made: std::cell::Cell::new(0),
+            native_bars: false,
+            native_bars_made: std::cell::Cell::new(0),
+            bar_bases: RefCell::new(HashMap::new()),
             sample: (0.0, 1.0),
             plugins: None,
             shown: None,
@@ -1377,7 +1394,9 @@ impl Renderer {
                 };
                 let content = bar::content(frac, paint);
                 if finish::of(&w) == Finish::LitGauge && lit::ringed(&w) {
-                    let content = Value::List(vec!["lit".into(), content]);
+                    // (one the engine makes is another piece than one drawn here)
+                    let native = Value::Bool(self.native_rings);
+                    let content = Value::List(vec!["lit".into(), content, native]);
                     self.cached(&w, content, |r| r.lit_gauge_piece(&w, frac, paint))
                 } else {
                     self.cached(&w, content, |r| r.gauge_piece(&w, frac, paint))

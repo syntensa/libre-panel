@@ -830,8 +830,11 @@ impl TurzxVideo {
             _ => "x264",
         }
         .to_string();
-        let scenes = (setup.video.engine_layers && can.contains("scenes"))
-            .then(|| crate::scene::SceneSender::with(can.contains("views"), can.contains("grown")));
+        let scenes = (setup.video.engine_layers && can.contains("scenes")).then(|| {
+            crate::scene::SceneSender::with(can.contains("views"), can.contains("grown"))
+                .with_rings(can.contains("rings"))
+                .with_bars(can.contains("bars"))
+        });
         let mut panel = TurzxVideo {
             conn,
             block: DEFAULT_BLOCK,
@@ -1100,6 +1103,16 @@ impl TurzxVideo {
     /// Whether frames go as their layers to an engine that cuts layers from pictures it keeps.
     pub fn cuts_views(&self) -> bool {
         self.scenes.as_ref().is_some_and(|scenes| scenes.views())
+    }
+
+    /// Whether frames go as their layers to an engine that makes lit rings itself.
+    pub fn makes_rings(&self) -> bool {
+        self.scenes.as_ref().is_some_and(|scenes| scenes.rings())
+    }
+
+    /// Whether frames go as their layers to an engine that makes lit bars itself.
+    pub fn makes_bars(&self) -> bool {
+        self.scenes.as_ref().is_some_and(|scenes| scenes.bars())
     }
 
     /// The frame of layers the engine composed last (EngineLink::shown), within `timeout`.
@@ -1555,6 +1568,16 @@ impl Turzx {
     /// Whether frames go as their layers to an engine that cuts layers from pictures it keeps.
     pub fn cuts_views(&self) -> bool {
         matches!(self, Turzx::Video(panel) if panel.cuts_views())
+    }
+
+    /// Whether frames go as their layers to an engine that makes lit rings itself.
+    pub fn makes_rings(&self) -> bool {
+        matches!(self, Turzx::Video(panel) if panel.makes_rings())
+    }
+
+    /// Whether frames go as their layers to an engine that makes lit bars itself.
+    pub fn makes_bars(&self) -> bool {
+        matches!(self, Turzx::Video(panel) if panel.makes_bars())
     }
 
     /// The pixels of the frame that went last as its layers (video only: TurzxVideo::keep_last).

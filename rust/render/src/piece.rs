@@ -46,6 +46,17 @@ pub struct CutPart {
     pub h: i64,
 }
 
+/// How a piece's pixels left out are made where something asks for them ([`Piece::whole`]): a
+/// ring or a bar an engine makes, drawn as the renderer draws it (render/scene.py's Again).
+#[derive(Clone)]
+pub struct Maker(pub std::rc::Rc<dyn Fn() -> Option<Image>>);
+
+impl std::fmt::Debug for Maker {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Maker(..)")
+    }
+}
+
 /// A rendered widget: its layer (RGBA) with its corner at (x, y).
 #[derive(Clone, Debug)]
 pub struct Piece {
@@ -64,9 +75,16 @@ pub struct Piece {
     /// what its layer is cut from, where it is so cut (a scrolling graph's window from its
     /// strip): an engine that keeps those pictures cuts it itself (render/scene.py's View)
     pub cut: Option<Vec<CutPart>>,
-    /// the layer's size where its pixels are left out, `cut` giving them (render/scene.py's
-    /// View: made only where something asks for them, [`Piece::whole`]); `layer` is then empty
+    /// the layer's size where its pixels are left out, `cut` or `made` giving them
+    /// (render/scene.py's View and Again: made only where something asks for them,
+    /// [`Piece::whole`]); `layer` is then empty
     pub left_out: Option<(usize, usize)>,
+    /// how its pixels left out are made, where they are not cut
+    pub made: Option<Maker>,
+    /// the lit ring or the lit bar an engine makes itself, where it is one (render/lit.py's
+    /// Ring and Bar): what it is made of and its value; a bar's glow is its light
+    pub ring: Option<std::rc::Rc<lp_devices::scene::RingLayer>>,
+    pub bar: Option<std::rc::Rc<lp_devices::scene::BarLayer>>,
 }
 
 impl Piece {
@@ -83,6 +101,9 @@ impl Piece {
             light: None,
             cut: None,
             left_out: None,
+            made: None,
+            ring: None,
+            bar: None,
         }
     }
 
@@ -92,9 +113,16 @@ impl Piece {
     }
 
     /// Its layer's pixels: the layer, or where they are left out, cut from what `cut` names
-    /// (each part pasted on a clear picture of the layer's size, as View.image makes it).
+    /// (each part pasted on a clear picture of the layer's size, as View.image makes it), or
+    /// made as the renderer draws them (a ring, a bar or its glow an engine makes).
     pub fn whole(&self) -> std::borrow::Cow<'_, Image> {
         use std::borrow::Cow;
+        if let (Some(_), Some(made)) = (self.left_out, &self.made) {
+            return match (made.0)() {
+                Some(image) => Cow::Owned(image),
+                None => Cow::Borrowed(&self.layer),
+            };
+        }
         let (Some((w, h)), Some(cut)) = (self.left_out, &self.cut) else {
             return Cow::Borrowed(&self.layer);
         };
@@ -128,6 +156,9 @@ impl Piece {
         let mut piece = self.clone();
         piece.layer = self.whole().into_owned();
         piece.left_out = None;
+        piece.made = None;
+        piece.ring = None;
+        piece.bar = None;
         Cow::Owned(piece)
     }
 
