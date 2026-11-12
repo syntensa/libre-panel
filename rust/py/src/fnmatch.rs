@@ -48,6 +48,18 @@ impl Pattern {
 
     /// Whether the whole of `name` matches (fnmatchcase: as it is, case and all).
     pub fn matches(&self, name: &str) -> bool {
+        // (a short name's letters on the stack: it is asked for each name of a list, every
+        // frame)
+        const SHORT: usize = 64;
+        if name.len() <= SHORT {
+            let mut letters = ['\0'; SHORT];
+            let mut n = 0;
+            for c in name.chars() {
+                letters[n] = c;
+                n += 1;
+            }
+            return glob(&self.tokens, &letters[..n]);
+        }
         let text: Vec<char> = name.chars().collect();
         glob(&self.tokens, &text)
     }

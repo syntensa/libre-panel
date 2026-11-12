@@ -203,6 +203,25 @@ pub(crate) fn corners(bounds: (f64, f64, f64, f64)) -> Result<(i32, i32, i32, i3
     ))
 }
 
+/// A polygon of more edges than this keeps those each row crosses; a smaller one's rows look
+/// at all of them.
+const MANY_EDGES: usize = 16;
+
+/// polygon_edges' lists, kept from one polygon to the next on a thread (a wide line is a
+/// polygon for each of its segments).
+#[derive(Default)]
+struct Scratch {
+    table: Vec<Edge>,
+    xx: Vec<f32>,
+    coming: Vec<usize>,
+    active: Vec<usize>,
+    crossed: Vec<Edge>,
+}
+
+thread_local! {
+    static SCRATCH: std::cell::RefCell<Scratch> = std::cell::RefCell::new(Scratch::default());
+}
+
 /// Draw.c's Edge.
 #[derive(Clone, Copy, Debug)]
 struct Edge {
@@ -358,10 +377,24 @@ impl<'a, C: Canvas> Draw<'a, C> {
         if edges.is_empty() {
             return;
         }
+        SCRATCH.with(|scratch| {
+            let mut scratch = scratch.borrow_mut();
+            self.polygon_in(edges, ink, mask, &mut scratch);
+        });
+    }
+
+    fn polygon_in(&mut self, edges: &[Edge], ink: C::Ink, mask: Mask, lists: &mut Scratch) {
+        let Scratch {
+            table,
+            xx,
+            coming,
+            active,
+            crossed,
+        } = lists;
         let height = self.canvas.canvas_size().1 as i32;
         let mut ymin = height - 1;
         let mut ymax = 0;
-        let mut table: Vec<&Edge> = Vec::with_capacity(edges.len());
+        table.clear();
         for e in edges {
             ymin = ymin.min(e.ymin);
             ymax = ymax.max(e.ymax);
@@ -369,33 +402,46 @@ impl<'a, C: Canvas> Draw<'a, C> {
                 self.hline(e.xmin, e.ymin, e.xmax, ink, mask);
                 continue;
             }
-            table.push(e);
+            table.push(*e);
         }
         ymin = ymin.max(0);
         ymax = ymax.min(height);
-        let mut xx: Vec<f32> = Vec::with_capacity(table.len() * 2);
         let at = |e: &Edge, y: i32| (y - e.y0) as f32 * e.dx + e.x0 as f32;
         // Draw.c looks at every edge on every row; only those the row crosses count (an edge
-        // the row is above or below of is passed over, and so in the corners' look back), so
-        // the edges the row crosses are kept, in the table's order, coming in by where they
-        // begin and going once they end
-        let mut coming: Vec<usize> = (0..table.len()).collect();
-        coming.sort_by_key(|&i| table[i].ymin);
+        // the row is above or below of is passed over, and so in the corners' look back). Of
+        // a polygon of many edges (a graph's filled area: one a point) the rows keep the edges
+        // they cross, in the table's order, coming in by where they begin and going once they
+        // end; a small one looks at all.
+        let many = table.len() > MANY_EDGES;
+        if many {
+            coming.clear();
+            coming.extend(0..table.len());
+            coming.sort_by_key(|&i| table[i].ymin);
+            active.clear();
+        }
         let mut next = 0;
-        let mut active: Vec<usize> = Vec::with_capacity(table.len());
         for y in ymin..=ymax {
             xx.clear();
-            active.retain(|&i| table[i].ymax >= y);
-            while next < coming.len() && table[coming[next]].ymin <= y {
-                let i = coming[next];
-                next += 1;
-                if table[i].ymax >= y {
-                    let place = active.partition_point(|&k| k < i);
-                    active.insert(place, i);
+            let row: &[Edge] = if many {
+                active.retain(|&i| table[i].ymax >= y);
+                while next < coming.len() && table[coming[next]].ymin <= y {
+                    let i = coming[next];
+                    next += 1;
+                    if table[i].ymax >= y {
+                        let place = active.partition_point(|&k| k < i);
+                        active.insert(place, i);
+                    }
                 }
-            }
-            for (a, &i) in active.iter().enumerate() {
-                let current = table[i];
+                crossed.clear();
+                crossed.extend(active.iter().map(|&i| table[i]));
+                crossed
+            } else {
+                table
+            };
+            for (i, current) in row.iter().enumerate() {
+                if y < current.ymin || y > current.ymax {
+                    continue;
+                }
                 xx.push(at(current, y));
                 if y == current.ymax && y < ymax {
                     // (Draw.c: needed to draw consistent polygons)
@@ -403,7 +449,7 @@ impl<'a, C: Canvas> Draw<'a, C> {
                     xx.push(last);
                 } else if (y == current.ymin || y == current.ymax) && current.dx != 0.0 {
                     // connect discontiguous corners
-                    for other in active[..a].iter().map(|&k| table[k]) {
+                    for other in &row[..i] {
                         if (y != other.ymin && y != other.ymax) || other.dx == 0.0 {
                             continue;
                         }

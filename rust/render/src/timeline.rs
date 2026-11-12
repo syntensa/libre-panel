@@ -416,14 +416,20 @@ impl Renderer {
 
     /// _traced: the graph as it draws now: with its `trace`'s key as its sensor where that has
     /// a course (and the course, as its text and as numbers); else as it is.
-    pub(crate) fn traced(&self, w: &Dict, snapshot: &Snapshot) -> (Dict, Option<Fine>) {
+    /// (The widget itself where it has no trace: not copied for each frame.)
+    pub(crate) fn traced<'a>(
+        &self,
+        w: &'a Dict,
+        snapshot: &Snapshot,
+    ) -> (std::borrow::Cow<'a, Dict>, Option<Fine>) {
+        use std::borrow::Cow;
         let trace = widget::text(w, "trace");
         if trace.is_empty() {
-            return (w.clone(), None);
+            return (Cow::Borrowed(w), None);
         }
         let value = snapshot.value(trace);
         let Some(course) = graph::course_of(&value) else {
-            return (w.clone(), None);
+            return (Cow::Borrowed(w), None);
         };
         let text = match &value {
             Value::Str(text) => text.clone(),
@@ -433,7 +439,7 @@ impl Renderer {
         let own = widget::text(w, "sensor").to_string();
         traced.insert("sensor".into(), Value::Str(trace.to_string()));
         traced.insert("\0value".into(), Value::Str(own));
-        (traced, Some((text, course)))
+        (Cow::Owned(traced), Some((text, course)))
     }
 
     /// _trace_delay: how much later than its time a fine course is shown.
@@ -1173,7 +1179,7 @@ impl Renderer {
             Some(range) => range,
             None => (float_of(&strip.bounds.0), float_of(&strip.bounds.1)),
         };
-        Ok(value.map(|value| (w, value, bounds)))
+        Ok(value.map(|value| (w.into_owned(), value, bounds)))
     }
 }
 
