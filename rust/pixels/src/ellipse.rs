@@ -5,6 +5,7 @@
 
 use crate::draw::{corners, Canvas, Draw};
 use crate::Result;
+use std::rc::Rc;
 
 /// Draw.c's quarter_state: the top right quarter of an ellipse of semi-axes a and b, on the
 /// points (2x + x0, 2y + y0) of the grid where (a, b) lies (x0, y0 each 0 or 1).
@@ -74,6 +75,8 @@ impl Quarter {
 /// Draw.c's ellipse_state: the spans (x0, y, x1, on the grid of half pixels round the middle)
 /// of an ellipse `w` wide, between its outer quarter and the inner one, all four quarters.
 struct Ellipse {
+    /// what it was made of (Ellipse::new's a, b and w): its spans hang on these alone
+    made: (i32, i32, i32),
     outer: Quarter,
     inner: Quarter,
     py: i32,
@@ -87,6 +90,7 @@ struct Ellipse {
 impl Ellipse {
     fn new(a: i32, b: i32, w: i32) -> Ellipse {
         let mut e = Ellipse {
+            made: (a, b, w),
             outer: Quarter::new(a, b),
             inner: Quarter::new(-1, -1),
             py: 0,
@@ -227,8 +231,9 @@ fn clipped(clip: Option<&Clip>, x0: i32, y: i32, x1: i32) -> Vec<(i32, i8)> {
 }
 
 /// What `clipped` gives, held in place: at most `MOST` ends (a tree of more half planes than
-/// half that can give more: None then, and `clipped` is asked).
-const MOST: usize = 32;
+/// half that can give more: None then, and `clipped` is asked). A pie slice's tree of three
+/// gives six at most; kept small, so that each node's list is quick to make and hand on.
+const MOST: usize = 8;
 
 #[derive(Clone, Copy)]
 struct Ends {
@@ -490,6 +495,20 @@ fn pie_tree(a: i32, b: i32, al: f32, ar: f32) -> Clip {
     }
 }
 
+/// The spans on a picture of the ellipses clipped last, by what each was made of and where it
+/// lay on a picture of which size; the one used longest ago goes first.
+type SpansKey = ((i32, i32, i32), i32, i32, i32, i32);
+
+/// An ellipse's spans (x0, y, x1 on its grid of half pixels), shared while kept.
+type Spans = Rc<Vec<(i32, i32, i32)>>;
+
+const KEPT_ELLIPSES: usize = 16;
+
+thread_local! {
+    static SPANS: std::cell::RefCell<Vec<(SpansKey, Spans)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
 impl<C: Canvas> Draw<'_, C> {
     /// ellipseNew: the ellipse in the box, a ring `width` wide or (`fill`) all of it.
     fn ellipse_new(
@@ -528,15 +547,47 @@ impl<C: Canvas> Draw<'_, C> {
             return;
         }
         let (mut e, clip) = init(a, b);
+        // (the spans are kept by what the ellipse was made of, and laid by these a and b)
+        debug_assert!(e.made.0 == a && e.made.1 == b);
         let (w, h) = self.canvas.canvas_size();
         let (w, h) = (w as i32, h as i32);
-        while let Some((sx0, sy, sx1)) = e.next() {
-            // (a span off the picture leaves nothing, whatever the clipping makes of it: the
-            // spans it leaves lie within it)
-            let y = y0 + (sy + b) / 2;
-            if y < 0 || y >= h || x0 + (sx1 + a) / 2 < 0 || x0 + (sx0 + a) / 2 >= w {
-                continue;
+        // the ellipse's spans on the picture, in their order: the same for the same ellipse at
+        // the same place on a picture of the same size (a gauge's sector, every frame), kept
+        let key = (e.made, x0, y0, w, h);
+        let spans = SPANS.with(|kept| {
+            let mut kept = kept.borrow_mut();
+            let at = kept.iter().position(|(k, _)| *k == key)?;
+            // (the one found moves to the end, the ones used last)
+            let found = kept.remove(at);
+            let spans = Rc::clone(&found.1);
+            kept.push(found);
+            Some(spans)
+        });
+        let spans = match spans {
+            Some(spans) => spans,
+            None => {
+                let mut on = Vec::new();
+                while let Some((sx0, sy, sx1)) = e.next() {
+                    // (a span off the picture leaves nothing, whatever the clipping makes of
+                    // it: the spans it leaves lie within it)
+                    let y = y0 + (sy + b) / 2;
+                    if y < 0 || y >= h || x0 + (sx1 + a) / 2 < 0 || x0 + (sx0 + a) / 2 >= w {
+                        continue;
+                    }
+                    on.push((sx0, sy, sx1));
+                }
+                let on = Rc::new(on);
+                SPANS.with(|kept| {
+                    let mut kept = kept.borrow_mut();
+                    if kept.len() >= KEPT_ELLIPSES {
+                        kept.remove(0);
+                    }
+                    kept.push((key, Rc::clone(&on)));
+                });
+                on
             }
+        };
+        for &(sx0, sy, sx1) in spans.iter() {
             let kept = clipped_in_place(clip.as_ref(), sx0, sy, sx1);
             let listed;
             let spans = match &kept {
@@ -682,5 +733,57 @@ mod tests {
         assert_eq!(normalized(-90.0, 270.0), (0.0, 360.0));
         assert_eq!(normalized(30.0, 20.0), (30.0, 380.0));
         assert_eq!(normalized(400.0, 410.0), (40.0, 50.0));
+    }
+
+    /// The `k`th of the pie slices, arcs and chords drawn on a picture `size` big, the
+    /// ellipse's box at `at`; the picture's bytes.
+    fn drawn(k: usize, (w, h): (usize, usize), (x, y): (f64, f64)) -> Vec<u8> {
+        let bounds = (x, y, x + 150.0, y + 140.0);
+        let start = k as f32 * 37.0 - 200.0;
+        let end = start + (k as f32 * 23.0) % 400.0 + 1.0;
+        let width = k as i32;
+        let ink = [200, 100, 50, 255];
+        let mut im = crate::Image::blank(crate::Mode::RGBA, w, h);
+        let mut draw = Draw::new(&mut im);
+        match k % 4 {
+            0 => draw.draw_pieslice(bounds, start, end, ink, true, 0),
+            1 => draw.draw_pieslice(bounds, start, end, ink, false, 1 + width),
+            2 => draw.draw_arc(bounds, start, end, ink, 3 + width),
+            _ => draw.draw_chord(bounds, start, end, ink, k % 8 == 3, 2),
+        }
+        .unwrap();
+        im.data
+    }
+
+    #[test]
+    fn spans_kept_from_an_earlier_drawing_draw_what_fresh_ones_draw() {
+        // the same ellipses on pictures of another width or height, and at other places, one
+        // after the other, in the order in which spans kept for the one would leave some out
+        // of the next; more ellipses than are kept, and some again, so that spans are kept,
+        // found and put out. Each drawing once more alone, on a thread that kept nothing.
+        let cases = [
+            ((100, 150), (-9.0, -4.0)),
+            ((160, 90), (-9.0, -4.0)),
+            ((160, 150), (-9.0, -4.0)),
+            ((160, 150), (-9.0, -100.0)),
+            ((160, 150), (-9.0, 30.0)),
+            ((160, 150), (-120.0, -4.0)),
+            ((160, 150), (-9.0, -4.0)),
+            ((160, 150), (100.0, -4.0)),
+            ((200, 200), (20.0, 20.0)),
+            ((40, 40), (-60.0, -50.0)),
+            ((300, 90), (-9.0, -4.0)),
+            ((160, 90), (-9.0, -4.0)),
+            ((160, 150), (-9.0, -4.0)),
+        ];
+        for k in 0..24 {
+            for &(size, at) in &cases {
+                let warm = drawn(k, size, at);
+                let fresh = std::thread::spawn(move || drawn(k, size, at))
+                    .join()
+                    .unwrap();
+                assert!(warm == fresh, "drawing {k} on {size:?} at {at:?} differs");
+            }
+        }
     }
 }
