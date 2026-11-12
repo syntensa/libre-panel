@@ -225,7 +225,7 @@ fn battery_shape(b: &mut Build, x: f64, y: f64, w: f64, h: f64, color: &str) -> 
     b.add("rect", "battery-nub", tip)?;
     let inset = line as f64 * 2.2;
     let rule = |above: i64, color: String| {
-        let mut d = Dict::new();
+        let mut d = Dict::default();
         d.insert("above".into(), above.into());
         d.insert("color".into(), color.into());
         Value::Dict(d)

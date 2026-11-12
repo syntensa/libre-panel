@@ -49,7 +49,7 @@ pub struct Source {
 
 impl Source {
     fn value(&self) -> Value {
-        let mut told = Dict::new();
+        let mut told = Dict::default();
         told.insert("kind".into(), Value::Str(self.kind.clone()));
         told.insert("id".into(), Value::Str(self.id.clone()));
         told.insert("name".into(), Value::Str(self.name.clone()));
@@ -230,7 +230,7 @@ pub fn status() -> Value {
     let Some(mirroring) = own.as_ref() else {
         return Value::None;
     };
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("source".into(), mirroring.source.value());
     told.insert(
         "panels".into(),

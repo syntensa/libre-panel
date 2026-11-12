@@ -324,11 +324,11 @@ fn scan(s: &[char], mut idx: usize) -> Result<(Value, usize, Half), Error> {
                 let after = skip_white(s, idx + 1);
                 if after < s.len() && s[after] == '}' {
                     idx = after + 1;
-                    Value::Dict(Dict::new())
+                    Value::Dict(Dict::default())
                 } else {
                     let (name, next, in_key) = key(s, after)?;
                     open.push(Open::Dict(Box::new(OpenDict {
-                        dict: Dict::new(),
+                        dict: Dict::default(),
                         name,
                         in_keys: in_key,
                         in_values: Default::default(),

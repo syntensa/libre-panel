@@ -151,7 +151,7 @@ pub fn answer(link: &mut dyn Link) -> Result<Dict> {
     for _ in 0..64 {
         let byte = link.read(1)?;
         if byte.is_empty() {
-            return Ok(Dict::new());
+            return Ok(Dict::default());
         }
         if byte[0] == 0x55 && link.read(1)? == [0xAA] {
             found = true;
@@ -159,11 +159,11 @@ pub fn answer(link: &mut dyn Link) -> Result<Dict> {
         }
     }
     if !found {
-        return Ok(Dict::new());
+        return Ok(Dict::default());
     }
     let head = link.read(3)?;
     if head.len() < 3 {
-        return Ok(Dict::new());
+        return Ok(Dict::default());
     }
     let length = usize::from(u16::from_le_bytes([head[0], head[1]]));
     let data = link.read(length.saturating_sub(7))?;
@@ -171,9 +171,9 @@ pub fn answer(link: &mut dyn Link) -> Result<Dict> {
     let text = String::from_utf8_lossy(&data);
     match lp_py::json::loads(text.trim_matches('\0')) {
         Ok(Value::Dict(info)) => Ok(info),
-        Ok(_) => Ok(Dict::new()),
+        Ok(_) => Ok(Dict::default()),
         Err(e) if e.kind == ErrorKind::Recursion => Err(DeviceError(e.msg)),
-        Err(_) => Ok(Dict::new()),
+        Err(_) => Ok(Dict::default()),
     }
 }
 

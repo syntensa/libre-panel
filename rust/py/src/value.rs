@@ -14,8 +14,9 @@ use num_traits::{FromPrimitive, ToPrimitive, Zero};
 
 use crate::{float_repr, repr as str_repr};
 
-/// A dict as JSON gives it: str keys, in their order.
-pub type Dict = IndexMap<String, Value>;
+/// A dict as JSON gives it: str keys, in their order (its keys hashed by foldhash: a widget's
+/// settings are looked up by name many times a frame, and the order is the dict's own).
+pub type Dict = IndexMap<String, Value, foldhash::fast::RandomState>;
 
 /// One of Python's values, as JSON gives them.
 #[derive(Clone, Debug)]
@@ -266,7 +267,7 @@ mod tests {
 
     #[test]
     fn repr_and_str_as_python_s() {
-        let mut dict = Dict::new();
+        let mut dict = Dict::default();
         dict.insert(
             "k".into(),
             Value::List(vec![Value::None, Value::Bool(true), 1.5.into()]),

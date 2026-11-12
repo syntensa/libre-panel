@@ -66,10 +66,10 @@ fn one_line(value: &Value) -> String {
 
 /// Claude Code's request for its usage, as one line of JSON.
 pub fn claude_request() -> String {
-    let mut request = Dict::new();
+    let mut request = Dict::default();
     request.insert("subtype".into(), Value::Str("get_usage".into()));
     request.insert("skip_behaviors".into(), Value::Bool(true));
-    let mut message = Dict::new();
+    let mut message = Dict::default();
     message.insert("type".into(), Value::Str("control_request".into()));
     message.insert("request_id".into(), Value::Str(REQUEST_ID.into()));
     message.insert("request".into(), Value::Dict(request));

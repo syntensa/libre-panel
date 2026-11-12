@@ -430,7 +430,7 @@ pub fn entries(level: &str, path: &Path, home: Option<&str>) -> Vec<Value> {
     kept.into_iter()
         .skip(skip)
         .map(|(time, level, logger, message)| {
-            let mut d = Dict::new();
+            let mut d = Dict::default();
             d.insert("time".into(), Value::Str(time));
             d.insert("level".into(), Value::Str(level));
             d.insert("logger".into(), Value::Str(logger));
@@ -458,7 +458,7 @@ pub fn text(path: &Path, home: Option<&str>) -> String {
 /// `GET /api/logs?level=WARNING`: the log's last entries and whether it is written in detail.
 pub fn state(level: &str) -> Value {
     let path = lp_config::dirs::log_file();
-    let mut d = Dict::new();
+    let mut d = Dict::default();
     d.insert(
         "entries".into(),
         Value::List(entries(&level.to_uppercase(), &path, None)),

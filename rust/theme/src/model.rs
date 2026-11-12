@@ -185,13 +185,13 @@ pub struct Theme {
 
 /// TOAST_DEFAULTS
 pub fn toast_defaults() -> Dict {
-    let mut d = Dict::new();
+    let mut d = Dict::default();
     d.insert("anchor".into(), "top-right".into());
     d.insert("seconds".into(), 4.0.into());
     d.insert("queue".into(), true.into());
     d.insert("off".into(), Value::List(Vec::new()));
     d.insert("style".into(), "".into());
-    d.insert("options".into(), Value::Dict(Dict::new()));
+    d.insert("options".into(), Value::Dict(Dict::default()));
     d
 }
 
@@ -210,7 +210,7 @@ impl Theme {
     }
 
     fn background(&self) -> Value {
-        let mut b = Dict::new();
+        let mut b = Dict::default();
         b.insert("color".into(), self.background_color.clone().into());
         b.insert(
             "image".into(),
@@ -235,7 +235,7 @@ impl Theme {
 
     /// to_dict(): the theme as theme.json holds it, as the app saves it.
     pub fn to_dict(&self) -> Value {
-        let mut d = Dict::new();
+        let mut d = Dict::default();
         d.insert("format".into(), THEME_FORMAT.into());
         d.insert("name".into(), self.name.clone().into());
         d.insert("author".into(), self.author.clone().into());
@@ -244,7 +244,7 @@ impl Theme {
         if !self.collection.is_empty() {
             d.insert("collection".into(), self.collection.clone().into());
         }
-        let mut display = Dict::new();
+        let mut display = Dict::default();
         display.insert("model".into(), self.model.clone().into());
         display.insert("orientation".into(), self.orientation().into());
         display.insert("width".into(), self.width.into());
@@ -254,7 +254,7 @@ impl Theme {
         d.insert("font".into(), self.font.clone().into());
         d.insert("background".into(), self.background());
         d.insert("refresh_ms".into(), self.refresh_ms.clone());
-        let mut animation = Dict::new();
+        let mut animation = Dict::default();
         animation.insert("smoothing_ms".into(), self.smoothing_ms.into());
         d.insert("animation".into(), Value::Dict(animation));
         let widgets = self.widgets.iter().cloned().map(Value::Dict).collect();
@@ -529,7 +529,7 @@ pub fn coerce(kind: &str, value: Value, place: &str, palette: Option<&Dict>) -> 
                     false,
                     palette,
                 )?;
-                let mut kept = Dict::new();
+                let mut kept = Dict::default();
                 kept.insert("above".into(), above);
                 kept.insert("color".into(), color);
                 rules.push(Value::Dict(kept));
@@ -645,7 +645,7 @@ pub fn normalize_widget(
         _ => return refuse(format!("{place}: unknown widget type {}", wtype.repr())),
     };
     let wtype = wtype.as_str().expect("a str").to_string();
-    let mut widget = Dict::new();
+    let mut widget = Dict::default();
     widget.insert("type".into(), wtype.clone().into());
     for field in &spec {
         let value = get(raw, &field.name, field.default.clone());
@@ -769,7 +769,7 @@ fn plugin_options(
         ));
         return Ok(given);
     };
-    let mut options = Dict::new();
+    let mut options = Dict::default();
     for field in schema {
         let value = get(&given, &field.name, field.default);
         let coerced = coerce(
@@ -795,7 +795,7 @@ fn plugin_options(
 fn object_or_empty(raw: &Dict, key: &str) -> Value {
     match raw.get(key) {
         Some(v) if v.truthy() => v.clone(),
-        _ => Value::Dict(Dict::new()),
+        _ => Value::Dict(Dict::default()),
     }
 }
 
@@ -866,7 +866,7 @@ fn parse_screen(
         palette,
         warnings,
     )?;
-    let mut screen = Dict::new();
+    let mut screen = Dict::default();
     screen.insert("name".into(), name);
     screen.insert("options".into(), Value::Dict(options));
     Ok(Some(screen))
@@ -878,7 +878,7 @@ fn parse_grid(raw: Option<&Value>) -> Result<Option<Dict>> {
         Some(Value::Dict(d)) => d,
         Some(_) => return refuse("grid must be an object"),
     };
-    let mut grid = Dict::new();
+    let mut grid = Dict::default();
     for (key, default) in GRID_DEFAULTS {
         let value = coerce(
             "int",
@@ -917,7 +917,7 @@ fn parse_style(raw: Option<&Value>, root: Option<&Path>, env: &Env) -> Result<Op
         ("text_font", "string"),
         ("card_opacity", "number"),
     ];
-    let mut style = Dict::new();
+    let mut style = Dict::default();
     for (key, kind) in kinds {
         let value = get(raw, key, defaults[key].clone());
         style.insert(
@@ -956,11 +956,11 @@ fn parse_style(raw: Option<&Value>, root: Option<&Path>, env: &Env) -> Result<Op
 
 fn parse_look(raw: Option<&Value>, palette: &Dict, warnings: &mut Vec<String>) -> Result<Dict> {
     let raw = match raw {
-        None | Some(Value::None) => return Ok(Dict::new()),
+        None | Some(Value::None) => return Ok(Dict::default()),
         Some(Value::Dict(d)) => d,
         Some(_) => return refuse("look must be an object"),
     };
-    let mut look = Dict::new();
+    let mut look = Dict::default();
     for (name, given) in raw {
         let spec = LOOK_SPECS.iter().find(|(n, _)| n == name).map(|(_, s)| *s);
         if GONE_LOOK.contains(&name.as_str()) {
@@ -976,11 +976,11 @@ fn parse_look(raw: Option<&Value>, palette: &Dict, warnings: &mut Vec<String>) -
         };
         let given = match given {
             Value::None | Value::Bool(false) => continue,
-            Value::Bool(true) => Dict::new(),
+            Value::Bool(true) => Dict::default(),
             Value::Dict(d) => d.clone(),
             _ => return refuse(format!("look.{name} must be an object")),
         };
-        let mut block = Dict::new();
+        let mut block = Dict::default();
         for field in spec {
             let value = get(&given, field.name, field.default.value());
             let value = coerce(
@@ -1092,7 +1092,7 @@ fn finish_warnings(widgets: &[Dict], warnings: &mut Vec<String>) -> Result<()> {
 
 fn parse_switches(raw: Option<&Value>) -> Result<Dict> {
     let raw = match raw {
-        None | Some(Value::None) => return Ok(Dict::new()),
+        None | Some(Value::None) => return Ok(Dict::default()),
         Some(Value::Dict(d)) if d.len() <= MAX_SWITCHES => d,
         Some(_) => {
             return refuse(format!(
@@ -1100,7 +1100,7 @@ fn parse_switches(raw: Option<&Value>) -> Result<Dict> {
             ))
         }
     };
-    let mut switches = Dict::new();
+    let mut switches = Dict::default();
     for (name, spec) in raw {
         if !palette_name(name) {
             return refuse(format!(
@@ -1125,7 +1125,7 @@ fn parse_switches(raw: Option<&Value>) -> Result<Dict> {
             &format!("switches.{name}.on"),
             None,
         )?;
-        let mut switch = Dict::new();
+        let mut switch = Dict::default();
         switch.insert("label".into(), label);
         switch.insert("on".into(), on);
         switches.insert(name.clone(), Value::Dict(switch));
@@ -1141,9 +1141,9 @@ fn parse_detached(
     warnings: &mut Vec<String>,
 ) -> Result<Dict> {
     let Some(Value::Dict(raw)) = raw else {
-        return Ok(Dict::new());
+        return Ok(Dict::default());
     };
-    let mut kept = Dict::new();
+    let mut kept = Dict::default();
     for (name, module) in raw.iter().take(MAX_DETACHED) {
         let is_module =
             matches!(module, Value::Dict(d) if d.get("type") == Some(&Value::from("module")));
@@ -1178,7 +1178,7 @@ pub fn parse_theme(data: &Value, root: Option<&Path>, env: &Env) -> Result<Theme
             format.repr()
         ));
     }
-    let display = match get(data, "display", Value::Dict(Dict::new())) {
+    let display = match get(data, "display", Value::Dict(Dict::default())) {
         Value::Dict(d) => d,
         _ => return refuse("display must be an object"),
     };
@@ -1243,7 +1243,7 @@ pub fn parse_theme(data: &Value, root: Option<&Path>, env: &Env) -> Result<Theme
     let Value::Dict(raw_palette) = raw_palette else {
         return refuse("palette must be an object of name: color");
     };
-    let mut palette = Dict::new();
+    let mut palette = Dict::default();
     for (name, color) in &raw_palette {
         if !palette_name(name) {
             return refuse(format!(

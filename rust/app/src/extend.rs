@@ -75,7 +75,7 @@ fn warn(message: &str) {
 /// state: for the app: whether a monitor of the panel's own can be had here (`how`: "vdd",
 /// "xrandr", "wayland", or ""), whether it is set up (`ready`) and what is missing.
 pub fn state(size: Option<(i64, i64)>, place: &str) -> Dict {
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     if place == "wayland" {
         // (the desktop makes it as the capture starts: wayland.rs)
         told.insert("how".into(), Value::from("wayland"));
@@ -508,7 +508,7 @@ pub fn setup_state() -> Dict {
     let state = SETUP
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("running".into(), Value::Bool(state.running));
     told.insert("said".into(), Value::Str(state.said.clone()));
     told.insert("error".into(), Value::Str(state.error.clone()));

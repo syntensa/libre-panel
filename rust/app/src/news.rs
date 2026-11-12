@@ -91,7 +91,7 @@ impl News {
 }
 
 fn told(first: &str, seen: &str) -> Value {
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("first".into(), Value::Str(first.into()));
     told.insert("seen".into(), Value::Str(seen.into()));
     Value::Dict(told)

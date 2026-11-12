@@ -280,7 +280,7 @@ fn light_value(value: &Value, key: &str) -> Result<Value> {
     Ok(match value {
         Value::Dict(dict) => {
             let body = weather_icon(dict);
-            let mut out = Dict::new();
+            let mut out = Dict::default();
             for (name, field) in dict {
                 let made = if body && (name == "finish" || name == "color") {
                     if name == "color" {

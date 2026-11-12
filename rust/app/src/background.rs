@@ -378,7 +378,7 @@ impl PanelService {
         } else {
             status.state
         };
-        let mut told = Dict::new();
+        let mut told = Dict::default();
         told.insert("state".into(), Value::Str(state.into()));
         let detail = match (error.is_empty(), state) {
             (true, "waiting") => status.detail.clone(),
@@ -435,7 +435,7 @@ impl PanelService {
         // where the screens in turn stand: the step, its theme and the seconds left of it
         let sequence = match (state, status.sequence) {
             ("showing", Some((index, theme, left_s))) => {
-                let mut at = Dict::new();
+                let mut at = Dict::default();
                 at.insert("index".into(), Value::int(index as i64));
                 at.insert("theme".into(), Value::Str(theme));
                 at.insert(
@@ -460,7 +460,7 @@ impl PanelService {
         more.sort_by_key(|(n, _)| *n);
         let more = (more.into_iter().filter(|_| running))
             .map(|(n, each)| {
-                let mut entry = Dict::new();
+                let mut entry = Dict::default();
                 entry.insert("index".into(), Value::int(n as i64));
                 entry.insert("state".into(), Value::Str(each.state.into()));
                 let detail = match each.state {
@@ -500,7 +500,7 @@ impl PanelService {
             "more",
         ];
         told.insert("testing".into(), Value::Bool(false)); // (no panel test here yet)
-        let mut sorted = Dict::new();
+        let mut sorted = Dict::default();
         for key in order {
             if let Some(value) = told.shift_remove(key) {
                 sorted.insert(key.into(), value);
@@ -688,7 +688,7 @@ impl BackgroundApp {
             };
             access::publish(&self.home.settings, &server.token, server.port);
             say(&format!("theme editor at {}", server.url()));
-            let mut told = Dict::new();
+            let mut told = Dict::default();
             told.insert("pid".into(), Value::int(i64::from(std::process::id())));
             told.insert("editor".into(), Value::Str(server.url()));
             let text = lp_py::json::dumps(&Value::Dict(told), &lp_py::json::Dumps::default());
@@ -1012,7 +1012,7 @@ impl BackgroundApp {
     }
 
     pub fn snapshot(&self) -> Dict {
-        let mut told = Dict::new();
+        let mut told = Dict::default();
         told.insert("panel".into(), Value::Dict(self.panel.state()));
         let brightness = self.brightness().map_or(Value::None, Value::int);
         told.insert("brightness".into(), brightness);

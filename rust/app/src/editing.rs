@@ -54,7 +54,7 @@ pub fn save(theme_id: &str, payload: &Value, places: &Places, env: &Env) -> Resu
     let data = get(payload, "theme")?.cloned().unwrap_or(Value::None);
     let folder =
         versions::save_theme(theme_id, &data, source, places, env).map_err(|e| said(e, false))?;
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("ok".into(), Value::Bool(true));
     told.insert("id".into(), Value::Str(theme_id.into()));
     told.insert(
@@ -161,7 +161,7 @@ pub fn make_version(
         versions::save_theme(&name, &data, source.as_deref(), places, env)
     };
     let folder = made().map_err(|e| said(e, true))?;
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("id".into(), Value::Str(name));
     told.insert(
         "path".into(),

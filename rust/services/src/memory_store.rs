@@ -210,7 +210,7 @@ pub fn rows(connection: &Connection, sql: &str, params: &[Value]) -> Result<Vec<
         .query(rusqlite::params_from_iter(cells?))
         .map_err(wrong)?;
     while let Some(row) = given.next().map_err(wrong)? {
-        let mut dict = Dict::new();
+        let mut dict = Dict::default();
         for (at, name) in names.iter().enumerate() {
             dict.insert(name.clone(), value(row.get_ref(at).map_err(wrong)?));
         }

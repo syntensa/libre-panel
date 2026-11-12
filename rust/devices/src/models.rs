@@ -98,7 +98,7 @@ impl PanelModel {
     /// to_dict(): every field, the label, the USB ids as "1cbe:0016", the frame sizes, the
     /// hidden strips by orientation and the protocol's name.
     pub fn to_dict(&self) -> Value {
-        let mut d = Dict::new();
+        let mut d = Dict::default();
         let strs = |items: &[&str]| Value::List(items.iter().map(|&s| s.into()).collect());
         let ints = |items: &[i64]| Value::List(items.iter().map(|&n| n.into()).collect());
         let edges = |values: [i64; 4]| {

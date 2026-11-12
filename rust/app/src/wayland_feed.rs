@@ -356,7 +356,7 @@ mod linux {
         let text = std::fs::read_to_string(&path).unwrap_or_default();
         let mut known = match lp_py::json::loads(&text) {
             Ok(lp_py::Value::Dict(known)) => known,
-            _ => lp_py::Dict::new(),
+            _ => lp_py::Dict::default(),
         };
         known.insert(kind.into(), lp_py::Value::Str(token.into()));
         let text = lp_py::json::dumps(&lp_py::Value::Dict(known), &lp_py::json::Dumps::default());

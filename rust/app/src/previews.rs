@@ -157,7 +157,7 @@ pub fn theme_sizes(
             None if (theme.width, theme.height) == (w, h) => ("made", version.clone()),
             None => ("scaled", version.clone()),
         };
-        let mut entry = Dict::new();
+        let mut entry = Dict::default();
         entry.insert(
             "size".into(),
             Value::List(vec![Value::int(w), Value::int(h)]),
@@ -172,7 +172,7 @@ pub fn theme_sizes(
         entry.insert("from".into(), Value::Str(source));
         out.push(Value::Dict(entry));
     }
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("theme".into(), Value::Str(theme_id.into()));
     told.insert("sizes".into(), Value::List(out));
     Ok(Value::Dict(told))

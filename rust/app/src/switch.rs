@@ -80,7 +80,7 @@ fn occasion_params(
     theme_name: &str,
     now: &Moment,
 ) -> Dict {
-    let mut params = Dict::new();
+    let mut params = Dict::default();
     if name != "entrance" {
         return params;
     }

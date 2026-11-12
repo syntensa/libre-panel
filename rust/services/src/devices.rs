@@ -376,7 +376,7 @@ impl Watcher {
             if !found.contains_key(&slot) {
                 self.connected.remove(&slot);
                 self.weak.remove(&slot);
-                self.tell(told("controller-out", slot, &Dict::new()), Some(now));
+                self.tell(told("controller-out", slot, &Dict::default()), Some(now));
             }
         }
         for (slot, c) in &found {
@@ -581,7 +581,7 @@ pub fn describe(event: &Event) -> Toast {
     let amount = |key: &str| number(d, key).unwrap_or(0.0);
     let letter = of("letter");
     let label = |text: String| -> Dict {
-        let mut payload = Dict::new();
+        let mut payload = Dict::default();
         payload.insert("label".into(), s(text));
         payload
     };

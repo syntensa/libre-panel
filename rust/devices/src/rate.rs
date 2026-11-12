@@ -209,7 +209,7 @@ impl VideoState {
             .and_then(|bytes| String::from_utf8(bytes).ok());
         match text.map(|text| lp_py::json::loads(&text)) {
             Some(Ok(Value::Dict(data))) => data,
-            _ => lp_py::Dict::new(),
+            _ => lp_py::Dict::default(),
         }
     }
 
@@ -240,7 +240,7 @@ impl VideoState {
         let mut data = self.read();
         let mut rates = match data.get("rates") {
             Some(Value::Dict(rates)) => rates.clone(),
-            _ => lp_py::Dict::new(),
+            _ => lp_py::Dict::default(),
         };
         rates.insert(key_text(key), Value::Float(mbit));
         data.insert("rates".to_string(), Value::Dict(rates));

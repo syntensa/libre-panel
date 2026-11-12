@@ -522,7 +522,7 @@ impl Core {
         let text =
             |text: Option<&String>| text.map_or(Value::None, |text| Value::Str(text.clone()));
         let float = |number: Option<f64>| number.map_or(Value::None, Value::Float);
-        let mut signals = Dict::new();
+        let mut signals = Dict::default();
         signals.insert("music".into(), Value::Bool(self.signals.music));
         signals.insert("microphone".into(), Value::Bool(self.signals.microphone));
         signals.insert("app".into(), text(self.signals.app.as_ref()));
@@ -535,7 +535,7 @@ impl Core {
             .0
             .as_ref()
             .filter(|_| self.candidate.0 != self.theme);
-        let mut status = Dict::new();
+        let mut status = Dict::default();
         status.insert(
             "rule".into(),
             text(self.rule.map(|rule| &self.rules[rule].name)),

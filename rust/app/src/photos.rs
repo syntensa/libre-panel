@@ -291,7 +291,7 @@ pub fn round_picture(
     let path = kept().map_err(conflict)?;
     // (kept all the same where it does not open: the answer says where)
     let opened = crate::settings::open_path(&folder).is_ok();
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert(
         "file".into(),
         Value::Str(path.to_string_lossy().into_owned()),

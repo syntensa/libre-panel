@@ -453,7 +453,7 @@ impl Tracker {
         let history: Result<Vec<Value>, String> = (history.into_iter().flatten())
             .map(|rate| rounded(*rate))
             .collect();
-        let mut state = Dict::new();
+        let mut state = Dict::default();
         let mut set = |key: &str, value: Value| state.insert(key.to_string(), value);
         set("id", Value::Str(item.id.clone()));
         set("source", Value::Str(item.source.into()));
@@ -568,11 +568,11 @@ impl Tracker {
             if is_file(&path) {
                 return match steam::read_vdf(&path).get("appstate") {
                     Some(Value::Dict(state)) => state.clone(),
-                    _ => Dict::new(),
+                    _ => Dict::default(),
                 };
             }
         }
-        Dict::new()
+        Dict::default()
     }
 
     fn steam_step(&mut self, now: f64, dt: f64) -> Vec<Item> {
@@ -1052,7 +1052,7 @@ impl Service for Downloads {
         let place = |path: &Option<Path>| {
             (path.as_ref()).map_or(Value::None, |path| Value::Str(path.text()))
         };
-        let mut said = Dict::new();
+        let mut said = Dict::default();
         said.insert("steam".into(), place(&held.tracker.root));
         said.insert("folder".into(), place(&held.tracker.folder));
         let name = held.state.as_ref().and_then(|state| state.get("name"));

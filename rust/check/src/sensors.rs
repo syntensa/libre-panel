@@ -1768,7 +1768,7 @@ fn agents(case: &Value) -> Result<Value, String> {
     );
     let table = |value: &Value| match loaded(value) {
         lp_py::Value::Dict(table) => table,
-        _ => lp_py::Dict::new(),
+        _ => lp_py::Dict::default(),
     };
     let written = |made: Result<lp_py::Dict, String>| match made {
         Ok(made) => {

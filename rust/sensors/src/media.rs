@@ -218,7 +218,7 @@ pub fn parse_mpris(reply: &Value, name: &str, at: f64) -> Option<Track> {
     };
     let properties = properties.as_dict()?;
     let none = Value::None;
-    let empty = IndexMap::new();
+    let empty = lp_py::Dict::default();
     let metadata = properties.get("Metadata").map_or(&none, plain);
     let metadata = metadata.as_dict().unwrap_or(&empty);
     let text = |key: &str| -> String {

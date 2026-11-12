@@ -564,11 +564,11 @@ impl Hotkeys {
     /// wrong.
     pub fn state(&self) -> Dict {
         let (supported, why) = (self.supported)();
-        let mut keys = Dict::new();
+        let mut keys = Dict::default();
         if let Ok(now) = self.now.lock() {
             let errors = now.current.as_ref().map(|c| c.errors()).unwrap_or_default();
             let entry = |combo: String, error: String| {
-                let mut entry = Dict::new();
+                let mut entry = Dict::default();
                 entry.insert("combo".into(), Value::Str(combo));
                 entry.insert("error".into(), Value::Str(error));
                 Value::Dict(entry)
@@ -581,7 +581,7 @@ impl Hotkeys {
                 keys.insert(action.clone(), entry(String::new(), text.clone()));
             }
         }
-        let mut state = Dict::new();
+        let mut state = Dict::default();
         state.insert("supported".into(), Value::Bool(supported));
         state.insert("why".into(), Value::Str(why));
         state.insert("keys".into(), Value::Dict(keys));

@@ -325,7 +325,7 @@ fn run(case: &Value) -> Result<Value, String> {
                 .into_iter()
                 .flatten()
                 .map(|c| {
-                    let mut w = lp_py::Dict::new();
+                    let mut w = lp_py::Dict::default();
                     for (k, v) in c["widget"].as_object().into_iter().flatten() {
                         w.insert(k.clone(), typed(v));
                     }
@@ -376,7 +376,7 @@ fn run(case: &Value) -> Result<Value, String> {
                 .into_iter()
                 .flatten()
                 .map(|c| {
-                    let mut w = lp_py::Dict::new();
+                    let mut w = lp_py::Dict::default();
                     for (k, v) in c["widget"].as_object().into_iter().flatten() {
                         w.insert(k.clone(), typed(v));
                     }
@@ -3448,7 +3448,7 @@ fn run(case: &Value) -> Result<Value, String> {
                         .collect(),
                 )
             };
-            let mut d = Dict::new();
+            let mut d = Dict::default();
             d.insert("COMMON".into(), fields(t::COMMON));
             d.insert("WIDGET_SPECS".into(), by_type(t::WIDGETS));
             d.insert("LOOK_SPECS".into(), by_type(t::LOOK_SPECS));

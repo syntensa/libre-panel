@@ -247,7 +247,7 @@ fn set_aside(folder: &Path) -> bool {
 pub fn publish(settings: &Path, token: &str, port: u16) -> Option<PathBuf> {
     let path = token_file(settings);
     let folder = path.parent()?.to_path_buf();
-    let mut info = Dict::new();
+    let mut info = Dict::default();
     info.insert("pid".into(), Value::int(i64::from(std::process::id())));
     info.insert("port".into(), Value::int(i64::from(port)));
     info.insert("token".into(), Value::Str(token.to_string()));

@@ -340,7 +340,7 @@ pub fn adapt_theme(
     let Value::Dict(mut result) = theme.to_dict() else {
         unreachable!("a theme's dict")
     };
-    let mut display = Dict::new();
+    let mut display = Dict::default();
     display.insert("model".into(), model.into());
     display.insert("orientation".into(), orientation.into());
     display.insert("width".into(), Value::Int(new_w.clone()));
@@ -380,7 +380,7 @@ pub fn adapt_theme(
             let a = num::int_true_div(&new_w, &old_w)?;
             let b = num::int_true_div(&new_h, &old_h)?;
             let s = if b < a { b } else { a };
-            let mut scaled = Dict::new();
+            let mut scaled = Dict::default();
             for (key, value) in grid {
                 let v = if matches!(key.as_str(), "margin" | "gap") && value.truthy() {
                     at_least(1, value, s)?
@@ -698,7 +698,7 @@ fn laid_out_data(file: &Path, width: i64, height: i64, model: &str, env: &Env) -
             .get("display")
             .filter(|d| d.truthy())
             .cloned()
-            .unwrap_or(Value::Dict(Dict::new()));
+            .unwrap_or(Value::Dict(Dict::default()));
         let (w, h) = (display_int(&made, "width")?, display_int(&made, "height")?);
         let given = dict.get("grid").cloned();
         let model_of = match made.as_dict().and_then(|d| d.get("model")) {
@@ -708,7 +708,7 @@ fn laid_out_data(file: &Path, width: i64, height: i64, model: &str, env: &Env) -
         let grid = make_cells(&w, &h, given.as_ref(), &model_of)?;
         let mut merged = match given {
             Some(Value::Dict(g)) => g,
-            _ => Dict::new(), // (falsy: anything else is no mapping, make_cells said so)
+            _ => Dict::default(), // (falsy: anything else is no mapping, make_cells said so)
         };
         merged.insert("columns".into(), grid.columns);
         merged.insert("rows".into(), grid.rows);

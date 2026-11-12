@@ -63,7 +63,7 @@ pub fn new_key(folder: &Path) -> std::io::Result<String> {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    let mut kept = Dict::new();
+    let mut kept = Dict::default();
     kept.insert("key".into(), Value::Str(found.clone()));
     let text = lp_py::json::dumps(&Value::Dict(kept), &Dumps::default());
     options.open(&temporary)?.write_all(text.as_bytes())?;
@@ -131,7 +131,7 @@ pub fn with_hooks(settings: &Dict, events: &[&str], command: &str) -> Result<Dic
     let mut out = settings.clone();
     let hooks = out
         .entry("hooks".into())
-        .or_insert(Value::Dict(Dict::new()));
+        .or_insert(Value::Dict(Dict::default()));
     let Value::Dict(hooks) = hooks else {
         return Err("\"hooks\" is no table".into());
     };
@@ -142,12 +142,12 @@ pub fn with_hooks(settings: &Dict, events: &[&str], command: &str) -> Result<Dic
             Some(_) => return Err(format!("\"hooks.{event}\" is no list")),
         };
         groups.retain(|group| !ours(group));
-        let mut hook = Dict::new();
+        let mut hook = Dict::default();
         hook.insert("type".into(), Value::Str("command".into()));
         hook.insert("command".into(), Value::Str(command.to_string()));
         hook.insert("async".into(), Value::Bool(true));
         hook.insert("timeout".into(), Value::int(5));
-        let mut group = Dict::new();
+        let mut group = Dict::default();
         group.insert("hooks".into(), Value::List(vec![Value::Dict(hook)]));
         groups.push(Value::Dict(group));
         hooks.insert((*event).to_string(), Value::List(groups));
@@ -232,11 +232,11 @@ pub fn installed(settings: &Dict) -> Installed {
 pub fn read_settings(path: &Path) -> Result<Dict, String> {
     let text = match std::fs::read(path) {
         Ok(bytes) => String::from_utf8(bytes).map_err(|why| why.to_string())?,
-        Err(why) if why.kind() == std::io::ErrorKind::NotFound => return Ok(Dict::new()),
+        Err(why) if why.kind() == std::io::ErrorKind::NotFound => return Ok(Dict::default()),
         Err(why) => return Err(why.to_string()),
     };
     if lp_py::strip(&text).is_empty() {
-        return Ok(Dict::new());
+        return Ok(Dict::default());
     }
     match lp_py::json::loads(&text).map_err(|why| why.to_string())? {
         Value::Dict(data) => Ok(data),
@@ -289,7 +289,7 @@ pub fn claude_plan(
     let command = hook_command(port, "claude", secret);
     let mut out = with_hooks(&without_ours(settings), &HOOK_EVENTS, &command)?;
     if status_line && !out.get("statusLine").is_some_and(Value::truthy) {
-        let mut line = Dict::new();
+        let mut line = Dict::default();
         line.insert("type".into(), Value::Str("command".into()));
         line.insert("command".into(), Value::Str(status_command(port, secret)));
         out.insert("statusLine".into(), Value::Dict(line));

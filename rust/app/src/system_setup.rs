@@ -600,11 +600,11 @@ pub fn status(system: &dyn System, user: Option<&str>) -> Dict {
             .ok()
             .map(|members| members.contains(&sid))
     });
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert(
         "service".into(),
         info.map_or(Value::None, |info| {
-            let mut s = Dict::new();
+            let mut s = Dict::default();
             s.insert("state".into(), Value::Str(info.state));
             s.insert("pid".into(), Value::int(i64::from(info.pid)));
             s.insert("program".into(), Value::Str(info.program));
@@ -715,7 +715,7 @@ struct Job {
 
 impl Job {
     fn value(&self) -> Value {
-        let mut told = Dict::new();
+        let mut told = Dict::default();
         told.insert("action".into(), Value::Str(self.action.clone()));
         told.insert("running".into(), Value::Bool(self.running));
         told.insert("code".into(), self.code.map_or(Value::None, Value::int));
@@ -833,7 +833,7 @@ fn service_state() -> Value {
         return Value::None;
     };
     let info = win::Real.service();
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert(
         "state".into(),
         Value::Str(info.map_or("unknown".into(), |info| info.state)),
@@ -873,7 +873,7 @@ pub fn platform_word() -> &'static str {
 /// unlock_state: what "Unlock all sensors" would set up, what is in place, and the last run.
 pub fn unlock_state() -> Dict {
     let windows = cfg!(windows);
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("platform".into(), Value::from(platform_word()));
     told.insert(
         "available".into(),

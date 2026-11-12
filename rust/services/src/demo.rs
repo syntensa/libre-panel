@@ -729,7 +729,7 @@ pub fn demo_report(t: f64, earlier: i64) -> Result<Readings, String> {
     ])
     .into_iter()
     .collect();
-    let mut session = Dict::new();
+    let mut session = Dict::default();
     session.insert("game".into(), text("Starfall"));
     session.insert("started".into(), Value::Float(t - 2760.0));
     session.insert("ended".into(), Value::Float(t - 60.0));
@@ -771,7 +771,7 @@ pub fn demo_report(t: f64, earlier: i64) -> Result<Readings, String> {
         ("count", Value::int(earlier)),
         (
             "mean",
-            Value::Dict(if earlier != 0 { mean } else { Dict::new() }),
+            Value::Dict(if earlier != 0 { mean } else { Dict::default() }),
         ),
         (
             "levels",
@@ -781,7 +781,7 @@ pub fn demo_report(t: f64, earlier: i64) -> Result<Readings, String> {
             },
         ),
     ]);
-    let mut report = Dict::new();
+    let mut report = Dict::default();
     report.insert("session".into(), Value::Dict(session));
     report.insert("comparison".into(), comparison);
     round_report::readings(&report).map(told)

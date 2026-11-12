@@ -109,7 +109,7 @@ pub fn make_backup(config_path: &Path, themes: &Path) -> Result<Vec<u8>, Refused
     let mut names: Vec<String> = files.iter().map(|(parts, _)| parts[0].clone()).collect();
     names.sort();
     names.dedup();
-    let mut manifest = Dict::new();
+    let mut manifest = Dict::default();
     manifest.insert("kind".into(), Value::from(KIND));
     manifest.insert("version".into(), Value::from(lp_py::VERSION));
     let at = local_time(now());
@@ -356,7 +356,7 @@ pub fn restore_backup(data: &[u8], config_path: &Path, themes: &Path) -> Result<
     }
     let mut names: Vec<&String> = found.keys().collect();
     names.sort();
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("config".into(), Value::Bool(config.is_some()));
     told.insert(
         "themes".into(),

@@ -295,7 +295,7 @@ impl Renderer {
             return Err(Failed("a mark of no size".into()));
         }
         let layer = Image::new(Mode::RGBA, size.0 as usize, size.1 as usize, &ink(colour));
-        let mut marked = Dict::new();
+        let mut marked = Dict::default();
         marked.insert(
             "id".into(),
             Value::Str(format!("{}\0mark", widget::text(w, "id"))),
@@ -399,7 +399,7 @@ impl Renderer {
         );
         Draw::new(&mut big).ellipse(bounds, Some(ink(colour)), None, 1)?;
         let mut dot = down(&big, size, size, 4)?;
-        let mut glow = Dict::new();
+        let mut glow = Dict::default();
         glow.insert(
             "glow".into(),
             w.get("glow").cloned().unwrap_or(Value::Float(0.0)),
@@ -418,7 +418,7 @@ impl Renderer {
             dot = halo;
             pad = p;
         }
-        let mut plain = Dict::new();
+        let mut plain = Dict::default();
         plain.insert(
             "id".into(),
             Value::Str(format!("{}\0dot", widget::text(w, "id"))),

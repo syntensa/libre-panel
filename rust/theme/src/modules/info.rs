@@ -79,10 +79,10 @@ fn ints(values: &[i64]) -> Value {
 
 /// module_info: what the editor needs: the kinds, their sources and sizes, the looks.
 pub fn module_info() -> Dict {
-    let mut kinds = Dict::new();
+    let mut kinds = Dict::default();
     for &(key, name) in KINDS {
         let kind = kind_of(key).expect("every kind is built");
-        let mut info = Dict::new();
+        let mut info = Dict::default();
         info.insert("name".into(), t(name).into());
         let sources = kind.sources.iter().map(|&s| Value::from(s)).collect();
         info.insert("sources".into(), Value::List(sources));
@@ -96,10 +96,10 @@ pub fn module_info() -> Dict {
         info.insert("fan_items".into(), fans.into());
         kinds.insert(key.into(), Value::Dict(info));
     }
-    let mut looks = Dict::new();
+    let mut looks = Dict::default();
     for (key, look) in crate::design::looks() {
         let (palette, style) = look_theme_parts(key).expect("a look of the table");
-        let mut info = Dict::new();
+        let mut info = Dict::default();
         let name = look.as_dict().and_then(|l| l.get("name")).cloned();
         info.insert("name".into(), name.unwrap_or(Value::None));
         info.insert("palette".into(), Value::Dict(palette));
@@ -110,7 +110,7 @@ pub fn module_info() -> Dict {
         .iter()
         .map(|&(k, v)| (k.to_string(), Value::int(v)))
         .collect();
-    let mut info = Dict::new();
+    let mut info = Dict::default();
     info.insert("kinds".into(), Value::Dict(kinds));
     info.insert("looks".into(), Value::Dict(looks));
     info.insert("grid".into(), Value::Dict(grid));
@@ -120,7 +120,7 @@ pub fn module_info() -> Dict {
 
 /// _m: a module of a starting layout.
 fn placed(kind: &str, col: i64, row: i64, cols: i64, rows: i64, source: &str) -> Value {
-    let mut m = Dict::new();
+    let mut m = Dict::default();
     m.insert("module".into(), kind.into());
     m.insert("col".into(), Value::int(col));
     m.insert("row".into(), Value::int(row));
@@ -207,7 +207,7 @@ pub fn templates(columns: i64, rows: i64) -> Value {
         chosen
             .into_iter()
             .map(|(key, modules)| {
-                let mut d = Dict::new();
+                let mut d = Dict::default();
                 d.insert("id".into(), key.into());
                 d.insert("name".into(), names(key).into());
                 d.insert("modules".into(), Value::List(modules));

@@ -286,15 +286,15 @@ pub fn send(
                 (_, panel) => panel,
             })
             .collect();
-        let mut set = Dict::new();
+        let mut set = Dict::default();
         set.insert("panels".into(), Value::List(panels));
-        let mut payload = Dict::new();
+        let mut payload = Dict::default();
         payload.insert("set".into(), Value::Dict(set));
         settings
             .write(&Value::Dict(payload))
             .map_err(|why| why.message)?;
     }
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("theme".into(), Value::Str(target));
     told.insert("copied".into(), Value::Bool(built_in));
     told.insert(

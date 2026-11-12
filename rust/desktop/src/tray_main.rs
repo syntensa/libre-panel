@@ -107,7 +107,7 @@ impl Link {
     fn choose(&self, id: String) {
         let link = self.clone();
         std::thread::spawn(move || {
-            let mut chosen = Dict::new();
+            let mut chosen = Dict::default();
             chosen.insert("id".into(), Value::Str(id));
             let body = lp_py::json::dumps(&Value::Dict(chosen), &lp_py::json::Dumps::default());
             if link.ask("POST", "/api/tray", body.as_bytes()).is_none() {

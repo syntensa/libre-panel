@@ -104,7 +104,7 @@ pub struct Info {
 
 impl Info {
     fn value(&self) -> Value {
-        let mut told = Dict::new();
+        let mut told = Dict::default();
         told.insert("name".into(), Value::Str(self.name.clone()));
         told.insert("kind".into(), Value::from(self.kind));
         told.insert("bytes".into(), Value::int(self.bytes as i64));
@@ -724,7 +724,7 @@ pub fn status() -> Value {
         .items
         .iter()
         .map(|item| {
-            let mut told = Dict::new();
+            let mut told = Dict::default();
             told.insert("name".into(), Value::Str(item.name.clone()));
             told.insert("kind".into(), Value::from(item.kind));
             told.insert("seconds".into(), Value::Float(item.seconds));
@@ -733,7 +733,7 @@ pub fn status() -> Value {
         })
         .collect();
     let position = (playback.position(at) * 1000.0).round_ties_even() / 1000.0;
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("items".into(), Value::List(items));
     told.insert("index".into(), Value::int(playback.index as i64));
     told.insert("name".into(), Value::Str(item.name.clone()));

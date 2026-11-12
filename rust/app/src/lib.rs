@@ -878,7 +878,7 @@ fn running_instance(settings: &std::path::Path) -> lp_py::Dict {
     let text = std::fs::read_to_string(settings.join("instance.json")).unwrap_or_default();
     match lp_py::json::loads(&text) {
         Ok(lp_py::Value::Dict(told)) => told,
-        _ => lp_py::Dict::new(),
+        _ => lp_py::Dict::default(),
     }
 }
 
@@ -1014,7 +1014,7 @@ fn notify_command(args: &[String]) -> Result<i32, String> {
         eprintln!("{}", lp_i18n::t("Libre Panel is not running."));
         return Ok(1);
     };
-    let mut body = lp_py::Dict::new();
+    let mut body = lp_py::Dict::default();
     body.insert("text".into(), lp_py::Value::Str(text));
     body.insert("seconds".into(), lp_py::Value::Float(seconds));
     body.insert("level".into(), lp_py::Value::Str(level));

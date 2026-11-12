@@ -140,7 +140,7 @@ pub fn make_cells(
     settings: Option<&Value>,
     model: &str,
 ) -> num::Result<Cells> {
-    let empty = Dict::new();
+    let empty = Dict::default();
     let given = match settings {
         Some(v) if v.truthy() => match v {
             Value::Dict(d) => d,

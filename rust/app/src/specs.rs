@@ -17,7 +17,7 @@ const PRESETS: &str = include_str!("presets.json");
 fn presets() -> Dict {
     match lp_py::json::loads(PRESETS) {
         Ok(Value::Dict(d)) => d,
-        _ => Dict::new(),
+        _ => Dict::default(),
     }
 }
 
@@ -54,7 +54,7 @@ fn plugin_specs() -> Dict {
     };
     let built_in = lp_i18n::t_format("{name} (built in)", &[("name", Value::from(label))])
         .unwrap_or_else(|why| why.msg);
-    let mut options = Dict::new();
+    let mut options = Dict::default();
     options.insert(
         "roll_in".into(),
         Value::List(vec![Value::from("number"), Value::Float(0.45)]),
@@ -63,16 +63,16 @@ fn plugin_specs() -> Dict {
         "roll_out".into(),
         Value::List(vec![Value::from("number"), Value::Float(0.32)]),
     );
-    let mut band = Dict::new();
+    let mut band = Dict::default();
     band.insert("label".into(), Value::Str(built_in));
     band.insert("options".into(), Value::Dict(options));
-    let mut toasts = Dict::new();
+    let mut toasts = Dict::default();
     toasts.insert("band".into(), Value::Dict(band));
-    let mut out = Dict::new();
-    out.insert("widgets".into(), Value::Dict(Dict::new()));
-    out.insert("widget_labels".into(), Value::Dict(Dict::new()));
+    let mut out = Dict::default();
+    out.insert("widgets".into(), Value::Dict(Dict::default()));
+    out.insert("widget_labels".into(), Value::Dict(Dict::default()));
     out.insert("presets".into(), Value::List(Vec::new()));
-    out.insert("screens".into(), Value::Dict(Dict::new()));
+    out.insert("screens".into(), Value::Dict(Dict::default()));
     out.insert("toasts".into(), Value::Dict(toasts));
     out
 }
@@ -80,7 +80,7 @@ fn plugin_specs() -> Dict {
 /// _finish_types: the widget types each finish draws (any other is drawn flat); a module
 /// counts where its finish reaches one of its parts.
 fn finish_types(types: &[String]) -> Value {
-    let mut found = Dict::new();
+    let mut found = Dict::default();
     for (name, drawn) in tables::FINISH_TYPES {
         let mut kinds: Vec<Value> = types
             .iter()
@@ -155,11 +155,11 @@ pub fn specs(env: &Env, places: &Places) -> Value {
         .iter()
         .map(|(name, table)| ((*name).to_string(), fields(table)))
         .collect();
-    let mut look_ranges = Dict::new();
+    let mut look_ranges = Dict::default();
     for (block, key, low, high) in tables::LOOK_RANGES {
         let entry = look_ranges
             .entry((*block).to_string())
-            .or_insert_with(|| Value::Dict(Dict::new()));
+            .or_insert_with(|| Value::Dict(Dict::default()));
         if let Value::Dict(d) = entry {
             d.insert(
                 (*key).to_string(),
@@ -176,7 +176,7 @@ pub fn specs(env: &Env, places: &Places) -> Value {
         .into_iter()
         .map(|(name, _)| Value::Str(format!("{}{name}", tables::BUILTIN_PREFIX)))
         .collect();
-    let mut out = Dict::new();
+    let mut out = Dict::default();
     out.insert("version".into(), Value::from(lp_py::VERSION));
     out.insert("widgets".into(), Value::Dict(widgets));
     for key in ["widget_labels", "screens", "toasts"] {
@@ -243,19 +243,19 @@ pub fn preset_previews(
 ) -> Result<Value, crate::drawings::Refused> {
     let palette = match palette {
         Value::Dict(d) => d.clone(),
-        _ => Dict::new(),
+        _ => Dict::default(),
     };
     let all = presets();
     let tokens = match all.get("tokens") {
         Some(Value::Dict(d)) => d.clone(),
-        _ => Dict::new(),
+        _ => Dict::default(),
     };
     let list = match all.get("presets") {
         Some(Value::List(l)) => l.clone(),
         _ => Vec::new(),
     };
     let pad = 8i64;
-    let mut previews = Dict::new();
+    let mut previews = Dict::default();
     for preset in &list {
         let Value::Dict(preset) = preset else {
             continue;
@@ -283,17 +283,17 @@ pub fn preset_previews(
                 .collect(),
             _ => Vec::new(),
         };
-        let mut display = Dict::new();
+        let mut display = Dict::default();
         display.insert("width".into(), Value::int(size[0]));
         display.insert("height".into(), Value::int(size[1]));
-        let mut background = Dict::new();
+        let mut background = Dict::default();
         let ground = if palette.contains_key("bg") {
             "@bg"
         } else {
             "#0b1016"
         };
         background.insert("color".into(), Value::from(ground));
-        let mut data = Dict::new();
+        let mut data = Dict::default();
         data.insert("format".into(), Value::from(tables::THEME_FORMAT));
         data.insert("display".into(), Value::Dict(display));
         data.insert("palette".into(), Value::Dict(palette.clone()));

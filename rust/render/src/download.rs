@@ -739,7 +739,7 @@ impl Renderer {
             return Ok(piece);
         }
         // (the bar lit.bar_piece draws; its groove is the card's background, the stretch's none)
-        let mut bar = Dict::new();
+        let mut bar = Dict::default();
         let mut set = |key: &str, value: Value| {
             bar.insert(key.to_string(), value);
         };

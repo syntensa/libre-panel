@@ -210,7 +210,7 @@ pub fn parse_vdf(text: &str) -> Dict {
 }
 
 pub fn read_vdf(path: &Path) -> Dict {
-    read_text(path).map_or_else(Dict::new, |text| parse_vdf(&text))
+    read_text(path).map_or_else(Dict::default, |text| parse_vdf(&text))
 }
 
 /// find_root: Steam's folder: the one in `given`, else where the system or the usual places

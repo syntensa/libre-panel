@@ -53,7 +53,7 @@ impl Language {
     pub fn english() -> Language {
         Language {
             code: "en".into(),
-            catalog: Dict::new(),
+            catalog: Dict::default(),
         }
     }
 
@@ -63,7 +63,7 @@ impl Language {
         if code == "en" || !known(code) {
             return Ok(Language {
                 code: code.into(),
-                catalog: Dict::new(),
+                catalog: Dict::default(),
             });
         }
         let file = locale_dir.join(format!("{code}.json"));

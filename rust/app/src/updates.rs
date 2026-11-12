@@ -318,7 +318,7 @@ impl Updates {
         let text = text.and_then(|text| String::from_utf8(text).ok());
         match text.map(|text| lp_py::json::loads(&text)) {
             Some(Ok(Value::Dict(data))) => data,
-            _ => Dict::new(),
+            _ => Dict::default(),
         }
     }
 

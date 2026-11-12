@@ -695,7 +695,7 @@ pub fn state(told: &Told) -> Value {
     let listed: Vec<Value> = models()
         .map(|m| {
             let (w, h) = m.size(told.orientation);
-            let mut one = Dict::new();
+            let mut one = Dict::default();
             one.insert("id".into(), text(m.id));
             one.insert("label".into(), Value::Str(m.label()));
             one.insert(
@@ -706,10 +706,10 @@ pub fn state(told: &Told) -> Value {
             Value::Dict(one)
         })
         .collect();
-    let mut names = Dict::new();
+    let mut names = Dict::default();
     names.insert("logo".into(), text(BOOT_LOGO));
     names.insert("clip".into(), text(STANDBY_CLIP));
-    let mut answer = Dict::new();
+    let mut answer = Dict::default();
     answer.insert("models".into(), Value::List(listed));
     answer.insert("model".into(), told.model.map_or(Value::None, text));
     answer.insert("panel".into(), Value::Int(told.panel.into()));

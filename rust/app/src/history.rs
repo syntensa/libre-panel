@@ -109,7 +109,7 @@ fn course(con: &Connection, since: i64, step: i64) -> rusqlite::Result<Value> {
     let column = |i: usize, digits: usize| -> Value {
         Value::List(rows.iter().map(|row| rounded(&row[i], digits)).collect())
     };
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert(
         "t".into(),
         Value::List(rows.iter().map(|row| row[0].clone()).collect()),
@@ -158,7 +158,7 @@ fn summary(con: &Connection, since: i64) -> rusqlite::Result<Dict> {
         "cpu_watt_minutes",
         "gpu_watt_minutes",
     ];
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("minutes".into(), or_zero(&at(0)));
     told.insert("game_minutes".into(), or_zero(&at(1)));
     for (n, name) in names.iter().enumerate() {
@@ -273,7 +273,7 @@ pub fn energy(summary: &Dict, options: &Table) -> Value {
         Some(Toml::Int(n)) if *n != 0.into() => n.to_string(),
         _ => "€".to_string(),
     };
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("kwh".into(), Value::Float(lp_py::round_digits(kwh, 2)));
     told.insert(
         "cost".into(),
@@ -301,15 +301,15 @@ pub fn history(path: &Path, span: &str, now: f64) -> Result<Dict, Refused> {
     };
     let since = now as i64 - length;
     let found = path.is_file();
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("span".into(), Value::from(span));
     told.insert("since".into(), Value::int(since));
     told.insert("step".into(), Value::int(*step));
     told.insert("found".into(), Value::Bool(found));
-    let mut empty = Dict::new();
+    let mut empty = Dict::default();
     empty.insert("t".into(), Value::List(Vec::new()));
     told.insert("course".into(), Value::Dict(empty));
-    let mut nothing = Dict::new();
+    let mut nothing = Dict::default();
     nothing.insert("minutes".into(), Value::int(0));
     nothing.insert("game_minutes".into(), Value::int(0));
     told.insert("summary".into(), Value::Dict(nothing));

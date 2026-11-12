@@ -74,7 +74,7 @@ fn installed(settings: &Dict) -> Dict {
         .port
         .and_then(|digits| lp_py::int_of_str(&digits))
         .map_or(Value::None, Value::Int);
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("hooks".into(), Value::Bool(found.hooks));
     told.insert("status_line".into(), Value::Bool(found.status_line));
     told.insert(
@@ -96,16 +96,16 @@ pub fn setup_state(config: &lp_config::Config, port: u16) -> Value {
     let on = agents_on(config);
     let options = config.services.options.get("agents");
     let board = lp_services::agents::board();
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("on".into(), Value::Bool(on));
     told.insert("port".into(), Value::int(i64::from(port)));
     for (agent, path) in paths() {
         let (state, problem) = match setup::read_settings(&path) {
             Ok(current) => (installed(&current), String::new()),
-            Err(why) => (Dict::new(), why),
+            Err(why) => (Dict::default(), why),
         };
         let (ago, what) = board.last_heard(agent);
-        let mut usage = Dict::new();
+        let mut usage = Dict::default();
         if let Some(found) = board.usage(agent) {
             usage.insert("source".into(), Value::Str(found.source));
             usage.insert("ago".into(), seconds(found.ago));
@@ -117,7 +117,7 @@ pub fn setup_state(config: &lp_config::Config, port: u16) -> Value {
         let asked = on && !matches!(asked, Some(lp_py::toml::Toml::Bool(false)));
         usage.insert("asked".into(), Value::Bool(asked));
         let program = lp_devices::rights::which(agent, &mut Vec::new()).is_some();
-        let mut entry = Dict::new();
+        let mut entry = Dict::default();
         entry.insert("program".into(), Value::Bool(program));
         entry.insert(
             "path".into(),
@@ -187,7 +187,7 @@ pub fn set_up(config: &lp_config::Config, payload: &Value, port: u16) -> Result<
     };
     let how = lp_py::json::Dumps::file(2);
     let text = lp_py::json::dumps(&Value::Dict(after.clone()), &how);
-    let mut answer = Dict::new();
+    let mut answer = Dict::default();
     if action == "preview" {
         let before = lp_py::json::dumps(&Value::Dict(current), &how);
         answer.insert("path".into(), Value::Str(file));

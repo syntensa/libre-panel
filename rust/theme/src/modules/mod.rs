@@ -514,7 +514,7 @@ impl<'a> Build<'a> {
 
     /// add: a widget of the module (its fields in the order given).
     pub fn add(&mut self, kind: &str, name: &str, fields: Fields) -> Result<usize> {
-        let mut widget = Dict::new();
+        let mut widget = Dict::default();
         widget.insert("type".into(), kind.into());
         widget.insert("id".into(), name.into());
         for (k, v) in fields {
@@ -968,7 +968,7 @@ fn times_div(a: N, b: N, c: f64) -> f64 {
 /// _heat_rules: [{"above": warn, "color": warn}, {"above": crit, "color": crit}]
 pub fn heat_rules(b: &Build, warn: i64, crit: i64) -> Value {
     let rule = |above: i64, color: String| {
-        let mut d = Dict::new();
+        let mut d = Dict::default();
         d.insert("above".into(), above.into());
         d.insert("color".into(), color.into());
         Value::Dict(d)
@@ -1281,7 +1281,7 @@ pub fn colors_of(palette: &Dict) -> Result<Dict> {
         .and_then(|l| l.get("palette"))
         .and_then(Value::as_dict)
         .expect("the default look's palette");
-    let mut out = Dict::new();
+    let mut out = Dict::default();
     for &role in design::ROLES {
         let given = palette
             .get(role)
@@ -1327,7 +1327,7 @@ pub fn expand(theme: &Theme, env: &Env) -> Result<Expanded> {
         });
     let grid = make_grid(theme.width, theme.height, settings, &theme.model);
     let colors = colors_of(&theme.palette)?;
-    let mut style = Dict::new();
+    let mut style = Dict::default();
     for (k, given) in crate::tables::STYLE_DEFAULTS {
         style.insert((*k).into(), given.value());
     }
@@ -1341,7 +1341,7 @@ pub fn expand(theme: &Theme, env: &Env) -> Result<Expanded> {
         Value::Float(theme.width.min(theme.height) as f64 / 2.0),
     );
     if style.get("backdrop").map(Value::str).as_deref() == Some("gradient") {
-        let mut raw = Dict::new();
+        let mut raw = Dict::default();
         raw.insert("type".into(), "rect".into());
         raw.insert("id".into(), "\0backdrop".into());
         raw.insert("x".into(), 0.into());

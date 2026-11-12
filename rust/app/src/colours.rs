@@ -209,7 +209,7 @@ impl ColourCheck {
             .and_then(|s| s.1)
             .or_else(|| model.map(|m| m.size(way)))
             .unwrap_or((0, 0));
-        let mut found = Dict::new();
+        let mut found = Dict::default();
         found.insert("panel".into(), Value::Int(number.into()));
         found.insert("model".into(), model.map_or(Value::None, |m| text(m.id)));
         found.insert(
@@ -345,7 +345,7 @@ impl ColourCheck {
         let video = &config.device.video;
         let model = self.model(number, config);
         let full = Self::full(config, model);
-        let mut found = Dict::new();
+        let mut found = Dict::default();
         for (key, value) in [
             ("encoder", encoder.map_or(Value::None, text)),
             ("pixels", text(&video.pixels)),

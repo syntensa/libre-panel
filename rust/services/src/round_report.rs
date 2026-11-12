@@ -90,9 +90,9 @@ fn levels(text: Option<&Value>) -> Result<Dict, String> {
     let found = match text {
         Some(Value::Str(text)) if !text.is_empty() => lp_py::json::loads(text).ok(),
         Some(text) if text.truthy() => None, // (no text: json.loads raises TypeError)
-        _ => Some(Value::Dict(Dict::new())),
+        _ => Some(Value::Dict(Dict::default())),
     };
-    let found = match found.unwrap_or_else(|| Value::Dict(Dict::new())) {
+    let found = match found.unwrap_or_else(|| Value::Dict(Dict::default())) {
         Value::Dict(found) => found,
         other => {
             return Err(format!(
@@ -105,7 +105,7 @@ fn levels(text: Option<&Value>) -> Result<Dict, String> {
         Some(value) => value.clone(),
         None => Value::List(Vec::new()),
     };
-    let mut out = Dict::new();
+    let mut out = Dict::default();
     out.insert("edges".into(), part("edges"));
     out.insert("seconds".into(), part("seconds"));
     Ok(out)
@@ -177,7 +177,7 @@ pub fn build(
             Value::int(compare),
         ],
     )?;
-    let mut means = Dict::new();
+    let mut means = Dict::default();
     for name in values() {
         let found: Vec<f64> = (earlier.iter())
             .filter_map(|row| number(row.get(&name)))
@@ -212,12 +212,12 @@ pub fn build(
             Value::List((0..first.len()).map(mean).collect())
         }
     };
-    let mut comparison = Dict::new();
+    let mut comparison = Dict::default();
     let count = i64::try_from(earlier.len()).unwrap_or(i64::MAX);
     comparison.insert("count".into(), Value::int(count));
     comparison.insert("mean".into(), Value::Dict(means));
     comparison.insert("levels".into(), average);
-    let mut report = Dict::new();
+    let mut report = Dict::default();
     report.insert("session".into(), Value::Dict(session));
     report.insert("comparison".into(), Value::Dict(comparison));
     Ok(Some(report))
@@ -354,7 +354,7 @@ fn held_back(session: &Dict) -> Value {
 /// texts that are values, are in the language of the panel. A value may be None (not known).
 /// An error where Python raises.
 pub fn readings(report: &Dict) -> Result<Told, String> {
-    let empty = Dict::new();
+    let empty = Dict::default();
     let dict = |value: Option<&Value>| value.and_then(Value::as_dict).cloned();
     let session = dict(report.get("session")).ok_or("KeyError: 'session'")?;
     let comparison = dict(report.get("comparison")).ok_or("KeyError: 'comparison'")?;

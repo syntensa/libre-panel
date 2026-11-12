@@ -429,7 +429,7 @@ impl Exchange {
     /// page is from an earlier run of Libre Panel).
     pub fn error(&mut self, message: &str, status: u16, reason: &str) {
         self.discard_body();
-        let mut told = Dict::new();
+        let mut told = Dict::default();
         told.insert("error".into(), Value::Str(message.to_string()));
         if !reason.is_empty() {
             told.insert("reason".into(), Value::Str(reason.to_string()));

@@ -101,7 +101,7 @@ pub fn tooltip(state: &Dict) -> String {
 // -- the menu's items -----------------------------------------------------------------------------
 
 fn entry(text: &str, id: Option<String>) -> Dict {
-    let mut item = Dict::new();
+    let mut item = Dict::default();
     item.insert("text".into(), Value::Str(text.to_string()));
     item.insert("id".into(), id.map_or(Value::None, Value::Str));
     item.insert("enabled".into(), Value::Bool(true));
@@ -147,7 +147,7 @@ fn submenu(text: &str, items: Vec<Value>) -> Value {
 }
 
 fn separator() -> Value {
-    let mut item = Dict::new();
+    let mut item = Dict::default();
     item.insert("separator".into(), Value::Bool(true));
     Value::Dict(item)
 }
@@ -169,11 +169,11 @@ fn facts(folder: &Path) -> Facts {
         .and_then(|text| lp_py::json::loads(&text).ok());
     let data = match data {
         Some(Value::Dict(data)) => data,
-        _ => Dict::new(),
+        _ => Dict::default(),
     };
     let display = match data.get("display") {
         Some(Value::Dict(display)) => display.clone(),
-        _ => Dict::new(),
+        _ => Dict::default(),
     };
     let whole = |key: &str| match display.get(key) {
         Some(Value::Int(n)) => n.to_string().parse::<i64>().ok(),
@@ -539,7 +539,7 @@ pub fn menu(app: &BackgroundApp) -> Vec<Value> {
 /// `GET /api/tray`: the icon's state, its tooltip and the menu.
 pub fn state(app: &BackgroundApp) -> Value {
     let panel = app.panel.state();
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("state".into(), Value::Str(text_of(&panel, "state")));
     told.insert("title".into(), Value::Str(tooltip(&panel)));
     told.insert("menu".into(), Value::List(menu(app)));
@@ -573,9 +573,9 @@ fn set_panel(app: &BackgroundApp, n: usize, changes: &[(&str, Value)]) -> Result
         for (key, value) in changes {
             panel.insert((*key).to_string(), value.clone());
         }
-        let mut set = Dict::new();
+        let mut set = Dict::default();
         set.insert("panels".into(), Value::List(panels));
-        let mut payload = Dict::new();
+        let mut payload = Dict::default();
         payload.insert("set".into(), Value::Dict(set));
         settings
             .write(&Value::Dict(payload))

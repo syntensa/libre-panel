@@ -221,10 +221,10 @@ impl PluginHost {
             .map_err(|why| why.to_string())?;
         let mut host = PluginHost {
             inner,
-            hello: Dict::new(),
+            hello: Dict::default(),
         };
         let begun = std::time::Instant::now();
-        host.hello = host.request("hello", Dict::new(), &[])?.0;
+        host.hello = host.request("hello", Dict::default(), &[])?.0;
         let took = begun.elapsed().as_secs_f64();
         if took > 5.0 {
             let said = format!("plugins: the plugin host took {took:.1} s to start");
@@ -280,7 +280,7 @@ impl PluginHost {
                 break (told, data);
             }
             let (value, pixels) = need(&told, &data);
-            let mut said = Dict::new();
+            let mut said = Dict::default();
             said.insert("answer".into(), field(&told, "call").clone());
             said.insert("value".into(), value);
             self.inner.send(said, &pixels)?;
@@ -309,7 +309,7 @@ impl PluginHost {
 
     /// The answer to what a plugin asked (an event with its `call`).
     pub fn answer(&self, call: &Value, value: Value) {
-        let mut message = Dict::new();
+        let mut message = Dict::default();
         message.insert("answer".into(), call.clone());
         message.insert("value".into(), value);
         let _ = self.inner.send(message, &[]);
@@ -472,7 +472,7 @@ pub fn shared(settings: &Path) -> Option<Shared> {
 /// (lp_theme::plugins), so that themes are checked against them as theme/model.py checks them.
 fn learn_schemas(host: &PluginHost) {
     let begun = std::time::Instant::now();
-    let told = match host.request("schemas", Dict::new(), &[]) {
+    let told = match host.request("schemas", Dict::default(), &[]) {
         Ok((told, _)) => told,
         Err(why) => {
             let took = begun.elapsed().as_secs_f64();
@@ -538,7 +538,7 @@ pub fn list(settings: &Path) -> bool {
     }
     match shared(settings) {
         None => {}
-        Some(Ok(host)) => match host.request("check", Dict::new(), &[]) {
+        Some(Ok(host)) => match host.request("check", Dict::default(), &[]) {
             Ok((told, _)) => {
                 if let Some(Value::List(parts)) = told.get("parts") {
                     for part in parts {
@@ -603,7 +603,7 @@ fn reading_of(told: &Dict) -> (String, lp_render::Reading) {
 
 /// A reading as the plugin host takes one.
 fn reading_dict(key: &str, reading: &lp_render::Reading) -> Value {
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("key".into(), Value::from(key));
     let value = match &reading.value {
         Value::Float(f) if !f.is_finite() => Value::None, // (JSON has no NaN)
@@ -623,7 +623,7 @@ fn reading_dict(key: &str, reading: &lp_render::Reading) -> Value {
 
 /// A snapshot as the plugin host takes one: its readings, history and moment (its pictures stay).
 fn snapshot_dict(snapshot: &lp_render::Snapshot) -> Value {
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     let readings = snapshot
         .readings
         .iter()
@@ -775,7 +775,7 @@ fn act(host: &PluginHost, hub: &lp_services::host::PluginHost, message: &Dict, b
                 return;
             };
             let delivery = hub.notify(toast_of(told));
-            let mut said = Dict::new();
+            let mut said = Dict::default();
             said.insert("shown".into(), Value::Bool(delivery.shown));
             said.insert("reason".into(), Value::from(delivery.reason.as_str()));
             host.answer(field(message, "call"), Value::Dict(said));
@@ -787,7 +787,7 @@ fn act(host: &PluginHost, hub: &lp_services::host::PluginHost, message: &Dict, b
 /// An event of the app as the plugin host takes it.
 fn event_message(event: &lp_services::host::Event) -> Dict {
     use lp_services::host::Event;
-    let mut data = Dict::new();
+    let mut data = Dict::default();
     match event {
         Event::ThemeChanged { theme } => {
             data.insert("theme".into(), Value::from(theme.as_str()));
@@ -808,7 +808,7 @@ fn event_message(event: &lp_services::host::Event) -> Dict {
         }
         _ => {}
     }
-    let mut message = Dict::new();
+    let mut message = Dict::default();
     message.insert("event".into(), Value::from(event.name()));
     message.insert("data".into(), Value::Dict(data));
     message
@@ -829,7 +829,7 @@ impl RemoteServices {
         config: Option<&Path>,
     ) -> RemoteServices {
         if let Some(path) = config {
-            let mut fields = Dict::new();
+            let mut fields = Dict::default();
             fields.insert(
                 "path".into(),
                 Value::Str(path.to_string_lossy().into_owned()),
@@ -876,7 +876,7 @@ impl lp_services::manager::Remote for RemoteServices {
         enabled: &[String],
         options: &indexmap::IndexMap<String, Dict>,
     ) -> indexmap::IndexMap<String, String> {
-        let mut fields = Dict::new();
+        let mut fields = Dict::default();
         let enabled = enabled.iter().map(|n| Value::from(n.as_str())).collect();
         fields.insert("enabled".into(), Value::List(enabled));
         let options = options
@@ -900,14 +900,14 @@ impl lp_services::manager::Remote for RemoteServices {
     }
 
     fn restart(&mut self, name: &str) -> Result<String, String> {
-        let mut fields = Dict::new();
+        let mut fields = Dict::default();
         fields.insert("name".into(), Value::from(name));
         let (told, _) = self.host.request("services.restart", fields, &[])?;
         Ok(text(&told, "state"))
     }
 
     fn summary(&self, name: &str) -> Option<Value> {
-        let mut fields = Dict::new();
+        let mut fields = Dict::default();
         fields.insert("name".into(), Value::from(name));
         let (told, _) = self.host.request("services.summary", fields, &[]).ok()?;
         match field(&told, "summary") {
@@ -917,7 +917,7 @@ impl lp_services::manager::Remote for RemoteServices {
     }
 
     fn stop(&mut self) {
-        let _ = self.host.request("services.stop", Dict::new(), &[]);
+        let _ = self.host.request("services.stop", Dict::default(), &[]);
     }
 }
 
@@ -951,14 +951,14 @@ impl PluginSource {
             return None;
         }
         if let Some(path) = config {
-            let mut fields = Dict::new();
+            let mut fields = Dict::default();
             fields.insert(
                 "path".into(),
                 Value::Str(path.to_string_lossy().into_owned()),
             );
             let _ = host.request("config", fields, &[]);
         }
-        let mut fields = Dict::new();
+        let mut fields = Dict::default();
         fields.insert("name".into(), Value::from(name));
         fields.insert("options".into(), Value::Dict(options));
         let opened = host.request("sensors.open", fields, &[]).map(|(told, _)| {
@@ -989,7 +989,7 @@ impl PluginSource {
     }
 
     fn named(&self) -> Dict {
-        let mut fields = Dict::new();
+        let mut fields = Dict::default();
         fields.insert("name".into(), Value::from(self.name));
         fields
     }
@@ -1069,7 +1069,7 @@ impl Drop for PluginSource {
 /// with its `source`); none without plugins.
 pub fn catalog(settings: &Path) -> Option<Dict> {
     let host = shared(settings)?.ok()?;
-    host.request("catalog", Dict::new(), &[])
+    host.request("catalog", Dict::default(), &[])
         .ok()
         .map(|(told, _)| told)
 }
@@ -1170,7 +1170,7 @@ impl PluginDrawing {
         if !needed {
             return None;
         }
-        let mut told = Dict::new();
+        let mut told = Dict::default();
         told.insert("name".into(), Value::Str(theme.name.clone()));
         told.insert("width".into(), Value::int(theme.width));
         told.insert("height".into(), Value::int(theme.height));
@@ -1187,7 +1187,7 @@ impl PluginDrawing {
                 Value::Str(root.to_string_lossy().into_owned())
             }),
         );
-        let mut fields = Dict::new();
+        let mut fields = Dict::default();
         fields.insert("theme".into(), Value::Dict(told));
         fields.insert("preview".into(), Value::Bool(renderer.options.preview));
         fields.insert("animate".into(), Value::Bool(renderer.options.animate));
@@ -1220,9 +1220,9 @@ impl PluginDrawing {
         snapshot: &lp_render::Snapshot,
         frame: &lp_render::plugin::Frame,
     ) -> (Dict, Vec<u8>) {
-        let mut fields = Dict::new();
+        let mut fields = Dict::default();
         fields.insert("drawing".into(), self.drawing.clone());
-        let mut timing = Dict::new();
+        let mut timing = Dict::default();
         timing.insert("now".into(), Value::Float(frame.now));
         timing.insert("fps".into(), Value::Float(frame.fps));
         timing.insert("continuous".into(), Value::Bool(frame.continuous));
@@ -1249,7 +1249,7 @@ impl PluginDrawing {
                 }
             };
             let mark = mark_of(&rgba);
-            let mut item = Dict::new();
+            let mut item = Dict::default();
             item.insert("key".into(), Value::Str(key.clone()));
             item.insert("mark".into(), Value::int(mark));
             if sent.get(key) != Some(&mark) {
@@ -1387,7 +1387,7 @@ fn frame_told(frame: &lp_pixels::Image) -> (Value, Vec<u8>) {
     let Some(bytes) = rgb_or_rgba(frame) else {
         return (Value::None, Vec::new());
     };
-    let mut said = Dict::new();
+    let mut said = Dict::default();
     said.insert(
         "size".into(),
         Value::List(vec![
@@ -1431,7 +1431,7 @@ pub fn page_need(
                 return (Value::None, Vec::new());
             };
             let delivery = app.notify(toast_of(toast));
-            let mut said = Dict::new();
+            let mut said = Dict::default();
             said.insert("shown".into(), Value::Bool(delivery.shown));
             said.insert("reason".into(), Value::from(delivery.reason.as_str()));
             (Value::Dict(said), Vec::new())
@@ -1442,7 +1442,7 @@ pub fn page_need(
 
 /// A toast as the plugin host makes a Toast of it.
 fn toast_dict(toast: &lp_render::overlays::Toast) -> Value {
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("text".into(), Value::Str(toast.text.clone()));
     told.insert(
         "icon".into(),
@@ -1507,7 +1507,7 @@ impl lp_render::plugin::PluginToastStyle for HostToastStyle {
         age: f64,
         previous: Option<(&lp_render::overlays::Toast, f64)>,
     ) -> Result<lp_pixels::Image, String> {
-        let mut fields = Dict::new();
+        let mut fields = Dict::default();
         Self::toasts(&mut fields, toast, previous);
         fields.insert("age".into(), Value::Float(age));
         fields.insert(
@@ -1527,7 +1527,7 @@ impl lp_render::plugin::PluginToastStyle for HostToastStyle {
         toast: &lp_render::overlays::Toast,
         previous: Option<(&lp_render::overlays::Toast, f64)>,
     ) -> Result<f64, String> {
-        let mut fields = Dict::new();
+        let mut fields = Dict::default();
         Self::toasts(&mut fields, toast, previous);
         let (answer, _) = self.ask("toast.lifetime", fields, &[])?;
         Ok(Self::seconds(&answer))
@@ -1538,7 +1538,7 @@ impl lp_render::plugin::PluginToastStyle for HostToastStyle {
         toast: &lp_render::overlays::Toast,
         theme_seconds: f64,
     ) -> Result<f64, String> {
-        let mut fields = Dict::new();
+        let mut fields = Dict::default();
         Self::toasts(&mut fields, toast, None);
         fields.insert("theme_seconds".into(), Value::Float(theme_seconds));
         let (answer, _) = self.ask("toast.hold", fields, &[])?;
@@ -1555,7 +1555,7 @@ impl lp_render::plugin::PluginToastStyle for HostToastStyle {
                 *self.seen.borrow_mut() = seen;
             }
         }
-        let mut fields = Dict::new();
+        let mut fields = Dict::default();
         fields.insert("drawing".into(), Value::int(plugins.handle()));
         fields.insert("anchor".into(), Value::from(anchor));
         let _ = self.ask("toast.rebind", fields, &[]);
@@ -1564,7 +1564,7 @@ impl lp_render::plugin::PluginToastStyle for HostToastStyle {
 
 impl Drop for HostToastStyle {
     fn drop(&mut self) {
-        let _ = self.ask("toast.close", Dict::new(), &[]);
+        let _ = self.ask("toast.close", Dict::default(), &[]);
     }
 }
 
@@ -1592,7 +1592,7 @@ impl lp_render::Plugins for PluginDrawing {
         if !self.host.names("toasts").iter().any(|known| known == name) {
             return None;
         }
-        let mut fields = Dict::new();
+        let mut fields = Dict::default();
         fields.insert("drawing".into(), self.drawing.clone());
         fields.insert("name".into(), Value::from(name));
         fields.insert("options".into(), Value::Dict(options.clone()));
@@ -1624,7 +1624,7 @@ impl lp_render::Plugins for PluginDrawing {
         {
             return None;
         }
-        let mut fields = Dict::new();
+        let mut fields = Dict::default();
         fields.insert("drawing".into(), self.drawing.clone());
         fields.insert("name".into(), Value::from(name));
         fields.insert("params".into(), Value::Dict(params.clone()));
@@ -1732,7 +1732,7 @@ impl lp_render::plugin::PluginTransition for HostTransition {
         new: &lp_pixels::Image,
         t: f64,
     ) -> Result<lp_pixels::Image, String> {
-        let mut fields = Dict::new();
+        let mut fields = Dict::default();
         fields.insert("transition".into(), self.transition.clone());
         fields.insert("t".into(), Value::Float(t));
         fields.insert(
@@ -1767,7 +1767,7 @@ impl lp_render::plugin::PluginTransition for HostTransition {
         mode: Option<&str>,
         mode_changed: bool,
     ) -> Result<String, String> {
-        let mut fields = Dict::new();
+        let mut fields = Dict::default();
         fields.insert("transition".into(), self.transition.clone());
         fields.insert("theme".into(), Value::from(theme));
         fields.insert("mode".into(), mode.map_or(Value::None, Value::from));
@@ -1784,7 +1784,7 @@ impl lp_render::plugin::PluginTransition for HostTransition {
 
 impl Drop for HostTransition {
     fn drop(&mut self) {
-        let mut fields = Dict::new();
+        let mut fields = Dict::default();
         fields.insert("transition".into(), self.transition.clone());
         let _ = self.host.request("transition.close", fields, &[]);
     }
@@ -1804,7 +1804,7 @@ fn rgb(image: &lp_pixels::Image) -> Result<std::borrow::Cow<'_, lp_pixels::Image
 
 impl Drop for PluginDrawing {
     fn drop(&mut self) {
-        let mut fields = Dict::new();
+        let mut fields = Dict::default();
         fields.insert("drawing".into(), self.drawing.clone());
         let _ = self.host.request("draw.close", fields, &[]);
     }
@@ -1836,7 +1836,7 @@ pub fn pages() -> Vec<Page> {
     let Some(Ok(host)) = shared(&home.settings) else {
         return Vec::new();
     };
-    let Ok((told, _)) = host.request("pages.list", Dict::new(), &[]) else {
+    let Ok((told, _)) = host.request("pages.list", Dict::default(), &[]) else {
         return Vec::new();
     };
     let Value::List(pages) = field(&told, "pages") else {
@@ -1849,7 +1849,7 @@ pub fn pages() -> Vec<Page> {
                 id: text(page, "id"),
                 titles: match field(page, "titles") {
                     Value::Dict(titles) => titles.clone(),
-                    _ => Dict::new(),
+                    _ => Dict::default(),
                 },
                 icon: text(page, "icon"),
                 folder: PathBuf::from(text(page, "folder")),
@@ -1887,7 +1887,7 @@ pub fn page_request(
     if !host.names("editor_pages").iter().any(|known| known == page) {
         return None;
     }
-    let mut fields = Dict::new();
+    let mut fields = Dict::default();
     fields.insert("page".into(), Value::from(page));
     fields.insert("method".into(), Value::from(method));
     fields.insert("path".into(), Value::from(path));

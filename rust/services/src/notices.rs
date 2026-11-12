@@ -284,7 +284,7 @@ fn tell(
 }
 
 fn labelled(label: &str) -> Dict {
-    let mut payload = Dict::new();
+    let mut payload = Dict::default();
     payload.insert("label".into(), Value::Str(lp_i18n::t(label)));
     payload
 }

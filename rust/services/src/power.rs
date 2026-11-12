@@ -83,7 +83,7 @@ impl Core {
     pub fn load(&mut self, kept: Option<&str>, wall: &DateTime) {
         let kept = match kept.map(lp_py::json::loads) {
             Some(Ok(Value::Dict(kept))) => kept,
-            _ => Dict::new(),
+            _ => Dict::default(),
         };
         (self.day, self.month) = day_of(wall);
         let same = |key: &str, now: &str| kept.get(key).and_then(Value::as_str) == Some(now);
@@ -97,7 +97,7 @@ impl Core {
 
     /// The totals as power.json keeps them.
     pub fn kept(&self) -> String {
-        let mut kept = Dict::new();
+        let mut kept = Dict::default();
         kept.insert("day".into(), Value::Str(self.day.clone()));
         kept.insert(
             "today_wh".into(),

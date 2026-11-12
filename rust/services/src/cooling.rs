@@ -104,7 +104,7 @@ pub fn analysis(
     points: i64,
 ) -> Dict {
     let (Some(first), Some(last)) = (rows.first(), rows.last()) else {
-        return Dict::new();
+        return Dict::default();
     };
     let seconds = data::total(rows);
     let (start, end) = (first.ts, last.ts + last.duration);

@@ -44,7 +44,7 @@ pub struct Monitor {
 
 impl Monitor {
     pub fn value(&self) -> Value {
-        let mut told = Dict::new();
+        let mut told = Dict::default();
         told.insert("id".into(), Value::Str(self.id.clone()));
         told.insert("name".into(), Value::Str(self.name.clone()));
         told.insert("x".into(), Value::int(self.x));
@@ -67,7 +67,7 @@ pub struct Window {
 
 impl Window {
     pub fn value(&self) -> Value {
-        let mut told = Dict::new();
+        let mut told = Dict::default();
         told.insert("id".into(), Value::Str(self.id.clone()));
         told.insert("title".into(), Value::Str(self.title.clone()));
         told.insert("program".into(), Value::Str(self.program.clone()));

@@ -601,7 +601,7 @@ const ROUTES: &[Route] = &[
                 _ => Value::None,
             };
             let previews = crate::specs::preset_previews(&palette, &config.symbols, env)?;
-            let mut told = Dict::new();
+            let mut told = Dict::default();
             told.insert("previews".into(), previews);
             Ok(Value::Dict(told))
         })
@@ -621,7 +621,7 @@ const ROUTES: &[Route] = &[
                 &config.symbols,
                 env,
             )?;
-            let mut told = Dict::new();
+            let mut told = Dict::default();
             told.insert("previews".into(), previews);
             Ok(Value::Dict(told))
         })
@@ -815,7 +815,7 @@ fn outside_notice(state: &State, exchange: &mut Exchange, url: &Url, posted: boo
             reason: lp_services::host::NO_PANEL.into(),
         },
     };
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("shown".into(), Value::Bool(delivery.shown));
     told.insert("reason".into(), Value::Str(delivery.reason));
     exchange.json(&Value::Dict(told), 200);
@@ -976,7 +976,7 @@ fn history(state: &State, exchange: &mut Exchange, url: &Url) {
         true => {
             let summary = match found.get("summary") {
                 Some(Value::Dict(d)) => d.clone(),
-                _ => Dict::new(),
+                _ => Dict::default(),
             };
             let none = lp_py::toml::Table::new();
             let options = config.services.options.get("power").unwrap_or(&none);
@@ -1013,7 +1013,7 @@ fn set_verbose(exchange: &mut Exchange) {
         return exchange.error("expected {\"verbose\": true or false}", 400, "");
     };
     crate::logs::set_verbose(*on);
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("verbose".into(), Value::Bool(crate::logs::verbose()));
     exchange.json(&Value::Dict(told), 200);
 }
@@ -1178,11 +1178,11 @@ fn theme_list(state: &State) -> Value {
         let text = text.and_then(|bytes| String::from_utf8(bytes).ok());
         let data = match text.and_then(|text| lp_py::json::loads(&text).ok()) {
             Some(Value::Dict(data)) => data,
-            _ => Dict::new(),
+            _ => Dict::default(),
         };
         let display = match data.get("display") {
             Some(Value::Dict(display)) => display.clone(),
-            _ => Dict::new(),
+            _ => Dict::default(),
         };
         let text = |value: Option<&Value>| match value {
             Some(Value::Str(text)) => Some(text.clone()),
@@ -1457,7 +1457,7 @@ fn import_theme(state: &State, exchange: &mut Exchange, url: &Url) {
     let places = state.home.places();
     match crate::share::import_theme(&data, &places.user, &places, &env, &name, "") {
         Ok(done) => {
-            let mut told = Dict::new();
+            let mut told = Dict::default();
             told.insert("id".into(), Value::Str(done.id));
             told.insert("name".into(), Value::Str(done.name));
             told.insert("files".into(), Value::int(done.files as i64));
@@ -1542,7 +1542,7 @@ fn get_theme(state: &State, exchange: &mut Exchange, theme_id: &str) {
     };
     let resolved = |path: &Path| std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let builtin = !resolved(&folder).starts_with(resolved(&places.user));
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("id".into(), Value::Str(theme_id.to_string()));
     told.insert("builtin".into(), Value::Bool(builtin));
     told.insert("theme".into(), theme.to_dict());
@@ -1726,7 +1726,7 @@ fn readings(state: &State, exchange: &mut Exchange, url: &Url) {
         false => wanted.clone(),
     };
     let entry = |value: Value, unit: &str, label: &str, sample: bool| {
-        let mut told = Dict::new();
+        let mut told = Dict::default();
         told.insert("value".into(), value);
         told.insert("unit".into(), Value::Str(unit.to_string()));
         told.insert("label".into(), Value::Str(label.to_string()));
@@ -1735,7 +1735,7 @@ fn readings(state: &State, exchange: &mut Exchange, url: &Url) {
         told.insert("sample".into(), Value::Bool(sample));
         Value::Dict(told)
     };
-    let mut found = Dict::new();
+    let mut found = Dict::default();
     for key in keys {
         if let Some(reading) = snapshot
             .readings
@@ -1753,7 +1753,7 @@ fn readings(state: &State, exchange: &mut Exchange, url: &Url) {
         let told = entry(snapshot.value(second), "s", "Seconds of the minute", false);
         found.insert(second.to_string(), told);
     }
-    let mut history = Dict::new();
+    let mut history = Dict::default();
     for key in listed("history") {
         let values = snapshot
             .history
@@ -1767,7 +1767,7 @@ fn readings(state: &State, exchange: &mut Exchange, url: &Url) {
             history.insert(key, Value::List(rounded.collect()));
         }
     }
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("live".into(), Value::Bool(live));
     told.insert("readings".into(), Value::Dict(found));
     told.insert("history".into(), Value::Dict(history));
@@ -1778,7 +1778,7 @@ fn readings(state: &State, exchange: &mut Exchange, url: &Url) {
 /// panel's own (a source's unit and label come last, so they win), and the pictures.
 fn sensors(state: &State, exchange: &mut Exchange) {
     let entry = |key: &str, unit: &str, label: &str| {
-        let mut told = Dict::new();
+        let mut told = Dict::default();
         told.insert("key".into(), Value::Str(key.to_string()));
         told.insert("unit".into(), Value::Str(unit.to_string()));
         told.insert("label".into(), Value::Str(label.to_string()));
@@ -1820,7 +1820,7 @@ fn i18n(state: &State) -> Dict {
     let setting = lp_config::load_config(&state.config_file, lp_config::platform())
         .map_or_else(|_| "auto".to_string(), |config| config.language);
     let language = lp_i18n::language();
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("language".into(), Value::Str(language.code().to_string()));
     told.insert("setting".into(), Value::Str(setting));
     let languages = lp_i18n::LANGUAGES.iter();
@@ -1837,7 +1837,7 @@ fn i18n(state: &State) -> Dict {
 }
 
 fn available(snapshot: Dict) -> Value {
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("available".into(), Value::Bool(true));
     told.extend(snapshot);
     Value::Dict(told)
@@ -1848,7 +1848,7 @@ fn app_state(state: &State, exchange: &mut Exchange) {
     match state.controls.upgrade() {
         Some(app) => exchange.json(&available(app.snapshot()), 200),
         None => {
-            let mut told = Dict::new();
+            let mut told = Dict::default();
             told.insert("available".into(), Value::Bool(false));
             exchange.json(&Value::Dict(told), 200);
         }
@@ -2111,7 +2111,7 @@ fn across_upload(state: &State, exchange: &mut Exchange) {
         app.follow_config();
     }
     let stamp = crate::arrangement::stamp_of(&folder.join(&name)).unwrap_or(0);
-    let mut told = lp_py::Dict::new();
+    let mut told = lp_py::Dict::default();
     told.insert("across".into(), Value::Str(name));
     told.insert("stamp".into(), Value::Int(stamp.into()));
     exchange.json(&Value::Dict(told), 200);
@@ -2384,7 +2384,7 @@ fn mirror_state(state: &State, exchange: &mut Exchange, query: &str) {
         .and_then(|values| values.first())
         .is_some_and(|value| value == "1");
     let size = panel_frame(state, 1);
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert(
         "available".into(),
         Value::Bool(state.controls.upgrade().is_some()),
@@ -2486,7 +2486,7 @@ const PLAYER_ACTIONS: [&str; 11] = [
 /// The panels to play on: `{number, name}`, 1 the first, then [[panels]] that are on.
 fn player_panels(state: &State) -> Value {
     let entry = |number: i64, name: String| {
-        let mut told = lp_py::Dict::new();
+        let mut told = lp_py::Dict::default();
         told.insert("number".into(), Value::int(number));
         told.insert("name".into(), Value::Str(name));
         Value::Dict(told)
@@ -2519,7 +2519,7 @@ fn player_panels(state: &State) -> Value {
 /// running app is there to play them.
 fn player_state(state: &State, exchange: &mut Exchange) {
     let place = crate::player::folder();
-    let mut told = lp_py::Dict::new();
+    let mut told = lp_py::Dict::default();
     told.insert(
         "available".into(),
         Value::Bool(state.controls.upgrade().is_some()),
@@ -2853,15 +2853,15 @@ fn name_clip(state: &State, n: i64) -> Result<(), String> {
     if let Some(Value::Dict(panel)) = panels.get_mut(n as usize - 1) {
         let mut video = match panel.get("video") {
             Some(Value::Dict(video)) => video.clone(),
-            _ => lp_py::Dict::new(),
+            _ => lp_py::Dict::default(),
         };
         video.insert("local_clip".into(), Value::Str(clip.into()));
         video.insert("clip_asked".into(), Value::Bool(true));
         panel.insert("video".into(), Value::Dict(video));
     }
-    let mut set = lp_py::Dict::new();
+    let mut set = lp_py::Dict::default();
     set.insert("panels".into(), Value::List(panels));
-    let mut payload = lp_py::Dict::new();
+    let mut payload = lp_py::Dict::default();
     payload.insert("set".into(), Value::Dict(set));
     settings
         .write(&Value::Dict(payload))
@@ -2997,7 +2997,7 @@ fn start_screen_action(state: &State, exchange: &mut Exchange) {
                 "libre_panel.editor.server",
                 &format!("start screen: {action} failed: {why}"),
             );
-            let mut told = lp_py::Dict::new();
+            let mut told = lp_py::Dict::default();
             told.insert("error".into(), Value::Str(why));
             told.insert("paused".into(), Value::Bool(paused));
             exchange.json(&Value::Dict(told), 409);
@@ -3040,7 +3040,7 @@ fn tray_action(state: &State, exchange: &mut Exchange) {
         Value::Dict(payload) => match payload.get("id") {
             Some(Value::Str(id)) => {
                 crate::tray::act(app, id.clone());
-                exchange.json(&Value::Dict(Dict::new()), 200);
+                exchange.json(&Value::Dict(Dict::default()), 200);
             }
             _ => exchange.error("expected {\"id\": ...}", 400, ""),
         },

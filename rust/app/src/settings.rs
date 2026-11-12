@@ -470,7 +470,7 @@ fn json_sources(config: &Config) -> Value {
                         .map(|(k, v)| (k.clone(), Value::Str(lp_py::format::str_of(&value_of(v)))))
                         .collect(),
                 ),
-                _ => Value::Dict(Dict::new()),
+                _ => Value::Dict(Dict::default()),
             };
             sources.push(dict([
                 ("name", Value::Str(said(of("name")))),
@@ -625,7 +625,7 @@ impl Settings<'_> {
             .collect();
         let mut device_told = device_table(device);
         device_told.shift_remove("jpeg");
-        let mut transitions = Dict::new();
+        let mut transitions = Dict::default();
         transitions.insert("default".into(), text(&config.transition));
         transitions.insert("speed".into(), text(&config.transitions.speed));
         for (occasion, name) in &config.transitions.occasions {
@@ -2058,7 +2058,7 @@ fn check_panels(value: &Value, config: &Config) -> Answer<Vec<Table>> {
             ("alarm_theme", text(lp_config::ALARM_THEME)),
             ("same_look", Value::Bool(false)),
             ("follow", Value::None),
-            ("video", Value::Dict(Dict::new())),
+            ("video", Value::Dict(Dict::default())),
         ]) else {
             unreachable!()
         };
@@ -2068,7 +2068,7 @@ fn check_panels(value: &Value, config: &Config) -> Answer<Vec<Table>> {
             .panels
             .get(n)
             .map_or(&device.output, |panel| &panel.device.output);
-        let mut kept = Dict::new();
+        let mut kept = Dict::default();
         for (key, item) in table {
             let name = format!("panels[{n}].{key}");
             let cleaned = match key.as_str() {
@@ -2178,7 +2178,7 @@ fn check_json_sources(value: &Value, config: &Config) -> Answer<Vec<Table>> {
         table.insert(if url { "url" } else { "file" }.into(), Toml::Str(place));
         let or_none = |value: Value| match value.truthy() {
             true => value,
-            false => Value::Dict(Dict::new()),
+            false => Value::Dict(Dict::default()),
         };
         let fields = pairs(&format!("{at}.fields"), &or_none(of("fields")))?;
         let units = pairs(&format!("{at}.units"), &or_none(of("units")))?;

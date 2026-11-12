@@ -470,7 +470,7 @@ impl Core {
         if !self.options.entrance {
             return None;
         }
-        let mut params = Dict::new();
+        let mut params = Dict::default();
         params.insert("kind".into(), Value::Str(kind.to_string()));
         // (a forced mode has no game to name)
         if let Some(found) = self.found.as_ref().filter(|found| !found.key.is_empty()) {
@@ -490,7 +490,7 @@ impl Core {
         let text =
             |text: Option<&String>| text.map_or(Value::None, |text| Value::Str(text.clone()));
         let found = self.found.as_ref();
-        let mut status = Dict::new();
+        let mut status = Dict::default();
         status.insert("game".into(), text(found.map(|found| &found.name)));
         let appid = found
             .map(|found| &found.appid)
@@ -506,7 +506,7 @@ impl Core {
         let Some(found) = &self.found else {
             return;
         };
-        let mut payload = Dict::new();
+        let mut payload = Dict::default();
         payload.insert("label".into(), Value::Str(lp_i18n::t(label)));
         out.push(Action::Tell(Box::new(Toast {
             icon: Some("gamepad".into()),

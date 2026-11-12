@@ -122,7 +122,7 @@ pub fn decode(body: &[u8]) -> Result<Dict, Error> {
 // -- requests ---------------------------------------------------------------------------------
 
 fn request(op: &str) -> Dict {
-    let mut message = Dict::new();
+    let mut message = Dict::default();
     message.insert("v".into(), Value::int(PROTOCOL));
     message.insert("op".into(), Value::Str(op.into()));
     message

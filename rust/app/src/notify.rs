@@ -44,7 +44,7 @@ pub fn new_key() -> std::io::Result<String> {
     let folder = path.parent().map(PathBuf::from).unwrap_or_default();
     std::fs::create_dir_all(&folder)?;
     let temporary = folder.join(format!(".{KEY_FILE}.{}", std::process::id()));
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("key".into(), Value::Str(key.clone()));
     let text = lp_py::json::dumps(&Value::Dict(told), &lp_py::json::Dumps::default());
     let mut options = std::fs::OpenOptions::new();
@@ -136,7 +136,7 @@ pub fn notice(params: &Dict) -> Result<Toast, String> {
         Some(Value::Str(level)) if LEVELS.contains(&level.as_str()) => level.clone(),
         Some(_) => return Err("level: info, warning or error".into()),
     };
-    let mut payload = Dict::new();
+    let mut payload = Dict::default();
     if !title.is_empty() {
         payload.insert("label".into(), Value::Str(title));
     }
@@ -178,7 +178,7 @@ pub fn address(port: u16, key: &str, text: &str) -> String {
 /// `GET` and `POST /api/notify-key`: the notify key (made where there is none; `renew`: a new
 /// one), the address that shows a notice and the command that does.
 pub fn key_state(config: &lp_config::Config, port: u16, renew: bool) -> Result<Value, String> {
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     if !config.allow_notify {
         told.insert("on".into(), Value::Bool(false));
         return Ok(Value::Dict(told));

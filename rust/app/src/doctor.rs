@@ -954,7 +954,7 @@ impl Session {
             Some(report) => report.steps.clone(),
             None => inner.steps.clone(),
         };
-        let mut out = Dict::new();
+        let mut out = Dict::default();
         out.insert("state".into(), Value::from(inner.state));
         out.insert(
             "question".into(),
@@ -984,7 +984,7 @@ impl Session {
                     ("label", Value::Str(model.label())),
                 ]))
             });
-            let mut told = Dict::new();
+            let mut told = Dict::default();
             told.insert("text".into(), Value::Str(text.clone()));
             told.insert("passed".into(), Value::Bool(report.passed()));
             told.insert("failed".into(), Value::Bool(report.failed()));
@@ -1068,7 +1068,7 @@ impl Session {
             self.shared.cancel.store(true, Ordering::Relaxed);
             if let Ok(answers) = self.shared.answers.lock() {
                 if let Some(send) = answers.as_ref() {
-                    let _ = send.send(Dict::new());
+                    let _ = send.send(Dict::default());
                 }
             }
         }
@@ -1317,7 +1317,7 @@ mod tests {
         assert!(said.contains("Options -> Remote Web Server -> Run"));
         assert!(said.contains("Add \"librehardwaremonitor\" to providers"));
 
-        let mut empty = Dict::new();
+        let mut empty = Dict::default();
         empty.insert("Children".into(), Value::List(Vec::new()));
         let (_, said) = check("", Ok(empty));
         assert!(said.contains("answers, but sends no temperatures or power"));

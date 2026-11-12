@@ -225,7 +225,7 @@ fn curve_of(name: &str, points: &Points) -> Curve {
         points: pairs_of(points),
         source: None,
         mix: Vec::new(),
-        hysteresis: Dict::new(),
+        hysteresis: Dict::default(),
     }
 }
 
@@ -777,7 +777,7 @@ fn rule_oscillation(st: &mut Situation) {
             calm.push(format!("{} {}/h", series.name(), num(per_hour, 0, false)));
             continue;
         }
-        let none = Dict::new();
+        let none = Dict::default();
         let h = st
             .curves
             .get(&series.curve)
@@ -1078,7 +1078,7 @@ pub fn advise(
         let only = states.len() == 2;
         let kept = |r: &&Row| (from <= r.ts && r.ts < to) || (only && r.ts < to);
         before = rows.iter().filter(kept).cloned().collect();
-        let empty = Dict::new();
+        let empty = Dict::default();
         let settled = |state: &Dict| match state.get("state") {
             Some(Value::Dict(state)) => state.clone(),
             _ => empty.clone(),

@@ -185,7 +185,7 @@ impl Shared {
         };
         self.publish();
         if let (Some(told), true) = (told, self.notice) {
-            let mut payload = Dict::new();
+            let mut payload = Dict::default();
             payload.insert("label".into(), Value::Str(lp_i18n::t("Timer")));
             self.host.notify(Toast {
                 icon: Some("hourglass".into()),
@@ -282,7 +282,7 @@ impl Service for Timer {
     /// For the app: how it stands now.
     fn summary(&self) -> Option<Value> {
         let core = self.shared.core.lock().ok()?;
-        let mut state = Dict::new();
+        let mut state = Dict::default();
         state.insert("left".into(), Value::Float(round_digits(core.left, 1)));
         state.insert("running".into(), Value::Bool(core.ends.is_some()));
         let phase = if core.on_break { "break" } else { "focus" };

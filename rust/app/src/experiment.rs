@@ -253,7 +253,7 @@ fn judge(samples: &[Dict], first: &Dict, last: &Dict) -> Dict {
     };
     let float = |x: Option<f64>| x.map_or(Value::None, Value::Float);
     let got = |key: &str| last.get(key).cloned().unwrap_or(Value::None);
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("fps".into(), float(fps));
     told.insert("target_fps".into(), target);
     told.insert("render_ms".into(), float(render));
@@ -289,7 +289,7 @@ impl Context {
 
     fn write(&self, changes: &[(String, Value)]) -> Result<(), String> {
         let set: Dict = changes.iter().cloned().collect();
-        let mut payload = Dict::new();
+        let mut payload = Dict::default();
         payload.insert("set".into(), Value::Dict(set));
         (self.settings().write(&Value::Dict(payload)))
             .map(drop)
@@ -434,7 +434,7 @@ impl Experiment {
             .run
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let mut told = Dict::new();
+        let mut told = Dict::default();
         told.insert("running".into(), Value::Bool(run.running));
         told.insert("step".into(), Value::int(run.step));
         told.insert("of".into(), Value::int(run.steps.len() as i64));
@@ -442,7 +442,7 @@ impl Experiment {
         told.insert("left_s".into(), Value::int(left));
         let steps = (run.steps.iter())
             .map(|step| {
-                let mut each = Dict::new();
+                let mut each = Dict::default();
                 each.insert("id".into(), Value::Str(step.id.clone()));
                 each.insert("changes".into(), Value::Dict(changes_of(&step.changes)));
                 each.insert("seconds".into(), Value::Float(step.seconds));
@@ -546,11 +546,11 @@ fn measure(context: &Context, run: &Mutex<Run>, stop: &AtomicBool, step: &Step) 
     let mut numbers: Vec<usize> = first.keys().chain(last.keys()).copied().collect();
     numbers.sort_unstable();
     numbers.dedup();
-    let empty = Dict::new();
+    let empty = Dict::default();
     let panels: Vec<Dict> = numbers
         .iter()
         .map(|n| {
-            let mut each = Dict::new();
+            let mut each = Dict::default();
             each.insert("panel".into(), Value::int(*n as i64));
             let judged = judge(
                 samples.get(n).map_or(&[][..], Vec::as_slice),
@@ -566,7 +566,7 @@ fn measure(context: &Context, run: &Mutex<Run>, stop: &AtomicBool, step: &Step) 
         .max_by_key(|v| WORST.iter().position(|w| w == v))
         .unwrap_or("no video")
         .to_string();
-    let mut result = Dict::new();
+    let mut result = Dict::default();
     result.insert("id".into(), Value::Str(step.id.clone()));
     result.insert("changes".into(), Value::Dict(changes_of(&step.changes)));
     let panels = panels.into_iter().map(Value::Dict).collect();

@@ -203,7 +203,7 @@ fn public(entry: &Entry) -> Value {
         .iter()
         .map(|(w, h)| Value::List(vec![Value::int(*w), Value::int(*h)]))
         .collect();
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("id".into(), Value::Str(entry.id.clone()));
     told.insert("name".into(), Value::Str(entry.name.clone()));
     told.insert("author".into(), Value::Str(entry.author.clone()));
@@ -297,7 +297,7 @@ impl Community {
     pub fn themes(&self) -> Value {
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let entries = self.index(&mut inner).unwrap_or_default();
-        let mut told = Dict::new();
+        let mut told = Dict::default();
         told.insert(
             "themes".into(),
             Value::List(entries.iter().map(public).collect()),
@@ -441,7 +441,7 @@ impl Community {
         }
         let done = share::import_theme(&data, &places.user, places, env, "", &entry.id)
             .map_err(share_failed)?;
-        let mut told = Dict::new();
+        let mut told = Dict::default();
         told.insert("id".into(), Value::Str(done.id));
         told.insert("name".into(), Value::Str(done.name));
         told.insert("files".into(), Value::int(done.files as i64));

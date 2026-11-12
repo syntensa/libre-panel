@@ -192,7 +192,7 @@ pub fn source_lines(verdict: &Dict, names: &Dict) -> Vec<String> {
     if kind == "too_few" {
         return lines;
     }
-    let empty = Dict::new();
+    let empty = Dict::default();
     let best = verdict
         .get("best")
         .and_then(Value::as_dict)

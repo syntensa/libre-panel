@@ -395,7 +395,7 @@ mod tests {
         manager.apply(&enabled, &IndexMap::new());
         assert_eq!(STOPPED.load(Ordering::SeqCst), 0);
         let mut options = IndexMap::new();
-        let mut given = Dict::new();
+        let mut given = Dict::default();
         given.insert("fail".into(), Value::Bool(true));
         options.insert("probe".to_string(), given.clone());
         manager.apply(&enabled, &options);

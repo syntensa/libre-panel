@@ -78,7 +78,7 @@ fn load_state(settings: &Path) -> (u32, u32, bool) {
     let text = std::fs::read_to_string(settings.join(STATE_FILENAME)).unwrap_or_default();
     let state = match lp_py::json::loads(&text) {
         Ok(Value::Dict(state)) => state,
-        _ => Dict::new(),
+        _ => Dict::default(),
     };
     let whole = |key: &str| match state.get(key) {
         Some(Value::Int(n)) => n.to_string().parse::<i64>().ok(),
@@ -98,7 +98,7 @@ fn load_state(settings: &Path) -> (u32, u32, bool) {
 }
 
 fn save_state(settings: &Path, (width, height, maximized): (u32, u32, bool)) {
-    let mut state = Dict::new();
+    let mut state = Dict::default();
     state.insert("width".into(), Value::int(i64::from(width)));
     state.insert("height".into(), Value::int(i64::from(height)));
     state.insert("maximized".into(), Value::Bool(maximized));
@@ -115,7 +115,7 @@ fn save_state(settings: &Path, (width, height, maximized): (u32, u32, bool)) {
 
 /// _register: the file that lets other starts find this window, readable by this user only.
 fn register(settings: &Path, port: u16, token: &str, url: &str) {
-    let mut info = Dict::new();
+    let mut info = Dict::default();
     info.insert("pid".into(), Value::int(i64::from(std::process::id())));
     info.insert("port".into(), Value::int(i64::from(port)));
     info.insert("token".into(), Value::Str(token.into()));

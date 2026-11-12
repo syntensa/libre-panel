@@ -669,13 +669,13 @@ fn round_report(done: Option<&lp_sensors::protocol::RoundTime>) -> Value {
     };
     let mut parts: Vec<&lp_sensors::protocol::PartTime> = done.parts.iter().collect();
     parts.sort_by(|a, b| b.seconds.total_cmp(&a.seconds));
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("ms".into(), Value::Float(round2(done.seconds() * 1000.0)));
     told.insert("full".into(), Value::Bool(done.full));
     let parts = parts
         .into_iter()
         .map(|part| {
-            let mut each = Dict::new();
+            let mut each = Dict::default();
             each.insert("kind".into(), Value::Str(part.kind.clone()));
             each.insert("name".into(), Value::Str(part.name.clone()));
             each.insert("ms".into(), Value::Float(round2(part.seconds * 1000.0)));
@@ -696,7 +696,7 @@ fn sensors_report(status: Option<&LhmStatus>) -> Value {
     let Some(status) = status else {
         return Value::None;
     };
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("mode".into(), Value::Str(status.mode.clone()));
     told.insert("version".into(), Value::Str(status.version.clone()));
     told.insert("error".into(), Value::Str(status.error.clone()));
@@ -711,7 +711,7 @@ fn sensors_report(status: Option<&LhmStatus>) -> Value {
         round_report(timing.and_then(|t| t.full.as_ref())),
     );
     let memory = status.memory.as_ref().map_or(Value::None, |memory| {
-        let mut said = Dict::new();
+        let mut said = Dict::default();
         said.insert("private".into(), bytes_or_none(memory.private));
         said.insert("working_set".into(), bytes_or_none(memory.working_set));
         said.insert("managed".into(), bytes_or_none(memory.managed));
@@ -805,7 +805,7 @@ impl Sampler {
                 Value::Dict(latest)
             }
             _ => {
-                let mut told = Dict::new();
+                let mut told = Dict::default();
                 told.insert("ready".into(), Value::Bool(false));
                 told.insert("cpus".into(), Value::int(self.cpus as i64));
                 told.insert("window_s".into(), Value::Float(WINDOW_S));
@@ -962,11 +962,11 @@ impl Sampler {
             inner.inside_at = Some(now);
         }
         let started = Instant::now();
-        let mut held = Dict::new();
+        let mut held = Dict::default();
         held.insert(
             "heap".into(),
             os::heap().map_or(Value::None, |(in_use, free)| {
-                let mut heap = Dict::new();
+                let mut heap = Dict::default();
                 heap.insert("in_use".into(), Value::int(in_use as i64));
                 heap.insert("free".into(), Value::int(free as i64));
                 Value::Dict(heap)
@@ -1130,7 +1130,7 @@ impl Sampler {
                 main_cpu = share;
             }
             let row = rows.entry((m.role, m.name.clone())).or_insert_with(|| {
-                let mut row = Dict::new();
+                let mut row = Dict::default();
                 row.insert("role".into(), Value::from(m.role));
                 row.insert("panel".into(), Value::None);
                 row.insert("name".into(), Value::Str(m.name.clone()));
@@ -1202,12 +1202,12 @@ impl Sampler {
             private_total += int_in(row, "private");
             rss_total += int_in(row, "rss");
         }
-        let mut total = Dict::new();
+        let mut total = Dict::default();
         total.insert("cpu_core".into(), Value::Float(cpu_total));
         total.insert("private".into(), Value::int(private_total));
         total.insert("rss".into(), Value::int(rss_total));
         self.shares(&mut total);
-        let mut report = Dict::new();
+        let mut report = Dict::default();
         report.insert("ready".into(), Value::Bool(true));
         report.insert("cpus".into(), Value::int(self.cpus as i64));
         report.insert("window_s".into(), Value::Float(round2(elapsed)));
@@ -1224,7 +1224,7 @@ impl Sampler {
         report.insert(
             "service".into(),
             service.map_or(Value::None, |found| {
-                let mut said = Dict::new();
+                let mut said = Dict::default();
                 said.insert("state".into(), Value::from(found.state));
                 said.insert("found_by".into(), Value::from(found.how));
                 Value::Dict(said)
@@ -1282,7 +1282,7 @@ impl Sampler {
         Value::List(
             out.into_iter()
                 .map(|(name, n, share)| {
-                    let mut each = Dict::new();
+                    let mut each = Dict::default();
                     each.insert("name".into(), Value::Str(name));
                     each.insert("count".into(), Value::int(n));
                     each.insert("cpu_core".into(), Value::Float(share));

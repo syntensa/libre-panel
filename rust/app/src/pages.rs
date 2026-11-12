@@ -94,7 +94,7 @@ impl Settings<'_> {
 
     /// _panel_state: what the running app says about its panel; empty without one.
     fn panel_state(&self) -> Dict {
-        (self.controls.as_ref()).map_or_else(Dict::new, |app| app.panel.state())
+        (self.controls.as_ref()).map_or_else(Dict::default, |app| app.panel.state())
     }
 
     /// _panel_pages: the pages of the panel: the theme it shows normally (config.toml's,

@@ -650,7 +650,7 @@ impl Renderer {
             let number = item.number();
             let mut shown = number;
             if glide && number.is_some() {
-                let mut spring = Dict::new();
+                let mut spring = Dict::default();
                 spring.insert("type".into(), "list".into());
                 spring.insert("sensor".into(), item.key.clone().into());
                 spring.insert("smooth".into(), Value::Bool(true));
@@ -867,7 +867,7 @@ impl Renderer {
             return Ok(());
         }
         let size = round_int(size).max(6);
-        let mut part = Dict::new();
+        let mut part = Dict::default();
         part.insert("x".into(), Value::int(round_int(x)));
         part.insert(
             "y".into(),
@@ -922,7 +922,7 @@ impl Renderer {
             Some(track) => lerp(accent, track, 0.55),
             None => accent,
         };
-        let mut piece = Dict::new();
+        let mut piece = Dict::default();
         for (key, value) in [
             ("x", bx),
             ("y", by),

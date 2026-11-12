@@ -87,7 +87,7 @@ pub fn listed(data: &Path) -> Value {
         pages
             .into_iter()
             .map(|(id, title, icon)| {
-                let mut d = Dict::new();
+                let mut d = Dict::default();
                 d.insert("id".into(), Value::Str(id));
                 d.insert("title".into(), Value::Str(title));
                 d.insert("icon".into(), Value::Str(icon));
@@ -217,7 +217,7 @@ pub fn handle(
     let route = path.trim_matches('/');
     let body = match body {
         Some(Value::Dict(d)) => d.clone(),
-        _ => Dict::new(),
+        _ => Dict::default(),
     };
     let request = Request { query, body };
     let done = match id {
@@ -246,7 +246,7 @@ fn plugin_page(
     body: Option<Value>,
     context: &Context,
 ) -> Option<Answer> {
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("background".into(), Value::Bool(context.background()));
     told.insert("elevated".into(), Value::Bool(crate::access::elevated()));
     told.insert(
@@ -321,7 +321,7 @@ fn plugin_page(
 }
 
 fn error_of(message: &str) -> Value {
-    let mut d = Dict::new();
+    let mut d = Dict::default();
     d.insert("error".into(), Value::from(message));
     Value::Dict(d)
 }
@@ -408,7 +408,7 @@ fn probes(look: &str) -> Vec<(&'static str, String, lp_render::overlays::Toast)>
                  icon: Option<&str>,
                  level: &str,
                  more: Vec<(&str, Value)>| {
-        let mut payload = Dict::new();
+        let mut payload = Dict::default();
         let label = if label.is_empty() { name } else { label };
         payload.insert("label".into(), Value::from(label));
         for (key, value) in more {
@@ -609,7 +609,7 @@ fn service_row(
         },
         _ => Value::None,
     };
-    let mut row = Dict::new();
+    let mut row = Dict::default();
     row.insert("name".into(), Value::from(name));
     row.insert("state".into(), Value::Str(code.clone()));
     row.insert("detail".into(), Value::Str(detail));
@@ -828,7 +828,7 @@ fn control(
             let Value::Dict(mut told) = log_file() else {
                 return None;
             };
-            let mut out = Dict::new();
+            let mut out = Dict::default();
             out.insert(
                 "lines".into(),
                 Value::List(lines.into_iter().map(Value::Str).collect()),
@@ -1165,7 +1165,7 @@ fn autopilot_status(config: Option<&lp_config::Config>, context: &Context) -> Di
         .as_ref()
         .and_then(|app| app.service_status(SERVICE))
         .unwrap_or(Value::None);
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("background".into(), Value::Bool(context.background()));
     told.insert("enabled".into(), enabled.map_or(Value::None, Value::Bool));
     told.insert("state".into(), Value::Str(code));

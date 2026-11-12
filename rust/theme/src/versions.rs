@@ -257,7 +257,7 @@ pub fn theme_for(
 
 /// list_themes: every installed theme, once (the user's over a plugin's over the app's), by id.
 pub fn list_themes(places: &Places) -> Vec<Dict> {
-    let mut found: Dict = Dict::new();
+    let mut found: Dict = Dict::default();
     for base in places.search().into_iter().rev() {
         if !base.is_dir() {
             continue;
@@ -281,7 +281,7 @@ pub fn list_themes(places: &Places) -> Vec<Dict> {
             } else {
                 "plugin"
             };
-            let mut entry = Dict::new();
+            let mut entry = Dict::default();
             entry.insert("id".into(), name.clone().into());
             entry.insert("builtin".into(), (source != "user").into());
             let shown = if base == places.builtin {
@@ -493,7 +493,7 @@ pub fn switches_for(theme: &Theme, chosen: &Dict) -> Dict {
         .unwrap_or("")
         .to_string();
     let own = version_base(&name).unwrap_or(&name).to_string();
-    let mut out = Dict::new();
+    let mut out = Dict::default();
     for key in ["*", own.as_str()] {
         if let Some(Value::Dict(d)) = chosen.get(key) {
             for (k, v) in d {

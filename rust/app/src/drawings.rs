@@ -137,7 +137,7 @@ pub fn probes(look: &str) -> IndexMap<&'static str, (String, Toast)> {
                  icon: Option<&str>,
                  level: &str,
                  more: Dict| {
-        let mut payload = Dict::new();
+        let mut payload = Dict::default();
         payload.insert(
             "label".into(),
             Value::Str(if label.is_empty() {
@@ -161,7 +161,7 @@ pub fn probes(look: &str) -> IndexMap<&'static str, (String, Toast)> {
         (name, toast)
     };
     let progress = |p: f64| -> Dict {
-        let mut d = Dict::new();
+        let mut d = Dict::default();
         d.insert("progress".into(), Value::Float(p));
         d
     };
@@ -227,7 +227,7 @@ pub fn probes(look: &str) -> IndexMap<&'static str, (String, Toast)> {
             Some(8.0),
             None,
             "info",
-            Dict::new(),
+            Dict::default(),
         ),
     );
     out.insert(
@@ -241,7 +241,7 @@ pub fn probes(look: &str) -> IndexMap<&'static str, (String, Toast)> {
             Some(4.0),
             Some("usb"),
             "info",
-            Dict::new(),
+            Dict::default(),
         ),
     );
     out.insert(
@@ -255,7 +255,7 @@ pub fn probes(look: &str) -> IndexMap<&'static str, (String, Toast)> {
             Some(3.0),
             Some("gamepad"),
             "info",
-            Dict::new(),
+            Dict::default(),
         ),
     );
     out
@@ -316,7 +316,7 @@ pub fn grid_settings(theme: &Theme) -> lp_theme::grid::Settings {
 
 /// Grid.to_dict.
 fn grid_dict(grid: &lp_theme::grid::Grid) -> Value {
-    let mut d = Dict::new();
+    let mut d = Dict::default();
     d.insert("x".into(), int_value(grid.x));
     d.insert("y".into(), int_value(grid.y));
     d.insert("cell_w".into(), Value::Float(grid.cell_w));
@@ -418,7 +418,7 @@ pub fn render(
         .chain(renderer.warnings())
         .map(Value::Str)
         .collect();
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("png".into(), Value::Str(base64(&png(&frame)?)));
     told.insert("boxes".into(), boxes_value(&boxes));
     told.insert("width".into(), int_value(theme.width));
@@ -447,7 +447,7 @@ pub fn module_previews(palette: &Value, style: &Value, symbols: &str, env: &Env)
         false => Value::Dict(arctic_style),
     };
     let snapshot = demo(Some(1_700_000_000.0), &env.fonts_dir)?;
-    let mut previews = Dict::new();
+    let mut previews = Dict::default();
     for kind in lp_theme::tables::MODULE_KINDS {
         let source = match *kind {
             "ring" => "cpu",
@@ -635,7 +635,7 @@ pub fn templates(payload: &Value) -> Answer<Value> {
     let model = d.get("model").map_or("custom".to_string(), Value::str);
     let grid =
         lp_theme::grid::make_grid(width, height, lp_theme::grid::Settings::default(), &model);
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("grid".into(), grid_dict(&grid));
     told.insert(
         "templates".into(),
@@ -661,7 +661,7 @@ pub fn detach(payload: &Value, root: Option<&Path>, env: &Env) -> Answer<Value> 
     let id = get(payload, "id")?.map_or(String::new(), Value::str);
     let widgets = lp_theme::modules::info::detach(&theme, env, &id)
         .map_err(|e| Refused::Failed(format!("{}: {}", e.kind.name(), e.msg)))?;
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert(
         "widgets".into(),
         Value::List(widgets.into_iter().map(Value::Dict).collect()),
@@ -701,7 +701,7 @@ pub fn adapt(payload: &Value, env: &Env) -> Answer<Value> {
                 Kind::Theme | Kind::Key | Kind::Value | Kind::Type => Refused::Said(e.msg),
                 kind => Refused::Failed(format!("{}: {}", kind.name(), e.msg)),
             })?;
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("theme".into(), adapted);
     Ok(Value::Dict(told))
 }

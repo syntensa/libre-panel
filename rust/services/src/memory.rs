@@ -389,7 +389,7 @@ impl Reader {
                 behind.insert(&reading.origin, column);
             }
         }
-        let mut out = Dict::new();
+        let mut out = Dict::default();
         for kind in ["cpu", "gpu"] {
             let name = match readings.get(&format!("{kind}.name")).map(|r| &r.value) {
                 Some(name @ Value::Str(_)) => name.clone(),
@@ -406,7 +406,7 @@ impl Reader {
                 let ident = reading.origin.strip_prefix("lhm:");
                 let panel = behind.get(reading.origin.as_str());
                 let text = |text: Option<&str>| text.map_or(Value::None, |t| Value::Str(t.into()));
-                let mut sensor = Dict::new();
+                let mut sensor = Dict::default();
                 sensor.insert("key".into(), Value::Str(key.clone()));
                 sensor.insert("id".into(), text(ident));
                 sensor.insert("label".into(), Value::Str(reading.label.clone()));
@@ -690,7 +690,7 @@ impl Course {
         if !self.points.iter().any(|(_, counts)| counts != &[0, 0]) {
             return None;
         }
-        let mut found = Dict::new();
+        let mut found = Dict::default();
         found.insert("seconds".into(), Value::Float(self.width as f64 * SAMPLE_S));
         for (at, name) in COURSE.iter().enumerate() {
             let means = self.points.iter().map(|(sums, counts)| match counts[at] {
@@ -806,7 +806,7 @@ impl Session {
             false => Value::Float(*edge),
         });
         let seconds = (self.levels.iter()).map(|n| Value::int(i64::try_from(*n).unwrap_or(0)));
-        let mut levels = Dict::new();
+        let mut levels = Dict::default();
         levels.insert("edges".into(), Value::List(edges.collect()));
         levels.insert("seconds".into(), Value::List(seconds.collect()));
         levels
@@ -1350,7 +1350,7 @@ impl Shared {
             // in every mode but a game's (which ends it): ahead of the music's page too
             (self.host).show_theme(&s.report_theme, self.transition(), 10, Scope::Any);
         }
-        let empty = Dict::new();
+        let empty = Dict::default();
         let part = |key: &str| report.get(key).and_then(Value::as_dict).unwrap_or(&empty);
         let session = part("session");
         let number = |value: Option<&Value>| value.and_then(Value::to_f64);
@@ -1576,7 +1576,7 @@ impl Service for Memory {
     fn summary(&self) -> Option<Value> {
         let state = self.shared.state.lock().ok()?;
         let store = &self.shared.store;
-        let mut said = Dict::new();
+        let mut said = Dict::default();
         said.insert("recording".into(), Value::Bool(!state.stopped));
         let database = self.shared.database.display().to_string();
         said.insert("database".into(), Value::Str(database));

@@ -67,7 +67,7 @@ impl Toast {
             seconds: None,
             kind: String::new(),
             rank: 0,
-            payload: Dict::new(),
+            payload: Dict::default(),
             service: String::new(),
             key: String::new(),
         }
@@ -140,7 +140,7 @@ impl Settings {
             options: toast
                 .get("options")
                 .cloned()
-                .unwrap_or_else(|| Value::Dict(Dict::new())),
+                .unwrap_or_else(|| Value::Dict(Dict::default())),
         }
     }
 }
@@ -241,7 +241,7 @@ impl ToastLayer {
             settings: None,
             size: None,
             context: Context {
-                palette: Dict::new(),
+                palette: Dict::default(),
                 model: None,
                 id: 0,
                 preview: false,
@@ -331,7 +331,7 @@ impl ToastLayer {
             other => {
                 let options = match &self.settings().options {
                     Value::Dict(options) => options.clone(),
-                    _ => Dict::new(),
+                    _ => Dict::default(),
                 };
                 match renderer
                     .plugins

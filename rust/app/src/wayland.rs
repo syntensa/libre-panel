@@ -97,7 +97,7 @@ pub fn desktop() -> (bool, bool) {
 /// virtual_state: for the app (extend.state): a monitor of the panel's own is there for the
 /// asking where GNOME or the portal is, with GStreamer; `missing` says what is not.
 pub fn virtual_state() -> Dict {
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     let (ready, missing, gnome) = if gstreamer().is_none() {
         (false, "gstreamer", None)
     } else {

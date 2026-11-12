@@ -97,9 +97,9 @@ pub fn json(text: &Value) -> Dict {
     match text {
         Value::Str(text) if !text.is_empty() => match lp_py::json::loads(text) {
             Ok(Value::Dict(found)) => found,
-            _ => Dict::new(),
+            _ => Dict::default(),
         },
-        _ => Dict::new(),
+        _ => Dict::default(),
     }
 }
 
@@ -148,7 +148,7 @@ impl<T: Default> Once<T> {
     fn decode(&mut self, text: &Value) -> Arc<T> {
         let Value::Str(text) = text else {
             return match text.truthy() {
-                true => Arc::new((self.make)(&Dict::new())),
+                true => Arc::new((self.make)(&Dict::default())),
                 false => Arc::clone(&self.none),
             };
         };
@@ -278,7 +278,7 @@ pub fn catalogue(path: &std::path::Path) -> Dict {
     read()
         .ok()
         .flatten()
-        .map_or_else(Dict::new, |text| json(&text))
+        .map_or_else(Dict::default, |text| json(&text))
 }
 
 // -- statistics ---------------------------------------------------------------------------------
@@ -427,7 +427,7 @@ fn float(value: Option<f64>) -> Value {
 pub fn find_source(data: &Data, curve: &Curve, sensors: &[String]) -> Dict {
     let back = back_calculated(data, curve);
     let samples = Value::int(i64::try_from(back.len()).unwrap_or(i64::MAX));
-    let mut out = Dict::new();
+    let mut out = Dict::default();
     let verdict = |out: &mut Dict, verdict: &str| {
         out.insert("verdict".into(), Value::Str(verdict.into()));
     };
@@ -492,7 +492,7 @@ pub fn find_source(data: &Data, curve: &Curve, sensors: &[String]) -> Dict {
             .then(a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal))
     });
     let entry = |x: &Found| {
-        let mut entry = Dict::new();
+        let mut entry = Dict::default();
         entry.insert("sensor".into(), Value::Str(x.sensor.clone()));
         entry.insert("spread".into(), float(x.spread));
         entry.insert("offset".into(), float(x.offset));

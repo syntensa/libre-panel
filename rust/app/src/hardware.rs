@@ -158,7 +158,7 @@ pub fn hardware(
     let detected = lp_sensors::hardware::describe(&found, &card_of(&config));
     let own = &config.hardware;
     let custom = [&own.cpu_name, &own.gpu_name, &own.memory_name];
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     for (n, (part, _)) in SETTINGS.iter().enumerate() {
         told.insert(
             (*part).to_string(),

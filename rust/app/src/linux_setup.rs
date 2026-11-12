@@ -1225,7 +1225,7 @@ pub fn report_lines(steps: &[Step], results: &[Outcome]) -> Vec<String> {
 }
 
 pub fn report(results: &[Outcome]) -> Dict {
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert(
         "ok".into(),
         Value::Bool(results.iter().all(|r| r.status == "done")),
@@ -1233,10 +1233,10 @@ pub fn report(results: &[Outcome]) -> Dict {
     let listed = results
         .iter()
         .map(|r| {
-            let mut each = Dict::new();
+            let mut each = Dict::default();
             each.insert("id".into(), Value::from(r.id));
             each.insert("status".into(), Value::from(r.status));
-            let mut items = Dict::new();
+            let mut items = Dict::default();
             for (k, v) in &r.items {
                 items.insert(k.clone(), Value::Str(v.clone()));
             }
@@ -1539,7 +1539,7 @@ pub fn start(way: &Elevation, action: &str) -> bool {
 fn snapshot() -> Value {
     let kept = job();
     let failing = matches!(kept.state, "failed" | "unavailable");
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("action".into(), Value::Str(kept.action.clone()));
     told.insert("running".into(), Value::Bool(kept.state == "running"));
     told.insert(
@@ -1569,13 +1569,13 @@ fn snapshot() -> Value {
 pub fn status(facts: &Facts, with_job: bool) -> Dict {
     let command = program();
     let way = elevation(Options::default(), command.as_deref(), false, true);
-    let mut told = Dict::new();
+    let mut told = Dict::default();
     told.insert("platform".into(), Value::from("linux"));
     told.insert("available".into(), Value::Bool(true));
     let listed = offers(facts)
         .into_iter()
         .map(|offer| {
-            let mut each = Dict::new();
+            let mut each = Dict::default();
             each.insert("id".into(), Value::from(offer.id));
             each.insert("needed".into(), Value::Bool(offer.needed));
             each.insert(

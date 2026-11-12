@@ -398,7 +398,7 @@ pub fn geocode(
     // (an answer that is nothing, an empty list among them, names no place)
     let answer = match lp_py::json::loads(&data).map_err(|why| why.to_string())? {
         Value::Dict(answer) => answer,
-        other if !other.truthy() => Dict::new(),
+        other if !other.truthy() => Dict::default(),
         other => {
             return Err(format!(
                 "the answer is no table but a {}",

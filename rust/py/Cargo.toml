@@ -12,6 +12,8 @@ publish.workspace = true
 unicode-general-category = "=0.6.0"
 # a dict's order, and ints of any size
 indexmap = "2"
+# (the dicts' keys hashed quickly: a widget's settings are looked up by name every frame)
+foldhash = "0.2"
 num-bigint = "0.4"
 num-integer = "0.1"
 num-traits = "0.2"

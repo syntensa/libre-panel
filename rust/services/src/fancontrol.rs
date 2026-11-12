@@ -99,7 +99,7 @@ pub fn state_of(section: &Dict) -> Dict {
         });
         Value::Dict(fields.collect())
     });
-    let mut state = Dict::new();
+    let mut state = Dict::default();
     let curves = curves.map(|curve| Value::Dict(curve.clone())).collect();
     state.insert("curves".into(), Value::List(curves));
     state.insert("controls".into(), Value::List(controls.collect()));
@@ -360,7 +360,7 @@ pub fn names_and_hidden(section: &Dict) -> (IndexMap<String, String>, Vec<String
 // -- what changed ------------------------------------------------------------------------------
 
 fn record(kind: &str, fields: Vec<(&str, Value)>) -> Value {
-    let mut found = Dict::new();
+    let mut found = Dict::default();
     found.insert("kind".into(), Value::Str(kind.into()));
     for (key, value) in fields {
         found.insert(key.to_string(), value);

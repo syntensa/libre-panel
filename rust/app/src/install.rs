@@ -68,7 +68,7 @@ fn said(text: &str, values: &[(&str, Value)]) -> String {
 
 /// IDLE: the state before anything is fetched.
 pub fn idle() -> Dict {
-    let mut state = Dict::new();
+    let mut state = Dict::default();
     for (key, value) in [
         ("state", Value::Str("idle".into())),
         ("version", Value::Str(String::new())),

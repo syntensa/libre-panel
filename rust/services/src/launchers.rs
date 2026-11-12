@@ -377,7 +377,7 @@ pub fn epic(programdata: &Path) -> Games {
             .join("LauncherInstalled.dat"),
     );
     let listed = match listed.filter(Value::truthy) {
-        None => Dict::new(),
+        None => Dict::default(),
         Some(Value::Dict(listed)) => listed,
         Some(_) => return Err(Odd),
     };
