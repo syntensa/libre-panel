@@ -175,6 +175,11 @@ def main(command):
             # the build starts itself once more for it, as for a panel's own process)
             theme = url + "api/themes/lumen/preview?w=240"
             wait(lambda: fetch(theme).startswith(b"\x89PNG"), 60, "a theme's picture (PNG)")
+            if tray:
+                # (the icon's own process says when it is in the tray, or why not: heard
+                # before the app is asked to end, which ends that process too)
+                said = home / "logs" / "libre-panel.log"
+                wait(lambda: "tray icon" in said.read_text(encoding="utf-8"), 30, "the tray icon")
             api(url, "quit")
             code = proc.wait(30)
             if code != 0:
