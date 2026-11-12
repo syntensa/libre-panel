@@ -20,7 +20,7 @@ const FADE_S: f64 = 0.18;
 /// A history no graph asked for this long is dropped (and a spring not drawn so long).
 const KEEP_S: f64 = 600.0;
 /// The longest history: ten minutes.
-const MAX_POINTS: usize = 600 * 25;
+pub(crate) const MAX_POINTS: usize = 600 * 25;
 
 /// grid: the history point at or just before `t`.
 pub fn grid(t: f64) -> i64 {
@@ -62,6 +62,36 @@ pub struct Spring {
     made: u64,
 }
 
+/// (value, speed) at `t` of a glide kept as `pieces`; None without a reading then.
+fn state_in(pieces: &[Part], t: f64) -> Option<(f64, f64)> {
+    let p = pieces.iter().rev().find(|p| p.start <= t)?;
+    let target = p.target?;
+    if p.omega <= 0.0 {
+        return Some((target, 0.0));
+    }
+    let dt = t - p.start;
+    let decay = (-p.omega * dt).exp();
+    let curve = p.speed + p.omega * p.error;
+    Some((
+        target + (p.error + curve * dt) * decay,
+        (p.speed - p.omega * curve * dt) * decay,
+    ))
+}
+
+/// A spring's pieces as they stood when taken (a graph's strip drew ahead with them): the
+/// value they glide through at any time, and which pieces they were.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Course {
+    pieces: Vec<Part>,
+}
+
+impl Course {
+    /// The value at `t` (None without a reading then).
+    pub fn at(&self, t: f64) -> Option<f64> {
+        state_in(&self.pieces, t).map(|s| s.0)
+    }
+}
+
 impl Spring {
     fn piece(&self, t: f64) -> Option<&Part> {
         self.pieces.iter().rev().find(|p| p.start <= t)
@@ -69,18 +99,7 @@ impl Spring {
 
     /// (value, speed) at `t`; None without a reading then.
     pub fn state(&self, t: f64) -> Option<(f64, f64)> {
-        let p = self.piece(t)?;
-        let target = p.target?;
-        if p.omega <= 0.0 {
-            return Some((target, 0.0));
-        }
-        let dt = t - p.start;
-        let decay = (-p.omega * dt).exp();
-        let curve = p.speed + p.omega * p.error;
-        Some((
-            target + (p.error + curve * dt) * decay,
-            (p.speed - p.omega * curve * dt) * decay,
-        ))
+        state_in(&self.pieces, t)
     }
 
     pub fn at(&self, t: f64) -> Option<f64> {
@@ -360,6 +379,30 @@ impl Motion {
     /// The gliding value of `key` at `t` (None if it was not drawn then).
     pub fn value(&self, key: &str, t: f64) -> Option<f64> {
         self.springs.get(key)?.at(t)
+    }
+
+    /// `key`'s glide as it stands now: how many pieces it was made of so far, and its pieces
+    /// (None where `key` does not glide).
+    pub fn course(&self, key: &str) -> Option<(u64, Course)> {
+        let spring = self.springs.get(key)?;
+        let pieces = spring.pieces.clone();
+        Some((spring.made, Course { pieces }))
+    }
+
+    /// _valid_until: until when a strip drawn with `key`'s glide of `made` pieces (taken at
+    /// `taken`, drawn ahead until `until`) is the sensor's: the end of what it drew ahead, or
+    /// when the value took a course the strip did not know.
+    pub fn valid_until(&self, key: &str, made: u64, taken: f64, until: f64) -> f64 {
+        let Some(spring) = self.springs.get(key) else {
+            return taken;
+        };
+        if spring.made == made {
+            return until;
+        }
+        match spring.pieces.iter().find(|p| p.made >= made) {
+            Some(first) if first.made == made => first.start,
+            _ => taken, // (gone already: right until it was taken)
+        }
     }
 
     /// When the oldest piece of `key`'s glide that is kept begins.

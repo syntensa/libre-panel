@@ -7,9 +7,19 @@
 //! (division_UINT32), or the shift that is the same where the count is a power of two. So one
 //! formula with each block's own count gives what each of them gives.
 
+use crate::ints::{clip8, muldiv255};
 use crate::{error, Image, Mode, Result};
 
 /// division_UINT32(divider, 8): computed in float, as Reduce.c computes it.
+/// RGBa's colour back to RGBA's (as convert.rs's unmultiplied).
+fn unmultiplied(c: u8, alpha: u8) -> u8 {
+    if alpha == 255 || alpha == 0 {
+        c
+    } else {
+        clip8((255 * i64::from(c)) / i64::from(alpha))
+    }
+}
+
 fn multiplier(count: u32) -> u32 {
     let max_dividend = (1u32 << 8) * count;
     let max_int = (1u64 << 32) as f32;
@@ -17,6 +27,59 @@ fn multiplier(count: u32) -> u32 {
 }
 
 impl Image {
+    /// The `w` x `h` blocks of `s` x `s` pixels from (`x0`, `y0`) of an RGBA picture reduced
+    /// as `crop(x0, y0, x0 + w * s, y0 + h * s).reduce(s, s)` reduces them (premultiplied, then
+    /// back), in one pass: the same bytes. (Outside the picture its pixels are transparent
+    /// black, as a crop has them.)
+    pub fn reduce_rgba_part(
+        &self,
+        x0: i64,
+        y0: i64,
+        w: usize,
+        h: usize,
+        s: usize,
+    ) -> Result<Image> {
+        if self.mode != Mode::RGBA || s < 1 {
+            return error("reduce_rgba_part takes RGBA and a scale above 0");
+        }
+        let count = (s * s) as u32;
+        let m = u64::from(multiplier(count));
+        let mut out = vec![0u8; w * h * 4];
+        let (width, height) = (self.width as i64, self.height as i64);
+        let reduced = |sum: u32| ((u64::from(sum) * m) as u32 >> 24) as u8;
+        for oy in 0..h {
+            for ox in 0..w {
+                let mut sums = [count / 2; 4];
+                for dy in 0..s {
+                    let y = y0 + (oy * s + dy) as i64;
+                    if y < 0 || y >= height {
+                        continue;
+                    }
+                    for dx in 0..s {
+                        let x = x0 + (ox * s + dx) as i64;
+                        if x < 0 || x >= width {
+                            continue;
+                        }
+                        let at = (y as usize * self.width + x as usize) * 4;
+                        let p = &self.data[at..at + 4];
+                        let a = u32::from(p[3]);
+                        sums[0] += muldiv255(u32::from(p[0]), a);
+                        sums[1] += muldiv255(u32::from(p[1]), a);
+                        sums[2] += muldiv255(u32::from(p[2]), a);
+                        sums[3] += a;
+                    }
+                }
+                let a = reduced(sums[3]);
+                let at = (oy * w + ox) * 4;
+                for k in 0..3 {
+                    out[at + k] = unmultiplied(reduced(sums[k]), a);
+                }
+                out[at + 3] = a;
+            }
+        }
+        Image::from_bytes(Mode::RGBA, w, h, out)
+    }
+
     /// ``xscale`` by ``yscale`` reduced, the part of the picture in ``bounds`` (left, top,
     /// right, bottom; the whole picture where None). RGBA is reduced premultiplied (Image.py
     /// converts it to RGBa and back).
@@ -115,5 +178,85 @@ impl Image {
             }
         }
         Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_column_resized_across_stays_as_it_is_in_every_column() {
+        // (what the graph's fill takes for its fade: BICUBIC from one column)
+        for (cw, ch) in [(1usize, 1usize), (5, 7), (600, 360), (33, 2), (1200, 141)] {
+            let rows: Vec<u8> = (0..ch).map(|i| (i * 37 % 256) as u8).collect();
+            let column = Image::from_bytes(Mode::L, 1, ch, rows.clone()).unwrap();
+            let wide = column
+                .resize(cw, ch, crate::Filter::Bicubic, None, None)
+                .unwrap();
+            let want: Vec<u8> = rows
+                .iter()
+                .flat_map(|&v| std::iter::repeat_n(v, cw))
+                .collect();
+            assert_eq!(wide.as_bytes(), &want[..], "{cw}x{ch}");
+        }
+    }
+
+    #[test]
+    fn a_tint_over_a_picture_as_alpha_composite_lays_it() {
+        let (w, h) = (31usize, 9usize);
+        let data: Vec<u8> = (0..w * h * 4).map(|i| (i * 53 % 256) as u8).collect();
+        let under = Image::from_bytes(Mode::RGBA, w, h, data).unwrap();
+        let alpha: Vec<u8> = (0..w * h).map(|i| (i * 29 % 256) as u8).collect();
+        let mut tint = Image::new(Mode::RGBA, w, h, &[200, 40, 90, 255]);
+        tint.putalpha(&Image::from_bytes(Mode::L, w, h, alpha.clone()).unwrap())
+            .unwrap();
+        let want = crate::alpha_composite(&under, &tint).unwrap();
+        let mut got = under.clone();
+        crate::tint_over(&mut got, [200, 40, 90], &alpha).unwrap();
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn an_rgba_part_reduced_in_one_go_as_cut_and_reduced() {
+        let (w, h) = (23usize, 17usize);
+        let mut seed = 0x9e37_79b9_u64;
+        let data: Vec<u8> = (0..w * h * 4)
+            .map(|i| {
+                seed ^= seed << 13;
+                seed ^= seed >> 7;
+                seed ^= seed << 17;
+                // (alpha 0, 255 and between, colours anywhere)
+                match (i % 4, seed % 5) {
+                    (3, 0) => 0,
+                    (3, 1) => 255,
+                    _ => (seed >> 8) as u8,
+                }
+            })
+            .collect();
+        let im = Image::from_bytes(Mode::RGBA, w, h, data).unwrap();
+        for s in [1usize, 2, 3] {
+            for (x0, y0, ow, oh) in [
+                (0i64, 0i64, 5usize, 4usize),
+                (1, 0, 11, 8),
+                (3, 2, 4, 5),
+                (-2, -1, 6, 3),
+                (20, 15, 3, 3),
+            ] {
+                let cut = im.crop(x0, y0, x0 + (ow * s) as i64, y0 + (oh * s) as i64);
+                let want = cut
+                    .convert(Mode::RGBa)
+                    .unwrap()
+                    .reduce(s, s, None)
+                    .unwrap()
+                    .convert(Mode::RGBA)
+                    .unwrap();
+                assert_eq!(
+                    im.reduce_rgba_part(x0, y0, ow, oh, s).unwrap(),
+                    want,
+                    "{s} {x0} {y0}"
+                );
+            }
+        }
     }
 }

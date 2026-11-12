@@ -9,7 +9,7 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
-use lp_pixels::{chops, Draw, Filter, Image, Mode};
+use lp_pixels::{Draw, Filter, Image, Mode};
 use lp_py::num as pn;
 use lp_py::value::compare;
 use lp_py::{Dict, Value};
@@ -483,7 +483,7 @@ pub fn still_range(w: &Dict, numbers: &[f64]) -> std::result::Result<Range, Stri
 /// _fraction of a graph's point: `value`'s place between the range's ends (0 to 1) as Python
 /// counts with ends of an int or a float, bent by a sqrt or log scale; what Python raises (an
 /// int too large for a float).
-fn fraction(value: f64, (lo, hi): &Range, scale: &str) -> Result<f64> {
+pub(crate) fn fraction(value: f64, (lo, hi): &Range, scale: &str) -> Result<f64> {
     if same(hi, lo) {
         return Ok(0.0);
     }
@@ -602,7 +602,7 @@ impl Renderer {
             .enumerate()
             .map(|(i, &v)| ((first + i as f64) * step, v))
             .collect();
-        let layer = self.graph_curve(w, &points, gw, s, range)?;
+        let layer = self.graph_curve(w, &points, gw, s, range, None)?;
         let mut piece = Piece::new(shapes::down(&layer, gw, gh, SUPERSAMPLE)?, x, y);
         piece.hit = Some([x, y, gw, gh]);
         Ok(piece)
@@ -610,14 +610,15 @@ impl Renderer {
 
     /// _curve: background, grid and the curve through `points` (x in pixels at `s`; a value
     /// None breaks it) on a canvas `width` px wide, its range `range` (else the widget's, else
-    /// the points').
-    fn graph_curve(
+    /// the points'), `top` the row the fill's fade starts at (else its peak).
+    pub(crate) fn graph_curve(
         &self,
         w: &Dict,
         points: &[(f64, Option<f64>)],
         width: i64,
         s: i64,
         range: Option<&Range>,
+        top: Option<f64>,
     ) -> Result<Image> {
         let h = widget::int(w, "h", 60);
         let (cw, ch) = (width.saturating_mul(s).max(1), h.saturating_mul(s).max(1));
@@ -691,16 +692,20 @@ impl Renderer {
         }
         let colour = self.colour_of(w, "color")?.unwrap_or([0; 4]);
         if widget::truthy(w, "fill") && !runs.is_empty() {
-            layer = self.graph_fill(w, &layer, &runs, colour, (first, last), down)?;
+            layer = crate::prof::part("curve fill", || {
+                self.graph_fill(w, &layer, &runs, colour, (first, last), down, top)
+            })?;
         }
         if finish::of(w) == Finish::LitGraph {
-            lit_curve(w, &mut layer, &runs, colour, s)?;
+            crate::prof::part("curve lit", || lit_curve(w, &mut layer, &runs, colour, s))?;
             return Ok(layer);
         }
         let width = widget::int(w, "line_width", 2).saturating_mul(s) as i32;
+        // (points a strip draws this close are a curve already: no round joints)
+        let joints = widget::flag(w, "\0joints", true);
         let mut draw = Draw::new(&mut layer);
         for run in &runs {
-            draw.line(run, Some(ink(colour)), width, true)?;
+            draw.line(run, Some(ink(colour)), width, joints)?;
         }
         Ok(layer)
     }
@@ -708,6 +713,7 @@ impl Renderer {
     /// _curve's fill: the area under each run (above it where the graph hangs from the top) in
     /// the line's colour, fading from the highest point (or the range's top) to the bottom, or
     /// flat, laid over `layer`.
+    #[allow(clippy::too_many_arguments)]
     fn graph_fill(
         &self,
         w: &Dict,
@@ -716,6 +722,7 @@ impl Renderer {
         colour: Rgba,
         (first, last): (f64, f64),
         down: bool,
+        top: Option<f64>,
     ) -> Result<Image> {
         let (cw, ch) = layer.size();
         let hf = ch as f64;
@@ -741,7 +748,9 @@ impl Renderer {
             } else {
                 115.0
             };
-            let top = if widget::truthy(w, "range_step") {
+            let top = if let Some(top) = top {
+                top
+            } else if widget::truthy(w, "range_step") {
                 first.trunc()
             } else {
                 // (int(first + last - max(ys) if down else min(ys)): Python's max and min, the
@@ -763,29 +772,54 @@ impl Renderer {
             if down {
                 rows.reverse();
             }
-            let fade = Image::from_bytes(Mode::L, 1, ch, rows)?;
-            chops::multiply(&area, &fade.resize(cw, ch, Filter::Bicubic, None, None)?)?
+            // ImageChops.multiply(area, the fade's column resized across with BICUBIC): a
+            // column of one pixel resized across stays as it is in every column
+            let mut alpha = area.as_bytes().to_vec();
+            for (line, &fade) in alpha.chunks_exact_mut(cw).zip(&rows) {
+                let fade = u32::from(fade);
+                for v in line {
+                    *v = (u32::from(*v) * fade / 255) as u8;
+                }
+            }
+            alpha
         } else {
             let flat = if solid != 0.0 {
-                lp_py::round(255.0 * solid) as i64
+                lp_py::round(255.0 * solid) as u32
             } else {
                 64
             };
-            area.point(&(0..256).map(|v| v * flat / 255).collect::<Vec<i64>>())?
+            area.as_bytes()
+                .iter()
+                .map(|&v| (u32::from(v) * flat / 255) as u8)
+                .collect()
         };
         let [r, g, b, a] = ink(colour);
-        let mut tint = Image::new(Mode::RGBA, cw, ch, &[r, g, b, 255]);
         if a < 255 {
-            alpha = chops::multiply(&alpha, &Image::new(Mode::L, cw, ch, &[a]))?;
+            // (ImageChops.multiply by the colour's alpha)
+            for v in &mut alpha {
+                *v = (u32::from(*v) * u32::from(a) / 255) as u8;
+            }
         }
-        tint.putalpha(&alpha)?;
-        Ok(lp_pixels::alpha_composite(layer, &tint)?)
+        // (Image.alpha_composite(layer, the colour through that alpha))
+        let mut out = layer.clone();
+        lp_pixels::tint_over(&mut out, [r, g, b], &alpha)?;
+        Ok(out)
     }
 
     /// _draw_end_dot in a still frame: a dot of `end_dot` px radius in the line's colour where
     /// the line ends, at the right edge, at the newest value of the history (in the range the
     /// graph keeps, else its values'), with the widget's glow; none where the line has no end.
     pub(crate) fn graph_dot(&self, w: &Dict, snapshot: &Snapshot) -> Result<Option<Over>> {
+        if self.continuous {
+            // the curve is drawn from the gliding value: so is its end, where the curve is
+            // drawn in this frame
+            let Some((w, value, (lo, hi))) = self.timeline_end(w, snapshot)? else {
+                return Ok(None);
+            };
+            let s = crate::timeline::STRIP_SCALE;
+            let range = (Value::Float(lo), Value::Float(hi));
+            return self.end_dot(&w, value, &range, s).map(Some);
+        }
         let (values, _) = history_of(snapshot, w);
         let value = if values.len() > 1 {
             values[values.len() - 1]
@@ -806,9 +840,13 @@ impl Renderer {
         let (Some(value), Some(range)) = (value, range) else {
             return Ok(None);
         };
-        let s = SUPERSAMPLE as i64;
+        self.end_dot(w, value, &range, SUPERSAMPLE as i64).map(Some)
+    }
+
+    /// The end dot at `value` in `range`, its row worked out at scale `s`.
+    fn end_dot(&self, w: &Dict, value: f64, range: &Range, s: i64) -> Result<Over> {
         let (first, last) = range_rows(w, s);
-        let frac = fraction(value, &range, widget::text(w, "scale"))?;
+        let frac = fraction(value, range, widget::text(w, "scale"))?;
         let mut row = first + (last - first) * (1.0 - frac);
         if widget::text(w, "direction") == "down" {
             row = first + last - row;
@@ -821,7 +859,7 @@ impl Renderer {
         let cx = x.saturating_add(gw) as f64 - 0.5 / s as f64;
         let cy = y as f64 + (row + 0.5) / s as f64;
         let colour = self.colour_of(w, "color")?.unwrap_or([0; 4]);
-        self.dot(w, cx, cy, colour).map(Some)
+        self.dot(w, cx, cy, colour)
     }
 }
 

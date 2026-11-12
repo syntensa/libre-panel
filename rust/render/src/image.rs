@@ -554,7 +554,7 @@ impl Renderer {
             .widgets
             .iter()
             .filter(|w| widget::text(w, "type") == "image")
-            .cloned()
+            .map(|w| (**w).clone())
             .collect();
         widgets
             .iter()

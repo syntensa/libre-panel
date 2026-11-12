@@ -3,6 +3,10 @@
 //! light in its milled groove, and its glow (LitBar, bar_piece); a ring gauge's arc of light
 //! on the middle of its milled groove (LitGauge, gauge_piece).
 
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
+
 use lp_pixels::{Draw, Filter, Image, Mode, Transpose, ALL_CORNERS};
 use lp_py::{Dict, Value};
 use num_bigint::{BigInt, Sign};
@@ -18,6 +22,9 @@ use crate::widget;
 /// _alpha_scaled: the picture's alpha times `factor` (none where it is 0.999 or more), each
 /// level rounded half to even, 255 at most.
 fn alpha_scaled(image: &Image, factor: f64) -> Result<Image> {
+    if factor >= 0.999 {
+        return Ok(image.clone());
+    }
     let lut: Vec<i64> = (0..256)
         .map(|v| (lp_py::round(v as f64 * factor) as i64).min(255))
         .collect();
@@ -178,18 +185,18 @@ fn light(
 ) -> Vec<u8> {
     let cut: Vec<f32> = mask.iter().map(|&m| f32::from((m * 255.0) as u8)).collect();
     let share = (1.0f64 / 255.0) as f32;
-    let soft: Vec<f32> = lp_pixels::dither::blur(&cut, h, w, halo)
-        .iter()
-        .map(|&v| v * share)
-        .collect();
-    let exponent = 0.7f64 as f32;
+    let soft: Vec<f32> =
+        crate::prof::part("light blur", || lp_pixels::dither::blur(&cut, h, w, halo))
+            .iter()
+            .map(|&v| v * share)
+            .collect();
     let (x0, y0, x1, y1) = bounds.unwrap_or((0, 0, w, h));
     let mut out = Vec::with_capacity((y1 - y0) * (x1 - x0) * 4);
     for y in y0..y1 {
         for x in x0..x1 {
             let i = y * w + x;
             let m = mask[i];
-            let core = m.powf(exponent);
+            let core = cored(m);
             let c = colour(x);
             for v in c {
                 out.push(fclip(v + (255.0 - v) * (LIGHT_WHITE * core) + 0.5) as u8);
@@ -199,6 +206,22 @@ fn light(
         }
     }
     out
+}
+
+/// m ** 0.7 in float32, as light takes it: a coverage of whole levels (k / 255, as a mask
+/// reduced from 8 bits has) from a table made of the same powf, any other worked out.
+fn cored(m: f32) -> f32 {
+    static TABLE: std::sync::OnceLock<[f32; 256]> = std::sync::OnceLock::new();
+    let exponent = 0.7f64 as f32;
+    let k = (m * 255.0).round();
+    if (0.0..=255.0).contains(&k) && k / 255.0 == m {
+        let table = TABLE.get_or_init(|| {
+            // (worked out as the light's own: the C library's powf, not folded away)
+            std::array::from_fn(|k| (std::hint::black_box(k as f32) / 255.0).powf(exponent))
+        });
+        return table[k as usize];
+    }
+    m.powf(exponent)
 }
 
 /// np.clip(x, 0, 255) of float32 (NaN stays NaN).
@@ -835,6 +858,10 @@ fn ring_sweep(shape: &RingShape, colour: [i64; 3], stroke: i64, halo: f64) -> Re
     Ok(sweep)
 }
 
+/// The light made anew around a ring's tip (and its start): where it lies (left, top) and its
+/// picture.
+type Patches = Vec<(i64, i64, Rc<Image>)>;
+
 /// _ring_light: the light of a ring's arc of `frac` in `colour`: the whole sweep's up to the
 /// arc's tip (through a sector), and around the tip and the start of a closed ring the light
 /// made anew of the coverage in a window round it, laid over that in turn.
@@ -845,6 +872,33 @@ fn ring_light(
     stroke: i64,
     halo: f64,
 ) -> Result<Image> {
+    let (sector, patches) = ring_parts(shape, frac, colour, stroke, halo, None)?;
+    let (width, height) = shape.canvas();
+    let mut out = Image::blank(Mode::RGBA, width, height);
+    out.paste(
+        &ring_sweep(shape, colour, stroke, halo)?,
+        0,
+        0,
+        Some(&sector),
+    )?;
+    for (left, top, image) in patches {
+        out.paste(&image, left, top, None)?;
+    }
+    Ok(out)
+}
+
+/// _ring_parts: what the light of a ring's arc of `frac` is made of: where it is the whole
+/// sweep's (a mask of 0 and 255, the size of the ring's canvas), and the light made anew
+/// around the arc's tip and the start of a closed ring, laid over that in turn. `starts`: the
+/// start's light kept, where it lies apart from the tip's (the same at every such value).
+fn ring_parts(
+    shape: &RingShape,
+    frac: f64,
+    colour: [i64; 3],
+    stroke: i64,
+    halo: f64,
+    starts: Option<&RefCell<HashMap<String, Rc<Image>>>>,
+) -> Result<(Image, Patches)> {
     let (width, height) = shape.canvas();
     let (start, end) = (shape.start, shape.end);
     let tip = start + (end - start) * frac;
@@ -853,21 +907,16 @@ fn ring_light(
     let far = (width + height) as f64;
     let (mx, my) = (width as f64 / 2.0, height as f64 / 2.0);
     let low = if end < start { end } else { start } - gap / 2.0;
-    Draw::new(&mut sector).pieslice(
-        (mx - far, my - far, mx + far, my + far),
-        low,
-        if low > tip { low } else { tip },
-        Some([255, 0, 0, 0]),
-        None,
-        1,
-    )?;
-    let mut out = Image::blank(Mode::RGBA, width, height);
-    out.paste(
-        &ring_sweep(shape, colour, stroke, halo)?,
-        0,
-        0,
-        Some(&sector),
-    )?;
+    crate::prof::part("ring sector", || {
+        Draw::new(&mut sector).pieslice(
+            (mx - far, my - far, mx + far, my + far),
+            low,
+            if low > tip { low } else { tip },
+            Some([255, 0, 0, 0]),
+            None,
+            1,
+        )
+    })?;
     let radius = (shape.w.min(shape.h) - shape.thickness) as f64 / 2.0;
     let reach = (stroke as f64 / 2.0 + 3.0 * halo).ceil() as i64 + 3;
     let margin = (3.0 * halo).ceil() as i64 + 4;
@@ -894,7 +943,9 @@ fn ring_light(
     // (the light worked out of the coverage in the outer window, kept in the inner one, each
     // cut as numpy slices)
     let patch = |inner: (i64, i64, i64, i64), outer: (i64, i64, i64, i64)| -> Result<Image> {
-        let (cover, ow, oh) = arc_part(shape, frac, stroke, outer)?;
+        let (cover, ow, oh) =
+            crate::prof::part("ring arc", || arc_part(shape, frac, stroke, outer))?;
+        let _lighting = crate::prof::Span::new("ring light");
         let (x0, y0) = (inner.0 - outer.0, inner.1 - outer.1);
         let (left, right) = py_slice(x0, x0 + inner.2 - inner.0, ow);
         let (top, bottom) = py_slice(y0, y0 + inner.3 - inner.1, oh);
@@ -907,18 +958,39 @@ fn ring_light(
             local,
         )?)
     };
-    let mut patches = vec![];
+    let mut patches: Patches = vec![];
     let (tip_inner, tip_outer) = window(tip);
     if gap * std::f64::consts::PI / 180.0 * radius < (2 * reach + 2) as f64 {
         // (closed: the sweep's light has no start)
         let (inner, outer) = window(start);
-        patches.push((inner, patch(inner, outer)?));
+        let apart = tip_outer.2 <= outer.0
+            || outer.2 <= tip_outer.0
+            || tip_outer.3 <= outer.1
+            || outer.3 <= tip_outer.1;
+        let made = match starts.filter(|_| apart) {
+            // (its start the same at every value but these: kept)
+            Some(kept) => {
+                let key = format!(
+                    "ring-start {} {} {} {} {} {colour:?} {stroke} {}",
+                    shape.w, shape.h, shape.thickness, shape.start, shape.end, shape.room
+                );
+                let found = kept.borrow().get(&key).cloned();
+                match found {
+                    Some(image) => image,
+                    None => {
+                        let image = Rc::new(patch(inner, outer)?);
+                        kept.borrow_mut().insert(key, image.clone());
+                        image
+                    }
+                }
+            }
+            None => Rc::new(patch(inner, outer)?),
+        };
+        patches.push((inner.0, inner.1, made));
     }
-    patches.push((tip_inner, patch(tip_inner, tip_outer)?));
-    for (inner, image) in patches {
-        out.paste(&image, inner.0, inner.1, None)?;
-    }
-    Ok(out)
+    let tip_patch = Rc::new(patch(tip_inner, tip_outer)?);
+    patches.push((tip_inner.0, tip_inner.1, tip_patch));
+    Ok((sector, patches))
 }
 
 impl Renderer {
@@ -954,6 +1026,69 @@ impl Renderer {
         Ok(Some(out))
     }
 
+    /// _ring_ground: a ring's groove on its canvas, `room` px larger on every side, kept by what
+    /// it is made of (and that, its key).
+    fn ring_ground(&self, w: &Dict, room: usize) -> Result<(String, Rc<Image>)> {
+        let track = self.colour_of(w, "background")?;
+        let ticks = widget::int(w, "ticks", 0);
+        let tick = if ticks > 0 {
+            let named = ["tick_color", "background", "color"]
+                .into_iter()
+                .find(|k| widget::truthy(w, k));
+            match named {
+                Some(k) => self.colour_of(w, k)?,
+                None => None,
+            }
+        } else {
+            None
+        };
+        let shape = RingShape::of(w, room);
+        let key = format!(
+            "ring-ground {} {} {} {} {} {track:?} {ticks} {tick:?} {room}",
+            shape.w, shape.h, shape.thickness, shape.start, shape.end
+        );
+        if let Some(found) = self.ring_pictures.borrow().get(&key) {
+            return Ok((key, found.clone()));
+        }
+        let (width, height) = shape.canvas();
+        let mut canvas = Image::blank(Mode::RGBA, width, height);
+        if let Some(groove) = self.lit_groove(w)? {
+            canvas.paste(&groove, room as i64, room as i64, None)?;
+        }
+        let made = Rc::new(canvas);
+        let mut kept = self.ring_pictures.borrow_mut();
+        if kept.len() > 64 {
+            kept.clear(); // (a few gauges' pictures: what is no longer shown goes now and then)
+        }
+        kept.insert(key.clone(), made.clone());
+        Ok((key, made))
+    }
+
+    /// _ring_lit: the groove with a ring's whole sweep lit in `colour` (RGBA) on it, kept by
+    /// colour.
+    fn ring_lit(
+        &self,
+        ground_key: &str,
+        ground: &Image,
+        shape: &RingShape,
+        colour: [i64; 4],
+        stroke: i64,
+        halo: f64,
+    ) -> Result<Rc<Image>> {
+        let key = format!("ring-lit {ground_key} {colour:?} {stroke} {halo}");
+        if let Some(found) = self.ring_pictures.borrow().get(&key) {
+            return Ok(found.clone());
+        }
+        let sweep = ring_sweep(shape, [colour[0], colour[1], colour[2]], stroke, halo)?;
+        let sweep = alpha_scaled(&sweep, colour[3] as f64 / 255.0)?;
+        let mut lit = ground.clone();
+        let whole = (0, 0, sweep.width() as i64, sweep.height() as i64);
+        lit.alpha_composite_at(&sweep, (0, 0), whole)?;
+        let made = Rc::new(lit);
+        self.ring_pictures.borrow_mut().insert(key, made.clone());
+        Ok(made)
+    }
+
     /// gauge_piece: the lit ring: its groove on a canvas with room round it for the light, and
     /// the value's arc of light on it (in its colour, or of a gradient where the arc ends).
     pub(crate) fn lit_gauge_piece(&self, w: &Dict, frac: f64, paint: Paint) -> Result<Piece> {
@@ -966,14 +1101,38 @@ impl Renderer {
         if (width as i64).saturating_mul(height as i64) > crate::renderer::MOST_PIXELS {
             return Err(Failed("a ring too large".into()));
         }
-        let mut canvas = Image::blank(Mode::RGBA, width, height);
-        if let Some(groove) = self.lit_groove(w)? {
-            canvas.paste(&groove, room as i64, room as i64, None)?;
-        }
+        let (ground_key, ground) = crate::prof::part("gauge ground", || self.ring_ground(w, room))?;
+        let mut canvas = crate::prof::part("gauge clone", || (*ground).clone());
         if frac > 0.0 {
             let (a, b) = paint;
             let stroke = (lp_py::round(shape.thickness as f64 * RING_CORE) as i64).max(2);
             let halo = RING_HALO * unit_px;
+            if b.is_none() {
+                // one colour: the groove with its whole sweep lit is kept, cut at the arc's tip
+                // for each value, the light around the tip laid on the groove anew
+                // (_light_ring: as the whole light laid over the groove, pixel for pixel)
+                let fade = a[3] as f64 / 255.0;
+                let lit = crate::prof::part("gauge lit", || {
+                    self.ring_lit(&ground_key, &ground, &shape, a, stroke, halo)
+                })?;
+                let colour = [a[0], a[1], a[2]];
+                let kept = Some(&self.ring_pictures);
+                let (sector, patches) = crate::prof::part("gauge parts", || {
+                    ring_parts(&shape, frac, colour, stroke, halo, kept)
+                })?;
+                crate::prof::part("gauge sector", || canvas.paste(&lit, 0, 0, Some(&sector)))?;
+                let _patching = crate::prof::Span::new("gauge patches");
+                for (left, top, patch) in patches {
+                    let (pw, ph) = (patch.width() as i64, patch.height() as i64);
+                    let mut tile = ground.crop(left, top, left + pw, top + ph);
+                    let light = alpha_scaled(&patch, fade)?;
+                    tile.alpha_composite_at(&light, (0, 0), (0, 0, pw, ph))?;
+                    canvas.paste(&tile, left, top, None)?;
+                }
+                let mut piece = Piece::new(canvas, x - room as i64, y - room as i64);
+                piece.hit = Some([x, y, gw, gh]);
+                return Ok(piece);
+            }
             // (a gradient: the colour where the arc ends, in whole levels)
             let colour = match b {
                 None => [a[0], a[1], a[2]],

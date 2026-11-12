@@ -74,6 +74,71 @@ fn weights(float_radius: f32) -> (usize, u32, u32) {
     (radius, ww, fw)
 }
 
+/// One pass down the columns, every band: line_blur on each column, worked out for all of
+/// them at once, row by row (the same sums for each column; the picture read in order).
+fn pass_down(im: &mut Image, float_radius: f32) {
+    let (radius, ww, fw) = weights(float_radius);
+    let row = im.width * im.bands();
+    let n = im.height;
+    if n == 0 || row == 0 {
+        return;
+    }
+    let lastx = n - 1;
+    let edge_a = (radius + 1).min(n);
+    let edge_b = n.saturating_sub(radius + 1);
+    let data = &im.data;
+    let line = |y: usize| &data[y * row..(y + 1) * row];
+    // the sums for pixel -1, as line_blur's
+    let mut acc: Vec<u32> = line(0)
+        .iter()
+        .map(|&v| u32::from(v).wrapping_mul(radius as u32 + 1))
+        .collect();
+    for y in 0..edge_a.saturating_sub(1) {
+        for (a, &v) in acc.iter_mut().zip(line(y)) {
+            *a = a.wrapping_add(u32::from(v));
+        }
+    }
+    let rest = (radius + 1 - edge_a) as u32;
+    for (a, &v) in acc.iter_mut().zip(line(lastx)) {
+        *a = a.wrapping_add(u32::from(v).wrapping_mul(rest));
+    }
+    // (which pixels line_blur's step takes at each y: sub, add, left, right)
+    let at = |y: usize| -> (usize, usize, usize, usize) {
+        if edge_a <= edge_b {
+            if y < edge_a {
+                (0, y + radius, 0, y + radius + 1)
+            } else if y < edge_b {
+                (y - radius - 1, y + radius, y - radius - 1, y + radius + 1)
+            } else {
+                (y - radius - 1, lastx, y - radius - 1, lastx)
+            }
+        } else if y < edge_b {
+            (0, y + radius, 0, y + radius + 1)
+        } else if y < edge_a {
+            (0, lastx, 0, lastx)
+        } else {
+            (y - radius - 1, lastx, y - radius - 1, lastx)
+        }
+    };
+    let mut out = vec![0u8; n * row];
+    for y in 0..n {
+        let (sub, add, left, right) = at(y);
+        let (sub, add, left, right) = (line(sub), line(add), line(left), line(right));
+        let o = &mut out[y * row..(y + 1) * row];
+        for c in 0..row {
+            let a = acc[c]
+                .wrapping_add(u32::from(add[c]))
+                .wrapping_sub(u32::from(sub[c]));
+            acc[c] = a;
+            let bulk = a
+                .wrapping_mul(ww)
+                .wrapping_add((u32::from(left[c]) + u32::from(right[c])).wrapping_mul(fw));
+            o[c] = (bulk.wrapping_add(1 << 23) >> 24) as u8;
+        }
+    }
+    im.data = out;
+}
+
 /// One pass along the rows (``rows``) or the columns, every band.
 fn pass(im: &mut Image, float_radius: f32, rows: bool) {
     let (radius, ww, fw) = weights(float_radius);
@@ -131,7 +196,7 @@ impl Image {
         }
         if yradius != 0.0 {
             for _ in 0..passes {
-                pass(&mut out, yradius, false);
+                pass_down(&mut out, yradius);
             }
         }
         Ok(out)
@@ -143,5 +208,40 @@ impl Image {
             return Ok(self.clone()); // (ImageFilter returns a copy)
         }
         self.box_blur(gaussian_box(xradius, 3), gaussian_box(yradius, 3), 3)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Mode;
+
+    #[test]
+    fn the_columns_blurred_all_at_once_as_one_by_one() {
+        let mut seed = 0x3c6e_f372_u64;
+        for (w, h, mode) in [
+            (1usize, 1usize, Mode::L),
+            (5, 1, Mode::RGBA),
+            (1, 9, Mode::L),
+            (37, 23, Mode::RGBA),
+            (64, 5, Mode::RGB),
+        ] {
+            let data: Vec<u8> = (0..w * h * mode.bands())
+                .map(|_| {
+                    seed ^= seed << 13;
+                    seed ^= seed >> 7;
+                    seed ^= seed << 17;
+                    (seed >> 11) as u8
+                })
+                .collect();
+            let im = Image::from_bytes(mode, w, h, data).unwrap();
+            for radius in [0.4f32, 1.0, 2.6, 7.3, 40.0] {
+                let mut one = im.clone();
+                pass(&mut one, radius, false);
+                let mut all = im.clone();
+                pass_down(&mut all, radius);
+                assert_eq!(one, all, "{w}x{h} {radius}");
+            }
+        }
     }
 }

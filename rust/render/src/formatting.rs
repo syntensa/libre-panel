@@ -171,13 +171,61 @@ fn format_field(value: &Value, spec: &str, unit: &str) -> Result<String, FmtErro
     }
 }
 
-/// safe_format: `fmt` with the reading's `value`, `unit` and `label`.
+/// What a text is kept by (_kept): the format, the value with its type (and the sign of a
+/// zero), the unit and the label.
+#[derive(PartialEq, Eq, Hash)]
+enum Kept {
+    None,
+    Bool(bool),
+    Int(String),
+    Float(u64),
+    Str(String),
+}
+
+/// How many texts are kept (_kept's lru_cache).
+const TEXTS_KEPT: usize = 1024;
+
+thread_local! {
+    static TEXTS: std::cell::RefCell<std::collections::HashMap<(String, Kept, String, String), String>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// safe_format: `fmt` with the reading's `value`, `unit` and `label`. A text depends on
+/// nothing else, so the last ones made are kept (_kept): a steady value, a list's names, the
+/// same few numbers of a value that glides back and forth are made once.
 pub fn safe_format(
     fmt: &str,
     value: &Value,
     unit: &str,
     label: &str,
 ) -> Result<String, FormatError> {
+    let kept = match value {
+        Value::None => Kept::None,
+        Value::Bool(b) => Kept::Bool(*b),
+        Value::Int(n) => Kept::Int(n.to_string()),
+        // (the bits: 0.0 and -0.0 apart, as the sign of a zero keeps them)
+        Value::Float(x) => Kept::Float(x.to_bits()),
+        Value::Str(text) => Kept::Str(text.clone()),
+        // (a value that is no key, e.g. a list: made each time)
+        _ => return made(fmt, value, unit, label),
+    };
+    let key = (fmt.to_string(), kept, unit.to_string(), label.to_string());
+    if let Some(text) = TEXTS.with(|texts| texts.borrow().get(&key).cloned()) {
+        return Ok(text);
+    }
+    let text = made(fmt, value, unit, label)?;
+    TEXTS.with(|texts| {
+        let mut texts = texts.borrow_mut();
+        if texts.len() >= TEXTS_KEPT {
+            texts.clear();
+        }
+        texts.insert(key, text.clone());
+    });
+    Ok(text)
+}
+
+/// _made: the text of safe_format, made (errors are not kept).
+fn made(fmt: &str, value: &Value, unit: &str, label: &str) -> Result<String, FormatError> {
     let get = |name: &str| -> Result<Value, FmtError> {
         match name {
             "value" => Ok(value.clone()),

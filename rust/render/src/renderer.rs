@@ -63,6 +63,25 @@ pub struct Options {
 /// What a frame is made of: its pieces in the order they are laid, by widget id.
 type Pieces = Vec<(String, Rc<Piece>)>;
 
+/// The part of the profile a widget's drawing counts in (prof.rs).
+fn prof_name(kind: &str) -> &'static str {
+    match kind {
+        "graph" => "graph",
+        "text" => "text",
+        "metric" => "metric",
+        "clock" => "clock",
+        "bar" => "bar",
+        "gauge" => "gauge",
+        "list" => "list",
+        "icon" => "icon",
+        "rect" => "rect",
+        "image" => "image",
+        "fan" => "fan",
+        "weather" => "weather",
+        _ => "other widget",
+    }
+}
+
 /// What a card slot shows: its id, the card on show, its frame's colour (None: none chosen) and
 /// thickness.
 pub type SlotShown = (String, String, Option<[i64; 3]>, i64);
@@ -114,11 +133,12 @@ pub struct Renderer {
     pub options: Options,
     pub(crate) dither: bool,
     /// the widgets to draw: the theme's, its modules replaced by their parts
-    pub widgets: Vec<Dict>,
+    /// (kept behind Rcs: a frame walks them without copying them)
+    pub widgets: Rc<Vec<Rc<Dict>>>,
     /// the box of each module, for the editor
     pub module_boxes: IndexMap<String, [i64; 4]>,
     /// the theme's modules by id
-    modules: IndexMap<String, Dict>,
+    modules: IndexMap<String, Rc<Dict>>,
     /// the background picture at the theme's size (with its gradient), None for none
     background: Option<Image>,
     /// whether the background's picture is one Rust does not read (UNREAD)
@@ -126,10 +146,30 @@ pub struct Renderer {
     /// frames start from an opaque colour: pieces go on with a paste in place, in RGB
     opaque: bool,
     mode: Mode,
+    /// the ground of the frames, made once (the background changes it: made again then)
+    ground_kept: Option<Image>,
+    /// the frame composed last and its pieces: the next frame composes anew only where its
+    /// pieces differ (the same pixels as composing all of it)
+    composed: Option<(Image, Pieces)>,
+    /// what lies under the pieces that change, by region (_underlays)
+    underlays: compose::Underlays,
+    /// the frames render_shared hands out, two in turn: the one shown last stays the panel's
+    /// while the next is laid into the other, there only where the frame changed since
+    frames: [Option<Rc<Image>>; 2],
+    /// for each of `frames`, where the frame changed since it was laid (None: anywhere)
+    behind: [Option<Vec<compose::Area>>; 2],
+    /// which of `frames` is laid next
+    turn: usize,
+    /// where the frame drawn last differs from the one before it (None: anywhere, or not known)
+    pub changed: Option<Vec<compose::Area>>,
+    /// this renderer among all made, and how many frames it drew: a frame's `changed` holds
+    /// for the frame drawn just before it by the same renderer
+    pub serial: u64,
+    pub renders: u64,
     /// the person's choice of the theme's switches (one not chosen is as the theme has it)
     pub switches: IndexMap<String, bool>,
     /// the readings it drew last (the cover's colour)
-    snapshot: Option<Snapshot>,
+    snapshot: Option<Rc<Snapshot>>,
     warnings: RefCell<Vec<String>>,
     /// each widget's finished piece, while it and what it shows stay the same
     pub(crate) cache: HashMap<String, (Value, Rc<Piece>)>,
@@ -143,7 +183,21 @@ pub struct Renderer {
     /// it; vivid where it does not, as Python's renderer has it)
     pub symbols: String,
     /// each graph's own range as it glides (_ranges), by id: its end dot lies in it
-    ranges: HashMap<String, graph::Glide>,
+    pub(crate) ranges: HashMap<String, graph::Glide>,
+    /// each graph's strip in video mode (_strips), by id, and how many were drawn
+    pub(crate) strips: HashMap<String, crate::timeline::Strips>,
+    pub(crate) strip_count: u64,
+    /// lit rings' grooves, their whole sweeps lit and their starts' light, kept (lit.py's
+    /// _PICTURES for rings)
+    pub(crate) ring_pictures: RefCell<HashMap<String, Rc<Image>>>,
+    /// the letters' pictures kept (_glyphs)
+    pub(crate) glyphs: RefCell<crate::text::Glyphs>,
+    /// graphs that step a reading at a time and rest between (config.toml's graph_steps: the
+    /// loop sets it), and when the reading before the last came (new_sample)
+    pub graph_steps: bool,
+    pub sample_before: Option<f64>,
+    /// whether a reading came since the renderer was made
+    pub(crate) sampled: bool,
     /// the slot of every module that shows one card of several, by its id (_slots)
     slots: IndexMap<String, Slot>,
     /// whether this frame's slots have chosen their cards
@@ -276,6 +330,9 @@ pub(crate) fn spring_key(w: &Dict) -> String {
     }
 }
 
+/// A frame shared (render_shared), and the boxes its widgets took.
+pub type Shared = (Rc<Image>, IndexMap<String, [i64; 4]>);
+
 impl Renderer {
     pub fn new(theme: Theme, env: &Env, options: Options) -> Result<Renderer> {
         let expanded = lp_theme::modules::expand(&theme, env).map_err(|e| Failed(e.msg.clone()))?;
@@ -283,7 +340,7 @@ impl Renderer {
             .widgets
             .iter()
             .filter(|w| widget::text(w, "type") == "module")
-            .map(|w| (widget::text(w, "id").to_string(), w.clone()))
+            .map(|w| (widget::text(w, "id").to_string(), Rc::new(w.clone())))
             .collect();
         let mut renderer = Renderer {
             theme,
@@ -291,13 +348,29 @@ impl Renderer {
             options,
             dither: options.dither,
             // (finish.py's attach: the widgets as their finishes keep them)
-            widgets: expanded.widgets.into_iter().map(finish::kept).collect(),
+            widgets: Rc::new(
+                (expanded.widgets.into_iter())
+                    .map(|w| Rc::new(finish::kept(w)))
+                    .collect(),
+            ),
             module_boxes: expanded.boxes,
             modules,
             background: None,
             ground_unread: false,
             opaque: false,
             mode: Mode::RGBA,
+            ground_kept: None,
+            composed: None,
+            underlays: compose::Underlays::default(),
+            frames: [None, None],
+            behind: [None, None],
+            turn: 0,
+            changed: None,
+            serial: {
+                static SERIAL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+                SERIAL.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            },
+            renders: 0,
             switches: IndexMap::new(),
             snapshot: None,
             warnings: RefCell::new(Vec::new()),
@@ -307,6 +380,13 @@ impl Renderer {
             facet_glyphs: RefCell::new(HashMap::new()),
             symbols: crate::symbols::DEFAULT_PACK.to_string(),
             ranges: HashMap::new(),
+            strips: HashMap::new(),
+            strip_count: 0,
+            ring_pictures: RefCell::new(HashMap::new()),
+            glyphs: RefCell::new(crate::text::Glyphs::default()),
+            graph_steps: false,
+            sample_before: None,
+            sampled: false,
             slots: IndexMap::new(),
             slots_begun: false,
             slots_warm: false,
@@ -482,7 +562,7 @@ impl Renderer {
     /// The readings what is drawn over the frame takes its pictures of, as a frame drawn of
     /// them leaves them (renderer.snapshot).
     pub fn set_snapshot(&mut self, snapshot: Snapshot) {
-        self.snapshot = Some(snapshot);
+        self.snapshot = Some(Rc::new(snapshot));
     }
 
     /// _reads: the sensor keys (and patterns) the widgets read: their sensors, marks and fine
@@ -490,7 +570,7 @@ impl Renderer {
     /// field, a list's items and the pictures an image widget takes from a source.
     pub fn reads(&self) -> std::collections::HashSet<String> {
         let mut keys = std::collections::HashSet::new();
-        for w in &self.widgets {
+        for w in self.widgets.iter() {
             for field in ["sensor", "mark", "trace"] {
                 let key = widget::text(w, field);
                 if !key.is_empty() {
@@ -791,6 +871,10 @@ impl Renderer {
     pub fn set_backdrop(&mut self, backdrop: Option<Image>) -> Result<()> {
         self.backdrop = backdrop;
         self.background = self.load_background()?;
+        self.ground_kept = None;
+        self.composed = None;
+        self.behind = [None, None];
+        self.underlays.clear();
         Ok(())
     }
 
@@ -966,19 +1050,19 @@ impl Renderer {
     }
 
     /// A widget's piece, or why it has none.
-    fn draw(&mut self, w: &Dict) -> Drawn {
+    fn draw(&mut self, w: &Rc<Dict>) -> Drawn {
         let made = match widget::text(w, "type") {
             "rect" => {
-                let w = w.clone();
+                let w = Rc::clone(w);
                 self.cached(&w, Value::None, |r| r.rect_piece(&w))
             }
             "text" => {
-                let w = w.clone();
+                let w = Rc::clone(w);
                 let text = self.text_of(&w);
                 self.text_widget(&w, text, widget::text(&w, "color").to_string())
             }
             "icon" => {
-                let w = w.clone();
+                let w = Rc::clone(w);
                 let snapshot = self.snapshot.clone().unwrap_or_default();
                 let name = Self::icon_name(&w, &snapshot);
                 // (LitIcon: a weather's icon as its symbol, lit, where it is large enough)
@@ -1019,7 +1103,7 @@ impl Renderer {
                 }
             }
             "weather" => {
-                let w = w.clone();
+                let w = Rc::clone(w);
                 let snapshot = self.snapshot.clone().unwrap_or_default();
                 let key = format!("weather.{}", widget::text(&w, "field"));
                 let text = match self.format_reading(&w, &key, snapshot.readings.get(&key)) {
@@ -1029,7 +1113,7 @@ impl Renderer {
                 self.text_widget(&w, text, widget::text(&w, "color").to_string())
             }
             "countdown" => {
-                let w = w.clone();
+                let w = Rc::clone(w);
                 let now = self.now();
                 let (target, part) = (widget::text(&w, "target"), widget::text(&w, "part"));
                 let text =
@@ -1041,7 +1125,7 @@ impl Renderer {
                 self.text_widget(&w, text, widget::text(&w, "color").to_string())
             }
             "clock" => {
-                let w = w.clone();
+                let w = Rc::clone(w);
                 let now = match self.time_of(&w) {
                     Ok(now) => now,
                     Err(drawn) => return drawn,
@@ -1051,7 +1135,9 @@ impl Renderer {
                     Err(drawn) => return drawn,
                 };
                 let colour = widget::text(&w, "color").to_string();
-                let resting = self.text_widget(&w, text.clone(), colour.clone());
+                let resting = crate::prof::part("clock text", || {
+                    self.text_widget(&w, text.clone(), colour.clone())
+                });
                 // (in a moving frame, for digits_seconds after the second turns, what changed
                 // rolls or fades from the text of the second before)
                 let kind = widget::optional(&w, "digits").unwrap_or("jump");
@@ -1077,12 +1163,16 @@ impl Renderer {
                         resting
                     } else {
                         let e = 1.0 - (1.0 - p).powf(3.0);
-                        match self.changing(&w, &before, &text, &colour, e, kind) {
+                        let changing = crate::prof::part("clock roll", || {
+                            self.changing(&w, &before, &text, &colour, e, kind)
+                        });
+                        match changing {
                             Ok(None) => resting,
                             Ok(Some(piece)) => {
                                 // (never kept: it is another one every frame)
                                 self.moving = true;
-                                self.effects(&w, piece).map(Rc::new)
+                                crate::prof::part("clock glow", || self.effects(&w, piece))
+                                    .map(Rc::new)
                             }
                             Err(e) => Err(e),
                         }
@@ -1090,7 +1180,7 @@ impl Renderer {
                 }
             }
             "analog" => {
-                let w = w.clone();
+                let w = Rc::clone(w);
                 let now = match self.time_of(&w) {
                     Ok(now) => now,
                     Err(drawn) => return drawn,
@@ -1114,11 +1204,11 @@ impl Renderer {
                 }
             }
             "earth" => {
-                let w = w.clone();
+                let w = Rc::clone(w);
                 return self.earth_widget(&w);
             }
             "calendar" => {
-                let w = w.clone();
+                let w = Rc::clone(w);
                 let now = self.now();
                 let today = now.midnight();
                 let content = Value::List(vec![
@@ -1131,7 +1221,7 @@ impl Renderer {
                 self.cached(&w, content, |r| r.calendar_piece(&w, &today))
             }
             "agent" => {
-                let w = w.clone();
+                let w = Rc::clone(w);
                 let snapshot = self.snapshot.clone().unwrap_or_default();
                 let state = match snapshot.value(widget::text(&w, "sensor")) {
                     Value::Str(s) if matches!(s.as_str(), "working" | "waiting" | "idle") => s,
@@ -1169,7 +1259,7 @@ impl Renderer {
                 })
             }
             "sunpath" => {
-                let w = w.clone();
+                let w = Rc::clone(w);
                 let snapshot = self.snapshot.clone().unwrap_or_default();
                 let at = match sunpath::step(&snapshot.value(widget::text(&w, "sensor"))) {
                     Ok(at) => at,
@@ -1188,7 +1278,7 @@ impl Renderer {
                 self.cached(&w, way.content(), |_| way.piece())
             }
             "bar" => {
-                let w = w.clone();
+                let w = Rc::clone(w);
                 if !["min", "max", "glide_ms"]
                     .iter()
                     .all(|k| widget::exact(&w, k))
@@ -1227,7 +1317,7 @@ impl Renderer {
                 }
             }
             "gauge" => {
-                let w = w.clone();
+                let w = Rc::clone(w);
                 let numbers = ["min", "max", "start_angle", "end_angle", "glide_ms"];
                 if !numbers.iter().all(|k| widget::exact(&w, k)) {
                     return Drawn::Unported("numbers a float does not hold as they are".into());
@@ -1264,11 +1354,12 @@ impl Renderer {
                 }
             }
             "metric" => {
-                let w = w.clone();
+                let w = Rc::clone(w);
                 let snapshot = self.snapshot.clone().unwrap_or_default();
                 // (_metric: whether this metric moves, apart from what moved before it)
                 let before = std::mem::replace(&mut self.moving, false);
-                let (text, colour) = match self.metric_text(&w, &snapshot) {
+                let shown = crate::prof::part("metric text", || self.metric_text(&w, &snapshot));
+                let (text, colour) = match shown {
                     Ok(Shown::Text(text, colour)) => (text, colour),
                     Ok(Shown::Unported(what)) => return Drawn::Unported(what.into()),
                     Err(e) => {
@@ -1286,11 +1377,11 @@ impl Renderer {
                 drawn
             }
             "image" => {
-                let w = w.clone();
+                let w = Rc::clone(w);
                 return self.image_widget(&w);
             }
             "graph" => {
-                let w = w.clone();
+                let w = Rc::clone(w);
                 let snapshot = self.snapshot.clone().unwrap_or_default();
                 // (a course published whole: across the width, its range the values' own)
                 if let Some(course) = graph::course_of(&snapshot.value(widget::text(&w, "sensor")))
@@ -1312,6 +1403,9 @@ impl Renderer {
                     self.cached(&w, content, |r| {
                         r.graph_piece(&w, &course, slots, range.as_ref())
                     })
+                } else if self.continuous {
+                    // (video mode: a window cut from the strip drawn ahead, every frame)
+                    self.timeline(&w, &snapshot)
                 } else {
                     let (values, slots) = graph::history_of(&snapshot, &w);
                     let numbers: Vec<f64> = values.iter().flatten().copied().collect();
@@ -1337,7 +1431,7 @@ impl Renderer {
                 }
             }
             "list" => {
-                let w = w.clone();
+                let w = Rc::clone(w);
                 // (bars gliding to a reading: motion; fans turn on their names in a moving
                 // frame, and stand in a still one)
                 let fans = widget::text(&w, "style") == "fans";
@@ -1381,7 +1475,7 @@ impl Renderer {
                         Err(e) => return Drawn::Failed(e),
                     };
                     let wid = widget::text(&w, "id").to_string();
-                    let mut apart = w.clone();
+                    let mut apart = (*w).clone();
                     apart.insert("id".into(), format!("{wid}\0levels").into());
                     self.bars_drawn.borrow_mut().take();
                     let levels = match self.cached(&apart, list::rows_key(&rows), |r| {
@@ -1414,7 +1508,7 @@ impl Renderer {
                 }
             }
             "symbol" => {
-                let w = w.clone();
+                let w = Rc::clone(w);
                 // (moving with the planned time of the frame, a step a 25th of a second)
                 let live = widget::truthy(&w, "moving") && self.options.animate;
                 let offset = widget::number(&w, "offset", 0.0);
@@ -1441,7 +1535,7 @@ impl Renderer {
                 self.cached(&w, content, |r| r.symbol_piece(&w, &snapshot, lit, t))
             }
             "moon" => {
-                let w = w.clone();
+                let w = Rc::clone(w);
                 let snapshot = self.snapshot.clone().unwrap_or_default();
                 let Some(phase) = number(&snapshot.value(widget::text(&w, "sensor"))) else {
                     return Drawn::Nothing;
@@ -1469,7 +1563,7 @@ impl Renderer {
                 }
             }
             "fan" => {
-                let w = w.clone();
+                let w = Rc::clone(w);
                 let snapshot = self.snapshot.clone().unwrap_or_default();
                 let sensor = widget::text(&w, "sensor");
                 // (the widget's look and paint, else the person's for its sensor or all, else
@@ -1538,7 +1632,7 @@ impl Renderer {
                 })
             }
             "downloads" => {
-                let w = w.clone();
+                let w = Rc::clone(w);
                 let snapshot = self.snapshot.clone().unwrap_or_default();
                 let lit = finish::of(&w) == Finish::LitDownloads;
                 return self.download(&w, lit, &snapshot, self.at);
@@ -1708,12 +1802,35 @@ impl Renderer {
         snapshot: Snapshot,
         now: f64,
     ) -> std::result::Result<(Image, IndexMap<String, [i64; 4]>), Unported> {
+        let (frame, boxes) = self.drawn(snapshot, now, false)?;
+        Ok((Rc::unwrap_or_clone(frame), boxes))
+    }
+
+    /// render, the frame shared: laid into one of two kept frames where it changed (see
+    /// `changed`), not copied whole each time.
+    pub fn render_shared(
+        &mut self,
+        snapshot: Snapshot,
+        now: f64,
+    ) -> std::result::Result<Shared, Unported> {
+        self.drawn(snapshot, now, true)
+    }
+
+    fn drawn(
+        &mut self,
+        snapshot: Snapshot,
+        now: f64,
+        shared: bool,
+    ) -> std::result::Result<Shared, Unported> {
+        let begun = std::time::Instant::now();
+        self.renders += 1;
+        self.changed = None;
         self.slots_begun = false;
         self.at = now;
         if let Some(what) = self.beyond_widgets() {
             return Err(Unported(what.into()));
         }
-        let snapshot = snapshot.finite();
+        let snapshot = Rc::new(snapshot.finite());
         if !self.slots.is_empty()
             && self.options.animate
             && !self.options.preview
@@ -1723,7 +1840,7 @@ impl Renderer {
             self.slots_warm = true;
             self.warm_slots(&snapshot, now)?;
         }
-        self.snapshot = Some(snapshot.clone());
+        self.snapshot = Some(Rc::clone(&snapshot));
         // (Motion.begin: the springs of values long gone go, the others forget old pieces)
         self.moving = false;
         self.due = None;
@@ -1747,8 +1864,9 @@ impl Renderer {
         // the turned widgets' turns, and the turned modules' ("<id>/")
         let mut turns: IndexMap<String, Turn> = IndexMap::new();
         let mut gone: HashMap<String, bool> = HashMap::new();
-        let widgets = self.widgets.clone();
-        for w in &widgets {
+        let widgets = Rc::clone(&self.widgets);
+        crate::prof::add("render begin", begun.elapsed());
+        for w in widgets.iter() {
             if !widget::flag(w, "visible", true) {
                 continue;
             }
@@ -1799,7 +1917,12 @@ impl Renderer {
                         Err(e) => Drawn::Failed(e),
                     }
                 }
-                _ => self.draw(w),
+                _ => {
+                    let began = std::time::Instant::now();
+                    let drawn = self.draw(w);
+                    crate::prof::add(prof_name(widget::text(w, "type")), began.elapsed());
+                    drawn
+                }
             };
             let piece = match drawn {
                 Drawn::Piece(piece) => piece,
@@ -1827,7 +1950,7 @@ impl Renderer {
                 _ => piece,
             };
             pieces.push((id.clone(), piece.clone()));
-            if let Some(turn) = self.turn_of(w, module.as_ref(), &piece)? {
+            if let Some(turn) = self.turn_of(w, module.as_deref(), &piece)? {
                 turns.insert(id.clone(), turn);
                 if let Some(module) = &module {
                     // (and its frame and line of light, over its cards)
@@ -1862,9 +1985,8 @@ impl Renderer {
             } else if widget::text(w, "type") == "graph" && widget::truthy(w, "end_dot") {
                 // (what lies over a graph: its end dot)
                 let refused = |e: Failed| Unported(format!("a graph's end dot: {}", e.0));
-                if let Some((plain, content, made)) =
-                    self.graph_dot(w, &snapshot).map_err(refused)?
-                {
+                let dot = crate::prof::part("graph dot", || self.graph_dot(w, &snapshot));
+                if let Some((plain, content, made)) = dot.map_err(refused)? {
                     let made = self
                         .cached(&plain, content, |_| Ok(made))
                         .map_err(refused)?;
@@ -1889,6 +2011,7 @@ impl Renderer {
             }
             boxes.insert(id, piece.bounds());
         }
+        let ending = crate::prof::Span::new("render end");
         // the slots' frames, over their cards
         let mut slots = std::mem::take(&mut self.slots);
         let laid = slots
@@ -1896,6 +2019,9 @@ impl Renderer {
             .try_for_each(|slot| slot.overlay(&self.theme, &mut pieces));
         self.slots = slots;
         laid.map_err(|Failed(e)| Unported(format!("a card slot's frame failed: {e}")))?;
+        if !self.strips.is_empty() {
+            self.forget_strips(now);
+        }
         if !turns.is_empty() || !self.turned.is_empty() {
             self.turn_pieces(&mut pieces, &turns, &mut boxes)?;
         }
@@ -1906,12 +2032,14 @@ impl Renderer {
                 == (self.theme.width as usize, self.theme.height as usize);
             if pieces.is_empty() && screen.mode() == Mode::RGB && whole {
                 // an opaque screen alone is the frame: nothing to compose
-                return Ok((Rc::unwrap_or_clone(screen), boxes));
+                self.behind = [None, None];
+                return Ok((screen, boxes));
             }
             pieces.insert(0, ("\0screen".to_string(), self.screen_piece(screen)?));
         }
-        let canvas = self.compose(&pieces)?;
-        Ok((compose::as_rgb(&canvas)?, boxes))
+        drop(ending);
+        let frame = crate::prof::part("compose", || self.compose(pieces, shared))?;
+        Ok((frame, boxes))
     }
 
     /// _whole_video: the video of this frame (its file, how it is fitted, its speed) where the
@@ -2057,13 +2185,110 @@ impl Renderer {
     }
 
     /// _compose (the first frame, or keep_static off: the whole of it from the ground up).
-    fn compose(&mut self, pieces: &Pieces) -> Result<Image> {
-        let mut part = self.ground()?;
-        for (id, piece) in pieces {
-            if let Err(Failed(e)) = compose::composite(&mut part, piece, (0, 0), self.opaque) {
-                self.warn(format!("widget {} failed: {e}", lp_py::repr(id)));
+    /// _compose: the pieces laid on the ground in their order, as the frame (RGB). Where the
+    /// frame before had the same pieces in the same order, only the boxes of those that
+    /// changed are laid again (from the ground up, each piece over them in its order): the
+    /// same pixels as laying all of them, at a fraction of the cost.
+    fn compose(&mut self, pieces: Pieces, shared: bool) -> Result<Rc<Image>> {
+        if self.ground_kept.is_none() {
+            self.ground_kept = Some(self.ground()?);
+        }
+        let ground = self.ground_kept.as_ref().expect("made above");
+        let size = ground.size();
+        let areas = match self.composed.take() {
+            Some((canvas, before)) if canvas.size() == size && canvas.mode() == ground.mode() => {
+                crate::prof::part("compose changed", || {
+                    compose::changed(&before, &pieces, size)
+                })
+                .map(|areas| (canvas, areas))
+            }
+            _ => None,
+        };
+        let mut failed = Vec::new();
+        self.underlays.next_frame();
+        let mut changed = None;
+        let canvas = match areas {
+            Some((mut canvas, (areas, moved))) => {
+                changed = Some(areas.clone());
+                for area in areas {
+                    compose::lay_again(
+                        &mut canvas,
+                        ground,
+                        &pieces,
+                        &moved,
+                        area,
+                        self.opaque,
+                        &mut self.underlays,
+                        &mut failed,
+                    );
+                }
+                canvas
+            }
+            None => {
+                let mut canvas = ground.clone();
+                for (id, piece) in &pieces {
+                    if let Err(Failed(e)) =
+                        compose::composite(&mut canvas, piece, (0, 0), self.opaque)
+                    {
+                        failed.push((id.clone(), e));
+                    }
+                }
+                canvas
+            }
+        };
+        for (id, e) in failed {
+            self.warn(format!("widget {} failed: {e}", lp_py::repr(&id)));
+        }
+        let frame = crate::prof::part("compose rgb", || match shared {
+            true => self.shared_frame(&canvas, changed.as_deref()),
+            false => {
+                self.behind = [None, None];
+                Ok(Rc::new(compose::as_rgb(&canvas)?))
+            }
+        })?;
+        self.changed = changed;
+        self.composed = Some((canvas, pieces));
+        Ok(frame)
+    }
+
+    /// The frame of `canvas` (RGB) in one of the two kept frames, laid where it changed since
+    /// that one was laid: `changed` is where the canvas changed since the frame before. A kept
+    /// frame still held elsewhere is made anew.
+    fn shared_frame(
+        &mut self,
+        canvas: &Image,
+        changed: Option<&[compose::Area]>,
+    ) -> Result<Rc<Image>> {
+        if canvas.mode() != Mode::RGB {
+            self.frames = [None, None];
+            self.behind = [None, None];
+            return Ok(Rc::new(compose::as_rgb(canvas)?));
+        }
+        for behind in &mut self.behind {
+            match (behind.as_mut(), changed) {
+                (Some(list), Some(areas)) if list.len() + areas.len() <= 64 => {
+                    list.extend_from_slice(areas);
+                }
+                _ => *behind = None,
             }
         }
-        Ok(part)
+        let k = self.turn;
+        self.turn = 1 - k;
+        let size = canvas.size();
+        let kept = self.frames[k]
+            .as_mut()
+            .and_then(Rc::get_mut)
+            .filter(|frame| frame.size() == size);
+        match (kept, &self.behind[k]) {
+            (Some(frame), Some(areas)) => {
+                for &area in areas {
+                    compose::copy_area(frame, canvas, area);
+                }
+            }
+            (Some(frame), None) => compose::copy_area(frame, canvas, (0, 0, i64::MAX, i64::MAX)),
+            (None, _) => self.frames[k] = Some(Rc::new(canvas.clone())),
+        }
+        self.behind[k] = Some(Vec::new());
+        Ok(Rc::clone(self.frames[k].as_ref().expect("laid above")))
     }
 }

@@ -904,7 +904,13 @@ struct Kept {
     drops: HashMap<char, i64>,
     own: Option<Option<Arc<Coverage>>>,
     heavy: Option<bool>,
+    /// getlength of texts measured the plain way (no mode, direction, features or language):
+    /// a renderer measures the same digits and labels every frame.
+    lengths: HashMap<String, f64>,
 }
+
+/// How many plain measurements a font keeps before it starts again.
+const LENGTHS_KEPT: usize = 4096;
 
 /// FallbackFont: a FreeType face that draws a character it has no glyph for with a system
 /// font. getlength, getbbox and getmask2 know the runs, so every way ImageDraw draws and
@@ -940,6 +946,36 @@ impl FallbackFont {
             crate::truetype(path, size, index, "", layout)?,
             None,
         ))
+    }
+
+    /// getlength without the kept lengths.
+    fn measure(
+        &self,
+        text: &str,
+        mode: &str,
+        direction: Option<&str>,
+        features: Option<&[String]>,
+        language: Option<&str>,
+    ) -> Result<f64> {
+        let plan = if text.is_ascii() {
+            None
+        } else {
+            self.runs(text, direction)
+        };
+        let Some(plan) = plan else {
+            return self
+                .font
+                .getlength(text, mode, direction, features, language);
+        };
+        let mut lengths = Vec::with_capacity(plan.len());
+        for (spec, run) in &plan {
+            let face = self
+                .face(spec)
+                .ok_or_else(|| Error::new(Kind::Os, "a face of the plan"))?;
+            lengths.push(face.getlength(run, mode, direction, features, language)?);
+        }
+        // (summed as Python's sum() sums floats: without the loss of each step, since 3.12)
+        Ok(lp_py::sum_floats(lengths))
     }
 
     fn own_coverage(&self) -> Option<Arc<Coverage>> {
@@ -1238,25 +1274,22 @@ impl TextFace for FallbackFont {
         features: Option<&[String]>,
         language: Option<&str>,
     ) -> Result<f64> {
-        let plan = if text.is_ascii() {
-            None
-        } else {
-            self.runs(text, direction)
-        };
-        let Some(plan) = plan else {
-            return self
-                .font
-                .getlength(text, mode, direction, features, language);
-        };
-        let mut lengths = Vec::with_capacity(plan.len());
-        for (spec, run) in &plan {
-            let face = self
-                .face(spec)
-                .ok_or_else(|| Error::new(Kind::Os, "a face of the plan"))?;
-            lengths.push(face.getlength(run, mode, direction, features, language)?);
+        let plain =
+            mode.is_empty() && direction.is_none() && features.is_none() && language.is_none();
+        if plain {
+            if let Some(&length) = self.kept.borrow().lengths.get(text) {
+                return Ok(length);
+            }
         }
-        // (summed as Python's sum() sums floats: without the loss of each step, since 3.12)
-        Ok(lp_py::sum_floats(lengths))
+        let length = self.measure(text, mode, direction, features, language)?;
+        if plain {
+            let mut kept = self.kept.borrow_mut();
+            if kept.lengths.len() >= LENGTHS_KEPT {
+                kept.lengths.clear();
+            }
+            kept.lengths.insert(text.to_string(), length);
+        }
+        Ok(length)
     }
 
     fn getbbox(

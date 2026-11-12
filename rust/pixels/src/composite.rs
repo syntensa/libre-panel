@@ -45,6 +45,28 @@ pub fn alpha_composite(dst: &Image, src: &Image) -> Result<Image> {
     Ok(out)
 }
 
+/// Image.alpha_composite(dst, tint) in place, `tint` an RGBA picture of one colour whose alpha
+/// is `alpha` (one byte a pixel, row by row): the same bytes, without making the tint.
+pub fn tint_over(dst: &mut Image, colour: [u8; 3], alpha: &[u8]) -> Result<()> {
+    if dst.mode != Mode::RGBA {
+        return error("image has wrong mode");
+    }
+    if alpha.len() != dst.width * dst.height {
+        return error("images do not match");
+    }
+    let mut src = [colour[0], colour[1], colour[2], 0];
+    let mut was = [0u8; 4];
+    for (d, &a) in dst.data.chunks_exact_mut(4).zip(alpha) {
+        if a == 0 {
+            continue; // (over_pixel leaves it as it is)
+        }
+        src[3] = a;
+        was.copy_from_slice(d);
+        over_pixel(&was, &src, d);
+    }
+    Ok(())
+}
+
 impl Image {
     /// Image.alpha_composite(im, dest, source) in place: the part of ``im`` from
     /// ``source`` (left, top, and right, bottom: Image.py takes im's own size where only two are
@@ -62,15 +84,16 @@ impl Image {
         if sx0.min(sy0).min(sx1).min(sy1) < 0 {
             return error("Source must be non-negative");
         }
-        let whole = (0, 0, im.width as i64, im.height as i64);
+        let inside = sx1 <= im.width as i64 && sy1 <= im.height as i64 && sx0 <= sx1 && sy0 <= sy1;
         let cropped;
-        let overlay = if source == whole {
-            im
+        let (overlay, ox, oy, w, h) = if inside {
+            // (the part read where it is: Image.py's crop of it holds the same pixels)
+            (im, sx0, sy0, sx1 - sx0, sy1 - sy0)
         } else {
             cropped = im.crop(sx0, sy0, sx1, sy1);
-            &cropped
+            let (w, h) = (cropped.width as i64, cropped.height as i64);
+            (&cropped, 0, 0, w, h)
         };
-        let (w, h) = (overlay.width as i64, overlay.height as i64);
         let (dx, dy) = dest;
         // the part of the overlay that lands on this image (Image.py composites the crop of
         // this image at the box and pastes it back, which keeps only that part)
@@ -79,13 +102,22 @@ impl Image {
         if x0 >= x1 || y0 >= y1 {
             return Ok(());
         }
+        let n = (x1 - x0) as usize * 4;
         let mut pixel = [0u8; 4];
         for y in y0..y1 {
-            for x in x0..x1 {
-                let s = ((y - dy) as usize * overlay.width + (x - dx) as usize) * 4;
-                let d = (y as usize * self.width + x as usize) * 4;
-                over_pixel(&self.data[d..d + 4], &overlay.data[s..s + 4], &mut pixel);
-                self.data[d..d + 4].copy_from_slice(&pixel);
+            let s = ((y - dy + oy) as usize * overlay.width + (x0 - dx + ox) as usize) * 4;
+            let d = (y as usize * self.width + x0 as usize) * 4;
+            let from = &overlay.data[s..s + n];
+            let to = &mut self.data[d..d + n];
+            for (out, src) in to.chunks_exact_mut(4).zip(from.chunks_exact(4)) {
+                match src[3] {
+                    0 => {}                          // (it stays as it is)
+                    255 => out.copy_from_slice(src), // (exactly the source, opaque)
+                    _ => {
+                        over_pixel(out, src, &mut pixel);
+                        out.copy_from_slice(&pixel);
+                    }
+                }
             }
         }
         Ok(())

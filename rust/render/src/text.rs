@@ -47,6 +47,70 @@ pub(crate) enum Ink {
     Unknown,
 }
 
+/// The letters' pictures kept (_glyphs): by font, character, ink, fraction of a pixel (to four
+/// places), pad and height; the most recently used while they hold at most GLYPH_BYTES.
+#[derive(Default)]
+pub(crate) struct Glyphs {
+    kept: HashMap<GlyphKey, KeptGlyph>,
+    bytes: usize,
+    clock: u64,
+}
+
+type GlyphKey = (usize, char, [u8; 4], u64, i64, i64);
+
+/// A letter's picture kept, where its ink lies, its bytes and when it was last used; with its
+/// font, so that no other font takes its place in memory while it is kept.
+struct KeptGlyph {
+    _font: Rc<FallbackFont>,
+    image: Image,
+    ink: Ink,
+    bytes: usize,
+    used: u64,
+}
+
+/// What the letters' pictures may hold (GLYPH_BYTES: a digit of 60 px is about 10 kB).
+const GLYPH_BYTES: usize = 4 * 1024 * 1024;
+
+impl Glyphs {
+    fn get(&mut self, key: &GlyphKey) -> Option<(Image, Ink)> {
+        self.clock += 1;
+        let clock = self.clock;
+        self.kept.get_mut(key).map(|kept| {
+            kept.used = clock;
+            (kept.image.clone(), kept.ink)
+        })
+    }
+
+    fn put(&mut self, key: GlyphKey, font: Rc<FallbackFont>, image: Image, ink: Ink) {
+        self.clock += 1;
+        let bytes = image.as_bytes().len();
+        if let Some(old) = self.kept.remove(&key) {
+            self.bytes -= old.bytes;
+        }
+        // (the least recently used go while they would hold more; the newest always stays)
+        while self.bytes + bytes > GLYPH_BYTES && !self.kept.is_empty() {
+            let oldest = (self.kept.iter())
+                .min_by_key(|(_, kept)| kept.used)
+                .map(|(key, _)| *key);
+            if let Some(oldest) = oldest {
+                if let Some(gone) = self.kept.remove(&oldest) {
+                    self.bytes -= gone.bytes;
+                }
+            }
+        }
+        self.bytes += bytes;
+        let used = self.clock;
+        let kept = KeptGlyph {
+            _font: font,
+            image,
+            ink,
+            bytes,
+            used,
+        };
+        self.kept.insert(key, kept);
+    }
+}
+
 /// The finishes' letters kept: by font, character, quarter pixel and style (None: a blank).
 pub(crate) type FacetGlyphs = RefCell<HashMap<(usize, char, i64, Style), Option<Rc<Glyph>>>>;
 
@@ -279,6 +343,7 @@ impl Renderer {
                 inks.push(Ink::Unknown);
             } else {
                 let (glyph, gx, glyph_ink) = self.glyph(&font, ch, fill, at, margin, lh)?;
+
                 glyphs.push(Some((glyph, gx, 0)));
                 inks.push(glyph_ink);
             }
@@ -300,8 +365,40 @@ impl Renderer {
     }
 
     /// _glyph: `ch` drawn at `at` (its fraction of a pixel counts) on a picture `pad` px wider on
-    /// each side, where its left edge goes, and where its ink lies in it (None: none).
+    /// each side, where its left edge goes, and where its ink lies in it (None: none): kept, so
+    /// the next text with that character in that place costs no rendering (by the fraction to
+    /// four places, as Python keeps it).
     fn glyph(
+        &self,
+        font: &Rc<FallbackFont>,
+        ch: char,
+        fill: [u8; 4],
+        at: f64,
+        pad: i64,
+        h: i64,
+    ) -> Result<(Image, i64, Ink)> {
+        let whole = at.floor();
+        let fraction = lp_py::round_digits(at - whole, 4);
+        let key = (
+            Rc::as_ptr(font) as usize,
+            ch,
+            fill,
+            fraction.to_bits(),
+            pad,
+            h,
+        );
+        if let Some((image, ink)) = self.glyphs.borrow_mut().get(&key) {
+            return Ok((image, whole as i64 - pad, ink));
+        }
+        let (image, left, ink) = self.drawn_glyph(font, ch, fill, at, pad, h)?;
+        self.glyphs
+            .borrow_mut()
+            .put(key, Rc::clone(font), image.clone(), ink);
+        Ok((image, left, ink))
+    }
+
+    /// _glyph, drawn.
+    fn drawn_glyph(
         &self,
         font: &FallbackFont,
         ch: char,

@@ -215,6 +215,8 @@ pub struct MainLoop {
     wants: BTreeSet<String>,
     /// what the themes on show read, as the services' host was told
     theme_reads: BTreeSet<String>,
+    /// what `theme_reads` and the wants were last worked out of (rewant)
+    rewanted: Option<(u64, u64, u64)>,
     toasts: Option<ToastLayer>,
     judged: Arc<Mutex<Judged>>,
     alarm: AlarmEdge,
@@ -226,6 +228,10 @@ pub struct MainLoop {
     /// the frame before toasts, and with them where one showed
     last_frame: Option<Rc<Image>>,
     shown_frame: Option<Rc<Image>>,
+    /// the renderer and its count of frames of the frame the panel showed last, where that
+    /// was the theme's frame as drawn (no transition, message, edge or picture over it): the
+    /// next such frame of that renderer differs from it only where the renderer says
+    shown_drawn: Option<(u64, u64)>,
     /// what the app's Player plays here (player.rs), drawn instead of the theme
     player: crate::player::Screen,
     playing: bool,
@@ -453,6 +459,7 @@ impl MainLoop {
             pages: PageSwitch::new(),
             wants: BTreeSet::new(),
             theme_reads: BTreeSet::new(),
+            rewanted: None,
             toasts: None,
             judged: Arc::default(),
             alarm: AlarmEdge::new(),
@@ -461,6 +468,7 @@ impl MainLoop {
             failed_switches: std::collections::HashSet::new(),
             last_frame: None,
             shown_frame: None,
+            shown_drawn: None,
             player: crate::player::Screen::default(),
             playing: false,
             mirror: crate::mirror::Screen::default(),
@@ -512,6 +520,19 @@ impl MainLoop {
     /// The readings the sources are asked for: those the theme on show reads, those the
     /// services want and those the pages read.
     fn rewant(&mut self, renderer: &Renderer) {
+        // (worked out again only where what it is made of changed: the renderer, what the
+        // services read, the pages' own)
+        let pages = {
+            use std::hash::{Hash, Hasher};
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            self.pages.reads.hash(&mut hasher);
+            hasher.finish()
+        };
+        let made_of = (renderer.serial, self.host.wanted_version(), pages);
+        if self.rewanted == Some(made_of) {
+            return;
+        }
+        self.rewanted = Some(made_of);
         let mut wants: BTreeSet<String> = self.host.wanted();
         let mut shown: BTreeSet<String> = (self.pages.reads.iter())
             .map(|key| (*key).to_string())
@@ -1094,7 +1115,7 @@ impl MainLoop {
 
     /// The frame made the panel's size where the theme is another (fit_frame: scaled into it,
     /// the theme's background round it).
-    fn fitted(&self, frame: Image, renderer: &Renderer) -> Result<Image, String> {
+    fn fitted(&self, frame: Rc<Image>, renderer: &Renderer) -> Result<Rc<Image>, String> {
         let mut frame = frame;
         if let Some(model) = self.model() {
             let (width, height) = model.size(renderer.theme.orientation());
@@ -1105,9 +1126,11 @@ impl MainLoop {
                     .map_err(|e| e.0)?
                     .unwrap_or([0, 0, 0, 255]);
                 let colour: Vec<u8> = ground[..3].iter().map(|c| *c as u8).collect();
-                frame = frame
-                    .pad(size, Filter::Lanczos, Some(&colour), (0.5, 0.5))
-                    .map_err(|e| e.to_string())?;
+                frame = Rc::new(
+                    frame
+                        .pad(size, Filter::Lanczos, Some(&colour), (0.5, 0.5))
+                        .map_err(|e| e.to_string())?,
+                );
             }
         }
         Ok(frame)
@@ -1118,26 +1141,26 @@ impl MainLoop {
         if let Ok(mut status) = self.status.lock() {
             let asked = status.live_asked;
             let wanted = asked.is_some_and(|at| at.elapsed().as_secs_f64() < LIVE_HOLD_S);
-            status.shown = wanted.then(|| Arc::new(frame.clone()));
+            status.shown = wanted.then(|| Arc::new((*frame).clone()));
         }
     }
 
     /// The frame as it goes out: upside down on a panel mounted so.
-    fn turned(&self, frame: Image) -> Image {
+    fn turned(&self, frame: Rc<Image>) -> Rc<Image> {
         let on_panel = self.panel.as_ref().is_some_and(Display::on_panel);
         match on_panel && self.config.device.rotate == 180 {
-            true => frame.transpose(Transpose::Rotate180),
+            true => Rc::new(frame.transpose(Transpose::Rotate180)),
             false => frame,
         }
     }
 
     /// The frame as the panel shows it: the transition under way, the message on show and the
     /// alarm's edge over the theme's own.
-    fn dressed_frame(&mut self, frame: Image, renderer: &Renderer, now: f64) -> Image {
+    fn dressed_frame(&mut self, frame: Rc<Image>, renderer: &Renderer, now: f64) -> Rc<Image> {
         let mut frame = frame;
         if let Some(mut blend) = self.blend.take() {
-            let (shown, goes_on, failed) = blend.frame(frame, now, renderer);
-            frame = shown;
+            let (shown, goes_on, failed) = blend.frame(Rc::unwrap_or_clone(frame), now, renderer);
+            frame = Rc::new(shown);
             if let Some(why) = failed {
                 say(&format!("transition {} failed: {why}", blend.kind.name));
             }
@@ -1151,26 +1174,29 @@ impl MainLoop {
             .as_ref()
             .is_some_and(|blend| blend.kind.toasts == "hide");
         self.shown_frame = None;
+        // (the frame is shared: what the panel showed last is kept for the transitions and
+        // the plugins without a copy)
         if let Some(toasts) = &mut self.toasts {
             match toasts.draw(&frame, now, hidden, renderer) {
                 Ok(Some(with)) => {
-                    self.last_frame = Some(Rc::new(frame));
-                    self.shown_frame = Some(Rc::new(with.clone()));
+                    self.last_frame = Some(frame);
+                    let with = Rc::new(with);
+                    self.shown_frame = Some(with.clone());
                     frame = with;
                 }
-                Ok(None) => self.last_frame = Some(Rc::new(frame.clone())),
+                Ok(None) => self.last_frame = Some(frame.clone()),
                 Err(why) => {
                     say(&format!("message not drawn by this build yet: {}", why.0));
-                    self.last_frame = Some(Rc::new(frame.clone()));
+                    self.last_frame = Some(frame.clone());
                 }
             }
         } else {
-            self.last_frame = Some(Rc::new(frame.clone()));
+            self.last_frame = Some(frame.clone());
         }
         let crit = renderer.theme.palette.get("crit").and_then(Value::as_str);
         let still = self.config.fps <= 1 || self.calm();
         let frame = match self.alarm.draw(&frame, now, crit, still) {
-            Ok(Some(edged)) => edged,
+            Ok(Some(edged)) => Rc::new(edged),
             _ => frame,
         };
         // the colour check's picture (Settings → Panel), its video made in the range its
@@ -1189,7 +1215,7 @@ impl MainLoop {
                 };
                 let size = (frame.width(), frame.height());
                 match crate::colour_show::picture(&env, size, letter) {
-                    Ok(picture) => picture,
+                    Ok(picture) => Rc::new(picture),
                     Err(why) => {
                         say(&format!("the colour check's picture not drawn: {why}"));
                         frame
@@ -1209,7 +1235,7 @@ impl MainLoop {
             let size = (frame.width(), frame.height());
             let colour = accent.unwrap_or(crate::identify::ACCENT);
             match crate::identify::picture(&env, number, size, colour) {
-                Ok(numbered) => return numbered,
+                Ok(numbered) => return Rc::new(numbered),
                 Err(why) => say(&format!("the panel's number not drawn: {why}")),
             }
         }
@@ -1219,7 +1245,15 @@ impl MainLoop {
     /// One frame: config.toml followed, the theme that is due drawn of the readings and
     /// shown. How long to wait before the next.
     pub fn step(&mut self) -> Duration {
+        let began = std::time::Instant::now();
+        let wait = self.step_inner();
+        lp_render::prof::add("step", began.elapsed());
+        wait
+    }
+
+    fn step_inner(&mut self) -> Duration {
         let started = self.clock();
+        let heading = lp_render::prof::Span::new("loop head");
         self.follow_config(started);
         self.follow_across(started);
         for note in self.host.notes() {
@@ -1337,6 +1371,8 @@ impl MainLoop {
             _ => 1000.0,
         } / 1000.0;
         let (now, fold) = moment();
+        drop(heading);
+        let snapshotting = lp_render::prof::Span::new("snapshot");
         let mut sampled = false; // (fresh readings: Renderer.new_sample)
         let snapshot = match self.snapshot.take() {
             Some(mut last) if started < self.next_sample => {
@@ -1400,11 +1436,15 @@ impl MainLoop {
             }
         };
         self.snapshot = Some(snapshot.clone());
-        self.rewant(&renderer);
+        drop(snapshotting);
+        let middle = lp_render::prof::Span::new("loop mid");
+        lp_render::prof::part("rewant", || self.rewant(&renderer));
         if sampled {
-            renderer.sample = (started, every.max(0.001));
+            renderer.new_sample(started, every);
         }
         renderer.continuous = self.panel.as_ref().is_some_and(Display::streams);
+        // (graphs that rest: frames that rest)
+        renderer.graph_steps = self.config.graph_steps;
 
         // the messages (while the panel is away they wait at the host, the newest), and the
         // alarm's edge
@@ -1431,7 +1471,9 @@ impl MainLoop {
         self.alarm.follow(alarm, started);
 
         let away = crate::presence::away();
-        let level = lp_config::night::brightness_now(&self.config.device, &now, away, None);
+        let level = lp_render::prof::part("brightness", || {
+            lp_config::night::brightness_now(&self.config.device, &now, away, None)
+        });
         if self.brightness != Some(level) {
             if let Some(panel) = &mut self.panel {
                 match panel.set_brightness(level) {
@@ -1441,6 +1483,7 @@ impl MainLoop {
             }
         }
 
+        drop(middle);
         let drawing = self.clock();
         // the app's Player: instead of the theme, on the panels it plays on
         let number = self.beside.as_ref().map_or(1, |beside| beside.n + 2) as i64;
@@ -1461,12 +1504,13 @@ impl MainLoop {
             ),
         };
         let drawn = match (&mirrored, &playing) {
-            (Some(source), _) => Ok(self.mirror.frame(source, size, renderer.fps)),
-            (None, Some(showing)) => Ok(self.player.frame(showing, size, renderer.fps)),
-            (None, None) => renderer
-                .render(snapshot, started)
-                .map_err(|e| format!("not drawn by this build yet: {}", e.0))
-                .and_then(|(frame, _)| self.fitted(frame, &renderer)),
+            (Some(source), _) => Ok(Rc::new(self.mirror.frame(source, size, renderer.fps))),
+            (None, Some(showing)) => Ok(Rc::new(self.player.frame(showing, size, renderer.fps))),
+            (None, None) => {
+                lp_render::prof::part("render", || renderer.render_shared(snapshot, started))
+                    .map_err(|e| format!("not drawn by this build yet: {}", e.0))
+                    .and_then(|(frame, _)| self.fitted(frame, &renderer))
+            }
         };
         if self.playing && playing.is_none() {
             self.player.close(); // (it ended: ffmpeg stops)
@@ -1476,12 +1520,34 @@ impl MainLoop {
             self.mirror.close();
         }
         self.mirrored = mirrored.is_some();
+        // the theme's frame as drawn: where it changed since the one shown before, if that
+        // was the frame the same renderer drew just before it
+        let mut drawn_as = None;
         let drawn = drawn
-            .map(|frame| self.dressed_frame(frame, &renderer, started))
+            .map(|frame| {
+                let theirs = (mirrored.is_none() && playing.is_none()).then(|| Rc::clone(&frame));
+                let dressed = lp_render::prof::part("dress", || {
+                    self.dressed_frame(frame, &renderer, started)
+                });
+                if theirs.is_some_and(|theirs| Rc::ptr_eq(&theirs, &dressed)) {
+                    drawn_as = Some((renderer.serial, renderer.renders));
+                }
+                dressed
+            })
             .map(|frame| {
                 self.keep_shown(&frame);
-                self.turned(frame)
+                let turned = self.turned(frame.clone());
+                if !Rc::ptr_eq(&turned, &frame) {
+                    drawn_as = None;
+                }
+                turned
             });
+        let follows = match (drawn_as, self.shown_drawn) {
+            (Some((serial, count)), Some((before, then))) => serial == before && count == then + 1,
+            _ => false,
+        };
+        let changed = renderer.changed.clone().filter(|_| follows);
+        self.shown_drawn = None;
         if drawn.is_ok() {
             self.meter.drew(self.clock() - drawing);
         }
@@ -1495,13 +1561,14 @@ impl MainLoop {
         match drawn {
             Ok(frame) => {
                 let size = frame.size();
-                let shown = match &mut self.panel {
-                    Some(panel) => panel.show(frame, started),
+                let shown = lp_render::prof::part("show", || match &mut self.panel {
+                    Some(panel) => panel.show_changed(frame, started, changed.as_deref()),
                     None => Ok(false),
-                };
+                });
                 match shown {
                     Ok(found) => {
                         self.frames += 1;
+                        self.shown_drawn = drawn_as.filter(|_| !found);
                         if let Ok(mut status) = self.status.lock() {
                             status.state = "showing";
                             status.sequence.clone_from(&self.sequence_at);
@@ -1536,6 +1603,7 @@ impl MainLoop {
             }
         }
 
+        let _tail = lp_render::prof::Span::new("loop tail");
         if let Some(panel) = &mut self.panel {
             for note in panel.notes() {
                 say(&note);

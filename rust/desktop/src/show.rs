@@ -301,6 +301,8 @@ mod native {
         Dirty(bool),
         Title(String),
         Close,
+        /// a page of the app's own asked for in a window of its own: its route, here
+        Route(String),
     }
 
     /// The question before closing a window with changes that are not saved.
@@ -362,6 +364,7 @@ mod native {
         });
         let mut context = WebContext::new(Some(settings.join("window-data")));
         let page = proxy.clone();
+        let routed = proxy.clone();
         #[cfg_attr(not(windows), allow(unused_mut))]
         let mut builder = WebViewBuilder::new_with_web_context(&mut context)
             .with_url(url)
@@ -392,8 +395,14 @@ mod native {
                 }
                 ours
             })
-            .with_new_window_req_handler(|to, _| {
-                open_in_browser(&to);
+            .with_new_window_req_handler(move |to, _| {
+                // the app's own pages stay in its window (the browser has not its access
+                // token: it would say so); only links to elsewhere open in the browser
+                if local_url(&to) {
+                    let _ = routed.send_event(Told::Route(to));
+                } else {
+                    open_in_browser(&to);
+                }
                 NewWindowResponse::Deny
             })
             // "Export" saves a theme file where the person chooses
@@ -482,6 +491,17 @@ mod native {
                     }
                 }
                 Event::UserEvent(Told::Dirty(now)) => dirty.set(now),
+                Event::UserEvent(Told::Route(to)) => {
+                    // (a route of the page: shown here; any other page of the app stays as
+                    // the page links to it, never loaded anew without its token)
+                    if let Some((_, route)) = to.split_once('#') {
+                        let hash = lp_py::json::dumps(
+                            &lp_py::Value::Str(format!("#{route}")),
+                            &lp_py::json::Dumps::default(),
+                        );
+                        let _ = webview.evaluate_script(&format!("location.hash = {hash}"));
+                    }
+                }
                 Event::UserEvent(Told::Title(title)) => {
                     let title: String = title.split_whitespace().collect::<Vec<_>>().join(" ");
                     let title: String = title.chars().take(200).collect();

@@ -202,12 +202,49 @@ fn rows<T: Level>(a: &[T], h: usize, w: usize, side: usize, frac: f64) -> Vec<T>
     out
 }
 
-/// The `h` x `w` floats turned (w rows of h).
+/// The `h` x `w` floats turned (w rows of h): what the passes down the columns stand for.
+#[cfg(test)]
 fn turned<T: Level>(a: &[T], h: usize, w: usize) -> Vec<T> {
     let mut out = vec![T::ZERO; h * w];
     for r in 0..h {
         for k in 0..w {
             out[k * h + r] = a[r * w + k];
+        }
+    }
+    out
+}
+
+/// rows down the columns: the same sums in the same order for each column (as the rows of the
+/// picture turned), worked out for all columns at once, row by row.
+fn cols<T: Level>(a: &[T], h: usize, w: usize, side: usize, frac: f64) -> Vec<T> {
+    let padded = h + 2 * side + 2;
+    let frac_t = T::of(frac);
+    let scale = T::of(1.0 / (2.0 * side as f64 + 1.0 + 2.0 * frac));
+    // the padded column's k-th value: the edges held
+    let at = |k: usize| -> &[T] {
+        let r = k.saturating_sub(side + 1).min(h - 1);
+        &a[r * w..(r + 1) * w]
+    };
+    // the running sums, c[0] = 0, c[k + 1] = c[k] + p[k], for every column
+    let mut c = vec![T::ZERO; (padded + 1) * w];
+    for k in 0..padded {
+        let (done, next) = c.split_at_mut((k + 1) * w);
+        let before = &done[k * w..];
+        for ((n, &b), &v) in next[..w].iter_mut().zip(before).zip(at(k)) {
+            *n = b + v;
+        }
+    }
+    let mut out = vec![T::ZERO; h * w];
+    for i in 0..h {
+        let (hi, lo) = (&c[(2 * side + 2 + i) * w..][..w], &c[(1 + i) * w..][..w]);
+        let (first, last) = (at(i), at(2 * side + 2 + i));
+        let row = &mut out[i * w..(i + 1) * w];
+        for x in 0..w {
+            let mut v = hi[x] - lo[x];
+            if frac != 0.0 {
+                v = v + frac_t * (first[x] + last[x]);
+            }
+            row[x] = v * scale;
         }
     }
     out
@@ -219,11 +256,10 @@ fn passes<T: Level>(a: Vec<T>, h: usize, w: usize, side: usize, frac: f64) -> Ve
     for _ in 0..3 {
         out = rows(&out, h, w, side, frac);
     }
-    let mut out = turned(&out, h, w);
     for _ in 0..3 {
-        out = rows(&out, w, h, side, frac);
+        out = cols(&out, h, w, side, frac);
     }
-    turned(&out, w, h)
+    out
 }
 
 /// Whether dither.blur multiplies by the passes' matrices: no side longer than PRODUCT_MOST,
@@ -272,6 +308,57 @@ pub fn blur(a: &[f32], h: usize, w: usize, radius: f64) -> Vec<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_passes_down_the_columns_as_down_the_rows_of_the_picture_turned() {
+        let turned_passes = |a: Vec<f64>, h: usize, w: usize, side: usize, frac: f64| {
+            let mut out = a;
+            for _ in 0..3 {
+                out = rows(&out, h, w, side, frac);
+            }
+            let mut out = turned(&out, h, w);
+            for _ in 0..3 {
+                out = rows(&out, w, h, side, frac);
+            }
+            turned(&out, w, h)
+        };
+        let mut seed = 0x51ed_270b_u64;
+        for (h, w) in [(1usize, 1usize), (1, 7), (9, 1), (13, 17), (64, 31)] {
+            for (side, frac) in [(0usize, 0.0), (1, 0.25), (3, 0.5), (6, 0.0)] {
+                let a: Vec<f64> = (0..h * w)
+                    .map(|_| {
+                        seed ^= seed << 13;
+                        seed ^= seed >> 7;
+                        seed ^= seed << 17;
+                        (seed % 1000) as f64 / 7.0
+                    })
+                    .collect();
+                let want = turned_passes(a.clone(), h, w, side, frac);
+                let got = passes(a.clone(), h, w, side, frac);
+                assert!(
+                    want.iter()
+                        .zip(&got)
+                        .all(|(x, y)| x.to_bits() == y.to_bits()),
+                    "{h}x{w}"
+                );
+                let a32: Vec<f32> = a.iter().map(|&v| v as f32).collect();
+                let mut want32 = a32.clone();
+                for _ in 0..3 {
+                    want32 = rows(&want32, h, w, side, frac);
+                }
+                let mut want32 = turned(&want32, h, w);
+                for _ in 0..3 {
+                    want32 = rows(&want32, w, h, side, frac);
+                }
+                let want32 = turned(&want32, w, h);
+                let got32 = passes(a32, h, w, side, frac);
+                assert!(want32
+                    .iter()
+                    .zip(&got32)
+                    .all(|(x, y)| x.to_bits() == y.to_bits()));
+            }
+        }
+    }
 
     #[test]
     fn numpys_first_draws() {

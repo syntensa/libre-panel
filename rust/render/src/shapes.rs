@@ -141,12 +141,22 @@ pub fn down(layer: &Image, w: i64, h: i64, s: usize) -> Result<Image> {
     let (w, h) = (w.max(1) as usize, h.max(1) as usize);
     if layer.size() == (w * s, h * s) {
         if layer.mode() == Mode::RGBA {
-            let reduced = layer.convert(Mode::RGBa)?.reduce(s, s, None)?;
-            return Ok(reduced.convert(Mode::RGBA)?);
+            // (premultiplied, reduced and back in one go: the same bytes)
+            return Ok(layer.reduce_rgba_part(0, 0, w, h, s)?);
         }
         return Ok(layer.reduce(s, s, None)?);
     }
     Ok(layer.resize(w, h, Filter::Lanczos, None, None)?)
+}
+
+/// down of the part of `layer` from column `x0` that is `w` x `h` at `s` (its crop from
+/// (x0, 0)), without cutting it out first.
+pub fn down_at(layer: &Image, x0: i64, w: i64, h: i64, s: usize) -> Result<Image> {
+    if layer.mode() == Mode::RGBA && w >= 1 && h >= 1 && s >= 1 {
+        return Ok(layer.reduce_rgba_part(x0, 0, w as usize, h as usize, s)?);
+    }
+    let si = s as i64;
+    down(&layer.crop(x0, 0, x0 + si * w, si * h), w, h, s)
 }
 
 /// The corners of a card: how much of each pixel a card with corners of radius `r` (and an

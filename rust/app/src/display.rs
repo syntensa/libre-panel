@@ -6,6 +6,7 @@
 //! panel that was in use and is gone is not replaced by the file: it is waited for.
 
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 use lp_config::DeviceConfig;
 use lp_devices::changes::{changed_region, changed_regions};
@@ -518,7 +519,18 @@ impl Display {
     /// showing video gets it on its time). While `driver = "auto"` writes the PNG file, a
     /// panel is looked for every few seconds and takes over when one is there: true then
     /// (the frame went to it, and what is shown is to be drawn for it from now on).
-    pub fn show(&mut self, frame: Image, now: f64) -> Result<bool, Failed> {
+    pub fn show(&mut self, frame: Rc<Image>, now: f64) -> Result<bool, Failed> {
+        self.show_changed(frame, now, None)
+    }
+
+    /// show, the frame differing from the one shown before only in `changed` (x0, y0, x1, y1;
+    /// None: anywhere): a panel showing video compares the two only there.
+    pub fn show_changed(
+        &mut self,
+        frame: Rc<Image>,
+        now: f64,
+        changed: Option<&[(i64, i64, i64, i64)]>,
+    ) -> Result<bool, Failed> {
         let mut found = false;
         if self.device.driver == "auto" && !self.on_panel() && now >= self.next_probe {
             self.next_probe = now + PROBE_S;
@@ -541,7 +553,9 @@ impl Display {
             }
             Panel::File { path: None } => Ok(()),
             Panel::Hongtai { display, .. } => display.show(&frame).map_err(failed),
-            Panel::Turzx(panel) => panel.show(frame, Some(now)).map_err(failed),
+            Panel::Turzx(panel) => panel
+                .show_changed(frame, Some(now), changed)
+                .map_err(failed),
             Panel::Other { driver, previous } => {
                 // app.py's loop: a streaming display every frame whole; a slow one the parts
                 // that changed, each on its own; the others the box around what changed
@@ -564,7 +578,7 @@ impl Display {
                     .try_for_each(|part| driver.show(&frame, part))
                     .map_err(failed);
                 *previous = match (&shown, driver.streaming()) {
-                    (Ok(()), false) => Some(frame),
+                    (Ok(()), false) => Some(Rc::unwrap_or_clone(frame)),
                     _ => None,
                 };
                 shown

@@ -367,32 +367,81 @@ pub fn video_gaps(local_clip: &str, model: Option<&PanelModel>, proven: bool) ->
 /// changed_boxes: where the frame `now` differs from `before` (both of `size`, three bytes
 /// a pixel), as boxes grown to whole blocks of `block` pixels: a band of blocks for each
 /// stretch of rows that changed between the same columns. None changed: none.
+/// Where two rows of the same length first differ (0 where they do not): eight bytes at a
+/// time, then the byte.
+fn first_difference(a: &[u8], b: &[u8]) -> usize {
+    let whole = a.len() / 8 * 8;
+    let mut at = 0;
+    while at < whole && a[at..at + 8] == b[at..at + 8] {
+        at += 8;
+    }
+    (at..a.len()).find(|&i| a[i] != b[i]).unwrap_or(0)
+}
+
+/// Where two rows of the same length last differ (0 where they do not).
+fn last_difference(a: &[u8], b: &[u8]) -> usize {
+    let mut end = a.len();
+    while end >= 8 && a[end - 8..end] == b[end - 8..end] {
+        end -= 8;
+    }
+    (0..end).rev().find(|&i| a[i] != b[i]).unwrap_or(0)
+}
+
 pub fn changed_boxes(
     before: &[u8],
     now: &[u8],
     size: (usize, usize),
     block: usize,
 ) -> Vec<[u16; 4]> {
+    let whole = [(0, 0, size.0 as i64, size.1 as i64)];
+    changed_boxes_in(before, now, size, block, &whole)
+}
+
+/// changed_boxes where the frames can differ only in `areas` (x0, y0, x1, y1 on the frame):
+/// the same boxes, the rest of the frames not compared.
+pub fn changed_boxes_in(
+    before: &[u8],
+    now: &[u8],
+    size: (usize, usize),
+    block: usize,
+    areas: &[(i64, i64, i64, i64)],
+) -> Vec<[u16; 4]> {
     let (width, height) = size;
     let (row, block) = (width * 3, block.max(1));
+    let (wide, high) = (width as i64, height as i64);
+    let mut spans: Vec<(usize, usize, usize, usize)> = areas
+        .iter()
+        .filter_map(|&(x0, y0, x1, y1)| {
+            let (x0, y0) = (x0.clamp(0, wide) as usize, y0.clamp(0, high) as usize);
+            let (x1, y1) = (x1.clamp(0, wide) as usize, y1.clamp(0, high) as usize);
+            (x0 < x1 && y0 < y1).then_some((x0, y0, x1, y1))
+        })
+        .collect();
+    spans.sort_unstable_by_key(|span| span.1);
     let mut boxes: Vec<[u16; 4]> = Vec::new();
     for top in (0..height).step_by(block) {
         let bottom = (top + block).min(height);
         let mut span: Option<(usize, usize)> = None;
-        for y in top..bottom {
-            let (old, new) = (
-                &before[y * row..(y + 1) * row],
-                &now[y * row..(y + 1) * row],
-            );
-            if old == new {
+        for &(x0, y0, x1, y1) in &spans {
+            if y0 >= bottom {
+                break;
+            }
+            if y1 <= top {
                 continue;
             }
-            let first = old.iter().zip(new).position(|(a, b)| a != b).unwrap_or(0) / 3;
-            let last = old.iter().zip(new).rposition(|(a, b)| a != b).unwrap_or(0) / 3;
-            span = Some(match span {
-                Some((x0, x1)) => (x0.min(first), x1.max(last)),
-                None => (first, last),
-            });
+            for y in y0.max(top)..y1.min(bottom) {
+                let (a, b) = (y * row + x0 * 3, y * row + x1 * 3);
+                let (old, new) = (&before[a..b], &now[a..b]);
+                if old == new {
+                    continue;
+                }
+                let first = x0 + first_difference(old, new) / 3;
+                let last = x0 + last_difference(old, new) / 3;
+                span = Some(match span {
+                    Some((f, l)) => (f.min(first), l.max(last)),
+                    None => (first, last),
+                });
+            }
         }
         let Some((first, last)) = span else { continue };
         let x0 = first - first % block;
@@ -718,7 +767,7 @@ pub struct TurzxVideo {
     /// the size of the frames the running stream takes, and the next frame's number
     stream: Option<((i64, i64), u32)>,
     /// the frame sent last: what the next is compared with, and what stays on the panel
-    last: Option<Image>,
+    last: Option<std::rc::Rc<Image>>,
     /// the panel the bit rate "auto" is followed for
     rate_key: Option<RateKey>,
     /// what video-state.json has of it, and when it was written
@@ -735,7 +784,7 @@ pub struct TurzxVideo {
     stream_full: bool,
     /// the theme's last frame while a colour check's picture is shown (what stays on the
     /// panel when it closes)
-    left: Option<Image>,
+    left: Option<std::rc::Rc<Image>>,
 }
 
 impl TurzxVideo {
@@ -1057,7 +1106,18 @@ impl TurzxVideo {
     /// clock): the parts of it that changed since the one before, of which the engine makes
     /// the picture and sends it a fixed lead later. A frame of another size begins a new
     /// stream; a hung decoder restarts the panel.
-    pub fn show(&mut self, frame: Image, planned: Option<f64>) -> Result<()> {
+    pub fn show(&mut self, frame: std::rc::Rc<Image>, planned: Option<f64>) -> Result<()> {
+        self.show_changed(frame, planned, None)
+    }
+
+    /// show, the frame differing from the one shown before only in `changed` (x0, y0, x1, y1;
+    /// None: anywhere).
+    pub fn show_changed(
+        &mut self,
+        frame: std::rc::Rc<Image>,
+        planned: Option<f64>,
+        changed: Option<&[(i64, i64, i64, i64)]>,
+    ) -> Result<()> {
         match self.trouble() {
             Some(Trouble::Hung(depth)) => return Err(self.restart_panel(&depth)),
             Some(Trouble::Failed(why)) => {
@@ -1069,7 +1129,7 @@ impl TurzxVideo {
         let frame = if frame.mode() == Mode::RGB {
             frame
         } else {
-            frame.convert(Mode::RGB)?
+            std::rc::Rc::new(frame.convert(Mode::RGB)?)
         };
         let size = (frame.width() as i64, frame.height() as i64);
         if size.0 > i64::from(u16::MAX) || size.1 > i64::from(u16::MAX) {
@@ -1085,12 +1145,25 @@ impl TurzxVideo {
         self.follow_the_panel();
         let number = self.stream.map_or(0, |(_, number)| number);
         let whole = [[0, 0, size.0 as u16, size.1 as u16]];
-        let changed;
+        let mut boxed;
         let boxes: &[[u16; 4]] = match &self.last {
             Some(last) if last.size() == frame.size() => {
                 let block = block_of(size).unwrap_or(1) as usize;
-                changed = changed_boxes(last.as_bytes(), frame.as_bytes(), frame.size(), block);
-                &changed
+                let (before, now) = (last.as_bytes(), frame.as_bytes());
+                boxed = match changed {
+                    Some(areas) => changed_boxes_in(before, now, frame.size(), block, areas),
+                    None => changed_boxes(before, now, frame.size(), block),
+                };
+                if changed.is_some() && std::env::var_os("LP_CHECK_CHANGED").is_some() {
+                    // (a check while measuring: the areas said hold every change)
+                    let whole = changed_boxes(before, now, frame.size(), block);
+                    if whole != boxed {
+                        self.notes
+                            .push(format!("changed areas missed: {whole:?} {boxed:?}"));
+                        boxed = whole;
+                    }
+                }
+                &boxed
             }
             _ => &whole,
         };
@@ -1125,7 +1198,7 @@ impl TurzxVideo {
             let link = &self.conn.link;
             let _ = link.command(CMD_STOP_STREAM, &[], &[], 2000);
             let _ = link.command(CMD_FRAME_RATE, &[POWER_ON_FPS], &[], 2000);
-            let last = self.left.as_ref().or(self.last.as_ref()).map(to_native);
+            let last = self.left.as_deref().or(self.last.as_deref()).map(to_native);
             if let Some(png) = last.and_then(|native| encode_frame(&native).ok()) {
                 let length = (png.len() as u32).to_be_bytes();
                 let _ = link.command(CMD_UPLOAD_PNG, &length, &png, 5000);
@@ -1337,9 +1410,19 @@ impl Turzx {
         matches!(self, Turzx::Video(_))
     }
 
-    pub fn show(&mut self, frame: Image, planned: Option<f64>) -> Result<()> {
+    pub fn show(&mut self, frame: std::rc::Rc<Image>, planned: Option<f64>) -> Result<()> {
+        self.show_changed(frame, planned, None)
+    }
+
+    /// show, the frame differing from the one before only in `changed` (None: anywhere).
+    pub fn show_changed(
+        &mut self,
+        frame: std::rc::Rc<Image>,
+        planned: Option<f64>,
+        changed: Option<&[(i64, i64, i64, i64)]>,
+    ) -> Result<()> {
         match self {
-            Turzx::Video(panel) => panel.show(frame, planned),
+            Turzx::Video(panel) => panel.show_changed(frame, planned, changed),
             Turzx::Stills(panel) => panel.show(&frame),
         }
     }
@@ -1418,6 +1501,50 @@ mod tests {
         let (before, mut now) = (vec![0u8; 5 * 3 * 3], vec![0u8; 5 * 3 * 3]);
         now[(5 + 4) * 3] = 1;
         assert_eq!(changed_boxes(&before, &now, (5, 3), 1), [[4, 1, 5, 2]]);
+    }
+
+    #[test]
+    fn the_parts_that_changed_compared_only_where_the_frame_could_change() {
+        // (areas round every difference, overlapping and in any order: the boxes of the
+        // whole frame's comparison)
+        let (w, h) = (100usize, 70usize);
+        let before: Vec<u8> = (0..w * h * 3).map(|i| (i * 7 % 251) as u8).collect();
+        let mut seed = 0x2545_f491_u64;
+        let mut next = |n: usize| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed % n as u64) as usize
+        };
+        for _ in 0..200 {
+            let mut now = before.clone();
+            let mut areas = Vec::new();
+            for _ in 0..1 + next(4) {
+                let (x0, y0) = (next(w), next(h));
+                let (x1, y1) = (x0 + 1 + next(w - x0), y0 + 1 + next(h - y0));
+                for _ in 0..next(6) {
+                    let (x, y) = (x0 + next(x1 - x0), y0 + next(y1 - y0));
+                    now[(y * w + x) * 3 + next(3)] ^= 0x55;
+                }
+                let grow = next(3) as i64;
+                areas.push((
+                    x0 as i64 - grow,
+                    y0 as i64 - grow,
+                    x1 as i64 + grow,
+                    y1 as i64,
+                ));
+            }
+            areas.reverse();
+            for block in [1, 16] {
+                let whole = changed_boxes(&before, &now, (w, h), block);
+                assert_eq!(
+                    changed_boxes_in(&before, &now, (w, h), block, &areas),
+                    whole
+                );
+            }
+        }
+        assert!(changed_boxes_in(&before, &before, (w, h), 16, &[(-5, -5, 500, 500)]).is_empty());
+        assert!(changed_boxes_in(&before, &before, (w, h), 16, &[]).is_empty());
     }
 
     #[test]

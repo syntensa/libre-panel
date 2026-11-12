@@ -181,36 +181,38 @@ impl Clip {
     }
 }
 
+/// What a half plane leaves of the span x0..=x1 of row y: its ends, None for nothing.
+fn half_span((a, b, c): (f64, f64, f64), x0: i32, y: i32, x1: i32) -> Option<(i32, i32)> {
+    let eps = 1e-9;
+    let (mut x0, mut x1) = (x0, x1);
+    let y = f64::from(y);
+    if a.abs() < eps {
+        if b * y + c < -eps {
+            x0 = 1;
+            x1 = 0;
+        }
+    } else {
+        // where it crosses the row
+        let ix = -(b * y + c) / a;
+        if a * f64::from(x0) + b * y + c < eps {
+            x0 = f64::from(x0).max(ix).round() as i32;
+        }
+        if a * f64::from(x1) + b * y + c < eps {
+            x1 = f64::from(x1).min(ix).round() as i32;
+        }
+    }
+    (x0 <= x1).then_some((x0, x1))
+}
+
 /// What is left of the span x0..=x1 of row y in `clip` (clip_tree_do_clip): its pieces' ends in
 /// order, each with 1 where one begins and -1 where it ends.
 fn clipped(clip: Option<&Clip>, x0: i32, y: i32, x1: i32) -> Vec<(i32, i8)> {
     match clip {
         None => vec![(x0, 1), (x1, -1)],
-        Some(Clip::Half(a, b, c)) => {
-            let eps = 1e-9;
-            let (mut x0, mut x1) = (x0, x1);
-            let y = f64::from(y);
-            if a.abs() < eps {
-                if b * y + c < -eps {
-                    x0 = 1;
-                    x1 = 0;
-                }
-            } else {
-                // where it crosses the row
-                let ix = -(b * y + c) / a;
-                if a * f64::from(x0) + b * y + c < eps {
-                    x0 = f64::from(x0).max(ix).round() as i32;
-                }
-                if a * f64::from(x1) + b * y + c < eps {
-                    x1 = f64::from(x1).min(ix).round() as i32;
-                }
-            }
-            if x0 <= x1 {
-                vec![(x0, 1), (x1, -1)]
-            } else {
-                Vec::new()
-            }
-        }
+        Some(&Clip::Half(a, b, c)) => match half_span((a, b, c), x0, y, x1) {
+            Some((x0, x1)) => vec![(x0, 1), (x1, -1)],
+            None => Vec::new(),
+        },
         Some(Clip::And(l, r)) => joined(
             true,
             &clipped(Some(l), x0, y, x1),
@@ -222,6 +224,94 @@ fn clipped(clip: Option<&Clip>, x0: i32, y: i32, x1: i32) -> Vec<(i32, i8)> {
             &clipped(Some(r), x0, y, x1),
         ),
     }
+}
+
+/// What `clipped` gives, held in place: at most `MOST` ends (a tree of more half planes than
+/// half that can give more: None then, and `clipped` is asked).
+const MOST: usize = 32;
+
+#[derive(Clone, Copy)]
+struct Ends {
+    len: usize,
+    at: [(i32, i8); MOST],
+}
+
+impl Ends {
+    fn new() -> Ends {
+        Ends {
+            len: 0,
+            at: [(0, 0); MOST],
+        }
+    }
+
+    fn of(pairs: &[(i32, i8)]) -> Ends {
+        let mut ends = Ends::new();
+        ends.at[..pairs.len()].copy_from_slice(pairs);
+        ends.len = pairs.len();
+        ends
+    }
+
+    fn as_slice(&self) -> &[(i32, i8)] {
+        &self.at[..self.len]
+    }
+}
+
+/// clipped, without a list made for each node: None where more ends come of it than fit.
+fn clipped_in_place(clip: Option<&Clip>, x0: i32, y: i32, x1: i32) -> Option<Ends> {
+    match clip {
+        None => Some(Ends::of(&[(x0, 1), (x1, -1)])),
+        Some(&Clip::Half(a, b, c)) => Some(match half_span((a, b, c), x0, y, x1) {
+            Some((x0, x1)) => Ends::of(&[(x0, 1), (x1, -1)]),
+            None => Ends::new(),
+        }),
+        Some(Clip::And(l, r)) => joined_in_place(
+            true,
+            clipped_in_place(Some(l), x0, y, x1)?.as_slice(),
+            clipped_in_place(Some(r), x0, y, x1)?.as_slice(),
+        ),
+        Some(Clip::Or(l, r)) => joined_in_place(
+            false,
+            clipped_in_place(Some(l), x0, y, x1)?.as_slice(),
+            clipped_in_place(Some(r), x0, y, x1)?.as_slice(),
+        ),
+    }
+}
+
+/// joined, held in place (None where its ends do not fit).
+fn joined_in_place(and: bool, l1: &[(i32, i8)], l2: &[(i32, i8)]) -> Option<Ends> {
+    if l1.len() + l2.len() > MOST {
+        return None;
+    }
+    let mut out = Ends::new();
+    let (mut i, mut j) = (0, 0);
+    let (mut k1, mut k2) = (0i32, 0i32);
+    while i < l1.len() || j < l2.len() {
+        let first = j >= l2.len()
+            || (i < l1.len() && (l1[i].0 < l2[j].0 || (l1[i].0 == l2[j].0 && l1[i].1 > l2[j].1)));
+        let t = if first {
+            let t = l1[i];
+            k1 += i32::from(t.1);
+            i += 1;
+            t
+        } else {
+            let t = l2[j];
+            k2 += i32::from(t.1);
+            j += 1;
+            t
+        };
+        let tail = out.as_slice().last().map(|e| e.1);
+        let opens = t.1 == 1 && tail.is_none_or(|kind| kind == -1);
+        let keep = if and {
+            (opens && k1 > 0 && k2 > 0) || (t.1 == -1 && tail == Some(1) && (k1 == 0 || k2 == 0))
+        } else {
+            opens || (t.1 == -1 && k1 == 0 && k2 == 0)
+        };
+        if keep {
+            out.at[out.len] = t;
+            out.len += 1;
+        }
+    }
+    Some(out)
 }
 
 /// Two lists of ends joined as Draw.c's combining nodes join them (and: where both are, or:
@@ -438,8 +528,25 @@ impl<C: Canvas> Draw<'_, C> {
             return;
         }
         let (mut e, clip) = init(a, b);
+        let (w, h) = self.canvas.canvas_size();
+        let (w, h) = (w as i32, h as i32);
         while let Some((sx0, sy, sx1)) = e.next() {
-            for span in clipped(clip.as_ref(), sx0, sy, sx1).chunks_exact(2) {
+            // (a span off the picture leaves nothing, whatever the clipping makes of it: the
+            // spans it leaves lie within it)
+            let y = y0 + (sy + b) / 2;
+            if y < 0 || y >= h || x0 + (sx1 + a) / 2 < 0 || x0 + (sx0 + a) / 2 >= w {
+                continue;
+            }
+            let kept = clipped_in_place(clip.as_ref(), sx0, sy, sx1);
+            let listed;
+            let spans = match &kept {
+                Some(ends) => ends.as_slice(),
+                None => {
+                    listed = clipped(clip.as_ref(), sx0, sy, sx1);
+                    &listed[..]
+                }
+            };
+            for span in spans.chunks_exact(2) {
                 self.hline(
                     x0 + (span[0].0 + a) / 2,
                     y0 + (sy + b) / 2,

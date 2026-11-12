@@ -172,6 +172,8 @@ struct State {
     listeners: IndexMap<&'static str, Vec<(Option<String>, Callback)>>,
     /// the readings each service reads
     wants: IndexMap<String, BTreeSet<String>>,
+    /// how often `wants` changed
+    wants_version: u64,
     /// the keys (or patterns) the themes on show read
     shown: BTreeSet<String>,
     /// the newest sample and fresh not yet delivered
@@ -279,7 +281,15 @@ impl PluginHost {
     /// Which readings `owner` reads; none takes them back.
     pub fn want(&self, owner: &str, keys: impl IntoIterator<Item = String>) {
         let keys: BTreeSet<String> = keys.into_iter().collect();
-        self.with(|state| state.wants.insert(owner.to_string(), keys));
+        self.with(|state| {
+            state.wants_version += 1;
+            state.wants.insert(owner.to_string(), keys)
+        });
+    }
+
+    /// A number that changes whenever what the services read does (wanted).
+    pub fn wanted_version(&self) -> u64 {
+        self.with(|state| state.wants_version)
     }
 
     /// Every key (or pattern) a service reads.
@@ -412,7 +422,9 @@ impl PluginHost {
             if mode_ended {
                 state.mode = None;
             }
-            state.wants.shift_remove(owner);
+            if state.wants.shift_remove(owner).is_some() {
+                state.wants_version += 1;
+            }
             mode_ended
         });
         if mode_ended {

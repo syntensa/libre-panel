@@ -424,10 +424,10 @@ const ROUTES: &[Route] = &[
     private("GET", "/api/start-screen", |s, x, _, u| {
         start_screen_state(s, x, &u.query)
     }),
-    private("GET", "/api/start-screen/picture", |s, x, _, u| {
+    picture("GET", "/api/start-screen/picture", |s, x, _, u| {
         start_screen_picture(s, x, &u.query)
     }),
-    private("GET", "/api/start-screen/file", |s, x, _, u| {
+    picture("GET", "/api/start-screen/file", |s, x, _, u| {
         start_screen_file(s, x, &u.query)
     }),
     private("GET", "/api/hardware", |s, x, _, u| {

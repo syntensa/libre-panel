@@ -370,9 +370,13 @@ impl<'a> Doctor<'a> {
             Some(Opened::Serial(display)) => {
                 let started = Instant::now();
                 let now = lp_render::video::monotonic();
-                display.show(image.clone(), now).map_err(|why| match why {
-                    crate::display::Failed::Frame(why) | crate::display::Failed::Panel(why) => why,
-                })?;
+                display
+                    .show(std::rc::Rc::new(image.clone()), now)
+                    .map_err(|why| match why {
+                        crate::display::Failed::Frame(why) | crate::display::Failed::Panel(why) => {
+                            why
+                        }
+                    })?;
                 Ok((
                     started.elapsed().as_secs_f64(),
                     image.width() * image.height() * 2,

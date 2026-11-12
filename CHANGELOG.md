@@ -22,6 +22,21 @@ before; being finished and tested now.
   unless the language was chosen by hand).
 - **The icon in the notification area is off by default**: *Settings → Start and system →
   Icon in the notification area* turns it on (`tray_icon = true`), at once.
+- **The graphs move with every frame again** in the video mode (Lumen's CPU and network
+  graphs went on once a second): a window into a strip drawn ahead, as before.
+- **The start screen's preview shows** (*Start → More for your panel → Start screen*): its
+  picture and download were refused for want of the token the app's pictures go without.
+- **No browser from a click in the app.** A link to a page of the app opened the browser,
+  which then said *Access token missing or wrong*; it now opens in the app's window, and only
+  links to other sites go to the browser.
+
+**Lighter** (Lumen on the 12.3" at 25 fps, the video mode with x264, on the same computer as
+0.8.0: see below)
+- **What a frame costs cut down** without a pixel changed: the readings no longer copied for
+  each widget, a frame laid only where it changed and handed on without a copy, the panel's
+  driver comparing only there, the graphs' strips cut per window instead of made in sixteen
+  blends, their fill and glow in one pass, the texts' widths kept, the rings' light worked out
+  with less, pictures laid four pixels at a time.
 
 ## 0.8.1rc2 — 2026-11-06
 
