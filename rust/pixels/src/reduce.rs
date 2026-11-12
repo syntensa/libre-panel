@@ -7,19 +7,10 @@
 //! (division_UINT32), or the shift that is the same where the count is a power of two. So one
 //! formula with each block's own count gives what each of them gives.
 
-use crate::ints::{clip8, muldiv255};
+use crate::ints::{muldiv255, unmultiplied};
 use crate::{error, Image, Mode, Result};
 
 /// division_UINT32(divider, 8): computed in float, as Reduce.c computes it.
-/// RGBa's colour back to RGBA's (as convert.rs's unmultiplied).
-fn unmultiplied(c: u8, alpha: u8) -> u8 {
-    if alpha == 255 || alpha == 0 {
-        c
-    } else {
-        clip8((255 * i64::from(c)) / i64::from(alpha))
-    }
-}
-
 fn multiplier(count: u32) -> u32 {
     let max_dividend = (1u32 << 8) * count;
     let max_int = (1u64 << 32) as f32;

@@ -307,4 +307,35 @@ pub(crate) mod ints {
     pub fn clip8(v: i64) -> u8 {
         v.clamp(0, 255) as u8
     }
+
+    /// Every premultiplied colour's plain one, by alpha and colour (Convert.c's rgba2rgbA:
+    /// `CLIP8(255 * c / alpha)`, the colour itself where alpha is 0 or 255), worked out once.
+    static UNMULTIPLIED: [u8; 65536] = {
+        let mut table = [0u8; 65536];
+        let mut alpha = 0;
+        while alpha < 256 {
+            let mut c = 0;
+            while c < 256 {
+                table[alpha * 256 + c] = if alpha == 0 || alpha == 255 {
+                    c as u8
+                } else {
+                    let v = 255 * c / alpha;
+                    if v > 255 {
+                        255
+                    } else {
+                        v as u8
+                    }
+                };
+                c += 1;
+            }
+            alpha += 1;
+        }
+        table
+    };
+
+    /// A premultiplied colour `c` of `alpha` back to its plain one (RGBa to RGBA).
+    #[inline(always)]
+    pub fn unmultiplied(c: u8, alpha: u8) -> u8 {
+        UNMULTIPLIED[(usize::from(alpha) << 8) | usize::from(c)]
+    }
 }

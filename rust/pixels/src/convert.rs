@@ -2,23 +2,13 @@
 //! table's functions named below), with Image.py's way round where Convert.c has none: through
 //! the mode's base (RGBa to L goes through RGB).
 
-use crate::ints::{clip8, muldiv255};
+use crate::ints::{muldiv255, unmultiplied};
 use crate::{error, Image, Mode, Result};
 
 /// L24 >> 16: the grey of a colour, ITU-R 601-2 (rgb2l).
 #[inline(always)]
 fn grey(r: u8, g: u8, b: u8) -> u8 {
     ((u32::from(r) * 19595 + u32::from(g) * 38470 + u32::from(b) * 7471 + 0x8000) >> 16) as u8
-}
-
-/// rgba2rgbA (sic): a premultiplied colour band back to the plain one.
-#[inline(always)]
-fn unmultiplied(c: u8, alpha: u8) -> u8 {
-    if alpha == 255 || alpha == 0 {
-        c
-    } else {
-        clip8((255 * i64::from(c)) / i64::from(alpha))
-    }
 }
 
 impl Image {
@@ -72,14 +62,14 @@ impl Image {
                 }
             }
             (RGBa, RGBA) => {
-                for p in src.chunks_exact(4) {
+                // rgba2rgbA (sic): each premultiplied colour band back to the plain one
+                out.resize(n * 4, 0);
+                for (o, p) in out.chunks_exact_mut(4).zip(src.chunks_exact(4)) {
                     let a = p[3];
-                    out.extend_from_slice(&[
-                        unmultiplied(p[0], a),
-                        unmultiplied(p[1], a),
-                        unmultiplied(p[2], a),
-                        a,
-                    ]);
+                    o[0] = unmultiplied(p[0], a);
+                    o[1] = unmultiplied(p[1], a);
+                    o[2] = unmultiplied(p[2], a);
+                    o[3] = a;
                 }
             }
             (RGBa, RGB) => {

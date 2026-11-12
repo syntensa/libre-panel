@@ -79,9 +79,14 @@ pub fn blend(a: &Image, b: &Image, alpha: f32) -> Result<Image> {
     }
     let inside = (0.0..=1.0).contains(&alpha);
     let mut out = Image::blank(a.mode, a.width, a.height);
+    if inside {
+        // (between the two: never past either end, so taken as it is)
+        blend_inside(&mut out.data, &a.data, &b.data, alpha);
+        return Ok(out);
+    }
     for ((o, &x1), &x2) in out.data.iter_mut().zip(&a.data).zip(&b.data) {
         let v = i32::from(x1) as f32 + alpha * (i32::from(x2) - i32::from(x1)) as f32;
-        *o = if inside || (v > 0.0 && v < 255.0) {
+        *o = if v > 0.0 && v < 255.0 {
             v as u8
         } else if v <= 0.0 {
             0
@@ -90,6 +95,46 @@ pub fn blend(a: &Image, b: &Image, alpha: f32) -> Result<Image> {
         };
     }
     Ok(out)
+}
+
+/// `one + alpha * (two - one)` of each byte in single precision, truncated, for an alpha in
+/// 0..1 (whatever it gives lies between the two, so no clipping).
+fn blend_inside(out: &mut [u8], one: &[u8], two: &[u8], alpha: f32) {
+    let n = out.len().min(one.len()).min(two.len());
+    let mut done = 0;
+    #[cfg(target_arch = "x86_64")]
+    {
+        // SAFETY: SSE2 is part of every x86-64 processor; the loads and stores stay within
+        // the first `n` bytes of each slice.
+        unsafe {
+            use std::arch::x86_64::*;
+            let zero = _mm_setzero_si128();
+            let k = _mm_set1_ps(alpha);
+            // (the same operations as the scalar loop below, four at a time: the same bits)
+            let lanes = |x: __m128i, y: __m128i| {
+                let d = _mm_cvtepi32_ps(_mm_sub_epi32(y, x));
+                _mm_cvttps_epi32(_mm_add_ps(_mm_cvtepi32_ps(x), _mm_mul_ps(k, d)))
+            };
+            while done + 16 <= n {
+                let x = _mm_loadu_si128(one.as_ptr().add(done).cast());
+                let y = _mm_loadu_si128(two.as_ptr().add(done).cast());
+                let (xl, xh) = (_mm_unpacklo_epi8(x, zero), _mm_unpackhi_epi8(x, zero));
+                let (yl, yh) = (_mm_unpacklo_epi8(y, zero), _mm_unpackhi_epi8(y, zero));
+                let a = lanes(_mm_unpacklo_epi16(xl, zero), _mm_unpacklo_epi16(yl, zero));
+                let b = lanes(_mm_unpackhi_epi16(xl, zero), _mm_unpackhi_epi16(yl, zero));
+                let c = lanes(_mm_unpacklo_epi16(xh, zero), _mm_unpacklo_epi16(yh, zero));
+                let d = lanes(_mm_unpackhi_epi16(xh, zero), _mm_unpackhi_epi16(yh, zero));
+                // (each 0..255: packed back without clipping)
+                let packed = _mm_packus_epi16(_mm_packs_epi32(a, b), _mm_packs_epi32(c, d));
+                _mm_storeu_si128(out.as_mut_ptr().add(done).cast(), packed);
+                done += 16;
+            }
+        }
+    }
+    for i in done..n {
+        let (x1, x2) = (i32::from(one[i]), i32::from(two[i]));
+        out[i] = (x1 as f32 + alpha * (x2 - x1) as f32) as u8;
+    }
 }
 
 /// Image.composite(a, b, mask): ``a`` pasted over a copy of ``b`` through ``mask``.
@@ -126,5 +171,27 @@ impl Image {
             }
         }
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_blend_between_two_gives_what_the_formula_gives_for_every_pair_of_bytes() {
+        // (every pair of bytes, in a length that leaves a tail past the 16 at a time)
+        let one: Vec<u8> = (0..65536 + 7).map(|i| (i >> 8) as u8).collect();
+        let two: Vec<u8> = (0..65536 + 7).map(|i| i as u8).collect();
+        let mut out = vec![0u8; one.len()];
+        for k in 1..64 {
+            let alpha = k as f32 / 64.0 + if k % 3 == 0 { 1e-4 } else { 0.0 };
+            blend_inside(&mut out, &one, &two, alpha);
+            for i in 0..one.len() {
+                let (x1, x2) = (i32::from(one[i]), i32::from(two[i]));
+                let want = (x1 as f32 + alpha * (x2 - x1) as f32) as u8;
+                assert_eq!(out[i], want, "{alpha} {x1} {x2}");
+            }
+        }
     }
 }
