@@ -185,18 +185,29 @@ fn light<F: Fn(usize) -> [f32; 3]>(
 ) -> Vec<u8> {
     let cut: Vec<f32> = mask.iter().map(|&m| f32::from((m * 255.0) as u8)).collect();
     let share = (1.0f64 / 255.0) as f32;
-    let soft = crate::prof::part("light blur", || lp_pixels::dither::blur(&cut, h, w, halo));
     let (x0, y0, x1, y1) = bounds.unwrap_or((0, 0, w, h));
     let mut out = vec![0u8; (y1 - y0) * (x1 - x0) * 4];
     if out.is_empty() {
         return out;
     }
+    // (the blur of the bounds alone: blur_part's values are blur's there)
+    let soft = crate::prof::part("light blur", || match bounds {
+        Some(part) => lp_pixels::dither::blur_part(&cut, h, w, halo, part),
+        None => lp_pixels::dither::blur(&cut, h, w, halo),
+    });
+    let sw = x1 - x0;
     // (a pixel's core and colour hang on its coverage and colour alone: those of the pixel
     // before taken again where they are the same, as most are, the light's colour one)
     let mut before: Option<(u32, [f32; 3], f32, [u8; 3])> = None;
     for (y, line) in (y0..y1).zip(out.chunks_exact_mut((x1 - x0) * 4)) {
         let at = y * w;
-        let (masks, softs) = (&mask[at + x0..at + x1], &soft[at + x0..at + x1]);
+        let (masks, softs) = match bounds {
+            Some(_) => (
+                &mask[at + x0..at + x1],
+                &soft[(y - y0) * sw..(y - y0 + 1) * sw],
+            ),
+            None => (&mask[at + x0..at + x1], &soft[at + x0..at + x1]),
+        };
         for (x, ((px, &m), &s)) in (x0..).zip(line.chunks_exact_mut(4).zip(masks).zip(softs)) {
             let c = colour(x);
             let (core, rgb) = match before {

@@ -227,15 +227,29 @@ fn turned_into<T: Level>(a: &[T], out: &mut [T], h: usize, w: usize) {
 /// the two a window takes are kept, where it starts and where it ends, each summed from the
 /// first row on as rows sums them: the same additions in the same order.
 fn cols<T: Level>(a: &[T], out: &mut [T], h: usize, w: usize, side: usize, frac: f64) {
+    cols_upto(a, out, h, w, side, frac, h);
+}
+
+/// cols, its rows worked out up to `upto` alone (the running sums still from the first row
+/// on, so that each of those rows is what cols makes of it); `a` read up to row `upto + side`.
+fn cols_upto<T: Level>(
+    a: &[T],
+    out: &mut [T],
+    h: usize,
+    w: usize,
+    side: usize,
+    frac: f64,
+    upto: usize,
+) {
     #[cfg(target_arch = "x86_64")]
     {
         static WIDE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
         if *WIDE.get_or_init(|| std::arch::is_x86_feature_detected!("avx2")) {
             // SAFETY: the processor has AVX2 (asked above).
-            return unsafe { cols_avx2(a, out, h, w, side, frac) };
+            return unsafe { cols_avx2(a, out, h, w, side, frac, upto) };
         }
     }
-    cols_in(a, out, h, w, side, frac);
+    cols_in(a, out, h, w, side, frac, upto);
 }
 
 /// cols with AVX2's wider registers: the same additions and products, in the same order, on
@@ -243,12 +257,28 @@ fn cols<T: Level>(a: &[T], out: &mut [T], h: usize, w: usize, side: usize, frac:
 /// twice).
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
-unsafe fn cols_avx2<T: Level>(a: &[T], out: &mut [T], h: usize, w: usize, side: usize, frac: f64) {
-    cols_in(a, out, h, w, side, frac);
+unsafe fn cols_avx2<T: Level>(
+    a: &[T],
+    out: &mut [T],
+    h: usize,
+    w: usize,
+    side: usize,
+    frac: f64,
+    upto: usize,
+) {
+    cols_in(a, out, h, w, side, frac, upto);
 }
 
 #[inline(always)]
-fn cols_in<T: Level>(a: &[T], out: &mut [T], h: usize, w: usize, side: usize, frac: f64) {
+fn cols_in<T: Level>(
+    a: &[T],
+    out: &mut [T],
+    h: usize,
+    w: usize,
+    side: usize,
+    frac: f64,
+    upto: usize,
+) {
     let frac_t = T::of(frac);
     let scale = T::of(1.0 / (2.0 * side as f64 + 1.0 + 2.0 * frac));
     // the padded column's k-th value: the edges held
@@ -266,7 +296,7 @@ fn cols_in<T: Level>(a: &[T], out: &mut [T], h: usize, w: usize, side: usize, fr
             *sum = *sum + v;
         }
     }
-    for i in 0..h {
+    for i in 0..upto.min(h) {
         let (first, last) = (at(i), at(2 * side + 2 + i));
         let row = &mut out[i * w..(i + 1) * w];
         if i + 1 == h {
@@ -362,9 +392,142 @@ pub fn blur(a: &[f32], h: usize, w: usize, radius: f64) -> Vec<f32> {
     passes(a.to_vec(), h, w, side, frac)
 }
 
+/// blur, worked out for the part (x0, y0, x1, y1) of the picture alone: its values there, row by
+/// row (y1 - y0 rows of x1 - x0), each the one blur gives. Each pass's running sums still start
+/// at the first row or column, so that every value worked out is summed as blur sums it; what
+/// lies past the part's far edges by more than the passes reach, and the columns beside it in
+/// the passes down, are not worked out.
+pub fn blur_part(
+    a: &[f32],
+    h: usize,
+    w: usize,
+    radius: f64,
+    (x0, y0, x1, y1): (usize, usize, usize, usize),
+) -> Vec<f32> {
+    assert!(
+        x0 <= x1 && x1 <= w && y0 <= y1 && y1 <= h,
+        "a part beyond the picture"
+    );
+    if radius <= 0.0 || a.is_empty() || x0 == x1 || y0 == y1 {
+        let mut out = Vec::with_capacity((x1 - x0) * (y1 - y0));
+        for y in y0..y1 {
+            out.extend_from_slice(&a[y * w + x0..y * w + x1]);
+        }
+        return out;
+    }
+    let (side, frac) = box_radius(radius);
+    let part = (x0, y0, x1, y1);
+    if takes_products(a, h, w, radius) {
+        let wide: Vec<f64> = a.iter().map(|&v| f64::from(v)).collect();
+        return passes_part(&wide, h, w, side, frac, part)
+            .into_iter()
+            .map(|v| v as f32)
+            .collect();
+    }
+    passes_part(a, h, w, side, frac, part)
+}
+
+/// passes, for a part alone (blur_part).
+fn passes_part<T: Level>(
+    a: &[T],
+    h: usize,
+    w: usize,
+    side: usize,
+    frac: f64,
+    (x0, y0, x1, y1): (usize, usize, usize, usize),
+) -> Vec<T> {
+    // (each pass reads a row `side + 1` beyond the last it works out: the pass before works
+    // out as far)
+    let reach = side + 1;
+    let along = [(x1 + 2 * reach).min(w), (x1 + reach).min(w), x1];
+    // along the rows: down the columns of the picture turned, all its columns (the rows of
+    // the picture, which the passes down take), its rows (the picture's columns) to x1
+    let mut one = vec![T::ZERO; h * w];
+    turned_into(a, &mut one, h, w);
+    let mut other = vec![T::ZERO; h * w];
+    for upto in along {
+        cols_upto(&one, &mut other, w, h, side, frac, upto);
+        std::mem::swap(&mut one, &mut other);
+    }
+    // down: the part's columns alone (each column's sums are its own), its rows to y1
+    let pw = x1 - x0;
+    let mut down = vec![T::ZERO; h * pw];
+    for (k, column) in one[x0 * h..x1 * h].chunks_exact(h).enumerate() {
+        for (y, &v) in column.iter().enumerate() {
+            down[y * pw + k] = v;
+        }
+    }
+    let mut spare = vec![T::ZERO; h * pw];
+    for upto in [(y1 + 2 * reach).min(h), (y1 + reach).min(h), y1] {
+        cols_upto(&down, &mut spare, h, pw, side, frac, upto);
+        std::mem::swap(&mut down, &mut spare);
+    }
+    down.truncate(y1 * pw);
+    down.drain(..y0 * pw);
+    down
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_part_blurred_is_that_part_of_the_whole_blurred() {
+        let mut seed = 0x2b7e_1516_u64;
+        let mut next = move || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        let mut tried = 0;
+        for (h, w) in [
+            (1usize, 1usize),
+            (1, 9),
+            (7, 1),
+            (13, 17),
+            (40, 33),
+            (130, 130),
+            (90, 700),
+        ] {
+            for radius in [0.0, 0.4, 1.0, 2.5, 6.75, 9.0, 13.0] {
+                for empty_edges in [false, true] {
+                    // (levels, some rows and columns of nothing by the edges: the products' way)
+                    let a: Vec<f32> = (0..h * w)
+                        .map(|i| {
+                            let (y, x) = (i / w, i % w);
+                            let edge = empty_edges && (y + 6 > h || x + 6 > w);
+                            if edge {
+                                0.0
+                            } else {
+                                (next() % 256) as f32
+                            }
+                        })
+                        .collect();
+                    let whole = blur(&a, h, w, radius);
+                    for _ in 0..6 {
+                        let (xa, xb) = ((next() as usize) % (w + 1), (next() as usize) % (w + 1));
+                        let (ya, yb) = ((next() as usize) % (h + 1), (next() as usize) % (h + 1));
+                        let part = (xa.min(xb), ya.min(yb), xa.max(xb), ya.max(yb));
+                        let got = blur_part(&a, h, w, radius, part);
+                        let (x0, y0, x1, y1) = part;
+                        let mut want = Vec::new();
+                        for y in y0..y1 {
+                            want.extend_from_slice(&whole[y * w + x0..y * w + x1]);
+                        }
+                        let same = got.len() == want.len()
+                            && got
+                                .iter()
+                                .zip(&want)
+                                .all(|(g, w)| g.to_bits() == w.to_bits());
+                        assert!(same, "{h}x{w} radius {radius} part {part:?}");
+                        tried += 1;
+                    }
+                }
+            }
+        }
+        assert!(tried > 500);
+    }
 
     #[test]
     fn the_passes_down_the_columns_as_down_the_rows_of_the_picture_turned() {
