@@ -380,9 +380,19 @@ jobs:
             -DFT_DISABLE_HARFBUZZ=ON -DFT_DISABLE_BROTLI=ON > /dev/null
           cmake --build freetype --config Release --parallel > /dev/null
           ls freetype/Release/*.dll
+      # the engine the job `engine` built (on Windows; Linux's is built above), for the cost of
+      # a frame through it below: there by then, else that measurement is left out
+      - uses: actions/download-artifact@v4
+        if: ${{ runner.os == 'Windows' && !inputs.quick }}
+        continue-on-error: true
+        with:
+          name: engine-windows
+          path: ${{ runner.temp }}/engine
       # what drawing a frame costs here (no panel: the frames go nowhere), before the long
       # comparisons, so that a failing one does not hide it: with this computer's readings,
-      # then with the app's demo readings (the weather and its symbol, readings that jump)
+      # then with the app's demo readings (the weather and its symbol, readings that jump);
+      # then the whole way to a panel: the demo readings' frames through the engine into the
+      # simulated 12.3" (fake_panel.py), the app's process and the engine's measured
       - name: What drawing a frame costs (Lumen on a virtual 12.3", 25 fps)
         if: ${{ !inputs.quick }}
         shell: bash
@@ -390,11 +400,19 @@ jobs:
           if [ "$RUNNER_OS" = Windows ]; then
             export LP_LIBFREETYPE="$(cygpath -w "$RUNNER_TEMP/libs/freetype/Release/freetype.dll")"
             app=rust/target/release/libre-panel.exe
+            engine="$RUNNER_TEMP/engine/libre-panel-engine.exe"
           else
             app=rust/target/release/libre-panel
+            engine="$LIBRE_PANEL_ENGINE"
           fi
           python tests/frame_load.py --app "$app" --seconds 30
           python tests/frame_load.py --app "$app" --seconds 30 --demo
+          if [ -f "$engine" ]; then
+            pip install -q pyusb
+            python tests/frame_load.py --app "$app" --engine "$engine" --seconds 30 --demo
+          else
+            echo "no engine here: the frames through it are not measured"
+          fi
       - name: The crates against the Python app
         if: ${{ !inputs.quick }}
         run: python -u -X faulthandler -m pytest -v -rfE --durations=20 tests/test_rust_py.py tests/test_rust_pixels.py tests/test_rust_decode.py tests/test_rust_text.py tests/test_rust_theme.py tests/test_rust_modules.py tests/test_rust_render.py tests/test_rust_toasts.py tests/test_rust_transitions.py tests/test_rust_alarm.py tests/test_rust_boot.py tests/test_rust_video.py tests/test_rust_devices.py tests/test_rust_config.py tests/test_rust_sensors.py tests/test_rust_services.py tests/test_rust_app.py tests/test_rust_plugins.py
