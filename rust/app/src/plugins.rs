@@ -9,7 +9,6 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -103,8 +102,8 @@ pub fn program() -> Option<(PathBuf, Vec<String>)> {
 type Answer = (Dict, Vec<u8>);
 
 struct Inner {
-    stdin: Mutex<ChildStdin>,
-    child: Mutex<Child>,
+    stdin: Mutex<Box<dyn Write + Send>>,
+    child: Mutex<crate::spawn::Process>,
     waiting: Mutex<HashMap<u64, Sender<Answer>>>,
     next: AtomicU64,
     events: Mutex<Option<Sender<Answer>>>,
@@ -139,28 +138,21 @@ impl PluginHost {
                 .to_string_lossy()
                 .into_owned(),
         );
-        let mut command = Command::new(&program);
-        command
-            .args(&args)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-            command.creation_flags(CREATE_NO_WINDOW);
-        }
+        // (on Windows its three pipes the only handles it inherits: spawn.rs)
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         trace(|| format!("starting {} {}", program.display(), args.join(" ")));
-        let mut child = command
-            .spawn()
+        let started = crate::spawn::piped(&program, &args, CREATE_NO_WINDOW)
             .map_err(|why| format!("the plugin host {} did not start: {why}", program.display()))?;
-        trace(|| format!("started (process {})", child.id()));
-        let stdin = child.stdin.take().ok_or("the plugin host has no input")?;
-        let mut stdout = child.stdout.take().ok_or("the plugin host has no output")?;
+        trace(|| format!("started (process {})", started.process.id()));
+        let crate::spawn::Piped {
+            stdin,
+            mut stdout,
+            stderr,
+            process: child,
+        } = started;
         // what the plugins log goes into the app's log: "<level>\t<logger>\t<message>" a line,
         // and the lines of a traceback after it
-        if let Some(stderr) = child.stderr.take() {
+        {
             let _ = std::thread::Builder::new()
                 .name("plugin-log".into())
                 .spawn(move || {
@@ -404,8 +396,8 @@ impl Inner {
 impl Drop for PluginHost {
     fn drop(&mut self) {
         if let Ok(mut child) = self.inner.child.lock() {
-            let _ = child.kill();
-            let _ = child.wait();
+            child.kill();
+            child.wait();
         }
     }
 }

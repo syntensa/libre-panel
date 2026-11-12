@@ -57,6 +57,7 @@ mod server;
 mod services;
 mod settings;
 mod share;
+mod spawn;
 mod specs;
 mod start_screen;
 mod switch;
