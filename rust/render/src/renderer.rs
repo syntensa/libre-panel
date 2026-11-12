@@ -1878,7 +1878,7 @@ impl Renderer {
         if let Some(what) = self.beyond_widgets() {
             return Err(Unported(what.into()));
         }
-        let snapshot = Rc::new(snapshot.finite());
+        let snapshot = Rc::new(crate::prof::part("begin snapshot", || snapshot.finite()));
         if !self.slots.is_empty()
             && self.options.animate
             && !self.options.preview
@@ -1900,13 +1900,15 @@ impl Renderer {
                 .get(key)
                 .and_then(|r| motion::number(&r.value))
         };
-        self.motion.begin(&readings, now, glide, lead);
+        crate::prof::part("begin motion", || {
+            self.motion.begin(&readings, now, glide, lead)
+        });
         if let Some(plugins) = self.plugins.clone() {
-            plugins.begin(&self.frame_info());
+            crate::prof::part("begin plugins", || plugins.begin(&self.frame_info()));
         }
-        let screen = self.screen_image(&snapshot);
+        let screen = crate::prof::part("begin screen", || self.screen_image(&snapshot));
         // which card each slot shows
-        self.begin_slots(&snapshot, now)?;
+        crate::prof::part("begin slots", || self.begin_slots(&snapshot, now))?;
         let mut boxes = IndexMap::new();
         let mut pieces: Pieces = Vec::new();
         // the turned widgets' turns, and the turned modules' ("<id>/")

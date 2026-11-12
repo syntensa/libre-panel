@@ -6,7 +6,7 @@
 //! theme of theirs, a mode (with its page and frame rate), messages, the transition of a
 //! switch; and the pages it switches to by itself (music, the PC at rest).
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -157,6 +157,53 @@ pub struct Beside {
     pub first: Arc<Mutex<RunStatus>>,
 }
 
+/// _Versions: the version of a theme a panel shows (versions::theme_for, pair_version,
+/// unpaired_version: they look into the theme folders), looked up again after [`LOOK_S`]: a
+/// panel's loop asks for it every frame, and each lookup asks the disk. A version installed
+/// meanwhile is shown within [`LOOK_S`].
+#[derive(Default)]
+struct Versions {
+    /// (the theme named, the orientation, the panel's size, paired): the version, and when
+    known: HashMap<VersionAsked, (String, f64)>,
+}
+
+type VersionAsked = (String, String, Option<(i64, i64)>, bool);
+
+impl Versions {
+    /// How long a version looked up stands (s).
+    const LOOK_S: f64 = 1.0;
+    /// Names kept at most (a theme in turn, a page, a mode: each one name).
+    const MOST: usize = 64;
+
+    fn of(
+        &mut self,
+        named: &str,
+        orientation: &str,
+        size: Option<(i64, i64)>,
+        paired: bool,
+        now: f64,
+        places: &Places,
+    ) -> String {
+        let key = (named.to_string(), orientation.to_string(), size, paired);
+        if let Some((name, when)) = self.known.get(&key) {
+            if (0.0..Self::LOOK_S).contains(&(now - when)) {
+                return name.clone();
+            }
+        }
+        let shown = versions::theme_for(named, orientation, size, places);
+        let version = match paired {
+            true => versions::pair_version(&shown, places),
+            false => versions::unpaired_version(&shown, places),
+        };
+        let name = version.unwrap_or(shown);
+        if self.known.len() >= Self::MOST {
+            self.known.clear();
+        }
+        self.known.insert(key, (name.clone(), now));
+        name
+    }
+}
+
 pub struct MainLoop {
     home: Home,
     env: Env,
@@ -200,6 +247,8 @@ pub struct MainLoop {
     across: Option<crate::arrangement::Across>,
     across_watched: f64,
     rotation: Rotation,
+    /// the versions of themes looked up a moment ago (theme_name, every frame)
+    versions: Versions,
     snapshot: Option<Snapshot>,
     next_sample: f64,
     brightness: Option<i64>,
@@ -460,6 +509,7 @@ impl MainLoop {
             across: None,
             across_watched: f64::NEG_INFINITY,
             rotation: Rotation::default(),
+            versions: Versions::default(),
             snapshot: None,
             next_sample: 0.0,
             brightness: None,
@@ -917,15 +967,13 @@ impl MainLoop {
         } else {
             lp_theme::defaults::default_theme(self.model(), &self.places).to_string()
         };
+        // (while a companion runs beside it, the first panel's pair version: Lumen without
+        // the fans the companion shows)
+        let paired = self.paired(now);
+        let size = self.panel_size();
         let orientation = &self.config.device.orientation;
-        let shown = versions::theme_for(&named, orientation, self.panel_size(), &self.places);
-        // while a companion runs beside it, the first panel's pair version (Lumen without the
-        // fans the companion shows)
-        let version = match self.paired(now) {
-            true => versions::pair_version(&shown, &self.places),
-            false => versions::unpaired_version(&shown, &self.places),
-        };
-        version.unwrap_or(shown)
+        self.versions
+            .of(&named, orientation, size, paired, now, &self.places)
     }
 
     /// _instead_of: where the theme that is due cannot be shown and none is on show yet: the
@@ -1402,14 +1450,16 @@ impl MainLoop {
     fn step_inner(&mut self) -> Duration {
         let started = self.clock();
         let heading = lp_render::prof::Span::new("loop head");
+        let following = lp_render::prof::Span::new("head follow");
         self.follow_config(started);
         self.follow_across(started);
         for note in self.host.notes() {
             say(&note);
         }
         self.follow_pages(started);
+        drop(following);
         let restarting = lp_devices::turzx::restart_under_way();
-        let there = self.ensure_panel(started);
+        let there = lp_render::prof::part("head panel", || self.ensure_panel(started));
         self.follow_link(restarting);
         if !there {
             if let Ok(mut status) = self.status.lock() {
@@ -1417,7 +1467,7 @@ impl MainLoop {
             }
             return Duration::from_millis(250);
         }
-        let name = self.theme_name(started);
+        let name = lp_render::prof::part("head theme", || self.theme_name(started));
         let default = lp_theme::defaults::default_theme(self.model(), &self.places);
         let (model, size) = (self.model().map(|model| model.id), self.panel_size());
         if let Ok(mut status) = self.status.lock() {
