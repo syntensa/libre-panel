@@ -6,6 +6,23 @@ use std::collections::BTreeMap;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
+/// Where a line is said besides the standard error (the app's log: a program with a window
+/// has none to see).
+static ALSO: OnceLock<fn(&str)> = OnceLock::new();
+
+/// Each line said into `also` too.
+pub fn say_also(also: fn(&str)) {
+    let _ = ALSO.set(also);
+}
+
+/// `line` on the standard error and where say_also said.
+pub fn say(line: &str) {
+    eprintln!("{line}");
+    if let Some(also) = ALSO.get() {
+        also(line);
+    }
+}
+
 fn on() -> bool {
     static ON: OnceLock<bool> = OnceLock::new();
     *ON.get_or_init(|| std::env::var_os("LP_PROFILE").is_some_and(|v| !v.is_empty()))
@@ -55,7 +72,7 @@ pub fn add(name: &'static str, took: Duration) {
                     sum.as_secs_f64() * 1000.0 / *n as f64
                 );
             }
-            eprintln!("{line}");
+            say(&line);
             sums.1.clear();
             sums.0 = Some(Instant::now());
         }

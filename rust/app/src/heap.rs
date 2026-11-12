@@ -339,12 +339,12 @@ pub fn tick() {
     if now >= said.0 + 10_000 {
         let counts = global.counts();
         let span = (now - said.0) as f64 / 1000.0;
-        eprintln!(
+        lp_render::prof::say(&format!(
             "heap: {:.0} large blocks a second, {:.0} of them kept ones; {:.1} MB kept",
             (counts.asked - said.1.asked) as f64 / span,
             (counts.kept - said.1.kept) as f64 / span,
             counts.holding as f64 / f64::from(1 << 20)
-        );
+        ));
         *said = (now, counts);
     }
 }
