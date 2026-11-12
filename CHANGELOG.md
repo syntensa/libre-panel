@@ -4,12 +4,15 @@
 
 **Lighter** (Lumen on the 12.3" at 25 fps, the video mode through the engine, with the
 computer's own readings, on the same computer as 0.8.0; every change the same pixels)
-- **What a frame costs cut down further.** The app 5.2 to 5.6 % of a core instead of 9.3 a
-  morning before. Run in turn twice with 0.8.0 on that computer: 0.8.0 23.9 and 24.3 % of a
-  core (Python 11.9, its engine 12.0 and 12.4), this 15.5 and 16.7 (the app 5.2 and 5.6, the
-  engine 10.3 and 11.1); memory 101 MB instead of 193. The engine takes 3.7 to 4.0 ms a frame,
-  3.1 to 3.3 of them x264's; without x264 (the graphics card's encoder takes it over where it
-  is AMD's or NVIDIA's) this is about half of 0.8.0.
+- **What a frame costs cut down further.** Run in turn twice with 0.8.0 on that computer, a
+  minute each, the same engine for both: 0.8.0 31.4 and 32.5 % of a core (Python 14.9 and
+  15.3, its engine 16.5 and 17.2), this 21.1 and 21.6 (the app 6.9 and 7.0, the engine 14.3
+  and 14.6): two thirds of 0.8.0, the app alone less than half of Python. The simulated panel
+  is counted in neither (it runs in 0.8.0's Python process; its 1.8 and 2.0 %, measured beside
+  this one, are taken out of it). Memory 100 MB instead of 194. x264 takes 4.4 to 4.5 ms of
+  the engine's 5.2 to 5.4 a frame, the same pictures for both; without it (the graphics
+  card's encoder takes it over where it is AMD's or NVIDIA's) this is half of 0.8.0 (48.7 and
+  49.5 %), worked out from these runs: there was no graphics card to measure it on.
 - **Lit rings and graphs drawn with less work.** A lit gauge's sector is drawn straight
   through its lit picture (no mask over the whole ring, no paste through it), its light's
   colour worked out once for each coverage, its blur's passes on AVX2 where the processor has
