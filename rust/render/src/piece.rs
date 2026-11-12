@@ -85,6 +85,9 @@ pub struct Piece {
     /// Ring and Bar): what it is made of and its value; a bar's glow is its light
     pub ring: Option<std::rc::Rc<lp_devices::scene::RingLayer>>,
     pub bar: Option<std::rc::Rc<lp_devices::scene::BarLayer>>,
+    /// the pictures an engine lays its layer from, which it makes itself, where it is so laid
+    /// (render/scene.py's Laid of Made pictures: a fan's ring and its rotor over it)
+    pub laid: Option<std::rc::Rc<lp_devices::scene::LaidLayer>>,
 }
 
 impl Piece {
@@ -104,6 +107,7 @@ impl Piece {
             made: None,
             ring: None,
             bar: None,
+            laid: None,
         }
     }
 
@@ -159,6 +163,7 @@ impl Piece {
         piece.made = None;
         piece.ring = None;
         piece.bar = None;
+        piece.laid = None;
         Cow::Owned(piece)
     }
 

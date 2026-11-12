@@ -18,7 +18,8 @@ use crate::engine::head;
 /// The records of a frame of layers (wire.rs): its ground, a layer, the frame; a lit ring and a
 /// layer of it at a value (ring.rs); a picture the engine keeps, a layer it cuts from such
 /// pictures, and a picture it grows from one it keeps; a lit bar and a layer of it at a value,
-/// with its glow (bar.rs).
+/// with its glow (bar.rs); a layer it lays from pictures it keeps, a rotor whose pictures it
+/// makes, a rotor's picture at a position and a fan's ring (fan.rs).
 const GROUND: u8 = 9;
 const LAYER: u8 = 10;
 const SCENE: u8 = 11;
@@ -26,9 +27,23 @@ const RING: u8 = 12;
 const RING_LAYER: u8 = 13;
 const SOURCE: u8 = 14;
 const VIEW: u8 = 15;
+const LAID: u8 = 19;
 const GROWN: u8 = 20;
 const BAR: u8 = 21;
 const BAR_LAYER: u8 = 22;
+const ROTOR: u8 = 23;
+const BLADES: u8 = 24;
+const FAN_RING: u8 = 25;
+
+/// The rotors an engine keeps for a stream, those used last (scene.rs's MOST_ROTORS); the most
+/// parts a layer is laid from (wire.rs's MOST_PARTS); a rotor's largest side and most positions
+/// (fan.rs), the most bytes of its numbers (wire.rs's MOST_LAYER).
+pub const MOST_ROTORS: usize = 8;
+const MOST_PARTS: usize = 64;
+const MOST_KEPT: usize = 1024;
+const ROTOR_SIDE: usize = 1024;
+const ROTOR_POSITIONS: usize = 256;
+const MOST_LAYER: usize = 64 << 20;
 
 /// The most a bar of the engine's is long or a glow's area wide (with its room, px), and the
 /// most spans (segments) it lights (render/lit.py's NATIVE_SIDE, NATIVE_SPANS; bar.rs, wire.rs).
@@ -59,6 +74,9 @@ pub struct Layer<'a> {
     /// the lit bar the engine makes itself, where it is one (`image` empty): its picture, and
     /// its glow where it has one (the piece's light, which goes with it)
     pub bar: Option<Rc<BarLayer>>,
+    /// the pictures the engine lays it from, which it makes itself, where it is so laid (a
+    /// fan's ring and its rotor over it; `image` empty)
+    pub laid: Option<Rc<LaidLayer>>,
 }
 
 /// A lit ring of one colour at a value, as the engine makes it (render/lit.py's Ring,
@@ -283,6 +301,145 @@ impl BarLayer {
     }
 }
 
+/// What a rotor's pictures are made of (render/fan.py's rotor_layers): its grey layers at each
+/// of its positions, position after position, layer after layer, row after row.
+pub trait Planes {
+    fn numbers(&self) -> &[f32];
+}
+
+/// A rotor of a look at a size, as the engine takes it once for the stream (ROTOR; fan.rs's
+/// Rotor): `k` x `k`, its `layers` grey layers at each of its `positions`, and how they make a
+/// colour (ambient, diffuse, flat, core, gloss: fan.py's SHADING).
+pub struct RotorPlanes {
+    pub look: String,
+    pub k: usize,
+    pub positions: usize,
+    pub layers: usize,
+    pub shading: [f32; 5],
+    pub planes: std::sync::Arc<dyn Planes + Send + Sync>,
+}
+
+impl std::fmt::Debug for RotorPlanes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "RotorPlanes({} at {} px)", self.look, self.k)
+    }
+}
+
+impl RotorPlanes {
+    /// Whether the engine takes it (fan.rs's Rotor::new, wire.rs's ROTOR).
+    pub fn fits(&self) -> bool {
+        let n = self.planes.numbers().len();
+        (1..=ROTOR_SIDE).contains(&self.k)
+            && (1..=ROTOR_POSITIONS).contains(&self.positions)
+            && (4..=5).contains(&self.layers)
+            && Some(n) == self.positions.checked_mul(self.layers * self.k * self.k)
+            && n.checked_mul(4).is_some_and(|bytes| bytes <= MOST_LAYER)
+    }
+}
+
+/// A fan's ring as the engine makes it (render/fan.py's RingRecipe, fan.rs's RingSpec): on its
+/// `canvas`, in `colour`, the groove all round and its arc (`arc`: 0 none, 1 all round, 2 from
+/// one of its `angles` to the other, as Pillow's arc takes them), a ring `width` wide in
+/// `bounds` (Pillow's box, three times larger, in whole pixels), blurred into its halo by
+/// `halo`; `groove`, `white` and `share` as fan.py has them.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FanRing {
+    pub canvas: usize,
+    pub colour: [u8; 3],
+    pub arc: u8,
+    pub bounds: [i32; 4],
+    pub width: i32,
+    pub angles: (f32, f32),
+    pub halo: f32,
+    pub groove: f32,
+    pub white: f32,
+    pub share: f32,
+}
+
+/// What the engine makes a picture of itself (render/scene.py's Made of render/fan.py's
+/// recipes): a rotor at a position in its colours, blurred into its disc by `blend`
+/// (Image.blend's alpha, 0 for none) and its alpha put through `dim` (Image.point's table)
+/// where it is dimmed (BLADES); a fan's ring (FAN_RING).
+#[derive(Debug)]
+pub enum Recipe {
+    Blades {
+        rotor: Rc<RotorPlanes>,
+        phase: usize,
+        colour: [u8; 3],
+        second: [u8; 3],
+        blend: f32,
+        dim: Option<Vec<u8>>,
+    },
+    Ring(FanRing),
+}
+
+/// A picture the engine makes itself, `side` x `side` (render/scene.py's Made): what it is made
+/// of.
+#[derive(Debug)]
+pub struct MadePicture {
+    pub side: usize,
+    pub recipe: Recipe,
+}
+
+impl MadePicture {
+    /// Whether the engine makes it (fan.rs's limits, wire.rs's BLADES and FAN_RING).
+    pub fn fits(&self) -> bool {
+        match &self.recipe {
+            Recipe::Blades {
+                rotor, blend, dim, ..
+            } => {
+                rotor.fits()
+                    && self.side == rotor.k
+                    && blend.is_finite()
+                    && dim.as_ref().is_none_or(|table| table.len() == 256)
+            }
+            Recipe::Ring(ring) => {
+                let numbers = [
+                    ring.angles.0,
+                    ring.angles.1,
+                    ring.halo,
+                    ring.groove,
+                    ring.white,
+                    ring.share,
+                ];
+                (1..=ROTOR_SIDE).contains(&ring.canvas)
+                    && self.side == ring.canvas
+                    && ring.arc <= 2
+                    && numbers.iter().all(|v| v.is_finite())
+            }
+        }
+    }
+}
+
+/// A layer the engine lays from pictures it makes itself (render/scene.py's Laid of Made
+/// pictures): `w` x `h`, its `parts` (a picture, where its top left lies on it) each laid over
+/// those before on a clear picture, nothing where one hangs off it (a fan's ring, its rotor
+/// over it); `kept`, pictures the engine keeps with it besides, unused, where it has them (a
+/// turning rotor's positions it made before: laid when the rotor comes back to them, not made
+/// again).
+#[derive(Debug)]
+pub struct LaidLayer {
+    pub w: usize,
+    pub h: usize,
+    pub parts: Vec<(Rc<MadePicture>, i64, i64)>,
+    pub kept: Vec<Rc<MadePicture>>,
+}
+
+impl LaidLayer {
+    /// Whether the engine lays it as it is (wire.rs's LAID, scene.rs's laid).
+    pub fn fits(&self) -> bool {
+        let place = |v: i64| i32::try_from(v).is_ok();
+        (1..=NATIVE_SIDE).contains(&self.w)
+            && (1..=NATIVE_SIDE).contains(&self.h)
+            && (1..=MOST_PARTS).contains(&self.parts.len())
+            && self.kept.len() <= MOST_KEPT
+            && self
+                .parts
+                .iter()
+                .all(|(picture, x, y)| picture.fits() && place(*x) && place(*y))
+    }
+}
+
 /// A ring the engine has by its pictures and shape: the pictures kept alive, its number there.
 type RingKey = (usize, usize, [u64; 5], u32, [u8; 4]);
 type Rings = HashMap<RingKey, (Rc<Image>, Rc<Image>, u32)>;
@@ -337,7 +494,7 @@ enum Kept {
 }
 
 /// A piece the engine has: kept alive (its key stays its own), its layers, the pictures they
-/// are cut from and the rings and bars they are of.
+/// are cut from, the rings and bars they are of and the pictures the engine made them of.
 #[derive(Clone)]
 struct Had {
     /// (never read: it keeps the piece, and so its key, alive)
@@ -346,6 +503,7 @@ struct Had {
     cut_from: Vec<usize>,
     rings: Vec<RingKey>,
     bars: Vec<usize>,
+    made_of: Vec<usize>,
 }
 
 /// The bars the engine has, by their base's address: the base kept alive, its number there.
@@ -354,6 +512,9 @@ type Bars = HashMap<usize, (Rc<BarBase>, u32)>;
 /// The pictures the engine keeps by their key (the picture's address): the picture kept alive,
 /// its number there.
 type Sources = HashMap<usize, (Rc<Image>, u32)>;
+
+/// The same of the pictures the engine made itself.
+type MadeSources = HashMap<usize, (Rc<MadePicture>, u32)>;
 
 /// What one stream of the engine has of the frames' layers. Used by the stream's writer alone.
 #[derive(Default)]
@@ -367,19 +528,29 @@ pub struct SceneSender {
     /// the rings and bars the engine has, while the frames' layers are of them
     rings: Rings,
     bars: Bars,
+    /// the pictures the engine made itself, while the frames' layers are laid from them; the
+    /// rotors it keeps for the stream by look and size (the one used last at the end), their
+    /// numbers there
+    made: MadeSources,
+    rotors: Vec<((String, usize), u32)>,
     /// whether the engine cuts layers from pictures it keeps ("views"), grows a picture from
-    /// one it keeps ("grown"), makes lit rings ("rings") and lit bars ("bars")
+    /// one it keeps ("grown"), makes lit rings ("rings") and lit bars ("bars"), and lays layers
+    /// of a fan's pictures it makes itself ("laid", "fans")
     views: bool,
     grown: bool,
     makes_rings: bool,
     makes_bars: bool,
+    makes_fans: bool,
     next: u32,
     /// layers sent, and their bytes (pictures to cut from with them)
     pub layers: u64,
     pub bytes: u64,
-    /// layers the engine cut from pictures it keeps, and pictures it grew
+    /// layers the engine cut from pictures it keeps, and pictures it grew; layers it laid from
+    /// pictures it made itself, and those pictures
     pub cut: u64,
     pub grew: u64,
+    pub laid: u64,
+    pub made_pictures: u64,
 }
 
 impl SceneSender {
@@ -407,6 +578,18 @@ impl SceneSender {
     pub fn with_bars(mut self, bars: bool) -> SceneSender {
         self.makes_bars = bars;
         self
+    }
+
+    /// The same for an engine that lays layers of a fan's pictures it makes itself (`fans`: it
+    /// says both "laid" and "fans"; LAID of ROTOR, BLADES and FAN_RING records).
+    pub fn with_fans(mut self, fans: bool) -> SceneSender {
+        self.makes_fans = fans;
+        self
+    }
+
+    /// Whether the engine lays layers of a fan's pictures it makes itself.
+    pub fn fans(&self) -> bool {
+        self.makes_fans
     }
 
     /// Whether the engine cuts layers from pictures it keeps (VIEW records).
@@ -652,6 +835,177 @@ impl SceneSender {
         Some((number, keys))
     }
 
+    /// The layer the engine lays from pictures it makes itself (devices/engine.py's _laid of
+    /// _made pictures), those sent once while the frames' layers are laid from them; None where
+    /// it goes as its pixels: an engine that does not make them, a layer laid otherwise than
+    /// through its alpha, or one it would not take.
+    fn laid(
+        &mut self,
+        parts: &mut Vec<Vec<u8>>,
+        layer: &Layer<'_>,
+        now: &mut MadeSources,
+    ) -> Option<(u32, Vec<usize>)> {
+        let laid = layer.laid.as_ref()?;
+        if !self.makes_fans || layer.how != How::Over || !laid.fits() {
+            return None;
+        }
+        let mut keys = Vec::with_capacity(laid.parts.len() + laid.kept.len());
+        let mut placed = Vec::with_capacity(12 * laid.parts.len());
+        for (picture, x, y) in &laid.parts {
+            keys.push(Rc::as_ptr(picture) as usize);
+            let number = self.made(parts, picture, now);
+            placed.extend_from_slice(&number.to_le_bytes());
+            placed.extend_from_slice(&(*x as i32).to_le_bytes());
+            placed.extend_from_slice(&(*y as i32).to_le_bytes());
+        }
+        // (those kept besides that the engine has: it keeps them on; one it has not is not
+        // sent for it, nor made there)
+        let mut kept = Vec::new();
+        for picture in &laid.kept {
+            let key = Rc::as_ptr(picture) as usize;
+            if keys.contains(&key) {
+                continue;
+            }
+            let known = (now.get(&key).or_else(|| self.made.get(&key)))
+                .filter(|(had, _)| Rc::ptr_eq(had, picture))
+                .map(|(had, number)| (Rc::clone(had), *number));
+            if let Some(hit) = known {
+                kept.extend_from_slice(&hit.1.to_le_bytes());
+                now.insert(key, hit);
+                keys.push(key);
+            }
+        }
+        let mut body = Vec::with_capacity(24 + placed.len() + kept.len());
+        body.extend_from_slice(&(layer.x as i32).to_le_bytes());
+        body.extend_from_slice(&(layer.y as i32).to_le_bytes());
+        body.extend_from_slice(&(laid.w as u32).to_le_bytes());
+        body.extend_from_slice(&(laid.h as u32).to_le_bytes());
+        body.extend_from_slice(&(laid.parts.len() as u32).to_le_bytes());
+        body.extend_from_slice(&((kept.len() / 4) as u32).to_le_bytes());
+        body.extend_from_slice(&placed);
+        body.extend_from_slice(&kept);
+        let number = self.next.wrapping_add(1);
+        self.next = number;
+        let mut record = head(LAID, number, body.len() as u32);
+        record.extend_from_slice(&body);
+        parts.push(record);
+        self.layers += 1;
+        self.laid += 1;
+        Some((number, keys))
+    }
+
+    /// The number of the picture the engine makes itself for `picture`, sent the first time
+    /// and kept while the frames' layers are laid from it (devices/engine.py's _made): a
+    /// rotor's at a position, of the rotor sent first where the engine does not keep it; a
+    /// fan's ring.
+    fn made(
+        &mut self,
+        parts: &mut Vec<Vec<u8>>,
+        picture: &Rc<MadePicture>,
+        now: &mut MadeSources,
+    ) -> u32 {
+        let key = Rc::as_ptr(picture) as usize;
+        let known = (now.get(&key).or_else(|| self.made.get(&key)))
+            .filter(|(had, _)| Rc::ptr_eq(had, picture))
+            .map(|(had, number)| (Rc::clone(had), *number));
+        if let Some(hit) = known {
+            let number = hit.1;
+            now.insert(key, hit);
+            return number;
+        }
+        let number = match &picture.recipe {
+            Recipe::Blades {
+                rotor,
+                phase,
+                colour,
+                second,
+                blend,
+                dim,
+            } => {
+                let made_of = self.rotor(parts, rotor);
+                let number = self.next.wrapping_add(1);
+                self.next = number;
+                let table = dim.as_deref().unwrap_or_default();
+                let mut record = head(BLADES, number, (20 + table.len()) as u32);
+                record.extend_from_slice(&made_of.to_le_bytes());
+                record.extend_from_slice(&(*phase as u32).to_le_bytes());
+                record.extend_from_slice(colour);
+                record.extend_from_slice(second);
+                record.extend_from_slice(&[u8::from(dim.is_some()), 0]);
+                record.extend_from_slice(&blend.to_le_bytes());
+                record.extend_from_slice(table);
+                parts.push(record);
+                number
+            }
+            Recipe::Ring(ring) => {
+                let number = self.next.wrapping_add(1);
+                self.next = number;
+                let mut record = head(FAN_RING, number, (52 + 256 * 4) as u32);
+                record.extend_from_slice(&(ring.canvas as u32).to_le_bytes());
+                record.extend_from_slice(&ring.colour);
+                record.push(ring.arc);
+                for v in ring.bounds.iter().chain([&ring.width]) {
+                    record.extend_from_slice(&v.to_le_bytes());
+                }
+                for v in [
+                    ring.angles.0,
+                    ring.angles.1,
+                    ring.halo,
+                    ring.groove,
+                    ring.white,
+                    ring.share,
+                ] {
+                    record.extend_from_slice(&v.to_le_bytes());
+                }
+                // (the core of each level of the arc's coverage, as fan.py's CORE_LEVELS has
+                // it: single precision, the levels a 255th each)
+                for level in 0..256u16 {
+                    let core = (f32::from(level) / 255.0).powf(0.7);
+                    record.extend_from_slice(&core.to_le_bytes());
+                }
+                parts.push(record);
+                number
+            }
+        };
+        self.made_pictures += 1;
+        now.insert(key, (Rc::clone(picture), number));
+        number
+    }
+
+    /// The number of `rotor` where the engine keeps it, sent first where it does not: it keeps
+    /// the MOST_ROTORS used last for the stream (scene.rs's rotor and blades), as this counts.
+    fn rotor(&mut self, parts: &mut Vec<Vec<u8>>, rotor: &RotorPlanes) -> u32 {
+        let key = (rotor.look.clone(), rotor.k);
+        if let Some(at) = self.rotors.iter().position(|(kept, _)| *kept == key) {
+            let used = self.rotors.remove(at);
+            let number = used.1;
+            self.rotors.push(used);
+            return number;
+        }
+        let number = self.next.wrapping_add(1);
+        self.next = number;
+        let numbers = rotor.planes.numbers();
+        let mut record = head(ROTOR, number, (32 + numbers.len() * 4) as u32);
+        for v in [rotor.k, rotor.positions, rotor.layers] {
+            record.extend_from_slice(&(v as u32).to_le_bytes());
+        }
+        for v in rotor.shading {
+            record.extend_from_slice(&v.to_le_bytes());
+        }
+        parts.push(record);
+        let mut data = Vec::with_capacity(numbers.len() * 4);
+        for v in numbers {
+            data.extend_from_slice(&v.to_le_bytes());
+        }
+        self.bytes += data.len() as u64;
+        parts.push(data);
+        self.rotors.push((key, number));
+        if self.rotors.len() > MOST_ROTORS {
+            self.rotors.remove(0);
+        }
+        number
+    }
+
     /// The number of the picture the engine keeps for `part`'s image, sent the first time and
     /// kept while the frames' layers are cut from it (devices/engine.py's _source); one grown
     /// from a picture it keeps goes as the rest of its columns.
@@ -765,6 +1119,7 @@ impl SceneSender {
         let mut sources: Sources = HashMap::new();
         let mut rings: Rings = HashMap::new();
         let mut bars: Bars = HashMap::new();
+        let mut made: MadeSources = HashMap::new();
         for entry in entries {
             match entry {
                 Entry::Known(key) => {
@@ -787,6 +1142,11 @@ impl SceneSender {
                                 bars.insert(*at, (Rc::clone(&bar.0), bar.1));
                             }
                         }
+                        for at in &had.made_of {
+                            if let Some(picture) = self.made.get(at) {
+                                made.insert(*at, (Rc::clone(&picture.0), picture.1));
+                            }
+                        }
                         now.insert(key, had);
                     }
                 }
@@ -797,6 +1157,7 @@ impl SceneSender {
                         cut_from: Vec::new(),
                         rings: Vec::new(),
                         bars: Vec::new(),
+                        made_of: Vec::new(),
                     };
                     for layer in &layers {
                         if let Some((id, ring)) = self.ring(&mut parts, layer, &mut rings) {
@@ -805,6 +1166,9 @@ impl SceneSender {
                         } else if let Some((ids, bar)) = self.bar(&mut parts, layer, &mut bars) {
                             had.ids.extend(ids);
                             had.bars.push(bar);
+                        } else if let Some((id, keys)) = self.laid(&mut parts, layer, &mut made) {
+                            had.ids.push(id);
+                            had.made_of.extend(keys);
                         } else if let Some((id, keys)) = self.view(&mut parts, layer, &mut sources)
                         {
                             had.ids.push(id);
@@ -822,6 +1186,7 @@ impl SceneSender {
         self.sources = sources;
         self.rings = rings;
         self.bars = bars;
+        self.made = made;
         let mut record = head(SCENE, number, order.len() as u32);
         record.extend_from_slice(&planned.unwrap_or(f64::NAN).to_le_bytes());
         record.extend_from_slice(&(if half { 180u32 } else { 0 }).to_le_bytes());
@@ -839,6 +1204,8 @@ impl SceneSender {
         self.sources.clear();
         self.rings.clear();
         self.bars.clear();
+        self.made.clear();
+        self.rotors.clear();
     }
 }
 
@@ -918,6 +1285,7 @@ mod tests {
                 left_out: None,
                 ring: None,
                 bar: None,
+                laid: None,
             }],
         }];
         let parts = sender.records(&Ground::Colour([1, 2, 3]), entries, 7, Some(1.5), false);
@@ -972,6 +1340,7 @@ mod tests {
                     left_out: None,
                     ring: None,
                     bar: None,
+                    laid: None,
                 },
                 Layer {
                     image: &light,
@@ -982,6 +1351,7 @@ mod tests {
                     left_out: None,
                     ring: None,
                     bar: None,
+                    laid: None,
                 },
             ],
         }];
@@ -1031,6 +1401,7 @@ mod tests {
             left_out: None,
             ring: None,
             bar: None,
+            laid: None,
         };
         let entries = vec![Entry::New {
             key,
@@ -1063,6 +1434,7 @@ mod tests {
                 left_out: None,
                 ring: None,
                 bar: None,
+                laid: None,
             }],
         }];
         let parts = sender.records(&Ground::Colour([0, 0, 0]), entries, 2, None, false);
@@ -1089,6 +1461,7 @@ mod tests {
                 left_out: None,
                 ring: None,
                 bar: None,
+                laid: None,
             }],
         }];
         let parts = sender.records(&Ground::Colour([0, 0, 0]), entries, 3, None, false);
@@ -1118,6 +1491,7 @@ mod tests {
                 left_out: None,
                 ring: None,
                 bar: None,
+                laid: None,
             }],
         }];
         let parts = sender.records(&Ground::Colour([0, 0, 0]), entries, 4, None, false);
@@ -1137,6 +1511,7 @@ mod tests {
                 left_out: None,
                 ring: None,
                 bar: None,
+                laid: None,
             }],
         }];
         let parts = plain.records(&Ground::Colour([0, 0, 0]), entries, 1, None, false);
@@ -1175,6 +1550,7 @@ mod tests {
                     left_out: Some((side, side)),
                     ring: Some(Rc::new(ring(frac))),
                     bar: None,
+                    laid: None,
                 }],
             }]
         };
@@ -1294,6 +1670,7 @@ mod tests {
                     left_out: Some((8, 14)),
                     ring: None,
                     bar: Some(Rc::new(layer)),
+                    laid: None,
                 }],
             }]
         };
@@ -1413,5 +1790,202 @@ mod tests {
             glow.area.0 = 1 << 40;
         }
         assert!(!far.fits());
+    }
+
+    struct Numbers(Vec<f32>);
+
+    impl Planes for Numbers {
+        fn numbers(&self) -> &[f32] {
+            &self.0
+        }
+    }
+
+    fn rotor(look: &str) -> Rc<RotorPlanes> {
+        Rc::new(RotorPlanes {
+            look: look.into(),
+            k: 3,
+            positions: 2,
+            layers: 5,
+            shading: [0.35, 0.65, 0.7, 0.3, 0.55],
+            planes: std::sync::Arc::new(Numbers((0..90).map(|v| v as f32 / 90.0).collect())),
+        })
+    }
+
+    fn blades(rotor: &Rc<RotorPlanes>, phase: usize, dim: bool) -> Rc<MadePicture> {
+        Rc::new(MadePicture {
+            side: 3,
+            recipe: Recipe::Blades {
+                rotor: Rc::clone(rotor),
+                phase,
+                colour: [10, 20, 30],
+                second: [40, 50, 60],
+                blend: 0.25,
+                dim: dim.then(|| (0..=255).collect()),
+            },
+        })
+    }
+
+    #[test]
+    fn a_fan_goes_as_what_the_engine_makes_it_of_its_rotor_once_its_positions_kept() {
+        let mut sender = SceneSender::with(true, true).with_fans(true);
+        let r = rotor("noctua-g2");
+        let ring = Rc::new(MadePicture {
+            side: 8,
+            recipe: Recipe::Ring(FanRing {
+                canvas: 8,
+                colour: [1, 2, 3],
+                arc: 2,
+                bounds: [1, 1, 22, 22],
+                width: 4,
+                angles: (-90.0, 30.0),
+                halo: 1.5,
+                groove: 0.22,
+                white: 0.75,
+                share: 1.45,
+            }),
+        });
+        let empty = Image::blank(Mode::RGBA, 0, 0);
+        let fan = |parts: Vec<(Rc<MadePicture>, i64, i64)>, kept: Vec<Rc<MadePicture>>| {
+            let piece: Rc<dyn Any> = Rc::new(0u8);
+            let key = Rc::as_ptr(&piece) as *const () as usize;
+            let laid = Rc::new(LaidLayer {
+                w: 8,
+                h: 8,
+                parts,
+                kept,
+            });
+            (key, piece, laid)
+        };
+        fn entry<'a>(
+            key: usize,
+            keep: Rc<dyn Any>,
+            laid: &Rc<LaidLayer>,
+            image: &'a Image,
+        ) -> Entry<'a> {
+            Entry::New {
+                key,
+                keep,
+                layers: vec![Layer {
+                    image,
+                    x: 5,
+                    y: 6,
+                    how: How::Over,
+                    cut: None,
+                    left_out: Some((8, 8)),
+                    ring: None,
+                    bar: None,
+                    laid: Some(Rc::clone(laid)),
+                }],
+            }
+        }
+        // the first frame: the ring, the rotor, its position, the layer laid of them
+        let first = blades(&r, 0, false);
+        let (k1, p1, l1) = fan(
+            vec![(Rc::clone(&ring), 0, 0), (Rc::clone(&first), 2, 2)],
+            vec![],
+        );
+        let parts = sender.records(
+            &Ground::Colour([0; 3]),
+            vec![entry(k1, p1, &l1, &empty)],
+            1,
+            None,
+            false,
+        );
+        let got = kinds(&parts);
+        assert_eq!(got[1], (FAN_RING, 1, 52 + 1024));
+        assert_eq!(got[2], (ROTOR, 2, 32 + 90 * 4));
+        assert_eq!(got[3], (BLADES, 3, 20));
+        assert_eq!(got[4], (LAID, 4, 24 + 2 * 12));
+        // (the rotor's head and its numbers; the blades of it; the layer's parts)
+        let head = &parts[2][16..48];
+        let u = |b: &[u8], i: usize| u32::from_le_bytes(b[i..i + 4].try_into().unwrap());
+        assert_eq!((u(head, 0), u(head, 4), u(head, 8)), (3, 2, 5));
+        assert_eq!(f32::from_le_bytes(head[12..16].try_into().unwrap()), 0.35);
+        assert_eq!(parts[3].len(), 90 * 4);
+        let blades_record = &parts[4][16..];
+        assert_eq!((u(blades_record, 0), u(blades_record, 4)), (2, 0));
+        assert_eq!(&blades_record[8..16], &[10, 20, 30, 40, 50, 60, 0, 0]);
+        assert_eq!(
+            f32::from_le_bytes(blades_record[16..20].try_into().unwrap()),
+            0.25
+        );
+        let body = &parts[5][16..];
+        assert_eq!(
+            (u(body, 0), u(body, 4), u(body, 8), u(body, 12)),
+            (5, 6, 8, 8)
+        );
+        assert_eq!((u(body, 16), u(body, 20)), (2, 0));
+        assert_eq!((u(body, 24), u(body, 36), u(body, 40)), (1, 3, 2));
+        // the next: the ring as it was, the rotor further on (dimmed): no rotor again, the
+        // position before kept, one never made not sent for it
+        let second = blades(&r, 1, true);
+        let never = blades(&r, 0, true);
+        let (k2, p2, l2) = fan(
+            vec![(Rc::clone(&ring), 0, 0), (Rc::clone(&second), 2, 2)],
+            vec![Rc::clone(&first), Rc::clone(&never)],
+        );
+        let parts = sender.records(
+            &Ground::Colour([0; 3]),
+            vec![entry(k2, p2, &l2, &empty)],
+            2,
+            None,
+            false,
+        );
+        let got = kinds(&parts);
+        assert_eq!(got[0], (BLADES, 5, 20 + 256));
+        assert_eq!(got[1], (LAID, 6, 24 + 2 * 12 + 4));
+        let body = &parts[1][16..];
+        assert_eq!((u(body, 16), u(body, 20)), (2, 1));
+        assert_eq!((u(body, 24), u(body, 36), u(body, 48)), (1, 5, 3));
+        assert_eq!(got[2].0, SCENE);
+        // the one after: the position kept comes back, laid, not made again
+        let (k3, p3, l3) = fan(
+            vec![(Rc::clone(&ring), 0, 0), (Rc::clone(&first), 2, 2)],
+            vec![Rc::clone(&second)],
+        );
+        let parts = sender.records(
+            &Ground::Colour([0; 3]),
+            vec![entry(k3, p3, &l3, &empty)],
+            3,
+            None,
+            false,
+        );
+        let got = kinds(&parts);
+        assert_eq!(got[0], (LAID, 7, 24 + 2 * 12 + 4));
+        assert_eq!(got[1].0, SCENE);
+        // the engine keeps the MOST_ROTORS used last: a ninth sends the first again
+        for n in 0..MOST_ROTORS {
+            let other = rotor(&format!("look {n}"));
+            let (k, p, l) = fan(vec![(blades(&other, 0, false), 0, 0)], vec![]);
+            sender.records(
+                &Ground::Colour([0; 3]),
+                vec![entry(k, p, &l, &empty)],
+                4,
+                None,
+                false,
+            );
+        }
+        let (k4, p4, l4) = fan(vec![(blades(&r, 1, false), 0, 0)], vec![]);
+        let parts = sender.records(
+            &Ground::Colour([0; 3]),
+            vec![entry(k4, p4, &l4, &empty)],
+            5,
+            None,
+            false,
+        );
+        assert_eq!(kinds(&parts)[0].0, ROTOR);
+        // an engine that makes no fans is sent none
+        let mut plain = SceneSender::with(true, true);
+        let (k5, p5, l5) = fan(vec![(blades(&r, 1, false), 0, 0)], vec![]);
+        let parts = plain.records(
+            &Ground::Colour([0; 3]),
+            vec![entry(k5, p5, &l5, &empty)],
+            1,
+            None,
+            false,
+        );
+        assert!(kinds(&parts)
+            .iter()
+            .all(|k| ![LAID, ROTOR, BLADES].contains(&k.0)));
     }
 }

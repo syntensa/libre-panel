@@ -2639,6 +2639,7 @@ fn run(case: &Value) -> Result<Value, String> {
                     // pixels made here where the frame is composed: Piece::whole)
                     renderer.native_rings = c["native_rings"].as_bool().unwrap_or(false);
                     renderer.native_bars = c["native_bars"].as_bool().unwrap_or(false);
+                    renderer.native_fans = c["native_fans"].as_bool().unwrap_or(false);
                     // (video mode: every frame reaches the panel, the graphs scroll on in each,
                     // as the loop sets it for a panel that streams)
                     renderer.continuous = c["continuous"].as_bool().unwrap_or(false);
@@ -2698,6 +2699,7 @@ fn run(case: &Value) -> Result<Value, String> {
                                     "warnings": renderer.warnings(),
                                     "native_rings": renderer.native_rings_made.get(),
                                     "native_bars": renderer.native_bars_made.get(),
+                                    "native_fans": renderer.native_fans_made.get(),
                                     "moving": renderer.moving, "due": renderer.due});
                                 if bytes {
                                     out["frame"] = value_of(&frame);

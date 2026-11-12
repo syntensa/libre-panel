@@ -834,6 +834,7 @@ impl TurzxVideo {
             crate::scene::SceneSender::with(can.contains("views"), can.contains("grown"))
                 .with_rings(can.contains("rings"))
                 .with_bars(can.contains("bars"))
+                .with_fans(can.contains("laid") && can.contains("fans"))
         });
         let mut panel = TurzxVideo {
             conn,
@@ -1113,6 +1114,12 @@ impl TurzxVideo {
     /// Whether frames go as their layers to an engine that makes lit bars itself.
     pub fn makes_bars(&self) -> bool {
         self.scenes.as_ref().is_some_and(|scenes| scenes.bars())
+    }
+
+    /// Whether frames go as their layers to an engine that lays a fan's pictures it makes
+    /// itself.
+    pub fn makes_fans(&self) -> bool {
+        self.scenes.as_ref().is_some_and(|scenes| scenes.fans())
     }
 
     /// The frame of layers the engine composed last (EngineLink::shown), within `timeout`.
@@ -1578,6 +1585,12 @@ impl Turzx {
     /// Whether frames go as their layers to an engine that makes lit bars itself.
     pub fn makes_bars(&self) -> bool {
         matches!(self, Turzx::Video(panel) if panel.makes_bars())
+    }
+
+    /// Whether frames go as their layers to an engine that lays a fan's pictures it makes
+    /// itself.
+    pub fn makes_fans(&self) -> bool {
+        matches!(self, Turzx::Video(panel) if panel.makes_fans())
     }
 
     /// The pixels of the frame that went last as its layers (video only: TurzxVideo::keep_last).

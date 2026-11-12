@@ -252,6 +252,11 @@ pub struct Renderer {
     pub native_bars: bool,
     pub native_bars_made: std::cell::Cell<u64>,
     pub(crate) bar_bases: RefCell<HashMap<String, Rc<lp_devices::scene::BarBase>>>,
+    /// whether a fan may go as the pictures an engine lays it from, which it makes itself
+    /// (Piece::laid, its pixels left out): where the frames go to an engine that makes fans
+    /// (renderer.native_fans and native_laid); how many went so
+    pub native_fans: bool,
+    pub native_fans_made: std::cell::Cell<u64>,
     /// when the last reading came and the seconds to the next (Python's sample, the loop's)
     pub sample: (f64, f64),
     /// what draws the plugins' widget types and screen (the app's plugin host); None: a frame
@@ -443,6 +448,8 @@ impl Renderer {
             native_bars: false,
             native_bars_made: std::cell::Cell::new(0),
             bar_bases: RefCell::new(HashMap::new()),
+            native_fans: false,
+            native_fans_made: std::cell::Cell::new(0),
             sample: (0.0, 1.0),
             plugins: None,
             shown: None,
@@ -1655,6 +1662,9 @@ impl Renderer {
                 let (x, y) = (widget::int(&w, "x", 0), widget::int(&w, "y", 0));
                 let (fw, fh) = (widget::int(&w, "w", 48), widget::int(&w, "h", 48));
                 let (size, _margin, canvas) = fan::geometry(fw, fh);
+                // (laid by an engine of the pictures it makes itself, where it makes them and the
+                // widget's effects need no pixels here: _laid_fan's native)
+                let native = self.native_fans && fan::native(&w);
                 let content = Value::List(vec![
                     Value::List(colour.iter().map(|&c| Value::int(i64::from(c))).collect()),
                     Value::int(size),
@@ -1666,16 +1676,41 @@ impl Renderer {
                     Value::Str(format!("{frame:?}")),
                     Value::Str(look.name.to_string()),
                     Value::Bool(own),
+                    Value::Bool(native),
                 ]);
                 let dir = fan::pictures_dir(&self.env.fonts_dir);
-                self.cached(&w, content, |_| {
+                self.cached(&w, content, |r| {
                     // (its frame, the rotor over it, the square in the middle of its box)
-                    let image = fan::picture(&dir, colour, size, &rotor, frame, look, own)?;
                     let at = (
                         x + (fw - canvas).div_euclid(2),
                         y + (fh - canvas).div_euclid(2),
                     );
-                    let mut piece = Piece::new(image, at.0, at.1);
+                    let made = if native {
+                        fan::made_parts(&dir, colour, size, &rotor, frame, look, own, id)?
+                    } else {
+                        None
+                    };
+                    let mut piece = match made {
+                        Some(fan::Made { parts, kept, side }) => {
+                            let mut piece = Piece::new(Image::blank(Mode::RGBA, 0, 0), at.0, at.1);
+                            piece.left_out = Some((side, side));
+                            piece.made = Some(crate::piece::Maker(Rc::new(move || {
+                                fan::picture(&dir, colour, size, &rotor, frame, look, own).ok()
+                            })));
+                            piece.laid = Some(Rc::new(lp_devices::scene::LaidLayer {
+                                w: side,
+                                h: side,
+                                parts,
+                                kept,
+                            }));
+                            r.native_fans_made.set(r.native_fans_made.get() + 1);
+                            piece
+                        }
+                        None => {
+                            let image = fan::picture(&dir, colour, size, &rotor, frame, look, own)?;
+                            Piece::new(image, at.0, at.1)
+                        }
+                    };
                     piece.hit = Some([x, y, fw, fh]);
                     Ok(piece)
                 })

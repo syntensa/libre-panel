@@ -9,6 +9,7 @@ use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::{Mutex, OnceLock};
 
+use lp_devices::scene::LaidLayer;
 use lp_pixels::{chops, Draw, Image, Mode};
 use lp_py::fnmatch;
 use lp_py::num as pn;
@@ -461,13 +462,41 @@ pub(crate) enum ListPart {
 /// A box by its corners: (x0, y0, x1, y1).
 pub(crate) type Corners = (i64, i64, i64, i64);
 
-/// _within: the part of `layer` that `image` at (x, y) covers (as paste lays it): its corners,
-/// None where it covers none of it.
-fn within(layer: &Image, image: &Image, x: i64, y: i64) -> Option<Corners> {
+/// _within: the part of `layer` that a picture of `side` x `side` at (x, y) covers (as paste
+/// lays it): its corners, None where it covers none of it.
+fn within(layer: &Image, side: usize, x: i64, y: i64) -> Option<Corners> {
     let (x0, y0) = (x.max(0), y.max(0));
-    let x1 = (x + image.width() as i64).min(layer.width() as i64);
-    let y1 = (y + image.height() as i64).min(layer.height() as i64);
+    let x1 = (x + side as i64).min(layer.width() as i64);
+    let y1 = (y + side as i64).min(layer.height() as i64);
     (x1 > x0 && y1 > y0).then_some((x0, y0, x1, y1))
+}
+
+/// The pictures an engine lays a fan of, which it makes itself (fan::made_parts), with how the
+/// fan's picture is made here where something asks for it.
+type FanMade = (fan::Made, Rc<dyn Fn() -> Option<Image>>);
+
+/// A fan of a list where it lies on the list's layer (its corner at x, y; its picture `side`
+/// px square): its picture drawn here, or what an engine lays it of (_laid_fan's native).
+struct ListFan {
+    image: Option<Image>,
+    made: Option<FanMade>,
+    side: usize,
+    x: i64,
+    y: i64,
+}
+
+impl ListFan {
+    /// Its picture: drawn here, or made here as the engine makes it.
+    fn picture(&self) -> Result<std::borrow::Cow<'_, Image>> {
+        use std::borrow::Cow;
+        match (&self.image, &self.made) {
+            (Some(image), _) => Ok(Cow::Borrowed(image)),
+            (None, Some((_, make))) => make()
+                .map(Cow::Owned)
+                .ok_or_else(|| Failed("a fan's picture not made".into())),
+            (None, None) => Err(Failed("a fan of no picture".into())),
+        }
+    }
 }
 
 /// Whether nothing of `layer` (RGBA) shows in the box (x0, y0, x1, y1): alpha.crop(box).getbbox()
@@ -481,10 +510,10 @@ fn clear_in(layer: &Image, (x0, y0, x1, y1): Corners) -> Result<bool> {
 
 /// _fans_apart: whether the fans (their pictures at their places on `layer`) lie apart from each
 /// other and on nothing of the layer (the names and numbers).
-fn fans_apart(layer: &Image, fans: &[(Image, i64, i64)]) -> Result<bool> {
+fn fans_apart(layer: &Image, fans: &[ListFan]) -> Result<bool> {
     let shown: Vec<_> = fans
         .iter()
-        .filter_map(|(image, x, y)| within(layer, image, *x, *y))
+        .filter_map(|fan| within(layer, fan.side, fan.x, fan.y))
         .collect();
     let apart = shown.iter().enumerate().all(|(i, a)| {
         shown[i + 1..]
@@ -502,16 +531,42 @@ fn fans_apart(layer: &Image, fans: &[(Image, i64, i64)]) -> Result<bool> {
     Ok(true)
 }
 
-/// _fan_pieces: the fans as pieces over the list (`piece`), each cut as it lies on it, by name.
-fn fan_pieces(piece: &Piece, fans: &[(Image, i64, i64)]) -> Vec<(String, Rc<Piece>)> {
+/// _fan_pieces: the fans as pieces over the list (`piece`), each cut as it lies on it, by name;
+/// a fan an engine lays is cut as its parts are laid (its pixels left out, made here where
+/// something asks for them).
+fn fan_pieces(piece: &Piece, fans: &[ListFan]) -> Vec<(String, Rc<Piece>)> {
     let mut out = Vec::new();
-    for (i, (image, x, y)) in fans.iter().enumerate() {
-        let Some((x0, y0, x1, y1)) = within(&piece.layer, image, *x, *y) else {
+    for (i, fan) in fans.iter().enumerate() {
+        let Some((x0, y0, x1, y1)) = within(&piece.layer, fan.side, fan.x, fan.y) else {
             continue;
         };
-        let part = image.crop(x0 - x, y0 - y, x1 - x, y1 - y);
-        let fan = Piece::new(part, piece.x + x0, piece.y + y0);
-        out.push((format!("fan{i}"), Rc::new(fan)));
+        // (where the cut begins in the fan's picture)
+        let (cx, cy) = (x0 - fan.x, y0 - fan.y);
+        let made = match (&fan.image, &fan.made) {
+            (Some(image), _) => Piece::new(image.crop(cx, cy, x1 - fan.x, y1 - fan.y), 0, 0),
+            (None, Some((made, make))) => {
+                let (w, h) = ((x1 - x0) as usize, (y1 - y0) as usize);
+                let mut cut = Piece::new(Image::blank(Mode::RGBA, 0, 0), 0, 0);
+                cut.left_out = Some((w, h));
+                let make = Rc::clone(make);
+                cut.made = Some(crate::piece::Maker(Rc::new(move || {
+                    Some(make()?.crop(cx, cy, cx + w as i64, cy + h as i64))
+                })));
+                cut.laid = Some(Rc::new(LaidLayer {
+                    w,
+                    h,
+                    parts: (made.parts.iter())
+                        .map(|(part, px, py)| (Rc::clone(part), px - cx, py - cy))
+                        .collect(),
+                    kept: made.kept.clone(),
+                }));
+                cut
+            }
+            (None, None) => continue,
+        };
+        let mut fan_piece = made;
+        (fan_piece.x, fan_piece.y) = (piece.x + x0, piece.y + y0);
+        out.push((format!("fan{i}"), Rc::new(fan_piece)));
     }
     out
 }
@@ -814,6 +869,9 @@ impl Renderer {
             widget::int(w, "y", 0) - piece.y,
         );
         let dir = fan::pictures_dir(&self.env.fonts_dir);
+        // (laid by an engine of the pictures it makes itself where they may go over the list as
+        // pieces of their own: not in a card)
+        let native = self.native_fans && !w.contains_key("_card");
         let mut fans = Vec::new();
         let places = fan_places(w, items.len())?;
         for (&(x0, y0), item) in places.iter().zip(items) {
@@ -826,11 +884,37 @@ impl Renderer {
             } else {
                 fan::Rotor::settled(&key, item.number(), max_rpm)
             };
-            let image = fan::picture(&dir, colour, size, &rotor, frame, look, own)?;
-            let half = (size - image.width() as i64) as f64 / 2.0;
+            let made = if native {
+                fan::made_parts(&dir, colour, size, &rotor, frame, look, own, &key)?
+            } else {
+                None
+            };
+            let (image, made, side) = match made {
+                Some(made) => {
+                    let dir = dir.clone();
+                    let make: Rc<dyn Fn() -> Option<Image>> = Rc::new(move || {
+                        fan::picture(&dir, colour, size, &rotor, frame, look, own).ok()
+                    });
+                    self.native_fans_made.set(self.native_fans_made.get() + 1);
+                    let side = made.side;
+                    (None, Some((made, make)), side)
+                }
+                None => {
+                    let image = fan::picture(&dir, colour, size, &rotor, frame, look, own)?;
+                    let side = image.width();
+                    (Some(image), None, side)
+                }
+            };
+            let half = (size - side as i64) as f64 / 2.0;
             let x = round_int(ox as f64 + x0 + half);
-            let y = round_int(oy as f64 + y0 + (size - image.height() as i64) as f64 / 2.0);
-            fans.push((image, x, y));
+            let y = round_int(oy as f64 + y0 + half);
+            fans.push(ListFan {
+                image,
+                made,
+                side,
+                x,
+                y,
+            });
         }
         // (where they lie apart from each other and on none of the names and numbers, they go
         // over the list as pieces of their own, the list as it is: the pixels they give laid
@@ -841,8 +925,8 @@ impl Renderer {
             return Ok(piece.clone());
         }
         let mut layer = piece.layer.clone();
-        for (image, x, y) in &fans {
-            paste(&mut layer, image, *x, *y, false)?;
+        for fan in &fans {
+            paste(&mut layer, &*fan.picture()?, fan.x, fan.y, false)?;
         }
         let mut turned = (**piece).clone();
         turned.layer = layer;

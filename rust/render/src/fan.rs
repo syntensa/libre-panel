@@ -21,8 +21,10 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::{Arc, Mutex, OnceLock};
 
+use lp_devices::scene::{FanRing, MadePicture, Recipe, RotorPlanes};
 use lp_pixels::{alpha_composite, chops, Draw, Filter, FloatImage, Image, Mode};
 
 use crate::fan_looks::{self, Look};
@@ -1007,6 +1009,236 @@ pub fn picture(
     laid.alpha_composite_at(&rotor_picture, (at, at), (0, 0, k, k))
         .map_err(failed)?;
     Ok(laid)
+}
+
+impl lp_devices::scene::Planes for Layers {
+    fn numbers(&self) -> &[f32] {
+        &self.planes
+    }
+}
+
+/// Whether a fan widget's picture may be laid by an engine of the pictures it makes itself:
+/// drawn as it is (no glow or shadow round it, no fade, cut sides or turn over it, which need
+/// its pixels here).
+pub fn native(w: &lp_py::Dict) -> bool {
+    use crate::widget;
+    widget::number(w, "glow", 0.0) == 0.0
+        && widget::optional(w, "shadow").is_none_or(str::is_empty)
+        && !widget::truthy(w, "clip")
+        && !widget::truthy(w, "rotate")
+        && widget::number(w, "opacity", 1.0) >= 0.999
+}
+
+/// fan.ring_recipe: what an engine makes a fan's ring of, as ring_image makes it (_ring_mask's
+/// box and width as Pillow takes them: the box in whole pixels).
+fn ring_recipe(colour: [u8; 3], size: i64, steps: i64, canvas: usize) -> FanRing {
+    const LARGER: f64 = 3.0;
+    let scale = size as f64 / FAN_SIZE;
+    let (centre, stroke) = (RING_CENTRE * scale, py_max(1.5, RING_STROKE * scale));
+    let g = canvas as f64 * LARGER;
+    let r = (centre + stroke / 2.0) * LARGER;
+    let (low, high) = ((g / 2.0 - r) as i32, (g / 2.0 + r) as i32);
+    let share = steps as f64 / RING_STEPS;
+    let arc = if steps <= 0 {
+        0
+    } else if share >= 0.995 {
+        1
+    } else {
+        2
+    };
+    let angles = if arc == 2 {
+        (-90.0, (-90.0 + 360.0 * share) as f32)
+    } else {
+        (0.0, 0.0)
+    };
+    FanRing {
+        canvas,
+        colour,
+        arc,
+        bounds: [low, low, high, high],
+        width: round_int(stroke * LARGER).max(1) as i32,
+        angles,
+        halo: (RING_HALO * scale) as f32,
+        groove: GROOVE as f32,
+        white: GLOW_WHITE as f32,
+        share: GLOW_SHARE as f32,
+    }
+}
+
+/// What a picture an engine makes of a fan shows (fan.py's _made keys): a ring by its colour,
+/// size, how far it is lit and its canvas; a rotor by its look, colours, size, position, blur
+/// and dimming.
+#[derive(Clone, PartialEq, Eq, Hash)]
+enum MadeKey {
+    Ring([u8; 3], i64, i64, usize),
+    Blades(&'static str, [u8; 3], [u8; 3], usize, usize, i64, i64),
+}
+
+/// The pictures of fans an engine makes itself, by what they show (fan.py's _made): so a fan's
+/// ring that stays lit as it is, and a rotor at a position, are the same picture from frame to
+/// frame, which the engine keeps and does not make again while frames show it; at most
+/// MADE_KEPT (then they all go: the next are made anew). The rotors they are of, one a look
+/// and size.
+const MADE_KEPT: usize = 512;
+type MadeKept = std::cell::RefCell<HashMap<MadeKey, Rc<MadePicture>>>;
+type RotorsKept = std::cell::RefCell<HashMap<(&'static str, usize), Rc<RotorPlanes>>>;
+type RecentKept = std::cell::RefCell<HashMap<String, Vec<Rc<MadePicture>>>>;
+thread_local! {
+    static MADE: MadeKept = std::cell::RefCell::new(HashMap::new());
+    static ROTORS: RotorsKept = std::cell::RefCell::new(HashMap::new());
+    static RECENT: RecentKept = std::cell::RefCell::new(HashMap::new());
+}
+
+/// The pictures of a fan's rotor an engine made last that it keeps with the fan's layer
+/// (renderer.KEPT_ROTORS: a rotor turning steadily shows 48 of them), so a position the rotor
+/// comes back to is laid there, not made again; and the most fans they are kept for (then they
+/// all go, kept anew).
+const KEPT_ROTORS: usize = 64;
+const KEPT_FANS: usize = 64;
+
+/// The fan `key`'s rotor at its position now, `blades`, kept as the newest of those it showed:
+/// the others it showed last (renderer._rotor_kept).
+fn kept_with(key: &str, blades: &Rc<MadePicture>) -> Vec<Rc<MadePicture>> {
+    RECENT.with(|recent| {
+        let mut recent = recent.borrow_mut();
+        if !recent.contains_key(key) && recent.len() >= KEPT_FANS {
+            recent.clear();
+        }
+        let kept = recent.entry(key.to_string()).or_default();
+        kept.retain(|had| !Rc::ptr_eq(had, blades));
+        kept.push(Rc::clone(blades));
+        if kept.len() > KEPT_ROTORS {
+            let gone = kept.len() - KEPT_ROTORS;
+            kept.drain(..gone);
+        }
+        kept[..kept.len() - 1].to_vec()
+    })
+}
+
+/// What a fan is laid of where an engine makes its pictures itself (fan.made_parts): its
+/// `parts` on a canvas of `side` px, and the pictures of its rotor the engine keeps besides.
+pub struct Made {
+    pub parts: Vec<(Rc<MadePicture>, i64, i64)>,
+    pub kept: Vec<Rc<MadePicture>>,
+    pub side: usize,
+}
+
+/// The picture an engine makes of a fan that shows `key`, made of `make` where none is kept.
+fn made_picture(
+    key: MadeKey,
+    make: impl FnOnce() -> Result<MadePicture>,
+) -> Result<Rc<MadePicture>> {
+    if let Some(found) = MADE.with(|kept| kept.borrow().get(&key).cloned()) {
+        return Ok(found);
+    }
+    let made = Rc::new(make()?);
+    MADE.with(|kept| {
+        let mut kept = kept.borrow_mut();
+        if kept.len() >= MADE_KEPT {
+            kept.clear();
+        }
+        kept.insert(key, Rc::clone(&made));
+    });
+    Ok(made)
+}
+
+/// The rotor of `look` at `k` px as an engine takes it (fan.rotor_layers, fan.SHADING), one
+/// kept a look and size.
+fn rotor_planes(dir: &Path, look: &'static Look, k: usize) -> Result<Rc<RotorPlanes>> {
+    if let Some(found) = ROTORS.with(|kept| kept.borrow().get(&(look.name, k)).cloned()) {
+        return Ok(found);
+    }
+    let planes = Rc::new(RotorPlanes {
+        look: look.name.to_string(),
+        k,
+        positions: POSITIONS,
+        layers: fan_looks::PLANES,
+        shading: [AMBIENT, DIFFUSE, 1.0 - CORE, CORE, GLOSS].map(|v| v as f32),
+        planes: layers(dir, look, k)?,
+    });
+    ROTORS.with(|kept| {
+        let mut kept = kept.borrow_mut();
+        // (as many as an engine keeps for a stream: a theme's fans are of a few sizes)
+        if kept.len() >= lp_devices::scene::MOST_ROTORS {
+            kept.clear();
+        }
+        kept.insert((look.name, k), Rc::clone(&planes));
+    });
+    Ok(planes)
+}
+
+/// fan.made_parts: the pictures a fan of `size` px is laid from as an engine makes them itself
+/// (its ring where it has one, from its corner; its rotor at its position, blurred and dimmed,
+/// in the middle), the same as those [`picture`] lays; None for a fan whose frame is not one
+/// an engine makes (a square one). With the canvas they are laid on and the positions of the
+/// fan `key`'s rotor the engine made last.
+#[allow(clippy::too_many_arguments)]
+pub fn made_parts(
+    dir: &Path,
+    colour: [u8; 3],
+    size: i64,
+    rotor: &Rotor,
+    frame: Frame,
+    look: &'static Look,
+    own: bool,
+    key: &str,
+) -> Result<Option<Made>> {
+    if frame == Frame::Square {
+        return Ok(None);
+    }
+    let (size, _margin, canvas) = geometry(size, size);
+    let k = rotor_size(size);
+    let canvas_px = canvas as usize;
+    let mut parts = Vec::with_capacity(2);
+    if frame == Frame::Ring {
+        let steps = rotor.steps();
+        let shows = MadeKey::Ring(colour, size, steps, canvas_px);
+        let ring = made_picture(shows, || {
+            Ok(MadePicture {
+                side: canvas_px,
+                recipe: Recipe::Ring(ring_recipe(colour, size, steps, canvas_px)),
+            })
+        })?;
+        parts.push((ring, 0, 0));
+    }
+    let side = k as usize;
+    let (main, second) = colours(look, own, colour, false);
+    let (phase, blur, dim) = (rotor.phase() % POSITIONS, rotor.blur(), rotor.dim());
+    let shows = MadeKey::Blades(look.name, main, second, side, phase, blur, dim);
+    let blades = made_picture(shows, || {
+        // (Image.blend's alpha, in single precision; _DIMMED's table, rounded as Python
+        // rounds)
+        let blend = if blur != 0 {
+            (BLUR * blur as f64 / SHADES as f64) as f32
+        } else {
+            0.0
+        };
+        let dim = (dim != 0).then(|| {
+            let keep = 1.0 - dim as f64 / SHADES as f64;
+            (0..256)
+                .map(|v| round_int(f64::from(v) * keep).clamp(0, 255) as u8)
+                .collect()
+        });
+        Ok(MadePicture {
+            side,
+            recipe: Recipe::Blades {
+                rotor: rotor_planes(dir, look, side)?,
+                phase,
+                colour: main,
+                second,
+                blend,
+                dim,
+            },
+        })
+    })?;
+    let kept = kept_with(key, &blades);
+    let at = (canvas - k).div_euclid(2);
+    parts.push((blades, at, at));
+    Ok(Some(Made {
+        parts,
+        kept,
+        side: canvas_px,
+    }))
 }
 
 #[cfg(test)]

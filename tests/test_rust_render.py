@@ -4577,6 +4577,37 @@ def test_fans_frame_after_frame_as_python_keeps_them(tmp_path: Path) -> None:
     assert drawn > 180, drawn
 
 
+def test_fans_the_engine_lays_are_drawn_here_as_before_where_a_frame_asks(
+    tmp_path: Path,
+) -> None:
+    # (where the frames go to an engine that lays a fan's pictures it makes itself, a fan goes
+    # as what the engine makes them of, its pixels made here only where a frame is composed
+    # here: those the same, byte for byte, as the fan drawn here; a square frame, a glow, a
+    # shadow, a fade or a turn keep it drawn here)
+    rng = random.Random(0xFA4E)
+    cases = []
+    for n in range(120):
+        folder = tmp_path / f"t{n}"
+        _frame_theme(rng, folder, _fan_or_more)
+        given, _snapshot = _fan_widget_snapshot(rng)
+        cases.append({"folder": str(folder), "snapshot": given, "dither": False, "bytes": True})
+    native = [{**case, "native_fans": True} for case in cases]
+    asked = {"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}
+    [plain, made] = run([asked, {**asked, "frames": native}])
+    drawn = fans = 0
+    for n, (a, b) in enumerate(zip(plain["frames"], made["frames"], strict=True)):
+        assert ("error" in a) == ("error" in b), n
+        if "error" in a or "unported" in a:
+            assert a.get("unported") == b.get("unported"), n
+            continue
+        assert a["sha256"] == b["sha256"], n
+        assert a["boxes"] == b["boxes"], n
+        assert a["native_fans"] == 0, n
+        fans += b["native_fans"]
+        drawn += 1
+    assert drawn > 100 and fans > 150, (drawn, fans)
+
+
 def test_fans_with_glow_and_shadow_within_a_level(tmp_path: Path) -> None:
     # (a fan casts its light as a card does: blurred in floating point, now and then a pixel a
     # level apart; at every size the lists draw them, in its ring and in none)

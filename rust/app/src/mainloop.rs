@@ -1650,6 +1650,7 @@ impl MainLoop {
         renderer.left_out_windows = self.panel.as_ref().is_some_and(Display::cuts_windows);
         renderer.native_rings = self.panel.as_ref().is_some_and(Display::makes_rings);
         renderer.native_bars = self.panel.as_ref().is_some_and(Display::makes_bars);
+        renderer.native_fans = self.panel.as_ref().is_some_and(Display::makes_fans);
         // (graphs that rest: frames that rest)
         renderer.graph_steps = self.config.graph_steps;
 

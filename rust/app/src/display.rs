@@ -514,6 +514,12 @@ impl Display {
         matches!(&self.panel, Panel::Turzx(panel) if panel.makes_bars())
     }
 
+    /// Whether frames go as their layers to an engine that lays a fan's pictures it makes
+    /// itself (renderer.native_fans).
+    pub fn makes_fans(&self) -> bool {
+        matches!(&self.panel, Panel::Turzx(panel) if panel.makes_fans())
+    }
+
     pub fn streams(&self) -> bool {
         match &self.panel {
             Panel::Turzx(panel) => panel.streams(),
@@ -623,21 +629,23 @@ impl Display {
         now: f64,
         half: bool,
     ) -> Result<(), Failed> {
-        use lp_devices::scene::{BarLayer, Entry, Ground, How, Layer, RingLayer};
+        use lp_devices::scene::{BarLayer, Entry, Ground, How, LaidLayer, Layer, RingLayer};
         let Panel::Turzx(panel) = &mut self.panel else {
             return Err(Failed::Frame("this panel takes no frames of layers".into()));
         };
-        // (a ring or a bar the engine makes: what it is made of, its pixels and its glow's left
-        // out; one made for an engine that makes them where this one does not, or one it does
-        // not take as it is: its pixels, and its glow's)
+        // (a ring, a bar or a fan the engine makes: what it is made of, its pixels and its
+        // glow's left out; one made for an engine that makes them where this one does not, or
+        // one it does not take as it is: its pixels, and its glow's)
         #[derive(Default)]
         struct Made {
             ring: Option<Rc<RingLayer>>,
             bar: Option<Rc<BarLayer>>,
+            laid: Option<Rc<LaidLayer>>,
             layer: Option<lp_pixels::Image>,
             light: Option<lp_pixels::Image>,
         }
         let (rings, bars) = (panel.makes_rings(), panel.makes_bars());
+        let fans = panel.makes_fans();
         let made: Vec<Made> = scene
             .pieces
             .iter()
@@ -661,6 +669,13 @@ impl Display {
                     };
                     if glow_there {
                         out.bar = Some(Rc::clone(bar));
+                        return out;
+                    }
+                }
+                // (laid by the engine of what it makes: a piece of no light of its own)
+                if let Some(laid) = piece.laid.as_ref().filter(|l| fans && l.fits()) {
+                    if !piece.add && piece.light.is_none() {
+                        out.laid = Some(Rc::clone(laid));
                         return out;
                     }
                 }
@@ -699,6 +714,7 @@ impl Display {
                         left_out: None,
                         ring: None,
                         bar: None,
+                        laid: None,
                     });
                 } else {
                     // (what its layer is cut from, as devices/engine.py's _view takes it: a
@@ -739,6 +755,7 @@ impl Display {
                         },
                         ring: made.ring.clone(),
                         bar: made.bar.clone(),
+                        laid: made.laid.clone(),
                     });
                     // (a bar the engine makes: its glow goes with it)
                     if let Some(light) = piece.light.as_ref().filter(|_| made.bar.is_none()) {
@@ -751,6 +768,7 @@ impl Display {
                             left_out: None,
                             ring: None,
                             bar: None,
+                            laid: None,
                         });
                     }
                 }

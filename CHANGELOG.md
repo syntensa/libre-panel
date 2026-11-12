@@ -31,6 +31,13 @@ pixel or two, and x264 makes a cleaner picture of them)
   21.3; Lumen sends the engine 4.1 MB a second instead of 12.3. The engine keeps what they
   are made of (5 MB more). Its frames held against those composed here, for a minute: of
   1679, 76 apart in one or two pixels by one or two levels, the others the same.
+- **Fans laid by the engine, as in 0.8.** A fan's ring and its rotor go to the engine once,
+  and for each frame only where each rotor stands; blades at a position the engine already
+  made are laid again from what it keeps. Lumen with its fans turning (the demo's readings,
+  run in turn three times a minute each) sends the engine 2.5 MB a second instead of 4.2;
+  the work moved to the engine (the whole the same within the computer's own spread), the app
+  2 to 3 MB smaller, the engine 2 to 3 MB larger. The fans are the same pixels as those drawn
+  here.
 - **What a frame costs cut down further.** Run in turn twice with 0.8.0 on that computer, a
   minute each, the same engine for both: 0.8.0 31.4 and 32.5 % of a core (Python 14.9 and
   15.3, its engine 16.5 and 17.2), this 21.1 and 21.6 (the app 6.9 and 7.0, the engine 14.3

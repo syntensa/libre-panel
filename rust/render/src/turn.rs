@@ -130,6 +130,7 @@ pub(crate) fn turned(piece: &Piece, turn: Turn) -> Result<Piece> {
         made: None,
         ring: None,
         bar: None,
+        laid: None,
     })
 }
 
