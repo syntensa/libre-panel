@@ -4,11 +4,18 @@
 
 **Lighter** (Lumen on the 12.3" at 25 fps, the video mode through the engine, with the
 computer's own readings, on the same computer as 0.8.0; every change the same pixels)
-- **What a frame costs cut down further.** The app 7.3 % of a core instead of 9.3 a morning
-  before (three runs of each in turn), the engine as before. On that computer 0.8.0 now takes
-  28.2 % of a core (Python 13.8, its engine 14.4), this 19.4 (the app 7.3, the engine 12.1);
-  x264 on the processor is some 10 points of each, which the graphics card's encoder takes
-  over where it is AMD's or NVIDIA's.
+- **What a frame costs cut down further.** The app 5.2 to 5.6 % of a core instead of 9.3 a
+  morning before. Run in turn twice with 0.8.0 on that computer: 0.8.0 23.9 and 24.3 % of a
+  core (Python 11.9, its engine 12.0 and 12.4), this 15.5 and 16.7 (the app 5.2 and 5.6, the
+  engine 10.3 and 11.1); memory 101 MB instead of 193. The engine takes 3.7 to 4.0 ms a frame,
+  3.1 to 3.3 of them x264's; without x264 (the graphics card's encoder takes it over where it
+  is AMD's or NVIDIA's) this is about half of 0.8.0.
+- **Lit rings and graphs drawn with less work.** A lit gauge's sector is drawn straight
+  through its lit picture (no mask over the whole ring, no paste through it), its light's
+  colour worked out once for each coverage, its blur's passes on AVX2 where the processor has
+  it; a polygon's rows look only at the edges they cross (a graph's filled area has one for
+  each point), and a lit graph's line is drawn once. Widgets' settings are looked up with a
+  faster hash.
 - **The graphs' windows cut by the engine, as in 0.8.** Where the engine keeps the graphs'
   strips, the app sends a window as what it is cut from and no longer cuts it itself (some
   0.75 MB a graph and frame on the 12.3"); a strip that grows goes as its new columns. A
@@ -21,6 +28,11 @@ computer's own readings, on the same computer as 0.8.0; every change the same pi
 - **The engine on Windows keeps a frame's large blocks for the next one**, as the app does:
   Windows gave their memory back each time and had it zeroed and mapped again (the Windows
   runner's engine: 2,663 page faults a second).
+
+**Fixed**
+- **Plugins on Windows: a page that starts the plugin host no longer waits two minutes.** The
+  host inherited the browser's connection and held it open after the answer; it now inherits
+  its own three pipes alone, as Python's subprocess starts a program.
 
 ## 0.9.0rc1 — 2026-11-11
 
