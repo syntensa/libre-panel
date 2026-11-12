@@ -25,6 +25,7 @@ mod experiment;
 mod extend;
 mod fan_names;
 mod hardware;
+pub mod heap;
 mod history;
 mod home;
 mod hotkeys;

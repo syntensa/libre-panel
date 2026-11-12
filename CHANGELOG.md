@@ -37,6 +37,10 @@ before; being finished and tested now.
   driver comparing only there, the graphs' strips cut per window instead of made in sixteen
   blends, their fill and glow in one pass, the texts' widths kept, the rings' light worked out
   with less, pictures laid four pixels at a time.
+- **Windows: a frame's large pictures kept for the next one.** Windows' heap gave every block
+  above about a megabyte back to the system and asked for a fresh one the next frame, whose
+  pages the system zeroed and mapped one by one; the app now keeps them for a moment, as
+  glibc does on Linux (`LP_HEAP_KEEP=0` turns it off).
 
 ## 0.8.1rc2 — 2026-11-06
 

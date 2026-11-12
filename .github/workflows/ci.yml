@@ -528,6 +528,12 @@ jobs:
           name: libre-panel-rust-windows
           path: libre-panel-rust
           retention-days: 30
+      - name: What a frame costs on Windows (Lumen on a simulated 12.3", 25 fps; large blocks kept, then not)
+        shell: bash
+        run: |
+          pip install pyusb
+          python tests/frame_load.py --app libre-panel-rust/libre-panel.exe \
+            --engine libre-panel-rust/tools/libre-panel-engine.exe --env LP_HEAP_KEEP=0
       - name: Its setup
         shell: pwsh
         run: |

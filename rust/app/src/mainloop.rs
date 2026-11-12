@@ -1246,6 +1246,7 @@ impl MainLoop {
     /// shown. How long to wait before the next.
     pub fn step(&mut self) -> Duration {
         let began = std::time::Instant::now();
+        crate::heap::tick();
         let wait = self.step_inner();
         lp_render::prof::add("step", began.elapsed());
         wait
