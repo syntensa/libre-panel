@@ -172,7 +172,9 @@ impl Level for f64 {
 }
 
 /// dither._rows: one pass along each of `h` rows of `w`: the mean over `side` pixels each way
-/// and `frac` of the next, the edges held, through a running sum.
+/// and `frac` of the next, the edges held, through a running sum. (What `passes` does down
+/// the columns of the picture turned; kept as the measure of that.)
+#[cfg(test)]
 fn rows<T: Level>(a: &[T], h: usize, w: usize, side: usize, frac: f64) -> Vec<T> {
     let padded = w + 2 * side + 2;
     let mut p = vec![T::ZERO; padded];
@@ -202,23 +204,29 @@ fn rows<T: Level>(a: &[T], h: usize, w: usize, side: usize, frac: f64) -> Vec<T>
     out
 }
 
-/// The `h` x `w` floats turned (w rows of h): what the passes down the columns stand for.
+/// The `h` x `w` floats turned (w rows of h): the passes along the rows made passes down the
+/// columns, which run for all of them at once. (In tiles, each read and written in the cache.)
 #[cfg(test)]
 fn turned<T: Level>(a: &[T], h: usize, w: usize) -> Vec<T> {
     let mut out = vec![T::ZERO; h * w];
-    for r in 0..h {
-        for k in 0..w {
-            out[k * h + r] = a[r * w + k];
+    turned_into(a, &mut out, h, w);
+    out
+}
+
+fn turned_into<T: Level>(a: &[T], out: &mut [T], h: usize, w: usize) {
+    // (column k of `a`, from its k-th value on every w-th, as row k of `out`)
+    for (k, line) in out[..h * w].chunks_exact_mut(h).enumerate() {
+        for (o, &v) in line.iter_mut().zip(a[k..].iter().step_by(w)) {
+            *o = v;
         }
     }
-    out
 }
 
 /// rows down the columns: the same sums in the same order for each column (as the rows of the
 /// picture turned), worked out for all columns at once, row by row. Of the running sums only
 /// the two a window takes are kept, where it starts and where it ends, each summed from the
 /// first row on as rows sums them: the same additions in the same order.
-fn cols<T: Level>(a: &[T], h: usize, w: usize, side: usize, frac: f64) -> Vec<T> {
+fn cols<T: Level>(a: &[T], out: &mut [T], h: usize, w: usize, side: usize, frac: f64) {
     let frac_t = T::of(frac);
     let scale = T::of(1.0 / (2.0 * side as f64 + 1.0 + 2.0 * frac));
     // the padded column's k-th value: the edges held
@@ -236,42 +244,57 @@ fn cols<T: Level>(a: &[T], h: usize, w: usize, side: usize, frac: f64) -> Vec<T>
             *sum = *sum + v;
         }
     }
-    let mut out = vec![T::ZERO; h * w];
     for i in 0..h {
         let (first, last) = (at(i), at(2 * side + 2 + i));
         let row = &mut out[i * w..(i + 1) * w];
+        if i + 1 == h {
+            for x in 0..w {
+                row[x] = if frac != 0.0 {
+                    (hi[x] - lo[x] + frac_t * (first[x] + last[x])) * scale
+                } else {
+                    (hi[x] - lo[x]) * scale
+                };
+            }
+            break;
+        }
+        // (the row, then on to c[i + 2] and c[2 side + 3 + i]: in one go along it)
+        let (lo, hi, next) = (&mut lo[..w], &mut hi[..w], &at(i + 1)[..w]);
+        let (first, last) = (&first[..w], &last[..w]);
         if frac != 0.0 {
             for x in 0..w {
                 row[x] = (hi[x] - lo[x] + frac_t * (first[x] + last[x])) * scale;
+                lo[x] = lo[x] + next[x];
+                hi[x] = hi[x] + last[x];
             }
         } else {
             for x in 0..w {
                 row[x] = (hi[x] - lo[x]) * scale;
-            }
-        }
-        // (on to c[i + 2] and c[2 side + 3 + i])
-        if i + 1 < h {
-            for (sum, &v) in lo.iter_mut().zip(at(i + 1)) {
-                *sum = *sum + v;
-            }
-            for (sum, &v) in hi.iter_mut().zip(last) {
-                *sum = *sum + v;
+                lo[x] = lo[x] + next[x];
+                hi[x] = hi[x] + last[x];
             }
         }
     }
-    out
 }
 
-/// The three passes along the rows, then the three down.
+/// The three passes along the rows, then the three down: those along the rows as passes down
+/// the columns of the picture turned (each row's sums the same, in the same order), so that
+/// every pass runs across all the lines at once.
+/// (Two buffers, the passes going from one to the other.)
 fn passes<T: Level>(a: Vec<T>, h: usize, w: usize, side: usize, frac: f64) -> Vec<T> {
-    let mut out = a;
+    let mut one = vec![T::ZERO; h * w];
+    turned_into(&a, &mut one, h, w);
+    let mut other = a;
     for _ in 0..3 {
-        out = rows(&out, h, w, side, frac);
+        cols(&one, &mut other, w, h, side, frac);
+        std::mem::swap(&mut one, &mut other);
     }
+    turned_into(&one, &mut other, w, h);
+    std::mem::swap(&mut one, &mut other);
     for _ in 0..3 {
-        out = cols(&out, h, w, side, frac);
+        cols(&one, &mut other, h, w, side, frac);
+        std::mem::swap(&mut one, &mut other);
     }
-    out
+    one
 }
 
 /// Whether dither.blur multiplies by the passes' matrices: no side longer than PRODUCT_MOST,
