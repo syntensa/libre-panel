@@ -65,6 +65,21 @@ fn moved(image: &Image, dy: f64, colour: Option<[u8; 3]>) -> Result<(Image, i64)
 }
 
 impl Renderer {
+    /// _digit_band: the box the digits fill (getbbox, from the top left) in the font of
+    /// `reference` at `size`, kept.
+    fn digit_band(&self, reference: &str, size: i64) -> Result<(f64, f64, f64, f64)> {
+        let key = (reference.to_string(), size);
+        if let Some(found) = self.digit_bands.borrow().get(&key) {
+            return Ok(*found);
+        }
+        let font = self.font(reference, size)?;
+        let found = font
+            .getbbox(DIGITS, "", None, None, None, 0.0, Some("la"))
+            .map_err(failed)?;
+        self.digit_bands.borrow_mut().insert(key, found);
+        Ok(found)
+    }
+
     /// _changing: the clock `e` of the way from `old` to `new`, letter by letter: the letters
     /// that stay where they stand, those that change rolling, or with `kind` "fade" fading; None
     /// where the two are not laid out alike (another size, another width).
@@ -96,10 +111,7 @@ impl Renderer {
         let (lw, lh) = (after.size.0, after.size.1 as i64);
         // (the band a digit lives in, with room above and below where the letters fade: outside
         // the resting digit, so it does not end its roll dimmed and then light up)
-        let font = self.font(widget::text(w, "font"), size)?;
-        let (_, top, _, bottom) = font
-            .getbbox(DIGITS, "", None, None, None, 0.0, Some("la"))
-            .map_err(failed)?;
+        let (_, top, _, bottom) = self.digit_band(widget::text(w, "font"), size)?;
         let (top, bottom) = (top.floor() as i64, bottom.ceil() as i64);
         let edge = (bottom - top).div_euclid(5).max(6);
         let (band_top, band_h) = (top - edge, bottom - top + 2 * edge);

@@ -130,6 +130,9 @@ pub(crate) enum Drawn {
 /// The widgets a renderer draws, kept behind Rcs.
 pub type Widgets = Rc<Vec<Rc<Dict>>>;
 
+/// A box as getbbox gives it: left, top, right, bottom.
+pub type Bbox = (f64, f64, f64, f64);
+
 pub struct Renderer {
     pub theme: Theme,
     pub(crate) env: Env,
@@ -180,6 +183,8 @@ pub struct Renderer {
     pub(crate) cache: HashMap<String, (Value, Rc<Piece>)>,
     /// the fonts by name and size, opened once
     pub(crate) fonts: RefCell<HashMap<(String, i64), Rc<FallbackFont>>>,
+    /// the box the digits fill in each of them (_digit_bands)
+    pub(crate) digit_bands: RefCell<HashMap<(String, i64), Bbox>>,
     /// what metal lettering mirrors: the sky (the palette's accent) and the ground
     pub(crate) world: ([u8; 3], [u8; 3]),
     /// the finishes' letters by font, character, quarter pixel and style, built once
@@ -393,6 +398,7 @@ impl Renderer {
             warnings: RefCell::new(Vec::new()),
             cache: HashMap::new(),
             fonts: RefCell::new(HashMap::new()),
+            digit_bands: RefCell::new(HashMap::new()),
             world: ([0; 3], [0; 3]),
             facet_glyphs: RefCell::new(HashMap::new()),
             facet_patches: RefCell::new(Kept::new(crate::text::PATCH_BYTES)),
