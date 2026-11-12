@@ -3099,6 +3099,25 @@ fn serve(state: &State, token: &str, hosts: &[String; 2], exchange: &mut Exchang
     exchange.discard_body(); // (a route that answers without asking for its body)
 }
 
+/// A request's connection kept from the programs this process starts while answering it, as
+/// Python's sockets are (PEP 446): Windows hands a new process every handle that may be
+/// inherited, and the plugin host, started inside the first request that needs it, would hold
+/// the connection open after the answer, the browser waiting for its end. (Linux: Rust takes
+/// it with SOCK_CLOEXEC already.)
+fn own_socket(stream: &TcpStream) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsRawSocket;
+        use windows_sys::Win32::Foundation::{SetHandleInformation, HANDLE, HANDLE_FLAG_INHERIT};
+        // SAFETY: the stream's own socket, a handle while the stream lives.
+        unsafe {
+            SetHandleInformation(stream.as_raw_socket() as HANDLE, HANDLE_FLAG_INHERIT, 0);
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = stream;
+}
+
 fn handle(stream: TcpStream, state: &State, token: &str, hosts: &[String; 2]) {
     let _ = stream.set_nonblocking(false);
     let software = format!("LibrePanelEditor/{}", lp_py::VERSION);
@@ -3223,6 +3242,7 @@ impl EditorServer {
             while !stop.load(Ordering::Relaxed) {
                 match listener.accept() {
                     Ok((stream, _)) => {
+                        own_socket(&stream);
                         let (state, token, hosts) =
                             (Arc::clone(&state), token.clone(), hosts.clone());
                         let request = std::thread::Builder::new().name("editor-request".into());
