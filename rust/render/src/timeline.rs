@@ -1101,7 +1101,13 @@ impl Renderer {
                 h: gh + 2 * pad,
             }]);
         }
-        let mut layer = if !patch || part == 0 {
+        // (where the engine cuts it from what it keeps, its pixels are left out: made only
+        // where something asks for them, Piece::whole)
+        let clip = widget::truthy(&w, "clip");
+        let leave_out = cut.is_some() && self.left_out_windows && !clip;
+        let mut layer = if leave_out {
+            Image::blank(Mode::RGBA, 0, 0)
+        } else if !patch || part == 0 {
             window(phase * strip.parts + part, offset, left)?
         } else {
             // the end drawn again: on both steps, and blended as the strip's parts are
@@ -1122,7 +1128,10 @@ impl Renderer {
         let mut piece = Piece::new(layer, x - pad, y - pad);
         piece.hit = Some([x, y, gw, gh]);
         piece.cut = cut;
-        if widget::truthy(&w, "clip") {
+        if leave_out {
+            piece.left_out = Some(((gw + 2 * pad) as usize, (gh + 2 * pad) as usize));
+        }
+        if clip {
             piece = effects::clip_sides(piece);
         }
         let piece = Rc::new(piece);

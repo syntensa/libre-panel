@@ -14,11 +14,12 @@ pub type Area = (i64, i64, i64, i64);
 /// box its frosted backdrop blurs (None where none of it lies on the frame).
 fn reach(piece: &Piece, size: (usize, usize)) -> Option<Area> {
     let layer = |p: &Piece| {
+        let (w, h) = p.size();
         (
             p.x,
             p.y,
-            p.x.saturating_add(p.layer.width() as i64),
-            p.y.saturating_add(p.layer.height() as i64),
+            p.x.saturating_add(w as i64),
+            p.y.saturating_add(h as i64),
         )
     };
     let mut area = layer(piece);
@@ -292,10 +293,11 @@ pub fn composite(
             canvas.paste(&blurred, region.0, region.1, Some(&cut))?;
         }
     }
+    let layer = piece.whole();
     if piece.add {
-        return add_light(canvas, &piece.layer, piece.x - ox, piece.y - oy);
+        return add_light(canvas, &layer, piece.x - ox, piece.y - oy);
     }
-    paste(canvas, &piece.layer, piece.x - ox, piece.y - oy, opaque)?;
+    paste(canvas, &layer, piece.x - ox, piece.y - oy, opaque)?;
     if let Some(light) = &piece.light {
         add_light(canvas, &light.layer, light.x - ox, light.y - oy)?;
     }

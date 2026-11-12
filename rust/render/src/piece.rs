@@ -64,6 +64,9 @@ pub struct Piece {
     /// what its layer is cut from, where it is so cut (a scrolling graph's window from its
     /// strip): an engine that keeps those pictures cuts it itself (render/scene.py's View)
     pub cut: Option<Vec<CutPart>>,
+    /// the layer's size where its pixels are left out, `cut` giving them (render/scene.py's
+    /// View: made only where something asks for them, [`Piece::whole`]); `layer` is then empty
+    pub left_out: Option<(usize, usize)>,
 }
 
 impl Piece {
@@ -79,16 +82,58 @@ impl Piece {
             add: false,
             light: None,
             cut: None,
+            left_out: None,
         }
+    }
+
+    /// The size of its layer, its pixels left out or not.
+    pub fn size(&self) -> (usize, usize) {
+        self.left_out.unwrap_or_else(|| self.layer.size())
+    }
+
+    /// Its layer's pixels: the layer, or where they are left out, cut from what `cut` names
+    /// (each part pasted on a clear picture of the layer's size, as View.image makes it).
+    pub fn whole(&self) -> std::borrow::Cow<'_, Image> {
+        use std::borrow::Cow;
+        let (Some((w, h)), Some(cut)) = (self.left_out, &self.cut) else {
+            return Cow::Borrowed(&self.layer);
+        };
+        if let [part] = cut.as_slice() {
+            if (part.dx, part.dy, part.w, part.h) == (0, 0, w as i64, h as i64) {
+                return Cow::Owned(part.image.crop(
+                    part.sx,
+                    part.sy,
+                    part.sx + part.w,
+                    part.sy + part.h,
+                ));
+            }
+        }
+        let mut made = Image::blank(lp_pixels::Mode::RGBA, w, h);
+        for part in cut {
+            let piece = part
+                .image
+                .crop(part.sx, part.sy, part.sx + part.w, part.sy + part.h);
+            // (RGBA onto RGBA without a mask: it cannot fail)
+            let _ = made.paste(&piece, part.dx, part.dy, None);
+        }
+        Cow::Owned(made)
+    }
+
+    /// The piece with its layer's pixels, where they were left out.
+    pub fn filled(&self) -> std::borrow::Cow<'_, Piece> {
+        use std::borrow::Cow;
+        if self.left_out.is_none() {
+            return Cow::Borrowed(self);
+        }
+        let mut piece = self.clone();
+        piece.layer = self.whole().into_owned();
+        piece.left_out = None;
+        Cow::Owned(piece)
     }
 
     /// piece.box or [x, y, width, height] of its layer.
     pub fn bounds(&self) -> [i64; 4] {
-        self.hit.unwrap_or([
-            self.x,
-            self.y,
-            self.layer.width() as i64,
-            self.layer.height() as i64,
-        ])
+        let (w, h) = self.size();
+        self.hit.unwrap_or([self.x, self.y, w as i64, h as i64])
     }
 }

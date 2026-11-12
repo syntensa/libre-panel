@@ -73,6 +73,7 @@ fn image(image: &Image, angle: f64) -> Result<Image> {
 
 /// _turned: `piece` turned: its layer (in RGBA), its box, what blurs beneath it and its light.
 pub(crate) fn turned(piece: &Piece, turn: Turn) -> Result<Piece> {
+    let piece = &*piece.filled();
     let converted;
     let layer = if piece.layer.mode() == Mode::RGBA {
         &piece.layer
@@ -125,6 +126,7 @@ pub(crate) fn turned(piece: &Piece, turn: Turn) -> Result<Piece> {
         add: piece.add,
         light,
         cut: None,
+        left_out: None,
     })
 }
 

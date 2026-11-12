@@ -237,6 +237,9 @@ pub struct Renderer {
     pub fps: f64,
     /// video mode: every frame reaches the panel (the loop sets it; Python's continuous)
     pub continuous: bool,
+    /// whether a graph's window cut from its strip may leave its pixels out (Piece::left_out):
+    /// where the frames go to an engine that cuts it itself
+    pub left_out_windows: bool,
     /// when the last reading came and the seconds to the next (Python's sample, the loop's)
     pub sample: (f64, f64),
     /// what draws the plugins' widget types and screen (the app's plugin host); None: a frame
@@ -422,6 +425,7 @@ impl Renderer {
             moving: false,
             fps: 0.0,
             continuous: false,
+            left_out_windows: false,
             sample: (0.0, 1.0),
             plugins: None,
             shown: None,

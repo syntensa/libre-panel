@@ -40,6 +40,9 @@ pub struct Layer<'a> {
     pub y: i64,
     pub how: How,
     pub cut: Option<Vec<Cut>>,
+    /// the layer's size where its pixels were left out, `cut` giving them (`image` empty):
+    /// cut by the engine from what it keeps, or made here from `cut` where it cannot
+    pub left_out: Option<(usize, usize)>,
 }
 
 /// A part a layer is cut from (render/scene.py's View): `image` from (sx, sy), w x h, pasted at
@@ -125,6 +128,11 @@ impl SceneSender {
         }
     }
 
+    /// Whether the engine cuts layers from pictures it keeps (VIEW records).
+    pub fn views(&self) -> bool {
+        self.views
+    }
+
     /// Whether the engine has the layers of the piece of `key` (from the frame before).
     pub fn knows(&self, key: usize) -> bool {
         self.pieces.contains_key(&key)
@@ -136,7 +144,12 @@ impl SceneSender {
     fn layer(&mut self, parts: &mut Vec<Vec<u8>>, layer: &Layer<'_>) -> Option<u32> {
         let how = layer.how;
         let converted;
+        let made;
         let mut image = layer.image;
+        if let (Some((w, h)), Some(cut)) = (layer.left_out, &layer.cut) {
+            made = cut_image(cut, w, h)?;
+            image = &made;
+        }
         // (added light onto RGB, as Pillow pastes it there and adds it; laid as it is: RGB)
         let rgb_wanted = how != How::Over;
         if rgb_wanted && image.mode() != Mode::RGB {
@@ -194,15 +207,19 @@ impl SceneSender {
         if !self.views || layer.how != How::Over || !rgba(image) {
             return None;
         }
-        if !cut.iter().all(|part| rgba(&part.image)) || !cut_is(image, cut) {
+        // (a layer whose pixels were left out is what its parts cut, by the renderer's making)
+        let (width, height) = layer.left_out.unwrap_or_else(|| image.size());
+        if !cut.iter().all(|part| rgba(&part.image))
+            || (layer.left_out.is_none() && !cut_is(image, cut))
+        {
             return None;
         }
         let mut keys = Vec::with_capacity(cut.len());
         let mut body = Vec::with_capacity(20 + 28 * cut.len());
         body.extend_from_slice(&(layer.x as i32).to_le_bytes());
         body.extend_from_slice(&(layer.y as i32).to_le_bytes());
-        body.extend_from_slice(&(image.width() as u32).to_le_bytes());
-        body.extend_from_slice(&(image.height() as u32).to_le_bytes());
+        body.extend_from_slice(&(width as u32).to_le_bytes());
+        body.extend_from_slice(&(height as u32).to_le_bytes());
         body.extend_from_slice(&(cut.len() as u32).to_le_bytes());
         for part in cut {
             keys.push(Rc::as_ptr(&part.image) as usize);
@@ -407,16 +424,20 @@ fn cut_is(image: &Image, cut: &[Cut]) -> bool {
             });
         }
     }
-    let mut made = Image::blank(Mode::RGBA, w as usize, h as usize);
+    cut_image(cut, w as usize, h as usize).is_some_and(|made| made.as_bytes() == image.as_bytes())
+}
+
+/// The picture `cut` makes, `w` x `h`: each part pasted on a clear picture in turn (the
+/// renderer's View.image); None where a part cannot be.
+fn cut_image(cut: &[Cut], w: usize, h: usize) -> Option<Image> {
+    let mut made = Image::blank(Mode::RGBA, w, h);
     for part in cut {
         let piece = part
             .image
             .crop(part.sx, part.sy, part.sx + part.w, part.sy + part.h);
-        if made.paste(&piece, part.dx, part.dy, None).is_err() {
-            return false;
-        }
+        made.paste(&piece, part.dx, part.dy, None).ok()?;
     }
-    made.as_bytes() == image.as_bytes()
+    Some(made)
 }
 
 #[cfg(test)]
@@ -454,6 +475,7 @@ mod tests {
                 y: 50,
                 how: How::Over,
                 cut: None,
+                left_out: None,
             }],
         }];
         let parts = sender.records(&Ground::Colour([1, 2, 3]), entries, 7, Some(1.5), false);
@@ -505,6 +527,7 @@ mod tests {
                     y: 0,
                     how: How::Over,
                     cut: None,
+                    left_out: None,
                 },
                 Layer {
                     image: &light,
@@ -512,6 +535,7 @@ mod tests {
                     y: 10,
                     how: How::Add,
                     cut: None,
+                    left_out: None,
                 },
             ],
         }];
@@ -558,6 +582,7 @@ mod tests {
             y: 5,
             how: How::Over,
             cut: cut(&strip, None, 2),
+            left_out: None,
         };
         let entries = vec![Entry::New {
             key,
@@ -587,6 +612,7 @@ mod tests {
                 y: 5,
                 how: How::Over,
                 cut: cut(&strip, None, 3),
+                left_out: None,
             }],
         }];
         let parts = sender.records(&Ground::Colour([0, 0, 0]), entries, 2, None, false);
@@ -610,6 +636,7 @@ mod tests {
                 y: 5,
                 how: How::Over,
                 cut: cut(&grown, Some((Rc::clone(&strip), 3, 9)), 0),
+                left_out: None,
             }],
         }];
         let parts = sender.records(&Ground::Colour([0, 0, 0]), entries, 3, None, false);
@@ -636,6 +663,7 @@ mod tests {
                 y: 5,
                 how: How::Over,
                 cut: cut(&grown, None, 1),
+                left_out: None,
             }],
         }];
         let parts = sender.records(&Ground::Colour([0, 0, 0]), entries, 4, None, false);
@@ -652,6 +680,7 @@ mod tests {
                 y: 5,
                 how: How::Over,
                 cut: cut(&strip, None, 2),
+                left_out: None,
             }],
         }];
         let parts = plain.records(&Ground::Colour([0, 0, 0]), entries, 1, None, false);

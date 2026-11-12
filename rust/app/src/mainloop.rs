@@ -1641,6 +1641,7 @@ impl MainLoop {
             renderer.new_sample(started, every);
         }
         renderer.continuous = self.panel.as_ref().is_some_and(Display::streams);
+        renderer.left_out_windows = self.panel.as_ref().is_some_and(Display::cuts_windows);
         // (graphs that rest: frames that rest)
         renderer.graph_steps = self.config.graph_steps;
 

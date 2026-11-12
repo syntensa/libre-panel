@@ -496,6 +496,12 @@ impl Display {
     }
 
     /// Whether the panel shows video: it is drawn for at `[video] fps`.
+    /// Whether a graph's window may leave its pixels out: frames go as their layers to an
+    /// engine that cuts such a window itself (Piece::left_out).
+    pub fn cuts_windows(&self) -> bool {
+        matches!(&self.panel, Panel::Turzx(panel) if panel.cuts_views())
+    }
+
     pub fn streams(&self) -> bool {
         match &self.panel {
             Panel::Turzx(panel) => panel.streams(),
@@ -624,20 +630,23 @@ impl Display {
                 // (as Renderer._composite lays them on the opaque frame)
                 let mut layers = Vec::with_capacity(2);
                 if piece.add {
+                    // (light is never left out: only a window cut from a strip is)
                     layers.push(Layer {
                         image: &piece.layer,
                         x: piece.x,
                         y: piece.y,
                         how: How::Add,
                         cut: None,
+                        left_out: None,
                     });
                 } else {
                     // (what its layer is cut from, as devices/engine.py's _view takes it: a
-                    // piece with no light of its own)
+                    // piece with no light of its own; and always where its pixels were left
+                    // out, which that cut gives)
                     let cut = piece
                         .cut
                         .as_ref()
-                        .filter(|_| piece.light.is_none())
+                        .filter(|_| piece.light.is_none() || piece.left_out.is_some())
                         .map(|parts| {
                             parts
                                 .iter()
@@ -662,6 +671,7 @@ impl Display {
                         y: piece.y,
                         how: How::Over,
                         cut,
+                        left_out: piece.left_out,
                     });
                     if let Some(light) = &piece.light {
                         layers.push(Layer {
@@ -670,6 +680,7 @@ impl Display {
                             y: light.y,
                             how: How::Add,
                             cut: None,
+                            left_out: None,
                         });
                     }
                 }

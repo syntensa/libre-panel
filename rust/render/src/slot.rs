@@ -128,6 +128,7 @@ pub(crate) fn window(piece: Option<&Piece>, top: f64, bottom: f64) -> Result<Opt
     if bottom <= top {
         return Ok(None);
     }
+    let piece = &*piece.filled();
     let (layer, y0) = (&piece.layer, piece.y as f64);
     let a = py_max(top, y0);
     let b = py_min(bottom, y0 + layer.height() as f64);
@@ -148,6 +149,7 @@ pub(crate) fn window(piece: Option<&Piece>, top: f64, bottom: f64) -> Result<Opt
     }
     let mut out = piece.clone();
     (out.layer, out.y, out.light) = (part, piece.y + first, glow.map(Box::new));
+    out.cut = None; // (its layer is no longer what that cuts)
     Ok(Some(out))
 }
 
@@ -161,6 +163,7 @@ fn slid(piece: Option<&Piece>, dx: i64, left: i64, right: i64) -> Result<Option<
         Some(light) => slid(Some(light), dx, left, right)?,
         None => None,
     };
+    let piece = &*piece.filled();
     let (layer, x0) = (&piece.layer, piece.x + dx);
     let (a, b) = (left.max(x0), right.min(x0 + layer.width() as i64));
     if b <= a {
@@ -169,6 +172,7 @@ fn slid(piece: Option<&Piece>, dx: i64, left: i64, right: i64) -> Result<Option<
     let mut out = piece.clone();
     if (a, b) != (x0, x0 + layer.width() as i64) {
         out.layer = layer.crop(a - x0, 0, b - x0, layer.height() as i64);
+        out.cut = None; // (its layer is no longer what that cuts)
     }
     (out.x, out.light) = (a, glow.map(Box::new));
     Ok(Some(out))
@@ -200,6 +204,7 @@ fn faded(piece: Option<&Piece>, share: f64) -> Result<Option<Piece>> {
         None => None,
     };
     let dim = |v: u8| f64::from(v) * share;
+    let piece = &*piece.filled();
     let layer = if piece.layer.mode() == Mode::RGBA {
         piece.layer.clone()
     } else {
@@ -219,6 +224,7 @@ fn faded(piece: Option<&Piece>, share: f64) -> Result<Option<Piece>> {
     };
     let mut out = piece.clone();
     (out.layer, out.light) = (layer, glow.map(Box::new));
+    out.cut = None; // (its layer is no longer what that cuts)
     Ok(Some(out))
 }
 
