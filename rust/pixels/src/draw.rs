@@ -375,12 +375,27 @@ impl<'a, C: Canvas> Draw<'a, C> {
         ymax = ymax.min(height);
         let mut xx: Vec<f32> = Vec::with_capacity(table.len() * 2);
         let at = |e: &Edge, y: i32| (y - e.y0) as f32 * e.dx + e.x0 as f32;
+        // Draw.c looks at every edge on every row; only those the row crosses count (an edge
+        // the row is above or below of is passed over, and so in the corners' look back), so
+        // the edges the row crosses are kept, in the table's order, coming in by where they
+        // begin and going once they end
+        let mut coming: Vec<usize> = (0..table.len()).collect();
+        coming.sort_by_key(|&i| table[i].ymin);
+        let mut next = 0;
+        let mut active: Vec<usize> = Vec::with_capacity(table.len());
         for y in ymin..=ymax {
             xx.clear();
-            for (i, current) in table.iter().enumerate() {
-                if y < current.ymin || y > current.ymax {
-                    continue;
+            active.retain(|&i| table[i].ymax >= y);
+            while next < coming.len() && table[coming[next]].ymin <= y {
+                let i = coming[next];
+                next += 1;
+                if table[i].ymax >= y {
+                    let place = active.partition_point(|&k| k < i);
+                    active.insert(place, i);
                 }
+            }
+            for (a, &i) in active.iter().enumerate() {
+                let current = table[i];
                 xx.push(at(current, y));
                 if y == current.ymax && y < ymax {
                     // (Draw.c: needed to draw consistent polygons)
@@ -388,7 +403,7 @@ impl<'a, C: Canvas> Draw<'a, C> {
                     xx.push(last);
                 } else if (y == current.ymin || y == current.ymax) && current.dx != 0.0 {
                     // connect discontiguous corners
-                    for other in &table[..i] {
+                    for other in active[..a].iter().map(|&k| table[k]) {
                         if (y != other.ymin && y != other.ymax) || other.dx == 0.0 {
                             continue;
                         }

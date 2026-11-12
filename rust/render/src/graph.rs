@@ -953,6 +953,17 @@ fn lit_curve(
             let through = m.point(&scale_table(colour[3] as f64 / 255.0))?;
             layer.paste(&solid, 0, 0, Some(&through))?;
         }
+        // (the line drawn on the mask already: its pixels, 255 there, set to the core, as
+        // drawing the same line on the layer sets them)
+        (false, Some(m)) => {
+            let bands = layer.bands();
+            for y in 0..ch {
+                let (row, line) = (m.row(y), layer.row_mut(y));
+                for (x, _) in row.iter().enumerate().filter(|(_, &v)| v == 255) {
+                    line[x * bands..(x + 1) * bands].copy_from_slice(&core[..bands]);
+                }
+            }
+        }
         _ => {
             let mut draw = Draw::new(layer);
             for run in runs {
