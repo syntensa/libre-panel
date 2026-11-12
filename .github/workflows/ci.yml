@@ -400,7 +400,14 @@ jobs:
           if [ "$RUNNER_OS" = Windows ]; then
             export LP_LIBFREETYPE="$(cygpath -w "$RUNNER_TEMP/libs/freetype/Release/freetype.dll")"
             app=rust/target/release/libre-panel.exe
-            engine="$RUNNER_TEMP/engine/libre-panel-engine.exe"
+            # (in "tools" beside the app, as the downloads have it: the app takes an engine
+            # LIBRE_PANEL_ENGINE names only from a folder others cannot change, which the
+            # runner's temporary one is not)
+            engine=rust/target/release/tools/libre-panel-engine.exe
+            if [ -f "$RUNNER_TEMP/engine/libre-panel-engine.exe" ]; then
+              mkdir -p rust/target/release/tools
+              cp "$RUNNER_TEMP/engine/libre-panel-engine.exe" "$engine"
+            fi
           else
             app=rust/target/release/libre-panel
             engine="$LIBRE_PANEL_ENGINE"
@@ -413,6 +420,8 @@ jobs:
           else
             echo "no engine here: the frames through it are not measured"
           fi
+          # (the comparisons after this find no engine beside the app, as before)
+          if [ "$RUNNER_OS" = Windows ]; then rm -rf rust/target/release/tools; fi
       - name: The crates against the Python app
         if: ${{ !inputs.quick }}
         run: python -u -X faulthandler -m pytest -v -rfE --durations=20 tests/test_rust_py.py tests/test_rust_pixels.py tests/test_rust_decode.py tests/test_rust_text.py tests/test_rust_theme.py tests/test_rust_modules.py tests/test_rust_render.py tests/test_rust_toasts.py tests/test_rust_transitions.py tests/test_rust_alarm.py tests/test_rust_boot.py tests/test_rust_video.py tests/test_rust_devices.py tests/test_rust_config.py tests/test_rust_sensors.py tests/test_rust_services.py tests/test_rust_app.py tests/test_rust_plugins.py
