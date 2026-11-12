@@ -3110,20 +3110,46 @@ fn own_socket(stream: &TcpStream) {
         use std::os::windows::io::AsRawSocket;
         use windows_sys::Win32::Foundation::{SetHandleInformation, HANDLE, HANDLE_FLAG_INHERIT};
         // SAFETY: the stream's own socket, a handle while the stream lives.
-        unsafe {
-            SetHandleInformation(stream.as_raw_socket() as HANDLE, HANDLE_FLAG_INHERIT, 0);
+        let done = unsafe {
+            SetHandleInformation(stream.as_raw_socket() as HANDLE, HANDLE_FLAG_INHERIT, 0)
+        };
+        if done == 0 {
+            let why = std::io::Error::last_os_error();
+            trace(|| format!("a connection's socket stays inheritable: {why}"));
         }
     }
     #[cfg(not(windows))]
     let _ = stream;
 }
 
+/// What the server does with a request, on the standard error, where
+/// LIBRE_PANEL_PLUGIN_TRACE is set (the tests set it: where a request is not answered in a
+/// test, its output shows how far the server got).
+fn trace(what: impl FnOnce() -> String) {
+    if std::env::var_os("LIBRE_PANEL_PLUGIN_TRACE").is_some_and(|v| !v.is_empty()) {
+        eprintln!("libre-panel: server: {}", what());
+    }
+}
+
 fn handle(stream: TcpStream, state: &State, token: &str, hosts: &[String; 2]) {
+    let began = Instant::now();
     let _ = stream.set_nonblocking(false);
     let software = format!("LibrePanelEditor/{}", lp_py::VERSION);
     let Some(mut exchange) = Exchange::read(stream, &software) else {
+        trace(|| {
+            format!(
+                "a request not read ({:.1} s)",
+                began.elapsed().as_secs_f64()
+            )
+        });
         return;
     };
+    let asked = format!(
+        "{} {}",
+        exchange.method,
+        exchange.target.split('?').next().unwrap_or("")
+    );
+    trace(|| format!("{asked}: read in {:.1} s", began.elapsed().as_secs_f64()));
     match exchange.method.as_str() {
         "GET" | "POST" => serve(state, token, hosts, &mut exchange),
         other => {
@@ -3131,6 +3157,15 @@ fn handle(stream: TcpStream, state: &State, token: &str, hosts: &[String; 2]) {
             exchange.send_error(501, Some(&said), None);
         }
     }
+    let status = exchange.answered;
+    trace(|| {
+        format!(
+            "{asked}: answered {status:?} in {:.1} s",
+            began.elapsed().as_secs_f64()
+        )
+    });
+    drop(exchange);
+    trace(|| format!("{asked}: closed in {:.1} s", began.elapsed().as_secs_f64()));
 }
 
 /// The app's server: made (its port taken), then serving on a thread of its own until it
