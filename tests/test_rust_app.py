@@ -1972,7 +1972,7 @@ def test_the_memory_keeps_a_round_and_shows_its_report(tmp_path: Path) -> None:
     )
     script = tmp_path / "script.json"
     script.write_text(json.dumps([
-        [0.2, "publish", "cpu.temp", 55.0, "°C", "CPU"],
+        [0.0, "publish", "cpu.temp", 55.0, "°C", "CPU"],
         [1.0, "publish", "game.name", "Doom", "", "Game"],
         [1.0, "publish", "game.app", "Doom.exe", "", "Program"],
         [1.0, "publish", "game.fps", 100.0, "fps", "FPS"],
@@ -2022,7 +2022,11 @@ def test_the_memory_keeps_a_round_and_shows_its_report(tmp_path: Path) -> None:
     assert 3 <= fps_s <= 6 and 100.0 < fps_mean < 140.0, rounds
     assert ("game", "Doom", 55.0) in cooling and ("normal", None, 55.0) in cooling, cooling
     if os.name != "nt":  # (ended at once on Windows: the minute under way is not written)
-        assert minutes and all(row[1] == 55.0 for row in minutes), minutes
+        # (a sample taken before the script's first reading came holds no temperature: a
+        # minute of only such samples has none, as Python's memory writes it)
+        warm = [row for row in minutes if row[1] is not None]
+        assert warm and all(row[1] == 55.0 for row in warm), minutes
+        assert all(row[0] <= 2 for row in minutes if row[1] is None), minutes
         assert "round report: Doom, 0 min, 1" in said, said
 
 

@@ -254,7 +254,7 @@ def test_settings_list_the_plugins_as_settings_py_lists_them(plugin_folder, isol
         assert status == "HTTP/1.0 200 OK", status
         assert 'color = "green"' in config.read_text("utf-8")
     finally:
-        _ended(ours, err)
+        print(_ended(ours, err))  # (the app's words, shown where the test fails)
 
 
 def test_a_plugins_screen_and_widget_type_are_drawn_as_the_python_app_draws_them(
@@ -442,7 +442,7 @@ def test_a_plugins_editor_page_is_served_as_server_py_serves_it(plugin_folder, i
             assert status == 500 and "the analysis failed" in data["error"]
             assert ask("GET", "/api/plugins/pages")[0] == 200
         finally:
-            _ended(program, err)
+            print(_ended(program, err))  # (the app's words, shown where the test fails)
 
 
 WATCHING = """
