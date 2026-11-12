@@ -27,6 +27,15 @@ const ANSWER_S: u64 = 30;
 /// of Python's renderer in the host (long where a virus scanner reads every file)
 const OPENING_S: u64 = 120;
 
+/// What the app does with the plugin host, on the standard error, where
+/// LIBRE_PANEL_PLUGIN_TRACE is set (the tests set it: where a request is not answered in a
+/// test, its output shows how far the host got).
+fn trace(what: impl FnOnce() -> String) {
+    if std::env::var_os("LIBRE_PANEL_PLUGIN_TRACE").is_some_and(|v| !v.is_empty()) {
+        eprintln!("libre-panel: plugin host: {}", what());
+    }
+}
+
 fn answer_s(op: &str) -> u64 {
     let opening = op.ends_with(".open") || op.starts_with("page") || op == "schemas";
     if opening {
@@ -142,9 +151,11 @@ impl PluginHost {
             const CREATE_NO_WINDOW: u32 = 0x0800_0000;
             command.creation_flags(CREATE_NO_WINDOW);
         }
+        trace(|| format!("starting {} {}", program.display(), args.join(" ")));
         let mut child = command
             .spawn()
             .map_err(|why| format!("the plugin host {} did not start: {why}", program.display()))?;
+        trace(|| format!("started (process {})", child.id()));
         let stdin = child.stdin.take().ok_or("the plugin host has no input")?;
         let mut stdout = child.stdout.take().ok_or("the plugin host has no output")?;
         // what the plugins log goes into the app's log: "<level>\t<logger>\t<message>" a line,
@@ -184,7 +195,16 @@ impl PluginHost {
             .name("plugin-host".into())
             .spawn(move || {
                 let why = loop {
-                    match receive(&mut stdout) {
+                    let message = receive(&mut stdout);
+                    trace(|| match &message {
+                        Ok(Some((message, _))) => match message.get("id") {
+                            Some(Value::Int(id)) => format!("answered {id}"),
+                            _ => format!("said {}", text(message, "event")),
+                        },
+                        Ok(None) => "ended".into(),
+                        Err(why) => format!("broken: {why}"),
+                    });
+                    match message {
                         Ok(Some(message)) => reading.deliver(message),
                         Ok(None) => break "the plugin host ended".to_string(),
                         Err(why) => break format!("the plugin host's answer is broken: {why}"),
@@ -241,10 +261,13 @@ impl PluginHost {
         message.insert("id".into(), Value::Int(id.into()));
         message.insert("op".into(), Value::from(op));
         self.inner.send(message, blob)?;
+        let asked = std::time::Instant::now();
+        trace(|| format!("asked {op} ({id})"));
         let (told, data) = loop {
             let (told, data) = answer
                 .recv_timeout(Duration::from_secs(answer_s(op)))
                 .map_err(|_| {
+                    trace(|| format!("{op} ({id}) not answered"));
                     self.inner.waiting.lock().ok().map(|mut w| w.remove(&id));
                     self.inner
                         .gone
@@ -263,6 +286,12 @@ impl PluginHost {
             self.inner.send(said, &pixels)?;
         };
         self.inner.waiting.lock().ok().map(|mut w| w.remove(&id));
+        trace(|| {
+            format!(
+                "{op} ({id}) answered in {:.1} s",
+                asked.elapsed().as_secs_f64()
+            )
+        });
         match told.get("error") {
             Some(Value::Str(why)) => Err(why.clone()),
             _ => Ok((told, data)),
@@ -420,7 +449,9 @@ pub type Shared = Result<Arc<PluginHost>, String>;
 pub fn shared(settings: &Path) -> Option<Shared> {
     static HOST: OnceLock<Mutex<Option<Shared>>> = OnceLock::new();
     let held = HOST.get_or_init(|| Mutex::new(None));
+    trace(|| "waiting for its lock".into());
     let mut held = held.lock().ok()?;
+    trace(|| "has its lock".into());
     if held.is_none() {
         match PluginHost::start(settings) {
             Ok(None) => return None,

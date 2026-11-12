@@ -27,7 +27,8 @@ from libre_panel import cli
 # up to 120, plugins.rs OPENING_S), elsewhere a second or two.
 HOST_S = 300 if sys.platform == "win32" else 60
 HOST = {"LIBRE_PANEL_PLUGIN_HOST": sys.executable,
-        "LIBRE_PANEL_PLUGIN_HOST_ARGS": "-m libre_panel.plugin_host"}  # fmt: skip
+        "LIBRE_PANEL_PLUGIN_HOST_ARGS": "-m libre_panel.plugin_host",
+        "LIBRE_PANEL_PLUGIN_TRACE": "1"}  # fmt: skip
 
 
 def _drain(stream: Any) -> tuple[threading.Thread, list[str]]:
@@ -51,14 +52,16 @@ def _drain(stream: Any) -> tuple[threading.Thread, list[str]]:
 
 def _ended(program: subprocess.Popen, said: tuple[threading.Thread, list[str]]) -> str:
     """``program`` asked to end (SIGINT; on Windows terminated) and waited for: what it wrote to
-    its stderr, which ``said`` drained."""
+    its stderr, which ``said`` drained (and its exit code where it had ended by itself)."""
+    before = program.poll()
     if os.name == "nt":
         program.terminate()
     else:
         program.send_signal(signal.SIGINT)
     program.wait(timeout=30)
     said[0].join(10)
-    return "".join(said[1])
+    ended = "" if before is None else f"(it had ended by itself, with {before})\n"
+    return ended + "".join(said[1])
 
 
 @pytest.fixture
