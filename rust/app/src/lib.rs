@@ -597,8 +597,13 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
                 .collect();
             // (the background app logs to a file: there is no terminal to read)
             if command == "tray" && !args_given.iter().any(|arg| arg == "--no-icon") {
-                if let Err(why) = logs::to_file() {
-                    eprintln!("libre-panel: the log: {why}");
+                match logs::to_file() {
+                    // (LP_PROFILE's lines into it too: a program with a window has no standard
+                    // error to read)
+                    Ok(_) => lp_render::prof::say_also(|line| {
+                        logs::log(logs::Level::Info, "libre_panel.profile", line)
+                    }),
+                    Err(why) => eprintln!("libre-panel: the log: {why}"),
                 }
             }
             let asked = asked(&args)?;

@@ -68,8 +68,6 @@ pub fn to_file() -> std::io::Result<PathBuf> {
         file,
         size,
     });
-    // (LP_PROFILE's lines into it too: a program with a window has no standard error to read)
-    lp_render::prof::say_also(|line| log(Level::Info, "libre_panel.profile", line));
     Ok(path)
 }
 
