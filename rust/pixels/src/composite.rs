@@ -54,17 +54,77 @@ pub fn tint_over(dst: &mut Image, colour: [u8; 3], alpha: &[u8]) -> Result<()> {
     if alpha.len() != dst.width * dst.height {
         return error("images do not match");
     }
-    let mut src = [colour[0], colour[1], colour[2], 0];
-    let mut was = [0u8; 4];
+    let mut tint = Tint::new(colour);
     for (d, &a) in dst.data.chunks_exact_mut(4).zip(alpha) {
-        if a == 0 {
-            continue; // (over_pixel leaves it as it is)
-        }
-        src[3] = a;
-        was.copy_from_slice(d);
-        over_pixel(&was, &src, d);
+        tint.over(d, a);
     }
     Ok(())
+}
+
+/// tint_over on a part of `dst`: the colour through `alpha` (`width` bytes a row), its corner
+/// at (`left`, `top`), as Image.alpha_composite_at lays a picture of one colour there; nothing
+/// of it beyond `dst`.
+pub fn tint_over_at(
+    dst: &mut Image,
+    colour: [u8; 3],
+    alpha: &[u8],
+    width: usize,
+    (left, top): (usize, usize),
+) -> Result<()> {
+    if dst.mode != Mode::RGBA {
+        return error("image has wrong mode");
+    }
+    if width == 0 || left >= dst.width || top >= dst.height {
+        return Ok(());
+    }
+    let w = width.min(dst.width - left);
+    let mut tint = Tint::new(colour);
+    for (y, line) in alpha.chunks_exact(width).enumerate().take(dst.height - top) {
+        let at = ((top + y) * dst.width + left) * 4;
+        let row = &mut dst.data[at..at + w * 4];
+        for (d, &a) in row.chunks_exact_mut(4).zip(&line[..w]) {
+            tint.over(d, a);
+        }
+    }
+    Ok(())
+}
+
+/// One colour laid over pixels through an alpha of each, as over_pixel lays it. Over a clear
+/// pixel the outcome is the colour's own at that alpha whatever the pixel's colour (its share
+/// is nought): those are worked out once each, as they come.
+struct Tint {
+    colour: [u8; 3],
+    clear: [[u8; 4]; 256],
+    known: [bool; 256],
+}
+
+impl Tint {
+    fn new(colour: [u8; 3]) -> Tint {
+        Tint {
+            colour,
+            clear: [[0; 4]; 256],
+            known: [false; 256],
+        }
+    }
+
+    #[inline(always)]
+    fn over(&mut self, d: &mut [u8], a: u8) {
+        if a == 0 {
+            return; // (over_pixel leaves it as it is)
+        }
+        let src = [self.colour[0], self.colour[1], self.colour[2], a];
+        if d[3] == 0 {
+            let k = usize::from(a);
+            if !self.known[k] {
+                over_pixel(&[0; 4], &src, &mut self.clear[k]);
+                self.known[k] = true;
+            }
+            d.copy_from_slice(&self.clear[k]);
+            return;
+        }
+        let was = [d[0], d[1], d[2], d[3]];
+        over_pixel(&was, &src, d);
+    }
 }
 
 impl Image {
@@ -121,5 +181,52 @@ impl Image {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A picture of every alpha over every alpha, in colours that change with them.
+    fn ground(w: usize, h: usize) -> Image {
+        let mut data = Vec::with_capacity(w * h * 4);
+        for i in 0..w * h {
+            let a = (i * 7 % 256) as u8;
+            data.extend_from_slice(&[(i % 251) as u8, (i * 3 % 256) as u8, (i / 5 % 256) as u8]);
+            data.push(if i % 3 == 0 { 0 } else { a });
+        }
+        Image::from_bytes(Mode::RGBA, w, h, data).unwrap()
+    }
+
+    #[test]
+    fn a_colour_tinted_over_as_a_picture_of_it_laid_over() {
+        let (w, h) = (256, 9);
+        let colour = [200, 31, 99];
+        let alpha: Vec<u8> = (0..w * h).map(|i| (i * 13 % 256) as u8).collect();
+        let mut tint = Image::new(Mode::RGBA, w, h, &[200, 31, 99, 0]);
+        for (p, &a) in tint.data.chunks_exact_mut(4).zip(&alpha) {
+            p[3] = a;
+        }
+        let want = alpha_composite(&ground(w, h), &tint).unwrap();
+        let mut got = ground(w, h);
+        tint_over(&mut got, colour, &alpha).unwrap();
+        assert!(got.data == want.data);
+        // a part of it, at a place, cut where it leaves the picture
+        let (pw, ph) = (40, 6);
+        for at in [(0usize, 0usize), (17, 2), (230, 5)] {
+            let part: Vec<u8> = alpha[..pw * ph].to_vec();
+            let mut laid = Image::new(Mode::RGBA, pw, ph, &[200, 31, 99, 0]);
+            for (p, &a) in laid.data.chunks_exact_mut(4).zip(&part) {
+                p[3] = a;
+            }
+            let mut want = ground(w, h);
+            let whole = (0, 0, pw as i64, ph as i64);
+            want.alpha_composite_at(&laid, (at.0 as i64, at.1 as i64), whole)
+                .unwrap();
+            let mut got = ground(w, h);
+            tint_over_at(&mut got, colour, &part, pw, at).unwrap();
+            assert!(got.data == want.data, "{at:?}");
+        }
     }
 }

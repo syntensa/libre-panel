@@ -31,7 +31,7 @@ mod resample;
 mod ziggurat;
 
 pub use bands::merge;
-pub use composite::{alpha_composite, tint_over};
+pub use composite::{alpha_composite, tint_over, tint_over_at};
 pub use draw::{Canvas, Draw};
 pub use geometry::{Transform, Transpose};
 pub use imagedraw::ALL_CORNERS;

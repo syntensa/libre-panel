@@ -908,15 +908,9 @@ fn lay_halo(
         y0 as f64 + size.1 as f64 / qf,
     );
     let big = halo.resize(size.0, size.1, Filter::Bilinear, Some(source), None)?;
-    let mut glow = Image::new(
-        Mode::RGBA,
-        size.0,
-        size.1,
-        &[colour[0], colour[1], colour[2], 0],
-    );
-    glow.putalpha(&big)?;
-    let whole = (0, 0, size.0 as i64, size.1 as i64);
-    layer.alpha_composite_at(&glow, (left as i64, top as i64), whole)?;
+    // (the colour with that alpha, laid over the layer there: alpha_composite_at of it)
+    let rgb = [colour[0], colour[1], colour[2]];
+    lp_pixels::tint_over_at(layer, rgb, big.as_bytes(), size.0, (left, top))?;
     Ok(())
 }
 
