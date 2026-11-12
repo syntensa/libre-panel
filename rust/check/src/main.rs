@@ -3934,7 +3934,7 @@ fn snapshot_of(v: &Value) -> lp_render::snapshot::Snapshot {
                 lp_py::Value::Int(n) => lp_py::num::int_to_float(&n).unwrap_or(f64::NAN),
                 _ => f64::NAN,
             });
-        snap.history.insert(key.clone(), numbers.collect());
+        std::sync::Arc::make_mut(&mut snap.history).insert(key.clone(), numbers.collect());
     }
     snap
 }

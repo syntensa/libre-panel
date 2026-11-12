@@ -44,7 +44,9 @@ pub use lp_py::datetime::DateTime as Moment;
 #[derive(Clone, Debug)]
 pub struct Snapshot {
     pub readings: IndexMap<String, Reading>,
-    pub history: IndexMap<String, Vec<f64>>,
+    /// shared: a snapshot is copied for every frame (the readings that follow on every frame
+    /// change it), the histories only with the readings (up to 600 numbers each)
+    pub history: std::sync::Arc<IndexMap<String, Vec<f64>>>,
     pub now: Moment,
     /// the fold of `now` (datetime's: true for the later of two moments of one local time)
     pub fold: bool,
@@ -57,7 +59,7 @@ impl Default for Snapshot {
     fn default() -> Snapshot {
         Snapshot {
             readings: IndexMap::new(),
-            history: IndexMap::new(),
+            history: std::sync::Arc::default(),
             now: Moment::date(1970, 1, 1),
             fold: false,
             images: IndexMap::new(),

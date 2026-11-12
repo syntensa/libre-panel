@@ -1373,8 +1373,7 @@ fn render(state: &State, exchange: &mut Exchange) {
         let root = base_folder(state, Some(&get("base")?));
         let live = match get("live")?.truthy() {
             true => live_snapshot(state).map(|current| {
-                let history = current
-                    .history
+                let history = std::sync::Arc::unwrap_or_clone(current.history)
                     .into_iter()
                     .filter(|(_, values)| values.len() > 1)
                     .collect();
@@ -1699,11 +1698,10 @@ fn readings(state: &State, exchange: &mut Exchange, url: &Url) {
     if let Some(current) = live_snapshot(state) {
         live = !current.readings.is_empty();
         measured = current.readings.keys().cloned().collect();
-        let longer = current
-            .history
+        let longer = std::sync::Arc::unwrap_or_clone(current.history)
             .into_iter()
             .filter(|(_, values)| values.len() > 1);
-        snapshot.history.extend(longer);
+        std::sync::Arc::make_mut(&mut snapshot.history).extend(longer);
         snapshot.readings.extend(current.readings);
     }
     let listed = |name: &str| -> Vec<String> {

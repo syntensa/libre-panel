@@ -364,7 +364,7 @@ pub fn render(
     let mut snapshot = demo(None, &env.fonts_dir)?;
     if let Some((readings, history)) = live {
         snapshot.readings.extend(readings);
-        snapshot.history.extend(history);
+        std::sync::Arc::make_mut(&mut snapshot.history).extend(history);
     }
     let dressed = lp_theme::modules::slots::with_cards(&theme, &config.cards, "first", "light")
         .unwrap_or_else(|| theme.clone());

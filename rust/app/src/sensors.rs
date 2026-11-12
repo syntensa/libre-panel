@@ -5,6 +5,7 @@
 //! temperature (system.rs reads them from the system).
 
 use std::collections::{BTreeSet, VecDeque};
+use std::sync::Arc;
 use std::time::Instant;
 
 use indexmap::IndexMap;
@@ -1184,7 +1185,7 @@ impl Hub {
     pub fn snapshot(&mut self, now: Moment, fold: bool) -> Snapshot {
         let (readings, images) = self.take();
         Snapshot {
-            history: remember(&mut self.history, &readings),
+            history: Arc::new(remember(&mut self.history, &readings)),
             readings,
             now,
             fold,
@@ -1272,7 +1273,7 @@ impl View {
         // as it was when the shared ones were taken
         readings.extend(hub.fresh(true));
         Snapshot {
-            history: remember(&mut self.history, &readings),
+            history: Arc::new(remember(&mut self.history, &readings)),
             readings,
             now,
             fold,

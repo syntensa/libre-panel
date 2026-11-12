@@ -66,6 +66,9 @@ pixel or two, and x264 makes a cleaner picture of them)
 - **What stays the same is kept, as 0.8 keeps it**: the fans' rings, rotors and blades, the
   box the digits of a rolling clock fill (a frame of the roll 0.23 ms instead of 0.50), and
   which version of the theme is shown (looked up on the disk once a second, not every frame).
+  The readings' histories are shared by the frames between two readings instead of copied
+  for each: with ten minutes of them (Lumen's 296 at 600 numbers each) the copy took 0.44 ms
+  a frame, about 1 % of a core, which a minute's measuring did not see.
 - **The engine on Windows keeps a frame's large blocks for the next one**, as the app does:
   Windows gave their memory back each time and had it zeroed and mapped again (the Windows
   runner's engine: 2,663 page faults a second).

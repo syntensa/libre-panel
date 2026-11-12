@@ -884,7 +884,7 @@ pub fn demo_snapshot(t: f64, samples: usize, local: &Zone) -> Result<Snapshot, S
     let (now, fold) = zones::fromtimestamp(local, t).unwrap_or((DateTime::date(1970, 1, 1), false));
     Ok(Snapshot {
         readings,
-        history: history.collect(),
+        history: std::sync::Arc::new(history.collect()),
         now,
         fold,
         images: IndexMap::new(),
