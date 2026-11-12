@@ -175,34 +175,41 @@ fn rise_steps() -> [(f64, f64); GLOW_STEPS] {
 /// or one per column), straight RGBA: the core towards white, the halo in the colour; its
 /// halo the coverage cut to whole levels and blurred in float32, `halo` px. With `bounds`
 /// (x0, y0, x1, y1) the light in that part alone, its halo still worked out of all the mask.
-fn light(
+fn light<F: Fn(usize) -> [f32; 3]>(
     mask: &[f32],
     h: usize,
     w: usize,
-    colour: &dyn Fn(usize) -> [f32; 3],
+    colour: &F,
     halo: f64,
     bounds: Option<(usize, usize, usize, usize)>,
 ) -> Vec<u8> {
     let cut: Vec<f32> = mask.iter().map(|&m| f32::from((m * 255.0) as u8)).collect();
     let share = (1.0f64 / 255.0) as f32;
-    let soft: Vec<f32> =
-        crate::prof::part("light blur", || lp_pixels::dither::blur(&cut, h, w, halo))
-            .iter()
-            .map(|&v| v * share)
-            .collect();
+    let soft = crate::prof::part("light blur", || lp_pixels::dither::blur(&cut, h, w, halo));
     let (x0, y0, x1, y1) = bounds.unwrap_or((0, 0, w, h));
-    let mut out = Vec::with_capacity((y1 - y0) * (x1 - x0) * 4);
-    for y in y0..y1 {
-        for x in x0..x1 {
-            let i = y * w + x;
-            let m = mask[i];
-            let core = cored(m);
+    let mut out = vec![0u8; (y1 - y0) * (x1 - x0) * 4];
+    if out.is_empty() {
+        return out;
+    }
+    // (a pixel's core and colour hang on its coverage and colour alone: those of the pixel
+    // before taken again where they are the same, as most are, the light's colour one)
+    let mut before: Option<(u32, [f32; 3], f32, [u8; 3])> = None;
+    for (y, line) in (y0..y1).zip(out.chunks_exact_mut((x1 - x0) * 4)) {
+        let at = y * w;
+        let (masks, softs) = (&mask[at + x0..at + x1], &soft[at + x0..at + x1]);
+        for (x, ((px, &m), &s)) in (x0..).zip(line.chunks_exact_mut(4).zip(masks).zip(softs)) {
             let c = colour(x);
-            for v in c {
-                out.push(fclip(v + (255.0 - v) * (LIGHT_WHITE * core) + 0.5) as u8);
-            }
-            let a = clip01(core + LIGHT_HALO * clip01(soft[i] - m)) * 255.0;
-            out.push(fclip(a + 0.5) as u8);
+            let (core, rgb) = match before {
+                Some((bits, was, core, rgb)) if bits == m.to_bits() && was == c => (core, rgb),
+                _ => {
+                    let core = cored(m);
+                    let rgb = c.map(|v| fclip(v + (255.0 - v) * (LIGHT_WHITE * core) + 0.5) as u8);
+                    before = Some((m.to_bits(), c, core, rgb));
+                    (core, rgb)
+                }
+            };
+            let a = clip01(core + LIGHT_HALO * clip01(s * share - m)) * 255.0;
+            px.copy_from_slice(&[rgb[0], rgb[1], rgb[2], fclip(a + 0.5) as u8]);
         }
     }
     out
@@ -843,7 +850,7 @@ fn arc_part(
 fn ring_sweep(shape: &RingShape, colour: [i64; 3], stroke: i64, halo: f64) -> Result<Image> {
     let (width, height) = shape.canvas();
     let (arc, ..) = arc_part(shape, 1.0, stroke, (0, 0, width as i64, height as i64))?;
-    let rgba = light(&arc, height, width, &|_| [0.0; 3], halo, None);
+    let rgba = light(&arc, height, width, &|_: usize| [0.0; 3], halo, None);
     let band = |i: usize| rgba.chunks_exact(4).map(|p| p[i]).collect::<Vec<u8>>();
     let (white, opaque) = (band(0), band(3));
     let white = Image::from_bytes(Mode::L, width, height, white)?;
@@ -873,14 +880,14 @@ fn ring_light(
     stroke: i64,
     halo: f64,
 ) -> Result<Image> {
-    let (sector, patches) = ring_parts(shape, frac, colour, stroke, halo, None)?;
+    let patches = ring_parts(shape, frac, colour, stroke, halo, None)?;
     let (width, height) = shape.canvas();
     let mut out = Image::blank(Mode::RGBA, width, height);
-    out.paste(
+    sector_through(
+        shape,
+        frac,
+        &mut out,
         &ring_sweep(shape, colour, stroke, halo)?,
-        0,
-        0,
-        Some(&sector),
     )?;
     for (left, top, image) in patches {
         out.paste(&image, left, top, None)?;
@@ -888,10 +895,33 @@ fn ring_light(
     Ok(out)
 }
 
-/// _ring_parts: what the light of a ring's arc of `frac` is made of: where it is the whole
-/// sweep's (a mask of 0 and 255, the size of the ring's canvas), and the light made anew
-/// around the arc's tip and the start of a closed ring, laid over that in turn. `starts`: the
-/// start's light kept, where it lies apart from the tip's (the same at every such value).
+/// Where a ring's arc of `frac` has the whole sweep's light (_ring_parts' sector: a pie
+/// slice from far outside the canvas, drawn in 255 on a mask of the canvas's size, the sweep
+/// pasted through it): `onto` with `lit` (of its size and mode) there.
+fn sector_through(shape: &RingShape, frac: f64, onto: &mut Image, lit: &Image) -> Result<()> {
+    let (width, height) = shape.canvas();
+    let (start, end) = (shape.start, shape.end);
+    let tip = start + (end - start) * frac;
+    let gap = 360.0 - (end - start).abs();
+    let far = (width + height) as f64;
+    let (mx, my) = (width as f64 / 2.0, height as f64 / 2.0);
+    let low = if end < start { end } else { start } - gap / 2.0;
+    let _sector = crate::prof::Span::new("ring sector");
+    let mut through = lp_pixels::Through::new(onto, lit)?;
+    Draw::new(&mut through).pieslice(
+        (mx - far, my - far, mx + far, my + far),
+        low,
+        if low > tip { low } else { tip },
+        Some([255, 0, 0, 0]),
+        None,
+        1,
+    )?;
+    Ok(())
+}
+
+/// _ring_parts: the light made anew around a ring's arc's tip and the start of a closed
+/// ring, laid in turn over the whole sweep's light up to the tip (sector_through). `starts`:
+/// the start's light kept, where it lies apart from the tip's (the same at every such value).
 fn ring_parts(
     shape: &RingShape,
     frac: f64,
@@ -899,25 +929,11 @@ fn ring_parts(
     stroke: i64,
     halo: f64,
     starts: Option<&RefCell<HashMap<String, Rc<Image>>>>,
-) -> Result<(Image, Patches)> {
+) -> Result<Patches> {
     let (width, height) = shape.canvas();
     let (start, end) = (shape.start, shape.end);
     let tip = start + (end - start) * frac;
     let gap = 360.0 - (end - start).abs();
-    let mut sector = Image::blank(Mode::L, width, height);
-    let far = (width + height) as f64;
-    let (mx, my) = (width as f64 / 2.0, height as f64 / 2.0);
-    let low = if end < start { end } else { start } - gap / 2.0;
-    crate::prof::part("ring sector", || {
-        Draw::new(&mut sector).pieslice(
-            (mx - far, my - far, mx + far, my + far),
-            low,
-            if low > tip { low } else { tip },
-            Some([255, 0, 0, 0]),
-            None,
-            1,
-        )
-    })?;
     let radius = (shape.w.min(shape.h) - shape.thickness) as f64 / 2.0;
     let reach = (stroke as f64 / 2.0 + 3.0 * halo).ceil() as i64 + 3;
     let margin = (3.0 * halo).ceil() as i64 + 4;
@@ -951,7 +967,7 @@ fn ring_parts(
         let (left, right) = py_slice(x0, x0 + inner.2 - inner.0, ow);
         let (top, bottom) = py_slice(y0, y0 + inner.3 - inner.1, oh);
         let kept = Some((left, top, right, bottom));
-        let local = light(&cover, oh, ow, &|_| c, halo, kept);
+        let local = light(&cover, oh, ow, &|_: usize| c, halo, kept);
         Ok(Image::from_bytes(
             Mode::RGBA,
             right - left,
@@ -991,7 +1007,7 @@ fn ring_parts(
     }
     let tip_patch = Rc::new(patch(tip_inner, tip_outer)?);
     patches.push((tip_inner.0, tip_inner.1, tip_patch));
-    Ok((sector, patches))
+    Ok(patches)
 }
 
 impl Renderer {
@@ -1118,10 +1134,10 @@ impl Renderer {
                 })?;
                 let colour = [a[0], a[1], a[2]];
                 let kept = Some(&self.ring_pictures);
-                let (sector, patches) = crate::prof::part("gauge parts", || {
+                let patches = crate::prof::part("gauge parts", || {
                     ring_parts(&shape, frac, colour, stroke, halo, kept)
                 })?;
-                crate::prof::part("gauge sector", || canvas.paste(&lit, 0, 0, Some(&sector)))?;
+                sector_through(&shape, frac, &mut canvas, &lit)?;
                 let _patching = crate::prof::Span::new("gauge patches");
                 for (left, top, patch) in patches {
                     let (pw, ph) = (patch.width() as i64, patch.height() as i64);

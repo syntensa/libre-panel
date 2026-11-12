@@ -227,6 +227,28 @@ fn turned_into<T: Level>(a: &[T], out: &mut [T], h: usize, w: usize) {
 /// the two a window takes are kept, where it starts and where it ends, each summed from the
 /// first row on as rows sums them: the same additions in the same order.
 fn cols<T: Level>(a: &[T], out: &mut [T], h: usize, w: usize, side: usize, frac: f64) {
+    #[cfg(target_arch = "x86_64")]
+    {
+        static WIDE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        if *WIDE.get_or_init(|| std::arch::is_x86_feature_detected!("avx2")) {
+            // SAFETY: the processor has AVX2 (asked above).
+            return unsafe { cols_avx2(a, out, h, w, side, frac) };
+        }
+    }
+    cols_in(a, out, h, w, side, frac);
+}
+
+/// cols with AVX2's wider registers: the same additions and products, in the same order, on
+/// more columns at a time (no fused multiply-add: that would round once where they round
+/// twice).
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn cols_avx2<T: Level>(a: &[T], out: &mut [T], h: usize, w: usize, side: usize, frac: f64) {
+    cols_in(a, out, h, w, side, frac);
+}
+
+#[inline(always)]
+fn cols_in<T: Level>(a: &[T], out: &mut [T], h: usize, w: usize, side: usize, frac: f64) {
     let frac_t = T::of(frac);
     let scale = T::of(1.0 / (2.0 * side as f64 + 1.0 + 2.0 * frac));
     // the padded column's k-th value: the edges held

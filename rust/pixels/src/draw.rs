@@ -60,6 +60,54 @@ impl Canvas for Image {
     }
 }
 
+/// A picture drawn on through another of its mode and size: wherever a drawing sets a pixel,
+/// the other's pixel there. As drawing the same in 255 on a mask (L, 0 everywhere) and
+/// pasting the other picture through it (Paste.c's BLEND takes a mask of 255 as the other's
+/// pixel, one of 0 as its own), without the mask: the ink is the mask's, and 255.
+pub struct Through<'a> {
+    out: &'a mut Image,
+    from: &'a Image,
+}
+
+impl<'a> Through<'a> {
+    pub fn new(out: &'a mut Image, from: &'a Image) -> Result<Self> {
+        if out.mode != from.mode || out.size() != from.size() {
+            return error("images do not match");
+        }
+        Ok(Through { out, from })
+    }
+}
+
+impl Canvas for Through<'_> {
+    type Ink = [u8; 4];
+
+    fn canvas_size(&self) -> (usize, usize) {
+        (self.out.width, self.out.height)
+    }
+
+    fn fill_span(&mut self, x0: usize, x1: usize, y: usize, _ink: [u8; 4]) {
+        debug_assert_eq!(
+            _ink[0], 255,
+            "a mask's 255 alone is the other picture's pixel"
+        );
+        let b = self.out.bands();
+        let (from, to) = (x0 * b, (x1 + 1) * b);
+        self.out.row_mut(y)[from..to].copy_from_slice(&self.from.row(y)[from..to]);
+    }
+
+    fn default_ink(&self) -> [u8; 4] {
+        [0; 4]
+    }
+
+    fn same_ink(a: [u8; 4], b: [u8; 4]) -> bool {
+        a == b
+    }
+
+    fn mask_ink(&self) -> u8 {
+        1
+    }
+}
+
 impl Canvas for FloatImage {
     type Ink = f32;
 

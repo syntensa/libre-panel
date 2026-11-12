@@ -32,7 +32,7 @@ mod ziggurat;
 
 pub use bands::merge;
 pub use composite::{alpha_composite, tint_over, tint_over_at};
-pub use draw::{Canvas, Draw};
+pub use draw::{Canvas, Draw, Through};
 pub use geometry::{Transform, Transpose};
 pub use imagedraw::ALL_CORNERS;
 pub use ops::thumbnail_size;
