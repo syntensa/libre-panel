@@ -7,8 +7,9 @@
 use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::mpsc::{sync_channel, SyncSender};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -208,15 +209,66 @@ pub fn frame_record(
 }
 
 /// The engine's process with the panel: its records in and out. A thread reads what it says
-/// (replies, counts, a failure); writes go out whole, one at a time.
+/// (replies, counts, a failure); a thread writes what it is told, in order, whole: a frame's
+/// records waiting there while the one before goes, so the render loop waits for a full pipe
+/// only when two frames are on their way (devices/engine.py's EngineStream writer).
 pub struct EngineLink {
     child: Mutex<Child>,
-    stdin: Mutex<Option<ChildStdin>>,
+    writer: Mutex<Option<SyncSender<Vec<Vec<u8>>>>>,
+    /// why the writer stopped: the engine took no more
+    unwritten: Arc<Mutex<Option<String>>>,
     shared: Arc<Shared>,
     numbers: AtomicU32,
     /// a command and its reply as one
     asking: Mutex<()>,
     threads: Vec<thread::JoinHandle<()>>,
+}
+
+/// The engine's input and output, as the link has them.
+type Input = Box<dyn Write + Send>;
+type Output = Box<dyn Read + Send>;
+
+/// The writer: each batch of records into the engine's input, until the link lets go of it or
+/// the engine takes no more (`unwritten` says why); then the input ends.
+fn write_loop(
+    mut pipe: Input,
+    batches: std::sync::mpsc::Receiver<Vec<Vec<u8>>>,
+    unwritten: &Mutex<Option<String>>,
+) {
+    for batch in batches {
+        let written = batch
+            .iter()
+            .try_for_each(|record| pipe.write_all(record))
+            .and_then(|()| pipe.flush());
+        if let Err(e) = written {
+            *unwritten.lock().unwrap_or_else(|e| e.into_inner()) = Some(e.to_string());
+            return;
+        }
+    }
+}
+
+/// How much the pipes to and from the engine hold on Windows (Rust's own hold 4 KB there: a
+/// frame of layers would go in a hundred turns, each waiting for the engine to read).
+#[cfg(windows)]
+const PIPE_BYTES: u32 = 1 << 20;
+
+/// A pipe of PIPE_BYTES: its end to read and its end to write.
+#[cfg(windows)]
+fn big_pipe() -> std::io::Result<(std::fs::File, std::fs::File)> {
+    use std::os::windows::io::{FromRawHandle, RawHandle};
+    use windows_sys::Win32::System::Pipes::CreatePipe;
+    let (mut read, mut write) = (std::ptr::null_mut(), std::ptr::null_mut());
+    // SAFETY: CreatePipe fills both handles where it succeeds; each is owned by a File from
+    // here on (not inherited: the child is given its own copy of its end).
+    unsafe {
+        if CreatePipe(&mut read, &mut write, std::ptr::null(), PIPE_BYTES) == 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok((
+            std::fs::File::from_raw_handle(read as RawHandle),
+            std::fs::File::from_raw_handle(write as RawHandle),
+        ))
+    }
 }
 
 fn read_loop(mut out: impl Read, shared: &Shared) {
@@ -300,20 +352,48 @@ impl EngineLink {
         let (program, arguments) = command
             .split_first()
             .ok_or_else(|| DeviceError("no engine to start".into()))?;
-        let mut child = hidden(&mut Command::new(program))
-            .args(arguments)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| DeviceError(format!("cannot start Libre Panel's engine: {e}")))?;
+        let cannot =
+            |e: std::io::Error| DeviceError(format!("cannot start Libre Panel's engine: {e}"));
+        let mut command = Command::new(program);
+        hidden(&mut command).args(arguments).stderr(Stdio::piped());
+        #[cfg(windows)]
+        let (ours_in, ours_out): (Option<Input>, Option<Output>) = {
+            let (their_in, ours_in) = big_pipe().map_err(cannot)?;
+            let (ours_out, their_out) = big_pipe().map_err(cannot)?;
+            command
+                .stdin(Stdio::from(their_in))
+                .stdout(Stdio::from(their_out));
+            (Some(Box::new(ours_in)), Some(Box::new(ours_out)))
+        };
+        #[cfg(not(windows))]
+        let (ours_in, ours_out): (Option<Input>, Option<Output>) = {
+            command.stdin(Stdio::piped()).stdout(Stdio::piped());
+            (None, None)
+        };
+        let mut child = command.spawn().map_err(cannot)?;
+        drop(command); // (its copies of the child's ends of the pipes close here)
         let shared = Arc::new(Shared {
             state: Mutex::new(State::default()),
             heard: Condvar::new(),
         });
-        let (stdin, stdout, stderr) =
-            (child.stdin.take(), child.stdout.take(), child.stderr.take());
+        let stdin = ours_in.or_else(|| {
+            let pipe = child.stdin.take()?;
+            Some(Box::new(pipe) as Input)
+        });
+        let stdout = ours_out.or_else(|| {
+            let pipe = child.stdout.take()?;
+            Some(Box::new(pipe) as Output)
+        });
+        let stderr = child.stderr.take();
         let mut threads = Vec::new();
+        let unwritten = Arc::new(Mutex::new(None));
+        let writer = stdin.map(|pipe| {
+            // (one batch waiting while one goes: a frame and its records, or a command)
+            let (send, batches) = sync_channel(1);
+            let unwritten = unwritten.clone();
+            threads.push(thread::spawn(move || write_loop(pipe, batches, &unwritten)));
+            send
+        });
         if let Some(out) = stdout {
             let shared = shared.clone();
             threads.push(thread::spawn(move || read_loop(out, &shared)));
@@ -324,7 +404,8 @@ impl EngineLink {
         }
         let mut link = EngineLink {
             child: Mutex::new(child),
-            stdin: Mutex::new(stdin),
+            writer: Mutex::new(writer),
+            unwritten,
             shared,
             numbers: AtomicU32::new(1),
             asking: Mutex::new(()),
@@ -408,15 +489,27 @@ impl EngineLink {
 
     /// A record, whole.
     pub fn write(&self, record: &[u8]) -> Result<()> {
-        let mut stdin = self.stdin.lock().unwrap_or_else(|e| e.into_inner());
-        let gone = |e: std::io::Error| DeviceError(format!("Libre Panel's engine is gone ({e})"));
-        match stdin.as_mut() {
-            Some(pipe) => pipe
-                .write_all(record)
-                .and_then(|()| pipe.flush())
-                .map_err(gone),
-            None => Err(DeviceError("Libre Panel's engine is closed".into())),
-        }
+        self.write_all(vec![record.to_vec()])
+    }
+
+    /// Records one after the other (a frame's), whole: handed to the writer, which takes them
+    /// while the one batch before goes into the engine (this waits for that).
+    pub fn write_all(&self, records: Vec<Vec<u8>>) -> Result<()> {
+        let writer = self.writer.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(send) = writer.as_ref() else {
+            return Err(DeviceError("Libre Panel's engine is closed".into()));
+        };
+        send.send(records).map_err(|_| {
+            let why = self
+                .unwritten
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
+            DeviceError(format!(
+                "Libre Panel's engine is gone ({})",
+                why.unwrap_or_else(|| "its input closed".into())
+            ))
+        })
     }
 
     /// request: a command for the panel and how the engine reads its reply: its status (0 the
@@ -617,7 +710,8 @@ impl EngineLink {
     /// close: the input ends: the engine sends the commands it still has (the video's stop),
     /// then lets the panel go and ends.
     pub fn close(&mut self, timeout: Duration) {
-        self.stdin.lock().unwrap_or_else(|e| e.into_inner()).take();
+        // (the writer takes what it still has, then the input ends)
+        self.writer.lock().unwrap_or_else(|e| e.into_inner()).take();
         let deadline = Instant::now() + timeout;
         {
             let mut child = self.child.lock().unwrap_or_else(|e| e.into_inner());

@@ -1147,7 +1147,9 @@ impl TurzxVideo {
             ));
         };
         let parts = scenes.records(ground, entries, number, planned, half);
-        // (heads go out with what follows; pixels as they are)
+        // (heads go out with what follows; pixels as they are; the frame's records to the
+        // engine's writer at once)
+        let mut batch: Vec<Vec<u8>> = Vec::new();
         let mut small: Vec<u8> = Vec::new();
         for part in parts {
             if part.len() < 4096 {
@@ -1155,14 +1157,14 @@ impl TurzxVideo {
                 continue;
             }
             if !small.is_empty() {
-                self.conn.link.write(&small)?;
-                small.clear();
+                batch.push(std::mem::take(&mut small));
             }
-            self.conn.link.write(&part)?;
+            batch.push(part);
         }
         if !small.is_empty() {
-            self.conn.link.write(&small)?;
+            batch.push(small);
         }
+        self.conn.link.write_all(batch)?;
         self.stream = Some((size, number.wrapping_add(1)));
         // (a frame of pixels after it is compared with none: it goes whole)
         self.last = None;
@@ -1262,7 +1264,7 @@ impl TurzxVideo {
             _ => &whole,
         };
         let record = frame_record(number, planned, frame.width(), frame.as_bytes(), boxes);
-        self.conn.link.write(&record)?;
+        self.conn.link.write_all(vec![record])?;
         self.stream = Some((size, number.wrapping_add(1)));
         self.last = Some(frame);
         self.notes.extend(self.conn.link.notes());
