@@ -152,6 +152,10 @@ def run(
     for line in lines:
         if line.startswith(("profile ", "heap:")) or "video:" in line:
             print("  " + line.rstrip())
+    if more and not any("video:" in line for line in lines):
+        # (no video went to the simulated panel: what the app said instead)
+        said = [line.rstrip() for line in lines if not line.startswith(("profile ", "heap:"))]
+        print("  no video to the panel; the app said:", *said[:40], sep="\n    ")
 
 
 def main() -> None:
