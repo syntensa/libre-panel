@@ -48,6 +48,13 @@ before; being finished and tested now.
   the bit rate fixed: the app 9.5 % of a core instead of 12.4, the engine as before
   (`[video] engine_layers = false` sends frames of pixels as before). Frames that show a
   blend, a toast, the alarm, a plugin or a colour check still go as pixels.
+- **What moves is kept, as 0.8 keeps it.** The weather symbols' layers and turned rays, the
+  agents' signs, the moon's halo and disc and the finishes' coloured letters were made anew
+  every frame; they are kept now by what they show. Lumen with the demo readings on Linux:
+  with the forecast card 24.0 % of a core instead of 41.0, with the AI card 22.7 instead of
+  41.8; the moving sun at 136 px 1.9 ms a frame instead of 3.3. The light's exponentials use
+  the processor's fused multiply-add where it has one, as the C library does, instead of
+  working it out in software.
 
 ## 0.8.1rc2 — 2026-11-06
 

@@ -181,6 +181,8 @@ pub struct Renderer {
     pub(crate) world: ([u8; 3], [u8; 3]),
     /// the finishes' letters by font, character, quarter pixel and style, built once
     pub(crate) facet_glyphs: crate::text::FacetGlyphs,
+    /// and coloured, kept while they hold at most PATCH_BYTES
+    pub(crate) facet_patches: crate::text::FacetPatches,
     /// the look of the weather symbols the person chose (config.toml's symbols: the app sets
     /// it; vivid where it does not, as Python's renderer has it)
     pub symbols: String,
@@ -387,6 +389,7 @@ impl Renderer {
             fonts: RefCell::new(HashMap::new()),
             world: ([0; 3], [0; 3]),
             facet_glyphs: RefCell::new(HashMap::new()),
+            facet_patches: RefCell::new(Kept::new(crate::text::PATCH_BYTES)),
             symbols: crate::symbols::DEFAULT_PACK.to_string(),
             ranges: HashMap::new(),
             strips: HashMap::new(),

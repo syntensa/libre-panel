@@ -16,6 +16,7 @@ use lp_text::text::{draw, Text};
 use crate::compose;
 use crate::facets::{self, Glyph, Style};
 use crate::finish::{self, Finish};
+use crate::kept::Kept;
 use crate::piece::{Failed, Piece, Result};
 use crate::renderer::Renderer;
 use crate::shapes::{ink, Rgba};
@@ -113,6 +114,15 @@ impl Glyphs {
 
 /// The finishes' letters kept: by font, character, quarter pixel and style (None: a blank).
 pub(crate) type FacetGlyphs = RefCell<HashMap<(usize, char, i64, Style), Option<Rc<Glyph>>>>;
+
+/// The finishes' letters coloured (facets._patches): by font, character, quarter pixel, style,
+/// colour and what metal mirrors; each with its font, so that no other font takes its place in
+/// memory while it is kept.
+pub(crate) type FacetPatches = RefCell<Kept<FacetPatchKey, (Rc<FallbackFont>, Image)>>;
+type FacetPatchKey = (usize, char, i64, Style, Rgba, ([u8; 3], [u8; 3]));
+
+/// What the coloured letters may hold (facets.PATCH_BYTES).
+pub(crate) const PATCH_BYTES: usize = 4 * 1024 * 1024;
 
 /// A text laid out letter by letter (_Letters): its layer's size, where the layer goes, the
 /// box, and each letter on the layer (None: a finish's blank) with where its ink lies in its
@@ -423,7 +433,8 @@ impl Renderer {
 
     /// facets.glyph: a finish's letter `ch` at `frac` of a pixel from the pen's (rounded to a
     /// quarter), in `fill`, and where it goes from the pen's pixel and the line's top; None for a
-    /// blank. Its geometry built once per font, character, quarter and style.
+    /// blank. Its geometry built once per font, character, quarter and style; once more per colour
+    /// and what metal mirrors.
     fn facet_glyph(
         &self,
         font: &Rc<FallbackFont>,
@@ -448,7 +459,18 @@ impl Renderer {
         };
         // (Python's tuple(fill) of a colour that is none)
         let fill = fill.ok_or_else(|| Failed("'NoneType' object is not iterable".into()))?;
-        let patch = facets::coloured(&glyph, fill, self.world)?;
+        // (built once more per colour and what metal mirrors, as facets.glyph keeps it)
+        let key = (key.0, ch, quarter, style, fill, self.world);
+        let kept = self.facet_patches.borrow_mut().get(&key);
+        let patch = match kept {
+            Some((_, patch)) => patch,
+            None => {
+                let patch = facets::coloured(&glyph, fill, self.world)?;
+                let size = patch.as_bytes().len();
+                (self.facet_patches.borrow_mut()).put(key, (Rc::clone(font), patch.clone()), size);
+                patch
+            }
+        };
         let (dx, dy) = facets::placed(&glyph, shift);
         Ok(Some((patch, dx, dy)))
     }
