@@ -17,10 +17,17 @@ static void say(char *err, int len, const char *text, const char *what) {
 }
 
 /* An encoder for I420 pictures of width x height: zero latency, one thread, one slice a
-   picture, no B pictures, a keyframe every keyint pictures with its headers, CRF capped at
-   kbit/s (VBV), the colours tagged BT.601 in limited or full range, told which macroblocks
-   stayed the same (mb_info). extra: "name=value:name=value" of x264's own options. */
-lp_x264 *lp_x264_open(int width, int height, int fps, float crf, int kbit, int keyint,
+   picture, no B pictures, a keyframe every keyint pictures with its headers, a constant
+   quantizer, which the engine gives each picture (lp_x264_encode), the colours tagged BT.601
+   in limited or full range, told which macroblocks stayed the same (mb_info). No rate
+   control of x264's: the engine keeps the bit rate's cap itself (x264.rs), so x264 makes no
+   half-size picture of each frame to foresee its cost, and without weighted prediction
+   neither (it would need that picture). x264 keeps a picture's quantizer between those its I
+   and B pictures would have: qp is the lowest the engine gives one (above 0, where x264
+   would go lossless), and an ip_factor that puts the I pictures' above 51 lets it give any up
+   to 51 from 12 (no picture takes x264's own I or B quantizer: each is given its own).
+   extra: "name=value:name=value" of x264's own options. */
+lp_x264 *lp_x264_open(int width, int height, int fps, int qp, int keyint,
                       const char *preset, const char *profile, int full, const char *extra,
                       char *err, int err_len) {
     lp_x264 *e = calloc(1, sizeof *e);
@@ -42,11 +49,10 @@ lp_x264 *lp_x264_open(int width, int height, int fps, float crf, int kbit, int k
     p->i_keyint_min = keyint;
     p->i_scenecut_threshold = 0;
     p->i_bframe = 0;
-    p->rc.i_rc_method = X264_RC_CRF;
-    p->rc.f_rf_constant = crf;
-    p->rc.i_vbv_max_bitrate = kbit;
-    p->rc.i_vbv_buffer_size = kbit;
-    p->rc.f_ip_factor = 2.0f;
+    p->rc.i_rc_method = X264_RC_CQP;
+    p->rc.i_qp_constant = qp < 1 ? 1 : qp;
+    p->rc.f_ip_factor = 0.01f;
+    p->analyse.i_weighted_pred = X264_WEIGHTP_NONE;
     p->b_repeat_headers = 1;
     p->b_annexb = 1;
     p->vui.b_fullrange = full ? 1 : 0;
@@ -87,10 +93,11 @@ lp_x264 *lp_x264_open(int width, int height, int fps, float crf, int kbit, int k
 }
 
 /* One picture: its planes, which macroblocks stayed the same (mb_info: X264_MBINFO_CONSTANT
-   each, or NULL), its number. *out points at the picture's NAL units, one after the other, and
-   the size is returned (0: none yet, negative: an error). */
+   each, or NULL), its number and its quantizer (negative: the encoder's). *out points at the
+   picture's NAL units, one after the other, and the size is returned (0: none yet, negative:
+   an error). */
 int lp_x264_encode(lp_x264 *e, uint8_t *y, uint8_t *u, uint8_t *v, int stride_y, int stride_c,
-                   uint8_t *mb_info, int64_t pts, const uint8_t **out, int *keyframe) {
+                   uint8_t *mb_info, int64_t pts, int qp, const uint8_t **out, int *keyframe) {
     x264_picture_t *pic = &e->picture, done;
     pic->img.plane[0] = y;
     pic->img.plane[1] = u;
@@ -100,6 +107,7 @@ int lp_x264_encode(lp_x264 *e, uint8_t *y, uint8_t *u, uint8_t *v, int stride_y,
     pic->img.i_stride[2] = stride_c;
     pic->i_pts = pts;
     pic->i_type = e->force_key ? X264_TYPE_IDR : X264_TYPE_AUTO;
+    pic->i_qpplus1 = qp >= 0 ? qp + 1 : X264_QP_AUTO;
     e->force_key = 0;
     pic->prop.mb_info = mb_info;
     pic->prop.mb_info_free = NULL;
@@ -114,16 +122,6 @@ int lp_x264_encode(lp_x264 *e, uint8_t *y, uint8_t *u, uint8_t *v, int stride_y,
         *keyframe = 0;
     }
     return size;
-}
-
-/* The bit rate's cap changed in the running stream (VBV): no new encoder, no keyframe. */
-int lp_x264_rate(lp_x264 *e, int kbit) {
-    x264_param_t p = e->param;
-    p.rc.i_vbv_max_bitrate = kbit;
-    p.rc.i_vbv_buffer_size = kbit;
-    int done = x264_encoder_reconfig(e->encoder, &p);
-    if (done == 0) e->param = p;
-    return done;
 }
 
 void lp_x264_keyframe(lp_x264 *e) { e->force_key = 1; }

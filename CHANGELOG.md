@@ -3,7 +3,23 @@
 ## Unreleased
 
 **Lighter** (Lumen on the 12.3" at 25 fps, the video mode through the engine, with the
-computer's own readings, on the same computer as 0.8.0; every change the same pixels)
+computer's own readings, on the same computer as 0.8.0; every change the same frames drawn,
+and x264 makes a cleaner picture of them)
+- **x264 without a rate control of its own: a third less of its work, a cleaner picture.**
+  The engine gives x264 a constant quantizer for each picture, two below `crf` (18 at the
+  default 20), and keeps the bit rate's cap itself as x264's VBV kept it: a bucket of a
+  second's bits at the cap; the pictures' quantizer rises while the last second's bits are
+  above 85 % of the cap, a keyframe takes at most 40 % of the bucket, and a picture that would
+  still overfill it is made coarser. x264 so makes no half-size copy of each frame to foresee
+  its cost (nor weighted prediction, which needs it): on Lumen 2.7 ms a frame instead of 3.8
+  and 4.0, the whole 20.4 and 19.7 % of a core instead of 22.7 and 21.7 (run in turn, a minute
+  each, the demo's readings), the engine 5 MB smaller. 1272 of Lumen's frames, encoded both
+  ways, decoded and held against what was drawn: 1472 kbit/s instead of 1501, PSNR 53.96 dB
+  instead of 53.07, the largest error 15 instead of 30, 21416 pixels off by more than 8
+  instead of 213274 (x264's adaptive quantizer took the bits from the edges of letters). At a
+  cap of 2 Mbit/s 52.85 dB instead of 51.31; at 1 Mbit/s, which Lumen does not fit in, 45.99
+  instead of 45.46, the worst frame 44.07 dB instead of 40.42, the bucket never more than 84 %
+  full.
 - **What a frame costs cut down further.** Run in turn twice with 0.8.0 on that computer, a
   minute each, the same engine for both: 0.8.0 31.4 and 32.5 % of a core (Python 14.9 and
   15.3, its engine 16.5 and 17.2), this 21.1 and 21.6 (the app 6.9 and 7.0, the engine 14.3
