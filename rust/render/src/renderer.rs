@@ -148,6 +148,8 @@ pub struct Renderer {
     mode: Mode,
     /// the ground of the frames, made once (the background changes it: made again then)
     ground_kept: Option<Image>,
+    /// the same, shared with the engine's frames of layers (their ground picture)
+    ground_shared: Option<Rc<Image>>,
     /// the frame composed last and its pieces: the next frame composes anew only where its
     /// pieces differ (the same pixels as composing all of it)
     composed: Option<(Image, Pieces)>,
@@ -333,6 +335,12 @@ pub(crate) fn spring_key(w: &Dict) -> String {
 /// A frame shared (render_shared), and the boxes its widgets took.
 pub type Shared = (Rc<Image>, IndexMap<String, [i64; 4]>);
 
+/// A frame drawn: composed here, or as its layers for an engine that composes them.
+pub enum Drawing {
+    Frame(Rc<Image>),
+    Scene(crate::scene::SceneFrame),
+}
+
 impl Renderer {
     pub fn new(theme: Theme, env: &Env, options: Options) -> Result<Renderer> {
         let expanded = lp_theme::modules::expand(&theme, env).map_err(|e| Failed(e.msg.clone()))?;
@@ -360,6 +368,7 @@ impl Renderer {
             opaque: false,
             mode: Mode::RGBA,
             ground_kept: None,
+            ground_shared: None,
             composed: None,
             underlays: compose::Underlays::default(),
             frames: [None, None],
@@ -872,6 +881,7 @@ impl Renderer {
         self.backdrop = backdrop;
         self.background = self.load_background()?;
         self.ground_kept = None;
+        self.ground_shared = None;
         self.composed = None;
         self.behind = [None, None];
         self.underlays.clear();
@@ -1802,7 +1812,10 @@ impl Renderer {
         snapshot: Snapshot,
         now: f64,
     ) -> std::result::Result<(Image, IndexMap<String, [i64; 4]>), Unported> {
-        let (frame, boxes) = self.drawn(snapshot, now, false)?;
+        let (frame, boxes) = self.drawn(snapshot, now, false, false)?;
+        let Drawing::Frame(frame) = frame else {
+            unreachable!("a frame composed here was asked for");
+        };
         Ok((Rc::unwrap_or_clone(frame), boxes))
     }
 
@@ -1813,7 +1826,21 @@ impl Renderer {
         snapshot: Snapshot,
         now: f64,
     ) -> std::result::Result<Shared, Unported> {
-        self.drawn(snapshot, now, true)
+        let (frame, boxes) = self.drawn(snapshot, now, true, false)?;
+        let Drawing::Frame(frame) = frame else {
+            unreachable!("a frame composed here was asked for");
+        };
+        Ok((frame, boxes))
+    }
+
+    /// render, as the frame's layers where the engine can compose them all as they are
+    /// (`_layered`): its pixels are not made here then; else the frame as render_shared.
+    pub fn render_scene(
+        &mut self,
+        snapshot: Snapshot,
+        now: f64,
+    ) -> std::result::Result<(Drawing, IndexMap<String, [i64; 4]>), Unported> {
+        self.drawn(snapshot, now, true, true)
     }
 
     fn drawn(
@@ -1821,7 +1848,8 @@ impl Renderer {
         snapshot: Snapshot,
         now: f64,
         shared: bool,
-    ) -> std::result::Result<Shared, Unported> {
+        scene: bool,
+    ) -> std::result::Result<(Drawing, IndexMap<String, [i64; 4]>), Unported> {
         let begun = std::time::Instant::now();
         self.renders += 1;
         self.changed = None;
@@ -2033,13 +2061,59 @@ impl Renderer {
             if pieces.is_empty() && screen.mode() == Mode::RGB && whole {
                 // an opaque screen alone is the frame: nothing to compose
                 self.behind = [None, None];
-                return Ok((screen, boxes));
+                return Ok((Drawing::Frame(screen), boxes));
             }
             pieces.insert(0, ("\0screen".to_string(), self.screen_piece(screen)?));
         }
         drop(ending);
+        if scene && self.layered(&pieces) {
+            return Ok((Drawing::Scene(self.scene_frame(pieces)?), boxes));
+        }
         let frame = crate::prof::part("compose", || self.compose(pieces, shared))?;
-        Ok((frame, boxes))
+        Ok((Drawing::Frame(frame), boxes))
+    }
+
+    /// _layered: whether the engine can compose this frame of `pieces` as `compose` does: on
+    /// the opaque ground of a frame in RGB, of pieces it takes as they are.
+    fn layered(&self, pieces: &Pieces) -> bool {
+        self.mode == Mode::RGB
+            && self.opaque
+            && pieces
+                .iter()
+                .all(|(_, piece)| crate::scene::layerable(piece))
+    }
+
+    /// _scene_frame: the frame of `pieces` for the engine to compose: what changed is the
+    /// engine's to work out. The frame composed here last goes with what lay under its pieces:
+    /// one composed here again (a transition, a message drawn here) is composed whole.
+    fn scene_frame(&mut self, pieces: Pieces) -> Result<crate::scene::SceneFrame> {
+        self.changed = None;
+        self.composed = None;
+        self.behind = [None, None];
+        self.underlays.clear();
+        let colour = self.color(Some(&self.theme.background_color), 1.0)?;
+        let ground = match (&self.background, colour) {
+            (None, Some(c)) => crate::scene::Ground::Colour([
+                c[0].clamp(0, 255) as u8,
+                c[1].clamp(0, 255) as u8,
+                c[2].clamp(0, 255) as u8,
+            ]),
+            _ => {
+                if self.ground_shared.is_none() {
+                    if self.ground_kept.is_none() {
+                        self.ground_kept = Some(self.ground()?);
+                    }
+                    let ground = self.ground_kept.clone().expect("made above");
+                    self.ground_shared = Some(Rc::new(ground));
+                }
+                crate::scene::Ground::Picture(Rc::clone(self.ground_shared.as_ref().expect("made")))
+            }
+        };
+        Ok(crate::scene::SceneFrame {
+            size: (self.theme.width, self.theme.height),
+            ground,
+            pieces,
+        })
     }
 
     /// _whole_video: the video of this frame (its file, how it is fitted, its speed) where the

@@ -41,6 +41,13 @@ before; being finished and tested now.
   above about a megabyte back to the system and asked for a fresh one the next frame, whose
   pages the system zeroed and mapped one by one; the app now keeps them for a moment, as
   glibc does on Linux (`LP_HEAP_KEEP=0` turns it off).
+- **Frames go to the engine as their layers, as in 0.8.** Where Libre Panel's engine sends
+  the pictures, the app no longer composes each frame and sends its pixels: it hands the
+  engine the frame's pieces, each piece once while it stays, and then for each frame only
+  their order; the engine lays them as the app would, pixel for pixel. Lumen on Linux with
+  the bit rate fixed: the app 9.5 % of a core instead of 12.4, the engine as before
+  (`[video] engine_layers = false` sends frames of pixels as before). Frames that show a
+  blend, a toast, the alarm, a plugin or a colour check still go as pixels.
 
 ## 0.8.1rc2 — 2026-11-06
 

@@ -87,6 +87,8 @@ pub struct Video {
     pub local_clip: String,
     /// `[device] video_range`: "auto" (the model's), "limited" or "full"
     pub video_range: String,
+    /// `[video] engine_layers`: frames of layers composed by the engine, where it can
+    pub engine_layers: bool,
 }
 
 /// What a TURZX panel is opened with.
@@ -785,6 +787,9 @@ pub struct TurzxVideo {
     /// the theme's last frame while a colour check's picture is shown (what stays on the
     /// panel when it closes)
     left: Option<std::rc::Rc<Image>>,
+    /// what the engine has of the frames' layers, where it composes frames of layers
+    /// (`[video] engine_layers` and an engine that says "scenes")
+    scenes: Option<crate::scene::SceneSender>,
 }
 
 impl TurzxVideo {
@@ -825,6 +830,8 @@ impl TurzxVideo {
             _ => "x264",
         }
         .to_string();
+        let scenes = (setup.video.engine_layers && can.contains("scenes"))
+            .then(crate::scene::SceneSender::new);
         let mut panel = TurzxVideo {
             conn,
             block: DEFAULT_BLOCK,
@@ -842,6 +849,7 @@ impl TurzxVideo {
             range: None,
             stream_full: false,
             left: None,
+            scenes,
         };
         if let Err(e) = panel.start() {
             panel.conn.close();
@@ -1073,6 +1081,92 @@ impl TurzxVideo {
         self.stream = Some((size, 0));
         self.stream_full = full;
         self.last = None; // (its first frame whole)
+        if let Some(scenes) = &mut self.scenes {
+            scenes.forget(); // (a new stream has none of the layers of the one before)
+        }
+        Ok(())
+    }
+
+    /// Whether a frame may come as its layers (`show_scene`): the engine composes it.
+    pub fn takes_scenes(&self) -> bool {
+        self.scenes.is_some()
+    }
+
+    /// Whether the engine has the layers of the piece of `key` from the frame before.
+    pub fn knows_piece(&self, key: usize) -> bool {
+        self.scenes.as_ref().is_some_and(|scenes| scenes.knows(key))
+    }
+
+    /// The frame of layers the engine composed last (EngineLink::shown), within `timeout`.
+    pub fn shown(&self, timeout: std::time::Duration) -> Option<Image> {
+        self.scenes.as_ref()?;
+        self.conn.link.shown(timeout)
+    }
+
+    /// The pixels of the frame that went last as its layers, composed where they were drawn:
+    /// what stays on the panel when it closes (`close`), as a frame of pixels would.
+    pub fn keep_last(&mut self, frame: std::rc::Rc<Image>) {
+        if self.last.is_none() {
+            self.last = Some(frame);
+        }
+    }
+
+    /// show_scene: a frame of `size` as its layers (engine_scene): its ground and its pieces,
+    /// those the engine has by their key and the others with their layers; drawn for
+    /// `planned`, turned half a turn where `half`. The engine composes it where it changed.
+    pub fn show_scene(
+        &mut self,
+        ground: &crate::scene::Ground<'_>,
+        entries: Vec<crate::scene::Entry<'_>>,
+        size: (i64, i64),
+        planned: Option<f64>,
+        half: bool,
+    ) -> Result<()> {
+        match self.trouble() {
+            Some(Trouble::Hung(depth)) => return Err(self.restart_panel(&depth)),
+            Some(Trouble::Failed(why)) => {
+                self.counters.usb_errors += 1;
+                return Err(DeviceError(why));
+            }
+            None => {}
+        }
+        if self.scenes.is_none() {
+            return Err(DeviceError(
+                "this engine composes no frames of layers".into(),
+            ));
+        }
+        let same = matches!(self.stream, Some((running, _)) if running == size);
+        if !same || self.stream_full != self.full() {
+            self.begin_stream(size)?;
+        }
+        self.follow_the_panel();
+        let number = self.stream.map_or(0, |(_, number)| number);
+        let Some(scenes) = &mut self.scenes else {
+            return Err(DeviceError(
+                "this engine composes no frames of layers".into(),
+            ));
+        };
+        let parts = scenes.records(ground, entries, number, planned, half);
+        // (heads go out with what follows; pixels as they are)
+        let mut small: Vec<u8> = Vec::new();
+        for part in parts {
+            if part.len() < 4096 {
+                small.extend_from_slice(&part);
+                continue;
+            }
+            if !small.is_empty() {
+                self.conn.link.write(&small)?;
+                small.clear();
+            }
+            self.conn.link.write(&part)?;
+        }
+        if !small.is_empty() {
+            self.conn.link.write(&small)?;
+        }
+        self.stream = Some((size, number.wrapping_add(1)));
+        // (a frame of pixels after it is compared with none: it goes whole)
+        self.last = None;
+        self.notes.extend(self.conn.link.notes());
         Ok(())
     }
 
@@ -1215,6 +1309,13 @@ impl TurzxVideo {
                 of("bytes") / 1e6,
                 of("waits") as u64,
                 of("max_depth") as u64
+            ));
+        }
+        if let Some(scenes) = self.scenes.as_ref().filter(|scenes| scenes.layers > 0) {
+            self.notes.push(format!(
+                "video: {} layers went to the engine, {:.1} MB",
+                scenes.layers,
+                scenes.bytes as f64 / 1e6
             ));
         }
         if of("pictures") > 0.0 {
@@ -1427,6 +1528,48 @@ impl Turzx {
         }
     }
 
+    /// Whether a frame may come as its layers (video through an engine that composes them).
+    pub fn takes_scenes(&self) -> bool {
+        matches!(self, Turzx::Video(panel) if panel.takes_scenes())
+    }
+
+    /// Whether the engine has the layers of the piece of `key` from the frame before.
+    pub fn knows_piece(&self, key: usize) -> bool {
+        matches!(self, Turzx::Video(panel) if panel.knows_piece(key))
+    }
+
+    /// The pixels of the frame that went last as its layers (video only: TurzxVideo::keep_last).
+    pub fn keep_last(&mut self, frame: std::rc::Rc<Image>) {
+        if let Turzx::Video(panel) = self {
+            panel.keep_last(frame);
+        }
+    }
+
+    /// The frame of layers the engine composed last (video only).
+    pub fn shown(&self, timeout: std::time::Duration) -> Option<Image> {
+        match self {
+            Turzx::Video(panel) => panel.shown(timeout),
+            Turzx::Stills(_) => None,
+        }
+    }
+
+    /// show_scene: a frame as its layers (TurzxVideo::show_scene); video only.
+    pub fn show_scene(
+        &mut self,
+        ground: &crate::scene::Ground<'_>,
+        entries: Vec<crate::scene::Entry<'_>>,
+        size: (i64, i64),
+        planned: Option<f64>,
+        half: bool,
+    ) -> Result<()> {
+        match self {
+            Turzx::Video(panel) => panel.show_scene(ground, entries, size, planned, half),
+            Turzx::Stills(_) => Err(DeviceError(
+                "single pictures take no frames of layers".into(),
+            )),
+        }
+    }
+
     /// set_range: the range a colour check compares (video only; single pictures have none).
     pub fn set_range(&mut self, range: Option<String>) {
         if let Turzx::Video(panel) = self {
@@ -1585,6 +1728,7 @@ mod tests {
             engine_encoder: "auto".into(),
             local_clip: "clip".into(),
             video_range: "auto".into(),
+            engine_layers: true,
         };
         let options = engine_options((1920, 480), &video, "turing-9.2-usb", false, 2.0, "x264");
         assert_eq!(

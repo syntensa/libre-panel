@@ -21,6 +21,7 @@ use lp_pixels::{Filter, Image, Transpose};
 use lp_py::Value;
 use lp_render::alarm::AlarmEdge;
 use lp_render::overlays::ToastLayer;
+use lp_render::renderer::Drawing;
 use lp_render::{Moment, Options, Renderer, Snapshot};
 use lp_services::host::{Delivery, Event, PluginHost, LEFT_OUT, NO_PANEL, OFF_IN_THEME};
 use lp_theme::versions::{self, Places};
@@ -227,6 +228,11 @@ pub struct MainLoop {
     failed_switches: std::collections::HashSet<String>,
     /// the frame before toasts, and with them where one showed
     last_frame: Option<Rc<Image>>,
+    /// the frame shown last where it went as its layers (its pixels made only when a
+    /// transition starts from it)
+    last_scene: Option<lp_render::scene::SceneFrame>,
+    /// frames of layers the engine composed as here (LP_SCENE_CHECK)
+    scenes_same: u64,
     shown_frame: Option<Rc<Image>>,
     /// the renderer and its count of frames of the frame the panel showed last, where that
     /// was the theme's frame as drawn (no transition, message, edge or picture over it): the
@@ -281,6 +287,13 @@ pub fn panel_config(config: &Config, n: usize) -> Result<Config, String> {
 
 /// how long the panel found on the USB bus counts before it is looked for again
 const BUS_LOOK_S: u64 = 5;
+
+/// LP_SCENE_CHECK: each frame that goes as its layers compared with the engine's (a check while
+/// measuring: it composes the frame here too).
+fn scene_check() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("LP_SCENE_CHECK").is_some_and(|v| !v.is_empty()))
+}
 
 /// The local time of now, and its fold.
 pub(crate) fn moment() -> (Moment, bool) {
@@ -467,6 +480,8 @@ impl MainLoop {
             began_in: None,
             failed_switches: std::collections::HashSet::new(),
             last_frame: None,
+            last_scene: None,
+            scenes_same: 0,
             shown_frame: None,
             shown_drawn: None,
             player: crate::player::Screen::default(),
@@ -651,6 +666,14 @@ impl MainLoop {
             &moment,
             self.blends as usize + now.to_bits() as usize,
         );
+        if self.last_frame.is_none() {
+            // (the frame shown last went as its layers: its pixels made now)
+            self.last_frame = self
+                .last_scene
+                .as_ref()
+                .and_then(|scene| scene.compose().ok())
+                .map(Rc::new);
+        }
         let began = Blend::begin(
             kind,
             self.last_frame.as_deref(),
@@ -721,6 +744,15 @@ impl MainLoop {
 
     fn close_panel(&mut self) {
         if let Some(mut panel) = self.panel.take() {
+            // (the frame that went last as its layers: its pixels made now, to stay, turned as
+            // the panel got it)
+            if let Some(Ok(frame)) = self.last_scene.take().map(|scene| scene.compose()) {
+                let frame = match panel.on_panel() && self.config.device.rotate == 180 {
+                    true => frame.transpose(Transpose::Rotate180),
+                    false => frame,
+                };
+                panel.keep_last(Rc::new(frame));
+            }
             panel.close();
             self.counted.follow(panel.counters(), panel.bit_rate());
             self.counted.closed();
@@ -1136,6 +1168,121 @@ impl MainLoop {
         Ok(frame)
     }
 
+    /// _layered (the main loop's choice): whether this frame may go as its layers, the engine
+    /// composing it: a panel that takes them, and nothing here that needs its pixels (a
+    /// transition, a message, the alarm's edge, plugins, the live picture, the colour check,
+    /// the panel's number, a frame fitted to another size).
+    fn layered_now(&self, renderer: &Renderer, size: (usize, usize), now: f64) -> bool {
+        if !self.panel.as_ref().is_some_and(Display::takes_scenes) {
+            return false;
+        }
+        let watched = self.status.lock().is_ok_and(|status| {
+            status
+                .live_asked
+                .is_some_and(|at| at.elapsed().as_secs_f64() < LIVE_HOLD_S)
+        });
+        let number = self.beside.as_ref().map_or(1, |beside| beside.n + 2) as i64;
+        let theme = (
+            renderer.theme.width.max(1) as usize,
+            renderer.theme.height.max(1) as usize,
+        );
+        self.blend.is_none()
+            && !self.toasts.as_ref().is_some_and(ToastLayer::active)
+            && !self.alarm.showing(now)
+            && renderer.plugins.is_none()
+            && !watched
+            && theme == size
+            && crate::colour_show::now(number).is_none()
+            && !crate::identify::showing()
+    }
+
+    /// The frame as its layers to the panel, the engine composing it (engine_scene): upside
+    /// down on a panel mounted so.
+    fn show_scene(&mut self, scene: lp_render::scene::SceneFrame, now: f64) {
+        let half =
+            self.panel.as_ref().is_some_and(Display::on_panel) && self.config.device.rotate == 180;
+        self.last_frame = None;
+        self.shown_frame = None;
+        if let Ok(mut status) = self.status.lock() {
+            status.shown = None; // (no one looks: the frame composed here would be its pixels)
+        }
+        if let Some(panel) = self.panel.as_mut() {
+            panel.set_range(None);
+        }
+        let shown = lp_render::prof::part("show", || match &mut self.panel {
+            Some(panel) => panel.show_scene(&scene, now, half),
+            None => Ok(()),
+        });
+        match shown {
+            Ok(()) => {
+                self.frames += 1;
+                if let Ok(mut status) = self.status.lock() {
+                    status.state = "showing";
+                    status.sequence.clone_from(&self.sequence_at);
+                    status.size = Some(scene.size);
+                    status.frames = self.frames;
+                    status.theme.clone_from(&self.shown);
+                }
+            }
+            Err(Failed::Frame(why)) => say(&format!("frame skipped: {why}")),
+            Err(Failed::Panel(why)) => {
+                self.close_panel();
+                self.failed(&why, now);
+            }
+        }
+        if scene_check() {
+            self.check_scene(&scene);
+        }
+        self.last_scene = Some(scene);
+    }
+
+    /// LP_SCENE_CHECK: the frame the engine composed of the layers against the one composed
+    /// here of the same pieces, pixel for pixel; a frame that differs is said, and how many
+    /// were the same now and then.
+    fn check_scene(&mut self, scene: &lp_render::scene::SceneFrame) {
+        let Some(theirs) = self
+            .panel
+            .as_ref()
+            .and_then(|panel| panel.shown(Duration::from_secs(2)))
+        else {
+            say("scene check: the engine gave no frame");
+            return;
+        };
+        let ours = match scene.compose() {
+            Ok(ours) => ours,
+            Err(why) => return say(&format!("scene check: not composed here: {}", why.0)),
+        };
+        if ours.size() != theirs.size() {
+            return say(&format!(
+                "scene check: {:?} here, {:?} by the engine",
+                ours.size(),
+                theirs.size()
+            ));
+        }
+        let (a, b) = (ours.as_bytes(), theirs.as_bytes());
+        if a == b {
+            self.scenes_same += 1;
+            if self.scenes_same % 100 == 1 {
+                say(&format!(
+                    "scene check: {} frames the same as composed here",
+                    self.scenes_same
+                ));
+            }
+            return;
+        }
+        let differ: Vec<usize> = (0..a.len() / 3)
+            .filter(|&i| a[i * 3..i * 3 + 3] != b[i * 3..i * 3 + 3])
+            .collect();
+        let first = differ[0];
+        let (x, y) = (first % ours.width(), first / ours.width());
+        say(&format!(
+            "scene check: the engine's frame differs in {} pixels, the first at ({x}, {y}): {:?} here, {:?} by the engine",
+            differ.len(),
+            &a[first * 3..first * 3 + 3],
+            &b[first * 3..first * 3 + 3]
+        ));
+    }
+
     /// The frame on the panel kept for the live picture, while it is asked for.
     fn keep_shown(&self, frame: &Image) {
         if let Ok(mut status) = self.status.lock() {
@@ -1504,9 +1651,24 @@ impl MainLoop {
                 renderer.theme.height.max(1) as usize,
             ),
         };
+        // the frame as its layers, for the engine to compose, where nothing here needs its
+        // pixels (render/scene.py; the main loop's choice of devices/turzx_video.py)
+        let layered =
+            mirrored.is_none() && playing.is_none() && self.layered_now(&renderer, size, started);
+        let mut scene = None;
         let drawn = match (&mirrored, &playing) {
             (Some(source), _) => Ok(Rc::new(self.mirror.frame(source, size, renderer.fps))),
             (None, Some(showing)) => Ok(Rc::new(self.player.frame(showing, size, renderer.fps))),
+            (None, None) if layered => {
+                match lp_render::prof::part("render", || renderer.render_scene(snapshot, started)) {
+                    Ok((Drawing::Scene(layers), _)) => {
+                        scene = Some(layers);
+                        Err(String::new()) // (the frame goes as its layers below)
+                    }
+                    Ok((Drawing::Frame(frame), _)) => self.fitted(frame, &renderer),
+                    Err(e) => Err(format!("not drawn by this build yet: {}", e.0)),
+                }
+            }
             (None, None) => {
                 lp_render::prof::part("render", || renderer.render_shared(snapshot, started))
                     .map_err(|e| format!("not drawn by this build yet: {}", e.0))
@@ -1521,88 +1683,102 @@ impl MainLoop {
             self.mirror.close();
         }
         self.mirrored = mirrored.is_some();
-        // the theme's frame as drawn: where it changed since the one shown before, if that
-        // was the frame the same renderer drew just before it
-        let mut drawn_as = None;
-        let drawn = drawn
-            .map(|frame| {
-                let theirs = (mirrored.is_none() && playing.is_none()).then(|| Rc::clone(&frame));
-                let dressed = lp_render::prof::part("dress", || {
-                    self.dressed_frame(frame, &renderer, started)
-                });
-                if theirs.is_some_and(|theirs| Rc::ptr_eq(&theirs, &dressed)) {
-                    drawn_as = Some((renderer.serial, renderer.renders));
-                }
-                dressed
-            })
-            .map(|frame| {
-                self.keep_shown(&frame);
-                let turned = self.turned(frame.clone());
-                if !Rc::ptr_eq(&turned, &frame) {
-                    drawn_as = None;
-                }
-                turned
-            });
-        let follows = match (drawn_as, self.shown_drawn) {
-            (Some((serial, count)), Some((before, then))) => serial == before && count == then + 1,
-            _ => false,
-        };
-        let changed = renderer.changed.clone().filter(|_| follows);
-        self.shown_drawn = None;
-        if drawn.is_ok() {
+        let (moving, due) = if let Some(scene) = scene {
             self.meter.drew(self.clock() - drawing);
-        }
-        let (mut moving, due) = (renderer.moving, renderer.due);
-        moving |= self.playing
-            || self.mirrored
-            || self.blend.is_some()
-            || self.toasts.as_ref().is_some_and(ToastLayer::active)
-            || self.alarm.showing(started);
-        self.renderer = Some(renderer);
-        match drawn {
-            Ok(frame) => {
-                let size = frame.size();
-                let shown = lp_render::prof::part("show", || match &mut self.panel {
-                    Some(panel) => panel.show_changed(frame, started, changed.as_deref()),
-                    None => Ok(false),
-                });
-                match shown {
-                    Ok(found) => {
-                        self.frames += 1;
-                        self.shown_drawn = drawn_as.filter(|_| !found);
-                        if let Ok(mut status) = self.status.lock() {
-                            status.state = "showing";
-                            status.sequence.clone_from(&self.sequence_at);
-                            status.size = Some((size.0 as i64, size.1 as i64));
-                            status.frames = self.frames;
-                            status.theme.clone_from(&self.shown);
-                        }
-                        if found {
-                            if let Some(panel) = &self.panel {
-                                let target = panel.describe();
-                                if let Ok(mut status) = self.status.lock() {
-                                    status.target = target;
-                                }
-                            }
-                            // (a panel took over from the PNG file: drawn for it from now on)
-                            self.had_panel = true;
-                            self.relook = true;
-                            self.brightness = None;
-                        }
+            self.shown_drawn = None;
+            let (moving, due) = (renderer.moving, renderer.due);
+            self.renderer = Some(renderer);
+            self.show_scene(scene, started);
+            (moving, due)
+        } else {
+            self.last_scene = None;
+            // the theme's frame as drawn: where it changed since the one shown before, if that
+            // was the frame the same renderer drew just before it
+            let mut drawn_as = None;
+            let drawn = drawn
+                .map(|frame| {
+                    let theirs =
+                        (mirrored.is_none() && playing.is_none()).then(|| Rc::clone(&frame));
+                    let dressed = lp_render::prof::part("dress", || {
+                        self.dressed_frame(frame, &renderer, started)
+                    });
+                    if theirs.is_some_and(|theirs| Rc::ptr_eq(&theirs, &dressed)) {
+                        drawn_as = Some((renderer.serial, renderer.renders));
                     }
-                    Err(Failed::Frame(why)) => say(&format!("frame skipped: {why}")),
-                    Err(Failed::Panel(why)) => {
-                        self.close_panel();
-                        self.failed(&why, started);
+                    dressed
+                })
+                .map(|frame| {
+                    self.keep_shown(&frame);
+                    let turned = self.turned(frame.clone());
+                    if !Rc::ptr_eq(&turned, &frame) {
+                        drawn_as = None;
+                    }
+                    turned
+                });
+            let follows = match (drawn_as, self.shown_drawn) {
+                (Some((serial, count)), Some((before, then))) => {
+                    serial == before && count == then + 1
+                }
+                _ => false,
+            };
+            let changed = renderer.changed.clone().filter(|_| follows);
+            self.shown_drawn = None;
+            if drawn.is_ok() {
+                self.meter.drew(self.clock() - drawing);
+            }
+            let (mut moving, due) = (renderer.moving, renderer.due);
+            moving |= self.playing
+                || self.mirrored
+                || self.blend.is_some()
+                || self.toasts.as_ref().is_some_and(ToastLayer::active)
+                || self.alarm.showing(started);
+            self.renderer = Some(renderer);
+            match drawn {
+                Ok(frame) => {
+                    let size = frame.size();
+                    let shown = lp_render::prof::part("show", || match &mut self.panel {
+                        Some(panel) => panel.show_changed(frame, started, changed.as_deref()),
+                        None => Ok(false),
+                    });
+                    match shown {
+                        Ok(found) => {
+                            self.frames += 1;
+                            self.shown_drawn = drawn_as.filter(|_| !found);
+                            if let Ok(mut status) = self.status.lock() {
+                                status.state = "showing";
+                                status.sequence.clone_from(&self.sequence_at);
+                                status.size = Some((size.0 as i64, size.1 as i64));
+                                status.frames = self.frames;
+                                status.theme.clone_from(&self.shown);
+                            }
+                            if found {
+                                if let Some(panel) = &self.panel {
+                                    let target = panel.describe();
+                                    if let Ok(mut status) = self.status.lock() {
+                                        status.target = target;
+                                    }
+                                }
+                                // (a panel took over from the PNG file: drawn for it from now on)
+                                self.had_panel = true;
+                                self.relook = true;
+                                self.brightness = None;
+                            }
+                        }
+                        Err(Failed::Frame(why)) => say(&format!("frame skipped: {why}")),
+                        Err(Failed::Panel(why)) => {
+                            self.close_panel();
+                            self.failed(&why, started);
+                        }
                     }
                 }
+                Err(why) => {
+                    say(&format!("theme {}: {why}", self.shown));
+                    self.refused = Some((self.shown.clone(), why));
+                    self.renderer = None;
+                }
             }
-            Err(why) => {
-                say(&format!("theme {}: {why}", self.shown));
-                self.refused = Some((self.shown.clone(), why));
-                self.renderer = None;
-            }
-        }
+            (moving, due)
+        };
 
         let _tail = lp_render::prof::Span::new("loop tail");
         if let Some(panel) = &mut self.panel {

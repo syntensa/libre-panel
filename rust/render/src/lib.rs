@@ -43,6 +43,7 @@ pub mod prof;
 mod rect;
 pub mod renderer;
 mod roll;
+pub mod scene;
 pub mod shapes;
 mod slot;
 pub mod snapshot;

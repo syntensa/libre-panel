@@ -266,6 +266,7 @@ fn turzx(device: &DeviceConfig, settings: &Path, brightness: i64) -> Result<Pane
             engine_encoder: video.engine_encoder.clone(),
             local_clip: video.local_clip.clone(),
             video_range: device.video_range.clone(),
+            engine_layers: video.engine_layers,
         },
         still: device.still.clone(),
         brightness,
@@ -311,6 +312,7 @@ pub fn files_setup(
             engine_encoder: String::new(),
             local_clip: String::new(),
             video_range: text("auto"),
+            engine_layers: false,
         },
         still: text("auto"),
         brightness: 0,
@@ -589,6 +591,93 @@ impl Display {
 
     /// set_range: the range a colour check compares on a panel showing video (None: its
     /// own again).
+    /// Whether a frame may come as its layers (`show_scene`): video through an engine that
+    /// composes them.
+    pub fn takes_scenes(&self) -> bool {
+        matches!(&self.panel, Panel::Turzx(panel) if panel.takes_scenes())
+    }
+
+    /// show_scene: the frame `scene` as its layers, drawn for `now`, turned half a turn where
+    /// `half`: the pieces the engine has from the frame before go as their key alone.
+    pub fn show_scene(
+        &mut self,
+        scene: &lp_render::scene::SceneFrame,
+        now: f64,
+        half: bool,
+    ) -> Result<(), Failed> {
+        use lp_devices::scene::{Entry, Ground, How, Layer};
+        let Panel::Turzx(panel) = &mut self.panel else {
+            return Err(Failed::Frame("this panel takes no frames of layers".into()));
+        };
+        let ground = match &scene.ground {
+            lp_render::scene::Ground::Colour(rgb) => Ground::Colour(*rgb),
+            lp_render::scene::Ground::Picture(picture) => Ground::Picture(picture),
+        };
+        let entries: Vec<Entry<'_>> = scene
+            .pieces
+            .iter()
+            .map(|(_, piece)| {
+                let key = Rc::as_ptr(piece) as usize;
+                if panel.knows_piece(key) {
+                    return Entry::Known(key);
+                }
+                // (as Renderer._composite lays them on the opaque frame)
+                let mut layers = Vec::with_capacity(2);
+                if piece.add {
+                    layers.push(Layer {
+                        image: &piece.layer,
+                        x: piece.x,
+                        y: piece.y,
+                        how: How::Add,
+                    });
+                } else {
+                    layers.push(Layer {
+                        image: &piece.layer,
+                        x: piece.x,
+                        y: piece.y,
+                        how: How::Over,
+                    });
+                    if let Some(light) = &piece.light {
+                        layers.push(Layer {
+                            image: &light.layer,
+                            x: light.x,
+                            y: light.y,
+                            how: How::Add,
+                        });
+                    }
+                }
+                let keep: Rc<dyn std::any::Any> = Rc::clone(piece) as Rc<dyn std::any::Any>;
+                Entry::New { key, keep, layers }
+            })
+            .collect();
+        let failed = |e: lp_devices::base::DeviceError| {
+            if e.is_frame() {
+                Failed::Frame(e.0)
+            } else {
+                Failed::Panel(e.0)
+            }
+        };
+        panel
+            .show_scene(&ground, entries, scene.size, Some(now), half)
+            .map_err(failed)
+    }
+
+    /// The pixels of the frame that went last as its layers: what stays on the panel when it
+    /// closes.
+    pub fn keep_last(&mut self, frame: Rc<Image>) {
+        if let Panel::Turzx(panel) = &mut self.panel {
+            panel.keep_last(frame);
+        }
+    }
+
+    /// The frame of layers the engine composed last, whole (for the checks of LP_SCENE_CHECK).
+    pub fn shown(&self, timeout: std::time::Duration) -> Option<Image> {
+        match &self.panel {
+            Panel::Turzx(panel) => panel.shown(timeout),
+            _ => None,
+        }
+    }
+
     pub fn set_range(&mut self, range: Option<&str>) {
         if let Panel::Turzx(panel) = &mut self.panel {
             panel.set_range(range.map(str::to_string));

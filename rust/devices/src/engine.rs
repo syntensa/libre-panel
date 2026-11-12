@@ -33,6 +33,8 @@ const COMMAND: u8 = 4;
 const STREAM: u8 = 5;
 const END: u8 = 6;
 const PLANNED: u8 = 7;
+/// the frame of layers composed last, asked for (its reply: width, height and its RGB)
+const SHOWN: u8 = 28;
 /// A reply may wait for the picture being sent (5 s a block at most, 1.5 s for room in the
 /// panel's queue, the hang check's readings): this long beyond a command's own time.
 const REPLY_SLACK: Duration = Duration::from_secs(10);
@@ -82,7 +84,7 @@ impl Shared {
     }
 }
 
-fn head(kind: u8, a: u32, b: u32) -> Vec<u8> {
+pub(crate) fn head(kind: u8, a: u32, b: u32) -> Vec<u8> {
     let mut record = MAGIC.to_vec();
     record.extend_from_slice(&[kind, 0, 0, 0]);
     record.extend_from_slice(&a.to_le_bytes());
@@ -485,6 +487,50 @@ impl EngineLink {
                 "USB error on command {cmd}: the engine gave no reply ({why})"
             ))
         })
+    }
+
+    /// shown: the frame of layers the engine composed last, whole, as it is before it turns
+    /// (EngineLink.shown); None where it has none (a frame of pixels went since, no frame of
+    /// layers yet), gives none within `timeout`, or is gone.
+    pub fn shown(&self, timeout: Duration) -> Option<lp_pixels::Image> {
+        if !self.alive() {
+            return None;
+        }
+        let number = self.numbers.fetch_add(1, Ordering::Relaxed);
+        self.shared.lock().replies.insert(number, None);
+        let written = self.write(&head(SHOWN, number, 0));
+        let deadline = Instant::now() + timeout;
+        let mut state = self.shared.lock();
+        let reply = loop {
+            if written.is_err() {
+                break None;
+            }
+            if let Some(Some(_)) = state.replies.get(&number) {
+                break state.replies.remove(&number).flatten();
+            }
+            let now = Instant::now();
+            if state.ended || now >= deadline {
+                break None;
+            }
+            state = self
+                .shared
+                .heard
+                .wait_timeout(state, deadline - now)
+                .unwrap_or_else(|e| e.into_inner())
+                .0;
+        };
+        state.replies.remove(&number);
+        drop(state);
+        let (status, data) = reply?;
+        if status != 0 || data.len() < 8 {
+            return None;
+        }
+        let width = u32::from_le_bytes(data[0..4].try_into().ok()?) as usize;
+        let height = u32::from_le_bytes(data[4..8].try_into().ok()?) as usize;
+        if width == 0 || height == 0 || data.len() != 8 + width * height * 3 {
+            return None;
+        }
+        lp_pixels::Image::from_bytes(lp_pixels::Mode::RGB, width, height, data[8..].to_vec()).ok()
     }
 
     fn given(cmd: u8, status: u8, data: Vec<u8>) -> Result<Vec<u8>> {

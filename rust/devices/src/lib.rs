@@ -24,6 +24,7 @@ pub mod png;
 pub mod ports;
 pub mod rate;
 pub mod rights;
+pub mod scene;
 pub mod serial;
 pub mod serial_panel;
 mod table;
