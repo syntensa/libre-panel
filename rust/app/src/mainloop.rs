@@ -90,6 +90,9 @@ pub struct RunStatus {
     /// a theme config.toml names that cannot be shown (removed, or of a plugin that is not
     /// there): the panel shows its own instead until another is chosen
     pub missing_theme: String,
+    /// what is wrong with `missing_theme` where it is there and cannot be loaded (an error in
+    /// its theme.json); empty for one that is not installed
+    pub missing_why: String,
     /// the frame on the panel now, after transitions and messages, in the theme's orientation:
     /// kept while the live picture was asked for a moment ago (`live_asked`)
     pub shown: Option<Arc<Image>>,
@@ -236,6 +239,8 @@ pub struct MainLoop {
     retry_at: f64,
     /// why the one frame asked for (`run --once`) could not be shown: the loop ends with it
     pub fatal: Option<String>,
+    /// what is wrong with the theme that cannot be shown, where it is there (`instead`)
+    missing_why: String,
     /// a panel was in use: one that is gone is waited for (`driver = "auto"`)
     had_panel: bool,
     renderer: Option<Renderer>,
@@ -243,6 +248,9 @@ pub struct MainLoop {
     shown: String,
     /// a theme that could not be shown, and why: not tried again until something changes
     refused: Option<(String, String)>,
+    /// nothing can be shown: neither the theme that is due nor the panel's own in its place
+    /// (not tried again until config.toml changes)
+    dark: bool,
     /// the theme on show is drawn anew (config.toml changed, another panel): kept on show
     /// where the new one cannot be
     relook: bool,
@@ -286,8 +294,9 @@ pub struct MainLoop {
     /// the frame shown last where it went as its layers (its pixels made only when a
     /// transition starts from it)
     last_scene: Option<lp_render::scene::SceneFrame>,
-    /// frames of layers the engine composed as here (LP_SCENE_CHECK)
+    /// frames of layers the engine composed as here (LP_SCENE_CHECK), and those it did not
     scenes_same: u64,
+    scenes_apart: u64,
     shown_frame: Option<Rc<Image>>,
     /// the renderer and its count of frames of the frame the panel showed last, where that
     /// was the theme's frame as drawn (no transition, message, edge or picture over it): the
@@ -508,10 +517,12 @@ impl MainLoop {
             failures: 0,
             retry_at: 0.0,
             fatal: None,
+            missing_why: String::new(),
             had_panel: false,
             renderer: None,
             shown: String::new(),
             refused: None,
+            dark: false,
             relook: false,
             across: None,
             across_watched: f64::NEG_INFINITY,
@@ -540,6 +551,7 @@ impl MainLoop {
             last_frame: None,
             last_scene: None,
             scenes_same: 0,
+            scenes_apart: 0,
             shown_frame: None,
             shown_drawn: None,
             player: crate::player::Screen::default(),
@@ -786,6 +798,7 @@ impl MainLoop {
                 self.config = fresh;
                 self.relook = true;
                 self.refused = None;
+                self.dark = false;
                 if self.beside.is_none() {
                     self.speak();
                     say("config.toml changed: read again");
@@ -1005,7 +1018,9 @@ impl MainLoop {
     /// missing. The renderer, the theme it draws and the missing one ("" for none).
     fn instead(&mut self, wanted: &str, why: String) -> Option<(Renderer, String, String)> {
         // (tried again when config.toml changes, not on every frame)
-        self.refused = Some((wanted.to_string(), why));
+        self.refused = Some((wanted.to_string(), why.clone()));
+        self.missing_why.clear();
+        let mut reason = why;
         let default = lp_theme::defaults::default_theme(self.model(), &self.places).to_string();
         let base = match self.config.theme_given {
             true => self.config.theme.clone(),
@@ -1019,13 +1034,19 @@ impl MainLoop {
                 lp_py::repr(wanted),
                 lp_py::repr(&named)
             ));
-            if let Ok(renderer) = self.renderer_of(&named) {
-                return Some((renderer, named, String::new()));
+            match self.renderer_of(&named) {
+                Ok(renderer) => return Some((renderer, named, String::new())),
+                Err(again) => reason = again,
             }
         }
         let why = match versions::find_theme(&named, &self.places) {
             Err(e) => e.msg,
-            Ok(_) => format!("theme {} cannot be loaded", lp_py::repr(&named)),
+            // (it is there: what is wrong with it is said, and it is not called "gone")
+            Ok(_) => {
+                let why = format!("theme {} cannot be loaded ({reason})", lp_py::repr(&named));
+                self.missing_why = reason;
+                why
+            }
         };
         if named == default {
             say(&format!("theme {named}: {why}"));
@@ -1343,6 +1364,7 @@ impl MainLoop {
             }
             return;
         }
+        self.scenes_apart += 1;
         let differ: Vec<usize> = (0..a.len() / 3)
             .filter(|&i| a[i * 3..i * 3 + 3] != b[i * 3..i * 3 + 3])
             .collect();
@@ -1483,7 +1505,7 @@ impl MainLoop {
                 }
                 Ok(None) => self.last_frame = Some(frame.clone()),
                 Err(why) => {
-                    say(&format!("message not drawn by this build yet: {}", why.0));
+                    say(&format!("message not drawn: {}", why.0));
                     self.last_frame = Some(frame.clone());
                 }
             }
@@ -1599,10 +1621,20 @@ impl MainLoop {
         let may_switch = policy != Some("wait");
         let rebuild = self.renderer.is_none() || self.relook;
         if may_switch && (rebuild || name != self.shown) {
-            let refused = (self.refused.as_ref()).is_some_and(|(theme, _)| *theme == name);
+            let refused = (self.refused.as_ref())
+                .filter(|(theme, _)| *theme == name)
+                .map(|(_, why)| why.clone());
             let made = match refused {
-                true => None,
-                false => match self.renderer_of(&name) {
+                // (a theme whose frame could not be drawn, with none on show: the panel's
+                // own in its place, as for one that cannot be loaded; a panel does not stay
+                // dark while there is something to show)
+                Some(why) if self.renderer.is_none() && !self.dark => {
+                    let made = self.instead(&name, why);
+                    self.dark = made.is_none();
+                    made
+                }
+                Some(_) => None,
+                None => match self.renderer_of(&name) {
                     Ok(renderer) => Some((renderer, name.clone(), String::new())),
                     Err(why) if self.renderer.is_some() && !self.shown.is_empty() => {
                         // (a half-written file, a theme taken away: the one on show stays)
@@ -1613,7 +1645,11 @@ impl MainLoop {
                         self.refused = Some((name.clone(), why));
                         None
                     }
-                    Err(why) => self.instead(&name, why),
+                    Err(why) => {
+                        let made = self.instead(&name, why);
+                        self.dark = made.is_none();
+                        made
+                    }
                 },
             };
             let due = name.clone();
@@ -1649,8 +1685,12 @@ impl MainLoop {
                 self.shown = name;
                 self.relook = false;
                 self.next_sample = started; // (its readings at once)
+                if missing.is_empty() {
+                    self.missing_why.clear();
+                }
                 if let Ok(mut status) = self.status.lock() {
                     status.missing_theme = missing;
+                    status.missing_why.clone_from(&self.missing_why);
                     status.theme.clone_from(&self.shown);
                 }
             }
@@ -1760,7 +1800,7 @@ impl MainLoop {
                 .as_ref()
                 .is_none_or(|blend| matches!(blend.kind.toasts, "over" | "hide"));
             if let Err(why) = toasts.advance(started, !go_on) {
-                say(&format!("message not shown by this build yet: {}", why.0));
+                say(&format!("message not shown: {}", why.0));
             }
             renderer.toast = toasts.showing(started); // (screens see a toast as it begins)
         }
@@ -1823,12 +1863,12 @@ impl MainLoop {
                         Err(String::new()) // (the frame goes as its layers below)
                     }
                     Ok((Drawing::Frame(frame), _)) => self.fitted(frame, &renderer),
-                    Err(e) => Err(format!("not drawn by this build yet: {}", e.0)),
+                    Err(e) => Err(format!("not drawn: {}", e.0)),
                 }
             }
             (None, None) => {
                 lp_render::prof::part("render", || renderer.render_shared(snapshot, started))
-                    .map_err(|e| format!("not drawn by this build yet: {}", e.0))
+                    .map_err(|e| format!("not drawn: {}", e.0))
                     .and_then(|(frame, _)| self.fitted(frame, &renderer))
             }
         };
@@ -1932,8 +1972,18 @@ impl MainLoop {
                 }
                 Err(why) => {
                     say(&format!("theme {}: {why}", self.shown));
-                    self.refused = Some((self.shown.clone(), why));
+                    let stands_in =
+                        (self.refused.as_ref()).is_some_and(|(theme, _)| *theme != self.shown);
+                    if stands_in {
+                        // (shown in place of one that cannot be shown, and not drawn either)
+                        self.dark = true;
+                    } else {
+                        self.refused = Some((self.shown.clone(), why));
+                    }
                     self.renderer = None;
+                    // (the transition to it has no frames to go on with: while it waited
+                    // for them, no other theme could take its place)
+                    self.blend = None;
                 }
             }
             (moving, due)
@@ -1988,6 +2038,15 @@ impl MainLoop {
                 std::thread::sleep(nap);
                 wait -= nap;
             }
+        }
+        let checked = self.scenes_same + self.scenes_apart;
+        if checked > 0 {
+            // (LP_SCENE_CHECK's sum: how many are the same depends on the readings, which
+            // the lit rings and bars the engine makes follow to a level)
+            say(&format!(
+                "scene check: {} of {checked} frames the same as composed here",
+                self.scenes_same
+            ));
         }
         self.close(ending());
     }

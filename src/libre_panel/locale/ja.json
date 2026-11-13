@@ -322,6 +322,7 @@
     "The setup is running already.": "セットアップはすでに実行中です。",
     "The software and the work Libre Panel is built on, with their licences.": "Libre Panelの土台となっているソフトウェアと成果物、およびそのライセンス。",
     "The theme “{name}” is no longer installed, so the panel shows “{shown}”. Choose a theme in the tray menu or on Start.": "テーマ「{name}」はインストールされていないため、パネルには「{shown}」が表示されています。ホームまたはトレイメニューからテーマを選んでください。",
+    "The theme “{name}” cannot be loaded ({why}), so the panel shows “{shown}”. Mend it, or choose a theme in the tray menu or on Start.": "テーマ「{name}」を読み込めないため（{why}）、パネルには「{shown}」が表示されています。テーマを修正するか、ホームまたはトレイメニューからテーマを選んでください。",
     "The themes you made or imported": "作成またはインポートしたテーマ",
     "The title, the cover and the player of the music that plays.": "再生中の音楽のタイトル、カバー、プレーヤー。",
     "The volume": "音量",

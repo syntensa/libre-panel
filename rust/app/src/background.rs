@@ -415,15 +415,25 @@ impl PanelService {
                     true => status.default_theme.clone(),
                     false => status.theme.clone(),
                 };
-                lp_i18n::t_format(
-                    "The theme “{name}” is no longer installed, so the panel shows “{shown}”. \
-                     Choose a theme in the tray menu or on Start.",
-                    &[
-                        ("name", Value::Str(status.missing_theme.clone())),
-                        ("shown", Value::Str(shown)),
-                    ],
-                )
-                .unwrap_or_else(|why| why.msg)
+                let name = Value::Str(status.missing_theme.clone());
+                let said = match status.missing_why.is_empty() {
+                    true => lp_i18n::t_format(
+                        "The theme “{name}” is no longer installed, so the panel shows \
+                         “{shown}”. Choose a theme in the tray menu or on Start.",
+                        &[("name", name), ("shown", Value::Str(shown))],
+                    ),
+                    // (it is there, with an error in it: said, and not that it is gone)
+                    false => lp_i18n::t_format(
+                        "The theme “{name}” cannot be loaded ({why}), so the panel shows \
+                         “{shown}”. Mend it, or choose a theme in the tray menu or on Start.",
+                        &[
+                            ("name", name),
+                            ("why", Value::Str(status.missing_why.clone())),
+                            ("shown", Value::Str(shown)),
+                        ],
+                    ),
+                };
+                said.unwrap_or_else(|why| why.msg)
             }
             _ => String::new(),
         };

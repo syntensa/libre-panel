@@ -82,6 +82,43 @@ def test_a_config_fixed_while_its_error_is_said_is_taken_at_once(isolated_home, 
         panel.stop()
 
 
+def test_a_theme_with_an_error_is_not_said_to_be_gone_and_what_is_wrong_is_said(
+    isolated_home, caplog
+):
+    """A theme of one's own with an error in its theme.json was "no longer installed" to the
+    tray and Start, and nobody said what was wrong with it. The panel shows its own theme, the
+    notice says that the theme cannot be loaded and why, and so does the log."""
+    from libre_panel.config import user_themes_dir
+
+    folder = user_themes_dir() / "mine"
+    folder.mkdir(parents=True)
+    theme = {"format": "libre-panel-theme/1", "name": "Mine",
+             "display": {"model": "turing-3.5", "orientation": "landscape", "width": 480,
+                         "height": 320},
+             "palette": {"bg": "#000000"}, "font": "builtin:Barlow-Medium",
+             "background": {"color": "@bg", "image": None}, "refresh_ms": 1000,
+             "widgets": [{"id": 1, "type": "text", "x": 0, "y": 0, "w": 100, "h": 30}]}  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+    write_config(isolated_home, theme="mine")
+    service = PanelService()
+    with caplog.at_level("WARNING", logger="libre_panel"):
+        service.start()
+        try:
+            assert wait_for(lambda: service.state()["state"] == "showing")
+            state = service.state()
+        finally:
+            service.stop()
+    wrong = "widgets[0].id: expected a string"
+    assert state["theme"] == "libre-default" and state["missing_theme"] == "mine"
+    assert state["notice"] == (
+        f"The theme “mine” cannot be loaded ({wrong}), so the panel shows “libre-default”. "
+        "Mend it, or choose a theme in the tray menu or on Start."
+    )
+    said = f"theme 'mine' cannot be loaded ({wrong}): showing 'libre-default', the panel's own"
+    assert any(said in record.getMessage() for record in caplog.records), caplog.text
+    assert list(state)[:6] == ["state", "testing", "detail", "hint", "missing_theme", "notice"]
+
+
 def test_a_theme_that_is_gone_shows_the_panels_own_and_says_so(isolated_home):
     """A theme config.toml names that is not installed any more (a plugin's that is gone)
     does not stop the panel: it shows its own theme, and the tray and Start say why."""

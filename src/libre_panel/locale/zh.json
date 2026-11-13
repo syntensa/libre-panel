@@ -322,6 +322,7 @@
     "The setup is running already.": "安装程序已在运行。",
     "The software and the work Libre Panel is built on, with their licences.": "Libre Panel 所依赖的软件与成果及其许可证。",
     "The theme “{name}” is no longer installed, so the panel shows “{shown}”. Choose a theme in the tray menu or on Start.": "主题“{name}”已不再安装，因此面板显示“{shown}”。请在托盘菜单或“开始”页选择一个主题。",
+    "The theme “{name}” cannot be loaded ({why}), so the panel shows “{shown}”. Mend it, or choose a theme in the tray menu or on Start.": "主题“{name}”无法加载（{why}），因此面板显示“{shown}”。请修正它，或在托盘菜单或“开始”页选择一个主题。",
     "The themes you made or imported": "你创建或导入的主题",
     "The title, the cover and the player of the music that plays.": "正在播放音乐的标题、封面和播放器。",
     "The volume": "音量",

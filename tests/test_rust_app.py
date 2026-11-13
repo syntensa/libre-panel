@@ -324,12 +324,19 @@ def test_frames_go_to_the_engine_as_their_layers_and_it_composes_them_as_the_app
     done = rig.run("run", "--demo", "--frames", "150", LP_SCENE_CHECK="1")
     assert done.returncode == 0, done.stderr
     assert rig.sock.errors == []
-    assert "scene check: 101 frames the same as composed here" in done.stderr, done.stderr
+    # (how many are the same to the pixel depends on the demo's readings, which follow the
+    # clock: at some a ring the engine makes is a level off in a pixel for as long as its
+    # reading stays; every frame is checked, and each is the same or within that)
+    summed = re.search(r"scene check: (\d+) of (\d+) frames the same as composed", done.stderr)
+    assert summed is not None and int(summed[2]) >= 100, done.stderr
+    close = 0
     for line in done.stderr.splitlines():
         if "scene check:" not in line or "frames the same as composed here" in line:
             continue
         apart = re.search(r"differs in (\d+) pixels by up to (\d+),", line)
         assert apart is not None and int(apart[1]) <= 16 and int(apart[2]) <= 2, done.stderr
+        close += 1
+    assert int(summed[1]) + close == int(summed[2]), done.stderr
     went = re.search(r"video: (\d+) layers went to the engine, ([\d.]+) MB", done.stderr)
     assert went is not None, done.stderr
     # (fewer layers than frames times pieces: those that stay go once)

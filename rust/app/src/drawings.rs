@@ -32,8 +32,32 @@ fn theme_error(e: lp_theme::Error) -> Refused {
     }
 }
 
-fn unported(e: impl std::fmt::Debug) -> Refused {
-    Refused::Failed(format!("not drawn by this build yet: {e:?}"))
+/// What the renderer says of a drawing it did not make.
+trait Why {
+    fn why(self) -> String;
+}
+
+impl Why for lp_render::Failed {
+    fn why(self) -> String {
+        self.0
+    }
+}
+
+impl Why for lp_render::Unported {
+    fn why(self) -> String {
+        self.0
+    }
+}
+
+impl Why for lp_render::overlays::Unported {
+    fn why(self) -> String {
+        self.0
+    }
+}
+
+/// A drawing the renderer did not make, with its reason (the page shows it).
+fn undrawn(e: impl Why) -> Refused {
+    Refused::Failed(format!("not drawn: {}", e.why()))
 }
 
 pub(crate) fn base64(bytes: &[u8]) -> String {
@@ -282,12 +306,12 @@ fn with_notice(
     let Some((_name, toast)) = probes(look).swap_remove(kind) else {
         return Ok(None);
     };
-    let mut layer = ToastLayer::new(renderer).map_err(unported)?;
+    let mut layer = ToastLayer::new(renderer).map_err(undrawn)?;
     layer.add([Rc::new(toast)]);
-    layer.advance(0.0, false).map_err(unported)?;
+    layer.advance(0.0, false).map_err(undrawn)?;
     let drawn = layer
         .draw(&frame, NOTICE_AGE_S, false, renderer)
-        .map_err(unported)?;
+        .map_err(undrawn)?;
     Ok(Some(drawn.unwrap_or(frame)))
 }
 
@@ -373,13 +397,13 @@ pub fn render(
         animate: false,
         dither: false,
     };
-    let mut renderer = Renderer::new(dressed, env, options).map_err(unported)?;
+    let mut renderer = Renderer::new(dressed, env, options).map_err(undrawn)?;
     crate::plugins::attach(&mut renderer);
     renderer.fan_choices = fan_choices(config);
     renderer.symbols = config.symbols.clone();
     renderer.switches = switches(&theme, config);
     let drawn = renderer.render(snapshot, lp_render::video::monotonic());
-    let shown = drawn.map_err(unported).and_then(|(frame, boxes)| {
+    let shown = drawn.map_err(undrawn).and_then(|(frame, boxes)| {
         if !notice.truthy() {
             return Ok((frame, boxes));
         }
@@ -473,12 +497,12 @@ pub fn module_previews(palette: &Value, style: &Value, symbols: &str, env: &Env)
             animate: false,
             dither: false,
         };
-        let mut renderer = Renderer::new(theme, env, options).map_err(unported)?;
+        let mut renderer = Renderer::new(theme, env, options).map_err(undrawn)?;
         renderer.symbols = symbols.to_string();
         let drawn = renderer.render(snapshot.clone(), lp_render::video::monotonic());
         let at = renderer.module_boxes.get("m").copied();
         renderer.close();
-        let (frame, _boxes) = drawn.map_err(unported)?;
+        let (frame, _boxes) = drawn.map_err(undrawn)?;
         let [x, y, w, h] = at.ok_or_else(|| Refused::Failed("KeyError: 'm'".into()))?;
         let part = frame.crop(x, y, x + w, y + h);
         previews.insert((*kind).to_string(), Value::Str(base64(&png(&part)?)));
@@ -495,11 +519,11 @@ pub fn still_picture(theme: Theme, symbols: &str, env: &Env) -> Answer<Value> {
         animate: false,
         dither: false,
     };
-    let mut renderer = Renderer::new(theme, env, options).map_err(unported)?;
+    let mut renderer = Renderer::new(theme, env, options).map_err(undrawn)?;
     renderer.symbols = symbols.to_string();
     let drawn = renderer.render(snapshot, lp_render::video::monotonic());
     renderer.close();
-    let (frame, _boxes) = drawn.map_err(unported)?;
+    let (frame, _boxes) = drawn.map_err(undrawn)?;
     Ok(Value::Str(base64(&png(&frame)?)))
 }
 
@@ -566,11 +590,11 @@ pub fn symbols_look(pack: &str, env: &Env) -> Answer<Option<Vec<u8>>> {
         animate: false,
         dither: false,
     };
-    let mut renderer = Renderer::new(theme, env, options).map_err(unported)?;
+    let mut renderer = Renderer::new(theme, env, options).map_err(undrawn)?;
     renderer.symbols = pack.to_string();
     let drawn = renderer.render(snapshot, lp_render::video::monotonic());
     renderer.close();
-    let (frame, _boxes) = drawn.map_err(unported)?;
+    let (frame, _boxes) = drawn.map_err(undrawn)?;
     png(&frame).map(Some)
 }
 

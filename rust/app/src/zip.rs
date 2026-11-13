@@ -403,11 +403,9 @@ impl<'a> Archive<'a> {
         }
         match info.compress_type {
             0 | 8 => {}
-            12 | 14 => {
-                return Err(ZipError::NotImplemented(
-                    "bzip2 and lzma: not read by this build".into(),
-                ))
-            }
+            // (bzip2 and LZMA, which zipfile reads where Python has their modules, are not
+            // read here: an archive of them is refused in zipfile's words for a method it
+            // does not know)
             _ => {
                 return Err(ZipError::NotImplemented(
                     "That compression method is not supported".into(),

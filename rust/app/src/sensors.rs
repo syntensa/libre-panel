@@ -815,7 +815,10 @@ fn remember(history: &mut IndexMap<String, VecDeque<f64>>, readings: &Readings) 
             _ => None,
         };
         if let Some(number) = number {
-            let series = history.entry(key.clone()).or_default();
+            // (room for its ten minutes at once: grown by doubling it ends with room for
+            // 1024 numbers to hold 600)
+            let series = (history.entry(key.clone()))
+                .or_insert_with(|| VecDeque::with_capacity(HISTORY_LENGTH));
             if series.len() == HISTORY_LENGTH {
                 series.pop_front();
             }

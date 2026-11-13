@@ -57,6 +57,20 @@ not work as 0.8's did and for how it looks. The load is rc3's.
   as defunct processes, in Diagnose's table of the load with 0 MB each. They are collected,
   such a process is not listed, and the computer is not asked to wait before it sleeps where
   the panel would not hear of it.
+- **A theme with an error in it is not said to be gone, and what is wrong with it is said.**
+  A theme of one's own whose theme.json has an error was "no longer installed" to Start and
+  to the tray, and neither they nor the log said what the error was (so in 0.8 too). The
+  panel shows its own theme as before; the notice says "The theme “mine” cannot be loaded
+  (widgets[0].id: expected a string) …", and so does the log.
+- **A theme that loads and cannot be drawn no longer leaves the panel dark.** The panel
+  showed nothing more, and nothing said so in the app, until config.toml changed; where such
+  a theme was switched to, the transition to it waited for its frames for good. The panel's
+  own theme shows in its place, with the reason in the notice and in the log.
+- **What cannot be drawn is said in its own words.** "not drawn by this build yet:
+  Failed("…")", words of the time the program was written in around the error in its
+  wrapping, is "not drawn: …" with the error itself: of a theme's frame, of a message on the
+  panel, and of a drawing Design or Look asks for. A zip archive packed with bzip2 or LZMA is
+  refused in the words for any way of packing that is not read.
 
 **Polished** (the app gone over in every view, in all ten languages, at the window's default
 and smallest size)

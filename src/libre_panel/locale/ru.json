@@ -322,6 +322,7 @@
     "The setup is running already.": "Настройка уже выполняется.",
     "The software and the work Libre Panel is built on, with their licences.": "ПО и работа, на которых построен Libre Panel, с их лицензиями.",
     "The theme “{name}” is no longer installed, so the panel shows “{shown}”. Choose a theme in the tray menu or on Start.": "Тема «{name}» больше не установлена, поэтому на панели показана «{shown}». Выберите тему на вкладке «Главная» или в меню значка в трее.",
+    "The theme “{name}” cannot be loaded ({why}), so the panel shows “{shown}”. Mend it, or choose a theme in the tray menu or on Start.": "Тему «{name}» не удаётся загрузить ({why}), поэтому на панели показана «{shown}». Исправьте её или выберите тему на вкладке «Главная» или в меню значка в трее.",
     "The themes you made or imported": "Темы, которые вы создали или импортировали",
     "The title, the cover and the player of the music that plays.": "Название, обложка и плеер воспроизводимой музыки.",
     "The volume": "Громкость",

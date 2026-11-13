@@ -322,6 +322,7 @@
     "The setup is running already.": "La configuración ya está en marcha.",
     "The software and the work Libre Panel is built on, with their licences.": "El software y el trabajo en los que se basa Libre Panel, con sus licencias.",
     "The theme “{name}” is no longer installed, so the panel shows “{shown}”. Choose a theme in the tray menu or on Start.": "El tema “{name}” ya no está instalado, así que el panel muestra “{shown}”. Elige un tema en el menú de la bandeja o en Inicio.",
+    "The theme “{name}” cannot be loaded ({why}), so the panel shows “{shown}”. Mend it, or choose a theme in the tray menu or on Start.": "El tema “{name}” no se puede cargar ({why}), así que el panel muestra “{shown}”. Corrígelo o elige un tema en el menú de la bandeja o en Inicio.",
     "The themes you made or imported": "Los temas que has creado o importado",
     "The title, the cover and the player of the music that plays.": "El título, la portada y el reproductor de la música que suena.",
     "The volume": "El volumen",

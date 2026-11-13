@@ -38,13 +38,18 @@ TOKEN = "t" * 43
 
 
 def _asked(
-    port: int, request: bytes, done: bool = True, wait: float = 60
+    port: int, request: bytes, done: bool = True, wait: float = 60, left: bool = False
 ) -> tuple[str, dict[str, str], bytes]:
     """What the server on ``port`` answers to ``request``: its status line, its headers (but
     for the server's name and the date) and its body. ``done``: the request's end said by
     closing the way there (else it stays open, as a browser's that waits for a picture);
-    ``wait``: seconds without a word from the server before it is taken for hung."""
+    ``wait``: seconds without a word from the server before it is taken for hung. ``left``:
+    the browser has left by the time the server reads its request: the request is held back
+    until the way there is closed, so that both arrive as one (a server that read the request
+    before the end was said took the browser for waiting, now and then on a busy machine)."""
     with socket.create_connection(("127.0.0.1", port), timeout=wait) as link:
+        if left and hasattr(socket, "TCP_CORK"):
+            link.setsockopt(socket.IPPROTO_TCP, socket.TCP_CORK, 1)
         link.sendall(request)
         if done:
             link.shutdown(socket.SHUT_WR)
@@ -142,12 +147,15 @@ def servers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
         port, token = int(address.split(":")[2].split("/")[0]), address.split("#token=")[1]
         sides = ((theirs.server_address[1], TOKEN), (port, token))
 
-        def ask(request: str | bytes, done: bool = True) -> list[tuple[str, dict[str, str], bytes]]:
+        def ask(
+            request: str | bytes, done: bool = True, left: bool = False
+        ) -> list[tuple[str, dict[str, str], bytes]]:
             answers = []
             for port, token in sides:
                 text = request if isinstance(request, bytes) else request.encode("utf-8")
                 text = text.replace(b"{host}", f"127.0.0.1:{port}".encode())
-                answers.append(_asked(port, text.replace(b"{token}", token.encode()), done))
+                text = text.replace(b"{token}", token.encode())
+                answers.append(_asked(port, text, done, left=left))
             return answers
 
         yield ask, homes
@@ -668,6 +676,96 @@ def test_a_theme_that_is_gone_leaves_the_panel_lit_and_is_said_as_app_py_says_it
     showing = f"{whys[0]}: showing {own!r}, the panel's own, until it is back or another is chosen"
     assert showing in lines and f"keeping theme {own!r}: {whys[1]}" in lines, said
     assert later["theme"] == own and later["frames"] > first["frames"], later
+
+
+def test_a_theme_with_an_error_or_one_that_cannot_be_drawn_is_said_with_its_reason(
+    tmp_path: Path,
+) -> None:
+    """A theme of one's own with an error in its theme.json was "no longer installed" to
+    Start and the tray, and nobody said what was wrong with it (so in 0.8): the notice says
+    that it cannot be loaded and why, as service.py's now does, and so does the log. One that
+    loads and cannot be drawn left the panel dark: the panel's own shows in its place."""
+    import time
+
+    from libre_panel import i18n
+    from libre_panel.devices.models import find_model
+    from libre_panel.theme.defaults import default_theme
+
+    theme: dict[str, Any] = {
+        "format": "libre-panel-theme/1", "name": "Mine",
+        "display": {"model": "turing-5", "orientation": "landscape", "width": 800,
+                    "height": 480},
+        "palette": {"bg": "#000000", "accent": "#35E0C2"}, "font": "builtin:Barlow-Medium",
+        "background": {"color": "@bg", "image": None}, "refresh_ms": 1000,
+        "widgets": [{"id": 1, "type": "bar", "x": 40, "y": 40, "w": 400, "h": 30,
+                     "sensor": "cpu.load", "min": 0, "max": 100, "color": "@accent"}],
+    }  # fmt: skip
+    folder = tmp_path / "themes" / "mine"
+    folder.mkdir(parents=True)
+    (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+    config = tmp_path / "config.toml"
+    config.write_text(
+        'theme = "mine"\nfps = 2\nlanguage = "en"\n[device]\ndriver = "virtual"\n'
+        'output = "panel.png"\nmodel = "turing-5"\n[sensors]\nproviders = ["demo"]\n',
+        encoding="utf-8",
+    )
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries()}  # fmt: skip
+    with subprocess.Popen([str(_program()), "start", "--port", "0", "--no-browser"], env=env,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        try:
+            assert program.stdout is not None
+            address = program.stdout.readline().split(" running at ")[1].split()[0]
+            port, token = int(address.split(":")[2].split("/")[0]), address.split("#token=")[1]
+
+            def panel() -> Any:
+                request = _get("/api/plugins/control/panel", WITH)
+                request = request.replace("{host}", f"localhost:{port}")
+                answer = _asked(port, request.replace("{token}", token).encode())[2]
+                return json.loads(answer)["panel"]
+
+            end = time.monotonic() + 20
+            while panel()["state"] != "showing" and time.monotonic() < end:
+                time.sleep(0.1)
+            first = panel()
+            # mended as far as it loads; its bar's range is one the renderer does not draw
+            theme["widgets"][0].update(id="bar", max=9007199254740993)
+            (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+            config.write_text(config.read_text("utf-8") + "\n", encoding="utf-8")
+            end = time.monotonic() + 20
+            while "not drawn" not in panel()["notice"] and time.monotonic() < end:
+                time.sleep(0.1)
+            later = panel()
+            time.sleep(1.5)
+            last = panel()
+            # Design asks for the same drawing: refused with the error's own words
+            request = _post("/api/render", {"theme": theme}).decode()
+            request = request.replace("{host}", f"localhost:{port}").replace("{token}", token)
+            status, _, body = _asked(port, request.encode())
+        finally:
+            program.send_signal(signal.SIGINT) if os.name == "posix" else program.terminate()
+            said = program.communicate(timeout=30)[1]
+    own = default_theme(find_model("turing-5"))
+    key = (
+        "The theme “{name}” cannot be loaded ({why}), so the panel shows “{shown}”. "
+        "Mend it, or choose a theme in the tray menu or on Start."
+    )
+    wrong = "widgets[0].id: expected a string"
+    assert (first["state"], first["theme"], first["missing_theme"]) == ("showing", own, "mine")
+    assert first["notice"] == i18n.t(key, name="mine", why=wrong, shown=own), first
+    assert list(first)[:6] == ["state", "testing", "detail", "hint", "missing_theme", "notice"]
+    lines = [line.removeprefix("libre-panel: ") for line in said.splitlines()]
+    showing = f"showing {own!r}, the panel's own, until it is back or another is chosen"
+    assert f"theme 'mine' cannot be loaded ({wrong}): {showing}" in lines, said
+    # the one that cannot be drawn: said once, and the panel's own goes on in its place
+    undrawn = "not drawn: numbers a float does not hold as they are"
+    assert (later["theme"], later["missing_theme"]) == (own, "mine"), later
+    assert later["notice"] == i18n.t(key, name="mine", why=undrawn, shown=own), later
+    assert lines.count(f"theme mine: {undrawn}") == 1, said
+    assert f"theme 'mine' cannot be loaded ({undrawn}): {showing}" in lines, said
+    assert last["frames"] > later["frames"] and "this build" not in said, (later, last, said)
+    assert status.split()[1] == "500" and json.loads(body) == {"error": undrawn}, (status, body)
 
 
 def test_a_theme_sent_to_the_panel_is_shown_on_it(tmp_path: Path) -> None:
@@ -2292,7 +2390,7 @@ def test_the_pictures_of_the_themes_are_drawn_as_server_py_draws_them(servers: A
 
     compare()
     # (a browser that left: nobody to draw for, nothing answered)
-    assert ask(_get("/api/themes/encore/preview", WITH)) == [("", {}, b"")] * 2
+    assert ask(_get("/api/themes/encore/preview", WITH), left=True) == [("", {}, b"")] * 2
     for home in homes:
         (home / "config.toml").write_text(
             'accent = "#ff8800"\ncard_opacity = 40\nlight_colours = true\n'
