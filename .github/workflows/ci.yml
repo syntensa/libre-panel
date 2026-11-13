@@ -430,7 +430,7 @@ jobs:
           if [ "$RUNNER_OS" = Windows ]; then rm -rf rust/target/release/tools; fi
       - name: The crates against the Python app
         if: ${{ !inputs.quick }}
-        run: python -u -X faulthandler -m pytest -v -rfE --durations=20 tests/test_rust_py.py tests/test_rust_pixels.py tests/test_rust_decode.py tests/test_rust_text.py tests/test_rust_theme.py tests/test_rust_modules.py tests/test_rust_render.py tests/test_rust_toasts.py tests/test_rust_transitions.py tests/test_rust_alarm.py tests/test_rust_boot.py tests/test_rust_video.py tests/test_rust_devices.py tests/test_rust_config.py tests/test_rust_sensors.py tests/test_rust_services.py tests/test_rust_app.py tests/test_rust_plugins.py
+        run: python -u -X faulthandler -m pytest -v -rfE --durations=20 tests/test_rust_py.py tests/test_rust_pixels.py tests/test_rust_decode.py tests/test_rust_text.py tests/test_rust_theme.py tests/test_rust_modules.py tests/test_rust_render.py tests/test_rust_toasts.py tests/test_rust_transitions.py tests/test_rust_alarm.py tests/test_rust_boot.py tests/test_rust_video.py tests/test_rust_devices.py tests/test_rust_serial_drivers.py tests/test_rust_usb_drivers.py tests/test_rust_config.py tests/test_rust_sensors.py tests/test_rust_services.py tests/test_rust_app.py tests/test_rust_plugins.py
       - name: The stacks of a comparison that hung
         if: failure()
         shell: bash

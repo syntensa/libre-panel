@@ -32,9 +32,10 @@ turn on the same Linux machine; the simulated panel counted in neither):
   closed, its memory goes back to the system (Lumen: about 150 MB open, 104 to 111 MB after).
 
 **Proven, not promised.** The Python app stays in the repository as the reference: 525
-comparison tests hold the new program against it in every test run, on Windows and Linux.
-Pillow's image operations match to the bit on thousands of random cases, and each of the 99
-built-in themes, still and moving, matches pixel for pixel (a glow to within one level of light).
+comparison tests hold the new program against it with every change, on Linux, and most of them
+on Windows too. Pillow's image operations match to the bit on thousands of random cases, and
+each of the 99 built-in themes, still and moving, matches pixel for pixel (a glow to within one
+level of light).
 
 **New**
 - The MAJESTY 9.16" (Hongtai `33C3:7792`, #40); the JONSBO DS339 without the purple flicker
