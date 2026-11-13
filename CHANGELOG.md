@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.9.0rc3 — 2026-11-13
+
+The next release candidate of 0.9.0 to try (there was no rc2: what was tried between were
+builds of the work in progress): what the test of those found, and about half of 0.8.0's
+load.
 
 **Lighter** (Lumen on the 12.3" at 25 fps, the video mode through the engine, with the
 computer's own readings, on the same computer as 0.8.0; every change the same frames drawn,
