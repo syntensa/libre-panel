@@ -3,7 +3,13 @@ name: CI
 on:
   push:
     branches-ignore: ["handoff/**"]  # mailbox branches carry only notes
+    paths-ignore: ["community/themes/**"]  # (a shared theme merged: see below)
   pull_request:
+    # A shared theme's pull request (community-theme.yml opens it once the theme passed its
+    # check) adds the theme beside the list and nothing else. No test here looks at that
+    # folder, and a run for it would first wait for someone's approval (a bot opened the pull
+    # request) and then take half an hour: such a pull request, and its merge, run nothing.
+    paths-ignore: ["community/themes/**"]
   # (release.yml: the downloads of a release are those this workflow builds and tries)
   workflow_call:
   # by hand: "quick" builds and packages the downloads and tries them, without the test suites
