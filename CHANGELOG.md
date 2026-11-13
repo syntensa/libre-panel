@@ -1,10 +1,9 @@
 # Changelog
 
-## 0.9.0rc5 — 2026-11-13
+## 0.9.0 — 2026-11-14
 
-The candidate for 0.9.0: Libre Panel written anew as one native program, the same pictures on
-the panel with less load, a third less memory and a quicker start. Unless its test finds
-something, this is 0.9.0. What changed since 0.8.0:
+Libre Panel written anew as one native program: the same pictures on the panel with less load,
+a third less memory and a quicker start. What changed since 0.8.0:
 
 **Highlights**
 - **One program in Rust instead of Python.** The app, its drawing, the panels' drivers and
