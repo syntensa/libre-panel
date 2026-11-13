@@ -191,9 +191,6 @@ pub struct Renderer {
     pub(crate) facet_glyphs: crate::text::FacetGlyphs,
     /// and coloured, kept while they hold at most PATCH_BYTES
     pub(crate) facet_patches: crate::text::FacetPatches,
-    /// whether a widget of `widgets` has a finish not drawn here, found once for those
-    /// widgets (held, so that another list is never taken for them)
-    unported_finish: RefCell<Option<(Widgets, bool)>>,
     /// the look of the weather symbols the person chose (config.toml's symbols: the app sets
     /// it; vivid where it does not, as Python's renderer has it)
     pub symbols: String,
@@ -269,6 +266,8 @@ pub struct Renderer {
     /// the screen's last picture and its piece (_screen_last): the same picture is not
     /// composed again
     screen_last: Option<(Rc<Image>, Rc<Piece>)>,
+    /// the theme's look: its grid, made once (panel_look.rs)
+    pub(crate) grid: Option<Rc<Piece>>,
     /// the theme's pictures fitted (_images), and the animated pictures' frames (_animations)
     pub(crate) pictures: RefCell<Kept<image::PictureKey, Option<Rc<Image>>>>,
     pub(crate) animations: Kept<image::AnimationKey, Option<Rc<image::Animation>>>,
@@ -422,7 +421,6 @@ impl Renderer {
             world: ([0; 3], [0; 3]),
             facet_glyphs: RefCell::new(HashMap::new()),
             facet_patches: RefCell::new(Kept::new(crate::text::PATCH_BYTES)),
-            unported_finish: RefCell::new(None),
             symbols: crate::symbols::DEFAULT_PACK.to_string(),
             ranges: HashMap::new(),
             strips: HashMap::new(),
@@ -454,6 +452,7 @@ impl Renderer {
             plugins: None,
             shown: None,
             screen_last: None,
+            grid: None,
             toast: None,
             pictures: RefCell::new(Kept::new(image::IMAGE_BYTES)),
             animations: Kept::new(image::ANIMATION_BYTES),
@@ -1405,6 +1404,8 @@ impl Renderer {
                     let native = Value::Bool(self.native_rings);
                     let content = Value::List(vec!["lit".into(), content, native]);
                     self.cached(&w, content, |r| r.lit_gauge_piece(&w, frac, paint))
+                } else if finish::of(&w) == Finish::FacetGauge {
+                    self.cached(&w, content, |r| r.facet_gauge_piece(&w, frac, paint))
                 } else {
                     self.cached(&w, content, |r| r.gauge_piece(&w, frac, paint))
                 }
@@ -1852,12 +1853,9 @@ impl Renderer {
         Ok(piece)
     }
 
-    /// What a frame of the theme holds beyond its widgets that is not drawn here yet: a screen
-    /// (a plugin's, drawn under the widgets), the panel's look (its grid beneath them) and the
-    /// finishes Rust does not draw yet (render/finish.py: lit, facet, acrylic; one that does not
-    /// take a widget leaves it flat, here as there). Rust says so for any of them, also where
-    /// Python goes on without (a screen no plugin has): never a frame drawn without what Python
-    /// draws.
+    /// What a frame of the theme holds beyond its widgets that is not drawn here: a screen no
+    /// plugin draws (Rust says so, also where Python goes on without: never a frame drawn
+    /// without what Python draws), a background picture that cannot be read.
     fn beyond_widgets(&self) -> Option<&'static str> {
         if self.theme.screen.is_some() && self.plugins.is_none() {
             return Some("screens");
@@ -1865,27 +1863,7 @@ impl Renderer {
         if self.ground_unread {
             return Some(UNREAD);
         }
-        if widget::truthy(&self.theme.look, "grid") {
-            return Some("looks");
-        }
-        if self.unported_finishes() {
-            return Some("finishes");
-        }
         None
-    }
-
-    /// Whether a widget has a finish not drawn here: looked at once for each list of
-    /// widgets, not on every frame (the widgets of a list do not change).
-    fn unported_finishes(&self) -> bool {
-        let mut known = self.unported_finish.borrow_mut();
-        match known.as_ref() {
-            Some((widgets, found)) if Rc::ptr_eq(widgets, &self.widgets) => *found,
-            _ => {
-                let found = (self.widgets.iter()).any(|w| finish::of(w) == Finish::Unported);
-                *known = Some((Rc::clone(&self.widgets), found));
-                found
-            }
-        }
     }
 
     /// render: the frame (RGB) of `snapshot` at `now` (the clock the slots' rules keep their
@@ -2144,12 +2122,16 @@ impl Renderer {
             self.full_video = None;
             let whole = (screen.width(), screen.height())
                 == (self.theme.width as usize, self.theme.height as usize);
-            if pieces.is_empty() && screen.mode() == Mode::RGB && whole {
+            if pieces.is_empty() && !self.has_grid() && screen.mode() == Mode::RGB && whole {
                 // an opaque screen alone is the frame: nothing to compose
                 self.behind = [None, None];
                 return Ok((Drawing::Frame(screen), boxes));
             }
             pieces.insert(0, ("\0screen".to_string(), self.screen_piece(screen)?));
+        }
+        if self.has_grid() {
+            // (the grid beneath the widgets, over the backdrops)
+            (self.lay_grid(&mut pieces)).map_err(|Failed(e)| Unported(format!("the grid: {e}")))?;
         }
         drop(ending);
         if scene && self.layered(&pieces) {

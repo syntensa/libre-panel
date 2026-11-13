@@ -1525,6 +1525,7 @@
     "The boot logo is on the panel ({size}); it shows at the next power-on.": "Le logo de démarrage est sur le panneau ({size}) ; il s'affichera au prochain allumage.",
     "The factory logo shows again at the next power-on.": "Le logo d'usine s'affichera de nouveau au prochain allumage.",
     "The panel shows what was written; its themes are paused.": "Le panneau affiche ce qui a été écrit ; ses thèmes sont en pause.",
+    "The panel is mounted upside down: the logo and the clip are written turned round, so that they are upright on it. Write them again when you turn the panel round.": "Le panneau est monté à l’envers : le logo et la vidéo sont écrits retournés, pour s’y afficher à l’endroit. Écrivez-les de nouveau quand vous retournez le panneau.",
     "The standby clip is on the panel ({size}) and plays now; the panel starts with it.": "La vidéo de veille est sur le panneau ({size}) et joue maintenant ; le panneau démarre avec elle.",
     "What is on the panel": "Ce qui est sur le panneau",
     "When the panel is switched on. The factory logo stays on the panel and can always come back.": "À l'allumage du panneau. Le logo d'usine reste sur le panneau et peut toujours revenir.",

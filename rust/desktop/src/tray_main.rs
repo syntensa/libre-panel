@@ -31,7 +31,7 @@ mod autostart {
 
 use std::io::{Read, Write};
 use std::net::TcpStream;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use lp_py::{Dict, Value};
 use tao::event::{Event, StartCause};
@@ -43,8 +43,11 @@ use tray_icon::{Icon, MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, 
 
 /// how often the app is asked how things stand (tray.py's POLL_S)
 const POLL_S: f64 = 1.0;
-/// the app is gone once it did not answer this many times running
+/// the app is gone once its port turned the icon away this many times running (an answer
+/// that is slow or fails while the app is there keeps the icon as it is)
 const GONE_AFTER: u32 = 3;
+/// how long an app that is there is waited for to say how things stand, at the icon's start
+const STARTING_S: f64 = 60.0;
 /// the icon's size, as tray.py draws it
 const ICON_SIZE: u32 = 64;
 
@@ -82,6 +85,12 @@ impl Link {
         Some((code, answer[end + 4..].to_vec()))
     }
 
+    /// Whether the app is there at all: its port takes a connection.
+    fn there(&self) -> bool {
+        let address = std::net::SocketAddr::from(([127, 0, 0, 1], self.port));
+        TcpStream::connect_timeout(&address, Duration::from_secs(2)).is_ok()
+    }
+
     fn state(&self) -> Option<Dict> {
         match self.ask("GET", "/api/tray", b"")? {
             (200, body) => match lp_py::json::loads(&String::from_utf8_lossy(&body)).ok()? {
@@ -114,6 +123,22 @@ impl Link {
                 say("the app did not hear what was chosen in the tray's menu");
             }
         });
+    }
+}
+
+/// Windows lets only the program the person just clicked bring a window to the front. That
+/// is the icon's program, not the app, which shows the window: the icon passes its right on
+/// before it tells the app what was chosen, so that the app's window comes forward where it
+/// only flashed in the taskbar (in 0.8 the icon was the app's own).
+fn allow_foreground() {
+    #[cfg(windows)]
+    {
+        /// ASFW_ANY: whichever program shows the app
+        const ANY: u32 = u32::MAX;
+        // SAFETY: a plain call with a constant
+        unsafe {
+            windows_sys::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow(ANY);
+        }
     }
 }
 
@@ -215,9 +240,18 @@ fn main() {
         .or_else(|| access::read_token(&settings, Some(port)))
         .unwrap_or_default();
     let link = Link { port, token };
-    let Some(first) = link.state() else {
-        say("no tray icon: the app does not answer");
-        std::process::exit(1);
+    // (an app that is there but slow to say how things stand, as at the computer's start, is
+    // waited for; one whose port is closed is not there)
+    let until = Instant::now() + Duration::from_secs_f64(STARTING_S);
+    let first = loop {
+        if let Some(state) = link.state() {
+            break state;
+        }
+        if !link.there() || Instant::now() >= until {
+            say("no tray icon: the app does not answer");
+            std::process::exit(1);
+        }
+        std::thread::sleep(Duration::from_secs_f64(POLL_S));
     };
 
     // (tray.py: without a desktop to put it on there is no tray icon, and Libre Panel keeps
@@ -236,7 +270,10 @@ fn main() {
     };
     let proxy = event_loop.create_proxy();
     let told = proxy.clone();
+    // (the right to come to the front is passed on at the click itself, and again as what
+    // was chosen goes to the app)
     MenuEvent::set_event_handler(Some(move |chosen: MenuEvent| {
+        allow_foreground();
         let _ = told.send_event(Told::Chosen(chosen.id.0));
     }));
     let told = proxy.clone();
@@ -247,6 +284,7 @@ fn main() {
             ..
         } = event
         {
+            allow_foreground();
             let _ = told.send_event(Told::Clicked);
         }
     }));
@@ -258,7 +296,9 @@ fn main() {
         loop {
             std::thread::sleep(Duration::from_secs_f64(POLL_S));
             let Some(state) = asking.state() else {
-                missed += 1;
+                // (an app that is there but slow, or failed to say how things stand, keeps
+                // its icon; one whose port is closed has ended)
+                missed = if asking.there() { 0 } else { missed + 1 };
                 if missed >= GONE_AFTER {
                     let _ = told.send_event(Told::Gone);
                     return;
@@ -334,11 +374,13 @@ fn main() {
             }
             Event::UserEvent(Told::Chosen(id)) => {
                 if !id.starts_with('-') {
+                    allow_foreground();
                     link.choose(id);
                 }
             }
             Event::UserEvent(Told::Clicked) => {
                 if let Some(id) = default_of(&current) {
+                    allow_foreground();
                     link.choose(id);
                 }
             }

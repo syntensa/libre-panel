@@ -700,6 +700,12 @@ impl Renderer {
             crate::prof::part("curve lit", || lit_curve(w, &mut layer, &runs, colour, s))?;
             return Ok(layer);
         }
+        if finish::of(w) == Finish::FacetGraph {
+            crate::prof::part("curve facet", || {
+                facet_curve(w, &mut layer, &runs, colour, s)
+            })?;
+            return Ok(layer);
+        }
         let width = widget::int(w, "line_width", 2).saturating_mul(s) as i32;
         // (points a strip draws this close are a curve already: no round joints)
         let joints = widget::flag(w, "\0joints", true);
@@ -910,6 +916,69 @@ fn lay_halo(
     // (the colour with that alpha, laid over the layer there: alpha_composite_at of it)
     let rgb = [colour[0], colour[1], colour[2]];
     lp_pixels::tint_over_at(layer, rgb, big.as_bytes(), size.0, (left, top))?;
+    Ok(())
+}
+
+/// _field: the rows of a graph's layer SPUR II works its curve out in: a line and two pixels
+/// beyond its highest and its lowest point, and the base its fill stands on.
+fn field(w: &Dict, height: usize, runs: &[Vec<(f64, f64)>], scale: i64) -> (usize, usize) {
+    let ys: Vec<f64> = runs.iter().flatten().map(|p| p.1).collect();
+    if ys.is_empty() {
+        return (0, height);
+    }
+    let base = if widget::text(w, "direction") == "down" {
+        0.0
+    } else {
+        height as f64 - 1.0
+    };
+    let reach = widget::int(w, "line_width", 2)
+        .saturating_add(2)
+        .saturating_mul(scale) as f64;
+    let top = (py_min(least(&ys), base) - reach).floor().max(0.0);
+    let bottom = ((py_max(most(&ys), base) + reach).ceil()).min(height as f64);
+    (top as usize, bottom.max(0.0) as usize)
+}
+
+/// FacetGraph.curve: the line as a bevelled ridge (a slimmer one on a wide graph), its halo
+/// under it; as SPUR II works a curve out in the rows it reaches (from a little above its
+/// highest point down to its base), the halo ends there: a flat curve keeps a narrow band.
+fn facet_curve(
+    w: &Dict,
+    layer: &mut Image,
+    runs: &[Vec<(f64, f64)>],
+    colour: Rgba,
+    s: i64,
+) -> Result<()> {
+    let wide = widget::int(w, "w", 0) > crate::facets::CURVE_WIDE;
+    let width = widget::int(w, "line_width", 2).saturating_mul(s);
+    let joints = widget::flag(w, "\0joints", true);
+    let (cw, ch) = layer.size();
+    let mut line = Image::blank(Mode::L, cw, ch);
+    {
+        let mut draw = Draw::new(&mut line);
+        for run in runs {
+            draw.line(run, Some([255, 0, 0, 0]), width as i32, joints)?;
+        }
+    }
+    let scale = s.max(1) as usize;
+    let (top, bottom) = field(w, ch, runs, s);
+    if (top, bottom) == (0, ch) {
+        crate::facets::curve_halo(layer, &line, colour, scale)?;
+    } else {
+        let (t, b) = (top as i64, bottom as i64);
+        let mut part = layer.crop(0, t, cw as i64, b);
+        crate::facets::curve_halo(&mut part, &line.crop(0, t, cw as i64, b), colour, scale)?;
+        layer.paste(&part, 0, t, None)?;
+    }
+    // (where the fill is)
+    let below = widget::text(w, "direction") != "down";
+    for run in runs {
+        let thick = width as f64;
+        if !crate::facets::curve_ridge(layer, run, thick, colour, wide, scale, below)? {
+            // (not left to right: a line)
+            Draw::new(layer).line(run, Some(ink(colour)), width as i32, joints)?;
+        }
+    }
     Ok(())
 }
 

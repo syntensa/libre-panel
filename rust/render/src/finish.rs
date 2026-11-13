@@ -28,10 +28,12 @@ pub(crate) enum Finish {
     LitDownloads,
     /// facet.py's FacetBar: a raised bar with bevelled ends in a milled track
     FacetBar,
+    /// facet.py's FacetGauge: a raised ring with bevelled ends in a milled track
+    FacetGauge,
+    /// facet.py's FacetGraph: a graph's line as a bevelled ridge, its halo under it
+    FacetGraph,
     /// facet.py's FacetText and AcrylicText: the text's letters the finish's own
     Lettered(Style),
-    /// a finish Rust does not draw yet
-    Unported,
 }
 
 /// lit.py's WEATHER_ICONS: the icons the lit finish draws as weather symbols.
@@ -55,7 +57,8 @@ pub(crate) fn of(w: &Dict) -> Finish {
         ("lit", "symbol") => Finish::LitSymbol,
         ("lit", "graph") => Finish::LitGraph,
         ("lit", "downloads") => Finish::LitDownloads,
-        ("facet", "gauge" | "graph") => Finish::Unported,
+        ("facet", "gauge") => Finish::FacetGauge,
+        ("facet", "graph") => Finish::FacetGraph,
         ("facet", "bar") => Finish::FacetBar,
         ("facet", "text" | "metric" | "clock" | "weather" | "countdown") => {
             Finish::Lettered(Style::Metal)

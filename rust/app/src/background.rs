@@ -795,8 +795,26 @@ impl BackgroundApp {
             },
             // which panel is which: each shows its number
             "identify" => crate::identify::show(),
+            // a transition shown on the panels, to see it
             "show_transition" => {
-                return Err(format!("{action} is not in this build yet"));
+                let expected = || r#"expected {"name": "...", "label": "..."}"#.to_string();
+                let Value::Dict(asked) = value else {
+                    return Err(expected());
+                };
+                let Some(Value::Str(name)) = asked.get("name") else {
+                    return Err(expected());
+                };
+                let name = lp_py::strip(name);
+                // (str(value.get("label") or "")[:60])
+                let label = match asked.get("label") {
+                    Some(label) if label.truthy() => lp_py::format::str_of(label),
+                    _ => String::new(),
+                };
+                let label: String = label.chars().take(60).collect();
+                if !(1..=64).contains(&name.chars().count()) {
+                    return Err("the name of a transition".into());
+                }
+                crate::transition_show::show(name, &label);
             }
             "quit" => {
                 // (the request is answered first; the server stops as part of quitting)

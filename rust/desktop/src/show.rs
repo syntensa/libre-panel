@@ -1,10 +1,18 @@
 //! The window's program: the app in a window of its own until it is closed (window.py's
-//! run_window, `libre-panel window URL`), holding `window.lock` from its first moment to its
-//! last, answering the other starts on a local port.
+//! run_window, `libre-panel window URL`), holding `window.lock` from its first moment until
+//! its window is closed, answering the other starts on a local port meanwhile.
+//!
+//! A closed window leaves nothing for another start to find: its file goes, its lock is let
+//! go and it answers no other start, before its web view is taken down. That can take
+//! seconds (WebView2's above all), and a start in that time (a click on the tray icon right
+//! after closing the window) would else be told the window came to the front, where there is
+//! none any more. A web view that does not come to its end is not waited for.
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use lp_py::{Dict, Value};
@@ -24,6 +32,10 @@ const BACKGROUND: (u8, u8, u8, u8) = (0x0A, 0x0E, 0x13, 0xFF);
 const LOCK_FILENAME: &str = "window.lock";
 /// how long a second start waits for a window that is still opening
 const OPENING_S: f64 = 30.0;
+/// a closed window's process ends within this long, whatever its web view does
+const END_S: f64 = 5.0;
+/// (the tests' own: a web view's end that takes this many seconds)
+const LINGER: &str = "LP_WINDOW_LINGER_S";
 /// its size, kept for the next time
 const STATE_FILENAME: &str = "window-state.json";
 /// WebView2's processes lighter (Windows): what its browser engine is started with, each in
@@ -56,21 +68,6 @@ fn local_url(url: &str) -> bool {
     parts(url).is_some_and(|(scheme, host, _)| {
         scheme.eq_ignore_ascii_case("http") && ["127.0.0.1", "localhost"].contains(&host)
     })
-}
-
-/// _wait_for_window: another window process holds the lock: its window is open or opening.
-/// It is brought to the front as soon as it answers; false when it has not after OPENING_S.
-fn wait_for_window(settings: &Path, url: &str, view: Option<&str>, token: Option<&str>) -> bool {
-    let until = Instant::now() + Duration::from_secs_f64(OPENING_S);
-    loop {
-        if focus_window(settings, url, view, token) {
-            return true;
-        }
-        if Instant::now() >= until {
-            return false;
-        }
-        std::thread::sleep(Duration::from_millis(250));
-    }
 }
 
 /// load_state: the window's size and whether it was maximised, as it was last time.
@@ -168,7 +165,13 @@ pub enum Asked {
 
 /// _Requests: answers the other starts, `focus <token> <url>` and `close <token>`: a request is
 /// answered as soon as it is understood, and what it asks is handed to the window.
-fn answer(listener: TcpListener, token: String, hand: impl Fn(Asked) + Send + 'static) {
+/// Once the window is `closed` it answers "no": there is nothing to bring to the front.
+fn answer(
+    listener: TcpListener,
+    token: String,
+    closed: Arc<AtomicBool>,
+    hand: impl Fn(Asked) + Send + 'static,
+) {
     std::thread::Builder::new()
         .name("window-requests".into())
         .spawn(move || {
@@ -183,6 +186,7 @@ fn answer(listener: TcpListener, token: String, hand: impl Fn(Asked) + Send + 's
                 let words: Vec<&str> = line.split_whitespace().collect();
                 let given = words.get(1).copied();
                 let asked = match words.first() {
+                    _ if closed.load(Ordering::Relaxed) => None,
                     _ if !access::matches(given, &token) => None,
                     Some(&"close") => Some(Asked::Close),
                     Some(&"focus") if words.len() == 3 && local_url(words[2]) => {
@@ -231,19 +235,27 @@ pub fn run_window(settings: &Path, url: &str, view: Option<&str>) -> i32 {
     let token = inside
         .or(inherited)
         .or_else(|| access::read_token(settings, port_of(&base)));
-    let lock = match InstanceLock::acquire_named(settings, LOCK_FILENAME) {
-        Ok(lock) => lock,
-        Err(NotLocked::Running(_)) => {
-            // another window is open, or opening: that one, never a second
-            if !wait_for_window(settings, &base, view, token.as_deref()) {
-                say("the open window does not answer: the app opens in the browser");
-                open_in_browser(&access::with_token(&target, token.as_deref()));
+    let until = Instant::now() + Duration::from_secs_f64(OPENING_S);
+    let lock = loop {
+        match InstanceLock::acquire_named(settings, LOCK_FILENAME) {
+            Ok(lock) => break lock,
+            Err(NotLocked::Running(_)) => {
+                // another window is open, or opening: that one, never a second, brought to
+                // the front as soon as it answers; one that was just closed lets its lock go
+                if focus_window(settings, &base, view, token.as_deref()) {
+                    return 0;
+                }
+                if Instant::now() >= until {
+                    say("the open window does not answer: the app opens in the browser");
+                    open_in_browser(&access::with_token(&target, token.as_deref()));
+                    return 0;
+                }
+                std::thread::sleep(Duration::from_millis(250));
             }
-            return 0;
-        }
-        Err(NotLocked::Failed(why)) => {
-            say(&format!("the window's lock: {why}"));
-            return 1;
+            Err(NotLocked::Failed(why)) => {
+                say(&format!("the window's lock: {why}"));
+                return 1;
+            }
         }
     };
     // (a window of a Libre Panel before the lock)
@@ -267,10 +279,31 @@ pub fn run_window(settings: &Path, url: &str, view: Option<&str>) -> i32 {
     };
     register(settings, port, &secret, &target); // (names the page, not the access token)
     let shown = access::with_token(&target, token.as_deref());
-    let code = native::show(settings, &shown, listener, secret);
-    unregister(settings);
-    drop(lock);
+    // (the window is closed: its file goes and its lock is let go, once)
+    let lock = std::cell::RefCell::new(Some(lock));
+    let closed = || {
+        unregister(settings);
+        drop(lock.borrow_mut().take());
+    };
+    let code = native::show(settings, &shown, listener, secret, &closed);
+    closed(); // (where no window opened)
     code
+}
+
+/// The process ends within END_S from now, whatever else it is doing: a closed window's web
+/// view that takes longer over its end (or never comes to it) is not waited for.
+fn end_soon() {
+    let ending = std::thread::Builder::new().name("window-end".into());
+    let _ = ending.spawn(|| {
+        std::thread::sleep(Duration::from_secs_f64(END_S));
+        std::process::exit(0);
+    });
+}
+
+/// (the tests' own: how long this window's web view takes over its end)
+fn lingering() -> Option<Duration> {
+    let seconds = std::env::var(LINGER).ok()?.parse::<f64>().ok()?;
+    (seconds > 0.0 && seconds.is_finite()).then(|| Duration::from_secs_f64(seconds))
 }
 
 #[cfg(any(windows, target_os = "linux"))]
@@ -281,6 +314,8 @@ mod native {
     use std::net::TcpListener;
     use std::path::Path;
     use std::rc::Rc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
 
     use tao::dpi::LogicalSize;
     use tao::event::{Event, WindowEvent};
@@ -336,7 +371,15 @@ mod native {
         tao::window::Icon::from_rgba(picture.as_bytes().to_vec(), width, height).ok()
     }
 
-    pub fn show(settings: &Path, url: &str, listener: TcpListener, secret: String) -> i32 {
+    /// The window until it is closed; `closed` is called once it is, before the web view is
+    /// taken down.
+    pub fn show(
+        settings: &Path,
+        url: &str,
+        listener: TcpListener,
+        secret: String,
+        closed: &dyn Fn(),
+    ) -> i32 {
         let (width, height, maximized) = load_state(settings);
         let mut event_loop = EventLoopBuilder::<Told>::with_user_event().build();
         let mut builder = WindowBuilder::new()
@@ -359,7 +402,8 @@ mod native {
         };
         let proxy = event_loop.create_proxy();
         let told = proxy.clone();
-        answer(listener, secret, move |asked| {
+        let gone = Arc::new(AtomicBool::new(false));
+        answer(listener, secret, Arc::clone(&gone), move |asked| {
             let _ = told.send_event(Told::Asked(asked));
         });
         let mut context = WebContext::new(Some(settings.join("window-data")));
@@ -544,7 +588,16 @@ mod native {
                 *flow = ControlFlow::Exit;
             }
         });
-        save_state(settings, state);
+        // closed: gone from the screen and from what another start finds, at once; then the
+        // web view's end, which is not waited for longer than END_S
+        gone.store(true, Ordering::Relaxed);
+        window.set_visible(false);
+        save_state(settings, state); // (before the next window may open: it opens as this was)
+        closed();
+        super::end_soon();
+        if let Some(linger) = super::lingering() {
+            std::thread::sleep(linger);
+        }
         0
     }
 }
@@ -554,7 +607,7 @@ mod native {
     use std::net::TcpListener;
     use std::path::Path;
 
-    pub fn show(_: &Path, url: &str, _: TcpListener, _: String) -> i32 {
+    pub fn show(_: &Path, url: &str, _: TcpListener, _: String, _: &dyn Fn()) -> i32 {
         super::open_in_browser(url);
         0
     }

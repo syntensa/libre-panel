@@ -27,7 +27,7 @@ pub enum Refused {
     Backup(String),
     /// OSError (409)
     Os(String),
-    /// what Python does not catch: the request is left unanswered
+    /// what Python does not catch (its request left unanswered): answered with a 500 and why
     Failed(String),
 }
 

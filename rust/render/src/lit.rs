@@ -1252,14 +1252,7 @@ impl Renderer {
         }
         if ticks > 0 {
             // (the ticks alone, in their colour, else the groove's)
-            let mut alone = w.clone();
-            let tick = match w.get("tick_color") {
-                Some(colour) if widget::truthy(w, "tick_color") => colour.clone(),
-                _ => w.get("background").cloned().unwrap_or(Value::None),
-            };
-            alone.insert("background".into(), Value::None);
-            alone.insert("tick_color".into(), tick);
-            let ticked = self.gauge_static(&alone)?;
+            let ticked = self.gauge_static(&crate::gauge::ticks_alone(w))?;
             let whole = (0, 0, ticked.width() as i64, ticked.height() as i64);
             out.alpha_composite_at(&ticked, (0, 0), whole)?;
         }

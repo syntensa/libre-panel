@@ -6,6 +6,16 @@
 computer's own readings, on the same computer as 0.8.0; every change the same frames drawn,
 the lit rings and bars the engine makes as 0.8's engine made them, within two levels in a
 pixel or two, and x264 makes a cleaner picture of them)
+- **About half of 0.8.0's load on the processor, half its memory.** Run in turn with 0.8.0 on
+  that computer, a minute each, each with its own engine, ten times in two sittings: this 8.9
+  to 14.5 % of a core (the app 2.7 to 4.9, the engine 6.2 to 9.6), 0.8.0 20.4 to 26.1 (Python
+  9.5 to 12.1, its engine 10.9 to 14.0): 39 to 60 % of 0.8.0 in a round, 51 % over all ten
+  (48.8 % over the first five, 52.5 % over the last, with all that is below). The readings
+  are the computer's own: a busier minute moves the graphs more, and x264 has more to do (1.5
+  to 2.4 ms of the engine's 2.0 to 3.1 a frame). The simulated panel is counted in neither (it
+  runs in 0.8.0's Python process; its 0.8 to 1.4 %, measured beside this one, are taken out of
+  it). Memory 97 to 101 MB instead of 192 to 203. Where the graphics card encodes (AMD's or
+  NVIDIA's) x264's share goes; that was not measured: there was no card to measure it on.
 - **x264 without a rate control of its own: a third less of its work, a cleaner picture.**
   The engine gives x264 a constant quantizer for each picture, two below `crf` (18 at the
   default 20), and keeps the bit rate's cap itself as x264's VBV kept it: a bucket of a
@@ -38,15 +48,6 @@ pixel or two, and x264 makes a cleaner picture of them)
   the work moved to the engine (the whole the same within the computer's own spread), the app
   2 to 3 MB smaller, the engine 2 to 3 MB larger. The fans are the same pixels as those drawn
   here.
-- **What a frame costs cut down further.** Run in turn twice with 0.8.0 on that computer, a
-  minute each, the same engine for both: 0.8.0 31.4 and 32.5 % of a core (Python 14.9 and
-  15.3, its engine 16.5 and 17.2), this 21.1 and 21.6 (the app 6.9 and 7.0, the engine 14.3
-  and 14.6): two thirds of 0.8.0, the app alone less than half of Python. The simulated panel
-  is counted in neither (it runs in 0.8.0's Python process; its 1.8 and 2.0 %, measured beside
-  this one, are taken out of it). Memory 100 MB instead of 194. x264 takes 4.4 to 4.5 ms of
-  the engine's 5.2 to 5.4 a frame, the same pictures for both; without it (the graphics
-  card's encoder takes it over where it is AMD's or NVIDIA's) this is half of 0.8.0 (48.7 and
-  49.5 %), worked out from these runs: there was no graphics card to measure it on.
 - **Lit rings and graphs drawn with less work.** A lit gauge's sector is drawn straight
   through its lit picture (no mask over the whole ring, no paste through it), its light's
   colour worked out once for each coverage, its blur's passes on AVX2 where the processor has
@@ -93,6 +94,46 @@ pixel or two, and x264 makes a cleaner picture of them)
 - **Plugins on Windows: a page that starts the plugin host no longer waits two minutes.** The
   host inherited the browser's connection and held it open after the answer; it now inherits
   its own three pipes alone, as Python's subprocess starts a program.
+- **"Libre Panel does not answer" no more where a finish or the grid was chosen.** The facet
+  finish's rings (a raised ring with straight, bevelled ends in its milled groove, a gradient
+  along the sweep, its ticks) and graphs (the line as a bevelled ridge with its band beneath
+  and the halo in the rows the curve reaches; a slimmer one on a graph wider than 1200 px) and
+  the panel's grid background (*Look → Grid background*) were not drawn by this build: the
+  frame was refused, the panel kept the one before and the app's preview got no answer. They
+  are drawn now as 0.8 draws them, compared with Python frame for frame (to the bit; a graph's
+  glow round them within a level, as every glow's). A ring's band is kept by what it is made
+  of, so a gliding value works out only the samples at its ends. A request that fails is now
+  answered with what failed (a 500 and the reason, which the app shows) instead of a connection
+  closed without a word; so is a failure no one foresaw in a request, and a request a route
+  came back from without an answer; each is logged, and the app goes on.
+- **Settings → Transitions → Show on the panel** works: the screen goes over to a card with the
+  transition's name, stays a moment and comes back, with the transition both ways at the speed
+  set, on every panel at once, at the panel's frame rate; a calm panel shows the card alone
+  ("not in this build yet" before).
+- **The start screen of a panel mounted upside down is upright** (#47): the boot logo and the
+  standby clip are written turned round where *Upside down* is on, as the frames are; the
+  start screen's card says so. They are stored in the panel: write them again after turning
+  the panel round.
+- **The tray icon stays, and follows its switch.** Its program asks the app once a second
+  how things stand; it ended after three seconds without an answer and was never started
+  again, so that a closed window left Libre Panel without its icon. It now ends only when the
+  app's port is closed, and a slow answer keeps the icon as it is. Where it ended after it had
+  its place (the desktop's tray restarted under it) the app starts it again at once; where it
+  ended as soon as it started (at the computer's start: an app too busy to answer it, for
+  which it now waits up to a minute, or a tray that is not there yet) the app tries again
+  after 20 seconds, four times in all, where it gave up until the next start before. Each is
+  in the log. Turned on in *Settings → Start and system* the icon appears at once, turned off
+  it goes, without a new start of Libre Panel. On Windows a click on the icon or in its menu
+  brings the app's window to the front: the icon's program, which was clicked, passes that
+  right on to the app, whose window only flashed in the taskbar otherwise (in 0.8 the icon
+  was the app's own). (The icon is off unless it is turned on in the settings; Windows 11
+  puts a new icon among the hidden ones first, behind the taskbar's `^`.)
+- **A window just closed opens again at once.** A closed window's process went on for as long
+  as its web view took over its end (seconds, with WebView2), still holding the window's lock
+  and telling the next start that the window had come to the front: a click on the tray icon
+  or a second start right after closing the window showed nothing. A closed window is now
+  gone for the other starts at once (its file, its lock, its answers), before its web view is
+  taken down, and its process ends within five seconds whatever the web view does.
 
 ## 0.9.0rc1 — 2026-11-11
 

@@ -70,6 +70,48 @@ def _moon_as_rust_s(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     moon._disc_kept.cache_clear()
 
 
+@pytest.fixture
+def _facet_rings_as_rust_s(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """facets' rings as numpy makes them on a processor without AVX-512: the angles of their
+    samples by the C library's atan2f and atan2 (with AVX-512 numpy takes SVML's, a unit in
+    the last place apart here and there, and a sample on a ring's straight cut may fall to the
+    other side of it). Rust's rings are those."""
+    import ctypes
+    import ctypes.util
+
+    import numpy as np
+
+    from libre_panel.render import facets
+
+    if not _avx512():
+        yield
+        return
+    libm = ctypes.CDLL("ucrtbase" if os.name == "nt" else ctypes.util.find_library("m"))
+    atan2f, atan2 = libm.atan2f, libm.atan2
+    atan2f.restype, atan2f.argtypes = ctypes.c_float, [ctypes.c_float, ctypes.c_float]
+    atan2.restype, atan2.argtypes = ctypes.c_double, [ctypes.c_double, ctypes.c_double]
+
+    class Numpy:
+        def __getattr__(self, name: str) -> Any:
+            return getattr(np, name)
+
+        @staticmethod
+        def arctan2(y: Any, x: Any) -> Any:
+            y, x = np.broadcast_arrays(np.asarray(y), np.asarray(x))
+            kind = np.result_type(y, x)
+            f = atan2f if kind == np.float32 else atan2
+            out = np.array([f(a, b) for a, b in zip(y.ravel().tolist(), x.ravel().tolist(),
+                                                    strict=True)], kind)  # fmt: skip
+            return out.reshape(y.shape)
+
+    monkeypatch.setattr(facets, "np", Numpy())
+    facets._rings.clear()
+    facets._tracks.clear()
+    yield
+    facets._rings.clear()
+    facets._tracks.clear()
+
+
 _DRAWN_LOOKS = """
 import json, struct, sys
 import numpy as np
@@ -727,26 +769,67 @@ def test_frames_of_texts_that_just_fit_as_python_fits_them(tmp_path: Path) -> No
     assert exact > 40  # (widths that are whole: there it is the max_width to the pixel)
 
 
+def test_frames_with_the_grid_look_as_python_draws_them(tmp_path: Path) -> None:
+    # (look.grid: thin lines every `spacing` px, every `major`-th one stronger, in the colours
+    # set, the palette's grid colours or a breath away from the ground, faded by its alpha;
+    # under the widgets but over the full-panel rects they start with)
+    rng = random.Random(0x6F1D)
+    cases, asked = [], []
+    for n in range(60):
+        folder = tmp_path / f"t{n}"
+        data = _frame_theme(rng, folder, _rect)
+        w, h = data["display"]["width"], data["display"]["height"]
+        backdrops = [{**_rect(rng, 90 + k, (w, h)), "x": rng.choice([0, -3]),
+                      "y": rng.choice([0, -2]), "w": w + 3, "h": h + 2}
+                     for k in range(rng.choice([0, 0, 1, 2]))]  # fmt: skip
+        data["widgets"] = backdrops + data["widgets"]
+        grid: dict[str, Any] = {}
+        if rng.random() < 0.6:
+            grid["spacing"] = rng.choice([2, 3, 8, 13, 40, 400])
+        if rng.random() < 0.6:
+            grid["major"] = rng.choice([0, 1, 2, 5, 50])
+        if rng.random() < 0.4:
+            grid["color"] = rng.choice([_hex(rng), _hex(rng, True), "@accent"])
+        if rng.random() < 0.4:
+            grid["major_color"] = rng.choice([_hex(rng), _hex(rng, True), "@text2"])
+        if rng.random() < 0.5:
+            grid["alpha"] = rng.choice([0, 0.25, 0.5, 1])
+        if rng.random() < 0.3:
+            data["palette"].update({k: _hex(rng, True) for k in
+                                    rng.sample(["grid", "grid_min", "grid_major", "grid_maj"],
+                                               2)})  # fmt: skip
+        data["look"] = {"grid": grid if grid or rng.random() < 0.5 else True}
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        try:
+            load_theme(folder)
+        except ThemeError:
+            continue  # (one Python refuses: the frame tests have those)
+        given, snapshot = _frame_snapshot(rng)
+        cases.append({"folder": str(folder), "snapshot": given, "dither": False})
+        asked.append((folder, snapshot, False))
+    expected = [_python_frame(*frame) for frame in asked]
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    drawn = 0
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        if "error" in want:
+            assert "error" in got, n
+            continue
+        assert "sha256" in got, (n, got)
+        assert got["sha256"] == hashlib.sha256(want["frame"].tobytes()).hexdigest(), n
+        assert got["boxes"] == want["boxes"], n
+        drawn += 1
+    assert drawn > 40
+
+
 def test_frames_beyond_their_widgets_are_not_drawn_here_yet(tmp_path: Path) -> None:
-    # (a screen, the panel's look and a finish Rust does not draw yet: the facets' rings and
-    # graphs; Rust says it does not draw them yet, rather than a frame without them)
+    # (a screen no plugin draws: Rust says it does not draw it, rather than a frame without it)
     rng = random.Random(0xB3D)
     cases, wanted = [], []
     for n in range(30):
         folder = tmp_path / f"t{n}"
         data = _frame_theme(rng, folder, _text)
-        beyond = rng.choice(["screens", "looks", "finishes"])
-        if beyond == "screens":
-            data["screen"] = {"name": rng.choice(["earth", "no-such-screen"])}
-        elif beyond == "looks":
-            data["look"] = {"grid": rng.choice([True, {}, {"spacing": 12, "major": 0}])}
-        else:
-            if rng.random() < 0.5:
-                finished = {**_gauge(rng, 99, (64, 48)), "finish": "facet"}
-            else:
-                finished = {"type": "graph", "id": "g99", "x": 4, "y": 4, "w": 40, "h": 20,
-                            "finish": "facet"}  # fmt: skip
-            data["widgets"].append(finished)
+        beyond = "screens"
+        data["screen"] = {"name": rng.choice(["earth", "no-such-screen"])}
         (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
         try:
             load_theme(folder)
@@ -1674,6 +1757,23 @@ def test_frames_of_gauges_as_python_draws_them(tmp_path: Path) -> None:
     assert _compare_frames(tmp_path, 0x6A6E, 200, _gauge_or_more, _bar_snapshot) > 150
 
 
+@pytest.mark.usefixtures("_facet_rings_as_rust_s")
+def test_frames_of_facet_gauges_as_python_draws_them(tmp_path: Path) -> None:
+    # (facet.py's FacetGauge: a raised ring with straight, bevelled ends in its milled track,
+    # in one colour, a gradient along the sweep or a threshold's colour; its ticks flat on it)
+    def facet(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+        widget = _gauge_or_more(rng, i, size)
+        if widget["type"] == "gauge":
+            widget["finish"] = "facet"
+            if rng.random() < 0.5:  # (large enough for its bevel to show)
+                widget.update(x=rng.randrange(-8, 8), y=rng.randrange(-8, 8),
+                              w=rng.choice([40, 64, 90]), h=rng.choice([40, 64, 90]),
+                              thickness=rng.choice([6, 9, 14, 30]))  # fmt: skip
+        return widget
+
+    assert _compare_frames(tmp_path, 0xFACE7, 160, facet, _bar_snapshot) > 120
+
+
 def test_frames_of_gauges_with_glow_within_a_level(tmp_path: Path) -> None:
     # (the glow round a ring: blurred in floating point, as a card's is, so now and then a
     # pixel a level apart)
@@ -2045,20 +2145,20 @@ LETTERED_FINISHES = [(finish, kind) for finish in ("facet", "acrylic")
                      for kind in ("text", "metric", "clock", "weather", "countdown")]  # fmt: skip
 OWN_FINISHES = [("lit", "bar"), ("facet", "bar"), ("lit", "gauge"), ("lit", "downloads")]
 SYMBOL_FINISHES = [("lit", "symbol"), ("lit", "icon")]
-GRAPH_FINISHES = [("lit", "graph")]
-UNDRAWN_FINISHES = [("facet", "gauge"), ("facet", "graph")]
+GRAPH_FINISHES = [("lit", "graph"), ("facet", "graph")]
+FACET_RINGS = [("facet", "gauge")]
 # a download the lit card shows (the state the downloads service publishes)
 DOWNLOADING = json.dumps({"phase": "downloading", "bytes": 3e8, "total": 1e9, "rate": 2.5e6,
                           "remaining_s": 280, "name": "a.iso",
                           "history": [1e6, 2e6, 3e6, 2.5e6]})  # fmt: skip
 
 
-def test_each_finish_rust_does_not_draw_yet_is_refused(tmp_path: Path) -> None:
-    # (a finish that takes the widget and that Rust does not draw: the whole frame refused,
-    # rather than a frame without it; one that does not take it: the widget drawn flat; the
-    # facets' letters and bars, the lit bar and ring: their own, the lit ones' halos within a
-    # level; a lit symbol and a lit weather icon: frosted glass, to the bit; a lit graph with
-    # no history: its ground alone, to the bit; a lit download card: its light in its groove)
+@pytest.mark.usefixtures("_facet_rings_as_rust_s")
+def test_each_finish_as_python_draws_it(tmp_path: Path) -> None:
+    # (a finish that does not take the widget: the widget drawn flat; the facets' letters, bars
+    # and rings, the lit bar and ring: their own, the lit ones' halos within a level; a lit
+    # symbol and a lit weather icon: frosted glass, to the bit; a lit or facet graph with no
+    # history: its ground alone, to the bit; a lit download card: its light in its groove)
     import numpy as np
 
     makers = {"clock": _clock, "weather": _weather_or_countdown, "rect": _rect, "bar": _bar,
@@ -2067,7 +2167,7 @@ def test_each_finish_rust_does_not_draw_yet_is_refused(tmp_path: Path) -> None:
     rng = random.Random(0xF1)
     cases, wanted = [], []
     pairs = [*FLAT_FINISHES, *LETTERED_FINISHES, *OWN_FINISHES, *SYMBOL_FINISHES,
-             *GRAPH_FINISHES, *UNDRAWN_FINISHES]  # fmt: skip
+             *GRAPH_FINISHES, *FACET_RINGS]  # fmt: skip
     for n, (finish, kind) in enumerate(pairs):
         widget = makers.get(kind, _text)(rng, 0, (64, 48))
         if kind in ("weather", "countdown"):
@@ -2079,7 +2179,7 @@ def test_each_finish_rust_does_not_draw_yet_is_refused(tmp_path: Path) -> None:
             widget.update(opacity=0.5, glow=0)
         if (finish, kind) in LETTERED_FINISHES:
             widget.update(font_size=40, max_width=300)
-        if (finish, kind) in OWN_FINISHES:  # (raised, or its light, in a groove; the lit glow)
+        if (finish, kind) in [*OWN_FINISHES, *FACET_RINGS]:  # (raised, or lit, in a groove)
             widget.update(x=8, y=12, w=40, h=10, glow=0.8 if finish == "lit" else 0, glow_radius=6,
                           background="@surface")  # fmt: skip
             if kind == "gauge":
@@ -2105,12 +2205,10 @@ def test_each_finish_rust_does_not_draw_yet_is_refused(tmp_path: Path) -> None:
                       "now": [2026, 11, 7, 18, 5, 9, 0]}, "dither": False})  # fmt: skip
         if finish == "lit" and (finish, kind) in OWN_FINISHES:
             cases[-1]["bytes"] = True
-        wanted.append("finishes" if (finish, kind) in UNDRAWN_FINISHES else None)
+        wanted.append(None)
     [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
     got = [frame.get("unported") for frame in ours["frames"]]
     for case, frame, pair in zip(cases, ours["frames"], pairs, strict=True):
-        if pair in UNDRAWN_FINISHES:
-            continue
         state = {"downloads": Reading("downloads", DOWNLOADING)} if pair[1] == "downloads" else {}
         now = Snapshot(readings=state, now=datetime(2026, 11, 7, 18, 5, 9))
         want = _python_frame(Path(case["folder"]), now, False)["frame"]  # (drawn as Python does)
@@ -3781,6 +3879,57 @@ def test_frames_of_graphs_as_python_draws_them(tmp_path: Path) -> None:
     drawn = _compare_frames(tmp_path, 0x6A9, 200, _graph_or_more, _graph_snapshot,
                             undefined=undefined)  # fmt: skip
     assert drawn > 150
+
+
+def test_frames_of_facet_graphs_as_python_draws_them(tmp_path: Path) -> None:
+    # (facet.py's FacetGraph: the line as a bevelled ridge with its band beneath, the halo
+    # under it in the rows the curve reaches; a slimmer ridge on a graph wider than 1200 px;
+    # mirrored where it hangs from the top; a line where the points do not run left to right)
+    undefined = ("graphs through points that are no numbers (a log scale of no finite span)",)
+
+    def facet(rng: random.Random, i: int, size: tuple[int, int]) -> dict[str, Any]:
+        widget = _graph_or_more(rng, i, size)
+        if widget["type"] == "graph":
+            widget["finish"] = "facet"
+            if rng.random() < 0.15:  # (wide: the slimmer ridge)
+                widget.update(x=rng.randrange(-1300, 0), w=rng.choice([1201, 1400]))
+            widget.pop("glow", None)  # (a glow round it: within a level, below)
+        return widget
+
+    drawn = _compare_frames(tmp_path, 0xFAC6, 160, facet, _graph_snapshot, undefined=undefined)
+    assert drawn > 110
+
+
+def test_frames_of_facet_graphs_with_glow_within_a_level(tmp_path: Path) -> None:
+    # (the glow round a graph is blurred in floating point, as a card's is: round a facet
+    # ridge's see-through flanks now and then a pixel a level apart)
+    import numpy as np
+
+    rng = random.Random(0xFA6)
+    cases, expected = [], []
+    for n in range(60):
+        folder = tmp_path / f"t{n}"
+        data = _frame_theme(rng, folder, _graph)
+        for widget in data["widgets"]:
+            widget.update(finish="facet", glow=rng.choice([0.21, 0.35, 1.0]),
+                          glow_radius=rng.choice([2, 6, 10]))  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+        given, snapshot = _graph_snapshot(rng)
+        cases.append({"folder": str(folder), "snapshot": given, "dither": False, "bytes": True})
+        expected.append(_python_frame(folder, snapshot, False))
+    [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
+    drawn = 0
+    for n, (got, want) in enumerate(zip(ours["frames"], expected, strict=True)):
+        if "error" in want:
+            assert "error" in got, n
+            continue
+        if "failed" in want or "unported" in got:  # (points that are no numbers: left out)
+            continue
+        apart = np.abs(np.asarray(picture(got["frame"]), int) - np.asarray(want["frame"], int))
+        assert apart.max() <= 1, n
+        assert got["boxes"] == want["boxes"], n
+        drawn += 1
+    assert drawn > 40
 
 
 # (a line left out twice over, a name with an = in it, a set with no star, every reading, a
@@ -5922,7 +6071,7 @@ def _slot_theme(rng: random.Random, folder: Path, make: Any = None, glow: float 
         for key, choices in options.items():
             if rng.random() < 0.5:
                 module[key] = rng.choice(choices)
-        if rng.random() < 0.85:  # (most flat: the finishes Rust does not draw yet aside)
+        if rng.random() < 0.85:  # (most flat; the others in the theme's own finish)
             module["finish"] = "flat"
         widgets.append(module)
     rng.shuffle(widgets)
@@ -6011,7 +6160,7 @@ def _compare_slot_frames(got: dict[str, Any], want: dict[str, Any], where: Any) 
     if "slots" in got:
         assert got["slots"] == want["slots"], where
     if "unported" in got:
-        assert got["unported"] in SLOT_NOT_YET or got["unported"] == "finishes", (where, got)
+        assert got["unported"] in SLOT_NOT_YET, (where, got)
         return False
     assert got["sha256"] == hashlib.sha256(want["frame"].tobytes()).hexdigest(), where
     assert got["boxes"] == want["boxes"], where

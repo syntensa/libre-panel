@@ -17,7 +17,7 @@ use num_bigint::BigInt;
 const NOTICE_AGE_S: f64 = 1.2;
 
 /// What a drawing came to where it is no picture: said to the page (400), or what Python's
-/// server does not catch (left unanswered, logged).
+/// server does not catch (its request left unanswered): answered with a 500 and why, logged.
 pub enum Refused {
     Said(String),
     Failed(String),

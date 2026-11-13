@@ -1525,6 +1525,7 @@
     "The boot logo is on the panel ({size}); it shows at the next power-on.": "Логотип загрузки записан на панель ({size}); он появится при следующем включении.",
     "The factory logo shows again at the next power-on.": "При следующем включении снова появится заводской логотип.",
     "The panel shows what was written; its themes are paused.": "Панель показывает то, что было записано; её темы приостановлены.",
+    "The panel is mounted upside down: the logo and the clip are written turned round, so that they are upright on it. Write them again when you turn the panel round.": "Панель установлена вверх ногами: логотип и клип записываются повёрнутыми, чтобы на ней они отображались правильно. Запишите их заново, когда перевернёте панель.",
     "The standby clip is on the panel ({size}) and plays now; the panel starts with it.": "Клип ожидания записан на панель ({size}) и воспроизводится сейчас; панель запускается с ним.",
     "What is on the panel": "Что на панели",
     "When the panel is switched on. The factory logo stays on the panel and can always come back.": "При включении панели. Заводской логотип остаётся на панели и всегда может вернуться.",

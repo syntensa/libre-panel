@@ -259,7 +259,7 @@ const ROUTES: &[Route] = &[
         match crate::previews::theme_sizes(m[0], &env, &s.home.places()) {
             Ok(told) => x.json(&told, 200),
             Err(crate::previews::Refused::Theme(_)) => not_found(x),
-            Err(crate::previews::Refused::Drawing(why)) => unanswered(&why),
+            Err(crate::previews::Refused::Drawing(why)) => failed(x, &why),
         }
     }),
     picture("GET", "/api/fan-look", |s, x, _, u| {
@@ -355,7 +355,7 @@ const ROUTES: &[Route] = &[
     private("GET", "/api/experiment", |s, x, _, _| {
         match s.experiment() {
             Some(run) => x.json(&run.state(), 200),
-            None => unanswered("the experiment is stuck"),
+            None => failed(x, "the experiment is stuck"),
         }
     }),
     // (the tray icon's program and the app: its menu, what is chosen in it, its picture;
@@ -483,7 +483,7 @@ const ROUTES: &[Route] = &[
         match crate::ai::set_up(&config, &payload, s.port) {
             Ok(told) => x.json(&told, 200),
             Err(crate::ai::Refused::Said(why, status)) => x.error(&why, status, ""),
-            Err(crate::ai::Refused::Failed(why)) => unanswered(&why),
+            Err(crate::ai::Refused::Failed(why)) => failed(x, &why),
         }
     }),
     picture("GET", "/api/backup/file", |s, x, _, _| {
@@ -501,7 +501,7 @@ const ROUTES: &[Route] = &[
             Err(crate::backup::Refused::Os(why) | crate::backup::Refused::Backup(why)) => {
                 x.error(&why, 409, "");
             }
-            Err(crate::backup::Refused::Failed(why)) => unanswered(&why),
+            Err(crate::backup::Refused::Failed(why)) => failed(x, &why),
         }
     }),
     private("GET", "/api/logs", |_, x, _, u| {
@@ -830,7 +830,7 @@ fn notify_key(state: &State, exchange: &mut Exchange, renew: bool) {
     };
     match crate::notify::key_state(&config, state.port, renew) {
         Ok(told) => exchange.json(&told, 200),
-        Err(why) => unanswered(&why),
+        Err(why) => failed(exchange, &why),
     }
 }
 
@@ -851,7 +851,7 @@ fn ai_in(state: &State, exchange: &mut Exchange, url: &Url, kind: &str) {
     let agent = match crate::ai::admitted(&config, Some(&given), agent) {
         Ok(agent) => agent,
         Err(crate::ai::Refused::Said(why, status)) => return exchange.error(&why, status, ""),
-        Err(crate::ai::Refused::Failed(why)) => return unanswered(&why),
+        Err(crate::ai::Refused::Failed(why)) => return failed(exchange, &why),
     };
     let max = lp_services::agents_setup::MAX_BODY as u64;
     let Some(body) = exchange.read_body(max, "request too large") else {
@@ -860,7 +860,7 @@ fn ai_in(state: &State, exchange: &mut Exchange, url: &Url, kind: &str) {
     let data = match crate::ai::event(&body) {
         Ok(data) => data,
         Err(crate::ai::Refused::Said(why, status)) => return exchange.error(&why, status, ""),
-        Err(crate::ai::Refused::Failed(why)) => return unanswered(&why),
+        Err(crate::ai::Refused::Failed(why)) => return failed(exchange, &why),
     };
     let board = lp_services::agents::board();
     if kind == "hook" {
@@ -947,7 +947,7 @@ fn restore_backup(state: &State, exchange: &mut Exchange) {
         }
         Err(crate::backup::Refused::Backup(why)) => exchange.error(&why, 400, ""),
         Err(crate::backup::Refused::Os(why)) => exchange.error(&why, 409, ""),
-        Err(crate::backup::Refused::Failed(why)) => unanswered(&why),
+        Err(crate::backup::Refused::Failed(why)) => failed(exchange, &why),
     }
 }
 
@@ -969,7 +969,7 @@ fn history(state: &State, exchange: &mut Exchange, url: &Url) {
     let mut found = match crate::history::history(&path, span, now) {
         Ok(found) => found,
         Err(crate::history::Refused::Span(why)) => return exchange.error(why, 400, ""),
-        Err(crate::history::Refused::Failed(why)) => return unanswered(&why),
+        Err(crate::history::Refused::Failed(why)) => return failed(exchange, &why),
     };
     let enabled = |name: &str| config.services.enabled.iter().any(|on| on == name);
     let power = match enabled("power") {
@@ -1298,15 +1298,17 @@ fn edit(
     };
     match route(&payload, &state.home.places(), &env) {
         Ok(told) => exchange.json(&told, 200),
-        Err(why) if why.status == 500 => unanswered(&why.message),
+        Err(why) if why.status == 500 => failed(exchange, &why.message),
         Err(why) => exchange.error(&why.message, why.status, ""),
     }
 }
 
-/// handle_error: what Python's server does not catch: logged, the request left unanswered
-/// (its connection closed with nothing).
-fn unanswered(why: &str) {
+/// handle_error: what Python's server does not catch is logged; here the request is answered
+/// with it too (a 500 and the reason), so that the page says what failed rather than that
+/// Libre Panel does not answer.
+fn failed(exchange: &mut Exchange, why: &str) {
     say(&format!("editor: request failed: {why}"));
+    exchange.error(why, 500, "");
 }
 
 /// _save: a theme saved into the person's themes folder.
@@ -1355,7 +1357,7 @@ fn drawing(
     match route(&payload, state, &env, &chosen(state)) {
         Ok(told) => exchange.json(&told, 200),
         Err(crate::drawings::Refused::Said(why)) => exchange.error(&why, 400, ""),
-        Err(crate::drawings::Refused::Failed(why)) => unanswered(&why),
+        Err(crate::drawings::Refused::Failed(why)) => failed(exchange, &why),
     }
 }
 
@@ -1403,7 +1405,7 @@ fn picture_answer(
         Ok(Some(png)) => exchange.send(200, &png, "image/png", ""),
         Ok(None) => exchange.error(unknown, 404, ""),
         Err(crate::drawings::Refused::Said(why)) => exchange.error(&why, 400, ""),
-        Err(crate::drawings::Refused::Failed(why)) => unanswered(&why),
+        Err(crate::drawings::Refused::Failed(why)) => failed(exchange, &why),
     }
 }
 
@@ -1414,7 +1416,7 @@ fn refused(exchange: &mut Exchange, refused: crate::share::Refused) {
         Refused::Share(why) => exchange.error(&why, 400, ""),
         Refused::Theme(why) => exchange.error(&why, 404, ""),
         Refused::Os(why) => exchange.error(&why, 409, ""),
-        Refused::Failed(why) => unanswered(&why),
+        Refused::Failed(why) => failed(exchange, &why),
     }
 }
 
@@ -1523,7 +1525,7 @@ fn theme_preview(state: &State, exchange: &mut Exchange, theme_id: &str, url: &U
         None => {}
         Some(Ok(png)) => exchange.send(200, &png, "image/png", ""),
         Some(Err(crate::previews::Refused::Theme(why))) => exchange.error(&why, 404, ""),
-        Some(Err(crate::previews::Refused::Drawing(why))) => unanswered(&why),
+        Some(Err(crate::previews::Refused::Drawing(why))) => failed(exchange, &why),
     }
 }
 
@@ -1885,7 +1887,7 @@ fn experiment_action(state: &State, exchange: &mut Exchange) {
         return;
     };
     let Some(run) = state.experiment() else {
-        return unanswered("the experiment is stuck");
+        return failed(exchange, "the experiment is stuck");
     };
     let action = match &payload {
         Value::Dict(payload) => payload
@@ -2943,6 +2945,8 @@ fn start_screen_action(state: &State, exchange: &mut Exchange) {
         return exchange.error(&format!("panel {shown}: there is no such panel"), 400, "");
     };
     let way = mounted(state, n);
+    // (a panel mounted upside down gets its start screen turned round, as its frames)
+    let turned = device.rotate == 180;
     let mut paused = false;
     if let Some(app) = state.controls.upgrade() {
         let _ = app.act("pause", &Value::None); // (the panels are free for this, and stay so)
@@ -2957,13 +2961,14 @@ fn start_screen_action(state: &State, exchange: &mut Exchange) {
     };
     let done = match action.as_str() {
         "state" => screen::panel_state(model, &place),
-        "logo" => screen::write_logo(&env, model, way, &place, design),
+        "logo" => screen::write_logo(&env, model, way, turned, &place, design),
         "remove-logo" => screen::remove_logo(model, &place),
         _ => screen::write_clip(
             &env,
             device.brightness,
             model,
             way,
+            turned,
             &place,
             design,
             &device.video_range,
@@ -3149,7 +3154,34 @@ fn handle(stream: TcpStream, state: &State, token: &str, hosts: &[String; 2]) {
     );
     trace(|| format!("{asked}: read in {:.1} s", began.elapsed().as_secs_f64()));
     match exchange.method.as_str() {
-        "GET" | "POST" => serve(state, token, hosts, &mut exchange),
+        "GET" | "POST" => {
+            // (a request that fails where nothing foresaw it is answered with why, and logged:
+            // the other requests and the app go on)
+            let served = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                serve(state, token, hosts, &mut exchange)
+            }));
+            match served {
+                Err(panicked) => {
+                    let why = panicked
+                        .downcast_ref::<&str>()
+                        .map(|why| why.to_string())
+                        .or_else(|| panicked.downcast_ref::<String>().cloned())
+                        .unwrap_or_else(|| "an unexpected failure".into());
+                    if exchange.answered.is_none() {
+                        failed(&mut exchange, &format!("{asked}: {why}"));
+                    } else {
+                        say(&format!("editor: request failed: {asked}: {why}"));
+                    }
+                }
+                // (a route that came back without an answer, where Python's leaves the
+                // request unanswered too: whoever still waits for one is told so, rather
+                // than left with a connection closed without a word)
+                Ok(()) if exchange.answered.is_none() && !exchange.client_gone() => {
+                    failed(&mut exchange, &format!("{asked}: no answer was made"));
+                }
+                Ok(()) => {}
+            }
+        }
         other => {
             let said = format!("Unsupported method ({})", lp_py::repr(other));
             exchange.send_error(501, Some(&said), None);

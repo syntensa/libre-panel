@@ -60,6 +60,15 @@ def _asked(
     return status, headers, body
 
 
+def _failed(ours: tuple[str, dict[str, str], bytes], asked: Any) -> None:
+    """Where server.py does not answer a request (an exception it does not catch: the page
+    says Libre Panel does not answer), Rust's answers it with what failed: a 500 and why."""
+    status, headers, body = ours
+    assert status == "HTTP/1.0 500 Internal Server Error", (asked, ours)
+    assert headers["Content-Type"].startswith("application/json"), (asked, ours)
+    assert json.loads(body)["error"], (asked, ours)
+
+
 # what this computer's hardware tells a server without sources: its names
 OWN = ("cpu.name", "mem.", "gpu.name", "board.", "system.")
 
@@ -240,6 +249,22 @@ def test_the_apps_files_and_the_way_in_are_answered_as_server_py_answers(servers
     assert seen.get("", 0) >= 5
 
 
+def test_a_request_no_route_answers_is_answered_where_someone_waits(servers: Any) -> None:
+    """A request a route comes back from without an answer (a body that says null is none to
+    server.py's routes: they answer nothing, and the page says that Libre Panel does not
+    answer): whoever still waits (a browser keeps its connection open) is told so by Rust's
+    server, a 500 and what was asked; a client that has closed its side gets nothing, as from
+    server.py."""
+    ask, _ = servers
+    request = _post("/api/app", None)
+    theirs, ours = ask(request)
+    assert theirs[0] == ours[0] == "" and theirs[2] == ours[2] == b""
+    theirs, ours = ask(request, done=False)
+    assert theirs[0] == "" and theirs[2] == b""
+    _failed(ours, request)
+    assert json.loads(ours[2]) == {"error": "POST /api/app: no answer was made"}
+
+
 def test_the_background_app_is_controlled_through_its_server(tmp_path: Path) -> None:
     """`libre-panel start`: the app's server beside the panel. Its address and token are where
     the programs of this user find them; the state and the controls answer (pause, resume,
@@ -311,6 +336,101 @@ def test_the_background_app_is_controlled_through_its_server(tmp_path: Path) -> 
     assert "panicked" not in said and f"theme editor at http://127.0.0.1:{port}/" in said, said
     assert token not in said, said
     assert not (tmp_path / "instance.json").exists() and not kept.exists()
+
+
+def test_a_transition_is_shown_on_the_panel_as_transition_show_py_shows_it(
+    tmp_path: Path,
+) -> None:
+    """Settings → Transitions → Show on the panel (`show_transition`, transition_show.py): the
+    panel goes over to a card with the transition's name (the card Python makes of it, pixel
+    for pixel), stays a moment and comes back to the theme, with the transition on its way;
+    what is no request for one is refused in service.py's words."""
+    import io
+
+    from PIL import Image
+
+    from libre_panel import transition_show
+    from libre_panel.plugins.render import RenderContext
+    from libre_panel.render.light import role_color
+    from libre_panel.render.renderer import Renderer
+    from libre_panel.theme import load_theme
+
+    folder = tmp_path / "themes" / "red"
+    folder.mkdir(parents=True)
+    theme = {"format": "libre-panel-theme/1", "name": "Red",
+             "display": {"model": "turing-5", "orientation": "landscape", "width": 800,
+                         "height": 480},
+             "palette": {"bg": "#DC1E1E", "void": "#101820", "text": "#F0F4FF"},
+             "font": "builtin:Barlow-Medium",
+             "background": {"color": "@bg", "image": None}, "refresh_ms": 1000,
+             "widgets": [{"type": "text", "x": 40, "y": 40, "text": "RED", "size": 90,
+                          "color": "#FFFFFF"}]}  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+    (tmp_path / "config.toml").write_text(
+        'theme = "red"\nfps = 20\nlanguage = "en"\n[device]\ndriver = "virtual"\n'
+        'output = "panel.png"\n[sensors]\nproviders = []\n',
+        encoding="utf-8",
+    )
+    context = RenderContext(Renderer(load_theme(folder), preview=True))
+    card = transition_show.card("Fade", (800, 480), role_color(context, "void"),
+                                role_color(context, "text")).tobytes()  # fmt: skip
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries()}  # fmt: skip
+    with subprocess.Popen([str(_program()), "start", "--port", "0", "--no-browser"], env=env,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        try:
+            assert program.stdout is not None
+            address = program.stdout.readline().split(" running at ")[1].split()[0]
+            port, token = int(address.split(":")[2].split("/")[0]), address.split("#token=")[1]
+
+            def sent(request: str) -> tuple[str, dict[str, str], bytes]:
+                request = request.replace("{host}", f"localhost:{port}")
+                return _asked(port, request.replace("{token}", token).encode())
+
+            def asked(value: Any) -> tuple[str, Any]:
+                body = json.dumps({"action": "show_transition", "value": value})
+                status, _, answer = sent(_get("/api/app", WITH, f"Content-Length: {len(body)}",
+                                              method="POST", body=body))  # fmt: skip
+                return status.split()[1], json.loads(answer)
+
+            def shown() -> bytes | None:
+                status, _, body = sent(_get("/api/plugins/control/live?panel=1&format=PNG&w=800",
+                                            WITH))  # fmt: skip
+                if " 200 " not in status:
+                    return None
+                with Image.open(io.BytesIO(body)) as picture:
+                    return picture.convert("RGB").tobytes()
+
+            before = _waited(shown, 30)
+            assert before is not None and before != card
+            expected = 'expected {"name": "...", "label": "..."}'
+            for value, why in ((None, expected), ("fade", expected), ({"name": 5}, expected),
+                               ({"label": "Fade"}, expected),
+                               ({"name": "  "}, "the name of a transition"),
+                               ({"name": "x" * 65}, "the name of a transition")):  # fmt: skip
+                assert asked(value) == ("400", {"error": why}), value
+            assert shown() == before  # (nothing of it on the panel)
+            status, state = asked({"name": "fade", "label": "Fade"})
+            assert status == "200" and state["panel"]["state"] == "showing", state
+            seen: list[str] = []  # what the panel showed, in turn: the theme, between, the card
+            end = time.monotonic() + 30
+            while time.monotonic() < end:
+                frame = shown()
+                kind = {before: "theme", card: "card"}.get(frame or b"", "between")
+                if not seen or seen[-1] != kind:
+                    seen.append(kind)
+                if kind == "theme" and "card" in seen:
+                    break
+                time.sleep(0.02)
+        finally:
+            program.send_signal(signal.SIGINT) if os.name == "posix" else program.terminate()
+            said = program.communicate(timeout=30)[1]
+    assert "panicked" not in said and "transition fade" not in said, said
+    # (the transition both ways: a fade's pictures between the theme and the card)
+    assert seen[-1] == "theme" and "card" in seen, seen
+    at = seen.index("card")
+    assert "between" in seen[:at] and "between" in seen[at:], seen
 
 
 def test_the_live_picture_is_the_frame_on_each_panel_as_control_py_makes_it(
@@ -973,6 +1093,92 @@ def test_the_app_opens_its_window_one_window_and_closes_it_as_window_py_does(
 
 
 @pytest.mark.skipif(
+    not sys.platform.startswith("linux") or shutil.which("Xvfb") is None,
+    reason="the window on a screen of Xvfb's",
+)
+def test_a_window_just_closed_is_opened_anew_by_the_next_start(tmp_path: Path) -> None:
+    """A closed window leaves nothing for another start to find, before its web view is taken
+    down (which can take seconds, WebView2's above all; LP_WINDOW_LINGER_S makes it 30 here):
+    its file is gone at once and it answers no start, so the next one (a click on the tray icon
+    right after closing the window) opens a window of its own, where it was told before that
+    the closed one had come to the front. The closed one's process ends within seconds,
+    whatever its web view does. No browser is opened."""
+    (tmp_path / "config.toml").write_text(
+        'theme = "slate"\nfps = 2\nlanguage = "en"\n[device]\ndriver = "virtual"\n'
+        'output = "panel.png"\n[sensors]\nproviders = []\n',
+        encoding="utf-8",
+    )
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    opened = tmp_path / "browser.txt"
+    (tools / "xdg-open").write_text(f'#!/bin/sh\necho "$@" >> {opened}\n', encoding="utf-8")
+    (tools / "xdg-open").chmod(0o755)
+    read, write = os.pipe()
+    screen = subprocess.Popen(["Xvfb", "-displayfd", str(write), "-screen", "0", "1920x1080x24"],
+                              pass_fds=(write,), stderr=subprocess.DEVNULL)  # fmt: skip
+    os.close(write)
+    try:
+        display = os.read(read, 16).decode().strip()
+    finally:
+        os.close(read)
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           "DISPLAY": f":{display}", "PATH": f"{tools}{os.pathsep}{os.environ['PATH']}",
+           "WAYLAND_DISPLAY": "", "LP_WINDOW_LINGER_S": "30", **_libraries()}  # fmt: skip
+    running = tmp_path / "window.json"
+
+    def window() -> dict[str, Any] | None:
+        try:
+            return dict(json.loads(running.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            return None
+
+    def alive(pid: int) -> bool:
+        try:  # (a process that ended and was not waited for is there no more)
+            return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0] != "Z"
+        except OSError:
+            return False
+
+    def told(first: dict[str, Any], *words: str) -> str:
+        """What the window answers another start: `close <token>`, `focus <token> <url>`."""
+        with socket.create_connection(("127.0.0.1", first["port"]), timeout=10) as link:
+            link.sendall((" ".join([words[0], first["token"], *words[1:]]) + "\n").encode())
+            return link.makefile().readline().strip()
+
+    try:
+        with subprocess.Popen([str(_program()), "start", "--port", "0"], env=env,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              encoding="utf-8") as program:  # fmt: skip
+            try:
+                assert program.stdout is not None
+                program.stdout.readline()
+                first = _waited(window, 60)
+                assert first is not None, "no window"
+                assert told(first, "close") == "ok"
+                closed = time.monotonic()
+                # gone for the other starts at once, its process still at its web view's end
+                assert _waited(lambda: True if window() is None else None, 5), window()
+                assert alive(first["pid"])
+                assert told(first, "focus", first["url"]) == "no"
+                again = subprocess.run([str(_program()), "start"], env=env, timeout=60,
+                                       capture_output=True, encoding="utf-8")  # fmt: skip
+                second = _waited(window, 60)
+                # (the first one's end is not waited for: within its five seconds and a few)
+                ended = _waited(lambda: True if not alive(first["pid"]) else None, 20)
+                took = time.monotonic() - closed
+            finally:
+                program.send_signal(signal.SIGINT)
+                program.communicate(timeout=30)
+        assert again.returncode == 0, again
+        assert second is not None and second["pid"] != first["pid"], (first, second)
+        assert second["url"] == first["url"]
+        assert ended and took < 25, took
+        assert not opened.exists(), opened.read_text()
+    finally:
+        screen.terminate()
+        screen.wait(timeout=30)
+
+
+@pytest.mark.skipif(
     not sys.platform.startswith("linux")
     or not (shutil.which("Xvfb") and shutil.which("stalonetray")),
     reason="the tray icon on a screen of Xvfb's, in stalonetray's tray",
@@ -1042,6 +1248,126 @@ def test_the_tray_shows_its_icon_and_its_quit_ends_libre_panel(tmp_path: Path) -
         tray.wait(timeout=30)
         screen.terminate()
         screen.wait(timeout=30)
+
+
+@pytest.mark.skipif(
+    not sys.platform.startswith("linux")
+    or not (shutil.which("Xvfb") and shutil.which("stalonetray")),
+    reason="the tray icon on a screen of Xvfb's, in stalonetray's tray",
+)
+def test_the_tray_icon_follows_its_setting_and_comes_back_when_it_ends(tmp_path: Path) -> None:
+    """The icon is there where Settings → System asks for it (`tray_icon`, off unless turned
+    on): turned on while Libre Panel runs it appears, without a new start; an icon that had
+    its place and ends by itself (the desktop's tray went away under it) is started again;
+    turned off it goes, and Libre Panel runs on without one."""
+    (tmp_path / "config.toml").write_text(
+        'theme = "slate"\nfps = 2\nlanguage = "en"\n[device]\ndriver = "virtual"\n'
+        'output = "panel.png"\n[sensors]\nproviders = []\n',
+        encoding="utf-8",
+    )
+    read, write = os.pipe()
+    screen = subprocess.Popen(["Xvfb", "-displayfd", str(write), "-screen", "0", "1280x800x24"],
+                              pass_fds=(write,), stderr=subprocess.DEVNULL)  # fmt: skip
+    os.close(write)
+    try:
+        display = os.read(read, 16).decode().strip()
+    finally:
+        os.close(read)
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           "DISPLAY": f":{display}", "WAYLAND_DISPLAY": "", "XDG_CONFIG_HOME": str(tmp_path),
+           **_libraries()}  # fmt: skip
+    tray = subprocess.Popen(["stalonetray"], env=env, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL)  # fmt: skip
+    said: list[str] = []
+    try:
+        with subprocess.Popen([str(_program()), "tray", "--background", "--port", "0"], env=env,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              encoding="utf-8") as program:  # fmt: skip
+            try:
+                assert program.stdout is not None and program.stderr is not None
+                address = program.stdout.readline().split(" running at ")[1].split()[0]
+                port, token = int(address.split(":")[2].split("/")[0]), address.split("#token=")[1]
+                heard = threading.Thread(target=lambda: said.extend(program.stderr), daemon=True)
+                heard.start()
+                children = Path(f"/proc/{program.pid}/task/{program.pid}/children")
+
+                def icons() -> list[int]:
+                    def named(pid: str) -> str:
+                        try:
+                            return Path(f"/proc/{pid}/exe").resolve().name
+                        except OSError:
+                            return ""
+
+                    return [int(p) for p in children.read_text().split()
+                            if named(p) == "libre-panel-tray"]  # fmt: skip
+
+                def sent(request: bytes) -> str:
+                    request = request.replace(b"{host}", f"localhost:{port}".encode())
+                    return _asked(port, request.replace(b"{token}", token.encode()))[0]
+
+                def ready(times: int) -> bool | None:
+                    return said.count("libre-panel: tray icon ready\n") >= times or None
+
+                time.sleep(2.5)  # (the setting is looked at once a second)
+                assert icons() == [] and not ready(1), said  # off unless turned on
+                assert " 200 " in sent(_post("/api/settings", {"set": {"tray_icon": True}}))
+                assert _waited(lambda: ready(1), 20), said
+                [first] = icons()
+                # an icon that had its place (it ran a while) ends: it is started again
+                time.sleep(10.5)
+                os.kill(first, signal.SIGKILL)
+                assert _waited(lambda: ready(2), 20), said
+                [second] = icons()
+                assert second != first
+                assert any("the tray icon's program ended" in line and "started again" in line
+                           for line in said), said  # fmt: skip
+                assert " 200 " in sent(_post("/api/settings", {"set": {"tray_icon": False}}))
+                assert _waited(lambda: icons() == [] or None, 20), icons()
+                assert program.poll() is None  # (Libre Panel runs on without its icon)
+                assert " 200 " in sent(_post("/api/tray", {"id": "quit"}))
+                program.wait(timeout=30)
+            finally:
+                if program.poll() is None:
+                    program.send_signal(signal.SIGINT)
+                program.wait(timeout=30)
+        assert program.returncode == 0, said
+    finally:
+        tray.terminate()
+        tray.wait(timeout=30)
+        screen.terminate()
+        screen.wait(timeout=30)
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="a Linux without a desktop")
+def test_a_tray_icon_that_ends_at_once_is_tried_again_after_a_while(tmp_path: Path) -> None:
+    """Where the icon's program ends as soon as it starts (here: no desktop to put it on; at a
+    computer's start: an app too busy to answer it, a tray that is not there yet), Libre Panel
+    runs on without it and tries again after a while, where it gave up for good before."""
+    (tmp_path / "config.toml").write_text(
+        'theme = "slate"\nfps = 2\nlanguage = "en"\ntray_icon = true\n[device]\n'
+        'driver = "virtual"\noutput = "panel.png"\n[sensors]\nproviders = []\n',
+        encoding="utf-8",
+    )
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           "DISPLAY": "", "WAYLAND_DISPLAY": "", **_libraries()}  # fmt: skip
+    said: list[str] = []
+    with subprocess.Popen([str(_program()), "tray", "--background", "--port", "0"], env=env,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        try:
+            assert program.stdout is not None and program.stderr is not None
+            program.stdout.readline()
+            heard = threading.Thread(target=lambda: said.extend(program.stderr), daemon=True)
+            heard.start()
+            ended = _waited(lambda: next((line for line in said
+                                          if "the tray icon's program ended" in line), None), 20)  # fmt: skip
+            assert program.poll() is None  # (Libre Panel runs on)
+        finally:
+            program.send_signal(signal.SIGINT)
+            program.wait(timeout=30)
+    assert program.returncode == 0, said
+    assert any("no tray icon (no desktop)" in line for line in said), said
+    assert ended is not None and ended.rstrip().endswith(": tried again in 20 s"), said
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="the end of a Windows session")
@@ -2038,8 +2364,8 @@ def test_themes_are_saved_and_made_for_a_size_as_server_py_does(servers: Any) ->
     ]  # fmt: skip
     for path, payload in bodies:
         theirs, ours = ask(_post(path, payload))
-        if theirs == ("", {}, b""):  # (an exception the server does not catch: no answer)
-            assert ours == theirs, path
+        if theirs == ("", {}, b""):  # (an exception server.py does not catch: no answer)
+            _failed(ours, path)
             continue
         told = [json.loads(body.replace(json.dumps(str(home))[1:-1].encode(), b"<home>"))
                 for home, (_, _, body) in zip(homes, (theirs, ours), strict=True)]  # fmt: skip
@@ -2123,8 +2449,8 @@ def test_the_editors_pictures_are_drawn_as_drawings_py_draws_them(servers: Any) 
     for path, payload in cases:
         for _ in range(2):  # (once more where a minute turned between the two)
             theirs, ours = ask(_post(path, payload))
-            if theirs == ("", {}, b""):  # (an exception the server does not catch: no answer)
-                assert ours == theirs, (path, ours)
+            if theirs == ("", {}, b""):  # (an exception server.py does not catch: no answer)
+                _failed(ours, path)
                 break
             assert ours[0] == theirs[0], (path, ours, theirs[0])
             told = [json.loads(body) for _, _, body in (theirs, ours)]
@@ -2642,8 +2968,11 @@ def test_the_start_screen_is_written_to_the_panel_as_panel_files_py_writes_it(
     again, the standby clip written, played and saved as the start (H.264 byte for byte where
     ffmpeg is there) and named in config.toml; what is no action, panel or model refused in
     server.py's words."""
+    from PIL import Image
+
     from libre_panel.devices import panel_files
     from libre_panel.devices.turzx_usb import brightness_arg
+    from libre_panel.render import bootscreen
 
     rig = Rig(tmp_path)
     try:
@@ -2707,6 +3036,24 @@ def test_the_start_screen_is_written_to_the_panel_as_panel_files_py_writes_it(
                     written = (tmp_path / "config.toml").read_text(encoding="utf-8")
                     assert 'local_clip = "usr/data/standby.h264"' in written, written
                     assert "clip_asked = true" in written, written
+                # a panel mounted upside down: its start screen turned round, as its frames are
+                rig.config(
+                    'theme = "slate"\nlanguage = "en"\n[device]\ndriver = "turzx"\n'
+                    'model = "turing-9.2-usb"\nbrightness = 60\nrotate = 180\n'
+                    "[sensors]\nproviders = []\n"
+                )
+                logo = bootscreen.boot_logo(model, "landscape", "aurora")
+                turned = panel_files.logo_jpeg(model, logo.transpose(Image.Transpose.ROTATE_180))
+                status, said = post({"action": "logo", "design": "aurora"})
+                assert status == "200" and said["boot_logo"] == len(turned), said
+                assert rig.fake.files[panel_files.BOOT_LOGO] == turned
+                if shutil.which("ffmpeg"):
+                    frames = [frame.transpose(Image.Transpose.ROTATE_180)
+                              for frame in bootscreen.standby_frames(model)]  # fmt: skip
+                    clip = panel_files.clip_h264(model, shutil.which("ffmpeg"), frames, full=True)
+                    status, said = post({"action": "clip"})
+                    assert status == "200" and said["standby_clip"] == len(clip), said
+                    assert rig.fake.files[panel_files.STANDBY_CLIP] == clip
                 for payload, words in (
                     ({"action": "nope"},
                      'expected {"action": "state", "logo", "remove-logo" or "clip"}'),

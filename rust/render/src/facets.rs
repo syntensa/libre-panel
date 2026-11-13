@@ -6,6 +6,9 @@
 //! Worked out as numpy works it out: in float32, each step rounded where numpy rounds it, its
 //! sums in numpy's order.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use lp_pixels::{Filter, Image, Mode};
 use lp_text::fallback::FallbackFont;
 use lp_text::text::{draw, Text, TextFace};
@@ -13,6 +16,7 @@ use lp_text::text::{draw, Text, TextFace};
 use lp_py::Dict;
 
 use crate::bar::Paint;
+use crate::kept::Kept;
 use crate::piece::{Failed, Piece, Result};
 use crate::renderer::{Renderer, MOST_PIXELS};
 use crate::shapes::Rgba;
@@ -974,9 +978,41 @@ struct RingBand {
     radial: Vec<f32>,
     /// 1 where a sample lies within both edges
     inside: Vec<f32>,
+    /// for each pixel, 0 to 1: how far along the sweep its middle is
+    place: Vec<f32>,
     /// radians, and the band's width (px)
     sweep: f64,
     thickness: f64,
+    /// the shading of each sample without the ends, by groove and style: worked out once
+    no_ends: RefCell<Vec<NoEnds>>,
+}
+
+/// A band's shading without ends: for a groove or not, in a style (its bits), (A, B) of each
+/// sample.
+type NoEnds = ((bool, u64, u64), Rc<(Vec<f32>, Vec<f32>)>);
+
+impl RingBand {
+    /// The shading of each sample as if the ring had no ends (band.kept[(groove, style)]).
+    fn no_ends(&self, groove: bool, style: (f64, f64)) -> Rc<(Vec<f32>, Vec<f32>)> {
+        let key = (groove, style.0.to_bits(), style.1.to_bits());
+        if let Some((_, kept)) = self.no_ends.borrow().iter().find(|(k, _)| *k == key) {
+            return Rc::clone(kept);
+        }
+        let (a, b) = (0..self.along.len())
+            .map(|q| ring_shading(self, q, f32::INFINITY, f32::INFINITY, groove, style))
+            .unzip();
+        let made = Rc::new((a, b));
+        self.no_ends.borrow_mut().push((key, Rc::clone(&made)));
+        made
+    }
+
+    /// About how many bytes it holds.
+    fn bytes(&self) -> usize {
+        let samples = self.along.len();
+        let shadings = self.no_ends.borrow().len();
+        self.pixels.len() * (std::mem::size_of::<(usize, usize)>() + 4)
+            + samples * 4 * (7 + 2 * shadings)
+    }
 }
 
 fn ring_band(w: usize, h: usize, thickness: i64, start: f64, end: f64) -> RingBand {
@@ -1011,8 +1047,10 @@ fn ring_band(w: usize, h: usize, thickness: i64, start: f64, end: f64) -> RingBa
         tangent: Vec::with_capacity(size),
         radial: Vec::with_capacity(size),
         inside: Vec::with_capacity(size),
+        place: vec![],
         sweep,
         thickness: outer_r - inner_r,
+        no_ends: RefCell::new(vec![]),
     };
     for s in 0..samples {
         // (a sample a quarter or three quarters into its pixel down and across)
@@ -1041,7 +1079,58 @@ fn ring_band(w: usize, h: usize, thickness: i64, start: f64, end: f64) -> RingBa
             });
         }
     }
+    // (np.mod(sign * (mid - radians(start)), 2 pi) / max(sweep, 1e-6), each pixel's middle in
+    // doubles, clipped to 0..1 and made float32)
+    let sign = f64::from(sign);
+    let start_rad = start.to_radians();
+    let most = sweep.max(1e-6);
+    band.place = (pixels.iter())
+        .map(|&(row, col)| {
+            let mid = (row as f64 + 0.5 - half_h).atan2(col as f64 + 0.5 - half_w);
+            let at = mod64(sign * (mid - start_rad), 2.0 * std::f64::consts::PI) / most;
+            at.clamp(0.0, 1.0) as f32
+        })
+        .collect();
     band.pixels = pixels;
+    band
+}
+
+/// np.mod of doubles: the remainder with the divisor's sign (numpy's npy_divmod).
+fn mod64(a: f64, b: f64) -> f64 {
+    let m = a % b;
+    if m == 0.0 {
+        0.0f64.copysign(b)
+    } else if (b < 0.0) != (m < 0.0) {
+        m + b
+    } else {
+        m
+    }
+}
+
+thread_local! {
+    /// ring_band's bands (facets.rings) and groove_ring's coloured grooves (facets.tracks), by
+    /// what they are made of; a ring of 300 px is some 3 MB of band.
+    static RINGS: RefCell<Kept<RingKey, Rc<RingBand>>> = RefCell::new(Kept::new(RING_BYTES));
+    static TRACKS: RefCell<Kept<(RingKey, Rgba), Rc<Image>>> =
+        RefCell::new(Kept::new(TRACK_BYTES));
+}
+
+/// What a ring's band is made of: its box, its thickness, where it starts and ends (bits).
+type RingKey = (usize, usize, i64, u64, u64);
+
+/// How many bytes of rings' bands are kept, and of their coloured grooves.
+const RING_BYTES: usize = 4 << 20;
+const TRACK_BYTES: usize = 2 << 20;
+
+/// ring_band, kept by what it is made of.
+fn kept_band(w: usize, h: usize, thickness: i64, start: f64, end: f64) -> Rc<RingBand> {
+    let key = (w, h, thickness, start.to_bits(), end.to_bits());
+    if let Some(band) = RINGS.with(|kept| kept.borrow_mut().get(&key)) {
+        return band;
+    }
+    let band = Rc::new(ring_band(w, h, thickness, start, end));
+    let size = band.bytes();
+    RINGS.with(|kept| kept.borrow_mut().put(key, Rc::clone(&band), size));
     band
 }
 
@@ -1105,10 +1194,13 @@ fn ring_maps(band: &RingBand, frac: f64, groove: bool, style: (f64, f64)) -> [Ve
     let samples = band.along.len() / n.max(1);
     let (mut a, mut b) = (vec![0f32; n], vec![0f32; n]);
     let mut alpha = vec![0f32; n];
+    // (what the long edges make does not depend on the fill: worked out once; each fill only
+    // the samples near its ends)
+    let no_ends = band.no_ends(groove, style);
     for s in 0..samples {
         for p in 0..n {
             let q = s * n + p;
-            let mut shaded = ring_shading(band, q, f32::INFINITY, f32::INFINITY, groove, style);
+            let mut shaded = (no_ends.0[q], no_ends.1[q]);
             if !closed {
                 let u = band.radius[q] * band.along[q];
                 let left = band.radius[q] * arc_at - u;
@@ -1151,16 +1243,590 @@ pub(crate) fn groove_ring(
     colour: Rgba,
 ) -> Result<Image> {
     let band = ring_band(w, h, thickness, start, end);
-    let [a, b, alpha] = ring_maps(&band, 1.0, true, GROOVE);
-    let c = colour.map(|v| v as f32);
+    let out = band_image(&band, w, h, 1.0, true, GROOVE, (colour, None));
+    Ok(Image::from_bytes(Mode::RGBA, w, h, out)?)
+}
+
+/// groove_ring kept by what it is made of (facets.tracks): the same picture each time.
+fn kept_groove(
+    w: usize,
+    h: usize,
+    thickness: i64,
+    start: f64,
+    end: f64,
+    colour: Rgba,
+) -> Result<Rc<Image>> {
+    let key = ((w, h, thickness, start.to_bits(), end.to_bits()), colour);
+    if let Some(groove) = TRACKS.with(|kept| kept.borrow_mut().get(&key)) {
+        return Ok(groove);
+    }
+    let band = kept_band(w, h, thickness, start, end);
+    let out = band_image(&band, w, h, 1.0, true, GROOVE, (colour, None));
+    let groove = Rc::new(Image::from_bytes(Mode::RGBA, w, h, out)?);
+    TRACKS.with(|kept| (kept.borrow_mut()).put(key, Rc::clone(&groove), w * h * 4));
+    Ok(groove)
+}
+
+/// _band_image: the RGBA bytes of a `w` x `h` picture holding the band, the ring filled `frac`
+/// of its sweep, coloured by `paint` along it (a colour, or a gradient to the second).
+fn band_image(
+    band: &RingBand,
+    w: usize,
+    h: usize,
+    frac: f64,
+    groove: bool,
+    style: (f64, f64),
+    paint: Paint,
+) -> Vec<u8> {
+    let [a, b, alpha] = ring_maps(band, frac, groove, style);
     let byte = |v: f32| clip(v + 0.5, 0.0, 255.0) as u8;
     let mut out = vec![0u8; w * h * 4];
     for (p, &(row, col)) in band.pixels.iter().enumerate() {
+        let c = mix(paint.0, paint.1, band.place[p]);
         let at = (row * w + col) * 4;
         for i in 0..3 {
             out[at + i] = byte(c[i] * a[p] + b[p]);
         }
         out[at + 3] = byte(alpha[p] * c[3]);
     }
-    Ok(Image::from_bytes(Mode::RGBA, w, h, out)?)
+    out
+}
+
+/// ring_layer: a ring as RGBA, `w` x `h`: a raised arc in `paint` (a gradient along the sweep
+/// to the second colour), `frac` of the sweep from its start, with straight, bevelled ends,
+/// in a milled track of colour `track`. Its ends are straight cuts, whatever the gauge's cap.
+#[allow(clippy::too_many_arguments)]
+fn ring_layer(
+    w: usize,
+    h: usize,
+    thickness: i64,
+    start: f64,
+    end: f64,
+    frac: f64,
+    paint: Paint,
+    track: Option<Rgba>,
+) -> Result<Image> {
+    let band = kept_band(w, h, thickness, start, end);
+    // (the groove pasted on a clear layer: the groove itself)
+    let mut layer = match track {
+        Some(track) => (*kept_groove(w, h, thickness, start, end, track)?).clone(),
+        None => Image::blank(Mode::RGBA, w, h),
+    };
+    if frac > 0.0 {
+        let out = band_image(&band, w, h, frac, false, SOLID, paint);
+        let raised = Image::from_bytes(Mode::RGBA, w, h, out)?;
+        layer.alpha_composite_at(&raised, (0, 0), (0, 0, w as i64, h as i64))?;
+    }
+    Ok(layer)
+}
+
+impl Renderer {
+    /// FacetGauge's piece (facet.py): a raised ring with straight, bevelled ends in a milled
+    /// track, at `frac` in `paint`; its ticks, if any, flat on it.
+    pub(crate) fn facet_gauge_piece(&self, w: &Dict, frac: f64, paint: Paint) -> Result<Piece> {
+        let (x, y) = (widget::int(w, "x", 0), widget::int(w, "y", 0));
+        let (gw, gh) = (widget::int(w, "w", 120), widget::int(w, "h", 120));
+        // (numpy's refusals of a band of no size: np.mgrid of a negative size, the reshape
+        // of no pixels)
+        if gw < 0 || gh < 0 {
+            return Err(Failed("negative dimensions are not allowed".into()));
+        }
+        if gw == 0 || gh == 0 {
+            return Err(Failed(
+                "cannot reshape array of size 0 into shape (0,newaxis)".into(),
+            ));
+        }
+        let (uw, uh) = crate::gauge::sized(gw, gh)?;
+        let track = self.colour_of(w, "background")?;
+        let mut layer = ring_layer(
+            uw,
+            uh,
+            widget::int(w, "thickness", 12),
+            widget::number(w, "start_angle", 135.0),
+            widget::number(w, "end_angle", 405.0),
+            frac,
+            paint,
+            track,
+        )?;
+        if widget::int(w, "ticks", 0) > 0 {
+            let ticked = self.gauge_static(&crate::gauge::ticks_alone(w))?;
+            let whole = (0, 0, ticked.width() as i64, ticked.height() as i64);
+            layer.alpha_composite_at(&ticked, (0, 0), whole)?;
+        }
+        let mut piece = Piece::new(layer, x, y);
+        piece.hit = Some([x, y, gw, gh]);
+        Ok(piece)
+    }
+}
+
+/// For lp-check: ring_layer of a ring `w` x `h`.
+#[allow(clippy::too_many_arguments)]
+pub fn check_ring(
+    w: usize,
+    h: usize,
+    thickness: i64,
+    start: f64,
+    end: f64,
+    frac: f64,
+    paint: ([i64; 4], Option<[i64; 4]>),
+    track: Option<[i64; 4]>,
+) -> Result<Image> {
+    ring_layer(w, h, thickness, start, end, frac, paint, track)
+}
+
+// -- curves ---------------------------------------------------------------------------------
+
+/// A graph wider than this gets the slimmer ridge (the full one costs Python ~5 ms there).
+pub(crate) const CURVE_WIDE: i64 = 1200;
+/// How strong the halo round a curve's line stands; it is worked out at this share of the
+/// size (final pixels per pixel), with this blur there: about eight pixels in the picture.
+const HALO: f64 = 0.9;
+const HALO_DIVIDER: usize = 4;
+const HALO_BLUR: f32 = 2.0;
+/// The ridge: steeper than the bevels elsewhere (degrees), turned this strongly towards or
+/// from the light by the curve's slope; each flank this share of the line's width; the band
+/// below it this many flanks down at most, and a third of the way to the graph's bottom.
+const RIDGE_TILT: f64 = 62.0;
+const RIDGE_STEEP: f64 = 1.8;
+const RIDGE_SHARE: f64 = 0.8;
+const BAND_SHARE: f64 = 2.6;
+const BAND_DEPTH: f64 = 3.0;
+/// The bright flank of a curve's ridge, the flank away from the light (nearly black), and
+/// the band beneath.
+const RIDGE: (f64, f64) = (0.85, 0.55);
+const RIDGE_FAR: (f64, f64) = (0.85, 0.04);
+const RIDGE_BAND: (f64, f64) = (0.85, 0.30);
+
+/// curve_halo: a soft halo of `colour` round a curve's line, over `layer` (RGBA): `line` is the
+/// line's coverage (L, the layer's size), `scale` the layer's pixels to a pixel of the picture.
+/// Worked out small: the line at a quarter of the size, blurred, and raised again.
+pub(crate) fn curve_halo(
+    layer: &mut Image,
+    line: &Image,
+    colour: Rgba,
+    scale: usize,
+) -> Result<()> {
+    let (w, h) = layer.size();
+    let divider = HALO_DIVIDER * scale;
+    // (too small both ways to be soft; a narrow band keeps one)
+    if w <= 2 * scale || h <= 2 * scale || (w < 2 * divider && h < 2 * divider) {
+        return Ok(());
+    }
+    // (_halo_table: min(255, int(v * HALO + 0.5)))
+    let table: Vec<i64> = (0..256)
+        .map(|v| 255.min((v as f64 * HALO + 0.5) as i64))
+        .collect();
+    let small = line.resize(
+        (w / divider).max(1),
+        (h / divider).max(1),
+        Filter::Box,
+        None,
+        None,
+    )?;
+    let mut soft = (small.gaussian_blur(HALO_BLUR, HALO_BLUR)?.point(&table)?).resize(
+        w,
+        h,
+        Filter::Bilinear,
+        None,
+        None,
+    )?;
+    if colour[3] < 255 {
+        let through: Vec<i64> = (0..256).map(|v| v * colour[3] / 255).collect();
+        soft = soft.point(&through)?;
+    }
+    // (the colour with that alpha laid over the layer: alpha_composite of it)
+    let rgb = [colour[0], colour[1], colour[2]].map(|v| v.clamp(0, 255) as u8);
+    lp_pixels::tint_over_at(layer, rgb, soft.as_bytes(), w, (0, 0))?;
+    Ok(())
+}
+
+/// numpy's binary_search_with_guess: the last index whose value is not above `key` (-1 below
+/// the first, `len` above the last), looking first about `guess`.
+fn search_with_guess(key: f64, arr: &[f64], guess: usize) -> isize {
+    const LIKELY_IN_CACHE_SIZE: usize = 8;
+    let len = arr.len();
+    if key > arr[len - 1] {
+        return len as isize;
+    } else if key < arr[0] {
+        return -1;
+    }
+    if len <= 4 {
+        let mut i = 1;
+        while i < len && key >= arr[i] {
+            i += 1;
+        }
+        return i as isize - 1;
+    }
+    let guess = guess.min(len - 3).max(1);
+    let (mut imin, mut imax) = (0, len);
+    if key < arr[guess] {
+        if key < arr[guess - 1] {
+            imax = guess - 1;
+            if guess > LIKELY_IN_CACHE_SIZE && key >= arr[guess - LIKELY_IN_CACHE_SIZE] {
+                imin = guess - LIKELY_IN_CACHE_SIZE;
+            }
+        } else {
+            return guess as isize - 1;
+        }
+    } else if key < arr[guess + 1] {
+        return guess as isize;
+    } else if key < arr[guess + 2] {
+        return guess as isize + 1;
+    } else {
+        imin = guess + 2;
+        if guess + LIKELY_IN_CACHE_SIZE + 1 < len && key < arr[guess + LIKELY_IN_CACHE_SIZE] {
+            imax = guess + LIKELY_IN_CACHE_SIZE;
+        }
+    }
+    while imin < imax {
+        let imid = imin + ((imax - imin) >> 1);
+        if key >= arr[imid] {
+            imin = imid + 1;
+        } else {
+            imax = imid;
+        }
+    }
+    imin as isize - 1
+}
+
+/// np.interp(at, xp, fp) in doubles, as numpy's arr_interp works it out: the first and the
+/// last value beyond the ends, a point's own value where it falls on one exactly.
+fn interp(at: &[f64], xp: &[f64], fp: &[f64]) -> Vec<f64> {
+    let len = xp.len();
+    let (left, right) = (fp[0], fp[len - 1]);
+    if len == 1 {
+        return (at.iter())
+            .map(|&x| {
+                if x < xp[0] {
+                    left
+                } else if x > xp[0] {
+                    right
+                } else {
+                    fp[0]
+                }
+            })
+            .collect();
+    }
+    let mut j = 0usize;
+    let mut out = Vec::with_capacity(at.len());
+    for &x in at {
+        if x.is_nan() {
+            out.push(x);
+            continue;
+        }
+        let found = search_with_guess(x, xp, j);
+        let value = if found == -1 {
+            left
+        } else if found == len as isize {
+            right
+        } else {
+            j = found as usize;
+            if j == len - 1 || xp[j] == x {
+                fp[j]
+            } else {
+                let slope = (fp[j + 1] - fp[j]) / (xp[j + 1] - xp[j]);
+                let mut v = slope * (x - xp[j]) + fp[j];
+                if v.is_nan() {
+                    v = slope * (x - xp[j + 1]) + fp[j + 1];
+                    if v.is_nan() && fp[j] == fp[j + 1] {
+                        v = fp[j];
+                    }
+                }
+                v
+            }
+        };
+        if found == -1 {
+            j = 0;
+        } else if found == len as isize {
+            j = len;
+        }
+        out.push(value);
+    }
+    out
+}
+
+/// A band of a ridge laid by `over`: its rows from `lo` to `hi` in each column, its colour in
+/// each, and the share of each of its pixels it takes (the layer's own coverage there).
+struct RidgeBand {
+    lo: Vec<f32>,
+    hi: Vec<f32>,
+    colour: Vec<[f32; 3]>,
+    weight: Option<Image>,
+}
+
+/// _over: lay `band` over `acc` (premultiplied RGB of the strip starting at row `rows0`, `n_rows`
+/// of them) and `alpha`: each row takes the share of it the band covers, so a curve moving by a
+/// fraction of a pixel does not jump. (numpy's dtypes: the share in doubles, kept in float32.)
+fn over(acc: &mut [[f32; 3]], alpha: &mut [f32], n_rows: usize, rows0: i64, band: &RidgeBand) {
+    let n_cols = band.lo.len();
+    if n_cols == 0 {
+        return;
+    }
+    let span = (0..n_cols)
+        .map(|c| band.hi[c] - band.lo[c])
+        .fold(
+            f32::NEG_INFINITY,
+            |m, v| if v > m || v.is_nan() { v } else { m },
+        );
+    let depth = f64::from(span).ceil() as i64 + 1;
+    if depth <= 0 {
+        return;
+    }
+    for c in 0..n_cols {
+        let (lo, hi) = (band.lo[c], band.hi[c]);
+        let first = f64::from(lo).floor() as i64;
+        for d in 0..depth {
+            let row = first + d;
+            let top = (row as f32).max(lo);
+            let cover = ((row as f64 + 1.0).min(f64::from(hi)) - f64::from(top)).clamp(0.0, 1.0);
+            let local = row - rows0;
+            if local < 0 || local >= n_rows as i64 || cover.is_nan() || cover <= 0.0 {
+                continue;
+            }
+            let r = local as usize;
+            let share = match &band.weight {
+                Some(fill) => cover * (f64::from(fill.pixel(c, r)[0]) / 255.0),
+                None => cover,
+            };
+            let at = r * n_cols + c;
+            for (v, &tint) in acc[at].iter_mut().zip(&band.colour[c]) {
+                *v = (f64::from(tint) * share + f64::from(*v) * (1.0 - share)) as f32;
+            }
+            alpha[at] = (share + f64::from(alpha[at]) * (1.0 - share)) as f32;
+        }
+    }
+}
+
+/// The least and the greatest of float32 numbers, as numpy's min() and max() (NaN wins).
+fn least32(v: &[f32]) -> f32 {
+    v.iter().fold(
+        f32::INFINITY,
+        |m, &x| if x < m || x.is_nan() { x } else { m },
+    )
+}
+
+fn most32(v: &[f32]) -> f32 {
+    v.iter().fold(
+        f32::NEG_INFINITY,
+        |m, &x| if x > m || x.is_nan() { x } else { m },
+    )
+}
+
+/// curve_ridge: the line of a curve on `layer` (RGBA, the fill already drawn) replaced by a
+/// ridge: a flank lit from the top left on the side away from the fill, a dark one on the side
+/// towards it, and a faint band beneath, each tilted by how the curve rises or falls there.
+/// `run` is the curve's points in the layer's pixels, `thick` the line's width in them; a
+/// `wide` graph gets one band only; `below`: the fill lies below the curve (else above it, and
+/// the ridge is mirrored, its light still from the top left). Worked out in the picture's
+/// pixels (`scale` of the layer's to one) and laid on the layer enlarged. False where the
+/// points do not run from left to right: the caller draws a line.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn curve_ridge(
+    layer: &mut Image,
+    run: &[(f64, f64)],
+    thick: f64,
+    colour: Rgba,
+    wide: bool,
+    scale: usize,
+    below: bool,
+) -> Result<bool> {
+    let sf = scale as f32;
+    let xs: Vec<f32> = run.iter().map(|p| p.0 as f32 / sf).collect();
+    let ys: Vec<f32> = run.iter().map(|p| p.1 as f32 / sf).collect();
+    let thick = thick / scale as f64;
+    let (lw, lh) = layer.size();
+    let (width, height) = (lw.div_ceil(scale) as i64, lh.div_ceil(scale) as i64);
+    let back = -1e-3f64 as f32;
+    if xs.len() < 2 || xs.windows(2).any(|p| p[1] - p[0] < back) {
+        return Ok(false);
+    }
+    let x0 = (f64::from(xs[0]).floor() as i64).max(0);
+    let x1 = (f64::from(xs[xs.len() - 1]).ceil() as i64).min(width);
+    if x1 - x0 < 2 {
+        return Ok(false);
+    }
+    // (np.interp of the columns' middles, in doubles, made float32)
+    let at: Vec<f64> = (x0..x1).map(|i| f64::from(i as f32 + 0.5)).collect();
+    let xp: Vec<f64> = xs.iter().map(|&v| f64::from(v)).collect();
+    let fp: Vec<f64> = ys.iter().map(|&v| f64::from(v)).collect();
+    let y: Vec<f32> = interp(&at, &xp, &fp)
+        .into_iter()
+        .map(|v| v as f32)
+        .collect();
+    let n = y.len();
+    // (np.gradient: the middle ones over two columns, the ends over one)
+    let gain = (if wide { 1.0 } else { RIDGE_STEEP }) as f32;
+    let steep: Vec<f32> = (0..n)
+        .map(|i| {
+            let g = if i == 0 {
+                y[1] - y[0]
+            } else if i == n - 1 {
+                y[n - 1] - y[n - 2]
+            } else {
+                (y[i + 1] - y[i - 1]) / 2.0
+            };
+            g * gain
+        })
+        .collect();
+    let (tilt_sin, tilt_cos) = if wide {
+        (sin45(), sin45())
+    } else {
+        let tilt = RIDGE_TILT.to_radians();
+        (tilt.sin(), tilt.cos())
+    };
+    let (ts, tc) = (tilt_sin as f32, tilt_cos as f32);
+    // (the outside below the curve where it hangs from the top: its flank faces down)
+    let flip = if below { 1.0f32 } else { -1.0 };
+    let out: Vec<[f32; 3]> = (steep.iter())
+        .map(|&s| {
+            let length = (1.0 + s * s).sqrt();
+            [s / length * ts * flip, -1.0 / length * ts * flip, tc]
+        })
+        .collect();
+    let away = if below { 1.0f64 } else { -1.0 };
+    let base = [colour[0], colour[1], colour[2]].map(|v| v as f32);
+    let light = light();
+    let paint = |normals: &[[f32; 3]], style: (f64, f64)| -> Vec<[f32; 3]> {
+        (normals.iter())
+            .map(|&n| {
+                let (a, b) = shade(facing(n, light), style);
+                base.map(|c| clip(c * a + b, 0.0, 255.0))
+            })
+            .collect()
+    };
+    // (the rows `near` to `far` beyond the line, towards the fill: `y + away * near`, a number
+    // of rows for all columns worked out in doubles, or one for each column in float32)
+    let rows =
+        |offset: &dyn Fn(usize) -> f32| -> Vec<f32> { (0..n).map(|i| y[i] + offset(i)).collect() };
+    let zone = |near: Vec<f32>, far: Vec<f32>| if below { (near, far) } else { (far, near) };
+    let number = |rows_beyond: f64| rows(&|_| (away * rows_beyond) as f32);
+    let each = |rows_beyond: &[f32]| rows(&|i| away as f32 * rows_beyond[i]);
+    let mut bands = vec![];
+    let (rows0, rows1);
+    if wide {
+        // (the line itself, shaded by the slope)
+        let (lo, hi) = zone(number(-thick / 2.0), number(thick));
+        rows0 = f64::from(least32(&lo)).floor() as i64 - 1;
+        rows1 = f64::from(most32(&hi)).ceil() as i64 + 2;
+        let tint = paint(&out, RIDGE_BAND);
+        bands.push(RidgeBand {
+            lo,
+            hi,
+            colour: tint,
+            weight: None,
+        });
+    } else {
+        let flank = RIDGE_SHARE * thick;
+        let flank32 = flank as f32;
+        let (least, most) = (flank32, (BAND_SHARE * flank) as f32);
+        let end: Vec<f32> = (y.iter())
+            .map(|&v| {
+                let avail = if below { (height - 1) as f32 - v } else { v };
+                clip(avail / BAND_DEPTH as f32, least, most) + flank32
+            })
+            .collect();
+        // (tilted the other way)
+        let inner: Vec<[f32; 3]> = out.iter().map(|n| [-n[0], -n[1], n[2]]).collect();
+        let (lo, hi) = zone(number(-flank), each(&end));
+        rows0 = f64::from(least32(&lo)).floor() as i64 - 1;
+        rows1 = f64::from(most32(&hi)).ceil() as i64 + 2;
+        // (a graph that is high enough has a band below, as much of each pixel as the layer
+        // covers there)
+        let deep = (2.0 * flank + 1e-3) as f32;
+        if end.iter().any(|&e| e > deep) {
+            let above = rows0.max(0);
+            let bottom = height.min(rows1);
+            if bottom < above {
+                return Err(Failed("Coordinate 'lower' is less than 'upper'".into()));
+            }
+            let s = scale as i64;
+            let cover = layer.crop(x0 * s, above * s, x1 * s, bottom * s);
+            let cover = cover.getchannel(3)?;
+            let fill = if scale > 1 {
+                cover.reduce(scale, scale, None)?
+            } else {
+                cover
+            };
+            let lower: Vec<f32> = end.iter().map(|&e| e - flank32).collect();
+            let (lo, hi) = zone(number(flank), each(&lower));
+            let tint = paint(&out, RIDGE_BAND);
+            bands.push(RidgeBand {
+                lo,
+                hi,
+                colour: tint,
+                weight: Some(fill),
+            });
+        }
+        let (lo, hi) = zone(number(0.0), number(flank));
+        let tint = paint(&inner, RIDGE_FAR);
+        bands.push(RidgeBand {
+            lo,
+            hi,
+            colour: tint,
+            weight: None,
+        });
+        let (lo, hi) = zone(number(-flank), number(0.0));
+        let tint = paint(&out, RIDGE);
+        bands.push(RidgeBand {
+            lo,
+            hi,
+            colour: tint,
+            weight: None,
+        });
+    }
+    let (rows0, rows1) = (rows0.max(0), rows1.min(height));
+    if rows1 <= rows0 {
+        return Ok(false);
+    }
+    let (n_rows, n_cols) = ((rows1 - rows0) as usize, n);
+    let mut acc = vec![[0f32; 3]; n_rows * n_cols];
+    let mut alpha = vec![0f32; n_rows * n_cols];
+    for band in &bands {
+        over(&mut acc, &mut alpha, n_rows, rows0, band);
+    }
+    let opacity = (colour[3] as f64 / 255.0) as f32;
+    let floor = 1e-6f64 as f32;
+    let byte = |v: f32| clip(v + 0.5, 0.0, 255.0) as u8;
+    // (the picture's pixels, each laid on the layer `scale` times larger, no further than it)
+    let (left, top) = (x0 as usize * scale, rows0 as usize * scale);
+    let (pw, ph) = (
+        (n_cols * scale).min(lw - left),
+        (n_rows * scale).min(lh - top),
+    );
+    let mut picture = vec![0u8; pw * ph * 4];
+    for (py, line) in picture.chunks_exact_mut(pw * 4).enumerate() {
+        let r = py / scale;
+        for (px, pixel) in line.chunks_exact_mut(4).enumerate() {
+            let at = r * n_cols + px / scale;
+            let a = alpha[at];
+            let safe = if a > floor || a.is_nan() { a } else { floor };
+            for (v, &sum) in pixel.iter_mut().zip(&acc[at]) {
+                *v = byte(sum / safe);
+            }
+            pixel[3] = byte(a * 255.0 * opacity);
+        }
+    }
+    let picture = Image::from_bytes(Mode::RGBA, pw, ph, picture)?;
+    let whole = (0, 0, pw as i64, ph as i64);
+    layer.alpha_composite_at(&picture, (left as i64, top as i64), whole)?;
+    Ok(true)
+}
+
+/// For lp-check: curve_halo of a layer.
+pub fn check_halo(layer: &mut Image, line: &Image, colour: [i64; 4], scale: usize) -> Result<()> {
+    curve_halo(layer, line, colour, scale)
+}
+
+/// For lp-check: curve_ridge of a run on a layer (whether it was drawn).
+#[allow(clippy::too_many_arguments)]
+pub fn check_ridge(
+    layer: &mut Image,
+    run: &[(f64, f64)],
+    thick: f64,
+    colour: [i64; 4],
+    wide: bool,
+    scale: usize,
+    below: bool,
+) -> Result<bool> {
+    curve_ridge(layer, run, thick, colour, wide, scale, below)
 }

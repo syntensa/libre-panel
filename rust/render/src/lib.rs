@@ -37,6 +37,7 @@ pub mod moon;
 pub mod motion;
 pub mod np;
 pub mod overlays;
+mod panel_look;
 pub mod photo;
 pub mod piece;
 pub mod plugin;

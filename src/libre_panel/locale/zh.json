@@ -1525,6 +1525,7 @@
     "The boot logo is on the panel ({size}); it shows at the next power-on.": "开机 Logo 已写入面板（{size}）；将在下次通电时显示。",
     "The factory logo shows again at the next power-on.": "出厂 Logo 将在下次通电时重新显示。",
     "The panel shows what was written; its themes are paused.": "面板显示已写入的内容；其主题已暂停。",
+    "The panel is mounted upside down: the logo and the clip are written turned round, so that they are upright on it. Write them again when you turn the panel round.": "面板为倒置安装：开机 Logo 和待机短片会旋转后写入，以便在面板上正向显示。翻转面板后请重新写入。",
     "The standby clip is on the panel ({size}) and plays now; the panel starts with it.": "待机短片已写入面板（{size}）并正在播放；面板将用它启动。",
     "What is on the panel": "面板上的内容",
     "When the panel is switched on. The factory logo stays on the panel and can always come back.": "面板通电时显示。出厂 Logo 仍保留在面板上，随时可以恢复。",

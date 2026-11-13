@@ -63,6 +63,7 @@ mod start_screen;
 mod switch;
 mod system;
 mod system_setup;
+mod transition_show;
 mod tray;
 mod updates;
 mod wayland;
@@ -792,26 +793,43 @@ fn follow_session(
 }
 
 /// The tray icon as config.toml's `tray_icon` asks for it: started when it is turned on,
-/// ended when it is turned off, looked at once a second (when the file changed).
+/// ended when it is turned off, looked at once a second (when the file changed). An icon
+/// whose program ends by itself is started again: at once where it had its place (the
+/// desktop's tray restarted under it), after a while and a few times where it ended at once
+/// (the app was slow to answer it at the computer's start, the desktop's tray not there yet).
 struct TrayFollower {
     /// the app's address (None: no icon in this run)
     address: Option<String>,
     child: Option<std::process::Child>,
+    /// when the icon's program was started
+    started: Option<std::time::Instant>,
     /// when the file was written, as last read
     stamp: Option<std::time::SystemTime>,
     next: std::time::Instant,
-    /// the icon's program ended by itself (no tray on this desktop): not started again
-    gave_up: bool,
+    /// how often running the icon's program ended at once (no tray on this desktop)
+    ended_at_once: u32,
+    /// when it is tried again after it ended at once
+    again: Option<std::time::Instant>,
 }
+
+/// An icon's program that ends sooner than this after its start found no tray to sit in; one
+/// that ends later had an icon (the desktop's tray restarted, Explorer with it): started again.
+const TRAY_SETTLE_S: f64 = 10.0;
+/// One that ended at once is tried again this long after, this many times in all; then not
+/// before the icon is turned off and on.
+const TRAY_AGAIN_S: f64 = 20.0;
+const TRAY_TRIES: u32 = 4;
 
 impl TrayFollower {
     fn new(address: Option<String>) -> TrayFollower {
         TrayFollower {
             address,
             child: None,
+            started: None,
             stamp: None,
             next: std::time::Instant::now(),
-            gave_up: false,
+            ended_at_once: 0,
+            again: None,
         }
     }
 
@@ -825,10 +843,34 @@ impl TrayFollower {
         }
         self.next = now + std::time::Duration::from_secs(1);
         if let Some(child) = &mut self.child {
-            if matches!(child.try_wait(), Ok(Some(_))) {
+            if let Ok(Some(status)) = child.try_wait() {
                 self.child = None;
-                self.gave_up = true;
+                let ran = self.started.map_or(0.0, |at| at.elapsed().as_secs_f64());
+                let next = if ran >= TRAY_SETTLE_S {
+                    // (it had its icon: started again at once, as the setting still asks)
+                    self.ended_at_once = 0;
+                    self.stamp = None;
+                    ": started again".to_string()
+                } else {
+                    self.ended_at_once += 1;
+                    match self.ended_at_once < TRAY_TRIES {
+                        true => {
+                            let wait = std::time::Duration::from_secs_f64(TRAY_AGAIN_S);
+                            self.again = Some(now + wait);
+                            format!(": tried again in {TRAY_AGAIN_S:.0} s")
+                        }
+                        false => ": not tried again until the icon is turned off and on".into(),
+                    }
+                };
+                logs::say(
+                    "libre_panel.tray",
+                    &format!("the tray icon's program ended ({status}) after {ran:.0} s{next}"),
+                );
             }
+        }
+        if self.again.is_some_and(|due| now >= due) {
+            self.again = None;
+            self.stamp = None; // (the setting read again: started again if it is still on)
         }
         let stamp = std::fs::metadata(file).and_then(|m| m.modified()).ok();
         if stamp == self.stamp && self.stamp.is_some() {
@@ -837,10 +879,19 @@ impl TrayFollower {
         self.stamp = stamp;
         let wanted = lp_config::load_config(file, lp_config::platform())
             .is_ok_and(|config| config.tray_icon);
+        // (one that ended at once waits for its next try, or was tried often enough)
+        let held = self.again.is_some() || self.ended_at_once >= TRAY_TRIES;
         match (wanted, self.child.is_some()) {
-            (true, false) if !self.gave_up => self.child = window::start_tray(address),
+            (true, false) if !held => {
+                self.child = window::start_tray(address);
+                self.started = Some(now);
+            }
             (false, true) => self.close(),
-            (false, false) => self.gave_up = false, // (asked again later: tried again)
+            (false, false) => {
+                // (asked again later: tried anew)
+                self.ended_at_once = 0;
+                self.again = None;
+            }
             _ => {}
         }
     }

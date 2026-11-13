@@ -1525,6 +1525,7 @@
     "The boot logo is on the panel ({size}); it shows at the next power-on.": "起動ロゴはパネルに書き込まれています（{size}）。次回の電源投入時に表示されます。",
     "The factory logo shows again at the next power-on.": "次回の電源投入時から、工場出荷時のロゴが再び表示されます。",
     "The panel shows what was written; its themes are paused.": "パネルには書き込んだ内容が表示されています。テーマは一時停止中です。",
+    "The panel is mounted upside down: the logo and the clip are written turned round, so that they are upright on it. Write them again when you turn the panel round.": "パネルは上下反転で取り付けられています。ロゴとクリップは、パネル上で正しい向きになるよう回転して書き込まれます。パネルの向きを変えたときは、もう一度書き込んでください。",
     "The standby clip is on the panel ({size}) and plays now; the panel starts with it.": "スタンバイクリップはパネルに書き込まれ（{size}）、現在再生中です。パネルはこのクリップで起動します。",
     "What is on the panel": "パネルに入っているもの",
     "When the panel is switched on. The factory logo stays on the panel and can always come back.": "パネルの電源を入れたとき。工場出荷時のロゴはパネルに残り、いつでも元に戻せます。",

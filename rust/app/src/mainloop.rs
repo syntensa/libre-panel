@@ -272,6 +272,8 @@ pub struct MainLoop {
     alarm: AlarmEdge,
     /// a transition under way, and the mode it began in
     blend: Option<Blend>,
+    /// a transition shown to see it (Settings → Transitions), while it goes on
+    showing: Option<crate::transition_show::Show>,
     began_in: Option<String>,
     /// the plugin transitions' failures to say how to switch, said once each
     failed_switches: std::collections::HashSet<String>,
@@ -527,6 +529,7 @@ impl MainLoop {
             judged: Arc::default(),
             alarm: AlarmEdge::new(),
             blend: None,
+            showing: None,
             began_in: None,
             failed_switches: std::collections::HashSet::new(),
             last_frame: None,
@@ -1241,6 +1244,8 @@ impl MainLoop {
             && !watched
             && theme == size
             && crate::colour_show::now(number).is_none()
+            && crate::transition_show::asked().is_none()
+            && self.showing.is_none()
             && !crate::identify::showing()
     }
 
@@ -1346,6 +1351,77 @@ impl MainLoop {
         }
     }
 
+    /// _show_transition: the frame while a transition is shown to see it
+    /// (transition_show.rs), else `frame`.
+    fn transition_shown(&mut self, frame: Rc<Image>, renderer: &Renderer, now: f64) -> Rc<Image> {
+        let Some((number, name, label)) = crate::transition_show::asked() else {
+            self.showing = None;
+            return frame;
+        };
+        if self.showing.as_ref().map(|show| show.number) != Some(number) {
+            let size = (frame.width(), frame.height());
+            let card = match lp_render::transitions::show_card(&label, size, renderer) {
+                Ok(card) => card,
+                Err(why) => {
+                    say(&format!("transition {name} not shown: {}", why.0));
+                    crate::transition_show::done(number);
+                    return frame;
+                }
+            };
+            // (a calm panel: the card alone; else the transition each way, as a switch makes
+            // it: at the speed set, one of the list where it is "random")
+            let calm = self.calm();
+            let (moment, _) = moment();
+            let mut made = |pick: usize| {
+                if calm {
+                    return None;
+                }
+                let mut params = lp_py::Dict::default();
+                if name == "entrance" {
+                    params.insert("title".into(), Value::Str(label.clone()));
+                }
+                let asked = lp_services::host::Transition {
+                    name: name.clone(),
+                    params: (name == "entrance").then_some(params),
+                };
+                self.blends += 1;
+                switch::handover(
+                    &self.config,
+                    "",
+                    false,
+                    Some(asked),
+                    renderer,
+                    self.snapshot.as_ref().map(|snapshot| &snapshot.readings),
+                    &renderer.theme.name,
+                    &moment,
+                    pick + self.blends as usize,
+                )
+            };
+            let picked = now.to_bits() as usize;
+            let (out, back) = (made(picked), made(picked.wrapping_add(1)));
+            self.showing = Some(crate::transition_show::Show::new(
+                number, &frame, card, out, back,
+            ));
+        }
+        let Some(show) = self.showing.as_mut() else {
+            return frame;
+        };
+        match show.frame(&frame, now, renderer) {
+            Ok(Some(shown)) => Rc::new(shown),
+            Ok(None) => {
+                crate::transition_show::done(number);
+                self.showing = None;
+                frame
+            }
+            Err(why) => {
+                say(&format!("transition {name} failed: {why}"));
+                crate::transition_show::done(number);
+                self.showing = None;
+                frame
+            }
+        }
+    }
+
     /// The frame as it goes out: upside down on a panel mounted so.
     fn turned(&self, frame: Rc<Image>) -> Rc<Image> {
         let on_panel = self.panel.as_ref().is_some_and(Display::on_panel);
@@ -1425,6 +1501,7 @@ impl MainLoop {
             }
             None => frame,
         };
+        let frame = self.transition_shown(frame, renderer, now);
         // which panel is which: its number instead, a moment
         if crate::identify::showing() {
             let accent = (renderer.theme.palette.get("accent").and_then(Value::as_str))
@@ -1790,6 +1867,7 @@ impl MainLoop {
             moving |= self.playing
                 || self.mirrored
                 || self.blend.is_some()
+                || self.showing.is_some()
                 || self.toasts.as_ref().is_some_and(ToastLayer::active)
                 || self.alarm.showing(started);
             self.renderer = Some(renderer);

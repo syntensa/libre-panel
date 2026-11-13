@@ -653,6 +653,30 @@ impl Entrance {
     }
 }
 
+/// transition_show.card: the card in the middle of a transition shown to see it: the
+/// transition's name, large, in the theme's text colour on its dark (`label` as the person
+/// reads it, made upper case), the panel's size.
+pub fn show_card(label: &str, (w, h): (usize, usize), renderer: &Renderer) -> Result<Image> {
+    let palette = &renderer.theme.palette;
+    let (void, ink) = (role_colour(palette, "void"), role_colour(palette, "text"));
+    let u = w.min(h) as f64 / 480.0;
+    let c = colour_of(void);
+    let mut out = Image::new(Mode::RGB, w, h, &c);
+    let width = 16.max(w as i64 - round_int(120.0 * u)?);
+    let letters = lettering(
+        &lp_py::upper(label),
+        width,
+        round_int(110.0 * u)?,
+        u,
+        ink,
+        &renderer.env,
+    )?;
+    let x = (w as i64 - letters.width() as i64).div_euclid(2);
+    let y = (h as i64 - letters.height() as i64).div_euclid(2);
+    out.paste(&letters, x, y, Some(&letters)).map_err(failed)?;
+    Ok(out)
+}
+
 /// _lettering: `text` in big, spaced letters on a clear picture `height` high, as narrow as it
 /// is (it gets smaller to fit `width`).
 fn lettering(

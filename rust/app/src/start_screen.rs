@@ -592,17 +592,28 @@ pub fn panel_state(model: Option<&'static PanelModel>, place: &Where) -> Result<
     })
 }
 
-/// StartScreen.write_logo: the boot logo written and shown (it shows at the next cold start).
+/// The picture as a panel mounted upside down (`turned`: rotate = 180) shows it upright: turned
+/// round, as its frames go to it.
+fn as_mounted(picture: Image, turned: bool) -> Image {
+    match turned {
+        true => picture.transpose(lp_pixels::Transpose::Rotate180),
+        false => picture,
+    }
+}
+
+/// StartScreen.write_logo: the boot logo written and shown (it shows at the next cold start);
+/// turned round for a panel mounted upside down (`turned`), as its frames are.
 pub fn write_logo(
     env: &lp_theme::Env,
     model: Option<&'static PanelModel>,
     way: &str,
+    turned: bool,
     place: &Where,
     design: &str,
 ) -> Result<Dict, String> {
     with_panel(model, place, |files, found| {
         let picture = boot::boot_logo(env, found, way, design, 1.0).map_err(|e| e.0)?;
-        let data = logo_jpeg(&picture)?;
+        let data = logo_jpeg(&as_mounted(picture, turned))?;
         files.noted_listing();
         files.write(BOOT_LOGO, &data)?;
         files.show_jpeg(BOOT_LOGO)?;
@@ -626,12 +637,15 @@ pub fn remove_logo(model: Option<&'static PanelModel>, place: &Where) -> Result<
 }
 
 /// StartScreen.write_clip: the standby clip written, played and saved as what the panel
-/// starts with; in the range of values its decoder shows.
+/// starts with; in the range of values its decoder shows; turned round for a panel mounted
+/// upside down (`turned`), as its frames are.
+#[allow(clippy::too_many_arguments)]
 pub fn write_clip(
     env: &lp_theme::Env,
     brightness: i64,
     model: Option<&'static PanelModel>,
     way: &str,
+    turned: bool,
     place: &Where,
     design: &str,
     video_range: &str,
@@ -639,6 +653,9 @@ pub fn write_clip(
     let ffmpeg = lp_devices::h264::find_ffmpeg("")?;
     with_panel(model, place, |files, found| {
         let frames = boot::standby_frames(env, found, None, way, design, 1.0).map_err(|e| e.0)?;
+        let frames: Vec<Image> = (frames.into_iter())
+            .map(|frame| as_mounted(frame, turned))
+            .collect();
         let full = lp_devices::turzx::full_range(video_range, Some(found));
         let data = clip_h264(&ffmpeg, &frames, full)?;
         files.noted_listing();

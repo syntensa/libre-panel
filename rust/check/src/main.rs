@@ -977,6 +977,59 @@ fn run(case: &Value) -> Result<Value, String> {
                 Some(layer) => json!({"layer": value_of(&layer)}),
             }
         }
+        "facet_halo" | "facet_ridge" => {
+            // a facet graph's halo (facets.curve_halo) or ridge (facets.curve_ridge) on a layer
+            let mut layer = image_of(&case["layer"])?;
+            let c = ints(&case["colour"])?;
+            let colour = [c[0], c[1], c[2], c[3]];
+            let scale = case["scale"].as_u64().ok_or("scale")? as usize;
+            let drawn = if op == "facet_halo" {
+                let line = image_of(&case["line"])?;
+                lp_render::facets::check_halo(&mut layer, &line, colour, scale).map_err(|e| e.0)?;
+                true
+            } else {
+                let run: Vec<(f64, f64)> = (case["run"].as_array().ok_or("run")?.iter())
+                    .map(|p| (p[0].as_f64().unwrap_or(0.0), p[1].as_f64().unwrap_or(0.0)))
+                    .collect();
+                lp_render::facets::check_ridge(
+                    &mut layer,
+                    &run,
+                    case["thick"].as_f64().ok_or("thick")?,
+                    colour,
+                    case["wide"].as_bool().unwrap_or(false),
+                    scale,
+                    case["below"].as_bool().unwrap_or(true),
+                )
+                .map_err(|e| e.0)?
+            };
+            json!({"layer": value_of(&layer), "drawn": drawn})
+        }
+        "facet_ring" => {
+            // the facet finish's raised ring (render/facets.py's ring_layer)
+            let rgba = |v: &Value| -> Result<Option<[i64; 4]>, String> {
+                if v.is_null() {
+                    return Ok(None);
+                }
+                let c = ints(v)?;
+                Ok(Some([c[0], c[1], c[2], c[3]]))
+            };
+            let paint = (
+                rgba(&case["paint"])?.ok_or("paint")?,
+                rgba(&case["paint2"])?,
+            );
+            let layer = lp_render::facets::check_ring(
+                case["w"].as_u64().ok_or("w")? as usize,
+                case["h"].as_u64().ok_or("h")? as usize,
+                case["thickness"].as_i64().ok_or("thickness")?,
+                case["start"].as_f64().ok_or("start")?,
+                case["end"].as_f64().ok_or("end")?,
+                case["frac"].as_f64().ok_or("frac")?,
+                paint,
+                rgba(&case["track"])?,
+            )
+            .map_err(|e| e.0)?;
+            json!({"layer": value_of(&layer)})
+        }
         "fnmatch" => {
             // fnmatch.fnmatchcase of each [name, pattern], and fnmatch.filter of the names by
             // each pattern: true, false, or the error re raises

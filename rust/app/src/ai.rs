@@ -12,7 +12,7 @@ use lp_services::agents_setup as setup;
 pub enum Refused {
     /// the message and the status
     Said(String, u16),
-    /// what Python does not catch: the request is left unanswered
+    /// what Python does not catch (its request left unanswered): answered with a 500 and why
     Failed(String),
 }
 

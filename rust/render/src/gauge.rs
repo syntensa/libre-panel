@@ -5,7 +5,7 @@
 //! conic gradient along the scale made of thin wedges.
 
 use lp_pixels::{alpha_composite, chops, Draw, Image, Mode};
-use lp_py::Dict;
+use lp_py::{Dict, Value};
 
 use crate::bar::Paint;
 use crate::piece::{Failed, Piece, Result};
@@ -64,7 +64,7 @@ fn geometry(w: &Dict, scale: i64) -> Geometry {
 
 /// A picture's size as Image.new takes it (its ValueError below 0; Rust's refusal of one too
 /// large to hold).
-fn sized(w: i64, h: i64) -> Result<(usize, usize)> {
+pub(crate) fn sized(w: i64, h: i64) -> Result<(usize, usize)> {
     if w < 0 || h < 0 {
         return Err(Failed("Width and height must be >= 0".into()));
     }
@@ -72,6 +72,20 @@ fn sized(w: i64, h: i64) -> Result<(usize, usize)> {
         return Err(Failed("a gauge too large".into()));
     }
     Ok((w as usize, h as usize))
+}
+
+/// The gauge as its ticks alone are drawn on a finish's own ring: no track, the ticks in
+/// their colour, else the track's (`{**widget, "background": None, "tick_color":
+/// widget["tick_color"] or widget["background"]}`).
+pub(crate) fn ticks_alone(w: &Dict) -> Dict {
+    let mut alone = w.clone();
+    let tick = match w.get("tick_color") {
+        Some(colour) if widget::truthy(w, "tick_color") => colour.clone(),
+        _ => w.get("background").cloned().unwrap_or(Value::None),
+    };
+    alone.insert("background".into(), Value::None);
+    alone.insert("tick_color".into(), tick);
+    alone
 }
 
 /// The ring's thickness as a line's width (the C int it is passed as).
