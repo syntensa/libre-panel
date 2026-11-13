@@ -3,7 +3,8 @@
 Themes come from strangers, so ``str.format`` is locked down: only the named
 fields ``value``, ``unit`` and ``label`` exist, attribute/index access is
 refused and absurd widths are rejected. Extra format specs:
-``{value:bytes}`` (1.2 MB), ``{value:duration}`` (3d 5h), ``{value:clock}``
+``{value:bytes}`` (1.2 MB; of a reading that comes in GB or MB, such as the
+memory's, 16.4 GB), ``{value:duration}`` (3d 5h), ``{value:clock}``
 (3:07, a song's length), ``{value:gb}`` (a size in GB from the reading's own
 unit: 13.5) and ``{value:rate}`` with ``{value:rate_unit}`` (a data rate as a
 number and its unit apart, as SPUR II sets them: 519 and KB/s, from 1 MB/s
@@ -21,7 +22,7 @@ from functools import lru_cache
 from typing import Any
 
 _ALLOWED_FIELDS = {"value", "unit", "label"}
-_UNIT: ContextVar[str] = ContextVar("unit", default="")  # the reading's, for {value:gb}
+_UNIT: ContextVar[str] = ContextVar("unit", default="")  # the reading's, for {value:gb}, bytes
 # Sizes in bytes of the units a reading may come in (binary, as the sources count)
 _SIZES = {"B": 1, "KB": 1024, "KiB": 1024, "MB": 1024**2, "MiB": 1024**2, "GB": 1024**3,
           "GiB": 1024**3, "TB": 1024**4, "TiB": 1024**4}  # fmt: skip
@@ -43,12 +44,20 @@ def counts(fmt: str) -> bool:
     return bool(_COUNTING.search(fmt))
 
 
-def human_bytes(value: float) -> str:
+def human_bytes(value: float, unit: str = "") -> str:
+    """An amount of data in the unit that fits it: 1.2 MB. A count of bytes goes up in steps
+    of 1000. A reading that comes in a larger unit (``unit``: the memory's GB, a graphics
+    card's MB) is counted from there, in that unit's own steps of 1024: 16.4 GB reads
+    "16.4 GB" (taken for bytes it read "16 B", which a shared theme showed)."""
     value = float(value)
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if abs(value) < 1000 or unit == "TB":
-            return f"{value:.0f} {unit}" if unit == "B" else f"{value:.1f} {unit}"
-        value /= 1000
+    size = _SIZES.get(unit.removesuffix("/s"), 1)
+    step = 1000
+    if size > 1:
+        value, step = value * size, 1024
+    for name in ("B", "KB", "MB", "GB", "TB"):
+        if abs(value) < 1000 or name == "TB":
+            return f"{value:.0f} {name}" if name == "B" else f"{value:.1f} {name}"
+        value /= step
     return f"{value:.1f} TB"  # pragma: no cover
 
 
@@ -111,7 +120,7 @@ class _SafeFormatter(string.Formatter):
         if _HUGE_NUMBER.search(format_spec):
             raise FormatError("format width too large")
         if format_spec == "bytes":
-            return human_bytes(value)
+            return human_bytes(value, _UNIT.get())
         if format_spec == "duration":
             return human_duration(value)
         if format_spec == "clock":

@@ -1,11 +1,11 @@
 //! Format strings of shared themes (render/formatting.py). Themes come from strangers, so
 //! str.format is locked down: only the fields `value`, `unit` and `label` exist, what is no
 //! such field is refused, and a width of four digits or more too. The app's own specs:
-//! `{value:bytes}` (1.2 MB), `{value:duration}` (3d 5h), `{value:clock}` (3:07), `{value:gb}`
-//! (a size in GB from the reading's own unit), `{value:rate}` with `{value:rate_unit}` (519
-//! and KB/s, from 1 MB/s 1.2 and MB/s) and `{value:upper}` (a text in capitals). Whether a
-//! format shows its value as a number (counts(), which the modules ask) is lp-theme's
-//! modules::counts.
+//! `{value:bytes}` (1.2 MB; of a reading that comes in GB or MB, 16.4 GB), `{value:duration}`
+//! (3d 5h), `{value:clock}` (3:07), `{value:gb}` (a size in GB from the reading's own unit),
+//! `{value:rate}` with `{value:rate_unit}` (519 and KB/s, from 1 MB/s 1.2 and MB/s) and
+//! `{value:upper}` (a text in capitals). Whether a format shows its value as a number
+//! (counts(), which the modules ask) is lp-theme's modules::counts.
 
 use lp_py::format::{self as py, FmtError, Kind};
 use lp_py::Value;
@@ -29,15 +29,22 @@ fn fixed(x: f64, digits: &str) -> String {
     py::format(&Value::Float(x), digits).expect("a float in a fixed format")
 }
 
-/// human_bytes: 1.2 MB (powers of 1000).
-pub fn human_bytes(value: &Value) -> Result<String, FmtError> {
+/// human_bytes: an amount of data in the unit that fits it, 1.2 MB. A count of bytes goes up
+/// in steps of 1000; a reading that comes in a larger unit (`unit`: the memory's GB, a graphics
+/// card's MB) is counted from there, in that unit's own steps of 1024: 16.4 GB reads "16.4 GB".
+pub fn human_bytes(value: &Value, unit: &str) -> Result<String, FmtError> {
     let mut value = py::float_of(value)?;
-    for unit in ["B", "KB", "MB", "GB", "TB"] {
-        if value.abs() < 1000.0 || unit == "TB" {
-            let number = fixed(value, if unit == "B" { ".0f" } else { ".1f" });
-            return Ok(format!("{number} {unit}"));
+    let size = known_size(unit).unwrap_or(1.0);
+    let step = if size > 1.0 { 1024.0 } else { 1000.0 };
+    if size > 1.0 {
+        value *= size;
+    }
+    for name in ["B", "KB", "MB", "GB", "TB"] {
+        if value.abs() < 1000.0 || name == "TB" {
+            let number = fixed(value, if name == "B" { ".0f" } else { ".1f" });
+            return Ok(format!("{number} {name}"));
         }
-        value /= 1000.0;
+        value /= step;
     }
     unreachable!("TB ends the loop")
 }
@@ -80,18 +87,24 @@ pub fn rate_parts(value: &Value) -> Result<(String, &'static str), FmtError> {
     })
 }
 
-/// Bytes of a unit a reading may come in (binary, as the sources count); GB where it has none
-/// of these.
-fn size_of(unit: &str) -> f64 {
+/// Bytes of a unit a reading may come in (_SIZES: binary, as the sources count), a rate's
+/// "/s" aside; None of a unit that is none of these.
+fn known_size(unit: &str) -> Option<f64> {
     let unit = unit.strip_suffix("/s").unwrap_or(unit);
     let k = 1024.0f64;
-    match unit {
+    Some(match unit {
         "B" => 1.0,
         "KB" | "KiB" => k,
         "MB" | "MiB" => k * k,
+        "GB" | "GiB" => k * k * k,
         "TB" | "TiB" => k * k * k * k,
-        _ => k * k * k,
-    }
+        _ => return None,
+    })
+}
+
+/// The same for `{value:gb}`: GB where the unit is none of them.
+fn size_of(unit: &str) -> f64 {
+    known_size(unit).unwrap_or(1024.0f64 * 1024.0 * 1024.0)
 }
 
 /// auto_format: a reading shown the usual way for its unit: 45%, 61°, 2.4 MB/s, 3h 5m (its
@@ -104,8 +117,8 @@ pub fn auto_format(value: &Value, unit: &str) -> Result<String, FmtError> {
     }
     let fmt = |spec: &str| py::format(value, spec);
     match unit {
-        "B/s" => return Ok(human_bytes(value)? + "/s"),
-        "B" => return human_bytes(value),
+        "B/s" => return Ok(human_bytes(value, "")? + "/s"),
+        "B" => return human_bytes(value, ""),
         "s" => return human_duration(value),
         "GiB" | "GB" => {
             let small = lp_py::num::lt(value, &Value::int(100)).map_err(|e| FmtError {
@@ -157,7 +170,7 @@ fn format_field(value: &Value, spec: &str, unit: &str) -> Result<String, FmtErro
         return Err(refused("format width too large"));
     }
     match spec {
-        "bytes" => human_bytes(value),
+        "bytes" => human_bytes(value, unit),
         "duration" => human_duration(value),
         "clock" => clock_duration(value),
         "rate" => Ok(rate_parts(value)?.0),

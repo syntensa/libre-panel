@@ -3503,7 +3503,7 @@ fn run(case: &Value) -> Result<Value, String> {
                 .map(|v| {
                     let v = typed(v);
                     json!({
-                        "bytes": outcome(f::human_bytes(&v)),
+                        "bytes": outcome(f::human_bytes(&v, "")),
                         "duration": outcome(f::human_duration(&v)),
                         "clock": outcome(f::clock_duration(&v)),
                         "rate": match f::rate_parts(&v) {

@@ -910,6 +910,7 @@ kept.
 | `{value:.0f}{unit}` | `64°C` |
 | `{value:.1f} GiB` | `15.3 GiB` |
 | `{value:bytes}/s` | `2.4 MB/s` |
+| `{value:bytes}` | `1.2 MB`; of a reading that comes in GB or MB (the memory's, a graphics card's) `16.4 GB` |
 | `{value:duration}` | `3d 5h` |
 | `{value:clock}` | `3:07` (a song's length) |
 | `{value:gb}` | `13.5` (a size in GB, whatever unit the reading comes in) |
