@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.9.0rc4 — 2026-11-13
+
+The next release candidate of 0.9.0 to try: the whole app gone over after rc3, for what did
+not work as 0.8's did and for how it looks. The load is rc3's.
 
 **Fixed**
 - **Windows' accent colour is taken again** (*Settings → Panel → Accent colour → Windows'*):

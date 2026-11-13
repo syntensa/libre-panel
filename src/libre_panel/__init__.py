@@ -11,7 +11,7 @@ for _name in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ.setdefault(_name, "1")
 del _name
 
-__version__ = "0.9.0rc3"
+__version__ = "0.9.0rc4"
 
 
 def clock() -> float:
