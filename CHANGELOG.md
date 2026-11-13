@@ -2,49 +2,48 @@
 
 ## 0.9.0 — 2026-11-14
 
-Libre Panel written anew as one native program: the same pictures on the panel with less load,
-a third less memory and a quicker start. What changed since 0.8.0:
+> *"Just rewrite it in Rust!"* — the internet's oldest joke.
+>
+> Well, we're not joking. Here it is: **Libre Panel, fully rewritten in Rust.**
 
-**Highlights**
-- **One program in Rust instead of Python.** The app, its drawing, the panels' drivers and
-  loop, the sensors, the services, the app's server, its window and tray icon. Your settings,
-  your themes and the history carry over as they are. Python is left in the plugin host alone,
-  which starts only where plugins are installed (they work as before). Each of the 99 built-in
-  themes is drawn by the new program and by the Python app it replaces, still and moving, and
-  compared pixel for pixel (a glow within one level of light) in every test run, on Windows and
-  Linux.
-- **Lighter.** The 12.3" at 25 frames a second through Libre Panel's engine, app and engine
-  together (processor in % of one core, private memory; the demo's readings, a minute each, in
-  turn on the same Linux machine):
+The drawing, the drivers of all 54 panel models, the sensors, the services, the app's server,
+its window and tray: some 200,000 lines of Rust in all. Your panel shows the same pictures,
+pixel for pixel; your PC does a lot less for them. Settings and themes carry over as they are.
 
-  | 12.3", 25 fps | 0.8.0 | 0.9.0 |
-  |---|---|---|
-  | Lumen | 32–36 %, 145–156 MB | **21–23 %, 104 MB** |
-  | Arena | 37–38 %, 147–150 MB | **30–33 %, 99 MB** |
-  | Encore | 12 %, 134 MB | **7 %, 92–94 MB** |
+**Lighter, and measured.** The 12.3" at 25 fps through Libre Panel's engine, app and engine
+together (processor in % of one core, private memory; the demo's readings, a minute each, in
+turn on the same Linux machine; the simulated panel counted in neither):
 
-  The simulated panel is counted in neither. How much less depends on the theme: what 0.8 drew
-  in Pillow's C code (Arena's large frame-rate graph) costs about as much as before, what Python
-  worked out around it is gone.
-- **A quicker start.** The first picture is on the panel 0.4 to 1.0 s after Libre Panel
-  starts, instead of 0.7 to 2.0 s.
-- **A cleaner picture for less work.** The engine gives x264 a quantizer for each picture and
-  keeps the bit rate's cap itself: x264 takes 2.7 to 2.9 ms for a frame of Lumen instead of 4.3
-  to 4.7, and its frames come out cleaner (53.96 dB instead of 53.07 against what was drawn, the
-  largest error 15 levels instead of 30).
-- **Memory back when the window closes.** Light mode is always on, with nothing to set (0.8.0 had
-  a switch): a minute after the window closed, what only the window needed goes and the memory
-  goes back to the system. Lumen on the 12.3": about 150 MB while the window is open, 104 to
-  111 MB a minute and a half after it closed.
-- **Panels.** The Turing 12.3" fully verified, its video mode too (#45). The JONSBO DS339
-  without the purple flicker (#46). The MAJESTY 9.16" (Hongtai `33C3:7792`, #40).
+| 12.3", 25 fps | 0.8.0 | 0.9.0 | saved |
+|---|---|---|---|
+| Lumen | 32–36 %, 145–156 MB | **21–23 %, 104 MB** | 34 % CPU, 30 % RAM |
+| Arena | 37–38 %, 147–150 MB | **30–33 %, 99 MB** | 17 % CPU, 34 % RAM |
+| Encore | 12 %, 134 MB | **7 %, 92–94 MB** | 38 % CPU, 31 % RAM |
 
-**Also new**
+- **About a third less memory** in every theme, **up to 38 % less processor**. (What 0.8
+  already drew in Pillow's C code, such as Arena's large frame-rate graph, costs about what it
+  did.)
+- **Starts faster**: the first picture is on the panel 0.4 to 1.0 s after the start, instead of
+  0.7 to 2.0 s.
+- **Cleaner video for less work**: x264 takes 2.7 to 2.9 ms for a frame of Lumen instead of 4.3
+  to 4.7, and draws closer to the original (53.96 dB instead of 53.07, the largest error 15
+  levels instead of 30).
+- **Memory back when the window closes**: light mode is always on; a minute after the window
+  closed, its memory goes back to the system (Lumen: about 150 MB open, 104 to 111 MB after).
+
+**Proven, not promised.** The Python app stays in the repository as the reference: 525
+comparison tests hold the new program against it in every test run, on Windows and Linux.
+Pillow's image operations match to the bit on thousands of random cases, and each of the 99
+built-in themes, still and moving, matches pixel for pixel (a glow to within one level of light).
+
+**New**
+- The MAJESTY 9.16" (Hongtai `33C3:7792`, #40); the JONSBO DS339 without the purple flicker
+  (#46); the Turing 12.3" fully verified, its video mode too (#45).
 - Windows: the graphics card encodes where it is AMD's or NVIDIA's (*The engine's encoder*:
-  *auto*), x264 elsewhere.
-- Windows: the sensor service is a small .NET program without Python: 10 MB instead of 33,
-  0.4 % of a core instead of 0.7 (Windows CI).
+  *auto*); the sensor service is a small .NET program without Python (10 MB instead of 33).
 - Start shows the panel's live picture (a click shows it large); *Live* is *Status* now.
+- Plugins work as before, in a plugin host of their own that starts only where plugins are
+  installed.
 - `{value:bytes}` counts from the reading's own unit: a shared theme's memory reads "16.4 GB",
   not "16 B".
 
