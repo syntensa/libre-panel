@@ -1359,8 +1359,8 @@ def test_a_tray_icon_that_ends_at_once_is_tried_again_after_a_while(tmp_path: Pa
             program.stdout.readline()
             heard = threading.Thread(target=lambda: said.extend(program.stderr), daemon=True)
             heard.start()
-            ended = _waited(lambda: next((line for line in said
-                                          if "the tray icon's program ended" in line), None), 20)  # fmt: skip
+            ended_words = "the tray icon's program ended"
+            ended = _waited(lambda: next((line for line in said if ended_words in line), None), 20)
             assert program.poll() is None  # (Libre Panel runs on)
         finally:
             program.send_signal(signal.SIGINT)
