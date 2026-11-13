@@ -44,6 +44,17 @@
       "preview": "gold-time-vertical/preview.png",
       "zip": "gold-time-vertical/gold-time-vertical.zip",
       "sha256": "4d6137250db864a8fc5b01bd478ed3a52676b8f9128f474864bfd9004c61add9"
+    },
+    {
+      "name": "Basic Computer Info",
+      "author": "Will Daher",
+      "description": "Time, Date, CPU activity, I/O activity, network activity, basic Weather",
+      "sizes": [
+        "320x480"
+      ],
+      "preview": "basic-computer-info/preview.png",
+      "zip": "basic-computer-info/basic-computer-info.zip",
+      "sha256": "9250c1c905810b3131cb0eb2c92953319d540e5cc0febb63c6864d2dec3aa4f3"
     }
   ]
 }
